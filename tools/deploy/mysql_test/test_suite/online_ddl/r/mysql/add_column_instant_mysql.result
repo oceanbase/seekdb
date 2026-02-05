@@ -1,0 +1,586 @@
+set @@session.recyclebin = off;
+alter system set _enable_defensive_check = '2';
+create table xingrui_normal_table(col1 int, col2 char(10));
+insert into xingrui_normal_table values(1, 'a');
+alter table xingrui_normal_table add column col3 int after col1;
+alter table xingrui_normal_table add column col4 varchar(10) after col1;
+alter table xingrui_normal_table add column col5 float after col1;
+alter table xingrui_normal_table add column col6 timestamp after col1;
+insert into xingrui_normal_table values(1, '2023-01-01 00:00:00', 3.3, 'b', 6, 'c');
+select * from xingrui_normal_table;
+col1	col6	col5	col4	col3	col2
+1	NULL	NULL	NULL	NULL	a
+1	2023-01-01 00:00:00	3.3	b	6	c
+drop table xingrui_normal_table;
+create table xingrui_comment_table(col1 varchar(100), col2 int);
+insert into xingrui_comment_table values('a', 1);
+alter table xingrui_comment_table add column col3 varchar(100) comment "test" after col1;
+insert into xingrui_comment_table values('a', '666', 1);
+select * from xingrui_comment_table;
+col1	col3	col2
+a	NULL	1
+a	666	1
+create table xingrui_default_table(col1 int, col2 int);
+insert into xingrui_default_table values(1, 2);
+alter table xingrui_default_table add column col3 int default 100 after col1;
+insert into xingrui_default_table values(1, 2, 100);
+select * from xingrui_default_table;
+col1	col3	col2
+1	100	2
+1	2	100
+create table xingrui_not_null_table(col1 int, col2 int);
+alter table xingrui_not_null_table add column col3 int not null after col1;
+select * from xingrui_not_null_table;
+col1	col3	col2
+drop table xingrui_not_null_table;
+create table xingrui_not_null_table(col1 int, col2 int);
+insert into xingrui_not_null_table values(1,2);
+insert into xingrui_not_null_table values(1,2);
+alter table xingrui_not_null_table add column col3 int not null after col1;
+select * from xingrui_not_null_table;
+col1	col3	col2
+1	0	2
+1	0	2
+create table xingrui_virtual_table (col1 int, col2 int);
+insert into xingrui_virtual_table values(1, 2);
+alter table xingrui_virtual_table add column col3 int generated always as (col1 + 1) virtual after col1;
+insert into xingrui_virtual_table (col1, col2) values(1,2);
+select * from xingrui_virtual_table;
+col1	col3	col2
+1	2	2
+1	2	2
+create table xingrui_stored_table (col1 int, col2 int);
+insert into xingrui_stored_table values(1, 2);
+alter table xingrui_stored_table add column col3 int generated always as (col1 + 1) stored after col1;
+insert into xingrui_stored_table (col1, col2) values(1,2);
+select * from xingrui_stored_table;
+col1	col3	col2
+1	2	2
+1	2	2
+create table xingrui_increment_table(col1 int, col2 int);
+insert into xingrui_increment_table values(1, 2);
+alter table xingrui_increment_table add column col3 int auto_increment after col1;
+insert into xingrui_increment_table values(1, 2, 1);
+select * from xingrui_increment_table;
+col1	col3	col2
+1	1	2
+1	2	1
+create table xingrui_primary_table(col1 int, col2 int);
+alter table xingrui_primary_table add column col3 int primary key;
+ERROR 0A000: Not supported feature or function
+select * from xingrui_primary_table;
+col1	col2
+drop table xingrui_primary_table;
+create table xingrui_primary_table(col1 int, col2 int);
+insert into xingrui_primary_table values(1,2);
+insert into xingrui_primary_table values(1,2);
+alter table xingrui_primary_table add column col3 int primary key;
+ERROR 0A000: Not supported feature or function
+select * from xingrui_primary_table;
+col1	col2
+1	2
+1	2
+create table xingrui_check_table(col1 int, col2 int);
+insert into xingrui_check_table values(1,2);
+alter table xingrui_check_table add column col3 int check(col3 > 10) after col1;
+insert into xingrui_check_table values(1,20,3);
+select * from xingrui_check_table;
+col1	col3	col2
+1	NULL	2
+1	20	3
+create table xingrui_unique_table(col1 int,col2 int);
+insert into xingrui_unique_table values(1,2);
+alter table xingrui_unique_table add column col3 int unique after col1;
+insert into xingrui_unique_table values(1,2,3);
+select * from xingrui_unique_table;
+col1	col3	col2
+1	NULL	2
+1	2	3
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table modify col3 int auto_increment primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table modify col3 int primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table modify col3 int auto_increment;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table modify col1 int auto_increment primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table modify col1 int primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table modify col1 int auto_increment;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table change col1 col1 int auto_increment primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table change col1 col1 int primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table change col1 col1 int auto_increment;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table change col1 col1 int auto_increment primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table change col1 col1 int primary key;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table change col1 col1 int auto_increment;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table drop column col3;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table drop column col1;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table alter column col3 set default 1000;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int);
+alter table xingrui_normal_table add column col3 int first;
+alter table xingrui_normal_table alter column col1 set default 1000;
+drop table xingrui_primary_table;
+create table xingrui_primary_table(col1 int, col2 int);
+alter table xingrui_primary_table add column col3 int after col1;
+alter table xingrui_primary_table add primary key(col1);
+drop table xingrui_primary_table;
+create table xingrui_primary_table(col1 int, col2 int, col3 int, key index_1(col2));
+alter table xingrui_primary_table add column col4 int after col1;
+alter table xingrui_primary_table add primary key(col1);
+drop table xingrui_primary_table;
+create table xingrui_primary_table(col1 int, col2 int primary key);
+alter table xingrui_primary_table add column col3 int after col1;
+alter table xingrui_primary_table drop primary key;
+create table xingrui_character_table(col1 int,col2 int);
+alter table xingrui_character_table add column col3 int after col1;
+alter table xingrui_character_table convert to character set 'utf16' COLLATE 'utf16_bin';
+create table xingrui_partition_table (col1 int, col2 int);
+alter table xingrui_partition_table add column col3 int after col1;
+alter table xingrui_partition_table partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
+create table xingrui_lob_inrow_table (col1 text, col2 text) DEFAULT_LOB_INROW_THRESHOLD=4444;
+alter table xingrui_lob_inrow_table add column col3 int after col1;
+alter table xingrui_lob_inrow_table set lob_inrow_threshold = 1026;
+create table xingrui_index_column_table(col1 int, col2 int);
+insert into xingrui_index_column_table values(1, 2);
+alter table xingrui_index_column_table add col3 int after col1;
+alter table xingrui_index_column_table add index xingrui_index(col3);
+insert into xingrui_index_column_table values(1, 2, 3);
+select * from xingrui_index_column_table;
+col1	col3	col2
+1	NULL	2
+1	2	3
+drop table xingrui_index_column_table;
+create table xingrui_index_column_table (col1 int, col2 int) partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
+create index xingrui_index on xingrui_index_column_table(col1) global;
+insert into xingrui_index_column_table values(1, 2);
+alter table xingrui_index_column_table add col3 int after col1;
+alter table xingrui_index_column_table truncate partition p1;
+select * from xingrui_index_column_table;
+col1	col3	col2
+1	NULL	2
+drop table xingrui_index_column_table;
+create table xingrui_index_column_table(col1 int, col2 varchar(10), col3 int);
+insert into xingrui_index_column_table values(1, 'a', 2);
+alter table xingrui_index_column_table add index xingrui_index(col3);
+alter table xingrui_index_column_table add col4 int after col1;
+alter table xingrui_index_column_table drop index xingrui_index;
+insert into xingrui_index_column_table values(1, 2, 'a', 3);
+select * from xingrui_index_column_table;
+col1	col4	col2	col3
+1	NULL	a	2
+1	2	a	3
+drop table xingrui_index_column_table;
+create table xingrui_index_column_table(col1 int, col2 varchar(10), col3 int);
+alter table xingrui_index_column_table add index xingrui_index(col3);
+insert into xingrui_index_column_table values(1, 'a', 2);
+alter table xingrui_index_column_table add col4 int after col1;
+alter table xingrui_index_column_table alter index xingrui_index invisible;
+select * from xingrui_index_column_table;
+col1	col4	col2	col3
+1	NULL	a	2
+drop table xingrui_index_column_table;
+create table xingrui_index_column_table(col1 int, col2 varchar(10), col3 int);
+alter table xingrui_index_column_table add index xingrui_index(col3);
+insert into xingrui_index_column_table values(1, 'a', 2);
+alter table xingrui_index_column_table add col4 int after col1;
+alter table xingrui_index_column_table alter index xingrui_index parallel 2;
+select * from xingrui_index_column_table;
+col1	col4	col2	col3
+1	NULL	a	2
+drop table xingrui_index_column_table;
+create table xingrui_index_column_table(col1 int, col2 varchar(10), col3 int);
+alter table xingrui_index_column_table add index xingrui_index(col3);
+insert into xingrui_index_column_table values(1, 'a', 2);
+alter table xingrui_index_column_table add col4 int after col1;
+alter table xingrui_index_column_table rename index xingrui_index to xingrui_index1;
+select * from xingrui_index_column_table;
+col1	col4	col2	col3
+1	NULL	a	2
+create table xingrui_constraint_table(col1 int, col2 int);
+insert into xingrui_constraint_table values(1, 2);
+alter table xingrui_constraint_table add column col3 int after col1;
+alter table xingrui_constraint_table add constraint xingrui_constraint check(col3 > 0);
+select * from xingrui_constraint_table;
+col1	col3	col2
+1	NULL	2
+drop table xingrui_constraint_table;
+create table xingrui_constraint_table(col1 int, col2 int);
+insert into xingrui_constraint_table values(1, 2);
+alter table xingrui_constraint_table add constraint xingrui_constraint check(col2 > 0);
+alter table xingrui_constraint_table add column col3 int after col1;
+alter table xingrui_constraint_table drop constraint xingrui_constraint;
+select * from xingrui_constraint_table;
+col1	col3	col2
+1	NULL	2
+drop table xingrui_constraint_table;
+create table xingrui_constraint_table(col1 int, col2 int);
+insert into xingrui_constraint_table values(1, 2);
+alter table xingrui_constraint_table add constraint xingrui_constraint check(col2 > 0);
+alter table xingrui_constraint_table add column col3 int after col1;
+alter table xingrui_constraint_table modify constraint xingrui_constraint disable;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'constraint xingrui_constraint disable' at line 1
+drop table xingrui_character_table;
+create table xingrui_character_table(col1 int,col2 int,col3 int);
+alter table xingrui_character_table add column col4 int after col1;
+alter table xingrui_character_table convert to character set 'utf16' COLLATE 'utf16_bin';
+insert into xingrui_character_table values(1, 2, 3, 4);
+select * from xingrui_character_table;
+col1	col4	col2	col3
+1	2	3	4
+create table xingrui_fk_parent_table (id int primary key, number int);
+create table xingrui_fk_child_table (parent_id int, number int);
+alter table xingrui_fk_child_table add column child_id int after parent_id;
+alter table xingrui_fk_child_table add constraint child_fk foreign key (parent_id) references xingrui_fk_parent_table(id);
+select * from xingrui_fk_child_table;
+parent_id	child_id	number
+drop table xingrui_fk_child_table;
+drop table xingrui_fk_parent_table;
+create table xingrui_fk_parent_table (id int primary key, number int);
+create table xingrui_fk_child_table (parent_id int, number int);
+alter table xingrui_fk_child_table add constraint child_fk foreign key (parent_id) references xingrui_fk_parent_table(id);
+alter table xingrui_fk_child_table add column child_id int after parent_id;
+alter table xingrui_fk_child_table drop foreign key child_fk;
+insert into xingrui_fk_child_table values(1, 2, 3);
+select * from xingrui_fk_child_table;
+parent_id	child_id	number
+1	2	3
+create external table xingrui_external_table (c1 int,c2 int,c3 int) location='mysqltest_data_for_external_table/external_table_lineitem' format ( type = 'csv');
+alter table xingrui_external_table add column c4 int;
+ERROR 0A000: alter table type not supported
+create table xingrui_big_column_table(col1 int, col2 int, col3 int, col4 int, col5 int, col6 int, col7 int, col8 int, col9 int, col10 int, col11 int, col12 int, col13 int, col14 int, col15 int, col16 int, col17 int, col18 int, col19 int, col20 int, col21 int, col22 int, col23 int, col24 int, col25 int, col26 int, col27 int, col28 int, col29 int, col30 int, col31 int, col32 int, col33 int, col34 int, col35 int, col36 int, col37 int, col38 int, col39 int, col40 int, col41 int, col42 int, col43 int, col44 int, col45 int, col46 int, col47 int, col48 int, col49 int, col50 int, col51 int, col52 int, col53 int, col54 int, col55 int, col56 int, col57 int, col58 int, col59 int, col60 int, col61 int, col62 int, col63 int, col64 int, col65 int, col66 int, col67 int, col68 int, col69 int, col70 int, col71 int, col72 int, col73 int, col74 int, col75 int, col76 int, col77 int, col78 int, col79 int, col80 int, col81 int, col82 int, col83 int, col84 int, col85 int, col86 int, col87 int, col88 int, col89 int, col90 int, col91 int, col92 int, col93 int, col94 int, col95 int, col96 int, col97 int, col98 int, col99 int, col100 int, col101 int, col102 int, col103 int, col104 int, col105 int, col106 int, col107 int, col108 int, col109 int, col110 int, col111 int, col112 int, col113 int, col114 int, col115 int, col116 int, col117 int, col118 int, col119 int, col120 int, col121 int, col122 int, col123 int, col124 int, col125 int, col126 int, col127 int, col128 int, col129 int, col130 int, col131 int, col132 int, col133 int, col134 int, col135 int, col136 int, col137 int, col138 int, col139 int, col140 int, col141 int, col142 int, col143 int, col144 int, col145 int, col146 int, col147 int, col148 int, col149 int, col150 int, col151 int, col152 int, col153 int, col154 int, col155 int, col156 int, col157 int, col158 int, col159 int, col160 int, col161 int, col162 int, col163 int, col164 int, col165 int, col166 int, col167 int, col168 int, col169 int, col170 int, col171 int, col172 int, col173 int, col174 int, col175 int, col176 int, col177 int, col178 int, col179 int, col180 int, col181 int, col182 int, col183 int, col184 int, col185 int, col186 int, col187 int, col188 int, col189 int, col190 int, col191 int, col192 int, col193 int, col194 int, col195 int, col196 int, col197 int, col198 int, col199 int, col200 int, col201 int, col202 int, col203 int, col204 int, col205 int, col206 int, col207 int, col208 int, col209 int, col210 int, col211 int, col212 int, col213 int, col214 int, col215 int, col216 int, col217 int, col218 int, col219 int, col220 int, col221 int, col222 int, col223 int, col224 int, col225 int, col226 int, col227 int, col228 int, col229 int, col230 int, col231 int, col232 int, col233 int, col234 int, col235 int, col236 int, col237 int, col238 int, col239 int, col240 int, col241 int, col242 int, col243 int, col244 int, col245 int, col246 int, col247 int, col248 int, col249 int, col250 int, col251 int, col252 int, col253 int, col254 int, col255 int, col256 int, col257 int, col258 int, col259 int, col260 int, col261 int, col262 int, col263 int, col264 int, col265 int, col266 int, col267 int, col268 int, col269 int, col270 int, col271 int, col272 int, col273 int, col274 int, col275 int, col276 int, col277 int, col278 int, col279 int, col280 int, col281 int, col282 int, col283 int, col284 int, col285 int, col286 int, col287 int, col288 int, col289 int, col290 int, col291 int, col292 int, col293 int, col294 int, col295 int, col296 int, col297 int, col298 int, col299 int, col300 int, col301 int, col302 int, col303 int, col304 int, col305 int, col306 int, col307 int, col308 int, col309 int, col310 int, col311 int, col312 int, col313 int, col314 int, col315 int, col316 int, col317 int, col318 int, col319 int, col320 int, col321 int, col322 int, col323 int, col324 int, col325 int, col326 int, col327 int, col328 int, col329 int, col330 int, col331 int, col332 int, col333 int, col334 int, col335 int, col336 int, col337 int, col338 int, col339 int, col340 int, col341 int, col342 int, col343 int, col344 int, col345 int, col346 int, col347 int, col348 int, col349 int, col350 int, col351 int, col352 int, col353 int, col354 int, col355 int, col356 int, col357 int, col358 int, col359 int, col360 int, col361 int, col362 int, col363 int, col364 int, col365 int, col366 int, col367 int, col368 int, col369 int, col370 int, col371 int, col372 int, col373 int, col374 int, col375 int, col376 int, col377 int, col378 int, col379 int, col380 int, col381 int, col382 int, col383 int, col384 int, col385 int, col386 int, col387 int, col388 int, col389 int, col390 int, col391 int, col392 int, col393 int, col394 int, col395 int, col396 int, col397 int, col398 int, col399 int, col400 int, col401 int, col402 int, col403 int, col404 int, col405 int, col406 int, col407 int, col408 int, col409 int, col410 int, col411 int, col412 int, col413 int, col414 int, col415 int, col416 int, col417 int, col418 int, col419 int, col420 int, col421 int, col422 int, col423 int, col424 int, col425 int, col426 int, col427 int, col428 int, col429 int, col430 int, col431 int, col432 int, col433 int, col434 int, col435 int, col436 int, col437 int, col438 int, col439 int, col440 int, col441 int, col442 int, col443 int, col444 int, col445 int, col446 int, col447 int, col448 int, col449 int, col450 int, col451 int, col452 int, col453 int, col454 int, col455 int, col456 int, col457 int, col458 int, col459 int, col460 int, col461 int, col462 int, col463 int, col464 int, col465 int, col466 int, col467 int, col468 int, col469 int, col470 int, col471 int, col472 int, col473 int, col474 int, col475 int, col476 int, col477 int, col478 int, col479 int, col480 int, col481 int, col482 int, col483 int, col484 int, col485 int, col486 int, col487 int, col488 int, col489 int, col490 int, col491 int, col492 int, col493 int, col494 int, col495 int, col496 int, col497 int, col498 int, col499 int, col500 int, col501 int, col502 int, col503 int, col504 int, col505 int, col506 int, col507 int, col508 int, col509 int, col510 int, col511 int, col512 int, col513 int, col514 int, col515 int, col516 int, col517 int, col518 int, col519 int, col520 int, col521 int, col522 int, col523 int, col524 int, col525 int, col526 int, col527 int, col528 int, col529 int, col530 int, col531 int, col532 int, col533 int, col534 int, col535 int, col536 int, col537 int, col538 int, col539 int, col540 int, col541 int, col542 int, col543 int, col544 int, col545 int, col546 int, col547 int, col548 int, col549 int, col550 int, col551 int, col552 int, col553 int, col554 int, col555 int, col556 int, col557 int, col558 int, col559 int, col560 int, col561 int, col562 int, col563 int, col564 int, col565 int, col566 int, col567 int, col568 int, col569 int, col570 int, col571 int, col572 int, col573 int, col574 int, col575 int, col576 int, col577 int, col578 int, col579 int, col580 int, col581 int, col582 int, col583 int, col584 int, col585 int, col586 int, col587 int, col588 int, col589 int, col590 int, col591 int, col592 int, col593 int, col594 int, col595 int, col596 int, col597 int, col598 int, col599 int, col600 int, col601 int, col602 int, col603 int, col604 int, col605 int, col606 int, col607 int, col608 int, col609 int, col610 int, col611 int, col612 int, col613 int, col614 int, col615 int, col616 int, col617 int, col618 int, col619 int, col620 int, col621 int, col622 int, col623 int, col624 int, col625 int, col626 int, col627 int, col628 int, col629 int, col630 int, col631 int, col632 int, col633 int, col634 int, col635 int, col636 int, col637 int, col638 int, col639 int, col640 int, col641 int, col642 int, col643 int, col644 int, col645 int, col646 int, col647 int, col648 int, col649 int, col650 int, col651 int, col652 int, col653 int, col654 int, col655 int, col656 int, col657 int, col658 int, col659 int, col660 int, col661 int, col662 int, col663 int, col664 int, col665 int, col666 int, col667 int, col668 int, col669 int, col670 int, col671 int, col672 int, col673 int, col674 int, col675 int, col676 int, col677 int, col678 int, col679 int, col680 int, col681 int, col682 int, col683 int, col684 int, col685 int, col686 int, col687 int, col688 int, col689 int, col690 int, col691 int, col692 int, col693 int, col694 int, col695 int, col696 int, col697 int, col698 int, col699 int, col700 int, col701 int, col702 int, col703 int, col704 int, col705 int, col706 int, col707 int, col708 int, col709 int, col710 int, col711 int, col712 int, col713 int, col714 int, col715 int, col716 int, col717 int, col718 int, col719 int, col720 int, col721 int, col722 int, col723 int, col724 int, col725 int, col726 int, col727 int, col728 int, col729 int, col730 int, col731 int, col732 int, col733 int, col734 int, col735 int, col736 int, col737 int, col738 int, col739 int, col740 int, col741 int, col742 int, col743 int, col744 int, col745 int, col746 int, col747 int, col748 int, col749 int, col750 int, col751 int, col752 int, col753 int, col754 int, col755 int, col756 int, col757 int, col758 int, col759 int, col760 int, col761 int, col762 int, col763 int, col764 int, col765 int, col766 int, col767 int, col768 int, col769 int, col770 int, col771 int, col772 int, col773 int, col774 int, col775 int, col776 int, col777 int, col778 int, col779 int, col780 int, col781 int, col782 int, col783 int, col784 int, col785 int, col786 int, col787 int, col788 int, col789 int, col790 int, col791 int, col792 int, col793 int, col794 int, col795 int, col796 int, col797 int, col798 int, col799 int, col800 int, col801 int, col802 int, col803 int, col804 int, col805 int, col806 int, col807 int, col808 int, col809 int, col810 int, col811 int, col812 int, col813 int, col814 int, col815 int, col816 int, col817 int, col818 int, col819 int, col820 int, col821 int, col822 int, col823 int, col824 int, col825 int, col826 int, col827 int, col828 int, col829 int, col830 int, col831 int, col832 int, col833 int, col834 int, col835 int, col836 int, col837 int, col838 int, col839 int, col840 int, col841 int, col842 int, col843 int, col844 int, col845 int, col846 int, col847 int, col848 int, col849 int, col850 int, col851 int, col852 int, col853 int, col854 int, col855 int, col856 int, col857 int, col858 int, col859 int, col860 int, col861 int, col862 int, col863 int, col864 int, col865 int, col866 int, col867 int, col868 int, col869 int, col870 int, col871 int, col872 int, col873 int, col874 int, col875 int, col876 int, col877 int, col878 int, col879 int, col880 int, col881 int, col882 int, col883 int, col884 int, col885 int, col886 int, col887 int, col888 int, col889 int, col890 int, col891 int, col892 int, col893 int, col894 int, col895 int, col896 int, col897 int, col898 int, col899 int, col900 int, col901 int, col902 int, col903 int, col904 int, col905 int, col906 int, col907 int, col908 int, col909 int, col910 int, col911 int, col912 int, col913 int, col914 int, col915 int, col916 int, col917 int, col918 int, col919 int, col920 int, col921 int, col922 int, col923 int, col924 int, col925 int, col926 int, col927 int, col928 int, col929 int, col930 int, col931 int, col932 int, col933 int, col934 int, col935 int, col936 int, col937 int, col938 int, col939 int, col940 int, col941 int, col942 int, col943 int, col944 int, col945 int, col946 int, col947 int, col948 int, col949 int, col950 int, col951 int, col952 int, col953 int, col954 int, col955 int, col956 int, col957 int, col958 int, col959 int, col960 int, col961 int, col962 int, col963 int, col964 int, col965 int, col966 int, col967 int, col968 int, col969 int, col970 int, col971 int, col972 int, col973 int, col974 int, col975 int, col976 int, col977 int, col978 int, col979 int, col980 int, col981 int, col982 int, col983 int, col984 int, col985 int, col986 int, col987 int, col988 int, col989 int, col990 int, col991 int, col992 int, col993 int, col994 int, col995 int, col996 int, col997 int, col998 int, col999 int, col1000 int, col1001 int, col1002 int, col1003 int, col1004 int, col1005 int, col1006 int, col1007 int, col1008 int, col1009 int, col1010 int, col1011 int, col1012 int, col1013 int, col1014 int, col1015 int, col1016 int, col1017 int, col1018 int, col1019 int, col1020 int, col1021 int, col1022 int, col1023 int, col1024 int, col1025 int, col1026 int, col1027 int, col1028 int, col1029 int, col1030 int, col1031 int, col1032 int, col1033 int, col1034 int, col1035 int, col1036 int, col1037 int, col1038 int, col1039 int, col1040 int, col1041 int, col1042 int, col1043 int, col1044 int, col1045 int, col1046 int, col1047 int, col1048 int, col1049 int, col1050 int, col1051 int, col1052 int, col1053 int, col1054 int, col1055 int, col1056 int, col1057 int, col1058 int, col1059 int, col1060 int, col1061 int, col1062 int, col1063 int, col1064 int, col1065 int, col1066 int, col1067 int, col1068 int, col1069 int, col1070 int, col1071 int, col1072 int, col1073 int, col1074 int, col1075 int, col1076 int, col1077 int, col1078 int, col1079 int, col1080 int, col1081 int, col1082 int, col1083 int, col1084 int, col1085 int, col1086 int, col1087 int, col1088 int, col1089 int, col1090 int, col1091 int, col1092 int, col1093 int, col1094 int, col1095 int, col1096 int, col1097 int, col1098 int, col1099 int, col1100 int, col1101 int, col1102 int, col1103 int, col1104 int, col1105 int, col1106 int, col1107 int, col1108 int, col1109 int, col1110 int, col1111 int, col1112 int, col1113 int, col1114 int, col1115 int, col1116 int, col1117 int, col1118 int, col1119 int, col1120 int, col1121 int, col1122 int, col1123 int, col1124 int, col1125 int, col1126 int, col1127 int, col1128 int, col1129 int, col1130 int, col1131 int, col1132 int, col1133 int, col1134 int, col1135 int, col1136 int, col1137 int, col1138 int, col1139 int, col1140 int, col1141 int, col1142 int, col1143 int, col1144 int, col1145 int, col1146 int, col1147 int, col1148 int, col1149 int, col1150 int, col1151 int, col1152 int, col1153 int, col1154 int, col1155 int, col1156 int, col1157 int, col1158 int, col1159 int, col1160 int, col1161 int, col1162 int, col1163 int, col1164 int, col1165 int, col1166 int, col1167 int, col1168 int, col1169 int, col1170 int, col1171 int, col1172 int, col1173 int, col1174 int, col1175 int, col1176 int, col1177 int, col1178 int, col1179 int, col1180 int, col1181 int, col1182 int, col1183 int, col1184 int, col1185 int, col1186 int, col1187 int, col1188 int, col1189 int, col1190 int, col1191 int, col1192 int, col1193 int, col1194 int, col1195 int, col1196 int, col1197 int, col1198 int, col1199 int, col1200 int, col1201 int, col1202 int, col1203 int, col1204 int, col1205 int, col1206 int, col1207 int, col1208 int, col1209 int, col1210 int, col1211 int, col1212 int, col1213 int, col1214 int, col1215 int, col1216 int, col1217 int, col1218 int, col1219 int, col1220 int, col1221 int, col1222 int, col1223 int, col1224 int, col1225 int, col1226 int, col1227 int, col1228 int, col1229 int, col1230 int, col1231 int, col1232 int, col1233 int, col1234 int, col1235 int, col1236 int, col1237 int, col1238 int, col1239 int, col1240 int, col1241 int, col1242 int, col1243 int, col1244 int, col1245 int, col1246 int, col1247 int, col1248 int, col1249 int, col1250 int, col1251 int, col1252 int, col1253 int, col1254 int, col1255 int, col1256 int, col1257 int, col1258 int, col1259 int, col1260 int, col1261 int, col1262 int, col1263 int, col1264 int, col1265 int, col1266 int, col1267 int, col1268 int, col1269 int, col1270 int, col1271 int, col1272 int, col1273 int, col1274 int, col1275 int, col1276 int, col1277 int, col1278 int, col1279 int, col1280 int, col1281 int, col1282 int, col1283 int, col1284 int, col1285 int, col1286 int, col1287 int, col1288 int, col1289 int, col1290 int, col1291 int, col1292 int, col1293 int, col1294 int, col1295 int, col1296 int, col1297 int, col1298 int, col1299 int, col1300 int, col1301 int, col1302 int, col1303 int, col1304 int, col1305 int, col1306 int, col1307 int, col1308 int, col1309 int, col1310 int, col1311 int, col1312 int, col1313 int, col1314 int, col1315 int, col1316 int, col1317 int, col1318 int, col1319 int, col1320 int, col1321 int, col1322 int, col1323 int, col1324 int, col1325 int, col1326 int, col1327 int, col1328 int, col1329 int, col1330 int, col1331 int, col1332 int, col1333 int, col1334 int, col1335 int, col1336 int, col1337 int, col1338 int, col1339 int, col1340 int, col1341 int, col1342 int, col1343 int, col1344 int, col1345 int, col1346 int, col1347 int, col1348 int, col1349 int, col1350 int, col1351 int, col1352 int, col1353 int, col1354 int, col1355 int, col1356 int, col1357 int, col1358 int, col1359 int, col1360 int, col1361 int, col1362 int, col1363 int, col1364 int, col1365 int, col1366 int, col1367 int, col1368 int, col1369 int, col1370 int, col1371 int, col1372 int, col1373 int, col1374 int, col1375 int, col1376 int, col1377 int, col1378 int, col1379 int, col1380 int, col1381 int, col1382 int, col1383 int, col1384 int, col1385 int, col1386 int, col1387 int, col1388 int, col1389 int, col1390 int, col1391 int, col1392 int, col1393 int, col1394 int, col1395 int, col1396 int, col1397 int, col1398 int, col1399 int, col1400 int, col1401 int, col1402 int, col1403 int, col1404 int, col1405 int, col1406 int, col1407 int, col1408 int, col1409 int, col1410 int, col1411 int, col1412 int, col1413 int, col1414 int, col1415 int, col1416 int, col1417 int, col1418 int, col1419 int, col1420 int, col1421 int, col1422 int, col1423 int, col1424 int, col1425 int, col1426 int, col1427 int, col1428 int, col1429 int, col1430 int, col1431 int, col1432 int, col1433 int, col1434 int, col1435 int, col1436 int, col1437 int, col1438 int, col1439 int, col1440 int, col1441 int, col1442 int, col1443 int, col1444 int, col1445 int, col1446 int, col1447 int, col1448 int, col1449 int, col1450 int, col1451 int, col1452 int, col1453 int, col1454 int, col1455 int, col1456 int, col1457 int, col1458 int, col1459 int, col1460 int, col1461 int, col1462 int, col1463 int, col1464 int, col1465 int, col1466 int, col1467 int, col1468 int, col1469 int, col1470 int, col1471 int, col1472 int, col1473 int, col1474 int, col1475 int, col1476 int, col1477 int, col1478 int, col1479 int, col1480 int, col1481 int, col1482 int, col1483 int, col1484 int, col1485 int, col1486 int, col1487 int, col1488 int, col1489 int, col1490 int, col1491 int, col1492 int, col1493 int, col1494 int, col1495 int, col1496 int, col1497 int, col1498 int, col1499 int, col1500 int, col1501 int, col1502 int, col1503 int, col1504 int, col1505 int, col1506 int, col1507 int, col1508 int, col1509 int, col1510 int, col1511 int, col1512 int, col1513 int, col1514 int, col1515 int, col1516 int, col1517 int, col1518 int, col1519 int, col1520 int, col1521 int, col1522 int, col1523 int, col1524 int, col1525 int, col1526 int, col1527 int, col1528 int, col1529 int, col1530 int, col1531 int, col1532 int, col1533 int, col1534 int, col1535 int, col1536 int, col1537 int, col1538 int, col1539 int, col1540 int, col1541 int, col1542 int, col1543 int, col1544 int, col1545 int, col1546 int, col1547 int, col1548 int, col1549 int, col1550 int, col1551 int, col1552 int, col1553 int, col1554 int, col1555 int, col1556 int, col1557 int, col1558 int, col1559 int, col1560 int, col1561 int, col1562 int, col1563 int, col1564 int, col1565 int, col1566 int, col1567 int, col1568 int, col1569 int, col1570 int, col1571 int, col1572 int, col1573 int, col1574 int, col1575 int, col1576 int, col1577 int, col1578 int, col1579 int, col1580 int, col1581 int, col1582 int, col1583 int, col1584 int, col1585 int, col1586 int, col1587 int, col1588 int, col1589 int, col1590 int, col1591 int, col1592 int, col1593 int, col1594 int, col1595 int, col1596 int, col1597 int, col1598 int, col1599 int, col1600 int, col1601 int, col1602 int, col1603 int, col1604 int, col1605 int, col1606 int, col1607 int, col1608 int, col1609 int, col1610 int, col1611 int, col1612 int, col1613 int, col1614 int, col1615 int, col1616 int, col1617 int, col1618 int, col1619 int, col1620 int, col1621 int, col1622 int, col1623 int, col1624 int, col1625 int, col1626 int, col1627 int, col1628 int, col1629 int, col1630 int, col1631 int, col1632 int, col1633 int, col1634 int, col1635 int, col1636 int, col1637 int, col1638 int, col1639 int, col1640 int, col1641 int, col1642 int, col1643 int, col1644 int, col1645 int, col1646 int, col1647 int, col1648 int, col1649 int, col1650 int, col1651 int, col1652 int, col1653 int, col1654 int, col1655 int, col1656 int, col1657 int, col1658 int, col1659 int, col1660 int, col1661 int, col1662 int, col1663 int, col1664 int, col1665 int, col1666 int, col1667 int, col1668 int, col1669 int, col1670 int, col1671 int, col1672 int, col1673 int, col1674 int, col1675 int, col1676 int, col1677 int, col1678 int, col1679 int, col1680 int, col1681 int, col1682 int, col1683 int, col1684 int, col1685 int, col1686 int, col1687 int, col1688 int, col1689 int, col1690 int, col1691 int, col1692 int, col1693 int, col1694 int, col1695 int, col1696 int, col1697 int, col1698 int, col1699 int, col1700 int, col1701 int, col1702 int, col1703 int, col1704 int, col1705 int, col1706 int, col1707 int, col1708 int, col1709 int, col1710 int, col1711 int, col1712 int, col1713 int, col1714 int, col1715 int, col1716 int, col1717 int, col1718 int, col1719 int, col1720 int, col1721 int, col1722 int, col1723 int, col1724 int, col1725 int, col1726 int, col1727 int, col1728 int, col1729 int, col1730 int, col1731 int, col1732 int, col1733 int, col1734 int, col1735 int, col1736 int, col1737 int, col1738 int, col1739 int, col1740 int, col1741 int, col1742 int, col1743 int, col1744 int, col1745 int, col1746 int, col1747 int, col1748 int, col1749 int, col1750 int, col1751 int, col1752 int, col1753 int, col1754 int, col1755 int, col1756 int, col1757 int, col1758 int, col1759 int, col1760 int, col1761 int, col1762 int, col1763 int, col1764 int, col1765 int, col1766 int, col1767 int, col1768 int, col1769 int, col1770 int, col1771 int, col1772 int, col1773 int, col1774 int, col1775 int, col1776 int, col1777 int, col1778 int, col1779 int, col1780 int, col1781 int, col1782 int, col1783 int, col1784 int, col1785 int, col1786 int, col1787 int, col1788 int, col1789 int, col1790 int, col1791 int, col1792 int, col1793 int, col1794 int, col1795 int, col1796 int, col1797 int, col1798 int, col1799 int, col1800 int, col1801 int, col1802 int, col1803 int, col1804 int, col1805 int, col1806 int, col1807 int, col1808 int, col1809 int, col1810 int, col1811 int, col1812 int, col1813 int, col1814 int, col1815 int, col1816 int, col1817 int, col1818 int, col1819 int, col1820 int, col1821 int, col1822 int, col1823 int, col1824 int, col1825 int, col1826 int, col1827 int, col1828 int, col1829 int, col1830 int, col1831 int, col1832 int, col1833 int, col1834 int, col1835 int, col1836 int, col1837 int, col1838 int, col1839 int, col1840 int, col1841 int, col1842 int, col1843 int, col1844 int, col1845 int, col1846 int, col1847 int, col1848 int, col1849 int, col1850 int, col1851 int, col1852 int, col1853 int, col1854 int, col1855 int, col1856 int, col1857 int, col1858 int, col1859 int, col1860 int, col1861 int, col1862 int, col1863 int, col1864 int, col1865 int, col1866 int, col1867 int, col1868 int, col1869 int, col1870 int, col1871 int, col1872 int, col1873 int, col1874 int, col1875 int, col1876 int, col1877 int, col1878 int, col1879 int, col1880 int, col1881 int, col1882 int, col1883 int, col1884 int, col1885 int, col1886 int, col1887 int, col1888 int, col1889 int, col1890 int, col1891 int, col1892 int, col1893 int, col1894 int, col1895 int, col1896 int, col1897 int, col1898 int, col1899 int, col1900 int, col1901 int, col1902 int, col1903 int, col1904 int, col1905 int, col1906 int, col1907 int, col1908 int, col1909 int, col1910 int, col1911 int, col1912 int, col1913 int, col1914 int, col1915 int, col1916 int, col1917 int, col1918 int, col1919 int, col1920 int, col1921 int, col1922 int, col1923 int, col1924 int, col1925 int, col1926 int, col1927 int, col1928 int, col1929 int, col1930 int, col1931 int, col1932 int, col1933 int, col1934 int, col1935 int, col1936 int, col1937 int, col1938 int, col1939 int, col1940 int, col1941 int, col1942 int, col1943 int, col1944 int, col1945 int, col1946 int, col1947 int, col1948 int, col1949 int, col1950 int, col1951 int, col1952 int, col1953 int, col1954 int, col1955 int, col1956 int, col1957 int, col1958 int, col1959 int, col1960 int, col1961 int, col1962 int, col1963 int, col1964 int, col1965 int, col1966 int, col1967 int, col1968 int, col1969 int, col1970 int, col1971 int, col1972 int, col1973 int, col1974 int, col1975 int, col1976 int, col1977 int, col1978 int, col1979 int, col1980 int, col1981 int, col1982 int, col1983 int, col1984 int, col1985 int, col1986 int, col1987 int, col1988 int, col1989 int, col1990 int, col1991 int, col1992 int, col1993 int, col1994 int, col1995 int, col1996 int, col1997 int, col1998 int, col1999 int, col2000 int, col2001 int, col2002 int, col2003 int, col2004 int, col2005 int, col2006 int, col2007 int, col2008 int, col2009 int, col2010 int, col2011 int, col2012 int, col2013 int, col2014 int, col2015 int, col2016 int, col2017 int, col2018 int, col2019 int, col2020 int, col2021 int, col2022 int, col2023 int, col2024 int, col2025 int, col2026 int, col2027 int, col2028 int, col2029 int, col2030 int, col2031 int, col2032 int, col2033 int, col2034 int, col2035 int, col2036 int, col2037 int, col2038 int, col2039 int, col2040 int, col2041 int, col2042 int, col2043 int, col2044 int, col2045 int, col2046 int, col2047 int, col2048 int, col2049 int, col2050 int, col2051 int, col2052 int, col2053 int, col2054 int, col2055 int, col2056 int, col2057 int, col2058 int, col2059 int, col2060 int, col2061 int, col2062 int, col2063 int, col2064 int, col2065 int, col2066 int, col2067 int, col2068 int, col2069 int, col2070 int, col2071 int, col2072 int, col2073 int, col2074 int, col2075 int, col2076 int, col2077 int, col2078 int, col2079 int, col2080 int, col2081 int, col2082 int, col2083 int, col2084 int, col2085 int, col2086 int, col2087 int, col2088 int, col2089 int, col2090 int, col2091 int, col2092 int, col2093 int, col2094 int, col2095 int, col2096 int, col2097 int, col2098 int, col2099 int, col2100 int, col2101 int, col2102 int, col2103 int, col2104 int, col2105 int, col2106 int, col2107 int, col2108 int, col2109 int, col2110 int, col2111 int, col2112 int, col2113 int, col2114 int, col2115 int, col2116 int, col2117 int, col2118 int, col2119 int, col2120 int, col2121 int, col2122 int, col2123 int, col2124 int, col2125 int, col2126 int, col2127 int, col2128 int, col2129 int, col2130 int, col2131 int, col2132 int, col2133 int, col2134 int, col2135 int, col2136 int, col2137 int, col2138 int, col2139 int, col2140 int, col2141 int, col2142 int, col2143 int, col2144 int, col2145 int, col2146 int, col2147 int, col2148 int, col2149 int, col2150 int, col2151 int, col2152 int, col2153 int, col2154 int, col2155 int, col2156 int, col2157 int, col2158 int, col2159 int, col2160 int, col2161 int, col2162 int, col2163 int, col2164 int, col2165 int, col2166 int, col2167 int, col2168 int, col2169 int, col2170 int, col2171 int, col2172 int, col2173 int, col2174 int, col2175 int, col2176 int, col2177 int, col2178 int, col2179 int, col2180 int, col2181 int, col2182 int, col2183 int, col2184 int, col2185 int, col2186 int, col2187 int, col2188 int, col2189 int, col2190 int, col2191 int, col2192 int, col2193 int, col2194 int, col2195 int, col2196 int, col2197 int, col2198 int, col2199 int, col2200 int, col2201 int, col2202 int, col2203 int, col2204 int, col2205 int, col2206 int, col2207 int, col2208 int, col2209 int, col2210 int, col2211 int, col2212 int, col2213 int, col2214 int, col2215 int, col2216 int, col2217 int, col2218 int, col2219 int, col2220 int, col2221 int, col2222 int, col2223 int, col2224 int, col2225 int, col2226 int, col2227 int, col2228 int, col2229 int, col2230 int, col2231 int, col2232 int, col2233 int, col2234 int, col2235 int, col2236 int, col2237 int, col2238 int, col2239 int, col2240 int, col2241 int, col2242 int, col2243 int, col2244 int, col2245 int, col2246 int, col2247 int, col2248 int, col2249 int, col2250 int, col2251 int, col2252 int, col2253 int, col2254 int, col2255 int, col2256 int, col2257 int, col2258 int, col2259 int, col2260 int, col2261 int, col2262 int, col2263 int, col2264 int, col2265 int, col2266 int, col2267 int, col2268 int, col2269 int, col2270 int, col2271 int, col2272 int, col2273 int, col2274 int, col2275 int, col2276 int, col2277 int, col2278 int, col2279 int, col2280 int, col2281 int, col2282 int, col2283 int, col2284 int, col2285 int, col2286 int, col2287 int, col2288 int, col2289 int, col2290 int, col2291 int, col2292 int, col2293 int, col2294 int, col2295 int, col2296 int, col2297 int, col2298 int, col2299 int, col2300 int, col2301 int, col2302 int, col2303 int, col2304 int, col2305 int, col2306 int, col2307 int, col2308 int, col2309 int, col2310 int, col2311 int, col2312 int, col2313 int, col2314 int, col2315 int, col2316 int, col2317 int, col2318 int, col2319 int, col2320 int, col2321 int, col2322 int, col2323 int, col2324 int, col2325 int, col2326 int, col2327 int, col2328 int, col2329 int, col2330 int, col2331 int, col2332 int, col2333 int, col2334 int, col2335 int, col2336 int, col2337 int, col2338 int, col2339 int, col2340 int, col2341 int, col2342 int, col2343 int, col2344 int, col2345 int, col2346 int, col2347 int, col2348 int, col2349 int, col2350 int, col2351 int, col2352 int, col2353 int, col2354 int, col2355 int, col2356 int, col2357 int, col2358 int, col2359 int, col2360 int, col2361 int, col2362 int, col2363 int, col2364 int, col2365 int, col2366 int, col2367 int, col2368 int, col2369 int, col2370 int, col2371 int, col2372 int, col2373 int, col2374 int, col2375 int, col2376 int, col2377 int, col2378 int, col2379 int, col2380 int, col2381 int, col2382 int, col2383 int, col2384 int, col2385 int, col2386 int, col2387 int, col2388 int, col2389 int, col2390 int, col2391 int, col2392 int, col2393 int, col2394 int, col2395 int, col2396 int, col2397 int, col2398 int, col2399 int, col2400 int, col2401 int, col2402 int, col2403 int, col2404 int, col2405 int, col2406 int, col2407 int, col2408 int, col2409 int, col2410 int, col2411 int, col2412 int, col2413 int, col2414 int, col2415 int, col2416 int, col2417 int, col2418 int, col2419 int, col2420 int, col2421 int, col2422 int, col2423 int, col2424 int, col2425 int, col2426 int, col2427 int, col2428 int, col2429 int, col2430 int, col2431 int, col2432 int, col2433 int, col2434 int, col2435 int, col2436 int, col2437 int, col2438 int, col2439 int, col2440 int, col2441 int, col2442 int, col2443 int, col2444 int, col2445 int, col2446 int, col2447 int, col2448 int, col2449 int, col2450 int, col2451 int, col2452 int, col2453 int, col2454 int, col2455 int, col2456 int, col2457 int, col2458 int, col2459 int, col2460 int, col2461 int, col2462 int, col2463 int, col2464 int, col2465 int, col2466 int, col2467 int, col2468 int, col2469 int, col2470 int, col2471 int, col2472 int, col2473 int, col2474 int, col2475 int, col2476 int, col2477 int, col2478 int, col2479 int, col2480 int, col2481 int, col2482 int, col2483 int, col2484 int, col2485 int, col2486 int, col2487 int, col2488 int, col2489 int, col2490 int, col2491 int, col2492 int, col2493 int, col2494 int, col2495 int, col2496 int, col2497 int, col2498 int, col2499 int, col2500 int, col2501 int, col2502 int, col2503 int, col2504 int, col2505 int, col2506 int, col2507 int, col2508 int, col2509 int, col2510 int, col2511 int, col2512 int, col2513 int, col2514 int, col2515 int, col2516 int, col2517 int, col2518 int, col2519 int, col2520 int, col2521 int, col2522 int, col2523 int, col2524 int, col2525 int, col2526 int, col2527 int, col2528 int, col2529 int, col2530 int, col2531 int, col2532 int, col2533 int, col2534 int, col2535 int, col2536 int, col2537 int, col2538 int, col2539 int, col2540 int, col2541 int, col2542 int, col2543 int, col2544 int, col2545 int, col2546 int, col2547 int, col2548 int, col2549 int, col2550 int, col2551 int, col2552 int, col2553 int, col2554 int, col2555 int, col2556 int, col2557 int, col2558 int, col2559 int, col2560 int, col2561 int, col2562 int, col2563 int, col2564 int, col2565 int, col2566 int, col2567 int, col2568 int, col2569 int, col2570 int, col2571 int, col2572 int, col2573 int, col2574 int, col2575 int, col2576 int, col2577 int, col2578 int, col2579 int, col2580 int, col2581 int, col2582 int, col2583 int, col2584 int, col2585 int, col2586 int, col2587 int, col2588 int, col2589 int, col2590 int, col2591 int, col2592 int, col2593 int, col2594 int, col2595 int, col2596 int, col2597 int, col2598 int, col2599 int, col2600 int, col2601 int, col2602 int, col2603 int, col2604 int, col2605 int, col2606 int, col2607 int, col2608 int, col2609 int, col2610 int, col2611 int, col2612 int, col2613 int, col2614 int, col2615 int, col2616 int, col2617 int, col2618 int, col2619 int, col2620 int, col2621 int, col2622 int, col2623 int, col2624 int, col2625 int, col2626 int, col2627 int, col2628 int, col2629 int, col2630 int, col2631 int, col2632 int, col2633 int, col2634 int, col2635 int, col2636 int, col2637 int, col2638 int, col2639 int, col2640 int, col2641 int, col2642 int, col2643 int, col2644 int, col2645 int, col2646 int, col2647 int, col2648 int, col2649 int, col2650 int, col2651 int, col2652 int, col2653 int, col2654 int, col2655 int, col2656 int, col2657 int, col2658 int, col2659 int, col2660 int, col2661 int, col2662 int, col2663 int, col2664 int, col2665 int, col2666 int, col2667 int, col2668 int, col2669 int, col2670 int, col2671 int, col2672 int, col2673 int, col2674 int, col2675 int, col2676 int, col2677 int, col2678 int, col2679 int, col2680 int, col2681 int, col2682 int, col2683 int, col2684 int, col2685 int, col2686 int, col2687 int, col2688 int, col2689 int, col2690 int, col2691 int, col2692 int, col2693 int, col2694 int, col2695 int, col2696 int, col2697 int, col2698 int, col2699 int, col2700 int, col2701 int, col2702 int, col2703 int, col2704 int, col2705 int, col2706 int, col2707 int, col2708 int, col2709 int, col2710 int, col2711 int, col2712 int, col2713 int, col2714 int, col2715 int, col2716 int, col2717 int, col2718 int, col2719 int, col2720 int, col2721 int, col2722 int, col2723 int, col2724 int, col2725 int, col2726 int, col2727 int, col2728 int, col2729 int, col2730 int, col2731 int, col2732 int, col2733 int, col2734 int, col2735 int, col2736 int, col2737 int, col2738 int, col2739 int, col2740 int, col2741 int, col2742 int, col2743 int, col2744 int, col2745 int, col2746 int, col2747 int, col2748 int, col2749 int, col2750 int, col2751 int, col2752 int, col2753 int, col2754 int, col2755 int, col2756 int, col2757 int, col2758 int, col2759 int, col2760 int, col2761 int, col2762 int, col2763 int, col2764 int, col2765 int, col2766 int, col2767 int, col2768 int, col2769 int, col2770 int, col2771 int, col2772 int, col2773 int, col2774 int, col2775 int, col2776 int, col2777 int, col2778 int, col2779 int, col2780 int, col2781 int, col2782 int, col2783 int, col2784 int, col2785 int, col2786 int, col2787 int, col2788 int, col2789 int, col2790 int, col2791 int, col2792 int, col2793 int, col2794 int, col2795 int, col2796 int, col2797 int, col2798 int, col2799 int, col2800 int, col2801 int, col2802 int, col2803 int, col2804 int, col2805 int, col2806 int, col2807 int, col2808 int, col2809 int, col2810 int, col2811 int, col2812 int, col2813 int, col2814 int, col2815 int, col2816 int, col2817 int, col2818 int, col2819 int, col2820 int, col2821 int, col2822 int, col2823 int, col2824 int, col2825 int, col2826 int, col2827 int, col2828 int, col2829 int, col2830 int, col2831 int, col2832 int, col2833 int, col2834 int, col2835 int, col2836 int, col2837 int, col2838 int, col2839 int, col2840 int, col2841 int, col2842 int, col2843 int, col2844 int, col2845 int, col2846 int, col2847 int, col2848 int, col2849 int, col2850 int, col2851 int, col2852 int, col2853 int, col2854 int, col2855 int, col2856 int, col2857 int, col2858 int, col2859 int, col2860 int, col2861 int, col2862 int, col2863 int, col2864 int, col2865 int, col2866 int, col2867 int, col2868 int, col2869 int, col2870 int, col2871 int, col2872 int, col2873 int, col2874 int, col2875 int, col2876 int, col2877 int, col2878 int, col2879 int, col2880 int, col2881 int, col2882 int, col2883 int, col2884 int, col2885 int, col2886 int, col2887 int, col2888 int, col2889 int, col2890 int, col2891 int, col2892 int, col2893 int, col2894 int, col2895 int, col2896 int, col2897 int, col2898 int, col2899 int, col2900 int, col2901 int, col2902 int, col2903 int, col2904 int, col2905 int, col2906 int, col2907 int, col2908 int, col2909 int, col2910 int, col2911 int, col2912 int, col2913 int, col2914 int, col2915 int, col2916 int, col2917 int, col2918 int, col2919 int, col2920 int, col2921 int, col2922 int, col2923 int, col2924 int, col2925 int, col2926 int, col2927 int, col2928 int, col2929 int, col2930 int, col2931 int, col2932 int, col2933 int, col2934 int, col2935 int, col2936 int, col2937 int, col2938 int, col2939 int, col2940 int, col2941 int, col2942 int, col2943 int, col2944 int, col2945 int, col2946 int, col2947 int, col2948 int, col2949 int, col2950 int, col2951 int, col2952 int, col2953 int, col2954 int, col2955 int, col2956 int, col2957 int, col2958 int, col2959 int, col2960 int, col2961 int, col2962 int, col2963 int, col2964 int, col2965 int, col2966 int, col2967 int, col2968 int, col2969 int, col2970 int, col2971 int, col2972 int, col2973 int, col2974 int, col2975 int, col2976 int, col2977 int, col2978 int, col2979 int, col2980 int, col2981 int, col2982 int, col2983 int, col2984 int, col2985 int, col2986 int, col2987 int, col2988 int, col2989 int, col2990 int, col2991 int, col2992 int, col2993 int, col2994 int, col2995 int, col2996 int, col2997 int, col2998 int, col2999 int, col3000 int, col3001 int, col3002 int, col3003 int, col3004 int, col3005 int, col3006 int, col3007 int, col3008 int, col3009 int, col3010 int, col3011 int, col3012 int, col3013 int, col3014 int, col3015 int, col3016 int, col3017 int, col3018 int, col3019 int, col3020 int, col3021 int, col3022 int, col3023 int, col3024 int, col3025 int, col3026 int, col3027 int, col3028 int, col3029 int, col3030 int, col3031 int, col3032 int, col3033 int, col3034 int, col3035 int, col3036 int, col3037 int, col3038 int, col3039 int, col3040 int, col3041 int, col3042 int, col3043 int, col3044 int, col3045 int, col3046 int, col3047 int, col3048 int, col3049 int, col3050 int, col3051 int, col3052 int, col3053 int, col3054 int, col3055 int, col3056 int, col3057 int, col3058 int, col3059 int, col3060 int, col3061 int, col3062 int, col3063 int, col3064 int, col3065 int, col3066 int, col3067 int, col3068 int, col3069 int, col3070 int, col3071 int, col3072 int, col3073 int, col3074 int, col3075 int, col3076 int, col3077 int, col3078 int, col3079 int, col3080 int, col3081 int, col3082 int, col3083 int, col3084 int, col3085 int, col3086 int, col3087 int, col3088 int, col3089 int, col3090 int, col3091 int, col3092 int, col3093 int, col3094 int, col3095 int, col3096 int, col3097 int, col3098 int, col3099 int, col3100 int, col3101 int, col3102 int, col3103 int, col3104 int, col3105 int, col3106 int, col3107 int, col3108 int, col3109 int, col3110 int, col3111 int, col3112 int, col3113 int, col3114 int, col3115 int, col3116 int, col3117 int, col3118 int, col3119 int, col3120 int, col3121 int, col3122 int, col3123 int, col3124 int, col3125 int, col3126 int, col3127 int, col3128 int, col3129 int, col3130 int, col3131 int, col3132 int, col3133 int, col3134 int, col3135 int, col3136 int, col3137 int, col3138 int, col3139 int, col3140 int, col3141 int, col3142 int, col3143 int, col3144 int, col3145 int, col3146 int, col3147 int, col3148 int, col3149 int, col3150 int, col3151 int, col3152 int, col3153 int, col3154 int, col3155 int, col3156 int, col3157 int, col3158 int, col3159 int, col3160 int, col3161 int, col3162 int, col3163 int, col3164 int, col3165 int, col3166 int, col3167 int, col3168 int, col3169 int, col3170 int, col3171 int, col3172 int, col3173 int, col3174 int, col3175 int, col3176 int, col3177 int, col3178 int, col3179 int, col3180 int, col3181 int, col3182 int, col3183 int, col3184 int, col3185 int, col3186 int, col3187 int, col3188 int, col3189 int, col3190 int, col3191 int, col3192 int, col3193 int, col3194 int, col3195 int, col3196 int, col3197 int, col3198 int, col3199 int, col3200 int, col3201 int, col3202 int, col3203 int, col3204 int, col3205 int, col3206 int, col3207 int, col3208 int, col3209 int, col3210 int, col3211 int, col3212 int, col3213 int, col3214 int, col3215 int, col3216 int, col3217 int, col3218 int, col3219 int, col3220 int, col3221 int, col3222 int, col3223 int, col3224 int, col3225 int, col3226 int, col3227 int, col3228 int, col3229 int, col3230 int, col3231 int, col3232 int, col3233 int, col3234 int, col3235 int, col3236 int, col3237 int, col3238 int, col3239 int, col3240 int, col3241 int, col3242 int, col3243 int, col3244 int, col3245 int, col3246 int, col3247 int, col3248 int, col3249 int, col3250 int, col3251 int, col3252 int, col3253 int, col3254 int, col3255 int, col3256 int, col3257 int, col3258 int, col3259 int, col3260 int, col3261 int, col3262 int, col3263 int, col3264 int, col3265 int, col3266 int, col3267 int, col3268 int, col3269 int, col3270 int, col3271 int, col3272 int, col3273 int, col3274 int, col3275 int, col3276 int, col3277 int, col3278 int, col3279 int, col3280 int, col3281 int, col3282 int, col3283 int, col3284 int, col3285 int, col3286 int, col3287 int, col3288 int, col3289 int, col3290 int, col3291 int, col3292 int, col3293 int, col3294 int, col3295 int, col3296 int, col3297 int, col3298 int, col3299 int, col3300 int, col3301 int, col3302 int, col3303 int, col3304 int, col3305 int, col3306 int, col3307 int, col3308 int, col3309 int, col3310 int, col3311 int, col3312 int, col3313 int, col3314 int, col3315 int, col3316 int, col3317 int, col3318 int, col3319 int, col3320 int, col3321 int, col3322 int, col3323 int, col3324 int, col3325 int, col3326 int, col3327 int, col3328 int, col3329 int, col3330 int, col3331 int, col3332 int, col3333 int, col3334 int, col3335 int, col3336 int, col3337 int, col3338 int, col3339 int, col3340 int, col3341 int, col3342 int, col3343 int, col3344 int, col3345 int, col3346 int, col3347 int, col3348 int, col3349 int, col3350 int, col3351 int, col3352 int, col3353 int, col3354 int, col3355 int, col3356 int, col3357 int, col3358 int, col3359 int, col3360 int, col3361 int, col3362 int, col3363 int, col3364 int, col3365 int, col3366 int, col3367 int, col3368 int, col3369 int, col3370 int, col3371 int, col3372 int, col3373 int, col3374 int, col3375 int, col3376 int, col3377 int, col3378 int, col3379 int, col3380 int, col3381 int, col3382 int, col3383 int, col3384 int, col3385 int, col3386 int, col3387 int, col3388 int, col3389 int, col3390 int, col3391 int, col3392 int, col3393 int, col3394 int, col3395 int, col3396 int, col3397 int, col3398 int, col3399 int, col3400 int, col3401 int, col3402 int, col3403 int, col3404 int, col3405 int, col3406 int, col3407 int, col3408 int, col3409 int, col3410 int, col3411 int, col3412 int, col3413 int, col3414 int, col3415 int, col3416 int, col3417 int, col3418 int, col3419 int, col3420 int, col3421 int, col3422 int, col3423 int, col3424 int, col3425 int, col3426 int, col3427 int, col3428 int, col3429 int, col3430 int, col3431 int, col3432 int, col3433 int, col3434 int, col3435 int, col3436 int, col3437 int, col3438 int, col3439 int, col3440 int, col3441 int, col3442 int, col3443 int, col3444 int, col3445 int, col3446 int, col3447 int, col3448 int, col3449 int, col3450 int, col3451 int, col3452 int, col3453 int, col3454 int, col3455 int, col3456 int, col3457 int, col3458 int, col3459 int, col3460 int, col3461 int, col3462 int, col3463 int, col3464 int, col3465 int, col3466 int, col3467 int, col3468 int, col3469 int, col3470 int, col3471 int, col3472 int, col3473 int, col3474 int, col3475 int, col3476 int, col3477 int, col3478 int, col3479 int, col3480 int, col3481 int, col3482 int, col3483 int, col3484 int, col3485 int, col3486 int, col3487 int, col3488 int, col3489 int, col3490 int, col3491 int, col3492 int, col3493 int, col3494 int, col3495 int, col3496 int, col3497 int, col3498 int, col3499 int, col3500 int, col3501 int, col3502 int, col3503 int, col3504 int, col3505 int, col3506 int, col3507 int, col3508 int, col3509 int, col3510 int, col3511 int, col3512 int, col3513 int, col3514 int, col3515 int, col3516 int, col3517 int, col3518 int, col3519 int, col3520 int, col3521 int, col3522 int, col3523 int, col3524 int, col3525 int, col3526 int, col3527 int, col3528 int, col3529 int, col3530 int, col3531 int, col3532 int, col3533 int, col3534 int, col3535 int, col3536 int, col3537 int, col3538 int, col3539 int, col3540 int, col3541 int, col3542 int, col3543 int, col3544 int, col3545 int, col3546 int, col3547 int, col3548 int, col3549 int, col3550 int, col3551 int, col3552 int, col3553 int, col3554 int, col3555 int, col3556 int, col3557 int, col3558 int, col3559 int, col3560 int, col3561 int, col3562 int, col3563 int, col3564 int, col3565 int, col3566 int, col3567 int, col3568 int, col3569 int, col3570 int, col3571 int, col3572 int, col3573 int, col3574 int, col3575 int, col3576 int, col3577 int, col3578 int, col3579 int, col3580 int, col3581 int, col3582 int, col3583 int, col3584 int, col3585 int, col3586 int, col3587 int, col3588 int, col3589 int, col3590 int, col3591 int, col3592 int, col3593 int, col3594 int, col3595 int, col3596 int, col3597 int, col3598 int, col3599 int, col3600 int, col3601 int, col3602 int, col3603 int, col3604 int, col3605 int, col3606 int, col3607 int, col3608 int, col3609 int, col3610 int, col3611 int, col3612 int, col3613 int, col3614 int, col3615 int, col3616 int, col3617 int, col3618 int, col3619 int, col3620 int, col3621 int, col3622 int, col3623 int, col3624 int, col3625 int, col3626 int, col3627 int, col3628 int, col3629 int, col3630 int, col3631 int, col3632 int, col3633 int, col3634 int, col3635 int, col3636 int, col3637 int, col3638 int, col3639 int, col3640 int, col3641 int, col3642 int, col3643 int, col3644 int, col3645 int, col3646 int, col3647 int, col3648 int, col3649 int, col3650 int, col3651 int, col3652 int, col3653 int, col3654 int, col3655 int, col3656 int, col3657 int, col3658 int, col3659 int, col3660 int, col3661 int, col3662 int, col3663 int, col3664 int, col3665 int, col3666 int, col3667 int, col3668 int, col3669 int, col3670 int, col3671 int, col3672 int, col3673 int, col3674 int, col3675 int, col3676 int, col3677 int, col3678 int, col3679 int, col3680 int, col3681 int, col3682 int, col3683 int, col3684 int, col3685 int, col3686 int, col3687 int, col3688 int, col3689 int, col3690 int, col3691 int, col3692 int, col3693 int, col3694 int, col3695 int, col3696 int, col3697 int, col3698 int, col3699 int, col3700 int, col3701 int, col3702 int, col3703 int, col3704 int, col3705 int, col3706 int, col3707 int, col3708 int, col3709 int, col3710 int, col3711 int, col3712 int, col3713 int, col3714 int, col3715 int, col3716 int, col3717 int, col3718 int, col3719 int, col3720 int, col3721 int, col3722 int, col3723 int, col3724 int, col3725 int, col3726 int, col3727 int, col3728 int, col3729 int, col3730 int, col3731 int, col3732 int, col3733 int, col3734 int, col3735 int, col3736 int, col3737 int, col3738 int, col3739 int, col3740 int, col3741 int, col3742 int, col3743 int, col3744 int, col3745 int, col3746 int, col3747 int, col3748 int, col3749 int, col3750 int, col3751 int, col3752 int, col3753 int, col3754 int, col3755 int, col3756 int, col3757 int, col3758 int, col3759 int, col3760 int, col3761 int, col3762 int, col3763 int, col3764 int, col3765 int, col3766 int, col3767 int, col3768 int, col3769 int, col3770 int, col3771 int, col3772 int, col3773 int, col3774 int, col3775 int, col3776 int, col3777 int, col3778 int, col3779 int, col3780 int, col3781 int, col3782 int, col3783 int, col3784 int, col3785 int, col3786 int, col3787 int, col3788 int, col3789 int, col3790 int, col3791 int, col3792 int, col3793 int, col3794 int, col3795 int, col3796 int, col3797 int, col3798 int, col3799 int, col3800 int, col3801 int, col3802 int, col3803 int, col3804 int, col3805 int, col3806 int, col3807 int, col3808 int, col3809 int, col3810 int, col3811 int, col3812 int, col3813 int, col3814 int, col3815 int, col3816 int, col3817 int, col3818 int, col3819 int, col3820 int, col3821 int, col3822 int, col3823 int, col3824 int, col3825 int, col3826 int, col3827 int, col3828 int, col3829 int, col3830 int, col3831 int, col3832 int, col3833 int, col3834 int, col3835 int, col3836 int, col3837 int, col3838 int, col3839 int, col3840 int, col3841 int, col3842 int, col3843 int, col3844 int, col3845 int, col3846 int, col3847 int, col3848 int, col3849 int, col3850 int, col3851 int, col3852 int, col3853 int, col3854 int, col3855 int, col3856 int, col3857 int, col3858 int, col3859 int, col3860 int, col3861 int, col3862 int, col3863 int, col3864 int, col3865 int, col3866 int, col3867 int, col3868 int, col3869 int, col3870 int, col3871 int, col3872 int, col3873 int, col3874 int, col3875 int, col3876 int, col3877 int, col3878 int, col3879 int, col3880 int, col3881 int, col3882 int, col3883 int, col3884 int, col3885 int, col3886 int, col3887 int, col3888 int, col3889 int, col3890 int, col3891 int, col3892 int, col3893 int, col3894 int, col3895 int, col3896 int, col3897 int, col3898 int, col3899 int, col3900 int, col3901 int, col3902 int, col3903 int, col3904 int, col3905 int, col3906 int, col3907 int, col3908 int, col3909 int, col3910 int, col3911 int, col3912 int, col3913 int, col3914 int, col3915 int, col3916 int, col3917 int, col3918 int, col3919 int, col3920 int, col3921 int, col3922 int, col3923 int, col3924 int, col3925 int, col3926 int, col3927 int, col3928 int, col3929 int, col3930 int, col3931 int, col3932 int, col3933 int, col3934 int, col3935 int, col3936 int, col3937 int, col3938 int, col3939 int, col3940 int, col3941 int, col3942 int, col3943 int, col3944 int, col3945 int, col3946 int, col3947 int, col3948 int, col3949 int, col3950 int, col3951 int, col3952 int, col3953 int, col3954 int, col3955 int, col3956 int, col3957 int, col3958 int, col3959 int, col3960 int, col3961 int, col3962 int, col3963 int, col3964 int, col3965 int, col3966 int, col3967 int, col3968 int, col3969 int, col3970 int, col3971 int, col3972 int, col3973 int, col3974 int, col3975 int, col3976 int, col3977 int, col3978 int, col3979 int, col3980 int, col3981 int, col3982 int, col3983 int, col3984 int, col3985 int, col3986 int, col3987 int, col3988 int, col3989 int, col3990 int, col3991 int, col3992 int, col3993 int, col3994 int, col3995 int, col3996 int, col3997 int, col3998 int, col3999 int, col4000 int, col4001 int, col4002 int, col4003 int, col4004 int, col4005 int, col4006 int, col4007 int, col4008 int, col4009 int, col4010 int, col4011 int, col4012 int, col4013 int, col4014 int, col4015 int, col4016 int, col4017 int, col4018 int, col4019 int, col4020 int, col4021 int, col4022 int, col4023 int, col4024 int, col4025 int, col4026 int, col4027 int, col4028 int, col4029 int, col4030 int, col4031 int, col4032 int, col4033 int, col4034 int, col4035 int, col4036 int, col4037 int, col4038 int, col4039 int, col4040 int, col4041 int, col4042 int, col4043 int, col4044 int, col4045 int, col4046 int, col4047 int, col4048 int, col4049 int, col4050 int, col4051 int, col4052 int, col4053 int, col4054 int, col4055 int, col4056 int, col4057 int, col4058 int, col4059 int, col4060 int, col4061 int, col4062 int, col4063 int, col4064 int, col4065 int, col4066 int, col4067 int, col4068 int, col4069 int, col4070 int, col4071 int, col4072 int, col4073 int, col4074 int, col4075 int, col4076 int, col4077 int, col4078 int, col4079 int, col4080 int, col4081 int, col4082 int, col4083 int, col4084 int, col4085 int, col4086 int, col4087 int, col4088 int, col4089 int, col4090 int, col4091 int, col4092 int, col4093 int, col4094 int, col4095 int, col4096 int, col4097 int);
+ERROR 42000: Too many columns
+create table xingrui_modify_column_table(col1 int, col2 int, col3 int);
+insert into xingrui_modify_column_table values(1, 2, 3);
+insert into xingrui_modify_column_table values(1, 2, 3);
+alter table xingrui_modify_column_table add column col4 int after col1;
+column_name	column_id	prev_column_id
+__pk_increment	1	18
+col1	16	0
+col2	17	19
+col3	18	17
+col4	19	16
+insert into xingrui_modify_column_table values(1, 4, 2, 3);
+insert into xingrui_modify_column_table values(1, 4, 2, 3);
+alter table xingrui_modify_column_table modify col4 int after col3;
+column_name	column_id	prev_column_id
+__pk_increment	1	19
+col1	16	0
+col2	17	16
+col3	18	17
+col4	19	18
+insert into xingrui_modify_column_table values(1, 2, 3, 4);
+insert into xingrui_modify_column_table values(1, 2, 3, 4);
+alter table xingrui_modify_column_table add column col5 int after col1;
+column_name	column_id	prev_column_id
+__pk_increment	1	19
+col1	16	0
+col2	17	20
+col3	18	17
+col4	19	18
+col5	20	16
+insert into xingrui_modify_column_table values(1, 5, 2, 3, 4);
+insert into xingrui_modify_column_table values(1, 5, 2, 3, 4);
+alter table xingrui_modify_column_table modify col5 int after col3;
+column_name	column_id	prev_column_id
+__pk_increment	1	20
+col1	16	0
+col2	17	16
+col3	18	17
+col5	19	18
+col4	20	19
+insert into xingrui_modify_column_table values(1,  2, 3, 5, 4);
+insert into xingrui_modify_column_table values(1,  2, 3, 5, 4);
+drop table xingrui_modify_column_table;
+create table xingrui_modify_column_table(col1 int, col2 int, col3 int);
+alter table xingrui_modify_column_table add column col4 int after col1;
+insert into xingrui_modify_column_table values(1, 4, 2, 3);
+column_name	column_id	prev_column_id
+__pk_increment	1	18
+col1	16	0
+col2	17	19
+col3	18	17
+col4	19	16
+alter table xingrui_modify_column_table rename column col4 to test, modify col2 int after col3;
+insert into xingrui_modify_column_table values(1, 4, 3, 2);
+column_name	column_id	prev_column_id
+__pk_increment	1	19
+col1	16	0
+test	17	16
+col3	18	17
+col2	19	18
+alter table xingrui_modify_column_table add column col5 int after col1;
+insert into xingrui_modify_column_table values(1, 5, 4, 3, 2);
+alter table xingrui_modify_column_table rename column col5 to test1, modify col1 int after col3;
+insert into xingrui_modify_column_table values(5, 4, 3, 1, 2);
+column_name	column_id	prev_column_id
+__pk_increment	1	20
+test1	16	0
+test	17	16
+col3	18	17
+col1	19	18
+col2	20	19
+create table xingrui_fts_table(
+id int,
+name varchar(20),
+title varchar(20),
+content varchar(20),
+existing_stored_col int GENERATED ALWAYS AS(id + 1) STORED,
+/*Indices*/
+FULLTEXT INDEX ftest(name, title) WITH PARSER space);
+insert into xingrui_fts_table (id, name, title, content) values(1, "name", "tile", "content");
+alter table xingrui_fts_table add column col int AFTER id;
+insert into xingrui_fts_table (id, col, name, title, content) values(1, 2, "name", "tile", "content");
+alter table xingrui_fts_table add column col2 int after name;
+insert into xingrui_fts_table (id, col, name, col2, title, content) values(1, 2, "name", 3, "tile", "content");
+select /*+index(name ftest)*/* from xingrui_fts_table;
+id	col	name	col2	title	content	existing_stored_col
+1	NULL	name	NULL	tile	content	2
+1	2	name	NULL	tile	content	2
+1	2	name	3	tile	content	2
+alter table xingrui_fts_table add column col3 int primary key;
+ERROR 0A000: Not supported feature or function
+alter table xingrui_fts_table add column col4 int AUTO_INCREMENT;
+alter table xingrui_fts_table add column col5 int, modify column id int;
+delete from xingrui_fts_table;
+drop table xingrui_fts_table;
+create table xingrui_fts_table(
+id int,
+name varchar(20),
+title varchar(20),
+content varchar(20),
+existing_stored_col int GENERATED ALWAYS AS(id + 1) STORED);
+alter system set _enable_add_fulltext_index_to_existing_table = true;
+alter table xingrui_fts_table add column col1 text after name, add fulltext index(name);
+ERROR 0A000: The DDL cannot be run, as creating/dropping fulltext/multivalue/vector index. not supported
+alter table xingrui_fts_table add column col1 text after name;
+alter table xingrui_fts_table add fulltext index(col1);
+insert into xingrui_fts_table (id, name, title, content, col1) values(1, "name", "tile", "content", 4);
+create table xingrui_ttl_table(col1 int, col2 datetime);
+alter table xingrui_ttl_table TTL(col2 + INTERVAL 1 hour), add column col3 int after col1;
+ERROR 0A000: SET/REMOVE TTL together with other Alter Column DDL not supported
+drop table xingrui_ttl_table;
+create table xingrui_ttl_table(col1 int, col2 datetime) TTL(col2 + INTERVAL 1 hour);
+insert into xingrui_ttl_table values(1, '2024-10-24');
+alter table xingrui_ttl_table add column col3 int after col1;
+insert into xingrui_ttl_table values(2, 3, '2024-10-24');
+select * from xingrui_ttl_table;
+col1	col3	col2
+1	NULL	2024-10-24 00:00:00
+2	3	2024-10-24 00:00:00
+alter table xingrui_ttl_table modify column col3 int before col1;
+select * from xingrui_ttl_table;
+col3	col1	col2
+NULL	1	2024-10-24 00:00:00
+3	2	2024-10-24 00:00:00
+delete from xingrui_ttl_table;
+CREATE TABLE xingrui_json_multivalue_table (
+id BIGINT not null,
+modified  BIGINT not null,
+custinfo JSON,
+data JSON
+);
+alter table xingrui_json_multivalue_table add index INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY))), add column col3 int after modified;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY))), add column col3 int after ' at line 1
+drop table xingrui_json_multivalue_table;
+CREATE TABLE xingrui_json_multivalue_table (
+id BIGINT not null,
+col1 int,
+data JSON,
+INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY)) )
+);
+insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}');
+alter table xingrui_json_multivalue_table add column col2 JSON after col1;
+insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}', '{"key":[7,932,22]}');
+select * from xingrui_json_multivalue_table;
+id	col1	col2	data
+1	2	NULL	{"key": [7, 932, 22]}
+1	2	{"key": [7, 932, 22]}	{"key": [7, 932, 22]}
+alter table xingrui_json_multivalue_table modify column col1 int before id;
+select * from xingrui_json_multivalue_table;
+col1	id	col2	data
+2	1	NULL	{"key": [7, 932, 22]}
+2	1	{"key": [7, 932, 22]}	{"key": [7, 932, 22]}
+delete from xingrui_json_multivalue_table;
+drop table xingrui_json_multivalue_table;
+CREATE TABLE xingrui_json_multivalue_table (
+id BIGINT not null,
+col1 int,
+data JSON,
+INDEX zips2( (CAST(data->'$.id' AS UNSIGNED ARRAY)) )
+);
+insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}');
+alter table xingrui_json_multivalue_table add column col2 JSON after col1;
+insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}', '{"key":[7,932,22]}');
+alter table xingrui_json_multivalue_table drop index zips2, add column col3 int after col1;
+ERROR 0A000: Not supported feature or function
+"error table id should change when add column instant with drop json multivalue"
+select * from xingrui_json_multivalue_table;
+id	col1	col2	data
+1	2	NULL	{"key": [7, 932, 22]}
+1	2	{"key": [7, 932, 22]}	{"key": [7, 932, 22]}
+alter table xingrui_json_multivalue_table modify column col1 int before id;
+select * from xingrui_json_multivalue_table;
+col1	id	col2	data
+2	1	NULL	{"key": [7, 932, 22]}
+2	1	{"key": [7, 932, 22]}	{"key": [7, 932, 22]}
+delete from xingrui_json_multivalue_table;
+alter system set ob_vector_memory_limit_percentage = 10;
+create table xingrui_vector_table(col1 int, col2 vector(3), vector index idx1(col2) with (distance=l2, type=hnsw));
+insert into xingrui_vector_table values(1, '[4,5,6]');
+alter table xingrui_vector_table add column col3 vector(3) after col1;
+alter table xingrui_vector_table add vector index idx1(c3) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'index idx1(c3) with (distance=l2, type=hnsw)' at line 1
+insert into xingrui_vector_table values(1, '[4,5,6]', '[1,2,3]');
+select * from xingrui_vector_table;
+col1	col3	col2
+1	NULL	[4,5,6]
+1	[4,5,6]	[1,2,3]
+alter table xingrui_vector_table modify column col1 int after col3;
+select * from xingrui_vector_table;
+col3	col1	col2
+NULL	1	[4,5,6]
+[4,5,6]	1	[1,2,3]
+delete from xingrui_vector_table;
+drop table xingrui_vector_table;
+create table xingrui_vector_table(col1 int, col2 vector(3));
+insert into xingrui_vector_table values(1, '[4,5,6]');
+alter table xingrui_vector_table add vector index idx1(c2) with (distance=l2, type=hnsw), add column col3 int after col1;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'index idx1(c2) with (distance=l2, type=hnsw), add column col3 int after col1' at line 1
+drop table xingrui_vector_table;
+create table xingrui_vector_table(col1 int, col2 vector(3), vector index idx1(col2) with (distance=l2, type=hnsw));
+insert into xingrui_vector_table values(1, '[4,5,6]');
+alter table xingrui_vector_table drop index idx1, add column col3 int after col1;
+ERROR 0A000: Not supported feature or function
+"error table id should change when add column instant and drop vector index"
+select * from xingrui_vector_table;
+col1	col2
+1	[4,5,6]
+alter table xingrui_vector_table modify column col1 int after col2;
+select * from xingrui_vector_table;
+col2	col1
+[4,5,6]	1
+delete from xingrui_vector_table;
+create table xingrui_binary_table(col1 varbinary(255) NOT NULL default 'col1', col2 varchar(150) NULL default 'col2');
+insert into xingrui_binary_table values();
+alter table xingrui_binary_table
+add column col3 binary(255) NOT NULL default 'col3' BEFORE col2,
+add column col4 time NOT NULL default '17:01:01' AFTER col1,
+add column col5 binary(255) NOT NULL default 'col5' BEFORE col2;
+column_name	column_id	prev_column_id	hex(orig_default_value_v2)	hex(cur_default_value_v2)
+col3	18	16	636F6C330000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	636F6C33
+col3	18	19	636F6C330000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	636F6C33
+col5	20	18	636F6C350000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000	636F6C35
+delete from xingrui_binary_table;
+create table xingrui_timestamp_table(col1 int, col2 int);
+insert into xingrui_timestamp_table values();
+alter table xingrui_timestamp_table add column col3 timestamp before col2,
+add column col4 int after col1;
+column_name	column_id	prev_column_id	hex(orig_default_value_v2)	hex(cur_default_value_v2)
+col3	18	16	NULL	NULL
+col3	18	19	NULL	NULL
+delete from xingrui_timestamp_table;
+drop table xingrui_timestamp_table;
+create table xingrui_timestamp_table(col1 int, col2 timestamp);
+insert into xingrui_timestamp_table values();
+alter table xingrui_timestamp_table add column col3 timestamp NOT NULL before col2,
+add column col4 int after col1;
+column_name	column_id	prev_column_id	orig_default_value_v2_non_null	cur_default_value_v2_non_null
+col3	18	16	1	NULL
+col3	18	19	1	NULL
+delete from xingrui_timestamp_table;
+drop table xingrui_timestamp_table;
+create table xingrui_timestamp_table(col1 int, col2 timestamp);
+insert into xingrui_timestamp_table values();
+alter table xingrui_timestamp_table add column col3 timestamp NOT NULL default CURRENT_TIMESTAMP before col2, add column col4 int after col1;
+column_name	column_id	prev_column_id	orig_default_value_v2_non_null	cur_default_value_v2_non_null
+col3	18	16	1	1
+col3	18	19	1	1
+delete from xingrui_timestamp_table;
+drop table xingrui_timestamp_table;
+create table xingrui_timestamp_table(col1 int, col2 timestamp);
+insert into xingrui_timestamp_table values();
+alter table xingrui_timestamp_table add column col3 timestamp NULL before col2,
+add column col4 int after col1;
+column_name	column_id	prev_column_id	hex(orig_default_value_v2)	hex(cur_default_value_v2)
+col3	18	16	NULL	NULL
+col3	18	19	NULL	NULL
+delete from xingrui_timestamp_table;
+drop table xingrui_timestamp_table;
+create table xingrui_timestamp_table(col1 int, col2 timestamp);
+insert into xingrui_timestamp_table values();
+alter table xingrui_timestamp_table add column col3 timestamp DEFAULT CURRENT_TIMESTAMP before col2,
+add column col4 int after col1;
+column_name	column_id	prev_column_id	orig_default_value_v2_non_null	cur_default_value_v2_non_null
+col3	18	16	1	1
+col3	18	19	1	1
+delete from xingrui_timestamp_table;
+drop table xingrui_timestamp_table;
+set @@session.explicit_defaults_for_timestamp=off;
+create table xingrui_timestamp_table(c1 int, c2 int);
+alter table xingrui_timestamp_table add column c3 timestamp first;
+alter system set ob_vector_memory_limit_percentage = 0;
+drop table xingrui_normal_table;
+drop table xingrui_comment_table;
+drop table xingrui_default_table;
+drop table xingrui_not_null_table;
+drop table xingrui_virtual_table;
+drop table xingrui_stored_table;
+drop table xingrui_increment_table;
+drop table xingrui_primary_table;
+drop table xingrui_check_table;
+drop table xingrui_unique_table;
+drop table xingrui_character_table;
+drop table xingrui_partition_table;
+drop table xingrui_lob_inrow_table;
+drop table xingrui_index_column_table;
+drop table xingrui_fk_child_table;
+drop table  xingrui_fk_parent_table;
+drop table xingrui_constraint_table;
+drop table xingrui_external_table;
+drop table xingrui_modify_column_table;
+drop table xingrui_fts_table;
+drop table xingrui_ttl_table;
+drop table xingrui_json_multivalue_table;
+drop table xingrui_vector_table;
+drop table xingrui_binary_table;
+drop table xingrui_timestamp_table;

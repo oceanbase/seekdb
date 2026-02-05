@@ -1,0 +1,359 @@
+#owner: luofan.zp
+#owner group: sql1
+
+--result_format 4
+--enable_sorted_result
+
+--disable_info
+--disable_metadata
+
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys;
+
+alter system flush plan cache global;
+--sleep 3
+
+connection default;
+--disable_warnings
+--disable_query_log
+drop table if exists proxy_mock_table_for_pc;
+create table proxy_mock_table_for_pc(a int);
+--enable_query_log
+--enable_warnings
+
+set ob_trx_timeout = 1000000000;
+--disable_warnings
+drop table if exists t1;
+--disable_warnings
+drop table if exists t2;
+--enable_warnings
+
+create table t1 (a int, b int);
+--disable_warnings
+
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+--echo // CASE#1: Insert
+--sleep 3
+insert into t1 values (1, 1), (1, -1);
+insert into t1 values (-1, 1), (1, 1);
+
+select hit_count, sql_id, query_sql from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (?, ?)';
+
+insert into t1 values (-  1, 1), (1, 1);
+select hit_count, sql_id, query_sql from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (?, ?)';
+
+insert into t1 values (- -1, 1), (1, 1);
+insert into t1 values (- - 2, 1), (1, 1);
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'insert into t1 values (- ?, ?)%';
+commit;
+
+
+--echo // CASE#2: Select Item
+
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+select -1 from dual;
+select 2 from dual;
+select -  1 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? from dual';
+select - -1 from dual;
+select - -   1 from dual;
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - ? from dual';
+
+select -+  1 from dual;
+select -+ 1 from dual;
+select - +1 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like "select -+  ? from dual" or
+                                                                     statement like "select -+ ? from dual" or
+                                                                     statement like "select - +? from dual";
+commit;
+connection obsys;
+alter system flush plan cache global;
+--sleep 3
+
+connection default;
+
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+select  +-
+1 from dual;
+select  +-
+-1 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like '%from dual';
+
+select -1, -2, -1-2, 1-3 from dual;
+select -2, -3, -2-1, 1-4 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?, ?, ?-?, ?-? from dual';
+
+
+select -1 - 2 from dual;
+select -1 -    4 from dual;
+select -1  - 3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? from dual';
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?  - ? from dual';
+
+connection obsys;
+alter system flush plan cache global;
+--sleep 3
+
+connection default;
+select - '1' from dual;
+select - '-1' from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - ? from dual';
+commit;
+
+--echo // CASE#3: Normal Select
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+select * from t1 where a = -1.2 or b = 1;
+select * from t1 where a = 1.1 or b = -1;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = ? or b = ?';
+
+select * from t1 where a = -  -1;
+select * from t1 where a = -  1;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = -  ?';
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 where a = ?';
+commit;
+
+
+--echo // CASE#4: Neg sign with Tokens
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+set @user_var = 1;
+
+select - @user_var from dual;
+select - @user_var from dual;
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - @user_var from dual';
+
+select - a from t1;
+select - a from t1;
+select - a - b from t1;
+select - a - b from t1;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - a from t1';
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - a - b from t1';
+
+select - @@IS_RESULT_ACCURATE from dual;
+select - @@IS_RESULT_ACCURATE from dual;
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select - @@IS_RESULT_ACCURATE from dual';
+commit;
+
+--echo // CASE#5: Trans neg sign
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+select 1 - 2 * 3 from dual;
+select 22 - 22 * 3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? * ? from dual';
+
+select 1 - 2 / 3 from dual;
+select 1 - 4 / 3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? / ? from dual';
+
+select 1 - 2 % 1 from dual;
+select 1 - 2 % 3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? % ? from dual';
+
+select 1 - 3 mod 2 from dual;
+select 1 - 2 mod 3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - ? mod ? from dual';
+
+select 1--1 from dual;
+select 1--2 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?-? from dual';
+commit;
+
+--echo // CASE#6: INT64_MIN
+connection obsys;
+alter system flush plan cache global;
+--sleep 3
+connection default;
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+select - 9223372036854775808 from dual;
+select -1 from dual;
+select -9223372036854775808 from dual;
+
+--echo // expect hit same plan
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? from dual';
+
+--disable_warnings
+drop table if exists t_int_min;
+create table t_int_min as select -9223372036854775808 from dual;
+--sleep 3
+desc t_int_min;
+
+select -(-(9223372036854775808)) from dual;
+select -(-(9223372036854775809)) from dual;
+select -(-(1)) from dual;
+select -(-(9223372036854775807)) from dual;
+--echo // expect 2 records, one uint, one int
+select hit_count, sql_id, param_infos from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(-(?)) from dual';
+
+select -(-(-(9223372036854775808))) from dual;
+select -(-(-(1))) from dual;
+select -(-(-(-1))) from dual;
+
+--echo // expect 2 records
+select hit_count, sql_id, param_infos from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(-(-(?))) from dual';
+commit;
+
+--echo // CASE#7: Limit Expr
+begin;
+--source mysql_test/include/proxy_route_to_c.inc
+select * from t1 limit 1, 1;
+select * from t1 limit 0, 1;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 limit ?, ?';
+
+--error 1064
+select * from t1 limit -1, 1;
+--error 1064
+select * from t1 limit -0, 1;
+
+select * from t1 limit 1 offset 1;
+select * from t1 limit 1 offset 0;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select * from t1 limit ? offset ?';
+
+--error 1064
+select * from t1 limit 1 offset -1;
+--error 1064
+select * from t1 limit 1 offset -0;
+
+--echo // parentheses
+select 1 - (1) from dual;
+select 1 - (1) from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?) from dual';
+
+select (1-(-1-(2-3-4-(5-(6-(7)))))) from dual;
+select (1-(-1-(2-3-4-(5-(6-(7)))))) from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?-(?-(?-?-?-(?-(?-(?)))))) from dual';
+
+select 1--2/3 from dual;
+select 1--2/3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?-?/? from dual';
+
+select  1-(2)/3 from dual;
+select  1-(2)/3 from dual;
+select  1-(-2)/3 from dual;
+select  1-(-2)/3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select  ?-(?)/? from dual';
+
+select 1 - (2/3)/4 from dual;
+select 1 - (2/3)/4 from dual;
+
+select 1 - (-2/3)/-4 from dual;
+select 1 - (-2/3)/-4 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?/?)/? from dual';
+
+select 1 - (2%3)%4 from dual;
+select 1 - (2%3)%4 from dual;
+
+select 1 - (-2%3)%-4 from dual;
+select 1 - (-2%3)%-4 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?%?)%? from dual';
+
+select 1 - (2*3)*4 from dual;
+select 1 - (2*3)*4 from dual;
+
+select 1 - (-2*3)*-4 from dual;
+select 1 - (-2*3)*-4 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?*?)*? from dual';
+
+select 1 - (2/(3/4)/(-(2/3/4 - (2/3/4/5/6/7/8/9)))) from dual;
+select 1 - (2/(3/4)/(-(2/3/4 - (2/3/4/5/6/7/8/9)))) from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ? - (?/(?/?)/(-(?/?/? - (?/?/?/?/?/?/?/?)))) from dual';
+
+select -(-2/3/4 - (((2/3/4) + 2) + 2)) from dual;
+select -(-2/3/4 - (((2/3/4) + 2) + 2)) from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select -(?/?/? - (((?/?/?) + ?) + ?)) from dual';
+
+--echo // divs,muls and mods
+select (1 + 2) - 1 * 2 * 3 from dual;
+select (1 + 2) - 1 * 2 * 3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ? * ? * ? from dual';
+
+select (1 + 2) - 1/2/3 from dual;
+select (1 + 2) - 1/2/3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ?/?/? from dual';
+
+select (1 + 2) - 9%2%3 from dual;
+select (1 + 2) - 9%2%3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (? + ?) - ?%?%? from dual';
+
+select 3/2 - (1 * 2 / 3) + 18/-2/3 - 1 * 2 * 3 from dual;
+select 3/2 - (1 * 2 / 3) + 18/-2/3 - 1 * 2 * 3 from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?/? - (? * ? / ?) + ?/?/? - ? * ? * ? from dual';
+
+select -9%2/3 * 3 - (10/3%2 + 2/3/4) + (1 * (2 * (3/4/4/4) )) from dual;
+select -9%2/3 * 3 - (10/3%2 + 2/3/4) + (1 * (2 * (3/4/4/4) )) from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select ?%?/? * ? - (?/?%? + ?/?/?) + (? * (? * (?/?/?/?) )) from dual';
+
+select (1-(2-(3-(1 * (-2 / (-2 % (4 - (1 + 2 - 3 % 4)))))))) / (1 + 2 + 3 - (2 * 4 * 5 / 6 % (-2 * - 4 + 6))) - (-1 /4 * -3 + 2 / -3 * 5) from dual;
+select (1-(2-(3-(1 * (-2 / (-2 % (4 - (1 + 2 - 3 % 4)))))))) / (1 + 2 + 3 - (2 * 4 * 5 / 6 % (-2 * - 4 + 6))) - (-1 /4 * -3 + 2 / -3 * 5) from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?-(?-(?-(? * (? / (? % (? - (? + ? - ? % ?)))))))) / (? + ? + ? - (? * ? * ? / ? % (? * ? + ?))) - (? /? * ? + ? / ? * ?) from dual';
+
+select (1+(-2*3-5/5+6%2))*(1/((-2-3)/(-3*(4/(5*(-1-3+3))))))/(1-(5%2-(2/3/4/5/6/7/8))) from dual;
+select (1+(-2*3-5/5+6%2))*(1/((-2-3)/(-3*(4/(5*(-1-3+3))))))/(1-(5%2-(2/3/4/5/6/7/8))) from dual;
+
+select hit_count, sql_id from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement like 'select (?+(?*?-?/?+?%?))*(?/((?-?)/(?*(?/(?*(?-?+?))))))/(?-(?%?-(?/?/?/?/?/?/?))) from dual';
+commit;
+
+--echo // CLEANUP
+drop table t1;
+
+create table t1 (
+    c1 int, c2 int unsigned,
+    c3 tinyint, c4 tinyint unsigned,
+    c5 smallint, c6 smallint unsigned,
+    c7 mediumint, c8 mediumint unsigned,
+    c9 integer, c10 integer unsigned,
+    c11 bigint, c12 bigint unsigned,
+    c13 float, c14 float unsigned,
+    c15 double, c16 double unsigned,
+    c17 decimal, c18 decimal unsigned,
+    c19 datetime, c20 timestamp,
+    c21 year, c22 date, c23 time,
+    c24 varchar(30), c25 char(30),
+    c26 varbinary(30), c27 binary(30));
+
+
+create table t2 as select -c1,-c2,-c3,-c4,-c5,-c6,-c7,-c8,-c9,-c10,-c11,-c12,-c13,-c14,-c15,-c16,-c17,-c18,-c19,-c20,-c21,-c22,-c23,-c24,-c25,-c26,-c27 from t1;
+desc t2;
+drop table t2;
+
+create table t2 as select neg(c1),neg(c2),neg(c3),neg(c4),neg(c5),neg(c6),neg(c7),neg(c8),neg(c9),neg(c10),neg(c11),neg(c12),neg(c13),neg(c14),neg(c15),neg(c16),neg(c17),neg(c18),neg(c19),neg(c20),neg(c21),neg(c22),neg(c23),neg(c24),neg(c25),neg(c26),neg(c27) from t1;
+desc t2;
+drop table t2;
+
+commit;
+set autocommit = 1;

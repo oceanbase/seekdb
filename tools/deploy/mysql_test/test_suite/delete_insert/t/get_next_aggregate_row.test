@@ -1,0 +1,66 @@
+# owner: liquanhong.lqh
+# owner group: storage
+# description: test delete_insert get_next_aggregate_row
+
+--disable_query_log
+connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (syscon, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection syscon;
+set @@session.explicit_defaults_for_timestamp=off;
+set session ob_trx_timeout=100000000000;
+set @@recyclebin = off;
+--enable_query_log
+
+
+connection conn1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(id int(11) DEFAULT NULL, c1 int(11) DEFAULT NULL) merge_engine = delete_insert;
+
+--disable_query_log
+
+let $cnt = 1;
+while($cnt <= 1000)
+{
+    eval insert into t1 values ($cnt, $cnt * 10);
+    inc $cnt;
+}
+
+--enable_query_log
+
+connection default;
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+
+--disable_query_log
+
+connection conn1;
+let $cnt = 100;
+while($cnt <= 200)
+{
+    eval update t1 set c1 = $cnt * 10 + 1 where id = $cnt;
+    inc $cnt;
+}
+
+--enable_query_log
+
+connection default;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+--disable_query_log
+connection conn1;
+update t1 set c1 = 1022 where id = 102;
+update t1 set c1 = 19900 where id = 199;
+update t1 set c1 = 9992 where id = 999;
+--enable_query_log
+
+select min(id), max(c1) from t1;
+
+drop table t1;
+
+--disable_query_log
+connection syscon;
+set @@recyclebin = on;
+--enable_query_log

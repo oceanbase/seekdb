@@ -1,0 +1,402 @@
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 int);
+create unique index u123 on t1(c1, c2, c3);
+create unique index u12 on t1(c1, c2);
+create unique index u2 on t1(c2);
+insert into t1 (select row_number() over(), row_number() over (), row_number() over() from table(generator(10000)));
+call dbms_stats.gather_table_stats(null,'t1');
+result_format: 4
+explain_protocol: 2
+## test common compare condition
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |1       |651         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c1 = 1], [t1.c2 = 1]), rowset=16
+      access([t1.c1], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+EXPLAIN select /*+index(t1 u12) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1;
+Query Plan
+============================================
+|ID|OPERATOR |NAME   |EST.ROWS|EST.TIME(us)|
+--------------------------------------------
+|0 |TABLE GET|t1(u12)|1       |10          |
+============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c1], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL],
+      range_cond([t1.c1 = 1], [t1.c2 = 1])
+select /*+index(t1 u12) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1 or c1 = 2 and c2 = 2;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |1       |577         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c1 = 1 AND t1.c2 = 1 OR t1.c1 = 2 AND t1.c2 = 2]), rowset=16
+      access([t1.c1], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1 or c1 = 2 and c2 = 2;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
+|    2 |    2 |    2 |
++------+------+------+
+EXPLAIN select /*+index(t1 u12) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1 or c1 = 2 and c2 = 2;
+Query Plan
+============================================
+|ID|OPERATOR |NAME   |EST.ROWS|EST.TIME(us)|
+--------------------------------------------
+|0 |TABLE GET|t1(u12)|2       |19          |
+============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c1], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,2,NULL ; 2,2,NULL],
+      range_cond([t1.c1 = 1 AND t1.c2 = 1 OR t1.c1 = 2 AND t1.c2 = 2])
+select /*+index(t1 u12) no_rewrite*/ * from t1 where c1 = 1 and c2 = 1 or c1 = 2 and c2 = 2;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
+|    2 |    2 |    2 |
++------+------+------+
+
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |2       |405         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1]), rowset=16
+      access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+EXPLAIN select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1;
+Query Plan
+===========================================
+|ID|OPERATOR |NAME  |EST.ROWS|EST.TIME(us)|
+-------------------------------------------
+|0 |TABLE GET|t1(u2)|1       |10          |
+===========================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c2], [t1.shadow_pk_0]), range[1,NULL ; 1,NULL],
+      range_cond([t1.c2 = 1])
+select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 and c2 <= 1;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |2       |419         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1], [t1.c2 <= 1]), rowset=16
+      access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 and c2 <= 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+EXPLAIN select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 and c2 <= 1;
+Query Plan
+==================================================
+|ID|OPERATOR        |NAME  |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------
+|0 |TABLE RANGE SCAN|t1(u2)|1       |7           |
+==================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c2], [t1.shadow_pk_0]), range(1,MIN ; 1,MAX),
+      range_cond([t1.c2 = 1], [t1.c2 <= 1])
+select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 and c2 <= 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 and c2 < 1;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |2       |419         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1], [t1.c2 < 1]), rowset=16
+      access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 and c2 < 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
++------+------+------+
+EXPLAIN select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 and c2 < 1;
+Query Plan
+==================================================
+|ID|OPERATOR        |NAME  |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------
+|0 |TABLE RANGE SCAN|t1(u2)|0       |7           |
+==================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c2], [t1.shadow_pk_0]), range(MAX,MAX ; MIN,MIN)always false,
+      range_cond([t1.c2 = 1], [t1.c2 < 1])
+select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 and c2 < 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
++------+------+------+
+
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 or c2 > 9999;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |3       |345         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1 OR t1.c2 > 9999]), rowset=16
+      access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where c2 = 1 or c2 > 9999;
++-------+-------+-------+
+| c1    | c2    | c3    |
++-------+-------+-------+
+|     1 |     1 |     1 |
+| 10000 | 10000 | 10000 |
++-------+-------+-------+
+EXPLAIN select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 or c2 > 9999;
+Query Plan
+==================================================
+|ID|OPERATOR        |NAME  |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------
+|0 |TABLE RANGE SCAN|t1(u2)|2       |14          |
+==================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c2], [t1.shadow_pk_0]), range(1,MIN ; 1,MAX), (9999,MAX ; MAX,MAX),
+      range_cond([t1.c2 = 1 OR t1.c2 > 9999])
+select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 = 1 or c2 > 9999;
++-------+-------+-------+
+| c1    | c2    | c3    |
++-------+-------+-------+
+|     1 |     1 |     1 |
+| 10000 | 10000 | 10000 |
++-------+-------+-------+
+
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |1       |823         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 = 1], [t1.c1 = 1 AND t1.c3 = 1 OR t1.c1 = 2 AND t1.c3 = 2]), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false,false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+EXPLAIN select /*+index(t1 u12) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
+Query Plan
+============================================
+|ID|OPERATOR |NAME   |EST.ROWS|EST.TIME(us)|
+--------------------------------------------
+|0 |TABLE GET|t1(u12)|1       |19          |
+============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c1 = 1 AND t1.c3 = 1 OR t1.c1 = 2 AND t1.c3 = 2]), rowset=16
+      access([t1.__pk_increment], [t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,1,NULL ; 2,1,NULL],
+      range_cond([t1.c1 = 1 AND t1.c2 = 1 OR t1.c1 = 2 AND t1.c2 = 1])
+select /*+index(t1 u12) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+EXPLAIN select /*+index(t1 u123) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
+Query Plan
+=============================================
+|ID|OPERATOR |NAME    |EST.ROWS|EST.TIME(us)|
+---------------------------------------------
+|0 |TABLE GET|t1(u123)|2       |10          |
+=============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.c1], [t1.c2], [t1.c3], [t1.shadow_pk_0]), range[1,1,1,NULL ; 1,1,1,NULL], [2,1,2,NULL ; 2,1,2,NULL],
+      range_cond([t1.c1 = 1 AND t1.c3 = 1 OR t1.c1 = 2 AND t1.c3 = 2], [t1.c2 = 1])
+select /*+index(t1 u123) no_rewrite*/ * from t1 where ((c1 = 1 and c3 = 1) or (c1 = 2 and c3 = 2)) and c2 = 1;
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
++------+------+------+
+
+## test in condition
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where c2 in (1,2,3);
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |4       |346         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([t1.c2 IN (1, 2, 3)]), rowset=16
+      access([t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where c2 in (1,2,3);
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
+|    2 |    2 |    2 |
+|    3 |    3 |    3 |
++------+------+------+
+EXPLAIN select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 in (1,2,3);
+Query Plan
+===========================================
+|ID|OPERATOR |NAME  |EST.ROWS|EST.TIME(us)|
+-------------------------------------------
+|0 |TABLE GET|t1(u2)|3       |28          |
+===========================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c2], [t1.c1], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c2], [t1.shadow_pk_0]), range[1,NULL ; 1,NULL], [2,NULL ; 2,NULL], [3,NULL ; 3,NULL],
+      range_cond([t1.c2 IN (1, 2, 3)])
+select /*+index(t1 u2) no_rewrite*/ * from t1 where c2 in (1,2,3);
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
+|    2 |    2 |    2 |
+|    3 |    3 |    3 |
++------+------+------+
+
+EXPLAIN select /*+full(t1) no_rewrite*/ * from t1 where (c1, c2) in ((1,1),(2,2),(3,3));
+Query Plan
+===============================================
+|ID|OPERATOR       |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------
+|0 |TABLE FULL SCAN|t1  |1       |577         |
+===============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter([(t1.c1, t1.c2) IN ((1, 1), (2, 2), (3, 3))]), rowset=16
+      access([t1.c1], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+select /*+full(t1) no_rewrite*/ * from t1 where (c1, c2) in ((1,1),(2,2),(3,3));
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
+|    2 |    2 |    2 |
+|    3 |    3 |    3 |
++------+------+------+
+EXPLAIN select /*+index(t1 u12) no_rewrite*/ * from t1 where (c1, c2) in ((1,1),(2,2),(3,3));
+Query Plan
+============================================
+|ID|OPERATOR |NAME   |EST.ROWS|EST.TIME(us)|
+--------------------------------------------
+|0 |TABLE GET|t1(u12)|3       |28          |
+============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.__pk_increment], [t1.c1], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c1], [t1.c2], [t1.shadow_pk_0]), range[1,1,NULL ; 1,1,NULL], [2,2,NULL ; 2,2,NULL], [3,3,NULL ; 3,3,NULL],
+      range_cond([(t1.c1, t1.c2) IN ((1, 1), (2, 2), (3, 3))])
+select /*+index(t1 u12) no_rewrite*/ * from t1 where (c1, c2) in ((1,1),(2,2),(3,3));
++------+------+------+
+| c1   | c2   | c3   |
++------+------+------+
+|    1 |    1 |    1 |
+|    2 |    2 |    2 |
+|    3 |    3 |    3 |
++------+------+------+
+
+drop table t1;

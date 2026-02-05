@@ -1,0 +1,179 @@
+drop database if exists fts_parser_properies;
+create database fts_parser_properies;
+use fts_parser_properies;
+result_format: 3
+DROP TABLE IF EXISTS create_index_with_parser_properties;
+create table create_index_with_parser_properties(
+  a varchar(100),
+  b varchar(100),
+  fulltext index fidx1(a) PARSER_PROPERTIES=(min_token_size=2, max_token_size=84)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+insert into create_index_with_parser_properties(a, b) values ('3aaa', '3aaa'), ('1a', '1a'), ('2aa', '2aa'),('4aaaa', '4aaaa');
+select * from create_index_with_parser_properties where match(a) against('1a');
++------+------+
+| a    | b    |
++------+------+
+| 1a   | 1a   |
++------+------+
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=-1);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '-1)' at line 1
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=0);
+ERROR HY000: Incorrect arguments to the ngram_token_size must be in [1, 10]
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=11);
+ERROR HY000: Incorrect arguments to the ngram_token_size must be in [1, 10]
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=4);
+select * from create_index_with_parser_properties where match(b) against('aaaa');
++-------+-------+
+| a     | b     |
++-------+-------+
+| 4aaaa | 4aaaa |
++-------+-------+
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=4, max_token_size=3);
+ERROR HY000: Incorrect arguments to the max_token_size must be in [10, 84]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=14, max_token_size=13);
+ERROR HY000: Incorrect arguments to the max_token_size must be equal to or greater than min_token_size
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=1, max_token_size=0);
+ERROR HY000: Incorrect arguments to the max_token_size must be in [10, 84]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(max_token_size=9);
+ERROR HY000: Incorrect arguments to the max_token_size must be in [10, 84]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(max_token_size=85);
+ERROR HY000: Incorrect arguments to the max_token_size must be in [10, 84]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=0);
+ERROR HY000: Incorrect arguments to the min_token_size must be in [1, 16]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=17);
+ERROR HY000: Incorrect arguments to the min_token_size must be in [1, 16]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=-1, max_token_size=0);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '-1, max_token_size=0)' at line 1
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=1, max_token_size=-1);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '-1)' at line 1
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=0, max_token_size=1);
+ERROR HY000: Incorrect arguments to the min_token_size must be in [1, 16]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=5);
+ERROR HY000: Incorrect arguments to the max_ngram_size must be equal to or greater than min_ngram_size
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(max_ngram_size=1);
+ERROR HY000: Incorrect arguments to the max_ngram_size must be equal to or greater than min_ngram_size
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(max_ngram_size=17, max_ngram_size=16);
+ERROR HY000: Incorrect arguments to the max_ngram_size must be in [1, 16]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=16, max_ngram_size=17);
+ERROR HY000: Incorrect arguments to the max_ngram_size must be in [1, 16]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=0, max_ngram_size=1);
+ERROR HY000: Incorrect arguments to the min_ngram_size must be in [1, 16]
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=4);
+select * from create_index_with_parser_properties where match(a, b) against('2aa');
++------+------+
+| a    | b    |
++------+------+
++------+------+
+select * from create_index_with_parser_properties where match(a, b) against('3aaa');
++------+------+
+| a    | b    |
++------+------+
+| 3aaa | 3aaa |
++------+------+
+show create table create_index_with_parser_properties;
+Table	Create Table
+create_index_with_parser_properties	CREATE TABLE `create_index_with_parser_properties` (
+  `a` varchar(100) COLLATE utf8mb4_bin DEFAULT NULL,
+  `b` varchar(100) COLLATE utf8mb4_bin DEFAULT NULL,
+  FULLTEXT KEY `fidx1` (`a`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=2,max_token_size=84) BLOCK_SIZE 16384,
+  FULLTEXT KEY `fidx2` (`b`) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=4) BLOCK_SIZE 16384,
+  FULLTEXT KEY `fidx3` (`a`, `b`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=4,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column)
+show index from create_index_with_parser_properties;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+create_index_with_parser_properties	1	fidx1	1	a	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+create_index_with_parser_properties	1	fidx2	1	b	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+create_index_with_parser_properties	1	fidx3	1	a	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+create_index_with_parser_properties	1	fidx3	2	b	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+drop table create_index_with_parser_properties;
+DROP TABLE IF EXISTS fts_basic_article;
+CREATE TABLE fts_basic_article (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content) WITH PARSER_PROPERTIES=()
+);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'PARSER_PROPERTIES=()
+)' at line 5
+CREATE TABLE fts_basic_article (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content) PARSER_PROPERTIES=(min_token_size=9)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+INSERT INTO fts_basic_article (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+INSERT INTO fts_basic_article (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+SELECT * FROM fts_basic_article WHERE MATCH(title, content) AGAINST("OceanBase") ORDER BY 1;
++----+----------------------+------------------------------------------------------------+
+| id | title                | content                                                    |
++----+----------------------+------------------------------------------------------------+
+|  1 | OceanBase Tutorial   | This is a tutorial about Oceanbase Fulltext.               |
+|  3 | OceanBase Test Case  | Writing test cases helps ensure quality.                   |
+|  4 | Optimizing OceanBase | This is a query optimization guide for OceanBase Database. |
++----+----------------------+------------------------------------------------------------+
+UPDATE fts_basic_article SET title = 'Fulltext Indexing' WHERE id = 2;
+DELETE FROM fts_basic_article WHERE id = 1;
+SHOW CREATE TABLE fts_basic_article;
+Table	Create Table
+fts_basic_article	CREATE TABLE `fts_basic_article` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `title` varchar(200) COLLATE utf8mb4_bin DEFAULT NULL,
+  `content` text COLLATE utf8mb4_bin DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  FULLTEXT KEY `ctx` (`title`, `content`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=9,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = auto_increment AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column)
+SHOW INDEX FROM fts_basic_article;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+fts_basic_article	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+fts_basic_article	1	ctx	1	title	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_basic_article	1	ctx	2	content	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+DROP TABLE fts_basic_article;
+DROP TABLE IF EXISTS table_create_with_ngram2;
+CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram PARSER_PROPERTIES=(min_ngram_size=2, max_ngram_size=4));
+ERROR 0A000: ngram config not supported
+CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=5));
+ERROR HY000: Incorrect arguments to the max_ngram_size must be equal to or greater than min_ngram_size
+CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=2, max_ngram_size=4))
+ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+SHOW CREATE TABLE table_create_with_ngram2;
+Table	Create Table
+table_create_with_ngram2	CREATE TABLE `table_create_with_ngram2` (
+  `text` char(255) COLLATE utf8mb4_bin DEFAULT NULL,
+  FULLTEXT KEY `text` (`text`) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=2,max_ngram_size=4) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column)
+INSERT INTO table_create_with_ngram2 VALUES ('hello world');
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('world' IN BOOLEAN MODE);
++------+
+| text |
++------+
++------+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('orld' IN BOOLEAN MODE);
++-------------+
+| text        |
++-------------+
+| hello world |
++-------------+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('hel' IN BOOLEAN MODE);
++-------------+
+| text        |
++-------------+
+| hello world |
++-------------+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('he' IN BOOLEAN MODE);
++-------------+
+| text        |
++-------------+
+| hello world |
++-------------+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('w' IN BOOLEAN MODE);
++------+
+| text |
++------+
++------+
+DROP TABLE table_create_with_ngram2;
+drop database fts_parser_properies;

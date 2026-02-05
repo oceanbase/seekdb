@@ -1,0 +1,97 @@
+# owner: ouyanghongrong.oyh
+# owner group: STORAGE
+# description: test column store replica of heap table drop primary key
+
+--echo ===============================================================
+--echo === Step 0: create tenant with cs replica locality in z2 ======
+--echo ===============================================================
+
+#let $unit1 = unit_1;
+#let $pool1 = pool_1;
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
+connection obsys;
+
+#let $z1 = query_get_value(select distinct zone from oceanbase.__all_zone where zone != '' limit 3, zone, 1);
+#let $z2 = query_get_value(select distinct zone from oceanbase.__all_zone where zone != '' limit 3, zone, 2);
+#let $z2_ip         = query_get_value(select svr_ip     from oceanbase.__all_server where zone = '$z2', svr_ip,     1);
+#let $z2_mysql_port = query_get_value(select inner_port from oceanbase.__all_server where zone = '$z2', inner_port, 1);
+
+--disable_warnings
+#drop tenant if exists tenant1 force;
+#eval DROP RESOURCE POOL if exists $pool1;
+#eval DROP RESOURCE UNIT if exists $unit1;
+#--disable_query_log
+#eval CREATE RESOURCE UNIT if not exists $unit1 MAX_CPU=1, MEMORY_SIZE='2G';
+#eval create resource pool if not exists $pool1 unit='$unit1', unit_num = 1, zone_list = ('$z1', '$z2');
+#eval create tenant tenant1 resource_pool_list=('$pool1'), replica_num=2, zone_list=('$z1','$z2'), locality = 'F@$z1, C@$z2' set ob_tcp_invited_nodes='%';
+--source mysql_test/include/check_tenant_sync.inc
+--enable_query_log
+--enable_warnings
+
+connect (conn1,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+connect (conn2,$OBMYSQL_MS0,root,'',test, $OBMYSQL_PORT);
+
+--echo ===============================================================
+--echo === Step 2: create heap table, prepare basic data =============
+--echo ===============================================================
+connection conn1;
+
+--disable_query_log
+--disable_warnings
+drop table if exists t1;
+set ob_query_timeout = 1000000000;
+--enable_warnings
+--enable_query_log
+
+create table t1 (k int primary key, v1 int, v2 int);
+insert into t1 values (1, 2, 3), (2, 3, 4), (4, 5, 6);
+
+--echo ===============================================================
+--echo === Step 3: drop primary key and do major freeze ==============
+--echo ===============================================================
+connection conn1;
+alter table t1 drop primary key;
+select k, v1, v2 from t1 order by k;
+sleep 5;
+
+connection conn2;
+#set ob_route_policy=COLUMN_STORE_ONLY;
+#set ob_read_consistency = WEAK;
+select k, v1, v2 from t1 order by k;
+set ob_read_consistency = STRONG;
+set ob_route_policy=READONLY_ZONE_FIRST;
+
+connection conn1;
+insert into t1 values (5, 6, 7), (6, 7, 8), (7, 8, 9);
+select k, v1, v2 from t1 order by k;
+sleep 5;
+
+connection conn2;
+#set ob_route_policy=COLUMN_STORE_ONLY;
+#set ob_read_consistency = WEAK;
+select k, v1, v2 from t1 order by k;
+set ob_read_consistency = STRONG;
+set ob_route_policy=READONLY_ZONE_FIRST;
+
+connection obsys;
+alter system major freeze tenant = sys;
+--source mysql_test/include/wait_daily_merge.inc
+
+connection conn1;
+select k, v1, v2 from t1 order by k;
+
+connection conn2;
+#set ob_route_policy=COLUMN_STORE_ONLY;
+#set ob_read_consistency = WEAK;
+select k, v1, v2 from t1 order by k;
+set ob_read_consistency = STRONG;
+set ob_route_policy=READONLY_ZONE_FIRST;
+
+connection obsys;
+--disable_warnings
+#drop tenant if exists tenant1 force;
+#eval DROP RESOURCE POOL if exists $pool1;
+#eval DROP RESOURCE UNIT if exists $unit1;
+#--disable_query_log
+
+select "Finish";

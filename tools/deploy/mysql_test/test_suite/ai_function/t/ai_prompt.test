@@ -1,0 +1,238 @@
+#owner: fengsun.cx
+#owner group: shenzhen
+
+### root
+connection default;
+
+# 正确
+select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
+
+# not support
+--error 1235
+select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
+
+
+# 无参数
+--error 1582
+select ai_prompt();
+
+# 错误类型
+--error 5083
+select ai_prompt(1);
+
+--error 5083
+select ai_prompt(1.2);
+
+--error 5083
+select ai_prompt(json_object("a","1"));
+
+--error 5083
+select ai_prompt('{0}+{1}={2} 吗？请回答true或false',1);
+
+# 表达式支持类型  支持任意数量的输入，要求都是varchar长度内的字符串，不支持其他类型，不允许输入null
+# test
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1 (nr char(5), a varchar(10), b BINARY(20), c VARBINARY(20));
+insert into t1 values( 'a', 'b', "oExGTLHmkvIGQekFkd" , "oExGTLHmkvIGQekFkd");
+insert into t1 values('aa', 'bb', 'oExGTLHmkvIGQekFkd', 'lmtBeletLiSQIwqhwr');
+insert into t1 values('aaa', 'bbb', 'RioBRrIKsEiedMVmtUqq', 'eIKamHGwnY');
+
+
+select ai_prompt(nr) from t1;
+select ai_prompt(a) from t1;
+select ai_prompt(b) from t1;
+select ai_prompt(c) from t1;
+
+drop table t1;
+
+
+# 表达式不支持的类型
+# test  text/blob
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1 (nr int, a tinyblob, b text, c mediumblob, d longtext);
+insert into t1 values(1, 'a', 'b', 'c', 'd');
+insert into t1 values(2, 'aa', 'bb', 'cc', 'dd');
+insert into t1 values(3, 'aaa', 'bbb', 'ccc', 'ddd');
+insert into t1 values(6, 'aaa', 'BBB', 'ccc', 'DDD');
+insert into t1 values(7, 'AA', 'bb', 'CC', 'dd');
+
+--error 5083
+select ai_prompt(nr) from t1;
+--error 5083
+select ai_prompt(a) from t1;
+--error 5083
+select ai_prompt(b) from t1;
+--error 5083
+select ai_prompt(c) from t1;
+--error 5083
+select ai_prompt(d) from t1;
+
+drop table t1;
+
+
+# 参数个数的不同排列组合
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1 (nr char(5), a varchar(10), b BINARY(20), c VARBINARY(20));
+insert into t1 values( 'a', 'b', "oExGTLHmkvIGQekFkd" , "oExGTLHmkvIGQekFkd");
+insert into t1 values('aa', 'bb', 'oExGTLHmkvIGQekFkd', 'lmtBeletLiSQIwqhwr');
+insert into t1 values('aaa', 'bbb', 'RioBRrIKsEiedMVmtUqq', 'eIKamHGwnY');
+
+
+select ai_prompt(nr) from t1;
+select ai_prompt(nr,a) from t1;
+select ai_prompt(nr,a,b) from t1;
+select ai_prompt(nr,a,b,c) from t1;
+
+drop table t1;
+
+# 表达式嵌套 , 每一个参数值都需要覆盖
+# 不同参数值的排列组合
+#
+# test of cast func with text/blob common string
+#
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1 (nr int primary key, a1 tinyblob, a2 text, a3 mediumblob, a4 longtext);
+insert into t1 values(1, 'aa', 'bb', 'cc', 'dd');
+insert into t1 values(2, 'AA', 'BB', 'CC', 'DD');
+insert into t1 values(3, 'aaa', '世界', 'ccc', '和平');
+
+--error 5083
+select ai_prompt(cast(a1 AS datetime)) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS datetime)) from t1 order by nr asc;
+
+--error 5083
+select ai_prompt(cast(a1 AS decimal(9,2))) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS decimal(9,2))) from t1 order by nr asc;
+
+--error 5083
+select ai_prompt(cast(a1 AS decimal(9))) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS decimal(9))) from t1 order by nr asc;
+
+--error 5083
+select ai_prompt(cast(a1 AS date)) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS date)) from t1 order by nr asc;
+
+--error 5083
+select ai_prompt(cast(a1 AS signed integer)) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS signed integer)) from t1 order by nr asc;
+
+--error 5083
+select ai_prompt(cast(a1 AS unsigned)) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS unsigned)) from t1 order by nr asc;
+
+--error 5083
+select ai_prompt(cast(a1 AS time)) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS time)) from t1 order by nr asc;
+
+--error 5083
+select ai_prompt(cast(a1 AS signed)) from t1 order by nr asc;
+--error 5083
+select ai_prompt(cast(a1 AS char(2)),cast(a1 AS signed)) from t1 order by nr asc;
+
+select ai_prompt(cast(a1 AS binary)) from t1 order by nr asc;
+select ai_prompt(cast(a1 AS binary),cast(a1 AS binary)) from t1 order by nr asc;
+select ai_prompt(cast(a1 AS char)) from t1 order by nr asc;
+select ai_prompt(cast(a1 AS char(2))) from t1 order by nr asc;
+
+drop table t1;
+
+# 特殊类型的数据
+# 不允许为null
+--error 5083
+select ai_prompt(null);
+
+--error 5083
+select ai_prompt('a',null);
+
+# template不允许为空字符串
+--error 1210
+select ai_prompt('');
+# 参数列表允许空数据
+select ai_prompt('1+1=?','');
+select ai_prompt('1+1=?{0}','');
+
+# 带转义的字符，最后转成unicode
+select ai_prompt('\0');
+
+
+# select
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1 (nr int, a varchar(10), b BINARY(20), d int);
+insert into t1 values( 1, 'b', "oExGTLHmkvIGQekFkd" , 10);
+insert into t1 values( 2, 'bbb', 'RioBRrIKsEiedMVmtUqq', 20);
+insert into t1 values( 1, 'bb', 'oExGTLHmkvIGQekFkd', 30);
+
+# order by
+select ai_prompt(a,b) from t1 order by nr;
+
+#group by
+select ai_prompt(a,b),sum(d) from t1 group by nr;
+select ai_prompt(a,b),sum(d) from t1 group by nr having nr>1;
+
+# 列别名
+select ai_prompt(w.a, w.b), b from t1 as w;
+
+# /*+read_consistency(weak) */ 弱读 结果不稳定
+##select /*+read_consistency(weak) */ ai_prompt(a,b) from t1 order by nr;
+
+# cast 表达式
+select cast(ai_prompt(w.a, w.b) as char), b from t1 as w;
+
+# where字句
+select ai_prompt(a,b) from t1 where d>10;
+select ai_prompt(a,b) from t1 where d=10;
+select ai_prompt(a,b) from t1 where d<10;
+
+# /*+ ENABLE_PARALLEL_DML parallel(256) */
+select /*+ ENABLE_PARALLEL_DML parallel(256) */ ai_prompt(a,b) from t1 order by nr;
+
+
+drop table t1;
+
+
+# test join /with as
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+create table t1 (nr int, a varchar(10), b BINARY(20), d int);
+insert into t1 values( 1, 'b', "oExGTLHmkvIGQekFkd" , 10);
+insert into t1 values( 2, 'bbb', 'RioBRrIKsEiedMVmtUqq', 20);
+insert into t1 values( 1, 'bb', 'oExGTLHmkvIGQekFkd', 30);
+
+create table t2 (nr int, a varchar(10), b BINARY(20), d int);
+insert into t2 values( 3, 'b', "oExGTLHmkvIGQekFkd" , 10);
+insert into t2 values( 2, 'bbb', 'RioBRrIKsEiedMVmtUqq', 20);
+insert into t2 values( 1, 'bb', 'oExGTLHmkvIGQekFkd', 30);
+
+
+# join
+select ai_prompt(t1.a) from t1 INNER JOIN t2 on t1.nr = t2.nr;
+
+# with as
+WITH t3 AS (
+    SELECT ai_prompt(t1.a) AS result
+    FROM t1
+    INNER JOIN t2 ON t1.nr = t2.nr
+)
+SELECT * FROM t3;
+
+drop table t1;

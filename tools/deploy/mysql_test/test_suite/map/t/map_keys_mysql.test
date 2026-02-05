@@ -1,0 +1,199 @@
+#owner: tengzhen.lk
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of map_keys.
+--echo # ----------------------------------------------------------------------
+
+--disable_warnings
+drop table if exists t1, t2, t3, t4, t5, output_test;
+--enable_warnings
+
+select map_keys(NULL);
+--error 1064
+select map_keys(map());
+--error 1582
+select map_keys(map(1,2,3));
+select map_keys(map(1,11,2,22));
+select map_keys(map(1.1,'aa',2.2,'bb'));
+select map_keys(map('aa',100,'bb',200));
+select map_keys(map('aa',100,'a',200));
+select map_keys(map('aa',100,'aa',200));
+select map_keys(map(1,'a',3.2,4));
+select map_keys(map(9223372036854775807,'a',9223372036854775808,4));
+select map_keys(map(9223372036854775807,'a',9223372036854775806,4));
+select map_keys(map(-9223372036854775807,'a',-9223372036854775808,4));
+select map_keys(map(-9223372036854775809,'a',-9223372036854775806,4));
+
+--error 1582
+select map_keys(map(1,2,3));
+--error 1235
+select map_keys(map([1],2));
+select map_keys(map('a',[[2]]));
+--error 1235
+select map_keys(map(1,map(1,2)));
+select map_keys(map(NULL,NULL,NULL,NULL));
+select map_keys(map(NULL,array_remove([1],1),'a',[2]));
+select map_keys(map(1,'a',2,'b',1,'c',NULL,'d'));
+select map_keys(map(1,'a',NULL,'b',1,'c',NULL,'d'));
+select map_keys(map('hi','a','hello','b','hi','c',NULL,'d'));
+select map_keys(map('hi','a',NULL,'b','hi','c',NULL,'d'));
+select map_keys(map(1,[1,2],2,[3],1,[4,5,6],NULL,[7,8,9]));
+select map_keys(map(1,[1,2],NULL,[3],1,[4,5,6],NULL,[7,8,9]));
+
+# BIGINT
+select map_keys(map(1,1));
+select map_keys(map(1,"apple"));
+select map_keys(map(1,1.0));
+
+# DOUBLE
+select map_keys(map(1.2,1));
+select map_keys(map(1.2,"apple"));
+select map_keys(map(1.2,1.1));
+select map_keys(map(1.2,2,1.5,"apple"));
+
+# VARCHAR
+select map_keys(map("a",1));
+select map_keys(map("a",1.2));
+select map_keys(map("a","apple"));
+select map_keys(map("a","apple",2,"banana"));
+select map_keys(map("a","apple",2.1,"banana"));
+select map_keys(map("a","apple","b","banana"));
+
+# invalid input type
+--error 1210
+select map_keys(1);
+--error 1210
+select map_keys(1.1);
+--error 1210
+select map_keys("hello world");
+--error 5083
+select map_keys([1,2,3]);
+--error 5083
+select map_keys([[1,2,3]]);
+select map_keys(NULL);
+
+# invalid number of input parameters
+--error 1582
+select map_keys(map("a",1), map("a",1));
+--error 1582
+select map_keys(map("a",1), map("a",1), map("a",1));
+--error 1582
+select map_keys(map("a",1), 1);
+
+# VEC 2.0
+
+# map(int, int)
+create table t1 (id int not null auto_increment, m map(int, int));
+insert into t1(m) values ('{1:1}');
+insert into t1(m) values ('{1:1,2:2,3:3}');
+insert into t1(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t1(m) values ('{1.5:2, 1.6:"3"}');
+
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t1;
+select map_keys(m) from t1;
+
+# map(double, double)
+create table t2 (id int not null auto_increment, m map(double, double));
+insert into t2(m) values ('{1.1:1,2.1:2,3.1:3}');
+insert into t2(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t2(m) values ('{1.5:2, 1.6:"3"}');
+insert into t2(m) values ('{1.5:2, 1.6:3.1}');
+
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t2;
+select map_keys(m) from t2;
+
+# map(varchar(20), varchar(20))
+create table t3 (id int not null auto_increment, m map(varchar(20), varchar(20)));
+insert into t3(m) values ('{1.1:1,2.1:2,3.1:3}');
+insert into t3(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t3(m) values ('{1.5:2, 1.6:"3"}');
+insert into t3(m) values ('{1.5:2, 1.6:3.1}');
+insert into t3(m) values ('{"1":2, "dog":3.1}');
+insert into t3(m) values ('{"apple":"tengzhen.lk", "dog":"3.1"}');
+
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t3;
+select map_keys(m) from t3;
+
+# map(int, int[])
+create table t4 (id int not null auto_increment, m map(int, int[]));
+insert into t4(m) values ('{1:[1],2:[2],3:[3]}');
+insert into t4(m) values ('{1:NULL}');
+insert into t4(m) values ('{1:[NULL]}');
+insert into t4(m) values ('{1:[11,11], 2:[22,22], 1:[33,33]}');
+insert into t4(m) values ('{1:[]}');
+insert into t4(m) values ('{1:[1],2:[2],1:[3,4]}');
+insert into t4(m) values ('{NULL:[1],1:[1],null:[],2:[2],1:NULL}');
+select * from t4;
+
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t4;
+select map_keys(m) from t4;
+
+# map(int, varchar(100)[][])
+create table t5 (id int not null auto_increment, m map(int, varchar(100)[][]), m2 map(int, varchar(100)[][][]));
+insert into t5(m) values ('{1:[[]]}');
+insert into t5(m) values ('{1:[["a","b"],["c"],NULL]}');
+insert into t5(m2) values ('{1:[[[]],[[]]]}');
+select * from t5;
+
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t5;
+select map_keys(m) from t5;
+
+# DML
+CREATE TABLE output_test (
+pk bigint not null AUTO_INCREMENT,
+s_1   Array(varchar(64)),
+i_1   Array(BigInt),
+f_1   Array(float),
+d_1   Array(double),
+i_2   Array(BigInt)
+);
+
+insert into output_test(i_1)
+select map_keys(m)
+from t1;
+select pk, i_1 from output_test;
+select * from output_test;
+
+insert into output_test(i_2)
+values (map_keys(map(1,2)));
+select * from output_test;
+
+update output_test
+SET i_2 = map_values(map(3, 4))
+WHERE i_2 = map_keys(map(1, 2));
+select pk, i_2 from output_test;
+
+delete from output_test
+WHERE i_1 = map_keys(map(1, 2));
+select pk, i_1 from output_test;
+
+# bug fix 2025032100107682185
+--disable_warnings
+drop table if EXISTS tt3, tt4;
+--enable_warnings
+create table tt3(id1 int primary key,id2 bool,id3 boolean,id4 TINYINT ,id5  smallint ,id6 int,id7 INTEGER,id8 BIGINT,id9 SERIAL,f float,d double,c varchar(100),a array(int),v vector(2),m map(int,varchar(100)));
+insert into tt3 values(1,127,127,127,32767,2147483647,2147483647,9223372036854775807,18446744073709551615,3.402823466E+38,1.7976931348623157E+308,'test1',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(2,-128,-128,-128,-32768,-2147483648,-2147483648,-9223372036854775808,18446744073709551614,3.402823466E+38,-1.7976931348623157E+308,'test2',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(3,1,2,3,4,5,6,7,8,1.175494351E-38,-2.2250738585072014E-308,'test3',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(4,0,0,0,0,0,0,0,9,1.175494351E-38,2.2250738585072014E-308,'test4',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(5,null,null,null,null,null,null,null,10,null,null,'test4','[]',null,map(1,'test'));
+--disable_warnings
+drop view if EXISTS vtt3;
+--enable_warnings
+create view vtt3 as select * from tt3;
+create table tt4(id int ,m1 map(int,int),m2 map(bigint unsigned,varchar(100)),m3 map(varchar(100),array(varchar(100))),m4 map(double ,float unsigned),
+m5 map(bigint,array(array(int unsigned))),m6 map(bigint,vector(2)));
+
+insert  /*+ direct(true,100,'inc') enable_parallel_dml parallel(2)*/  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+insert  /*+ direct(true,100) enable_parallel_dml parallel(2) append*/  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+insert   into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+
+--sorted_result
+select map_keys(m1) m1,map_keys(m2) m2,map_keys(m3) m3,map_keys(m4) m4,map_keys(m5) m5,map_keys(m6) m6 from tt4;
+--sorted_result
+select map_values(m1) m1,map_values(m2) m2,map_values(m3) m3,map_values(m4) m4,map_values(m5) m5,map_values(m6) m6 from tt4;
+
+# cleanup
+--disable_warnings
+drop table t1, t2, t3, t4, t5, output_test, tt3, tt4;
+--enable_warnings

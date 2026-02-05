@@ -1,0 +1,175 @@
+# owner: zg410411
+# description: test the basic behavior of major-refresh materialized view
+
+connect (sys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection sys;
+alter system set debug_sync_timeout = '100000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+
+connection default;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 30000000;
+SET ob_query_timeout = 30000000;
+SET @@recyclebin = 0;
+SET @@sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,no_zero_date,no_zero_in_date,PIPES_AS_CONCAT';
+
+--disable_warnings
+drop database IF EXISTS db1;
+--enable_warnings
+create database db1;
+use db1;
+
+## ------------prepare data------------
+create table collect_info(user_id int, item_id int, primary key(user_id, item_id)) partition by hash(user_id) partitions 4;
+create table collect_item(item_id int, price int, primary key(item_id)) duplicate_scope = 'cluster' duplicate_read_consistency = 'weak';
+insert into collect_item values(1, 100);
+insert into collect_item values(2, 200);
+insert into collect_item values(3, 300);
+insert into collect_info values(1, 1);
+insert into collect_info values(1, 2);
+insert into collect_info values(2, 1);
+insert into collect_info values(2, 3);
+insert into collect_info values(3, 3);
+
+## ------------create mv------------
+create materialized view collect_info_mv (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info inner join collect_item on collect_info.item_id = collect_item.item_id;
+
+## ------------check MV status------------
+let $mv_table_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 'collect_info_mv', table_id, 1);
+let $mv_container_table_id = query_get_value(select data_table_id from oceanbase.__all_table where table_name = 'collect_info_mv', data_table_id, 1);
+let $collect_info_table_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 'collect_info', table_id, 1);
+let $collect_item_table_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 'collect_item', table_id, 1);
+let $mv_container_tablet_id = query_get_value(select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $mv_container_table_id limit 1, tablet_id, 1);
+let $collect_info_tablet_id = query_get_value(select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $collect_info_table_id limit 1, tablet_id, 1);
+let $collect_item_tablet_id = query_get_value(select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $collect_item_table_id limit 1, tablet_id, 1);
+
+--disable_query_log
+# check whether the refresh_mode is "MAJOR COMPATCTION" and refresh_method is "FAST"
+eval select refresh_mode, refresh_method from oceanbase.__all_mview where mview_id = $mv_table_id;
+# check whether the snaphost of base table and container table is properly maintained
+eval select snapshot_type from oceanbase.__all_acquired_snapshot where tablet_id in ($mv_container_tablet_id, $collect_info_tablet_id, $collect_item_tablet_id);
+# check mv_mode is valid
+eval select mv_mode from oceanbase.__all_table where table_id in ($collect_info_table_id, $collect_item_table_id, $mv_container_table_id) order by table_name;
+--enable_query_log
+# check VIEWS
+select mview_name, query, refresh_method, refresh_mode, rewrite_enabled, on_query_computation from oceanbase.DBA_MVIEWS where mview_name = 'collect_info_mv';
+connection sys;
+select mview_name, query, refresh_method, refresh_mode, rewrite_enabled, on_query_computation from oceanbase.CDB_MVIEWS where mview_name = 'collect_info_mv' and owner = 'db1';
+# check show create table
+connection default;
+show create table collect_info_mv;
+# check __all_ddl_operation
+select ddl_stmt_str from oceanbase.__all_ddl_operation where ddl_stmt_str like '%collect_info_mv%' order by gmt_create desc limit 1;
+
+## ------------check base table ddl------------
+#rename table is not supported
+--error 1235
+rename table collect_item to citem;
+--error 1235
+alter table collect_item rename to citem;
+
+#truncate table is not supported
+--error 1235
+truncate collect_item;
+
+#drop primary key is not supported
+--error 1235
+alter table collect_item drop primary key;
+
+#add column is supported
+alter table collect_item add column new_col varchar(20);
+
+#drop column is not supported
+--error 1235
+alter table collect_item drop column price;
+
+#rename table column is not supported
+--error 1235
+alter table collect_item rename column price to price2;
+
+#modify base table column datatype is not supported
+--error 1235
+alter table collect_item modify price varchar(20);
+
+#add not null constraint is not supported
+--error 1235
+alter table collect_item modify price int not null;
+
+#alter default column value is not supported
+--error 1235
+alter table collect_item alter column price set default 1;
+
+#alter partition is not supported
+--error 1235
+alter table collect_info partition by range(user_id)
+(
+partition p1 values less than(15),
+partition p2 values less than(25),
+partition p3 values less than(35),
+partition p4 values less than(45),
+partition p5 values less than(55)
+);
+
+#alter tablegroup
+--disable_warnings
+drop tablegroup if exists test_tg;
+--enable_warnings
+create tablegroup test_tg;
+--error 1235
+alter tablegroup test_tg add table collect_info;
+drop tablegroup test_tg;
+
+#alter table options
+--error 1235
+alter table collect_info compression 'NONE';
+
+#2: supported operations
+#add index
+alter table collect_item add index k1(price);
+
+#drop index
+alter table collect_item drop index k1;
+
+#add unique key
+alter table collect_item add unique(price);
+
+#drop unique key
+alter table collect_item drop index price;
+
+#add/drop unique key 2
+alter table collect_item add constraint uk1 unique(price);
+drop index uk1 on collect_item;
+
+#add check constraint
+alter table collect_item add constraint chk_constraint check (price > 0);
+alter table collect_item drop constraint chk_constraint;
+
+#alter table options
+alter table collect_info comment 'base table comment';
+
+## ------------check mv ddl------------
+# add index is not supported
+--error 1235
+create index mv_idx1 on collect_info_mv(item_id);
+
+--error 1235
+alter table collect_info_mv add index mv_idx1(item_id);
+
+## ------------check mv creation constraint------------
+# check column store mv is not supported
+--error 9783
+create materialized view collect_info_mv2 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column) refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info inner join collect_item on collect_info.item_id = collect_item.item_id;
+create table collect_info_col(user_id int, item_id int, primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column);
+create table collect_item_col(item_id int, price int, primary key(item_id)) duplicate_scope = 'cluster' duplicate_read_consistency = 'weak' WITH COLUMN GROUP(each column);
+--error 9783
+create materialized view collect_info_mv3 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info_col.user_id, collect_info_col.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info_col inner join collect_item on collect_info_col.item_id = collect_item.item_id;
+--error 9783
+create materialized view collect_info_mv4 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item_col.item_id dup_item_id, collect_item_col.price from collect_info inner join collect_item_col on collect_info.item_id = collect_item_col.item_id;
+
+## ------------clean up------------
+connection sys;
+set ob_global_debug_sync = 'CREATE_TABLE_BEFORE_PUBLISH_SCHEMA clear';
+set ob_global_debug_sync = 'reset';
+connection default;
+drop database db1;

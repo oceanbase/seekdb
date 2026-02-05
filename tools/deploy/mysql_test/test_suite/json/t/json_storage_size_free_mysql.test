@@ -1,0 +1,163 @@
+# owner: lb446709
+# owner group: shenzhen
+--echo # Test JSON FUNCTION --- JSON_STORAGE_SIZE/JSON_STORAGE_FREE
+#--source mysql_test/test_suite/json/t/json_size_free_mysql_include.in
+--echo # ----------------------------------------------------------------------
+--echo # Test of JSON_STORAGE_SIZE/JSON_STORAGE_FREE
+--echo # ----------------------------------------------------------------------
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+# TODO:adapt mysql error code
+--error 1582
+SELECT JSON_STORAGE_SIZE();
+# TODO:adapt mysql error code
+--error 1582
+SELECT JSON_STORAGE_FREE();
+# TODO:adapt mysql error code
+--error 1582
+SELECT JSON_STORAGE_SIZE('{}', '[]');
+# TODO:adapt mysql error code
+--error 1582
+SELECT JSON_STORAGE_FREE('{}', '[]');
+--error ER_INVALID_JSON_TEXT
+SELECT JSON_STORAGE_SIZE('this is not JSON');
+--error ER_INVALID_JSON_TEXT
+SELECT JSON_STORAGE_FREE('this is not JSON');
+--echo #expect NULL
+SELECT JSON_STORAGE_SIZE(NULL);
+--echo #expect NULL
+SELECT JSON_STORAGE_FREE(NULL);
+--echo #expect 0
+SELECT JSON_STORAGE_SIZE(JSON_ARRAY(1,2,3));
+--echo #expect 0
+SELECT JSON_STORAGE_FREE(JSON_ARRAY(1,2,3));
+
+--disable_warnings
+DROP TABLE IF EXISTS t;
+--enable_warnings
+CREATE TABLE IF NOT EXISTS t(id INT PRIMARY KEY, j JSON, v VARCHAR(100));
+INSERT INTO t(id, j) VALUES (0, NULL), (1, '[["abc", "def", "ghi"], "jkl"]');
+UPDATE t SET v = j;
+--echo #expect NULL 55
+SELECT JSON_STORAGE_SIZE(j) FROM t;
+--echo #expect NULL 55
+SELECT JSON_STORAGE_SIZE(v) FROM t;
+
+SELECT JSON_STORAGE_SIZE(JSON_EXTRACT(j, '$[0]')) FROM t;
+
+--echo #expect NULL 0
+SELECT JSON_STORAGE_FREE(j) FROM t;
+--echo #expect NULL 0
+SELECT JSON_STORAGE_FREE(v) FROM t;
+
+SELECT JSON_STORAGE_FREE(JSON_EXTRACT(j, '$[0]')) FROM t;
+DROP TABLE t;
+
+CREATE TABLE IF NOT EXISTS t(id INT PRIMARY KEY, j JSON);
+INSERT INTO t VALUES (1, '{"a":"a"}'), (2, '{"a":"b", "b":"b"}'), (3, '{"a":"c", "c":"c"}');
+SELECT *, JSON_STORAGE_SIZE(j) ss,
+          JSON_STORAGE_FREE(j) sf FROM t ORDER BY id;
+DROP TABLE t;
+
+CREATE TABLE IF NOT EXISTS t(id INT PRIMARY KEY, j1 JSON, j2 JSON);
+INSERT INTO t VALUES
+(1, '{"a":"a","b":"b"}', '{"a":"a","b":"b"}'),
+(2, NULL, NULL),
+(3, '{"a":"aa","b":"bb"}', '{"a":"aa","b":"bb"}');
+SELECT *, JSON_STORAGE_SIZE(j1) ss1,
+          JSON_STORAGE_FREE(j1) sf1,
+          JSON_STORAGE_SIZE(j2) ss2,
+          JSON_STORAGE_FREE(j2) sf2 FROM t ORDER BY id;
+DROP TABLE t;
+
+CREATE TABLE IF NOT EXISTS t(j JSON,
+              i INT DEFAULT 42,
+              db DOUBLE DEFAULT 2.34e-10,
+              dc DECIMAL(5, 3) DEFAULT 98.765,
+              ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              gc JSON GENERATED ALWAYS AS (JSON_ARRAY(i, db, dc, ts)));
+INSERT INTO t(j, ts) VALUES
+('[null, "abc", true, "def", false]', '2017-01-02 14:15:16');
+SELECT j, JSON_TYPE(j) jt, JSON_STORAGE_SIZE(j) ss,
+          JSON_STORAGE_FREE(j) sf FROM t;
+DROP TABLE t;
+
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE IF NOT EXISTS t1(id INT PRIMARY KEY, j JSON, x INT);
+INSERT INTO t1 VALUES (1, '{"a":"xy"}', 1), (2, '{"a":"zw"}', 2);
+SELECT *, JSON_STORAGE_SIZE(j) ss,
+          JSON_STORAGE_FREE(j) sf FROM t1 ORDER BY id;
+DROP TABLE t1;
+
+--disable_warnings
+DROP TABLE IF EXISTS t2;
+--enable_warnings
+CREATE TABLE IF NOT EXISTS t2(id INT PRIMARY KEY, j JSON, x INT);
+INSERT INTO t2 VALUES
+(1, '{"b":"X"}', 3),
+(2, '{"b":"Y"}', 4),
+(3, '{"b":"Z"}', 9);
+SELECT *, JSON_STORAGE_SIZE(j) ss,
+          JSON_STORAGE_FREE(j) sf FROM t2 ORDER BY id;
+DROP TABLE t2;
+
+CREATE TABLE IF NOT EXISTS t(j JSON);
+INSERT INTO t VALUES ('[1,2,3,4]'), ('["adef"]'), ('["cdef"]');
+SELECT j, JSON_STORAGE_SIZE(j), JSON_STORAGE_FREE(j) FROM t;
+UPDATE t SET j = JSON_REMOVE(j, '$[0]');
+SELECT j, JSON_STORAGE_SIZE(j), JSON_STORAGE_FREE(j) FROM t;
+DROP TABLE t;
+
+--error ER_INVALID_JSON_CHARSET
+SELECT JSON_STORAGE_SIZE(UNHEX(""));
+
+--error ER_INVALID_JSON_CHARSET
+SELECT JSON_STORAGE_FREE(UNHEX(""));
+
+--echo #bug:
+SELECT JSON_STORAGE_FREE('false');
+SELECT JSON_STORAGE_FREE('123');
+
+--disable_warnings
+drop table if exists json_test;
+--enable_warnings
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys;
+#alter system set _enable_defensive_check = 1;
+connection default;
+set log_row_value_options="partial_json";
+set ob_default_lob_inrow_threshold = 4096;
+create table json_test(pk int, j json) JSON(j) STORE AS (CHUNK '1K');
+insert into json_test values(10 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 1), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
+select json_storage_size(j), JSON_STORAGE_FREE(j) from json_test where pk=10;
+update json_test set j = json_replace(j, '$.position', 'software enginee') where pk=10;
+select json_storage_size(j), JSON_STORAGE_FREE(j) from json_test where pk=10;
+update json_test set j = json_replace(j, '$.position', 'software engineera') where pk=10;
+select json_storage_size(j), JSON_STORAGE_FREE(j) from json_test where pk=10;
+
+drop table json_test;
+create table json_test(id int,j json) json(j) store as (chunk '1k');
+insert into json_test values(1,concat('{"name": "John","值值":5,"name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false], "content": "', repeat('x',5000), '"}'));
+select JSON_STORAGE_SIZE(j),JSON_STORAGE_FREE(j),JSON_EXTRACT(j,'$.name') from json_test;
+update json_test set j=json_set(j,'$.name','testee');
+select JSON_STORAGE_SIZE(j),JSON_STORAGE_FREE(j),JSON_EXTRACT(j,'$.name') from json_test;
+update json_test set j=json_set(j,'$.name','test');
+select JSON_STORAGE_SIZE(j),JSON_STORAGE_FREE(j),JSON_EXTRACT(j,'$.name') from json_test;
+update json_test set j=json_set(j,'$.name', 31415926);
+select JSON_STORAGE_SIZE(j),JSON_STORAGE_FREE(j),JSON_EXTRACT(j,'$.name') from json_test;
+drop table if exists json_test;
+connection obsys;
+#alter system set _enable_defensive_check = 0;
+connection default;
+set log_row_value_options="";
+
+create table json_test(pk int, j json) JSON(j) STORE AS (CHUNK '1K');
+insert into json_test values(10 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 1), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
+select json_storage_size(j), JSON_STORAGE_FREE(j) from json_test where pk=10;
+update json_test set j = json_replace(j, '$.position', 'software enginee') where pk=10;
+select json_storage_size(j), JSON_STORAGE_FREE(j) from json_test where pk=10;
+update json_test set j = json_replace(j, '$.position', 'software engineera') where pk=10;
+select json_storage_size(j), JSON_STORAGE_FREE(j) from json_test where pk=10;

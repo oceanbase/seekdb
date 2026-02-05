@@ -1,0 +1,398 @@
+drop database if exists yjl_vec;
+create database yjl_vec;
+use yjl_vec;
+alter system set ob_vector_memory_limit_percentage = 20;
+
+
+"=========================================== __all_ddl_operation ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop index idx1 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+select ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec') and ddl_stmt_str != '' order by schema_version;
+ddl_stmt_str
+create database yjl_vec
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw))
+drop index idx1 on t_vec
+
+
+"=========================================== 索引名有转义字符 ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index `idx\n1`(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx\n1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx\n1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop index `idx\n1` on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+
+
+"=========================================== 索引名有大小写 ==================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index iDx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `iDx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	iDx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop index idx1 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+
+
+"======================================= 多个大小写名字下，会创建失败 ============================================"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index iDx1(c2) with (distance=l2, type=hnsw), vector index idx1(c3) with (distance=l2, type=hnsw));
+ERROR 42000: Duplicate key name 'idx1'
+
+
+"========================================== 索引名有特殊字符 001 ==============================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index iDx$1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `iDx$1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	iDx$1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop index iDx$1 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+
+
+"========================================== 索引名有特殊字符 002 ==============================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index café(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `café` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	café	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop index cafe on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+
+
+"========================================== 索引名有特殊字符 003 ==============================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index cafe(c2) with (distance=l2, type=hnsw), vector index café(c3) with (distance=l2, type=hnsw));
+ERROR 42000: Duplicate key name 'café'
+
+
+"==========================================  删除多个向量索引中的1个 ============================================"
+use yjl_vec;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), vector index idx2(c3) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  VECTOR KEY `idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+3
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+3
+use yjl_vec;
+drop index idx1 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+count(table_name)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+3
+use yjl_vec;
+select * from t_vec;
+c1	c2	c3
+drop index idx2 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+count(table_name)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+
+
+"==========================================  删除混合索引  ============================================"
+use yjl_vec;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT ('ob_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('ob_embed');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ob_embed', '{
+    "type": "dense_embedding",
+    "model_name": "bge-M3"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'ob_embed_endpoint', '{
+    "ai_model_name": "ob_embed",
+    "scope": "all",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "bge-M3",
+    "provider": "openai"
+  }');
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index idx1(c2) WITH (distance=L2, type=hnsw, dim=1024, model=ob_embed, sync_mode=immediate));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, DIM=1024, MODEL=OB_EMBED, SYNC_MODE=IMMEDIATE, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop index idx1 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 vector(3), primary key(c1), vector index idx1(c2) WITH (distance=L2, type=hnsw, dim=1024, model=ob_embed, sync_mode=immediate), vector index idx2(c3) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, DIM=1024, MODEL=OB_EMBED, SYNC_MODE=IMMEDIATE, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384,
+  VECTOR KEY `idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+count(table_name)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+4
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+3
+use yjl_vec;
+drop index idx1 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+count(table_name)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+1
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+3
+use yjl_vec;
+drop index idx2 on t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+count(table_name)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+count(*)
+0
+use yjl_vec;
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ob_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ob_embed_endpoint');
+
+use yjl_vec;
+alter system set ob_vector_memory_limit_percentage = 0;
+drop table if exists t_vec;
+drop database if exists yjl_vec;
+PURGE RECYCLEBIN;

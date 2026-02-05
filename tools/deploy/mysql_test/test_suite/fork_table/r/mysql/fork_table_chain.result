@@ -1,0 +1,470 @@
+drop database if exists db_fork_chain;
+create database db_fork_chain;
+use db_fork_chain;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+# 启用debug sync
+alter system set debug_sync_timeout = '60s';
+set ob_global_debug_sync = 'reset';
+============================================
+1. 基本链式Fork（A -> B -> C）
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t1'
+drop table if exists t1_fork1;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t1_fork1'
+drop table if exists t1_fork2;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t1_fork2'
+create table t1 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t1 values (1, 'Original', 100);
+insert into t1 values (101, 'Original2', 200);
+# 第一次Fork: t1 -> t1_fork1
+fork table t1 to t1_fork1;
+# 验证第一次Fork
+select * from t1_fork1 order by id;
+id	name	value
+1	Original	100
+101	Original2	200
+# 在源表中插入数据
+insert into t1 values (50, 'Source_After_Fork1', 300);
+# 第二次Fork: t1_fork1 -> t1_fork2
+fork table t1_fork1 to t1_fork2;
+# 验证第二次Fork
+select * from t1_fork2 order by id;
+id	name	value
+1	Original	100
+101	Original2	200
+# 验证各表数据
+select 't1' as table_name, * from t1 order by id;
+table_name	id	name	value
+t1	1	Original	100
+t1	50	Source_After_Fork1	300
+t1	101	Original2	200
+select 't1_fork1' as table_name, * from t1_fork1 order by id;
+table_name	id	name	value
+t1_fork1	1	Original	100
+t1_fork1	101	Original2	200
+select 't1_fork2' as table_name, * from t1_fork2 order by id;
+table_name	id	name	value
+t1_fork2	1	Original	100
+t1_fork2	101	Original2	200
+# 等待所有fork任务完成
+# 再次验证各表数据（fork任务完全完成后）
+select 't1' as table_name, * from t1 order by id;
+table_name	id	name	value
+t1	1	Original	100
+t1	50	Source_After_Fork1	300
+t1	101	Original2	200
+select 't1_fork1' as table_name, * from t1_fork1 order by id;
+table_name	id	name	value
+t1_fork1	1	Original	100
+t1_fork1	101	Original2	200
+select 't1_fork2' as table_name, * from t1_fork2 order by id;
+table_name	id	name	value
+t1_fork2	1	Original	100
+t1_fork2	101	Original2	200
+============================================
+2. 链式Fork数据隔离测试
+============================================
+# 在源表中修改数据
+update t1 set value = 1000 where id = 1;
+insert into t1 values (150, 'Source_New', 400);
+# 在第一次Fork表中修改数据
+update t1_fork1 set value = 2000 where id = 1;
+insert into t1_fork1 values (75, 'Fork1_New', 500);
+# 在第二次Fork表中修改数据
+update t1_fork2 set value = 3000 where id = 1;
+insert into t1_fork2 values (25, 'Fork2_New', 600);
+# 验证各表数据独立
+select 't1' as table_name, * from t1 order by id;
+table_name	id	name	value
+t1	1	Original	1000
+t1	50	Source_After_Fork1	300
+t1	101	Original2	200
+t1	150	Source_New	400
+select 't1_fork1' as table_name, * from t1_fork1 order by id;
+table_name	id	name	value
+t1_fork1	1	Original	2000
+t1_fork1	75	Fork1_New	500
+t1_fork1	101	Original2	200
+select 't1_fork2' as table_name, * from t1_fork2 order by id;
+table_name	id	name	value
+t1_fork2	1	Original	3000
+t1_fork2	25	Fork2_New	600
+t1_fork2	101	Original2	200
+============================================
+3. 链式Fork快照版本验证
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t2'
+drop table if exists t2_fork1;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t2_fork1'
+drop table if exists t2_fork2;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t2_fork2'
+create table t2 (
+id int primary key,
+name varchar(50),
+value int
+);
+insert into t2 values (1, 'Snapshot1', 100);
+# 第一次Fork
+fork table t2 to t2_fork1;
+# 修改源表
+update t2 set name = 'Snapshot1_Modified', value = 200;
+insert into t2 values (2, 'Snapshot2', 300);
+# 第二次Fork（从第一次Fork表）
+fork table t2_fork1 to t2_fork2;
+# 验证快照版本
+# t2应该包含所有数据
+select * from t2 order by id;
+id	name	value
+1	Snapshot1_Modified	200
+2	Snapshot2	300
+# t2_fork1应该包含Fork1时刻的快照
+select * from t2_fork1 order by id;
+id	name	value
+1	Snapshot1	100
+# t2_fork2应该包含Fork2时刻的快照（与t2_fork1相同）
+select * from t2_fork2 order by id;
+id	name	value
+1	Snapshot1	100
+# 等待所有fork任务完成
+# 再次验证快照版本（fork任务完全完成后）
+select * from t2 order by id;
+id	name	value
+1	Snapshot1_Modified	200
+2	Snapshot2	300
+select * from t2_fork1 order by id;
+id	name	value
+1	Snapshot1	100
+select * from t2_fork2 order by id;
+id	name	value
+1	Snapshot1	100
+============================================
+5. 链式Fork与索引
+============================================
+drop table if exists t4;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t4'
+drop table if exists t4_fork1;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t4_fork1'
+drop table if exists t4_fork2;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t4_fork2'
+create table t4 (
+id int primary key,
+name varchar(50),
+email varchar(100),
+index idx_name(name),
+index idx_email(email)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t4 values (1, 'Alice', 'alice@example.com');
+insert into t4 values (101, 'Bob', 'bob@example.com');
+# 第一次Fork
+fork table t4 to t4_fork1;
+# 第二次Fork
+fork table t4_fork1 to t4_fork2;
+# 验证索引结构
+show index from t4;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t4	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t4	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t4	1	idx_email	1	email	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+show index from t4_fork1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t4_fork1	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t4_fork1	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t4_fork1	1	idx_email	1	email	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+show index from t4_fork2;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t4_fork2	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t4_fork2	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t4_fork2	1	idx_email	1	email	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+# 验证索引查询
+select * from t4_fork1 where name = 'Alice';
+id	name	email
+1	Alice	alice@example.com
+select * from t4_fork2 where name = 'Alice';
+id	name	email
+1	Alice	alice@example.com
+# 等待所有fork任务完成
+# 再次验证索引结构和查询（fork任务完全完成后）
+show index from t4;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t4	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t4	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t4	1	idx_email	1	email	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+show index from t4_fork1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t4_fork1	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t4_fork1	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t4_fork1	1	idx_email	1	email	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+show index from t4_fork2;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t4_fork2	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t4_fork2	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+t4_fork2	1	idx_email	1	email	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+select * from t4_fork1 where name = 'Alice';
+id	name	email
+1	Alice	alice@example.com
+select * from t4_fork2 where name = 'Alice';
+id	name	email
+1	Alice	alice@example.com
+============================================
+6. 并行Fork测试 - 从同一个源表并行fork多个表
+============================================
+drop table if exists t5;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t5'
+drop table if exists t5_fork1;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t5_fork1'
+drop table if exists t5_fork2;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t5_fork2'
+create table t5 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+# 插入初始数据
+insert into t5 values (1, 'Parallel_Data1', 100);
+insert into t5 values (101, 'Parallel_Data2', 200);
+# 设置debug sync信号，让所有fork操作都卡在BUILD_DATA阶段
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for parallel_fork_signal execute 10000';
+# 顺序执行fork命令（都会在BUILD_DATA阶段暂停，模拟并行）
+fork table t5 to t5_fork1;
+fork table t5 to t5_fork2;
+# 等待所有fork操作都进入BUILD_DATA阶段
+# 验证所有fork任务都卡在BUILD_DATA阶段
+select count(*) as parallel_fork_count
+from oceanbase.__all_virtual_ddl_task_status
+where ddl_type = 10009;
+parallel_fork_count
+2
+# 显示所有fork任务的详细信息
+select ddl_type, status
+from oceanbase.__all_virtual_ddl_task_status
+where ddl_type = 10009;
+ddl_type	status
+10009	48
+10009	48
+# 释放所有fork操作，让它们继续执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now broadcast parallel_fork_signal';
+# 等待所有fork任务完成
+# 验证所有fork表的数据完整性
+select 't5_fork1' as table_name, * from t5_fork1 order by id;
+table_name	id	name	value
+t5_fork1	1	Parallel_Data1	100
+t5_fork1	101	Parallel_Data2	200
+select 't5_fork2' as table_name, * from t5_fork2 order by id;
+table_name	id	name	value
+t5_fork2	1	Parallel_Data1	100
+t5_fork2	101	Parallel_Data2	200
+# 验证源表数据未受影响
+select 't5' as table_name, * from t5 order by id;
+table_name	id	name	value
+t5	1	Parallel_Data1	100
+t5	101	Parallel_Data2	200
+# 再次等待确认所有fork任务完成
+# 再次验证所有fork表的数据完整性（fork任务完全完成后）
+select 't5_fork1' as table_name, * from t5_fork1 order by id;
+table_name	id	name	value
+t5_fork1	1	Parallel_Data1	100
+t5_fork1	101	Parallel_Data2	200
+select 't5_fork2' as table_name, * from t5_fork2 order by id;
+table_name	id	name	value
+t5_fork2	1	Parallel_Data1	100
+t5_fork2	101	Parallel_Data2	200
+select 't5' as table_name, * from t5 order by id;
+table_name	id	name	value
+t5	1	Parallel_Data1	100
+t5	101	Parallel_Data2	200
+============================================
+7. 并行Fork数据隔离测试
+============================================
+# 修改源表数据
+update t5 set value = 1000 where id = 1;
+insert into t5 values (50, 'Source_After_Parallel', 300);
+# 修改不同fork表的数据（验证数据隔离）
+update t5_fork1 set value = 2000 where id = 1;
+insert into t5_fork1 values (75, 'Fork1_New', 400);
+update t5_fork2 set value = 3000 where id = 1;
+insert into t5_fork2 values (80, 'Fork2_New', 500);
+# 验证各表数据独立
+select 't5' as table_name, * from t5 order by id;
+table_name	id	name	value
+t5	1	Parallel_Data1	1000
+t5	50	Source_After_Parallel	300
+t5	101	Parallel_Data2	200
+select 't5_fork1' as table_name, * from t5_fork1 order by id;
+table_name	id	name	value
+t5_fork1	1	Parallel_Data1	2000
+t5_fork1	75	Fork1_New	400
+t5_fork1	101	Parallel_Data2	200
+select 't5_fork2' as table_name, * from t5_fork2 order by id;
+table_name	id	name	value
+t5_fork2	1	Parallel_Data1	3000
+t5_fork2	80	Fork2_New	500
+t5_fork2	101	Parallel_Data2	200
+============================================
+8. 并行Fork和链式Fork组合测试
+============================================
+drop table if exists t6;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t6'
+drop table if exists t6_fork1;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t6_fork1'
+drop table if exists t6_fork2;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t6_fork2'
+drop table if exists t6_fork1_chain;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t6_fork1_chain'
+drop table if exists t6_fork2_chain;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t6_fork2_chain'
+create table t6 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t6 values (1, 'Combo_Data1', 100);
+insert into t6 values (101, 'Combo_Data2', 200);
+# 设置debug sync信号，让所有fork操作都卡在BUILD_DATA阶段
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for combo_fork_signal execute 10000';
+# 顺序执行fork命令（都会在BUILD_DATA阶段暂停，模拟并行）
+fork table t6 to t6_fork1;
+fork table t6 to t6_fork2;
+# 等待所有fork操作都进入BUILD_DATA阶段
+# 释放所有fork操作，让它们继续执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now broadcast combo_fork_signal';
+# 等待所有fork任务完成
+# 验证并行fork的结果
+select 't6_fork1' as table_name, * from t6_fork1 order by id;
+table_name	id	name	value
+t6_fork1	1	Combo_Data1	100
+t6_fork1	101	Combo_Data2	200
+select 't6_fork2' as table_name, * from t6_fork2 order by id;
+table_name	id	name	value
+t6_fork2	1	Combo_Data1	100
+t6_fork2	101	Combo_Data2	200
+# 从并行fork的结果进行链式fork
+fork table t6_fork1 to t6_fork1_chain;
+fork table t6_fork2 to t6_fork2_chain;
+# 等待链式fork任务完成
+# 验证链式fork的结果
+select 't6_fork1_chain' as table_name, * from t6_fork1_chain order by id;
+table_name	id	name	value
+t6_fork1_chain	1	Combo_Data1	100
+t6_fork1_chain	101	Combo_Data2	200
+select 't6_fork2_chain' as table_name, * from t6_fork2_chain order by id;
+table_name	id	name	value
+t6_fork2_chain	1	Combo_Data1	100
+t6_fork2_chain	101	Combo_Data2	200
+# 修改源表和各个fork表的数据（验证隔离）
+update t6 set value = 1000 where id = 1;
+update t6_fork1 set value = 2000 where id = 1;
+update t6_fork2 set value = 3000 where id = 1;
+update t6_fork1_chain set value = 4000 where id = 1;
+update t6_fork2_chain set value = 5000 where id = 1;
+# 验证各表数据独立
+select 't6' as table_name, * from t6 order by id;
+table_name	id	name	value
+t6	1	Combo_Data1	1000
+t6	101	Combo_Data2	200
+select 't6_fork1' as table_name, * from t6_fork1 order by id;
+table_name	id	name	value
+t6_fork1	1	Combo_Data1	2000
+t6_fork1	101	Combo_Data2	200
+select 't6_fork2' as table_name, * from t6_fork2 order by id;
+table_name	id	name	value
+t6_fork2	1	Combo_Data1	3000
+t6_fork2	101	Combo_Data2	200
+select 't6_fork1_chain' as table_name, * from t6_fork1_chain order by id;
+table_name	id	name	value
+t6_fork1_chain	1	Combo_Data1	4000
+t6_fork1_chain	101	Combo_Data2	200
+select 't6_fork2_chain' as table_name, * from t6_fork2_chain order by id;
+table_name	id	name	value
+t6_fork2_chain	1	Combo_Data1	5000
+t6_fork2_chain	101	Combo_Data2	200
+# 再次等待确认所有fork任务完成
+# 再次验证各表数据独立（fork任务完全完成后）
+select 't6' as table_name, * from t6 order by id;
+table_name	id	name	value
+t6	1	Combo_Data1	1000
+t6	101	Combo_Data2	200
+select 't6_fork1' as table_name, * from t6_fork1 order by id;
+table_name	id	name	value
+t6_fork1	1	Combo_Data1	2000
+t6_fork1	101	Combo_Data2	200
+select 't6_fork2' as table_name, * from t6_fork2 order by id;
+table_name	id	name	value
+t6_fork2	1	Combo_Data1	3000
+t6_fork2	101	Combo_Data2	200
+select 't6_fork1_chain' as table_name, * from t6_fork1_chain order by id;
+table_name	id	name	value
+t6_fork1_chain	1	Combo_Data1	4000
+t6_fork1_chain	101	Combo_Data2	200
+select 't6_fork2_chain' as table_name, * from t6_fork2_chain order by id;
+table_name	id	name	value
+t6_fork2_chain	1	Combo_Data1	5000
+t6_fork2_chain	101	Combo_Data2	200
+============================================
+9. 清理
+============================================
+drop table if exists t1;
+drop table if exists t1_fork1;
+drop table if exists t1_fork2;
+drop table if exists t2;
+drop table if exists t2_fork1;
+drop table if exists t2_fork2;
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t3'
+drop table if exists t3_fork1;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t3_fork1'
+drop table if exists t3_fork2;
+Warnings:
+Note	1051	Unknown table 'db_fork_chain.t3_fork2'
+drop table if exists t4;
+drop table if exists t4_fork1;
+drop table if exists t4_fork2;
+drop table if exists t5;
+drop table if exists t5_fork1;
+drop table if exists t5_fork2;
+drop table if exists t6;
+drop table if exists t6_fork1;
+drop table if exists t6_fork2;
+drop table if exists t6_fork1_chain;
+drop table if exists t6_fork2_chain;
+drop database if exists db_fork_chain;

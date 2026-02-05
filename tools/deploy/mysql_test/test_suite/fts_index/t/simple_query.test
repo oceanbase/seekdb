@@ -1,0 +1,761 @@
+# owner: saitong.zst
+# owner group: storage
+# description: basic text retrieval query with fulltext index
+
+--disable_warnings
+drop database if exists fts;
+create database fts;
+use fts;
+--enable_warnings
+
+# full text index on single column
+create table t_ir_single_column(
+  digest varchar(512),
+  detail varchar(4096),
+  seq int,
+  fulltext index i1(detail));
+
+--result_format 4
+
+explain select digest from t_ir_single_column where match (detail) against ("info to search");
+select digest from t_ir_single_column where match (detail) against ("info to search");
+
+explain select digest from t_ir_single_column where match (detail) against ("info to search") > 0.7;
+select digest from t_ir_single_column where match (detail) against ("info to search") > 0.7;
+
+select digest from t_ir_single_column where match (detail) against ("info to search") < 0.7;
+
+explain select digest from t_ir_single_column where match (detail) against ("info to search") = 0.7;
+select digest from t_ir_single_column where match (detail) against ("info to search") = 0.7;
+
+select digest from t_ir_single_column where match (detail) against ("info to search") != 0.7;
+
+explain select digest from t_ir_single_column where match (detail) against ("info to search") >= 0.7;
+select digest from t_ir_single_column where match (detail) against ("info to search") >= 0.7;
+
+select digest from t_ir_single_column where match (detail) against ("info to search") <= 0.7;
+
+explain select digest, seq from t_ir_single_column where match (detail) against ("info to search") = 0.7 and seq > 77;
+select digest, seq from t_ir_single_column where match (detail) against ("info to search") = 0.7 and seq > 77;
+
+
+explain select digest from t_ir_single_column where match (detail) against ("info to search" in natural language mode);
+select digest from t_ir_single_column where match (detail) against ("info to search" in natural language mode);
+
+--error ER_NOT_SUPPORTED_YET
+explain select digest from t_ir_single_column where match (detail) against ("info to search" in natural language mode with query expansion);
+--error ER_NOT_SUPPORTED_YET
+select digest from t_ir_single_column where match (detail) against ("info to search" in natural language mode with query expansion);
+
+explain select digest from t_ir_single_column where match (detail) against ("info to search" in boolean mode);
+select digest from t_ir_single_column where match (detail) against ("info to search" in boolean mode);
+
+--error ER_NOT_SUPPORTED_YET
+explain select digest from t_ir_single_column where match (detail) against ("info to search" with query expansion);
+--error ER_NOT_SUPPORTED_YET
+select digest from t_ir_single_column where match (detail) against ("info to search" with query expansion);
+
+# project relevance score
+explain select digest, match (detail) against ("info to search") as score from t_ir_single_column where match (detail) against ("info to search");
+select digest, match (detail) against ("info to search") as score from t_ir_single_column where match (detail) against ("info to search");
+
+explain select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search") and seq > 77;
+select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search") and seq > 77;
+
+# order by column
+explain select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search") and seq > 77
+    order by seq desc;
+select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search") and seq > 77
+    order by seq desc;
+
+# limit
+explain select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search")
+    limit 5;
+select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search")
+    limit 5;
+explain select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search")
+    order by seq desc
+    limit 5;
+select digest, match (detail) against ("info to search") as score
+    from t_ir_single_column
+    where match (detail) against ("info to search")
+    order by seq desc
+    limit 5;
+
+# not filter
+explain select digest, match (detail) against ("info to search") as score from t_ir_single_column;
+select digest, match (detail) against ("info to search") as score from t_ir_single_column;
+
+explain select digest, match (detail) against ("info to search") as score from t_ir_single_column;
+select digest, match (detail) against ("info to search") as score from t_ir_single_column;
+
+--error ER_BAD_FIELD_ERROR
+explain select digest, match (detail) against ("info to search") as score from t_ir_single_column where score > 1;
+--error ER_BAD_FIELD_ERROR
+select digest, match (detail) against ("info to search") as score from t_ir_single_column where score > 1;
+
+explain select digest, match (detail) against ("info to search") as score from t_ir_single_column order by score;
+select digest, match (detail) against ("info to search") as score from t_ir_single_column order by score;
+
+# full text index on multi columns
+create table t_ir_multi_column(
+   digest varchar(512),
+   detail varchar(4096),
+   seq int,
+   fulltext index i1(digest, detail));
+
+explain select digest from t_ir_multi_column where match (digest, detail) against ("info to search");
+select digest from t_ir_multi_column where match (digest, detail) against ("info to search");
+
+explain select digest from t_ir_multi_column where match (detail, digest) against ("info to search");
+select digest from t_ir_multi_column where match (detail, digest) against ("info to search");
+
+--error ER_FT_MATCHING_KEY_NOT_FOUND
+explain select digest from t_ir_multi_column where match (detail) against ("info to search");
+--error ER_FT_MATCHING_KEY_NOT_FOUND
+select digest from t_ir_multi_column where match (detail) against ("info to search");
+
+explain select digest, match (digest, detail) against ("info to search") as score from t_ir_multi_column where match (digest, detail) against ("info to search");
+select digest, match (digest, detail) against ("info to search") as score from t_ir_multi_column where match (digest, detail) against ("info to search");
+
+--error ER_FT_MATCHING_KEY_NOT_FOUND
+explain select digest, match (digest) against ("info to search") as score from t_ir_multi_column where match (digest) against ("info to search");
+--error ER_FT_MATCHING_KEY_NOT_FOUND
+select digest, match (digest) against ("info to search") as score from t_ir_multi_column where match (digest) against ("info to search");
+
+# execution with das
+explain
+select /*+ use_das(t_ir_multi_column) */
+    digest, match (digest, detail) against ("info to search") as score
+from
+    t_ir_multi_column
+where
+    match (digest, detail) against ("info to search");
+
+select /*+ use_das(t_ir_multi_column) */
+    digest, match (digest, detail) against ("info to search") as score
+from
+    t_ir_multi_column
+where
+    match (digest, detail) against ("info to search");
+
+
+# match against in join
+
+create table t_dim_table(
+    seq int,
+    log varchar(1024));
+
+explain
+select
+    t_ir_multi_column.digest, t_dim_table.seq as seq, t_dim_table.log as log , match (digest, detail) against ("info to search") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq = t_dim_table.seq and match (digest, detail) against ("info to search")
+order by
+    score desc;
+
+select
+    t_ir_multi_column.digest, t_dim_table.seq as seq, t_dim_table.log as log , match (digest, detail) against ("info to search") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq = t_dim_table.seq and match (digest, detail) against ("info to search")
+order by
+    score desc;
+
+
+explain
+select /*+ use_das(t_ir_multi_column) */
+    t_ir_multi_column.digest, t_dim_table.seq as seq, t_dim_table.log as log , match (digest, detail) against ("info to search") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq = t_dim_table.seq and match (digest, detail) against ("info to search")
+order by
+    score desc;
+
+select /*+ use_das(t_ir_multi_column) */
+    t_ir_multi_column.digest, t_dim_table.seq as seq, t_dim_table.log as log , match (digest, detail) against ("info to search") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq = t_dim_table.seq and match (digest, detail) against ("info to search")
+order by
+    score desc;
+
+
+
+
+# insert data
+insert into t_ir_single_column (digest, detail, seq) values
+    ("Gerard Salton", "Gerard A. Gerry Salton (8 March 1927 – 28 August 1995) was a professor of Computer Science at Cornell University. Salton was perhaps the leading computer scientist working in the field of information retrieval during his time, and the father of Information Retrieval", 0),
+    ("Edgar F. Codd", "Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems. ", 1),
+    ("Michael Stonebraker", "Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases. ", 2),
+    ("Geoffrey Hinton", "Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.", 3),
+    ("Yann LeCun", "Yann André LeCun[1] (born 8 July 1960) is a Turing Award winning French computer scientist working primarily in the fields of machine learning, computer vision, mobile robotics and computational neuroscience.", 4),
+    ("Ken Thompson", "Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system. ", 5),
+    ("Gordon Plotkin", "Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.", 6),
+    ("Leslie Lamport", "Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX", 7);
+
+insert into t_ir_multi_column (digest, detail, seq) values
+    ("Gerard Salton", "Gerard A. Gerry Salton (8 March 1927 – 28 August 1995) was a professor of Computer Science at Cornell University. Salton was perhaps the leading computer scientist working in the field of information retrieval during his time, and the father of Information Retrieval", 0),
+    ("Edgar F. Codd", "Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems. ", 1),
+    ("Michael Stonebraker", "Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases. ", 2),
+    ("Geoffrey Hinton", "Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.", 3),
+    ("Yann LeCun", "Yann André LeCun[1] (born 8 July 1960) is a Turing Award winning French computer scientist working primarily in the fields of machine learning, computer vision, mobile robotics and computational neuroscience.", 4),
+    ("Ken Thompson", "Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system. ", 5),
+    ("Gordon Plotkin", "Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.", 6),
+    ("Leslie Lamport", "Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX", 7);
+
+insert into t_dim_table (seq, log) values
+    (1, "Codd log"),
+    (3, "Hinton log"),
+    (5, "Ken log"),
+    (7, "Lamport log"),
+    (9, "someone's log");
+
+set ob_enable_index_direct_select = 'ON';
+
+--disable_query_log
+let $data_table_id_single = query_get_value("SELECT table_id FROM oceanbase.__all_virtual_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_single_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
+let $fts_index_table_name_single = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 and data_table_id = $data_table_id_single, table_name, 1);
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__doc_id_%', column_name, 1);
+let $__word_segment_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__word_segment_%', column_name, 1);
+let $__word_count_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_single and column_name like '__word_count_%', column_name, 1);
+eval select /*+opt_param('hidden_column_visible','true')*/ __pk_increment as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count from $fts_index_table_name_single;
+
+let $data_table_id_multi = query_get_value("SELECT table_id FROM oceanbase.__all_virtual_table A, oceanbase.__all_database B WHERE A.table_name = 't_ir_multi_column' and A.database_id = B.database_id and database_name = 'fts'", table_id, 1);
+let $fts_index_table_name_multi = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 and data_table_id = $data_table_id_multi, table_name, 1);
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__doc_id_%', column_name, 1);
+let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__word_segment_%', column_name, 1);
+let $__word_count_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_column_history WHERE table_id = $data_table_id_multi and column_name like '__word_count_%', column_name, 1);
+eval select /*+opt_param('hidden_column_visible','true')*/ __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count from $fts_index_table_name_multi;
+--enable_query_log
+
+# query with data
+
+
+eval select digest, detail from t_ir_single_column where match (detail) against ("distributed database");
+eval select digest, detail from t_ir_single_column where match (detail) against ("database");
+eval select digest, detail from t_ir_single_column where match (detail) against ("computer");
+eval select digest, detail from t_ir_single_column where match (detail) against (1943);
+eval select digest, detail from t_ir_single_column where match (detail) against (0xFF);
+
+eval select digest, match (detail) against ("database") as relevance from t_ir_single_column where match (detail) against ("database") order by relevance desc;
+eval select digest, match (detail) against ("computer") as relevance from t_ir_single_column where match (detail) against ("computer") order by relevance desc;
+
+select digest, match (detail) against ("computer") as relevance from t_ir_single_column where match (detail) against ("computer") > 0.12 order by relevance desc;
+select digest, match (detail) against ("computer") as relevance from t_ir_single_column where match (detail) against ("computer") < 0.12 order by relevance desc;
+select digest, match (detail) against ("computer") as relevance from t_ir_single_column where match (detail) against ("computer") = 0 order by relevance desc;
+
+# empty query token set
+explain select digest from t_ir_single_column where match (detail) against ("");
+select digest from t_ir_single_column where match (detail) against ("");
+
+explain select digest from t_ir_single_column where match (detail) against ("is");
+select digest from t_ir_single_column where match (detail) against ("is");
+
+explain select digest from t_ir_single_column where match (detail) against ("is is");
+select digest from t_ir_single_column where match (detail) against ("is is");
+
+explain select count(1) from t_ir_single_column where match (detail) against ("distributed database");
+select count(1) from t_ir_single_column where match (detail) against ("distributed database");
+
+explain
+select
+    digest, match (detail) against ("computer") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("computer")
+order by relevance desc
+limit 4;
+
+select
+    digest, match (detail) against ("computer") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("computer")
+order by relevance desc
+limit 4;
+
+explain
+select
+    max(match (detail) against ("computer")) as max_relevance, max(seq)
+from
+    t_ir_single_column
+where
+    match (detail) against ("computer");
+
+select
+    max(match (detail) against ("computer")) as max_relevance, max(seq)
+from
+    t_ir_single_column
+where
+    match (detail) against ("computer");
+
+select
+    min(match (detail) against ("computer")) as min_relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("computer");
+
+select
+    avg(match (detail) against ("computer")) as avg_relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("computer");
+
+
+explain
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and seq < 4;
+
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and seq < 4;
+
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and seq >= 4;
+
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and digest = "Ken Thompson";
+
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and digest = "Yann LeCun";
+
+explain
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and digest like "%Ken%";
+
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and digest like "%Ken%";
+
+select
+    digest, seq, match (detail) against ("scientist") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("scientist") and digest like "%LeCun%";
+
+select
+    digest, match (detail) against ("distributed database") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed database")
+order by
+    relevance desc;
+
+select
+    digest, match (detail) against ("relational database") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("relational database")
+order by
+    relevance desc;
+
+select
+    digest, match (detail) against ("relational distributed database") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("relational distributed database")
+order by
+    relevance desc;
+
+select
+    digest, match (detail) against ("distributed relational database") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed relational database")
+order by
+    relevance desc;
+
+explain
+select
+    digest, match (detail) against ("distributed relational database") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed relational database")
+limit 2;
+
+select
+    digest, match (detail) against ("distributed relational database") as relevance
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed relational database")
+limit 2;
+
+# order by other column
+explain
+select
+    seq, digest
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed relational database")
+order by seq desc;
+
+select
+    seq, digest
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed relational database")
+order by seq desc;
+
+explain
+select
+    seq, digest, match (detail) against ("distributed relational database") as score
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed relational database")
+order by seq desc;
+
+select
+    seq, digest, match (detail) against ("distributed relational database") as score
+from
+    t_ir_single_column
+where
+    match (detail) against ("distributed relational database")
+order by seq desc;
+
+explain select distinct 1 from t_ir_single_column where match (detail) against ("distributed database");
+select distinct 1 from t_ir_single_column where match (detail) against ("distributed database");
+
+explain select distinct digest from t_ir_single_column where match (detail) against ("distributed database");
+select distinct digest from t_ir_single_column where match (detail) against ("distributed database");
+
+explain select distinct digest, match (detail) against ("distributed database") > 0 from t_ir_single_column where match (detail) against ("distributed database");
+select distinct digest, match (detail) against ("distributed database") > 0 from t_ir_single_column where match (detail) against ("distributed database");
+
+explain select (select digest from t_ir_single_column limit 1) as d1 from t_ir_single_column where match (detail) against ("distributed database") and seq > 1 ;
+select (select digest from t_ir_single_column limit 1) as d1 from t_ir_single_column where match (detail) against ("distributed database") and seq > 1 ;
+
+explain select distinct (select digest from t_ir_single_column limit 1) as d1 from t_ir_single_column where match (detail) against ("distributed database") and seq > 1;
+select distinct (select digest from t_ir_single_column limit 1) as d1 from t_ir_single_column where match (detail) against ("distributed database") and seq > 1;
+
+--error ER_FT_MATCHING_KEY_NOT_FOUND
+select digest, detail from t_ir_multi_column where match (detail) against ("database");
+--error ER_FT_MATCHING_KEY_NOT_FOUND
+select digest, detail from t_ir_multi_column where match (detail) against ("database");
+
+select digest, detail from t_ir_multi_column where match (detail, digest) against ("distributed database");
+select /*+ use_das(t_ir_multi_column) */ digest, detail from t_ir_multi_column where match (detail, digest) against ("distributed database");
+
+select  digest, detail from t_ir_multi_column where match (detail, digest) against ("database");
+select /*+ use_das(t_ir_multi_column) */ digest, detail from t_ir_multi_column where match (detail, digest) against ("database");
+
+select digest, detail from t_ir_multi_column where match (digest, detail) against ("computer");
+select /*+ use_das(t_ir_multi_column) */ digest, detail from t_ir_multi_column where match (digest, detail) against ("computer");
+
+select digest, match (detail, digest) against ("database") as relevance from t_ir_multi_column where match (detail, digest) against ("database") order by relevance desc;
+select /*+ use_das(t_ir_multi_column) */ digest, match (detail, digest) against ("database") as relevance from t_ir_multi_column where match (detail, digest) against ("database") order by relevance desc;
+
+select digest, match (digest, detail) against ("computer") as relevance from t_ir_multi_column where match (digest, detail) against ("computer") order by relevance desc;
+select /*+ use_das(t_ir_multi_column) */ digest, match (digest, detail) against ("computer") as relevance from t_ir_multi_column where match (digest, detail) against ("computer") order by relevance desc;
+
+
+select
+    t_ir_multi_column.digest, t_dim_table.seq as seq, t_dim_table.log as log , match (digest, detail) against ("computer") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq = t_dim_table.seq and match (digest, detail) against ("computer")
+order by
+    score desc;
+
+
+select /*+ use_das(t_ir_multi_column) */
+    t_ir_multi_column.digest, t_dim_table.seq as seq, t_dim_table.log as log , match (digest, detail) against ("computer") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq = t_dim_table.seq and match (digest, detail) against ("computer")
+order by
+    score desc;
+
+select /*+ use_das(t_ir_multi_column), use_das(t_dim_table) */
+    t_ir_multi_column.digest, t_dim_table.seq as seq, t_dim_table.log as log , match (digest, detail) against ("computer") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq = t_dim_table.seq and match (digest, detail) against ("computer")
+order by
+    score desc;
+
+
+explain
+select
+    t_ir_multi_column.digest, t_ir_multi_column.seq, t_dim_table.seq, t_dim_table.log as log , match (digest, detail) against ("computer") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq < t_dim_table.seq and match (digest, detail) against ("computer")
+order by
+    t_ir_multi_column.seq, t_dim_table.seq;
+
+select
+    t_ir_multi_column.digest, t_ir_multi_column.seq, t_dim_table.seq, t_dim_table.log as log , match (digest, detail) against ("computer") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq < t_dim_table.seq and match (digest, detail) against ("computer")
+order by
+    t_ir_multi_column.seq, t_dim_table.seq;
+
+explain
+select /*+ use_das(t_ir_multi_column) */
+    t_ir_multi_column.digest, t_ir_multi_column.seq, t_dim_table.seq, t_dim_table.log as log , match (digest, detail) against ("computer") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq < t_dim_table.seq and match (digest, detail) against ("computer")
+order by
+    t_ir_multi_column.seq, t_dim_table.seq;
+
+select /*+ use_das(t_ir_multi_column) */
+    t_ir_multi_column.digest, t_ir_multi_column.seq, t_dim_table.seq, t_dim_table.log as log , match (digest, detail) against ("computer") as score
+from
+    t_ir_multi_column, t_dim_table
+where
+    t_ir_multi_column.seq < t_dim_table.seq and match (digest, detail) against ("computer")
+order by
+    t_ir_multi_column.seq, t_dim_table.seq;
+
+
+# dml within match against
+
+create table t_ir_multi_column_dml(
+   digest varchar(512),
+   detail varchar(4096),
+   seq int,
+   fulltext index i1(digest, detail));
+
+insert into t_ir_multi_column_dml (digest, detail, seq) values
+    ("Gerard Salton", "Gerard A. Gerry Salton (8 March 1927 – 28 August 1995) was a professor of Computer Science at Cornell University. Salton was perhaps the leading computer scientist working in the field of information retrieval during his time, and the father of Information Retrieval", 0),
+    ("Edgar F. Codd", "Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems. ", 1),
+    ("Michael Stonebraker", "Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases. ", 2),
+    ("Geoffrey Hinton", "Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.", 3),
+    ("Yann LeCun", "Yann André LeCun[1] (born 8 July 1960) is a Turing Award winning French computer scientist working primarily in the fields of machine learning, computer vision, mobile robotics and computational neuroscience.", 4),
+    ("Ken Thompson", "Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system. ", 5),
+    ("Gordon Plotkin", "Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.", 6),
+    ("Leslie Lamport", "Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX", 7);
+
+select digest, seq from t_ir_multi_column_dml;
+
+# explain update t_ir_multi_column_dml set digest = 'Modified Thompson' where match (detail, digest) against ("Thompson");
+update t_ir_multi_column_dml set digest = 'Modified Thompson' where match (detail, digest) against ("Thompson");
+select digest, seq from t_ir_multi_column_dml;
+
+# explain update t_ir_multi_column_dml set digest = 'Modified Thompson' where match (detail, digest) against ("Thompson");
+update t_ir_multi_column_dml set digest = 'Ken Thompson' where match (detail, digest) against ("Thompson");
+select digest, seq from t_ir_multi_column_dml;
+
+select * from t_ir_multi_column_dml where match(detail, digest) against ('distributed database');
+# explain update t_ir_multi_column_dml set digest = 'distributed database contirbuter' where match (detail, digest) against ("distributed database");
+update t_ir_multi_column_dml set digest = 'distributed database contirbuter' where match (detail, digest) against ("distributed database");
+select digest, seq from t_ir_multi_column_dml;
+
+
+select * from t_ir_multi_column_dml where match(detail, digest) against ('system research');
+# explain delete from t_ir_multi_column_dml where match(detail, digest) against ('system research');
+delete from t_ir_multi_column_dml where match(detail, digest) against ('system research');
+select * from t_ir_multi_column_dml;
+
+select * from t_ir_multi_column_dml where match(detail, digest) against ('system research');
+
+
+select * from t_ir_multi_column_dml where match(detail, digest) against ('computer');
+# explain insert into t_ir_multi_column_dml (digest, detail, seq)
+#     select * from t_ir_multi_column_dml where match(detail, digest) against ('computer');
+insert into t_ir_multi_column_dml (digest, detail, seq)
+    select * from t_ir_multi_column_dml where match(detail, digest) against ('computer');
+select * from t_ir_multi_column_dml where match(detail, digest) against ('computer');
+select * from t_ir_multi_column_dml;
+
+select digest, seq from t_ir_multi_column_dml;
+# explain update t_ir_multi_column_dml set seq =
+#     (select sum(seq) from t_ir_multi_column_dml where match (detail, digest) against ('Hinton'))
+# where match (detail, digest) against ("Lecun");
+
+update t_ir_multi_column_dml set seq =
+    (select sum(seq) from t_ir_multi_column_dml where match (detail, digest) against ('Hinton'))
+where match (detail, digest) against ("Lecun");
+select digest, seq from t_ir_multi_column_dml;
+
+# explain delete from t_ir_multi_column_dml where match (digest, detail) against ("computer science");
+delete from t_ir_multi_column_dml where match (digest, detail) against ("computer science");
+select * from t_ir_multi_column_dml;
+
+
+# test query token count exceed limit with ngram parser
+--disable_warnings
+drop table if exists t_ngram_tokens;
+--enable_warnings
+
+create table t_ngram_tokens(
+  digest varchar(512),
+  detail varchar(4096),
+  seq int,
+  fulltext index i1(detail) with parser ngram);
+
+insert into t_ngram_tokens select * from t_ir_single_column;
+
+select digest, seq from t_ngram_tokens where match (detail) against ('OceanBase Database is a native, enterprise-level distributed database developed independently by the OceanBase team. It provides financial-grade high availability on commodity hardware and introduces a new city-level disaster recovery standard known as Five IDCs across Three Regions. As the worlds first distributed database to pass the TPC-C benchmark test, it can support over 1,500 nodes in a single cluster. Additionally, it features cloud-native architecture, strong consistency, and high compatibility with other popular databases such as Oracle and MySQL. ');
+
+#--error ER_NOT_SUPPORTED_YET
+select digest, seq from t_ngram_tokens where match (detail) against ('OceanBase Database is a native, enterprise-level distributed database developed independently by the OceanBase team. It provides financial-grade high availability on commodity hardware and introduces a new city-level disaster recovery standard known as Five IDCs across Three Regions. As the worlds first distributed database to pass the TPC-C benchmark test, it can support over 1,500 nodes in a single cluster. Additionally, it features cloud-native architecture, strong consistency, and high compatibility with other popular databases such as Oracle and MySQL.  OceanBase Database implements a unique disaster recovery solution with five IDCs across three regions, which sets forth a new standard for lossless disaster recovery in the financial industry. OceanBase Database supports multi-active IDCs deployed across multiple regions for zone- and geo-disaster recovery, which meets the Level 6 disaster recovery requirements of the financial industry with a recovery point objective (RPO) of 0 and a recovery time objective (RTO) of less than 8 seconds.');
+
+
+
+# test relevance after dml
+--disable_warnings
+drop table if exists t_estimate_doc_cnt;
+--enable_warnings
+
+create table t_estimate_doc_cnt (document varchar(200), fulltext (document));
+
+insert into t_estimate_doc_cnt (document) values
+    ('t0 t1 t2 t3 t4 t5 t6 t7 t8 t9'),
+    ('t1 t3 t5 t7 t9'),
+    ('t0 t2 t4 t6 t8'),
+    ('t3'),
+    ('t3 t6 t9'),
+    ('t1 t1 t2 t3 t5 t7'),
+    ('t1 t1 t1 t1 t1'),
+    ('t0 t1 t0 t1 t0'),
+    ('t1 t777 t3'),
+    ('t1 t777'),
+    ('t777'),
+    ('t1024');
+# select document, match (document) against ('t777') as relevance from t_estimate_doc_cnt where match (document) against ('t777');
+
+delete from t_estimate_doc_cnt where match (document) against ('t1024');
+analyze table t_estimate_doc_cnt;
+# select document, match (document) against ('t777') as relevance from t_estimate_doc_cnt where match (document) against ('t777');
+
+insert into t_estimate_doc_cnt (document) values ('t777 t1024');
+# select document, match (document) against ('t777') as relevance from t_estimate_doc_cnt where match (document) against ('t777');
+
+# test simple case for batch
+create table t_simple(
+  name varchar(512),
+  fulltext index i1(name));
+insert into t_simple values ('but and you'),
+                         ('but and'),
+                         ('and you'),
+                         ('but you'),
+                         ('and');
+select *, match (name) against ('but and you') as relevance from t_simple where match (name) against ('but and you');
+select *, match (name) against ('but') as relevance from t_simple where match (name) against ('but');
+select *, match (name) against ('and') as relevance from t_simple where match (name) against ('and');
+select *, match (name) against ('you') as relevance from t_simple where match (name) against ('you');
+select *, match (name) against ('you but') as relevance from t_simple where match (name) against ('you but');
+select *, match (name) against ('but and you') as relevance from t_simple where match (name) against ('but and you') limit 3;
+select *, match (name) against ('but and you') as relevance from t_simple where match (name) against ('but and you') limit 2 offset 2;
+select *, match (name) against ('but and you') as relevance from t_simple where match (name) against ('but and you') limit 2 offset 4;
+
+# test case: data is more than one batch
+--disable_warnings
+drop table if exists t_more_data;
+--enable_warnings
+create table t_more_data(
+  name varchar(512),
+  fulltext index i1(name));
+--disable_query_log
+--let $loop=100
+while($loop > 0)
+{
+    insert into t_more_data select * from t_simple;
+    dec $loop;
+}
+--enable_query_log
+select *, match (name) against ('and') from t_more_data where match (name) against ('and') order by name;
+select *, match (name) against ('and') from t_more_data where match (name) against ('and') limit 1 offset 2;
+
+# test case 2025032600107780501
+create table batch_delete_test(
+  id int,
+  text varchar(100),
+  fulltext index i1(text));
+insert into batch_delete_test values(0,"test some words here you are"),(1,"test"),(2,"please there are some apples, test some words here you are"), (3, "sleep"), (4, "some words");
+delete from batch_delete_test where id < 4;
+
+# test case: match against columns on different tables
+create table `articles` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) DEFAULT NULL,
+  `body` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  FULLTEXT KEY `ft_index` (`title`, `body`));
+
+--error 1210
+select * from articles a1,articles a2  where match(a1.title,a2.body) against("content article data") and a1.id=a2.id;
+
+--disable_warnings
+drop table if exists t_ir_single_column;
+drop table if exists t_ir_multi_column;
+drop table if exists t_dim_table;
+drop table if exists t_ir_multi_column_dml;
+drop table if exists t_ngram_tokens;
+drop table if exists t_estimate_doc_cnt;
+drop table if exists t_simple;
+drop table if exists t_more_data;
+drop table if exists batch_delete_test;
+drop table if exists articles;
+--enable_warnings
+
+drop database fts;

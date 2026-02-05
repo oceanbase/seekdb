@@ -1,0 +1,442 @@
+#owner: gehao.wh
+#owner group: shenzhen
+--echo # Vector Index Basic Test
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+# set ob_query_timeout=1000000000;
+# set ob_trx_timeout=1000000000;
+alter system set ob_vector_memory_limit_percentage = 44;
+sleep 3;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int, c2 int, c3 vector(3), c4 vector(3), c5 vector(3), primary key(c1));
+create index idx1 on t1(c2);
+create vector index idx_ivf_flat on t1(c3) with (distance=l2, type=ivf_flat);
+create vector index idx_ivf_sq8 on t1(c4) with (distance=l2, type=ivf_sq8);
+create vector index idx_ivf_pq on t1(c5) with (distance=l2, type=ivf_pq, m=1);
+--error 1235
+call dbms_vector.refresh_index('idx1', 't1', 'c2', 1, 'FAST');
+--error 1210
+call dbms_vector.refresh_index('idx_ivf_flat', 't1', 'c2', 1, 'FAST');
+--error 1210
+call dbms_vector.refresh_index('idx_ivf_sq8', 't1', 'c2', 1, 'FAST');
+--error 1210
+call dbms_vector.refresh_index('idx_ivf_pq', 't1', 'c2', 1, 'FAST');
+--error 1235
+call dbms_vector.refresh_index('idx_ivf_flat', 't1', 'c3', 1, 'FAST');
+--error 1235
+call dbms_vector.refresh_index('idx_ivf_sq8', 't1', 'c4', 1, 'FAST');
+--error 1235
+call dbms_vector.refresh_index('idx_ivf_pq', 't1', 'c5', 1, 'FAST');
+--replace_regex /__idx_[0-9]*/__idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%idx_ivf%";
+ALTER TABLE t1 RENAME INDEX idx_ivf_flat TO new_idx_ivf_flat;
+--replace_regex /__idx_[0-9]*/__idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%idx_ivf_flat%";
+ALTER TABLE t1 RENAME INDEX idx_ivf_sq8 TO new_idx_ivf_sq8;
+--replace_regex /__idx_[0-9]*/__idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%idx_ivf_sq8%";
+ALTER TABLE t1 RENAME INDEX idx_ivf_pq TO new_idx_ivf_pq;
+--replace_regex /__idx_[0-9]*/__idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%idx_ivf_pq%";
+call dbms_vector.rebuild_index('new_idx_ivf_flat', 't1', 'c3', 0);
+call dbms_vector.rebuild_index('new_idx_ivf_sq8', 't1', 'c4', 0);
+call dbms_vector.rebuild_index('new_idx_ivf_pq', 't1', 'c5', 0);
+drop table t1;
+
+create table t1(c1 int, c2 vector(10), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t1 values(2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]');
+insert into t1 values(3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]');
+insert into t1 values(4, '[0.148869,0.878546,0.028024,0.326642,0.044912,0.144034,0.717580,0.442633,0.637534,0.633993]');
+insert into t1 values(5, '[0.334970,0.857377,0.886132,0.668270,0.983913,0.418145,0.208459,0.190118,0.959676,0.796483]');
+insert into t1 values(6, '[0.117582,0.302352,0.471198,0.248725,0.315868,0.717533,0.028496,0.710370,0.007130,0.710913]');
+insert into t1 values(7, '[0.551185,0.231134,0.075354,0.230557,0.248149,0.383390,0.483179,0.238120,0.289662,0.970101]');
+insert into t1 values(8, '[0.185221,0.315131,0.558301,0.543172,0.335010,0.556101,0.595842,0.168794,0.567442,0.062338]');
+insert into t1 values(9, '[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]');
+insert into t1 values(10, '[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]');
+
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+select c1 from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+
+update t1 set c2 = [0.615558,0.613338,0.031494,0.114999,0.713017,0.792606,0.551865,0.990780,0.034867,0.062117] where c1 = 3;
+
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 0;
+
+select * from t1;
+
+call dbms_vector.refresh_index('idx1', 't1', 'c2', 1, 'FAST');
+call dbms_vector.rebuild_index('idx1','t1','c2');
+
+drop table t1;
+
+--disable_warnings
+drop table if exists t2;
+--enable_warnings
+
+create table t2(c1 int, c2 vector(10), c3 vector(10), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag), vector index idx2(c3) with (distance=l2, type=hnsw, lib=vsag));
+
+insert into t2 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '[0.213846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '[0.223846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(4, '[0.148869,0.878546,0.028024,0.326642,0.044912,0.144034,0.717580,0.442633,0.637534,0.633993]', '[0.233846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(5, '[0.334970,0.857377,0.886132,0.668270,0.983913,0.418145,0.208459,0.190118,0.959676,0.796483]', '[0.243846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(6, '[0.117582,0.302352,0.471198,0.248725,0.315868,0.717533,0.028496,0.710370,0.007130,0.710913]', '[0.253846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(7, '[0.551185,0.231134,0.075354,0.230557,0.248149,0.383390,0.483179,0.238120,0.289662,0.970101]', '[0.263846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(8, '[0.185221,0.315131,0.558301,0.543172,0.335010,0.556101,0.595842,0.168794,0.567442,0.062338]', '[0.273846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(9, '[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]', '[0.283846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(10, '[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]', '[0.293846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+
+select * from t2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+
+select * from t2 order by l2_distance(c3, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+
+update t2 set c2 = [0.615558,0.613338,0.031494,0.114999,0.713017,0.792606,0.551865,0.990780,0.034867,0.062117] where c1 = 3;
+
+select * from t2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+
+select * from t2 order by l2_distance(c3, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+
+call dbms_vector.refresh_index('idx1', 't2', 'c2', 1, 'FAST');
+call dbms_vector.refresh_index('idx2', 't2', 'c3', 1, 'FAST');
+call dbms_vector.rebuild_index('idx1','t2','c2');
+call dbms_vector.rebuild_index('idx2','t2','c3');
+
+drop table t2;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1(c1 int, c2 vector(3), c3 vector(5), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200), vector index idx2(c3) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
+insert into t1 values (1, '[0.990622,0.861702,0.114999]', '[0.558301,0.543172,0.335010,0.844568,0.275233]');
+insert into t1(c1, c2) values (2, '[0.990622,0.861702,0.114999]');
+delete from t1 where c1 = 2;
+delete from t1 where c1 = 1;
+select * from t1;
+
+--disable_warnings
+drop table if exists vector_index_test_table20240714;
+--enable_warnings
+#PURGE RECYCLEBIN;
+
+set ob_enable_index_direct_select = 1;
+
+--echo # 创建表写入数据
+
+create table vector_index_test_table20240714(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+insert into vector_index_test_table20240714 values(1, '[0.203846,0.205289,0.880265]');
+insert into vector_index_test_table20240714 values(2, '[0.484526,0.669954,0.986755]');
+insert into vector_index_test_table20240714 values(3, '[0.327936,0.048756,0.084670]');
+insert into vector_index_test_table20240714 values(4, '[0.148869,0.878546,0.028024]');
+insert into vector_index_test_table20240714 values(5, '[0.334970,0.857377,0.886132]');
+insert into vector_index_test_table20240714 values(6, '[0.117582,0.302352,0.471198]');
+insert into vector_index_test_table20240714 values(7, '[0.551185,0.231134,0.075354]');
+insert into vector_index_test_table20240714 values(8, '[0.185221,0.315131,0.558301]');
+insert into vector_index_test_table20240714 values(9, '[0.928764,0.254038,0.272721]');
+insert into vector_index_test_table20240714 values(10, '[0.345999,0.254102,0.950869]');
+insert into vector_index_test_table20240714 values(11, '[0.102417,0.769097,0.655852]');
+insert into vector_index_test_table20240714 values(12, '[0.260019,0.176781,0.252475]');
+insert into vector_index_test_table20240714 values(13, '[0.727582,0.167779,0.383390]');
+insert into vector_index_test_table20240714 values(14, '[0.440073,0.998299,0.178305]');
+insert into vector_index_test_table20240714 values(15, '[0.593148,0.156687,0.351126]');
+insert into vector_index_test_table20240714 values(16, '[0.995789,0.761186,0.830773]');
+insert into vector_index_test_table20240714 values(17, '[0.538628,0.082426,0.083695]');
+insert into vector_index_test_table20240714 values(18, '[0.515894,0.188949,0.420311]');
+insert into vector_index_test_table20240714 values(19, '[0.329709,0.892973,0.850152]');
+insert into vector_index_test_table20240714 values(20, '[0.055008,0.893954,0.445311]');
+insert into vector_index_test_table20240714 values(21, '[0.271288,0.969836,0.899836]');
+insert into vector_index_test_table20240714 values(22, '[0.050261,0.845356,0.877143]');
+insert into vector_index_test_table20240714 values(23, '[0.802323,0.671325,0.694353]');
+insert into vector_index_test_table20240714 values(24, '[0.003465,0.902425,0.745576]');
+insert into vector_index_test_table20240714 values(25, '[0.488643,0.217055,0.257016]');
+insert into vector_index_test_table20240714 values(26, '[0.646577,0.103579,0.802476]');
+insert into vector_index_test_table20240714 values(27, '[0.318426,0.707079,0.196895]');
+insert into vector_index_test_table20240714 values(28, '[0.983855,0.265534,0.566591]');
+insert into vector_index_test_table20240714 values(29, '[0.957104,0.729224,0.092537]');
+insert into vector_index_test_table20240714 values(30, '[0.495983,0.556285,0.986712]');
+insert into vector_index_test_table20240714 values(31, '[0.956373,0.549782,0.493153]');
+insert into vector_index_test_table20240714 values(32, '[0.470215,0.788596,0.534499]');
+insert into vector_index_test_table20240714 values(33, '[0.660493,0.373283,0.755029]');
+insert into vector_index_test_table20240714 values(34, '[0.100299,0.676867,0.970798]');
+insert into vector_index_test_table20240714 values(35, '[0.802192,0.079942,0.627571]');
+insert into vector_index_test_table20240714 values(36, '[0.109255,0.865682,0.368419]');
+insert into vector_index_test_table20240714 values(37, '[0.589309,0.026667,0.665149]');
+insert into vector_index_test_table20240714 values(38, '[0.769838,0.006709,0.233108]');
+insert into vector_index_test_table20240714 values(39, '[0.731215,0.949661,0.397933]');
+insert into vector_index_test_table20240714 values(40, '[0.735541,0.670776,0.903237]');
+
+let $table_id = `select table_id from oceanbase.__all_table where table_name = 'vector_index_test_table20240714';`;
+let $index_table = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $index_id_table = `select CONCAT('__idx_', $table_id , '_idx1_index_id_table') from dual;`;
+let $index_snapshot_data_table_idx = `select CONCAT('__idx_', $table_id , '_idx1_index_snapshot_data_table') from dual;`;
+
+--echo # 查询3、4表
+--disable_query_log
+eval select count(*) from $index_table;
+eval select count(*) from $index_id_table;
+
+--echo # 查询结果
+select c1, l2_distance(c2, [0.765300,0.560072,0.900498]) l2 from vector_index_test_table20240714 order by l2 limit 5;
+select /*+ opt_param('rowsets_enabled', 'false') */ * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+select * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+
+--echo # 更新数据
+update vector_index_test_table20240714 set  c2 = [0.615558,0.613338,0.031494] where c1 = 30;
+update vector_index_test_table20240714 set  c2 = [0.124528,0.652454,0.937912] where c1 = 31;
+update vector_index_test_table20240714 set  c2 = [0.146475,0.182972,0.400260] where c1 = 32;
+update vector_index_test_table20240714 set  c2 = [0.386882,0.223310,0.129449] where c1 = 33;
+
+--echo # 查询3、4表
+eval select count(*) from $index_table;
+eval select count(*) from $index_id_table;
+
+--echo # 查询结果
+select c1, l2_distance(c2, [0.765300,0.560072,0.900498]) l2 from vector_index_test_table20240714 order by l2 limit 5;
+select /*+ opt_param('rowsets_enabled', 'false') */ * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+select * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+
+--echo # 增量刷新
+call dbms_vector.refresh_index('idx1', 'vector_index_test_table20240714', 'c2', 40, 'FAST');
+eval select count(*) from $index_table;
+eval select count(*) from $index_id_table;
+
+select /*+ opt_param('rowsets_enabled', 'false') */ * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+select * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+
+--echo # 更新数据
+update vector_index_test_table20240714 set  c2 = [0.315868,0.717533,0.028496] where c1 = 40;
+
+--echo # 查询3、4表
+eval select count(*) from $index_table;
+eval select count(*) from $index_id_table;
+
+--echo # 查询结果
+select c1, l2_distance(c2, [0.765300,0.560072,0.900498]) l2 from vector_index_test_table20240714 order by l2 limit 5;
+select /*+ opt_param('rowsets_enabled', 'false') */ * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+select * from vector_index_test_table20240714 order by l2_distance(c2, [0.765300,0.560072,0.900498]) APPROXIMATE limit 5;
+
+--echo # 全量刷新
+call dbms_vector.rebuild_index('idx1','vector_index_test_table20240714','c2');
+eval select count(*) from $index_table;
+eval select count(*) from $index_id_table;
+eval select count(*)>0 from $index_snapshot_data_table_idx;
+
+drop table vector_index_test_table20240714;
+--enable_query_log
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int, c0 int, c2 vector(10), c3 vector(10), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag), vector index idx2(c3) with (distance=l2, type=hnsw, lib=vsag));
+
+insert into t1 values(1, 1,'[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t1 values(2, 2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '[0.213846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t1 values(3, 3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '[0.223846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+
+select * from t1 where c0 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit
+10;
+# select * from t1 where c0 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 1;
+select * from t1 where c1 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit
+10;
+select * from t1 where c1 = 2 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit
+1;
+drop table t1;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200))
+PARTITION BY RANGE (c1) (
+  PARTITION p0 VALUES LESS THAN (20),
+  PARTITION p1 VALUES LESS THAN (40),
+  PARTITION p2 VALUES LESS THAN (80),
+  PARTITION p3 VALUES LESS THAN (400),
+  PARTITION pMax VALUES LESS THAN MAXVALUE
+);
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265]');
+insert into t1 values(2, '[0.484526,0.669954,0.986755]');
+insert into t1 values(3, '[0.327936,0.048756,0.084670]');
+insert into t1 values(4, '[0.148869,0.878546,0.028024]');
+insert into t1 values(5, '[0.334970,0.857377,0.886132]');
+insert into t1 values(6, '[0.117582,0.302352,0.471198]');
+insert into t1 values(7, '[0.551185,0.231134,0.075354]');
+insert into t1 values(8, '[0.185221,0.315131,0.558301]');
+insert into t1 values(9, '[0.928764,0.254038,0.272721]');
+insert into t1 values(10, '[0.345999,0.254102,0.950869]');
+insert into t1 values(11, '[0.102417,0.769097,0.655852]');
+insert into t1 values(12, '[0.260019,0.176781,0.252475]');
+insert into t1 values(13, '[0.727582,0.167779,0.383390]');
+insert into t1 values(14, '[0.440073,0.998299,0.178305]');
+insert into t1 values(15, '[0.593148,0.156687,0.351126]');
+insert into t1 values(16, '[0.995789,0.761186,0.830773]');
+insert into t1 values(17, '[0.538628,0.082426,0.083695]');
+insert into t1 values(18, '[0.515894,0.188949,0.420311]');
+insert into t1 values(19, '[0.329709,0.892973,0.850152]');
+insert into t1 values(30, '[0.055008,0.893954,0.445311]');
+insert into t1 values(31, '[0.271288,0.969836,0.899836]');
+insert into t1 values(32, '[0.050261,0.845356,0.877143]');
+insert into t1 values(33, '[0.802323,0.671325,0.694353]');
+insert into t1 values(34, '[0.003465,0.902425,0.745576]');
+insert into t1 values(35, '[0.488643,0.217055,0.257016]');
+insert into t1 values(36, '[0.646577,0.103579,0.802476]');
+insert into t1 values(37, '[0.318426,0.707079,0.196895]');
+insert into t1 values(38, '[0.983855,0.265534,0.566591]');
+insert into t1 values(39, '[0.957104,0.729224,0.092537]');
+insert into t1 values(50, '[0.495983,0.556285,0.986712]');
+insert into t1 values(51, '[0.956373,0.549782,0.493153]');
+insert into t1 values(52, '[0.470215,0.788596,0.534499]');
+insert into t1 values(53, '[0.660493,0.373283,0.755029]');
+insert into t1 values(54, '[0.100299,0.676867,0.970798]');
+insert into t1 values(55, '[0.802192,0.079942,0.627571]');
+insert into t1 values(56, '[0.109255,0.865682,0.368419]');
+insert into t1 values(57, '[0.589309,0.026667,0.665149]');
+insert into t1 values(58, '[0.769838,0.006709,0.233108]');
+insert into t1 values(59, '[0.731215,0.949661,0.397933]');
+insert into t1 values(70, '[0.735541,0.670776,0.903237]');
+insert into t1 values(71, '[0.880265,0.824340,0.615737]');
+insert into t1 values(72, '[0.903237,0.447223,0.232028]');
+insert into t1 values(73, '[0.084670,0.389642,0.970982]');
+insert into t1 values(74, '[0.028024,0.326642,0.044912]');
+insert into t1 values(75, '[0.886132,0.668270,0.983913]');
+insert into t1 values(76, '[0.471198,0.248725,0.315868]');
+insert into t1 values(77, '[0.075354,0.230557,0.248149]');
+insert into t1 values(78, '[0.558301,0.543172,0.335010]');
+insert into t1 values(79, '[0.272721,0.648755,0.966464]');
+insert into t1 values(90, '[0.950869,0.275233,0.844568]');
+
+select /*+ opt_param('rowsets_enabled', 'false') */ * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+select * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+select count(*) from (select * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10) as tmp1, (select * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) limit 10) as tmp2 where tmp1.c1=tmp2.c1;
+
+call dbms_vector.refresh_index('idx1', 't1', 'c2', 1, 'FAST');
+call dbms_vector.rebuild_index('idx1','t1','c2');
+
+--disable_warnings
+drop table if exists nt;
+--enable_warnings
+create table nt(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
+--error 1736
+alter table t1 exchange partition p0 with table nt WITHOUT VALIDATION;
+drop table t1;
+drop table nt;
+#PURGE RECYCLEBIN;
+
+--echo ################# complex dml operation ##################
+--disable_warnings
+DROP TABLE IF EXISTS vec;
+DROP TABLE IF EXISTS normal;
+DROP VIEW IF EXISTS vec_view;
+--enable_warnings
+
+create table vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+create table normal(c1 int, c2 vector(3), primary key(c1));
+CREATE VIEW vec_view as select * from vec;
+
+INSERT INTO vec values (1, '[1,2,3]'), (2, '[3,4,5]');
+INSERT INTO normal values (1, '[1,2,3]'), (2, '[3,4,5]');
+
+insert into vec values (1, '[1,2,3]') ON DUPLICATE KEY UPDATE c2 = '[1,2,3]';
+insert into normal values (1, '[1,2,3]') ON DUPLICATE KEY UPDATE c2 = '[1,2,3]';
+
+# open when vector cmp func is ready
+#replace into vec (c1, c2) values (1, '[1,2,3]');
+#replace into normal (c1, c2) values (1, '[1,2,3]');
+
+insert into vec_view values (3, '[5,6,7]'), (4, '[7,8,9]');
+insert into normal (c1, c2) values (3, '[1,2,3]');
+select * from vec_view;
+select * from normal;
+
+update vec join normal on vec.c1 = normal.c1 set vec.c2 = '[7,8,9]', normal.c2 = '[9,10,11]';
+select * from vec_view;
+select * from normal;
+
+update vec join normal on vec.c1 = normal.c1 set vec.c2 = '[7,8,9]';
+update vec join normal on vec.c1 = normal.c1 set normal.c2 = vec.c2;
+select * from normal;
+select * from vec;
+
+update vec_view join normal on vec_view.c1 = normal.c1 set vec_view.c2 = '[7,8,9]', normal.c2 = '[9,10,11]';
+update vec_view set c2 = '[7,8,9]';
+select * from vec;
+select * from vec_view;
+
+delete vec, normal from vec join normal on vec.c1 = normal.c1;
+delete vec from vec join normal on vec.c1 = normal.c1;
+delete vec from vec join normal on vec.c1 = normal.c1;
+
+delete normal from vec_view join normal on vec_view.c1 = normal.c1 and 1=0;
+delete from vec_view where c2 = '[7,8,9]';
+
+drop table vec;
+drop table normal;
+drop view vec_view;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
+VECTOR INDEX vector_idx(c2)
+WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40));
+insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t1 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t1 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+update t1 set c1 = 10 where c3 is null;
+select * from oceanbase.__ALL_VIRTUAL_INFORMATION_COLUMNS where table_name="t1" and TABLE_SCHEMA = "test";
+drop table t1;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int, c2 vector(10) not null, primary key(c1));
+--error 1048
+insert ignore into t1 values(1, null);
+drop table t1;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
+insert into t1 values(1, [1,1,1]);
+select 567 from t1 for update;
+select /*+ opt_param('rowsets_enabled', 'false') */ 567 from t1 for update;
+drop table t1;
+
+# bugfix 2024081300104111334
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int primary key, c2 vector(3),c3 vector(3) , c4 vector(3),
+VECTOR INDEX vector_idx(c4)
+WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40)) partition by hash(c1) partitions 4;
+replace into t1(c1, c2, c3) values(1,'[1,1,2]','[2,2,3]');
+replace into t1(c1, c2, c3) values(2,'[1,-1,3]','[1,0,3]');
+select * from t1 order by l2_distance(c4, [1,2,3]);
+select * from t1 order by l2_distance(c4, [1,2,3])  limit 1,1;
+select * from t1 order by l2_distance(c4, [1,2,3]) approximate limit 1,1;
+drop table t1;
+
+#bugfix
+--disable_warnings
+drop table if exists vec_idx_tb;
+--enable_warnings
+create table vec_idx_tb(
+    id bigint unsigned,
+    vec1 vector(3),
+    vec2 vector(3),
+    primary key(id),
+    vector index vec_idx1(vec1) with (distance=l2,type=hnsw,lib=vsag,m=16,ef_construction= 300,ef_search = 400),
+    vector index vec_idx2(vec2) with (distance=l2,type=hnsw,lib=vsag,m=20,ef_construction= 250,ef_search = 250)
+);
+alter table vec_idx_tb drop index vec_idx1, drop index vec_idx2;
+drop table vec_idx_tb;
+
+alter system set ob_vector_memory_limit_percentage = 0;

@@ -1,0 +1,178 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: dingjincheng.djc
+# owner group: SQL1
+# tags: optimizer, opt_stats
+# descriptor: test sys table and virtual table stats gather and use.
+
+--result_format 4
+
+connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection conn_admin;
+alter system set_tp tp_no = 368, error_code = 0, frequency = 1;
+connection default;
+
+##build new tenant.
+##build tenant
+#--source mysql_test/test_suite/histogram/include/create_mysql_tenant.inc
+--source mysql_test/test_suite/histogram/include/conn_mysql_tenant.inc
+--disable_warnings
+drop user if exists root@'127.0.0.1';
+drop user if exists root@'127.0.1.1';
+drop user if exists root@'127.1.1.1';
+--enable_warnings
+create user root@'127.0.0.1' identified by 'rootWang@123';
+create user root@'127.0.1.1' identified by 'rootWang@123';
+create user root@'127.1.1.1' identified by 'rootWang@123';
+select count(*) from oceanbase.__all_user where user_name='root';
+
+call dbms_stats.gather_schema_stats('oceanbase');
+select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__all_core_table' and NUM_ROWS > 0;
+select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__ALL_VIRTUAL_CORE_ALL_TABLE' and NUM_ROWS > 0;
+select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table_name='__ALL_VIRTUAL_CORE_COLUMN_TABLE' and NUM_ROWS > 0;
+select count(*) from OCEANBASE.DBA_TAB_STATISTICS where table_name='__all_table' and NUM_ROWS > 0;
+select count(*) from OCEANBASE.DBA_TAB_STATISTICS where table_name='__all_column' and NUM_ROWS > 0;
+
+##see the maintenance window
+--sorted_result
+select OWNER,JOB_NAME,ENABLED,REPEAT_INTERVAL,MAX_RUN_DURATION from oceanbase.dba_scheduler_jobs where JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW','OPT_STATS_HISTORY_MANAGER','SATURDAY_WINDOW','SUNDAY_WINDOW','THURSDAY_WINDOW','TUESDAY_WINDOW','WEDNESDAY_WINDOW', 'ASYNC_GATHER_STATS_JOB_PROC');
+desc oceanbase.dba_scheduler_windows;
+--sorted_result
+select OWNER,WINDOW_NAME,ENABLED,REPEAT_INTERVAL,DURATION,COMMENTS from oceanbase.dba_scheduler_windows;
+
+call dbms_scheduler.disable('MONDAY_WINDOW');
+call dbms_scheduler.disable('FRIDAY_WINDOW');
+select OWNER,JOB_NAME,ENABLED from oceanbase.dba_scheduler_jobs where JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW','OPT_STATS_HISTORY_MANAGER','SATURDAY_WINDOW','SUNDAY_WINDOW','THURSDAY_WINDOW','TUESDAY_WINDOW','WEDNESDAY_WINDOW');
+
+call dbms_scheduler.enable('MONDAY_WINDOW');
+call dbms_scheduler.enable('FRIDAY_WINDOW');
+select OWNER,JOB_NAME,ENABLED from oceanbase.dba_scheduler_jobs where JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW');
+
+--disable_warnings
+drop table if exists t1, t_part, t_subpart;
+--enable_warnings
+
+create table t1 (c1 int, c2 int, c3 int);
+create index idx1_t1 on t1(c2);
+
+create table t_part (c1 int primary key, c2 int, c3 int) partition by hash(c1) partitions 4;
+create index idx1_part on t_part(c2);
+
+create table t_subpart (c1 int, c2 int, c3 int) partition by hash(c1)
+subpartition by hash(c2)
+subpartition template
+(
+  subpartition p0,
+  subpartition p1,
+  subpartition p2
+)
+partitions 3;
+create index idx1_subpart on t_subpart(c2) local;
+
+#test insert count stats
+insert into t1 values(1,1,1), (2,2,2), (3,3,3), (4,4,4), (5,5,5), (6,6,6), (7,7,7), (8,8,8), (9,9,9), (10,10,10);
+insert into t1 values(11,1,1), (12,2,2), (13,3,3), (14,4,4), (15,5,5), (16,6,6), (17,7,7), (18,8,8), (19,9,9), (20,10,10);
+insert into t1 values(21,1,1), (22,2,2), (23,3,3), (24,4,4), (25,5,5), (26,6,6), (27,7,7), (28,8,8), (29,9,9), (30,10,10);
+insert into t1 values(31,1,1), (32,2,2), (33,3,3), (34,4,4), (35,5,5), (36,6,6), (37,7,7), (38,8,8), (39,9,9), (40,10,10);
+insert into t1 values(41,1,1), (42,2,2), (43,3,3), (44,4,4), (45,5,5), (46,6,6), (47,7,7), (48,8,8), (49,9,9), (50,10,10);
+insert into t1 values(51,1,1), (52,2,2), (53,3,3), (54,4,4), (55,5,5), (56,6,6), (57,7,7), (58,8,8), (59,9,9), (60,10,10);
+insert into t1 values(61,1,1), (62,2,2), (63,3,3), (64,4,4), (65,5,5), (66,6,6), (67,7,7), (68,8,8), (69,9,9), (70,10,10);
+insert into t1 values(71,1,1), (72,2,2), (73,3,3), (74,4,4), (75,5,5), (76,6,6), (77,7,7), (78,8,8), (79,9,9), (80,10,10);
+insert into t1 values(81,1,1), (82,2,2), (83,3,3), (84,4,4), (85,5,5), (86,6,6), (87,7,7), (88,8,8), (89,9,9), (90,10,10);
+insert into t1 values(91,1,1), (92,2,2), (93,3,3), (94,4,4), (95,5,5), (96,6,6), (97,7,7), (98,8,8), (99,9,9), (100,10,10);
+
+insert into t_part values(101,1,1), (102,2,2), (103,3,3), (104,4,4), (105,5,5), (106,6,6), (107,7,7), (108,8,8), (109,9,9), (110,10,10);
+insert into t_part values(111,1,1), (112,2,2), (113,3,3), (114,4,4), (115,5,5), (116,6,6), (117,7,7), (118,8,8), (119,9,9), (120,10,10);
+insert into t_part values(121,1,1), (122,2,2), (123,3,3), (124,4,4), (125,5,5), (126,6,6), (127,7,7), (128,8,8), (129,9,9), (130,10,10);
+insert into t_part values(131,1,1), (132,2,2), (133,3,3), (134,4,4), (135,5,5), (136,6,6), (137,7,7), (138,8,8), (139,9,9), (140,10,10);
+insert into t_part values(141,1,1), (142,2,2), (143,3,3), (144,4,4), (145,5,5), (146,6,6), (147,7,7), (148,8,8), (149,9,9), (150,10,10);
+insert into t_part values(151,1,1), (152,2,2), (153,3,3), (154,4,4), (155,5,5), (156,6,6), (157,7,7), (158,8,8), (159,9,9), (160,10,10);
+insert into t_part values(161,1,1), (162,2,2), (163,3,3), (164,4,4), (165,5,5), (166,6,6), (167,7,7), (168,8,8), (169,9,9), (170,10,10);
+insert into t_part values(171,1,1), (172,2,2), (173,3,3), (174,4,4), (175,5,5), (176,6,6), (177,7,7), (178,8,8), (179,9,9), (180,10,10);
+insert into t_part values(181,1,1), (182,2,2), (183,3,3), (184,4,4), (185,5,5), (186,6,6), (187,7,7), (188,8,8), (189,9,9), (190,10,10);
+insert into t_part values(191,1,1), (192,2,2), (193,3,3), (194,4,4), (195,5,5), (196,6,6), (197,7,7), (198,8,8), (199,9,9), (200,10,10);
+
+insert into t_part select c1%100,c2,c3 from t_part;
+insert into t_part select c1+1000,c2,c3 from t_part;
+insert into t_part select c1+10000,c2,c3 from t_part;
+
+insert into t_subpart select * from t_part;
+insert into t_subpart select * from t_subpart;
+insert into t_subpart select * from t_subpart;
+insert into t_subpart select * from t_subpart;
+
+##the dml statistics are recorded in memtable and reported periodically to dba_tab_modifications, we must use minor freeze to report the residual statistics
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+connection conn_stat_test_sys_mysql;
+
+--echo set stat maintenance attribute window auto gather table stats after 15 second.
+--disable_result_log
+--disable_query_log
+let $point = query_get_value("select substr(date_add(now(),interval 15 second), 1, 26) as X from dual;", X, 1);
+let $day = query_get_value("select WEEKDAY(now()) as X from dual;", X, 1);
+if ($day == 0) {
+  eval call dbms_scheduler.set_attribute('MONDAY_WINDOW', 'NEXT_DATE', '$point');
+}
+if ($day == 1) {
+  eval call dbms_scheduler.set_attribute('TUESDAY_WINDOW', 'NEXT_DATE', '$point');
+}
+if ($day == 2) {
+  eval call dbms_scheduler.set_attribute('WEDNESDAY_WINDOW', 'NEXT_DATE', '$point');
+}
+if ($day == 3) {
+  eval call dbms_scheduler.set_attribute('THURSDAY_WINDOW', 'NEXT_DATE', '$point');
+}
+if ($day == 4) {
+  eval call dbms_scheduler.set_attribute('FRIDAY_WINDOW', 'NEXT_DATE', '$point');
+}
+if ($day == 5) {
+  eval call dbms_scheduler.set_attribute('SATURDAY_WINDOW', 'NEXT_DATE', '$point');
+}
+if ($day == 6) {
+  eval call dbms_scheduler.set_attribute('SUNDAY_WINDOW', 'NEXT_DATE', '$point');
+}
+--enable_result_log
+--enable_query_log
+
+--sorted_result
+select TABLE_NAME, partition_name, subpartition_name, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.DBA_TAB_STATISTICS where table_name in ('T1','T_PART','T_SUBPART') and OWNER = 'TEST';
+##wait auto gather table stats finish
+let $__i__= 120;
+while($__i__ > 0)
+{
+  sleep 1;
+  dec $__i__;
+  let $__memstore_cnt__ = query_get_value("select count(*) as CNT from oceanbase.DBA_TAB_STATISTICS where LAST_ANALYZED is not null and table_name in ('T1','T_PART','T_SUBPART') and OWNER = 'TEST';", CNT, 1);
+  if ($__memstore_cnt__ == 19)
+  {
+    let $__i__ = -1;
+  }
+}
+if ($__i__ != -1)
+{
+  --echo auto gather table sats failed
+}
+sleep 5;
+--sorted_result
+select TABLE_NAME, partition_name, subpartition_name, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.DBA_TAB_STATISTICS where table_name in ('T1','T_PART','T_SUBPART') and OWNER = 'TEST';
+
+
+--sorted_result
+select TABLE_OWNER,TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,INSERTS,UPDATES,DELETES from oceanbase.dba_tab_modifications where TABLE_OWNER='TEST' and table_name in ('T1','T_PART','T_SUBPART');
+select DATEDIFF(next_date, start_date) from oceanbase.__all_tenant_scheduler_job where (this_date is not null or last_date is not null) and JOB_NAME in ('FRIDAY_WINDOW','MONDAY_WINDOW','OPT_STATS_HISTORY_MANAGER','SATURDAY_WINDOW','SUNDAY_WINDOW','THURSDAY_WINDOW','TUESDAY_WINDOW','WEDNESDAY_WINDOW');
+drop table t1;
+drop table t_part;
+drop table t_subpart;
+drop user if exists root@'127.0.0.1';
+drop user if exists root@'127.0.1.1';
+drop user if exists root@'127.1.1.1';
+
+##drop tenant
+#--source mysql_test/test_suite/histogram/include/drop_mysql_tenant.inc
+connection default;
+
+connection conn_admin;
+alter system set_tp tp_no = 368, error_code = 4016, frequency = 1;
+connection default;

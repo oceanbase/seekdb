@@ -1,0 +1,321 @@
+# owner: yunshan.tys
+# owner group: storage
+# description: test create table with fulltext index
+
+connect(sys_conn, $OBMYSQL_MS0, root@sys,,oceanbase, $OBMYSQL_PORT);
+connection sys_conn;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_1;
+--enable_warnings
+
+--result_format 3
+
+# create table with 2 fulltext index:
+# - f101 on name column
+# - f102 on name and title column
+CREATE TABLE fts_table_1 (
+  id int,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f101(name) WITH PARSER ngram,
+  FULLTEXT INDEX f102(name, title) WITH PARSER space,
+  FULLTEXT INDEX f103(content));
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_1;
+
+SHOW INDEX FROM fts_table_1;
+
+let $data_table_id = query_get_value(SELECT table_id
+                                     FROM __all_virtual_table
+                                     WHERE table_name = 'fts_table_1'
+                                       AND tenant_id = 1, table_id, 1);
+
+# check fts generate columns on fts_table_1 table
+--echo ===== fts_table_1 columns =============
+--disable_query_log
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+     FROM __all_virtual_column
+     WHERE table_id = $data_table_id
+       AND tenant_id = 1;
+
+# expect 8 fts aux index tables
+--echo ===== fts index aux tables =====
+eval SELECT count(*)
+     FROM __all_virtual_table
+     WHERE data_table_id = $data_table_id
+       AND tenant_id = 1;
+--enable_query_log
+
+# get table id of 8 corresponding fts aux index table exists
+let $rowkey_doc_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE index_type = 13
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+let $doc_rowkey_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE index_type = 14
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+let $f101_fts_index_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE table_name LIKE '%f101'
+    AND index_type = 15
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+let $f101_fts_doc_word_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE table_name LIKE '%f101%'
+    AND index_type = 16
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+let $f102_fts_index_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE table_name LIKE '%f102'
+    AND index_type = 15
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+let $f102_fts_doc_word_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE table_name LIKE '%f102%'
+    AND index_type = 16
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+let $f103_fts_index_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE table_name LIKE '%f103'
+    AND index_type = 15
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+let $f103_fts_doc_word_table_id = query_get_value(
+  SELECT table_id
+  FROM __all_virtual_table
+  WHERE table_name LIKE '%f103%'
+    AND index_type = 16
+    AND tenant_id = 1
+    AND data_table_id = $data_table_id, table_id, 1);
+
+--disable_query_log
+
+## TODO@xinglipeng.xlp
+## --echo ===== fts_table_1 fts rowkey doc cols ===
+## eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+##      FROM __all_virtual_column
+##      WHERE table_id = $rowkey_doc_table_id
+##        AND tenant_id = 1;
+##
+## --echo ===== fts_table_1 fts doc rowkey cols ===
+## eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+##      FROM __all_virtual_column
+##      WHERE table_id = $doc_rowkey_table_id
+##        AND tenant_id = 1;
+
+--echo ===== f101 fts index cols ======
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+     FROM __all_virtual_column
+     WHERE table_id = $f101_fts_index_table_id
+       AND tenant_id = 1;
+
+--echo ===== f101 fts doc word cols ===
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+     FROM __all_virtual_column
+     WHERE table_id = $f101_fts_doc_word_table_id
+       AND tenant_id = 1;
+
+--echo ===== f102 fts index cols ======
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+     FROM __all_virtual_column
+     WHERE table_id = $f102_fts_index_table_id
+       AND tenant_id = 1;
+
+--echo ===== f102 fts doc word cols ===
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+     FROM __all_virtual_column
+     WHERE table_id = $f102_fts_doc_word_table_id
+       AND tenant_id = 1;
+
+--echo ===== f103 fts index cols ======
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+     FROM __all_virtual_column
+     WHERE table_id = $f103_fts_index_table_id
+       AND tenant_id = 1;
+
+--echo ===== f103 fts doc word cols ===
+eval SELECT column_id, REGEXP_REPLACE(column_name, '[0-9]+', '*') as column_name, skip_index_attr
+     FROM __all_virtual_column
+     WHERE table_id = $f103_fts_doc_word_table_id
+       AND tenant_id = 1;
+
+## TODO@xinglipeng.xlp : add it back for table with no doc id opt
+## --echo ===== fts_table_1 fts rowkey doc parser ===
+## eval SELECT parser_name
+##      FROM __all_virtual_table
+##      WHERE table_id = $rowkey_doc_table_id
+##        AND tenant_id = 1;
+##
+## --echo ===== fts_table_1 fts doc rowkey parser ===
+## eval SELECT parser_name
+##      FROM __all_virtual_table
+##      WHERE table_id = $doc_rowkey_table_id
+##        AND tenant_id = 1;
+
+--echo ===== f101 fts index parser ======
+eval SELECT parser_name
+     FROM __all_virtual_table
+     WHERE table_id = $f101_fts_index_table_id
+       AND tenant_id = 1;
+
+--echo ===== f101 fts doc word parser ===
+eval SELECT parser_name
+     FROM __all_virtual_table
+     WHERE table_id = $f101_fts_doc_word_table_id
+       AND tenant_id = 1;
+
+--echo ===== f102 fts index parser ======
+eval SELECT parser_name
+     FROM __all_virtual_table
+     WHERE table_id = $f102_fts_index_table_id
+       AND tenant_id = 1;
+
+--echo ===== f102 fts doc word parser ===
+eval SELECT parser_name
+     FROM __all_virtual_table
+     WHERE table_id = $f102_fts_doc_word_table_id
+       AND tenant_id = 1;
+
+--echo ===== f103 fts index parser ======
+eval SELECT parser_name
+     FROM __all_virtual_table
+     WHERE table_id = $f103_fts_index_table_id
+       AND tenant_id = 1;
+
+--echo ===== f103 fts doc word parser ===
+eval SELECT parser_name
+     FROM __all_virtual_table
+     WHERE table_id = $f103_fts_doc_word_table_id
+       AND tenant_id = 1;
+--enable_query_log
+
+ALTER TABLE fts_table_1 ADD INDEX fts_doc_rowkey(id);
+
+SHOW INDEX FROM fts_table_1;
+
+ALTER TABLE fts_table_1 ADD INDEX fts_rowkey_doc(id);
+
+SHOW INDEX FROM fts_table_1;
+
+ALTER TABLE fts_table_1 ADD INDEX name_fts_doc_word(title);
+
+SHOW INDEX FROM fts_table_1;
+
+DROP TABLE fts_table_1;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_2;
+--enable_warnings
+
+--error 1061
+CREATE TABLE fts_table_2 (
+  id int,
+  name varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f101(name) WITH PARSER ngram,
+  INDEX fts_doc_rowkey(id),
+  INDEX fts_rowkey_doc(id),
+  INDEX f101_fts_doc_word(name));
+
+--disable_warnings
+DROP TABLE IF EXISTS articles;
+--enable_warnings
+--error 1128
+CREATE TABLE articles (
+  __doc_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200),
+  body Text,
+  FULLTEXT INDEX ctx(title) WITH PARSER simple_parser);
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_with_generated_col;
+--enable_warnings
+
+--error ER_NOT_SUPPORTED_YET
+CREATE TABLE fts_table_with_generated_col(
+    c1 VARCHAR(200),
+    c2 TEXT,
+    c3 TEXT AS (CONCAT(c2, '')) VIRTUAL,
+    FULLTEXT INDEX v_idx(c3));
+
+--error ER_NOT_SUPPORTED_YET
+CREATE TABLE fts_table_with_generated_col(
+    c1 VARCHAR(200),
+    c2 TEXT,
+    c3 TEXT AS (CONCAT(c2, '')) STORED,
+    FULLTEXT INDEX v_idx(c3));
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_col_orders;
+--enable_warnings
+
+CREATE TABLE fts_col_orders(
+    a INT,
+    b VARCHAR(20),
+    c VARCHAR(20),
+    FULLTEXT INDEX fts_b_c(b, c),
+    FULLTEXT INDEX fts_c_b(c, b)
+);
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_col_orders;
+
+SHOW INDEX FROM fts_col_orders;
+
+EXPLAIN SELECT * FROM fts_col_orders WHERE MATCH(b,c) AGAINST("aa");
+
+EXPLAIN SELECT * FROM fts_col_orders WHERE MATCH(c,b) AGAINST("aa");
+
+DROP TABLE fts_col_orders;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_varchar_binary;
+--enable_warnings
+
+--error 1283
+CREATE TABLE fts_varchar_binary(a VARCHAR(255), FULLTEXT(a)) CHARACTER SET = binary;
+
+CREATE TABLE fts_varchar_binary(a VARCHAR(255), FULLTEXT(a));
+
+DROP TABLE fts_varchar_binary;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_char_binary;
+--enable_warnings
+
+--error 1283
+CREATE TABLE fts_char_binary(a CHAR(255), FULLTEXT(a)) CHARACTER SET = binary;
+
+CREATE TABLE fts_char_binary(a CHAR(255), FULLTEXT(a));
+
+DROP TABLE fts_char_binary;
+
+
+--disable_warnings
+DROP TABLE IF EXISTS table_create_with_ik;
+--enable_warnings
+
+CREATE TABLE table_create_with_ik(a CHAR(255), FULLTEXT(a) WITH PARSER ik);
+
+DROP TABLE table_create_with_ik;
+
+
+disconnect sys_conn;

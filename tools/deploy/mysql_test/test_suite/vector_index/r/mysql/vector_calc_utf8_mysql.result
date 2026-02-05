@@ -1,0 +1,607 @@
+alter system set ob_vector_memory_limit_percentage = 20;
+set ob_query_timeout=1000000000;
+set ob_trx_timeout=1000000000;
+drop database if exists vector_test;
+create database vector_test;
+use vector_test;
+drop table if exists test;
+drop table if exists test1;
+drop table if exists t;
+drop table if exists t1;
+create table test (id int, c1 vector(3), c2 vector(3), c3 vector(4), c4 array(int));
+insert into test values(1, [1,-1,1], '[1,2,-3]', array(1,2,3,4), array(1,2,3));
+insert into test values(2, [2.2,2.3,2.4], '[-1.5,2.566,3.44]', array(1,2,3,4), array(1,2,3,4));
+insert into test values(3, [3.55,3.66,3.777], '[1.123,2,3]', array(1,2,3,4), array(1,NULL,3));
+insert into test values(1, [-1.1122,2.3322,3], NULL, [2.22,3.33,45.55, 3.2], '[11.1,2,3]');
+create table test1 (id int, c1 vector(3)) partition by hash(id) partitions 2;
+insert into test1 values(1, [1,1,1]);
+insert into test1 values(2, [2.2,2.3,2.4]);
+insert into test1 values(3, [3.55,3.66,3.777]);
+insert into test1 values(1, [1.1122,2.3322,3]);
+select l2_distance([1,-1,1], [1,2,-3]), l2_distance('[1,-1,1]', [1,2,-3]), vector_distance('[1,-1,1]', [1,2,-3], euclidean);
+l2_distance([1,-1,1], [1,2,-3])	l2_distance('[1,-1,1]', [1,2,-3])	vector_distance('[1,-1,1]', [1,2,-3], euclidean)
+5	5	5
+select cosine_distance([1,2,3], NULL), inner_product(NULL, '[1,2,3]'), inner_product(NULL, NULL), vector_distance(NULL, NULL, manhattan);
+cosine_distance([1,2,3], NULL)	inner_product(NULL, '[1,2,3]')	inner_product(NULL, NULL)	vector_distance(NULL, NULL, manhattan)
+NULL	NULL	NULL	NULL
+select cosine_distance([1,2,3], NULL), negative_inner_product(NULL, '[1,2,3]'), negative_inner_product(NULL, NULL), vector_distance(NULL, NULL, manhattan);
+cosine_distance([1,2,3], NULL)	negative_inner_product(NULL, '[1,2,3]')	negative_inner_product(NULL, NULL)	vector_distance(NULL, NULL, manhattan)
+NULL	NULL	NULL	NULL
+select cosine_distance([1,2,3], '[0,0,0]');
+cosine_distance([1,2,3], '[0,0,0]')
+NULL
+select c1, c2, l1_distance(c1, c2), l1_distance([1,1,1], '[1,2,3]'), vector_distance([1,1,1], c2, manhattan) from test;
+c1	c2	l1_distance(c1, c2)	l1_distance([1,1,1], '[1,2,3]')	vector_distance([1,1,1], c2, manhattan)
+[1,-1,1]	[1,2,-3]	7	3	5
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	5.00600004196167	3	6.50600004196167
+[3.55,3.66,3.777]	[1.123,2,3]	4.864000082015991	3	3.1230000257492065
+[-1.1122,2.3322,3]	NULL	NULL	3	NULL
+select c1, c2, l1_distance(c2, NULL), vector_distance(NULL, c2, manhattan) from test;
+c1	c2	l1_distance(c2, NULL)	vector_distance(NULL, c2, manhattan)
+[1,-1,1]	[1,2,-3]	NULL	NULL
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	NULL	NULL
+[3.55,3.66,3.777]	[1.123,2,3]	NULL	NULL
+[-1.1122,2.3322,3]	NULL	NULL	NULL
+select c1, c2, l2_distance(c1, c2), l2_distance(c1, '[1,2,3]'), l2_distance([1,1,1], c2), vector_distance([1,1,1], c2, euclidean) from test;
+c1	c2	l2_distance(c1, c2)	l2_distance(c1, '[1,2,3]')	l2_distance([1,1,1], c2)	vector_distance([1,1,1], c2, euclidean)
+[1,-1,1]	[1,2,-3]	5	3.605551275463989	4.123105625617661	4.123105625617661
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	3.8525778760154687	1.374772698081317	3.828309840052829	3.828309840052829
+[3.55,3.66,3.777]	[1.123,2,3]	3.0413251108837196	3.1403549106281656	2.239448370991014	2.239448370991014
+[-1.1122,2.3322,3]	NULL	NULL	2.138164120293296	NULL	NULL
+select c1, c2, cosine_distance([1,1,1], [1,2,3]), cosine_distance(c1, [1,2,3]), cosine_distance(c2, '[1,1,1]'), vector_distance(c2, '[1,1,1]', cosine) from test;
+c1	c2	cosine_distance([1,1,1], [1,2,3])	cosine_distance(c1, [1,2,3])	cosine_distance(c2, '[1,1,1]')	vector_distance(c2, '[1,1,1]', cosine)
+[1,-1,1]	[1,2,-3]	0.07417990022744858	0.6913933000758161	1	1
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	0.07417990022744858	0.061353485227380156	0.42775527074822384	0.42775527074822384
+[3.55,3.66,3.777]	[1.123,2,3]	0.07417990022744858	0.06491525609985971	0.06389044234089536	0.06389044234089536
+[-1.1122,2.3322,3]	NULL	0.07417990022744858	0.15270198931819656	NULL	NULL
+select c1, c2, inner_product(c1, '[1,2,3]'), inner_product('[1,1,1]', '[1,2,3]'), inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
+c1	c2	inner_product(c1, '[1,2,3]')	inner_product('[1,1,1]', '[1,2,3]')	inner_product('[1,1,1]', c2)	vector_distance('[1,1,1]', c2, dot)
+[1,-1,1]	[1,2,-3]	2	6	0	0
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	14.000000238418579	6	4.50600004196167	4.50600004196167
+[3.55,3.66,3.777]	[1.123,2,3]	22.20099949836731	6	6.1230000257492065	6.1230000257492065
+[-1.1122,2.3322,3]	NULL	12.552200078964233	6	NULL	NULL
+select c1, c2, negative_inner_product(c1, '[1,2,3]'), negative_inner_product('[1,1,1]', '[1,2,3]'), negative_inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
+c1	c2	negative_inner_product(c1, '[1,2,3]')	negative_inner_product('[1,1,1]', '[1,2,3]')	negative_inner_product('[1,1,1]', c2)	vector_distance('[1,1,1]', c2, dot)
+[1,-1,1]	[1,2,-3]	-2	-6	0	0
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	-14.000000238418579	-6	-4.50600004196167	4.50600004196167
+[3.55,3.66,3.777]	[1.123,2,3]	-22.20099949836731	-6	-6.1230000257492065	6.1230000257492065
+[-1.1122,2.3322,3]	NULL	-12.552200078964233	-6	NULL	NULL
+select c1, c4, l2_distance(c1, c4) from test where id = 1;
+c1	c4	l2_distance(c1, c4)
+[1,-1,1]	[1,2,3]	3.605551275463989
+[-1.1122,2.3322,3]	[11,2,3]	12.116754535131845
+select c3, c4, l2_distance(c3, c4) from test where id = 2;
+c3	c4	l2_distance(c3, c4)
+[1,2,3,4]	[1,2,3,4]	0
+select c1, l2_distance(c1, '[1,1,1]') from test group by l2_distance(c1, '[1,1,1]');
+c1	l2_distance(c1, '[1,1,1]')
+[1,-1,1]	2
+[2.2,2.3,2.4]	2.2561028916013735
+[3.55,3.66,3.777]	4.614090261146129
+[-1.1122,2.3322,3]	3.1993977411409187
+select c1, l2_distance(c1, '[1,1,1]') from test where l2_distance(c1, '[1,1,1]') < 100;
+c1	l2_distance(c1, '[1,1,1]')
+[1,-1,1]	2
+[2.2,2.3,2.4]	2.2561028916013735
+[3.55,3.66,3.777]	4.614090261146129
+[-1.1122,2.3322,3]	3.1993977411409187
+select l2_distance(c1, '[1,1,1]') + cosine_distance(c2, '[1,2,3]') from test;
+l2_distance(c1, '[1,1,1]') + cosine_distance(c2, '[1,2,3]')
+3.2857142857142856
+2.4358955043768438
+4.614582921586805
+NULL
+select c1, l2_distance(c1, '[1,1,1]') from test1;
+c1	l2_distance(c1, '[1,1,1]')
+[2.2,2.3,2.4]	2.2561028916013735
+[1,1,1]	0
+[3.55,3.66,3.777]	4.614090261146129
+[1.1122,2.3322,3]	2.4056902999019876
+select test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+id	c1	c1	l2_distance(test1.c1, test.c1)
+2	[2.2,2.3,2.4]	[2.2,2.3,2.4]	0
+select /*+parallel(2)*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+id	c1	c1	l2_distance(test1.c1, test.c1)
+2	[2.2,2.3,2.4]	[2.2,2.3,2.4]	0
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+id	c1	c1	l2_distance(test1.c1, test.c1)
+2	[2.2,2.3,2.4]	[2.2,2.3,2.4]	0
+select [1,2,3] + '[1.12,1000.0001, -1.2222]', [1,2,3] - NULL, '[1.2,0.221,0.666]' * [1.11,3.33,5.55], NULL + [11,13.3,2,1.2];
+[1,2,3] + '[1.12,1000.0001, -1.2222]'	[1,2,3] - NULL	'[1.2,0.221,0.666]' * [1.11,3.33,5.55]	NULL + [11,13.3,2,1.2]
+[2.12,1002,1.7778]	NULL	[1.332,0.73593,3.6963]	NULL
+select c1, c2, c1 + [1.5,2.3,3.3], [3.3,55.55,66.66] - c2, c2 * c1 from test;
+c1	c2	c1 + [1.5,2.3,3.3]	[3.3,55.55,66.66] - c2	c2 * c1
+[1,-1,1]	[1,2,-3]	[2.5,1.3,4.3]	[2.3,53.55,69.66]	[1,-2,-3]
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	[3.7,4.6,5.7]	[4.8,52.984,63.22]	[-3.3,5.9018,8.256]
+[3.55,3.66,3.777]	[1.123,2,3]	[5.05,5.96,7.077]	[2.177,53.55,63.66]	[3.98665,7.32,11.331]
+[-1.1122,2.3322,3]	NULL	[0.3878,4.6322,6.3]	NULL	NULL
+select c1 / 0, [2,3,4] + [1,2,3] from test;
+c1 / 0	[2,3,4] + [1,2,3]
+NULL	[3,5,7]
+NULL	[3,5,7]
+NULL	[3,5,7]
+NULL	[3,5,7]
+select c1 + [1,1,1] from test1;
+c1 + [1,1,1]
+[3.2,3.3,3.4]
+[2,2,2]
+[4.55,4.66,4.777]
+[2.1122,3.3322,4]
+select test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+c1	c1	test1.c1+test.c1
+[2.2,2.3,2.4]	[2.2,2.3,2.4]	[4.4,4.6,4.8]
+select /*+parallel(2)*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+c1	c1	test1.c1+test.c1
+[2.2,2.3,2.4]	[2.2,2.3,2.4]	[4.4,4.6,4.8]
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+c1	c1	test1.c1+test.c1
+[2.2,2.3,2.4]	[2.2,2.3,2.4]	[4.4,4.6,4.8]
+select c1, c1 = '[2.2,2.3,2.4]', c1 != [0.00001,0.00002,0.00003] from test;
+c1	c1 = '[2.2,2.3,2.4]'	c1 != [0.00001,0.00002,0.00003]
+[1,-1,1]	0	1
+[2.2,2.3,2.4]	1	1
+[3.55,3.66,3.777]	0	1
+[-1.1122,2.3322,3]	0	1
+select c3, c3 < [1,2,3.000001,4], c3 > [1,1.999999,3,4], c3 >= [0,1,2,3], c3 <= [2,3,4,5] from test;
+ERROR 22000: Invalid data type for the operation
+select c2, c2 = NULL from test;
+c2	c2 = NULL
+[1,2,-3]	NULL
+[-1.5,2.566,3.44]	NULL
+[1.123,2,3]	NULL
+NULL	NULL
+select c2, NULL < c2 from test;
+ERROR 22000: Invalid data type for the operation
+select c1, c2, c1 < c2, NULL >= c1, c2 = NULL from test;
+ERROR 22000: Invalid data type for the operation
+select id, c1, c2 from test where c1 >= c2;
+ERROR 22000: Invalid data type for the operation
+select c1, c2, c1 = [2,2,2]+[0.2,0.3,0.4] from test;
+c1	c2	c1 = [2,2,2]+[0.2,0.3,0.4]
+[1,-1,1]	[1,2,-3]	0
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	1
+[3.55,3.66,3.777]	[1.123,2,3]	0
+[-1.1122,2.3322,3]	NULL	0
+select c1, c2, c1 > c2 - '[1,2,3]' from test;
+ERROR 22000: Invalid data type for the operation
+select id, c1 from test where c2 = [1,2,-3];
+id	c1
+1	[1,-1,1]
+select id, c2 from test where c2 != '[1,2,-3]';
+id	c2
+2	[-1.5,2.566,3.44]
+3	[1.123,2,3]
+select id, c1, c2 from test where c1 >= c2;
+ERROR 22000: Invalid data type for the operation
+select c1, c2, c1 = [2,-2,2]+[0.2,4.3,0.4] from test;
+c1	c2	c1 = [2,-2,2]+[0.2,4.3,0.4]
+[1,-1,1]	[1,2,-3]	0
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	1
+[3.55,3.66,3.777]	[1.123,2,3]	0
+[-1.1122,2.3322,3]	NULL	0
+select c1 < [1,2,3] from test1;
+ERROR 22000: Invalid data type for the operation
+select c1 from test1 where c1 > [1,2,3] && c1 < [3,4,5];
+ERROR 22000: Invalid data type for the operation
+select test1.c1, test.c1 from test1, test;
+c1	c1
+[2.2,2.3,2.4]	[1,-1,1]
+[2.2,2.3,2.4]	[2.2,2.3,2.4]
+[2.2,2.3,2.4]	[3.55,3.66,3.777]
+[2.2,2.3,2.4]	[-1.1122,2.3322,3]
+[1,1,1]	[1,-1,1]
+[1,1,1]	[2.2,2.3,2.4]
+[1,1,1]	[3.55,3.66,3.777]
+[1,1,1]	[-1.1122,2.3322,3]
+[3.55,3.66,3.777]	[1,-1,1]
+[3.55,3.66,3.777]	[2.2,2.3,2.4]
+[3.55,3.66,3.777]	[3.55,3.66,3.777]
+[3.55,3.66,3.777]	[-1.1122,2.3322,3]
+[1.1122,2.3322,3]	[1,-1,1]
+[1.1122,2.3322,3]	[2.2,2.3,2.4]
+[1.1122,2.3322,3]	[3.55,3.66,3.777]
+[1.1122,2.3322,3]	[-1.1122,2.3322,3]
+select test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+c1	c1
+[1,1,1]	[1,-1,1]
+select /*+parallel(2)*/test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+c1	c1
+[1,1,1]	[1,-1,1]
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+c1	c1
+[1,1,1]	[1,-1,1]
+select c1, c2, c4, vector_dims(c1), vector_dims(c2), vector_dims([1,2,3,4]), vector_dims('[1,2,3]') from test;
+c1	c2	c4	vector_dims(c1)	vector_dims(c2)	vector_dims([1,2,3,4])	vector_dims('[1,2,3]')
+[1,-1,1]	[1,2,-3]	[1,2,3]	3	3	4	3
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	[1,2,3,4]	3	3	4	3
+[3.55,3.66,3.777]	[1.123,2,3]	[1,NULL,3]	3	3	4	3
+[-1.1122,2.3322,3]	NULL	[11,2,3]	3	NULL	4	3
+select c1, c2, vector_norm(c1), vector_norm(c2), vector_norm([1,2,3,4]), vector_norm('[1,2,3]') from test;
+c1	c2	vector_norm(c1)	vector_norm(c2)	vector_norm([1,2,3,4])	vector_norm('[1,2,3]')
+[1,-1,1]	[1,2,-3]	1.7320508075688772	3.7416573867739413	5.477225575051661	3.7416573867739413
+[2.2,2.3,2.4]	[-1.5,2.566,3.44]	3.9862263286625805	4.546202357506398	5.477225575051661	3.7416573867739413
+[3.55,3.66,3.777]	[1.123,2,3]	6.345378572730094	3.7763910048675564	5.477225575051661	3.7416573867739413
+[-1.1122,2.3322,3]	NULL	3.959311292537723	NULL	5.477225575051661	3.7416573867739413
+select vector_dims(NULL), vector_norm(NULL);
+vector_dims(NULL)	vector_norm(NULL)
+NULL	NULL
+select vector_norm(c1),vector_dims(c1) from test1;
+vector_norm(c1)	vector_dims(c1)
+3.9862263286625805	3
+1.7320508075688772	3
+6.345378572730094	3
+3.959311292537723	3
+select vector_dims('[1,1,1]') / vector_dims('[1]');
+vector_dims('[1,1,1]') / vector_dims('[1]')
+3.0000
+set @a = [1];
+ERROR 0A000: Variable value type not supported
+set @b = l2_distance([1,2],[-2,3]);
+select @b;
+@b
+3.1622776601683795
+insert into test values(null, null, null, null, null);
+insert into test values(null, [0.1,0.2,0.3], [0.1,0.2,0.3], [0.1,0.2,0.3,0.4], null);
+insert into test values(1, [-0.777,0.12346,-1.2556], [1,2,-0.666], [3,4,5,6.000], NULL);
+insert into test values(1, NULL, NULL, NULL, NULL);
+insert into test values(2, [3,4,5], [1,2,3], NULL, '[1,2,3,4,5]');
+insert into test values(3, [100000.111,500000.6666,1.2222222], [1.333,2,3], [1.333333,4.555555,6.123456789,0], '[1,2,3,4,5]');
+select sum(c1),avg(c1),count(c1) from test group by id;
+sum(c1)	avg(c1)	count(c1)
+[-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
+[5.2,6.3,7.4]	[2.6,3.15,3.7]	2
+[100004,500004,4.99922]	[50001.8,250002,2.49961]	2
+[0.1,0.2,0.3]	[0.1,0.2,0.3]	1
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test group by id;
+sum(c1+[1,2,3]-[1,2,3])	avg(c1+[1,2,3]-[1,2,3])	count(c1+[1,2,3]-[1,2,3])
+[-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
+[5.2,6.3,7.4]	[2.6,3.15,3.7]	2
+[100004,500004,4.99922]	[50001.8,250002,2.49961]	2
+[0.1,0.2,0.3]	[0.1,0.2,0.3]	1
+select sum(c1),avg(c1),count(c1) from test group by id order by id;
+sum(c1)	avg(c1)	count(c1)
+[0.1,0.2,0.3]	[0.1,0.2,0.3]	1
+[-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
+[5.2,6.3,7.4]	[2.6,3.15,3.7]	2
+[100004,500004,4.99922]	[50001.8,250002,2.49961]	2
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test group by id order by id;
+sum(c1+[1,2,3]-[1,2,3])	avg(c1+[1,2,3]-[1,2,3])	count(c1+[1,2,3]-[1,2,3])
+[0.1,0.2,0.3]	[0.1,0.2,0.3]	1
+[-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
+[5.2,6.3,7.4]	[2.6,3.15,3.7]	2
+[100004,500004,4.99922]	[50001.8,250002,2.49961]	2
+select sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+sum(c1)	avg(c1)	count(c1)
+[2.1122,3.3322,4]	[1.0561,1.6661,2]	2
+[2.2,2.3,2.4]	[2.2,2.3,2.4]	1
+[3.55,3.66,3.777]	[3.55,3.66,3.777]	1
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test1 group by id order by id;
+sum(c1+[1,2,3]-[1,2,3])	avg(c1+[1,2,3]-[1,2,3])	count(c1+[1,2,3]-[1,2,3])
+[2.1122,3.3322,4]	[1.0561,1.6661,2]	2
+[2.2,2.3,2.4]	[2.2,2.3,2.4]	1
+[3.55,3.66,3.777]	[3.55,3.66,3.777]	1
+select id,sum(c1),avg(c1),count(c1) from test group by id order by id;
+id	sum(c1)	avg(c1)	count(c1)
+NULL	[0.1,0.2,0.3]	[0.1,0.2,0.3]	1
+1	[-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
+2	[5.2,6.3,7.4]	[2.6,3.15,3.7]	2
+3	[100004,500004,4.99922]	[50001.8,250002,2.49961]	2
+select id,sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+id	sum(c1)	avg(c1)	count(c1)
+1	[2.1122,3.3322,4]	[1.0561,1.6661,2]	2
+2	[2.2,2.3,2.4]	[2.2,2.3,2.4]	1
+3	[3.55,3.66,3.777]	[3.55,3.66,3.777]	1
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test;
+sum(c1+[1,2,3]-[1,2,3])	avg(c1+[1,2,3]-[1,2,3])	count(c1+[1,2,3]-[1,2,3])
+[100008,500012,15.4436]	[12501,62501.5,1.93045]	8
+select sum(c1+c2),avg(c1+c2),count(c1+c2) from test;
+sum(c1+c2)	avg(c1+c2)	count(c1+c2)
+[100013,500023,21.5176]	[14287.6,71431.8,3.07395]	7
+select sum(c1+[1,1,1]),avg(c1+[1,1,1]),count(c1+[1,1,1]) from test1;
+sum(c1+[1,1,1])	avg(c1+[1,1,1])	count(c1+[1,1,1])
+[11.8622,13.2922,14.177]	[2.96555,3.32305,3.54425]	4
+select test.id, sum(test1.c1+test.c1) from test1,test where test1.id = test.id group by test.id order by test.id;
+id	sum(test1.c1+test.c1)
+1	[4.5582,12.9079,17.4888]
+2	[9.6,10.9,12.2]
+3	[100011,500012,12.5532]
+select c1, cast(SUM(id)/COUNT(id) as double), c2 from test;
+c1	cast(SUM(id)/COUNT(id) as double)	c2
+[1,-1,1]	1.75	[1,2,-3]
+select l1_distance([cast(AVG(id) as float), cast(SUM(id) as float), cast(COUNT(id) as float)],c1) from test;
+l1_distance([cast(AVG(id) as float), cast(SUM(id) as float), cast(COUNT(id) as float)],c1)
+22.75
+select l2_distance(c1, [0, cast(MAX(id) as float), cast(MIN(id) as float)]) from test;
+l2_distance(c1, [0, cast(MAX(id) as float), cast(MIN(id) as float)])
+4.123105625617661
+select count(c1) over (partition by id) from test order by id;
+count(c1) over (partition by id)
+1
+1
+3
+3
+3
+3
+2
+2
+2
+2
+select sum(c1) over (partition by id) from test order by id;
+sum(c1) over (partition by id)
+[0.1,0.2,0.3]
+[0.1,0.2,0.3]
+[-0.8892,1.45566,2.7444]
+[-0.8892,1.45566,2.7444]
+[-0.8892,1.45566,2.7444]
+[-0.8892,1.45566,2.7444]
+[5.2,6.3,7.4]
+[5.2,6.3,7.4]
+[100004,500004,4.99922]
+[100004,500004,4.99922]
+select avg(c1) over (partition by id) from test order by id;
+avg(c1) over (partition by id)
+[0.1,0.2,0.3]
+[0.1,0.2,0.3]
+[-0.2964,0.48522,0.9148]
+[-0.2964,0.48522,0.9148]
+[-0.2964,0.48522,0.9148]
+[-0.2964,0.48522,0.9148]
+[2.6,3.15,3.7]
+[2.6,3.15,3.7]
+[50001.8,250002,2.49961]
+[50001.8,250002,2.49961]
+select id, sum(c1) = [5.2,6.3,7.4], avg(c1) = [0.1,0.2,0.3] from test group by id;
+id	sum(c1) = [5.2,6.3,7.4]	avg(c1) = [0.1,0.2,0.3]
+1	0	0
+2	1	0
+3	0	0
+NULL	0	1
+select c1 from test where id in (select id from test group by id having sum(c1) = [5.2,6.3,7.4]);
+c1
+[2.2,2.3,2.4]
+[3,4,5]
+select sum(c1),avg(c1),count(c1) from test where id = 10;
+sum(c1)	avg(c1)	count(c1)
+NULL	NULL	0
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test group by id order by id;
+sum(c1)	avg(c1)	count(c1)
+[0.1,0.2,0.3]	[0.1,0.2,0.3]	1
+[-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
+[5.2,6.3,7.4]	[2.6,3.15,3.7]	2
+[100004,500004,4.99922]	[50001.8,250002,2.49961]	2
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+sum(c1)	avg(c1)	count(c1)
+[2.1122,3.3322,4]	[1.0561,1.6661,2]	2
+[2.2,2.3,2.4]	[2.2,2.3,2.4]	1
+[3.55,3.66,3.777]	[3.55,3.66,3.777]	1
+select /*+ OPT_PARAM('rowsets_enabled', 'FALSE') */ sum(c1),avg(c1),count(c1) from test group by id order by id;
+sum(c1)	avg(c1)	count(c1)
+[0.1,0.2,0.3]	[0.1,0.2,0.3]	1
+[-0.8892,1.45566,2.7444]	[-0.2964,0.48522,0.9148]	3
+[5.2,6.3,7.4]	[2.6,3.15,3.7]	2
+[100004,500004,4.99922]	[50001.8,250002,2.49961]	2
+select /*+ OPT_PARAM('rowsets_enabled', 'FALSE') */ sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+sum(c1)	avg(c1)	count(c1)
+[2.1122,3.3322,4]	[1.0561,1.6661,2]	2
+[2.2,2.3,2.4]	[2.2,2.3,2.4]	1
+[3.55,3.66,3.777]	[3.55,3.66,3.777]	1
+create table t (id int primary key, c1 vector(3));
+insert into t values(1, [1,1,1]), (2, [2.2,3.3,4.4]), (3, [3.33,4.44,5.55]);
+select sum(c1),avg(c1),count(c1) from t group by id;
+sum(c1)	avg(c1)	count(c1)
+[1,1,1]	[1,1,1]	1
+[2.2,3.3,4.4]	[2.2,3.3,4.4]	1
+[3.33,4.44,5.55]	[3.33,4.44,5.55]	1
+select sum(c1),avg(c1),count(c1) from test;
+sum(c1)	avg(c1)	count(c1)
+[100008,500012,15.4436]	[12501,62501.5,1.93045]	8
+select sum(c1),avg(c1),count(c1) from test1;
+sum(c1)	avg(c1)	count(c1)
+[7.8622,9.2922,10.177]	[1.96555,2.32305,2.54425]	4
+select sum(c1),sum(id),sum(c2) from test;
+sum(c1)	sum(id)	sum(c2)
+[100008,500012,15.4436]	14	[4.056,12.766,9.074]
+select sum(c1),sum(id) from test1;
+sum(c1)	sum(id)
+[7.8622,9.2922,10.177]	7
+select sum(c1),avg(c1),count(c1) from test where id > 1;
+sum(c1)	avg(c1)	count(c1)
+[100009,500011,12.3992]	[25002.2,125003,3.09981]	4
+select sum(c1),avg(c1),count(c1) from test1 where id > 1;
+sum(c1)	avg(c1)	count(c1)
+[5.75,5.96,6.177]	[2.875,2.98,3.0885]	2
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test;
+sum(c1)	avg(c1)	count(c1)
+[100008,500012,15.4436]	[12501,62501.5,1.93045]	8
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test1;
+sum(c1)	avg(c1)	count(c1)
+[7.8622,9.2922,10.177]	[1.96555,2.32305,2.54425]	4
+select sum(distinct c1) from test;
+ERROR 0A000: vector aggregation with distinct is not supported
+select avg(distinct c1) from test group by id;
+ERROR 0A000: vector aggregation with distinct is not supported
+select count(distinct c1) over (partition by id) from test order by id;
+ERROR 0A000: vector aggregation with distinct is not supported
+drop table test1;
+create table t1 (c1 int, c2 vector(3));
+alter system minor freeze;
+alter system major freeze;
+select c1,sum(c2),avg(c2),count(c2) from t1 group by c1;
+c1	sum(c2)	avg(c2)	count(c2)
+0	[0,0,0]	[0,0,0]	1250
+1	[1250,1250,1250]	[1,1,1]	1250
+2	[2500,2500,2500]	[2,2,2]	1250
+3	[3750,3750,3750]	[3,3,3]	1250
+drop table t1;
+create table t1 (c1 date, c2 vector(3));
+insert into t1 values ('2024-08-01', [0.1,0.1,0.1]), ('2024-08-02', [0.2,0.2,0.2]), ('2024-08-03', [0.3,0.3,0.3]), ('2024-08-04', [0.4,0.4,0.4]), ('2024-08-05', [0.5,0.5,0.5]), ('2024-08-06', [0.6,0.6,0.6]);
+SELECT
+c1,
+SUM(c2) OVER (
+ORDER BY c1
+ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+) AS rolling_sum_3_days
+FROM
+t1;
+c1	rolling_sum_3_days
+2024-08-01	[0.1,0.1,0.1]
+2024-08-02	[0.3,0.3,0.3]
+2024-08-03	[0.6,0.6,0.6]
+2024-08-04	[0.9,0.9,0.9]
+2024-08-05	[1.2,1.2,1.2]
+2024-08-06	[1.5,1.5,1.5]
+set _enable_rich_vector_format = false;
+SELECT
+c1,
+SUM(c2) OVER (
+ORDER BY c1
+ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+) AS rolling_sum_3_days
+FROM
+t1;
+c1	rolling_sum_3_days
+2024-08-01	[0.1,0.1,0.1]
+2024-08-02	[0.3,0.3,0.3]
+2024-08-03	[0.6,0.6,0.6]
+2024-08-04	[0.9,0.9,0.9]
+2024-08-05	[1.2,1.2,1.2]
+2024-08-06	[1.5,1.5,1.5]
+set _enable_rich_vector_format = true;
+drop table if exists t1;
+create table t1(c1 int, c2 vector(3), c3 varchar(30), c4 char(30), c5 text, c6 blob(100), c7 varbinary(100), c8 mediumtext, c9 longtext, c10 tinyblob, c11 mediumblob, c12 longblob);
+insert into t1 values(1, [0,1,2], "[0,1,2]", "[0,1,2]", "[0,1,1]", X'000000000000803F00000040', 0x000000000000803F00000040, "[0,1,1]", "[0,1,1]", 0x000000000000803F00000040, 0x000000000000803F00000040, 0x000000000000803F00000040);
+select inner_product(c2, c3),inner_product(c2, c4),inner_product(c2, c5),inner_product(c2, c6),inner_product(c2, c7),inner_product(c2, c8),inner_product(c2, c9),inner_product(c2, c10),inner_product(c2, c11),inner_product(c2, c12) from t1;
+inner_product(c2, c3)	inner_product(c2, c4)	inner_product(c2, c5)	inner_product(c2, c6)	inner_product(c2, c7)	inner_product(c2, c8)	inner_product(c2, c9)	inner_product(c2, c10)	inner_product(c2, c11)	inner_product(c2, c12)
+5	5	3	5	5	3	3	5	5	5
+drop table if exists t2, tt0;
+CREATE TABLE t2 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t2(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t2(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t2(c1,c2,c3,c4) values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t2(c1,c2,c3,c4) values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t2(c1,c2,c3,c4) values(5,'[-1,-3,-2]',null,'[2,3,1]');
+create table tt0 as select c2+c3+c4 as c1, [1,2,3] + [2,3,4] as c2, sum(c2) as c3, avg(c3) as c4 from t2;
+select * from tt0;
+c1	c2	c3	c4
+[4,6,7]	[3,5,7]	[-1,-2,3]	[-1,1.5,3]
+select sum(c1), avg(c1), count(c1), c1+c2+c3 from tt0;
+sum(c1)	avg(c1)	count(c1)	c1+c2+c3
+[4,6,7]	[4,6,7]	1	[6,9,17]
+drop table tt0;
+create table tt0 as select c2+c3+c4 as c1, [1,2,3] + [2,3,4] as c2 from t2;
+select * from tt0;
+c1	c2
+[4,6,7]	[3,5,7]
+[4,3,8]	[3,5,7]
+[0,7,8]	[3,5,7]
+NULL	[3,5,7]
+NULL	[3,5,7]
+select sum(c1), avg(c1), count(c1), c1+c2 from tt0;
+sum(c1)	avg(c1)	count(c1)	c1+c2
+[8,16,23]	[2.66667,5.33333,7.66667]	3	[7,11,14]
+drop table if exists t2, tt0;
+CREATE TABLE t2 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t2 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t2 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t2 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t2 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t2 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+CREATE TABLE tt0 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3));
+insert into tt0 select c1,c2,c3,c4 from t2;
+select c1,c2,c3,c4,l2_distance(a3,c2) from t2 a right join tt0 b on l2_distance(c2,c3)=l2_distance(a3,a4)  order by l2_distance(a3,c2);
+c1	c2	c3	c4	l2_distance(a3,c2)
+NULL	NULL	NULL	NULL	NULL
+NULL	NULL	NULL	NULL	NULL
+NULL	NULL	NULL	NULL	NULL
+1	[1,1,2]	[2,2,3]	[1,3,2]	1.7320508075688772
+4	[-1,-2,-2]	[-4,2,3]	NULL	6.708203932499369
+select c1 from t2 a right join tt0 b on a3=c2  order by l2_distance(a3,c2);
+c1
+NULL
+NULL
+NULL
+NULL
+2
+select count(c1), CASE WHEN l2_distance(c2, '[1,2,3]') > 1 THEN avg(c2) ELSE avg(c3) END as A from t2;
+count(c1)	A
+5	[-0.2,-0.4,0.6]
+select count(c1), CASE WHEN l2_distance(c2, '[1,2,3]') < 1 THEN c2 ELSE sum(c3) END as A from t2;
+count(c1)	A
+5	[-4,6,12]
+select count(c1), CASE WHEN l2_distance(c2, '[1,2,3]') < 1 THEN [1,2,3] ELSE c3 END as A from t2;
+count(c1)	A
+5	[2,2,3]
+create table tt1 as SELECT avg(t2.c2) OVER (PARTITION BY t2.c1) AS avg_vector FROM t2;
+select * from tt1;
+avg_vector
+[1,1,2]
+[1,0,3]
+[-1,2,2]
+[-1,-2,-2]
+[-1,-3,-2]
+insert into test values(2, [1,2], [1,2,3], [1,2,3,4], NULL);
+ERROR 22000: inconsistent dimension: expected 3 got 2
+select l2_distance('[1,2,3]', c3) from test;
+ERROR 22000: inconsistent dimension: expected 4 got 3
+select cosine_distance(c1, c3) from test;
+ERROR 22000: Invalid dimension for vector.
+select l2_distance(c1, c4) from test where id = 2;
+ERROR 22000: inconsistent dimension: expected 3 got 4
+select l2_distance(c3, c4) from test where id = 1;
+ERROR 22000: inconsistent dimension: expected 4 got 3
+select l2_distance(c1, [null]) from test;
+ERROR 22000: inconsistent dimension: expected 3 got 1
+select l2_distance(c1, [1,NULL,1]) from test;
+ERROR 42000: Null value
+select vector_norm(c4) from test;
+ERROR 42000: Null value
+select vector_dims(c4) from test;
+ERROR 42000: Null value
+select l2_distance('1,2,3', c1) from test;
+ERROR HY000: Invalid argument
+insert into test values(1, 1, 1.0, 1, 1);
+ERROR 0A000: type casting not supported
+insert into t1(c2) values(l2_distance(null,null));
+ERROR 0A000: type casting not supported
+select sum([1,2]) from dual;
+ERROR 0A000: Not supported feature or function
+select avg([1,2]) from dual;
+ERROR 0A000: Not supported feature or function
+select l2_distance(c1, [[1,2],[1,2],[1,3]]) from test;
+ERROR 22000: array type mismatch found between definition and data
+select c1 = [[1,2],[1,2],[1,3]] from test;
+ERROR 22000: array type mismatch found between definition and data
+select c1 + [[1,2],[1,2],[1,3]] from test;
+ERROR 22000: array type mismatch found between definition and data
+select c1 from test order by c1;
+ERROR 22000: Invalid data type for the operation
+select c2 from test group by c1;
+ERROR 22000: Invalid data type for the operation
+select c1 && c2 from test;
+ERROR 22000: Invalid data type for the operation
+select [1,2,3] || [1,2,3];
+ERROR 22000: Invalid data type for the operation
+select STDDEV(c1) from test;
+ERROR 22000: Invalid data type for the operation
+select c1+1 from test;
+ERROR 22000: Invalid data type for the operation
+select sum(c1*1) from test;
+ERROR 22000: Invalid data type for the operation
+select [1,2,3] > [2,3,4];
+ERROR 22000: Invalid data type for the operation
+select [1] / 3;
+ERROR 22000: Invalid data type for the operation
+select inner_product(1, c1) from test;
+ERROR HY000: Invalid argument
+select c1,max(c2) from test;
+ERROR HY000: Invalid argument
+select min(c1) from test;
+ERROR HY000: Invalid argument
+select l2_distance('101', c1) from test;
+ERROR HY000: Invalid argument
+select vector_dims(['a']) as res;
+ERROR 01000: Truncated incorrect DOUBLE value
+select vector_norm(['a']) as res;
+ERROR 01000: Truncated incorrect DOUBLE value
+drop database vector_test;
+alter system set ob_vector_memory_limit_percentage = 0;

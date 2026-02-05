@@ -1,0 +1,153 @@
+# owner: lana.lgx
+# owner group: data
+# tags:
+# descriotion:
+# 创建mv的测试
+#
+
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+
+
+use test;
+
+--disable_warnings
+drop materialized view if exists mv1;
+drop materialized view if exists mv2;
+drop materialized view if exists mv3;
+drop materialized view if exists mv4;
+drop materialized view if exists mv5;
+drop materialized view if exists mv6;
+drop materialized view if exists mv7;
+drop materialized view if exists lob_mv1;
+drop materialized view if exists mv_once;
+drop materialized view if exists mv_interval;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t2;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t3;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on lob_t1;
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop table if exists lob_t1;
+--enable_warnings
+
+
+create table t1 (c1 int, c2 int);
+
+insert into t1 values(1,2),(3,4);
+
+create materialized view mv1 never refresh as select * from t1;
+select refresh_mode, refresh_method, refresh_start, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv1');
+--sorted_result
+select * from mv1;
+
+#insert into mv1 values(3,4);
+--error 1235
+truncate mv1;
+
+--sorted_result
+select k.c1 from mv1 as k;
+
+--error 9761
+call dbms_mview.refresh('mv1', 'c');
+
+
+create materialized view mv2 refresh complete on demand as select * from t1;
+select refresh_mode, refresh_method, refresh_start, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv2');
+--sorted_result
+select * from mv2;
+
+#insert into t1 values(5,6);
+#call dbms_mview.refresh('mv2', 'c');
+
+create materialized view mv3 refresh complete on demand start with now() next now() + interval 1 day as select * from t1;
+select refresh_mode, refresh_method, refresh_start is null, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv3');
+--sorted_result
+select * from mv3;
+
+create materialized view mv4 refresh complete on demand start with now() as select * from t1;
+select refresh_mode, refresh_method, refresh_start is null, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv4');
+--sorted_result
+select * from mv4;
+
+create materialized view mv5 refresh complete on demand next now() + interval 1 day as select * from t1;
+select refresh_mode, refresh_method, refresh_start is null, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv5');
+--sorted_result
+select * from mv5;
+
+
+create index i1 on mv1(c1);
+create index i2 on mv1(c1);
+show index from mv1;
+drop index i1 on mv1;
+drop index i2 on mv1;
+--error 1235
+create index i3 on mv1((c2 + 1));
+show index from mv1;
+
+analyze table mv1 compute statistics;
+call dbms_stats.gather_table_stats('test', 'mv1');
+
+
+drop materialized view mv1;
+select count(1) from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv1');
+
+
+--echo # create partition mv
+
+create materialized view mv1 partition by range(c1) (partition p0 values less than(5)) as select * from t1;
+drop materialized view mv1;
+
+create materialized view mv1 partition by hash(c1) partitions 5 as select * from t1;
+drop materialized view mv1;
+
+--echo # create mview options
+--echo # on commit attribute is not compatible with start with/next options
+--error 1235
+create materialized view mv6 refresh COMPLETE on commit start with sysdate() next sysdate() + interval 1 day as select * from t1;
+
+--echo # on statement attribute is not compatible with start with/next options
+--error 1235
+create materialized view mv6 refresh COMPLETE on statement start with sysdate() next sysdate() + interval 1 day as select * from t1;
+
+--echo # only on demand attribute is compatible with start with/next options
+create materialized view mv6 refresh COMPLETE on demand start with sysdate() next sysdate() + interval 1 day as select * from t1;
+
+--echo # on demand attribute can be omitted
+create materialized view mv7 refresh COMPLETE start with sysdate() next sysdate() + interval 1 day as select * from t1;
+
+--echo # mview with lob
+create table lob_t1(pk int primary key, c1 text);
+insert into lob_t1 values(1, repeat('1', 100));
+create materialized view lob_mv1 as select * from lob_t1;
+let $container_tid = query_get_value(select data_table_id from oceanbase.__all_table where table_name = 'LOB_MV1', data_table_id, 1);
+--disable_query_log
+eval select table_type from oceanbase.__all_table where table_id = $container_tid;
+eval select table_type from oceanbase.dba_ob_table_locations where table_name like '%aux_lob%' and tablet_id > 0 and role = 'LEADER' and data_table_id = $container_tid;
+--enable_query_log
+--sorted_result
+select * from lob_mv1;
+insert into lob_t1 values(2, repeat('2', 100));
+call dbms_mview.refresh('lob_mv1');
+--sorted_result
+select * from lob_mv1;
+drop materialized view lob_mv1;
+--disable_query_log
+eval select table_type from oceanbase.__all_table where table_id = $container_tid;
+eval select table_type from oceanbase.dba_ob_table_locations where table_name like '%aux_lob%' and data_table_id = $container_tid;
+--enable_query_log
+drop table lob_t1;
+
+drop materialized view mv2;
+drop materialized view mv3;
+drop materialized view mv4;
+drop materialized view mv5;
+drop materialized view mv6;
+drop materialized view mv7;
+drop table t1;

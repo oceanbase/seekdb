@@ -1,0 +1,56 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner: lana.lgx
+
+--disable_warnings
+drop materialized view if exists mv;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t2;
+drop table if exists t1;
+drop table if exists t2;
+
+create table t1(a int primary key, b int) partition by hash(a) partitions 4;
+create table t2(c int primary key, d int) partition by hash(c) partitions 4;
+create materialized view log on t1 parallel 7 with primary key, rowid, sequence (b) including new values PURGE START WITH sysdate() NEXT sysdate() + INTERVAL 120 second;
+create materialized view log on t2 parallel 7 with primary key, rowid, sequence (d) including new values PURGE START WITH sysdate() NEXT sysdate() + INTERVAL 120 second;
+
+CREATE MATERIALIZED VIEW mv(a,b,c,d)  parallel 10 partition by hash(a) partitions 4 subpartition by hash(c) subpartitions 2
+REFRESH fast START WITH sysdate() NEXT sysdate() + INTERVAL 60 second
+as  select t1.a, t1.b, t2.c, t2.d from t1 join t2 on t1.a = t2.c;
+
+create index idx on mv(b) local;
+
+--replace_column 20 "YYYY-MM-DD hh:mm:ss" 16 "DATA_LENGTH" 18 "MAX_DATA_LENGTH"
+select * from information_schema.partitions where table_name='mv' order by 1,2,3,4,5,6,7;
+
+select * from oceanbase.DBA_TAB_SUBPARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
+select * from oceanbase.DBA_TAB_PARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
+--replace_column 3 "table_id" 9 "tablet_id" 10 "ls_id" 12 "ip" 13 "port" 18 "object_id"
+select * from oceanbase.DBA_OB_TABLE_LOCATIONS where table_name='mv' and role='LEADER' order by 1,2,3,4,5,6,7;
+select * from oceanbase.DBA_PART_INDEXES where table_name='mv' order by 1,2,3,4,5,6,7;
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection obsys;
+--replace_column 1 "tenant_id"
+select * from oceanbase.CDB_TAB_SUBPARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
+--replace_column 1 "tenant_id"
+select * from oceanbase.CDB_TAB_PARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
+--replace_column 1 "tenant_id" 4 "table_id" 10 "tablet_id" 11 "ls_id" 13 "ip" 14 "port" 19 "object_id"
+select * from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name='mv' and role='LEADER' order by 1,2,3,4,5,6,7;
+--replace_column 1 "tenant_id"
+select * from oceanbase.CDB_PART_INDEXES where table_name='mv' order by 1,2,3,4,5,6,7;
+--replace_column 1 "tenant_id"
+select * from oceanbase.CDB_INDEXES where table_name='mv' order by 1,2,3,4,5,6,7;
+disconnect obsys;
+connection default;
+
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t2;
+drop materialized view if exists mv;
+drop table if exists t1;
+drop table if exists t2;

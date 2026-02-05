@@ -1,0 +1,360 @@
+drop database if exists db_fork_error;
+create database db_fork_error;
+use db_fork_error;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. Fork不存在的表
+============================================
+drop table if exists t_not_exist;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t_not_exist'
+drop table if exists t_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t_fork'
+fork table t_not_exist to t_fork;
+ERROR 42S02: Table doesn't exist
+============================================
+2. Fork到已存在的表
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50)
+);
+create table t1_fork (
+id int primary key,
+name varchar(50)
+);
+fork table t1 to t1_fork;
+ERROR 42S01: Table 't1_fork' already exists
+drop table if exists t1_fork;
+============================================
+3. Fork表名冲突
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t2'
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t2'
+create table t2 (
+id int primary key,
+name varchar(50)
+);
+fork table t2 to t2;
+ERROR 42S01: Table 't2' already exists
+============================================
+4. Fork系统表（不支持）
+============================================
+fork table oceanbase.__all_table to __all_table;
+ERROR HY000: 'oceanbase.__all_table' is not BASE TABLE
+============================================
+5. Fork视图（不支持）
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t3'
+drop view if exists v3;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.v3'
+drop table if exists v3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.v3_fork'
+create table t3 (
+id int primary key,
+name varchar(50)
+);
+create view v3 as select * from t3;
+fork table v3 to v3_fork;
+ERROR HY000: 'db_fork_error.v3' is not BASE TABLE
+============================================
+6. Fork表名包含特殊字符
+============================================
+drop table if exists t4;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t4'
+drop table if exists `t4-fork`;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t4-fork'
+create table t4 (
+id int primary key,
+name varchar(50)
+);
+# 使用反引号处理特殊字符
+fork table t4 to `t4-fork`;
+show create table `t4-fork`;
+Table	Create Table
+t4-fork	CREATE TABLE `t4-fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop table if exists `t4-fork`;
+============================================
+7. Fork表跨数据库
+============================================
+drop database if exists db_fork_error2;
+Warnings:
+Note	1008	Can't drop database 'db_fork_error2'; database doesn't exist
+create database db_fork_error2;
+drop table if exists t5;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t5'
+drop table if exists db_fork_error2.t5_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error2.t5_fork'
+create table t5 (
+id int primary key,
+name varchar(50)
+);
+# Fork到不同数据库
+fork table t5 to db_fork_error2.t5_fork;
+show create table db_fork_error2.t5_fork;
+Table	Create Table
+t5_fork	CREATE TABLE `t5_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop table if exists db_fork_error2.t5_fork;
+drop database if exists db_fork_error2;
+============================================
+8. Fork表语法错误
+============================================
+drop table if exists t6;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t6'
+create table t6 (
+id int primary key,
+name varchar(50)
+);
+fork table t6_fork from t6;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'from t6' at line 1
+fork t6_fork to t6;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 't6_fork to t6' at line 1
+fork table t6_fork;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 't6_fork' at line 1
+============================================
+9. Fork临时表（不支持）
+============================================
+drop table if exists t9_tmp;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t9_tmp'
+drop table if exists t9_tmp_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t9_tmp_fork'
+create temporary table t9_tmp (
+id int primary key,
+name varchar(50)
+);
+ERROR 0A000: MySQL compatible temporary table not supported
+============================================
+10. Fork parent/child table（支持，但不复制外键信息）
+============================================
+drop table if exists t10_fk_child;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t10_fk_child'
+drop table if exists t10_fk_parent;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t10_fk_parent'
+drop table if exists t10_fk_parent_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t10_fk_parent_fork'
+drop table if exists t10_fk_child_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t10_fk_child_fork'
+create table t10_fk_parent (
+id int primary key,
+name varchar(50)
+);
+create table t10_fk_child (
+id int primary key,
+parent_id int,
+constraint fk_t10 foreign key (parent_id) references t10_fk_parent(id)
+);
+fork table t10_fk_parent to t10_fk_parent_fork;
+fork table t10_fk_child to t10_fk_child_fork;
+# 验证：源表 child 有外键，fork 后 child 不包含外键
+show create table t10_fk_child;
+Table	Create Table
+t10_fk_child	CREATE TABLE `t10_fk_child` (
+  `id` int(11) NOT NULL,
+  `parent_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  CONSTRAINT `fk_t10` FOREIGN KEY (`parent_id`) REFERENCES `db_fork_error`.`t10_fk_parent`(`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show create table t10_fk_child_fork;
+Table	Create Table
+t10_fk_child_fork	CREATE TABLE `t10_fk_child_fork` (
+  `id` int(11) NOT NULL,
+  `parent_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+# 行为验证：如果 fork 后没有外键，child_fork 可插入非法 parent_id
+insert into t10_fk_child_fork values (1, 999);
+select * from t10_fk_child_fork order by id;
+id	parent_id
+1	999
+============================================
+11. Fork to mock parent table（不支持）
+============================================
+set foreign_key_checks = off;
+drop table if exists t11_mock_fk_child;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t11_mock_fk_child'
+drop table if exists t11_mock_fk_parent;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t11_mock_fk_parent'
+drop table if exists t11_mock_fk_parent_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t11_mock_fk_parent_fork'
+create table t11_mock_fk_child (
+id int primary key,
+parent_id int,
+constraint fk_t11 foreign key (parent_id) references t11_mock_fk_parent(id)
+);
+set foreign_key_checks = on;
+drop table if exists t11_mock_fk_src;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t11_mock_fk_src'
+create table t11_mock_fk_src(id int primary key);
+fork table t11_mock_fk_src to t11_mock_fk_parent;
+ERROR 0A000: fork table to mock parent table name is not supported
+============================================
+12. Fork trigger table（支持，但不复制trigger信息）
+============================================
+drop table if exists t12_trig;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t12_trig'
+drop table if exists t12_trig_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t12_trig_fork'
+create table t12_trig (
+id int primary key,
+c1 int
+);
+create trigger tri_bi before insert on t12_trig for each row set new.c1 = new.c1 + 1;
+fork table t12_trig to t12_trig_fork;
+# 验证：源表有 trigger，插入时会改写数据
+insert into t12_trig values (1, 1);
+select * from t12_trig order by id;
+id	c1
+1	2
+# 验证：fork 表不带 trigger，插入不改写数据
+insert into t12_trig_fork values (1, 1);
+select * from t12_trig_fork order by id;
+id	c1
+1	1
+============================================
+13. Fork语义索引表（不支持）
+============================================
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT ('ob_embed_endpoint');
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('ob_embed');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ob_embed', '{
+    "type": "dense_embedding",
+    "model_name": "qwen3-embedding"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'ob_embed_endpoint', '{
+    "ai_model_name": "ob_embed",
+    "scope": "all",
+    "url": "fork_table_error",
+    "access_key": "fork_table_error",
+    "request_model_name": "fork_table_error",
+    "provider": "OPENAI"
+  }');
+drop table if exists t13_semantic;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t13_semantic'
+drop table if exists t13_semantic_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t13_semantic_fork'
+create table t13_semantic (
+id int primary key,
+doc varchar(100),
+vector index idx1(doc) with (distance=L2,type=hnsw,dim=1024,model=ob_embed,sync_mode=IMMEDIATE)
+);
+fork table t13_semantic to t13_semantic_fork;
+ERROR 0A000: fork table on table with semantic index is not supported
+============================================
+14. Fork IVF索引表（不支持）
+============================================
+drop table if exists t14_ivf;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t14_ivf'
+drop table if exists t14_ivf_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t14_ivf_fork'
+create table t14_ivf (
+id int primary key,
+vec vector(3),
+vector index idx1(vec) with (distance=L2,type=ivf_flat)
+);
+fork table t14_ivf to t14_ivf_fork;
+ERROR 0A000: fork table on table with ivf index is not supported
+============================================
+15. Fork空间索引表（不支持）
+============================================
+drop table if exists t15_spatial;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t15_spatial'
+drop table if exists t15_spatial_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t15_spatial_fork'
+create table t15_spatial (
+id int primary key,
+g geometry not null,
+spatial index idx_g (g)
+);
+fork table t15_spatial to t15_spatial_fork;
+ERROR 0A000: fork table on table with spatial index is not supported
+============================================
+16. Fork带全局索引的分区表（不支持）
+============================================
+drop table if exists t16_gidx;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t16_gidx'
+drop table if exists t16_gidx_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t16_gidx_fork'
+create table t16_gidx (
+id int primary key,
+c1 int
+) partition by range (id) (
+partition p0 values less than (10),
+partition p1 values less than (20)
+);
+create index idx_c1 on t16_gidx(c1) global partition by hash(c1) partitions 4;
+fork table t16_gidx to t16_gidx_fork;
+ERROR 0A000: fork table on partitioned table with global index is not supported
+============================================
+17. 清理
+============================================
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop view if exists v3;
+drop table if exists t4;
+drop table if exists t5;
+drop table if exists t6;
+drop table if exists t10_fk_child;
+drop table if exists t10_fk_parent;
+drop table if exists t10_fk_parent_fork;
+drop table if exists t10_fk_child_fork;
+drop table if exists t11_mock_fk_child;
+drop table if exists t11_mock_fk_src;
+drop table if exists t12_trig;
+drop table if exists t12_trig_fork;
+drop table if exists t13_semantic;
+drop table if exists t14_ivf;
+drop table if exists t15_spatial;
+drop table if exists t16_gidx;
+drop database if exists db_fork_error;

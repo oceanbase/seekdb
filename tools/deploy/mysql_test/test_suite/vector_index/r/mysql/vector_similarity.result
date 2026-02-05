@@ -1,0 +1,817 @@
+# Vector Similarity
+alter system set ob_vector_memory_limit_percentage = 44;
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select l2_similarity(c3, [1,1,2]) from t1;
+l2_similarity(c3, [1,1,2])
+0.5
+1
+0.3333333333333333
+0.00010201999591920016
+0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	c2	c3
+4	4	[100,1,2]
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select l2_similarity(c3, [1,1,2]) from t1;
+l2_similarity(c3, [1,1,2])
+0.3333333333333333
+0.5
+0.00010201999591920016
+1
+0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	c2	c3
+4	4	[100,1,2]
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=2);
+ERROR HY000: Invalid argument
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=hnsw));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select cosine_similarity(c3, [1,1,2]) from t1;
+cosine_similarity(c3, [1,1,2])
+0.9564354568719864
+0.9999999701976776
+0.9909902140498161
+0.7142767873592675
+0.723828332091216
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	c2	c3
+5	5	[1000,100,1]
+4	4	[100,1,2]
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=hnsw)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select cosine_similarity(c3, [1,1,2]) from t1;
+cosine_similarity(c3, [1,1,2])
+0.9909902140498161
+0.9564354568719864
+0.7142767873592675
+0.9999999701976776
+0.723828332091216
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	c2	c3
+5	5	[1000,100,1]
+4	4	[100,1,2]
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw_sq));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select l2_similarity(c3, [1,1,2]) from t1;
+l2_similarity(c3, [1,1,2])
+0.5
+1
+0.3333333333333333
+0.00010201999591920016
+0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	c2	c3
+4	4	[100,1,2]
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw_sq)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select l2_similarity(c3, [1,1,2]) from t1;
+l2_similarity(c3, [1,1,2])
+0.3333333333333333
+0.5
+0.00010201999591920016
+1
+0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	c2	c3
+4	4	[100,1,2]
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=hnsw_sq));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select l2_similarity(c3, [1,1,2]) from t1;
+l2_similarity(c3, [1,1,2])
+0.5
+1
+0.3333333333333333
+0.00010201999591920016
+0.000000992256430813928
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	c2	c3
+5	5	[1000,100,1]
+4	4	[100,1,2]
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=hnsw_sq)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select l2_similarity(c3, [1,1,2]) from t1;
+l2_similarity(c3, [1,1,2])
+0.3333333333333333
+0.5
+0.00010201999591920016
+1
+0.000000992256430813928
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+select/* +index(t1 idx1)*/ * from t1 where c2 > 3 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	c2	c3
+5	5	[1000,100,1]
+4	4	[100,1,2]
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw_bq));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select/* +index(t1 idx1)*/ c1, l2_similarity(c3, [1,1,2]) from t1 where c2 > 3 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+4	0.00010201999591920016
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw_bq)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select/* +index(t1 idx1)*/ c1, l2_similarity(c3, [1,1,2]) from t1 where c2 > 3 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+4	0.00010201999591920016
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=ivf_flat));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=ivf_flat)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=ivf_flat));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=ivf_flat)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=ivf_pq, m=1));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=ivf_pq, m=1)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=ivf_pq, m=1));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=ivf_pq, m=1)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=ivf_sq8));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+1	0.5
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+1	0.5
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=ivf_sq8)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5;
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+4	0.00010201999591920016
+5	0.000000992256430813928
+select c1, l2_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by l2_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.0001);
+c1	l2_similarity(c3, [1,1,2])
+2	1
+1	0.5
+3	0.3333333333333333
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=ivf_sq8));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+4	0.7142767873592675
+5	0.723828332091216
+1	0.9564354568719864
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+4	0.7142767873592675
+5	0.723828332091216
+1	0.9564354568719864
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=cosine, type=ivf_sq8)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+insert into t1 values(3, 3, [1,2,3]);
+insert into t1 values(4, 4, [100,1,2]);
+insert into t1 values(5, 5, [1000,100,1]);
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5;
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+5	0.723828332091216
+4	0.7142767873592675
+select c1, cosine_similarity(c3, [1,1,2]) from t1 where c2 < 4 order by cosine_distance(c3, [1,1,2]) approx limit 5 parameters (similarity=0.7);
+c1	cosine_similarity(c3, [1,1,2])
+2	0.9999999701976776
+3	0.9909902140498161
+1	0.9564354568719864
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=inner_product, type=hnsw)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
+c1	c2	c3
+2	2	[1,1,2]
+1	1	[0,1,2]
+select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
+ERROR 0A000: similarity parameter for inner_product distance is not supported
+select inner_product_similarity(c3, [2,2,3]) from t1;
+inner_product_similarity(c3, [2,2,3])
+0.9338609352707863
+0.9950737506151199
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=inner_product, type=ivf_flat)) partition by hash (c1) partitions 3;
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
+c1	c2	c3
+2	2	[1,1,2]
+1	1	[0,1,2]
+select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
+ERROR 0A000: similarity parameter for inner_product distance is not supported
+select inner_product_similarity(c3, [2,2,3]) from t1;
+inner_product_similarity(c3, [2,2,3])
+0.9338609352707863
+0.9950737506151199
+drop table if exists t1;
+create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=inner_product, type=hnsw));
+insert into t1 values(1, 1, [0,1,2]);
+insert into t1 values(2, 2, [1,1,2]);
+select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5;
+c1	c2	c3
+2	2	[1,1,2]
+1	1	[0,1,2]
+select * from t1 order by negative_inner_product(c3, [1,0,0]) approx limit 5 parameters (similarity=0.7);
+ERROR 0A000: similarity parameter for inner_product distance is not supported
+select cosine_similarity([0,1,2], [1,1,2]);
+cosine_similarity([0,1,2], [1,1,2])
+0.9564354568719864
+select cosine_similarity(0x000000000000803F00000040,'[2,2,3]');
+cosine_similarity(0x000000000000803F00000040,'[2,2,3]')
+0.9338609352707863
+select cosine_similarity([0,1,2]);
+ERROR 42000: Incorrect parameter count in the call to native function 'cosine_similarity'
+select cosine_similarity(NULL);
+ERROR 42000: Incorrect parameter count in the call to native function 'cosine_similarity'
+select cosine_similarity(TRUE);
+ERROR 42000: Incorrect parameter count in the call to native function 'cosine_similarity'
+select cosine_similarity([0,1,2], [1]);
+ERROR 22000: Invalid dimension for vector.
+select cosine_similarity(?,?);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '?' at line 1
+select inner_product_similarity([0,1,2], [1,1,2]);
+inner_product_similarity([0,1,2], [1,1,2])
+0.9564354568719864
+select inner_product_similarity(0x000000000000803F00000040,'[2,2,3]');
+inner_product_similarity(0x000000000000803F00000040,'[2,2,3]')
+0.9338609352707863
+select inner_product_similarity([0,1,2]);
+ERROR 42000: Incorrect parameter count in the call to native function 'inner_product_similarity'
+select inner_product_similarity(NULL);
+ERROR 42000: Incorrect parameter count in the call to native function 'inner_product_similarity'
+select inner_product_similarity(TRUE);
+ERROR 42000: Incorrect parameter count in the call to native function 'inner_product_similarity'
+select inner_product_similarity([0,1,2], [1]);
+ERROR 22000: Invalid dimension for vector.
+select inner_product_similarity(?,?);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '?' at line 1
+select l2_similarity([0,1,2], [1,1,2]);
+l2_similarity([0,1,2], [1,1,2])
+0.5
+select l2_similarity(0x000000000000803F00000040,'[2,2,3]');
+l2_similarity(0x000000000000803F00000040,'[2,2,3]')
+0.14285714285714285
+select l2_similarity([0,1,2]);
+ERROR 42000: Incorrect parameter count in the call to native function 'l2_similarity'
+select l2_similarity(NULL);
+ERROR 42000: Incorrect parameter count in the call to native function 'l2_similarity'
+select l2_similarity(TRUE);
+ERROR 42000: Incorrect parameter count in the call to native function 'l2_similarity'
+select l2_similarity([0,1,2], [1]);
+ERROR 22000: Invalid dimension for vector.
+select l2_similarity(?,?);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '?' at line 1
+drop table if exists `ai_knowledge_new`;
+CREATE TABLE if not exists `ai_knowledge_new` (
+`id` int(11) NOT NULL AUTO_INCREMENT,
+`record_id` varchar(128) NOT NULL,
+`knowledge_base_id` varchar(256) NOT NULL,
+`content_vector` VECTOR(1024) DEFAULT NULL,
+PRIMARY KEY (`id`, `knowledge_base_id`),
+KEY `idx1` (`id`) ,
+KEY `idx2` (`knowledge_base_id`) ,
+KEY `idx3` (`id`, `knowledge_base_id`)
+);
+set @test_vec = '[-0.052001953125,0.00897216796875,-0.00470733642578125,-0.035369873046875,-0.01517486572265625,0.0233612060546875,-0.003448486328125,-0.007808685302734375,-0.0211334228515625,0.01093292236328125,0.03314208984375,0.031036376953125,0.00917816162109375,-0.01129913330078125,0.005817413330078125,-0.009613037109375,-0.0269927978515625,-0.050628662109375,0.0235595703125,-0.04132080078125,-0.01027679443359375,-0.02362060546875,-0.042572021484375,0.04638671875,0.0338134765625,0.04888916015625,-0.04290771484375,-0.00676727294921875,0.0182952880859375,0.0009975433349609375,0.02008056640625,-0.0309600830078125,-0.0176239013671875,-0.0316162109375,-0.0504150390625,-0.0767822265625,-0.019866943359375,-0.00545501708984375,-0.0679931640625,-0.019195556640625,0.01393890380859375,-0.0230255126953125,0.031951904296875,-0.036529541015625,0.07904052734375,-0.0167694091796875,-0.01800537109375,-0.037628173828125,0.0161895751953125,-0.01605224609375,0.0024509429931640625,-0.044219970703125,0.0552978515625,-0.0163421630859375,0.0066986083984375,0.02874755859375,-0.0305023193359375,-0.01131439208984375,-0.0207366943359375,-0.017547607421875,-0.05340576171875,0.007297515869140625,-0.004222869873046875,0.00733184814453125,0.05438232421875,0.02447509765625,0.013092041015625,0.01163482666015625,-0.01052093505859375,-0.02325439453125,-0.005706787109375,0.034271240234375,-0.00286102294921875,0.013702392578125,-0.059844970703125,0.01474761962890625,-0.0288848876953125,0.0220184326171875,0.01041412353515625,-0.02545166015625,0.00806427001953125,-0.01444244384765625,-0.0298309326171875,-0.0032138824462890625,0.0031948089599609375,0.02850341796875,0.0031833648681640625,0.041412353515625,-0.004917144775390625,-0.021148681640625,0.008148193359375,-0.0078887939453125,-0.013580322265625,-0.004482269287109375,0.006381988525390625,-0.01556396484375,-0.056793212890625,-0.02374267578125,0.00553131103515625,-0.0062408447265625,-0.0287628173828125,0.016632080078125,0.07574462890625,-0.0021457672119140625,-0.006839752197265625,0.01053619384765625,0.049072265625,0.03594970703125,-0.01035308837890625,-0.0072021484375,-0.0219573974609375,0.040496826171875,-0.022125244140625,-0.01267242431640625,-0.0216064453125,-0.0225982666015625,-0.007747650146484375,-0.0035305023193359375,0.040985107421875,0.0274505615234375,0.012359619140625,-0.036865234375,-0.00337982177734375,-0.0447998046875,0.0017871856689453125,-0.009765625,-0.00994110107421875,0.057861328125,-0.01247406005859375,0.00661468505859375,0.00920867919921875,0.03668212890625,-0.0266265869140625,0.01442718505859375,-0.05706787109375,-0.041717529296875,0.01349639892578125,-0.01033782958984375,-0.038116455078125,-0.0430908203125,0.01788330078125,0.00643157958984375,-0.040679931640625,0.023162841796875,0.040130615234375,-0.01544952392578125,0.004024505615234375,-0.0071868896484375,0.0018548965454101562,-0.04638671875,0.038787841796875,0.042572021484375,-0.007274627685546875,0.035003662109375,0.021087646484375,-0.00705718994140625,-0.01352691650390625,0.021575927734375,0.0064544677734375,0.0389404296875,-0.015869140625,0.0716552734375,-0.01141357421875,-0.036346435546875,-0.0112152099609375,-0.00344085693359375,-0.025848388671875,0.0099029541015625,-0.002948760986328125,0.017333984375,0.0256500244140625,-0.034759521484375,-0.0269012451171875,-0.0443115234375,0.0238037109375,0.0003542900085449219,0.0833740234375,0.005901336669921875,-0.01251220703125,-0.0372314453125,-0.0479736328125,0.00843048095703125,-0.049072265625,-0.02899169921875,-0.01357269287109375,-0.01085662841796875,0.033935546875,-0.0101776123046875,0.035614013671875,0.040679931640625,0.0140380859375,-0.00540924072265625,0.02825927734375,-0.011993408203125,-0.01004791259765625,-0.01107025146484375,-0.01271820068359375,-0.0016326904296875,0.01416015625,-0.01340484619140625,-0.019195556640625,0.01953125,-0.00942230224609375,-0.037841796875,-0.04168701171875,-0.0391845703125,0.00970458984375,0.0343017578125,-0.005329132080078125,0.00618743896484375,-0.01488494873046875,0.0218963623046875,0.018829345703125,0.022796630859375,-0.01058197021484375,-0.0091552734375,0.036346435546875,0.0127716064453125,0.0001817941665649414,-0.062286376953125,-0.03131103515625,0.04193115234375,0.02825927734375,0.019378662109375,0.0355224609375,-0.00010913610458374023,0.0291290283203125,0.0213470458984375,0.031463623046875,0.042449951171875,-0.033538818359375,0.011810302734375,-0.0298004150390625,-0.052001953125,0.018096923828125,0.0162811279296875,0.052032470703125,0.0258026123046875,-0.0179443359375,0.0185394287109375,-0.05157470703125,0.033447265625,0.0204925537109375,-0.005199432373046875,-0.0145111083984375,-0.004657745361328125,-0.013092041015625,0.038421630859375,-0.01302337646484375,-0.0205078125,-0.01763916015625,-0.06787109375,-0.038116455078125,0.03143310546875,0.0309600830078125,0.01090240478515625,-0.006145477294921875,-0.0025234222412109375,0.021575927734375,0.0186004638671875,0.0209808349609375,-0.0372314453125,0.01971435546875,0.0299835205078125,0.0252685546875,0.0247650146484375,-0.0044708251953125,-0.05072021484375,0.0205078125,-0.0261077880859375,0.00168609619140625,-0.007541656494140625,-0.007415771484375,0.01464080810546875,0.0091094970703125,0.0285186767578125,-0.0012922286987304688,-0.027740478515625,0.039337158203125,-0.0037994384765625,0.035491943359375,0.0296783447265625,-0.04547119140625,-0.031494140625,-0.0050201416015625,-0.06414794921875,-0.0216064453125,0.01491546630859375,-0.00020015239715576172,-0.06353759765625,-0.0156707763671875,-0.003936767578125,0.095947265625,0.0111541748046875,-0.0114593505859375,-0.0018177032470703125,-0.036712646484375,-0.12469482421875,0.031036376953125,-0.042816162109375,0.032073974609375,-0.0024261474609375,0.0018777847290039062,-0.0275726318359375,0.029022216796875,-0.0214080810546875,0.06170654296875,0.0323486328125,-0.065185546875,0.028228759765625,0.0098114013671875,-0.0694580078125,-0.012420654296875,0.01332855224609375,-0.0016603469848632812,0.061920166015625,-0.028472900390625,-0.049468994140625,0.0018205642700195312,0.0201873779296875,-0.004604339599609375,-0.060821533203125,-0.0088653564453125,0.0178985595703125,-0.00002950429916381836,0.027587890625,-0.04449462890625,-0.0184783935546875,-0.01389312744140625,0.0015411376953125,-0.0056915283203125,0.07525634765625,0.0184783935546875,0.043670654296875,0.0171966552734375,-0.013214111328125,0.01015472412109375,0.040802001953125,0.01093292236328125,0.0131988525390625,0.05474853515625,-0.005184173583984375,0.03619384765625,0.014862060546875,-0.0228271484375,0.0012149810791015625,-0.008209228515625,-0.0012865066528320312,0.0284423828125,-0.004673004150390625,-0.001605987548828125,-0.056640625,0.0018758773803710938,0.0089263916015625,0.06878662109375,0.024200439453125,-0.003162384033203125,-0.04937744140625,-0.0307769775390625,-0.01435089111328125,-0.00687408447265625,-0.0111236572265625,-0.011322021484375,0.00954437255859375,0.028167724609375,0.04315185546875,-0.01232147216796875,0.041229248046875,-0.0021991729736328125,-0.023223876953125,-0.033477783203125,-0.015411376953125,-0.0017910003662109375,0.0165863037109375,-0.009307861328125,0.022674560546875,-0.103515625,-0.034637451171875,0.0248565673828125,-0.0188446044921875,0.0242919921875,-0.0233001708984375,-0.0579833984375,-0.03668212890625,-0.0005445480346679688,-0.00281524658203125,0.1776123046875,0.002613067626953125,0.048187255859375,0.0909423828125,0.06317138671875,0.013671875,-0.0221405029296875,0.00946044921875,0.0302734375,-0.0105743408203125,0.004093170166015625,-0.0014019012451171875,0.0265655517578125,-0.01319122314453125,-0.0302886962890625,0.033843994140625,-0.053009033203125,-0.023834228515625,0.06439208984375,-0.03131103515625,0.0028095245361328125,-0.07366943359375,-0.00945281982421875,-0.0197296142578125,-0.040771484375,-0.0189361572265625,0.008026123046875,0.05322265625,-0.027069091796875,0.06573486328125,0.033966064453125,0.01519775390625,-0.01202392578125,-0.0819091796875,0.0251007080078125,-0.0015659332275390625,-0.018157958984375,-0.0156097412109375,0.0032520294189453125,0.045562744140625,-0.041656494140625,-0.033355712890625,0.0400390625,-0.0126495361328125,-0.0036563873291015625,-0.045013427734375,0.0020732879638671875,0.0159912109375,-0.0293426513671875,-0.02874755859375,0.024169921875,0.006420135498046875,0.0204620361328125,0.0176849365234375,0.036956787109375,0.00522613525390625,-0.01708984375,-0.039276123046875,-0.039764404296875,0.0224761962890625,0.0270843505859375,-0.00815582275390625,-0.0081634521484375,0.032440185546875,-0.01202392578125,0.00734710693359375,-0.00763702392578125,0.0157928466796875,0.0087890625,0.0010652542114257812,-0.02325439453125,-0.0010976791381835938,-0.0015344619750976562,-0.007472991943359375,0.02581787109375,-0.0113372802734375,0.005176544189453125,0.006954193115234375,0.029327392578125,0.008331298828125,-0.031982421875,0.0188446044921875,0.01053619384765625,0.01306915283203125,0.0198211669921875,-0.05682373046875,-0.0110015869140625,0.03460693359375,0.009429931640625,-0.0299224853515625,0.0223236083984375,-0.0247650146484375,0.035858154296875,0.00862884521484375,0.0242462158203125,0.021484375,-0.030364990234375,0.00730133056640625,-0.032440185546875,0.00792694091796875,0.04388427734375,-0.001617431640625,-0.004734039306640625,-0.0117950439453125,0.00835418701171875,0.0275726318359375,0.052978515625,-0.01324462890625,-0.054412841796875,-0.00809478759765625,-0.0244293212890625,-0.01446533203125,0.003520965576171875,0.00986480712890625,-0.00960540771484375,0.03265380859375,0.01340484619140625,0.0005054473876953125,0.057861328125,0.00365447998046875,0.027191162109375,0.0006613731384277344,-0.01641845703125,0.0019931793212890625,0.036956787109375,-0.0186920166015625,-0.0176849365234375,-0.0169677734375,-0.07159423828125,0.051239013671875,0.024566650390625,-0.007843017578125,-0.00860595703125,-0.005100250244140625,0.0219573974609375,0.0024013519287109375,0.006214141845703125,0.021087646484375,-0.002017974853515625,-0.029388427734375,0.00897979736328125,0.01129913330078125,-0.03411865234375,0.0000540614128112793,0.019927978515625,-0.0352783203125,0.04925537109375,0.00908660888671875,-0.0010976791381835938,0.0853271484375,-0.054779052734375,0.0176849365234375,-0.02667236328125,-0.0692138671875,-0.0093994140625,-0.07855224609375,0.01275634765625,-0.0222015380859375,0.029815673828125,-0.01169586181640625,-0.00753021240234375,0.007404327392578125,-0.01091766357421875,0.053802490234375,0.0044708251953125,0.03741455078125,0.0010280609130859375,-0.0247344970703125,-0.0107269287109375,-0.026947021484375,0.043304443359375,0.0175018310546875,-0.039825439453125,0.04010009765625,0.01520538330078125,-0.0201263427734375,-0.00293731689453125,-0.0186004638671875,0.01294708251953125,-0.037841796875,0.01016998291015625,0.0239410400390625,-0.032684326171875,-0.03582763671875,-0.0156402587890625,-0.03497314453125,-0.02154541015625,-0.0150909423828125,-0.0129241943359375,-0.017852783203125,-0.04290771484375,0.07928466796875,-0.046173095703125,-0.036468505859375,0.002643585205078125,0.034423828125,-0.06341552734375,0.047393798828125,-0.0386962890625,-0.03839111328125,-0.0008664131164550781,0.098876953125,0.0169219970703125,-0.018890380859375,-0.005706787109375,-0.010986328125,-0.002277374267578125,0.027557373046875,0.006023406982421875,0.0106201171875,0.0081939697265625,0.0183258056640625,-0.0191802978515625,-0.006256103515625,0.050994873046875,-0.01226043701171875,0.0190582275390625,0.04132080078125,-0.019866943359375,-0.054656982421875,0.0097503662109375,0.020538330078125,0.00669097900390625,-0.070556640625,0.000980377197265625,0.03082275390625,0.023681640625,-0.0269622802734375,0.042266845703125,0.031951904296875,-0.0014352798461914062,-0.005893707275390625,0.0538330078125,-0.01617431640625,0.0145721435546875,-0.03875732421875,-0.036651611328125,0.03082275390625,-0.0199127197265625,0.0443115234375,-0.0238037109375,-0.017486572265625,0.04656982421875,-0.0238494873046875,0.00836944580078125,0.00904083251953125,-0.055145263671875,0.004390716552734375,0.0031681060791015625,0.01496124267578125,-0.025543212890625,0.007465362548828125,0.034912109375,-0.0207977294921875,-0.0003211498260498047,-0.0016336441040039062,0.0018301010131835938,0.0237579345703125,-0.070556640625,-0.01358795166015625,0.0228271484375,0.01549530029296875,-0.0213165283203125,-0.0190582275390625,-0.03851318359375,-0.049835205078125,0.04400634765625,0.0250701904296875,-0.0111541748046875,-0.0190582275390625,0.0184783935546875,-0.0166168212890625,-0.0771484375,-0.046142578125,0.0196380615234375,-0.0189361572265625,-0.0026645660400390625,0.005359649658203125,0.01062774658203125,0.0228118896484375,-0.0101776123046875,-0.002849578857421875,0.036468505859375,-0.01556396484375,-0.06304931640625,0.0086669921875,-0.01543426513671875,-0.0106201171875,-0.035369873046875,-0.06524658203125,0.015869140625,-0.0270843505859375,-0.0748291015625,0.045684814453125,-0.033172607421875,0.015777587890625,-0.04815673828125,-0.031158447265625,-0.00789642333984375,0.01403045654296875,0.004108428955078125,-0.0221099853515625,-0.043548583984375,-0.008209228515625,-0.039276123046875,-0.017791748046875,-0.0202178955078125,-0.04937744140625,0.022125244140625,0.017242431640625,-0.025909423828125,-0.0091400146484375,-0.00792694091796875,0.039154052734375,0.011199951171875,0.031280517578125,0.037109375,0.021636962890625,-0.007366180419921875,0.01116180419921875,0.0086212158203125,-0.0195465087890625,-0.010284423828125,-0.0304718017578125,0.01666259765625,0.016082763671875,0.004119873046875,0.007541656494140625,-0.05255126953125,0.06732177734375,-0.0210723876953125,0.01253509521484375,-0.017303466796875,0.0161285400390625,0.01806640625,-0.01551055908203125,0.056732177734375,-0.00946044921875,0.007568359375,-0.030609130859375,0.01134490966796875,-0.05389404296875,0.037872314453125,-0.01824951171875,0.0147705078125,-0.0280303955078125,0.00986480712890625,-0.00444793701171875,0.000995635986328125,0.0045318603515625,-0.00864410400390625,-0.0221405029296875,-0.01039886474609375,-0.046051025390625,0.0264892578125,0.0270843505859375,0.004993438720703125,0.04620361328125,-0.004795074462890625,0.0439453125,-0.0576171875,0.0272369384765625,0.0212249755859375,0.0396728515625,-0.01885986328125,-0.052947998046875,0.0262908935546875,0.0697021484375,-0.0107421875,-0.0239715576171875,0.00702667236328125,-0.03875732421875,-0.01319122314453125,0.056549072265625,0.020538330078125,-0.00688934326171875,0.0118255615234375,-0.07293701171875,0.05438232421875,-0.0020275115966796875,-0.054962158203125,-0.04290771484375,-0.0244293212890625,-0.0251007080078125,0.088623046875,-0.001766204833984375,-0.0159454345703125,-0.0265045166015625,0.0748291015625,-0.00304412841796875,-0.029052734375,-0.0205535888671875,-0.018310546875,0.01340484619140625,-0.149658203125,0.042694091796875,0.0308380126953125,-0.01374053955078125,-0.02099609375,-0.004425048828125,-0.015960693359375,-0.0243988037109375,0.023406982421875,-0.0038433074951171875,0.0030460357666015625,0.0022296905517578125,0.07305908203125,-0.03204345703125,0.03851318359375,0.0418701171875,-0.01490020751953125,0.0005578994750976562,0.00839996337890625,-0.0394287109375,-0.02691650390625,-0.004199981689453125,0.061126708984375,0.053192138671875,0.018646240234375,-0.01111602783203125,-0.01141357421875,0.035400390625,-0.048309326171875,0.0229339599609375,-0.0203704833984375,0.044708251953125,0.0305633544921875,0.040924072265625,0.01129150390625,0.00487518310546875,0.01113128662109375,-0.00896453857421875,-0.00675201416015625,0.00580596923828125,0.01064300537109375,0.024688720703125,-0.01495361328125,-0.0088348388671875,0.004062652587890625,0.0254058837890625,-0.00945281982421875,0.002391815185546875,0.030853271484375,-0.01209259033203125,0.00225830078125,0.005603790283203125,-0.03924560546875,0.0179443359375,-0.0034942626953125,0.002971649169921875,-0.0298919677734375,0.05120849609375,0.0202178955078125,0.043792724609375,-0.0298919677734375,-0.007904052734375,-0.0213623046875,-0.0263671875,0.0242919921875,0.00226593017578125,-0.033843994140625,-0.016845703125,-0.033050537109375,0.017578125,-0.00007075071334838867,0.046966552734375,0.04327392578125,-0.042388916015625,-0.0028171539306640625,-0.02325439453125,0.0137786865234375,0.0287322998046875,-0.0455322265625,-0.0252532958984375,-0.0286407470703125,0.0251312255859375,0.020843505859375,-0.0253143310546875,0.028076171875,0.00937652587890625,0.006160736083984375,0.01300048828125,-0.05584716796875,0.0230865478515625,-0.0792236328125,-0.0293121337890625,-0.023284912109375,-0.043853759765625,0.0179290771484375,0.0157318115234375,-0.038055419921875,0.026123046875,0.0138397216796875,-0.05865478515625,0.004726409912109375,-0.02197265625,-0.007717132568359375,0.01418304443359375,-0.01238250732421875,0.0100555419921875,0.0394287109375,-0.050689697265625,0.006427764892578125,-0.00031685829162597656,-0.0018634796142578125,-0.0259857177734375,0.00601959228515625,0.0193328857421875,-0.0595703125,-0.0021152496337890625,-0.0335693359375,0.00162506103515625,-0.0309295654296875,-0.0012187957763671875,-0.0244293212890625,-0.007442474365234375,-0.00408172607421875,-0.0380859375,0.035247802734375,0.0078582763671875,0.03778076171875,-0.00791168212890625,0.020599365234375,-0.0108642578125,-0.007205963134765625,0.0229339599609375,-0.040771484375,0.0027923583984375,0.02203369140625,-0.000052094459533691406,-0.026458740234375,0.06695556640625,0.004169464111328125,-0.01904296875,-0.023284912109375,0.032745361328125,0.01502227783203125,-0.0150299072265625,-0.02154541015625,-0.01898193359375,0.0494384765625,0.0198211669921875,-0.0186309814453125,-0.01708984375,0.01922607421875,0.033416748046875,-0.0163116455078125,0.0262908935546875,-0.0029582977294921875,-0.01360321044921875,-0.04522705078125,0.0087432861328125,0.02496337890625,0.06719970703125,-0.009765625,-0.0281524658203125,-0.007404327392578125,-0.033447265625,-0.00018584728240966797,-0.017547607421875,-0.0003216266632080078,0.005489349365234375,-0.01100921630859375,0.028167724609375,-0.006801605224609375,-0.04052734375,-0.01444244384765625,0.058258056640625,0.007076263427734375,0.016754150390625,-0.00206756591796875,-0.061004638671875,0.065673828125,0.040008544921875,0.0164794921875,0.0299530029296875,0.031463623046875,0.0281524658203125,0.008148193359375,0.04510498046875,0.028167724609375,0.01287078857421875,0.00299835205078125,-0.01434326171875,0.0174713134765625,-0.0394287109375,0.01084136962890625,0.0203399658203125,0.031494140625,0.01434326171875,-0.004634857177734375,0.03125,-0.0135955810546875,0.01194000244140625,0.0249481201171875,-0.042816162109375,-0.01552581787109375,-0.046173095703125,-0.0161590576171875,0.033447265625,0.0258026123046875,0.0032196044921875,-0.0650634765625,0.042388916015625,-0.018310546875,-0.007068634033203125,-0.010833740234375,-0.0097503662109375,-0.006870269775390625,0.056915283203125,0.06634521484375,0.0298919677734375,0.0012912750244140625,-0.032073974609375,-0.02325439453125,0.03619384765625,-0.002231597900390625,-0.01049041748046875,0.023834228515625,-0.0303192138671875,0.00487518310546875,0.011810302734375,-0.0234832763671875,-0.03369140625,0.01242828369140625,-0.056365966796875,-0.054473876953125,0.012847900390625,-0.004543304443359375,-0.007579803466796875,0.0250244140625,0.0247650146484375,-0.050872802734375,-0.0423583984375,0.08514404296875,-0.034423828125,0.036041259765625,0.01015472412109375]';
+drop procedure if exists insert_data;
+create PROCEDURE insert_data(cnt int)
+BEGIN
+DECLARE i INT DEFAULT 0;
+WHILE i < cnt do
+insert into ai_knowledge_new(record_id, knowledge_base_id, content_vector) values (cast(i as char), 176, @test_vec);
+set i = i + 1;
+end while;
+END |
+call insert_data(50);
+SELECT  /*+PARALLEL(8) */ cosine_similarity(`content_vector`, @test_vec )=0 FROM ai_knowledge_new  ak where knowledge_base_id in ('176') order BY cosine_distance(`content_vector`, @test_vec ) APPROXIMATE LIMIT 100;
+cosine_similarity(`content_vector`, @test_vec )=0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+drop table if exists ai_knowledge_new;
+drop procedure insert_data;
+drop table if exists t1;

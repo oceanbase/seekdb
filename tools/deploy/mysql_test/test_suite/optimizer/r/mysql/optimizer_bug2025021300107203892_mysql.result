@@ -1,0 +1,86 @@
+drop table if exists temp_table_1;
+drop table if exists t6;
+result_format: 4
+CREATE TABLE `t6` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` int(11) DEFAULT NULL,
+  `c4` varchar(100) DEFAULT NULL,
+  `c5` text DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  KEY `idx1` (`c2`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `idx2` (`c3`) BLOCK_SIZE 16384 LOCAL
+) partition by hash(c1)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`,
+partition `p4`,
+partition `p5`,
+partition `p6`,
+partition `p7`,
+partition `p8`,
+partition `p9`);
+
+CREATE TABLE `temp_table_1` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` int(11) DEFAULT NULL,
+  `c4` varchar(100) DEFAULT NULL,
+  `c5` text DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  KEY `idx1` (`c2`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `idx2` (`c3`) BLOCK_SIZE 16384 LOCAL
+) partition by hash(c1)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`,
+partition `p4`,
+partition `p5`,
+partition `p6`,
+partition `p7`,
+partition `p8`,
+partition `p9`);
+
+explain basic insert /*+ direct(true,0,'full') enable_parallel_dml parallel(10) */ into temp_table_1 select * from t6;
+Query Plan
+===========================================================
+|ID|OPERATOR                              |NAME           |
+-----------------------------------------------------------
+|0 |PX COORDINATOR                        |               |
+|1 |└─EXCHANGE OUT DISTR                  |:EX10001       |
+|2 |  └─INSERT                            |               |
+|3 |    └─EXCHANGE IN DISTR               |               |
+|4 |      └─EXCHANGE OUT DISTR (PKEY HASH)|:EX10000       |
+|5 |        └─SUBPLAN SCAN                |ANONYMOUS_VIEW1|
+|6 |          └─PX BLOCK ITERATOR         |               |
+|7 |            └─TABLE FULL SCAN         |t6             |
+===========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil), rowset=16
+  1 - output(nil), filter(nil), rowset=16
+      dop=10
+  2 - output(nil), filter(nil), rowset=16
+      columns([{temp_table_1: ({temp_table_1: (temp_table_1.c1, temp_table_1.c2, temp_table_1.c3, temp_table_1.c4, temp_table_1.c5)})}]), partitions(p[0-9]),
+
+      column_values([column_conv(INT,PS:(11,0),NOT NULL,ANONYMOUS_VIEW1.c1)], [column_conv(INT,PS:(11,0),NULL,ANONYMOUS_VIEW1.c2)], [column_conv(INT,PS:(11,
+      0),NULL,ANONYMOUS_VIEW1.c3)], [column_conv(VARCHAR,utf8mb4_general_ci,length:100,NULL,ANONYMOUS_VIEW1.c4)], [column_conv(TEXT,utf8mb4_general_ci,length:65535,
+      NULL,ANONYMOUS_VIEW1.c5)])
+  3 - output([PARTITION_ID], [column_conv(INT,PS:(11,0),NOT NULL,ANONYMOUS_VIEW1.c1)], [ANONYMOUS_VIEW1.c2], [ANONYMOUS_VIEW1.c3], [ANONYMOUS_VIEW1.c4],
+       [ANONYMOUS_VIEW1.c5]), filter(nil), rowset=16
+  4 - output([PARTITION_ID], [column_conv(INT,PS:(11,0),NOT NULL,ANONYMOUS_VIEW1.c1)], [ANONYMOUS_VIEW1.c2], [ANONYMOUS_VIEW1.c3], [ANONYMOUS_VIEW1.c4],
+       [ANONYMOUS_VIEW1.c5]), filter(nil), rowset=16
+      (#keys=1, [column_conv(INT,PS:(11,0),NOT NULL,ANONYMOUS_VIEW1.c1)]), dop=10
+  5 - output([ANONYMOUS_VIEW1.c1], [ANONYMOUS_VIEW1.c2], [ANONYMOUS_VIEW1.c3], [ANONYMOUS_VIEW1.c4], [ANONYMOUS_VIEW1.c5]), filter(nil), rowset=16
+      access([ANONYMOUS_VIEW1.c1], [ANONYMOUS_VIEW1.c2], [ANONYMOUS_VIEW1.c3], [ANONYMOUS_VIEW1.c4], [ANONYMOUS_VIEW1.c5])
+  6 - output([t6.c1], [t6.c2], [t6.c3], [t6.c4], [t6.c5]), filter(nil), rowset=16
+  7 - output([t6.c1], [t6.c2], [t6.c3], [t6.c4], [t6.c5]), filter(nil), rowset=16
+      access([t6.c1], [t6.c2], [t6.c3], [t6.c4], [t6.c5]), partitions(p[0-9])
+      is_index_back=false, is_global_index=false,
+      range_key([t6.c1]), range(MIN ; MAX)always true
+insert /*+ direct(true,0,'full') enable_parallel_dml parallel(10) */ into temp_table_1 select * from t6;
+
+drop table if exists temp_table_1;
+drop table if exists t6;

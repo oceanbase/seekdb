@@ -1,0 +1,42 @@
+# owner: wenyu.ffz
+# owner group: RS
+# tags: rs
+# description:
+# test that the parallel comment is not affect comment in oracle
+
+connect (mysql,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+
+--disable_query_log
+--disable_warnings
+--disable_result_log
+--disable_abort_on_error
+
+drop table table_mysql;
+
+--enable_query_log
+--enable_warnings
+--enable_result_log
+--enable_abort_on_error
+
+# comment in mysql should as the same as the past
+
+create table table_mysql (col1 int comment 'test comment in mysql table col1', col2 int comment 'test comment in mysql table col2') comment 'test comment in mysql table';
+select table_name, table_comment from information_schema.tables where table_name = 'table_mysql';
+select column_name, column_comment from information_schema.columns where table_name = 'table_mysql';
+
+alter table table_mysql comment 'test comment in mysql table alter';
+select table_name, table_comment from information_schema.tables where table_name = 'table_mysql';
+
+alter table table_mysql change column col1 col1 int comment 'test comment in mysql table col1 change';
+select column_name, column_comment from information_schema.columns where table_name = 'table_mysql';
+
+alter table table_mysql modify column col1 int comment 'test comment in mysql table col1 modify';
+select column_name, column_comment from information_schema.columns where table_name = 'table_mysql';
+
+--disable_query_log
+--disable_warnings
+--disable_result_log
+drop table table_mysql;
+--enable_query_log
+--enable_warnings
+--enable_result_log

@@ -1,0 +1,22 @@
+create table table_mysql (col1 int comment 'test comment in mysql table col1', col2 int comment 'test comment in mysql table col2') comment 'test comment in mysql table';
+select table_name, table_comment from information_schema.tables where table_name = 'table_mysql';
+table_name	table_comment
+table_mysql	test comment in mysql table
+select column_name, column_comment from information_schema.columns where table_name = 'table_mysql';
+column_name	column_comment
+col1	test comment in mysql table col1
+col2	test comment in mysql table col2
+alter table table_mysql comment 'test comment in mysql table alter';
+select table_name, table_comment from information_schema.tables where table_name = 'table_mysql';
+table_name	table_comment
+table_mysql	test comment in mysql table alter
+alter table table_mysql change column col1 col1 int comment 'test comment in mysql table col1 change';
+select column_name, column_comment from information_schema.columns where table_name = 'table_mysql';
+column_name	column_comment
+col1	test comment in mysql table col1 change
+col2	test comment in mysql table col2
+alter table table_mysql modify column col1 int comment 'test comment in mysql table col1 modify';
+select column_name, column_comment from information_schema.columns where table_name = 'table_mysql';
+column_name	column_comment
+col1	test comment in mysql table col1 modify
+col2	test comment in mysql table col2

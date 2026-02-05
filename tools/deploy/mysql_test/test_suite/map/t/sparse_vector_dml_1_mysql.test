@@ -1,0 +1,30 @@
+#owner: lb446709
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of sparse vector dml
+--echo # ----------------------------------------------------------------------
+
+--disable_warnings
+drop table if exists test_sparse_vec_tbl;
+--enable_warnings
+
+# 无主键
+create table test_sparse_vec_tbl (
+  id int, c1 bool, c2 int, c3 decimal, c4 float, c5 bit,
+  c6 date, c7 varchar(10), c8 text, c9 json, c10 GEOMETRY,
+  c11 array(int), c12 vector(3), c13 map(int, int), c14 sparsevector);
+--source sparse_vec_dml.inc
+
+# 带主键
+create table test_sparse_vec_tbl (
+  id int primary key, c1 bool, c2 int, c3 decimal, c4 float, c5 bit,
+  c6 date, c7 varchar(10), c8 text, c9 json, c10 GEOMETRY,
+  c11 array(int), c12 vector(3), c13 map(int, int), c14 sparsevector);
+--source sparse_vec_dml.inc
+
+# hash分区
+create table test_sparse_vec_tbl (
+  id int primary key, c1 bool, c2 int, c3 decimal, c4 float, c5 bit,
+  c6 date, c7 varchar(10), c8 text, c9 json, c10 GEOMETRY,
+  c11 array(int), c12 vector(3), c13 map(int, int), c14 sparsevector) partition by hash(id) partitions 3;
+--source sparse_vec_dml.inc

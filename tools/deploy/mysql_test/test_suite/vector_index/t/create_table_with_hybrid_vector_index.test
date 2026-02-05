@@ -1,0 +1,497 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner : xiongjingpan.xjp
+#owner group: shenzhen
+#description: basic test ob create table with hybrid vector index
+
+--disable_warnings
+drop database if exists xjp_vec;
+create database xjp_vec;
+use xjp_vec;
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ob_embed', '{
+    "type": "dense_embedding",
+    "model_name": "bge-M3"
+  }');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'ob_embed_endpoint', '{
+    "ai_model_name": "ob_embed",
+    "scope": "all",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "bge-M3",
+    "provider": "openai"
+  }');
+
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS;
+select ENDPOINT_NAME, AI_MODEL_NAME, PROVIDER, REQUEST_MODEL_NAME from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS;
+
+alter system set ob_vector_memory_limit_percentage = 20;
+
+--echo
+--echo
+--echo "------------------------------- not support hybrid vec index and fts in same table -------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate), fulltext index vec_idx2(c3));
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+# create vector index vec_idx1 on t_vec(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate);
+create fulltext index vec_idx2 on t_vec(c3);
+create vector index vec_idx3 on t_vec(c4) with (distance=l2, type=hnsw);
+create index vec_idx4 on t_vec(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table t_vec;
+
+--echo
+--echo
+--echo "---------------------------------not support hybrid vector index without varchar -------------------------------"
+drop table if exists t_vec;
+--error 7601
+create table t_vec(c1 int, c2 string, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+--error 7601
+create table t_vec(c1 int, c2 text(32), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+
+--echo
+--echo
+--echo "---------------------------------not support multi index column --------------------------------------------------------"
+drop table if exists t_vec;
+--error 1235
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c1,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+--error 1235
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c2,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+# create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1));
+# --error 1235
+# create vector index vec_idx1 on t_vec(c2,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate);
+# --error 1235
+# create vector index vec_idx1 on t_vec(c1,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate);
+
+# --echo
+# --echo
+# --echo "---------------------------------not support more than one vector index on same column -----------------------------------"
+# drop table if exists t_vec;
+# --error 1235
+# create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 vector(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate), vector index vec_idx2(c3) with (distance=l2, type=hnsw));
+# --error 1235
+# create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 vector(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate), vector index vec_idx2(c3) with (distance=l2, type=hnsw), vector index vec_idx3(c4) with (distance=l2, type=hnsw));
+# create table t_vec(c1 int, c2 varchar(3), c3 vector(3), primary key(c1));
+# create vector index vec_idx1 on t_vec(c2) with (distance=l2, type=hnsw);
+# --error 1235
+# create vector index vec_idx2 on t_vec(c2) with (distance=l2, type=hnsw);
+# create vector index vec_idx3 on t_vec(c3) with (distance=l2, type=hnsw);
+
+--echo
+--echo
+--echo "-------------------------------------not support same index name ----------------------------------------------------------"
+drop table if exists t_vec;
+--error 1061
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), index vec_idx1(c4), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+--error 1061
+create index vec_idx1 on t_vec(c4);
+# --error 1061
+# create vector index vec_idx1 on t_vec(c3) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "------------------------------------- support more than one hybrid vector index ----------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int primary key, c2 varchar(100), c3 varchar(3),vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate),vector index vec_idx2(c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+show index from t_vec;
+delete from t_vec;
+
+# for invalid statement
+echo "-------------------------------------------- invalid statement ------------------------------------------------";
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+--error 7601
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=100));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m1=100));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1001));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=160001));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l3, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=xxx, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance1=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib1=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type1=hnsw, m=64, ef_construction=1000, ef_search=1000));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=endpoint_name));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, dim=1024));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=5000));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=0));
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=10000));
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=0));
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=abc));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, endpoint1=ob_embed, dim=1024, sync_mode=immediate));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim1=1024, sync_mode=manual));
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode1=async));
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10));
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=0s));
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10g));
+--error 1235
+CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed));
+
+# 不支持storing column
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
+
+# with column group
+--error 1064
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column));
+--error 1064
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column));
+--error 1064
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column));
+
+# show create table/index
+echo "------------------------------------------ show create table -------------------------------------------------------";
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=inner_product, type=hnsw, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=cosine, type=hnsw, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 vector(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024), vector index vec_idx2(c3) with (distance=L2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=async, sync_interval=20s));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=manual));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# partition table
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) partition by hash(id) partitions 2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int, c1 int, c2 varchar(100),  primary key (id, c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) partition by hash(id) SUBPARTITION BY HASH (c1) partitions 2;
+
+# extra info
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, extra_info_max_size=1, model=ob_embed, dim=1024, sync_mode=manual));
+
+# rename index
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, model=ob_embed, dim=1024, sync_mode=immediate));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+--replace_regex /__idx_[0-9]*/__vec_idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%_vec_idx1%";
+ALTER TABLE t_vec RENAME INDEX vec_idx1 TO new_vec_idx;
+--replace_regex /__idx_[0-9]*/__vec_idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%new_vec_idx%";
+
+# for ORGANIZATION HEAP table
+--echo
+--echo
+--echo "------------------------------- not support hybrid vec index and fts in same table -------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate), fulltext index vec_idx2(c3)) ORGANIZATION HEAP;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+# create vector index vec_idx1 on t_vec(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate);
+create fulltext index vec_idx2 on t_vec(c3);
+create vector index vec_idx3 on t_vec(c4) with (distance=l2, type=hnsw);
+create index vec_idx4 on t_vec(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table t_vec;
+
+--echo
+--echo
+--echo "---------------------------------not support hybrid vector index without varchar -------------------------------"
+drop table if exists t_vec;
+--error 7601
+create table t_vec(c1 int, c2 string, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--error 7601
+create table t_vec(c1 int, c2 text(32), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+
+--echo
+--echo
+--echo "---------------------------------not support multi index column --------------------------------------------------------"
+drop table if exists t_vec;
+--error 1235
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c1,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c2,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+
+--echo
+--echo
+--echo "-------------------------------------not support same index name ----------------------------------------------------------"
+drop table if exists t_vec;
+--error 1061
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), index vec_idx1(c4), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--error 1061
+create index vec_idx1 on t_vec(c4);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "------------------------------------- support more than one hybrid vector index ----------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int primary key, c2 varchar(100), c3 varchar(3),vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate),vector index vec_idx2(c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+show index from t_vec;
+delete from t_vec;
+
+# for invalid statement
+echo "-------------------------------------------- invalid statement ------------------------------------------------";
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+--error 7601
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=100)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m1=100)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1001)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=160001)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l3, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=xxx, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance1=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib1=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type1=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=endpoint_name)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, dim=1024)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=5000)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=0)) ORGANIZATION HEAP;
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=10000)) ORGANIZATION HEAP;
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=0)) ORGANIZATION HEAP;
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=abc)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, endpoint1=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim1=1024, sync_mode=manual)) ORGANIZATION HEAP;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode1=async)) ORGANIZATION HEAP;
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10)) ORGANIZATION HEAP;
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=0s)) ORGANIZATION HEAP;
+--error 1210
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10g)) ORGANIZATION HEAP;
+--error 1235
+CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed)) ORGANIZATION HEAP;
+
+# 不支持storing column
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+
+# with column group
+--error 1064
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column)) ORGANIZATION HEAP;
+--error 1064
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column)) ORGANIZATION HEAP;
+--error 1064
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column)) ORGANIZATION HEAP;
+
+# show create table/index
+echo "------------------------------------------ show create table -------------------------------------------------------";
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=inner_product, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=cosine, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 vector(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024), vector index vec_idx2(c3) with (distance=L2, type=hnsw)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=async, sync_interval=20s)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=manual)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# partition table
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP partition by hash(id) partitions 2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int, c1 int, c2 varchar(100),  primary key (id, c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP partition by hash(id) SUBPARTITION BY HASH (c1) partitions 2;
+
+# extra info
+drop table if exists t_vec;
+--error 1235
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, extra_info_max_size=1, model=ob_embed, dim=1024, sync_mode=manual)) ORGANIZATION HEAP;
+
+# rename index
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+--replace_regex /__idx_[0-9]*/__vec_idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%_vec_idx1%";
+ALTER TABLE t_vec RENAME INDEX vec_idx1 TO new_vec_idx;
+--replace_regex /__idx_[0-9]*/__vec_idx_vec/g
+select table_name from oceanbase.__all_table where table_name like "%new_vec_idx%";
+
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ob_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ob_embed_endpoint');
+
+drop table if exists t_vec;
+drop database if exists xjp_vec;

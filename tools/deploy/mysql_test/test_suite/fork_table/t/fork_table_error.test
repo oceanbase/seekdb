@@ -1,0 +1,360 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table错误处理测试
+##tags: fork_table error
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_error;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_error;
+use db_fork_error;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo ============================================
+--echo 1. Fork不存在的表
+--echo ============================================
+
+drop table if exists t_not_exist;
+drop table if exists t_fork;
+
+--error 1146
+fork table t_not_exist to t_fork;
+
+--echo ============================================
+--echo 2. Fork到已存在的表
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+
+create table t1 (
+    id int primary key,
+    name varchar(50)
+);
+
+create table t1_fork (
+    id int primary key,
+    name varchar(50)
+);
+
+--error 1050
+fork table t1 to t1_fork;
+
+drop table if exists t1_fork;
+
+--echo ============================================
+--echo 3. Fork表名冲突
+--echo ============================================
+
+drop table if exists t2;
+drop table if exists t2;
+
+create table t2 (
+    id int primary key,
+    name varchar(50)
+);
+
+--error 1050
+fork table t2 to t2;
+
+--echo ============================================
+--echo 4. Fork系统表（不支持）
+--echo ============================================
+
+--error 1347
+fork table oceanbase.__all_table to __all_table;
+
+--echo ============================================
+--echo 5. Fork视图（不支持）
+--echo ============================================
+
+drop table if exists t3;
+drop view if exists v3;
+drop table if exists v3_fork;
+
+create table t3 (
+    id int primary key,
+    name varchar(50)
+);
+
+create view v3 as select * from t3;
+
+--error 1347
+fork table v3 to v3_fork;
+
+--echo ============================================
+--echo 6. Fork表名包含特殊字符
+--echo ============================================
+
+drop table if exists t4;
+drop table if exists `t4-fork`;
+
+create table t4 (
+    id int primary key,
+    name varchar(50)
+);
+
+--echo # 使用反引号处理特殊字符
+fork table t4 to `t4-fork`;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table `t4-fork`;
+
+drop table if exists `t4-fork`;
+
+--echo ============================================
+--echo 7. Fork表跨数据库
+--echo ============================================
+
+drop database if exists db_fork_error2;
+create database db_fork_error2;
+
+drop table if exists t5;
+drop table if exists db_fork_error2.t5_fork;
+
+create table t5 (
+    id int primary key,
+    name varchar(50)
+);
+
+--echo # Fork到不同数据库
+fork table t5 to db_fork_error2.t5_fork;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table db_fork_error2.t5_fork;
+
+drop table if exists db_fork_error2.t5_fork;
+drop database if exists db_fork_error2;
+
+--echo ============================================
+--echo 8. Fork表语法错误
+--echo ============================================
+
+drop table if exists t6;
+
+create table t6 (
+    id int primary key,
+    name varchar(50)
+);
+
+--error 1064
+fork table t6_fork from t6;
+
+--error 1064
+fork t6_fork to t6;
+
+--error 1064
+fork table t6_fork;
+
+--echo ============================================
+--echo 9. Fork临时表（不支持）
+--echo ============================================
+
+drop table if exists t9_tmp;
+drop table if exists t9_tmp_fork;
+
+--error 1235
+create temporary table t9_tmp (
+    id int primary key,
+    name varchar(50)
+);
+
+--echo ============================================
+--echo 10. Fork parent/child table（支持，但不复制外键信息）
+--echo ============================================
+
+drop table if exists t10_fk_child;
+drop table if exists t10_fk_parent;
+drop table if exists t10_fk_parent_fork;
+drop table if exists t10_fk_child_fork;
+
+create table t10_fk_parent (
+    id int primary key,
+    name varchar(50)
+);
+
+create table t10_fk_child (
+    id int primary key,
+    parent_id int,
+    constraint fk_t10 foreign key (parent_id) references t10_fk_parent(id)
+);
+
+fork table t10_fk_parent to t10_fk_parent_fork;
+fork table t10_fk_child to t10_fk_child_fork;
+
+--echo # 验证：源表 child 有外键，fork 后 child 不包含外键
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t10_fk_child;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t10_fk_child_fork;
+
+--echo # 行为验证：如果 fork 后没有外键，child_fork 可插入非法 parent_id
+insert into t10_fk_child_fork values (1, 999);
+select * from t10_fk_child_fork order by id;
+
+--echo ============================================
+--echo 11. Fork to mock parent table（不支持）
+--echo ============================================
+
+set foreign_key_checks = off;
+drop table if exists t11_mock_fk_child;
+drop table if exists t11_mock_fk_parent;
+drop table if exists t11_mock_fk_parent_fork;
+
+create table t11_mock_fk_child (
+    id int primary key,
+    parent_id int,
+    constraint fk_t11 foreign key (parent_id) references t11_mock_fk_parent(id)
+);
+set foreign_key_checks = on;
+
+drop table if exists t11_mock_fk_src;
+create table t11_mock_fk_src(id int primary key);
+
+--error 1235
+fork table t11_mock_fk_src to t11_mock_fk_parent;
+
+--echo ============================================
+--echo 12. Fork trigger table（支持，但不复制trigger信息）
+--echo ============================================
+
+drop table if exists t12_trig;
+drop table if exists t12_trig_fork;
+
+create table t12_trig (
+    id int primary key,
+    c1 int
+);
+
+create trigger tri_bi before insert on t12_trig for each row set new.c1 = new.c1 + 1;
+
+fork table t12_trig to t12_trig_fork;
+
+--echo # 验证：源表有 trigger，插入时会改写数据
+insert into t12_trig values (1, 1);
+select * from t12_trig order by id;
+
+--echo # 验证：fork 表不带 trigger，插入不改写数据
+insert into t12_trig_fork values (1, 1);
+select * from t12_trig_fork order by id;
+
+--echo ============================================
+--echo 13. Fork语义索引表（不支持）
+--echo ============================================
+
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT ('ob_embed_endpoint');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('ob_embed');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ob_embed', '{
+    "type": "dense_embedding",
+    "model_name": "qwen3-embedding"
+  }');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'ob_embed_endpoint', '{
+    "ai_model_name": "ob_embed",
+    "scope": "all",
+    "url": "fork_table_error",
+    "access_key": "fork_table_error",
+    "request_model_name": "fork_table_error",
+    "provider": "OPENAI"
+  }');
+
+drop table if exists t13_semantic;
+drop table if exists t13_semantic_fork;
+
+create table t13_semantic (
+    id int primary key,
+    doc varchar(100),
+    vector index idx1(doc) with (distance=L2,type=hnsw,dim=1024,model=ob_embed,sync_mode=IMMEDIATE)
+);
+
+--error 1235
+fork table t13_semantic to t13_semantic_fork;
+
+--echo ============================================
+--echo 14. Fork IVF索引表（不支持）
+--echo ============================================
+
+drop table if exists t14_ivf;
+drop table if exists t14_ivf_fork;
+
+create table t14_ivf (
+    id int primary key,
+    vec vector(3),
+    vector index idx1(vec) with (distance=L2,type=ivf_flat)
+);
+
+--error 1235
+fork table t14_ivf to t14_ivf_fork;
+
+--echo ============================================
+--echo 15. Fork空间索引表（不支持）
+--echo ============================================
+
+drop table if exists t15_spatial;
+drop table if exists t15_spatial_fork;
+
+create table t15_spatial (
+    id int primary key,
+    g geometry not null,
+    spatial index idx_g (g)
+);
+
+--error 1235
+fork table t15_spatial to t15_spatial_fork;
+
+--echo ============================================
+--echo 16. Fork带全局索引的分区表（不支持）
+--echo ============================================
+
+drop table if exists t16_gidx;
+drop table if exists t16_gidx_fork;
+
+create table t16_gidx (
+    id int primary key,
+    c1 int
+) partition by range (id) (
+    partition p0 values less than (10),
+    partition p1 values less than (20)
+);
+
+create index idx_c1 on t16_gidx(c1) global partition by hash(c1) partitions 4;
+
+--error 1235
+fork table t16_gidx to t16_gidx_fork;
+
+--echo ============================================
+--echo 17. 清理
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop view if exists v3;
+drop table if exists t4;
+drop table if exists t5;
+drop table if exists t6;
+drop table if exists t10_fk_child;
+drop table if exists t10_fk_parent;
+drop table if exists t10_fk_parent_fork;
+drop table if exists t10_fk_child_fork;
+drop table if exists t11_mock_fk_child;
+drop table if exists t11_mock_fk_src;
+drop table if exists t12_trig;
+drop table if exists t12_trig_fork;
+drop table if exists t13_semantic;
+drop table if exists t14_ivf;
+drop table if exists t15_spatial;
+drop table if exists t16_gidx;
+drop database if exists db_fork_error;

@@ -1,0 +1,58 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table snapshot相关测试
+##tags: fork_table snapshot
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_snapshot;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_snapshot;
+use db_fork_snapshot;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo ============================================
+--echo 1. snapshot_gc_scn 锁冲突（NOWAIT）重试直到释放
+--echo ============================================
+
+drop table if exists t1_src;
+drop table if exists t1_dst;
+
+create table t1_src (
+    id int primary key,
+    name varchar(50)
+);
+
+connect (lock_conn,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection lock_conn;
+start transaction;
+select count(*) from __all_core_table where TABLE_NAME = '__all_global_stat' and COLUMN_NAME = 'snapshot_gc_scn' for update;
+
+connection default;
+SET ob_query_timeout = 10000000;
+--send fork table t1_src to t1_dst;
+
+connection lock_conn;
+--sleep 2
+rollback;
+disconnect lock_conn;
+
+connection default;
+--reap
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+show create table t1_dst;
+SET ob_query_timeout = 100000000;
+
+--echo ============================================
+--echo 2. 清理
+--echo ============================================
+
+drop table if exists t1_src;
+drop table if exists t1_dst;
+drop database if exists db_fork_snapshot;

@@ -1,0 +1,60 @@
+drop materialized view log on t1;
+DROP TABLE IF EXISTS t1;
+CREATE TABLE t1 (
+id int primary key,
+name varchar(10),
+age int
+);
+create materialized view log on t1 with primary key (age) including new values;
+insert into t1 values (1, 'Lucy', 21), (2, 'Tommy', 24), (3, 'Jack', 30), (4, 'May', 22), (5, 'Rose', 23), (6, 'Grace', 34), (7, 'Nancy', 24), (8, 'Jones', 32), (9, 'Jerry', 23), (10, 'Marry', 25);
+call dbms_stats.gather_table_stats('TEST', 'MLOG$_T1', method_opt=>'for all columns size 64', estimate_percent=>100);
+explain extended_noaddr select * from mlog$_t1;
+Query Plan
+===================================================
+|ID|OPERATOR       |NAME    |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------
+|0 |TABLE FULL SCAN|mlog$_t1|10      |3           |
+===================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([mlog$_t1.id], [mlog$_t1.age], [mlog$_t1.SEQUENCE$$], [mlog$_t1.DMLTYPE$$], [mlog$_t1.OLD_NEW$$]), filter(nil), rowset=16
+      access([mlog$_t1.id], [mlog$_t1.SEQUENCE$$], [mlog$_t1.age], [mlog$_t1.DMLTYPE$$], [mlog$_t1.OLD_NEW$$]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([mlog$_t1.id], [mlog$_t1.SEQUENCE$$]), range(MIN,MIN ; MAX,MAX)always true
+Used Hint:
+-------------------------------------
+  /*+
+
+  */
+Qb name trace:
+-------------------------------------
+  stmt_id:0, stmt_type:T_EXPLAIN
+  stmt_id:1, SEL$1
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "test"."mlog$_t1"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('')
+      END_OUTLINE_DATA
+  */
+Optimization Info:
+-------------------------------------
+  mlog$_t1:
+      table_rows:10
+      physical_range_rows:10
+      logical_range_rows:10
+      index_back_rows:0
+      output_rows:10
+      table_dop:1
+      dop_method:Table DOP
+      avaiable_index_name:[mlog$_t1]
+      stats info:[version=stat_version, is_locked=0, is_expired=0]
+      dynamic sampling level:0
+      estimation method:[OPTIMIZER STATISTICS, STORAGE]
+  Plan Type:
+      LOCAL
+  Note:
+      Degree of Parallelisim is 1 because of table property
+drop materialized view log on t1;
+drop table t1;

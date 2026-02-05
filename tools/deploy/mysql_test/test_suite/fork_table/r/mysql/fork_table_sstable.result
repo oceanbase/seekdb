@@ -1,0 +1,317 @@
+drop database if exists db_fork_sstable;
+create database db_fork_sstable;
+use db_fork_sstable;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+# 启用debug sync
+alter system set debug_sync_timeout = '120s';
+set ob_global_debug_sync = 'reset';
+# 加速major freeze
+alter system set merger_check_interval = '10s' tenant sys;
+alter system set ob_compaction_schedule_interval = '3s' tenant sys;
+============================================
+Case 1: Fork表与混合SSTable（Major + Minor + Memtable）
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_sstable.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_sstable.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50),
+value int,
+large_data text
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+# Step 1: 插入数据并触发major freeze（产生Major SSTable）
+insert into t1 values (1, 'Major_P0_1', 100, repeat('A', 500));
+insert into t1 values (101, 'Major_P1_1', 200, repeat('B', 500));
+alter system major freeze;
+# Step 2: 插入数据并触发minor freeze（产生Minor SSTable）
+insert into t1 values (2, 'Minor_P0_1', 300, repeat('C', 500));
+insert into t1 values (102, 'Minor_P1_1', 400, repeat('D', 500));
+alter system minor freeze;
+# Step 3: 插入数据到Memtable（未冻结）
+insert into t1 values (3, 'Memtable_P0_1', 500, repeat('E', 500));
+insert into t1 values (103, 'Memtable_P1_1', 600, repeat('F', 500));
+# Step 4: Fork表
+fork table t1 to t1_fork;
+# 验证Fork表数据完整性
+select count(*) as src_cnt from t1;
+src_cnt
+6
+select count(*) as fork_cnt from t1_fork;
+fork_cnt
+6
+select id, name, value, length(large_data) as data_len from t1 order by id;
+id	name	value	data_len
+1	Major_P0_1	100	500
+2	Minor_P0_1	300	500
+3	Memtable_P0_1	500	500
+101	Major_P1_1	200	500
+102	Minor_P1_1	400	500
+103	Memtable_P1_1	600	500
+select id, name, value, length(large_data) as data_len from t1_fork order by id;
+id	name	value	data_len
+1	Major_P0_1	100	500
+2	Minor_P0_1	300	500
+3	Memtable_P0_1	500	500
+101	Major_P1_1	200	500
+102	Minor_P1_1	400	500
+103	Memtable_P1_1	600	500
+# 验证COW：同时在源表和Fork表插入新数据
+insert into t1 values (4, 'NewData_Src', 700, repeat('G', 500));
+insert into t1_fork values (5, 'NewData_Fork', 800, repeat('H', 500));
+select count(*) as src_cnt from t1;
+src_cnt
+7
+select count(*) as fork_cnt from t1_fork;
+fork_cnt
+7
+# 验证COW：同时在源表和Fork表修改数据
+update t1 set large_data = repeat('X', 1000) where id = 1;
+update t1_fork set large_data = repeat('Z', 1000) where id = 1;
+select id, name, length(large_data) as data_len, substring(large_data, 1, 10) as preview from t1 where id = 1;
+id	name	data_len	preview
+1	Major_P0_1	1000	XXXXXXXXXX
+select id, name, length(large_data) as data_len, substring(large_data, 1, 10) as preview from t1_fork where id = 1;
+id	name	data_len	preview
+1	Major_P0_1	1000	ZZZZZZZZZZ
+# 验证数据隔离：源表和Fork表各自独立
+select id, name, value from t1 order by id;
+id	name	value
+1	Major_P0_1	100
+2	Minor_P0_1	300
+3	Memtable_P0_1	500
+4	NewData_Src	700
+101	Major_P1_1	200
+102	Minor_P1_1	400
+103	Memtable_P1_1	600
+select id, name, value from t1_fork order by id;
+id	name	value
+1	Major_P0_1	100
+2	Minor_P0_1	300
+3	Memtable_P0_1	500
+5	NewData_Fork	800
+101	Major_P1_1	200
+102	Minor_P1_1	400
+103	Memtable_P1_1	600
+============================================
+Case 2: Fork过程中（BUILD_DATA阶段）执行混合SSTable操作
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_sstable.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_sstable.t2_fork'
+create table t2 (
+id int primary key,
+name varchar(50),
+value int,
+large_data text
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+# 准备初始数据
+insert into t2 values (1, 'Init_P0_1', 100, repeat('A', 500));
+insert into t2 values (101, 'Init_P1_1', 200, repeat('B', 500));
+# 设置debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for build_data_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t2 to t2_fork;
+# 在BUILD_DATA阶段同时对源表和Fork表执行混合SSTable操作
+# Step 1: 同时在源表和Fork表插入数据并触发major freeze
+insert into t2 values (2, 'Major_P0_1', 300, repeat('C', 500));
+insert into t2 values (102, 'Major_P1_1', 400, repeat('D', 500));
+insert into t2_fork values (10, 'Fork_Major_P0', 1000, repeat('M', 500));
+alter system major freeze;
+# Step 2: 同时在源表和Fork表插入数据并触发minor freeze
+insert into t2 values (3, 'Minor_P0_1', 500, repeat('E', 500));
+insert into t2 values (103, 'Minor_P1_1', 600, repeat('F', 500));
+insert into t2_fork values (11, 'Fork_Minor_P0', 1100, repeat('N', 500));
+alter system minor freeze;
+# Step 3: 同时在源表和Fork表插入Memtable数据
+insert into t2 values (4, 'Memtable_P0_1', 700, repeat('G', 500));
+insert into t2 values (104, 'Memtable_P1_1', 800, repeat('H', 500));
+insert into t2_fork values (12, 'Fork_Mem_P0', 1200, repeat('O', 500));
+# Step 4: 同时更新源表和Fork表已有数据
+update t2 set value = 999 where id = 1;
+update t2_fork set value = 888 where id = 1;
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal build_data_signal';
+# 等待Fork和合并完成
+# 验证源表和Fork表数据
+select count(*) as src_cnt from t2;
+src_cnt
+8
+select count(*) as fork_cnt from t2_fork;
+fork_cnt
+5
+select id, name, value from t2 order by id;
+id	name	value
+1	Init_P0_1	999
+2	Major_P0_1	300
+3	Minor_P0_1	500
+4	Memtable_P0_1	700
+101	Init_P1_1	200
+102	Major_P1_1	400
+103	Minor_P1_1	600
+104	Memtable_P1_1	800
+select id, name, value from t2_fork order by id;
+id	name	value
+1	Init_P0_1	888
+10	Fork_Major_P0	1000
+11	Fork_Minor_P0	1100
+12	Fork_Mem_P0	1200
+101	Init_P1_1	200
+# 验证COW：继续在两个表上操作
+update t2_fork set value = 7777 where id = 1;
+update t2 set value = 6666 where id = 1;
+select id, value from t2 where id = 1;
+id	value
+1	6666
+select id, value from t2_fork where id = 1;
+id	value
+1	7777
+============================================
+Case 3: Snapshot保护测试（undo_retention=0时SSTable不被回收）
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_sstable.t3'
+drop table if exists t3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_sstable.t3_fork'
+# 设置undo_retention=0（核心前置条件）
+# undo_retention=0意味着系统不保留旧版本数据
+# 如果没有snapshot保护，compaction时旧SSTable会被回收
+alter system set undo_retention = 0;
+create table t3 (
+id int primary key,
+name varchar(50),
+value int,
+large_data text
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+# 构建混合SSTable
+insert into t3 values (1, 'Major_P0', 100, repeat('A', 500));
+insert into t3 values (101, 'Major_P1', 200, repeat('B', 500));
+alter system major freeze;
+insert into t3 values (2, 'Minor_P0', 300, repeat('C', 500));
+insert into t3 values (102, 'Minor_P1', 400, repeat('D', 500));
+alter system minor freeze;
+insert into t3 values (3, 'Memtable_P0', 500, repeat('E', 500));
+insert into t3 values (103, 'Memtable_P1', 600, repeat('F', 500));
+# 记录Fork前数据
+select count(*) as pre_fork_count from t3;
+pre_fork_count
+6
+# 使用debug sync在BUILD_DATA阶段暂停Fork
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for snapshot_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t3 to t3_fork;
+# 在Fork暂停期间同时对源表和Fork表操作，并触发Major Freeze
+# 如果没有snapshot保护，旧SSTable可能被回收导致数据丢失
+insert into t3 values (4, 'NewData_Src', 700, repeat('G', 500));
+insert into t3_fork values (5, 'NewData_Fork', 800, repeat('H', 500));
+update t3 set value = 111 where id = 1;
+update t3_fork set value = 222 where id = 1;
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal snapshot_signal';
+# 等待Fork完成
+# 验证Snapshot保护生效 - 数据完整
+select count(*) as src_cnt from t3;
+src_cnt
+7
+select count(*) as fork_cnt from t3_fork;
+fork_cnt
+7
+select id, name, value, length(large_data) as data_len from t3 order by id;
+id	name	value	data_len
+1	Major_P0	111	500
+2	Minor_P0	300	500
+3	Memtable_P0	500	500
+4	NewData_Src	700	500
+101	Major_P1	200	500
+102	Minor_P1	400	500
+103	Memtable_P1	600	500
+select id, name, value, length(large_data) as data_len from t3_fork order by id;
+id	name	value	data_len
+1	Major_P0	222	500
+2	Minor_P0	300	500
+3	Memtable_P0	500	500
+5	NewData_Fork	800	500
+101	Major_P1	200	500
+102	Minor_P1	400	500
+103	Memtable_P1	600	500
+# 验证COW正常工作：继续同时操作两个表
+update t3 set value = 3333 where id = 1;
+update t3_fork set value = 4444 where id = 1;
+insert into t3 values (6, 'Final_Src', 900, repeat('I', 500));
+insert into t3_fork values (7, 'Final_Fork', 1000, repeat('J', 500));
+select id, value from t3 where id in (1, 6) order by id;
+id	value
+1	3333
+6	900
+select id, value from t3_fork where id in (1, 7) order by id;
+id	value
+1	4444
+7	1000
+# 恢复undo_retention到默认值
+alter system set undo_retention = 1800;
+============================================
+Case 4: column_info_simplified场景触发fork
+============================================
+drop table if exists t4;
+drop table if exists t4_fork;
+create table t4 (
+id int primary key,
+c1 int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+# Step 1: 先生成major sstable（旧schema）
+insert into t4 values (1, 10);
+insert into t4 values (101, 20);
+alter system major freeze;
+# Step 2: 增加列并写入新列数据，触发schema差异
+alter table t4 add column c2 int default 0;
+insert into t4(id, c1, c2) values (2, 30, 300);
+insert into t4(id, c1, c2) values (102, 40, 400);
+# Step 3: minor freeze，让新列进入存储层
+alter system minor freeze;
+# Step 4: fork table（若存在column_info_simplified问题，此处会失败或卡住）
+fork table t4 to t4_fork;
+# Step 5: 基础校验
+select count(*) as src_cnt from t4;
+src_cnt
+4
+select count(*) as fork_cnt from t4_fork;
+fork_cnt
+4
+============================================
+清理
+============================================
+# 重置debug sync
+set ob_global_debug_sync = 'reset';
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop database if exists db_fork_sstable;

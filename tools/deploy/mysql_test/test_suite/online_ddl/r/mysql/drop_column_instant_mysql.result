@@ -1,0 +1,674 @@
+alter system set _enable_add_fulltext_index_to_existing_table = false;
+alter system set _enable_defensive_check = '2';
+alter system set _enable_add_fulltext_index_to_existing_table = true;
+set @@session.recyclebin = off;
+alter system set default_table_store_format = 'compound';
+alter system set _enable_drop_column_instant = true;
+#case 垂直分区表
+create table t_vp_1(c1 int, c2 int, c3 int, c4 int, c5 int, c6 int, c7 int, c8 int) partition by column (c1, c4);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'column (c1, c4)' at line 1
+#case 普通表
+drop table xingrui_normal_table;
+create table xingrui_normal_table (
+c1 FLOAT,
+c2 VARCHAR(10)
+);
+insert into xingrui_normal_table (c1, c2)
+select RAND() AS c1, LPAD(FLOOR(1 + RAND() * 9999999999), 10, '0') AS c2
+FROM (select 1 UNION ALL select 2 UNION ALL select 3 UNION ALL select 4 UNION ALL select 5 UNION ALL select 6 UNION ALL select 7 UNION ALL select 8 UNION ALL select 9 UNION ALL select 10) AS temp_table;
+select count(*) from xingrui_normal_table;
+count(*)
+10
+alter table xingrui_normal_table drop column c1;
+alter table xingrui_normal_table drop column c2;
+ERROR 42000: You can't delete all columns with ALTER TABLE; use DROP TABLE instead
+alter table xingrui_normal_table force;
+drop table xingrui_normal_table;
+alter system set _enable_drop_column_instant = false;
+create table xingrui_normal_table (
+c1 FLOAT,
+c2 VARCHAR(10)
+);
+alter table xingrui_normal_table drop column c1;
+drop table xingrui_normal_table;
+create table xingrui_normal_table (
+c1 blob,
+c2 VARCHAR(10),
+c3 blob
+);
+alter table xingrui_normal_table drop column c1;
+alter system set _enable_drop_column_instant = true;
+#case not null
+drop table xingrui_not_null_table;
+create table xingrui_not_null_table (
+col1 int NOT NULL,
+col2 VARCHAR(10) NOT NULL
+);
+insert into xingrui_not_null_table values(1, "abc");
+insert into xingrui_not_null_table values(1, "abc");
+insert into xingrui_not_null_table values(1, "abc");
+alter table xingrui_not_null_table drop column col2;
+insert into xingrui_not_null_table values(1);
+insert into xingrui_not_null_table values(1);
+insert into xingrui_not_null_table values(1);
+alter table xingrui_not_null_table force;
+#case default
+drop table xingrui_default_table;
+create table xingrui_default_table (
+col1 int default 10,
+col2 VARCHAR(10) NOT NULL
+);
+insert into xingrui_default_table values(1, "abc");
+insert into xingrui_default_table values(1, "abc");
+insert into xingrui_default_table values(1, "abc");
+alter table xingrui_default_table drop column col1;
+insert into xingrui_default_table values(1);
+insert into xingrui_default_table values(1);
+insert into xingrui_default_table values(1);
+alter table xingrui_default_table force;
+#case check约束
+drop table xingrui_check_table;
+create table xingrui_check_table (
+col1 int,
+col2 VARCHAR(10) NOT NULL,
+check (col1 > 0)
+);
+insert into xingrui_check_table values(1, "abc");
+insert into xingrui_check_table values(1, "abc");
+insert into xingrui_check_table values(1, "abc");
+alter table xingrui_check_table drop column col1;
+insert into xingrui_check_table values(1);
+insert into xingrui_check_table values(1);
+insert into xingrui_check_table values(1);
+alter table xingrui_check_table force;
+drop table xingrui_check_table;
+create table xingrui_check_table (col1 int, col2 int, check(col1 < col2));
+insert into xingrui_check_table values(1, 2);
+insert into xingrui_check_table values(1, 2);
+insert into xingrui_check_table values(1, 2);
+alter table xingrui_check_table drop column col1;
+ERROR HY000: Check constraint 'xingrui_check_table'
+#case 分区表
+#range
+drop table xingrui_range_table;
+create table xingrui_range_table(
+c1 int auto_increment,
+c2 varchar(60) DEFAULT 'AA' NOT null,
+c3 int,
+primary key (c1,c2)
+)partition BY RANGE(c1)(
+partition p0 VALUES LESS THAN(20),
+partition p1 VALUES LESS THAN(40),
+partition p2 VALUES LESS THAN(60),
+partition p3 VALUES LESS THAN(80),
+partition p4 VALUES LESS THAN(MAXVALUE)
+);
+DROP PROCEDURE IF EXISTS pro1 //
+CREATE PROCEDURE pro1()
+BEGIN
+DECLARE i INT DEFAULT 1;
+WHILE i <= 11 DO
+-- 插入随机数据
+INSERT INTO xingrui_range_table(c2, c3)
+VALUES (
+SUBSTRING(MD5(RAND()), 1, 10),
+FLOOR(1 + (RAND() * 99))
+);
+SET i = i + 1;
+END WHILE;
+END //
+CALL pro1();
+alter table xingrui_range_table drop column c1;
+ERROR HY000: Column 'c1' has a partitioning function dependency and cannot be dropped or renamed.
+alter table xingrui_range_table drop column c2;
+ERROR 0A000: drop rowkey column is not supported
+alter table xingrui_range_table drop column c3;
+drop table xingrui_range_table;
+#list
+drop table xingrui_list_table;
+create table xingrui_list_table (
+order_id int,
+customer_id int NOT NULL DEFAULT 0,
+order_date date DEFAULT '2025-02-14'
+)
+PARTITION BY LIST (order_id) (
+PARTITION p_central VALUES IN (0),
+PARTITION p_north VALUES IN (1),
+PARTITION p_south VALUES IN (2),
+PARTITION p_east VALUES IN (3),
+PARTITION p_west VALUES IN (4)
+);
+DROP PROCEDURE IF EXISTS pro1 //
+CREATE PROCEDURE pro1()
+BEGIN
+DECLARE i INT DEFAULT 1; -- 声明变量并初始化
+WHILE i <= 11 DO
+-- 插入随机数据
+INSERT INTO xingrui_list_table(order_id, customer_id)
+VALUES (
+FLOOR(1 + (RAND() * 4)), -- 模拟 zipf(1, 5, random())，生成 1 到 5 的随机整数
+1000 + i                 -- 模拟 1000 + i
+);
+SET i = i + 1; -- 更新计数器
+END WHILE;
+END //
+CALL pro1();
+alter table xingrui_list_table drop column order_id;
+ERROR HY000: Column 'order_id' has a partitioning function dependency and cannot be dropped or renamed.
+alter table xingrui_list_table drop column customer_id;
+alter table xingrui_list_table drop column order_date;
+alter table xingrui_list_table force;
+drop table xingrui_list_table;
+#hash
+drop table xingrui_hash_table;
+create table xingrui_hash_table (
+c1 VARCHAR(200) NOT NULL DEFAULT 'AA',
+c2 INT,
+c3 INT,
+c4 INT
+)PARTITION BY HASH (c4) PARTITIONS 4;
+DROP PROCEDURE IF EXISTS pro1 //
+CREATE PROCEDURE pro1()
+BEGIN
+DECLARE i INT DEFAULT 1;
+WHILE i <= 10 DO
+INSERT INTO xingrui_hash_table (c1, c2, c3, c4)
+VALUES (
+SUBSTRING(MD5(RAND()), 1, 10),  -- 生成随机字符串
+FLOOR(RAND() * 100),           -- 生成随机数
+FLOOR(POW(RAND(), -1) * 1000),  -- 生成 Zipf 分布数列
+FLOOR(RAND() * 100) + 1        -- 生成均匀分布数列
+);
+SET i = i + 1;
+END WHILE;
+END //
+CALL pro1();
+alter table xingrui_hash_table drop column c4;
+ERROR HY000: Column 'c4' has a partitioning function dependency and cannot be dropped or renamed.
+alter table xingrui_hash_table drop column c2;
+alter table xingrui_hash_table force;
+#case view
+drop view xingrui_view;
+create view xingrui_view as select * from xingrui_hash_table;
+select count(1) from xingrui_view;
+count(1)
+10
+alter table xingrui_hash_table drop column c3;
+select count(1) FROM xingrui_view;
+ERROR 42S22: View 'test.xingrui_view' references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them
+alter table xingrui_view drop column c4;
+ERROR HY000: 'test.xingrui_view' is not BASE TABLE
+select count(1) FROM xingrui_view;
+ERROR 42S22: View 'test.xingrui_view' references invalid table(s) or column(s) or function(s) or definer/invoker of view lack rights to use them
+drop table xingrui_hash_table;
+drop view xingrui_view;
+#case temporary table
+create temporary table xingrui_tmp_table(id int auto_increment, name varchar(30));
+ERROR 0A000: MySQL compatible temporary table not supported
+drop mult columns in single stmt, and drop constraint simultaneously.
+drop table DDLKITTY_1704163544268344;
+create table DDLKITTY_1704163544268344  (seed int NOT NULL, COL0 varchar(11) ,COL1 char(20) ,COL2 char(41) ,COL3 varchar(85) ,COL4 int ,COL5 varchar(31) ,COL6 CHAR ,COL7 CHAR DEFAULT NULL,COL8 CHAR ,COL9 varchar(77) ,COL10 varchar(131) ,COL11 int ,COL12 int NOT NULL,COL13 CHAR DEFAULT NULL,COL14 text DEFAULT NULL,COL15 char(11) DEFAULT NULL,COL16 text DEFAULT NULL,COL17 char(54) ,COL18 char(41) ,COL19 varchar(170) ,COL20 varchar(10) ,COL21 int ,COL22 int NOT NULL,COL23 char(50) ,COL24 varchar(78) ,COL25 varchar(68) ,COL26 varchar(177) ,COL27 varchar(70) ,COL28 CHAR ,COL29 int ,COL30 varchar(128) ,COL31 int ,COL32 text ,COL33 varchar(48) ,COL34 varchar(88) ,COL35 varchar(38) ,COL36 CHAR ,COL37 text ,COL38 char(27) ,COL39 int ,COL40 varchar(39) NOT NULL,COL41 varchar(215) ,COL42 char(13) ,COL43 varchar(48) ,COL44 int ,COL45 varchar(14) NOT NULL,COL46 CHAR ,COL47 varchar(230) DEFAULT NULL,COL48 text ,COL49 CHAR ,COL50 int ,COL51 text DEFAULT NULL,COL52 varchar(28) ,COL53 varchar(124) ,COL54 CHAR ,COL55 varchar(168) ,COL56 varchar(112) ,COL57 varchar(60) ,COL58 CHAR ,COL59 varchar(105) ,COL60 char(58) ,COL61 varchar(244) ,COL62 varchar(172) ,COL63 char(27) ,COL64 char(53) ,COL65 char(17) ,COL66 int ,COL67 int ,COL68 char(31) ,COL69 varchar(193) DEFAULT NULL,COL70 CHAR ,COL71 text ,COL72 CHAR ,COL73 CHAR DEFAULT NULL,COL74 text DEFAULT NULL,COL75 varchar(89) DEFAULT NULL,COL76 varchar(160) ,COL77 char(21) ,COL78 CHAR ,COL79 varchar(250) ,COL80 varchar(122) NOT NULL,COL81 text ,COL82 varchar(121) ,COL83 text ,COL84 varchar(65) ,COL85 varchar(222) ,COL86 varchar(2) ,COL87 int ,COL88 int ,COL89 CHAR ,COL90 char(45) ,COL91 char(2) ,COL92 CHAR ,COL93 CHAR ,COL94 CHAR ,COL95 CHAR ,COL96 text ,COL97 char(25) ,COL98 int ,COL99 text ,COL100 text ,COL101 varchar(78) DEFAULT NULL,COL102 varchar(117) DEFAULT NULL,COL103 CHAR ,COL104 varchar(64) ,COL105 text ,COL106 varchar(147) ,COL107 varchar(8) ,COL108 varchar(48) ,COL109 text ,COL110 text DEFAULT NULL,COL111 char(55) NOT NULL,COL112 varchar(187) DEFAULT NULL,COL113 int ,COL114 text ,COL115 char(34) ,COL116 CHAR ,COL117 varchar(191) ,COL118 varchar(28) NOT NULL,COL119 text ,COL120 text ,COL121 CHAR ,COL122 int ,COL123 text ,COL124 char(46) NOT NULL,COL125 varchar(40) ,COL126 int ,COL127 text ,COL128 char(16) ,COL129 varchar(26) ,COL130 varchar(96) ,COL131 text DEFAULT NULL,COL132 varchar(116) ,COL133 CHAR ,COL134 text ,COL135 int DEFAULT NULL,COL136 CHAR ,COL137 varchar(47) ,COL138 text ,COL139 varchar(128) ,COL140 int ,COL141 int ,COL142 char(54) ,COL143 text ,COL144 text NOT NULL,COL145 char(38) ,COL146 char(45) NOT NULL,COL147 varchar(10) ,COL148 varchar(128) ,COL149 char(3) DEFAULT NULL,COL150 char(29) ,COL151 text ,COL152 char(45) ,COL153 varchar(4) NOT NULL,COL154 CHAR ,COL155 varchar(94) ,COL156 varchar(128) ,COL157 text ,COL158 char(25) DEFAULT NULL,COL159 text ,COL160 varchar(91) ,COL161 varchar(94) ,COL162 int ,COL163 varchar(100) ,COL164 CHAR ,COL165 varchar(126) DEFAULT NULL,COL166 int ,COL167 varchar(73) NOT NULL,COL168 int ,COL169 text ,COL170 CHAR ,COL171 text ,COL172 text ,COL173 text ,COL174 varchar(246) ,COL175 varchar(174) ,CONSTRAINT DDLKITTY_1704163544268344_pk PRIMARY KEY (seed));
+alter table DDLKITTY_1704163544268344 drop column COL0,drop column COL1,drop column COL2,drop column COL3,drop column COL4,drop column COL5,drop column COL6,drop column COL7,drop column COL8,drop column COL9,drop column COL10,drop column COL11,drop column COL12,drop column COL13,drop column COL14,drop column COL15,drop column COL16,drop column COL17,drop column COL18,drop column COL19,drop column COL20,drop column COL21,drop column COL22,drop column COL23,drop column COL24,drop column COL25,drop column COL26,drop column COL27,drop column COL28,drop column COL29,drop column COL30,drop column COL31,drop column COL32,drop column COL33,drop column COL34,drop column COL35,drop column COL36,drop column COL37,drop column COL38,drop column COL39,drop column COL40,drop column COL41,drop column COL42,drop column COL43,drop column COL44,drop column COL45,drop column COL46,drop column COL47,drop column COL48,drop column COL49,drop column COL50,drop column COL51,drop column COL52,drop column COL53,drop column COL54,drop column COL55,drop column COL56,drop column COL57,drop column COL58,drop column COL59,drop column COL60,drop column COL61,drop column COL62,drop column COL63,drop column COL64,drop column COL65,drop column COL66,drop column COL67,drop column COL68,drop column COL69,drop column COL70,drop column COL71,drop column COL72,drop column COL73,drop column COL74,drop column COL75,drop column COL76,drop column COL77,drop column COL78,drop column COL79,drop column COL80,drop column COL81,drop column COL82,drop column COL83,drop column COL84,drop column COL85,drop column COL86,drop column COL87,drop column COL88,drop column COL89,drop column COL90,drop column COL91,drop column COL92,drop column COL93,drop column COL94,drop column COL95,drop column COL96,drop column COL97,drop column COL98,drop column COL99,drop column COL100,drop column COL101,drop column COL102,drop column COL103,drop column COL104,drop column COL105,drop column COL106,drop column COL107,drop column COL108,drop column COL109,drop column COL110,drop column COL111,drop column COL112,drop column COL113,drop column COL114,drop column COL115,drop column COL116,drop column COL117,drop column COL118;
+alter table DDLKITTY_1704163544268344 force;
+drop table DDLKITTY_1704163544268344;
+drop table DDLKITTY_1704163588457118;
+create table DDLKITTY_1704163588457118  (seed int NOT NULL, COL0 varchar(129) ,COL1 varchar(67) ,COL2 CHAR ,COL3 int ,COL4 varchar(246) ,COL5 varchar(115) ,COL6 int NOT NULL,COL7 varchar(237) ,COL8 text NOT NULL,COL9 char(32) NOT NULL,COL10 int ,COL11 char(34) DEFAULT NULL,COL12 text ,COL13 varchar(214) ,COL14 char(13) ,COL15 CHAR ,COL16 text NOT NULL,COL17 char(30) NOT NULL,COL18 CHAR ,COL19 CHAR DEFAULT NULL,COL20 text ,COL21 char(1) ,COL22 varchar(196) ,COL23 CHAR ,COL24 char(61) ,COL25 text ,COL26 CHAR ,COL27 int ,COL28 varchar(64) ,COL29 varchar(127) ,COL30 text ,COL31 char(25) DEFAULT NULL,COL32 text ,COL33 CHAR NOT NULL,COL34 varchar(19) ,COL35 varchar(52) ,COL36 char(19) NOT NULL,COL37 text NOT NULL,COL38 CHAR ,COL39 varchar(50) ,COL40 CHAR ,COL41 varchar(122) ,COL42 char(1) ,COL43 int ,COL44 int ,COL45 varchar(49) ,COL46 char(31) DEFAULT NULL,COL47 CHAR NOT NULL,COL48 varchar(49) ,COL49 char(43) ,COL50 CHAR ,COL51 varchar(94) ,COL52 char(50) ,COL53 int ,COL54 int ,COL55 text ,COL56 varchar(10) ,COL57 varchar(109) DEFAULT NULL,COL58 char(12) ,COL59 varchar(120) DEFAULT NULL,COL60 varchar(63) ,COL61 text ,COL62 text DEFAULT NULL,COL63 int ,COL64 varchar(142) DEFAULT NULL,COL65 int NOT NULL,COL66 char(33) ,COL67 varchar(8) ,COL68 CHAR NOT NULL,COL69 CHAR ,COL70 char(16) ,COL71 text DEFAULT NULL,COL72 varchar(125) ,COL73 CHAR ,COL74 varchar(69) ,COL75 char(18) ,COL76 CHAR ,COL77 int ,COL78 varchar(82) ,COL79 char(5) ,COL80 int ,COL81 varchar(30) ,COL82 text ,COL83 varchar(113) ,COL84 varchar(97) DEFAULT NULL,COL85 int ,COL86 varchar(29) ,COL87 text ,COL88 CHAR ,COL89 varchar(39) ,COL90 varchar(12) ,COL91 int NOT NULL,COL92 CHAR NOT NULL,COL93 text ,COL94 varchar(72) ,COL95 char(35) NOT NULL,COL96 CHAR NOT NULL,COL97 varchar(38) ,COL98 varchar(191) ,COL99 CHAR ,COL100 int ,COL101 char(58) ,COL102 varchar(54) ,COL103 int NOT NULL,COL104 varchar(20) ,COL105 text ,COL106 varchar(9) ,COL107 varchar(42) ,COL108 int ,COL109 char(49) ,COL110 varchar(81) NOT NULL,COL111 varchar(169) ,COL112 char(45) ,COL113 CHAR ,COL114 CHAR ,COL115 CHAR ,COL116 text ,COL117 CHAR ,COL118 varchar(152) ,COL119 int ,COL120 int ,COL121 varchar(62) ,COL122 varchar(75) NOT NULL,COL123 int ,COL124 varchar(53) ,COL125 char(32) ,COL126 CHAR ,COL127 char(5) ,COL128 int DEFAULT NULL,COL129 char(61) NOT NULL,COL130 text ,COL131 int ,COL132 CHAR ,COL133 char(53) ,COL134 char(44) NOT NULL,COL135 CHAR ,COL136 varchar(53) ,COL137 char(34) ,COL138 text ,COL139 CHAR ,COL140 int ,COL141 varchar(59) ,COL142 int ,COL143 int ,COL144 char(23) DEFAULT NULL,COL145 char(10) ,COL146 text ,COL147 char(39) ,COL148 text ,COL149 CHAR ,COL150 varchar(113) ,COL151 char(58) ,COL152 varchar(76) DEFAULT NULL,COL153 CHAR ,COL154 varchar(81) ,COL155 char(51) NOT NULL,COL156 char(39) DEFAULT NULL,COL157 varchar(46) ,COL158 varchar(86) DEFAULT NULL,COL159 CHAR ,COL160 varchar(37) NOT NULL,COL161 int ,COL162 text ,COL163 CHAR ,COL164 text DEFAULT NULL,COL165 int ,COL166 int ,COL167 varchar(63) ,COL168 CHAR DEFAULT NULL,COL169 text DEFAULT NULL,COL170 char(52) ,COL171 int ,COL172 char(22) ,COL173 char(64) ,COL174 varchar(155) ,COL175 CHAR ,COL176 varchar(37) NOT NULL,COL177 varchar(109) ,COL178 varchar(138) ,COL179 int ,COL180 varchar(64) ,COL181 char(43) ,COL182 CHAR ,COL183 text ,COL184 int ,COL185 int ,COL186 CHAR ,COL187 char(4) ,COL188 char(45) ,COL189 char(42) ,COL190 varchar(116) ,COL191 char(18) ,COL192 char(8) ,COL193 CHAR ,COL194 CHAR ,COL195 varchar(208) ,COL196 varchar(37) ,COL197 varchar(14) ,COL198 char(52) ,COL199 char(40) ,COL200 varchar(246) ,COL201 CHAR ,COL202 text ,COL203 int ,COL204 text ,COL205 varchar(184) NOT NULL,COL206 int NOT NULL,COL207 text NOT NULL,COL208 varchar(168) ,COL209 char(23) ,COL210 char(32) ,COL211 varchar(240) ,COL212 int ,COL213 CHAR ,COL214 text ,COL215 varchar(97) DEFAULT NULL,COL216 CHAR ,COL217 char(41) ,COL218 varchar(248) DEFAULT NULL,COL219 int ,COL220 int ,COL221 varchar(89) ,COL222 CHAR ,COL223 text ,COL224 text ,COL225 text ,COL226 varchar(28) ,COL227 text ,COL228 char(30) ,COL229 varchar(28) ,COL230 CHAR ,COL231 text ,COL232 char(3) ,COL233 varchar(163) ,COL234 text DEFAULT NULL,COL235 int NOT NULL,COL236 CHAR ,COL237 text ,COL238 char(38) ,COL239 varchar(254) DEFAULT NULL,COL240 text ,COL241 varchar(62) ,COL242 varchar(204) ,COL243 char(35) ,COL244 varchar(87) ,COL245 varchar(63) ,COL246 char(16) ,COL247 text DEFAULT NULL,COL248 CHAR ,COL249 varchar(77) ,COL250 CHAR ,COL251 int ,COL252 varchar(118) ,COL253 CHAR ,COL254 CHAR ,COL255 varchar(92) DEFAULT NULL,COL256 varchar(60) DEFAULT NULL,COL257 char(53) ,COL258 int ,COL259 varchar(67) ,COL260 text DEFAULT NULL,COL261 varchar(61) ,COL262 varchar(85) NOT NULL,COL263 int ,COL264 varchar(101) ,COL265 char(40) ,COL266 text ,COL267 varchar(198) ,COL268 int ,COL269 text ,COL270 text ,COL271 char(25) ,COL272 varchar(217) ,COL273 varchar(147) ,COL274 varchar(84) NOT NULL,COL275 text ,COL276 int ,COL277 varchar(93) ,COL278 text ,COL279 CHAR DEFAULT NULL,COL280 int NOT NULL,COL281 varchar(6) ,COL282 CHAR ,COL283 CHAR ,COL284 text ,COL285 int ,COL286 varchar(36) ,COL287 text ,COL288 text ,COL289 varchar(220) ,COL290 char(30) DEFAULT NULL,COL291 varchar(96) ,COL292 CHAR ,COL293 int ,COL294 int NOT NULL,COL295 char(46) ,COL296 int ,COL297 char(33));
+alter table DDLKITTY_1704163588457118 drop column COL0,drop column COL1,drop column COL2,drop column COL3,drop column COL4,drop column COL5,drop column COL6,drop column COL7,drop column COL8,drop column COL9,drop column COL10,drop column COL11,drop column COL12,drop column COL13,drop column COL14,drop column COL15,drop column COL16,drop column COL17,drop column COL18,drop column COL19,drop column COL20,drop column COL21,drop column COL22,drop column COL23,drop column COL24,drop column COL25,drop column COL26,drop column COL27,drop column COL28,drop column COL29,drop column COL30,drop column COL31,drop column COL32,drop column COL33,drop column COL34,drop column COL35,drop column COL36,drop column COL37,drop column COL38,drop column COL39,drop column COL40,drop column COL41,drop column COL42,drop column COL43,drop column COL44,drop column COL45,drop column COL46,drop column COL47,drop column COL48,drop column COL49,drop column COL50,drop column COL51,drop column COL52,drop column COL53,drop column COL54,drop column COL55,drop column COL56,drop column COL57,drop column COL58,drop column COL59,drop column COL60,drop column COL61,drop column COL62,drop column COL63,drop column COL64,drop column COL65,drop column COL66,drop column COL67,drop column COL68,drop column COL69,drop column COL70,drop column COL71,drop column COL72,drop column COL73,drop column COL74,drop column COL75,drop column COL76,drop column COL77,drop column COL78,drop column COL79,drop column COL80,drop column COL81,drop column COL82,drop column COL83,drop column COL84,drop column COL85,drop column COL86,drop column COL87,drop column COL88,drop column COL89,drop column COL90,drop column COL91,drop column COL92,drop column COL93,drop column COL94,drop column COL95,drop column COL96,drop column COL97,drop column COL98,drop column COL99,drop column COL100,drop column COL101,drop column COL102,drop column COL103,drop column COL104,drop column COL105,drop column COL106,drop column COL107,drop column COL108,drop column COL109,drop column COL110,drop column COL111,drop column COL112,drop column COL113,drop column COL114,drop column COL115,drop column COL116,drop column COL117,drop column COL118,drop column COL119,drop column COL120,drop column COL121,drop column COL122,drop column COL123,drop column COL124,drop column COL125,drop column COL126,drop column COL127,drop column COL128,drop column COL129,drop column COL130;
+alter table DDLKITTY_1704163588457118 FORCE;
+drop table DDLKITTY_1704163588457118;
+drop table xingrui_dup_name;
+create table xingrui_dup_name (c1 varchar(10) NOT NULL , c2 int);
+insert into xingrui_dup_name VALUES ('ABCD', 1);
+insert into xingrui_dup_name VALUES ('EFGHIJK', 2);
+alter table xingrui_dup_name drop column c2;
+alter table xingrui_dup_name ADD (c2 int auto_increment);
+alter table xingrui_dup_name drop column c2;
+alter table xingrui_dup_name force;
+select * FROM xingrui_dup_name ORDER BY 1;
+c1
+ABCD
+EFGHIJK
+drop table xingrui_dup_name;
+create table xingrui_dup_name (c1 varchar(10) NOT NULL , c2 int);
+alter table xingrui_dup_name drop column c1, drop column c1;
+ERROR 42000: Can't DROP 'c1'; check that column/key exists
+drop table xingrui_dup_name;
+ERROR 42000: Incorrect column name 'SYS_UNUSED_column_NAME'
+ERROR 42S21: Duplicate column name 'SYS_UNUSED_column_NAME'
+ERROR 42S22: Unknown column 'SYS_UNUSED_column_NAME'
+ERROR 42000: Incorrect column name 'SYS_UNUSED_column_NAME'
+alter table xingrui_dup_name force;
+drop table xingrui_dup_name;
+#case 索引表
+#普通索引
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 char(20) not null, col2 int);
+insert into xingrui_normal_table values('abcd', 1);
+create index xingrui_index1 on xingrui_normal_table(col1);
+create index xingrui_index2 on xingrui_normal_table(col1, col2);
+alter table xingrui_normal_table drop column col1;
+insert into xingrui_normal_table values(1);
+insert into xingrui_normal_table values('');
+ERROR HY000: Incorrect integer value for column 'col2' at row 1
+drop table xingrui_normal_table;
+#unique index
+create table xingrui_normal_table(col1 char(20) not null, col2 int);
+insert into xingrui_normal_table values('abcd', 1);
+create unique index xingrui_index1 on xingrui_normal_table(col1);
+create unique index xingrui_index2 on xingrui_normal_table(col1, col2);
+alter table xingrui_normal_table drop column col1;
+insert into xingrui_normal_table values(2);
+insert into xingrui_normal_table values('');
+ERROR HY000: Incorrect integer value for column 'col2' at row 1
+drop table xingrui_normal_table;
+#shadow column
+create table xingrui_normal_table(col1 int, col2 int, unique key(col1) local);
+insert into xingrui_normal_table values(1,2);
+insert into xingrui_normal_table values(3,4);
+insert into xingrui_normal_table values(5,6);
+alter table xingrui_normal_table drop column col1;
+select * from xingrui_normal_table order by col2;
+col2
+2
+4
+6
+#primary key
+drop table xingrui_primary_table;
+#unique index
+create table xingrui_primary_table(col1 char(20) not null, col2 int primary key);
+insert into xingrui_primary_table values('abcd', 1);
+create unique index xingrui_index1 on xingrui_primary_table(col1);
+create unique index xingrui_index2 on xingrui_primary_table(col1, col2);
+alter table xingrui_primary_table drop column col1;
+insert into xingrui_primary_table values(2);
+insert into xingrui_primary_table values('');
+ERROR HY000: Incorrect integer value for column 'col2' at row 1
+drop table xingrui_primary_table;
+create table xingrui_primary_table(col1 int auto_increment, col2 varchar(60) DEFAULT 'AA' NOT null, col3 int, primary key (col1,col2));
+insert into xingrui_primary_table (col2, col3) values('a', 1);
+insert into xingrui_primary_table (col2, col3) values('b', 2);
+insert into xingrui_primary_table (col2, col3) values('c', 3);
+alter table xingrui_primary_table drop column col1;
+ERROR 0A000: drop rowkey column is not supported
+#全文索引表
+drop table xingrui_fts_table;
+create table xingrui_fts_table(
+id int,
+name varchar(20),
+title varchar(20),
+content varchar(20));
+alter table xingrui_fts_table add fulltext index xingrui_index(name);
+alter table xingrui_fts_table drop column name;
+ERROR HY000: Column 'name' has a generated column dependency
+alter table xingrui_fts_table drop column id;
+alter table xingrui_fts_table force;
+drop table xingrui_fts_table;
+drop table xingrui_json_multivalue_table;
+create table xingrui_json_multivalue_table (
+custinfo JSON,
+data JSON,
+c1 int
+);
+create index xingrui_test on xingrui_json_multivalue_table( (CAST(data->'$.id' AS UNSIGNED ARRAY)));
+alter table xingrui_json_multivalue_table drop column c1;
+alter table xingrui_json_multivalue_table force;
+drop table xingrui_json_multivalue_table;
+#向量索引
+drop table xingrui_vector_table;
+create table xingrui_vector_table(col1 int, col2 vector(3));
+alter table xingrui_vector_table drop column col2;
+drop table xingrui_vector_table;
+alter system set ob_vector_memory_limit_percentage = 44;
+create table xingrui_vector_table(c1 int, c2 int, c3 vector(3), c4 vector(3), c5 vector(3), c6 int, primary key(c1));
+create index idx1 on xingrui_vector_table(c2);
+create vector index idx_ivf_flat on xingrui_vector_table(c3) with (distance=l2, type=ivf_flat);
+ERROR 0A000: create ivf index on table with column store is not supported
+create vector index idx_ivf_sq8 on xingrui_vector_table(c4) with (distance=l2, type=ivf_sq8);
+ERROR 0A000: create ivf index on table with column store is not supported
+create vector index idx_ivf_pq on xingrui_vector_table(c5) with (distance=l2, type=ivf_pq, m=1);
+ERROR 0A000: create ivf index on table with column store is not supported
+alter table xingrui_vector_table drop column c1;
+ERROR 0A000: drop rowkey column is not supported
+alter table xingrui_vector_table drop column c6;
+alter table xingrui_vector_table force;
+drop table xingrui_vector_table;
+#case json列
+drop table xingrui_json;
+create table xingrui_json(c1 json, c2 int, c3 varchar(10));
+insert into xingrui_json values('{"a":1}', 1, 'abc');
+insert into xingrui_json values('{"a":2}', 2, 'abcd');
+alter table xingrui_json drop column c1;
+insert into xingrui_json values(1, 'abc');
+insert into xingrui_json values(2, 'abcd');
+create index idx on xingrui_json(c2);
+alter table xingrui_json force;
+drop table xingrui_json;
+create table xingrui_json (
+id bigint not null primary key,
+c1 bigint not null,
+c2 bigint not null,
+c3 bigint not null,
+custinfo JSON
+);
+insert into xingrui_json VALUES
+(10, 21, 31, 41, '{"user":"Jack","user_id":37,"zipcode":["pk10_1", "pk10_2"]}'),
+(11, 22, 32, 42, '{"user":"Jill","user_id":22,"zipcode":["pk11_1", "pk11_2", "pk11_3"]}'),
+(12, 23, 33, 43, '{"user":"Bob","user_id":31,"zipcode":["pk12_1", "pk12_2", "pk12_3"]}'),
+(13, 24, 34, 44, '{"user":"Mary","user_id":72,"zipcode":["pk13_1", "pk13_2", "pk13_3"]}'),
+(14, 25, 35, 45, '{"user":"Ted","user_id":56,"zipcode":["pk14_1", "pk14_2"]}');
+create index zips1 on xingrui_json( (CAST(custinfo->'$.zipcode' AS char(16) ARRAY)) );
+alter table xingrui_json drop column custinfo;
+ERROR HY000: Column 'custinfo' has a functional index dependency and cannot be dropped or renamed.
+alter table xingrui_json drop column c2;
+alter table xingrui_json force;
+drop table xingrui_json;
+create table xingrui_json (id int ,js json, c1 json);
+create index idx1 on xingrui_json ((cast(js->'$[*]' as unsigned array)));
+insert into xingrui_json (id ,js, c1) values (1,null,null);
+insert into xingrui_json (id ,js, c1) values (2,'null','null');
+insert into xingrui_json (id ,js, c1) values (3,null,'{"user":"Jack","user_id":37,"zipcode":["pk10_1", "pk10_2"]}');
+alter table xingrui_json drop column js;
+ERROR HY000: Column 'js' has a functional index dependency and cannot be dropped or renamed.
+alter table xingrui_json drop column c1;
+insert into xingrui_json (id) values (4);
+insert into xingrui_json (id) values (5);
+alter table xingrui_json force;
+drop table xingrui_json;
+#case bitmap列
+drop table xingrui_bitmap;
+create table xingrui_bitmap(c1 roaringbitmap, c2 roaringbitmap);
+insert into xingrui_bitmap values(x'0100', x'010100000002'), (null, null);
+insert into xingrui_bitmap values(x'0100', x'010100000002');
+alter table xingrui_bitmap drop column c1;
+insert into xingrui_bitmap values(x'010100000002');
+insert into xingrui_bitmap values(x'010100000002');
+select * from xingrui_bitmap;
+c2
+   
+NULL
+   
+   
+   
+alter table xingrui_bitmap force;
+drop table xingrui_bitmap;
+#case bitmap列
+drop table xingrui_array;
+create table xingrui_array(c1 array(int), c2 array(bigint), c3 array(float), c4 array(double));
+insert into xingrui_array values(array(1, 2, 3, 4, 5),
+array(8589934592, 8592031744, 8592033792, 8592164864),
+array(52314.234657, 5.123123, 0.0000000234, 10000),
+array(52314.234657, 5.123123, 0.0000000234, 10000));
+alter table xingrui_array drop column c1;
+insert into xingrui_array values(array(8592031744, 8592033792, 8592164864),
+array(5.123123, 0.0000000234, 10000),
+array(5.123123, 0.0000000234, 10000));
+alter table xingrui_array force;
+drop table xingrui_array;
+#case vector列
+drop table xingrui_vector;
+alter system set ob_vector_memory_limit_percentage = 44;
+create table xingrui_vector(c1 int, c2 vector(3), c3 vector(5), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200), vector index idx2(c3) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
+insert into xingrui_vector values (1, '[0.990622,0.861702,0.114999]', '[0.558301,0.543172,0.335010,0.844568,0.275233]');
+alter table xingrui_vector drop column c2;
+ERROR HY000: Column 'c2' has a generated column dependency
+drop table xingrui_vector;
+#case ivf索引
+drop table xingrui_ivf;
+CREATE TABLE xingrui_ivf (c1 int primary key, c4 vector(3),
+VECTOR INDEX idx1(c4)
+WITH (distance=l2, type=ivf_flat))
+PARTITION BY RANGE(c1) (
+PARTITION p0 VALUES less than(10),
+PARTITION p1 VALUES less than(20),
+PARTITION p2 VALUES less than(MAXVALUE)
+) with column group(all columns);
+insert into xingrui_ivf(c1,c4) values(1,'[1,3,2]');
+insert into xingrui_ivf(c1,c4) values(2,'[2,3,2]');
+insert into xingrui_ivf(c1,c4) values(3,'[3,3,2]');
+alter table xingrui_ivf drop column c4;
+ERROR HY000: Column 'c4' has a generated column dependency
+drop table xingrui_ivf;
+create table xingrui_ivf (id int primary key, wine_type int, wine_data vector(13), iris_type varchar(20), iris_data vector(4), data vector(3)) with column group(all columns);
+create vector index idx1 on xingrui_ivf (wine_data) with (distance=l2, type=ivf_sq8, nlist=3, sample_per_nlist=50);
+insert into xingrui_ivf (id, data) values(1, '[1,2,3]');
+alter table xingrui_ivf drop column data;
+alter table xingrui_ivf force;
+drop table xingrui_ivf;
+CREATE TABLE xingrui_ivf (
+c1 int,
+c2 vector(10)) with column group(all columns);
+create vector index vec_idx1 on xingrui_ivf(c2) with (distance=l2, type=ivf_pq, lib=OB, m=5);
+insert into xingrui_ivf values(1, '[0.748479,0.276979,0.555195,0.145492,0.045639,0.924278,0.696082,0.841479,0.742934,0.953073]');
+alter table xingrui_ivf drop column c2;
+ERROR HY000: Column 'c2' has a generated column dependency
+alter table xingrui_ivf drop column c1;
+alter table xingrui_ivf force;
+#case ivf索引
+drop table xingrui_ivf_table;
+CREATE TABLE xingrui_ivf_table (c1 int primary key, c2 varchar(30), c3 vector(3) ,c4 vector(3),
+VECTOR INDEX idx1(c4)
+WITH (distance=l2, type=ivf_flat)) with column group(all columns);
+insert into xingrui_ivf_table(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into xingrui_ivf_table(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]');
+insert into xingrui_ivf_table(c1,c2,c3,c4) values(3,'[3,1,2]','[3,2,2]','[3,3,2]');
+insert into xingrui_ivf_table(c1,c2,c3,c4) values(4,'[4,1,2]','[5,2,3]','[4,4,4]');
+insert into xingrui_ivf_table(c1,c2,c3,c4) values(5,'[5,1,2]','[5,2,3]','[5,5,5]');
+alter table xingrui_ivf_table drop column c2;
+alter table xingrui_ivf_table force;
+drop table xingrui_ivf_table;
+CREATE TABLE xingrui_ivf_table (id int, c2 vector(10)) with column group(all columns);
+create vector index vec_idx1 on xingrui_ivf_table(c2) with (distance=l2, type=ivf_sq8, lib=OB);
+alter table xingrui_ivf_table drop column id;
+alter table xingrui_ivf_table force;
+drop table xingrui_ivf_table;
+CREATE TABLE xingrui_ivf_table (id int, c2 vector(10)) with column group(all columns);
+create vector index vec_idx1 on xingrui_ivf_table(c2) with (distance=l2, type=ivf_pq, lib=OB);
+ERROR 0A000: ivf_pq vector index param m not set is not supported
+create vector index vec_idx1 on xingrui_ivf_table(c2) with (distance=l2, type=ivf_pq, lib=OB, m=128);
+ERROR 0A000: this value of vector index m not to be divisible by dim or greater than dim is not supported
+create vector index vec_idx1 on xingrui_ivf_table(c2) with (distance=l2, type=ivf_pq, lib=OB, m=5);
+alter table xingrui_ivf_table drop column id;
+alter table xingrui_ivf_table force;
+#case 生成列
+drop table xingrui_virtual_generated_table;
+create table xingrui_virtual_generated_table (
+id int auto_increment,
+name VARCHAR(100),
+price DECIMAL(10, 2),
+tax_rate DECIMAL(4, 2),
+total_price DECIMAL(10, 2) AS (price + price * tax_rate) virtual
+);
+INSERT INTO xingrui_virtual_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_virtual_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_virtual_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+alter table xingrui_virtual_generated_table drop column price;
+ERROR HY000: Column 'price' has a generated column dependency
+INSERT INTO xingrui_virtual_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_virtual_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_virtual_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+alter table xingrui_virtual_generated_table drop column total_price;
+alter table xingrui_virtual_generated_table drop column price;
+alter table xingrui_virtual_generated_table force;
+drop table xingrui_virtual_generated_table;
+drop table xingrui_stored_generated_table;
+create table xingrui_stored_generated_table (
+id int auto_increment,
+name VARCHAR(100),
+price DECIMAL(10, 2),
+tax_rate DECIMAL(4, 2),
+total_price DECIMAL(10, 2) AS (price + price * tax_rate) stored
+);
+INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+alter table xingrui_stored_generated_table drop column price;
+ERROR HY000: Column 'price' has a generated column dependency
+INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
+alter table xingrui_stored_generated_table drop column total_price;
+alter table xingrui_stored_generated_table drop column price;
+alter table xingrui_stored_generated_table force;
+drop table xingrui_stored_generated_table;
+drop table xingrui_default_table;
+create table xingrui_default_table(col1 int, col2 int default(10 + 1));
+insert into xingrui_default_table values(1, 10);
+insert into xingrui_default_table values(1, 10);
+alter table xingrui_default_table drop column col2;
+create index idx on xingrui_default_table(col1);
+alter table xingrui_default_table force;
+drop table xingrui_default_table;
+#case invisible列
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(
+col1 int,
+col2 VARCHAR(100) INVISIBLE
+);
+insert into xingrui_invisible_table values(1);
+insert into xingrui_invisible_table values(1);
+insert into xingrui_invisible_table values(1);
+alter table xingrui_invisible_table drop column col2;
+insert into xingrui_invisible_table values(1);
+insert into xingrui_invisible_table values(1);
+insert into xingrui_invisible_table values(1);
+#删除剩余一个列的场景
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(
+col1 int,
+col2 int INVISIBLE
+);
+alter table xingrui_invisible_table drop column col1;
+ERROR HY000: table must have at least one column that is not invisible
+alter table xingrui_invisible_table drop column col1, drop column col2;
+ERROR 42000: You can't delete all columns with ALTER TABLE; use DROP TABLE instead
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(col1 int, col2 VARCHAR(100) INVISIBLE );
+alter table xingrui_invisible_table drop column col1, drop column col2, add column col3 int;
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(col1 int, col2 VARCHAR(100) INVISIBLE );
+alter table xingrui_invisible_table drop column col1, drop column col2, add column col3 int invisible;
+ERROR HY000: table must have at least one column that is not invisible
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(col1 int auto_increment, col2 int invisible, col3 int);
+alter table xingrui_invisible_table drop column col1, drop column col2;
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(col1 int auto_increment, col2 int invisible, col3 int);
+alter table xingrui_invisible_table drop column col3;
+ERROR HY000: table must have at least one column that is not invisible
+ERROR 42000: Incorrect column name 'SYS_UNUSED_column_NAME'
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(col1 int auto_increment, col2 int invisible);
+alter table xingrui_invisible_table drop column col1;
+ERROR HY000: table must have at least one column that is not invisible
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int, col3 int);
+alter table xingrui_normal_table drop column col1,drop column col2, drop column col3, add column col4 int invisible;
+ERROR HY000: table must have at least one column that is not invisible
+alter table xingrui_normal_table drop column col1,drop column col2, drop column col3, add column col4 int;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int, col3 int auto_increment, col4 int as (col1 + col2) stored);
+alter table xingrui_normal_table drop column col1, drop column col2, drop column col3, drop column col4;
+ERROR HY000: Column 'col1' has a generated column dependency
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int primary key, col3 int);
+alter table xingrui_normal_table drop column col1, drop column col2, drop column col3;
+ERROR 0A000: drop rowkey column is not supported
+drop table xingrui_normal_table;
+create table xingrui_normal_table(
+col1 int auto_increment, col2 int, col3 int
+)partition BY RANGE(col2)(
+partition p0 VALUES LESS THAN(20),
+partition p1 VALUES LESS THAN(40),
+partition p2 VALUES LESS THAN(60),
+partition p3 VALUES LESS THAN(80),
+partition p4 VALUES LESS THAN(MAXVALUE)
+);
+alter table xingrui_normal_table drop column col1, drop column col2, drop column col3;
+ERROR HY000: Column 'col2' has a partitioning function dependency and cannot be dropped or renamed.
+drop table xingrui_invisible_table;
+create table xingrui_invisible_table(
+col1 int primary key,
+col2 int INVISIBLE
+);
+alter table xingrui_invisible_table drop column col1;
+ERROR HY000: table must have at least one column that is not invisible
+alter table xingrui_invisible_table drop column col1, drop column col2;
+ERROR 0A000: drop rowkey column is not supported
+alter table xingrui_invisible_table drop column col2;
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int, col3 int primary key);
+alter table xingrui_normal_table drop column col1,drop column col2, drop column col3;
+ERROR 42000: You can't delete all columns with ALTER TABLE; use DROP TABLE instead
+alter table xingrui_normal_table drop column col1,drop column col2, drop column col3, add column col4 int;
+ERROR 0A000: drop rowkey column is not supported
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int, col3 int auto_increment);
+alter table xingrui_normal_table drop column col1,drop column col2, drop column col3;
+ERROR 42000: You can't delete all columns with ALTER TABLE; use DROP TABLE instead
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 int, col2 int, col3 int auto_increment primary key);
+alter table xingrui_normal_table drop column col1,drop column col2, drop column col3;
+ERROR 42000: You can't delete all columns with ALTER TABLE; use DROP TABLE instead
+#case 自增列
+drop table xingrui_auto_increment;
+create table xingrui_auto_increment(
+col1 int auto_increment,
+col2 varchar(100)
+);
+insert into xingrui_auto_increment (col2) values('abcd');
+insert into xingrui_auto_increment (col2) values('abcd');
+alter table xingrui_auto_increment drop column col1;
+insert into xingrui_auto_increment values('abcd');
+insert into xingrui_auto_increment values('abcd');
+drop table xingrui_auto_increment;
+#case 外键
+drop table xingrui_order;
+drop table xingrui_customer;
+create table xingrui_customer (
+customer_id int primary key,
+name VARCHAR(50)
+);
+create table xingrui_order (
+order_id int,
+customer_id int ,
+amount DECIMAL(10,2),
+CONSTRAINT fk_orders_customers FOREIGN KEY (customer_id) REFERENCES xingrui_customer(customer_id));
+alter table xingrui_customer drop column customer_id;
+ERROR HY000: 'customer_id': used in a foreign key constraint
+alter table xingrui_order drop column customer_id;
+ERROR HY000: 'customer_id': used in a foreign key constraint
+#case trigger
+drop table xingrui_trigger;
+create table xingrui_trigger (
+id INT PRIMARY KEY AUTO_INCREMENT,
+username VARCHAR(50) NOT NULL,
+created_at DATETIME,  -- 记录创建时间
+updated_at DATETIME   -- 记录最后更新时间
+);
+CREATE TRIGGER before_users_insert
+BEFORE INSERT ON xingrui_trigger
+FOR EACH ROW
+BEGIN
+IF NEW.created_at IS NULL THEN
+SET NEW.created_at = NOW();
+END IF;
+END;
+//
+INSERT INTO xingrui_trigger (username) VALUES ('alice');
+alter table xingrui_trigger drop column created_at;
+drop table xingrui_trigger;
+#case xml
+create table xingrui_xml(col1 xmltype, col2 xmltype);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'xmltype, col2 xmltype)' at line 1
+alter system set _enable_drop_column_instant = true tenant = all_user;
+alter system set debug_sync_timeout = '100000s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BEFORE_ALTER_TABLE_IN_TRANS wait_for continue_signal execute 10000';
+drop table xingrui_normal_table;
+create table xingrui_normal_table(col1 blob, col2 int, col3 blob);
+alter table xingrui_normal_table drop column col3;
+alter system set _enable_drop_column_instant = false tenant = all_user;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+alter system set default_table_store_format = 'row';
+alter system set _enable_drop_column_instant = true tenant = all_user;

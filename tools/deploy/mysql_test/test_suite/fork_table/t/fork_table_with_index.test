@@ -1,0 +1,359 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table索引处理测试
+##tags: fork_table index
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_index;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_index;
+use db_fork_index;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo ============================================
+--echo 1. Fork Table with Primary Key
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+
+create table t1 (
+    id int primary key,
+    name varchar(50),
+    age int,
+    email varchar(100)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t1 values (1, 'Alice', 25, 'alice@example.com');
+insert into t1 values (101, 'Bob', 30, 'bob@example.com');
+insert into t1 values (50, 'Charlie', 35, 'charlie@example.com');
+
+--echo # Fork表
+fork table t1 to t1_fork;
+
+--echo # 验证Fork表的主键索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1_fork;
+
+--echo # 验证通过主键查询
+select * from t1_fork where id = 1;
+select * from t1_fork where id = 101;
+
+--echo ============================================
+--echo 2. Fork Table with Secondary Index
+--echo ============================================
+
+drop table if exists t2;
+drop table if exists t2_fork;
+
+create table t2 (
+    id int primary key,
+    name varchar(50),
+    age int,
+    email varchar(100),
+    index idx_name(name),
+    index idx_age(age),
+    index idx_email(email)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t2 values (1, 'Alice', 25, 'alice@example.com');
+insert into t2 values (101, 'Bob', 30, 'bob@example.com');
+insert into t2 values (50, 'Charlie', 35, 'charlie@example.com');
+
+--echo # Fork表
+fork table t2 to t2_fork;
+
+--echo # 验证Fork表的索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t2_fork;
+
+--echo # 验证通过二级索引查询
+select * from t2_fork where name = 'Alice';
+select * from t2_fork where age = 30;
+select * from t2_fork where email = 'charlie@example.com';
+
+--echo # 验证索引查询在Fork表中正常工作
+--replace_regex /output\(\[INTERNAL_FUNCTION\(([^)]+)\)\]\)/output([\1])/g
+--replace_regex /\[t2_fork\.([^,]+), t2_fork\.([^,]+), t2_fork\.([^,]+), t2_fork\.([^\]]+)\]/\[t2_fork.\1\], \[t2_fork.\2\], \[t2_fork.\3\], \[t2_fork.\4\]/g
+explain select * from t2_fork where name = 'Alice';
+--replace_regex /output\(\[INTERNAL_FUNCTION\(([^)]+)\)\]\)/output([\1])/g
+--replace_regex /\[t2_fork\.([^,]+), t2_fork\.([^,]+), t2_fork\.([^,]+), t2_fork\.([^\]]+)\]/\[t2_fork.\1\], \[t2_fork.\2\], \[t2_fork.\3\], \[t2_fork.\4\]/g
+explain select * from t2_fork where age = 30;
+
+--echo ============================================
+--echo 2.1 Fork Table with Index Building
+--echo ============================================
+
+drop table if exists t2a;
+drop table if exists t2a_fork;
+
+create table t2a (
+    id int primary key,
+    name varchar(50),
+    age int,
+    email varchar(100)
+);
+
+set ob_query_timeout = 900000000000000;
+insert into t2a values (1, 'Alice', 25, 'alice@example.com');
+--disable_query_log
+let $i=0;
+while ($i < 20)
+{
+  eval insert /*+ enable_parallel_dml parallel(32) append*/ into t2a
+  select id + (1 << $i), name, age, email from t2a;
+  inc $i;
+}
+--enable_query_log
+
+connect (conn1,$OBMYSQL_MS0,root@sys,,db_fork_index,$OBMYSQL_PORT);
+connection conn1;
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 900000000000000;
+use db_fork_index;
+
+connection conn1;
+--send create index idx_name on t2a(name) local;
+
+connection default;
+--sleep 1
+--echo # Fork表（索引构建中）
+fork table t2a to t2a_fork;
+
+connection conn1;
+--reap
+
+connection default;
+--echo # 验证Fork表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t2a_fork;
+
+--echo ============================================
+--echo 2.2 Fork Table with Fulltext Index Building
+--echo ============================================
+
+drop table if exists t2b;
+drop table if exists t2b_fork;
+
+create table t2b (
+    id int primary key,
+    name varchar(50),
+    age int,
+    email varchar(100)
+);
+
+set ob_query_timeout = 900000000000000;
+insert into t2b values (1, 'Alice', 25, 'alice@example.com');
+--disable_query_log
+let $i=0;
+while ($i < 10)
+{
+  eval insert /*+ enable_parallel_dml parallel(32) append*/ into t2b
+  select id + (1 << $i), name, age, email from t2b;
+  inc $i;
+}
+--enable_query_log
+
+connect (conn2,$OBMYSQL_MS0,root@sys,,db_fork_index,$OBMYSQL_PORT);
+connection conn2;
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 900000000000000;
+use db_fork_index;
+
+connection conn2;
+--send create fulltext index idx_ft_name on t2b(name) local;
+
+connection default;
+--sleep 1
+--echo # Fork表（全文索引构建中）
+fork table t2b to t2b_fork;
+
+connection conn2;
+--reap
+
+connection default;
+--echo # 验证Fork表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t2b_fork;
+
+--echo ============================================
+--echo 2.3 Fork Table with Vector Index Building
+--echo ============================================
+
+drop table if exists t2c;
+drop table if exists t2c_fork;
+
+create table t2c (
+    id int primary key,
+    name varchar(50),
+    age int,
+    email varchar(100),
+    emb vector(3)
+);
+
+set ob_query_timeout = 900000000000000;
+insert into t2c values (1, 'Alice', 25, 'alice@example.com', '[0.203846,0.205289,0.880265]');
+--disable_query_log
+let $i=0;
+while ($i < 10)
+{
+  eval insert /*+ enable_parallel_dml parallel(32) append*/ into t2c
+  select id + (1 << $i), name, age, email, emb from t2c;
+  inc $i;
+}
+--enable_query_log
+
+connect (conn3,$OBMYSQL_MS0,root@sys,,db_fork_index,$OBMYSQL_PORT);
+connection conn3;
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 900000000000000;
+use db_fork_index;
+
+connection conn3;
+--send create vector index idx_vec_emb on t2c(emb) with (distance=l2, type=hnsw, lib=vsag);
+
+connection default;
+--sleep 1
+--echo # Fork表（向量索引构建中）
+fork table t2c to t2c_fork;
+
+connection conn3;
+--reap
+
+connection default;
+--echo # 验证Fork表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t2c_fork;
+
+--echo ============================================
+--echo 3. Fork Table with Unique Index
+--echo ============================================
+
+drop table if exists t3;
+drop table if exists t3_fork;
+
+create table t3 (
+    id int,
+    name varchar(50),
+    email varchar(100),
+    phone varchar(20),
+    dept int,
+    primary key (id, dept),
+    unique key uk_email(dept, email),
+    unique key uk_phone(dept, phone)
+) partition by range(dept) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t3 values (1, 'Alice', 'alice@example.com', '1234567890', 10);
+insert into t3 values (2, 'Bob', 'bob@example.com', '0987654321', 150);
+
+--echo # Fork表
+fork table t3 to t3_fork;
+
+--echo # 验证Fork表的唯一索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t3_fork;
+
+--echo # 验证唯一索引约束在Fork表中独立（局部唯一索引：dept+email组合唯一）
+--error 1062
+insert into t3_fork values (3, 'Alice2', 'alice@example.com', '1111111111', 10);
+
+--echo # 在Fork表中插入新的唯一值（不同的dept，相同的email是允许的）
+insert into t3_fork values (3, 'Alice2', 'alice@example.com', '1111111111', 150);
+
+--echo # 验证唯一索引约束（dept+phone组合唯一）
+--error 1062
+insert into t3_fork values (4, 'Alice3', 'alice3@example.com', '1234567890', 10);
+
+--echo # 在Fork表中插入新的唯一值（不同的dept，相同的phone是允许的）
+insert into t3_fork values (4, 'Alice3', 'alice3@example.com', '1234567890', 150);
+
+--echo # 验证源表的唯一约束不受影响
+insert into t3 values (5, 'Alice4', 'alice@example.com', '1234567890', 50);
+
+--echo ============================================
+--echo 4. Fork Table with Composite Index
+--echo ============================================
+
+drop table if exists t4;
+drop table if exists t4_fork;
+
+create table t4 (
+    id int primary key,
+    name varchar(50),
+    age int,
+    dept varchar(50),
+    index idx_name_age(name, age),
+    index idx_age_dept(age, dept)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t4 values (1, 'Alice', 25, 'IT');
+insert into t4 values (101, 'Bob', 30, 'HR');
+insert into t4 values (50, 'Charlie', 25, 'IT');
+
+--echo # Fork表
+fork table t4 to t4_fork;
+
+--echo # 验证Fork表的复合索引
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t4_fork;
+
+--echo # 验证通过复合索引查询
+select * from t4_fork where name = 'Alice' and age = 25;
+select * from t4_fork where age = 30 and dept = 'HR';
+
+--echo ============================================
+--echo 5. 索引隔离测试 - Fork表索引修改不影响源表
+--echo ============================================
+
+--echo # 在Fork表中插入数据并验证索引
+insert into t4_fork values (99, 'Fork_User', 40, 'Finance');
+select * from t4_fork where name = 'Fork_User' and age = 40;
+
+--echo # 验证源表索引不受影响
+select * from t4 where name = 'Fork_User' and age = 40;
+
+--echo # 在源表中插入数据并验证索引
+insert into t4 values (88, 'Source_User', 45, 'Finance');
+select * from t4 where name = 'Source_User' and age = 45;
+
+--echo # 验证Fork表索引不受影响
+select * from t4_fork where name = 'Source_User' and age = 45;
+
+--echo ============================================
+--echo 6. 清理
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t2a;
+drop table if exists t2a_fork;
+drop table if exists t2b;
+drop table if exists t2b_fork;
+drop table if exists t2c;
+drop table if exists t2c_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop database if exists db_fork_index;

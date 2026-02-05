@@ -1,0 +1,120 @@
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_1');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_2');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_3');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_4');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_1', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_1';
+NAME	TYPE	MODEL_NAME
+my_ai_model_1	DENSE_EMBEDDING	text-embedding-v1
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_2', '{
+    "type": "sparse_embedding",
+    "model_name": "text-embedding-v4"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_2';
+NAME	TYPE	MODEL_NAME
+my_ai_model_2	SPARSE_EMBEDDING	text-embedding-v4
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_3', '{
+    "type": "completion",
+    "model_name": "hunyuan-t1-20250711"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_3';
+NAME	TYPE	MODEL_NAME
+my_ai_model_3	COMPLETION	hunyuan-t1-20250711
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_4', '{
+    "type": "rerank",
+    "model_name": "Qwen/Qwen3-Reranker-0.6B"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'my_ai_model_4';
+NAME	TYPE	MODEL_NAME
+my_ai_model_4	RERANK	Qwen/Qwen3-Reranker-0.6B
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_1');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_2');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_3');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_1', '{
+    "type": "unknow",
+    "model_name": "Qwen/Qwen3-Reranker-0.6B"
+  }');
+ERROR HY000: The value of param 'type' is invalid
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_1', '{
+    "model_name": "Qwen/Qwen3-Reranker-0.6B"
+  }');
+ERROR HY000: The param 'type' is empty or null
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_1', '{
+    "type": "",
+    "model_name": "Qwen/Qwen3-Reranker-0.6B"
+  }');
+ERROR HY000: The value of param 'type' is invalid
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_1', '{
+    "type": "dense_embedding",
+    "model_name": ""
+  }');
+ERROR HY000: The param 'model_name' is empty or null
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_1', '{
+    "type": "dense_embedding"
+  }');
+ERROR HY000: The param 'model_name' is empty or null
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_1', '{
+  }');
+ERROR HY000: The param 'model_name' is empty or null
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_4', '{
+    "type": "rerank",
+    "model_name": "Qwen/Qwen3-Reranker-0.6B"
+  }');
+ERROR HY000: This ai model 'my_ai_model_4' is already exists
+call DBMS_AI_SERVICE.DROP_AI_MODEL('');
+ERROR HY000: The param 'name' is empty or null
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_3');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_ai_model_3', '{
+    "type": "completion",
+    "model_name": "hunyuan-t1-20250711"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.CDB_OB_AI_MODELS WHERE NAME in ('my_ai_model_3', 'my_ai_model_4') ORDER BY TENANT_ID;
+NAME	TYPE	MODEL_NAME
+my_ai_model_4	RERANK	Qwen/Qwen3-Reranker-0.6B
+my_ai_model_3	COMPLETION	hunyuan-t1-20250711
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_3');
+select user_id, database_id, database_name, tablegroup_id, table_name, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where operation_type >= 2154 and operation_type <= 2157 order by gmt_create desc limit 2;
+user_id	database_id	database_name	tablegroup_id	table_name	operation_type	ddl_stmt_str
+call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_4');
+select user_id, database_id, database_name, tablegroup_id, table_name, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where operation_type >= 2154 and operation_type <= 2157 order by gmt_create desc limit 8;
+user_id	database_id	database_name	tablegroup_id	table_name	operation_type	ddl_stmt_str
+call DBMS_AI_SERVICE.DROP_AI_MODEL('user_ai_model_1');
+DROP USER IF EXISTS test_ai_user@'%';
+CREATE USER test_ai_user@'%' IDENTIFIED BY '123456';
+GRANT SELECT ON test.* TO 'test_ai_user'@'%';
+SHOW GRANTS FOR test_ai_user@'%';
+Grants for test_ai_user@%
+GRANT USAGE ON *.* TO 'test_ai_user'
+GRANT SELECT ON `test`.* TO 'test_ai_user'
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'user_ai_model_1', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+ERROR 42501: Access denied; you need (at least one of) the create ai model privilege(s) for this operation
+GRANT CREATE AI MODEL ON *.* TO test_ai_user@'%';
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'user_ai_model_1', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+call DBMS_AI_SERVICE.DROP_AI_MODEL('user_ai_model_1');
+ERROR 42501: Access denied; you need (at least one of) the drop ai model privilege(s) for this operation
+GRANT DROP AI MODEL ON *.* TO test_ai_user@'%';
+call DBMS_AI_SERVICE.DROP_AI_MODEL('user_ai_model_1');
+DROP USER test_ai_user@'%';

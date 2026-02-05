@@ -1,0 +1,55 @@
+drop table if exists test_conv_varchar;
+create table test_conv_varchar(c1 varchar(20), c2 varchar(26));
+insert into test_conv_varchar values ('aaa', 'bbbbb');
+insert into test_conv_varchar values ('baa', '1;aslfa;ldfa;lsdfj20a;sd26');
+result_format: 4
+explain_protocol: 2
+update test_conv_varchar set c1=c2;
+ERROR 22001: Data too long for column 'c1' at row 2
+EXPLAIN update test_conv_varchar set c1=c2 where length(c2)<=20;
+Query Plan
+==============================================================
+|ID|OPERATOR         |NAME             |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------
+|0 |UPDATE           |                 |1       |32          |
+|1 |└─TABLE FULL SCAN|test_conv_varchar|1       |3           |
+==============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+      table_columns([{test_conv_varchar: ({test_conv_varchar: (test_conv_varchar.__pk_increment, test_conv_varchar.c1, test_conv_varchar.c2)})}]),
+      update([test_conv_varchar.c1=column_conv(VARCHAR,utf8mb4_general_ci,length:20,NULL,test_conv_varchar.c2)])
+  1 - output([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), filter([length(test_conv_varchar.c2) <= 20]), rowset=16
+      access([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([test_conv_varchar.__pk_increment]), range(MIN ; MAX)always true
+update test_conv_varchar set c1=c2 where length(c2)<=20;
+EXPLAIN update test_conv_varchar set c1=c2 where c1 in (select c1 from test_conv_varchar where length(c2)<=20);
+Query Plan
+====================================================================
+|ID|OPERATOR               |NAME             |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------------
+|0 |UPDATE                 |                 |1       |37          |
+|1 |└─HASH RIGHT SEMI JOIN |                 |1       |6           |
+|2 |  ├─SUBPLAN SCAN       |VIEW1            |1       |3           |
+|3 |  │ └─TABLE FULL SCAN  |test_conv_varchar|1       |3           |
+|4 |  └─TABLE FULL SCAN    |test_conv_varchar|2       |3           |
+====================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+      table_columns([{test_conv_varchar: ({test_conv_varchar: (test_conv_varchar.__pk_increment, test_conv_varchar.c1, test_conv_varchar.c2)})}]),
+      update([test_conv_varchar.c1=column_conv(VARCHAR,utf8mb4_general_ci,length:20,NULL,test_conv_varchar.c2)])
+  1 - output([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), filter(nil), rowset=16
+      equal_conds([test_conv_varchar.c1 = VIEW1.c1]), other_conds(nil)
+  2 - output([VIEW1.c1]), filter(nil), rowset=16
+      access([VIEW1.c1])
+  3 - output([test_conv_varchar.c1]), filter([length(test_conv_varchar.c2) <= 20]), rowset=16
+      access([test_conv_varchar.c2], [test_conv_varchar.c1]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([test_conv_varchar.__pk_increment]), range(MIN ; MAX)always true
+  4 - output([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), filter(nil), rowset=16
+      access([test_conv_varchar.__pk_increment], [test_conv_varchar.c1], [test_conv_varchar.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([test_conv_varchar.__pk_increment]), range(MIN ; MAX)always true
+update test_conv_varchar set c1=c2 where c1 in (select c1 from test_conv_varchar where length(c2)<=20);

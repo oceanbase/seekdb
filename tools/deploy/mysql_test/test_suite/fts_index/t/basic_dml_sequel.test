@@ -1,0 +1,475 @@
+# owner: yunshan.tys
+# owner group: storage
+# description test basic dml for fulltext search
+
+connect(sys_conn, $OBMYSQL_MS0, root@sys,,oceanbase, $OBMYSQL_PORT);
+connection sys_conn;
+
+alter system set _enable_add_fulltext_index_to_existing_table = true;
+
+--disable_warnings
+drop database if exists fts_basic_dml_sequel;
+--enable_warnings
+
+create database fts_basic_dml_sequel;
+
+use fts_basic_dml_sequel;
+
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_basic_dml_sequel' AND tenant_id = 1, database_id, 1);
+
+--result_format 3
+
+--disable_warnings
+DROP TABLE IF EXISTS sub_part_t1;
+--enable_warnings
+
+create table sub_part_t1(
+  c1 int not null auto_increment,
+  c2 int,
+  c3 varchar(100),
+  c4 varchar(100),
+  primary key(c1, c2),
+  fulltext index idx1(c3),
+  fulltext index idx2(c4) with parser ngram
+) partition by range columns(c1) subpartition by range columns(c2)
+subpartition template(
+  subpartition m0 values less than(100),
+  subpartition m1 values less than(200),
+  subpartition m2 values less than(300),
+  subpartition m3 values less than(10000))
+( partition p0 values less than(100),
+  partition p1 values less than(200),
+  partition p2 values less than(300),
+  partition p3 values less than(10000));
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE sub_part_t1;
+SHOW INDEX FROM sub_part_t1;
+
+set ob_enable_index_direct_select = 'ON';
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'sub_part_t1' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id AND table_name like '%idx1', table_name, 1);
+let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id AND table_name like '%idx2', table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_segment_18_%', column_name, 1);
+let $__word_count_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_count_18_%', column_name, 1);
+let $__doc_length_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_length_18_%', column_name, 1);
+
+let $__word_segment_19 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_segment_19_%', column_name, 1);
+let $__word_count_19 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_count_19_%', column_name, 1);
+let $__doc_length_19 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_length_19_%', column_name, 1);
+
+insert into sub_part_t1(c2, c3, c4) values (1, 'aaaa aaa, aa', 'bbbb'), (2, 'cccc', 'dddd dd ddd'), (3, 'eeee', 'ffff');
+select * from sub_part_t1;
+#eval select $__word_segment_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index1_table_name;
+#eval select $__word_segment_19 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_19 as word_count, $__doc_length_19 as doc_length from $fts_index2_table_name;
+
+update sub_part_t1 set  c3 = 'test test test' where c1 = 2;
+select * from sub_part_t1;
+#eval select $__word_segment_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index1_table_name;
+#eval select $__word_segment_19 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_19 as word_count, $__doc_length_19 as doc_length from $fts_index2_table_name;
+
+delete from sub_part_t1;
+select * from sub_part_t1;
+#eval select $__word_segment_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index1_table_name;
+#eval select $__word_segment_19 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_19 as word_count, $__doc_length_19 as doc_length from $fts_index2_table_name;
+
+drop table sub_part_t1;
+
+alter system set _enable_defensive_check=2;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_with_strict_defensive_check;
+--enable_warnings
+
+CREATE TABLE fts_with_strict_defensive_check(a int PRIMARY KEY, b text, FULLTEXT INDEX(b));
+INSERT INTO fts_with_strict_defensive_check values (1, 'aaaa'), (2, 'bbbb');
+SELECT * FROM fts_with_strict_defensive_check;
+UPDATE fts_with_strict_defensive_check SET b = 'cccc' WHERE a = 1;
+DELETE FROM fts_with_strict_defensive_check WHERE a = 2;
+SELECT * FROM fts_with_strict_defensive_check;
+DROP TABLE fts_with_strict_defensive_check;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_bug2024082100104206689;
+--enable_warnings
+
+CREATE TABLE fts_bug_2024082100104206689(a int PRIMARY KEY, b text, FULLTEXT INDEX(b));
+INSERT INTO fts_bug_2024082100104206689 values (1, 'aaaa'), (2, 'bbbb');
+SELECT * FROM fts_bug_2024082100104206689;
+alter table fts_bug_2024082100104206689 add column c timestamp;
+insert into fts_bug_2024082100104206689(a,b,c) values(1, 'aaaa', FROM_UNIXTIME(1724049910.0)) ON DUPLICATE KEY UPDATE a=values(a), b=values(b), c = VALUES(c);
+SELECT * FROM fts_bug_2024082100104206689;
+DROP TABLE fts_bug_2024082100104206689;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_bug_2025012200107101199;
+
+CREATE TABLE fts_bug_2025012200107101199(a varchar(100), fulltext index fts1(a), fulltext index fts2(a), fulltext index fts3(a));
+--enable_warnings
+
+INSERT INTO fts_bug_2025012200107101199(a) VALUES ('aaaa'), ('bbbb'), ('cccc');
+UPDATE fts_bug_2025012200107101199 SET a = 'dddd ddd' WHERE a = 'aaaa';
+DROP TABLE fts_bug_2025012200107101199;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_bug_2025012100107089369;
+
+CREATE TABLE fts_bug_2025012100107089369(
+  `pk1` int(11) ,
+  `pk2` int(11),
+  `first_name` varchar(100) ,
+  `last_name` varchar(100) ,
+  FULLTEXT KEY `index_i1` (`last_name`) WITH PARSER space,
+  FULLTEXT KEY `index_i4` (`last_name`) WITH PARSER ngram);
+--enable_warnings
+
+INSERT INTO fts_bug_2025012100107089369 (`pk1`, `pk2`, `first_name`, `last_name`) VALUES
+(1, 101, 'John', 'Doe'),
+(2, 102, 'Jane', 'Smith');
+
+UPDATE fts_bug_2025012100107089369 SET last_name="def" WHERE pk1=1;
+
+DROP TABLE fts_bug_2025012100107089369;
+
+alter system set _enable_defensive_check=1;
+
+--disable_warnings
+DROP TABLE IF EXISTS replace_table_of_part_table;
+--enable_warnings
+
+CREATE TABLE replace_table_of_part_table(
+  c1 INT PRIMARY KEY,
+  c2 VARCHAR(100),
+  FULLTEXT idx1(c2)
+) PARTITION BY HASH(c1) PARTITIONS 2;
+CREATE VIEW replace_view_of_part_table AS SELECT * FROM replace_table_of_part_table;
+
+INSERT INTO replace_view_of_part_table VALUES (1, 'aaaa');
+REPLACE INTO replace_view_of_part_table VALUES (2, 'bbbb');
+SELECT * FROM replace_view_of_part_table;
+SELECT * FROM replace_table_of_part_table;
+
+DROP VIEW replace_view_of_part_table;
+DROP TABLE replace_table_of_part_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS table_without_partition;
+--enable_warnings
+
+CREATE TABLE table_without_partition(
+  c1 INT PRIMARY KEY,
+  c2 VARCHAR(100),
+  FULLTEXT idx1(c2)
+) PARTITION BY LIST COLUMNS (c1) (PARTITION p0 VALUES in(10), PARTITION p1 VALUES in(50));
+
+--error 1526
+INSERT INTO table_without_partition VALUES (1, 'aaaa');
+--error 1526
+REPLACE INTO table_without_partition VALUES (2, 'bbbb');
+SELECT * FROM table_without_partition;
+
+INSERT INTO table_without_partition VALUES (10, 'aaaa');
+REPLACE INTO table_without_partition VALUES (50, 'bbbb');
+SELECT * FROM table_without_partition;
+
+DROP TABLE table_without_partition;
+
+--disable_warnings
+DROP TABLE IF EXISTS update_with_global_lookup;
+--enable_warnings
+
+CREATE TABLE update_with_global_lookup(
+  c1 int(127) NOT NULL PRIMARY KEY,
+  c2 int(127) DEFAULT NULL,
+  c3 varchar(86),
+  FULLTEXT KEY f_idx(c3),
+  INDEX g_idx (c2) GLOBAL
+) partition by hash(c1);
+
+INSERT INTO update_with_global_lookup(c1, c2, c3) VALUES (1, 1, 'bbbb'), (2, 2, 'dddd');
+SELECT * FROM update_with_global_lookup;
+
+--replace_regex /_[0-9]+/_*/
+EXPLAIN UPDATE update_with_global_lookup SET c3 = 'cccc' where c2 = 2;
+
+UPDATE update_with_global_lookup SET c3 = 'cccc' where c2 = 2;
+SELECT * FROM update_with_global_lookup;
+
+DROP TABLE update_with_global_lookup;
+
+--disable_warnings
+DROP TABLE IF EXISTS replace_updatable_view;
+--enable_warnings
+
+CREATE TABLE replace_updatable_table(c1 INT PRIMARY KEY, c2 VARCHAR(100), FULLTEXT idx1(c2));
+CREATE VIEW replace_updatable_view AS SELECT * FROM replace_updatable_table;
+
+REPLACE INTO replace_updatable_view VALUES(1, 'aaaa');
+SELECT * FROM replace_updatable_view;
+SELECT * FROM replace_updatable_table;
+
+REPLACE INTO replace_updatable_view VALUES(1, 'bbbb');
+SELECT * FROM replace_updatable_view;
+SELECT * FROM replace_updatable_table;
+
+DROP VIEW replace_updatable_view;
+DROP TABLE replace_updatable_table;
+
+CREATE TABLE replace_updatable_table(c1 INT UNIQUE KEY, c2 VARCHAR(100), FULLTEXT idx1(c2));
+CREATE VIEW replace_updatable_view AS SELECT * FROM replace_updatable_table;
+
+REPLACE INTO replace_updatable_view VALUES(1, 'aaaa');
+SELECT * FROM replace_updatable_view;
+SELECT * FROM replace_updatable_table;
+
+REPLACE INTO replace_updatable_view VALUES(1, 'bbbb');
+SELECT * FROM replace_updatable_view;
+SELECT * FROM replace_updatable_table;
+
+DROP VIEW replace_updatable_view;
+DROP TABLE replace_updatable_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS select_for_update;
+--enable_warnings
+
+CREATE TABLE select_for_update(
+  c1 INT PRIMARY KEY,
+  c2 VARCHAR(100),
+  FULLTEXT f_idx(c2));
+INSERT INTO select_for_update(c1, c2) VALUES (1, 'aaa'), (2, 'bbb'), (3, 'ccc');
+SELECT 1 FROM select_for_update WHERE c1 = 2 FOR UPDATE;
+
+DROP TABLE select_for_update;
+
+--disable_warnings
+DROP TABLE IF EXISTS rowkey_order_with_doc_id;
+--enable_warnings
+
+CREATE TABLE rowkey_order_with_doc_id (
+  c1 INT(20) NOT NULL AUTO_INCREMENT,
+  c2 INT(20) NOT NULL,
+  c3 VARCHAR(200) DEFAULT NULL,
+  PRIMARY KEY (c2, c1),
+  FULLTEXT KEY f_idx(c3));
+INSERT INTO rowkey_order_with_doc_id(c2, c3) VALUES (42584969, 'bbbb');
+UPDATE rowkey_order_with_doc_id SET c2 = 45712355 WHERE c3 = 'bbbb';
+UPDATE rowkey_order_with_doc_id SET c3 = 'cccc' WHERE c2 = 45712355;
+SELECT * FROM rowkey_order_with_doc_id;
+
+DROP TABLE rowkey_order_with_doc_id;
+
+--disable_warnings
+DROP TABLE IF EXISTS replace_with_multi_part;
+--enable_warnings
+
+CREATE TABLE replace_with_multi_part(
+  c1 INT PRIMARY KEY,
+  c2 VARCHAR(100),
+  FULLTEXT idx(c2)
+) PARTITION BY KEY(c1) PARTITIONS 4;
+
+CREATE TABLE replace_with_multi_part_twin LIKE replace_with_multi_part;
+
+INSERT INTO replace_with_multi_part(c1,c2) VALUES (1, 'aaaa'), (2, 'bbbb'), (3,'cccc'), (4,'dddd'), (5,'eeee');
+
+REPLACE INTO replace_with_multi_part_twin(c1,c2) SELECT c1,c2 FROM replace_with_multi_part;
+REPLACE INTO replace_with_multi_part_twin(c1,c2) SELECT c1,c2 FROM replace_with_multi_part;
+
+SELECT * FROM replace_with_multi_part;
+SELECT * FROM replace_with_multi_part_twin;
+
+DROP TABLE replace_with_multi_part;
+DROP TABLE replace_with_multi_part_twin;
+
+--disable_warnings
+DROP TABLE IF EXISTS t6_y;
+
+--disable_warnings
+CREATE TABLE `t6_y` (
+  `c1` binary(70) NOT NULL,
+  `c2` varchar(86) COLLATE utf8mb4_bin NOT NULL,
+  `c3` decimal(64,0) NOT NULL,
+  `c4` year(4) DEFAULT NULL,
+  `c5` year(4) DEFAULT NULL,
+  `c6` datetime DEFAULT NULL,
+  `c7` varchar(86) COLLATE utf8mb4_bin NOT NULL,
+  `c8` timestamp(5) NOT NULL DEFAULT '0000-00-00 00:00:00.00000',
+  `c9` decimal(64,29) DEFAULT NULL,
+  `c10` decimal(64,4) NOT NULL,
+  `c11` bigint(127) DEFAULT NULL,
+  `c12` binary(152) DEFAULT NULL,
+  `c13` varchar(86) COLLATE utf8mb4_bin NOT NULL,
+  PRIMARY KEY (`c1`, `c13`, `c10`, `c2`, `c3`, `c7`),
+  UNIQUE KEY `u_0_lNpaBSd` (`c12`(151), `c1`(69)) LOCAL,
+  UNIQUE KEY `u_1_imxDD` ((`c11` - 1), `c12`(151), `c7`(85), `c1`(69)) LOCAL,
+  UNIQUE KEY `u_2_UC` (`c13`, `c11`, `c1`) LOCAL,
+  UNIQUE KEY `u_3_u` (`c2`, `c3`, `c1`) LOCAL,
+  FULLTEXT KEY `f_0_nDnxnHAAA` (`c2`, `c13`) WITH PARSER space,
+  FULLTEXT KEY `f_1_fbPG` (`c2`, `c13`) WITH PARSER space,
+  KEY `i_0_VUgpDp` (`c1`, `c2`, `c13`) LOCAL,
+  KEY `i_2_Cd` (`c11`, `c12`) LOCAL,
+  KEY `i_3_uClzM` (`c7`, `c1`) LOCAL
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0;
+--enable_warnings
+
+insert into t6_y(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13)
+  values('DW025','XAYzBuzALLItjoaBC DEF G025', '-25', 2101, 2139, '2000-05-01 09:54:48', 'FOOwEiEaxpNxXtZNsZiLpANyrwgtJtvoEGvAxDaNPJKL MNO 025', '2004-08-11 13:00:36.00000', '-25.00000000000000000000000000000', '-25.0000', '-25', 'tnAcsdGnbnuwJGdEcsmjDjYbaoxAMqLQSZaUmIPTtXwJQfVOttrO PQR ST025', 'eOhKGyHmulLxdkGiwqfgIMKBRVQenUwjRVhpAebFdIVvvXqFUbTqjWkwLMjmmnCkaNO PQR S025');
+
+insert into t6_y(c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13)
+  values('DeeXrPbBxnUjxikZuNwl DEF GHI069','mwTYjFHQsPruZNvgNgnNngViASFROEmMBktZWpESndmGLNkNsZYlPLmWRDuyKkDLlqThYHfXWLF GHI JK069', '69', 2089, 2002, '2014-08-23 03:56:14', 'aWURMVunjAkAMipLrijulufOfsEkzDpU VWX YZ069', '2023-03-27 18:27:24.00000', '69.00000000000000000000000000000', '69.0000', '69', 'nhywmUzVQKfXbVdeijlYItNvbWJZClAsdUrHYiTVQuZhFmGNyoZkkHQbYkRkJMdueQkRLaswURNjYksulfgSDXcnIBJDvjuwwbRHZvgvDgI JKL MN069', 'XHrHDnCJKL MNO 069');
+
+DELETE /*+ delete_single_table_with_single_table_index_case_hint_with_index.yaml no_use_px leading(t6_y view1) */ FROM t6_y WHERE c13 not in ((select /*+delete_single_table_with_single_table_index_case_hint_with_index.yaml index(t6_y u_2_UC) */ c13 from t6_y) union (select /*+delete_single_table_with_single_table_index_case_hint_with_index.yaml index(t6_y u_2_UC) */ c13 from t6_y)) and c13 not in ('tdfBJVOtNzSuLMdjRJjRcvNHgJjefPQR STU ');
+
+SELECT * FROM t6_y;
+
+drop table t6_y;
+
+--disable_warnings
+DROP TABLE IF EXISTS dml_without_null;
+--enable_warnings
+
+CREATE TABLE dml_without_null(
+  id INT NOT NULL AUTO_INCREMENT,
+  name VARCHAR(255),
+  description VARCHAR(255) DEFAULT NULL,
+  PRIMARY KEY (id),
+  FULLTEXT fts_idx(description)
+);
+
+INSERT INTO dml_without_null(name, description) VALUES
+('Product 1', 'This is the description for product 1.'),
+('Product 2', 'This is the description for product 2.'),
+('Product 3', 'This is the description for product 3.'),
+('Product 4', NULL),
+('Product 5', 'This is the description for product 5.'),
+('Product 6', 'This is the description for product 6.');
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'dml_without_null' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+let $fts_index = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id AND table_name like '%fts_idx', table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+let $__word_count_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+let $__doc_length_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+select * from dml_without_null order by id desc;
+
+--disable_query_log
+eval select $__word_segment_18 as word, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index order by 1,2;
+--enable_query_log
+
+drop table dml_without_null;
+
+--disable_warnings
+DROP TABLE IF EXISTS bug2024111900105177241;
+--enable_warnings
+
+CREATE TABLE `bug2024111900105177241` (
+  `c1` year(4) DEFAULT NULL,
+  `c2` varbinary(72) DEFAULT NULL,
+  `c3` int(127) DEFAULT NULL,
+  `c4` binary(104) DEFAULT NULL,
+  `c5` date DEFAULT NULL,
+  `c6` decimal(64,23) DEFAULT NULL,
+  `c7` varchar(86) COLLATE utf8mb4_bin DEFAULT NULL,
+  `c8` int(127) DEFAULT NULL,
+  `c9` timestamp(4) NOT NULL DEFAULT '0000-00-00 00:00:00.0000',
+  `c10` int(127) DEFAULT NULL,
+  `c11` char(152) COLLATE utf8mb4_bin NOT NULL,
+  `c12` year(4) DEFAULT NULL,
+  `c13` int(127) DEFAULT NULL,
+  `c14` char(152) COLLATE utf8mb4_bin DEFAULT NULL,
+  `c15` datetime DEFAULT NULL,
+  `c16` int(127) NOT NULL,
+  `c17` decimal(64,0) DEFAULT NULL,
+  `c18` int(127) NOT NULL AUTO_INCREMENT,
+  `c19` year(4) DEFAULT NULL,
+  `c20` varchar(86) COLLATE utf8mb4_bin DEFAULT NULL,
+  `c21` int(127) NOT NULL,
+  `c22` date DEFAULT NULL,
+  `c23` year(4) DEFAULT NULL,
+  `c24` varbinary(73) DEFAULT NULL,
+  `c25` int(127) NOT NULL,
+  `c26` varchar(86) COLLATE utf8mb4_bin NOT NULL,
+  `c27` bigint(127) DEFAULT NULL,
+  `c28` datetime DEFAULT NULL,
+  `c29` year(4) DEFAULT NULL,
+  `c30` varbinary(71) DEFAULT NULL,
+  `c31` varchar(86) COLLATE utf8mb4_bin DEFAULT NULL,
+  `c32` date DEFAULT NULL,
+  `c33` char(152) COLLATE utf8mb4_bin NOT NULL,
+  PRIMARY KEY (`c26`, `c33`, `c25`, `c18`, `c21`, `c11`, `c16`),
+  UNIQUE KEY `u_0_leIaHjz` (`c13`, `c2`, `c26`, `c33`, `c25`, `c18`, `c21`, `c11`, `c16`) BLOCK_SIZE 16384 LOCAL,
+  UNIQUE KEY `u_1_xN` (`c4`, `c26`, `c33`, `c25`, `c18`, `c21`, `c11`, `c16`) BLOCK_SIZE 16384 LOCAL,
+  UNIQUE KEY `u_2_uiMBii` (`c21`, `c26`, `c33`, `c25`, `c18`, `c11`, `c16`) BLOCK_SIZE 16384 LOCAL,
+  UNIQUE KEY `g_u_3_fJVYtw` (`c11`) BLOCK_SIZE 16384 GLOBAL,
+  FULLTEXT KEY `f_0_AbTOV` (`c20`) WITH PARSER space BLOCK_SIZE 16384,
+  KEY `g_i_0_JPK` (`c21`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `g_i_1_mBsUB` (`c2`, `c8`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `i_2_IvQoVzH` (`c2`, `c27`, `c14`, `c31`) BLOCK_SIZE 16384 LOCAL,
+  KEY `i_3_d` (`c3`, `c31`) BLOCK_SIZE 16384 LOCAL
+) AUTO_INCREMENT = 100425246 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by key(c26,c33,c25,c18,c21,c11,c16)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`,
+partition `p4`,
+partition `p5`,
+partition `p6`,
+partition `p7`,
+partition `p8`);
+
+INSERT INTO bug2024111900105177241 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30, c31, c32, c33) VALUES
+(NULL, 'sCQSxYSFaeyEpscltWxEpNroEOKl abc def11370205', '11370205', 'zqijCuJJzuOIyYqIctNLCiyXejshOnAbkOgVxXWoWnKyZA abc d11370205', NULL, NULL, NULL, '11370205', '1993-08-22 05:32:48.0000', 814, 'IdfrAXJtNMtLAwpOUGSZfeVyWNKrdXbNQqKcszIcPMAdqHNpRpYVLAfijDKLBlryIEMLoGEkrxtBKwwAYlUduahdGerjomP STU VWX11370205', NULL, '11370205', 'cjfuOwLtTkxQLjkhrIGDVhHMrNAoCAwAHwjRqDNWCoLpgFzxHdSTU VWX 11370205', NULL, '11370205', 9615, '11370205', 2024, 'yTBRHreEsywEvGbJRNyuALqWwWlZdbMloXaBSSApnGpFrRylqr stu v11370205', '11370205', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '11370205', 'rXo11370205', '11370205', '2011-04-27 00:00:00', 2125, NULL, 'SJxMbNPKRDjimEUBHSPqTEvCiwDmdEVhGugfImuzKTDsB pqr stu11370205', '2013-06-18', 'HXnkSpivqZu vwx yz11370205'),
+(NULL, 'NGRVdnJQVWX YZA 56161745', '56161745', 'YCBlarUSXIGcJUgZPfuHgbLOExeqszGYIjYdlMAPXAbAhTZU VWX YZA56161745', NULL, NULL, NULL, '56161745', '1993-08-22 05:32:48.0000', 814, 'LjrgmdQBvyMDzDBpvRlFBELyhbZBPVZqXAlRvcYwIWByqjzUZSqAhYHABC DEF 56161745', NULL, '56161745', 'OTLJHzkkIqpOBHdGBqqliSzzMRdSzmfTU VWX Y56161745', NULL, '56161745', 9615, '56161745', 2024, 'wO56161745', '56161745', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '56161745', 'diTJQDMtbJHPakoNLLTmno pqr 56161745', '56161745', '2011-04-27 00:00:00', 2125, NULL, 'XUoxjshpsGhyhqVXKwIKmRjNHYSWvqNJwPemFnZJlZiJOoHnpNspghi jkl 56161745', '2013-06-18', 'zUjS56161745'),
+(NULL, 'h35454912', '35454912', 'BzjjCKyzBEYhnzNDdRWsZoposWRxapNJeCP YZA abc35454912', NULL, NULL, NULL, '35454912', '1993-08-22 05:32:48.0000', 814, 'YmuouHYDsfmSbWelHPfhuWNWVAzQClGcBWeiNApDDkaxVDBwNnreEQaCiDUPSuBVunRhdlyvmKVKuLnxXlSeNFFnEunmStcJKL MNO 35454912', NULL, '35454912', 'CFcOvzfFbIzuzEjgNXMEaAkMbqYqJw YZA abc35454912', NULL, '35454912', 9615, '35454912', 2024, 'TiPUfhJPigpqkJcIuIyVtR STU VW35454912', '35454912', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '35454912', 'psFWFJoxtoTEfGBlSfjRWpbDALPMkarUDqJmno pqr 35454912', '35454912', '2011-04-27 00:00:00', 2125, NULL, 'PlZiDaTvquCBUrORHaBihubKlomfIMoEUBYvBLOMJzTcDhCeTXTEFEGzfFKsgPmLQAb ghi jkl35454912', '2013-06-18', 'FnyGFoFpemyKTZuXDswaXllzeOMuUgwOGISCuLepnkfAFPcOztVgVlYjbuDjISxvYzFTEamOwlwUJTfNxvDF GHI JK35454912'),
+(NULL, 'POfCsIJLKsFjxbGiDKGpjpKXUiwaFfkuyOaFnUyMGZlDKYAddvnef ghi j40626977', '40626977', 'QYYjOsSgmSVtXMTYo pqr st40626977', NULL, NULL, NULL, '40626977', '1993-08-22 05:32:48.0000', 814, 'ZTzwaMFWrlALrvtUAQUjhjIPEVTHiiMPopmxHSGOnszomJxIFyfocTUZUcNxEiPFQPIwgqKUujCCCIJZDTJSMhsqhfJUnCREXxeVFwtyibn def ghi40626977', NULL, '40626977', 'mluLGGQUSCcccxYHkstu vwx 40626977', NULL, '40626977', 9615, '40626977', 2024, 'LtLGkvuPNZhrIRVKRxFvaAGI jkl mno40626977', '40626977', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '40626977', 'xHiieYnNQBCrjZwDHGpDKJNCCTGEZTbAPMyfleISOESAnyXkl mno p40626977', '40626977', '2011-04-27 00:00:00', 2125, NULL, 'UeurQFrVbcDpf ghi jk40626977', '2013-06-18', 'OKcnPoSjbfLhPzcrOoCFrpRkZlDwRMkdAMcKHBhIccMjIlAKPyNYiPLMWmJgkphVZwDEF GHI 40626977'),
+(NULL, 'zxuacHulLLAkavRbYhQNVuwATJZTBfdxYDiBrEDsml STU VWX91031115', '91031115', 'UcfnhXcPzcnyaYfQdTZseJtthZWqvpwjXgkSetLYCudUEkpXaLPNLKniwVscKCQGMyMGsh vwx yza91031115', NULL, NULL, NULL, '91031115', '1993-08-22 05:32:48.0000', 814, 'eihBIEIEDaQIQiMyVetgctyKfLWKgyfLXJQexUTLAqdwBsUahJSRgVODzjylsCnhDiamEPbZpgxFPKZDpUQYlRKYrahfzQLjiuqsORDXOlJdDqsli pqr stu91031115', NULL, '91031115', 'yldX91031115', NULL, '91031115', 9615, '91031115', 2024, 'aPXIBmazdixacDzwPnJCqmlFdOMXaYxAgSxeDTFGNEUPSAsTcoqgdTgJColwHSTU VWX 91031115', '91031115', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '91031115', 'qBZKQwvNSssGUXDAiuSsoi mno pqr91031115', '91031115', '2011-04-27 00:00:00', 2125, NULL, 'ypWmhVIi91031115', '2013-06-18', 'dKPeoVbQhZAsKyOHcXKoDTCHLoVNboUcuHEDwWLzqHWDlejVlbbaJtPPLaTrRGnwdCrsWSqMzNmkpMkBdybCDxJxGJNOhKNqOZDuODEF GHI 91031115'),
+(NULL, 'AcCktYKglCTbYiesKKismCrcUcHfnTFgfEfHAklAghi jkl 11610199', '11610199', 'nAzSslRVzgJlaBbgnFdbLCuiAMGqxzAGRCgXLonXUaHPukQKqHyhgOCoiKuxoAqkPtBdpSURtkYVDKHnJKL MNO 11610199', NULL, NULL, NULL, '11610199', '1993-08-22 05:32:48.0000', 814, 'jDIxAErNgnvUoWVC DEF GH11610199', NULL, '11610199', 'CoPOagOcyBouFuMBkiLTtbffzfRroreslCETfdiCSaJPPYSooDLIatJNPTrSf ghi jk11610199', NULL, '11610199', 9615, '11610199', 2024, 'AyrPSXpivdpIf ghi jk11610199', '11610199', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '11610199', 'XwuFrTXIzPQDYBbZTNMPtDEF GHI 11610199', '11610199', '2011-04-27 00:00:00', 2125, NULL, 'dJ abc def11610199', '2013-06-18', 'ZIDpRNTWCqjulfRDQgjZEwUQnchdHMqYmhvJBlpSdPegrhYDltjELSNuJvZtKXhYIiOKksHmbqXRBC DEF G11610199'),
+(NULL, 'tWGlOWpuVBAIQpidjXiOaEaMHvjyoNZIrQWRcQJvTUguMr stu vw67485183', '67485183', 'ZjQlAZjmkbwC DEF GHI67485183', NULL, NULL, NULL, '67485183', '1993-08-22 05:32:48.0000', 814, 'uyqkOHWnFnKfZALTqUdIOEBSwYQkgettigGAfqgfJryveFZhDgUgWPxVZPrxSWZzrPCItjMuQtlJXuXQZrntIwUgghfBpzHI JKL M67485183', NULL, '67485183', 'yjHzzxpzSNZUmMOFtVBiniuoBrsUSALMDaoehIvMWEdhjvYyedhNTwBvHXDuucyewFFX YZA ab67485183', NULL, '67485183', 9615, '67485183', 2024, 'CsEBBOVuDQdVQfIIXiranfBBZvxNtYsePxkvCtXqMYmrEV ghi jkl67485183', '67485183', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '67485183', 'cvYTsEWseeulHrIncYJskVEKstSnRfRcxouZgenEgXIZPDmSJMnpqr stu 67485183', '67485183', '2011-04-27 00:00:00', 2125, NULL, 'yvqzDo YZA abc67485183', '2013-06-18', 'hLPpMRkHcqAKJxhFZVWaBhVwtteWBYKsafiRjsPwGdLfavEEjtpPtYtljSKgsOUVCwwbCbZsYTJiQDkRYBNlNOpWueWRkWLmghgoMoJoeQqrtPvrmSiNSMttDoHqGliUAc def gh67485183'),
+(NULL, 'EWvxSeTamxpuoUanYkSvJeHyfwCzrYXEhXr stu vw9095511', '9095511', 'SatTTOrSnAKKXjYcqGGnYtBKJjYoLeCbedBJniWAOXu vwx yz9095511', NULL, NULL, NULL, '9095511', '1993-08-22 05:32:48.0000', 814, 'zdgkGbltusVSmnvPOQXLLbJaddZQuoLyxJEejVqEF GHI J9095511', NULL, '9095511', 'lIDZLxLabc def 9095511', NULL, '9095511', 9615, '9095511', 2024, 'VkihECQdvJFhlFUExhQOZJOxDuOvNstu vwx 9095511', '9095511', NULL, 2090, 'IFBXmqCBLfhwKaXMktBnZAkCIoWvQhMUH STU VWX', '9095511', 'XtAHMEIfhBwaCthi jkl m9095511', '9095511', '2011-04-27 00:00:00', 2125, NULL, 'tOIZBLRIbIbdecabc def 9095511', '2013-06-18', 'VXJWX YZA a9095511');
+
+UPDATE /*+ use_px parallel(2)*/ bug2024111900105177241 AS t1_0 INNER JOIN ((SELECT bug2024111900105177241.c16, bug2024111900105177241.c17, bug2024111900105177241.c18, bug2024111900105177241.c19, bug2024111900105177241.c20, bug2024111900105177241.c21, bug2024111900105177241.c22, bug2024111900105177241.c23, bug2024111900105177241.c24, bug2024111900105177241.c25, bug2024111900105177241.c26, bug2024111900105177241.c27, bug2024111900105177241.c28, bug2024111900105177241.c29, bug2024111900105177241.c30, bug2024111900105177241.c31, bug2024111900105177241.c32, bug2024111900105177241.c33, bug2024111900105177241.c1, bug2024111900105177241.c2, bug2024111900105177241.c3, bug2024111900105177241.c4, bug2024111900105177241.c5, bug2024111900105177241.c6, bug2024111900105177241.c7, bug2024111900105177241.c8, bug2024111900105177241.c9, bug2024111900105177241.c10, bug2024111900105177241.c11, bug2024111900105177241.c12, bug2024111900105177241.c13, bug2024111900105177241.c14, bug2024111900105177241.c15 FROM bug2024111900105177241 AS bug2024111900105177241 ORDER BY 31, 32, 33, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30 LIMIT 565) UNION ALL (SELECT bug2024111900105177241.c16, bug2024111900105177241.c17, bug2024111900105177241.c18, bug2024111900105177241.c19, bug2024111900105177241.c20, bug2024111900105177241.c21, bug2024111900105177241.c22, bug2024111900105177241.c23, bug2024111900105177241.c24, bug2024111900105177241.c25, bug2024111900105177241.c26, bug2024111900105177241.c27, bug2024111900105177241.c28, bug2024111900105177241.c29, bug2024111900105177241.c30, bug2024111900105177241.c31, bug2024111900105177241.c32, bug2024111900105177241.c33, bug2024111900105177241.c1, bug2024111900105177241.c2, bug2024111900105177241.c3, bug2024111900105177241.c4, bug2024111900105177241.c5, bug2024111900105177241.c6, bug2024111900105177241.c7, bug2024111900105177241.c8, bug2024111900105177241.c9, bug2024111900105177241.c10, bug2024111900105177241.c11, bug2024111900105177241.c12, bug2024111900105177241.c13, bug2024111900105177241.c14, bug2024111900105177241.c15 FROM bug2024111900105177241)) AS bug2024111900105177241 ON t1_0.c26 >= bug2024111900105177241.c26 AND t1_0.c26 <= bug2024111900105177241.c26 SET t1_0.c1 = '1918', t1_0.c2 = t1_0.c2, t1_0.c3 = t1_0.c3, t1_0.c4 = t1_0.c4, t1_0.c5 = date'2025-5-17', t1_0.c6 = 20755.50207512448000000000000, t1_0.c7 = 'nmdcuEkjSeqapNsUmHCzpbwGeVHNPRIgytfrrDaAbZdJASyyBhYYtfiznroqCKtqQwooGmWUYWX YZA a', t1_0.c8 = t1_0.c8, t1_0.c9 = timestamp'2019-2-4 15:7:10', t1_0.c10 = -153, t1_0.c11 = t1_0.c11, t1_0.c12 = '2146', t1_0.c13 = t1_0.c13, t1_0.c14 = t1_0.c14, t1_0.c15 = date'2031-11-27', t1_0.c16 = t1_0.c16, t1_0.c17 = 12934, t1_0.c18 = t1_0.c18, t1_0.c19 = '1909', t1_0.c20 = t1_0.c20, t1_0.c21 = t1_0.c21, t1_0.c22 = date'2008-10-15', t1_0.c23 = '1912', t1_0.c24 = 'MqCdEhLcxXPODcShuXIQNnbGxdcBSOMrEyUScG GHI JKL', t1_0.c25 = t1_0.c25, t1_0.c26 = t1_0.c26, t1_0.c27 = t1_0.c27, t1_0.c28 = date'2049-9-16', t1_0.c29 = '2060', t1_0.c30 = 'iLJyOrwQkuFsuRsBdYBtXxQgpF GHI JK', t1_0.c31 = t1_0.c31, t1_0.c32 = date'2055-6-18', t1_0.c33 = t1_0.c33 WHERE t1_0.c3 like t1_0.c8 AND t1_0.c9 = (SELECT t1_0.c9 FROM bug2024111900105177241 AS t1_0 ORDER BY 1 DESC LIMIT 1);
+
+DROP TABLE bug2024111900105177241;
+
+--disable_warnings
+DROP TABLE IF EXISTS create_index_without_words;
+--enable_warnings
+
+create table create_index_without_words(a int primary key, b varchar(100), c varchar(100), fulltext index fts1(b));
+
+insert into create_index_without_words(a, b, c) values (1, 'a', 'a'), (2, 'bb', 'bb'), (3, 'ccc', 'ccc'), (4, 'dddd', 'dddd');
+
+create fulltext index fts2 on create_index_without_words(c);
+
+select * from create_index_without_words where match(b) against("a bb ccc dddd");
+select * from create_index_without_words where match(c) against("a bb ccc dddd");
+
+DROP TABLE create_index_without_words;
+
+--disable_warnings
+DROP TABLE IF EXISTS create_index_with_one_partition;
+--enable_warnings
+
+create table create_index_with_one_partition(
+  a int,
+  b varchar(100)
+) partition by range columns(a) (partition `P8192` values less than (MAXVALUE));
+
+insert into create_index_with_one_partition (a,b) values (1, 'aaaaa');
+
+create fulltext index fts_idx on create_index_with_one_partition(b);
+
+select * from create_index_with_one_partition where match(b) against('aaaaa');
+
+drop table create_index_with_one_partition;
+
+drop database fts_basic_dml_sequel;

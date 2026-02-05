@@ -1,0 +1,117 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: dingjincheng.djc
+# owner group: SQL1
+# tags: optimizer, opt_stats
+# descriptor: test set table stats
+
+--result_format 3
+--disable_warnings
+drop table if exists t1, t_part, t_subpart;
+--enable_warnings
+
+create table t1 (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int);
+create table t_part (c1 int, c2 int, c3 int, c4 int, c5 int, c6 int) partition by hash(c1) partitions 4;
+create table t_subpart (c1 int, c2 int, c3 int) partition by hash(c1)
+subpartition by hash(c2)
+subpartition template
+(
+  subpartition p0,
+  subpartition p1,
+  subpartition p2
+)
+partitions 3;
+
+--disable_query_log
+--disable_warnings
+insert into t1 values(1,1,1,1,1,1);
+insert into t1 values(2,2,2,2,2,2);
+insert into t1 values(NULL,3,3,NULL,2,2);
+insert into t1 values(NULL,1,NULL,4,4,4);
+
+insert into t_part values(1,1,11,1,1,1);
+insert into t_part values(2,12,2,2,22,2);
+insert into t_part values(NULL,3,3,NULL,2,2);
+insert into t_part values(NULL,1,NULL,4,4,4);
+insert into t_part values(3,11,1,NULL,1,1);
+insert into t_part values(14,22,2,12,2,22);
+insert into t_part values(5,13,1,1,11,NULL);
+insert into t_part values(16,NULL,2,2,2,22);
+insert into t_part values(8,1,NULL,31,21,1);
+insert into t_part values(17,2,12,2,22,2);
+insert into t_part values(10,11,41,NULL,1,1);
+insert into t_part values(9,2,2,52,2,NULL);
+
+insert into t_subpart values(11,1,21);
+insert into t_subpart values(2,4,22);
+insert into t_subpart values(NULL,3,13);
+insert into t_subpart values(14,31,NULL);
+insert into t_subpart values(7,NULL,1);
+insert into t_subpart values(12,17,12);
+insert into t_subpart values(5,NULL,31);
+insert into t_subpart values(5,1,NULL);
+insert into t_subpart values(1,21,11);
+insert into t_subpart values(12,NULL,2);
+insert into t_subpart values(16,13,13);
+insert into t_subpart values(6,11,NULL);
+--enable_query_log
+--enable_warnings
+
+call dbms_stats.set_table_stats('TEST', 'T1', numrows=>10);
+select TABLE_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T1' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.gather_table_stats('TEST', 'T1', method_opt=>'for all columns');
+select TABLE_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T1' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T1', numrows=>10);
+select TABLE_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T1' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T1', avgrlen=>100);
+select TABLE_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T1' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T1', numrows=>11, avgrlen=>111);
+select TABLE_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T1' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_PART', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_PART', 'P0', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.gather_table_stats('TEST', 'T_PART', method_opt=>'for all columns', granularity => 'ALL');
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_PART', 'P1', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_PART', 'P2', avgrlen=>100);
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_PART', 'P3', numrows=>11, avgrlen=>111);
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P0', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P0SP0', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', method_opt=>'for all columns', granularity => 'ALL');
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P0SP1', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P1', avgrlen=>100);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P1SP2', numrows=>11, avgrlen=>111);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, SAMPLE_SIZE from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
+
+drop table t1;
+drop table t_part;
+drop table t_subpart;

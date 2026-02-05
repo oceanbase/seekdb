@@ -1,0 +1,48 @@
+--explain_protocol 1
+--result_format 3
+
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: yibo.tyf
+# owner group: sql1
+# tags: optimizer
+# description:
+
+--disable_warnings
+DROP DATABASE IF EXISTS BUG_15188850;
+--enable_warnings
+CREATE DATABASE BUG_15188850;
+USE BUG_15188850;
+
+create table t1 (d1 int, d2 int);
+
+create table t2 (e1 int, e2 int);
+
+create table t3 (f1 int, f2 int);
+
+insert into t1 values (3, 4), (5, 6), (7, 8), (9, 10);
+insert into t2 values (1,2), (4,4), (7,7), (10,10), (20,2);
+
+--echo # 不可以消除
+select distinct(count(d2)) from t1, t2;
+select /*+ no_rewrite() */ distinct(count(d2)) from t1, t2;
+
+--echo # 不可以消除
+select distinct(d2) from t1, t2;
+select /*+ no_rewrite() */ distinct(d2) from t1, t2;
+
+--echo # 不可以消除
+select max(t1.d1) from t1, t3;
+select /*+ no_rewrite() */ max(t1.d1) from t1, t3;
+
+--echo # 不可以消除
+select min(t1.d1) from t1, t3;
+select /*+ no_rewrite() */ min(t1.d1) from t1, t3;
+
+--echo # 不可以消除
+select count(distinct t1.d1) from t1, t3;
+select /*+ no_rewrite() */ count(distinct t1.d1) from t1, t3;
+
+USE BUG_15188850;
+DROP DATABASE IF EXISTS BUG_15188850;

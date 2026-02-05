@@ -1,0 +1,100 @@
+result_format: 4
+
+
+alter system set debug_sync_timeout = '300s';
+alter system set _ob_ddl_timeout = '1000s';
+alter system set rpc_timeout = '1000s';
+
+drop table if exists ddl_t1;
+drop table if exists foo;
+set ob_query_timeout = 1000000000;
+
+create table ddl_t1(c1 bigint, c2 varchar(512),
+                c3 varchar(1024), c4 varchar(1024),
+                c5 varchar(1024), c6 varchar(1024),
+                c7 varchar(1024));
+
+set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE wait_for signal1 execute 1000000000';
+insert /*+ append enable_parallel_dml parallel(4) */ into ddl_t1
+        select random() c1,
+               randstr(512, random()) c2, randstr(512, random()) c3,
+               randstr(512, random()) c4, randstr(512, random()) c5,
+               randstr(512, random()) c6, randstr(512, random()) c7
+        from table(generator(1000));
+
+alter system minor freeze;
+select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
+                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+                                             and table_type = 14;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
+                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+                                             and table_type = 21;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
+                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+                                             and table_type = 22;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+
+set ob_global_debug_sync = 'now signal signal1';
+set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE clear';
+select count(*) from ddl_t1;
++----------+
+| count(*) |
++----------+
+|     1000 |
++----------+
+
+
+set ob_global_debug_sync = 'reset';
+alter system set debug_sync_timeout = '10000000s';
+set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE wait_for signal1 execute 1000000000';
+
+alter table ddl_t1 add column group(all columns, each column);
+
+alter system minor freeze;
+select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
+                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+                                             and table_type = 14;
++----------+
+| count(*) |
++----------+
+|        0 |
++----------+
+select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
+                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+                                             and table_type = 21;
++----------+
+| count(*) |
++----------+
+|        1 |
++----------+
+select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
+                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+                                             and table_type = 22;
++----------+
+| count(*) |
++----------+
+|        8 |
++----------+
+
+set ob_global_debug_sync = 'now signal signal1';
+set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE clear';
+select count(*) from __all_virtual_column_group where table_id = (select table_id from __all_virtual_table where table_name like "ddl_t1" and tenant_id = (select effective_tenant_id())) and tenant_id = (select effective_tenant_id());
++----------+
+| count(*) |
++----------+
+|       10 |
++----------+

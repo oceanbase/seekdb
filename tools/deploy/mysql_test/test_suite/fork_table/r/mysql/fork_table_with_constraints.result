@@ -1,0 +1,124 @@
+drop database if exists db_fork_constraints;
+create database db_fork_constraints;
+use db_fork_constraints;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. Fork表与NOT NULL约束
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_constraints.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_constraints.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50) not null,
+email varchar(100) not null,
+age int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t1 values (1, 'Alice', 'alice@example.com', 25);
+insert into t1 values (101, 'Bob', 'bob@example.com', 30);
+# Fork表
+fork table t1 to t1_fork;
+# 验证Fork表约束
+show create table t1_fork;
+Table	Create Table
+t1_fork	CREATE TABLE `t1_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) NOT NULL,
+  `email` varchar(100) NOT NULL,
+  `age` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证NOT NULL约束在Fork表中生效
+insert into t1_fork(id, name) values (50, 'Test');
+ERROR HY000: Field 'email' doesn't have a default value
+# 正常插入
+insert into t1_fork values (50, 'Test', 'test@example.com', 35);
+select * from t1_fork where id = 50;
+id	name	email	age
+50	Test	test@example.com	35
+============================================
+2. Fork表与CHECK约束
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_constraints.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_constraints.t2_fork'
+create table t2 (
+id int primary key,
+age int check (age >= 0 and age <= 150),
+score int check (score >= 0 and score <= 100)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t2 values (1, 25, 85);
+insert into t2 values (101, 30, 90);
+# Fork表
+fork table t2 to t2_fork;
+# 验证CHECK约束在Fork表中生效
+insert into t2_fork values (50, -1, 50);
+ERROR HY000: check constraint violated
+insert into t2_fork values (50, 200, 50);
+ERROR HY000: check constraint violated
+insert into t2_fork values (50, 25, 150);
+ERROR HY000: check constraint violated
+# 正常插入
+insert into t2_fork values (50, 25, 85);
+select * from t2_fork where id = 50;
+id	age	score
+50	25	85
+============================================
+3. Fork表与DEFAULT约束
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_constraints.t3'
+drop table if exists t3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_constraints.t3_fork'
+create table t3 (
+id int primary key,
+name varchar(50) default 'Unknown',
+create_seq int default 0,
+status int default 0
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t3(id) values (1);
+insert into t3(id, name) values (101, 'Bob');
+# Fork表
+fork table t3 to t3_fork;
+# 验证DEFAULT约束在Fork表中生效
+insert into t3_fork(id) values (50);
+select * from t3_fork where id = 50;
+id	name	create_seq	status
+50	Unknown	0	0
+# 验证默认值独立
+insert into t3_fork(id, name) values (150, 'Fork_User');
+select * from t3_fork where id = 150;
+id	name	create_seq	status
+150	Fork_User	0	0
+============================================
+4. 清理
+============================================
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop database if exists db_fork_constraints;

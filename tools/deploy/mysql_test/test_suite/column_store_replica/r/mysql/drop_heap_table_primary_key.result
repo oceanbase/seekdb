@@ -1,0 +1,65 @@
+===============================================================
+=== Step 0: create tenant with cs replica locality in z2 ======
+===============================================================
+===============================================================
+=== Step 2: create heap table, prepare basic data =============
+===============================================================
+create table t1 (k int primary key, v1 int, v2 int);
+insert into t1 values (1, 2, 3), (2, 3, 4), (4, 5, 6);
+===============================================================
+=== Step 3: drop primary key and do major freeze ==============
+===============================================================
+alter table t1 drop primary key;
+select k, v1, v2 from t1 order by k;
+k	v1	v2
+1	2	3
+2	3	4
+4	5	6
+select k, v1, v2 from t1 order by k;
+k	v1	v2
+1	2	3
+2	3	4
+4	5	6
+set ob_read_consistency = STRONG;
+set ob_route_policy=READONLY_ZONE_FIRST;
+insert into t1 values (5, 6, 7), (6, 7, 8), (7, 8, 9);
+select k, v1, v2 from t1 order by k;
+k	v1	v2
+1	2	3
+2	3	4
+4	5	6
+5	6	7
+6	7	8
+7	8	9
+select k, v1, v2 from t1 order by k;
+k	v1	v2
+1	2	3
+2	3	4
+4	5	6
+5	6	7
+6	7	8
+7	8	9
+set ob_read_consistency = STRONG;
+set ob_route_policy=READONLY_ZONE_FIRST;
+alter system major freeze tenant = sys;
+select k, v1, v2 from t1 order by k;
+k	v1	v2
+1	2	3
+2	3	4
+4	5	6
+5	6	7
+6	7	8
+7	8	9
+select k, v1, v2 from t1 order by k;
+k	v1	v2
+1	2	3
+2	3	4
+4	5	6
+5	6	7
+6	7	8
+7	8	9
+set ob_read_consistency = STRONG;
+set ob_route_policy=READONLY_ZONE_FIRST;
+select "Finish";
+Finish
+Finish

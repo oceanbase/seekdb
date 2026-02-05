@@ -1,0 +1,1091 @@
+drop table if exists t, tpart, tsubpart;
+result_format: 4
+create table t (c1 int, c2 int);
+create table tpart(c1 int, c2 int) partition by hash(c1) partitions 2;
+create table tsubpart (c1 int, c2 int) partition by hash(c1)
+subpartition by hash(c2)
+  subpartition template (subpartition p0, subpartition p1)
+  partitions 2;
+
+insert into t values(1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10);
+insert into t values(11,1), (12,2), (13,3), (14,4), (15,5), (16,6), (17,7), (18,8), (19,9), (20,10);
+insert into t values(21,1), (22,2), (23,3), (24,4), (25,5), (26,6), (27,7), (28,8), (29,9), (30,10);
+insert into t values(31,1), (32,2), (33,3), (34,4), (35,5), (36,6), (37,7), (38,8), (39,9), (40,10);
+insert into t values(41,1), (42,2), (43,3), (44,4), (45,5), (46,6), (47,7), (48,8), (49,9), (50,10);
+insert into t values(51,1), (52,2), (53,3), (54,4), (55,5), (56,6), (57,7), (58,8), (59,9), (60,10);
+insert into t values(61,1), (62,2), (63,3), (64,4), (65,5), (66,6), (67,7), (68,8), (69,9), (70,10);
+insert into t values(71,1), (72,2), (73,3), (74,4), (75,5), (76,6), (77,7), (78,8), (79,9), (80,10);
+insert into t values(81,1), (82,2), (83,3), (84,4), (85,5), (86,6), (87,7), (88,8), (89,9), (90,10);
+insert into t values(91,1), (92,2), (93,3), (94,4), (95,5), (96,6), (97,7), (98,8), (99,9), (100,10);
+insert into t values(101,1), (102,2), (103,3), (104,4), (105,5), (106,6), (107,7), (108,8), (109,9), (110,10);
+insert into t values(111,1), (112,2), (113,3), (114,4), (115,5), (116,6), (117,7), (118,8), (119,9), (120,10);
+insert into t values(121,1), (122,2), (123,3), (124,4), (125,5), (126,6), (127,7), (128,8), (129,9), (130,10);
+insert into t values(131,1), (132,2), (133,3), (134,4), (135,5), (136,6), (137,7), (138,8), (139,9), (140,10);
+insert into t values(141,1), (142,2), (143,3), (144,4), (145,5), (146,6), (147,7), (148,8), (149,9), (150,10);
+insert into t values(151,1), (152,2), (153,3), (154,4), (155,5), (156,6), (157,7), (158,8), (159,9), (160,10);
+insert into t values(161,1), (162,2), (163,3), (164,4), (165,5), (166,6), (167,7), (168,8), (169,9), (170,10);
+insert into t values(171,1), (172,2), (173,3), (174,4), (175,5), (176,6), (177,7), (178,8), (179,9), (180,10);
+insert into t values(181,1), (182,2), (183,3), (184,4), (185,5), (186,6), (187,7), (188,8), (189,9), (190,10);
+insert into t values(191,1), (192,2), (193,3), (194,4), (195,5), (196,6), (197,7), (198,8), (199,9), (200,10);
+insert into tpart select * from t;
+insert into tsubpart select * from t;
+
+## delete table stats
+call dbms_stats.gather_table_stats('TEST', 'T');
+call dbms_stats.delete_table_stats('TEST', 'T');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | t          | NULL           | NULL              |     NULL |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'T' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | t          | c1          |         NULL |
+| test  | t          | c2          |         NULL |
++-------+------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TPART', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |     NULL |
+| test  | tpart      | p0             | NULL              |      100 |
+| test  | tpart      | p1             | NULL              |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tpart      | c1          |         NULL |
+| test  | tpart      | c2          |         NULL |
++-------+------------+-------------+--------------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tpart      | c1          |           97 |
+| test  | tpart      | c1          |          100 |
+| test  | tpart      | c2          |            5 |
+| test  | tpart      | c2          |            5 |
++-------+------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TPART', cascade_columns=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |     NULL |
+| test  | tpart      | p0             | NULL              |     NULL |
+| test  | tpart      | p1             | NULL              |     NULL |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tpart      | c1          |          204 |
+| test  | tpart      | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tpart      | p0             | c1          |          100 |
+| test  | tpart      | p0             | c2          |            5 |
+| test  | tpart      | p1             | c1          |           97 |
+| test  | tpart      | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TPART', 'P0', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |      200 |
+| test  | tpart      | p0             | NULL              |     NULL |
+| test  | tpart      | p1             | NULL              |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tpart      | c1          |          204 |
+| test  | tpart      | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tpart      | p0             | c1          |         NULL |
+| test  | tpart      | p0             | c2          |         NULL |
+| test  | tpart      | p1             | c1          |           97 |
+| test  | tpart      | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TPART', 'P0', cascade_columns=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |      200 |
+| test  | tpart      | p0             | NULL              |     NULL |
+| test  | tpart      | p1             | NULL              |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tpart      | c1          |          204 |
+| test  | tpart      | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tpart      | p0             | c1          |          100 |
+| test  | tpart      | p0             | c2          |            5 |
+| test  | tpart      | p1             | c1          |           97 |
+| test  | tpart      | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TSUBPART', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |     NULL |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tsubpart   | c1          |         NULL |
+| test  | tsubpart   | c2          |         NULL |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tsubpart   | p0             | c1          |          100 |
+| test  | tsubpart   | p0             | c2          |            5 |
+| test  | tsubpart   | p1             | c1          |           97 |
+| test  | tsubpart   | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+select owner, table_name, subpartition_name, column_name, num_distinct from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+
+| owner | table_name | subpartition_name | column_name | num_distinct |
++-------+------------+-------------------+-------------+--------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 |
+| test  | tsubpart   | p0sp0             | c2          |            5 |
+| test  | tsubpart   | p0sp1             | c1          |            0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 |
+| test  | tsubpart   | p1sp1             | c2          |            5 |
++-------+------------+-------------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TSUBPART', cascade_columns=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |     NULL |
+| test  | tsubpart   | p0             | NULL              |     NULL |
+| test  | tsubpart   | p0             | p0sp0             |     NULL |
+| test  | tsubpart   | p0             | p0sp1             |     NULL |
+| test  | tsubpart   | p1             | NULL              |     NULL |
+| test  | tsubpart   | p1             | p1sp0             |     NULL |
+| test  | tsubpart   | p1             | p1sp1             |     NULL |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tsubpart   | c1          |          204 |
+| test  | tsubpart   | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tsubpart   | p0             | c1          |          100 |
+| test  | tsubpart   | p0             | c2          |            5 |
+| test  | tsubpart   | p1             | c1          |           97 |
+| test  | tsubpart   | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+select owner, table_name, subpartition_name, column_name, num_distinct from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+
+| owner | table_name | subpartition_name | column_name | num_distinct |
++-------+------------+-------------------+-------------+--------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 |
+| test  | tsubpart   | p0sp0             | c2          |            5 |
+| test  | tsubpart   | p0sp1             | c1          |            0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 |
+| test  | tsubpart   | p1sp1             | c2          |            5 |
++-------+------------+-------------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TSUBPART', 'P0', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART';
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |     NULL |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tsubpart   | c1          |          204 |
+| test  | tsubpart   | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tsubpart   | p0             | c1          |         NULL |
+| test  | tsubpart   | p0             | c2          |         NULL |
+| test  | tsubpart   | p1             | c1          |           97 |
+| test  | tsubpart   | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+select owner, table_name, subpartition_name, column_name, num_distinct from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+
+| owner | table_name | subpartition_name | column_name | num_distinct |
++-------+------------+-------------------+-------------+--------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 |
+| test  | tsubpart   | p0sp0             | c2          |            5 |
+| test  | tsubpart   | p0sp1             | c1          |            0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 |
+| test  | tsubpart   | p1sp1             | c2          |            5 |
++-------+------------+-------------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TSUBPART', 'P0', cascade_columns=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |     NULL |
+| test  | tsubpart   | p0             | p0sp0             |     NULL |
+| test  | tsubpart   | p0             | p0sp1             |     NULL |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tsubpart   | c1          |          204 |
+| test  | tsubpart   | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tsubpart   | p0             | c1          |          100 |
+| test  | tsubpart   | p0             | c2          |            5 |
+| test  | tsubpart   | p1             | c1          |           97 |
+| test  | tsubpart   | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+select owner, table_name, subpartition_name, column_name, num_distinct from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+
+| owner | table_name | subpartition_name | column_name | num_distinct |
++-------+------------+-------------------+-------------+--------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 |
+| test  | tsubpart   | p0sp0             | c2          |            5 |
+| test  | tsubpart   | p0sp1             | c1          |            0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 |
+| test  | tsubpart   | p1sp1             | c2          |            5 |
++-------+------------+-------------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TSUBPART', 'P0SP0', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |     NULL |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tsubpart   | c1          |          204 |
+| test  | tsubpart   | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tsubpart   | p0             | c1          |          100 |
+| test  | tsubpart   | p0             | c2          |            5 |
+| test  | tsubpart   | p1             | c1          |           97 |
+| test  | tsubpart   | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+select owner, table_name, subpartition_name, column_name, num_distinct from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+
+| owner | table_name | subpartition_name | column_name | num_distinct |
++-------+------------+-------------------+-------------+--------------+
+| test  | tsubpart   | p0sp0             | c1          |         NULL |
+| test  | tsubpart   | p0sp0             | c2          |         NULL |
+| test  | tsubpart   | p0sp1             | c1          |            0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 |
+| test  | tsubpart   | p1sp1             | c2          |            5 |
++-------+------------+-------------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TSUBPART', 'P0SP0', cascade_columns=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |     NULL |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tsubpart   | c1          |          204 |
+| test  | tsubpart   | c2          |           10 |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tsubpart   | p0             | c1          |          100 |
+| test  | tsubpart   | p0             | c2          |            5 |
+| test  | tsubpart   | p1             | c1          |           97 |
+| test  | tsubpart   | p1             | c2          |            5 |
++-------+------------+----------------+-------------+--------------+
+select owner, table_name, subpartition_name, column_name, num_distinct from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+
+| owner | table_name | subpartition_name | column_name | num_distinct |
++-------+------------+-------------------+-------------+--------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 |
+| test  | tsubpart   | p0sp0             | c2          |            5 |
+| test  | tsubpart   | p0sp1             | c1          |            0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 |
+| test  | tsubpart   | p1sp1             | c2          |            5 |
++-------+------------+-------------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TPART');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |     NULL |
+| test  | tpart      | p0             | NULL              |     NULL |
+| test  | tpart      | p1             | NULL              |     NULL |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tpart      | c1          |         NULL |
+| test  | tpart      | c2          |         NULL |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tpart      | p0             | c1          |         NULL |
+| test  | tpart      | p0             | c2          |         NULL |
+| test  | tpart      | p1             | c1          |         NULL |
+| test  | tpart      | p1             | c2          |         NULL |
++-------+------------+----------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_table_stats('TEST', 'TSUBPART');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |     NULL |
+| test  | tsubpart   | p0             | NULL              |     NULL |
+| test  | tsubpart   | p0             | p0sp0             |     NULL |
+| test  | tsubpart   | p0             | p0sp1             |     NULL |
+| test  | tsubpart   | p1             | NULL              |     NULL |
+| test  | tsubpart   | p1             | p1sp0             |     NULL |
+| test  | tsubpart   | p1             | p1sp1             |     NULL |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+
+| owner | table_name | column_name | num_distinct |
++-------+------------+-------------+--------------+
+| test  | tsubpart   | c1          |         NULL |
+| test  | tsubpart   | c2          |         NULL |
++-------+------------+-------------+--------------+
+select owner, table_name, partition_name, column_name, num_distinct from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+
+| owner | table_name | partition_name | column_name | num_distinct |
++-------+------------+----------------+-------------+--------------+
+| test  | tsubpart   | p0             | c1          |         NULL |
+| test  | tsubpart   | p0             | c2          |         NULL |
+| test  | tsubpart   | p1             | c1          |         NULL |
+| test  | tsubpart   | p1             | c2          |         NULL |
++-------+------------+----------------+-------------+--------------+
+select owner, table_name, subpartition_name, column_name, num_distinct from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+
+| owner | table_name | subpartition_name | column_name | num_distinct |
++-------+------------+-------------------+-------------+--------------+
+| test  | tsubpart   | p0sp0             | c1          |         NULL |
+| test  | tsubpart   | p0sp0             | c2          |         NULL |
+| test  | tsubpart   | p0sp1             | c1          |         NULL |
+| test  | tsubpart   | p0sp1             | c2          |         NULL |
+| test  | tsubpart   | p1sp0             | c1          |         NULL |
+| test  | tsubpart   | p1sp0             | c2          |         NULL |
+| test  | tsubpart   | p1sp1             | c1          |         NULL |
+| test  | tsubpart   | p1sp1             | c2          |         NULL |
++-------+------------+-------------------+-------------+--------------+
+
+## delete column stats
+call dbms_stats.gather_table_stats('TEST', 'T');
+call dbms_stats.delete_column_stats('TEST', 'T', 'C1');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | t          | NULL           | NULL              |      200 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'T' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | t          | c1          |         NULL | NULL      |        NULL |
+| test  | t          | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TPART', 'C1', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |      200 |
+| test  | tpart      | p0             | NULL              |      100 |
+| test  | tpart      | p1             | NULL              |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | c1          |         NULL | NULL      |        NULL |
+| test  | tpart      | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | c1          |           97 | NULL      |           0 |
+| test  | tpart      | c1          |          100 | NULL      |           0 |
+| test  | tpart      | c2          |            5 | NULL      |           0 |
+| test  | tpart      | c2          |            5 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TPART', 'C1', col_stat_type=>'HISTOGRAM');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |      200 |
+| test  | tpart      | p0             | NULL              |      100 |
+| test  | tpart      | p1             | NULL              |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | c1          |          204 | NULL      |           0 |
+| test  | tpart      | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | p0             | c1          |          100 | NULL      |           0 |
+| test  | tpart      | p0             | c2          |            5 | NULL      |           0 |
+| test  | tpart      | p1             | c1          |           97 | NULL      |           0 |
+| test  | tpart      | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TPART', 'C1', 'P0', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |      200 |
+| test  | tpart      | p0             | NULL              |      100 |
+| test  | tpart      | p1             | NULL              |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | c1          |          204 | NULL      |           0 |
+| test  | tpart      | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | p0             | c1          |         NULL | NULL      |        NULL |
+| test  | tpart      | p0             | c2          |            5 | NULL      |           0 |
+| test  | tpart      | p1             | c1          |           97 | NULL      |           0 |
+| test  | tpart      | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TPART', 'C1', 'P0', col_stat_type=>'HISTOGRAM');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tpart      | NULL           | NULL              |      200 |
+| test  | tpart      | p0             | NULL              |      100 |
+| test  | tpart      | p1             | NULL              |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | c1          |          204 | NULL      |           0 |
+| test  | tpart      | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tpart      | p0             | c1          |          100 | NULL      |           0 |
+| test  | tpart      | p0             | c2          |            5 | NULL      |           0 |
+| test  | tpart      | p1             | c1          |           97 | NULL      |           0 |
+| test  | tpart      | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TSUBPART', 'C1', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+select owner, table_name, subpartition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| owner | table_name | subpartition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0sp0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c2          |            5 | NULL      |           0 |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TSUBPART', 'C1', col_stat_type=>'HISTOGRAM');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | c1          |          204 | NULL      |           0 |
+| test  | tsubpart   | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+select owner, table_name, subpartition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| owner | table_name | subpartition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0sp0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c2          |            5 | NULL      |           0 |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TSUBPART', 'C1', 'P0', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | c1          |          204 | NULL      |           0 |
+| test  | tsubpart   | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+select owner, table_name, subpartition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| owner | table_name | subpartition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0sp0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c2          |            5 | NULL      |           0 |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TSUBPART', 'C1', 'P0', col_stat_type=>'HISTOGRAM');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | c1          |          204 | NULL      |           0 |
+| test  | tsubpart   | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+select owner, table_name, subpartition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| owner | table_name | subpartition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0sp0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c2          |            5 | NULL      |           0 |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TSUBPART', 'C1', 'P0SP0', cascade_parts=>false);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | c1          |          204 | NULL      |           0 |
+| test  | tsubpart   | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+select owner, table_name, subpartition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| owner | table_name | subpartition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0sp0             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p0sp0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c2          |            5 | NULL      |           0 |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TSUBPART', 'C1', 'P0SP0', col_stat_type=>'HISTOGRAM');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | c1          |          204 | NULL      |           0 |
+| test  | tsubpart   | c2          |           10 | NULL      |           0 |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1             | c2          |            5 | NULL      |           0 |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+select owner, table_name, subpartition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| owner | table_name | subpartition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0sp0             | c1          |          100 | NULL      |           0 |
+| test  | tsubpart   | p0sp0             | c2          |            5 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p0sp1             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c1          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp0             | c2          |            0 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c1          |           97 | NULL      |           0 |
+| test  | tsubpart   | p1sp1             | c2          |            5 | NULL      |           0 |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST', 'TSUBPART', granularity=>'ALL');
+call dbms_stats.delete_column_stats('TEST', 'TSUBPART', NULL);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------------+----------+
+| owner | table_name | partition_name | subpartition_name | NUM_ROWS |
++-------+------------+----------------+-------------------+----------+
+| test  | tsubpart   | NULL           | NULL              |      200 |
+| test  | tsubpart   | p0             | NULL              |      100 |
+| test  | tsubpart   | p0             | p0sp0             |      100 |
+| test  | tsubpart   | p0             | p0sp1             |        0 |
+| test  | tsubpart   | p1             | NULL              |      100 |
+| test  | tsubpart   | p1             | p1sp0             |        0 |
+| test  | tsubpart   | p1             | p1sp1             |      100 |
++-------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3;
++-------+------------+-------------+--------------+-----------+-------------+
+| owner | table_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | c2          |         NULL | NULL      |        NULL |
++-------+------------+-------------+--------------+-----------+-------------+
+select owner, table_name, partition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_part_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| owner | table_name | partition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p0             | c2          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p1             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p1             | c2          |         NULL | NULL      |        NULL |
++-------+------------+----------------+-------------+--------------+-----------+-------------+
+select owner, table_name, subpartition_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_subpart_col_statistics where owner = 'TEST' and table_name = 'TSUBPART' order by 1,2,3,4;
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| owner | table_name | subpartition_name | column_name | num_distinct | histogram | num_buckets |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+| test  | tsubpart   | p0sp0             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p0sp0             | c2          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p0sp1             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p0sp1             | c2          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p1sp0             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p1sp0             | c2          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p1sp1             | c1          |         NULL | NULL      |        NULL |
+| test  | tsubpart   | p1sp1             | c2          |         NULL | NULL      |        NULL |
++-------+------------+-------------------+-------------+--------------+-----------+-------------+
+
+drop table t;
+drop table tpart;
+drop table tsubpart;
+
+CREATE TABLE t (f1 int, f2 char(10), f3 varchar(10))
+PARTITION BY RANGE(f1)
+(PARTITION p1 VALUES less than (5),
+PARTITION p2 VALUES less than (10),
+PARTITION p3 VALUES less than (MAXVALUE)
+);
+
+INSERT INTO t VALUES(0,'test0',null);
+INSERT INTO t VALUES(0,'test0','admin0');
+INSERT INTO t VALUES(1,'test1','admin1');
+INSERT INTO t VALUES(2,'test2','admin2');
+INSERT INTO t VALUES(3,'test3','admin3');
+INSERT INTO t VALUES(3,null,'admin3');
+INSERT INTO t VALUES(4,'test4','admin4');
+
+CALL dbms_stats.lock_table_stats('TEST','T','ALL');
+SELECT table_name, partition_name, partition_position, subpartition_name, subpartition_position, object_type, num_rows, avg_row_len, STATTYPE_LOCKED FROM oceanbase.dba_TAB_STATISTICS WHERE owner='TEST' AND table_name='T' ORDER BY subpartition_name,partition_name;
++------------+----------------+--------------------+-------------------+-----------------------+-------------+----------+-------------+-----------------+
+| table_name | partition_name | partition_position | subpartition_name | subpartition_position | object_type | num_rows | avg_row_len | STATTYPE_LOCKED |
++------------+----------------+--------------------+-------------------+-----------------------+-------------+----------+-------------+-----------------+
+| t          | NULL           |               NULL | NULL              |                  NULL | TABLE       |        0 |           0 | ALL             |
+| t          | p1             |                  1 | NULL              |                  NULL | PARTITION   |        0 |           0 | ALL             |
+| t          | p2             |                  2 | NULL              |                  NULL | PARTITION   |        0 |           0 | ALL             |
+| t          | p3             |                  3 | NULL              |                  NULL | PARTITION   |        0 |           0 | ALL             |
++------------+----------------+--------------------+-------------------+-----------------------+-------------+----------+-------------+-----------------+
+
+CALL dbms_stats.delete_table_stats('TEST','T', cascade_parts=>true, cascade_columns=>true, force=>true);
+SELECT table_name, partition_name, partition_position, subpartition_name, subpartition_position, object_type, num_rows, avg_row_len,STATTYPE_LOCKED FROM oceanbase.dba_TAB_STATISTICS WHERE owner='TEST' AND table_name='T' ORDER BY subpartition_name,partition_name;
++------------+----------------+--------------------+-------------------+-----------------------+-------------+----------+-------------+-----------------+
+| table_name | partition_name | partition_position | subpartition_name | subpartition_position | object_type | num_rows | avg_row_len | STATTYPE_LOCKED |
++------------+----------------+--------------------+-------------------+-----------------------+-------------+----------+-------------+-----------------+
+| t          | NULL           |               NULL | NULL              |                  NULL | TABLE       |        0 |           0 | ALL             |
+| t          | p1             |                  1 | NULL              |                  NULL | PARTITION   |        0 |           0 | ALL             |
+| t          | p2             |                  2 | NULL              |                  NULL | PARTITION   |        0 |           0 | ALL             |
+| t          | p3             |                  3 | NULL              |                  NULL | PARTITION   |        0 |           0 | ALL             |
++------------+----------------+--------------------+-------------------+-----------------------+-------------+----------+-------------+-----------------+
+
+drop table t;
+
+#test degree
+drop database if exists test_delete_degree;
+create database test_delete_degree;
+use test_delete_degree;
+create table t (c1 int, c2 int);
+create index i1 on t(c1);
+insert into t values(1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (9,9), (10,10);
+insert into t values(11,1), (12,2), (13,3), (14,4), (15,5), (16,6), (17,7), (18,8), (19,9), (20,10);
+insert into t values(21,1), (22,2), (23,3), (24,4), (25,5), (26,6), (27,7), (28,8), (29,9), (30,10);
+insert into t values(31,1), (32,2), (33,3), (34,4), (35,5), (36,6), (37,7), (38,8), (39,9), (40,10);
+insert into t values(41,1), (42,2), (43,3), (44,4), (45,5), (46,6), (47,7), (48,8), (49,9), (50,10);
+insert into t values(51,1), (52,2), (53,3), (54,4), (55,5), (56,6), (57,7), (58,8), (59,9), (60,10);
+insert into t values(61,1), (62,2), (63,3), (64,4), (65,5), (66,6), (67,7), (68,8), (69,9), (70,10);
+insert into t values(71,1), (72,2), (73,3), (74,4), (75,5), (76,6), (77,7), (78,8), (79,9), (80,10);
+insert into t values(81,1), (82,2), (83,3), (84,4), (85,5), (86,6), (87,7), (88,8), (89,9), (90,10);
+insert into t values(91,1), (92,2), (93,3), (94,4), (95,5), (96,6), (97,7), (98,8), (99,9), (100,10);
+insert into t values(101,1), (102,2), (103,3), (104,4), (105,5), (106,6), (107,7), (108,8), (109,9), (110,10);
+insert into t values(111,1), (112,2), (113,3), (114,4), (115,5), (116,6), (117,7), (118,8), (119,9), (120,10);
+insert into t values(121,1), (122,2), (123,3), (124,4), (125,5), (126,6), (127,7), (128,8), (129,9), (130,10);
+insert into t values(131,1), (132,2), (133,3), (134,4), (135,5), (136,6), (137,7), (138,8), (139,9), (140,10);
+insert into t values(141,1), (142,2), (143,3), (144,4), (145,5), (146,6), (147,7), (148,8), (149,9), (150,10);
+insert into t values(151,1), (152,2), (153,3), (154,4), (155,5), (156,6), (157,7), (158,8), (159,9), (160,10);
+insert into t values(161,1), (162,2), (163,3), (164,4), (165,5), (166,6), (167,7), (168,8), (169,9), (170,10);
+insert into t values(171,1), (172,2), (173,3), (174,4), (175,5), (176,6), (177,7), (178,8), (179,9), (180,10);
+insert into t values(181,1), (182,2), (183,3), (184,4), (185,5), (186,6), (187,7), (188,8), (189,9), (190,10);
+insert into t values(191,1), (192,2), (193,3), (194,4), (195,5), (196,6), (197,7), (198,8), (199,9), (200,10);
+
+call dbms_stats.gather_schema_stats('TEST_DELETE_DEGREE');
+call dbms_stats.delete_schema_stats('TEST_DELETE_DEGREE', degree=>4);
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN from oceanbase.dba_TAB_STATISTICS where table_name='T' and OWNER = 'TEST_DELETE_DEGREE' order by 1, 2, 3;
++------------+----------------+-------------+----------+-------------+
+| TABLE_NAME | PARTITION_NAME | OBJECT_TYPE | NUM_ROWS | AVG_ROW_LEN |
++------------+----------------+-------------+----------+-------------+
+| t          | NULL           | TABLE       |     NULL |        NULL |
++------------+----------------+-------------+----------+-------------+
+select TABLE_NAME, COLUMN_NAME, NUM_DISTINCT, LOW_VALUE, HIGH_VALUE, DENSITY, NUM_NULLS, NUM_BUCKETS, SAMPLE_SIZE, AVG_COL_LEN, HISTOGRAM from oceanbase.dba_TAB_COL_STATISTICS where table_name='T' and OWNER = 'TEST_DELETE_DEGREE' order by 1, 2, 3;
++------------+-------------+--------------+-----------+------------+---------+-----------+-------------+-------------+-------------+-----------+
+| TABLE_NAME | COLUMN_NAME | NUM_DISTINCT | LOW_VALUE | HIGH_VALUE | DENSITY | NUM_NULLS | NUM_BUCKETS | SAMPLE_SIZE | AVG_COL_LEN | HISTOGRAM |
++------------+-------------+--------------+-----------+------------+---------+-----------+-------------+-------------+-------------+-----------+
+| t          | c1          |         NULL | NULL      | NULL       |    NULL |      NULL |        NULL |        NULL |        NULL | NULL      |
+| t          | c2          |         NULL | NULL      | NULL       |    NULL |      NULL |        NULL |        NULL |        NULL | NULL      |
++------------+-------------+--------------+-----------+------------+---------+-----------+-------------+-------------+-------------+-----------+
+select TABLE_NAME, COLUMN_NAME, ENDPOINT_NUMBER, ENDPOINT_VALUE, ENDPOINT_ACTUAL_VALUE, ENDPOINT_ACTUAL_VALUE_RAW, ENDPOINT_REPEAT_COUNT from oceanbase.dba_TAB_HISTOGRAMS where table_name='T' and OWNER = 'TEST_DELETE_DEGREE' order by 1, 2, 3;
++------------+-------------+-----------------+----------------+-----------------------+---------------------------+-----------------------+
+| TABLE_NAME | COLUMN_NAME | ENDPOINT_NUMBER | ENDPOINT_VALUE | ENDPOINT_ACTUAL_VALUE | ENDPOINT_ACTUAL_VALUE_RAW | ENDPOINT_REPEAT_COUNT |
++------------+-------------+-----------------+----------------+-----------------------+---------------------------+-----------------------+
++------------+-------------+-----------------+----------------+-----------------------+---------------------------+-----------------------+
+
+call dbms_stats.gather_table_stats('TEST_DELETE_DEGREE', 'T');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3,4;
++--------------------+------------+----------------+-------------------+----------+
+| owner              | table_name | partition_name | subpartition_name | NUM_ROWS |
++--------------------+------------+----------------+-------------------+----------+
+| test_delete_degree | t          | NULL           | NULL              |      200 |
++--------------------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3;
++--------------------+------------+-------------+--------------+-----------+-------------+
+| owner              | table_name | column_name | num_distinct | histogram | num_buckets |
++--------------------+------------+-------------+--------------+-----------+-------------+
+| test_delete_degree | t          | c1          |          204 | FREQUENCY |         200 |
+| test_delete_degree | t          | c2          |           10 | NULL      |           0 |
++--------------------+------------+-------------+--------------+-----------+-------------+
+call dbms_stats.delete_table_stats('TEST_DELETE_DEGREE','T',degree=>4);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3,4;
++--------------------+------------+----------------+-------------------+----------+
+| owner              | table_name | partition_name | subpartition_name | NUM_ROWS |
++--------------------+------------+----------------+-------------------+----------+
+| test_delete_degree | t          | NULL           | NULL              |     NULL |
++--------------------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct from oceanbase.dba_tab_col_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3;
++--------------------+------------+-------------+--------------+
+| owner              | table_name | column_name | num_distinct |
++--------------------+------------+-------------+--------------+
+| test_delete_degree | t          | c1          |         NULL |
+| test_delete_degree | t          | c2          |         NULL |
++--------------------+------------+-------------+--------------+
+
+call dbms_stats.gather_table_stats('TEST_DELETE_DEGREE', 'T');
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3,4;
++--------------------+------------+----------------+-------------------+----------+
+| owner              | table_name | partition_name | subpartition_name | NUM_ROWS |
++--------------------+------------+----------------+-------------------+----------+
+| test_delete_degree | t          | NULL           | NULL              |      200 |
++--------------------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3;
++--------------------+------------+-------------+--------------+-----------+-------------+
+| owner              | table_name | column_name | num_distinct | histogram | num_buckets |
++--------------------+------------+-------------+--------------+-----------+-------------+
+| test_delete_degree | t          | c1          |          204 | FREQUENCY |         200 |
+| test_delete_degree | t          | c2          |           10 | NULL      |           0 |
++--------------------+------------+-------------+--------------+-----------+-------------+
+call dbms_stats.delete_column_stats('TEST_DELETE_DEGREE', 'T', 'C1', degree=>4);
+select owner, table_name, partition_name, subpartition_name, NUM_ROWS from oceanbase.dba_tab_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3,4;
++--------------------+------------+----------------+-------------------+----------+
+| owner              | table_name | partition_name | subpartition_name | NUM_ROWS |
++--------------------+------------+----------------+-------------------+----------+
+| test_delete_degree | t          | NULL           | NULL              |      200 |
++--------------------+------------+----------------+-------------------+----------+
+select owner, table_name, column_name, num_distinct, histogram, num_buckets from oceanbase.dba_tab_col_statistics where owner = 'TEST_DELETE_DEGREE' and table_name = 'T' order by 1,2,3;
++--------------------+------------+-------------+--------------+-----------+-------------+
+| owner              | table_name | column_name | num_distinct | histogram | num_buckets |
++--------------------+------------+-------------+--------------+-----------+-------------+
+| test_delete_degree | t          | c1          |         NULL | NULL      |        NULL |
+| test_delete_degree | t          | c2          |           10 | NULL      |           0 |
++--------------------+------------+-------------+--------------+-----------+-------------+
+
+call dbms_stats.gather_table_stats('TEST_DELETE_DEGREE', 'T');
+call dbms_stats.gather_index_stats('TEST_DELETE_DEGREE', 'I1', tabname=>'T');
+select OWNER, INDEX_NAME, TABLE_OWNER, TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, STATTYPE_LOCKED from oceanbase.dba_ind_statistics where TABLE_NAME='T' and owner = 'TEST_DELETE_DEGREE';
++--------------------+------------+--------------------+------------+----------------+-------------------+-------------+----------+-----------------+
+| OWNER              | INDEX_NAME | TABLE_OWNER        | TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE | NUM_ROWS | STATTYPE_LOCKED |
++--------------------+------------+--------------------+------------+----------------+-------------------+-------------+----------+-----------------+
+| test_delete_degree | i1         | test_delete_degree | t          | NULL           | NULL              | INDEX       |      200 | NULL            |
++--------------------+------------+--------------------+------------+----------------+-------------------+-------------+----------+-----------------+
+call dbms_stats.delete_index_stats('TEST_DELETE_DEGREE', 'I1', tabname=>'T', degree=>4);
+select OWNER, INDEX_NAME, TABLE_OWNER, TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, STATTYPE_LOCKED from oceanbase.dba_ind_statistics where TABLE_NAME='T' and owner = 'TEST_DELETE_DEGREE';
++--------------------+------------+--------------------+------------+----------------+-------------------+-------------+----------+-----------------+
+| OWNER              | INDEX_NAME | TABLE_OWNER        | TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE | NUM_ROWS | STATTYPE_LOCKED |
++--------------------+------------+--------------------+------------+----------------+-------------------+-------------+----------+-----------------+
+| test_delete_degree | i1         | test_delete_degree | t          | NULL           | NULL              | INDEX       |     NULL | NULL            |
++--------------------+------------+--------------------+------------+----------------+-------------------+-------------+----------+-----------------+
+
+drop database TEST_DELETE_DEGREE;

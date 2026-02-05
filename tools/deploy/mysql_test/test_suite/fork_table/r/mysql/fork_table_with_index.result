@@ -1,0 +1,388 @@
+drop database if exists db_fork_index;
+create database db_fork_index;
+use db_fork_index;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. Fork Table with Primary Key
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50),
+age int,
+email varchar(100)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t1 values (1, 'Alice', 25, 'alice@example.com');
+insert into t1 values (101, 'Bob', 30, 'bob@example.com');
+insert into t1 values (50, 'Charlie', 35, 'charlie@example.com');
+# Fork表
+fork table t1 to t1_fork;
+# 验证Fork表的主键索引
+show create table t1_fork;
+Table	Create Table
+t1_fork	CREATE TABLE `t1_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证通过主键查询
+select * from t1_fork where id = 1;
+id	name	age	email
+1	Alice	25	alice@example.com
+select * from t1_fork where id = 101;
+id	name	age	email
+101	Bob	30	bob@example.com
+============================================
+2. Fork Table with Secondary Index
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2_fork'
+create table t2 (
+id int primary key,
+name varchar(50),
+age int,
+email varchar(100),
+index idx_name(name),
+index idx_age(age),
+index idx_email(email)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t2 values (1, 'Alice', 25, 'alice@example.com');
+insert into t2 values (101, 'Bob', 30, 'bob@example.com');
+insert into t2 values (50, 'Charlie', 35, 'charlie@example.com');
+# Fork表
+fork table t2 to t2_fork;
+# 验证Fork表的索引
+show create table t2_fork;
+Table	Create Table
+t2_fork	CREATE TABLE `t2_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_name` (`name`) BLOCK_SIZE 16384 LOCAL,
+  KEY `idx_age` (`age`) BLOCK_SIZE 16384 LOCAL,
+  KEY `idx_email` (`email`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证通过二级索引查询
+select * from t2_fork where name = 'Alice';
+id	name	age	email
+1	Alice	25	alice@example.com
+select * from t2_fork where age = 30;
+id	name	age	email
+101	Bob	30	bob@example.com
+select * from t2_fork where email = 'charlie@example.com';
+id	name	age	email
+50	Charlie	35	charlie@example.com
+# 验证索引查询在Fork表中正常工作
+explain select * from t2_fork where name = 'Alice';
+Query Plan
+======================================================================
+|ID|OPERATOR                 |NAME             |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------------------------
+|0 |PX COORDINATOR           |                 |1       |16          |
+|1 |└─EXCHANGE OUT DISTR     |:EX10000         |1       |14          |
+|2 |  └─PX PARTITION ITERATOR|                 |1       |12          |
+|3 |    └─TABLE RANGE SCAN   |t2_fork(idx_name)|1       |12          |
+======================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t2_fork.id, t2_fork.name, t2_fork.age, t2_fork.email)]), filter(nil), rowset=16
+  1 - output([INTERNAL_FUNCTION(t2_fork.id, t2_fork.name, t2_fork.age, t2_fork.email)]), filter(nil), rowset=16
+      dop=1
+  2 - output([t2_fork.id], [t2_fork.name], [t2_fork.age], [t2_fork.email]), filter(nil), rowset=16
+      force partition granule
+  3 - output([t2_fork.id], [t2_fork.name], [t2_fork.age], [t2_fork.email]), filter(nil), rowset=16
+      access([t2_fork.id], [t2_fork.name], [t2_fork.age], [t2_fork.email]), partitions(p[0-1])
+      is_index_back=true, is_global_index=false,
+      range_key([t2_fork.name], [t2_fork.id]), range(Alice,MIN ; Alice,MAX),
+      range_cond([t2_fork.name = 'Alice'])
+explain select * from t2_fork where age = 30;
+Query Plan
+=====================================================================
+|ID|OPERATOR                 |NAME            |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------
+|0 |PX COORDINATOR           |                |1       |16          |
+|1 |└─EXCHANGE OUT DISTR     |:EX10000        |1       |14          |
+|2 |  └─PX PARTITION ITERATOR|                |1       |12          |
+|3 |    └─TABLE RANGE SCAN   |t2_fork(idx_age)|1       |12          |
+=====================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t2_fork.id, t2_fork.name, t2_fork.age, t2_fork.email)]), filter(nil), rowset=16
+  1 - output([INTERNAL_FUNCTION(t2_fork.id, t2_fork.name, t2_fork.age, t2_fork.email)]), filter(nil), rowset=16
+      dop=1
+  2 - output([t2_fork.id], [t2_fork.age], [t2_fork.name], [t2_fork.email]), filter(nil), rowset=16
+      force partition granule
+  3 - output([t2_fork.id], [t2_fork.age], [t2_fork.name], [t2_fork.email]), filter(nil), rowset=16
+      access([t2_fork.id], [t2_fork.age], [t2_fork.name], [t2_fork.email]), partitions(p[0-1])
+      is_index_back=true, is_global_index=false,
+      range_key([t2_fork.age], [t2_fork.id]), range(30,MIN ; 30,MAX),
+      range_cond([t2_fork.age = 30])
+============================================
+2.1 Fork Table with Index Building
+============================================
+drop table if exists t2a;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2a'
+drop table if exists t2a_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2a_fork'
+create table t2a (
+id int primary key,
+name varchar(50),
+age int,
+email varchar(100)
+);
+set ob_query_timeout = 900000000000000;
+insert into t2a values (1, 'Alice', 25, 'alice@example.com');
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 900000000000000;
+use db_fork_index;
+create index idx_name on t2a(name) local;;
+# Fork表（索引构建中）
+fork table t2a to t2a_fork;
+# 验证Fork表结构
+show create table t2a_fork;
+Table	Create Table
+t2a_fork	CREATE TABLE `t2a_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_name` (`name`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+============================================
+2.2 Fork Table with Fulltext Index Building
+============================================
+drop table if exists t2b;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2b'
+drop table if exists t2b_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2b_fork'
+create table t2b (
+id int primary key,
+name varchar(50),
+age int,
+email varchar(100)
+);
+set ob_query_timeout = 900000000000000;
+insert into t2b values (1, 'Alice', 25, 'alice@example.com');
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 900000000000000;
+use db_fork_index;
+create fulltext index idx_ft_name on t2b(name) local;;
+# Fork表（全文索引构建中）
+fork table t2b to t2b_fork;
+# 验证Fork表结构
+show create table t2b_fork;
+Table	Create Table
+t2b_fork	CREATE TABLE `t2b_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  FULLTEXT KEY `idx_ft_name` (`name`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+============================================
+2.3 Fork Table with Vector Index Building
+============================================
+drop table if exists t2c;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2c'
+drop table if exists t2c_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2c_fork'
+create table t2c (
+id int primary key,
+name varchar(50),
+age int,
+email varchar(100),
+emb vector(3)
+);
+set ob_query_timeout = 900000000000000;
+insert into t2c values (1, 'Alice', 25, 'alice@example.com', '[0.203846,0.205289,0.880265]');
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 900000000000000;
+use db_fork_index;
+create vector index idx_vec_emb on t2c(emb) with (distance=l2, type=hnsw, lib=vsag);;
+# Fork表（向量索引构建中）
+fork table t2c to t2c_fork;
+# 验证Fork表结构
+show create table t2c_fork;
+Table	Create Table
+t2c_fork	CREATE TABLE `t2c_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `emb` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx_vec_emb` (`emb`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+============================================
+3. Fork Table with Unique Index
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t3'
+drop table if exists t3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t3_fork'
+create table t3 (
+id int,
+name varchar(50),
+email varchar(100),
+phone varchar(20),
+dept int,
+primary key (id, dept),
+unique key uk_email(dept, email),
+unique key uk_phone(dept, phone)
+) partition by range(dept) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t3 values (1, 'Alice', 'alice@example.com', '1234567890', 10);
+insert into t3 values (2, 'Bob', 'bob@example.com', '0987654321', 150);
+# Fork表
+fork table t3 to t3_fork;
+# 验证Fork表的唯一索引
+show create table t3_fork;
+Table	Create Table
+t3_fork	CREATE TABLE `t3_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `dept` int(11) NOT NULL,
+  PRIMARY KEY (`id`, `dept`),
+  UNIQUE KEY `uk_email` (`dept`, `email`) BLOCK_SIZE 16384 LOCAL,
+  UNIQUE KEY `uk_phone` (`dept`, `phone`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(dept)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证唯一索引约束在Fork表中独立（局部唯一索引：dept+email组合唯一）
+insert into t3_fork values (3, 'Alice2', 'alice@example.com', '1111111111', 10);
+ERROR 23000: Duplicate entry '10-alice@example.com' for key 'uk_email'
+# 在Fork表中插入新的唯一值（不同的dept，相同的email是允许的）
+insert into t3_fork values (3, 'Alice2', 'alice@example.com', '1111111111', 150);
+# 验证唯一索引约束（dept+phone组合唯一）
+insert into t3_fork values (4, 'Alice3', 'alice3@example.com', '1234567890', 10);
+ERROR 23000: Duplicate entry '10-1234567890' for key 'uk_phone'
+# 在Fork表中插入新的唯一值（不同的dept，相同的phone是允许的）
+insert into t3_fork values (4, 'Alice3', 'alice3@example.com', '1234567890', 150);
+# 验证源表的唯一约束不受影响
+insert into t3 values (5, 'Alice4', 'alice@example.com', '1234567890', 50);
+============================================
+4. Fork Table with Composite Index
+============================================
+drop table if exists t4;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t4'
+drop table if exists t4_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t4_fork'
+create table t4 (
+id int primary key,
+name varchar(50),
+age int,
+dept varchar(50),
+index idx_name_age(name, age),
+index idx_age_dept(age, dept)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t4 values (1, 'Alice', 25, 'IT');
+insert into t4 values (101, 'Bob', 30, 'HR');
+insert into t4 values (50, 'Charlie', 25, 'IT');
+# Fork表
+fork table t4 to t4_fork;
+# 验证Fork表的复合索引
+show create table t4_fork;
+Table	Create Table
+t4_fork	CREATE TABLE `t4_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `dept` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_name_age` (`name`, `age`) BLOCK_SIZE 16384 LOCAL,
+  KEY `idx_age_dept` (`age`, `dept`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证通过复合索引查询
+select * from t4_fork where name = 'Alice' and age = 25;
+id	name	age	dept
+1	Alice	25	IT
+select * from t4_fork where age = 30 and dept = 'HR';
+id	name	age	dept
+101	Bob	30	HR
+============================================
+5. 索引隔离测试 - Fork表索引修改不影响源表
+============================================
+# 在Fork表中插入数据并验证索引
+insert into t4_fork values (99, 'Fork_User', 40, 'Finance');
+select * from t4_fork where name = 'Fork_User' and age = 40;
+id	name	age	dept
+99	Fork_User	40	Finance
+# 验证源表索引不受影响
+select * from t4 where name = 'Fork_User' and age = 40;
+id	name	age	dept
+# 在源表中插入数据并验证索引
+insert into t4 values (88, 'Source_User', 45, 'Finance');
+select * from t4 where name = 'Source_User' and age = 45;
+id	name	age	dept
+88	Source_User	45	Finance
+# 验证Fork表索引不受影响
+select * from t4_fork where name = 'Source_User' and age = 45;
+id	name	age	dept
+============================================
+6. 清理
+============================================
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t2a;
+drop table if exists t2a_fork;
+drop table if exists t2b;
+drop table if exists t2b_fork;
+drop table if exists t2c;
+drop table if exists t2c_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop database if exists db_fork_index;

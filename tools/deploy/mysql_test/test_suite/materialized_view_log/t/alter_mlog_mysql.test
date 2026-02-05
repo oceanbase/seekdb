@@ -1,0 +1,193 @@
+#owner: lana.lgx
+#owner group: data
+
+--disable_warnings
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int primary key,
+  name varchar(10),
+  age int
+);
+
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+
+#1: unsupported operations
+#alter mlog is not supported
+--error 1235
+alter table mlog$_t1 add column new_col varchar(20);
+
+#rename mlog is not supported
+--error 1235
+rename table mlog$_t1 to mlog2;
+--error 1235
+alter table mlog$_t1 rename to mlog2;
+
+#truncate mlog is not supported
+--error 1235
+truncate mlog$_t1;
+
+#rename table with mlog is not supported
+--error 1235
+rename table t1 to t2;
+--error 1235
+alter table t1 rename to t2;
+
+#truncate table with mlog is not supported
+--error 1235
+truncate t1;
+
+#drop primary key is not supported
+--error 1235
+alter table t1 drop primary key;
+
+#drop primary key of table without mlog is supported
+drop materialized view log on t1;
+alter table t1 drop primary key;
+create materialized view log on t1 with (id, age) including new values;
+
+#add primary key is not supported
+--error 1235
+alter table t1 add primary key(id);
+
+#add primary key 2
+--error 1235
+alter table t1 add constraint pk1 primary key(id);
+
+#add column to base table is supported
+alter table t1 add column new_col varchar(20);
+
+#drop column of base table is not supported
+--error 1235
+alter table t1 drop column name;
+
+#rename base table column is not supported
+--error 1235
+alter table t1 rename column age to age2;
+
+#modify base table column datatype is not supported
+--error 1235
+alter table t1 modify name varchar(20);
+
+#add not null constraint is not supported
+--error 1235
+alter table t1 modify name varchar(10) not null;
+
+#alter default column value is not supported
+--error 1235
+alter table t1 alter column age set default 1;
+
+#alter partition is not supported
+--disable_warnings
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t2;
+DROP TABLE IF EXISTS t2;
+--enable_warnings
+CREATE TABLE t2 (
+  id int,
+  name varchar(10),
+  age int
+)
+partition by range(age)
+(
+partition p1 values less than(10),
+partition p2 values less than(20),
+partition p3 values less than(30),
+partition p4 values less than(40),
+partition p5 values less than(50)
+);
+create materialized view log on t2 with primary key (id, age) including new values;
+
+#add partition
+--error 1235
+alter table mlog$_t2 add partition (partition p6 values less than(60));
+--error 1235
+alter table t2 add partition (partition p6 values less than(60));
+
+#drop partition
+--error 1235
+alter table mlog$_t2 drop partition p3;
+--error 1235
+alter table t2 drop partition p3;
+
+#alter partition
+--error 1503
+alter table mlog$_t2 partition by range(age)
+(
+partition p1 values less than(15),
+partition p2 values less than(25),
+partition p3 values less than(35),
+partition p4 values less than(45),
+partition p5 values less than(55)
+);
+--error 1235
+alter table t2 partition by range(age)
+(
+partition p1 values less than(15),
+partition p2 values less than(25),
+partition p3 values less than(35),
+partition p4 values less than(45),
+partition p5 values less than(55)
+);
+
+#alter tablegroup
+--disable_warnings
+drop tablegroup if exists test_tg;
+--enable_warnings
+create tablegroup test_tg;
+--error 1235
+alter tablegroup test_tg add table t1;
+--error 1235
+alter tablegroup test_tg add table mlog$_t1;
+drop tablegroup test_tg;
+
+#alter table options
+--error 1235
+alter table t1 compression 'NONE';
+--error 1235
+alter table mlog$_t1 compression 'NONE';
+--error 1235
+alter table mlog$_t1 comment 'mlog table comment';
+
+#2: supported operations
+#add index
+alter table t1 add index k1(age);
+
+#drop index
+alter table t1 drop index k1;
+
+#add unique index
+alter table t1 add unique(age);
+
+#drop unique key
+alter table t1 drop index age;
+
+#add/drop unique key 2
+alter table t1 add constraint uk1 unique(age);
+drop index uk1 on t1;
+
+#add foreign key constraint
+CREATE TABLE fk_t1 (
+  age int primary key
+);
+#alter table t1 add constraint fk_constraint foreign key(age) references fk_t1(age);
+
+#drop foreign key constraint
+#alter table t1 drop foreign key fk_constraint;
+drop table fk_t1;
+
+#add check constraint
+alter table t1 add constraint chk_constraint check (age > 0);
+alter table t1 drop constraint chk_constraint;
+
+#alter table options
+alter table t1 comment 'base table comment';
+
+#cleanup
+drop materialized view log on t1;
+drop table t1;
+drop materialized view log on t2;
+drop table t2;

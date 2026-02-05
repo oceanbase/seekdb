@@ -1,0 +1,272 @@
+drop materialized view log on t1;
+DROP TABLE IF EXISTS t1;
+CREATE TABLE t1 (
+id int primary key,
+name varchar(10),
+age int
+);
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO	PRI	NULL
+age	int(11)	YES		NULL
+SEQUENCE$$	bigint(20)	NO	PRI	NULL
+DMLTYPE$$	varchar(1)	NO		NULL
+OLD_NEW$$	varchar(1)	NO		NULL
+insert into t1 values (1, 'Lucy', 21), (2, 'Tommy', 24), (3, 'Jack', 30), (4, 'May', 22), (5, 'Rose', 23), (6, 'Grace', 34), (7, 'Nancy', 24), (8, 'Jones', 32), (9, 'Jerry', 23), (10, 'Marry', 25);
+select age from t1;
+age
+21
+24
+30
+22
+23
+34
+24
+32
+23
+25
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+dmltype$$	old_new$$	id	age
+I	N	1	21
+I	N	2	24
+I	N	3	30
+I	N	4	22
+I	N	5	23
+I	N	6	34
+I	N	7	24
+I	N	8	32
+I	N	9	23
+I	N	10	25
+update t1 set age=age+10 where age < 25;
+select age from t1;
+age
+31
+34
+30
+32
+33
+34
+34
+32
+33
+25
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+dmltype$$	old_new$$	id	age
+I	N	1	21
+U	O	1	21
+U	N	1	31
+I	N	2	24
+U	O	2	24
+U	N	2	34
+I	N	3	30
+I	N	4	22
+U	O	4	22
+U	N	4	32
+I	N	5	23
+U	O	5	23
+U	N	5	33
+I	N	6	34
+I	N	7	24
+U	O	7	24
+U	N	7	34
+I	N	8	32
+I	N	9	23
+U	O	9	23
+U	N	9	33
+I	N	10	25
+update t1 set age=age-10;
+select age from t1;
+age
+21
+24
+20
+22
+23
+24
+24
+22
+23
+15
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+dmltype$$	old_new$$	id	age
+I	N	1	21
+U	O	1	21
+U	N	1	31
+U	O	1	31
+U	N	1	21
+I	N	2	24
+U	O	2	24
+U	N	2	34
+U	O	2	34
+U	N	2	24
+I	N	3	30
+U	O	3	30
+U	N	3	20
+I	N	4	22
+U	O	4	22
+U	N	4	32
+U	O	4	32
+U	N	4	22
+I	N	5	23
+U	O	5	23
+U	N	5	33
+U	O	5	33
+U	N	5	23
+I	N	6	34
+U	O	6	34
+U	N	6	24
+I	N	7	24
+U	O	7	24
+U	N	7	34
+U	O	7	34
+U	N	7	24
+I	N	8	32
+U	O	8	32
+U	N	8	22
+I	N	9	23
+U	O	9	23
+U	N	9	33
+U	O	9	33
+U	N	9	23
+I	N	10	25
+U	O	10	25
+U	N	10	15
+set autocommit=off;
+begin;
+update t1 set age=age+100;
+select age from t1;
+age
+121
+124
+120
+122
+123
+124
+124
+122
+123
+115
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+dmltype$$	old_new$$	id	age
+I	N	1	21
+U	O	1	21
+U	N	1	31
+U	O	1	31
+U	N	1	21
+U	O	1	21
+U	N	1	121
+I	N	2	24
+U	O	2	24
+U	N	2	34
+U	O	2	34
+U	N	2	24
+U	O	2	24
+U	N	2	124
+I	N	3	30
+U	O	3	30
+U	N	3	20
+U	O	3	20
+U	N	3	120
+I	N	4	22
+U	O	4	22
+U	N	4	32
+U	O	4	32
+U	N	4	22
+U	O	4	22
+U	N	4	122
+I	N	5	23
+U	O	5	23
+U	N	5	33
+U	O	5	33
+U	N	5	23
+U	O	5	23
+U	N	5	123
+I	N	6	34
+U	O	6	34
+U	N	6	24
+U	O	6	24
+U	N	6	124
+I	N	7	24
+U	O	7	24
+U	N	7	34
+U	O	7	34
+U	N	7	24
+U	O	7	24
+U	N	7	124
+I	N	8	32
+U	O	8	32
+U	N	8	22
+U	O	8	22
+U	N	8	122
+I	N	9	23
+U	O	9	23
+U	N	9	33
+U	O	9	33
+U	N	9	23
+U	O	9	23
+U	N	9	123
+I	N	10	25
+U	O	10	25
+U	N	10	15
+U	O	10	15
+U	N	10	115
+rollback;
+select age from t1;
+age
+21
+24
+20
+22
+23
+24
+24
+22
+23
+15
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+dmltype$$	old_new$$	id	age
+I	N	1	21
+U	O	1	21
+U	N	1	31
+U	O	1	31
+U	N	1	21
+I	N	2	24
+U	O	2	24
+U	N	2	34
+U	O	2	34
+U	N	2	24
+I	N	3	30
+U	O	3	30
+U	N	3	20
+I	N	4	22
+U	O	4	22
+U	N	4	32
+U	O	4	32
+U	N	4	22
+I	N	5	23
+U	O	5	23
+U	N	5	33
+U	O	5	33
+U	N	5	23
+I	N	6	34
+U	O	6	34
+U	N	6	24
+I	N	7	24
+U	O	7	24
+U	N	7	34
+U	O	7	34
+U	N	7	24
+I	N	8	32
+U	O	8	32
+U	N	8	22
+I	N	9	23
+U	O	9	23
+U	N	9	33
+U	O	9	33
+U	N	9	23
+I	N	10	25
+U	O	10	25
+U	N	10	15
+drop materialized view log on t1;
+drop table t1;

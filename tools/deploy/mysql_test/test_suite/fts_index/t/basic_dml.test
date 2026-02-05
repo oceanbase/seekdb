@@ -1,0 +1,1684 @@
+# owner: yunshan.tys
+# owner group: storage
+# description test basic dml for fulltext search
+
+connect(sys_conn, $OBMYSQL_MS0, root@sys,,oceanbase, $OBMYSQL_PORT);
+connection sys_conn;
+
+alter system set _enable_add_fulltext_index_to_existing_table = true;
+
+--disable_warnings
+drop database if exists fts_basic_dml;
+--enable_warnings
+
+create database fts_basic_dml;
+
+use fts_basic_dml;
+
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_basic_dml' AND tenant_id = 1, database_id, 1);
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_basic_dml_articles;
+--enable_warnings
+
+--result_format 3
+
+--echo ######## Create Table With Auto Increment Column #########
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content)
+);
+
+set _show_ddl_in_compat_mode = 1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+set _show_ddl_in_compat_mode = 0;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17_18 as word, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $doc_word_table_name;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17_18 as word, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $doc_word_table_name;
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE id = 2;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17_18 as word, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $doc_word_table_name;
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE id = 1;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17_18 as word, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $doc_word_table_name;
+
+--echo ========================= select doc_id ==========================
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from fts_basic_dml_articles;
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+--echo ########### Create Table With No Primary Key #############
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content) WITH PARSER space
+);
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+
+let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select /*+opt_param('hidden_column_visible','true')*/ $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/ __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select /*+opt_param('hidden_column_visible','true')*/ $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/ __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE title = 'Fulltext Index';
+
+select * from fts_basic_dml_articles order by title;
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Index' WHERE title like '%Fulltext Indexing%';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select /*+opt_param('hidden_column_visible','true')*/  $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/  __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE title = 'Optimizing OceanBase';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select /*+opt_param('hidden_column_visible','true')*/  $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/  __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+--echo ############ Create Table With Primary Key ###############
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    title VARCHAR(200) PRIMARY KEY,
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content)
+);
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE title = 'Fulltext Index';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE title = 'Optimizing OceanBase';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+--echo ######### Alter Table With Auto Increment Column #########
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by id;
+
+ALTER TABLE fts_basic_dml_articles add FULLTEXT INDEX ctx(title, content) WITH PARSER space;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+--disable_query_log
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select id from $rowkey_doc_table_name;
+
+eval select $fts_index_table_name.$__word_segment_17_18 as word, $doc_rowkey_table_name.id as id, $fts_index_table_name.$__word_count_17_18 as word_count, $fts_index_table_name.$__doc_length_17_18 as doc_length from $fts_index_table_name, $doc_rowkey_table_name WHERE $fts_index_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1, 2;
+
+eval select $doc_rowkey_table_name.id as id, $doc_word_table_name.$__word_segment_17_18 as word, $doc_word_table_name.$__word_count_17_18 as word_count, $doc_word_table_name.$__doc_length_17_18 as doc_length from $doc_word_table_name, $doc_rowkey_table_name WHERE $doc_word_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1,2;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id from $rowkey_doc_table_name;
+
+eval select $fts_index_table_name.$__word_segment_17_18 as word, $doc_rowkey_table_name.id as id, $fts_index_table_name.$__word_count_17_18 as word_count, $fts_index_table_name.$__doc_length_17_18 as doc_length from $fts_index_table_name, $doc_rowkey_table_name WHERE $fts_index_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1, 2;
+
+eval select $doc_rowkey_table_name.id as id, $doc_word_table_name.$__word_segment_17_18 as word, $doc_word_table_name.$__word_count_17_18 as word_count, $doc_word_table_name.$__doc_length_17_18 as doc_length from $doc_word_table_name, $doc_rowkey_table_name WHERE $doc_word_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1, 2;
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE id = 2;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id from $rowkey_doc_table_name;
+
+eval select $fts_index_table_name.$__word_segment_17_18 as word, $doc_rowkey_table_name.id as id, $fts_index_table_name.$__word_count_17_18 as word_count, $fts_index_table_name.$__doc_length_17_18 as doc_length from $fts_index_table_name, $doc_rowkey_table_name WHERE $fts_index_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1, 2;
+
+eval select $doc_rowkey_table_name.id as id, $doc_word_table_name.$__word_segment_17_18 as word, $doc_word_table_name.$__word_count_17_18 as word_count, $doc_word_table_name.$__doc_length_17_18 as doc_length from $doc_word_table_name, $doc_rowkey_table_name WHERE $doc_word_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1, 2;
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE id = 1;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id from $rowkey_doc_table_name;
+
+eval select $fts_index_table_name.$__word_segment_17_18 as word, $doc_rowkey_table_name.id as id, $fts_index_table_name.$__word_count_17_18 as word_count, $fts_index_table_name.$__doc_length_17_18 as doc_length from $fts_index_table_name, $doc_rowkey_table_name WHERE $fts_index_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1, 2;
+
+eval select $doc_rowkey_table_name.id as id, $doc_word_table_name.$__word_segment_17_18 as word, $doc_word_table_name.$__word_count_17_18 as word_count, $doc_word_table_name.$__doc_length_17_18 as doc_length from $doc_word_table_name, $doc_rowkey_table_name WHERE $doc_word_table_name.$__doc_id = $doc_rowkey_table_name.$__doc_id order by 1, 2;
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+--echo ############ Alter Table With No Primary Key #############
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    title VARCHAR(200),
+    content TEXT);
+
+ALTER TABLE fts_basic_dml_articles add FULLTEXT INDEX ctx(title, content);
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select /*+opt_param('hidden_column_visible','true')*/  $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/  __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select /*+opt_param('hidden_column_visible','true')*/  $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/  __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE title = 'Fulltext Index';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select /*+opt_param('hidden_column_visible','true')*/  $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/  __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE title = 'Optimizing OceanBase';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select /*+opt_param('hidden_column_visible','true')*/  $__word_segment_16_17 as word, __pk_increment as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select /*+opt_param('hidden_column_visible','true')*/  __pk_increment as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+--echo ############# Alter Table With Primary Key ###############
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    title VARCHAR(200) PRIMARY KEY,
+    content TEXT);
+
+ALTER TABLE fts_basic_dml_articles add FULLTEXT INDEX ctx(title, content);
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_16_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE title = 'Fulltext Index';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE title = 'Optimizing OceanBase';
+
+select * from fts_basic_dml_articles order by title;
+
+--disable_query_log
+
+eval select title, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, title from $doc_rowkey_table_name;
+
+eval select $__word_segment_16_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_length from $fts_index_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_16_17 as word, $__word_count_16_17 as word_count, $__doc_length_16_17 as doc_lenght from $doc_word_table_name;
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+--echo ######## Create Table With Auto Increment Column #########
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx1(title),
+    FULLTEXT INDEX ctx2(content) WITH PARSER ngram,
+    FULLTEXT INDEX ctx3(title, content) WITH PARSER beng
+);
+
+set _show_ddl_in_compat_mode=1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+set _show_ddl_in_compat_mode=0;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND table_name like '%ctx1' AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND table_name like '%ctx2' AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index3_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 AND table_name like '%ctx3' AND tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_20_%', column_name, 1);
+
+let $__word_count_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_21_%', column_name, 1);
+
+let $__doc_length_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_22_%', column_name, 1);
+
+let $__word_segment_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_23_%', column_name, 1);
+
+let $__word_count_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_24_%', column_name, 1);
+
+let $__doc_length_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_25_%', column_name, 1);
+
+let $__word_segment_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_26_%', column_name, 1);
+
+let $__word_count_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_27_%', column_name, 1);
+
+let $__doc_length_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_28_%', column_name, 1);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index1_table_name;
+
+eval select $__word_segment_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index2_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index3_table_name;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index1_table_name;
+
+eval select $__word_segment_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index2_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index3_table_name;
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE id = 2;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index1_table_name;
+
+eval select $__word_segment_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index2_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index3_table_name;
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE id = 1;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index1_table_name;
+
+eval select $__word_segment_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_18 as word_count, $__doc_length_18 as doc_length from $fts_index2_table_name;
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index3_table_name;
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+--echo ####### Create Partition Table With Fulltext index #######
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx1(title) WITH PARSER beng,
+    FULLTEXT INDEX ctx2(content) WITH PARSER ngram,
+    FULLTEXT INDEX ctx3(title, content) WITH PARSER space
+) PARTITION BY HASH(id) PARTITIONS 64;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_basic_dml_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE table_name like '%fts_rowkey_doc' And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE table_name like '%fts_doc_rowkey' And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index1_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE table_name like '%ctx1_fts_index' And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index2_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE table_name like '%ctx2_fts_index' And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index3_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE table_name like '%ctx3_fts_index' And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+--enable_query_log
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+# eval select
+#             $fts_index1_table_name.__word_segment_17,
+#             $doc_rowkey_table_name.id,
+#             $fts_index1_table_name.__word_count_17
+#      from
+#             $fts_index1_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index1_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+#
+# eval select
+#             $fts_index2_table_name.__word_segment_18,
+#             $doc_rowkey_table_name.id,
+#             $fts_index2_table_name.__word_count_18
+#      from
+#             $fts_index2_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index2_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+#
+# eval select
+#             $fts_index3_table_name.__word_segment_17_18,
+#             $doc_rowkey_table_name.id,
+#             $fts_index3_table_name.__word_count_17_18
+#      from
+#             $fts_index3_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index3_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+
+--echo ========================= update ==========================
+
+--enable_query_log
+
+--replace_regex /_[0-9]+/_*/
+EXPLAIN UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE id = 2;
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE id = 2;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+# eval select
+#             $fts_index1_table_name.__word_segment_17,
+#             $doc_rowkey_table_name.id,
+#             $fts_index1_table_name.__word_count_17
+#      from
+#             $fts_index1_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index1_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+#
+# eval select
+#             $fts_index2_table_name.__word_segment_18,
+#             $doc_rowkey_table_name.id,
+#             $fts_index2_table_name.__word_count_18
+#      from
+#             $fts_index2_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index2_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+#
+# eval select
+#             $fts_index3_table_name.__word_segment_17_18,
+#             $doc_rowkey_table_name.id,
+#             $fts_index3_table_name.__word_count_17_18
+#      from
+#             $fts_index3_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index3_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+
+--echo ========================= delete ==========================
+
+--enable_query_log
+
+DELETE FROM fts_basic_dml_articles WHERE id = 1;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_query_log
+
+eval select id, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id from $rowkey_doc_table_name;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, id from $doc_rowkey_table_name;
+
+# eval select
+#             $fts_index1_table_name.__word_segment_17,
+#             $doc_rowkey_table_name.id,
+#             $fts_index1_table_name.__word_count_17
+#      from
+#             $fts_index1_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index1_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+#
+# eval select
+#             $fts_index2_table_name.__word_segment_18,
+#             $doc_rowkey_table_name.id,
+#             $fts_index2_table_name.__word_count_18
+#      from
+#             $fts_index2_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index2_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+#
+# eval select
+#             $fts_index3_table_name.__word_segment_17_18,
+#             $doc_rowkey_table_name.id,
+#             $fts_index3_table_name.__word_count_17_18
+#      from
+#             $fts_index3_table_name,
+#             $doc_rowkey_table_name
+#      where
+#             $fts_index3_table_name.__doc_id = $doc_rowkey_table_name.__doc_id;
+
+--echo ========================== drop ===========================
+
+--enable_query_log
+
+DROP TABLE fts_basic_dml_articles;
+
+# For conflicting rows, `replace into` may be split into insert + delete in
+# `ObTableReplaceOp::prepare_final_replace_task()`.
+--echo ################ replace into with varchar ################
+
+--disable_warnings
+DROP TABLE IF EXISTS basic_dml_t1;
+DROP TABLE IF EXISTS basic_dml_t2;
+--enable_warnings
+
+CREATE TABLE basic_dml_t1 (a int PRIMARY KEY, b varchar(10000), FULLTEXT INDEX(b));
+
+CREATE TABLE basic_dml_t2 (a int, b varchar(10000));
+
+INSERT INTO basic_dml_t1 VALUES (1, 'aaaa'), (2, 'bbbb');
+
+INSERT INTO basic_dml_t2 VALUES (10, 'aaaa'), (2, 'cccc');
+
+SELECT * FROM basic_dml_t1;
+
+REPLACE INTO basic_dml_t1 SELECT * FROM basic_dml_t2;
+
+SELECT * FROM basic_dml_t1;
+
+SELECT * FROM basic_dml_t2;
+
+# For conflicting rows, `replace into` may be split into insert + delete in
+# `ObTableReplaceOp::prepare_final_replace_task()`.
+--echo ################# replace into with text ##################
+
+--disable_warnings
+DROP TABLE IF EXISTS basic_dml_t1;
+DROP TABLE IF EXISTS basic_dml_t2;
+--enable_warnings
+
+CREATE TABLE basic_dml_t1 (a int PRIMARY KEY, b text, FULLTEXT INDEX(b));
+
+CREATE TABLE basic_dml_t2 (a int, b text);
+
+INSERT INTO basic_dml_t1 VALUES (1, 'aaaa'), (2, 'bbbb');
+
+INSERT INTO basic_dml_t2 VALUES (10, 'aaaa'), (2, 'cccc');
+
+SELECT * FROM basic_dml_t1;
+
+REPLACE INTO basic_dml_t1 SELECT * FROM basic_dml_t2;
+
+SELECT * FROM basic_dml_t1;
+
+SELECT * FROM basic_dml_t2;
+
+DROP TABLE basic_dml_t1;
+
+DROP TABLE basic_dml_t2;
+
+--echo ######## Create Table With Normal And Fulltext Index  #########
+--echo ======================== create ==========================
+CREATE TABLE fts_basic_dml_articles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx1(title),
+    INDEX i1(title),
+    INDEX i2(id),
+    FULLTEXT INDEX ctx3(title, content) WITH PARSER beng
+);
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_basic_dml_articles;
+
+SHOW INDEX FROM fts_basic_dml_articles;
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+INSERT INTO fts_basic_dml_articles (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+UPDATE fts_basic_dml_articles SET title = 'Fulltext Indexing' WHERE title = 'Fulltext Index';
+
+DELETE FROM fts_basic_dml_articles WHERE id = 1;
+
+select * from fts_basic_dml_articles order by id;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_basic_dml_articles;
+DROP TABLE IF EXISTS fts_czt_coupon_main_body;
+--enable_warnings
+
+--echo ######## Create Table With Multivalue and Fulltext Index  #########
+CREATE TABLE fts_czt_coupon_main_body (
+    coupon_body_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '优惠券主体自增id',
+    coupon_name VARCHAR(60)  NOT NULL DEFAULT '' COMMENT '优惠券名字',
+    extra_contains json NOT NULL COMMENT '可用门店ID',
+    PRIMARY KEY (coupon_body_id) ,
+    KEY contain_store_ids_index ((CAST(json_extract(extra_contains,'$.contain_store_ids') AS UNSIGNED array))),
+    FULLTEXT KEY coupon_name_index (coupon_name) WITH PARSER ngram
+) AUTO_INCREMENT=1265 COMMENT='优惠券主体数据表';
+
+INSERT INTO fts_czt_coupon_main_body (coupon_name, extra_contains) VALUES
+('优惠券A', '{"contain_store_ids": [1000010001, 1000010002, 1000010003]}'),
+('优惠券B', '{"contain_store_ids": [2000010001, 2000010002, 2000010003]}');
+
+SELECT * FROM fts_czt_coupon_main_body order by coupon_body_id;
+
+SELECT *, MATCH(coupon_name) AGAINST("优惠券B") FROM fts_czt_coupon_main_body WHERE MATCH(coupon_name) AGAINST("优惠券B");
+
+SELECT *, MATCH(coupon_name) AGAINST("优惠券B") FROM fts_czt_coupon_main_body WHERE MATCH(coupon_name) AGAINST("优惠券B") limit 1;
+
+DROP TABLE fts_czt_coupon_main_body;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_compat_mysql_articles;
+--enable_warnings
+
+--echo ######## Test Fulltext MIN/MAX WORD LENGTH #########
+CREATE TABLE fts_compat_mysql_articles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    body TEXT,
+    FULLTEXT INDEX ctx(title, body)
+);
+
+INSERT INTO fts_compat_mysql_articles (title) VALUES ("abc_df");
+
+select * from fts_compat_mysql_articles where match(title, body) against('abc');
+select * from fts_compat_mysql_articles where match(title, body) against('df');
+select * from fts_compat_mysql_articles where match(title, body) against('abc df');
+select * from fts_compat_mysql_articles where match(title, body) against('abc_df');
+
+DROP TABLE fts_compat_mysql_articles;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_min_max_word_articles;
+--enable_warnings
+
+--echo ######## Test Fulltext MIN/MAX WORD LENGTH #########
+CREATE TABLE fts_min_max_word_articles (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    body TEXT,
+    FULLTEXT INDEX ctx(title, body)
+);
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_min_max_word_articles' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_17_18 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+--echo ======================== insert ==========================
+
+--enable_query_log
+
+INSERT INTO fts_min_max_word_articles (title, body) VALUES
+("wordlen2", "ab"),
+('wordlen3', 'abc'),
+('wordlen4', 'abcd'),
+("wordlen78", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"),
+('wordlen83', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz12345'),
+('wordlen84', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz123456'),
+('wordlen85', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567');
+
+select * from fts_min_max_word_articles order by id;
+
+--disable_query_log
+
+set ob_enable_index_direct_select = 'ON';
+
+eval select $__word_segment_17_18 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $fts_index_table_name order by word, doc_id;
+
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17_18 as word, $__word_count_17_18 as word_count, $__doc_length_17_18 as doc_length from $doc_word_table_name order by doc_id, word;
+
+--enable_query_log
+
+select * from fts_min_max_word_articles where match(title, body) against("ab");
+
+select * from fts_min_max_word_articles where match(title, body) against("abc");
+
+select * from fts_min_max_word_articles where match(title, body) against("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz123456");
+
+select * from fts_min_max_word_articles where match(title, body) against("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567");
+
+drop table fts_min_max_word_articles;
+
+--echo ################# complex dml operation ##################
+--disable_warnings
+DROP TABLE IF EXISTS fts;
+DROP TABLE IF EXISTS normal;
+DROP VIEW IF EXISTS fts_view;
+--enable_warnings
+
+CREATE TABLE fts (a int PRIMARY KEY, b text, FULLTEXT INDEX(b));
+CREATE TABLE normal (a int PRIMARY KEY, b text);
+CREATE VIEW fts_view as select * from fts;
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 And tenant_id = 1 AND data_table_id = $data_table_id, table_name, 1);
+
+let $__doc_id = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_id_%', column_name, 1);
+
+let $__word_segment_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_segment_%', column_name, 1);
+
+let $__word_count_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__word_count_%', column_name, 1);
+
+let $__doc_length_17 = query_get_value(SELECT column_name FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $data_table_id and column_name like '__doc_length_%', column_name, 1);
+
+set ob_enable_index_direct_select = 'ON';
+
+INSERT INTO fts values (1, 'aaaa'), (2, 'bbbb');
+INSERT INTO normal values (1, 'aaaa'), (2, 'bbbb');
+
+--result_format 4
+
+insert into fts values (1, 'aaaa') ON DUPLICATE KEY UPDATE b = 'aaaa';
+insert into normal values (1, 'aaaa') ON DUPLICATE KEY UPDATE b = 'aaaa';
+--disable_query_log
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index_table_name order by word, doc_id;
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $doc_word_table_name order by doc_id, word;
+--enable_query_log
+
+replace into fts (a, b) values (1, 'aaaa');
+replace into normal (a, b) values (1, 'aaaa');
+--disable_query_log
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index_table_name order by word, doc_id;
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $doc_word_table_name order by doc_id, word;
+--enable_query_log
+
+insert into fts_view values (3, 'cccc'), (4, 'dddd');
+insert into normal (a, b) values (3, 'aaaa');
+select * from fts_view;
+select * from normal;
+--disable_query_log
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index_table_name order by word, doc_id;
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $doc_word_table_name order by doc_id, word;
+--enable_query_log
+
+update fts join normal on fts.a = normal.a set fts.b = 'dddd', normal.b = 'eeee';
+select * from fts_view;
+select * from normal;
+--disable_query_log
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index_table_name order by word, doc_id;
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $doc_word_table_name order by doc_id, word;
+--enable_query_log
+
+update fts join normal on fts.a = normal.a set fts.b = 'dddd';
+update fts join normal on fts.a = normal.a set normal.b = fts.b;
+select * from normal;
+select * from fts;
+
+update fts_view join normal on fts_view.a = normal.a set fts_view.b = 'dddd', normal.b = 'eeee';
+update fts_view set b = 'dddd';
+select * from fts;
+select * from fts_view;
+--disable_query_log
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index_table_name order by word, doc_id;
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $doc_word_table_name order by doc_id, word;
+--enable_query_log
+
+delete fts, normal from fts join normal on fts.a = normal.a;
+delete fts from fts join normal on fts.a = normal.a;
+delete fts from fts join normal on fts.a = normal.a;
+
+delete normal from fts_view join normal on fts_view.a = normal.a and 1=0;
+delete from fts_view where b = 'dddd';
+--disable_query_log
+eval select $__word_segment_17 as word, HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $fts_index_table_name order by word, doc_id;
+eval select HEX(SUBSTRING($__doc_id, 9, 8)) as doc_id, $__word_segment_17 as word, $__word_count_17 as word_count, $__doc_length_17 as doc_length from $doc_word_table_name order by doc_id, word;
+--enable_query_log
+
+drop table fts;
+drop table normal;
+
+--echo ################# empty token set ##################
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+
+CREATE TABLE t1 (a int, b text, FULLTEXT INDEX(b));
+INSERT INTO t1 values(1, '');
+INSERT INTO t1 values(2, 'is is');
+INSERT INTO t1 values(3, ' ');
+
+UPDATE t1 SET b = 'is' WHERE a = 1;
+UPDATE t1 SET b = ' ' WHERE a = 2;
+UPDATE t1 SET b = '' WHERE a = 3;
+SELECT * FROM t1;
+
+SET SQL_MODE = '';
+DROP TABLE IF EXISTS t1;
+CREATE TABLE t1(a CHAR(1), FULLTEXT(a));
+INSERT INTO t1 VALUES(0xACB0);
+DELETE FROM t1 WHERE a < 2 LIMIT 4;
+
+--disable_warnings
+DROP TABLE t1;
+DROP VIEW IF EXISTS fts_view;
+--enable_warnings
+
+--echo ################# rowkeys doesn't cover partition keys ##################
+--disable_warnings
+DROP TABLE IF EXISTS fts_partition_without_primary_key;
+--enable_warnings
+
+CREATE TABLE fts_partition_without_primary_key (
+    id INT UNSIGNED,
+    title VARCHAR(200),
+    body TEXT,
+    FULLTEXT INDEX ctx(title, body)
+) partition by hash(id) partitions 3;
+
+INSERT INTO fts_partition_without_primary_key (id, title, body) VALUES
+(1, 'OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+(2, 'Fulltext Index', 'Fulltext index can be very useful.'),
+(3, 'OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+SELECT * FROM fts_partition_without_primary_key;
+
+select * from fts_partition_without_primary_key where match(title, body) against('oceanbase') order by id;
+
+UPDATE fts_partition_without_primary_key SET body = 'dddd' WHERE id = 3;
+
+select * from fts_partition_without_primary_key where match(title, body) against('dddd') order by id;
+
+
+## --disable_warnings
+## DROP TABLE IF EXISTS muilt_value_table;
+## --enable_warnings
+## CREATE TABLE muilt_value_table (
+##     id INT UNSIGNED,
+##     extra_contains json NOT NULL COMMENT '可用门店ID',
+##     INDEX contain_store_ids_index ((CAST(json_extract(extra_contains,'$.contain_store_ids') AS UNSIGNED array)))
+## ) partition by hash(id) partitions 3;
+##
+## DROP TABLE muilt_value_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_partition_article;
+--enable_warnings
+
+CREATE TABLE fts_partition_article(
+    id INT UNSIGNED,
+    p_id INT UNSIGNED,
+    title VARCHAR(200),
+    body TEXT
+) partition by hash(p_id) partitions 3;
+
+INSERT INTO fts_partition_article (id, p_id, title, body) VALUES
+(1, 1, "a", "abc"), (2, 2, 'b', 'abcd'), (3, 3, 'c', 'abcde'),
+(4, 1, "d", "def"), (5, 2, 'e', "defg"), (6, 3, 'e', "defgh"),
+(7, 1, "h", "hij"), (8, 2, 'i', "hijk"), (9, 3, 'j', "hijkl");
+
+select * from fts_partition_article order by id;
+
+update fts_partition_article set body = 'dddd' where id = 3;
+
+select * from fts_partition_article order by id;
+
+delete from fts_partition_article where id = 2;
+
+select * from fts_partition_article order by id;
+
+drop table fts_partition_article;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_bug56794259;
+--enable_warnings
+
+create table fts_bug56794259 (
+  c1 int(127) NOT NULL,
+  c4 varchar(86) COLLATE utf8mb4_bin NOT NULL,
+  PRIMARY KEY (c1),
+  FULLTEXT KEY ctx (c4)
+) partition by range(c1+1) (partition p0 values less than (2000), partition p1 values less than (MAXVALUE));
+
+INSERT INTO fts_bug56794259 (c1, c4) VALUES (40000, 'sssssddddd'), (111, 'dddddd');
+
+UPDATE fts_bug56794259 SET fts_bug56794259.c1 = fts_bug56794259.c1;
+
+DROP TABLE fts_bug56794259;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_bug56890647;
+--enable_warnings
+
+CREATE TABLE fts_bug56890647 (
+  c1 varchar(100) NOT NULL,
+  FULLTEXT KEY ctx (c1));
+
+INSERT INTO fts_bug56890647 (c1) VALUES ("aaaa,bbbb,cccc"), ('aaaa'), ('aaaa,cccc');
+
+SELECT * FROM fts_bug56890647 order by c1;
+
+DROP TABLE fts_bug56890647;
+
+--disable_warnings
+DROP TABLE IF EXISTS tx_smpay_traderecord3;
+--enable_warnings
+
+CREATE TABLE tx_smpay_traderecord3 (
+  recorddate date NOT NULL COMMENT '记录日期',
+  recordyear int(4) NOT NULL COMMENT '记录年份',
+  shopid int (11) NOT NULL COMMENT '店铺id',
+  tradetype varchar (2) DEFAULT NULL COMMENT '交易类型',
+  clusterids json DEFAULT NULL COMMENT '商户所属集群id',
+  groupids json DEFAULT NULL COMMENT '管理方id',
+  PRIMARY KEY (recorddate,recordyear),
+  INDEX tx_smpay_traderecord( (CAST(clusterids->>'$[*]' AS char(500) ARRAY)) )
+) partition by range columns(recordyear) (
+  partition `P2018`
+   values less than (2019),
+    partition `P2019`
+  values
+    less than (2020),
+    partition `P2020`
+  values
+    less than (2021),
+    partition `P2021`
+  values
+    less than (2022),
+    partition `P2022`
+  values
+    less than (2023),
+    partition `P2023`
+  values
+    less than (2024),
+    partition `P2024`
+  values
+    less than (2025)
+);
+
+insert into tx_smpay_traderecord3 values('2018-01-02 10:00:00', 2018, 123, "a1", '[1,2,3]', '[100,101,102]');
+
+--replace_regex /_[0-9]+/_*/
+explain update tx_smpay_traderecord3 set shopid = 3 where recorddate = '2018-01-02 10:00:00' and recordyear = 2018;
+
+DROP TABLE tx_smpay_traderecord3;
+
+--disable_warnings
+DROP TABLE IF EXISTS test_alias_tt1;
+--enable_warnings
+
+CREATE TABLE `test_alias_tt1` (
+  `c1` varchar(86) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `c2` decimal(64,13) DEFAULT NULL,
+  `c3` year(4) DEFAULT NULL,
+  `c4` binary(105) NOT NULL,
+  `c5` decimal(64,4) DEFAULT NULL,
+  `c6` year(4) DEFAULT NULL,
+  `c7` decimal(64,21) NOT NULL,
+  `c8` bigint(127) NOT NULL,
+  `c9` decimal(64,22) DEFAULT NULL,
+  `c10` binary(95) DEFAULT NULL,
+  `c11` int(127) DEFAULT NULL,
+  `c12` binary(146) DEFAULT NULL,
+  `c13` int(127) NOT NULL,
+  `c14` decimal(64,20) DEFAULT NULL,
+  `c15` binary(108) NOT NULL,
+  PRIMARY KEY (`c4`, `c13`, `c15`, `c8`, `c7`, `c1`),
+  UNIQUE KEY `u_0_tYOjXqgN` (`c8`, `c4`, `c13`, `c15`, `c7`, `c1`) BLOCK_SIZE 16384 LOCAL,
+  UNIQUE KEY `g_u_1_qK` (`c8`, `c10`) BLOCK_SIZE 16384 GLOBAL,
+  UNIQUE KEY `u_2_wYpNqOp` (`c1`, `c15`, `c4`, `c13`, `c8`, `c7`) BLOCK_SIZE 16384 LOCAL,
+  UNIQUE KEY `u_3_KnkjPh` (`c8`, `c14`, `c4`, `c13`, `c15`, `c7`, `c1`) BLOCK_SIZE 16384 LOCAL,
+  FULLTEXT KEY `f_0_EdoYutM` (`c1`) WITH PARSER space BLOCK_SIZE 16384,
+  KEY `g_i_0_kkyEg` (`c14`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `g_i_1_XVx` (`c10`, `c2`, `c5`, `c15`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `i_2_wQbHms` (`c11`, `c1`) BLOCK_SIZE 16384 LOCAL,
+  KEY `g_i_3_VQvB` (`c4`) BLOCK_SIZE 16384 GLOBAL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 3 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(all columns, each column);
+
+--replace_regex /_[0-9]+/_*/
+explain UPDATE test_alias_tt1 AS tt10 set tt10.c1 = tt10.c1 WHERE tt10.c1 like '%000%';
+
+DROP TABLE test_alias_tt1;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_changed_part_key;
+--enable_warnings
+
+alter system set _enable_defensive_check = 2;
+
+CREATE TABLE fts_changed_part_key(
+  c1 bigint(20) NOT NULL AUTO_INCREMENT,
+  c2 bigint(20) NOT NULL,
+  c3 varchar(5000) DEFAULT NULL,
+  PRIMARY KEY (c1, c2),
+  FULLTEXT KEY ctx (c3)
+) partition by key(c2)
+ (partition p0,
+  partition p1,
+  partition p2,
+  partition p3,
+  partition p4,
+  partition p5,
+  partition p6,
+  partition p7,
+  partition p8,
+  partition p9,
+  partition p10,
+  partition p11,
+  partition p12,
+  partition p13,
+  partition p14,
+  partition p15,
+  partition p16,
+  partition p17,
+  partition p18);
+
+INSERT INTO fts_changed_part_key(c2, c3) VALUES (42584969, 'bbbb');
+UPDATE fts_changed_part_key SET c2 = 45712355 WHERE c3 = 'bbbb';
+UPDATE fts_changed_part_key SET c3 = 'cccc' WHERE c2 = 45712355;
+
+DROP TABLE fts_changed_part_key;
+
+alter system set _enable_defensive_check = 1;
+
+CREATE TABLE fts_parser_name_test (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content)
+);
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_parser_name_test' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+--replace_regex /data_table_id = [0-9]+/*/
+eval SELECT parser_name FROM oceanbase.__all_virtual_table WHERE index_type = 13 And tenant_id = 1 AND data_table_id = $data_table_id;
+--replace_regex /data_table_id = [0-9]+/*/
+eval SELECT parser_name FROM oceanbase.__all_virtual_table WHERE index_type = 14 And tenant_id = 1 AND data_table_id = $data_table_id;
+--replace_regex /data_table_id = [0-9]+/*/
+eval SELECT parser_name FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id;
+--replace_regex /data_table_id = [0-9]+/*/
+eval SELECT parser_name FROM oceanbase.__all_virtual_table WHERE index_type = 16 And tenant_id = 1 AND data_table_id = $data_table_id;
+
+let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 13 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 14 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 16 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $rowkey_doc_table_id;
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $doc_rowkey_table_id;
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $fts_index_table_id;
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $doc_word_table_id;
+
+DROP TABLE fts_parser_name_test;
+
+CREATE TABLE fts_parser_name_test (
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content)
+);
+let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 13 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 14 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 16 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $rowkey_doc_table_id;
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $doc_rowkey_table_id;
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $fts_index_table_id;
+--replace_regex /table_id = [0-9]+/*/g  /_[0-9]+/_*/g
+eval SELECT column_name, is_hidden FROM oceanbase.__all_virtual_column WHERE tenant_id = 1 AND table_id = $doc_word_table_id;
+
+DROP TABLE fts_parser_name_test;
+create table fts_parser_name_test(seq_id int PRIMARY KEY, detail varchar(4096)) partition by hash(seq_id) partitions 2;
+CREATE FULLTEXT INDEX fts_parser_name_test_index on fts_parser_name_test(detail);
+
+let $data_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE table_name = 'fts_parser_name_test' AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+let $rowkey_doc_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 13 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_rowkey_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 14 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+let $fts_index_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 15 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+let $doc_word_table_id = query_get_value(SELECT table_id FROM oceanbase.__all_virtual_table WHERE index_type = 16 And tenant_id = 1 AND data_table_id = $data_table_id, table_id, 1);
+
+--replace_regex /table_id = [0-9]+/*/  /database_id = [0-9]+/*/
+eval select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = $database_id and table_id = $rowkey_doc_table_id;
+--replace_regex /table_id = [0-9]+/*/  /database_id = [0-9]+/*/
+eval select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = $database_id and table_id = $doc_rowkey_table_id;
+--replace_regex /table_id = [0-9]+/*/  /database_id = [0-9]+/*/
+eval select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = $database_id and table_id = $fts_index_table_id;
+--replace_regex /table_id = [0-9]+/*/  /database_id = [0-9]+/*/
+eval select operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = $database_id and table_id = $doc_word_table_id;
+
+
+DROP TABLE fts_parser_name_test;
+
+
+--echo ========= for some charset =========
+
+--echo === utf8 for tokenize result ===
+
+select tokenize("abc英文空格 中文分号；英文分号;全角空格　全角逗号，等", 'space');
+
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1(trailing_space VARCHAR(256), fulltext index ft1(trailing_space) with parser space) DEFAULT CHARSET = utf16;
+
+insert into t1 values("abc英文空格 中文分号；英文分号;全角空格　全角逗号，等");
+
+select * from t1 where match(trailing_space) against ('abc英文空格' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('中文分号' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('英文分号' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('全角空格' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('全角逗号' IN BOOLEAN MODE);
+
+select tokenize("abc英文空格 中文分号；英文分号;全角空格　全角逗号，等", 'ngram');
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1(trailing_space VARCHAR(256), fulltext index ft1(trailing_space) with parser ngram) DEFAULT CHARSET = utf16;
+insert into t1 values("abc英文空格 中文分号；英文分号;全角空格　全角逗号，等");
+select * from t1 where match(trailing_space) against ('ab' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('文空' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('空格' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('文分' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('c英' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('分号' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('角逗' IN BOOLEAN MODE);
+
+--echo === should not found ===
+select * from t1 where match(trailing_space) against ('号，' IN BOOLEAN MODE);
+select * from t1 where match(trailing_space) against ('格　' IN BOOLEAN MODE);
+
+select tokenize("abc英文空格 中文分号；英文分号;全角空格　全角逗号，等", 'ngram2');
+
+drop table t1;
+drop database fts_basic_dml;

@@ -1,0 +1,332 @@
+alter system set ob_vector_memory_limit_percentage = 34;
+drop table if exists t1;
+drop table if exists t2;
+create table t1 (c1 int AUTO_INCREMENT, c2 int UNIQUE, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3),
+PRIMARY KEY(c1),
+INDEX (c2, c3));
+insert into t1 values(1, 1, 1, 'row1', '[1, 2, 3]', '[2, 3, 4]');
+insert into t1 values(2, 2, 2, 'row2', '[2, 3, 6]', '[4, 4, 8]');
+insert into t1 values(3, 3, 3, 'row3', '[2, 5, 3]', '[12, 22, 3]');
+insert into t1 values(4, 4, 4, 'row4', '[1, 5, 3]', '[2, 2, 3]');
+insert into t1 values(5, 5, 5, 'row5', '[5, 5, 3]', '[6, 2, 3]');
+insert into t1 values(6, 6, 6, 'row6', '[6, 6, 3]', '[7, 2, 1]');
+insert into t1 values(7, 7, 7, 'row7', '[9, 5, 0]', '[12, 2, 3]');
+insert into t1 values(8, 8, 8, 'row8', '[3, 5, 3]', '[2, 22, 3]');
+insert into t1 values(9, 9, 9, 'row9', '[8, 5, 1]', '[1, 22, 33]');
+insert into t1 values(10, 10, 10, 'row10', null, '[10, 22, 33]');
+create vector index idx1 on t1 (c5) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create vector index idx2 on t1 (c6) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+insert into t1(c2, c3, c4, c5, c6) values(11, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c1 = c1 + 10;
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+create table t2 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3));
+insert into t2 values(100, 100, 100, 'row100', '[20, 20, 20]', null);
+insert into t2 values(101, 101, 100, 'row101', '[21, 2, 10]', '[5,6,7]');
+insert into t1 select * from t2;
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+update t1 set c5 = '[1,2,3]' where c1 = 100;
+update t1 set c6 = '[1,2,3]' where c1 = 2;
+update t1 set c5 = c6 order by c1;
+delete from t1 where c1 = 2;
+delete from t1 where c1 <= 5;
+select distinct c3 from t1;
+c3
+6
+7
+8
+9
+2
+10
+100
+drop table t1, t2;
+drop table if exists t1;
+drop table if exists t2;
+CREATE TABLE t1(c1 int not null auto_increment, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3),
+primary key(c1,c2))
+PARTITION BY RANGE COLUMNS(c1)
+(
+PARTITION p0 VALUES LESS THAN(100),
+PARTITION p1 VALUES LESS THAN(200),
+PARTITION p2 VALUES LESS THAN(300),
+PARTITION p3 VALUES LESS THAN(10000),
+PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+create vector index idx1 on t1 (c5) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create vector index idx2 on t1 (c6) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+insert into t1(c2, c3, c4, c5, c6) values(11, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c1 = c1 + 10;
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+create table t2 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3));
+insert into t2 values(99, 99, 99, 'row99', '[21, 2, 10]', '[5,6,7]');
+insert into t2 values(100, 100, 100, 'row100', '[20, 20, 20]', null);
+insert into t1 select * from t2;
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+update t1 set c5 = '[1,2,3]' where c1 = 100;
+update t1 set c6 = '[1,2,3]' where c1 = 2;
+update t1 set c5 = c6 order by c1;
+delete from t1 where c1 = 2;
+delete from t1 where c1 <= 5;
+select distinct c3 from t1;
+c3
+1
+2
+99
+100
+drop table t1, t2;
+drop table if exists t1;
+drop table if exists t2;
+CREATE TABLE t1(c1 int not null auto_increment, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3),
+primary key(c1,c2),
+VECTOR INDEX idx1(c5)
+WITH (distance=l2, type=ivf_flat),
+VECTOR INDEX idx2(c6)
+WITH (distance=l2, type=ivf_flat))
+PARTITION BY RANGE COLUMNS(c1)
+SUBPARTITION BY LIST COLUMNS(c2)
+SUBPARTITION TEMPLATE
+(
+SUBPARTITION mp0 VALUES IN (1,2,3,4,5),
+SUBPARTITION mp1 VALUES IN (6,7,8,9,10),
+SUBPARTITION mp2 VALUES IN (11,12,13,14,15),
+SUBPARTITION mp3 VALUES IN (16,17,18,19,20)
+)
+(
+PARTITION p0 VALUES LESS THAN(100),
+PARTITION p1 VALUES LESS THAN(200),
+PARTITION p2 VALUES LESS THAN(300),
+PARTITION p3 VALUES LESS THAN(10000),
+PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+insert into t1(c2, c3, c4, c5, c6) values(11, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c1 = c1 + 10;
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+create table t2 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3));
+insert into t2 values(99, 20, 99, 'row99', '[21, 2, 10]', '[5,6,7]');
+insert into t2 values(100, 6, 100, 'row100', '[20, 20, 20]', null);
+insert into t1 select * from t2;
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+update t1 set c5 = '[1,2,3]' where c1 = 100;
+update t1 set c6 = '[1,2,3]' where c1 = 2;
+update t1 set c2 = 16 where c1 < 5;
+update t1 set c5 = c6 order by c1;
+delete from t1 where c1 = 2;
+delete from t1 where c1 <= 5;
+select distinct c3 from t1;
+c3
+2
+1
+99
+100
+drop table t1, t2;
+drop table if exists t1;
+drop table if exists t2;
+CREATE TABLE t1(c1 int not null auto_increment, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3),
+primary key(c1,c2))
+PARTITION BY RANGE COLUMNS(c1)
+SUBPARTITION BY LIST COLUMNS(c2)
+SUBPARTITION TEMPLATE
+(
+SUBPARTITION mp0 VALUES IN (1,2,3,4,5),
+SUBPARTITION mp1 VALUES IN (6,7,8,9,10),
+SUBPARTITION mp2 VALUES IN (11,12,13,14,15),
+SUBPARTITION mp3 VALUES IN (16,17,18,19,20)
+)
+(
+PARTITION p0 VALUES LESS THAN(100),
+PARTITION p1 VALUES LESS THAN(200),
+PARTITION p2 VALUES LESS THAN(300),
+PARTITION p3 VALUES LESS THAN(10000),
+PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+create vector index idx1 on t1 (c5) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create vector index idx2 on t1 (c6) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+insert into t1(c2, c3, c4, c5, c6) values(11, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c5 = '[1,2,3]';
+insert into t1(c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]') on duplicate key update c1 = c1 + 10;
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+insert ignore into t1(c1, c2, c3, c4, c5, c6) values(10, 12, 2, "row10", '[10,2,1]', '[12,12,12]');
+create table t2 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3));
+insert into t2 values(99, 20, 99, 'row99', '[21, 2, 10]', '[5,6,7]');
+insert into t2 values(100, 6, 100, 'row100', '[20, 20, 20]', null);
+insert into t1 select * from t2;
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+replace into t1 (c1, c2, c3, c4, c5, c6) values(10, 1, 2, "row11", '[10,2,1]', '[12,12,12]');
+update t1 set c5 = '[1,2,3]' where c1 = 100;
+update t1 set c6 = '[1,2,3]' where c1 = 2;
+update t1 set c2 = 16 where c1 < 5;
+update t1 set c5 = c6 order by c1;
+delete from t1 where c1 = 2;
+delete from t1 where c1 <= 5;
+select distinct c3 from t1;
+c3
+2
+1
+99
+100
+drop table t1, t2;
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop procedure if exists process;
+CREATE TABLE t1(c1 int not null, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3),
+primary key(c1,c2))
+PARTITION BY RANGE COLUMNS(c1)
+(
+PARTITION p0 VALUES LESS THAN(100),
+PARTITION p1 VALUES LESS THAN(200),
+PARTITION p2 VALUES LESS THAN(300),
+PARTITION p3 VALUES LESS THAN(10000),
+PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+create vector index idx1 on t1 (c5) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create vector index idx2 on t1 (c6) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create table t2 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3));
+insert into t2 values(50, 50, 50, 'row99', '[21, 2, 10]', '[5,6,7]');
+insert into t2 values(99, 99, 99, 'row99', '[21, 2, 10]', '[5,6,7]');
+insert into t2 values(100, 100, 100, 'row100', '[20, 20, 20]', null);
+alter system set direct_load_allow_fallback=TRUE;
+insert /*+ direct(true, 0) enable_parallel_dml parallel(2) */ into t1 select * from t2;
+insert into t2 values(500, 500, 500, '111', '[1, 2, 3]', '[2, 3, 4]');
+insert into t2 values(501, 500, 1, '111', '[2, 3, 6]', '[4, 4, 8]');
+insert into t2 values(502, 3, 3, 'row3', '[2, 5, 3]', '[12, 22, 3]');
+insert into t2 values(503, 3, 4, 'row4', '[1, 5, 3]', '[2, 2, 3]');
+insert into t2 values(504, 5, 5, 'row5', '[5, 5, 3]', '[6, 2, 3]');
+insert into t2 values(505, 6, 6, '111', '[7, 6, 3]', '[10, 12, 13]');
+insert into t2 values(506, 6, 6, '111', '[1, 15, 13]', '[16, 22, 3]');
+insert into t2 values(507, 6, 6, '111', '[8, 5, 3]', '[6, 24, 23]');
+insert into t2 values(508, 6, 6, '111', '[11, 25, 3]', '[16, 2, 3]');
+insert /*+ direct(true, 100, 'inc_replace') enable_parallel_dml parallel(2) */ into t1 select * from t2;
+ERROR 23000: Duplicate entry '50-50' for key 'PRIMARY'
+create table t3 (c1 int primary key, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3));
+insert into t3 values(500, 500, 500, '111', '[1, 2, 3]', '[2, 3, 4]');
+insert into t3 values(501, 500, 1, '111', '[2, 3, 6]', '[4, 4, 8]');
+insert into t3 values(502, 3, 3, 'row3', '[2, 5, 3]', '[12, 22, 3]');
+insert into t3 values(503, 3, 4, 'row4', '[1, 5, 3]', '[2, 2, 3]');
+insert into t3 values(504, 5, 5, '111', '[5, 5, 3]', '[6, 2, 3]');
+insert into t3 values(505, 6, 6, '111', '[7, 6, 3]', '[10, 12, 13]');
+insert into t3 values(506, 6, 6, '111', '[1, 15, 13]', '[16, 22, 3]');
+insert into t3 values(507, 6, 6, '111', '[8, 5, 3]', '[6, 24, 23]');
+insert into t3 values(508, 6, 6, '111', '[11, 25, 3]', '[16, 2, 3]');
+insert into t1(c1, c2, c3, c4, c5, c6)
+select t2.c1, t2.c2, t2.c3, t2.c4, t3.c5, t3.c6
+from t2
+join t3 on t2.c1 = t3.c1
+where t2.c3 = 500;
+insert into t1(c1, c2, c3, c4, c5, c6)
+select t3.c1, sum(t3.c2), t3.c3, t3.c4, t3.c5, t3.c6
+from t2
+join t3 on t2.c1 = t3.c1
+where t3.c3 < 6
+group by t3.c2;
+insert into t1(c1, c2, c3, c4, c5, c6)
+values (20, 20, 20, '222',
+(select c5 from t2 where c1 = 500),
+(select t2.c6 from t2 join t3 on t2.c1 = t3.c1 where t3.c1 = 501));
+update t1
+set t1.c6 = (select t2.c6 from t2 where t2.c1 = t1.c1 and t2.c1 = 100)
+where t1.c1 in (select t3.c2 from t3 where t3.c1 = 502);
+update t1
+join t2 on t1.c1 = t2.c1
+set t1.c6 = t2.c6 + '[1,2,3]'
+where t2.c2 < 5;
+update t1
+set c5 = case
+when c1 = 201 then c6 + '[1,2,3]'
+            when c1 = 401 then c6 - '[1,2,3]'
+            else c5
+end
+where c1 < 500;
+with cte as (
+select c2, c5 from t2 where c2 = (select t3.c2 from t3 where t3.c1 = 504)
+)
+update t1
+set c5 = (select c5 from cte)
+where c1 = (select c2 from cte);
+delete from t1
+where t1.c1 in (
+select t2.c2
+from t2
+join t3 on t2.c2 = t3.c2
+where t2.c3 = 6
+);
+delete t1
+from t1
+join t2 on t1.c1 = t2.c2
+where t2.c3 <= 3;
+START TRANSACTION;
+delete from t1
+where t1.c1 in (
+select c1 from t2
+);
+update t1
+set c5 = c5 + '[1,1,1]'
+where c1 > 10009;
+insert into t1 values(30, 30, 30, '333', '[3,3,3]', '[0.3,0.3,0.3]');
+COMMIT;
+create procedure process(IN inc1 INT, IN inc2 INT)
+begin
+DECLARE t2c2 INT;
+select c2 into t2c2
+from t2
+where c1 = inc1;
+if t2c2 = inc2 then
+update t1
+set c5 = c5 + '[1,1,1]'
+        where c1 > 10000;
+else
+insert into t1 select * from t2 where t2.c1 >= 505;
+end if;
+end;
+//
+CALL process(500, 500);
+CALL process(500, 501);
+drop procedure process;
+drop table t1, t2, t3;
+bugfix 2025011500107001921 parallel dml
+drop table if exists t1;
+create table t1(c1 int, c2 int, c3 varchar(20), v vector(3), primary key(c1), vector index idx3(v) with (distance=l2, type=ivf_flat));
+insert into t1 values(1, 1, 'GfHnmWjRxTaIErsZ', '[0.203846,0.205289,0.880265]');
+insert into t1 values(2, 2, 'LKmNtrEbUvQPJZXODyF', '[0.226980,0.579658,0.933939]');
+insert into t1 values(3, 3, 'aFGhzNVwKtUCXsJoRp', '[0.181664,0.013905,0.628127]');
+insert into t1 values(4, 4, 'lzEjkIrFbHNGpVuoXwQA', '[0.442633,0.637534,0.633993]');
+insert into t1 values(5, 5, 'yMBsQOVnfiGeRHYDpTk', '[0.190118,0.959676,0.796483]');
+insert into t1 values(6, 6, 'qXCvnWjDLYtgsuPfA', '[0.710370,0.007130,0.710913]');
+insert into t1 values(7, 7, 'PRhFJtnaeXkvcQLWM', '[0.238120,0.289662,0.970101]');
+insert into t1 values(8, 8, 'GxoFSdZLNrMpWyQlT', '[0.168794,0.567442,0.062338]');
+insert into t1 values(9, 9, 'vTzmaHiBKwLCXOjqsY', '[0.901419,0.676738,0.122339]');
+insert into t1 values(10, 10, 'NLcYpTsirQZkWgJOUx', '[0.563644,0.811224,0.175574]');
+insert into t1 values(100, 100, null,'[0.563644,0.811224,0.175574]');
+update /*+enable_parallel_dml parallel(2)*/t1 set c3=(select c1 from t1  limit 1) where c3 is null;
+update /*+enable_parallel_dml parallel(2)*/t1 set v=(select v from t1  limit 1) where c3 is not null;
+update t1 set c3=(select /*+enable_parallel_dml parallel(2)*/c1 from t1  limit 1);
+drop table t1;
+bufix 2025031100107452681 replace into
+set ob_enable_index_direct_select = 1;
+drop table if exists vec_xly;
+create table vec_xly(c1 int primary key,
+c4 vector(3),
+c5  vector(3),
+vector index idx2(c4) with (distance=l2, type=ivf_flat),
+vector index idx3(c5) with (distance=l2, type=ivf_flat));
+insert into vec_xly(c1,c4,c5) values(1,'[1,-2,3]','[-1,2,-3]');
+insert into vec_xly(c1,c4,c5) values(2,'[1,-2,3]','[1,3,3]');
+insert into vec_xly(c1,c4,c5) values(3,'[1,6,3]','[1,7,3]');
+call dbms_vector.rebuild_index('idx2','vec_xly','c4');
+replace into vec_xly(c1,c4,c5) values(1,'[2,3,4]','[5,6,7]');
+replace into vec_xly(c1,c4,c5) values(2,'[1,-2,3]','[1,3,3]');
+count(*)
+3
+count(*)
+3
+drop table vec_xly;
+===clean====
+alter system set ob_vector_memory_limit_percentage = 0;

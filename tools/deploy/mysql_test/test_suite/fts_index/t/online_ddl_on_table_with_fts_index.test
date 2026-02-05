@@ -1,0 +1,187 @@
+# owner: yunshan.tys
+# owner group: storage
+# description: test online ddl on table with fulltext index
+
+connect(sys_conn, $OBMYSQL_MS0, root@sys,,oceanbase, $OBMYSQL_PORT);
+connection sys_conn;
+
+--disable_warnings
+drop database if exists fts_online_ddl;
+--enable_warnings
+
+create database fts_online_ddl;
+
+use fts_online_ddl;
+
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_online_ddl' AND tenant_id = 1, database_id, 1);
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_1;
+--enable_warnings
+
+--result_format 3
+
+# create table with fulltext index:
+CREATE TABLE fts_table_1 (
+  id int,
+  auto_inc_col int AUTO_INCREMENT,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f102(title) WITH PARSER space);
+
+INSERT INTO fts_table_1 VALUES (1, 1, "name1", "title 1", "content1"),
+                               (2, 2, "name2", "title 2", "content2"),
+                               (3, 3, "name3", "title 3", "content3");
+
+# 1. index related ddl
+ALTER TABLE fts_table_1 RENAME INDEX f102 TO f101;
+SHOW INDEX FROM fts_table_1;
+let $data_table_id = query_get_value(SELECT table_id
+                                     FROM oceanbase.__all_virtual_table
+                                     WHERE table_name = 'fts_table_1'
+                                       AND tenant_id = 1 AND database_id = $database_id, table_id, 1);
+--disable_query_log
+--replace_regex /_[0-9]+/_*/
+eval SELECT table_name
+     FROM oceanbase.__all_virtual_table
+     WHERE data_table_id = $data_table_id
+       AND tenant_id = 1;
+--enable_query_log
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+# 2. column related ddl
+ALTER TABLE fts_table_1 ADD COLUMN col int;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 ADD COLUMN virtual_col int GENERATED ALWAYS AS (id+1) VIRTUAL;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 DROP COLUMN virtual_col;
+
+ALTER TABLE fts_table_1 MODIFY COLUMN id int NOT NULL;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 MODIFY COLUMN id int NULL;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 MODIFY COLUMN id int DEFAULT 0;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 MODIFY id int DEFAULT NULL;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 AUTO_INCREMENT = 101;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 RENAME COLUMN title TO titles;
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (titles) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_1 MODIFY name varchar(30);
+DESCRIBE fts_table_1;
+SELECT name FROM fts_table_1 WHERE MATCH (titles) AGAINST ("title") order by name;
+
+
+# 3. foreign key related ddl
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_2;
+DROP TABLE IF EXISTS fts_fk_table;
+--enable_warnings
+
+CREATE TABLE fts_table_2 (
+  id int,
+  auto_inc_col int AUTO_INCREMENT,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f102(title) WITH PARSER space);
+
+CREATE TABLE fts_fk_table (
+  id int PRIMARY KEY,
+  child_id int);
+
+INSERT INTO fts_fk_table VALUES (1, 1), (2, 2), (3, 3);
+INSERT INTO fts_table_2 VALUES (1, 1, "name1", "title 1", "content1"),
+                               (2, 2, "name2", "title 2", "content2"),
+                               (3, 3, "name3", "title 3", "content3");
+
+ALTER TABLE fts_table_2 ADD CONSTRAINT fk_constraint FOREIGN KEY (id) REFERENCES fts_fk_table(id);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_2;
+SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_2 DROP FOREIGN KEY fk_constraint;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_2;
+SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_2 ADD CONSTRAINT cons CHECK (id <= 10000);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_2;
+SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_2 DROP CONSTRAINT cons;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_2;
+SELECT name FROM fts_table_2 WHERE MATCH (title) AGAINST ("title") order by name;
+
+DROP TABLE fts_table_2;
+DROP TABLE fts_fk_table;
+
+# 4. table related ddl
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_3;
+--enable_warnings
+RENAME TABLE fts_table_1 TO fts_table_3;
+DESCRIBE fts_table_3;
+SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_3 ROW_FORMAT=COMPACT;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_3;
+SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_3 BLOCK_SIZE=2048;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_3;
+SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
+
+ALTER TABLE fts_table_3 COMPRESSION='lz4_1.0';
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_3;
+SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
+
+OPTIMIZE TABLE fts_table_3;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE fts_table_3;
+SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
+
+DROP TABLE fts_table_3;
+
+# 5. add partition
+create table fts_table(c1 int, name varchar(20), fulltext index f102(name))
+partition by range(c1)
+(partition p1 values less than(10),
+partition p2 values less than(20));
+insert into fts_table values(3, "jack a");
+insert into fts_table values(7, "jack b");
+insert into fts_table values(17, "jerry a");
+alter table fts_table add partition (partition p3 values less than(30));
+insert into fts_table values(27, "jerry b");
+select * from fts_table order by 1;
+alter table fts_table add partition (partition p4 values less than(40), partition p5 values less than(50));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+drop table fts_table;
+
+disconnect sys_conn;

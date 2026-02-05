@@ -1,0 +1,272 @@
+DROP TABLE IF EXISTS fts_table_1;
+result_format: 3
+CREATE TABLE fts_table_1 (
+  id int,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f101(name) WITH PARSER ngram,
+  FULLTEXT INDEX f102(name, title) WITH PARSER space,
+  FULLTEXT INDEX f103(content));
+SHOW CREATE TABLE fts_table_1;
+Table	Create Table
+fts_table_1	CREATE TABLE `fts_table_1` (
+  `id` int(11) DEFAULT NULL,
+  `name` varchar(20) DEFAULT NULL,
+  `title` varchar(20) DEFAULT NULL,
+  `content` varchar(20) DEFAULT NULL,
+  FULLTEXT KEY `f101` (`name`) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=2) BLOCK_SIZE 16384,
+  FULLTEXT KEY `f102` (`name`, `title`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
+  FULLTEXT KEY `f103` (`content`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+SHOW INDEX FROM fts_table_1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+fts_table_1	1	f101	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	2	title	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f103	1	content	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+===== fts_table_1 columns =============
++-----------+--------------------+-----------------+
+| column_id | column_name        | skip_index_attr |
++-----------+--------------------+-----------------+
+|         1 | __pk_increment     |               0 |
+|        16 | id                 |               0 |
+|        17 | name               |               0 |
+|        18 | title              |               0 |
+|        19 | content            |               0 |
+|        20 | __word_segment_*_* |               0 |
+|        21 | __word_count_*_*   |               0 |
+|        22 | __doc_length_*_*   |               0 |
+|        23 | __word_segment_*_* |               0 |
+|        24 | __word_count_*_*   |               0 |
+|        25 | __doc_length_*_*   |               0 |
+|        26 | __word_segment_*_* |               0 |
+|        27 | __word_count_*_*   |               0 |
+|        28 | __doc_length_*_*   |               0 |
++-----------+--------------------+-----------------+
+===== fts index aux tables =====
++----------+
+| count(*) |
++----------+
+|        6 |
++----------+
+===== f101 fts index cols ======
++-----------+--------------------+-----------------+
+| column_id | column_name        | skip_index_attr |
++-----------+--------------------+-----------------+
+|         1 | __pk_increment     |               4 |
+|        20 | __word_segment_*_* |               0 |
+|        21 | __word_count_*_*   |              10 |
+|        22 | __doc_length_*_*   |              16 |
++-----------+--------------------+-----------------+
+===== f101 fts doc word cols ===
++-----------+--------------------+-----------------+
+| column_id | column_name        | skip_index_attr |
++-----------+--------------------+-----------------+
+|         1 | __pk_increment     |               4 |
+|        20 | __word_segment_*_* |               0 |
+|        21 | __word_count_*_*   |              10 |
+|        22 | __doc_length_*_*   |              16 |
++-----------+--------------------+-----------------+
+===== f102 fts index cols ======
++-----------+--------------------+-----------------+
+| column_id | column_name        | skip_index_attr |
++-----------+--------------------+-----------------+
+|         1 | __pk_increment     |               4 |
+|        23 | __word_segment_*_* |               0 |
+|        24 | __word_count_*_*   |              10 |
+|        25 | __doc_length_*_*   |              16 |
++-----------+--------------------+-----------------+
+===== f102 fts doc word cols ===
++-----------+--------------------+-----------------+
+| column_id | column_name        | skip_index_attr |
++-----------+--------------------+-----------------+
+|         1 | __pk_increment     |               4 |
+|        23 | __word_segment_*_* |               0 |
+|        24 | __word_count_*_*   |              10 |
+|        25 | __doc_length_*_*   |              16 |
++-----------+--------------------+-----------------+
+===== f103 fts index cols ======
++-----------+--------------------+-----------------+
+| column_id | column_name        | skip_index_attr |
++-----------+--------------------+-----------------+
+|         1 | __pk_increment     |               4 |
+|        26 | __word_segment_*_* |               0 |
+|        27 | __word_count_*_*   |              10 |
+|        28 | __doc_length_*_*   |              16 |
++-----------+--------------------+-----------------+
+===== f103 fts doc word cols ===
++-----------+--------------------+-----------------+
+| column_id | column_name        | skip_index_attr |
++-----------+--------------------+-----------------+
+|         1 | __pk_increment     |               4 |
+|        26 | __word_segment_*_* |               0 |
+|        27 | __word_count_*_*   |              10 |
+|        28 | __doc_length_*_*   |              16 |
++-----------+--------------------+-----------------+
+===== f101 fts index parser ======
++-------------+
+| parser_name |
++-------------+
+| ngram.1     |
++-------------+
+===== f101 fts doc word parser ===
++-------------+
+| parser_name |
++-------------+
+| ngram.1     |
++-------------+
+===== f102 fts index parser ======
++-------------+
+| parser_name |
++-------------+
+| space.1     |
++-------------+
+===== f102 fts doc word parser ===
++-------------+
+| parser_name |
++-------------+
+| space.1     |
++-------------+
+===== f103 fts index parser ======
++-------------+
+| parser_name |
++-------------+
+| space.1     |
++-------------+
+===== f103 fts doc word parser ===
++-------------+
+| parser_name |
++-------------+
+| space.1     |
++-------------+
+ALTER TABLE fts_table_1 ADD INDEX fts_doc_rowkey(id);
+SHOW INDEX FROM fts_table_1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+fts_table_1	1	f101	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	2	title	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f103	1	content	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	fts_doc_rowkey	1	id	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+ALTER TABLE fts_table_1 ADD INDEX fts_rowkey_doc(id);
+SHOW INDEX FROM fts_table_1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+fts_table_1	1	f101	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	2	title	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f103	1	content	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	fts_doc_rowkey	1	id	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+fts_table_1	1	fts_rowkey_doc	1	id	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+ALTER TABLE fts_table_1 ADD INDEX name_fts_doc_word(title);
+SHOW INDEX FROM fts_table_1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+fts_table_1	1	f101	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	1	name	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f102	2	title	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	f103	1	content	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_table_1	1	fts_doc_rowkey	1	id	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+fts_table_1	1	fts_rowkey_doc	1	id	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+fts_table_1	1	name_fts_doc_word	1	title	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+DROP TABLE fts_table_1;
+DROP TABLE IF EXISTS fts_table_2;
+CREATE TABLE fts_table_2 (
+  id int,
+  name varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f101(name) WITH PARSER ngram,
+  INDEX fts_doc_rowkey(id),
+  INDEX fts_rowkey_doc(id),
+  INDEX f101_fts_doc_word(name));
+ERROR 42000: Duplicate key name 'f101_fts_doc_word'
+DROP TABLE IF EXISTS articles;
+CREATE TABLE articles (
+  __doc_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200),
+  body Text,
+  FULLTEXT INDEX ctx(title) WITH PARSER simple_parser);
+ERROR HY000: Function simple_parser is not defined
+DROP TABLE IF EXISTS fts_table_with_generated_col;
+CREATE TABLE fts_table_with_generated_col(
+    c1 VARCHAR(200),
+    c2 TEXT,
+    c3 TEXT AS (CONCAT(c2, '')) VIRTUAL,
+    FULLTEXT INDEX v_idx(c3));
+ERROR 0A000: Fulltext index on generated column is not supported
+CREATE TABLE fts_table_with_generated_col(
+    c1 VARCHAR(200),
+    c2 TEXT,
+    c3 TEXT AS (CONCAT(c2, '')) STORED,
+    FULLTEXT INDEX v_idx(c3));
+ERROR 0A000: Fulltext index on generated column is not supported
+DROP TABLE IF EXISTS fts_col_orders;
+CREATE TABLE fts_col_orders(
+    a INT,
+    b VARCHAR(20),
+    c VARCHAR(20),
+    FULLTEXT INDEX fts_b_c(b, c),
+    FULLTEXT INDEX fts_c_b(c, b)
+);
+SHOW CREATE TABLE fts_col_orders;
+Table	Create Table
+fts_col_orders	CREATE TABLE `fts_col_orders` (
+  `a` int(11) DEFAULT NULL,
+  `b` varchar(20) DEFAULT NULL,
+  `c` varchar(20) DEFAULT NULL,
+  FULLTEXT KEY `fts_b_c` (`b`, `c`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
+  FULLTEXT KEY `fts_c_b` (`c`, `b`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+SHOW INDEX FROM fts_col_orders;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+fts_col_orders	1	fts_b_c	1	b	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_col_orders	1	fts_b_c	2	c	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_col_orders	1	fts_c_b	1	c	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+fts_col_orders	1	fts_c_b	2	b	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+EXPLAIN SELECT * FROM fts_col_orders WHERE MATCH(b,c) AGAINST("aa");
+Query Plan
+========================================================================
+|ID|OPERATOR             |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------------
+|0 |SORT                 |                       |1       |16          |
+|1 |└─TEXT RETRIEVAL SCAN|fts_col_orders(fts_b_c)|1       |16          |
+========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([fts_col_orders.a], [fts_col_orders.b], [fts_col_orders.c]), filter(nil), rowset=16
+      sort_keys([MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa'), DESC])
+  1 - output([fts_col_orders.b], [fts_col_orders.c], [fts_col_orders.a], [MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')]), filter(nil), rowset=16
+      access([fts_col_orders.__pk_increment], [fts_col_orders.b], [fts_col_orders.c], [fts_col_orders.a]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      calc_relevance=true, match_expr(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa')),
+      pushdown_match_filter(MATCH(fts_col_orders.b, fts_col_orders.c) AGAINST('aa'))
+EXPLAIN SELECT * FROM fts_col_orders WHERE MATCH(c,b) AGAINST("aa");
+Query Plan
+========================================================================
+|ID|OPERATOR             |NAME                   |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------------
+|0 |SORT                 |                       |1       |16          |
+|1 |└─TEXT RETRIEVAL SCAN|fts_col_orders(fts_b_c)|1       |16          |
+========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([fts_col_orders.a], [fts_col_orders.b], [fts_col_orders.c]), filter(nil), rowset=16
+      sort_keys([MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa'), DESC])
+  1 - output([fts_col_orders.c], [fts_col_orders.b], [fts_col_orders.a], [MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')]), filter(nil), rowset=16
+      access([fts_col_orders.__pk_increment], [fts_col_orders.c], [fts_col_orders.b], [fts_col_orders.a]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      calc_relevance=true, match_expr(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa')),
+      pushdown_match_filter(MATCH(fts_col_orders.c, fts_col_orders.b) AGAINST('aa'))
+DROP TABLE fts_col_orders;
+DROP TABLE IF EXISTS fts_varchar_binary;
+CREATE TABLE fts_varchar_binary(a VARCHAR(255), FULLTEXT(a)) CHARACTER SET = binary;
+ERROR HY000: Column 'a' cannot be part of FULLTEXT index
+CREATE TABLE fts_varchar_binary(a VARCHAR(255), FULLTEXT(a));
+DROP TABLE fts_varchar_binary;
+DROP TABLE IF EXISTS fts_char_binary;
+CREATE TABLE fts_char_binary(a CHAR(255), FULLTEXT(a)) CHARACTER SET = binary;
+ERROR HY000: Column 'a' cannot be part of FULLTEXT index
+CREATE TABLE fts_char_binary(a CHAR(255), FULLTEXT(a));
+DROP TABLE fts_char_binary;
+DROP TABLE IF EXISTS table_create_with_ik;
+CREATE TABLE table_create_with_ik(a CHAR(255), FULLTEXT(a) WITH PARSER ik);
+DROP TABLE table_create_with_ik;

@@ -1,0 +1,89 @@
+#owner: lana.lgx
+#owner group: data
+#description: dbms_mview_stats
+#tags: pl
+#author: suzhi.yt
+
+--disable_query_log
+
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv1;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv2;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv3;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_table_err.inc
+drop table t1;
+
+create table t1(c1 int primary key, c2 int, c3 int, c4 int);
+create materialized view log on t1 with primary key (c2, c3, c4) including new values;
+
+create materialized view mv1 refresh complete on demand as select c2 as c2, count(*) cnt, count(c3) cnt_c3, sum(c3) sum_c3 from t1 group by c2;
+create materialized view mv2 refresh fast on demand as select count(*) cnt, count(c3) cnt_c3, sum(c3) sum_c3 from t1;
+
+#################### Clear ####################
+-- echo #
+-- echo # clear
+-- echo #
+
+CALL DBMS_MVIEW_STATS.PURGE_REFRESH_STATS(NULL, -1);
+SELECT count(*) from oceanbase.__all_mview_refresh_run_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_change_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stmt_stats;
+
+CALL DBMS_MVIEW_STATS.SET_MVREF_STATS_PARAMS(NULL, 'ADVANCED', -1);
+
+#################### Case1 ####################
+-- echo #
+-- echo # Case1
+-- echo #
+
+CALL DBMS_MVIEW.REFRESH('mv1');
+SELECT count(*) from oceanbase.__all_mview_refresh_run_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_change_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stmt_stats;
+
+CALL DBMS_MVIEW_STATS.PURGE_REFRESH_STATS('mv1', -1);
+SELECT count(*) from oceanbase.__all_mview_refresh_run_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_change_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stmt_stats;
+
+CALL DBMS_MVIEW.REFRESH('mv1');
+CALL DBMS_MVIEW.REFRESH('mv2');
+SELECT count(*) from oceanbase.__all_mview_refresh_run_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_change_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stmt_stats;
+
+CALL DBMS_MVIEW_STATS.PURGE_REFRESH_STATS(NULL, -1);
+SELECT count(*) from oceanbase.__all_mview_refresh_run_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_change_stats;
+SELECT count(*) from oceanbase.__all_mview_refresh_stmt_stats;
+
+--disable_result_log
+
+--error 1146
+CALL DBMS_MVIEW_STATS.PURGE_REFRESH_STATS('mv3', -1);
+
+--error 1235
+CALL DBMS_MVIEW_STATS.PURGE_REFRESH_STATS('mv1,mv2', -1);
+
+--enable_result_log
+
+#################### End ####################
+-- echo #
+-- echo # End
+-- echo #
+
+drop materialized view mv1;
+drop materialized view mv2;
+drop materialized view log on t1;
+drop table t1;
+
+--enable_query_log

@@ -1,0 +1,709 @@
+drop database if exists xjp_vec;
+create database xjp_vec;
+use xjp_vec;
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ob_embed', '{
+    "type": "dense_embedding",
+    "model_name": "bge-M3"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'ob_embed_endpoint', '{
+    "ai_model_name": "ob_embed",
+    "scope": "all",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "bge-M3",
+    "provider": "openai"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS;
+NAME	TYPE	MODEL_NAME
+ob_embed	DENSE_EMBEDDING	bge-M3
+select ENDPOINT_NAME, AI_MODEL_NAME, PROVIDER, REQUEST_MODEL_NAME from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS;
+ENDPOINT_NAME	AI_MODEL_NAME	PROVIDER	REQUEST_MODEL_NAME
+ob_embed_endpoint	ob_embed	openai	bge-M3
+alter system set ob_vector_memory_limit_percentage = 20;
+
+
+"------------------------------- not support hybrid vec index and fts in same table -------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate), fulltext index vec_idx2(c3));
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+create fulltext index vec_idx2 on t_vec(c3);
+create vector index vec_idx3 on t_vec(c4) with (distance=l2, type=hnsw);
+create index vec_idx4 on t_vec(c1);
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  `c3` varchar(3) DEFAULT NULL,
+  `c4` VECTOR(3) DEFAULT NULL,
+  `c5` varchar(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384,
+  FULLTEXT KEY `vec_idx2` (`c3`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
+  VECTOR KEY `vec_idx3` (`c4`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  KEY `vec_idx4` (`c1`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+t_vec	1	vec_idx3	1	c4	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx4	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+drop table t_vec;
+
+
+"---------------------------------not support hybrid vector index without varchar -------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 string, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+ERROR HY000: Column 'c2' cannot be part of VECTOR index
+create table t_vec(c1 int, c2 text(32), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+ERROR HY000: Column 'c2' cannot be part of VECTOR index
+
+
+"---------------------------------not support multi index column --------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c1,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+ERROR 0A000: multi vector index column is not supported
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c2,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+ERROR 0A000: multi vector index column is not supported
+
+
+"-------------------------------------not support same index name ----------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), index vec_idx1(c4), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+ERROR 42000: Duplicate key name 'vec_idx1'
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+create index vec_idx1 on t_vec(c4);
+ERROR 42000: Duplicate key name 'vec_idx1'
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(3) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  `c4` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"------------------------------------- support more than one hybrid vector index ----------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int primary key, c2 varchar(100), c3 varchar(3),vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate),vector index vec_idx2(c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate));
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+delete from t_vec;
+"-------------------------------------------- invalid statement ------------------------------------------------"
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1));
+ERROR HY000: Column 'c1' cannot be part of VECTOR index
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2));
+ERROR 0A000: vector index params not set is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2));
+ERROR 0A000: vector index params not set distance and type is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag));
+ERROR 0A000: the vector index params of distance or type not set is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx));
+ERROR 0A000: this type of vector index type is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=100));
+ERROR 0A000: when endpoint and dim is empty, hybrid vector index is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m1=100));
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1001));
+ERROR 0A000: this value of vector index ef_construction is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=160001));
+ERROR 0A000: this value of vector index ef_search is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l3, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+ERROR 0A000: this type of vector index distance algorithm is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=xxx, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+ERROR 0A000: this type of vector index lib is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx, m=64, ef_construction=1000, ef_search=1000));
+ERROR 0A000: this type of vector index type is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance1=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib1=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000));
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type1=hnsw, m=64, ef_construction=1000, ef_search=1000));
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=endpoint_name));
+ERROR 0A000: this value of vector index model is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, dim=1024));
+ERROR 0A000: when endpoint and dim is empty, hybrid vector index is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=5000));
+ERROR 0A000: this value of vector index dim is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=0));
+ERROR 0A000: this value of vector index dim is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=10000));
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=0));
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=abc));
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, endpoint1=ob_embed, dim=1024, sync_mode=immediate));
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim1=1024, sync_mode=manual));
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode1=async));
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10));
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=0s));
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10g));
+ERROR HY000: Invalid argument
+CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed));
+ERROR 0A000: hnsw vector index setting model or sync_mode or sync_interval is not supported
+create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
+ERROR 0A000: setting vector index storing column is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column));
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column, each column))' at line 1
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column));
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column))' at line 1
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column));
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(each column))' at line 1
+"------------------------------------------ show create table -------------------------------------------------------"
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=inner_product, type=hnsw, model=ob_embed, dim=1024));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=INNER_PRODUCT, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=cosine, type=hnsw, model=ob_embed, dim=1024));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=COSINE, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 vector(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024), vector index vec_idx2(c3) with (distance=L2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  `c3` VECTOR(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384,
+  VECTOR KEY `vec_idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, model=ob_embed, dim=1024));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, MODEL=OB_EMBED, DIM=1024, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, model=ob_embed, dim=1024));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, MODEL=OB_EMBED, DIM=1024, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=async, sync_interval=20s));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=ASYNC, SYNC_INTERVAL=20S) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=manual));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=MANUAL, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) partition by hash(id) partitions 2;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `id` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by hash(id)
+(partition `p0`,
+partition `p1`)
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int, c1 int, c2 varchar(100),  primary key (id, c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) partition by hash(id) SUBPARTITION BY HASH (c1) partitions 2;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, extra_info_max_size=1, model=ob_embed, dim=1024, sync_mode=manual));
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, model=ob_embed, dim=1024, sync_mode=immediate));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select table_name from oceanbase.__all_table where table_name like "%_vec_idx1%";
+table_name
+__vec_idx_vec_vec_idx1
+__vec_idx_vec_vec_idx1_embedded_vec_table
+__vec_idx_vec_vec_idx1_index_id_table
+__vec_idx_vec_vec_idx1_index_snapshot_data_table
+ALTER TABLE t_vec RENAME INDEX vec_idx1 TO new_vec_idx;
+select table_name from oceanbase.__all_table where table_name like "%new_vec_idx%";
+table_name
+__vec_idx_vec_new_vec_idx
+__vec_idx_vec_new_vec_idx_embedded_vec_table
+__vec_idx_vec_new_vec_idx_index_id_table
+__vec_idx_vec_new_vec_idx_index_snapshot_data_table
+
+
+"------------------------------- not support hybrid vec index and fts in same table -------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate), fulltext index vec_idx2(c3)) ORGANIZATION HEAP;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 varchar(3), c4 vector(3), c5 varchar(3), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+create fulltext index vec_idx2 on t_vec(c3);
+create vector index vec_idx3 on t_vec(c4) with (distance=l2, type=hnsw);
+create index vec_idx4 on t_vec(c1);
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  `c3` varchar(3) DEFAULT NULL,
+  `c4` VECTOR(3) DEFAULT NULL,
+  `c5` varchar(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384,
+  FULLTEXT KEY `vec_idx2` (`c3`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
+  VECTOR KEY `vec_idx3` (`c4`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  KEY `vec_idx4` (`c1`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	FULLTEXT	available		YES	NULL
+t_vec	1	vec_idx3	1	c4	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx4	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+drop table t_vec;
+
+
+"---------------------------------not support hybrid vector index without varchar -------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 string, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+ERROR HY000: Column 'c2' cannot be part of VECTOR index
+create table t_vec(c1 int, c2 text(32), primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+ERROR HY000: Column 'c2' cannot be part of VECTOR index
+
+
+"---------------------------------not support multi index column --------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c1,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+ERROR 0A000: multi vector index column is not supported
+create table t_vec(c1 int, c2 varchar(3), c3 varchar(3), primary key(c1), vector index vec_idx1(c2,c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+ERROR 0A000: multi vector index column is not supported
+
+
+"-------------------------------------not support same index name ----------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), index vec_idx1(c4), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+ERROR 42000: Duplicate key name 'vec_idx1'
+create table t_vec(c1 int, c2 varchar(3), c3 vector(3), c4 int, primary key(c1), vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+create index vec_idx1 on t_vec(c4);
+ERROR 42000: Duplicate key name 'vec_idx1'
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(3) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  `c4` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"------------------------------------- support more than one hybrid vector index ----------------------------------------------------------"
+drop table if exists t_vec;
+create table t_vec(c1 int primary key, c2 varchar(100), c3 varchar(3),vector index vec_idx1(c2) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate),vector index vec_idx2(c3) with (distance=l2, type=hnsw, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+delete from t_vec;
+"-------------------------------------------- invalid statement ------------------------------------------------"
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1)) ORGANIZATION HEAP;
+ERROR HY000: Column 'c1' cannot be part of VECTOR index
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2)) ORGANIZATION HEAP;
+ERROR 0A000: vector index params not set is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2)) ORGANIZATION HEAP;
+ERROR 0A000: vector index params not set distance and type is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag)) ORGANIZATION HEAP;
+ERROR 0A000: the vector index params of distance or type not set is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx)) ORGANIZATION HEAP;
+ERROR 0A000: this type of vector index type is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=100)) ORGANIZATION HEAP;
+ERROR 0A000: when endpoint and dim is empty, hybrid vector index is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m1=100)) ORGANIZATION HEAP;
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1001)) ORGANIZATION HEAP;
+ERROR 0A000: this value of vector index ef_construction is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=160001)) ORGANIZATION HEAP;
+ERROR 0A000: this value of vector index ef_search is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l3, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+ERROR 0A000: this type of vector index distance algorithm is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=xxx, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+ERROR 0A000: this type of vector index lib is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=xxx, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+ERROR 0A000: this type of vector index type is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance1=l2, lib=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib1=vsag, type=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type1=hnsw, m=64, ef_construction=1000, ef_search=1000)) ORGANIZATION HEAP;
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=endpoint_name)) ORGANIZATION HEAP;
+ERROR 0A000: this value of vector index model is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, dim=1024)) ORGANIZATION HEAP;
+ERROR 0A000: when endpoint and dim is empty, hybrid vector index is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=5000)) ORGANIZATION HEAP;
+ERROR 0A000: this value of vector index dim is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=0)) ORGANIZATION HEAP;
+ERROR 0A000: this value of vector index dim is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=10000)) ORGANIZATION HEAP;
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=0)) ORGANIZATION HEAP;
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=abc)) ORGANIZATION HEAP;
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, endpoint1=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim1=1024, sync_mode=manual)) ORGANIZATION HEAP;
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode1=async)) ORGANIZATION HEAP;
+ERROR 0A000: unexpected vector index params items is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10)) ORGANIZATION HEAP;
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=0s)) ORGANIZATION HEAP;
+ERROR HY000: Invalid argument
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10g)) ORGANIZATION HEAP;
+ERROR HY000: Invalid argument
+CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed)) ORGANIZATION HEAP;
+ERROR 0A000: hnsw vector index setting model or sync_mode or sync_interval is not supported
+create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+ERROR 0A000: setting vector index storing column is not supported
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column)) ORGANIZATION HEAP;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column, each column)) ORGANIZATION HEAP' at line 1
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column)) ORGANIZATION HEAP;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(all column)) ORGANIZATION HEAP' at line 1
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(each column)) ORGANIZATION HEAP;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'WITH COLUMN GROUP(each column)) ORGANIZATION HEAP' at line 1
+"------------------------------------------ show create table -------------------------------------------------------"
+alter system set ob_vector_memory_limit_percentage = 20;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=inner_product, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=INNER_PRODUCT, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=cosine, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=COSINE, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 vector(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024), vector index vec_idx2(c3) with (distance=L2, type=hnsw)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  `c3` VECTOR(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384,
+  VECTOR KEY `vec_idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, MODEL=OB_EMBED, DIM=1024, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, MODEL=OB_EMBED, DIM=1024, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=async, sync_interval=20s)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=ASYNC, SYNC_INTERVAL=20S) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=manual)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=MANUAL, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int NOT NULL PRIMARY KEY, c2 varchar(100), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP partition by hash(id) partitions 2;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `id` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=20, EF_CONSTRUCTION=200, EF_SEARCH=200, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by hash(id)
+(partition `p0`,
+partition `p1`)
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+CREATE TABLE t_vec (id int, c1 int, c2 varchar(100),  primary key (id, c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP partition by hash(id) SUBPARTITION BY HASH (c1) partitions 2;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, extra_info_max_size=1, model=ob_embed, dim=1024, sync_mode=manual)) ORGANIZATION HEAP;
+ERROR 0A000: vec hnsw extra_info on table with pk increment is not supported
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, model=ob_embed, dim=1024, sync_mode=immediate)) ORGANIZATION HEAP;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select table_name from oceanbase.__all_table where table_name like "%_vec_idx1%";
+table_name
+__vec_idx_vec_vec_idx1
+__vec_idx_vec_vec_idx1_embedded_vec_table
+__vec_idx_vec_vec_idx1_index_id_table
+__vec_idx_vec_vec_idx1_index_snapshot_data_table
+ALTER TABLE t_vec RENAME INDEX vec_idx1 TO new_vec_idx;
+select table_name from oceanbase.__all_table where table_name like "%new_vec_idx%";
+table_name
+__vec_idx_vec_new_vec_idx
+__vec_idx_vec_new_vec_idx_embedded_vec_table
+__vec_idx_vec_new_vec_idx_index_id_table
+__vec_idx_vec_new_vec_idx_index_snapshot_data_table
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ob_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ob_embed_endpoint');
+drop table if exists t_vec;
+drop database if exists xjp_vec;

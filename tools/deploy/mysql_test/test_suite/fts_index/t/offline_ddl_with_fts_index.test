@@ -1,0 +1,228 @@
+# owner: yunshan.tys
+# owner group: storage
+# description: test not supported ddl with fulltext index
+
+connect(sys_conn, $OBMYSQL_MS0, root@sys,,oceanbase, $OBMYSQL_PORT);
+connection sys_conn;
+
+
+# deny offline ddl on table with fts index
+# 1. column related ddl
+#
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_1;
+--enable_warnings
+
+CREATE TABLE fts_table_1 (
+  id int,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  existing_stored_col int GENERATED ALWAYS AS(id + 1) STORED,
+  /*Indices*/
+  FULLTEXT INDEX f101(name, title) WITH PARSER space);
+
+ALTER TABLE fts_table_1 ADD COLUMN col int AFTER id;
+
+--error 1235
+ALTER TABLE fts_table_1 ADD COLUMN col2 int primary key;
+ALTER TABLE fts_table_1 MODIFY COLUMN content varchar(20) FIRST;
+ALTER TABLE fts_table_1 ADD COLUMN auto_inc_col int AUTO_INCREMENT;
+--error 1075
+ALTER TABLE fts_table_1 MODIFY COLUMN id int AUTO_INCREMENT;
+ALTER TABLE fts_table_1 MODIFY content varchar(10);
+ALTER TABLE fts_table_1 MODIFY COLUMN id int PRIMARY KEY;
+ALTER TABLE fts_table_1 ADD COLUMN (stored_col int GENERATED ALWAYS AS(id + 1) STORED);
+ALTER TABLE fts_table_1 DROP COLUMN existing_stored_col;
+--error 3108
+ALTER TABLE fts_table_1 DROP COLUMN id;
+--error 3108
+ALTER TABLE fts_table_1 DROP COLUMN id, ADD COLUMN id2 int;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table_1;
+--enable_warnings
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+create table fts_table(c1 int, c2 varchar(20), primary key(c1), fulltext index f102(c2));
+alter table fts_table add column c3 char(10) default ' ';
+alter table fts_table drop c3, add c4 char(10) default 'a';
+ALTER TABLE fts_table ADD c5 INT AUTO_INCREMENT;
+ALTER TABLE fts_table ADD COLUMN c6 int AS (c1 + 3) STORED;
+alter table fts_table drop primary key;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+create table fts_table(c1 int, c2 int, c3 varchar(20), primary key(c1),  fulltext index f102(c3));
+alter table fts_table modify c1 int before c3;
+alter table fts_table modify c2 varchar(128) first;
+alter table fts_table modify c2 varchar(12) after c1;
+alter table fts_table modify c1 int unsigned not null auto_increment;
+alter table fts_table modify c3 char(30);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+create table fts_table(c1 int, c2 varchar(20), primary key(c1), fulltext index f102(c2));
+alter table fts_table change c1 c1 varchar(128);
+alter table fts_table change c1 c1 varchar(128) before c2;
+alter table fts_table change c1 c3 int after c2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+drop index f102 on fts_table;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+# 2. drop/add primary key
+#
+--disable_warnings
+DROP TABLE IF EXISTS fts_add_pk_1;
+--enable_warnings
+
+CREATE TABLE fts_add_pk_1 (
+  id int,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f101(name, title) WITH PARSER space);
+
+ALTER TABLE fts_add_pk_1 ADD PRIMARY KEY(id);
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_add_pk_1;
+--enable_warnings
+
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_drop_pk_1;
+--enable_warnings
+
+CREATE TABLE fts_drop_pk_1 (
+  id int PRIMARY KEY,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f101(name, title) WITH PARSER space);
+
+ALTER TABLE fts_drop_pk_1 DROP PRIMARY KEY;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_drop_pk_1;
+--enable_warnings
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+create table fts_table(c1 int, c2 varchar(20), fulltext index f102(c2));
+alter table fts_table modify c1 int primary key;
+alter table fts_table drop primary key;
+alter table fts_table add primary key(c1);
+alter table fts_table drop primary key;
+alter table fts_table modify c1 bigint, add primary key(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+alter table fts_table drop primary key, add primary key(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+# 3. table realted ddl
+#
+--disable_warnings
+DROP TABLE IF EXISTS fts_character_set_table_1;
+--enable_warnings
+
+CREATE TABLE fts_character_set_table_1 (
+  id int,
+  name varchar(20),
+  title varchar(20),
+  content varchar(20),
+  /*Indices*/
+  FULLTEXT INDEX f101(name, title) WITH PARSER space);
+
+ALTER TABLE fts_character_set_table_1 convert to character set gbk;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_character_set_table_1;
+--enable_warnings
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+create table fts_table(c1 int, c2 varchar(20), c3 varchar(10), c4 int, primary key(c1), fulltext index f102(c2)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+alter table fts_table modify c1 tinyint;
+alter table fts_table modify c3 varchar(5) charset 'gbk';
+alter table fts_table modify c3 char(8) , add c5 int, drop column c4;
+alter table fts_table convert to CHARACTER SET 'gbk';
+alter table fts_table modify c3 varchar(5) charset 'utf8';
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+alter table fts_table drop index f102;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+alter table fts_table partition by range(c1) (partition p0 values less than (20), partition p1 values less than (200));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table fts_table;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_table;
+--enable_warnings
+
+# 4. partition related ddl
+#
+--disable_warnings
+DROP TABLE IF EXISTS fts_partition_table_1;
+--enable_warnings
+
+CREATE TABLE fts_partition_table_1 (
+  id int PRIMARY KEY,
+  name varchar(20),
+  fulltext index f102(name))
+PARTITION BY RANGE(id)
+(PARTITION p1 VALUES LESS THAN(100),
+ PARTITION p2 VALUES LESS THAN(200));
+
+ALTER TABLE fts_partition_table_1 ADD PARTITION (PARTITION p3 VALUES LESS THAN(300));
+
+ALTER TABLE fts_partition_table_1 TRUNCATE PARTITION p2;
+ALTER TABLE fts_partition_table_1 DROP PARTITION p2;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_partition_table_1;
+--enable_warnings
+
+# 5. bug2025040900108123134
+--disable_warnings
+drop table if exists fts_table;
+--enable_warnings
+
+create table fts_table(c1 int, c2 int, c3 int, c4 text, fulltext index idx2(c4));
+insert into fts_table(c1,c2,c3,c4) values(1, 1, 1, '9v3UPuQnER QnOjVY3Izh');
+insert into fts_table(c1,c2,c3,c4) values(1, 1, 2, 'RP9k84ovQJ CFP9LvY3Sr');
+delete from fts_table where c3 = 1;
+alter table fts_table add column a1 int auto_increment;
+insert into fts_table(c1,c2,c3,c4) values(1, 1, 101, 'NqJdemuM2u k47fI1Lo6z');
+drop table fts_table;
+
+disconnect sys_conn;

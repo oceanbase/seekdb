@@ -1,0 +1,12 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner: jingyu.cr
+#owner group: rs
+create table test_table_1 (c1 int primary key, c2 int, c3 int) ;
+create index test_table_1_idx1 on test_table_1(c2) global partition by hash(c2) partitions 4;
+create index test_table_1_idx2 on test_table_1(c3) local;
+show create table test_table_1;
+drop index test_table_1_idx1 on test_table_1;
+drop index test_table_1_idx2 on test_table_1;
+drop table test_table_1;

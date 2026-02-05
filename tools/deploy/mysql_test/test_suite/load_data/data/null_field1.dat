@@ -1,0 +1,16 @@
+1,N
+1,\N
+N,1
+\N,1
+N,N
+\N,\N
+1,NULL
+NULL,1
+NULL,NULL
+"NULL","NULL"
+"N",N
+N,"N"
+"\N",\N
+\N,"\N"
+"N","N"
+"\N","\N"

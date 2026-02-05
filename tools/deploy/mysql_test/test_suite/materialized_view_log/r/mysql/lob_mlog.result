@@ -1,0 +1,40 @@
+drop table if exists t1;
+drop table if exists t2;
+drop materialized view log on t1;
+drop materialized view log on t2;
+drop table if exists t1;
+drop table if exists t2;
+drop materialized view if exists mv;
+create table t1(c1 int primary key, c2 text);
+create materialized view log on t1 parallel 10 with primary key, rowid, sequence (c2) including new values;
+insert into t1 values(1,1);
+insert into t1 values (2, repeat('a', 10000));
+ERROR 0A000: columns more than lob inrow threshold in materialized view log is not supported
+select*from t1;
+c1	c2
+1	1
+select lob_inrow_threshold from oceanbase.__all_table where table_name='mlog$_t1';
+lob_inrow_threshold
+8192
+set ob_default_lob_inrow_threshold=10000;
+alter system set direct_load_allow_fallback=False;
+create table t2(c1 int primary key, c2 text);
+create materialized view log on t2 parallel 10 with primary key, rowid, sequence (c2) including new values;
+insert into t2 values(2,1);
+insert /*+ DIRECT(true, 0, 'inc_replace')  enable_parallel_dml parallel(16) */ into t1 select*from t2;
+ERROR 0A000: direct-load does not support table with materialized view log
+select lob_inrow_threshold from oceanbase.__all_table where table_name='mlog$_t2';
+lob_inrow_threshold
+10000
+create materialized view mv(a,b,c) REFRESH FAST ON DEMAND ENABLE ON QUERY COMPUTATION as select t1.c1, t1.c2, t2.c1 from t1 join t2 on t1.c2=t2.c2;
+select*from t1;
+c1	c2
+1	1
+select*from mv;
+a	b	c
+1	1	2
+drop materialized view log on t1;
+drop materialized view log on t2;
+drop table if exists t1;
+drop table if exists t2;
+drop materialized view if exists mv;

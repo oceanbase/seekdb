@@ -1,0 +1,320 @@
+#owner: aozeliu.azl
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of the json semistruct encoding
+--echo # ----------------------------------------------------------------------
+--disable_warnings
+drop table if exists json_test;
+drop table if exists json_test2;
+drop table if exists json_patial;
+--enable_warnings
+
+set @@collation_server = 'utf8mb4_bin';
+set @@collation_connection='utf8mb4_bin';
+# create
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+show create table json_test;
+# alter
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = '';
+show create table json_test;
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = 'encoding';
+show create table json_test;
+# invalid
+--error 1210
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = 'encode';
+# not support
+--error 1235
+alter table json_test set row_format=DYNAMIC;
+# success
+alter table json_test set row_format=DYNAMIC SEMISTRUCT_ENCODING_TYPE='';
+# not support
+--error 1235
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = 'encoding';
+# success
+alter table json_test set row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE = 'encoding';
+drop table json_test;
+
+create table json_test(pk int primary key, j json) SEMISTRUCT_ENCODING_TYPE='';
+drop table json_test;
+# invaild
+--error 1210
+create table json_test(pk int primary key, j json) SEMISTRUCT_ENCODING_TYPE='encode';
+# not support
+--error 1235
+create table json_test(pk int primary key, j json) SEMISTRUCT_ENCODING_TYPE='encoding';
+
+# test encoding
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+insert into json_test values(1,'{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}');
+insert into json_test values(2,'{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}');
+insert into json_test values(3,'{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(4,'{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(5,'{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}');
+insert into json_test values(6,'{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}');
+insert into json_test values(7,'{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(8,'{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(9,'{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}');
+insert into json_test values(10,'{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}');
+insert into json_test values(11,'{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(12,'{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(13,'{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}');
+insert into json_test values(14,'{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}');
+insert into json_test values(15,'{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(16,'{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(17,'{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}');
+insert into json_test values(18,'{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}');
+insert into json_test values(19,'{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}');
+insert into json_test values(20, null);
+
+
+select pk, md5(j) from json_test;
+select pk, md5(j), j from json_test where json_value(j, '$.age' RETURNING SIGNED) = 35;
+
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+
+select pk, md5(j) from json_test;
+select pk, md5(j), j from json_test where json_value(j, '$.age' RETURNING SIGNED) = 35;
+
+create table json_test2 like json_test;
+show create table json_test2;
+insert  /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test;
+select pk, md5(j) from json_test2;
+
+# point select
+select pk, md5(j), j from json_test where pk = 19;
+select pk, md5(j), j from json_test where pk = 20;
+
+# pushdown filter
+# int
+# ==
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) = 35;
+# <=
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) <= 30;
+# <
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) < 30;
+# >=
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) >= 96;
+# >
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) > 100;
+# != / <>
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) != 33;
+# between
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) between 30 and 35;
+# in
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) in (28, 29);
+# is null
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) is null;
+# is not null
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) is not null;
+
+select pk, md5(j), j from json_test2 where 100 < json_value(j, '$.age' RETURNING SIGNED);
+
+# string
+# ==
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) = 'Devin';
+# <=
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) <= 'Bill';
+# <
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) < 'Bill';
+# >=
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) >= 'Ted';
+# >
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) > 'Ted';
+# != / <>
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) != 'Devin';
+# between
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) between 'Frank' and 'Hunter';
+# in
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) in ('Frank', 'Hunter');
+# is null
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) is null;
+# is not null
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) is not null;
+
+# double
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING DOUBLE) >= 85;
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING DOUBLE) < 85;
+
+select pk, md5(j), j from json_test2 where json_value(j, '$.score' RETURNING DOUBLE) >= 85;
+select pk, md5(j), j from json_test2 where json_value(j, '$.score' RETURNING DOUBLE) < 85;
+
+# int dict
+# ==
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) = 52;
+# <=
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) <= 52;
+# <
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) < 52;
+# >=
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) >= 52;
+# >
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) > 52;
+# != / <>
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) != 52;
+# between
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) between 52 and 53;
+# in
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) in (52, 1152);
+# is null
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) is null;
+# is not null
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) is not null;
+
+# string dict
+# ==
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) = 'Fake';
+# <=
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) <= 'Fake';
+# <
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) < 'Fake';
+# >=
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) >= 'Fake';
+# >
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) > 'Fake';
+# != / <>
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) != 'Fake';
+# between
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) between 'Fake' and 'gis';
+# in
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) in ('gis', 'xml');
+# is null
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) is null;
+# is not null
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) is not null;
+
+# array
+select pk, md5(j), j from json_test2 where json_value(j, '$.like[1]' RETURNING SIGNED) >= 10;
+select pk, md5(j), j from json_test2 where json_value(j, '$.like[0]' RETURNING SIGNED) is null;
+
+# not exist column
+select pk, md5(j), j from json_test2 where json_value(j, '$.not_exist' RETURNING SIGNED) != -1;
+
+delete from json_test2;
+# outrow
+insert into json_test values(21, json_object('k1', repeat('1', 10000)));
+insert  /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test;
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) = 35;
+
+drop table json_test;
+drop table json_test2;
+
+# 关闭并行建表
+alter system set _enable_parallel_table_creation = false;
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+set _show_ddl_in_compat_mode = 1;
+show create table json_test;
+set _show_ddl_in_compat_mode = 0;
+show create table json_test;
+drop table json_test;
+
+# 开启并行建表, 默认即开启
+alter system set _enable_parallel_table_creation = true;
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+set _show_ddl_in_compat_mode = 1;
+show create table json_test;
+set _show_ddl_in_compat_mode = 0;
+show create table json_test;
+drop table json_test;
+
+set log_row_value_options="partial_json";
+create table json_patial(c1 int primary key, c2 json) row_format=COMPRESSED semistruct_encoding_type='encoding' lob_inrow_threshold=0;
+insert into json_patial values(1, '{"k1": "1234567899999", "k2": 1}');
+insert into json_patial values(2, '{"k1": "1234567899999", "k2": 2}');
+insert into json_patial values(3, '{"k1": "1234567899999", "k2": 3}');
+insert into json_patial values(4, '{"k1": "1234567899999", "k2": 4}');
+insert into json_patial values(5, '{"k1": "1234567899999", "k2": 5}');
+update json_patial set c2 = json_replace(c2, '$.k1', 'x23456789999') where c1=1;
+select * from json_patial;
+alter table json_patial set lob_inrow_threshold=8192;
+# offline
+alter table json_patial set lob_inrow_threshold=8191;
+drop table json_patial;
+set log_row_value_options="";
+
+--disable_query_log
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+insert into json_test values(1,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v1"}}}}}}}}}}}');
+insert into json_test values(2,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v2"}}}}}}}}}}}');
+insert into json_test values(3,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v3"}}}}}}}}}}}');
+insert into json_test values(4,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v4"}}}}}}}}}}}');
+insert into json_test values(5,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v5"}}}}}}}}}}}');
+insert into json_test values(6,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v6"}}}}}}}}}}}');
+insert into json_test values(7,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v7"}}}}}}}}}}}');
+insert into json_test values(8,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v8"}}}}}}}}}}}');
+insert into json_test values(9,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v9"}}}}}}}}}}}');
+insert into json_test values(10,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v10"}}}}}}}}}}}');
+insert into json_test values(11,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v11"}}}}}}}}}}}');
+insert into json_test values(12,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v12"}}}}}}}}}}}');
+insert into json_test values(13,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v13"}}}}}}}}}}}');
+insert into json_test values(14,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v14"}}}}}}}}}}}');
+insert into json_test values(15,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v15"}}}}}}}}}}}');
+insert into json_test values(16,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v16"}}}}}}}}}}}');
+insert into json_test values(17,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v17"}}}}}}}}}}}');
+insert into json_test values(18,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v18"}}}}}}}}}}}');
+insert into json_test values(19,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v19"}}}}}}}}}}}');
+insert into json_test values(20,'{"c1": {"c2": {"c3": {"c4" : {"c5" : {"c6" : {"c7" : {"c8" : {"c9": { "c10" : {"c11" : "v20"}}}}}}}}}}}');
+
+create table json_test2 like json_test;
+insert  /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test;
+drop table json_test;
+drop table json_test2;
+
+create table json_test(c1 date, c2 datetime, c3 int, c4 varchar(100));
+create table json_test2(j json) row_format=COMPRESSED semistruct_encoding_type='encoding';
+insert into json_test values('2011-11-01', '2011-03-30 11:11:11.111', 1, '1111');
+insert into json_test values('2011-11-02', '2011-03-30 11:11:11.2', 2, '22222');
+insert into json_test values('2021-11-01', '2021-03-30 11:11:11.111', 3, '3333333');
+insert into json_test values('2021-11-01', '2021-03-30 11:11:11.21', 4, '4444444');
+insert into json_test values('2021-11-04', '2021-03-30 11:41:11.111', 5, '555555555');
+insert into json_test values('2021-01-04', '2021-03-30 11:01:11.111', 6, '666666666');
+insert into json_test values('2021-03-04', '2021-03-30 11:01:22.111', 7, '777777777');
+insert into json_test values('2021-06-24', '2021-03-03 11:01:11.222', 8, '8888888888');
+insert into json_test values('2021-09-24', '2021-03-03 11:11:11.222', 9, '999999');
+insert into json_test values('2021-10-24', '2021-03-03 21:11:11.222', 10, '00000');
+# freq
+insert /*+ query_timeout(10000000000) enable_parallel_dml parallel(2) append */ into json_test2 select json_object('c1', c1, 'c2', c2, 'c3', c3, 'c4', c4) from json_test;
+# spare
+insert /*+ query_timeout(10000000000) enable_parallel_dml parallel(2) append */ into json_test2 select json_object('c3', c3, 'c4', c4) from json_test;
+insert /*+ query_timeout(10000000000) enable_parallel_dml parallel(2) append */ into json_test2 select * from json_test2;
+
+drop table json_test;
+drop table json_test2;
+
+create table json_test(c1 int, c2 number, c3 decimal(10, 2), c4 decimal(18, 2), c_bit BIT(6), c5 decimal(38, 30));
+insert into json_test values(1, 1.0, 8.90, 10.21, b'010101', 32321321.321321321321),
+                            (2, 2.0, 8.00, 20.21, b'000101', 42321321.321321321322),
+                            (3, 3.0, 8.10, 30.21, b'100101', 52321321.32132141321),
+                            (4, 4.0, 8.20, 40.21, b'010100', 62321321.321351321321),
+                            (5, 5.0, 8.30, 50.21, b'000000', 72321321.321361321321),
+                            (6, 6.0, 8.40, 60.21, b'010100', 42321321.321327321321),
+                            (7, 7.0, 8.50, 70.21, b'100101', 82321321.3213813213),
+                            (8, 8.0, 8.60, 80.21, b'100100', 12321321.3213212321),
+                            (9, 9.0, 8.70, 80.21, b'001100', 22232121.321321421321),
+                            (10, 10.0, 8.90, 11.21, b'111111', 33232132.321351321321);
+create table json_test2(j json) row_format=COMPRESSED semistruct_encoding_type='encoding';
+insert /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select json_object('c1', c1, 'c2', c2, 'c3', c3, 'c4', c4, 'c5', c5, 'cb', c_bit) from json_test;
+insert /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select json_object('c1', c1) from json_test;
+insert /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test2;
+insert /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test2;
+drop table json_test;
+drop table json_test2;
+
+create table json_test(j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+insert into json_test values ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 114476712, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 1142673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 1144722674, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447645, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11417676, "c2": "Bob", "c3": 65.0, "c4": 65.2}');
+insert into json_test values ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 114476712, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447674, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447675, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447676, "c2": "Bob", "c3": 65.0, "c4": 65.2}');
+insert into json_test values  ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 114476712, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447674, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447675, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447676, "c2": "Bob", "c3": 65.0, "c4": 65.2}');
+insert into json_test values ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 114476712, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447674, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447675, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447676, "c2": "Bob", "c3": 65.0, "c4": 65.2}');
+insert into json_test values  ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 114476712, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447673, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447674, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447675, "c2": "Bob", "c3": 65.0, "c4": 65.2}'), ('{"c1": 11447676, "c2": "Bob", "c3": 65.0, "c4": 65.2}');
+
+
+update /*+ query_timeout(10000000000) enable_parallel_dml parallel(2) */ json_test set j = json_set(j,  '$.key_0',77,'$.key_1','{"c1": 12110413, "c2": "White", "c3": 55.2, "c4": 96.8}','$.key_2',79,'$.key_3','{"c1": 11762446, "c2": "Alice", "c3": 85.9, "c4": 67.1}' );
+update /*+ query_timeout(10000000000) enable_parallel_dml parallel(2) */ json_test set j = json_remove(j, '$.key_0');
+update /*+ query_timeout(10000000000) enable_parallel_dml parallel(2) */ json_test set j = json_set(j, '$.key_0',  '77'  );
+
+create table json_test2 like json_test;
+insert /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test;
+
+drop table json_test;
+drop table json_test2;
+--enable_query_log

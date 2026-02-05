@@ -1,0 +1,593 @@
+set global ob_query_timeout = DEFAULT;
+set global ob_trx_idle_timeout = DEFAULT;
+set global ob_trx_timeout = DEFAULT;
+================ basic DDL & DML ================
+set ob_enable_index_direct_select =0;
+create database if not exists test;
+use test;
+select database();
+database()
+test
+show databases like 'test';
+Database (test)
+test
+drop table if exists t0, t1, t2;
+create table t0 (c1 int, c2 int);
+create table t1 (c1 bigint primary key, c2 bigint, v1 varchar(128), v2 varchar(64));
+show tables like 't0';
+Tables_in_test (t0)
+t0
+show tables like 't1';
+Tables_in_test (t1)
+t1
+insert into t1 values (1, 2, 'a', 'b'), (10, NULL, 'c', NULL);
+select * from t1;
+c1	c2	v1	v2
+1	2	a	b
+10	NULL	c	NULL
+insert into t1 values (1, NULL, NULL, NULL);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+update t1 set c2 = 100 where c1 = 1;
+update t1 set c2 = c2+1 where c1 = 1;
+select * from t1;
+c1	c2	v1	v2
+1	101	a	b
+10	NULL	c	NULL
+delete from t1 where c1 < 10;
+select * from t1;
+c1	c2	v1	v2
+10	NULL	c	NULL
+update t1 set c1 = c1 + 1 where c1 > 0;
+select * from t1;
+c1	c2	v1	v2
+11	NULL	c	NULL
+delete from t1;
+select * from t1;
+c1	c2	v1	v2
+create table all_table (index_status int primary key, id int, schema_version int);
+insert into all_table values (1,2,3);
+select * from all_table;
+index_status	id	schema_version
+1	2	3
+update all_table SET index_status = 5, schema_version=schema_version+10 WHERE id=2;
+select * from all_table;
+index_status	id	schema_version
+5	2	13
+drop table all_table;
+drop table t1;
+drop database test;
+show databases like 'test';
+Database (test)
+create database test;
+use test;
+================ transaction ================
+create table t1 (c1 bigint primary key, c2 bigint, v1 varchar(128), v2 varchar(64));
+start transaction;
+insert into t1 (c1, c2) values (1, 2);
+select * from t1;
+c1	c2	v1	v2
+1	2	NULL	NULL
+rollback;
+select * from t1;
+c1	c2	v1	v2
+start transaction;
+insert into t1 (c1, c2) values (1, 2);
+select * from t1;
+c1	c2	v1	v2
+1	2	NULL	NULL
+commit;
+select * from t1;
+c1	c2	v1	v2
+1	2	NULL	NULL
+delete from t1;
+================ alias ================
+insert into t1 values (1, 2, 'a', 'b'), (10, 2, 'a', 'f'), (100, 3, 'e', 'f'), (1000, 3, 'a', 'e');
+select * from t1;
+c1	c2	v1	v2
+1	2	a	b
+10	2	a	f
+100	3	e	f
+1000	3	a	e
+select c1+c2 added from t1;
+added
+3
+12
+103
+1003
+================ aggregate ================
+select count(*), count(c1), sum(c1), max(v1), max(c2), avg(c2) from t1;
+count(*)	count(c1)	sum(c1)	max(v1)	max(c2)	avg(c2)
+4	4	1111	e	3	2.5000
+select count(*), count(c1), sum(c1), max(v1), max(c2), avg(c2), count(c1)+sum(c2) from t1 group by c2;
+count(*)	count(c1)	sum(c1)	max(v1)	max(c2)	avg(c2)	count(c1)+sum(c2)
+2	2	11	a	2	2.0000	6
+2	2	1100	e	3	3.0000	8
+select count(*), count(c1), sum(c1), max(v1), max(c2), avg(c2) from t1 group by c2, v1;
+count(*)	count(c1)	sum(c1)	max(v1)	max(c2)	avg(c2)
+1	1	100	e	3	3.0000
+1	1	1000	a	3	3.0000
+2	2	11	a	2	2.0000
+select count(*), count(c1), sum(c1), max(v1), max(c2), avg(c2) from t1 group by c2, v1 having sum(c1+1) > 100;
+count(*)	count(c1)	sum(c1)	max(v1)	max(c2)	avg(c2)
+1	1	100	e	3	3.0000
+1	1	1000	a	3	3.0000
+select distinct c2, c2+1 from t1;
+c2	c2+1
+2	3
+3	4
+================ order ================
+select * from t1 order by v1;
+c1	c2	v1	v2
+1	2	a	b
+10	2	a	f
+1000	3	a	e
+100	3	e	f
+select * from t1 order by v1, c1 desc;
+c1	c2	v1	v2
+1000	3	a	e
+10	2	a	f
+1	2	a	b
+100	3	e	f
+select * from t1 order by c1;
+c1	c2	v1	v2
+1	2	a	b
+10	2	a	f
+100	3	e	f
+1000	3	a	e
+select * from t1 order by c1 desc;
+c1	c2	v1	v2
+1000	3	a	e
+100	3	e	f
+10	2	a	f
+1	2	a	b
+================ limit ================
+select * from t1 limit 1;
+c1	c2	v1	v2
+1	2	a	b
+select * from t1 limit 1, 1;
+c1	c2	v1	v2
+10	2	a	f
+select * from t1 limit 1 offset 1;
+c1	c2	v1	v2
+10	2	a	f
+select * from t1 limit -1, 1;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '-1, 1' at line 1
+select * from t1 limit 0, 1;
+c1	c2	v1	v2
+1	2	a	b
+select * from t1 limit 0, 10;
+c1	c2	v1	v2
+1	2	a	b
+10	2	a	f
+100	3	e	f
+1000	3	a	e
+================ set ================
+(select * from t1) union all (select * from t1);
+c1	c2	v1	v2
+1	2	a	b
+10	2	a	f
+100	3	e	f
+1000	3	a	e
+1	2	a	b
+10	2	a	f
+100	3	e	f
+1000	3	a	e
+================ join ================
+select * from t1 X, t1 Y where X.c1 = Y.c1;
+c1	c2	v1	v2	c1	c2	v1	v2
+1	2	a	b	1	2	a	b
+10	2	a	f	10	2	a	f
+100	3	e	f	100	3	e	f
+1000	3	a	e	1000	3	a	e
+create table t2 (c1 bigint primary key, c2 bigint);
+insert into t2 (c2, c1) values (1, 2), (100, 0), (50, -1);
+select * from t1, t2;
+c1	c2	v1	v2	c1	c2
+1	2	a	b	-1	50
+1	2	a	b	0	100
+1	2	a	b	2	1
+10	2	a	f	-1	50
+10	2	a	f	0	100
+10	2	a	f	2	1
+100	3	e	f	-1	50
+100	3	e	f	0	100
+100	3	e	f	2	1
+1000	3	a	e	-1	50
+1000	3	a	e	0	100
+1000	3	a	e	2	1
+select * from t1, t2 where t1.c1 < t2.c2;
+c1	c2	v1	v2	c1	c2
+1	2	a	b	-1	50
+1	2	a	b	0	100
+10	2	a	f	-1	50
+10	2	a	f	0	100
+select * from t1 inner join t2 on t1.c1 = t2.c2;
+c1	c2	v1	v2	c1	c2
+1	2	a	b	2	1
+100	3	e	f	0	100
+select * from t1 left join t2 on t1.c1 = t2.c2;
+c1	c2	v1	v2	c1	c2
+1	2	a	b	2	1
+10	2	a	f	NULL	NULL
+100	3	e	f	0	100
+1000	3	a	e	NULL	NULL
+select * from t1 right join t2 on t1.c1 = t2.c2;
+c1	c2	v1	v2	c1	c2
+1	2	a	b	2	1
+100	3	e	f	0	100
+NULL	NULL	NULL	NULL	-1	50
+select * from t1 full join t2 on t1.c1 = t2.c2;
+c1	c2	v1	v2	c1	c2
+1	2	a	b	2	1
+10	2	a	f	NULL	NULL
+100	3	e	f	0	100
+1000	3	a	e	NULL	NULL
+NULL	NULL	NULL	NULL	-1	50
+================ virtual table & show ================
+set global max_allowed_packet=default;
+show tables like 't1';
+Tables_in_test (t1)
+t1
+show tables like '%c%';
+Tables_in_test (%c%)
+show variables where Variable_name like 'ob%' and Variable_name != 'ob_proxy_partition_hit' and Variable_name != 'ob_last_schema_version' and Variable_name != 'ob_compatibility_version'  and Variable_name != 'ob_security_version';
+Variable_name	Value
+ob_bnl_join_cache_size	10485760
+ob_check_sys_variable	ON
+ob_compatibility_control	MYSQL5.7
+ob_compatibility_mode	MYSQL
+ob_default_lob_inrow_threshold	8192
+ob_early_lock_release	OFF
+ob_enable_aggregation_pushdown	ON
+ob_enable_index_direct_select	OFF
+ob_enable_jit	OFF
+ob_enable_parameter_anonymous_block	ON
+ob_enable_plan_cache	ON
+ob_enable_pl_cache	ON
+ob_enable_ps_parameter_anonymous_block	ON
+ob_enable_rich_error_msg	OFF
+ob_enable_show_trace	OFF
+ob_enable_sql_audit	ON
+ob_enable_transformation	ON
+ob_enable_transmission_checksum	ON
+ob_enable_truncate_flashback	ON
+ob_hnsw_ef_search	64
+ob_hnsw_extra_info_max_size	1024
+ob_interm_result_mem_limit	2147483648
+ob_ivf_nprobes	8
+ob_kv_mode	ALL
+ob_log_level	disabled
+ob_max_read_stale_time	-1
+ob_org_cluster_id	0
+ob_plan_cache_evict_high_percentage	90
+ob_plan_cache_evict_low_percentage	50
+ob_plan_cache_percentage	2
+ob_pl_block_timeout	3216672000000000
+ob_query_timeout	10000000
+ob_read_consistency	STRONG
+ob_reserved_meta_memory_percentage	10
+ob_route_policy	READONLY_ZONE_FIRST
+ob_sparse_drop_ratio_search	0
+ob_sql_audit_percentage	1
+ob_sql_work_area_percentage	5
+ob_table_access_policy	AUTO
+ob_tcp_invited_nodes	%
+ob_temp_tablespace_size_percentage	0
+ob_trace_info
+ob_trx_idle_timeout	86400000000
+ob_trx_lock_timeout	-1
+ob_trx_timeout	86400000000
+show variables like 'ob_trx_timeout';
+Variable_name	Value
+ob_trx_timeout	86400000000
+set ob_trx_timeout = 200000000;
+show variables like 'ob_trx_timeout';
+Variable_name	Value
+ob_trx_timeout	200000000
+show global variables where Variable_name like 'ob%' and Variable_name != 'ob_compatibility_version'  and Variable_name != 'ob_security_version';
+Variable_name	Value
+ob_bnl_join_cache_size	10485760
+ob_check_sys_variable	ON
+ob_compatibility_control	MYSQL5.7
+ob_compatibility_mode	MYSQL
+ob_default_lob_inrow_threshold	8192
+ob_early_lock_release	OFF
+ob_enable_aggregation_pushdown	ON
+ob_enable_index_direct_select	OFF
+ob_enable_jit	OFF
+ob_enable_parameter_anonymous_block	ON
+ob_enable_plan_cache	ON
+ob_enable_pl_cache	ON
+ob_enable_ps_parameter_anonymous_block	ON
+ob_enable_rich_error_msg	OFF
+ob_enable_sql_audit	ON
+ob_enable_transformation	ON
+ob_enable_transmission_checksum	ON
+ob_enable_truncate_flashback	ON
+ob_hnsw_extra_info_max_size	1024
+ob_interm_result_mem_limit	2147483648
+ob_kv_mode	ALL
+ob_log_level	disabled
+ob_max_read_stale_time	-1
+ob_plan_cache_evict_high_percentage	90
+ob_plan_cache_evict_low_percentage	50
+ob_plan_cache_percentage	2
+ob_pl_block_timeout	3216672000000000
+ob_query_timeout	10000000
+ob_read_consistency	STRONG
+ob_reserved_meta_memory_percentage	10
+ob_route_policy	READONLY_ZONE_FIRST
+ob_sql_audit_percentage	1
+ob_sql_work_area_percentage	5
+ob_table_access_policy	AUTO
+ob_tcp_invited_nodes	%
+ob_temp_tablespace_size_percentage	0
+ob_trx_idle_timeout	86400000000
+ob_trx_lock_timeout	-1
+ob_trx_timeout	86400000000
+show global variables like 'max_allowed_packet';
+Variable_name	Value
+max_allowed_packet	16777216
+set global max_allowed_packet=8388608;
+show global variables like 'max_allowed_packet';
+Variable_name	Value
+max_allowed_packet	8388608
+set global max_allowed_packet=default;
+show global variables like 'max_allowed_packet';
+Variable_name	Value
+max_allowed_packet	16777216
+set max_allowed_packet=8388608;
+ERROR HY000: SESSION variable 'max_allowed_packet' is read-only. Use SET GLOBAL to assign the value
+show columns from oceanbase.__all_core_table;
+Field	Type	Null	Key	Default	Extra
+gmt_create	timestamp(6)	YES		CURRENT_TIMESTAMP(6)
+gmt_modified	timestamp(6)	YES		CURRENT_TIMESTAMP(6)	ON UPDATE CURRENT_TIMESTAMP(6)
+table_name	varchar(128)	NO	PRI	NULL
+row_id	bigint(20)	NO	PRI	NULL
+column_name	varchar(128)	NO	PRI	NULL
+column_value	varchar(65536)	YES		NULL
+show index from oceanbase.__all_core_table;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+__all_core_table	0	PRIMARY	1	table_name	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+__all_core_table	0	PRIMARY	2	row_id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+__all_core_table	0	PRIMARY	3	column_name	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+set version_comment = 'aaa';
+ERROR HY000: Variable 'version_comment' is a read only variable
+================ partition selection ================
+drop table if exists t_part;
+create table t_part (c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+insert into t_part(c1) values(1231346464513131231313);
+ERROR 22003: Out of range value for column 'c1' at row 1
+insert into t_part values(1, 2), (3, 1);
+insert into t_part values(2, 3), (4, 3);
+insert into t_part partition(p0, p1) values(5, 6);
+insert into t_part values('6', '6'), ('8', '8');
+insert into t_part partition(p1) values(6, 3);
+ERROR HY000: Found a row not matching the given partition set
+update t_part partition(p0) set c2 = 6 where c1 = 2;
+update t_part partition(p1) set c2 = 7 where c1 = 2;
+select * from t_part partition (p0);
+c1	c2
+2	6
+4	3
+6	6
+8	8
+select * from t_part partition(p1);
+c1	c2
+1	2
+3	1
+5	6
+select * from t_part partition(p1, p3);
+ERROR HY000: Unkown partition 'p3' in table 't_part'
+create table t_single(c1 int);
+delete from t_single where c1 in (select c1 from t_part);
+delete from t_single where c1 in (select/*+read_consistency(weak)*/ c1 from t_part);
+delete from t_part where c1 in (select c1 from t_single);
+drop table t_single;
+create table t3(a int, b float, c varchar(30), d double, e varchar(50), primary key(a,b,c), unique index(e, d));
+insert into t3 values(1, 2.00000, 'aaaa', '1.000000000', 'aaaaaaaaaaaaaaaa');
+insert into t3 values(2, 2.00000, 'aaaa', '2.000000000', 'aaaaaaaaaaaaaaaa');
+insert into t3 values(1, 2.00000, 'aaaa', '1.000000000', 'aaaaaaaaaaaaaaaa');
+ERROR 23000: Duplicate entry '1-2-aaaa' for key 'PRIMARY'
+update t3 set a=1 where a=2;
+ERROR 23000: Duplicate entry '1-2-aaaa' for key 'PRIMARY'
+insert into t3 values(3, 2.00000, 'aaaa', '1.000000000', 'aaaaaaaaaaaaaaaa');
+ERROR 23000: Duplicate entry 'aaaaaaaaaaaaaaaa-1' for key 'e'
+================ regexp ================
+create table t4 (a int primary key, b varchar(100));
+insert into t4 values(1, 'hello');
+insert into t4 values(2, 'aaaaabaaaabaaaabaaaabweeknights');
+insert into t4 values(3, 'dsfsdaaagd');
+select * from t4 where b regexp 'aaa';
+a	b
+2	aaaaabaaaabaaaabaaaabweeknights
+3	dsfsdaaagd
+select * from t4 where b regexp '^h.*';
+a	b
+1	hello
+select * from t4 where b not regexp 'aaa';
+a	b
+1	hello
+select * from t4 where b not regexp '^h.*';
+a	b
+2	aaaaabaaaabaaaabaaaabweeknights
+3	dsfsdaaagd
+select * from t4 where b rlike 'aaa';
+a	b
+2	aaaaabaaaabaaaabaaaabweeknights
+3	dsfsdaaagd
+select * from t4 where b rlike '^h.*';
+a	b
+1	hello
+select * from t4 where b not rlike 'aaa';
+a	b
+1	hello
+select * from t4 where b not rlike '^h.*';
+a	b
+2	aaaaabaaaabaaaabaaaabweeknights
+3	dsfsdaaagd
+create table t5(c1 varchar(2) primary key, c2 varchar(2));
+insert into t5 values('aa','a'),('bb','b'), ('cc', 'd');
+select c1 regexp c2, c1 rlike c2 from t5;
+c1 regexp c2	c1 rlike c2
+1	1
+1	1
+0	0
+select true = (1234 regexp 23);
+true = (1234 regexp 23)
+1
+select true = (1234 regexp 99);
+true = (1234 regexp 99)
+0
+================ system variable or user variable ================
+set @now_time=now();
+select @now_time;
+@now_time
+cur_time
+set @cur_time=CURRENT_TIMESTAMP();
+select @cur_time;
+@cur_time
+cur_time
+show variables like 'character_set_results';
+Variable_name	Value
+character_set_results	utf8mb4
+set character_set_results = NULL;
+show variables like 'character_set_results';
+Variable_name	Value
+character_set_results
+select @@session.character_set_results;
+@@session.character_set_results
+NULL
+show global variables like 'auto_increment_increment';
+Variable_name	Value
+auto_increment_increment	1
+set global auto_increment_increment = 5;
+show global variables like 'auto_increment_increment';
+Variable_name	Value
+auto_increment_increment	5
+show variables like 'auto_increment_increment';
+Variable_name	Value
+auto_increment_increment	1
+set auto_increment_increment = default;
+show variables like 'auto_increment_increment';
+Variable_name	Value
+auto_increment_increment	5
+set global auto_increment_increment = default;
+show global variables like 'auto_increment_increment';
+Variable_name	Value
+auto_increment_increment	1
+================ weak read ================
+drop table if exists t6;
+create table t6 (pk int primary key, c1 int, c2 int);
+begin;
+select pk from t6;
+pk
+select /*+read_consistency(weak)*/ c1 from t6;
+c1
+rollback;
+begin;
+show tables like 't6';
+Tables_in_test (t6)
+t6
+select * from t6;
+pk	c1	c2
+select table_name from information_schema.tables where table_name = 't6';
+table_name
+t6
+select /*+read_consistency(weak)*/ c2 from t6;
+c2
+rollback;
+begin;
+select pk from t6;
+pk
+select /*+read_consistency(weak)*/ c1 from t6;
+c1
+rollback;
+begin;
+show tables like 't6';
+Tables_in_test (t6)
+t6
+select * from t6;
+pk	c1	c2
+select table_name from information_schema.tables where table_name = 't6';
+table_name
+t6
+select /*+read_consistency(weak)*/ c2 from t6;
+c2
+rollback;
+================ partition by range ================
+drop table if exists t7;
+create table t7 (pk int, c1 int, primary key (pk))
+partition by range columns(pk)
+(
+partition p_2016_11_02_00 values less than (100),
+partition p_2016_11_04_00 values less than (200),
+partition p_2016_11_03_00 values less than (300),
+partition p_max_value values less than (MAXVALUE)
+);
+insert into t7 values (1, 1), (2, 2), (3, 3);
+insert into t7 values (101, 1), (102, 2), (103, 3);
+insert into t7 values (201, 1), (202, 2), (203, 3);
+select * from t7;
+pk	c1
+1	1
+2	2
+3	3
+101	1
+102	2
+103	3
+201	1
+202	2
+203	3
+select * from t7 order by pk;
+pk	c1
+1	1
+2	2
+3	3
+101	1
+102	2
+103	3
+201	1
+202	2
+203	3
+select * from t7 order by pk;
+pk	c1
+1	1
+2	2
+3	3
+101	1
+102	2
+103	3
+201	1
+202	2
+203	3
+select * from t7 order by pk desc;
+pk	c1
+203	3
+202	2
+201	1
+103	3
+102	2
+101	1
+3	3
+2	2
+1	1
+select * from t7 order by pk desc;
+pk	c1
+203	3
+202	2
+201	1
+103	3
+102	2
+101	1
+3	3
+2	2
+1	1
+================ intra partition parallelism ================
+drop table if exists t8;
+create table t8(c1 int primary key, c2 varchar(1000));
+select /*+ parallel(2) */ count(*) from t8;
+count(*)
+0
+================ teardown ================
+drop table if exists t0, t1, t2, t_part, t3, t4, t5, t6, t7, t8;

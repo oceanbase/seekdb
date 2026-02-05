@@ -1,0 +1,625 @@
+drop table if exists t1, t_part, t_subpart, TEST_STAT, T1_STAT, T_PART_STAT, T_SUBPART_STAT;
+drop tablegroup tgroup;
+create tablegroup tgroup;
+create table t1 (c1 int, c2 int, c3 int);
+create table t_part (c1 int, c2 int, c3 int) partition by hash(c1) partitions 4;
+create table t_subpart (c1 int, c2 int, c3 int) partition by hash(c1)
+subpartition by hash(c2)
+subpartition template
+(
+subpartition p0,
+subpartition p1,
+subpartition p2
+)
+partitions 3;
+insert into t1 values(1,1,1), (2,2,2), (3,3,3), (4,4,4), (5,5,5), (6,6,6), (7,7,7), (8,8,8), (9,9,9), (10,10,10);
+insert into t1 values(11,1,1), (12,2,2), (13,3,3), (14,4,4), (15,5,5), (16,6,6), (17,7,7), (18,8,8), (19,9,9), (20,10,10);
+insert into t1 values(21,1,1), (22,2,2), (23,3,3), (24,4,4), (25,5,5), (26,6,6), (27,7,7), (28,8,8), (29,9,9), (30,10,10);
+insert into t1 values(31,1,1), (32,2,2), (33,3,3), (34,4,4), (35,5,5), (36,6,6), (37,7,7), (38,8,8), (39,9,9), (40,10,10);
+insert into t1 values(41,1,1), (42,2,2), (43,3,3), (44,4,4), (45,5,5), (46,6,6), (47,7,7), (48,8,8), (49,9,9), (50,10,10);
+insert into t1 values(51,1,1), (52,2,2), (53,3,3), (54,4,4), (55,5,5), (56,6,6), (57,7,7), (58,8,8), (59,9,9), (60,10,10);
+insert into t1 values(61,1,1), (62,2,2), (63,3,3), (64,4,4), (65,5,5), (66,6,6), (67,7,7), (68,8,8), (69,9,9), (70,10,10);
+insert into t1 values(71,1,1), (72,2,2), (73,3,3), (74,4,4), (75,5,5), (76,6,6), (77,7,7), (78,8,8), (79,9,9), (80,10,10);
+insert into t1 values(81,1,1), (82,2,2), (83,3,3), (84,4,4), (85,5,5), (86,6,6), (87,7,7), (88,8,8), (89,9,9), (90,10,10);
+insert into t1 values(91,1,1), (92,2,2), (93,3,3), (94,4,4), (95,5,5), (96,6,6), (97,7,7), (98,8,8), (99,9,9), (100,10,10);
+insert into t_part values(101,1,1), (102,2,2), (103,3,3), (104,4,4), (105,5,5), (106,6,6), (107,7,7), (108,8,8), (109,9,9), (110,10,10);
+insert into t_part values(111,1,1), (112,2,2), (113,3,3), (114,4,4), (115,5,5), (116,6,6), (117,7,7), (118,8,8), (119,9,9), (120,10,10);
+insert into t_part values(121,1,1), (122,2,2), (123,3,3), (124,4,4), (125,5,5), (126,6,6), (127,7,7), (128,8,8), (129,9,9), (130,10,10);
+insert into t_part values(131,1,1), (132,2,2), (133,3,3), (134,4,4), (135,5,5), (136,6,6), (137,7,7), (138,8,8), (139,9,9), (140,10,10);
+insert into t_part values(141,1,1), (142,2,2), (143,3,3), (144,4,4), (145,5,5), (146,6,6), (147,7,7), (148,8,8), (149,9,9), (150,10,10);
+insert into t_part values(151,1,1), (152,2,2), (153,3,3), (154,4,4), (155,5,5), (156,6,6), (157,7,7), (158,8,8), (159,9,9), (160,10,10);
+insert into t_part values(161,1,1), (162,2,2), (163,3,3), (164,4,4), (165,5,5), (166,6,6), (167,7,7), (168,8,8), (169,9,9), (170,10,10);
+insert into t_part values(171,1,1), (172,2,2), (173,3,3), (174,4,4), (175,5,5), (176,6,6), (177,7,7), (178,8,8), (179,9,9), (180,10,10);
+insert into t_part values(181,1,1), (182,2,2), (183,3,3), (184,4,4), (185,5,5), (186,6,6), (187,7,7), (188,8,8), (189,9,9), (190,10,10);
+insert into t_part values(191,1,1), (192,2,2), (193,3,3), (194,4,4), (195,5,5), (196,6,6), (197,7,7), (198,8,8), (199,9,9), (200,10,10);
+insert into t_part select * from t_part;
+insert into t_part select * from t_part;
+insert into t_part select * from t_part;
+insert into t_part select * from t_part;
+insert into t_subpart select * from t_part;
+insert into t_subpart select * from t_subpart;
+insert into t_subpart select * from t_subpart;
+insert into t_subpart select * from t_subpart;
+result_format: 4
+##data ready
+call dbms_stats.gather_table_stats('TEST', 'T1', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+call dbms_stats.gather_table_stats('TEST', 'T_PART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+
+##create stat table
+call dbms_stats.create_stat_table('TEST', 'T1_STAT');
+call dbms_stats.create_stat_table('TEST', 'T_PART_STAT');
+call dbms_stats.create_stat_table('TEST', 'T_SUBPART_STAT', 'tgroup');
+
+call dbms_stats.export_table_stats('TEST', 'T1', NULL, 'T1_STAT', statown=>'TEST');
+call dbms_stats.export_table_stats('TEST', 'T_PART', NULL, 'T_PART_STAT', statown=>'TEST');
+call dbms_stats.export_table_stats('TEST', 'T_SUBPART', NULL, 'T_SUBPART_STAT', statown=>'TEST');
+
+#############################
+##1.lock/unlock table stats
+#############################
+##lock table stats
+call dbms_stats.lock_table_stats('TEST', 'T1');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T1';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t1         | NULL           | NULL              |      100 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+call dbms_stats.lock_table_stats('TEST', 'T_PART');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_PART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              |     1600 |          60 | ALL             |
+| t_part     | p0             | NULL              |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              |      400 |          60 | ALL             |
+| t_part     | p3             | NULL              |      400 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+call dbms_stats.lock_table_stats('TEST', 'T_SUBPART');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_SUBPART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              |    12800 |          60 | ALL             |
+| t_subpart  | p0             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p0             | p0sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p0             | p0sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p0             | p0sp2             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             |     1152 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+##try gather/delete/set/import stats ==> expected failure
+
+analyze table t1 compute statistics for all columns size 5;
+ERROR HY000: object statistics are locked
+call dbms_stats.gather_table_stats('TEST', 'T1', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+ERROR HY000: object statistics are locked
+call dbms_stats.gather_table_stats('TEST', 'T_PART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+ERROR HY000: object statistics are locked
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+ERROR HY000: object statistics are locked
+call dbms_stats.delete_table_stats('TEST', 'T1');
+ERROR HY000: object statistics are locked
+call dbms_stats.delete_table_stats('TEST', 'T_PART');
+ERROR HY000: object statistics are locked
+call dbms_stats.delete_table_stats('TEST', 'T_SUBPART');
+ERROR HY000: object statistics are locked
+call dbms_stats.set_table_stats('TEST', 'T1', numrows=>10);
+ERROR HY000: object statistics are locked
+call dbms_stats.set_table_stats('TEST', 'T_PART', numrows=>10);
+ERROR HY000: object statistics are locked
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', numrows=>10);
+ERROR HY000: object statistics are locked
+call dbms_stats.import_table_stats('TEST', 'T1', NULL, 'T1_STAT', statown=>'TEST');
+ERROR HY000: object statistics are locked
+call dbms_stats.import_table_stats('TEST', 'T_PART', NULL, 'T_PART_STAT', statown=>'TEST');
+ERROR HY000: object statistics are locked
+call dbms_stats.import_table_stats('TEST', 'T_SUBPART', NULL, 'T_SUBPART_STAT', statown=>'TEST');
+ERROR HY000: object statistics are locked
+
+##try export stats ==> expected success
+call dbms_stats.export_table_stats('TEST', 'T1', NULL, 'T1_STAT', statown=>'TEST');
+call dbms_stats.export_table_stats('TEST', 'T_PART', NULL, 'T_PART_STAT', statown=>'TEST');
+call dbms_stats.export_table_stats('TEST', 'T_SUBPART', NULL, 'T_SUBPART_STAT', statown=>'TEST');
+
+##unlock table stats
+call dbms_stats.unlock_table_stats('TEST', 'T1');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T1';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t1         | NULL           | NULL              |      100 |          60 | NULL            |
++------------+----------------+-------------------+----------+-------------+-----------------+
+call dbms_stats.unlock_table_stats('TEST', 'T_PART');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_PART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              |     1600 |          60 | NULL            |
+| t_part     | p0             | NULL              |      400 |          60 | NULL            |
+| t_part     | p1             | NULL              |      400 |          60 | NULL            |
+| t_part     | p2             | NULL              |      400 |          60 | NULL            |
+| t_part     | p3             | NULL              |      400 |          60 | NULL            |
++------------+----------------+-------------------+----------+-------------+-----------------+
+call dbms_stats.unlock_table_stats('TEST', 'T_SUBPART');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_SUBPART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              |    12800 |          60 | NULL            |
+| t_subpart  | p0             | NULL              |     4224 |          60 | NULL            |
+| t_subpart  | p0             | p0sp0             |     1152 |          60 | NULL            |
+| t_subpart  | p0             | p0sp1             |     1536 |          60 | NULL            |
+| t_subpart  | p0             | p0sp2             |     1536 |          60 | NULL            |
+| t_subpart  | p1             | NULL              |     4224 |          60 | NULL            |
+| t_subpart  | p1             | p1sp0             |     1536 |          60 | NULL            |
+| t_subpart  | p1             | p1sp1             |     1536 |          60 | NULL            |
+| t_subpart  | p1             | p1sp2             |     1152 |          60 | NULL            |
+| t_subpart  | p2             | NULL              |     4352 |          60 | NULL            |
+| t_subpart  | p2             | p2sp0             |     1152 |          60 | NULL            |
+| t_subpart  | p2             | p2sp1             |     2048 |          60 | NULL            |
+| t_subpart  | p2             | p2sp2             |     1152 |          60 | NULL            |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+##try gather/delete/set/import stats after unlock table==> expected success
+call dbms_stats.delete_table_stats('TEST', 'T1');
+call dbms_stats.set_table_stats('TEST', 'T_PART', numrows=>10);
+call dbms_stats.import_table_stats('TEST', 'T_SUBPART', NULL, 'T_SUBPART_STAT', statown=>'TEST');
+call dbms_stats.gather_table_stats('TEST', 'T1', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+call dbms_stats.gather_table_stats('TEST', 'T_PART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+
+################################
+##2.lock/unlock partition stats
+################################
+##lock partition stats
+call dbms_stats.lock_partition_stats('TEST', 'T1', NULL);
+ERROR HY000: partition not specified
+call dbms_stats.lock_partition_stats('TEST', 'T_PART', 'P0');
+call dbms_stats.lock_partition_stats('TEST', 'T_PART', 'P1');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_PART' order by 1, 2, 3;
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              |     1600 |          60 | NULL            |
+| t_part     | p0             | NULL              |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              |      400 |          60 | NULL            |
+| t_part     | p3             | NULL              |      400 |          60 | NULL            |
++------------+----------------+-------------------+----------+-------------+-----------------+
+call dbms_stats.lock_partition_stats('TEST', 'T_SUBPART', 'P1');
+call dbms_stats.lock_partition_stats('TEST', 'T_SUBPART', 'P2');
+call dbms_stats.lock_partition_stats('TEST', 'T_SUBPART', 'P0SP1');
+call dbms_stats.lock_partition_stats('TEST', 'T_SUBPART', 'P0SP2');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_SUBPART' order by 1, 2, 3;
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              |    12800 |          60 | NULL            |
+| t_subpart  | p0             | NULL              |     4224 |          60 | NULL            |
+| t_subpart  | p0             | p0sp0             |     1152 |          60 | NULL            |
+| t_subpart  | p0             | p0sp1             |     1536 |          60 | NULL            |
+| t_subpart  | p0             | p0sp2             |     1536 |          60 | NULL            |
+| t_subpart  | p1             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             |     1152 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+##try gather/delete/set/import stats ==> unlock partition will success
+call dbms_stats.delete_table_stats('TEST', 'T_PART');
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              | TABLE       |     NULL |        NULL | NULL            |
+| t_part     | p0             | NULL              | PARTITION   |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              | PARTITION   |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              | PARTITION   |     NULL |        NULL | NULL            |
+| t_part     | p3             | NULL              | PARTITION   |     NULL |        NULL | NULL            |
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+call dbms_stats.delete_table_stats('TEST', 'T_SUBPART');
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE  | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              | TABLE        |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | NULL              | PARTITION    |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp0             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp1             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp2             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p1             | NULL              | PARTITION    |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              | PARTITION    |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             | SUBPARTITION |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             | SUBPARTITION |     1152 |          60 | ALL             |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P2SP1', numrows=>10);
+ERROR HY000: object statistics are locked
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P0SP2', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE  | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              | TABLE        |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | NULL              | PARTITION    |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp0             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp1             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp2             | SUBPARTITION |       10 |           0 | NULL            |
+| t_subpart  | p1             | NULL              | PARTITION    |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              | PARTITION    |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             | SUBPARTITION |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             | SUBPARTITION |     1152 |          60 | ALL             |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+call dbms_stats.import_table_stats('TEST', 'T_PART', 'P0', 'T_PART_STAT', statown=>'TEST');
+ERROR HY000: object statistics are locked
+call dbms_stats.import_table_stats('TEST', 'T_PART', NULL, 'T_PART_STAT', statown=>'TEST');
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              | TABLE       |     1600 |          60 | NULL            |
+| t_part     | p0             | NULL              | PARTITION   |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              | PARTITION   |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              | PARTITION   |      400 |          60 | NULL            |
+| t_part     | p3             | NULL              | PARTITION   |      400 |          60 | NULL            |
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+call dbms_stats.import_table_stats('TEST', 'T_SUBPART', 'P1SP2', 'T_SUBPART_STAT', statown=>'TEST');
+ERROR HY000: object statistics are locked
+call dbms_stats.import_table_stats('TEST', 'T_SUBPART', 'P2SP1', 'T_SUBPART_STAT', statown=>'TEST');
+ERROR HY000: object statistics are locked
+call dbms_stats.import_table_stats('TEST', 'T_SUBPART', NULL, 'T_SUBPART_STAT', statown=>'TEST');
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE  | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              | TABLE        |    12800 |          60 | NULL            |
+| t_subpart  | p0             | NULL              | PARTITION    |     4224 |          60 | NULL            |
+| t_subpart  | p0             | p0sp0             | SUBPARTITION |     1152 |          60 | NULL            |
+| t_subpart  | p0             | p0sp1             | SUBPARTITION |     1536 |          60 | NULL            |
+| t_subpart  | p0             | p0sp2             | SUBPARTITION |     1536 |          60 | NULL            |
+| t_subpart  | p1             | NULL              | PARTITION    |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              | PARTITION    |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             | SUBPARTITION |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             | SUBPARTITION |     1152 |          60 | ALL             |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+
+call dbms_stats.delete_table_stats('TEST', 'T_SUBPART_STAT');
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', 'P1SP1', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'SUBPARTITION');
+ERROR HY000: object statistics are locked
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', 'P2SP0', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'SUBPARTITION');
+ERROR HY000: object statistics are locked
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'APPROX_GLOBAL AND PARTITION');
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+--------------+----------+-------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE  | NUM_ROWS | AVG_ROW_LEN |
++------------+----------------+-------------------+--------------+----------+-------------+
+| t_subpart  | NULL           | NULL              | TABLE        |    12800 |          60 |
+| t_subpart  | p0             | NULL              | PARTITION    |     4224 |          60 |
+| t_subpart  | p0             | p0sp0             | SUBPARTITION |     1152 |          60 |
+| t_subpart  | p0             | p0sp1             | SUBPARTITION |     1536 |          60 |
+| t_subpart  | p0             | p0sp2             | SUBPARTITION |     1536 |          60 |
+| t_subpart  | p1             | NULL              | PARTITION    |     4224 |          60 |
+| t_subpart  | p1             | p1sp0             | SUBPARTITION |     1536 |          60 |
+| t_subpart  | p1             | p1sp1             | SUBPARTITION |     1536 |          60 |
+| t_subpart  | p1             | p1sp2             | SUBPARTITION |     1152 |          60 |
+| t_subpart  | p2             | NULL              | PARTITION    |     4352 |          60 |
+| t_subpart  | p2             | p2sp0             | SUBPARTITION |     1152 |          60 |
+| t_subpart  | p2             | p2sp1             | SUBPARTITION |     2048 |          60 |
+| t_subpart  | p2             | p2sp2             | SUBPARTITION |     1152 |          60 |
++------------+----------------+-------------------+--------------+----------+-------------+
+
+##unlock some partition stats
+call dbms_stats.lock_partition_stats('TEST', 'T1', NULL);
+ERROR HY000: partition not specified
+call dbms_stats.unlock_partition_stats('TEST', 'T_PART', 'P0');
+select TABLE_NAME,PARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_PART';
++------------+----------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+----------+-------------+-----------------+
+| t_part     | NULL           |     1600 |          60 | NULL            |
+| t_part     | p0             |      400 |          60 | NULL            |
+| t_part     | p1             |      400 |          60 | ALL             |
+| t_part     | p2             |      400 |          60 | NULL            |
+| t_part     | p3             |      400 |          60 | NULL            |
++------------+----------------+----------+-------------+-----------------+
+call dbms_stats.unlock_partition_stats('TEST', 'T_SUBPART', 'P2');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_SUBPART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              |    12800 |          60 | NULL            |
+| t_subpart  | p0             | NULL              |     4224 |          60 | NULL            |
+| t_subpart  | p0             | p0sp0             |     1152 |          60 | NULL            |
+| t_subpart  | p0             | p0sp1             |     1536 |          60 | NULL            |
+| t_subpart  | p0             | p0sp2             |     1536 |          60 | NULL            |
+| t_subpart  | p1             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              |     4352 |          60 | NULL            |
+| t_subpart  | p2             | p2sp0             |     1152 |          60 | NULL            |
+| t_subpart  | p2             | p2sp1             |     2048 |          60 | NULL            |
+| t_subpart  | p2             | p2sp2             |     1152 |          60 | NULL            |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+##try gather/delete/set/import stats ==> unlock partition will success
+call dbms_stats.delete_table_stats('TEST', 'T_PART');
+call dbms_stats.delete_table_stats('TEST', 'T_SUBPART');
+call dbms_stats.delete_table_stats('TEST', 'T_SUBPART');
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              | TABLE       |     NULL |        NULL | NULL            |
+| t_part     | p0             | NULL              | PARTITION   |     NULL |        NULL | NULL            |
+| t_part     | p1             | NULL              | PARTITION   |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              | PARTITION   |     NULL |        NULL | NULL            |
+| t_part     | p3             | NULL              | PARTITION   |     NULL |        NULL | NULL            |
++------------+----------------+-------------------+-------------+----------+-------------+-----------------+
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE  | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              | TABLE        |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | NULL              | PARTITION    |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp0             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp1             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp2             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p1             | NULL              | PARTITION    |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              | PARTITION    |     NULL |        NULL | NULL            |
+| t_subpart  | p2             | p2sp0             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p2             | p2sp1             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p2             | p2sp2             | SUBPARTITION |     NULL |        NULL | NULL            |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P0SP1', numrows=>10);
+call dbms_stats.set_table_stats('TEST', 'T_SUBPART', 'P0SP2', numrows=>10);
+select TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN, STATTYPE_LOCKED from oceanbase.dba_TAB_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | OBJECT_TYPE  | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              | TABLE        |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | NULL              | PARTITION    |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp0             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p0             | p0sp1             | SUBPARTITION |       10 |           0 | NULL            |
+| t_subpart  | p0             | p0sp2             | SUBPARTITION |       10 |           0 | NULL            |
+| t_subpart  | p1             | NULL              | PARTITION    |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             | SUBPARTITION |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             | SUBPARTITION |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              | PARTITION    |     NULL |        NULL | NULL            |
+| t_subpart  | p2             | p2sp0             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p2             | p2sp1             | SUBPARTITION |     NULL |        NULL | NULL            |
+| t_subpart  | p2             | p2sp2             | SUBPARTITION |     NULL |        NULL | NULL            |
++------------+----------------+-------------------+--------------+----------+-------------+-----------------+
+call dbms_stats.import_table_stats('TEST', 'T_PART', 'P0', 'T_PART_STAT', statown=>'TEST');
+select TABLE_NAME, PARTITION_NAME, OBJECT_TYPE, NUM_ROWS, AVG_ROW_LEN from oceanbase.dba_TAB_STATISTICS where table_name = 'T_PART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+----------------+-------------+----------+-------------+
+| TABLE_NAME | PARTITION_NAME | OBJECT_TYPE | NUM_ROWS | AVG_ROW_LEN |
++------------+----------------+-------------+----------+-------------+
+| t_part     | NULL           | TABLE       |     NULL |        NULL |
+| t_part     | p0             | PARTITION   |      400 |          60 |
+| t_part     | p1             | PARTITION   |      400 |          60 |
+| t_part     | p2             | PARTITION   |     NULL |        NULL |
+| t_part     | p3             | PARTITION   |     NULL |        NULL |
++------------+----------------+-------------+----------+-------------+
+call dbms_stats.import_column_stats('TEST', 'T_SUBPART', NULL, 'P0SP1', 'T_SUBPART_STAT', statown=>'TEST');
+call dbms_stats.import_column_stats('TEST', 'T_SUBPART', NULL, 'P0SP2', 'T_SUBPART_STAT', statown=>'TEST');
+select TABLE_NAME, SUBPARTITION_NAME, COLUMN_NAME, NUM_DISTINCT from oceanbase.dba_subpart_col_STATISTICS where table_name = 'T_SUBPART' and OWNER = 'TEST' order by 1, 2, 3;
++------------+-------------------+-------------+--------------+
+| TABLE_NAME | SUBPARTITION_NAME | COLUMN_NAME | NUM_DISTINCT |
++------------+-------------------+-------------+--------------+
+| t_subpart  | p0sp0             | c1          |         NULL |
+| t_subpart  | p0sp0             | c2          |         NULL |
+| t_subpart  | p0sp0             | c3          |         NULL |
+| t_subpart  | p0sp1             | c1          |           12 |
+| t_subpart  | p0sp1             | c2          |            4 |
+| t_subpart  | p0sp1             | c3          |            4 |
+| t_subpart  | p0sp2             | c1          |           12 |
+| t_subpart  | p0sp2             | c2          |            3 |
+| t_subpart  | p0sp2             | c3          |            3 |
+| t_subpart  | p1sp0             | c1          |           12 |
+| t_subpart  | p1sp0             | c2          |            3 |
+| t_subpart  | p1sp0             | c3          |            3 |
+| t_subpart  | p1sp1             | c1          |           12 |
+| t_subpart  | p1sp1             | c2          |            4 |
+| t_subpart  | p1sp1             | c3          |            4 |
+| t_subpart  | p1sp2             | c1          |            9 |
+| t_subpart  | p1sp2             | c2          |            3 |
+| t_subpart  | p1sp2             | c3          |            3 |
+| t_subpart  | p2sp0             | c1          |         NULL |
+| t_subpart  | p2sp0             | c2          |         NULL |
+| t_subpart  | p2sp0             | c3          |         NULL |
+| t_subpart  | p2sp1             | c1          |         NULL |
+| t_subpart  | p2sp1             | c2          |         NULL |
+| t_subpart  | p2sp1             | c3          |         NULL |
+| t_subpart  | p2sp2             | c1          |         NULL |
+| t_subpart  | p2sp2             | c2          |         NULL |
+| t_subpart  | p2sp2             | c3          |         NULL |
++------------+-------------------+-------------+--------------+
+
+call dbms_stats.unlock_partition_stats('TEST', 'T_PART', 'P1');
+call dbms_stats.unlock_partition_stats('TEST', 'T_SUBPART', 'P1');
+call dbms_stats.gather_table_stats('TEST', 'T_PART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL');
+
+##test partition lock is different table lock
+call dbms_stats.lock_table_stats('TEST', 'T_PART');
+call dbms_stats.lock_partition_stats('TEST', 'T_PART', 'P0');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_PART' order by 1, 2, 3;
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              |     1600 |          60 | ALL             |
+| t_part     | p0             | NULL              |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              |      400 |          60 | ALL             |
+| t_part     | p3             | NULL              |      400 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+call dbms_stats.unlock_table_stats('TEST', 'T_PART');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_PART' order by 1, 2, 3;
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              |     1600 |          60 | NULL            |
+| t_part     | p0             | NULL              |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              |      400 |          60 | NULL            |
+| t_part     | p2             | NULL              |      400 |          60 | NULL            |
+| t_part     | p3             | NULL              |      400 |          60 | NULL            |
++------------+----------------+-------------------+----------+-------------+-----------------+
+call dbms_stats.unlock_partition_stats('TEST', 'T_PART', 'P0');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME = 'T_PART' order by 1, 2, 3;
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              |     1600 |          60 | NULL            |
+| t_part     | p0             | NULL              |      400 |          60 | NULL            |
+| t_part     | p1             | NULL              |      400 |          60 | NULL            |
+| t_part     | p2             | NULL              |      400 |          60 | NULL            |
+| t_part     | p3             | NULL              |      400 |          60 | NULL            |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+################################################################
+##3.test lock stats and specify force option to manager stats
+################################################################
+##lock stats
+call dbms_stats.lock_table_stats('TEST', 'T1');
+call dbms_stats.lock_table_stats('TEST', 'T_PART');
+call dbms_stats.lock_table_stats('TEST', 'T_SUBPART');
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and TABLE_NAME in ('T_PART', 'T_SUBPART', 'T1');
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t1         | NULL           | NULL              |      100 |          60 | ALL             |
+| t_part     | NULL           | NULL              |     1600 |          60 | ALL             |
+| t_part     | p0             | NULL              |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              |      400 |          60 | ALL             |
+| t_part     | p3             | NULL              |      400 |          60 | ALL             |
+| t_subpart  | NULL           | NULL              |    12800 |          60 | ALL             |
+| t_subpart  | p0             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p0             | p0sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p0             | p0sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p0             | p0sp2             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             |     1152 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+##try gather/delete/set/import stats to specify force option ==> expected success
+call dbms_stats.set_table_stats('TEST', 'T_PART', numrows=>10, force=>TRUE);
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T_PART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_part     | NULL           | NULL              |       10 |          60 | ALL             |
+| t_part     | p0             | NULL              |      400 |          60 | ALL             |
+| t_part     | p1             | NULL              |      400 |          60 | ALL             |
+| t_part     | p2             | NULL              |      400 |          60 | ALL             |
+| t_part     | p3             | NULL              |      400 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+call dbms_stats.gather_table_stats('TEST', 'T_SUBPART', method_opt=>'FOR ALL COLUMNS SIZE 10', granularity=>'ALL', force=>TRUE);
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T_SUBPART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              |    12800 |          60 | ALL             |
+| t_subpart  | p0             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p0             | p0sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p0             | p0sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p0             | p0sp2             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             |     1152 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+call dbms_stats.import_table_stats('TEST', 'T1', NULL, 'T1_STAT', statown=>'TEST', force=>TRUE);
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T1';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t1         | NULL           | NULL              |      100 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+call dbms_stats.import_column_stats('TEST', 'T_PART', NULL, NULL, 'T_PART_STAT', statown=>'TEST', force=>TRUE);
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T_SUBPART';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t_subpart  | NULL           | NULL              |    12800 |          60 | ALL             |
+| t_subpart  | p0             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p0             | p0sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p0             | p0sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p0             | p0sp2             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | NULL              |     4224 |          60 | ALL             |
+| t_subpart  | p1             | p1sp0             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp1             |     1536 |          60 | ALL             |
+| t_subpart  | p1             | p1sp2             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | NULL              |     4352 |          60 | ALL             |
+| t_subpart  | p2             | p2sp0             |     1152 |          60 | ALL             |
+| t_subpart  | p2             | p2sp1             |     2048 |          60 | ALL             |
+| t_subpart  | p2             | p2sp2             |     1152 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+call dbms_stats.delete_column_stats('TEST', 'T1', 'C1', force=>TRUE);
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T1';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t1         | NULL           | NULL              |      100 |          60 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+call dbms_stats.delete_table_stats('TEST', 'T1', force=>TRUE);
+select TABLE_NAME,PARTITION_NAME,SUBPARTITION_NAME,NUM_ROWS,AVG_ROW_LEN,STATTYPE_LOCKED from oceanbase.dba_tab_statistics where owner = 'TEST' and table_name = 'T1';
++------------+----------------+-------------------+----------+-------------+-----------------+
+| TABLE_NAME | PARTITION_NAME | SUBPARTITION_NAME | NUM_ROWS | AVG_ROW_LEN | STATTYPE_LOCKED |
++------------+----------------+-------------------+----------+-------------+-----------------+
+| t1         | NULL           | NULL              |        0 |           0 | ALL             |
++------------+----------------+-------------------+----------+-------------+-----------------+
+
+##clean env
+call dbms_stats.drop_stat_table('TEST', 'T1_STAT');
+call dbms_stats.drop_stat_table('TEST', 'T_PART_STAT');
+call dbms_stats.drop_stat_table('TEST', 'T_SUBPART_STAT');
+drop table t1;
+drop table t_part;
+drop table t_subpart;
+drop tablegroup tgroup;

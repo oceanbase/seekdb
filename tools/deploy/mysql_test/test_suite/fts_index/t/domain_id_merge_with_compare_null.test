@@ -1,0 +1,57 @@
+# owner: xinglipeng.xlp
+# owner group: storage
+# description: fix bug
+
+# see: bug2025090600110842124
+#   flag enable_new_false_range_ was missed, which make domain id scan iter unexpected data
+#     when there's "always false"  in query plan which use domain id merge.
+
+--disable_warnings
+drop table if exists t_first;
+drop table if exists t_second;
+
+CREATE TABLE t_first (id INT PRIMARY KEY);
+INSERT INTO t_first VALUES (1);
+
+CREATE TABLE t_second (
+  pk VARCHAR(50) PRIMARY KEY,
+  text_col VARCHAR(50),
+  FULLTEXT INDEX ft_idx(text_col)
+);
+--enable_warnings
+
+INSERT INTO t_second (pk, text_col) VALUES ('a', 'some text');
+
+-- echo "check always false join"
+DELETE t_first, t_second_4 FROM t_first
+LEFT JOIN t_second AS t_second_4 ON t_second_4.pk = NULL;
+
+drop table t_first;
+drop table t_second;
+
+alter system set default_table_store_format = "column";
+
+--disable_warnings
+drop table if exists t_first;
+drop table if exists t_second;
+
+CREATE TABLE t_first (id INT PRIMARY KEY);
+INSERT INTO t_first VALUES (1);
+
+CREATE TABLE t_second (
+  pk VARCHAR(50) PRIMARY KEY,
+  text_col VARCHAR(50),
+  FULLTEXT INDEX ft_idx(text_col)
+);
+--enable_warnings
+
+INSERT INTO t_second (pk, text_col) VALUES ('a', 'some text');
+
+-- echo "check always false join"
+DELETE t_first, t_second_4 FROM t_first
+LEFT JOIN t_second AS t_second_4 ON t_second_4.pk = NULL;
+
+drop table t_first;
+drop table t_second;
+
+alter system set default_table_store_format = "row";

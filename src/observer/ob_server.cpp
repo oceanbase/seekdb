@@ -2227,11 +2227,7 @@ int ObServer::init_pre_setting()
     ob_set_reserved_memory(reserved_memory);
   }
   if (OB_SUCC(ret)) {
-#ifdef __APPLE__
-    const int64_t default_stack_size = 1L << 23; // 8MB
-#else
     const int64_t default_stack_size = 1L << 19; // 512KB
-#endif
     const int64_t stack_size = std::max(static_cast<int64_t>(default_stack_size), static_cast<int64_t>(GCONF.stack_size));
     LOG_INFO("set stack_size", K(stack_size));
     global_thread_stack_size = stack_size - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
