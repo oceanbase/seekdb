@@ -19,6 +19,7 @@
 #include "ob_weak_read_util.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "logservice/ob_log_service.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"  // for OB_ALL_SERVER_TNAME
 
 #include "ob_tenant_weak_read_cluster_service.h"
 
@@ -152,7 +153,8 @@ int ObTenantWeakReadClusterService::check_leader_info_(int64_t &leader_epoch) co
 }
 
 // Query valid server count SQL
-#define QUERY_ALL_SERVER_COUNT_SQL "select count(1) as cnt from __all_server where status = 'active'"
+// Use OB_ALL_SERVER_TNAME constant to ensure case consistency
+#define QUERY_ALL_SERVER_COUNT_SQL_FMT "select count(1) as cnt from %s where status = 'active'"
 
 void ObTenantWeakReadClusterService::update_valid_server_count_()
 {
@@ -162,7 +164,7 @@ void ObTenantWeakReadClusterService::update_valid_server_count_()
     ObMySQLResult *result = NULL;
     if (OB_ISNULL(mysql_proxy_)) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(sql.assign_fmt(QUERY_ALL_SERVER_COUNT_SQL))) {
+    } else if (OB_FAIL(sql.assign_fmt(QUERY_ALL_SERVER_COUNT_SQL_FMT, OB_ALL_SERVER_TNAME))) {
       LOG_WARN("generate QUERY_ALL_SERVER_COUNT_SQL fail", KR(ret));
     } else if (OB_FAIL(mysql_proxy_->read(res, OB_SYS_TENANT_ID, sql.ptr()))) {
       LOG_WARN("execute sql read fail", KR(ret), K(sql));

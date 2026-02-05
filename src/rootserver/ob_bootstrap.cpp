@@ -34,6 +34,8 @@
 #include "share/inner_table/ob_dump_inner_table_schema.h"
 #include "lib/hash/ob_hashset.h"
 #include "rootserver/ob_partition_creator.h"
+#include "share/system_variable/ob_system_variable_init.h"  // for ObSysVariables
+#include "share/system_variable/ob_sys_var_class_type.h"    // for SYS_VAR_LOWER_CASE_TABLE_NAMES
 
 namespace oceanbase
 {
@@ -1047,8 +1049,10 @@ int ObBootstrap::construct_all_schema(ObSArray<ObTableSchema> &table_schemas, Ob
   } else if (OB_FAIL(ObSchemaUtils::construct_inner_table_schemas(OB_SYS_TENANT_ID,
       table_schemas, allocator, true))) {
     LOG_WARN("failed to construct inner table schemas", KR(ret));
-  } else if (OB_FAIL(ObSchemaUtils::generate_hard_code_schema_version(table_schemas))) {
-    LOG_WARN("failed to generate hard code schema version", KR(ret));
+  } else {
+    if (OB_FAIL(ObSchemaUtils::generate_hard_code_schema_version(table_schemas))) {
+      LOG_WARN("failed to generate hard code schema version", KR(ret));
+    }
   }
 
   BOOTSTRAP_CHECK_SUCCESS();
@@ -1298,7 +1302,38 @@ int ObBootstrap::create_sys_tenant()
     LOG_WARN("check_inner_stat failed", K(ret));
   } else {
     obrpc::ObCreateTenantArg arg;
-    arg.name_case_mode_ = OB_LOWERCASE_AND_INSENSITIVE;
+    
+    // Read lower_case_table_names from system variables instead of hardcoding
+    int64_t var_idx = ObSysVarsToIdxMap::get_store_idx(SYS_VAR_LOWER_CASE_TABLE_NAMES);
+    ObString lower_case_value = ObSysVariables::get_value(var_idx);
+    int64_t case_mode_int = 1; // default to 1 (lowercase insensitive)
+    
+    if (lower_case_value.length() > 0 && lower_case_value.ptr() != NULL) {
+      const char* str = lower_case_value.ptr();
+      int32_t len = lower_case_value.length();
+      
+      // Simple parsing for single digit (0, 1, or 2)
+      if (len == 1 && str[0] >= '0' && str[0] <= '2') {
+        case_mode_int = str[0] - '0';
+      } else {
+        LOG_WARN("invalid lower_case_table_names format, use default", K(lower_case_value));
+      }
+    }
+    
+    if (case_mode_int == 0) {
+      arg.name_case_mode_ = OB_ORIGIN_AND_SENSITIVE;
+    } else if (case_mode_int == 1) {
+      arg.name_case_mode_ = OB_LOWERCASE_AND_INSENSITIVE;
+    } else if (case_mode_int == 2) {
+      arg.name_case_mode_ = OB_ORIGIN_AND_INSENSITIVE;
+    } else {
+      LOG_WARN("invalid lower_case_table_names value, use default", K(case_mode_int));
+      arg.name_case_mode_ = OB_LOWERCASE_AND_INSENSITIVE;
+    }
+    
+    LOG_INFO("set name_case_mode from system variable", 
+             K(lower_case_value), K(case_mode_int), K(arg.name_case_mode_));
+    
     tenant.set_tenant_id(OB_SYS_TENANT_ID);
     tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
 

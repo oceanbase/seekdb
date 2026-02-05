@@ -187,6 +187,30 @@ static int parse_args(int argc, char *argv[], ObServerOptions &opts)
     MPRINT("Failed to create base dir. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
   } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
   }
+  
+  // Read lower_case_table_names from environment variable if not set via command line
+  if (OB_SUCC(ret)) {
+    bool has_lower_case_in_cmdline = false;
+    // Check if lower_case_table_names is already set via command line
+    for (int64_t i = 0; i < opts.variables_.count(); ++i) {
+      if (opts.variables_.at(i).first == "lower_case_table_names") {
+        has_lower_case_in_cmdline = true;
+        break;
+      }
+    }
+    
+    // If not set via command line, try to read from environment variable
+    if (!has_lower_case_in_cmdline) {
+      const char *env_value = getenv("LOWER_CASE_TABLE_NAMES");
+      if (nullptr != env_value && strlen(env_value) > 0) {
+        ObString key("lower_case_table_names");
+        ObString value(env_value);
+        if (OB_FAIL(opts.variables_.push_back(std::make_pair(key, value)))) {
+          MPRINT("Failed to add lower_case_table_names from environment variable, ret=%d", ret);
+        }
+      }
+    }
+  }
 
   return ret;
 }

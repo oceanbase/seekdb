@@ -19,6 +19,7 @@
 #include "share/ob_locality_table_operator.h"
 #include "share/ob_locality_priority.h"
 #include "share/ob_primary_zone_util.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"  // for OB_ALL_SERVER_TNAME, OB_ALL_ZONE_TNAME
 #include "observer/ob_server_struct.h"
 #include "observer/ob_sql_client_decorator.h"
 
@@ -148,9 +149,10 @@ int ObLocalityTableOperator::load_region(const ObAddr &addr,
     bool has_readonly_zone = false;
     (void)addr.ip_to_string(ip_buffer, common::OB_IP_STR_BUFF);
     if (OB_FAIL(sql.assign_fmt("select svr_ip, svr_port, a.zone, info, value, b.name, a.status, a.start_service_time, a.stop_time"
-                               " from __all_server a LEFT JOIN __all_zone b ON a.zone = b.zone"
+                               " from %s a LEFT JOIN %s b ON a.zone = b.zone"
                                " WHERE (b.name = 'region' or b.name = 'idc' or b.name = 'status'"
-                               " or b.name = 'zone_type') and a.zone != '' order by svr_ip, svr_port, b.name")))  {
+                               " or b.name = 'zone_type') and a.zone != '' order by svr_ip, svr_port, b.name",
+                               OB_ALL_SERVER_TNAME, OB_ALL_ZONE_TNAME)))  {
       LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", K(ret), K(sql));

@@ -22,6 +22,8 @@
 #include "observer/ob_server_struct.h"
 #include "observer/ob_server.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
+#include "share/system_variable/ob_system_variable.h"
+#include "share/system_variable/ob_sys_var_class_type.h"
 namespace oceanbase
 {
 namespace share
@@ -119,7 +121,27 @@ int ObServerSchemaService::init_tenant_basic_schema(const uint64_t tenant_id)
 
     ObSimpleSysVariableSchema sys_variable;
     sys_variable.set_tenant_id(tenant_id);
-    sys_variable.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
+    
+    // Read lower_case_table_names from system variables default value
+    int64_t var_idx = ObSysVarsToIdxMap::get_store_idx(SYS_VAR_LOWER_CASE_TABLE_NAMES);
+    ObString lower_case_value = ObSysVariables::get_value(var_idx);
+    ObNameCaseMode name_case_mode = OB_LOWERCASE_AND_INSENSITIVE; // default to 1
+    
+    if (lower_case_value.length() > 0 && lower_case_value.ptr() != NULL) {
+      const char* str = lower_case_value.ptr();
+      if (lower_case_value.length() == 1 && str[0] >= '0' && str[0] <= '2') {
+        int64_t case_mode_int = str[0] - '0';
+        if (case_mode_int == 0) {
+          name_case_mode = OB_ORIGIN_AND_SENSITIVE;
+        } else if (case_mode_int == 1) {
+          name_case_mode = OB_LOWERCASE_AND_INSENSITIVE;
+        } else if (case_mode_int == 2) {
+          name_case_mode = OB_ORIGIN_AND_INSENSITIVE;
+        }
+      }
+    }
+    
+    sys_variable.set_name_case_mode(name_case_mode);
     sys_variable.set_schema_version(OB_CORE_SCHEMA_VERSION);
 
     if (OB_FAIL(schema_mgr_for_cache->add_tenant(tenant))) {
