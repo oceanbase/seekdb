@@ -16,7 +16,6 @@ on:
 
 jobs:
   seekdb:
-    if: ${{ github.repository_owner == 'gy389672' && !github.event.pull_request.draft }}
     name: seekdb
     runs-on: ubuntu-latest
     steps:
