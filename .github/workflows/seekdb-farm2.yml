@@ -1,0 +1,40 @@
+# 示例：在 GitHub 上触发 SeekDB 测试并由 Farm2 执行，结果回写到 OSS 后本 workflow 轮询并回调
+#
+# 使用方式：
+# 1. 将本文件复制到 oceanbase/seekdb 的 .github/workflows/，并把 farm2-client 的 bin/seekdb_wait_result.py 复制到该仓库 .github/scripts/seekdb_wait_result.py
+# 2. 确保 seekdb_robot_for_ob_for_retry.py 在服务器上常驻运行（轮询 GitHub 发现本 job 的 step in_progress 后发 Farm2 任务，结束写 OSS）
+# 3. job 名必须为 seekdb3，且有一个 step 名以 "action by seekdb3" 开头
+#
+name: SeekDB Farm2
+
+on:
+  push:
+    branches: [ develop, master ]
+  pull_request:
+    branches: [ develop, master ]
+  workflow_dispatch:
+
+jobs:
+  seekdb3:
+    name: seekdb3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: action by seekdb3
+        id: seekdb_farm2
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          pip install -q requests
+          python3 .github/script/seekdb_wait_result.py --timeout 14400 --poll-interval 15
+        continue-on-error: true
+
+      - name: Farm2 result
+        if: always()
+        run: |
+          echo "task_id: ${{ steps.seekdb_farm2.outputs.task_id }}"
+          echo "success: ${{ steps.seekdb_farm2.outputs.success }}"
+          if [ "${{ steps.seekdb_farm2.outputs.success }}" != "true" ]; then exit 1; fi
