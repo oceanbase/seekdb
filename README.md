@@ -427,7 +427,7 @@ Edge devices—from mobile to vehicle and industrial terminals—operate with co
 </p>
 
 <p>
-Please refer to the [User Guide](docs/user-guide/README.md) for more details.
+Please refer to the <a href="docs/user-guide/README.md">User Guide</a> for more details.
 </p>
 
 
