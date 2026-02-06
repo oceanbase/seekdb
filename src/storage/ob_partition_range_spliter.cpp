@@ -687,7 +687,7 @@ int ObMultiRangeInfoEstimateContext::on_node_estimate(const ObMicroIndexInfo &in
   total_row_count_ += index_row.get_row_count() >> estimate_factor;
   total_macro_block_count_ += (index_row.get_macro_id() != last_macro_block_id_
                                || index_row.get_block_offset() != last_index_row_in_block_offset_)
-                                  ? max(1ll, index_row.get_macro_block_count() >> estimate_factor)
+                                  ? max(static_cast<int64_t>(1), static_cast<int64_t>(index_row.get_macro_block_count() >> estimate_factor))
                                   : 0;
   last_macro_block_id_ = index_row.get_macro_id();
   last_index_row_in_block_offset_ = index_row.get_block_offset();
