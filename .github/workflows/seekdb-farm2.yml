@@ -16,6 +16,7 @@ on:
 
 jobs:
   seekdb:
+    if: ${{ github.repository_owner == 'oceanbase' && !github.event.pull_request.draft }}
     name: seekdb
     runs-on: ubuntu-latest
     steps:
