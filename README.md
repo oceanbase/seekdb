@@ -426,9 +426,9 @@ Edge devices—from mobile to vehicle and industrial terminals—operate with co
     </a>
 </p>
 
-<p>
-Please refer to the <a href="docs/user-guide/README.md">User Guide</a> for more details.
-</p>
+<br/>
+
+Please refer to the [User Guide](https://www.oceanbase.ai/docs/seekdb-overview/) for more details.
 
 
 </div>
