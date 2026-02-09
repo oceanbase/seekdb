@@ -1,5 +1,5 @@
 # action.yml
-name: 'call SeekDB Farm2 to run task'
+name: 'call seekdb Farm2 to run task'
 description: ''
 inputs:
   pipeline_id:
