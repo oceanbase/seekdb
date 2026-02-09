@@ -50,21 +50,31 @@ struct MachTimeBaseLocal {
     numer_ = timebase.numer;
     denom_ = timebase.denom;
     calibration_interval_mach_ = CALIBRATION_INTERVAL_NS * denom_ / numer_;
-    calibrate();
+    // Do NOT call calibrate() here. Instead, set next_calibrate_mach_ = 0
+    // to force calibration on first use via calibrate_if_needed().
+    // This avoids a uint64_t underflow bug: the constructor is invoked lazily
+    // on first thread_local access, AFTER the caller has already captured
+    // current_mach = mach_absolute_time(). If calibrate() independently reads
+    // mach_absolute_time(), base_mach_time_ becomes newer than the caller's
+    // current_mach, causing (current_mach - base_mach_time_) to underflow.
+    base_wall_time_us_ = 0;
+    base_mach_time_ = 0;
+    next_calibrate_mach_ = 0;
   }
 
-  void calibrate() {
+  // Calibrate using the caller's mach time to guarantee
+  // base_mach_time_ <= current_mach (no underflow possible).
+  void calibrate(uint64_t current_mach) {
     struct timeval tv;
     gettimeofday(&tv, nullptr);
-    uint64_t mach_now = mach_absolute_time();
     base_wall_time_us_ = tv.tv_sec * 1000000LL + tv.tv_usec;
-    base_mach_time_ = mach_now;
-    next_calibrate_mach_ = mach_now + calibration_interval_mach_;
+    base_mach_time_ = current_mach;
+    next_calibrate_mach_ = current_mach + calibration_interval_mach_;
   }
 
   void calibrate_if_needed(uint64_t current_mach) {
     if (OB_UNLIKELY(current_mach >= next_calibrate_mach_)) {
-      calibrate();
+      calibrate(current_mach);
     }
   }
 };
