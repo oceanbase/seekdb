@@ -175,19 +175,23 @@ void read_single_column_chunk() {
 class ObParquetAllocator : public ::arrow::MemoryPool
 {
 public:
+  ObParquetAllocator() : total_alloc_size_(0), total_hold_size_(0), num_allocations_(0) {}
 
   /// Allocate a new memory region of at least size bytes.
   ///
   /// The allocated region shall be 64-byte aligned.
-  virtual arrow::Status Allocate(int64_t size, uint8_t** out) override
+  virtual arrow::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override
   {
     arrow::Status ret = arrow::Status::OK();
-    void *buf = alloc_.alloc_aligned(size, 64);
+    void *buf = alloc_.alloc_aligned(size, alignment);
     if (OB_ISNULL(buf)) {
       ret = arrow::Status::Invalid("allocate memory failed");
     } else {
       *out = static_cast<uint8_t*>(buf);
     }
+    ++num_allocations_;
+    total_alloc_size_ += size;
+    total_hold_size_ += size;
     std::cout << "Allocing : " << size << std::endl;
     return arrow::Status::OK();
   }
@@ -196,10 +200,11 @@ public:
   ///
   /// As by default most default allocators on a platform don't support aligned
   /// reallocation, this function can involve a copy of the underlying data.
-  virtual arrow::Status Reallocate(int64_t old_size, int64_t new_size, uint8_t** ptr)
+  virtual arrow::Status Reallocate(int64_t old_size, int64_t new_size, int64_t alignment,
+                                   uint8_t **ptr) override
   {
     std::cout << "Reallocing : " << old_size << ',' << new_size << std::endl;
-    return Allocate(new_size, ptr);
+    return Allocate(new_size, alignment, ptr);
   }
 
   /// Free an allocated region.
@@ -208,7 +213,9 @@ public:
   /// @param size Allocated size located at buffer. An allocator implementation
   ///   may use this for tracking the amount of allocated bytes as well as for
   ///   faster deallocation if supported by its backend.
-  virtual void Free(uint8_t* buffer, int64_t size) {
+  virtual void Free(uint8_t* buffer, int64_t size, int64_t alignment) override
+  {
+    UNUSED(alignment);
     std::cout << "Freed : " << size << std::endl;
     alloc_.free(buffer);
   }
@@ -222,11 +229,22 @@ public:
     std::cout << "ReleaseUnused" << std::endl;
   }
 
+  virtual int64_t total_bytes_allocated() const override
+  {
+    std::cout << "total_bytes_allocated()" << std::endl;
+    return total_alloc_size_;
+  }
+  virtual int64_t num_allocations() const override
+  {
+    std::cout << "num_allocations()" << std::endl;
+    return num_allocations_;
+  }
+
   /// The number of bytes that were allocated and not yet free'd through
   /// this allocator.
   virtual int64_t bytes_allocated() const override {
     std::cout << "bytes_allocated()" << std::endl;
-    return alloc_.total();
+    return total_hold_size_;
   }
 
   /// Return peak memory allocation in this memory pool
@@ -239,6 +257,9 @@ public:
   virtual std::string backend_name() const override { return "Parquet"; }
 private:
   ObArenaAllocator alloc_;
+  int64_t total_alloc_size_;
+  int64_t total_hold_size_;
+  int64_t num_allocations_;
   arrow::internal::MemoryPoolStats stats_;
 };
 
