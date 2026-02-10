@@ -1,4 +1,4 @@
-name: SeekDB Farm2
+name: seekdb Farm2
 
 on:
   pull_request:

@@ -170,7 +170,7 @@ def get_task_res(oss_proxy: OssProxy, github_pipeline_id):
 def main(pipeline_id, project, timeout):
     print("create a new task")
     print("working....")
-    logo = text2art('SeekDB Farm2')
+    logo = text2art('seekdb Farm2')
     print(logo)
     oss_proxy = OssProxy("https://obfarm-ce.oss-cn-hongkong.aliyuncs.com")
     github_proxy = GithubProxy()
