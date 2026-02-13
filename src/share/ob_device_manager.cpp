@@ -244,6 +244,18 @@ int parse_storage_info(common::ObString storage_type_prefix, ObIODevice*& device
     device_type = OB_STORAGE_AZBLOB;
     mem = allocator.alloc(sizeof(ObObjectDevice));
     if (NULL != mem) {new(mem)ObObjectDevice;}
+  } else if (storage_type_prefix.prefix_match(OB_OSS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
+    OB_LOG(WARN, "OSS storage is not supported", K(ret), K(storage_type_prefix));
+  } else if (storage_type_prefix.prefix_match(OB_COS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "COS storage");
+    OB_LOG(WARN, "COS storage is not supported", K(ret), K(storage_type_prefix));
+  } else if (storage_type_prefix.prefix_match(OB_HDFS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
+    OB_LOG(WARN, "HDFS storage is not supported", K(ret), K(storage_type_prefix));
   } else {
     ret = OB_INVALID_BACKUP_DEST;
     OB_LOG(WARN, "invaild device name info!", K(storage_type_prefix));

@@ -295,6 +295,18 @@ int ObBackupWrapperIODevice::parse_storage_device_type_(
     device_type = OB_STORAGE_S3;
   } else if (storage_type_prefix.prefix_match(OB_AZBLOB_PREFIX)) {
     device_type = OB_STORAGE_AZBLOB;
+  } else if (storage_type_prefix.prefix_match(OB_OSS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
+    LOG_WARN("OSS storage is not supported", K(ret), K(storage_type_prefix));
+  } else if (storage_type_prefix.prefix_match(OB_COS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "COS storage");
+    LOG_WARN("COS storage is not supported", K(ret), K(storage_type_prefix));
+  } else if (storage_type_prefix.prefix_match(OB_HDFS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
+    LOG_WARN("HDFS storage is not supported", K(ret), K(storage_type_prefix));
   } else {
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("invaild device name info!", K(storage_type_prefix));

@@ -1119,7 +1119,24 @@ int ObDDLResolver::resolve_file_prefix(ObString &url, ObSqlString &prefix_str, c
   if (!tmp_prefix.empty()) {
     OZ (get_storage_type_from_name(tmp_prefix.ptr(), device_type));
   }
-  if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE) {
+  if (OB_FAIL(ret)) {
+    // do nothing
+  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE
+      && !tmp_prefix.empty() && 0 == strcmp(tmp_prefix.ptr(), "OSS")) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
+    LOG_WARN("OSS storage is not supported", K(ret));
+  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE
+      && !tmp_prefix.empty() && 0 == strcmp(tmp_prefix.ptr(), "COS")) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "COS storage");
+    LOG_WARN("COS storage is not supported", K(ret));
+  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE
+      && !tmp_prefix.empty() && 0 == strcmp(tmp_prefix.ptr(), "HDFS")) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
+    LOG_WARN("HDFS storage is not supported", K(ret));
+  } else if (device_type == common::ObStorageType::OB_STORAGE_MAX_TYPE) {
     device_type = common::ObStorageType::OB_STORAGE_FILE;
     if (url.empty()) {
       ret = OB_DIR_NOT_EXIST;
