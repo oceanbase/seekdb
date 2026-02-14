@@ -1,0 +1,21 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+--result_format 3
+#owner:yibo.tyf
+#owner group: sql1
+# tags: optimizer
+## bug
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(a int, b int, c int);
+--disable_query_log
+insert into t1 values (1,1,1),(2,2,2),(3,3,3);
+--enable_query_log
+
+--result_format 4
+--explain_protocol 2
+select * from (select * from t1 where t1.a = t1.b order by t1.a) t2 order by t2.a;
+select * from (select * from t1 where t1.a = t1.b order by t1.a) t2 order by t2.a, t2.b;

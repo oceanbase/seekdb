@@ -1,0 +1,585 @@
+#owner: ht353245
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of array ddl/dml.
+--echo # ----------------------------------------------------------------------
+
+--disable_warnings
+drop table if exists t1, t2, t3, t4;
+--enable_warnings
+
+create table t1(c1 array(int), c2 array(varchar(256)), c3 array(bigint), c4 array(TINYINT), c5 array(float), c6 array(double),
+                c7 array(SMALLINT));
+desc t1;
+create table t2(c1 array(array(int)), c2 array(array(varchar(256))), c3 array(array(bigint)), c4 array(array(TINYINT)),
+                c5 array(array(bool)), c6 array(array(TINYINT)), c7 array(array(float)), c8 array(array(double)));
+desc t2;
+
+create table t3(c1 int[], c2 varchar(256)[], c3 bigint[], c4 TINYINT[], c5 float[], c6 double[], c7 SMALLINT[]);
+desc t3;
+create table t4(c1 int[][], c2 varchar(256)[][], c3 bigint[][], c4 TINYINT[][], c5 float[][], c6 double[][], c7 SMALLINT[][]);
+desc t4;
+drop table t3, t4;
+
+create table t3(c1 int);
+alter table t3 add column c2 array(varchar(256));
+--error 1235
+alter table t3 add column c3 array(array(TIMESTAMP(6)));
+--error 1138
+alter table t3 add column c3 array(int) not null;
+--error 1138
+alter table t3 add column c3 vector(2) not null;
+desc t3;
+alter table t3 drop column c2;
+desc t3;
+create table t4 (id int, c2 int[] not null, c3 int[]);
+insert into t4 values (1, [1], NULL);
+--error 1138
+alter table t4 modify c2 float[] not null;
+--error 1138
+alter table t4 modify c3 float[] not null;
+
+drop table t1, t2, t3, t4;
+
+create table t1(id int,c varchar(10),a array(int),v vector(2));
+insert into t1 values(1,'test1',[1,2],[3,4]);
+--error 5083
+select [c,a] from t1;
+--error 5083
+select [a,c] from t1;
+--error 5083
+select [c,v] from t1;
+--error 5083
+select [v,c] from t1;
+drop table t1;
+
+# array depth
+create table t1 (c1 int[][][][][][]);
+desc t1;
+insert into t1 values ([[[[[[1,2,3],[4,5,6]]]]]]);
+select * from t1;
+drop table t1;
+# depth > 6 is not supported
+--error 1235
+create table t1 (c1 int[][][][][][][]);
+--error 5083
+CREATE TABLE t1 (c1 int PRIMARY KEY, c2 set('A','[1]','W','12','999','NULL','中文'),c3 vector(3) as (c2));
+--error 5083
+CREATE TABLE t1 (c1 int PRIMARY KEY, c2 enum('A','[1]','W','12','999','NULL','中文'),c3 vector(3) as (c2));
+select [[[[[[1,2], [3,4], [5,6]], [[12], [3,4], [5,6]]]]]];
+--error 1235
+select [[[[[[[1,2], [3,4], [5,6]], [[12], [3,4], [5,6]]]]]]];
+
+# array type dml array<int>/array<float>
+--disable_warnings
+drop table if exists arr_t1;
+--enable_warnings
+create table arr_t1(c1 array(int), c2 array(bigint), c3 array(float), c4 array(double));
+select * from arr_t1;
+insert into arr_t1 values(array(1, 2, 3, 4, 5),
+                          array(8589934592, 8592031744, 8592033792, 8592164864),
+                          array(52314.234657, 5.123123, 0.0000000234, 10000),
+                          array(52314.234657, 5.123123, 0.0000000234, 10000));
+insert into arr_t1 values(array(1.55, 2.23, 323.689, 4.88888, 5.0),
+                          array(1.55, 2.23, 323.689, 4.88888, 5.0),
+                          array(8589934592, 8592031744, 8592033792, 8592164864),
+                          array(1, 2, 3, 4, 5));
+--error 1366
+insert into arr_t1(c1) values(['']);
+--error 1366
+insert into arr_t1(c2) values(['']);
+--error 1265
+insert into arr_t1(c3) values(['']);
+--error 1265
+insert into arr_t1(c4) values(['']);
+select * from arr_t1;
+drop table arr_t1;
+
+
+# vector type
+--disable_warnings
+drop table if exists vector_t1;
+--enable_warnings
+create table vector_t1(c1 array(float), c2 vector(4), c3 array(double));
+insert into vector_t1 values([5, 5.11111, 5.0, 5.888888, 57584], [5, 5.11111, 5.0, 5.888888], [5, 5.11111, 5.0, 5.888888, 57584]),
+                            ([5.11111, 5.0, 5.888888], "[5, 5.11111, 5.0, 5.888888]", [5.11111, 5.0, 5.888888]),
+                            ([5.11111, 5.0, 5.888888], '[5, 5.11111, 5.0, 5.888888]', [5.11111, 5.0, 5.888888]),
+                            ([5.0], [5.11111, 5.0, 5, 5.888888], [5.0]);
+insert into vector_t1(c1) values([57584]);
+insert into vector_t1 values(null, null, null);
+--error 7600
+insert into vector_t1(c2) values([57584]);
+--error 7600
+insert into vector_t1(c2) values([57584, 1, 2]);
+insert into vector_t1(c2) values([57584, 1, 2, 3.14159]);
+--error 7600
+insert into vector_t1(c2) values("[57584, 1, 2]");
+insert into vector_t1(c2) values("[57584, 1, 2, 3.14159]");
+--error 1210
+insert into vector_t1(c2) values("[57");
+--error 1210
+insert into vector_t1(c2) values("[57,");
+--error 1210
+insert into vector_t1(c2) values("[-");
+insert into vector_t1(c3) values("[1, NULL, 3.14159]");
+insert into vector_t1(c3) values("[1, null, 3.14159]");
+--error 7600
+insert into vector_t1 values([5, 5.11111, 5.0, 5.888888, 57584], "[5, 5.11111, 5.888888]", [5, 5.11111, 5.0, 5.888888, 57584]);
+select * from vector_t1;
+--error 1210
+select * from vector_t1 where cast((any_value("[4")) in (c2) AS TIME);
+drop table vector_t1;
+
+# array with null value
+
+create table arr_t1(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t1 values(1, [5, 2, null, 5], [2.1, 3.2, 4.3], [2.111144455, 3.444555666, null]);
+insert into arr_t1 values(2, [null, 2, 3, 5], [2.1, 3.2, 4.3], [null, 2.111144455, 3.444555666, null]);
+insert into arr_t1 values(3, [null, "2", "3", "5"], ["2.1", "3.2", "4.3"], [null, "2.111144455", "3.444555666", null]);
+--error 1366
+insert into arr_t1 values(3, [null, "a", "3", "5"], ["2.1", "3.2", "4.3"], [null, "2.111144455", "3.444555666", null]);
+select * from arr_t1;
+update arr_t1 set vec1=[1,7,1] where c1=2;
+update arr_t1 set vec1='[1,7,1]' where c1=1;
+select * from arr_t1;
+delete from arr_t1 where c1=2;
+select * from arr_t1;
+drop table arr_t1;
+
+# ctas
+create table arr_t1(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t1 values(1, [5, 2, null, 5], [2.1, 3.2, 4.3], [2.111144455, 3.444555666, null]);
+insert into arr_t1 values(2, [null, 2, 3, 5], [2.1, 3.2, 4.3], [null, 2.111144455, 3.444555666, null]);
+insert into arr_t1(vec1) select [3.14159, 5.88, 4.88];
+create table arr_t2(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t2 select * from arr_t1;
+select * from arr_t2;
+
+--disable_warnings
+drop table if exists arr_t2, arr_t3;
+drop view if exists arr_v1;
+--enable_warnings
+
+create table arr_t2 as select * from arr_t1;
+desc arr_t2;
+select * from arr_t2;
+select arr1, vec1, arr2 from arr_t2;
+create table arr_t3 as select vec1 from arr_t1;
+desc arr_t3;
+insert into arr_t3 select vec1 from arr_t1 where c1 = 1;
+select * from arr_t3;
+create view arr_v1 as select * from arr_t1;
+desc arr_v1;
+select * from arr_v1;
+select vec1 from arr_v1;
+drop table arr_t1;
+drop table arr_t2;
+drop table arr_t3;
+drop view arr_v1;
+
+# default value: blob column can"t have a default value
+--error ER_BLOB_CANT_HAVE_DEFAULT
+create table arr_t1(c1 int, c2 vector(4) default "[3.14, 4.56, 7.88, 9.777]");
+
+# varchar array
+select ["hello", "world", null, "hi"];
+create table arr_t1(c1 int, c2 array(varchar(16)));
+insert into arr_t1 values(1, ["hello", "world", null, "hi"]);
+insert into arr_t1 values(2, [null, "hello", "world", "hi"]);
+insert into arr_t1 values(3, ["hello", "world", "hi", null]);
+insert into arr_t1 values(4, ["hello", "蚂蚁", "hi", null]);
+insert into arr_t1 values(5, ["hello", "worldddddddddddd", "hi", null]);
+--error 1406
+insert into arr_t1 values(6, ["hello", "worlddddddddddddd", "hi", null]);
+select * from arr_t1;
+drop table arr_t1;
+
+create table arr_t1(c1 int, c2 array(varchar(2)));
+insert into arr_t1 values(1, ['ab', 'c']);
+--error 1406
+insert into arr_t1 values(1, ['ab', 'csdf']);
+select * from arr_t1;
+drop table arr_t1;
+
+--error 1074
+CREATE TABLE arr_t1 (c1 int primary key, c2 int[],c3 float[],c4 varchar(2560000000000000000)[]);
+
+# nested array
+
+create table arr_t1(c1 int, c2 array(array(varchar(16))), c3 array(array(float)), c4 array(array(array(double))));
+insert into arr_t1 values(1, [["hello", "world"], [null, "hi"]],
+                             [[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]],
+                             [[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]);
+insert into arr_t1 values(2, [null, [null, "hi"]],
+                             [[5.55, 7.87, 44], null, [null, 3.1415, 289.33]],
+                             [[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], null]);
+insert into arr_t1 values(3, [null, [null, null]],
+                             [null, null, [null, null, null]],
+                             [[[null]]]);
+insert into arr_t1 values(3, [null, [null, null]],
+                             [null, null, [null, null, null]],
+                             [[null,[null]]]);
+--error 7602
+insert into arr_t1 values(3, [null, [null, null]],
+                             [null, null, [null, null, null]],
+                             [null]);
+insert into arr_t1 values(4, [["hello", "world"], [null, "hi"]],
+                             [[5, 7, 44], [66, 123, null], [null, 31415, 28933]],
+                             [[[100, 314, 456, 788], [555, 787, 44]], [[null, 31415, 28933],[2115, 3444, null]]]);
+
+# cast array(num) to array(array(num)) isn"t allowed
+--error 7602
+insert into arr_t1(c3) values([[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]);
+--error 7602
+insert into arr_t1(c4) values([[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]]);
+# cast array(num) to array(string) is allowed
+insert into arr_t1(c1, c2) values(5, [[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]]);
+
+# cast array(string) to array(num) is allowed
+insert into arr_t1(c1, c3) values(6, [["5.55", "7.87", "44"], ["66", "123.67", null], [null, "3.1415", "289.33"]]);
+
+insert into arr_t1 values(7, "[[\"hello\", \"world\"], [null, \"hi\"]]",
+                             "[[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]]",
+                             "[[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]");
+
+
+select * from arr_t1;
+drop table arr_t1;
+
+# alter table change column type
+create table arr_t1(c1 vector(3), c2 array(float), c3 int, c4 varchar(64));
+insert into arr_t1(c1, c2) values ('[1,2,3]', [1.33, 2.77, 4.88]);
+--error 7600
+alter table arr_t1 modify c1 vector(4);
+alter table arr_t1 modify c2 vector(3);
+select * from arr_t1;
+alter table arr_t1 modify c2 array(int);
+select * from arr_t1;
+--error 7602
+alter table arr_t1 modify c2 array(array(int));
+alter table arr_t1 modify c2 array(varchar(64));
+select * from arr_t1;
+alter table arr_t1 modify c2 array(int);
+select * from arr_t1;
+alter table arr_t1 add column c5 array(float) GENERATED ALWAYS AS ( ltrim( c3 / c4 ) ) STORED;
+desc arr_t1;
+drop table arr_t1;
+
+# not supported case
+create table arr_t1(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t1 values(1, [5, 2, null, 5], [2.1, 3.2, 4.3], [2.111144455, 3.444555666, null]);
+insert into arr_t1 values(2, [null, 2, 3, 5], [2.1, 3.2, 4.3], [null, 2.111144455, 3.444555666, null]);
+insert into arr_t1 values(3, [1, 2, 3, 5], [2.1, 3.2, 4.3], [1.23, 2.111144455, 3.444555666, 4.57]);
+insert into arr_t1 values(2, [5, 8, 7, 5], [9.1, 2.2, 3.3], [7.23, 8.111144455, 3.444555666, 7.57]);
+insert into arr_t1 values(1, [6, 5, 8, 2], [1.1, 2.2, 3.3], [4.76, 11.1144455, 4.68, 7.57]);
+insert into arr_t1(vec1) select [3.14159, 5.88, 4.88];
+--error 5083
+select distinct vec1 + [1,1,1]  from arr_t1;
+--error 5083
+select c1 from arr_t1 group by arr1;
+--error 5083
+select c1 from arr_t1 order by arr1;
+--error 1235
+select sum(arr1) from arr_t1;
+--error 1210
+select max(arr1) from arr_t1;
+--error 1210
+select min(arr1) from arr_t1;
+drop table arr_t1;
+
+--disable_warnings
+DROP TABLE if exists t1, t2;
+drop materialized view if exists mv1, mv2;
+--enable_warnings
+
+CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t1 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t1 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+create materialized view mv1  parallel 2 refresh complete on demand  as select * from t1;
+
+#select c1, c2 from mv1 union select c1,c2 from t1 order by c1;
+#select /*+parallel(2)*/c1, c2 from mv1 union select c1,c2 from t1 order by c1;
+drop table t1;
+drop materialized view mv1;
+
+CREATE TABLE t2 (c1 int primary key, c2 array(int),c3 array(int) ,c4 array(int));
+insert into t2 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t2 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t2 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t2 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t2 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+create materialized view mv2  parallel 2 refresh complete on demand  as select * from t2;
+
+#select c1, c2 from mv2 union select c1, c2 from t2 order by c1;
+#select /*+parallel(2)*/ c1, c2 from t2 union select c1, c2 from t2 order by c1;
+drop table t2;
+drop materialized view mv2;
+
+CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+select * from t1 order by l2_distance(c2,'[2,3,1.5]'),l2_distance(c3,'[2,10,2.5]');
+
+CREATE TABLE t2 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3));
+insert into t2 select c1,c2,c3,c4 from t1;
+--error 5083
+select /*+NO_USE_HASH_SET(@"SET$1")*/* from t1 union  select * from t2 order by c1;
+update t1 set c4 = (select sum(c3) from t1), c3 = (select avg(c4) from t1)  where c1 = 3;
+select * from t1;
+drop table t1;
+drop table t2;
+
+CREATE TABLE t1(c1 TINYINT[], c2 SMALLINT[], c3 INT[]);
+INSERT INTO t1 VALUES([-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72]);
+
+CREATE TABLE t2(c1 INT[], c2 TINYINT[], c3 SMALLINT[]);
+INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+SELECT * from t2;
+
+drop table t1;
+drop table t2;
+
+CREATE TABLE t2 (c1 int primary key, c2 array(int),c3 array(int));
+insert into t2 values(1,'[1,1,2]','[2,2,3]');
+insert into t2 values(1,'[1,1,2]','[2,2,3]') on duplicate key update c2 = values(c3), c3 = values(c2);
+select * from t2;
+drop table t2;
+
+# generate column
+create table t1(c1 float[], c2 TINYINT[] generated always as (c1 + [2, 3, 4]) stored);
+show create table t1;
+insert into t1(c1) values([1,2,3]), ([1.2, 3.4, 5.6]);
+select * from t1;
+drop table t1;
+
+CREATE TABLE t1 (c1 smallint(5) unsigned NOT NULL DEFAULT '7252', c2 varbinary(467) NOT NULL, c4 tinyblob DEFAULT NULL);
+alter table t1 add column ( c3 float [] GENERATED ALWAYS AS ( ltrim( c1 / c2 ) ) STORED );
+--error 1235
+alter table t1 modify c3 float [] GENERATED ALWAYS AS ( ltrim( c4 / c2 ) ) STORED;
+drop table t1;
+
+# corner cases
+
+select [null];
+select [18446744073709551615];
+select [null, null, null];
+select [null, null, 3.33];
+select [null, null, "hello"];
+select [[1,2], [null]];
+select [[null]];
+select [null, 3.33, 12];
+select [3.33, null, 12];
+select [null, null, 12, 3.33];
+select [false, 1, true];
+select [false, true, 1];
+select [false, 3.33, true];
+select [3.33, true, false];
+select [true, true, false];
+select [1,null,'',null,3];
+select [null, 1, null, '', 3];
+select vector_dims(array(true, 1, false));
+select vector_dims(array(true, true, 0));
+select vector_dims([false, 1, true]);
+select vector_dims([false, true, 1]);
+select vector_dims([false, true, false]);
+
+# bugfix: 2024111400105116548
+--disable_warnings
+drop table if exists tt1, tt2;
+--enable_warnings
+create table tt1(c1 int unsigned, c2 tinyint unsigned ,c3 smallint unsigned ,c4 bigint unsigned);
+insert into tt1 values(1,2,3,4);
+select [c1] from tt1;
+select [c2] from tt1;
+select array(c3) from tt1;
+select array(c4) from tt1;
+create table tt2 as select [c2] from tt1;
+desc tt2;
+drop table tt1, tt2;
+
+# bugfix: 2024111400105120115
+--disable_warnings
+drop table if exists tt1, tt2, tt3;
+--enable_warnings
+create table tt1(c1 FLOAT unsigned, c2 double unsigned);
+insert into tt1 values(1.1, 2.2);
+select [c1], [c2] from tt1;
+select array(c1), array(c2) from tt1;
+select array_append([c1], c1), array_append([c2], c2) from tt1;
+create table tt2 as select [c1], [c2] from tt1;
+desc tt2;
+create table tt3 (id int, c1 array(float unsigned), c2 array(double unsigned), c3 array(array(float unsigned)), c4 array(array(double unsigned)));
+desc tt3;
+insert into tt3 values (1, [1.1], [2.2], [[3.3]], [[4.4]]);
+select * from tt3;
+select array_append(c1, 1.2), array_append(c2, 2.2), array_append(c3, [3.3]), array_append(c4, [4.4]) from tt3;
+drop table tt1, tt2, tt3;
+
+# bugfix: 2024112600105283674
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+create table test(id int,a varchar(100));
+insert into test values(1,'["test"]');
+insert into test values(2,'"');
+insert into test values(3,'""');
+insert into test values(4,'t"');
+insert into test values(5,'"t');
+select array_agg(a) from test;
+select [a] from test;
+drop table test;
+
+# bugfix: 2024112000105216932
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+create table test(c array(bigint unsigned));
+# 18446744073709551615 is UINT64_MAX
+insert into test values([18446744073709551615]);
+# 9223372036854775807 is INT64_MAX
+insert into test values([1, 9223372036854775807]);
+--error 1264 # not expected
+insert into test values([1, 9223372036854775808]);
+--error 1264
+insert into test values([-1, 9223372036854775807]);
+--error 1264
+insert into test values([-1, 9223372036854775808]);
+select * from test;
+drop table test;
+
+# bugfix 2024120400105925177
+create table test (c1 varchar(262144));
+desc test;
+drop table test;
+--error 1074
+create table test (c1 varchar(262145));
+
+# bugfix 2024121900106562767
+create table test as select ['中文',1] from dual;
+desc test;
+
+# bugfix 2024120300105845481
+--disable_warnings
+drop table if exists tt1, tt2;
+--enable_warnings
+create table tt1(id int, c1 varchar(5), c2 array(varchar(50)), c3 vector(3));
+insert into tt1 values(1, 'abc', ['abc'], [1,2,3]);
+create table tt2 as (select [c1] from tt1);
+desc tt2;
+drop table tt2;
+create table tt2 as (select c2 from tt1);
+desc tt2;
+drop table tt2;
+create table tt2 as (select [c3] from tt1);
+desc tt2;
+drop table tt2;
+create table tt2 as select array_agg('ocean');
+desc tt2;
+insert into tt2 values(["test"]);
+drop table tt2;
+create table tt2 as select array_agg(c1) from tt1;
+desc tt2;
+drop table tt1, tt2;
+
+# bugfix 2024112000105220586
+--error 1235
+create table tt1 (c1 array(varbinary(50)));
+--error 1235
+create table tt1 (c1 array(binary(50)));
+create table tt1 (c1 varbinary(50), c2 binary(50));
+insert into tt1 values ('abc', 'abc');
+insert into tt1 values ('A', 'A');
+--error 1235
+select [c1] from tt1;
+--error 1235
+select [c2] from tt1;
+--error 1235
+select array_agg(c1) from tt1;
+--error 1235
+select array_agg(c2) from tt1;
+--error 1235
+select array_map(x -> (c1) , [1]) from tt1;
+--error 1235
+select array_map(x -> (c2) , [1]) from tt1;
+drop table tt1;
+
+# bugfix
+
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+
+create table test(v vector(2),c1 float[],c2 int[],c3 varchar(50)[]);
+insert into  test values([1,3],[1,3],[1,3],['1','3']);
+insert into  test values([1,3],[1,3],[1,3],['test','test']);
+select [v,c1,c2,c3] from test;
+select [[v,c1,c2,c3]] from test;
+
+select [[v],[c1],[c2],[c3]] from test;
+select [[[v]],[[c1]],[[c2]],[[c3]]] from test;
+
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+
+# bugfix: 2025020800107160909
+select [array_remove([1],1),null ,[1,2]];
+select [null,array_remove([1],1),[1,2]];
+select [null,[1,2],array_remove([1],1)];
+select [array_remove([1],1),null ,['a','b']];
+select [null,array_remove([1],1),['a','b']];
+select [null,['a','b'],array_remove([1],1)];
+
+# bugfix: 2025021800107249477
+create table test (id int, c1 int[], c2 int[][], c3 int[][][]);
+--error 4152
+insert into test(c1) values ('');
+insert into test(c1) values ('[]');
+--error 7602
+insert into test(c1) values ('[[]]');
+--error 7602
+insert into test(c1) values ('[[],[]]');
+--error 7602
+insert into test(c2) values ('[]');
+insert into test(c2) values ('[[]]');
+insert into test(c2) values ('[[],[]]');
+--error 7602
+insert into test(c2) values ('[[[]]]');
+--error 7602
+insert into test(c2) values ('[[],[[]]]');
+--error 7602
+insert into test(c3) values ('[[]]');
+insert into test(c3) values ('[[[]]]');
+--error 7602
+insert into test(c3) values ('[[[[]]]]');
+drop table test;
+
+# bugfix: 2025072500110139170
+create table test(arr ARRAY(FLOAT), c1 int, c2 float, c3 decimal(3,3), c4 bit(20), c5 geometry, c6 roaringbitmap, c7 json);
+--error 5083
+select * from test where arr = c1;
+--error 5083
+select * from test where arr = c2;
+--error 5083
+select * from test where arr = c3;
+--error 5083
+select * from test where arr = c4;
+--error 5083
+select * from test where arr = c5;
+--error 5083
+select * from test where arr = c6;
+--error 5083
+select * from test where arr = c7;
+drop table test;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 bigint unsigned[]);
+insert into t1 values('[9223372036854775809,18446744073709551614,18446744073709551615]');
+select * from t1;
+drop table t1;

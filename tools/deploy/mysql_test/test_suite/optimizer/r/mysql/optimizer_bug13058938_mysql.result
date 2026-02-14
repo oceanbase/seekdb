@@ -1,0 +1,55 @@
+result_format: 3
+drop table if exists t1, t2;
+create table t1 (c1 int, c2 int, primary key(c1, c2));
+create table t2 (d1 int, primary key(d1));
+insert into t1 values (3, 3), (3, 7), (3, -20), (4, 4), (5, 5), (7,7);
+insert into t2 values (3), (4), (5), (7);
+select /*+ leading(t1 t2) use_merge(t1 t2) */ * from t1, t2 where t1.c2 = t2.d1 and t1.c1 = t2.d1;
++----+----+----+
+| c1 | c2 | d1 |
++----+----+----+
+|  3 |  3 |  3 |
+|  4 |  4 |  4 |
+|  5 |  5 |  5 |
+|  7 |  7 |  7 |
++----+----+----+
+select /*+ leading(t1 t2) use_hash(t1 t2) */ * from t1, t2 where t1.c2 = t2.d1 and t1.c1 = t2.d1;
++----+----+----+
+| c1 | c2 | d1 |
++----+----+----+
+|  3 |  3 |  3 |
+|  4 |  4 |  4 |
+|  5 |  5 |  5 |
+|  7 |  7 |  7 |
++----+----+----+
+select /*+ leading(t1 t2) use_nl(t1 t2) */ * from t1, t2 where t1.c2 = t2.d1 and t1.c1 = t2.d1;
++----+----+----+
+| c1 | c2 | d1 |
++----+----+----+
+|  3 |  3 |  3 |
+|  4 |  4 |  4 |
+|  5 |  5 |  5 |
+|  7 |  7 |  7 |
++----+----+----+
+explain select /*+ leading(t1 t2) use_merge(t1 t2) */ * from t1, t2 where t1.c2 = t2.d1 and t1.c1 = t2.d1;
+Query Plan
+=================================================
+|ID|OPERATOR         |NAME|EST.ROWS|EST.TIME(us)|
+-------------------------------------------------
+|0 |MERGE JOIN       |    |4       |6           |
+|1 |├─TABLE FULL SCAN|t1  |4       |3           |
+|2 |└─TABLE FULL SCAN|t2  |4       |3           |
+=================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.d1]), filter(nil), rowset=16
+      equal_conds([t1.c2 = t2.d1]), other_conds(nil)
+      merge_directions([ASC])
+  1 - output([t1.c1], [t1.c2]), filter([t1.c2 = t1.c1]), rowset=16
+      access([t1.c1], [t1.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.c1], [t1.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t2.d1]), filter(nil), rowset=16
+      access([t2.d1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t2.d1]), range(MIN ; MAX)always true

@@ -1,0 +1,53 @@
+#owner: lana.lgx
+#owner group: data
+
+#1: non-PDML update
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int primary key,
+  name varchar(10),
+  age int
+);
+
+# create mlog on base table
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+
+# insert data to empty base table
+insert into t1 values (1, 'Lucy', 21), (2, 'Tommy', 24), (3, 'Jack', 30), (4, 'May', 22), (5, 'Rose', 23), (6, 'Grace', 34), (7, 'Nancy', 24), (8, 'Jones', 32), (9, 'Jerry', 23), (10, 'Marry', 25);
+
+select age from t1;
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+
+# update data
+update t1 set age=age+10 where age < 25;
+
+select age from t1;
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+
+#2: PDML-update
+#update /*+ enable_parallel_dml parallel(3) */ t1 set age=age-10;
+update t1 set age=age-10;
+
+select age from t1;
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+
+#3: update within a transaction
+set autocommit=off;
+# start transaction
+begin;
+update t1 set age=age+100;
+select age from t1;
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+# rollback transaction
+rollback;
+select age from t1;
+select dmltype$$, old_new$$, id, age from mlog$_t1;
+
+# cleanup
+drop materialized view log on t1;
+drop table t1;

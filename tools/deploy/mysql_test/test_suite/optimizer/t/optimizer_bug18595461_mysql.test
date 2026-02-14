@@ -1,0 +1,22 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner:yibo.tyf
+#owner group: sql1
+# tags: optimizer
+#bug
+
+--disable_warnings
+drop table if exists test_conv_varchar;
+--enable_warnings
+
+create table test_conv_varchar(c1 varchar(20), c2 varchar(26));
+insert into test_conv_varchar values ('aaa', 'bbbbb');
+insert into test_conv_varchar values ('baa', '1;aslfa;ldfa;lsdfj20a;sd26');
+
+--result_format 4
+--explain_protocol 2
+--error 1406
+update test_conv_varchar set c1=c2;
+update test_conv_varchar set c1=c2 where length(c2)<=20;
+update test_conv_varchar set c1=c2 where c1 in (select c1 from test_conv_varchar where length(c2)<=20);

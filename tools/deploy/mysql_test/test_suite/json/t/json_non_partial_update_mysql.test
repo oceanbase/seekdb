@@ -1,0 +1,516 @@
+# owner: aozeliu.azl
+# owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of the json partial update.
+--echo # ----------------------------------------------------------------------
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys;
+#alter system set _enable_defensive_check = 1;
+connection default;
+set log_row_value_options="";
+set ob_default_lob_inrow_threshold = 4096;
+set GLOBAL max_allowed_packet=1073741824;
+set ob_query_timeout=100000000000;
+--disable_warnings
+drop table if exists json_test;
+
+# json_replace
+
+# in row no need partial update
+create table json_test(pk int primary key, j json);
+insert into json_test values(1, '{"name": "John", "age": "30"}');
+update json_test set j = json_replace(j, '$.name', 'abcd') where pk=1;
+select pk, md5(j) as md5 from json_test;
+drop table json_test;
+
+# out row for object
+create table json_test(pk int primary key, j json);
+insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x',81920), '"}'));
+update json_test set j = json_replace(j, '$.name', 'ab') where pk=1;
+update json_test set j = json_replace(j, '$.name', 'abcdefg') where pk=1;
+select pk, md5(j) as md5 from json_test where pk = 1;
+
+insert into json_test values(2, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ], "content": "', repeat('x',81920), '"}'));
+select pk, md5(j) as md5 from json_test where pk = 2;
+update json_test set j = json_replace(j, '$.a', 'woo') where pk=2;
+select pk, md5(j) as md5 from json_test where pk = 2;
+update json_test set j = json_replace(j, '$.a', 'woooooooo') where pk=2;
+select pk, md5(j) as md5 from json_test where pk = 2;
+
+insert into json_test values(3, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ] , "c" : 100, "content": "', repeat('x',81920), '"}'));
+update json_test set j = json_replace(json_replace(j, '$.a', 'xoo'), '$.c', 200) where pk = 3;
+select pk, md5(j) as md5 from json_test where pk = 3;
+update json_test set j = json_replace(json_replace(j, '$.a', 'boo'), '$.c', 100) where pk = 3;
+select pk, md5(j) as md5 from json_test where pk = 3;
+
+drop table json_test;
+
+# chinese test
+create table json_test(pk int primary key, j json);
+insert into json_test values(1, concat('{"name": "蚂蚁", "content": "', repeat('x',81920), '"}'));
+select json_extract(j, '$.name') from json_test;
+update json_test set j = json_replace(j, '$.name', '淘宝') where pk=1;
+select json_extract(j, '$.name') from json_test;
+update json_test set j = json_replace(j, '$.name', '天猫') where pk=1;
+select json_extract(j, '$.name') from json_test;
+select pk, md5(j) as md5 from json_test where pk = 1;
+drop table json_test;
+
+# out row for array
+create table json_test(pk int primary key, j json);
+insert into json_test values(1, concat('["name", "John", {"age": "30"}, {"padding": "', repeat('x',81920), '"}]'));
+update json_test set j = json_replace(j, '$[0]', 'abcd') where pk=1;
+select pk, md5(j) as md5 from json_test;
+drop table json_test;
+
+# multi json col
+create table json_test(pk int primary key, j1 json, j2 json ) json(j1) store as (chunk '4k') json(j2) store as (chunk '4k') ;
+insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x', 8000), '"}'), concat('["name", "John", {"age": "30"}, {"padding": "', repeat('x',81920), '"}]'));
+update json_test set j1 = json_replace(j1, '$.name', 'ab'), j2 = json_replace(j2, '$[0]', 'abcd') where pk=1;
+select pk, md5(j1), md5(j2) as md5 from json_test;
+update json_test set j1 = json_replace(j2, '$[0]', 'xyz'), j2 = json_replace(j2, '$[0]', 'xyz') where pk=1;
+select pk, md5(j1), md5(j2) as md5 from json_test;
+update json_test set j1 = json_replace(j2, '$[0]', 'xyz'), j2 = json_replace(j1, '$.name', '1b') where pk=1;
+select pk, md5(j1), md5(j2) as md5 from json_test;
+drop table json_test;
+
+create table json_test(pk int primary key, j json) json(j) store as (chunk '4k');
+insert into json_test values(1, concat('{"name": "John", "like" : "music", "content": "', repeat('x', 8127), '"}'));
+select json_extract(j, '$.name', '$.like') from json_test where pk=1;
+update json_test set j = json_replace(j, '$.name', 'xxxxxxxxxxxx', '$.like', 'yyyyyyyyyyyyyyyyy') where pk =1;
+select json_extract(j, '$.name', '$.like') from json_test where pk=1;
+drop table json_test;
+
+# json set
+create table json_test (pk int primary key, j json);
+insert into json_test values(1, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
+select pk, md5(j) as md5 from json_test;
+update json_test set j = json_set(j, '$.a', 'woo') where pk = 1;
+select pk, md5(j) as md5 from json_test;
+update json_test set j = json_set(j, '$.b[1]', '1.1') where pk = 1;
+select pk, md5(j) as md5 from json_test;
+update json_test set j = json_set(j, '$.b[10]', '10') where pk = 1;
+select pk, md5(j) as md5 from json_test;
+insert into json_test values(2, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
+update json_test set j = json_set(json_set(j, '$.b[10]', '101'), '$.b[1]', '1.2', '$.a', 'xoo') where pk = 1;
+select pk, md5(j) as md5 from json_test;
+update json_test set j = json_set(j, '$.b[0]', 2) where pk = 1;
+select pk, md5(j) as md5 from json_test;
+drop table json_test;
+
+# json remove
+create table json_test (pk int primary key, j json);
+insert into json_test values(1, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
+select pk, md5(j) as md5 from json_test;
+update json_test set j = json_remove(j, '$.a') where pk = 1;
+select pk, md5(j) as md5 from json_test;
+update json_test set j = json_remove(j, '$.b[1]') where pk = 1;
+select pk, md5(j) as md5 from json_test;
+drop table json_test;
+
+# lob meta size
+create table json_test(pk int, j json) json(j) store as (CHUNK '1K');
+insert into json_test values(3, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ] , "c" : 100, "content": "', repeat('x',81920), '"}'));
+select pk, md5(j) as md5 from json_test where pk = 3;
+update json_test set j = json_replace(json_replace(j, '$.a', 'xoo'), '$.c', 200) where pk = 3;
+select pk, md5(j) as md5 from json_test where pk = 3;
+update json_test set j = json_replace(json_replace(j, '$.a', 'boo'), '$.c', 100) where pk = 3;
+select pk, md5(j) as md5 from json_test where pk = 3;
+drop table json_test;
+
+create table json_test(pk int, j json);
+insert into json_test values(3, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ] , "c" : 100, "content": "', repeat('x',81920), '"}'));
+select pk, md5(j) as md5 from json_test where pk = 3;
+
+--error 1210
+alter table json_test modify j json CHUNK '1024';
+
+update json_test set j = json_replace(j, '$.a', 'xoo') where pk = 3;
+select pk, md5(j) as md5 from json_test where pk = 3;
+update json_test set j = json_replace(j, '$.c', 100) where pk = 3;
+select pk, md5(j) as md5 from json_test where pk = 3;
+drop table json_test;
+
+create table json_test(pk int, j json);
+insert into json_test values(3, concat('{ "a" : "foo", "b" : [ 1, 2, 3 ] , "c" : 100, "content": "', repeat('x',81920), '"}'));
+select pk, md5(j) as md5 from json_test where pk = 3;
+
+alter table json_test add (j2 json) json(j2) store as (CHUNK '1k');
+insert into json_test values(2, concat('{"name": "John", "content": "', repeat('x',81920), '"}'), concat('["name", "John", {"age": "30"}, {"padding": "', repeat('x',81920), '"}]'));
+select pk, md5(j) as md5 from json_test where pk = 2;
+
+update json_test set j = json_replace(j, '$.a', 'xoo') where pk = 3;
+select pk, md5(j) as md5 from json_test where pk = 3;
+update json_test set j2 = json_replace(j, '$.c', 100) where pk = 2;
+select pk, md5(j) as md5 from json_test where pk = 3;
+drop table json_test;
+
+create table json_test(pk int, j json) JSON(j) store as (CHUNK '1K');
+
+insert into json_test values(1 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 10000000000), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
+select pk, md5(j) as md5 from json_test where pk = 1;
+
+# json_replace
+# single node
+update json_test set j = json_replace(j, '$.name', 'one') where pk = 1;
+select json_extract(j, '$.name') from json_test;
+update json_test set j = json_replace(j, '$.age', json_object('birth', '2023-06-18')) where pk = 1;
+select json_extract(j, '$.age') from json_test;
+update json_test set j = json_replace(j,'$.like[1]', 'apple', '$.like', 'none') where pk = 1;
+select json_extract(j, '$.like') from json_test;
+update json_test set j = json_replace(j,'$.like', json_array('x', 'y', 'z')) where pk = 1;
+select json_extract(j, '$.like') from json_test;
+update json_test set j = json_replace(j,'$.like[1]', 'egg', '$.like', 'none-xiii') where pk = 1;
+select json_extract(j, '$.like') from json_test;
+update json_test set j = json_replace(j,'$.like', json_array('x', 'y', 'z')) where pk = 1;
+select json_extract(j, '$.like') from json_test;
+update json_test set j = json_replace(j, '$.like', 'none-xiii', '$.like[1]', 'egg') where pk = 1;
+select json_extract(j, '$.like') from json_test;
+
+insert into json_test values(2 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 10000000000), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
+select pk, md5(j) as md5 from json_test where pk = 2;
+update json_test set j = json_replace(j,'$.like[1]', 'egg', '$.like', 'none-') where pk = 2;
+select json_extract(j, '$.like') from json_test where pk = 2;
+
+insert into json_test values(3 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 10000000000), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
+select pk, md5(j) as md5 from json_test where pk = 3;
+update json_test set j = json_replace(j, '$.like', json_array('x', 'y', 'z'), '$.like[1]', 'egg') where pk = 3;
+select json_extract(j, '$.like') from json_test where pk = 3;
+# should rebuild
+update json_test set j = json_replace(j, '$.like', json_array('x', 'y', 'z'), '$.like[1]', 'egg') where pk = 3;
+select json_extract(j, '$.like') from json_test where pk = 3;
+
+drop table json_test;
+
+create table json_test(pk int, j json) JSON(j) STORE AS (CHUNK '1K');
+insert into json_test values(1 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 10000000000), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
+select pk, md5(j) as md5 from json_test where pk = 1;
+
+insert into json_test values(4 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'profile', repeat('x', 4096), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 1), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', 'noone'));
+select json_extract(j, '$.tags') from json_test where pk = 4;
+update json_test set j = json_remove(json_replace(j, '$.tags[3]', 2), '$.tags[1]') where pk = 4;
+select json_extract(j, '$.tags') from json_test where pk = 4;
+update json_test set j = json_replace(json_replace(json_replace(json_replace(j, '$.position', 'hr'), '$.position', 'ai engineer'), '$.position', 'a'), '$.position', 'abcdefgabcdefg') where pk = 4;
+select json_extract(j, '$.position') from json_test where pk = 4;
+update json_test set j = json_set(json_remove(json_replace(j, '$.position', 'hr'), '$.position'), '$.position', 'se') where pk = 4;
+select json_extract(j, '$.position') from json_test where pk = 4;
+update json_test set j = json_replace(j, '$.hrofile', repeat('a', 1500)) where pk = 4;
+select json_extract(j, '$.hrofile') from json_test where pk = 4;
+insert into json_test values(5 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'hrofile', repeat('x', 1500), 'like', json_array('a', 'b', 'c'), 'tags', json_array('sql boy', 'football', 'summer', 1), 'money' , json_object('RMB', 10000, 'Dollers', 20000, 'BTC', 100), 'nickname', repeat('z', 2500)));
+select json_extract(j, '$.hrofile') from json_test where pk = 5;
+update json_test set j = json_replace(j, '$.hrofile', repeat('a', 1500)) where pk = 5;
+select json_extract(j, '$.hrofile') from json_test where pk = 5;
+update json_test set j = json_replace(j, '$.hrofile', repeat('b', 1000)) where pk = 5;
+select json_extract(j, '$.hrofile') from json_test where pk = 5;
+update json_test set j = json_replace(j, '$.hrofile', repeat('c', 500)) where pk = 5;
+select json_extract(j, '$.hrofile') from json_test where pk = 5;
+update json_test set j = json_replace(j, '$.hrofile', repeat('d', 5)) where pk = 5;
+select json_extract(j, '$.hrofile') from json_test where pk = 5;
+update json_test set j = json_replace(j, '$.hrofile', repeat('e', 1500)) where pk = 5;
+select json_extract(j, '$.hrofile') from json_test where pk = 5;
+
+--let $filed_count=100
+--let $byte=2211111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+--let $json_data_1='{
+while($filed_count)
+{
+  --let json_data_1 = $json_data_1 "field$filed_count" : "$byte" ,
+  dec $filed_count;
+}
+--let json_data_1 = $json_data_1 "field$filed_count" : "$byte"
+--let json_data_1 = $json_data_1 }'
+--let insert_sql = insert into json_test values(6 , $json_data_1)
+eval $insert_sql;
+
+--let filed_count=100
+while($filed_count)
+{
+  --let update_sql = update json_test set j = json_replace(j, '\$.field$filed_count', repeat('e', 1500)) where pk = 6
+  eval $update_sql;
+  --let select_sql = select json_extract(j, '\$.field$filed_count') from json_test where pk = 6
+  eval $select_sql;
+  dec $filed_count;
+}
+
+--let $filed_count=100
+--let $byte=2211111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+--let $json_data_1='{
+while($filed_count)
+{
+  --let json_data_1 = $json_data_1 "field$filed_count" : "$byte" ,
+  dec $filed_count;
+}
+--let json_data_1 = $json_data_1 "field$filed_count" : "$byte"
+--let json_data_1 = $json_data_1 }'
+--let insert_sql = insert into json_test values(6 , $json_data_1)
+eval $insert_sql;
+
+--let filed_count=100
+while($filed_count)
+{
+  --let update_sql = update json_test set j = json_replace(j, '\$.field$filed_count', concat('$byte', 'xyz')) where pk = 6
+  eval $update_sql;
+  --let select_sql = select json_extract(j, '\$.field$filed_count') from json_test where pk = 6
+  eval $select_sql;
+  dec $filed_count;
+}
+
+insert into json_test values(7 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'hrofile', repeat('x', 1500), 'like', json_array('a', 'b', 'c'), 'nickname', repeat('z', 2500)));
+select json_extract(j, '$.like') from json_test where pk=7;
+update json_test set j = json_remove(j, '$.like[1]') where pk=7;
+select json_extract(j, '$.like') from json_test where pk=7;
+update json_test set j = json_replace(j, '$.like', json_array('x', 'y', 'z'), '$.like[1]', 'abc') where pk=7;
+select json_extract(j, '$.like') from json_test where pk=7;
+update json_test set j = json_replace(j, '$.like', json_array('x', json_array(1, json_array(3, 4), 5), 'z'), '$.like[1][1][1]', 'abc') where pk=7;
+select json_extract(j, '$.like') from json_test where pk=7;
+update json_test set j = json_set(json_replace(j, '$.like', json_array('x', json_array(1, json_array(3, 4), 5), 'z')), '$.like[1][1][2]', 'abc') where pk=7;
+select json_extract(j, '$.like') from json_test where pk=7;
+
+insert into json_test values(9 , json_object('name', 'zero', 'age', 100, 'position', 'software engineer', 'hrofile', repeat('x', 4000), 'like', json_array('a', 'b', 'c'), 'nickname', repeat('z', 100), 'big1', repeat('z', 1000), 'big2', repeat('z', 300), 'big3', repeat('z', 500), 'big4', repeat('z', 500), 'big5', repeat('z', 500), 'big6', repeat('z', 500), repeat('y', 1048570), 'big-key-y', repeat('z', 1048570), 'big-key-z', repeat('x', 1048570), 'big-key-x'));
+select json_extract(j, concat('$.', repeat('x', 1048570)), concat('$.', repeat('y', 1048570)), concat('$.', repeat('z', 1048570)) ) from json_test where pk=9;
+update json_test set j = json_set(j, concat('$.', repeat('x', 1048570)), 'big-key-x1', concat('$.', repeat('y', 1048570)), 'big-key-y1', concat('$.', repeat('z', 1048570)), 'big-key-z1') where pk=9;
+select json_extract(j, concat('$.', repeat('x', 1048570)), concat('$.', repeat('y', 1048570)), concat('$.', repeat('z', 1048570)) ) from json_test where pk=9;
+
+insert into json_test values(7 , json_object('name', 'zero', 'position', 'software engineer', 'profile', repeat('x', 4096)));
+update json_test set j = json_replace(j, '$.name', repeat('e', 1500)) where pk = 7;
+select md5(json_extract(j, '$.name')) from json_test where pk=7;
+update json_test set j = json_replace(j, '$.position', repeat('e', 1500)) where pk = 7;
+select md5(json_extract(j, '$.position')) from json_test where pk=7;
+
+insert into json_test values(8 , json_object('name', 'zero', 'position', 'software engineer', 'age', 21,  'profile', repeat('x', 4096)));
+select md5(j) from json_test where pk=8;
+update json_test set j = JSON_SET(j, '$.name', UPPER(j->>'$.name')), j = JSON_REPLACE(j, '$.age', 22), j = JSON_REMOVE(j, '$.position') where pk=8;
+select md5(j) from json_test where pk=8;
+
+drop table json_test;
+
+drop table if exists t;
+CREATE TABLE t(id INT PRIMARY KEY AUTO_INCREMENT,
+              json_col JSON,
+              name VARCHAR(100) AS (json_col->>'$.name'),
+              age INT AS (json_col->'$.age'));
+INSERT INTO t(json_col) VALUES
+(JSON_OBJECT('name', 'Joe', 'age', 24,
+            'data', REPEAT('x', 10 * 1000))),
+(JSON_OBJECT('name', 'Sue', 'age', 32,
+            'data', REPEAT('y', 10 * 1000))),
+(JSON_OBJECT('name', 'Pete', 'age', 40,
+            'data', REPEAT('z', 10 * 1000))),
+(JSON_OBJECT('name', 'Jenny', 'age', 27,
+            'data', REPEAT('w', 10 * 1000)));
+INSERT INTO t(json_col) SELECT json_col FROM t;
+INSERT INTO t(json_col) SELECT json_col FROM t;
+select md5(json_col) from t;
+update t set json_col = json_set(json_col, '$.age', age + 1);
+select md5(json_col) from t;
+UPDATE t SET json_col = JSON_SET(json_col, '$.name', UPPER(json_col->>'$.name')),
+            json_col = JSON_REPLACE(json_col, '$.age', id),
+            json_col = JSON_REMOVE(json_col, '$.address');
+select md5(json_col) from t;
+drop table t;
+
+CREATE TABLE t(j json);
+insert into t values(concat('{"k1": 1, "k2": 2, "k3": 3, "k4":"', repeat('t', 4200),'"}'));
+select md5(j) from t;
+update t set j = json_replace(j, '$.k1', 'xyz', '$.k3', 'abc');
+select md5(j) from t;
+drop table t;
+
+create table t(id int,a varchar(10000),c text,j1 json,j2 json,j3 json) json(j1) store as (chunk '1k');
+insert into t values(2,concat('{"name": "John","值值":5,"name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false], "content": "', repeat('x',4500), '"}'),concat('{"name": "John","键键":"值值","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false], "content": "', repeat('x',4500), '"}'),
+concat('{"name": "John","键键":"值值","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false], "content": "', repeat('x',5000), '"}'),concat('{"name": "John","键键":"值值","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false], "content": "', repeat('x',4500), '"}'),
+concat('{"name": "John","键键":"值值","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false], "content": "', repeat('x',4500), '"}'));
+select json_extract(j1, '$.name4', '$.键键') from t;
+update t set j1=json_replace(j1,'$.键键',5) where id=2;
+select json_extract(j1, '$.键键') from t where id=2;
+update t set j1=json_replace(j1,'$.name4',"tets",'$.键键','xiao');
+select json_extract(j1, '$.name4', '$.键键') from t;
+update t set j1=json_set(j1,'$.name4',"tets",'$.键键','xiao');
+select json_extract(j1, '$.name4', '$.键键') from t;
+drop table t;
+
+drop table if exists json_test;
+create table json_test(j3 json) json(j3) store as (chunk '4k');
+insert into json_test values(concat('{"k1": 1, "k2": 2, "k3": 3, "k4":"', repeat('t', 4200),'"}'));
+select md5(j3), json_extract(j3,'$.k1') from json_test;
+update json_test set j3=json_set(j3,'$.k1','test','$.k4',repeat('test',5000));
+select md5(j3), json_extract(j3,'$.k1') from json_test;
+update json_test set j3=json_replace(j3,'$.k1','ttttttt','$.k4',repeat('test',5000));
+select md5(j3), json_extract(j3,'$.k1') from json_test;
+drop table if exists json_test;
+
+create table json_test(j json) json(j) store as (chunk '4k');
+insert into json_test values(concat('{"name": "John","键键":"值值","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false],"name6":{"key1":"value","key2":"value2"}, "content": "', repeat('x',10000), '"}'));
+select md5(j), length(json_extract(j, '$.name1')), json_extract(j, '$.name6') from json_test;
+update json_test set j=json_set(j,'$.name1',repeat('x',10000),'$.name6',cast('{"kerewr":"valewrwte","key5":111111211121212}' as json));
+select md5(j), length(json_extract(j, '$.name1')), json_extract(j, '$.name6') from json_test;
+drop table if exists json_test;
+
+create table json_test(j json) json(j) store as (chunk '1k');
+insert into json_test values(concat('{"name": "John","name1":1,"name2":true,"name3":1.1,"name4":null, "name5":{"key":{"key1":"',repeat(1,10000), '"}},"name6":["test",1,null,false,{"key2":"value"}], "name7":{"key":{"key1":"',repeat('x',10000), '"}}}'));
+select md5(j), length(json_extract(j, '$.name5'))from json_test;
+update json_test set j=json_set(j,'$.name5[1]',1);
+select md5(j), length(json_extract(j, '$.name5'))from json_test;
+drop table if exists json_test;
+
+create table json_test (j json) json(j) store as (chunk '1k');
+insert into json_test values(concat('{"level0" : {}, "key":"', repeat('x',8192), '"}'));
+update json_test set j = json_set(j, '$.level0.key_1', 1, '$.level0.key_2', 2);
+select json_extract(j, '$.level0') from json_test;
+drop table if exists json_test;
+create table json_test(id int,j json) json(j) store as (chunk '1k');
+insert into json_test values(1,concat('{"name": "John","值值":5,"name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false], "content": "', repeat('x',5000), '"}'));
+select md5(j), JSON_EXTRACT(j,'$.name') from json_test;
+update json_test set j=json_set(j,'$.name','testee');
+select md5(j), JSON_EXTRACT(j,'$.name') from json_test;
+update json_test set j=json_set(j,'$.name','test');
+select md5(j), JSON_EXTRACT(j,'$.name') from json_test;
+update json_test set j=json_set(j,'$.name', 31415926);
+select md5(j), JSON_EXTRACT(j,'$.name') from json_test;
+drop table if exists json_test;
+
+create table json_test(j json);
+insert into json_test values(concat('["abc",{"key":["test1",1,true,null],"key1":{}},','[{"key":1,"key2":"value"},"test",[1,"',repeat('x',4100),'"]], [1, 2, [4, 5, 6]], {"key.1": "1", "key.1111": "2", "key.11x\\"1": "3", "[4]":"4"}]'));
+select md5(j), json_extract(j, '$[1]', '$[3]') from json_test;
+update json_test set j=json_remove(j,'$[2][0].key','$[2][0].key2');
+select md5(j), json_extract(j, '$[1]', '$[3]') from json_test;
+update json_test set j=json_remove(j,'$[1].key','$[1].key1');
+select md5(j), json_extract(j, '$[1]', '$[3]') from json_test;
+update json_test set j=json_set(j,'$[3][1]', 11, '$[3]', 10000000);
+select md5(j), json_extract(j, '$[1]', '$[3]', '$[4]') from json_test;
+update json_test set j=json_set(j,'$[4]."key.1"', 'yyy', '$[4]."key.1"', 10000000, '$[4]."key.11x\\"1"', 'xxxxxx', '$[4]."[4]"', 'gggggggg');
+select md5(j), json_extract(j, '$[1]', '$[3]', '$[4]') from json_test;
+drop table if exists json_test;
+
+create table json_test(j json);
+insert into json_test values(concat('{"name": "John","name1":1, "content":{"key":{"key1":"',repeat('x',4100), '"}}}'));
+--error 3141
+select json_replace(j,'$.name',cast('{"key":repeat(1,41)}' as json)) from json_test;
+drop table if exists json_test;
+
+create table json_test(j json);
+insert into json_test values(concat('{"name": "John","name1":1,"name2":true,"name3":"test","name4":null,"name5":["test",1,null,false,{"key2":"value"}], "content":{"key":{"key1":"',repeat('x',4100), '"}}}'));
+select md5(j) from json_test;
+update json_test set j=json_remove(j,'$.name5');
+select md5(j) from json_test;
+update json_test set j=json_remove(j,'$.name5');
+select md5(j) from json_test;
+update json_test set j=json_replace(j,'$.name','te');
+select md5(j) from json_test;
+update json_test set j=json_replace(j,'$.name','te');
+select md5(j) from json_test;
+update json_test set j=json_set(j,'$.name3','tes');
+select md5(j) from json_test;
+update json_test set j=json_set(j,'$.name3','tes');
+select md5(j) from json_test;
+drop table if exists json_test;
+
+create table json_test(j json);
+insert into json_test values(concat('{"name": "John","name1":1,"name2":true, "content":{"key":{"key1":"',repeat('x',4100), '"}}}'));
+select md5(j), JSON_STORAGE_SIZE(j), JSON_STORAGE_FREE(j), json_extract(j, '$.name1', '$.name2')  from json_test;
+update json_test set j=json_replace(json_remove(j,'$.name1'),'$.name2','te');
+select md5(j), json_extract(j, '$.name1', '$.name2')  from json_test;
+drop table if exists json_test;
+
+create table json_test(pk int primary key, c2 varchar(100), j json) json(j) store as (chunk '2k');
+insert into json_test values(1, '2222', concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}'));
+insert into json_test values(2, '2222', concat('{"name": "John", "like" : "music", "content": "', repeat('x', 4200), '"}'));
+select pk, md5(j) as md5 from json_test;
+alter table json_test drop column c2;
+update json_test set j = json_set(j, '$.k2', repeat('x', 4201)) where pk = 1;
+select pk, md5(j) as md5, json_storage_size(j), json_storage_free(j) from json_test where pk = 1;
+update json_test set j=json_set(j,'$.k2','test1') where pk = 1;
+select pk, md5(j) as md5, json_extract(j, '$.name', '$.like') from json_test where pk=2;
+update json_test set j = json_replace(j, '$.name', 'xxxxxxxxxxxx', '$.like', 'yyyyyyyyyyyyyyyyy') where pk =2;
+select pk, md5(j) as md5, json_extract(j, '$.name', '$.like') from json_test where pk=2;
+drop table json_test;
+
+create table json_test(pk int primary key, c2 varchar(100), j json chunk '4k');
+# chunk size is 4k
+insert into json_test values(1, '2222', concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}'));
+select pk, md5(j) from json_test;
+# change chunk size to 2k
+alter table json_test modify j json chunk '2k';
+# chunk size is still 4k
+select pk, md5(j), json_extract(j, '$.k4') from json_test;
+update json_test set j = json_set(j, '$.k4', 'test4') where pk = 1;
+select pk, md5(j), json_extract(j, '$.k4') from json_test;
+# full update, chunk size is 2k
+update json_test set j = json_set(j, '$.k2', repeat('x', 4201)) where pk = 1;
+select pk, md5(j), length(json_extract(j, '$.k2')) from json_test;
+# use chunk size 2k to partial update
+select pk, md5(j), json_extract(j, '$.k3') from json_test;
+update json_test set j = json_set(j, '$.k3', 'test3') where pk = 1;
+select pk, md5(j), json_extract(j, '$.k3') from json_test;
+alter table json_test modify j json chunk '1k';
+# partial update with 2k
+update json_test set j = json_set(j, '$.k3', 3) where pk = 1;
+select pk, md5(j), json_extract(j, '$.k3') from json_test;
+# to 1k
+select pk, md5(j), length(json_extract(j, '$.k2')) from json_test;
+update json_test set j = json_set(j, '$.k2', repeat('x', 4202)) where pk = 1;
+select pk, md5(j), length(json_extract(j, '$.k2')) from json_test;
+alter table json_test modify j json chunk '10k';
+# 1k partial update
+select pk, md5(j), json_extract(j, '$.k4') from json_test;
+update json_test set j = json_set(j, '$.k4', 4) where pk = 1;
+select pk, md5(j), json_extract(j, '$.k4') from json_test;
+# 10k
+select pk, md5(j), length(json_extract(j, '$.k2')) from json_test;
+update json_test set j = json_set(j, '$.k2', repeat('x', 4203)) where pk = 1;
+select pk, md5(j), length(json_extract(j, '$.k2')), json_extract(j, '$.k4') from json_test;
+update json_test set j = json_set(j, '$.k4', 'test') where pk = 1;
+select pk, md5(j), length(json_extract(j, '$.k2')), json_extract(j, '$.k4') from json_test;
+drop table json_test;
+
+create table json_test(pk int primary key, j json chunk '1k');
+insert into json_test values(1, concat('{"k1": 1, "k2":"', repeat('t', 4200), '", "k3": 2, "k4": 3}'));
+alter table json_test add `col_gen_1` varchar(1538) GENERATED ALWAYS AS (JSON_EXTRACT(j, '$.k4')) VIRTUAL;
+alter table json_test add  index `gen_idx_1` (`col_gen_1`) LOCAL;
+select /*+ index(gen_idx_1) */ col_gen_1 from json_test;
+update json_test set j = json_set(j, '$.k4', 'test') where pk = 1;
+select /*+ index(gen_idx_1) */ col_gen_1 from json_test;
+drop table json_test;
+
+create table json_test(pk int primary key, j json chunk '1k');
+insert into json_test values(1, concat('{"k1":"', repeat('x', 960),'", "k2" : {"k2_1": 1, "k2_2": 2, "k2_3": 3, "k2_4":"', repeat('x', 3200), '"}}'));
+select md5(j), json_extract(j, '$.k2.k2_2'),  json_extract(j, '$.k2.k2_3'), md5(json_extract(j, '$.k2.k2_4')) from json_test;
+update json_test set j = json_remove(j, '$.k2.k2_1');
+select  md5(j), json_extract(j, '$.k2.k2_2'),  json_extract(j, '$.k2.k2_3'), md5(json_extract(j, '$.k2.k2_4')) from json_test;
+drop table json_test;
+
+create table json_test(pk int primary key, j json chunk '1k');
+
+insert into json_test values(1, concat('{"k1":"', repeat('x', 988),'", "k2" : {"k2_1": 1, "k2_2": 2, "k2_3": 3, "k2_4":"', repeat('x', 3200), '"}}'));
+select md5(j), json_extract(j, '$.k2.k2_1'), json_extract(j, '$.k2.k2_2'),  json_extract(j, '$.k2.k2_3'), md5(json_extract(j, '$.k2.k2_4')) from json_test  where pk=1;
+update json_test set j = json_remove(j, '$.k2.k2_2') where pk=1;
+select md5(j), json_extract(j, '$.k2.k2_1'), json_extract(j, '$.k2.k2_2'),  json_extract(j, '$.k2.k2_3'), md5(json_extract(j, '$.k2.k2_4')) from json_test  where pk=1;
+
+insert into json_test values(2, concat('{"k1":"', repeat('x', 988),'", "k2" : {"k2_1": 1, "k2_2": 2, "k2_3": 3, "k2_4":"', repeat('x', 3200), '"}}'));
+select md5(j) from json_test where pk=2;
+update json_test set j = json_set(j, '$.k3', repeat('x', 1000)) where pk=2;
+select md5(j) from json_test where pk=2;
+delete from json_test;
+drop table json_test;
+
+create table json_test(id int,a varchar(10000),c text,j1 json,j2 json,j3 json);
+insert into json_test values(5,concat('{"name": "John","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false,{"key2":"value"}],"content":{"key":{"key1":"',repeat('x',4000), '"}}}'),concat('{"name": "John","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false,{"key2":"value"}], "content":{"key":{"key1":"',repeat('x',4000),'"}}}'), concat('{"name": "John","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false,{"key2":"value"}], "content":{"key":{"key1":"',repeat('x',4100), '"}}}'),concat('{"name": "John","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false,{"key2":"value"}], "content":{"key":{"key1":"',repeat('x',4000), '"}}}'), concat('{"name": "John","name1":1,"name2":true,"name3":false,"name4":null,"name5":["test",1,null,false,{"key2":"value"}], "content":{"key":{"key1":"',repeat('x',10000), '"}}}'));
+select JSON_STORAGE_SIZE(j3), JSON_STORAGE_FREE(j3) from json_test;
+update json_test set j3=json_replace(j3,'$.name',1,'$[0]','testtet');
+select j3 from json_test;
+delete from json_test;
+drop table json_test;
+
+create table json_test(pk int primary key, j json);
+insert into json_test values(1, concat('{"name": "John", "content": "', repeat('x',81920), '"}'));
+select md5(j), json_extract(j, '$.name') from json_test;
+update json_test set j = json_replace(j, '$.name', 'abc'), pk = 2 where pk=1;
+select md5(j), json_extract(j, '$.name') from json_test;
+delete from json_test;
+drop table json_test;
+
+connection obsys;
+#alter system set _enable_defensive_check = 0;
+connection default;
+set log_row_value_options="";
+set global max_allowed_packet=default;

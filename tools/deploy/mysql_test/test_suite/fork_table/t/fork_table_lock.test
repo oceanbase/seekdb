@@ -1,0 +1,394 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table DDL锁释放逻辑测试（并行fork和链式fork场景）
+##tags: fork_table parallel chain lock ddl_lock debug_sync
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_lock;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_lock;
+use db_fork_lock;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo # 启用debug sync
+connection obsys;
+alter system set debug_sync_timeout = '120s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+connection default;
+
+--echo ============================================
+--echo Case 1: 基础Fork - fork A to B
+--echo 场景: 单个fork任务，验证__all_virtual_obj_lock的状态
+--echo ============================================
+
+drop table if exists t_a0;
+drop table if exists t_b0;
+
+create table t_a0 (
+    id int primary key,
+    name varchar(50),
+    value int
+);
+
+insert into t_a0 values (1, 'Data1', 100);
+insert into t_a0 values (2, 'Data2', 200);
+
+--echo # 获取源表table_id
+--disable_query_log
+let $table_a0_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_a0' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+--echo # 设置debug sync: fork A to B 卡在 BUILD_DATA 阶段
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for signal_base execute 1';
+sleep 1;
+connection default;
+
+--echo # 执行 fork A to B（会卡在 BUILD_DATA）
+fork table t_a0 to t_b0;
+
+--disable_query_log
+let $table_b0_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_b0' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+--echo # 等待任务进入 BUILD_DATA 阶段（要求同时指定src/dest）
+let $wait_src_table_id= $table_a0_id;
+let $wait_dest_table_id= $table_b0_id;
+let $wait_status= BUILD_DATA;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证: fork任务进行中，源表A的锁应该存在
+connection obsys;
+--echo # 检查DDL任务状态
+--disable_query_log
+--eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where object_id = $table_a0_id and target_object_id = $table_b0_id and ddl_type = 10009 order by task_id desc
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b0_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b0_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 释放 fork A to B，让它继续执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal signal_base';
+connection default;
+
+--echo # 等待 fork A to B 完成
+let $wait_src_table_id= $table_a0_id;
+let $wait_dest_table_id= $table_b0_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证: fork完成后，源表A的锁应该被释放
+connection obsys;
+--echo # 确认Fork完成后任务状态
+--disable_query_log
+--eval select count(*) as pending_fork_tasks from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and object_id = $table_a0_id and target_object_id = $table_b0_id
+--enable_query_log
+--echo # 确认Fork完成后锁已释放
+select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
+
+--echo # 验证数据完整性
+connection default;
+select 't_b0' as table_name, * from t_b0 order by id;
+
+--echo ============================================
+--echo Case 2: 并行Fork - fork A to B, fork A to C
+--echo 场景: fork A to C 先执行完，fork A to B 后执行完
+--echo 验证: fork A to C 完成后，源表A的锁不应被释放（因为fork A to B还在进行）
+--echo ============================================
+
+drop table if exists t_a1;
+drop table if exists t_b1;
+drop table if exists t_c1;
+
+create table t_a1 (
+    id int primary key,
+    name varchar(50),
+    value int
+);
+
+insert into t_a1 values (1, 'Data1', 100);
+insert into t_a1 values (2, 'Data2', 200);
+
+--echo # 获取源表table_id
+--disable_query_log
+let $table_a1_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_a1' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+--echo # 设置debug sync: fork A to B 卡在 BUILD_DATA 阶段
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for signal_ab1 execute 1';
+sleep 1;
+connection default;
+
+--echo # 执行 fork A to B（会卡在 BUILD_DATA）
+fork table t_a1 to t_b1;
+
+--disable_query_log
+let $table_b1_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_b1' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+--echo # 等待任务进入 BUILD_DATA 阶段（要求同时指定src/dest）
+let $wait_src_table_id= $table_a1_id;
+let $wait_dest_table_id= $table_b1_id;
+let $wait_status= BUILD_DATA;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 设置debug sync: fork A to C 卡在 WAIT_DATA_COMPLEMENT 阶段（不同的sync point）
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for signal_ac1 execute 1';
+connection default;
+
+--echo # 执行 fork A to C（会通过 BUILD_DATA，卡在 WAIT_DATA_COMPLEMENT）
+fork table t_a1 to t_c1;
+
+--disable_query_log
+let $table_c1_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_c1' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+--echo # 等待任务进入 WAIT_DATA_COMPLEMENT 阶段（要求同时指定src/dest）
+let $wait_src_table_id= $table_a1_id;
+let $wait_dest_table_id= $table_c1_id;
+let $wait_status= WAIT_DATA_COMPLEMENT;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证: 两个fork任务都在进行中，源表A的锁应该存在
+connection obsys;
+--echo # 检查DDL任务状态
+--disable_query_log
+--eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where ((object_id = $table_a1_id and target_object_id = $table_b1_id) or (object_id = $table_a1_id and target_object_id = $table_c1_id)) and ddl_type = 10009 order by task_id desc
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 释放 fork A to C，让它先完成
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
+set ob_global_debug_sync = 'now signal signal_ac1';
+connection default;
+
+--echo # 等待 fork A to C 完成
+let $wait_src_table_id= $table_a1_id;
+let $wait_dest_table_id= $table_c1_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+connection obsys;
+
+--echo # 验证: fork A to C 完成后，源表A的锁应该还存在（因为fork A to B还在进行）
+--echo # 检查DDL任务状态
+--disable_query_log
+--eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where object_id = $table_a1_id and target_object_id = $table_b1_id and ddl_type = 10009 order by task_id desc
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（源表A）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_a1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_a1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表B）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b1_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b1_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 释放 fork A to B，让它继续执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal signal_ab1';
+connection default;
+
+--echo # 等待 fork A to B 完成
+let $wait_src_table_id= $table_a1_id;
+let $wait_dest_table_id= $table_b1_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证: 所有fork完成后，源表A的锁应该被释放
+connection obsys;
+--echo # 确认Fork完成后任务状态
+--disable_query_log
+--eval select count(*) as pending_fork_tasks from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and object_id = $table_a1_id and (target_object_id = $table_b1_id or target_object_id = $table_c1_id)
+--enable_query_log
+--echo # 确认Fork完成后锁已释放
+select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
+
+--echo # 验证数据完整性
+connection default;
+select 't_b1' as table_name, * from t_b1 order by id;
+select 't_c1' as table_name, * from t_c1 order by id;
+
+--echo ============================================
+--echo Case 3: 链式Fork - fork A to B, fork B to C
+--echo 场景: fork B to C 先执行完，fork A to B 后执行完
+--echo 验证: fork B to C 完成后，表B的锁不应被释放（因为fork A to B还在进行）
+--echo ============================================
+
+drop table if exists t_a2;
+drop table if exists t_b2;
+drop table if exists t_c2;
+
+create table t_a2 (
+    id int primary key,
+    name varchar(50),
+    value int
+);
+
+insert into t_a2 values (1, 'Data1', 100);
+insert into t_a2 values (2, 'Data2', 200);
+
+--echo # 获取表ID
+--disable_query_log
+let $table_a2_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_a2' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+--echo # 设置debug sync: fork A to B 卡在 SUCCESS 阶段（数据已构建完成，但任务未结束）
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS wait_for signal_ab2 execute 1';
+sleep 1;
+connection default;
+
+--echo # 执行 fork A to B（会卡在 SUCCESS 阶段，此时B已经构建完成）
+fork table t_a2 to t_b2;
+
+--echo # 等待任务进入 SUCCESS 阶段
+--disable_query_log
+let $table_b2_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_b2' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+let $wait_src_table_id= $table_a2_id;
+let $wait_dest_table_id= $table_b2_id;
+let $wait_status= SUCCESS;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 设置debug sync: fork B to C 卡在 BUILD_DATA 阶段
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for signal_bc2 execute 1';
+connection default;
+
+--echo # 此时B已经构建完成，可以执行 fork B to C（会卡在 BUILD_DATA）
+fork table t_b2 to t_c2;
+
+--echo # 等待任务进入 BUILD_DATA 阶段
+--disable_query_log
+let $table_c2_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_c2' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+
+let $wait_src_table_id= $table_b2_id;
+let $wait_dest_table_id= $table_c2_id;
+let $wait_status= BUILD_DATA;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证: 两个fork任务都在进行中，表B的锁应该存在
+connection obsys;
+--echo # 获取目标表table_id
+--disable_query_log
+connection default;
+let $table_c2_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't_c2' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_lock'), table_id, 1);
+--enable_query_log
+connection obsys;
+--echo # 检查DDL任务状态
+--disable_query_log
+--eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where ((object_id = $table_a2_id and target_object_id = $table_b2_id) or (object_id = $table_b2_id and target_object_id = $table_c2_id)) and ddl_type = 10009 order by task_id desc
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（表B）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 释放 fork B to C，让它先完成
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal signal_bc2';
+connection default;
+
+--echo # 等待 fork B to C 完成
+let $wait_src_table_id= $table_b2_id;
+let $wait_dest_table_id= $table_c2_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+connection obsys;
+
+--echo # 验证: fork B to C 完成后，表B的锁应该还存在（因为fork A to B还在进行）
+--echo # 检查DDL任务状态
+--disable_query_log
+--eval select ddl_type, status from oceanbase.__all_virtual_ddl_task_status where object_id = $table_a2_id and target_object_id = $table_b2_id and ddl_type = 10009 order by task_id desc
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（表B）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_b2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_b2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 检查__all_virtual_obj_lock中Fork相关的锁（fork表C）
+--disable_query_log
+--eval select count(*), lock_mode, owner_id, obj_type, owner_type from oceanbase.__all_virtual_obj_lock where obj_id = $table_c2_id or obj_id in (select tablet_id from oceanbase.__all_tablet_to_ls where table_id = $table_c2_id) group by lock_mode, owner_id, obj_type, owner_type order by 1, 2, 3, 4, 5
+--enable_query_log
+
+--echo # 释放 fork A to B，让它完成
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
+set ob_global_debug_sync = 'now signal signal_ab2';
+connection default;
+
+--echo # 等待 fork A to B 完成
+let $wait_src_table_id= $table_a2_id;
+let $wait_dest_table_id= $table_b2_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证: 所有fork完成后，表B的锁应该被释放
+connection obsys;
+--echo # 确认Fork完成后任务状态
+--disable_query_log
+--eval select count(*) as pending_fork_tasks from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and ((object_id = $table_a2_id and target_object_id = $table_b2_id) or (object_id = $table_b2_id and target_object_id = $table_c2_id))
+--enable_query_log
+--echo # 确认Fork完成后锁已释放
+select count(*) as fork_locks from oceanbase.__all_virtual_obj_lock;
+
+--echo # 验证数据完整性
+connection default;
+select 't_b2' as table_name, * from t_b2 order by id;
+select 't_c2' as table_name, * from t_c2 order by id;
+
+--echo ============================================
+--echo 清理
+--echo ============================================
+
+--echo # 重置debug sync
+connection obsys;
+set ob_global_debug_sync = 'reset';
+
+connection default;
+drop table if exists t_a0;
+drop table if exists t_b0;
+drop table if exists t_a1;
+drop table if exists t_b1;
+drop table if exists t_c1;
+drop table if exists t_a2;
+drop table if exists t_b2;
+drop table if exists t_c2;
+drop database if exists db_fork_lock;

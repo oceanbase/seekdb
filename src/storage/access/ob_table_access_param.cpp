@@ -56,6 +56,7 @@ ObTableIterParam::ObTableIterParam()
       limit_prefetch_(false),
       is_mds_query_(false),
       is_non_unique_local_index_(false),
+      is_advance_skip_scan_(false),
       ss_rowkey_prefix_cnt_(0),
       pd_storage_flag_(),
       table_scan_opt_(),
@@ -76,6 +77,11 @@ ObTableIterParam::~ObTableIterParam()
     pushdown_filter_ = nullptr;
   }
   ObSSTableIndexFilterFactory::destroy_sstable_index_filter(sstable_index_filter_);
+}
+
+void ObTableIterParam::reuse()
+{
+  is_advance_skip_scan_ = false;
 }
 
 void ObTableIterParam::reset()
@@ -112,6 +118,7 @@ void ObTableIterParam::reset()
   limit_prefetch_ = false;
   is_mds_query_ = false;
   is_non_unique_local_index_ = false;
+  is_advance_skip_scan_ = false;
   table_scan_opt_.reset();
   auto_split_filter_type_ = OB_INVALID_ID;
   auto_split_filter_ = nullptr;
@@ -218,6 +225,7 @@ DEF_TO_STRING(ObTableIterParam)
        K_(limit_prefetch),
        K_(is_mds_query),
        K_(is_non_unique_local_index),
+       K_(is_advance_skip_scan),
        K_(ss_rowkey_prefix_cnt),
        K_(table_scan_opt),
        K_(auto_split_filter_type),
@@ -258,6 +266,11 @@ void ObTableAccessParam::reset()
   row2exprs_projector_ = NULL;
   output_sel_mask_ = NULL;
   is_inited_ = false;
+}
+
+void ObTableAccessParam::reuse()
+{
+  iter_param_.reuse();
 }
 
 int ObTableAccessParam::init(

@@ -1,0 +1,107 @@
+alter system set debug_sync_timeout = '100000s';
+set ob_global_debug_sync = 'reset';
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 30000000;
+SET ob_query_timeout = 30000000;
+SET @@recyclebin = 0;
+SET @@sql_mode='STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,no_zero_date,no_zero_in_date,PIPES_AS_CONCAT';
+drop database IF EXISTS db1;
+create database db1;
+use db1;
+create table collect_info(user_id int, item_id int, primary key(user_id, item_id)) partition by hash(user_id) partitions 4;
+create table collect_item(item_id int, price int, primary key(item_id)) duplicate_scope = 'cluster' duplicate_read_consistency = 'weak';
+insert into collect_item values(1, 100);
+insert into collect_item values(2, 200);
+insert into collect_item values(3, 300);
+insert into collect_info values(1, 1);
+insert into collect_info values(1, 2);
+insert into collect_info values(2, 1);
+insert into collect_info values(2, 3);
+insert into collect_info values(3, 3);
+create materialized view collect_info_mv (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info inner join collect_item on collect_info.item_id = collect_item.item_id;
+refresh_mode	refresh_method
+4	2
+snapshot_type
+5
+5
+5
+mv_mode
+2
+2
+1
+select mview_name, query, refresh_method, refresh_mode, rewrite_enabled, on_query_computation from oceanbase.DBA_MVIEWS where mview_name = 'collect_info_mv';
+mview_name	query	refresh_method	refresh_mode	rewrite_enabled	on_query_computation
+collect_info_mv	select `db1`.`collect_info`.`user_id` AS `user_id`,`db1`.`collect_info`.`item_id` AS `item_id`,`db1`.`collect_item`.`item_id` AS `dup_item_id`,`db1`.`collect_item`.`price` AS `price` from (`db1`.`collect_info` join `db1`.`collect_item` on (`db1`.`collect_info`.`item_id` = `db1`.`collect_item`.`item_id`))	FAST	MAJOR_COMPACTION	Y	Y
+select mview_name, query, refresh_method, refresh_mode, rewrite_enabled, on_query_computation from oceanbase.CDB_MVIEWS where mview_name = 'collect_info_mv' and owner = 'db1';
+mview_name	query	refresh_method	refresh_mode	rewrite_enabled	on_query_computation
+collect_info_mv	select `db1`.`collect_info`.`user_id` AS `user_id`,`db1`.`collect_info`.`item_id` AS `item_id`,`db1`.`collect_item`.`item_id` AS `dup_item_id`,`db1`.`collect_item`.`price` AS `price` from (`db1`.`collect_info` join `db1`.`collect_item` on (`db1`.`collect_info`.`item_id` = `db1`.`collect_item`.`item_id`))	FAST	MAJOR_COMPACTION	Y	Y
+show create table collect_info_mv;
+View	Create View	character_set_client	collation_connection
+collect_info_mv	CREATE MATERIALIZED VIEW `collect_info_mv` (PRIMARY KEY (user_id, item_id)) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 10
+ partition by hash(user_id)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`) REFRESH FAST ON DEMAND ENABLE QUERY REWRITE ENABLE ON QUERY COMPUTATION  AS select `db1`.`collect_info`.`user_id` AS `user_id`,`db1`.`collect_info`.`item_id` AS `item_id`,`db1`.`collect_item`.`item_id` AS `dup_item_id`,`db1`.`collect_item`.`price` AS `price` from (`db1`.`collect_info` join `db1`.`collect_item` on (`db1`.`collect_info`.`item_id` = `db1`.`collect_item`.`item_id`))	utf8mb4	utf8mb4_general_ci
+select ddl_stmt_str from oceanbase.__all_ddl_operation where ddl_stmt_str like '%collect_info_mv%' order by gmt_create desc limit 1;
+ddl_stmt_str
+CREATE MATERIALIZED VIEW `db1`.`collect_info_mv` AS select `db1`.`collect_info`.`user_id` AS `user_id`,`db1`.`collect_info`.`item_id` AS `item_id`,`db1`.`collect_item`.`item_id` AS `dup_item_id`,`db1`.`collect_item`.`price` AS `price` from (`db1`.`collect_info` join `db1`.`collect_item` on (`db1`.`collect_info`.`item_id` = `db1`.`collect_item`.`item_id`));
+rename table collect_item to citem;
+ERROR 0A000: rename table required by materialized view is not supported
+alter table collect_item rename to citem;
+ERROR 0A000: this alter table to table required by materialized view is not supported
+truncate collect_item;
+ERROR 0A000: truncate table required by materialized view is not supported
+alter table collect_item drop primary key;
+ERROR 0A000: drop the primary key of table required by materialized view is not supported
+alter table collect_item add column new_col varchar(20);
+alter table collect_item drop column price;
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table collect_item rename column price to price2;
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table collect_item modify price varchar(20);
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table collect_item modify price int not null;
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table collect_item alter column price set default 1;
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table collect_info partition by range(user_id)
+(
+partition p1 values less than(15),
+partition p2 values less than(25),
+partition p3 values less than(35),
+partition p4 values less than(45),
+partition p5 values less than(55)
+);
+ERROR 0A000: this alter table to table required by materialized view is not supported
+drop tablegroup if exists test_tg;
+create tablegroup test_tg;
+alter tablegroup test_tg add table collect_info;
+ERROR 0A000: alter tablegroup of table required by materialized view is not supported
+drop tablegroup test_tg;
+alter table collect_info compression 'NONE';
+ERROR 0A000: alter option of table required by materialized view is not supported
+alter table collect_item add index k1(price);
+alter table collect_item drop index k1;
+alter table collect_item add unique(price);
+alter table collect_item drop index price;
+alter table collect_item add constraint uk1 unique(price);
+drop index uk1 on collect_item;
+alter table collect_item add constraint chk_constraint check (price > 0);
+alter table collect_item drop constraint chk_constraint;
+alter table collect_info comment 'base table comment';
+create index mv_idx1 on collect_info_mv(item_id);
+ERROR 0A000: create index on major refresh materialized view is not supported
+alter table collect_info_mv add index mv_idx1(item_id);
+ERROR 0A000: add index on major refresh materialized view is not supported
+create materialized view collect_info_mv2 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column) refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info inner join collect_item on collect_info.item_id = collect_item.item_id;
+ERROR HY000: cannot ENABLE ON QUERY COMPUTATION for the materialized view collect_info_mv2: base table collect_info doesn't have mlog table
+create table collect_info_col(user_id int, item_id int, primary key(user_id, item_id)) partition by hash(user_id) partitions 4 WITH COLUMN GROUP(each column);
+create table collect_item_col(item_id int, price int, primary key(item_id)) duplicate_scope = 'cluster' duplicate_read_consistency = 'weak' WITH COLUMN GROUP(each column);
+create materialized view collect_info_mv3 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info_col.user_id, collect_info_col.item_id, collect_item.item_id dup_item_id, collect_item.price from collect_info_col inner join collect_item on collect_info_col.item_id = collect_item.item_id;
+ERROR HY000: cannot ENABLE ON QUERY COMPUTATION for the materialized view collect_info_mv3: base table collect_info_col doesn't have mlog table
+create materialized view collect_info_mv4 (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select collect_info.user_id, collect_info.item_id, collect_item_col.item_id dup_item_id, collect_item_col.price from collect_info inner join collect_item_col on collect_info.item_id = collect_item_col.item_id;
+ERROR HY000: cannot ENABLE ON QUERY COMPUTATION for the materialized view collect_info_mv4: base table collect_info doesn't have mlog table
+set ob_global_debug_sync = 'CREATE_TABLE_BEFORE_PUBLISH_SCHEMA clear';
+set ob_global_debug_sync = 'reset';
+drop database db1;

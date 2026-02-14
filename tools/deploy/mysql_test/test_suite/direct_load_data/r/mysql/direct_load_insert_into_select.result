@@ -1,0 +1,1064 @@
+use test;
+alter system set direct_load_allow_fallback=False;
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+) partition by hash(c01) partitions 10;
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+) partition by hash(c01) partitions 10;
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+);
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+) partition by hash(c01) partitions 10;
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+) partition by hash(c01) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+);
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+) partition by hash(c01) partitions 10;
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+);
+insert /*+ enable_parallel_dml parallel(3) append */ into lineitem1 select * from lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+insert  /*+ enable_parallel_dml parallel(3) append */into lineitem1 select * from lineitem;
+ERROR 23000: Duplicated primary key
+drop table if exists lineitem;
+create table lineitem (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from lineitem;
+count(*)
+10
+drop database if exists test1;
+create database test1;
+use test1;
+drop table if exists lineitem1;
+create table lineitem1 (
+c01 int(255) NOT NULL,
+c02 numeric,
+c03 bit(64),
+c04 char(4),
+c05 binary(255),
+c06 varbinary(255),
+c07 datetime(6),
+c08 timestamp(6) NULL DEFAULT NULL,
+tchar char(64) not null,
+ttinyint tinyint,
+tsmallint smallint,
+tmediumint mediumint,
+tinteger integer,
+tbigint bigint,
+tfloat float,
+tdouble double,
+tdecimal decimal(10,5),
+tdate date,
+ttime time,
+tyear year,
+tdatetime datetime,
+ttimestamp timestamp NULL DEFAULT NULL,
+tvarchar varchar(128),
+ttinyint1 tinyint(1),
+ttinyint4 tinyint(4),
+tblob blob,
+tjson json,
+primary key (c01)
+);
+insert  /*+ enable_parallel_dml parallel(3) append */into test1.lineitem1 select * from test.lineitem;
+select count(*) from lineitem1;
+count(*)
+10
+use test;
+autocommit_and_transaction
+drop table if exists t1;
+drop table if exists t2;
+create table t1(id int primary key);
+create table t2(id int);
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3)*/ into t2 select * from t1;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3)*/ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+drop table if exists t1;
+drop table if exists t2;
+create table t1(id int primary key);
+create table t2(id int);
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+ERROR 0A000: using full or inc direct-insert within a transaction is not supported
+rollback;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+drop table if exists t1;
+drop table if exists t2;
+create table t1(id int primary key);
+create table t2(id int);
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+set autocommit=off;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+drop table if exists t1;
+drop table if exists t2;
+create table t1(id int primary key);
+create table t2(id int);
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+set autocommit=off;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+ERROR 0A000: using full or inc direct-insert within a transaction is not supported
+rollback;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+drop table if exists t1;
+drop table if exists t2;
+create table t1(id int primary key);
+create table t2(id int);
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+set autocommit=off;
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3) */ into t2 select * from t1;
+rollback;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+drop table if exists t1;
+drop table if exists t2;
+create table t1(id int primary key);
+create table t2(id int);
+set autocommit=on;
+insert into t1 values (1), (2), (3), (4), (5), (6), (7), (8), (9), (10);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+set autocommit=off;
+begin;
+insert into t1 values (11), (12), (13), (14), (15), (16), (17), (18), (19), (20);
+insert /*+ enable_parallel_dml parallel(3) append */ into t2 select * from t1;
+ERROR 0A000: using full or inc direct-insert within a transaction is not supported
+rollback;
+select count(*) from t1;
+count(*)
+10
+select count(*) from t2;
+count(*)
+10
+use test;
+set autocommit=on;
+global_and_local_index
+drop table if exists table_origin;
+drop table if exists table_global_index;
+drop table if exists table_local_index;
+CREATE TABLE `table_origin` ( `c1` varchar(10) NOT NULL, `c2` bigint(20) NOT NULL, `c3` char(10) NOT NULL, `c4` date NOT NULL, `c5` datetime NOT NULL, `c6` decimal(5,2) NOT NULL, `c7` double NOT NULL, `c8` int(11) NOT NULL, `c9` smallint(6) NOT NULL, `c10` time NOT NULL, `c11` tinyint(4) NOT NULL, `c13` json DEFAULT NULL,  `c14` mediumint(9) DEFAULT NULL,  `c15` mediumtext DEFAULT NULL,  `c16` float DEFAULT NULL, `c17` enum('M','F') DEFAULT NULL,  `md5` varchar(128) DEFAULT NULL);
+CREATE TABLE `table_global_index` (
+`c1` varchar(10) NOT NULL,
+`c2` bigint(20) auto_increment,
+`c3` char(10) NOT NULL,
+`c4` date NOT NULL,
+`c5` datetime NOT NULL,
+`c6` decimal(5,2) NOT NULL,
+`c7` double NOT NULL, `c8` int(11) NOT NULL,
+`c9` smallint(6) NOT NULL,
+`c10` time NOT NULL,
+`c11` tinyint(4) NOT NULL,
+`c13` json DEFAULT NULL,
+`c14` mediumint(9) DEFAULT NULL,
+`c15` mediumtext DEFAULT NULL,
+`c16` float DEFAULT NULL,
+`c17` enum('M','F') DEFAULT NULL,
+`md5` varchar(128) DEFAULT NULL,
+PRIMARY KEY (`c1`,c8),
+index k1 (c4,c2,c1) global partition by hash(c2) partitions 10) partition by hash(c8) partitions 10;
+CREATE TABLE `table_local_index` (
+`c1` varchar(10) NOT NULL,
+`c2` bigint(20) auto_increment,
+`c3` char(10) NOT NULL,
+`c4` date NOT NULL,
+`c5` datetime NOT NULL,
+`c6` decimal(5,2) NOT NULL,
+`c7` double NOT NULL, `c8` int(11) NOT NULL,
+`c9` smallint(6) NOT NULL,
+`c10` time NOT NULL,
+`c11` tinyint(4) NOT NULL,
+`c13` json DEFAULT NULL,
+`c14` mediumint(9) DEFAULT NULL,
+`c15` mediumtext DEFAULT NULL,
+`c16` float DEFAULT NULL,
+`c17` enum('M','F') DEFAULT NULL,
+`md5` varchar(128) DEFAULT NULL,
+PRIMARY KEY (`c1`,c8),
+index k1 (c4,c2,c1) local) partition by hash(c8) partitions 10;
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+select count(*) from table_origin;
+count(*)
+1000
+insert /*+ enable_parallel_dml parallel(3) append */ into table_global_index select * from table_origin;
+select count(*) from table_global_index;
+count(*)
+1000
+insert /*+ enable_parallel_dml parallel(3) append */ into table_local_index select * from table_origin;
+select count(*) from table_local_index;
+count(*)
+1000
+drop table test1.lineitem1;
+drop table test.lineitem;
+drop database if exists test2;
+create database test2;
+use test;
+drop table if exists t1;
+create table t1 (c1 int primary key, c2 int);
+insert into t1 values(1,2), (2,2), (3,2);
+create table test2.t2 (c1 int primary key, c2 int);
+insert /*+ append enable_parallel_dml parallel(3) */ into test2.t2 select * from t1;
+drop table t1;
+drop database test2;
+================ test vectorized ================
+select count(*) from t1;
+count(*)
+1000
+select count(*) from t_pqTly6tEb1;
+count(*)
+100000
+TEST Non-vectorized
+alter system set _rowsets_enabled = false;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2 (c1) select * from t1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3 (c1) select * from t1;
+select count(*) from t2 where c3 = 'hello world';
+count(*)
+1000
+select count(*) from t3 where c3 = 'hello world';
+count(*)
+1000
+insert /*+ append enable_parallel_dml parallel(8) */ into t1_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t4_pqTly6tEb1 select * from t_pqTly6tEb1;
+select count(*) from t1_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t2_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t3_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t4_pqTly6tEb1;
+count(*)
+100000
+alter system set _rowsets_enabled = true;
+TEST vectorized 1.0
+set _enable_rich_vector_format = false;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2 (c1) select * from t1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3 (c1) select * from t1;
+select count(*) from t2 where c3 = 'hello world';
+count(*)
+1000
+select count(*) from t3 where c3 = 'hello world';
+count(*)
+1000
+insert /*+ append enable_parallel_dml parallel(8) */ into t1_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t4_pqTly6tEb1 select * from t_pqTly6tEb1;
+select count(*) from t1_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t2_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t3_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t4_pqTly6tEb1;
+count(*)
+100000
+set _enable_rich_vector_format = true;
+TEST vectorized 2.0
+insert /*+ append enable_parallel_dml parallel(8) */ into t2 (c1) select * from t1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3 (c1) select * from t1;
+select count(*) from t2 where c3 = 'hello world';
+count(*)
+1000
+select count(*) from t3 where c3 = 'hello world';
+count(*)
+1000
+insert /*+ append enable_parallel_dml parallel(8) */ into t1_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t2_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t3_pqTly6tEb1 select * from t_pqTly6tEb1;
+insert /*+ append enable_parallel_dml parallel(8) */ into t4_pqTly6tEb1 select * from t_pqTly6tEb1;
+select count(*) from t1_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t2_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t3_pqTly6tEb1;
+count(*)
+100000
+select count(*) from t4_pqTly6tEb1;
+count(*)
+100000
+alter system set direct_load_allow_fallback=True;

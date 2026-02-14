@@ -51,6 +51,7 @@ public:
   ObTableIterParam();
   virtual ~ObTableIterParam();
   void reset();
+  void reuse();
   OB_INLINE bool is_valid() const
   {
     return (OB_INVALID_ID != table_id_ || tablet_id_.is_valid()) // TODO: use tablet id replace table id
@@ -145,6 +146,14 @@ public:
   { return ss_rowkey_prefix_cnt_; }
   OB_INLINE bool is_skip_scan() const
   { return ss_rowkey_prefix_cnt_ > 0; }
+  OB_INLINE void set_is_advance_skip_scan()
+  {
+    is_advance_skip_scan_ = true;
+  }
+  OB_INLINE bool is_advance_skip_scan() const
+  {
+    return is_advance_skip_scan_;
+  }
   OB_INLINE void disable_blockscan()
   {
     pd_storage_flag_.set_blockscan_pushdown(false);
@@ -237,6 +246,7 @@ public:
   bool limit_prefetch_;
   bool is_mds_query_;
   bool is_non_unique_local_index_;
+  bool is_advance_skip_scan_;
   int64_t ss_rowkey_prefix_cnt_;
   sql::ObStoragePushdownFlag pd_storage_flag_;
   ObTableScanOption table_scan_opt_;
@@ -255,6 +265,7 @@ public:
   ObTableAccessParam();
   virtual ~ObTableAccessParam();
   void reset();
+  void reuse();
   OB_INLINE bool is_valid() const { return is_inited_ && iter_param_.is_valid(); }
   // used for query
   int init(

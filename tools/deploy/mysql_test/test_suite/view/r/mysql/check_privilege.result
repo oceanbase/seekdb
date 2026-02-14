@@ -1,0 +1,23 @@
+drop user if exists check_privilege_user;
+drop database if exists check_privilege_db;
+create database check_privilege_db;
+use check_privilege_db;
+create table t1(id int, name char(20));
+select count(privileges)>10000 from oceanbase.__all_virtual_information_columns;
+count(privileges)>10000
+1
+create user if not exists 'check_privilege_user';
+grant select on check_privilege_db.* to check_privilege_user;
+show grants for check_privilege_user;
+Grants for check_privilege_user@%
+GRANT USAGE ON *.* TO 'check_privilege_user'
+GRANT SELECT ON `check_privilege_db`.* TO 'check_privilege_user'
+show columns from t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	YES		NULL
+name	char(20)	YES		NULL
+show tables;
+Tables_in_check_privilege_db
+t1
+drop user if exists check_privilege_user;
+drop database if exists check_privilege_db;

@@ -1,0 +1,119 @@
+set @@session.explicit_defaults_for_timestamp=off;
+alter system set minor_compact_trigger = 10;
+drop table if exists test_check_row_exist;
+drop table if exists test_check_row_exist2;
+create table test_check_row_exist(c1 int primary key, c2 int);
+create index _i_c2_test_check_row_exist on test_check_row_exist(c2);
+set SESSION ob_query_timeout = 1000000;
+insert /*+ log_level(debug) */ into test_check_row_exist values(1, 1);
+insert /*+ log_level(debug) */ into test_check_row_exist values(1, 1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+insert /*+ log_level(debug) */ into test_check_row_exist values(11, 11);
+delete /*+ log_level(debug) */ from test_check_row_exist where c1 = 11;
+begin;
+insert /*+ log_level(debug) */ into test_check_row_exist values(11, 11);
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(12, 12);
+begin;
+set SESSION ob_trx_timeout = 10000000000;
+insert /*+ log_level(debug) */ into test_check_row_exist values(2, 2);
+insert /*+ log_level(debug) */ into test_check_row_exist values(2, 2);
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+begin;
+select * from test_check_row_exist;
+c1	c2
+1	1
+12	12
+insert /*+ log_level(debug) */ into test_check_row_exist values(3, 3);
+insert /*+ log_level(debug) */ into test_check_row_exist values(3, 3);
+ERROR 25000: can't serialize access for this transaction
+begin;
+insert /*+ log_level(debug) */ into test_check_row_exist values(110, 110);
+savepoint qcc;
+insert /*+ log_level(debug) */ into test_check_row_exist values(111, 111);
+create table test_check_row_exist2(c1 int primary key, c2 int);
+set SESSION transaction isolation level repeatable read;
+begin;
+insert /*+ log_level(debug) */ into test_check_row_exist2 values(120, 120);
+commit;
+insert /*+ log_level(debug) */ into test_check_row_exist values(130, 130);
+alter system minor freeze;
+insert /*+ log_level(debug) */ into test_check_row_exist values(1, 1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+begin;
+update /*+ log_level(debug) */ test_check_row_exist set c1 = c1 + 1000 where c1 = 1;
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(1, 1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+begin;
+insert /*+ log_level(debug) */ into test_check_row_exist values(11, 11);
+rollback;
+begin;
+delete /*+ log_level(debug) */ from test_check_row_exist where c1 = 12;
+insert /*+ log_level(debug) */ into test_check_row_exist values(12, 12);
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(2, 2);
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+insert /*+ log_level(debug) */ into test_check_row_exist values(3, 3);
+ERROR 25000: can't serialize access for this transaction
+begin;
+update /*+ log_level(debug) */ test_check_row_exist set c1 = c1 + 1000 where c1 = 3;
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(3, 3);
+ERROR 25000: can't serialize access for this transaction
+rollback to savepoint qcc;
+commit;
+insert /*+ log_level(debug) */ into test_check_row_exist values(111, 111);
+set SESSION transaction isolation level repeatable read;
+begin;
+select * from test_check_row_exist2;
+c1	c2
+120	120
+begin;
+update /*+ log_level(debug) */ test_check_row_exist2 set c2 = c2 + 1;
+commit;
+begin;
+delete /*+ log_level(debug) */ from test_check_row_exist where c1 = 130;
+insert /*+ log_level(debug) */ into test_check_row_exist values(130, 131);
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(130, 132);
+ERROR 23000: Duplicate entry '130' for key 'PRIMARY'
+alter system minor freeze;
+insert /*+ log_level(debug) */ into test_check_row_exist values(1, 1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+begin;
+update /*+ log_level(debug) */ test_check_row_exist set c1 = c1 + 1000 where c1 = 1;
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(1, 1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+begin;
+insert /*+ log_level(debug) */ into test_check_row_exist values(11, 11);
+rollback;
+begin;
+delete /*+ log_level(debug) */ from test_check_row_exist where c1 = 12;
+insert /*+ log_level(debug) */ into test_check_row_exist values(12, 12);
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(2, 2);
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+insert /*+ log_level(debug) */ into test_check_row_exist values(3, 3);
+ERROR 25000: can't serialize access for this transaction
+begin;
+update /*+ log_level(debug) */ test_check_row_exist set c1 = c1 + 1000 where c1 = 3;
+rollback;
+insert /*+ log_level(debug) */ into test_check_row_exist values(3, 3);
+ERROR 25000: can't serialize access for this transaction
+begin;
+update /*+ log_level(debug) */ test_check_row_exist2 set c2 = c2 + 1;
+rollback;
+update /*+ log_level(debug) */ test_check_row_exist2 set c2 = c2 + 1;
+ERROR 25000: can't serialize access for this transaction
+commit;
+commit;
+commit;
+commit;
+commit;
+commit;
+commit;
+drop table if exists test_check_row_exist;
+drop table if exists test_check_row_exist2;

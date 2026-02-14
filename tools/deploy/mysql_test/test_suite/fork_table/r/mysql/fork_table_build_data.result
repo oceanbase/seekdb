@@ -1,0 +1,110 @@
+drop database if exists db_fork_data;
+create database db_fork_data;
+use db_fork_data;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+# 加速major freeze
+alter system set merger_check_interval = '10s' tenant sys;
+alter system set ob_compaction_schedule_interval = '3s' tenant sys;
+============================================
+1. 源表删列后执行Fork Table
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_data.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_data.t1_fork'
+create table t1 (
+id int primary key,
+c1 varchar(20),
+c2 int,
+drop_col varchar(20)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t1 values (1, 'a', 10, 'd1');
+insert into t1 values (101, 'b', 20, 'd2');
+# 先在源表删列
+alter table t1 drop column drop_col;
+# 源表结构确认
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `c1` varchar(20) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# Fork表
+fork table t1 to t1_fork;
+# 目标表结构应不包含被删除列
+show create table t1_fork;
+Table	Create Table
+t1_fork	CREATE TABLE `t1_fork` (
+  `id` int(11) NOT NULL,
+  `c1` varchar(20) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 目标表数据应与删列后的源表一致
+select * from t1_fork order by id;
+id	c1	c2
+1	a	10
+101	b	20
+# 触发major freeze并等待完成，验证不会卡住
+alter system major freeze;
+============================================
+2. Major Freeze后删列再Fork
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_data.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_data.t2_fork'
+create table t2 (
+id int primary key,
+c1 varchar(20),
+c2 int,
+drop_col varchar(20)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t2 values (1, 'a1', 10, 'd1');
+insert into t2 values (101, 'b1', 20, 'd2');
+# 先触发major freeze并等待完成
+alter system major freeze;
+# 再插入两行数据
+insert into t2 values (2, 'a2', 30, 'd3');
+insert into t2 values (102, 'b2', 40, 'd4');
+# 执行删列
+alter table t2 drop column drop_col;
+# Fork表
+fork table t2 to t2_fork;
+# 再次触发major freeze并等待完成
+alter system major freeze;
+# 目标表数据校验
+select * from t2_fork order by id;
+id	c1	c2
+1	a1	10
+2	a2	30
+101	b1	20
+102	b2	40
+============================================
+3. 清理
+============================================
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop database if exists db_fork_data;

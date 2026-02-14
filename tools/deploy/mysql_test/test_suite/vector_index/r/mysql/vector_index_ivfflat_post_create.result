@@ -1,0 +1,306 @@
+alter system set ob_vector_memory_limit_percentage = 34;
+# 单分区
+drop table if exists hhst1;
+CREATE TABLE hhst1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3));
+insert into hhst1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(3,'[3,1,2]','[3,2,2]','[3,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(4,'[4,1,2]','[5,2,3]','[4,4,4]');
+insert into hhst1(c1,c2,c3,c4) values(5,'[5,1,2]','[5,2,3]','[5,5,5]');
+insert into hhst1(c1,c2,c3,c4) values(6,'[1,1,2]','[2,2,3]','[6,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(7,'[2,1,2]','[2,2,2]','[4,7,4]');
+insert into hhst1(c1,c2,c3,c4) values(8,'[3,1,2]','[3,2,2]','[8,3,4]');
+insert into hhst1(c1,c2,c3,c4) values(9,'[4,1,2]','[5,2,3]','[9,9,4]');
+insert into hhst1(c1,c2,c3,c4) values(0,'[5,1,2]','[5,2,3]','[10,10,10]');
+create vector index idx1 on hhst1 (c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+update hhst1 set c4 = '[2,2,2]' where c1 = 2;
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]') ON DUPLICATE KEY UPDATE c4 = '[9,8,7]';
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]') ON DUPLICATE KEY UPDATE c3 = '[1,1,1]';
+delete from hhst1 where c1 = 3;
+update hhst1 set c4 = '[1,2,3]' where c1 = 1;
+insert into hhst1(c1,c2,c3,c4) values(3, '[6,2,2]', '[2,2,3]', '[6,6,6]');
+set ob_enable_index_direct_select = 1;
+# 查询索引表
+count(*)
+2
+count(*)
+10
+count(*)
+10
+# 采样数小于聚簇中心数
+# 查询索引表
+count(*)
+10
+count(*)
+10
+count(*)
+10
+drop table hhst1;
+# 分区表
+drop table if exists hhst1;
+drop view if exists hhst1_view;
+CREATE TABLE hhst1 (c1 int primary key, c4 vector(3))
+PARTITION BY RANGE(c1) (
+PARTITION p0 VALUES less than(10),
+PARTITION p1 VALUES less than(20),
+PARTITION p2 VALUES less than(MAXVALUE)
+);
+insert into hhst1(c1,c4) values(1,'[1,3,2]');
+insert into hhst1(c1,c4) values(2,'[2,3,2]');
+insert into hhst1(c1,c4) values(3,'[3,3,2]');
+insert into hhst1(c1,c4) values(4,'[4,4,4]');
+insert into hhst1(c1,c4) values(5,'[5,5,5]');
+insert into hhst1(c1,c4) values(6,'[6,3,2]');
+insert into hhst1(c1,c4) values(7,'[4,7,4]');
+insert into hhst1(c1,c4) values(8,'[8,3,4]');
+insert into hhst1(c1,c4) values(9,'[9,9,4]');
+insert into hhst1(c1,c4) values(0,'[10,10,10]');
+insert into hhst1(c1,c4) values(10,'[10,30,20]');
+insert into hhst1(c1,c4) values(11,'[20,30,20]');
+insert into hhst1(c1,c4) values(12,'[30,30,20]');
+insert into hhst1(c1,c4) values(13,'[40,40,40]');
+insert into hhst1(c1,c4) values(14,'[50,50,50]');
+insert into hhst1(c1,c4) values(15,'[60,30,20]');
+insert into hhst1(c1,c4) values(16,'[40,70,40]');
+insert into hhst1(c1,c4) values(17,'[80,30,40]');
+insert into hhst1(c1,c4) values(18,'[90,90,40]');
+insert into hhst1(c1,c4) values(19,'[100,100,100]');
+create /*+ parallel(2) */ vector index  idx1 on hhst1 (c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+CREATE VIEW hhst1_view as select * from hhst1;
+update hhst1 set c4 = '[2,2,2]' where c1 = 2;
+insert into hhst1(c1,c4) values(2,'[2,3,2]') ON DUPLICATE KEY UPDATE c4 = '[9,8,7]';
+delete from hhst1 where c1 = 13;
+update hhst1 set c4 = '[1,2,3]' where c1 = 2;
+insert into hhst1(c1,c4) values(21, '[6,6,6]');
+update hhst1 set c1 = 22 where c1 = 2;
+update hhst1 set c1 = 20 where c1 = 0;
+update hhst1_view set c4 = '[3,3,3]' where c1 = 3;
+update hhst1_view set c1 = 23 where c1 = 3;
+replace into hhst1_view (c1, c4) values(23, '[23,23,23]');
+replace into hhst1_view (c1, c4) values(23, '[23,23,23]');
+insert into hhst1_view(c1,c4) values(23,'[2,3,2]') ON DUPLICATE KEY UPDATE c4 = '[9,8,7]';
+update hhst1_view set c1 = 3 where c1 = 23;
+delete from hhst1_view where c1 = 3;
+# 查询索引表
+count(*)
+4
+count(*)
+19
+count(*)
+19
+drop table hhst1;
+drop view hhst1_view;
+# wine和iris数据集
+drop table if exists t1;
+create table t1 (id int primary key, wine_type int, wine_data vector(13), iris_type varchar(20), iris_data vector(4), data vector(3));
+create vector index idx1 on t1 (wine_data) with (distance=l2, type=ivf_flat, nlist=3, sample_per_nlist=50);
+create vector index idx2 on t1 (iris_data) with (distance=l2, type=ivf_flat, nlist=3, sample_per_nlist=50);
+create vector index idx3 on t1 (data) with (distance=l2, type=hnsw, lib=vsag, m=10, ef_construction=11, ef_search=40);
+create view vec_view as select * from t1;
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `wine_type` int(11) DEFAULT NULL,
+  `wine_data` VECTOR(13) DEFAULT NULL,
+  `iris_type` varchar(20) DEFAULT NULL,
+  `iris_data` VECTOR(4) DEFAULT NULL,
+  `data` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx1` (`wine_data`) WITH (DISTANCE=L2, TYPE=IVF_FLAT, NLIST=3, SAMPLE_PER_NLIST=50, LIB=OB) BLOCK_SIZE 16384,
+  VECTOR KEY `idx2` (`iris_data`) WITH (DISTANCE=L2, TYPE=IVF_FLAT, NLIST=3, SAMPLE_PER_NLIST=50, LIB=OB) BLOCK_SIZE 16384,
+  VECTOR KEY `idx3` (`data`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=10, EF_CONSTRUCTION=11, EF_SEARCH=40) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select count(*) from t1;
+count(*)
+628
+# 查询索引表
+count(*)
+3
+count(*)
+628
+count(*)
+628
+# 查询索引表
+count(*)
+3
+count(*)
+628
+count(*)
+628
+update t1 set wine_data = '[14.23,1.71,2.43,15.6,127,2.8,3.06,0.28,2.29,5.64,1.04,3.92,1065]' where id = 201;
+update t1 set wine_type = 1 where id = 201;
+update t1 set id = 190 where id = 201;
+update t1 set wine_data = '[11.61,1.35,2.7,20,94,2.74,2.92,0.29,2.49,2.65,0.96,3.26,680]' where id = 202;
+update t1 set wine_type = 2 where id = 202;
+insert into t1(id, wine_type, wine_data) values(203, 1, '[13.2,1.78,2.14,11.2,100,2.65,2.76,0.26,1.28,4.38,1.05,3.4,1050]') ON DUPLICATE KEY UPDATE wine_data = '[13.2,1.78,2.14,11.2,100,2.65,2.76,0.26,1.28,4.38,1.05,3.4,1050]';
+insert into t1(id, wine_type, wine_data) values(179, 3,'[14.13,4.1,2.74,24.5,96,2.05,0.76,0.56,1.35,9.2,0.61,1.6,560]') ON DUPLICATE KEY UPDATE wine_data = '[13.2,1.78,2.14,11.2,100,2.65,2.76,0.26,1.28,4.38,1.05,3.4,1050]';
+delete from t1 where id = 178;
+replace into t1(id, wine_type, wine_data) values(180, 3,'[13.17,2.59,2.37,20,120,1.65,0.68,0.53,1.46,9.3,0.6,1.62,840]');
+select count(*) from t1;
+count(*)
+629
+# 查询索引表
+count(*)
+3
+count(*)
+629
+count(*)
+629
+# 查询索引表
+count(*)
+3
+count(*)
+629
+count(*)
+629
+insert into vec_view(id, wine_type, wine_data, iris_type, iris_data, data) values
+(181, 1,'[14.23,1.71,2.43,15.6,127,2.8,3.06,0.28,2.29,5.64,1.04,3.92,1065]', 'Iris-virginica', '[5.9,3.0,5.1,1.8]', '[2,2,2]');
+update vec_view set data = '[181,181,181]' where id = 181;
+replace into vec_view(id, wine_type, wine_data, iris_type, iris_data, data) values
+(181, 1,'[14.23,1.71,2.43,15.6,127,2.8,3.06,0.28,2.29,5.64,1.04,3.92,1065]', 'Iris-virginica', '[5.9,3.0,5.1,1.8]', '[2,2,2]');
+replace into vec_view(id, wine_type, wine_data, iris_type, iris_data, data) values
+(181, 1,'[14.23,1.71,2.43,15.6,127,2.8,3.06,0.28,2.29,5.64,1.04,3.92,1065]', 'Iris-virginica', '[5.9,3.0,5.1,1.8]', '[2,2,2]');
+insert into vec_view(id, wine_type, wine_data, iris_type, iris_data, data) values
+(181, 1,'[14.23,1.71,2.43,15.6,127,2.8,3.06,0.28,2.29,5.64,1.04,3.92,1065]', 'Iris-virginica', '[5.9,3.0,5.1,1.8]', '[2,2,2]')
+ON DUPLICATE KEY UPDATE data = '[181,181,181]';
+drop table t1;
+drop view vec_view;
+drop table if exists hhst1;
+drop table if exists hhst2;
+CREATE TABLE hhst1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3));
+insert into hhst1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(3,'[3,1,2]','[3,2,2]','[3,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(4,'[4,1,2]','[5,2,3]','[4,4,4]');
+insert into hhst1(c1,c2,c3,c4) values(5,'[5,1,2]','[5,2,3]','[5,5,5]');
+insert into hhst1(c1,c2,c3,c4) values(6,'[1,1,2]','[2,2,3]','[6,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(7,'[2,1,2]','[2,2,2]','[4,7,4]');
+insert into hhst1(c1,c2,c3,c4) values(8,'[3,1,2]','[3,2,2]','[8,3,4]');
+insert into hhst1(c1,c2,c3,c4) values(9,'[4,1,2]','[5,2,3]','[9,9,4]');
+insert into hhst1(c1,c2,c3,c4) values(0,'[5,1,2]','[5,2,3]','[10,10,10]');
+CREATE TABLE hhst2 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3));
+insert into hhst2(c1,c2,c3,c4) values(11,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into hhst2(c1,c2,c3,c4) values(12,'[2,1,2]','[2,2,2]','[2,3,2]');
+insert into hhst2(c1,c2,c3,c4) values(13,'[3,1,2]','[3,2,2]','[3,3,2]');
+insert into hhst2(c1,c2,c3,c4) values(14,'[4,1,2]','[5,2,3]','[4,4,4]');
+insert into hhst2(c1,c2,c3,c4) values(15,'[5,1,2]','[5,2,3]','[5,5,5]');
+insert into hhst2(c1,c2,c3,c4) values(16,'[1,1,2]','[2,2,3]','[6,3,2]');
+insert into hhst2(c1,c2,c3,c4) values(17,'[2,1,2]','[2,2,2]','[4,7,4]');
+insert into hhst2(c1,c2,c3,c4) values(18,'[3,1,2]','[3,2,2]','[8,3,4]');
+insert into hhst2(c1,c2,c3,c4) values(19,'[4,1,2]','[5,2,3]','[9,9,4]');
+insert into hhst2(c1,c2,c3,c4) values(20,'[5,1,2]','[5,2,3]','[10,10,10]');
+create vector index vector_idx1 on hhst1(c3) with (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40);
+create vector index vector_idx2 on hhst1(c4) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) */ into hhst2 select * from hhst1;
+select count(*) from hhst2;
+count(*)
+20
+insert ignore into hhst1 select * from hhst2;
+select count(*) from hhst1;
+count(*)
+20
+drop table hhst1;
+drop table hhst2;
+drop table if exists t1;
+drop view if exists v1;
+create table t1 (c1 int primary key, c2 vector(3), c3 vector(3), c4 varchar(4096));
+insert into t1 values(1, '[0.203846,0.205289,0.880265]', '[0.203846,0.205289,0.880265]', "Gerard A. Gerry Salton (8 March 1927 – 28 August 1995) was a professor of Computer Science at Cornell University. Salton was perhaps the leading computer scientist working in the field of information retrieval during his time, and the father of Information Retrieval");
+insert into t1 values(2, '[0.735541,0.670776,0.903237]', '[0.735541,0.670776,0.903237]', "Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems. ");
+insert into t1 values(3, '[0.327936,0.048756,0.084670]', '[0.327936,0.048756,0.084670]', "Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases. ");
+insert into t1 values(4, '[0.148869,0.878546,0.028024]', '[0.148869,0.878546,0.028024]', "Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.");
+insert into t1 values(5, '[0.334970,0.857377,0.886132]', '[0.334970,0.857377,0.886132]', "Yann André LeCun[1] (born 8 July 1960) is a Turing Award winning French computer scientist working primarily in the fields of machine learning, computer vision, mobile robotics and computational neuroscience.");
+insert into t1 values(6, '[0.117582,0.302352,0.471198]', '[0.117582,0.302352,0.471198]', "Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system. ");
+insert into t1 values(7, '[0.551185,0.231134,0.075354]', '[0.551185,0.231134,0.075354]', "Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.");
+insert into t1 values(8, '[0.185221,0.315131,0.558301]', '[0.185221,0.315131,0.558301]', "Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX");
+insert into t1 values(9, '[0.928764,0.254038,0.272721]', '[0.928764,0.254038,0.272721]', "asdavoiajf oweirjweoifjsofmcspodkow cmdowm owejocwpe fowecofow ow weor pksdkm foe owei");
+insert into t1 values(10, '[0.345999,0.254102,0.950869]', '[0.345999,0.254102,0.950869]', "pqowepqo pweuijkfn dmclsjrqowep kdlsnvkfdjh oweifj oqfj oewijfpqwo kpew jfpqokd wpqkc owq");
+create vector index idx1 on t1(c2) with (type=hnsw, distance=l2);
+create fulltext index idx2 on t1(c4);
+create vector index idx3 on t1(c3) with (type=ivf_flat, distance=l2, nlist=2);
+create view v1 as select * from t1;
+select * from t1 order by l2_distance(c2, [0,0,0]) limit 5;
+c1	c2	c3	c4
+3	[0.327936,0.048756,0.08467]	[0.327936,0.048756,0.08467]	Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases.
+6	[0.117582,0.302352,0.471198]	[0.117582,0.302352,0.471198]	Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system.
+7	[0.551185,0.231134,0.075354]	[0.551185,0.231134,0.075354]	Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.
+8	[0.185221,0.315131,0.558301]	[0.185221,0.315131,0.558301]	Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX
+4	[0.148869,0.878546,0.028024]	[0.148869,0.878546,0.028024]	Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.
+select * from t1 order by l2_distance(c2, [0,0,0]) approx limit 5;
+c1	c2	c3	c4
+3	[0.327936,0.048756,0.08467]	[0.327936,0.048756,0.08467]	Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases.
+6	[0.117582,0.302352,0.471198]	[0.117582,0.302352,0.471198]	Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system.
+7	[0.551185,0.231134,0.075354]	[0.551185,0.231134,0.075354]	Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.
+8	[0.185221,0.315131,0.558301]	[0.185221,0.315131,0.558301]	Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX
+4	[0.148869,0.878546,0.028024]	[0.148869,0.878546,0.028024]	Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.
+select c1,c4 from t1 where match (c4) against ("distributed database");
+c1	c4
+8	Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX
+2	Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems.
+3	Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases.
+select c1,c4 from t1 where match (c4) against ("database");
+c1	c4
+2	Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems.
+3	Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases.
+select c1,c4 from t1 where match (c4) against ("computer");
+c1	c4
+5	Yann André LeCun[1] (born 8 July 1960) is a Turing Award winning French computer scientist working primarily in the fields of machine learning, computer vision, mobile robotics and computational neuroscience.
+1	Gerard A. Gerry Salton (8 March 1927 – 28 August 1995) was a professor of Computer Science at Cornell University. Salton was perhaps the leading computer scientist working in the field of information retrieval during his time, and the father of Information Retrieval
+4	Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.
+6	Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system.
+8	Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX
+3	Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases.
+2	Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems.
+7	Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.
+select c1,c4 from t1 where match (c4) against (1943);
+c1	c4
+6	Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system.
+3	Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases.
+select c1,c4 from t1 where match (c4) against (0xFF);
+c1	c4
+insert into t1(c1,c2,c3,c4) values(11, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c2='[1,9,3]';
+insert into t1(c1,c2,c3,c4) values(11, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c3='[1,1,1]';
+insert into t1(c1,c2,c3,c4) values(11, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c4="aldno wjdoi wodj owi jodi";
+insert into t1(c1,c2,c3,c4) values(1, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c2='[1,1,1]', c3='[3,3,3]', c4="aldno wjdoi wodj owi jodi kwdnowi o ioi";
+replace into t1 (c1, c2, c3, c4) values (10, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+replace into t1 (c1, c2, c3, c4) values (10, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+update t1 set c4 = "abcdefghijklmn iasoqw opqoweq nkqndk qjwkjq" where c1 = 1;
+update t1 set c2=[2,3,4], c3=[1,2,3], c4="qiweobkcjncoaijdoiqj odqwij o" where c1=2;
+update t1 set c2=[5,6,7] where c1=3;
+update t1 set c3=[1,1,1];
+update t1 set c4="oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p";
+select * from v1;
+c1	c2	c3	c4
+1	[1,1,1]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+2	[2,3,4]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+3	[5,6,7]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+4	[0.148869,0.878546,0.028024]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+5	[0.33497,0.857377,0.886132]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+6	[0.117582,0.302352,0.471198]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+7	[0.551185,0.231134,0.075354]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+8	[0.185221,0.315131,0.558301]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+9	[0.928764,0.254038,0.272721]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+10	[1,2,3]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+11	[1,1,1]	[1,1,1]	oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p
+insert into v1(c1,c2,c3,c4) values(1, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c2='[1,9,3]';
+insert into v1(c1,c2,c3,c4) values(1, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c3='[1,9,3]';
+update t1 set c2='[1,5,6]' where match (c4) against ("distributed database");
+delete from t1 where match (c4) against ("distributed database");
+replace into v1 (c1, c2, c3, c4) values (2, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+replace into v1 (c1, c2, c3, c4) values (2, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+drop table t1;
+drop view v1;
+bugfix: 2025032000107659236
+drop table if exists t1;
+create table t1 (id int primary key, wine_type int, wine_data vector(13), iris_type varchar(20), iris_data vector(4), data vector(3))
+LOB_INROW_THRESHOLD=16;
+alter table t1 set lob_inrow_threshold = 1024;
+create vector index idx1 on t1 (wine_data) with (distance=l2, type=ivf_flat, nlist=3, sample_per_nlist=50);
+drop table if exists t1;
+create table t1 (id int primary key, wine_type int, wine_data vector(13), iris_type varchar(20), iris_data vector(4), data vector(3))
+LOB_INROW_THRESHOLD=16 WITH COLUMN GROUP(all columns, each column);
+alter table t1 set lob_inrow_threshold = 1024;
+create vector index idx1 on t1 (wine_data) with (distance=l2, type=ivf_flat, nlist=3, sample_per_nlist=50);
+ERROR 0A000: create ivf index on table with column store is not supported
+drop table t1;
+alter system set ob_vector_memory_limit_percentage = 0;

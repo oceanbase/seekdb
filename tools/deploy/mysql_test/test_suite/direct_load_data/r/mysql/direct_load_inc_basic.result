@@ -1,0 +1,243 @@
+alter system set direct_load_allow_fallback=False;
+================ test rowkey table =========
+create table t_pqTly6tEb1  (c1 int primary key, c2 int);
+insert into t_pqTly6tEb1 values(-100, 5);
+insert into t_pqTly6tEb1 values(100,4);
+drop table t_pqTly6tEb1;
+================ test heap table =========
+create table t_pqTly6tEb1  (c1 int, c2 int);
+insert into t_pqTly6tEb1 values(-100, 5);
+insert into t_pqTly6tEb1 values(100,4);
+select * from t_pqTly6tEb1;
+c1	c2
+-100	5
+100	4
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+0	0
+1	1
+drop table t_pqTly6tEb1;
+================ test insert into select =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 int);
+insert into t1_pqTly6tEb1 values(1,2),(3,4),(5,6);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+select * from t2_pqTly6tEb1;
+c1	c2
+1	2
+3	4
+5	6
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test load fail =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(10));
+insert into t2_pqTly6tEb1 values(40, 'kkk1');
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long text longer than ten chars'), (4, 'kkk');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+ERROR 22001: Data too long for column 'c2' at row 0
+insert into t2_pqTly6tEb1 values(4, 'kkk');
+select * from t2_pqTly6tEb1;
+c1	c2
+4	kkk
+40	kkk1
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test lob =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(8000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 text);
+create table t3_pqTly6tEb1  (c1 int primary key, c2 json);
+create table t4_pqTly6tEb1  (c1 int primary key, c2 text);
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, repeat('1', 7000)), (4, 'kkk');
+insert into t4_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, repeat('1', 7000)), (4, 'kkk');
+insert into t2_pqTly6tEb1 values(40, repeat('1', 7000));
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t4_pqTly6tEb1;
+delete from t2_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t4_pqTly6tEb1;
+insert into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t4_pqTly6tEb1;
+delete from t3_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t4_pqTly6tEb1;
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+drop table t3_pqTly6tEb1;
+drop table t4_pqTly6tEb1;
+================ test local index =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create index i1 on t2_pqTly6tEb1(c2);
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long text longer than ten chars'), (4, 'kkk');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+select * from t2_pqTly6tEb1 order by c1;
+c1	c2
+1	hello
+2	world
+3	maybe very long text longer than ten chars
+4	kkk
+c1	c2
+1	hello
+2	world
+3	maybe very long text longer than ten chars
+4	kkk
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test local index with head table =========
+create table t1_pqTly6tEb1  (c1 int, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int, c2 varchar(1000));
+create index i1 on t2_pqTly6tEb1(c2);
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long text longer than ten chars'), (4, 'kkk');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+select * from t2_pqTly6tEb1 order by c2;
+c1	c2
+1	hello
+4	kkk
+3	maybe very long text longer than ten chars
+2	world
+c2
+hello
+kkk
+maybe very long text longer than ten chars
+world
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test local index with multi partiton =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000), c3 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(1000), c3 int) partition by hash(c1) partitions 3;
+create index i1 on t2_pqTly6tEb1(c3);
+insert into t1_pqTly6tEb1 values(1,'hello', 1), (2, 'world', 2), (3, 'maybe very long text longer than ten chars', 3), (4, 'kkk', 4);
+insert into t2_pqTly6tEb1 values(1, 'hello', 0);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+select * from t2_pqTly6tEb1 order by c1;
+c1	c2	c3
+1	hello	1
+2	world	2
+3	maybe very long text longer than ten chars	3
+4	kkk	4
+c1	c3
+1	1
+2	2
+3	3
+4	4
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test global index =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 int);
+create index i1 on t2_pqTly6tEb1(c2) global PARTITION BY HASH(c2) PARTITIONS 5;
+insert into t1_pqTly6tEb1 values(1, 1), (2, 2), (3, 3), (4, 4);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+ERROR 0A000: unsupported index type exists, incremental direct-load does only support normal local index or single local unique index in heap table
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test check row conflict =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+insert into t1_pqTly6tEb1 values (1,'hello');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+insert into t2_pqTly6tEb1 values (1,'hello');
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+insert into t1_pqTly6tEb1 values (2, 'world');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+insert into t2_pqTly6tEb1 values (1,'hello'), (2, 'world');
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test direct load memtable dump =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 int);
+insert into t1_pqTly6tEb1 values(1,1), (2,2), (3,3), (4,4);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+alter table t1_pqTly6tEb1 add (c3 int default 10);
+alter table t2_pqTly6tEb1 add (c3 int);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+================ test constraints =========
+create table t5_pqTly6tEb1  (c1 int primary key check (c1 > 10), c2 int);
+ERROR 0A000: incremental direct-load does not support table with check constraints
+create table t6_pqTly6tEb1  (c1 int primary key, c2 int);
+insert into t6_pqTly6tEb1 values (1, 6), (2, 7);
+insert /* direct(true, 0, 'inc_replace') enable_parallel_dml parallel(2) */ into t5_pqTly6tEb1 select * from t6_pqTly6tEb1;
+ERROR HY000: check constraint violated
+drop table t5_pqTly6tEb1;
+drop table t6_pqTly6tEb1;
+================ test sql stats =========
+create table t1_pqTly6tEb1 (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1 (c1 int, c2 int);
+create table t3_pqTly6tEb1 (c1 int primary key, c2 int);
+create view tab_stat_view as select OWNER, TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, NUM_ROWS, OBJECT_TYPE from oceanbase.DBA_TAB_STATISTICS where owner = 'test' order by PARTITION_NAME, SUBPARTITION_NAME;
+create view col_stat_view as select OWNER, TABLE_NAME, COLUMN_NAME, LOW_VALUE, HIGH_VALUE, NUM_NULLS from oceanbase.DBA_TAB_COL_STATISTICS where owner = 'test' ORDER BY COLUMN_NAME;
+create view modified_data_view as select TABLE_OWNER, TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, INSERTS, UPDATES, DELETES from oceanbase.DBA_TAB_MODIFICATIONS order by PARTITION_NAME, SUBPARTITION_NAME;
+insert into t1_pqTly6tEb1 values (1,1), (2,2);
+insert /*+ direct(true, 0, 'inc') enable_parallel_dml parallel(2) */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+select * from tab_stat_view where table_name = 't2_pqTly6tEb1';
+OWNER	TABLE_NAME	PARTITION_NAME	SUBPARTITION_NAME	NUM_ROWS	OBJECT_TYPE
+test	t2_pqtly6teb1	NULL	NULL	2	TABLE
+select * from col_stat_view where table_name = 't2_pqTly6tEb1';
+OWNER	TABLE_NAME	COLUMN_NAME	LOW_VALUE	HIGH_VALUE	NUM_NULLS
+test	t2_pqtly6teb1	c1	1	2	0
+test	t2_pqtly6teb1	c2	1	2	0
+select * from modified_data_view where table_name = 't2_pqTly6tEb1';
+TABLE_OWNER	TABLE_NAME	PARTITION_NAME	SUBPARTITION_NAME	INSERTS	UPDATES	DELETES
+test	t2_pqtly6teb1	NULL	NULL	0	0	0
+insert /*+ direct(true, 0, 'inc') enable_parallel_dml parallel(2) */ into t3_pqTly6tEb1 select * from t1_pqTly6tEb1;
+select * from tab_stat_view where table_name = 't3_pqTly6tEb1';
+OWNER	TABLE_NAME	PARTITION_NAME	SUBPARTITION_NAME	NUM_ROWS	OBJECT_TYPE
+test	t3_pqtly6teb1	NULL	NULL	2	TABLE
+select * from col_stat_view where table_name = 't3_pqTly6tEb1';
+OWNER	TABLE_NAME	COLUMN_NAME	LOW_VALUE	HIGH_VALUE	NUM_NULLS
+test	t3_pqtly6teb1	c1	1	2	0
+test	t3_pqtly6teb1	c2	1	2	0
+select * from modified_data_view where table_name = 't3_pqTly6tEb1';
+TABLE_OWNER	TABLE_NAME	PARTITION_NAME	SUBPARTITION_NAME	INSERTS	UPDATES	DELETES
+test	t3_pqtly6teb1	NULL	NULL	0	0	0
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+drop table t3_pqTly6tEb1;
+drop view tab_stat_view;
+drop view col_stat_view;
+drop view modified_data_view;
+================ test autocommit off =========
+create table t1_pqTly6tEb1 (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1 (c1 int primary key, c2 int);
+insert into t1_pqTly6tEb1 values (1,1), (2,2);
+set autocommit = OFF;
+insert /*+ direct(true, 0, 'inc') enable_parallel_dml parallel(2) */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+ERROR 0A000: using full or inc direct-insert within a transaction is not supported
+rollback;
+set autocommit = ON;
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+alter system set direct_load_allow_fallback=True;

@@ -1,0 +1,379 @@
+explain_protocol: 1
+result_format: 3
+DROP DATABASE IF EXISTS BUG_15188850;
+CREATE DATABASE BUG_15188850;
+USE BUG_15188850;
+create table t1 (d1 int, d2 int);
+create table t2 (e1 int, e2 int);
+create table t3 (f1 int, f2 int);
+EXPLAIN BASIC insert into t1 values (3, 4), (5, 6), (7, 8), (9, 10);
+Query Plan
+============================
+|ID|OPERATOR          |NAME|
+----------------------------
+|0 |DISTRIBUTED INSERT|    |
+|1 |└─EXPRESSION      |    |
+============================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+      columns([{t1: ({t1: (t1.__pk_increment, t1.d1, t1.d2)})}]),
+      column_values([T_HIDDEN_PK], [column_conv(INT,PS:(11,0),NULL,__values.d1)], [column_conv(INT,PS:(11,0),NULL,__values.d2)])
+  1 - output([__values.d1], [__values.d2]), filter(nil)
+      values({3, 4}, {5, 6}, {7, 8}, {9, 10})
+insert into t1 values (3, 4), (5, 6), (7, 8), (9, 10);
+EXPLAIN BASIC insert into t2 values (1,2), (4,4), (7,7), (10,10), (20,2);
+Query Plan
+============================
+|ID|OPERATOR          |NAME|
+----------------------------
+|0 |DISTRIBUTED INSERT|    |
+|1 |└─EXPRESSION      |    |
+============================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+      columns([{t2: ({t2: (t2.__pk_increment, t2.e1, t2.e2)})}]),
+      column_values([T_HIDDEN_PK], [column_conv(INT,PS:(11,0),NULL,__values.e1)], [column_conv(INT,PS:(11,0),NULL,__values.e2)])
+  1 - output([__values.e1], [__values.e2]), filter(nil)
+      values({1, 2}, {4, 4}, {7, 7}, {10, 10}, {20, 2})
+insert into t2 values (1,2), (4,4), (7,7), (10,10), (20,2);
+# 不可以消除
+EXPLAIN BASIC select distinct(count(d2)) from t1, t2;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |SCALAR GROUP BY              |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t2  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(t1.d2)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_COUNT(t1.d2)])
+  1 - output([t1.d2]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d2]), filter(nil), rowset=16
+      access([t1.d2]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t2.__pk_increment]), range(MIN ; MAX)always true
+select distinct(count(d2)) from t1, t2;
++-------------+
+| (count(d2)) |
++-------------+
+|          20 |
++-------------+
+EXPLAIN BASIC select /*+ no_rewrite() */ distinct(count(d2)) from t1, t2;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |SCALAR GROUP BY              |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t2  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(t1.d2)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_COUNT(t1.d2)])
+  1 - output([t1.d2]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d2]), filter(nil), rowset=16
+      access([t1.d2]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t2.__pk_increment]), range(MIN ; MAX)always true
+select /*+ no_rewrite() */ distinct(count(d2)) from t1, t2;
++-------------+
+| (count(d2)) |
++-------------+
+|          20 |
++-------------+
+# 不可以消除
+EXPLAIN BASIC select distinct(d2) from t1, t2;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |HASH DISTINCT                |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t2  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.d2]), filter(nil), rowset=16
+      distinct([t1.d2])
+  1 - output([t1.d2]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d2]), filter(nil), rowset=16
+      access([t1.d2]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t2.__pk_increment]), range(MIN ; MAX)always true
+select distinct(d2) from t1, t2;
++------+
+| d2   |
++------+
+|    4 |
+|    6 |
+|    8 |
+|   10 |
++------+
+EXPLAIN BASIC select /*+ no_rewrite() */ distinct(d2) from t1, t2;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |HASH DISTINCT                |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t2  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.d2]), filter(nil), rowset=16
+      distinct([t1.d2])
+  1 - output([t1.d2]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d2]), filter(nil), rowset=16
+      access([t1.d2]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t2.__pk_increment]), range(MIN ; MAX)always true
+select /*+ no_rewrite() */ distinct(d2) from t1, t2;
++------+
+| d2   |
++------+
+|    4 |
+|    6 |
+|    8 |
+|   10 |
++------+
+# 不可以消除
+EXPLAIN BASIC select max(t1.d1) from t1, t3;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |SCALAR GROUP BY              |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t3  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_MAX(t1.d1)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_MAX(t1.d1)])
+  1 - output([t1.d1]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d1]), filter(nil), rowset=16
+      access([t1.d1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t3.__pk_increment]), range(MIN ; MAX)always true
+select max(t1.d1) from t1, t3;
++------------+
+| max(t1.d1) |
++------------+
+|       NULL |
++------------+
+EXPLAIN BASIC select /*+ no_rewrite() */ max(t1.d1) from t1, t3;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |SCALAR GROUP BY              |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t3  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_MAX(t1.d1)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_MAX(t1.d1)])
+  1 - output([t1.d1]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d1]), filter(nil), rowset=16
+      access([t1.d1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t3.__pk_increment]), range(MIN ; MAX)always true
+select /*+ no_rewrite() */ max(t1.d1) from t1, t3;
++------------+
+| max(t1.d1) |
++------------+
+|       NULL |
++------------+
+# 不可以消除
+EXPLAIN BASIC select min(t1.d1) from t1, t3;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |SCALAR GROUP BY              |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t3  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_MIN(t1.d1)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_MIN(t1.d1)])
+  1 - output([t1.d1]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d1]), filter(nil), rowset=16
+      access([t1.d1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t3.__pk_increment]), range(MIN ; MAX)always true
+select min(t1.d1) from t1, t3;
++------------+
+| min(t1.d1) |
++------------+
+|       NULL |
++------------+
+EXPLAIN BASIC select /*+ no_rewrite() */ min(t1.d1) from t1, t3;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |SCALAR GROUP BY              |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t3  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_MIN(t1.d1)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_MIN(t1.d1)])
+  1 - output([t1.d1]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d1]), filter(nil), rowset=16
+      access([t1.d1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t3.__pk_increment]), range(MIN ; MAX)always true
+select /*+ no_rewrite() */ min(t1.d1) from t1, t3;
++------------+
+| min(t1.d1) |
++------------+
+|       NULL |
++------------+
+# 不可以消除
+EXPLAIN BASIC select count(distinct t1.d1) from t1, t3;
+Query Plan
+============================================
+|ID|OPERATOR                         |NAME |
+--------------------------------------------
+|0 |SCALAR GROUP BY                  |     |
+|1 |└─SUBPLAN SCAN                   |VIEW1|
+|2 |  └─HASH DISTINCT                |     |
+|3 |    └─NESTED-LOOP JOIN CARTESIAN |     |
+|4 |      ├─TABLE FULL SCAN          |t1   |
+|5 |      └─MATERIAL                 |     |
+|6 |        └─TABLE FULL SCAN        |t3   |
+============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(VIEW1.t1.d1)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_COUNT(VIEW1.t1.d1)])
+  1 - output([VIEW1.t1.d1]), filter(nil), rowset=16
+      access([VIEW1.t1.d1])
+  2 - output([t1.d1]), filter(nil), rowset=16
+      distinct([t1.d1])
+  3 - output([t1.d1]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  4 - output([t1.d1]), filter(nil), rowset=16
+      access([t1.d1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  5 - output(nil), filter(nil), rowset=16
+  6 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t3.__pk_increment]), range(MIN ; MAX)always true
+select count(distinct t1.d1) from t1, t3;
++-----------------------+
+| count(distinct t1.d1) |
++-----------------------+
+|                     0 |
++-----------------------+
+EXPLAIN BASIC select /*+ no_rewrite() */ count(distinct t1.d1) from t1, t3;
+Query Plan
+=======================================
+|ID|OPERATOR                     |NAME|
+---------------------------------------
+|0 |SCALAR GROUP BY              |    |
+|1 |└─NESTED-LOOP JOIN CARTESIAN |    |
+|2 |  ├─TABLE FULL SCAN          |t1  |
+|3 |  └─MATERIAL                 |    |
+|4 |    └─TABLE FULL SCAN        |t3  |
+=======================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(distinct t1.d1)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_COUNT(distinct t1.d1)])
+  1 - output([t1.d1]), filter(nil), rowset=16
+      conds(nil), nl_params_(nil), use_batch=false
+  2 - output([t1.d1]), filter(nil), rowset=16
+      access([t1.d1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.__pk_increment]), range(MIN ; MAX)always true
+  3 - output(nil), filter(nil), rowset=16
+  4 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t3.__pk_increment]), range(MIN ; MAX)always true
+select /*+ no_rewrite() */ count(distinct t1.d1) from t1, t3;
++-----------------------+
+| count(distinct t1.d1) |
++-----------------------+
+|                     0 |
++-----------------------+
+USE BUG_15188850;
+DROP DATABASE IF EXISTS BUG_15188850;

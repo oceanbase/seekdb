@@ -1,0 +1,89 @@
+drop database if exists db_fork_priv;
+drop user if exists 'test_user1'@'%';
+drop user if exists 'test_user2'@'%';
+create database db_fork_priv;
+use db_fork_priv;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. 准备测试环境
+============================================
+# 在sys租户下创建测试用户（因为数据库在sys租户下）
+create user 'test_user1'@'%' identified by 'test123';
+create user 'test_user2'@'%' identified by 'test123';
+# 创建源表并插入数据
+drop table if exists t_priv;
+Warnings:
+Note	1051	Unknown table 'db_fork_priv.t_priv'
+create table t_priv (
+id int primary key,
+name varchar(50),
+age int
+);
+insert into t_priv values (1, 'Alice', 25);
+insert into t_priv values (2, 'Bob', 30);
+insert into t_priv values (3, 'Charlie', 35);
+============================================
+2. 授予用户对原表的权限
+============================================
+# 授予test_user1对原表的SELECT权限
+grant select on db_fork_priv.t_priv to 'test_user1'@'%';
+# 授予test_user2对原表的SELECT和INSERT权限（用于fork操作）
+grant select, insert on db_fork_priv.t_priv to 'test_user2'@'%';
+grant create on db_fork_priv.* to 'test_user2'@'%';
+============================================
+3. 验证用户对原表的访问权限
+============================================
+# test_user1可以查询原表（使用sys租户连接）
+select count(*) as cnt from t_priv;
+cnt
+3
+# test_user2可以查询和插入原表（使用sys租户连接）
+select count(*) as cnt from t_priv;
+cnt
+3
+============================================
+4. test_user2执行Fork操作
+============================================
+fork table t_priv to t_priv_fork;
+# 验证Fork表创建成功
+show create table t_priv_fork;
+Table	Create Table
+t_priv_fork	CREATE TABLE `t_priv_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+# 验证Fork表数据（即使是创建fork表的用户，也需要显式授权才能访问）
+select * from t_priv_fork order by id;
+ERROR 42000: SELECT command denied to user 'test_user2'@'%' for table 't_priv_fork'
+============================================
+5. 验证fork table不会自动迁移权限
+============================================
+# test_user1对原表有SELECT权限，但对fork表没有权限（权限不会自动迁移）
+select * from t_priv_fork order by id;
+ERROR 42000: SELECT command denied to user 'test_user1'@'%' for table 't_priv_fork'
+============================================
+6. 手动授权后，用户才能访问fork表
+============================================
+# 授予test_user1对fork表的SELECT权限
+grant select on db_fork_priv.t_priv_fork to 'test_user1'@'%';
+# 验证授权后可以访问fork表
+select * from t_priv_fork order by id;
+id	name	age
+1	Alice	25
+2	Bob	30
+3	Charlie	35
+# test_user1对fork表没有INSERT权限（因为只授予了SELECT权限）
+insert into t_priv_fork values (4, 'David', 40);
+ERROR 42000: INSERT command denied to user 'test_user1'@'%' for table 't_priv_fork'
+============================================
+7. 清理
+============================================
+drop table if exists t_priv;
+drop table if exists t_priv_fork;
+drop database if exists db_fork_priv;
+drop user if exists 'test_user1'@'%';
+drop user if exists 'test_user2'@'%';

@@ -1,0 +1,554 @@
+alter system set ob_vector_memory_limit_percentage = 34;
+drop table if exists t1;
+drop table if exists t2;
+create table t1 (c1 int PRIMARY KEY, c2 int UNIQUE, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3), INDEX (c2, c3));
+INSERT INTO t1 VALUES(1 , 20, 1 , 'str1 ', '[-0.933,0.938,-0.358]', '[-0.144,0.645,0.476]');
+INSERT INTO t1 VALUES(2 , 19, 1 , 'str1 ', '[-0.557,-0.717,-0.805]', '[-0.106,0.938,-0.274]');
+INSERT INTO t1 VALUES(3 , 18, 2 , 'str2 ', '[0.968,-0.479,0.074]', '[-0.205,0.477,-0.102]');
+INSERT INTO t1 VALUES(4 , 17, 2 , 'str2 ', '[-0.104,-0.801,-0.295]', '[0.875,-0.486,-0.236]');
+INSERT INTO t1 VALUES(5 , 16, 3 , 'str3 ', '[-0.062,0.682,0.809]', '[0.394,0.794,-0.758]');
+INSERT INTO t1 VALUES(6 , 15, 3 , 'str3 ', '[-0.925,0.017,-0.666]', '[-0.517,-0.543,-0.021]');
+INSERT INTO t1 VALUES(7 , 14, 4 , 'str4 ', '[0.558,0.73,-0.177]', '[0.783,-0.284,-0.23]');
+INSERT INTO t1 VALUES(8 , 13, 4 , 'str4 ', '[-0.72,-0.934,0.965]', '[0.833,-0.772,0.262]');
+INSERT INTO t1 VALUES(9 , 12, 5 , 'str5 ', '[-0.253,-0.16,-0.899]', '[-0.734,-0.252,-0.351]');
+INSERT INTO t1 VALUES(10, 11, 5 , 'str5 ', '[-0.269,-0.967,-0.539]', '[0.36,0.591,0.008]');
+INSERT INTO t1 VALUES(11, 10, 6 , 'str6 ', '[0.53,0.888,0.5]', '[-0.408,0.772,-0.296]');
+INSERT INTO t1 VALUES(12, 9 , 6 , 'str6 ', '[-0.321,-0.021,-0.322]', '[0.477,0.111,-0.597]');
+INSERT INTO t1 VALUES(13, 8 , 7 , 'str7 ', '[-0.641,-0.658,-0.073]', '[0.097,0.039,-0.302]');
+INSERT INTO t1 VALUES(14, 7 , 7 , 'str7 ', '[0.749,0.888,0.217]', '[-0.951,-0.702,-0.736]');
+INSERT INTO t1 VALUES(15, 6 , 8 , 'str8 ', '[0.193,0.567,0.0]', '[0.416,0.418,0.223]');
+INSERT INTO t1 VALUES(16, 5 , 8 , 'str8 ', '[-0.899,0.398,0.985]', '[0.344,-0.105,0.392]');
+INSERT INTO t1 VALUES(17, 4 , 9 , 'str9 ', '[-0.465,0.358,0.729]', '[-0.243,-0.8,0.921]');
+INSERT INTO t1 VALUES(18, 3 , 9 , 'str9 ', '[0.502,0.929,0.108]', '[-0.855,-0.961,0.959]');
+INSERT INTO t1 VALUES(19, 2 , 10, 'str10', '[-0.575,-0.555,-0.563]', '[-0.703,-0.483,-0.569]');
+INSERT INTO t1 VALUES(20, 1 , 10, 'str10', '[0.139,-0.096,0.94]', '[0.16,0.952,-0.454]');
+INSERT INTO t1 VALUES(21, 0 , 10, 'str10', '[0.139,-0.096,0.94]', '[0.16,0.952,-0.454]');
+create table t2 (c1 int PRIMARY KEY, c2 int UNIQUE, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3), INDEX (c2, c3));
+INSERT INTO t2 VALUES(11, 10, 6 , 'str6 ', '[-0.408,0.772,-0.296]', '[0.53,0.888,0.5]');
+INSERT INTO t2 VALUES(12, 9 , 6 , 'str6 ', '[0.477,0.111,-0.597]', '[-0.321,-0.021,-0.322]');
+INSERT INTO t2 VALUES(13, 8 , 7 , 'str7 ', '[0.097,0.039,-0.302]', '[-0.641,-0.658,-0.073]');
+INSERT INTO t2 VALUES(14, 7 , 7 , 'str7 ', '[-0.951,-0.702,-0.736]', '[0.749,0.888,0.217]');
+INSERT INTO t2 VALUES(15, 6 , 8 , 'str8 ', '[0.416,0.418,0.223]', '[0.193,0.567,0.0]');
+INSERT INTO t2 VALUES(16, 5 , 8 , 'str8 ', '[0.344,-0.105,0.392]', '[-0.899,0.398,0.985]');
+INSERT INTO t2 VALUES(17, 4 , 9 , 'str9 ', '[-0.243,-0.8,0.921]', '[-0.465,0.358,0.729]');
+INSERT INTO t2 VALUES(18, 3 , 9 , 'str9 ', '[-0.855,-0.961,0.959]', '[0.502,0.929,0.108]');
+INSERT INTO t2 VALUES(19, 2 , 10, 'str10', '[-0.703,-0.483,-0.569]', '[-0.575,-0.555,-0.563]');
+INSERT INTO t2 VALUES(20, 1 , 10, 'str10', '[0.16,0.952,-0.454]', '[0.139,-0.096,0.94]');
+INSERT INTO t2 VALUES(21, 0 , 10, 'str10', '[0.16,0.952,-0.454]', '[0.139,-0.096,0.94]');
+INSERT INTO t2 VALUES(1 , 20, 1 , 'str1 ', '[-0.144,0.645,0.476]', '[-0.933,0.938,-0.358]');
+INSERT INTO t2 VALUES(2 , 19, 1 , 'str1 ', '[-0.106,0.938,-0.274]', '[-0.557,-0.717,-0.805]');
+INSERT INTO t2 VALUES(3 , 18, 2 , 'str2 ', '[-0.205,0.477,-0.102]', '[0.968,-0.479,0.074]');
+INSERT INTO t2 VALUES(4 , 17, 2 , 'str2 ', '[0.875,-0.486,-0.236]', '[-0.104,-0.801,-0.295]');
+INSERT INTO t2 VALUES(5 , 16, 3 , 'str3 ', '[0.394,0.794,-0.758]', '[-0.062,0.682,0.809]');
+INSERT INTO t2 VALUES(6 , 15, 3 , 'str3 ', '[-0.517,-0.543,-0.021]', '[-0.925,0.017,-0.666]');
+INSERT INTO t2 VALUES(7 , 14, 4 , 'str4 ', '[0.783,-0.284,-0.23]', '[0.558,0.73,-0.177]');
+INSERT INTO t2 VALUES(8 , 13, 4 , 'str4 ', '[0.833,-0.772,0.262]', '[-0.72,-0.934,0.965]');
+INSERT INTO t2 VALUES(9 , 12, 5 , 'str5 ', '[-0.734,-0.252,-0.351]', '[-0.253,-0.16,-0.899]');
+INSERT INTO t2 VALUES(10, 11, 5 , 'str5 ', '[0.36,0.591,0.008]', '[-0.269,-0.967,-0.539]');
+create vector index idx1 on t1 (c5) with (distance=l2, type=ivf_flat, nlist=4, sample_per_nlist=6);
+create vector index idx2 on t2 (c6) with (distance=l2, type=ivf_flat, nlist=4, sample_per_nlist=6);
+select * from t1 where c1 < 11 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+select * from t1 where c2 > 10 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+select * from t1 where c3 < 6 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+select * from t1 where c4 < 'str6' order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+19	2	10	str10	[-0.575,-0.555,-0.563]	[-0.703,-0.483,-0.569]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+select DISTINCT c1 from t1 where c1 < 11 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1
+10
+4
+2
+9
+6
+select DISTINCT c2 from t1 where c2 > 10 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c2
+11
+17
+19
+12
+15
+select DISTINCT c3 from t1 where c3 < 6 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c3
+5
+2
+1
+3
+select DISTINCT c4 from t1 where c4 < 'str6' order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c4
+str5
+str2
+str1
+str10
+SELECT DISTINCT c3 FROM t1 order by l2_distance(c5, [0.139,-0.096,0.94]) APPROXIMATE limit 5;
+c3
+10
+9
+3
+6
+SELECT DISTINCT c4 FROM t1 order by l2_distance(c5, [0.139,-0.096,0.94]) APPROXIMATE limit 5;
+c4
+str10
+str9
+str3
+str6
+select * from t1 where c1 < 11 GROUP BY c1 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+select * from t1 where c2 > 10 GROUP BY c3 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+select * from t1 where c2 > 10 GROUP BY c3 having c3 > 1 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+SELECT c3, COUNT(*) FROM t1 GROUP BY c3 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c3	COUNT(*)
+10	3
+7	2
+5	2
+2	2
+8	2
+SELECT c1, COUNT(*) FROM t1 GROUP BY c1 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	COUNT(*)
+10	1
+4	1
+2	1
+19	1
+13	1
+select *, CASE
+WHEN c1 < 6 THEN 'first halp'
+    ELSE 'second half'
+  END AS pri_category
+from t1 where c2 > 5
+order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6	pri_category
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]	second half
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]	first halp
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]	first halp
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]	second half
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]	second half
+select * from t1 a join t2 b on a.c1=b.c1 order by l2_distance(a.c5, [-0.269,-0.967,-0.539]) approximate limit 5;
+c1	c2	c3	c4	c5	c6	c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]	10	11	5	str5 	[0.36,0.591,0.008]	[-0.269,-0.967,-0.539]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]	4	17	2	str2 	[0.875,-0.486,-0.236]	[-0.104,-0.801,-0.295]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]	2	19	1	str1 	[-0.106,0.938,-0.274]	[-0.557,-0.717,-0.805]
+19	2	10	str10	[-0.575,-0.555,-0.563]	[-0.703,-0.483,-0.569]	19	2	10	str10	[-0.703,-0.483,-0.569]	[-0.575,-0.555,-0.563]
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]	13	8	7	str7 	[0.097,0.039,-0.302]	[-0.641,-0.658,-0.073]
+select a from (
+SELECT c5 as a FROM t1
+UNION
+SELECT c6 as a FROM t1
+)
+order by l2_distance(a, [-0.269,-0.967,-0.539]);
+a
+[-0.269,-0.967,-0.539]
+[-0.104,-0.801,-0.295]
+[-0.557,-0.717,-0.805]
+[-0.575,-0.555,-0.563]
+[-0.703,-0.483,-0.569]
+[-0.641,-0.658,-0.073]
+[-0.517,-0.543,-0.021]
+[-0.951,-0.702,-0.736]
+[-0.734,-0.252,-0.351]
+[-0.253,-0.16,-0.899]
+[-0.321,-0.021,-0.322]
+[0.097,0.039,-0.302]
+[-0.925,0.017,-0.666]
+[0.875,-0.486,-0.236]
+[0.783,-0.284,-0.23]
+[0.477,0.111,-0.597]
+[0.833,-0.772,0.262]
+[0.344,-0.105,0.392]
+[0.968,-0.479,0.074]
+[-0.243,-0.8,0.921]
+[-0.205,0.477,-0.102]
+[-0.72,-0.934,0.965]
+[-0.855,-0.961,0.959]
+[0.193,0.567,0]
+[0.416,0.418,0.223]
+[-0.408,0.772,-0.296]
+[0.139,-0.096,0.94]
+[0.36,0.591,0.008]
+[-0.465,0.358,0.729]
+[0.394,0.794,-0.758]
+[-0.144,0.645,0.476]
+[0.558,0.73,-0.177]
+[-0.106,0.938,-0.274]
+[0.16,0.952,-0.454]
+[-0.933,0.938,-0.358]
+[-0.062,0.682,0.809]
+[-0.899,0.398,0.985]
+[0.502,0.929,0.108]
+[0.749,0.888,0.217]
+[0.53,0.888,0.5]
+SELECT * FROM t1 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5 FOR UPDATE;
+ERROR 0A000: FOR UPDATE with APPROXIMATE vector search is not supported
+select * from t1 where c1 < 11 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5 FOR UPDATE;
+ERROR 0A000: FOR UPDATE with APPROXIMATE vector search is not supported
+select * from t1 where c2 > 10 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5 FOR UPDATE;
+ERROR 0A000: FOR UPDATE with APPROXIMATE vector search is not supported
+select * from t1 where c3 < 6 order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5 FOR UPDATE;
+ERROR 0A000: FOR UPDATE with APPROXIMATE vector search is not supported
+select * from t1 where c4 < 'str6' order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5 FOR UPDATE;
+ERROR 0A000: FOR UPDATE with APPROXIMATE vector search is not supported
+SELECT SUM(c1) AS total_sum FROM t1;
+total_sum
+231
+SELECT SUM(c5) AS total_sum FROM t1;
+total_sum
+[-2.946,0.911,1.57]
+SELECT SUM(c6) AS total_sum FROM t1;
+total_sum
+[0.0329999,1.301,-2.139]
+select count(*) from
+(select * from t1 where c2 - 1 > 9 order by l2_distance(c5, [-0.269,-0.967,-0.539])
+APPROXIMATE limit 5) as tmp1,
+(select * from t2 order by l2_distance(c6, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5)
+as tmp2 where tmp1.c1=tmp2.c1;
+count(*)
+3
+select * from t1 where c2 != 5
+order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+19	2	10	str10	[-0.575,-0.555,-0.563]	[-0.703,-0.483,-0.569]
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
+select * from t1 FORCE INDEX (idx1) where c2 > 5
+order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+select /*+ ENABLE_PARALLEL_DML parallel(256) */ * from t1 where c2 > 5
+order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+WITH query_result AS (
+select * from t1 where c2 > 5
+order by l2_distance(c5, [-0.269,-0.967,-0.539]) APPROXIMATE limit 5
+)
+SELECT c1 FROM query_result;
+c1
+10
+4
+2
+13
+9
+drop table if exists t1;
+drop table if exists t2;
+create table t1 (c1 int PRIMARY KEY, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3), INDEX (c2, c3))
+PARTITION BY RANGE COLUMNS(c1)
+(
+PARTITION p0 VALUES LESS THAN(10),
+PARTITION p1 VALUES LESS THAN(20),
+PARTITION p2 VALUES LESS THAN(30),
+PARTITION p3 VALUES LESS THAN(100),
+PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+INSERT INTO t1 VALUES(1 , 20, 1 , 'str1 ', '[-0.933,0.938,-0.358]', '[-0.144,0.645,0.476]');
+INSERT INTO t1 VALUES(2 , 19, 1 , 'str1 ', '[-0.557,-0.717,-0.805]', '[-0.106,0.938,-0.274]');
+INSERT INTO t1 VALUES(3 , 18, 2 , 'str2 ', '[0.968,-0.479,0.074]', '[-0.205,0.477,-0.102]');
+INSERT INTO t1 VALUES(4 , 17, 2 , 'str2 ', '[-0.104,-0.801,-0.295]', '[0.875,-0.486,-0.236]');
+INSERT INTO t1 VALUES(5 , 16, 3 , 'str3 ', '[-0.062,0.682,0.809]', '[0.394,0.794,-0.758]');
+INSERT INTO t1 VALUES(6 , 15, 3 , 'str3 ', '[-0.925,0.017,-0.666]', '[-0.517,-0.543,-0.021]');
+INSERT INTO t1 VALUES(7 , 14, 4 , 'str4 ', '[0.558,0.73,-0.177]', '[0.783,-0.284,-0.23]');
+INSERT INTO t1 VALUES(8 , 13, 4 , 'str4 ', '[-0.72,-0.934,0.965]', '[0.833,-0.772,0.262]');
+INSERT INTO t1 VALUES(9 , 12, 5 , 'str5 ', '[-0.253,-0.16,-0.899]', '[-0.734,-0.252,-0.351]');
+INSERT INTO t1 VALUES(10, 11, 5 , 'str5 ', '[-0.269,-0.967,-0.539]', '[0.36,0.591,0.008]');
+INSERT INTO t1 VALUES(11, 10, 6 , 'str6 ', '[0.53,0.888,0.5]', '[-0.408,0.772,-0.296]');
+INSERT INTO t1 VALUES(12, 9 , 6 , 'str6 ', '[-0.321,-0.021,-0.322]', '[0.477,0.111,-0.597]');
+INSERT INTO t1 VALUES(13, 8 , 7 , 'str7 ', '[-0.641,-0.658,-0.073]', '[0.097,0.039,-0.302]');
+INSERT INTO t1 VALUES(14, 7 , 7 , 'str7 ', '[0.749,0.888,0.217]', '[-0.951,-0.702,-0.736]');
+INSERT INTO t1 VALUES(15, 6 , 8 , 'str8 ', '[0.193,0.567,0.0]', '[0.416,0.418,0.223]');
+INSERT INTO t1 VALUES(16, 5 , 8 , 'str8 ', '[-0.899,0.398,0.985]', '[0.344,-0.105,0.392]');
+INSERT INTO t1 VALUES(17, 4 , 9 , 'str9 ', '[-0.465,0.358,0.729]', '[-0.243,-0.8,0.921]');
+INSERT INTO t1 VALUES(18, 3 , 9 , 'str9 ', '[0.502,0.929,0.108]', '[-0.855,-0.961,0.959]');
+INSERT INTO t1 VALUES(19, 2 , 10, 'str10', '[-0.575,-0.555,-0.563]', '[-0.703,-0.483,-0.569]');
+INSERT INTO t1 VALUES(20, 1 , 10, 'str10', '[0.139,-0.096,0.94]', '[0.16,0.952,-0.454]');
+INSERT INTO t1 VALUES(21, 0 , 10, 'str10', '[0.139,-0.096,0.94]', '[0.16,0.952,-0.454]');
+create vector index idx1 on t1 (c5) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+CREATE TABLE t2(c1 int not null auto_increment, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3),
+primary key(c1,c2))
+PARTITION BY RANGE COLUMNS(c1)
+(
+PARTITION p0 VALUES LESS THAN(10),
+PARTITION p1 VALUES LESS THAN(20),
+PARTITION p2 VALUES LESS THAN(30),
+PARTITION p3 VALUES LESS THAN(100),
+PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+insert into t2 values(1, 1, 1, '111', '[0.149599,0.570740,0.487505]', '[0.275799,0.239371,0.875098]');
+insert into t2 values(10, 1, 1, '111', '[0.974202,0.419430,0.558433]', '[0.173808,0.450608,0.116523]');
+insert into t2 values(20, 1, 1, '111', '[0.889676,0.144233,0.621488]', '[0.579793,0.203273,0.473667]');
+insert into t2 values(30, 1, 1, '111', '[0.372756,0.478767,0.687012]', '[0.556772,0.686932,0.044378]');
+insert into t2 values(40, 1, 1, '111', '[0.287521,0.438230,0.644009]', '[0.378725,0.784441,0.109615]');
+insert into t2 values(100, 1, 1, '111', '[0.927060,0.951636,0.607889]', '[0.083162,0.789756,0.802021]');
+create vector index idx2 on t2 (c5) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+select * from t1 where c1 > 10 and c1 < 20 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+12	9	6	str6 	[-0.321,-0.021,-0.322]	[0.477,0.111,-0.597]
+15	6	8	str8 	[0.193,0.567,0]	[0.416,0.418,0.223]
+17	4	9	str9 	[-0.465,0.358,0.729]	[-0.243,-0.8,0.921]
+16	5	8	str8 	[-0.899,0.398,0.985]	[0.344,-0.105,0.392]
+18	3	9	str9 	[0.502,0.929,0.108]	[-0.855,-0.961,0.959]
+select * from t1 where c2 > 1 and c2 < 11 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6
+12	9	6	str6 	[-0.321,-0.021,-0.322]	[0.477,0.111,-0.597]
+15	6	8	str8 	[0.193,0.567,0]	[0.416,0.418,0.223]
+17	4	9	str9 	[-0.465,0.358,0.729]	[-0.243,-0.8,0.921]
+16	5	8	str8 	[-0.899,0.398,0.985]	[0.344,-0.105,0.392]
+18	3	9	str9 	[0.502,0.929,0.108]	[-0.855,-0.961,0.959]
+select * from t1 where c1 < 20 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c1	c2	c3	c4	c5	c6
+1	20	1	str1 	[-0.933,0.938,-0.358]	[-0.144,0.645,0.476]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+12	9	6	str6 	[-0.321,-0.021,-0.322]	[0.477,0.111,-0.597]
+15	6	8	str8 	[0.193,0.567,0]	[0.416,0.418,0.223]
+17	4	9	str9 	[-0.465,0.358,0.729]	[-0.243,-0.8,0.921]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+16	5	8	str8 	[-0.899,0.398,0.985]	[0.344,-0.105,0.392]
+5	16	3	str3 	[-0.062,0.682,0.809]	[0.394,0.794,-0.758]
+18	3	9	str9 	[0.502,0.929,0.108]	[-0.855,-0.961,0.959]
+7	14	4	str4 	[0.558,0.73,-0.177]	[0.783,-0.284,-0.23]
+19	2	10	str10	[-0.575,-0.555,-0.563]	[-0.703,-0.483,-0.569]
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
+11	10	6	str6 	[0.53,0.888,0.5]	[-0.408,0.772,-0.296]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+14	7	7	str7 	[0.749,0.888,0.217]	[-0.951,-0.702,-0.736]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+8	13	4	str4 	[-0.72,-0.934,0.965]	[0.833,-0.772,0.262]
+3	18	2	str2 	[0.968,-0.479,0.074]	[-0.205,0.477,-0.102]
+select * from t1 where c2 > 1 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c1	c2	c3	c4	c5	c6
+1	20	1	str1 	[-0.933,0.938,-0.358]	[-0.144,0.645,0.476]
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]
+12	9	6	str6 	[-0.321,-0.021,-0.322]	[0.477,0.111,-0.597]
+15	6	8	str8 	[0.193,0.567,0]	[0.416,0.418,0.223]
+17	4	9	str9 	[-0.465,0.358,0.729]	[-0.243,-0.8,0.921]
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]
+16	5	8	str8 	[-0.899,0.398,0.985]	[0.344,-0.105,0.392]
+5	16	3	str3 	[-0.062,0.682,0.809]	[0.394,0.794,-0.758]
+18	3	9	str9 	[0.502,0.929,0.108]	[-0.855,-0.961,0.959]
+7	14	4	str4 	[0.558,0.73,-0.177]	[0.783,-0.284,-0.23]
+19	2	10	str10	[-0.575,-0.555,-0.563]	[-0.703,-0.483,-0.569]
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]
+11	10	6	str6 	[0.53,0.888,0.5]	[-0.408,0.772,-0.296]
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]
+14	7	7	str7 	[0.749,0.888,0.217]	[-0.951,-0.702,-0.736]
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]
+8	13	4	str4 	[-0.72,-0.934,0.965]	[0.833,-0.772,0.262]
+3	18	2	str2 	[0.968,-0.479,0.074]	[-0.205,0.477,-0.102]
+select DISTINCT c1 from t1 where c1 > 10 and c1 < 20 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c1
+12
+15
+17
+16
+18
+select DISTINCT c1 from t1 where c2 > 1 and c2 < 11 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c1
+12
+15
+17
+16
+18
+select DISTINCT c1 from t1 where c1 < 20 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c1
+1
+6
+12
+15
+17
+9
+16
+5
+18
+7
+19
+13
+11
+2
+14
+4
+10
+8
+3
+select DISTINCT c1 from t1 where c2 > 1 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c1
+1
+6
+12
+15
+17
+9
+16
+5
+18
+7
+19
+13
+11
+2
+14
+4
+10
+8
+3
+select c1, COUNT(*) from t1 where c1 > 11 and c1 < 21 GROUP BY c1 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c1	COUNT(*)
+12	1
+15	1
+17	1
+16	1
+18	1
+SELECT c3, COUNT(*) FROM t1 where c1 > 11 and c1 < 21 GROUP BY c3 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c3	COUNT(*)
+6	1
+8	2
+9	2
+10	2
+7	2
+select c1, COUNT(*) from t1 where c2 > 1 and c2 < 11 GROUP BY c1 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c1	COUNT(*)
+12	1
+15	1
+17	1
+16	1
+18	1
+select c1, COUNT(*) from t1 where c1 < 21 GROUP BY c1 order by l2_distance(c5, [0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c1	COUNT(*)
+7	1
+14	1
+18	1
+15	1
+11	1
+3	1
+5	1
+12	1
+9	1
+20	1
+17	1
+1	1
+4	1
+6	1
+19	1
+13	1
+10	1
+2	1
+16	1
+8	1
+SELECT c3, COUNT(*) FROM t1 where c1 < 21 GROUP BY c3 order by l2_distance(c5, [0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c3	COUNT(*)
+4	2
+8	2
+6	2
+2	2
+3	2
+5	2
+9	2
+1	2
+10	2
+7	2
+select c1, COUNT(*) from t1 where c2 > 1 GROUP BY c1 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c1	COUNT(*)
+1	1
+6	1
+12	1
+15	1
+17	1
+9	1
+16	1
+5	1
+18	1
+7	1
+19	1
+13	1
+11	1
+2	1
+14	1
+4	1
+10	1
+8	1
+3	1
+select *, CASE
+WHEN c1 < 6 THEN 'first halp'
+    ELSE 'second half'
+  END AS pri_category
+from t1 where c1 > 11 and c1 < 21
+order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+c1	c2	c3	c4	c5	c6	pri_category
+12	9	6	str6 	[-0.321,-0.021,-0.322]	[0.477,0.111,-0.597]	second half
+15	6	8	str8 	[0.193,0.567,0]	[0.416,0.418,0.223]	second half
+17	4	9	str9 	[-0.465,0.358,0.729]	[-0.243,-0.8,0.921]	second half
+16	5	8	str8 	[-0.899,0.398,0.985]	[0.344,-0.105,0.392]	second half
+18	3	9	str9 	[0.502,0.929,0.108]	[-0.855,-0.961,0.959]	second half
+select *, CASE
+WHEN c1 < 6 THEN 'first halp'
+    ELSE 'second half'
+  END AS pri_category
+from t1 where c1 < 21
+order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 20;
+c1	c2	c3	c4	c5	c6	pri_category
+1	20	1	str1 	[-0.933,0.938,-0.358]	[-0.144,0.645,0.476]	first halp
+6	15	3	str3 	[-0.925,0.017,-0.666]	[-0.517,-0.543,-0.021]	second half
+12	9	6	str6 	[-0.321,-0.021,-0.322]	[0.477,0.111,-0.597]	second half
+15	6	8	str8 	[0.193,0.567,0]	[0.416,0.418,0.223]	second half
+17	4	9	str9 	[-0.465,0.358,0.729]	[-0.243,-0.8,0.921]	second half
+9	12	5	str5 	[-0.253,-0.16,-0.899]	[-0.734,-0.252,-0.351]	second half
+16	5	8	str8 	[-0.899,0.398,0.985]	[0.344,-0.105,0.392]	second half
+5	16	3	str3 	[-0.062,0.682,0.809]	[0.394,0.794,-0.758]	first halp
+18	3	9	str9 	[0.502,0.929,0.108]	[-0.855,-0.961,0.959]	second half
+7	14	4	str4 	[0.558,0.73,-0.177]	[0.783,-0.284,-0.23]	second half
+19	2	10	str10	[-0.575,-0.555,-0.563]	[-0.703,-0.483,-0.569]	second half
+13	8	7	str7 	[-0.641,-0.658,-0.073]	[0.097,0.039,-0.302]	second half
+11	10	6	str6 	[0.53,0.888,0.5]	[-0.408,0.772,-0.296]	second half
+2	19	1	str1 	[-0.557,-0.717,-0.805]	[-0.106,0.938,-0.274]	first halp
+14	7	7	str7 	[0.749,0.888,0.217]	[-0.951,-0.702,-0.736]	second half
+4	17	2	str2 	[-0.104,-0.801,-0.295]	[0.875,-0.486,-0.236]	first halp
+20	1	10	str10	[0.139,-0.096,0.94]	[0.16,0.952,-0.454]	second half
+10	11	5	str5 	[-0.269,-0.967,-0.539]	[0.36,0.591,0.008]	second half
+8	13	4	str4 	[-0.72,-0.934,0.965]	[0.833,-0.772,0.262]	second half
+3	18	2	str2 	[0.968,-0.479,0.074]	[-0.205,0.477,-0.102]	first halp
+drop table if exists t1;
+drop table if exists t2;
+alter system set ob_vector_memory_limit_percentage =0;

@@ -266,6 +266,7 @@ void ObTableScanIterator::reuse()
   main_iter_ = NULL;
   reuse_row_iters();
   sample_ranges_.reuse();
+  main_table_param_.reuse();
 }
 
 void ObTableScanIterator::reset_for_switch()
@@ -315,6 +316,37 @@ int ObTableScanIterator::rescan(ObTableScanParam &scan_param)
       STORAGE_LOG(WARN, "fail to open iter", K(ret), KPC(cached_iter_node_));
     } else {
       STORAGE_LOG(DEBUG, "Success to rescan ObTableScanIterator", K(scan_param.key_ranges_));
+    }
+  }
+  return ret;
+}
+
+int ObTableScanIterator::advance_scan(ObTableScanParam &scan_param)
+{
+  int ret = OB_SUCCESS;
+  ACTIVE_GLOBAL_ITERATOR_GUARD(ret, cached_iter_node_);
+  if (OB_UNLIKELY(!is_inited_ || nullptr == scan_param_ || nullptr == main_iter_ || main_iter_ != scan_merge_)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "Unexpected state", K(ret), K(is_inited_), KP(scan_param_), KP(main_iter_), KP(scan_merge_));
+  } else if (OB_FAIL(check_advance_scan_supported())) {
+    STORAGE_LOG(WARN, "Failed to check advance scan supported", K(ret));
+  } else {
+    STORAGE_LOG(DEBUG, "table scan iterate advance scan", K_(is_inited), K(lbt()), K(scan_param_));
+    const ObTablet *tablet = get_table_param_.tablet_iter_.get_tablet_handle().get_obj();
+    bool is_tablet_spliting = false;
+    main_table_param_.iter_param_.set_is_advance_skip_scan();
+    if (OB_ISNULL(tablet)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tablet is null", K(ret), K(scan_param_));
+    } else if (FALSE_IT(table_scan_range_.reset())) {
+    } else if (OB_FAIL(table_scan_range_.init(*scan_param_, *tablet, is_tablet_spliting))) {
+      STORAGE_LOG(WARN, "Failed to init table scan range", K(ret));
+    } else if (OB_UNLIKELY(!table_scan_range_.is_scan() || table_scan_range_.get_ranges().count() != 1)) {
+      STORAGE_LOG(WARN, "Unexpected table scan range", K(ret), K(table_scan_range_));
+    } else if (OB_FAIL(main_iter_->advance_scan(table_scan_range_.get_ranges().at(0)))) {
+      STORAGE_LOG(WARN, "Failed to advance scan", K(ret));
+    } else {
+      STORAGE_LOG(DEBUG, "Success to advance scan ObTableScanIterator", K(scan_param.key_ranges_));
     }
   }
   return ret;
@@ -790,6 +822,31 @@ int ObTableScanIterator::check_txn_status_if_read_uncommitted_()
 bool ObTableScanIterator::need_trace() const
 {
   return OB_SUCCESS != ERRSIM_STORAGE_ITER_TRACE;
+}
+
+int ObTableScanIterator::check_advance_scan_supported()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(scan_param_->scan_flag_.scan_order_ != ObQueryFlag::Forward ||
+                  !scan_param_->sample_info_.is_no_sample() ||
+                  scan_param_->use_index_skip_scan() ||
+                  scan_param_->is_mview_query() ||
+                  main_table_param_.iter_param_.is_use_column_store() ||
+                  main_table_param_.iter_param_.enable_pd_aggregate() ||
+                  main_table_param_.iter_param_.enable_pd_group_by())) {
+      ret = OB_NOT_SUPPORTED;
+      STORAGE_LOG(WARN, "advance_scan not supported for not forward scan/sample/index skip scan/mview/column store/group by pushdown",
+      K(ret),
+      K(scan_param_->scan_flag_.scan_order_),
+      K(scan_param_->sample_info_.is_no_sample()),
+      K(scan_param_->use_index_skip_scan()),
+      K(scan_param_->is_mview_query()),
+      K(main_table_param_.iter_param_.is_use_column_store()),
+      K(main_table_param_.iter_param_.enable_pd_aggregate()),
+      K(main_table_param_.iter_param_.enable_pd_group_by()),
+      K(lbt()));
+  }
+  return ret;
 }
 
 } // namespace storage

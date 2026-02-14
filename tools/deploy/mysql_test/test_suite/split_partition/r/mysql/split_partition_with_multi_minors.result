@@ -1,0 +1,95 @@
+alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'reset';
+drop table if exists test_mult_sstables;
+drop sequence if exists seq_small;
+drop sequence if exists seq_large;
+alter system set undo_retention = 31536000;
+1. with multi minor sstables, euqal number of minor sstables for destination tablets.
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP wait_for continue_signal execute 10000';
+create sequence seq_small INCREMENT BY 1 start with 1 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create sequence seq_large INCREMENT BY 1 start with 5001 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create table test_mult_sstables(c1 bigint, c2 bigint, c3 longtext, primary key(c1))
+partition by range(c1) (
+partition p0 values less than (1),
+partition p1 values less than (10000),
+partition p2 values less than MAXVALUE);
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+alter table test_mult_sstables reorganize partition p1 into ( partition p1_0 values less than (5000), partition p1_1 values less than (10000));
+check for data table:
+svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+check for lob table:
+count(*)
+1
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP clear';
+set ob_global_debug_sync = 'now signal continue_signal';
+drop table test_mult_sstables;
+drop sequence seq_small;
+drop sequence seq_large;
+
+2. with multi minor sstables, unequal number of minor sstables for destination tablets.
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP wait_for continue_signal execute 10000';
+create sequence seq_small INCREMENT BY 1 start with 1 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create sequence seq_large INCREMENT BY 1 start with 5001 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create table test_mult_sstables(c1 bigint, c2 bigint, c3 longtext, primary key(c1))
+partition by range(c1) (
+partition p0 values less than (1),
+partition p1 values less than (10000),
+partition p2 values less than MAXVALUE);
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+alter system minor freeze;
+alter table test_mult_sstables reorganize partition p1 into ( partition p1_0 values less than (5000), partition p1_1 values less than (10000));
+check for data table:
+svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+check for lob table:
+count(*)
+1
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP clear';
+set ob_global_debug_sync = 'now signal continue_signal';
+drop table test_mult_sstables;
+drop sequence seq_small;
+drop sequence seq_large;

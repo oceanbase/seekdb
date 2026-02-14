@@ -1,0 +1,398 @@
+#owner: xiongliyao.xly
+#owner group: opensource
+#description: test vector related calculation functions
+
+--disable_query_log
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
+connection obsys;
+alter system set_tp tp_no = 368, error_code = 0, frequency = 1;
+connection default;
+--enable_query_log
+
+alter system set ob_vector_memory_limit_percentage = 20;
+sleep 3;
+
+--disable_warnings
+set ob_query_timeout=1000000000;
+set ob_trx_timeout=1000000000;
+drop database if exists vector_test;
+--enable_warnings
+create database vector_test;
+use vector_test;
+
+--disable_warnings
+drop table if exists test;
+drop table if exists test1;
+drop table if exists t;
+drop table if exists t1;
+--enable_warnings
+
+create table test (id int, c1 vector(3), c2 vector(3), c3 vector(4), c4 array(int));
+insert into test values(1, [1,-1,1], '[1,2,-3]', array(1,2,3,4), array(1,2,3));
+insert into test values(2, [2.2,2.3,2.4], '[-1.5,2.566,3.44]', array(1,2,3,4), array(1,2,3,4));
+insert into test values(3, [3.55,3.66,3.777], '[1.123,2,3]', array(1,2,3,4), array(1,NULL,3));
+insert into test values(1, [-1.1122,2.3322,3], NULL, [2.22,3.33,45.55, 3.2], '[11.1,2,3]');
+
+create table test1 (id int, c1 vector(3)) partition by hash(id) partitions 2;
+insert into test1 values(1, [1,1,1]);
+insert into test1 values(2, [2.2,2.3,2.4]);
+insert into test1 values(3, [3.55,3.66,3.777]);
+insert into test1 values(1, [1.1122,2.3322,3]);
+
+#########################################################################
+# test distance
+#########################################################################
+
+select l2_distance([1,-1,1], [1,2,-3]), l2_distance('[1,-1,1]', [1,2,-3]), vector_distance('[1,-1,1]', [1,2,-3], euclidean);
+select cosine_distance([1,2,3], NULL), inner_product(NULL, '[1,2,3]'), inner_product(NULL, NULL), vector_distance(NULL, NULL, manhattan);
+select cosine_distance([1,2,3], NULL), negative_inner_product(NULL, '[1,2,3]'), negative_inner_product(NULL, NULL), vector_distance(NULL, NULL, manhattan);
+select cosine_distance([1,2,3], '[0,0,0]');
+
+select c1, c2, l1_distance(c1, c2), l1_distance([1,1,1], '[1,2,3]'), vector_distance([1,1,1], c2, manhattan) from test;
+select c1, c2, l1_distance(c2, NULL), vector_distance(NULL, c2, manhattan) from test;
+select c1, c2, l2_distance(c1, c2), l2_distance(c1, '[1,2,3]'), l2_distance([1,1,1], c2), vector_distance([1,1,1], c2, euclidean) from test;
+select c1, c2, cosine_distance([1,1,1], [1,2,3]), cosine_distance(c1, [1,2,3]), cosine_distance(c2, '[1,1,1]'), vector_distance(c2, '[1,1,1]', cosine) from test;
+select c1, c2, inner_product(c1, '[1,2,3]'), inner_product('[1,1,1]', '[1,2,3]'), inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
+select c1, c2, negative_inner_product(c1, '[1,2,3]'), negative_inner_product('[1,1,1]', '[1,2,3]'), negative_inner_product('[1,1,1]', c2), vector_distance('[1,1,1]', c2, dot) from test;
+select c1, c4, l2_distance(c1, c4) from test where id = 1;
+select c3, c4, l2_distance(c3, c4) from test where id = 2;
+
+select c1, l2_distance(c1, '[1,1,1]') from test group by l2_distance(c1, '[1,1,1]');
+select c1, l2_distance(c1, '[1,1,1]') from test where l2_distance(c1, '[1,1,1]') < 100;
+select l2_distance(c1, '[1,1,1]') + cosine_distance(c2, '[1,2,3]') from test;
+
+select c1, l2_distance(c1, '[1,1,1]') from test1;
+select test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+select /*+parallel(2)*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+
+#########################################################################
+# test arith (+/-/*)
+#########################################################################
+
+select [1,2,3] + '[1.12,1000.0001, -1.2222]', [1,2,3] - NULL, '[1.2,0.221,0.666]' * [1.11,3.33,5.55], NULL + [11,13.3,2,1.2];
+select c1, c2, c1 + [1.5,2.3,3.3], [3.3,55.55,66.66] - c2, c2 * c1 from test;
+select c1 / 0, [2,3,4] + [1,2,3] from test;
+
+select c1 + [1,1,1] from test1;
+select test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+select /*+parallel(2)*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+
+# need fix
+#set  _enable_rich_vector_format = false;
+#select [1,2,3] + '[1.12,1000.0001, -1.2222]', [1,2,3] - NULL, '[1.2,0.221,0.666]' * [1.11,3.33,5.55], NULL + [11,13.3,2,1.2];
+#select c1, c2, c1 + [1.5,2.3,3.3], [3.3,55.55,66.66] - c2, c2 * c1 from test;
+#select c1 / 0, [2,3,4] + [1,2,3] from test;
+#set  _enable_rich_vector_format = true;
+
+#########################################################################
+# test cmp (= != > < >= <=), only = != supported
+#########################################################################
+
+select c1, c1 = '[2.2,2.3,2.4]', c1 != [0.00001,0.00002,0.00003] from test;
+--error 5083
+select c3, c3 < [1,2,3.000001,4], c3 > [1,1.999999,3,4], c3 >= [0,1,2,3], c3 <= [2,3,4,5] from test;
+select c2, c2 = NULL from test;
+--error 5083
+select c2, NULL < c2 from test;
+--error 5083
+select c1, c2, c1 < c2, NULL >= c1, c2 = NULL from test;
+--error 5083
+select id, c1, c2 from test where c1 >= c2;
+select c1, c2, c1 = [2,2,2]+[0.2,0.3,0.4] from test;
+--error 5083
+select c1, c2, c1 > c2 - '[1,2,3]' from test;
+select id, c1 from test where c2 = [1,2,-3];
+select id, c2 from test where c2 != '[1,2,-3]';
+--error 5083
+select id, c1, c2 from test where c1 >= c2;
+select c1, c2, c1 = [2,-2,2]+[0.2,4.3,0.4] from test;
+--error 5083
+select c1 < [1,2,3] from test1;
+--error 5083
+select c1 from test1 where c1 > [1,2,3] && c1 < [3,4,5];
+
+select test1.c1, test.c1 from test1, test;
+select test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+select /*+parallel(2)*/test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+select /*+OPT_PARAM('rowsets_enabled', 'FALSE')*/test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+
+#########################################################################
+# test others
+#########################################################################
+
+select c1, c2, c4, vector_dims(c1), vector_dims(c2), vector_dims([1,2,3,4]), vector_dims('[1,2,3]') from test;
+select c1, c2, vector_norm(c1), vector_norm(c2), vector_norm([1,2,3,4]), vector_norm('[1,2,3]') from test;
+select vector_dims(NULL), vector_norm(NULL);
+
+select vector_norm(c1),vector_dims(c1) from test1;
+select vector_dims('[1,1,1]') / vector_dims('[1]');
+
+--error 1235
+set @a = [1];
+set @b = l2_distance([1,2],[-2,3]);
+select @b;
+
+#########################################################################
+# test aggregate (sum/avg)
+#########################################################################
+
+insert into test values(null, null, null, null, null);
+insert into test values(null, [0.1,0.2,0.3], [0.1,0.2,0.3], [0.1,0.2,0.3,0.4], null);
+insert into test values(1, [-0.777,0.12346,-1.2556], [1,2,-0.666], [3,4,5,6.000], NULL);
+insert into test values(1, NULL, NULL, NULL, NULL);
+insert into test values(2, [3,4,5], [1,2,3], NULL, '[1,2,3,4,5]');
+insert into test values(3, [100000.111,500000.6666,1.2222222], [1.333,2,3], [1.333333,4.555555,6.123456789,0], '[1,2,3,4,5]');
+
+select sum(c1),avg(c1),count(c1) from test group by id;
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test group by id;
+select sum(c1),avg(c1),count(c1) from test group by id order by id;
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test group by id order by id;
+select sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test1 group by id order by id;
+select id,sum(c1),avg(c1),count(c1) from test group by id order by id;
+select id,sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+
+select sum(c1+[1,2,3]-[1,2,3]),avg(c1+[1,2,3]-[1,2,3]),count(c1+[1,2,3]-[1,2,3]) from test;
+select sum(c1+c2),avg(c1+c2),count(c1+c2) from test;
+select sum(c1+[1,1,1]),avg(c1+[1,1,1]),count(c1+[1,1,1]) from test1;
+select test.id, sum(test1.c1+test.c1) from test1,test where test1.id = test.id group by test.id order by test.id;
+
+select c1, cast(SUM(id)/COUNT(id) as double), c2 from test;
+select l1_distance([cast(AVG(id) as float), cast(SUM(id) as float), cast(COUNT(id) as float)],c1) from test;
+select l2_distance(c1, [0, cast(MAX(id) as float), cast(MIN(id) as float)]) from test;
+
+# win func
+select count(c1) over (partition by id) from test order by id;
+select sum(c1) over (partition by id) from test order by id;
+select avg(c1) over (partition by id) from test order by id;
+
+select id, sum(c1) = [5.2,6.3,7.4], avg(c1) = [0.1,0.2,0.3] from test group by id;
+select c1 from test where id in (select id from test group by id having sum(c1) = [5.2,6.3,7.4]);
+
+# 测试空集
+select sum(c1),avg(c1),count(c1) from test where id = 10;
+
+# 测试px
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test group by id order by id;
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+
+select /*+ OPT_PARAM('rowsets_enabled', 'FALSE') */ sum(c1),avg(c1),count(c1) from test group by id order by id;
+select /*+ OPT_PARAM('rowsets_enabled', 'FALSE') */ sum(c1),avg(c1),count(c1) from test1 group by id order by id;
+
+# 计划CASE WHEN t.c1 IS NOT NULL THEN 1 ELSE 0 END
+create table t (id int primary key, c1 vector(3));
+insert into t values(1, [1,1,1]), (2, [2.2,3.3,4.4]), (3, [3.33,4.44,5.55]);
+select sum(c1),avg(c1),count(c1) from t group by id;
+
+# scalar pushdown
+select sum(c1),avg(c1),count(c1) from test;
+select sum(c1),avg(c1),count(c1) from test1;
+select sum(c1),sum(id),sum(c2) from test;
+select sum(c1),sum(id) from test1;
+select sum(c1),avg(c1),count(c1) from test where id > 1;
+select sum(c1),avg(c1),count(c1) from test1 where id > 1;
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test;
+select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test1;
+
+--error 1235
+select sum(distinct c1) from test;
+--error 1235
+select avg(distinct c1) from test group by id;
+--error 1235
+select count(distinct c1) over (partition by id) from test order by id;
+
+drop table test1;
+
+# group by pushdown
+create table t1 (c1 int, c2 vector(3));
+--disable_query_log
+--let $count = 0
+while($count < 2000)
+{
+  eval insert into t1(c1, c2) values ($count % 4, [$count % 4, $count % 4, $count % 4]);
+  --inc $count
+}
+--enable_query_log
+
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+--disable_query_log
+--let $count = 0
+while($count < 3000)
+{
+  eval insert into t1(c1, c2) values ($count % 4, [$count % 4, $count % 4, $count % 4]);
+  --inc $count
+}
+--enable_query_log
+
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+
+--disable_query_log
+call dbms_stats.gather_table_stats('VECTOR_TEST', 'T1', method_opt=>'for all columns size 64', estimate_percent=>100);
+--enable_query_log
+
+select c1,sum(c2),avg(c2),count(c2) from t1 group by c1;
+
+# win func
+drop table t1;
+create table t1 (c1 date, c2 vector(3));
+insert into t1 values ('2024-08-01', [0.1,0.1,0.1]), ('2024-08-02', [0.2,0.2,0.2]), ('2024-08-03', [0.3,0.3,0.3]), ('2024-08-04', [0.4,0.4,0.4]), ('2024-08-05', [0.5,0.5,0.5]), ('2024-08-06', [0.6,0.6,0.6]);
+SELECT
+    c1,
+    SUM(c2) OVER (
+        ORDER BY c1
+        ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+    ) AS rolling_sum_3_days
+FROM
+    t1;
+set _enable_rich_vector_format = false;
+SELECT
+    c1,
+    SUM(c2) OVER (
+        ORDER BY c1
+        ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+    ) AS rolling_sum_3_days
+FROM
+    t1;
+set _enable_rich_vector_format = true;
+#########################################################################
+# test cast
+#########################################################################
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1(c1 int, c2 vector(3), c3 varchar(30), c4 char(30), c5 text, c6 blob(100), c7 varbinary(100), c8 mediumtext, c9 longtext, c10 tinyblob, c11 mediumblob, c12 longblob);
+insert into t1 values(1, [0,1,2], "[0,1,2]", "[0,1,2]", "[0,1,1]", X'000000000000803F00000040', 0x000000000000803F00000040, "[0,1,1]", "[0,1,1]", 0x000000000000803F00000040, 0x000000000000803F00000040, 0x000000000000803F00000040);
+select inner_product(c2, c3),inner_product(c2, c4),inner_product(c2, c5),inner_product(c2, c6),inner_product(c2, c7),inner_product(c2, c8),inner_product(c2, c9),inner_product(c2, c10),inner_product(c2, c11),inner_product(c2, c12) from t1;
+
+#########################################################################
+# complex test
+#########################################################################
+--disable_warnings
+drop table if exists t2, tt0;
+--enable_warnings
+
+CREATE TABLE t2 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t2(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t2(c1,c2,c3,c4) values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t2(c1,c2,c3,c4) values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t2(c1,c2,c3,c4) values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t2(c1,c2,c3,c4) values(5,'[-1,-3,-2]',null,'[2,3,1]');
+
+create table tt0 as select c2+c3+c4 as c1, [1,2,3] + [2,3,4] as c2, sum(c2) as c3, avg(c3) as c4 from t2;
+select * from tt0;
+select sum(c1), avg(c1), count(c1), c1+c2+c3 from tt0;
+
+drop table tt0;
+create table tt0 as select c2+c3+c4 as c1, [1,2,3] + [2,3,4] as c2 from t2;
+select * from tt0;
+select sum(c1), avg(c1), count(c1), c1+c2 from tt0;
+
+--disable_warnings
+drop table if exists t2, tt0;
+--enable_warnings
+
+CREATE TABLE t2 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t2 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t2 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t2 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t2 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t2 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+
+CREATE TABLE tt0 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3));
+insert into tt0 select c1,c2,c3,c4 from t2;
+
+select c1,c2,c3,c4,l2_distance(a3,c2) from t2 a right join tt0 b on l2_distance(c2,c3)=l2_distance(a3,a4)  order by l2_distance(a3,c2);
+select c1 from t2 a right join tt0 b on a3=c2  order by l2_distance(a3,c2);
+
+# case when
+select count(c1), CASE WHEN l2_distance(c2, '[1,2,3]') > 1 THEN avg(c2) ELSE avg(c3) END as A from t2;
+select count(c1), CASE WHEN l2_distance(c2, '[1,2,3]') < 1 THEN c2 ELSE sum(c3) END as A from t2;
+select count(c1), CASE WHEN l2_distance(c2, '[1,2,3]') < 1 THEN [1,2,3] ELSE c3 END as A from t2;
+
+# create table by win func
+create table tt1 as SELECT avg(t2.c2) OVER (PARTITION BY t2.c1) AS avg_vector FROM t2;
+select * from tt1;
+
+#########################################################################
+# test error
+#########################################################################
+--error 7600
+insert into test values(2, [1,2], [1,2,3], [1,2,3,4], NULL);
+--error 7600
+select l2_distance('[1,2,3]', c3) from test;
+--error 7600
+select cosine_distance(c1, c3) from test;
+--error 7600
+select l2_distance(c1, c4) from test where id = 2;
+--error 7600
+select l2_distance(c3, c4) from test where id = 1;
+--error 7600
+select l2_distance(c1, [null]) from test;
+
+--error 4152
+select l2_distance(c1, [1,NULL,1]) from test;
+--error 4152
+select vector_norm(c4) from test;
+--error 4152
+select vector_dims(c4) from test;
+
+--error 1210
+select l2_distance('1,2,3', c1) from test;
+
+--error 1235
+insert into test values(1, 1, 1.0, 1, 1);
+--error 1235
+insert into t1(c2) values(l2_distance(null,null));
+--error 1235
+select sum([1,2]) from dual;
+--error 1235
+select avg([1,2]) from dual;
+
+--error 7602
+select l2_distance(c1, [[1,2],[1,2],[1,3]]) from test;
+--error 7602
+select c1 = [[1,2],[1,2],[1,3]] from test;
+--error 7602
+select c1 + [[1,2],[1,2],[1,3]] from test;
+
+--error 5083
+select c1 from test order by c1;
+--error 5083
+select c2 from test group by c1;
+--error 5083
+select c1 && c2 from test;
+--error 5083
+select [1,2,3] || [1,2,3];
+--error 5083
+select STDDEV(c1) from test;
+--error 5083
+select c1+1 from test;
+--error 5083
+select sum(c1*1) from test;
+--error 5083
+select [1,2,3] > [2,3,4];
+--error 5083
+select [1] / 3;
+
+--error 1210
+select inner_product(1, c1) from test;
+--error 1210
+select c1,max(c2) from test;
+--error 1210
+select min(c1) from test;
+--error  1210
+select l2_distance('101', c1) from test;
+
+--error 1292
+select vector_dims(['a']) as res;
+--error  1292
+select vector_norm(['a']) as res;
+
+drop database vector_test;
+alter system set ob_vector_memory_limit_percentage = 0;

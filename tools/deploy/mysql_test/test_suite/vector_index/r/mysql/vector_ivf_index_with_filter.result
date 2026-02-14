@@ -1,0 +1,640 @@
+# Vector Ivf Index Filter Test
+alter system set ob_vector_memory_limit_percentage = 44;
+drop table if exists t1;
+create table t1(c1 int, c2 int, c3 vector(3), primary key(c1), vector index idxv(c3) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3));
+insert into t1 values(1, 90, '[0.203846,0.205289,0.880265]');
+insert into t1 values(2, 98,'[0.484526,0.669954,0.986755]');
+insert into t1 values(3, 80,'[0.327936,0.048756,0.084670]');
+insert into t1 values(4, 75,'[0.148869,0.878546,0.028024]');
+insert into t1 values(5, 8,'[0.334970,0.857377,0.886132]');
+insert into t1 values(6, 9,'[0.117582,0.302352,0.471198]');
+insert into t1 values(7, 19,'[0.551185,0.231134,0.075354]');
+insert into t1 values(8, 39,'[0.185221,0.315131,0.558301]');
+insert into t1 values(9, 58,'[0.928764,0.254038,0.272721]');
+insert into t1 values(10, 62,'[0.345999,0.254102,0.950869]');
+insert into t1 values(11, 35,'[0.102417,0.769097,0.655852]');
+insert into t1 values(12, 41,'[0.260019,0.176781,0.252475]');
+insert into t1 values(13, 36,'[0.727582,0.167779,0.383390]');
+insert into t1 values(14, 1,'[0.440073,0.998299,0.178305]');
+insert into t1 values(15, 92,'[0.593148,0.156687,0.351126]');
+insert into t1 values(16, 53,'[0.995789,0.761186,0.830773]');
+insert into t1 values(17, 45,'[0.538628,0.082426,0.083695]');
+insert into t1 values(18, 7,'[0.515894,0.188949,0.420311]');
+insert into t1 values(19, 23,'[0.329709,0.892973,0.850152]');
+insert into t1 values(30, 74,'[0.055008,0.893954,0.445311]');
+insert into t1 values(31, 61,'[0.271288,0.969836,0.899836]');
+insert into t1 values(32, 35,'[0.050261,0.845356,0.877143]');
+insert into t1 values(33, 88,'[0.802323,0.671325,0.694353]');
+insert into t1 values(34, 54,'[0.003465,0.902425,0.745576]');
+insert into t1 values(35, 15,'[0.488643,0.217055,0.257016]');
+insert into t1 values(36, 83,'[0.646577,0.103579,0.802476]');
+insert into t1 values(37, 56,'[0.318426,0.707079,0.196895]');
+insert into t1 values(38, 19,'[0.983855,0.265534,0.566591]');
+insert into t1 values(39, 77,'[0.957104,0.729224,0.092537]');
+insert into t1 values(50, 23,'[0.495983,0.556285,0.986712]');
+insert into t1 values(51, 68,'[0.956373,0.549782,0.493153]');
+insert into t1 values(52, 37,'[0.470215,0.788596,0.534499]');
+insert into t1 values(53, 46,'[0.660493,0.373283,0.755029]');
+insert into t1 values(54, 79,'[0.100299,0.676867,0.970798]');
+insert into t1 values(55, 13,'[0.802192,0.079942,0.627571]');
+insert into t1 values(56, 29,'[0.109255,0.865682,0.368419]');
+insert into t1 values(57, 70,'[0.589309,0.026667,0.665149]');
+insert into t1 values(58, 38,'[0.769838,0.006709,0.233108]');
+insert into t1 values(59, 57,'[0.731215,0.949661,0.397933]');
+insert into t1 values(70, 48,'[0.735541,0.670776,0.903237]');
+insert into t1 values(71, 94,'[0.880265,0.824340,0.615737]');
+insert into t1 values(72, 62,'[0.903237,0.447223,0.232028]');
+insert into t1 values(73, 25,'[0.084670,0.389642,0.970982]');
+insert into t1 values(74, 58,'[0.028024,0.326642,0.044912]');
+insert into t1 values(75, 34,'[0.886132,0.668270,0.983913]');
+insert into t1 values(76, 73,'[0.471198,0.248725,0.315868]');
+insert into t1 values(77, 20,'[0.075354,0.230557,0.248149]');
+insert into t1 values(78, 76,'[0.558301,0.543172,0.335010]');
+insert into t1 values(79, 49,'[0.272721,0.648755,0.966464]');
+insert into t1 values(90, 57,'[0.950869,0.275233,0.844568]');
+create index idx1 on t1(c2);
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+select * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+explain select * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+Query Plan
+==============================================================
+|ID|OPERATOR                      |NAME|EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------
+|0 |TOP-N SORT                    |    |10      |9           |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1  |50      |6           |
+==============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=256
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(10)
+  1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
+       -1))), ARRAY(18, -1)))]), filter(nil), rowset=256
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c1]), range(NULL ; 100),
+      range_cond([t1.c1 < 100])
+explain select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+Query Plan
+==================================================================
+|ID|OPERATOR                      |NAME    |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TOP-N SORT                    |        |5       |22          |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1(idx1)|5       |21          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(10)
+  1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
+       -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([t1.c2], [t1.c1]), range(MIN,MIN ; MAX,MAX)always true
+explain select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+Query Plan
+=======================================================
+|ID|OPERATOR           |NAME    |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------
+|0 |TOP-N SORT         |        |1       |7           |
+|1 |└─VECTOR INDEX SCAN|t1(idxv)|1       |7           |
+=======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(10)
+  1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
+       -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
+drop table if exists t1;
+create table t1(c1 int, c2 int, c3 vector(3), primary key(c1));
+insert into t1 values(1, 90, '[0.203846,0.205289,0.880265]');
+insert into t1 values(2, 98,'[0.484526,0.669954,0.986755]');
+insert into t1 values(3, 80,'[0.327936,0.048756,0.084670]');
+insert into t1 values(4, 75,'[0.148869,0.878546,0.028024]');
+insert into t1 values(5, 8,'[0.334970,0.857377,0.886132]');
+insert into t1 values(6, 9,'[0.117582,0.302352,0.471198]');
+insert into t1 values(7, 19,'[0.551185,0.231134,0.075354]');
+insert into t1 values(8, 39,'[0.185221,0.315131,0.558301]');
+insert into t1 values(9, 58,'[0.928764,0.254038,0.272721]');
+insert into t1 values(10, 62,'[0.345999,0.254102,0.950869]');
+insert into t1 values(11, 35,'[0.102417,0.769097,0.655852]');
+insert into t1 values(12, 41,'[0.260019,0.176781,0.252475]');
+insert into t1 values(13, 36,'[0.727582,0.167779,0.383390]');
+insert into t1 values(14, 1,'[0.440073,0.998299,0.178305]');
+insert into t1 values(15, 92,'[0.593148,0.156687,0.351126]');
+insert into t1 values(16, 53,'[0.995789,0.761186,0.830773]');
+insert into t1 values(17, 45,'[0.538628,0.082426,0.083695]');
+insert into t1 values(18, 7,'[0.515894,0.188949,0.420311]');
+insert into t1 values(19, 23,'[0.329709,0.892973,0.850152]');
+insert into t1 values(30, 74,'[0.055008,0.893954,0.445311]');
+insert into t1 values(31, 61,'[0.271288,0.969836,0.899836]');
+insert into t1 values(32, 35,'[0.050261,0.845356,0.877143]');
+insert into t1 values(33, 88,'[0.802323,0.671325,0.694353]');
+insert into t1 values(34, 54,'[0.003465,0.902425,0.745576]');
+insert into t1 values(35, 15,'[0.488643,0.217055,0.257016]');
+insert into t1 values(36, 83,'[0.646577,0.103579,0.802476]');
+insert into t1 values(37, 56,'[0.318426,0.707079,0.196895]');
+insert into t1 values(38, 19,'[0.983855,0.265534,0.566591]');
+insert into t1 values(39, 77,'[0.957104,0.729224,0.092537]');
+insert into t1 values(50, 23,'[0.495983,0.556285,0.986712]');
+insert into t1 values(51, 68,'[0.956373,0.549782,0.493153]');
+insert into t1 values(52, 37,'[0.470215,0.788596,0.534499]');
+insert into t1 values(53, 46,'[0.660493,0.373283,0.755029]');
+insert into t1 values(54, 79,'[0.100299,0.676867,0.970798]');
+insert into t1 values(55, 13,'[0.802192,0.079942,0.627571]');
+insert into t1 values(56, 29,'[0.109255,0.865682,0.368419]');
+insert into t1 values(57, 70,'[0.589309,0.026667,0.665149]');
+insert into t1 values(58, 38,'[0.769838,0.006709,0.233108]');
+insert into t1 values(59, 57,'[0.731215,0.949661,0.397933]');
+insert into t1 values(70, 48,'[0.735541,0.670776,0.903237]');
+insert into t1 values(71, 94,'[0.880265,0.824340,0.615737]');
+insert into t1 values(72, 62,'[0.903237,0.447223,0.232028]');
+insert into t1 values(73, 25,'[0.084670,0.389642,0.970982]');
+insert into t1 values(74, 58,'[0.028024,0.326642,0.044912]');
+insert into t1 values(75, 34,'[0.886132,0.668270,0.983913]');
+insert into t1 values(76, 73,'[0.471198,0.248725,0.315868]');
+insert into t1 values(77, 20,'[0.075354,0.230557,0.248149]');
+insert into t1 values(78, 76,'[0.558301,0.543172,0.335010]');
+insert into t1 values(79, 49,'[0.272721,0.648755,0.966464]');
+insert into t1 values(90, 57,'[0.950869,0.275233,0.844568]');
+create vector index idxv on t1 (c3) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create index idx1 on t1(c2);
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+select * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+c1	c2	c3
+53	46	[0.660493,0.373283,0.755029]
+10	62	[0.345999,0.254102,0.950869]
+50	23	[0.495983,0.556285,0.986712]
+1	90	[0.203846,0.205289,0.880265]
+8	39	[0.185221,0.315131,0.558301]
+2	98	[0.484526,0.669954,0.986755]
+79	49	[0.272721,0.648755,0.966464]
+36	83	[0.646577,0.103579,0.802476]
+73	25	[0.08467,0.389642,0.970982]
+18	7	[0.515894,0.188949,0.420311]
+explain select * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+Query Plan
+==============================================================
+|ID|OPERATOR                      |NAME|EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------
+|0 |TOP-N SORT                    |    |10      |9           |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1  |50      |6           |
+==============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=256
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(10)
+  1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
+       -1))), ARRAY(18, -1)))]), filter(nil), rowset=256
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c1]), range(NULL ; 100),
+      range_cond([t1.c1 < 100])
+explain select/*+index(t1 idx1)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+Query Plan
+==================================================================
+|ID|OPERATOR                      |NAME    |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TOP-N SORT                    |        |5       |22          |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1(idx1)|5       |21          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(10)
+  1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
+       -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([t1.c2], [t1.c1]), range(MIN,MIN ; MAX,MAX)always true
+explain select/*+index(t1 idxv)*/ * from t1 where c1 < 100 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+Query Plan
+=======================================================
+|ID|OPERATOR           |NAME    |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------
+|0 |TOP-N SORT         |        |1       |10          |
+|1 |└─VECTOR INDEX SCAN|t1(idxv)|1       |10          |
+=======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(10)
+  1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.428146, DOUBLE(-1, -1)), cast(0.408760, DOUBLE(-1, -1)), cast(0.765300, DOUBLE(-1,
+       -1))), ARRAY(18, -1)))]), filter([t1.c1 < 100]), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
+drop table if exists t1;
+create table t1(c1 int, c2 int, c3 int, v vector(3), primary key(c1));
+insert into t1 values(1, 1, 10, '[0.203846,0.205289,0.880265]');
+insert into t1 values(2, 2, 9, '[0.226980,0.579658,0.933939]');
+insert into t1 values(3, 3, 8, '[0.181664,0.013905,0.628127]');
+insert into t1 values(4, 4, 7, '[0.442633,0.637534,0.633993]');
+insert into t1 values(5, 5, 6, '[0.190118,0.959676,0.796483]');
+insert into t1 values(6, 6, 5, '[0.710370,0.007130,0.710913]');
+insert into t1 values(7, 7, 4, '[0.238120,0.289662,0.970101]');
+insert into t1 values(8, 8, 3, '[0.168794,0.567442,0.062338]');
+insert into t1 values(9, 9, 2, '[0.901419,0.676738,0.122339]');
+insert into t1 values(10, 10, 1, '[0.563644,0.811224,0.175574]');
+create vector index idx3 on t1 (v) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create index idx1 on t1(c2);
+create index idx2 on t1(c3);
+select * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+6	6	5	[0.71037,0.00713,0.710913]
+7	7	4	[0.23812,0.289662,0.970101]
+select /*+index(t1 idx1) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+6	6	5	[0.71037,0.00713,0.710913]
+7	7	4	[0.23812,0.289662,0.970101]
+select /*+index(t1 idx2) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+6	6	5	[0.71037,0.00713,0.710913]
+7	7	4	[0.23812,0.289662,0.970101]
+select /*+index(t1 idx3) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+6	6	5	[0.71037,0.00713,0.710913]
+7	7	4	[0.23812,0.289662,0.970101]
+select * from t1 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+4	4	7	[0.442633,0.637534,0.633993]
+6	6	5	[0.71037,0.00713,0.710913]
+explain select * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+Query Plan
+==================================================================
+|ID|OPERATOR                      |NAME    |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TOP-N SORT                    |        |2       |18          |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1(idx1)|2       |17          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(5)
+  1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
+       DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c3 < 6]), rowset=16
+      access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX),
+      range_cond([t1.c2 > 5])
+explain select /*+index(t1 idx1) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+Query Plan
+==================================================================
+|ID|OPERATOR                      |NAME    |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TOP-N SORT                    |        |2       |18          |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1(idx1)|2       |17          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(5)
+  1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
+       DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c3 < 6]), rowset=16
+      access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.c2], [t1.c1]), range(5,MAX ; MAX,MAX),
+      range_cond([t1.c2 > 5])
+explain select /*+index(t1 idx2) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+Query Plan
+==================================================================
+|ID|OPERATOR                      |NAME    |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TOP-N SORT                    |        |2       |18          |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1(idx2)|2       |17          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(5)
+  1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
+       DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c2 > 5]), rowset=16
+      access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; 6,MIN),
+      range_cond([t1.c3 < 6])
+explain select /*+index(t1 idx3) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+Query Plan
+=======================================================
+|ID|OPERATOR           |NAME    |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------
+|0 |TOP-N SORT         |        |1       |10          |
+|1 |└─VECTOR INDEX SCAN|t1(idx3)|1       |10          |
+=======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(5)
+  1 - output([t1.c1], [t1.v], [t1.c2], [t1.c3], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
+       DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c2 > 5], [t1.c3 < 6]), rowset=16
+      access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,false],
+      range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
+explain select * from t1 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t1(idx3)|2       |10          |
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
+      access([t1.c1], [t1.v], [t1.c2], [t1.c3]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
+drop table if exists t1;
+create table t1(c1 int, c2 int, c3 int, v vector(3), primary key(c1));
+insert into t1 values(1, 1, 10, '[0.203846,0.205289,0.880265]');
+insert into t1 values(2, 2, 9, '[0.226980,0.579658,0.933939]');
+insert into t1 values(3, 3, 8, '[0.181664,0.013905,0.628127]');
+insert into t1 values(4, 4, 7, '[0.442633,0.637534,0.633993]');
+insert into t1 values(5, 5, 6, '[0.190118,0.959676,0.796483]');
+insert into t1 values(6, 6, 5, '[0.710370,0.007130,0.710913]');
+insert into t1 values(7, 7, 4, '[0.238120,0.289662,0.970101]');
+insert into t1 values(8, 8, 3, '[0.168794,0.567442,0.062338]');
+insert into t1 values(9, 9, 2, '[0.901419,0.676738,0.122339]');
+insert into t1 values(10, 10, 1, '[0.563644,0.811224,0.175574]');
+create vector index idx3 on t1 (v) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create index idx1 on t1(c2, c3);
+select * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+6	6	5	[0.71037,0.00713,0.710913]
+7	7	4	[0.23812,0.289662,0.970101]
+select /*+index(t1 idx1) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+6	6	5	[0.71037,0.00713,0.710913]
+7	7	4	[0.23812,0.289662,0.970101]
+select /*+index(t1 idx3) */ * from t1 where c2 > 5 and c3 < 6 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	2	[0.901419,0.676738,0.122339]
+10	10	1	[0.563644,0.811224,0.175574]
+8	8	3	[0.168794,0.567442,0.062338]
+6	6	5	[0.71037,0.00713,0.710913]
+7	7	4	[0.23812,0.289662,0.970101]
+drop table if exists t1;
+create table t1(c1 int, c2 int, c3 varchar(20), v vector(3), primary key(c1));
+insert into t1 values(1, 1, 'GfHnmWjRxTaIErsZ', '[0.203846,0.205289,0.880265]');
+insert into t1 values(2, 2, 'LKmNtrEbUvQPJZXODyF', '[0.226980,0.579658,0.933939]');
+insert into t1 values(3, 3, 'aFGhzNVwKtUCXsJoRp', '[0.181664,0.013905,0.628127]');
+insert into t1 values(4, 4, 'lzEjkIrFbHNGpVuoXwQA', '[0.442633,0.637534,0.633993]');
+insert into t1 values(5, 5, 'yMBsQOVnfiGeRHYDpTk', '[0.190118,0.959676,0.796483]');
+insert into t1 values(6, 6, 'qXCvnWjDLYtgsuPfA', '[0.710370,0.007130,0.710913]');
+insert into t1 values(7, 7, 'PRhFJtnaeXkvcQLWM', '[0.238120,0.289662,0.970101]');
+insert into t1 values(8, 8, 'GxoFSdZLNrMpWyQlT', '[0.168794,0.567442,0.062338]');
+insert into t1 values(9, 9, 'vTzmaHiBKwLCXOjqsY', '[0.901419,0.676738,0.122339]');
+insert into t1 values(10, 10, 'NLcYpTsirQZkWgJOUx', '[0.563644,0.811224,0.175574]');
+create vector index idx3 on t1 (v) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+create index idx1 on t1(c2);
+create index idx2 on t1(c3);
+select * from t1 where c3 < 'ob' order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+10	10	NLcYpTsirQZkWgJOUx	[0.563644,0.811224,0.175574]
+8	8	GxoFSdZLNrMpWyQlT	[0.168794,0.567442,0.062338]
+4	4	lzEjkIrFbHNGpVuoXwQA	[0.442633,0.637534,0.633993]
+3	3	aFGhzNVwKtUCXsJoRp	[0.181664,0.013905,0.628127]
+2	2	LKmNtrEbUvQPJZXODyF	[0.22698,0.579658,0.933939]
+select * from t1 where c3 < 'ob' order by l2_distance(v, [0.712338,0.603321,0.133444]) limit 5;
+c1	c2	c3	v
+10	10	NLcYpTsirQZkWgJOUx	[0.563644,0.811224,0.175574]
+8	8	GxoFSdZLNrMpWyQlT	[0.168794,0.567442,0.062338]
+4	4	lzEjkIrFbHNGpVuoXwQA	[0.442633,0.637534,0.633993]
+3	3	aFGhzNVwKtUCXsJoRp	[0.181664,0.013905,0.628127]
+2	2	LKmNtrEbUvQPJZXODyF	[0.22698,0.579658,0.933939]
+explain select * from t1 where c3 < 'ob' order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+Query Plan
+==================================================================
+|ID|OPERATOR                      |NAME    |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TOP-N SORT                    |        |5       |21          |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1(idx2)|6       |20          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(5)
+  1 - output([t1.c1], [t1.v], [t1.c3], [t1.c2], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
+       DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([t1.c1], [t1.v], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; ob,MIN),
+      range_cond([t1.c3 < 'ob'])
+select * from t1 where c3 < 'ob' and c2 > 3 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+10	10	NLcYpTsirQZkWgJOUx	[0.563644,0.811224,0.175574]
+8	8	GxoFSdZLNrMpWyQlT	[0.168794,0.567442,0.062338]
+4	4	lzEjkIrFbHNGpVuoXwQA	[0.442633,0.637534,0.633993]
+explain select * from t1 where c3 < 'ob' and c2 > 3 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+Query Plan
+==================================================================
+|ID|OPERATOR                      |NAME    |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------------------
+|0 |TOP-N SORT                    |        |2       |20          |
+|1 |└─VECTOR INDEX PRE-FILTER SCAN|t1(idx2)|2       |20          |
+==================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.v]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(5)
+  1 - output([t1.c1], [t1.v], [t1.c3], [t1.c2], [l2_distance(t1.v, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444,
+       DOUBLE(-1, -1))), ARRAY(18, -1)))]), filter([t1.c2 > 3]), rowset=16
+      access([t1.c1], [t1.v], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.c3], [t1.c1]), range(NULL,MAX ; ob,MIN),
+      range_cond([t1.c3 < 'ob'])
+select * from t1 where c3 < 'ob' or c2 > 3 order by l2_distance(v, [0.712338,0.603321,0.133444]) APPROXIMATE limit 5;
+c1	c2	c3	v
+9	9	vTzmaHiBKwLCXOjqsY	[0.901419,0.676738,0.122339]
+10	10	NLcYpTsirQZkWgJOUx	[0.563644,0.811224,0.175574]
+8	8	GxoFSdZLNrMpWyQlT	[0.168794,0.567442,0.062338]
+4	4	lzEjkIrFbHNGpVuoXwQA	[0.442633,0.637534,0.633993]
+6	6	qXCvnWjDLYtgsuPfA	[0.71037,0.00713,0.710913]
+drop table if exists t1;
+create table t1(c1 FLOAT unsigned,c2 double unsigned,c3 vector(3),primary key(c1));
+insert into t1 values(1.12,1.123,'[5.1,2.2,3.4]');
+insert into t1 values(2.12,2.123,'[2,3,4]');
+insert into t1 values(5.12,3.123,'[1,1,1]');
+insert into t1 values(10.12,null,null);
+create /*+ ENABLE_PARALLEL_DML parallel(256) */vector index vec_idx1 on t1(c3) with (DISTANCE=l2, TYPE=ivf_flat);
+select * from t1 where c1>1 order by l2_distance(c3, [0.712338,0.603321,0.133444]) APPROXIMATE limit 1000;
+c1	c2	c3
+5.12	3.123	[1,1,1]
+2.12	2.123	[2,3,4]
+1.12	1.123	[5.1,2.2,3.4]
+explain select * from t1 where c1>1 order by l2_distance(c3, [0.712338,0.603321,0.133444]) APPROXIMATE limit 1000;
+Query Plan
+===========================================================
+|ID|OPERATOR           |NAME        |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------
+|0 |TOP-N SORT         |            |1       |12          |
+|1 |└─VECTOR INDEX SCAN|t1(vec_idx1)|1       |12          |
+===========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(1000)
+  1 - output([t1.c1], [t1.c3], [t1.c2], [l2_distance(t1.c3, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1,
+       -1))), ARRAY(18, -1)))]), filter([cast(t1.c1, DOUBLE(-1, -1)) > cast(1, DOUBLE(-1, -1))]), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
+select * from t1  order by l2_distance(c3, [0.712338,0.603321,0.133444]) APPROXIMATE limit 1000;
+c1	c2	c3
+5.12	3.123	[1,1,1]
+2.12	2.123	[2,3,4]
+1.12	1.123	[5.1,2.2,3.4]
+explain select * from t1  order by l2_distance(c3, [0.712338,0.603321,0.133444]) APPROXIMATE limit 1000;
+Query Plan
+=========================================================
+|ID|OPERATOR         |NAME        |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------
+|0 |VECTOR INDEX SCAN|t1(vec_idx1)|3       |12          |
+=========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false,
+      range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
+select * from t1  order by l2_distance(c3, [0.712338,0.603321,0.133444]) limit 1000;
+c1	c2	c3
+10.12	NULL	NULL
+5.12	3.123	[1,1,1]
+2.12	2.123	[2,3,4]
+1.12	1.123	[5.1,2.2,3.4]
+explain select * from t1  order by l2_distance(c3, [0.712338,0.603321,0.133444]) limit 1000;
+Query Plan
+=================================================
+|ID|OPERATOR         |NAME|EST.ROWS|EST.TIME(us)|
+-------------------------------------------------
+|0 |TOP-N SORT       |    |4       |3           |
+|1 |└─TABLE FULL SCAN|t1  |4       |3           |
+=================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t1.c3, cast(array(cast(0.712338, DOUBLE(-1, -1)), cast(0.603321, DOUBLE(-1, -1)), cast(0.133444, DOUBLE(-1, -1))), ARRAY(18,
+       -1))), ASC]), topn(1000)
+  1 - output([t1.c1], [t1.c3], [t1.c2]), filter(nil), rowset=16
+      access([t1.c1], [t1.c3], [t1.c2]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t1.c1]), range(MIN ; MAX)always true
+drop table if exists t1;
+alter system set ob_vector_memory_limit_percentage =0;

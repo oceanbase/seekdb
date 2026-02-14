@@ -1,0 +1,320 @@
+drop database if exists db_fork_partition;
+create database db_fork_partition;
+use db_fork_partition;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. Fork Range分区表
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200),
+partition p2 values less than (300)
+);
+insert into t1 values (1, 'P0_Data', 100);
+insert into t1 values (101, 'P1_Data', 200);
+insert into t1 values (201, 'P2_Data', 300);
+# Fork表
+fork table t1 to t1_fork;
+# 验证Fork表分区结构
+show create table t1_fork;
+Table	Create Table
+t1_fork	CREATE TABLE `t1_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300))
+# 验证各分区数据
+select * from t1_fork partition(p0);
+id	name	value
+1	P0_Data	100
+select * from t1_fork partition(p1);
+id	name	value
+101	P1_Data	200
+select * from t1_fork partition(p2);
+id	name	value
+201	P2_Data	300
+# 验证分区查询
+select * from t1_fork where id < 100;
+id	name	value
+1	P0_Data	100
+select * from t1_fork where id >= 100 and id < 200;
+id	name	value
+101	P1_Data	200
+select * from t1_fork where id >= 200 and id < 300;
+id	name	value
+201	P2_Data	300
+============================================
+2. Fork Hash分区表
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t2_fork'
+create table t2 (
+id int primary key,
+name varchar(50),
+value int
+) partition by hash(id) partitions 4;
+insert into t2 values (1, 'Hash1', 100);
+insert into t2 values (2, 'Hash2', 200);
+insert into t2 values (3, 'Hash3', 300);
+insert into t2 values (4, 'Hash4', 400);
+# Fork表
+fork table t2 to t2_fork;
+# 验证Fork表分区结构
+show create table t2_fork;
+Table	Create Table
+t2_fork	CREATE TABLE `t2_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by hash(id)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`)
+# 验证数据
+select * from t2_fork order by id;
+id	name	value
+1	Hash1	100
+2	Hash2	200
+3	Hash3	300
+4	Hash4	400
+============================================
+3. Fork List分区表
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t3'
+drop table if exists t3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t3_fork'
+create table t3 (
+id int,
+region int,
+value int,
+primary key(id, region)
+) partition by list(region) (
+partition p_east values in (1),
+partition p_west values in (2),
+partition p_central values in (3)
+);
+insert into t3 values (1, 1, 100);
+insert into t3 values (2, 2, 200);
+insert into t3 values (3, 3, 300);
+# Fork表
+fork table t3 to t3_fork;
+# 验证Fork表分区结构
+show create table t3_fork;
+Table	Create Table
+t3_fork	CREATE TABLE `t3_fork` (
+  `id` int(11) NOT NULL,
+  `region` int(11) NOT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`, `region`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by list(region)
+(partition `p_east` values in (1),
+partition `p_west` values in (2),
+partition `p_central` values in (3))
+# 验证各分区数据
+select * from t3_fork partition(p_east);
+id	region	value
+1	1	100
+select * from t3_fork partition(p_west);
+id	region	value
+2	2	200
+select * from t3_fork partition(p_central);
+id	region	value
+3	3	300
+============================================
+4. Fork分区表数据隔离测试
+============================================
+# 在Fork表的不同分区插入数据
+insert into t1_fork values (50, 'Fork_P0', 150);
+insert into t1_fork values (150, 'Fork_P1', 250);
+insert into t1_fork values (250, 'Fork_P2', 350);
+# 验证Fork表有新数据
+select * from t1_fork order by id;
+id	name	value
+1	P0_Data	100
+50	Fork_P0	150
+101	P1_Data	200
+150	Fork_P1	250
+201	P2_Data	300
+250	Fork_P2	350
+# 验证源表数据未受影响
+select * from t1 order by id;
+id	name	value
+1	P0_Data	100
+101	P1_Data	200
+201	P2_Data	300
+# 在源表的不同分区插入数据
+insert into t1 values (75, 'Source_P0', 175);
+insert into t1 values (175, 'Source_P1', 275);
+insert into t1 values (275, 'Source_P2', 375);
+# 验证源表有新数据
+select * from t1 order by id;
+id	name	value
+1	P0_Data	100
+75	Source_P0	175
+101	P1_Data	200
+175	Source_P1	275
+201	P2_Data	300
+275	Source_P2	375
+# 验证Fork表数据未受影响
+select * from t1_fork order by id;
+id	name	value
+1	P0_Data	100
+50	Fork_P0	150
+101	P1_Data	200
+150	Fork_P1	250
+201	P2_Data	300
+250	Fork_P2	350
+============================================
+5. Fork二级分区表
+============================================
+drop table if exists t4;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t4'
+drop table if exists t4_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t4_fork'
+create table t4 (
+id int,
+region int,
+create_seq int,
+value int,
+primary key(id, region, create_seq)
+) partition by range(id) subpartition by list(region) (
+partition p0 values less than (100) (
+subpartition sp0_east values in (1),
+subpartition sp0_west values in (2)
+),
+partition p1 values less than (200) (
+subpartition sp1_east values in (1),
+subpartition sp1_west values in (2)
+)
+);
+insert into t4 values (1, 1, 1, 100);
+insert into t4 values (101, 2, 2, 200);
+insert into t4 values (50, 2, 3, 300);
+insert into t4 values (150, 1, 4, 400);
+# Fork表
+fork table t4 to t4_fork;
+# 验证Fork表二级分区结构
+show create table t4_fork;
+Table	Create Table
+t4_fork	CREATE TABLE `t4_fork` (
+  `id` int(11) NOT NULL,
+  `region` int(11) NOT NULL,
+  `create_seq` int(11) NOT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`, `region`, `create_seq`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id) subpartition by list(region)
+(partition `p0` values less than (100) (
+subpartition `sp0_east` values in (1),
+subpartition `sp0_west` values in (2)),
+partition `p1` values less than (200) (
+subpartition `sp1_east` values in (1),
+subpartition `sp1_west` values in (2)))
+# 验证二级分区数据
+select * from t4_fork order by id, region, create_seq;
+id	region	create_seq	value
+1	1	1	100
+50	2	3	300
+101	2	2	200
+150	1	4	400
+============================================
+6. Fork分区表与分区操作
+============================================
+drop table if exists t5;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t5'
+drop table if exists t5_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_partition.t5_fork'
+create table t5 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200),
+partition p2 values less than (300)
+);
+insert into t5 values (1, 'Data1', 100);
+insert into t5 values (101, 'Data2', 200);
+insert into t5 values (201, 'Data3', 300);
+# Fork表
+fork table t5 to t5_fork;
+# 在源表中添加分区
+alter table t5 add partition (partition p3 values less than (400));
+# 验证源表有新分区
+show create table t5;
+Table	Create Table
+t5	CREATE TABLE `t5` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300),
+partition `p3` values less than (400))
+# 验证Fork表分区结构未变
+show create table t5_fork;
+Table	Create Table
+t5_fork	CREATE TABLE `t5_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300))
+# 在源表新分区插入数据
+insert into t5 values (301, 'NewPartition', 400);
+# 验证Fork表无法访问新分区
+select * from t5_fork partition(p3);
+ERROR HY000: Unkown partition 'p3' in table 't5_fork'
+============================================
+7. 清理
+============================================
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop table if exists t5;
+drop table if exists t5_fork;
+drop database if exists db_fork_partition;

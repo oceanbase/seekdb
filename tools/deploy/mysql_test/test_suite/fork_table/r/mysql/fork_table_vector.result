@@ -1,0 +1,314 @@
+drop database if exists db_fork_vec;
+create database db_fork_vec;
+use db_fork_vec;
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 100000000;
+alter system set ob_vector_memory_limit_percentage = 20;
+# 1. Fork table with existing HNSW vector index
+drop table if exists t_src;
+drop table if exists t_fork;
+create table t_src(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=200));
+insert into t_src values(1, '[0.203846,0.205289,0.880265]');
+insert into t_src values(2, '[0.484526,0.669954,0.986755]');
+insert into t_src values(3, '[0.327936,0.048756,0.084670]');
+insert into t_src values(4, '[0.148869,0.878546,0.028024]');
+insert into t_src values(5, '[0.334970,0.857377,0.886132]');
+# Fork table
+fork table t_src to t_fork;
+# Vector query on fork table (approx vs exact)
+select * from t_fork order by l2_distance(c2, [0.2,0.2,0.5]) APPROXIMATE limit 3;
+c1	c2
+1	[0.203846,0.205289,0.880265]
+3	[0.327936,0.048756,0.08467]
+2	[0.484526,0.669954,0.986755]
+select * from t_fork order by l2_distance(c2, [0.2,0.2,0.5]) limit 3;
+c1	c2
+1	[0.203846,0.205289,0.880265]
+3	[0.327936,0.048756,0.08467]
+2	[0.484526,0.669954,0.986755]
+select count(*) from (select * from t_fork order by l2_distance(c2, [0.2,0.2,0.5]) APPROXIMATE limit 3) as tmp1, (select * from t_fork order by l2_distance(c2, [0.2,0.2,0.5]) limit 3) as tmp2 where tmp1.c1=tmp2.c1;
+count(*)
+3
+drop table t_src;
+drop table t_fork;
+# 2. Fork source table with incr/snap/mixed vector index data
+drop table if exists t_src2;
+drop table if exists t_fork_incr;
+drop table if exists t_fork_snap;
+drop table if exists t_fork_mixed;
+# Create source table with vector index
+create table t_src2(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=200, ef_search=200));
+# Insert data into source table (data goes to incremental index)
+insert into t_src2 values(1, '[0.1,0.1,0.1]');
+insert into t_src2 values(2, '[0.203846,0.205289,0.880265]');
+insert into t_src2 values(3, '[0.484526,0.669954,0.986755]');
+insert into t_src2 values(4, '[0.327936,0.048756,0.084670]');
+insert into t_src2 values(5, '[0.148869,0.878546,0.028024]');
+# Fork source table when data is in incremental index
+fork table t_src2 to t_fork_incr;
+# Vector query on fork table with incremental data
+select * from t_fork_incr order by l2_distance(c2, [0.1,0.1,0.1]) APPROXIMATE limit 3;
+c1	c2
+1	[0.1,0.1,0.1]
+4	[0.327936,0.048756,0.08467]
+5	[0.148869,0.878546,0.028024]
+select * from t_fork_incr order by l2_distance(c2, [0.1,0.1,0.1]) limit 3;
+c1	c2
+1	[0.1,0.1,0.1]
+4	[0.327936,0.048756,0.08467]
+5	[0.148869,0.878546,0.028024]
+select count(*) from (select * from t_fork_incr order by l2_distance(c2, [0.1,0.1,0.1]) APPROXIMATE limit 3) as tmp1, (select * from t_fork_incr order by l2_distance(c2, [0.1,0.1,0.1]) limit 3) as tmp2 where tmp1.c1=tmp2.c1;
+count(*)
+3
+# Rebuild source table vector index (data moves to snapshot/full index)
+call dbms_vector.rebuild_index('idx1','t_src2','c2');
+# Fork source table when data is in snapshot index
+fork table t_src2 to t_fork_snap;
+# Vector query on fork table with snapshot data
+select * from t_fork_snap order by l2_distance(c2, [0.1,0.1,0.1]) APPROXIMATE limit 3;
+c1	c2
+1	[0.1,0.1,0.1]
+4	[0.327936,0.048756,0.08467]
+5	[0.148869,0.878546,0.028024]
+select * from t_fork_snap order by l2_distance(c2, [0.1,0.1,0.1]) limit 3;
+c1	c2
+1	[0.1,0.1,0.1]
+4	[0.327936,0.048756,0.08467]
+5	[0.148869,0.878546,0.028024]
+select count(*) from (select * from t_fork_snap order by l2_distance(c2, [0.1,0.1,0.1]) APPROXIMATE limit 3) as tmp1, (select * from t_fork_snap order by l2_distance(c2, [0.1,0.1,0.1]) limit 3) as tmp2 where tmp1.c1=tmp2.c1;
+count(*)
+3
+# Insert more data into source table after rebuild (mixed: snap + incr)
+insert into t_src2 values(10, '[0.0,0.0,0.0]');
+insert into t_src2 values(11, '[0.999,0.999,0.999]');
+# Fork source table when data is mixed (snap + incr)
+fork table t_src2 to t_fork_mixed;
+# Vector query on fork table with mixed data
+select * from t_fork_mixed order by l2_distance(c2, [0.0,0.0,0.0]) APPROXIMATE limit 3;
+c1	c2
+10	[0,0,0]
+1	[0.1,0.1,0.1]
+4	[0.327936,0.048756,0.08467]
+select * from t_fork_mixed order by l2_distance(c2, [0.0,0.0,0.0]) limit 3;
+c1	c2
+10	[0,0,0]
+1	[0.1,0.1,0.1]
+4	[0.327936,0.048756,0.08467]
+select count(*) from (select * from t_fork_mixed order by l2_distance(c2, [0.0,0.0,0.0]) APPROXIMATE limit 3) as tmp1, (select * from t_fork_mixed order by l2_distance(c2, [0.0,0.0,0.0]) limit 3) as tmp2 where tmp1.c1=tmp2.c1;
+count(*)
+3
+drop table t_src2;
+drop table t_fork_incr;
+drop table t_fork_snap;
+drop table t_fork_mixed;
+# 3. COW isolation: source DML/rebuild does not affect fork table
+drop table if exists t_src3;
+drop table if exists t_fork3;
+create table t_src3(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_src3 values(1, '[1,1,1]');
+insert into t_src3 values(2, '[2,2,2]');
+insert into t_src3 values(3, '[3,3,3]');
+fork table t_src3 to t_fork3;
+# Record fork table data before source modification
+select * from t_fork3 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Modify source table: update/delete/insert
+update t_src3 set c2 = '[100,100,100]' where c1 = 1;
+delete from t_src3 where c1 = 2;
+insert into t_src3 values(100, '[0,0,0]');
+# Rebuild source table vector index
+call dbms_vector.rebuild_index('idx1','t_src3','c2');
+# Verify fork table unchanged (COW isolation)
+select * from t_fork3 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+select * from t_fork3 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Verify source table changed
+select * from t_src3 order by c1;
+c1	c2
+1	[100,100,100]
+3	[3,3,3]
+100	[0,0,0]
+drop table t_src3;
+drop table t_fork3;
+# 4. Fork table and source table DML isolation
+drop table if exists t_src4;
+drop table if exists t_fork4;
+create table t_src4(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_src4 values(1, '[1,1,1]');
+insert into t_src4 values(2, '[2,2,2]');
+insert into t_src4 values(3, '[3,3,3]');
+fork table t_src4 to t_fork4;
+# DML on fork table
+update t_fork4 set c2 = '[0.1,0.1,0.1]' where c1 = 1;
+delete from t_fork4 where c1 = 2;
+insert into t_fork4 values(100, '[0,0,0]');
+# DML on source table (different modifications)
+update t_src4 set c2 = '[99,99,99]' where c1 = 1;
+delete from t_src4 where c1 = 3;
+insert into t_src4 values(200, '[50,50,50]');
+# Verify fork table has its own modifications
+select * from t_fork4 order by c1;
+c1	c2
+1	[0.1,0.1,0.1]
+3	[3,3,3]
+100	[0,0,0]
+select * from t_fork4 order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+100	[0,0,0]
+1	[0.1,0.1,0.1]
+3	[3,3,3]
+# Verify source table has its own modifications
+select * from t_src4 order by c1;
+c1	c2
+1	[99,99,99]
+2	[2,2,2]
+200	[50,50,50]
+select * from t_src4 order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+2	[2,2,2]
+200	[50,50,50]
+1	[99,99,99]
+# Rebuild both tables and verify isolation
+call dbms_vector.rebuild_index('idx1','t_fork4','c2');
+call dbms_vector.rebuild_index('idx1','t_src4','c2');
+select * from t_fork4 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+100	[0,0,0]
+1	[0.1,0.1,0.1]
+3	[3,3,3]
+select * from t_src4 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+2	[2,2,2]
+200	[50,50,50]
+1	[99,99,99]
+drop table t_src4;
+drop table t_fork4;
+# 5. Drop source table, fork table still works
+drop table if exists t_src5;
+drop table if exists t_fork5;
+create table t_src5(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_src5 values(1, '[1,1,1]');
+insert into t_src5 values(2, '[2,2,2]');
+insert into t_src5 values(3, '[3,3,3]');
+fork table t_src5 to t_fork5;
+# Drop source table
+drop table t_src5;
+# Fork table still works after source dropped
+select * from t_fork5 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+select * from t_fork5 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+select * from t_fork5 order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# DML on fork table still works
+insert into t_fork5 values(10, '[0,0,0]');
+update t_fork5 set c2 = '[0.5,0.5,0.5]' where c1 = 1;
+delete from t_fork5 where c1 = 3;
+select * from t_fork5 order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+10	[0,0,0]
+1	[0.5,0.5,0.5]
+2	[2,2,2]
+# Rebuild fork table vector index still works
+call dbms_vector.rebuild_index('idx1','t_fork5','c2');
+select * from t_fork5 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+10	[0,0,0]
+1	[0.5,0.5,0.5]
+2	[2,2,2]
+drop table t_fork5;
+# 6. Multi-level fork (fork of fork) with vector index
+drop table if exists t_src6;
+drop table if exists t_fork6_l1;
+drop table if exists t_fork6_l2;
+create table t_src6(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_src6 values(1, '[1,1,1]');
+insert into t_src6 values(2, '[2,2,2]');
+insert into t_src6 values(3, '[3,3,3]');
+# First level fork
+fork table t_src6 to t_fork6_l1;
+# Modify first level fork
+insert into t_fork6_l1 values(10, '[0,0,0]');
+# Second level fork (fork of fork)
+fork table t_fork6_l1 to t_fork6_l2;
+# Verify all three tables have correct data
+select * from t_src6 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+select * from t_fork6_l1 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+10	[0,0,0]
+select * from t_fork6_l2 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+10	[0,0,0]
+# Vector query on all three tables
+select * from t_src6 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+select * from t_fork6_l1 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+10	[0,0,0]
+1	[1,1,1]
+2	[2,2,2]
+select * from t_fork6_l2 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+10	[0,0,0]
+1	[1,1,1]
+2	[2,2,2]
+# Modify second level fork independently
+insert into t_fork6_l2 values(20, '[0.1,0.1,0.1]');
+update t_fork6_l2 set c2 = '[0.5,0.5,0.5]' where c1 = 1;
+# Verify isolation between all levels
+select * from t_src6 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+select * from t_fork6_l1 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+10	[0,0,0]
+select * from t_fork6_l2 order by c1;
+c1	c2
+1	[0.5,0.5,0.5]
+2	[2,2,2]
+3	[3,3,3]
+10	[0,0,0]
+20	[0.1,0.1,0.1]
+drop table t_src6;
+drop table t_fork6_l1;
+drop table t_fork6_l2;
+# 9. Cleanup
+drop database if exists db_fork_vec;
+alter system set ob_vector_memory_limit_percentage = 0;

@@ -28,11 +28,18 @@ pidof seekdb
 ```
 
 2. attach the process
+
+Using GDB:
 ```bash
 gdb seekdb <pid>
 ```
 
-Then you can set breakpoint, print variable, etc. Please refer to [gdb manual](https://sourceware.org/gdb/current/onlinedocs/gdb.html/) for more information.
+Or using LLDB (recommended on macOS):
+```bash
+lldb -p <pid>
+```
+
+Then you can set breakpoints, print variables, etc. Please refer to [GDB manual](https://sourceware.org/gdb/current/onlinedocs/gdb.html/) or [LLDB manual](https://lldb.llvm.org/use/tutorial.html) for more information.
 
 ## Debug oceanbase with debug-info package
 If you want to debug oceanbase or check the coredump file deployed with oceanbase rpm, you should install or load the debug-info package first. Loading is more recommended although installation is more convenient as there will be many debug-info packages in the system and it is not easy to cleanup.

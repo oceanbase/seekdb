@@ -1,0 +1,30 @@
+drop database if exists db_for_mv_test;
+purge recyclebin;
+SET @@recyclebin = ON;
+create database db_for_mv_test;
+use db_for_mv_test;
+create table t1 (c1 int, c2 int);
+create materialized view m1 as select * from t1;
+drop materialized view m1;
+show recyclebin;
+OBJECT_NAME	ORIGINAL_NAME	TYPE	CREATETIME
+create materialized view m1 as select * from t1;
+use test;
+drop database db_for_mv_test;
+flashback database db_for_mv_test
+use db_for_mv_test;
+select * from m1;
+c1	c2
+use test;
+drop database db_for_mv_test;
+table_name
+m1
+PURGE RECYCLEBIN;
+table_name
+SET @@recyclebin = OFF;
+create database db_for_mv_test;
+use db_for_mv_test;
+create table t1 (c1 int, c2 int);
+create materialized view m1 as select * from t1;
+use test;
+drop database db_for_mv_test;

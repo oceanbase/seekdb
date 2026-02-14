@@ -1,0 +1,203 @@
+#owner: xuqijia.xqj
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Base test of roaringbitmap ddl.
+--echo # ----------------------------------------------------------------------
+
+
+--echo Verify that ROARINGBITMAP columns do not support indexes on create table
+--error 1167
+CREATE TABLE bad(i INT, rb ROARINGBITMAP NOT NULL PRIMARY KEY);
+--error 1167
+CREATE TABLE bad(i INT, rb ROARINGBITMAP NOT NULL, INDEX rbindex (rb));
+--error 1167
+CREATE TABLE bad(i INT, rb ROARINGBITMAP NOT NULL, UNIQUE INDEX rbindex (rb));
+--error 1167
+CREATE TABLE bad(i INT, rb ROARINGBITMAP NOT NULL, UNIQUE INDEX rbindex (rb) USING HASH);
+
+--disable_warnings
+drop table if exists t1,t2,t3,t4,t5,t6,t7,t8,t9;
+drop table if exists tt1, tt2, tt3, tt4;
+drop table if exists roaringbitmap_ddl_t;
+--enable_warnings
+CREATE TABLE t1(i INT PRIMARY KEY);
+ALTER TABLE t1 ADD COLUMN rb1 ROARINGBITMAP;
+ALTER TABLE t1 ADD COLUMN rb2 ROARINGBITMAP NOT NULL;
+ALTER TABLE t1 ADD COLUMN rb3 ROARINGBITMAP default NULL;
+ALTER TABLE t1 ADD COLUMN rb4 ROARINGBITMAP default x'0100';
+ALTER TABLE t1 ADD COLUMN rb5 ROARINGBITMAP default x'01060100000000000000000000003a3000000100000000000000100000000100';
+# A ROARINGBITMAP column cannot be used as a key.
+--error 1167
+CREATE INDEX t1_idx_rb ON t1(rb1);
+--error 1167
+CREATE INDEX t1_idx_i_rb ON t1(i, rb1);
+--error 1167
+CREATE INDEX t1_idx_rb_i ON t1(rb1, i);
+CREATE INDEX t1_idx_i ON t1(i);
+DROP INDEX t1_idx_i ON t1;
+DROP TABLE t1;
+
+--echo Verify that ROARINGBITMAP columns do not support indexes on alter table
+CREATE TABLE t2(i INT PRIMARY KEY, rb1 ROARINGBITMAP, rb2 ROARINGBITMAP NOT NULL);
+--error 1167
+ALTER TABLE t2 ADD INDEX rb1_idx (rb1);
+--error 1167
+ALTER TABLE t2 ADD UNIQUE INDEX rb1_idx (rb1);
+--error 1167
+ALTER TABLE t2 ADD UNIQUE INDEX rb1_idx (rb1) USING HASH;
+
+--echo Verify that ROARINGBITMAP columns can be dropped
+ALTER TABLE t2 DROP COLUMN rb1;
+ALTER TABLE t2 DROP COLUMN rb2;
+desc t2;
+DROP TABLE t2;
+
+# ROARINGBITMAP is a non-reserved keyword, so it should be possible to use it
+# as an identifier.
+CREATE TABLE roaringbitmap(roaringbitmap int);
+INSERT INTO roaringbitmap(roaringbitmap) VALUES (1);
+SELECT roaringbitmap FROM roaringbitmap;
+DROP TABLE roaringbitmap;
+
+# And it should be possible to use it as a label in a stored procedure.
+--error 0,1305
+DROP PROCEDURE p;
+DELIMITER |;
+CREATE PROCEDURE p()
+BEGIN
+  roaringbitmap: LOOP
+    LEAVE roaringbitmap;
+  END LOOP roaringbitmap;
+END|
+DELIMITER ;|
+CALL p();
+
+CREATE TABLE t1(txt TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin);
+--error 1235
+ALTER TABLE t1 MODIFY COLUMN txt ROARINGBITMAP;
+--error 1235
+ALTER TABLE t1 CHANGE COLUMN txt rb ROARINGBITMAP;
+drop table t1;
+CREATE TABLE t1(txt TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin);
+INSERT INTO t1 VALUES ('not ROARINGBITMAP');
+--replace_regex /#sql-[0-9a-f_]*/#sql-temporary/
+
+--error 1235
+ALTER TABLE t1 MODIFY COLUMN txt ROARINGBITMAP;
+SELECT * FROM t1;
+CREATE TABLE t2(rb ROARINGBITMAP);
+INSERT INTO t2 VALUES (x'0100');
+ALTER TABLE t2 MODIFY COLUMN rb ROARINGBITMAP NOT NULL;
+SELECT hex(rb) FROM t2;
+ALTER TABLE t2 MODIFY COLUMN rb TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+SELECT hex(rb) FROM t2;
+--error 1235
+ALTER TABLE t2 MODIFY COLUMN rb ROARINGBITMAP;
+
+CREATE TABLE t3 (rb ROARINGBITMAP);
+INSERT INTO t3 VALUES (x'0100');
+select hex(rb) from t3;
+
+CREATE TABLE t4 AS SELECT UPPER(rb) AS rb_text FROM t3;
+INSERT INTO t4 VALUES ('not ROARINGBITMAP');
+
+--error 1235
+ALTER TABLE t4 MODIFY COLUMN rb_text ROARINGBITMAP;
+SELECT hex(rb_text) FROM t4 order by rb_text;
+
+create table t5 (c1 int);
+insert into t5 values(1),(2);
+alter table t5 add column rb1 roaringbitmap;
+alter table t5 add column rb2 roaringbitmap not null;
+alter table t5 add column rb3 roaringbitmap default null;
+alter table t5 add column rb4 roaringbitmap default x'01020000000000000002';
+alter table t5 add column rb5 roaringbitmap default x'01053a30000001000000000001001000000001000200';
+select c1, hex(rb1), hex(rb2), hex(rb3), hex(rb4), hex(rb5)  from t5;
+alter table t5 change rb1 rb1 roaringbitmap default null;
+alter table t5 change rb2 rb2 roaringbitmap not null;
+alter table t5 change rb3 rb3 roaringbitmap;
+select c1, hex(rb1), hex(rb2), hex(rb3), hex(rb4), hex(rb5) from t5;
+
+create table t6(rb1 roaringbitmap,rb2 roaringbitmap);
+insert into t6 values(x'0100', x'010100000002'), (null, null);
+select hex(rb1), hex(rb2) from t6;
+--error 1406
+create table t7 select cast(rb1 as char character set utf8mb4) a from t6 order by 1;
+drop table t1, t2;
+
+create table t8(rb roaringbitmap not null);
+--error 1048
+insert ignore into t8 values(null);
+select hex(rb) from t8;
+drop table t8;
+
+create table t9(rb roaringbitmap);
+--error 1235
+ALTER TABLE t9 MODIFY COLUMN rb INT;
+--error 1235
+ALTER TABLE t9 CHANGE COLUMN rb i INT;
+insert into t9 values(x'0100');
+alter table t9 change rb rb text;
+select hex(rb) from t9;
+--error 1235
+alter table t9 modify rb roaringbitmap;
+
+# bugfix: 57365193
+create table tt1 as select rb_build_empty();
+desc tt1;
+create table tt2 as select rb_from_string('');
+desc tt2;
+create table tt3 as select rb_build_varbinary(0x01030401000000020000000300000004000000);
+desc tt3;
+create table tt4 as select rb_build_agg(1);
+desc tt4;
+
+# bugfix: 57547006, 57727938
+create table roaringbitmap_ddl_t (rb roaringbitmap DEFAULT 0x0100);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = /
+show create table roaringbitmap_ddl_t;
+desc roaringbitmap_ddl_t;
+
+# print ddl
+select ddl_stmt_str from oceanbase.__all_ddl_operation where ddl_stmt_str like '%roaringbitmap%' order by gmt_create desc limit 22;
+
+connect (con1,$OBMYSQL_MS0,root@sys,,Oceanbase,$OBMYSQL_PORT);
+connection con1;
+select TABLE_NAME, COLUMN_NAME, DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE from  CDB_TAB_COLS_V$ where table_name='roaringbitmap_ddl_t';
+connection default;
+
+# cleanup
+--disable_warnings
+drop table if exists t1,t2,t3,t4,t5,t6,t7,t8,t9;
+drop table if exists tt1, tt2, tt3, tt4;
+drop table if exists roaringbitmap_ddl_t;
+--enable_warnings
+
+# bugfix: 2024121000106415840
+create table tt1 (c1 roaringbitmap DEFAULT X'0100');
+create table tt2 (c1 int, c2 blob NOT NULL);
+insert into  tt2 values (1,unhex('4450534e3731')),(1,unhex('3829'));
+select * from tt2 order by c1, c2;
+replace /*+USE_PLAN_CACHE(NONE)*/into tt1 (c1) values (x'0100');
+select * from tt2 order by c1, c2;
+
+# bugfix: 2025072500110139170
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+create table test(rb roaringbitmap, c1 int, c2 float, c3 decimal(3,3), c4 bit(20), c5 geometry, c6 roaringbitmap, c7 json);
+--error 5083
+select * from test where rb = c1;
+--error 5083
+select * from test where rb = c2;
+--error 5083
+select * from test where rb = c3;
+--error 5083
+select * from test where rb = c4;
+--error 5083
+select * from test where rb = c5;
+--error 5083
+select * from test where rb = c6;
+--error 5083
+select * from test where rb = c7;
+drop table test;

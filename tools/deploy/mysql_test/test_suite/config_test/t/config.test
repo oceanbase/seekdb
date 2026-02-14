@@ -1,0 +1,25 @@
+#owner: xiekejian.xkj
+#owner group: shenzhen
+
+connect (conn0,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
+connection conn0;
+
+# 执行脚本读取json文件中的配置信息，生成inc文件
+# inc文件是是.sh生成的中间文件，每次运行的时自动清理上一次结果
+# 还原默认配置和obd部署的默认配置，文件inc路径：./mysql_test/include/config_default.inc
+
+SELECT effective_tenant();
+# 1. 针对系统租户，读取config后，生成中间文件inc执行，最后还原默认配置
+--exec sh ./mysql_test/script/config_test_1.sh
+--source ./mysql_test/include/config_cluster.inc
+--echo "======还原sys租户 默认参数和部署 配置======"
+--source ./mysql_test/include/config_default_cluster.inc
+--source ./mysql_test/include/config_reboot_value.inc
+
+connection default;
+SELECT effective_tenant();
+# 2. 切换mysql用户租户，读取config后，生成中间文件inc执行，最后还原默认配置
+#--exec sh ./mysql_test/script/config_test_1.sh
+#--source ./mysql_test/include/config_tenant.inc
+#--echo "======还原mysql租户 默认参数和部署 配置======"
+#--source ./mysql_test/include/config_default_tenant.inc

@@ -1,0 +1,98 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+
+# owner: liujixiong.ljx
+# owner group: ddl
+# description: to test split partition with multi tables.
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+alter system set debug_sync_timeout = '1000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+
+connection default;
+--disable_warnings
+drop table if exists test_mult_sstables;
+drop sequence if exists seq_small;
+drop sequence if exists seq_large;
+--enable_warnings
+alter system set undo_retention = 31536000;
+
+--echo 1. with multi minor sstables, euqal number of minor sstables for destination tablets.
+connection obsys;
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP wait_for continue_signal execute 10000';
+sleep 1;
+connection default;
+
+create sequence seq_small INCREMENT BY 1 start with 1 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create sequence seq_large INCREMENT BY 1 start with 5001 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create table test_mult_sstables(c1 bigint, c2 bigint, c3 longtext, primary key(c1))
+  partition by range(c1) (
+    partition p0 values less than (1),
+    partition p1 values less than (10000),
+    partition p2 values less than MAXVALUE);
+
+--disable_query_log
+--let $count = 1
+while($count <= 10)
+{
+  insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+  insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+  alter system minor freeze;
+  --source mysql_test/include/wait_minor_merge.inc
+  --inc $count
+}
+--enable_query_log
+send alter table test_mult_sstables reorganize partition p1 into ( partition p1_0 values less than (5000), partition p1_1 values less than (10000));
+
+connection obsys;
+--source mysql_test/test_suite/split_partition/include/check_all_sstables_be_kept.inc
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP clear';
+set ob_global_debug_sync = 'now signal continue_signal';
+connection default;
+reap;
+drop table test_mult_sstables;
+drop sequence seq_small;
+drop sequence seq_large;
+
+--echo
+--echo 2. with multi minor sstables, unequal number of minor sstables for destination tablets.
+connection obsys;
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP wait_for continue_signal execute 10000';
+sleep 1;
+connection default;
+
+create sequence seq_small INCREMENT BY 1 start with 1 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create sequence seq_large INCREMENT BY 1 start with 5001 minvalue 1 maxvalue 100000 nocycle noorder nocache;
+create table test_mult_sstables(c1 bigint, c2 bigint, c3 longtext, primary key(c1))
+  partition by range(c1) (
+    partition p0 values less than (1),
+    partition p1 values less than (10000),
+    partition p2 values less than MAXVALUE);
+
+--disable_query_log
+--let $count = 1
+while($count <= 10)
+{
+  insert into test_mult_sstables select seq_small.nextval, random(), randstr(10000, random()) from table(generator(30));
+  if ($count == 10)
+  {
+    insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000, random()) from table(generator(30));
+  }
+  alter system minor freeze;
+  --source mysql_test/include/wait_minor_merge.inc
+  --inc $count
+}
+--enable_query_log
+send alter table test_mult_sstables reorganize partition p1 into ( partition p1_0 values less than (5000), partition p1_1 values less than (10000));
+
+connection obsys;
+--source mysql_test/test_suite/split_partition/include/check_all_sstables_be_kept.inc
+set ob_global_debug_sync = 'BEFORE_PARTITION_SPLIT_TASK_CLEANUP clear';
+set ob_global_debug_sync = 'now signal continue_signal';
+connection default;
+reap;
+drop table test_mult_sstables;
+drop sequence seq_small;
+drop sequence seq_large;

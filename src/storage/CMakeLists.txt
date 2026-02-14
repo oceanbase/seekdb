@@ -171,6 +171,7 @@ ob_set_subtarget(ob_storage blocksstable_index_block
 ob_set_subtarget(ob_storage meta_store
   meta_store/ob_server_storage_meta_service.cpp
   meta_store/ob_server_storage_meta_persister.cpp
+  meta_store/ob_server_storage_meta_replayer.cpp
   meta_store/ob_storage_meta_io_util.cpp
   meta_store/ob_tenant_storage_meta_service.cpp
   meta_store/ob_tenant_storage_meta_persister.cpp
@@ -588,6 +589,7 @@ ob_set_subtarget(ob_storage access
   access/ob_multiple_skip_scan_merge.cpp
   access/ob_multiple_multi_skip_scan_merge.cpp
   access/ob_multiple_mview_merge.cpp
+  access/ob_index_skip_scanner.cpp
   access/ob_table_scan_iterator.cpp
   access/ob_store_row_iterator.cpp
   access/ob_i_sample_iterator.cpp

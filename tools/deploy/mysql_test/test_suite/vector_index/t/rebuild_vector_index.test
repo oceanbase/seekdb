@@ -1,0 +1,376 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner : yangjiali.yjl
+#owner group: shenzhen
+#description: basic test ob rebuild vector index
+
+connect (conn_sys,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connect (conn2,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+
+connection conn_sys;
+alter system set debug_sync_timeout = '100s';
+sleep 3;
+
+# normal rebuild
+--echo
+--echo
+--echo "=========================================== normal rebuild ==========================================="
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+alter system set ob_vector_memory_limit_percentage = 20;
+sleep 3;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# rebuilding conflict before post create
+--echo
+--echo
+--echo "=========================================== rebuilding conflict ==========================================="
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_WAIT_CREATE_NEW_INDEX wait_for continue_signal execute 10000';
+
+connection conn1;
+send call dbms_vector.rebuild_index('idx1','t_vec','c2');
+sleep 10;
+
+connection conn2;
+send drop index idx1 on t_vec;
+sleep 1;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+
+connection conn1;
+reap;
+
+connection conn2;
+reap;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+--replace_regex /idx_[0-9]+/idx_new/g
+show index from t_vec;
+
+# rebuilding conflict after post create
+--echo
+--echo
+--echo "=========================================== rebuilding conflict ==========================================="
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_WAIT_DROP_OLD_INDEX wait_for continue_signal execute 10000';
+
+connection conn1;
+send call dbms_vector.rebuild_index('idx1','t_vec','c2');
+sleep 10;
+
+connection conn2;
+send drop index idx1 on t_vec;
+sleep 1;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+
+connection conn1;
+reap;
+
+connection conn2;
+reap;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+--replace_regex /idx_[0-9]+/idx_new/g
+show index from t_vec;
+
+# rebuilding when database in recyclebin
+--echo
+--echo
+--echo "=========================================== rebuild when drop index to recyclebin ==========================================="
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+set recyclebin='on';
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop index idx1 on t_vec;
+--error 1210
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+
+--echo
+--echo
+--echo "=========================================== show index of normal index creating ==========================================="
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+create table t_vec(c1 int, c2 int, primary key(c1));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'CREATE_INDEX_REPLICA_BUILD wait_for continue_signal execute 10000';
+
+connection conn1;
+send create index idx_show on t_vec(c2);
+sleep 5;
+
+connection conn2;
+show index from t_vec;
+sleep 3;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+
+connection conn1;
+reap;
+sleep 3;
+
+show index from t_vec;
+drop table if exists t_vec;
+
+--echo
+--echo
+--echo "========================= rebuilding when ctrl c in PREPARE state =========================="
+# REBUILD_VEC_INDEX_PREPARE
+connection conn1;
+let $sess_1=query_get_value(select connection_id() as id, id, 1);
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+--replace_regex /idx_[0-9]+/idx_new/g
+show index from t_vec;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_PREPARE wait_for continue_signal execute 10000';
+
+connection conn1;
+send call dbms_vector.rebuild_index('idx1','t_vec','c2');
+sleep 1;
+
+connection conn2;
+# ObDDLTaskStatus::PREPARE state: 0
+--disable_query_log
+--let $ddl_status = 1000
+while ($ddl_status != 0)
+{
+  sleep 1;
+  let $ddl_status = query_get_value(select status from oceanbase.__all_ddl_task_status where ddl_type=17, status, 1);
+}
+eval kill $sess_1;
+--enable_query_log
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+sleep 6;
+
+disconnect conn1;
+connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection conn1;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table t_vec;
+
+--echo
+--echo
+--echo "========================= rebuilding when ctrl c in switch_index_name state =========================="
+# REBUILD_VEC_INDEX_SWITCH_INDEX_NAME
+connection conn1;
+let $sess_1=query_get_value(select connection_id() as id, id, 1);
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+--replace_regex /idx_[0-9]+/idx_new/g
+show index from t_vec;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_SWITCH_INDEX_NAME wait_for continue_signal execute 10000';
+
+connection conn1;
+send call dbms_vector.rebuild_index('idx1','t_vec','c2');
+sleep 1;
+
+connection conn2;
+# SWITCH_INDEX_NAME state: 36
+--disable_query_log
+--let $ddl_status = 0
+while ($ddl_status != 36)
+{
+  sleep 1;
+  let $ddl_status = query_get_value(select status from oceanbase.__all_ddl_task_status where ddl_type=17, status, 1);
+}
+eval kill $sess_1;
+--enable_query_log
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+sleep 6;
+
+disconnect conn1;
+connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection conn1;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table t_vec;
+
+
+
+--echo
+--echo
+--echo "========================= rebuilding when ctrl c in DROP_SCHEMA state =========================="
+# REBUILD_VEC_INDEX_WAIT_DROP_OLD_INDEX
+connection conn1;
+let $sess_1=query_get_value(select connection_id() as id, id, 1);
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+--replace_regex /idx_[0-9]+/idx_new/g
+show index from t_vec;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_WAIT_DROP_OLD_INDEX wait_for continue_signal execute 10000';
+
+connection conn1;
+send call dbms_vector.rebuild_index('idx1','t_vec','c2');
+sleep 1;
+
+connection conn2;
+# ObDDLTaskStatus::DROP_SCHEMA state: 14
+--disable_query_log
+--let $ddl_status = 1000
+while ($ddl_status != 14)
+{
+  sleep 1;
+  let $ddl_status = query_get_value(select status from oceanbase.__all_ddl_task_status where ddl_type=17, status, 1);
+}
+eval kill $sess_1;
+--enable_query_log
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+sleep 6;
+
+disconnect conn1;
+connect (conn1,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection conn1;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table t_vec;
+
+
+--echo
+--echo
+--echo "=========================================== rebuild when drop table to recyclebin ==========================================="
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+set recyclebin='on';
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table t_vec;
+--error 1210
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+
+
+--echo
+--echo
+--echo "=========================================== rebuild from hnsw to hnsw sq ==========================================="
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+--error 1235
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=cosine, type=hnsw');
+--error 1235
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=ivf_flat');
+
+--error 1235
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, m=5');
+--error 1235
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','type=hnsw, m=64');
+--error 1235
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=xxx');
+--error 1210
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=');
+--error 1210
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type');
+--error 1210
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2');
+
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=hnsw');
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=hnsw_sq');
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+connection conn1;
+--disable_warnings
+drop table if exists t_vec;
+--enable_warnings
+alter system set ob_vector_memory_limit_percentage = 0;
+PURGE RECYCLEBIN;

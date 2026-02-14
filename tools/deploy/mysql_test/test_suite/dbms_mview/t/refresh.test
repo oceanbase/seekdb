@@ -1,0 +1,327 @@
+#owner: lana.lgx
+#owner group: data
+#description: dbms_mview
+#tags: pl
+#author: suzhi.yt
+
+--disable_query_log
+
+#################### Case1 begin ####################
+-- echo #
+-- echo # Case1 Basic test
+-- echo #
+
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_table_err.inc
+drop table t1;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv1;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv2;
+--source mysql_test/include/ignore_drop_mview_err_mysql.inc
+drop materialized view mv3;
+call dbms_mview_stats.set_system_default('COLLECTION_LEVEL', 'TYPICAL');
+call dbms_mview_stats.purge_refresh_stats(NULL, -1);
+
+create table t1(c1 int primary key, c2 int, c3 int, c4 int);
+create materialized view log on t1 with primary key (c2, c3, c4) including new values;
+
+-- echo # refresh in default method
+create materialized view mv1 refresh complete on demand as select c2 as c2, count(*) cnt, count(c3) cnt_c3, sum(c3) sum_c3 from t1 group by c2;
+create materialized view mv2 refresh fast on demand as select count(*) cnt, count(c3) cnt_c3, sum(c3) sum_c3 from t1;
+insert into t1 values (1, 1, 1, 1), (2, 2, 2, 2);
+call dbms_mview.refresh('mv1');
+select * from mv1 order by c2;
+select refresh_method from oceanbase.DBA_MVREF_STATS;
+call dbms_mview_stats.purge_refresh_stats(NULL, -1);
+call dbms_mview.refresh('mv2');
+select * from mv2;
+select refresh_method from oceanbase.DBA_MVREF_STATS;
+call dbms_mview_stats.purge_refresh_stats(NULL, -1);
+
+-- echo # refresh in specify method
+insert into t1 values (3, 3, 3, 4), (4, 4, 4, 4);
+--error 0,9759
+call dbms_mview.refresh('mv1', 'f');
+select * from mv1 order by c2;
+select refresh_method from oceanbase.DBA_MVREF_STATS;
+call dbms_mview_stats.purge_refresh_stats(NULL, -1);
+call dbms_mview.refresh('mv2', 'c');
+select * from mv2;
+select refresh_method from oceanbase.DBA_MVREF_STATS;
+call dbms_mview_stats.purge_refresh_stats(NULL, -1);
+
+# test invalid argument
+create materialized view mv3 as select t1.c1 from t1;
+--error 1210
+call dbms_mview.refresh('mv3', refresh_parallel => 1/0);
+call dbms_mview.refresh('mv3', refresh_parallel => 10);
+
+
+--error 0, 1146, 9755
+drop materialized view log on ce_sku_base;
+--error 0, 1051
+drop table ce_sku_base;
+--error 0, 1146, 9755
+drop materialized view log on cluster_base;
+--error 0, 1051
+drop table cluster_base;
+--error 0, 1146, 9755
+drop materialized view log on sl_item_pool;
+--error 0, 1051
+drop table sl_item_pool;
+--error 0, 1146, 9755
+drop materialized view log on tb_sku_base;
+--error 0, 1051
+drop table tb_sku_base;
+--error 0, 9757
+drop materialized view mv_incre_test_2;
+
+CREATE TABLE `ce_sku_base` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `gmt_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `item_id` varchar(64) NOT NULL,
+  `sku_id` varchar(128) NOT NULL,
+  `market_code` varchar(32) NOT NULL,
+  `item_title` varchar(2000) DEFAULT NULL,
+  `brand_name` varchar(500) DEFAULT NULL,
+  `seller_id` varchar(200) DEFAULT NULL,
+  `seller_nick` varchar(2000) DEFAULT NULL,
+  `update_time` varchar(64) DEFAULT NULL,
+  `item_price` bigint(20) DEFAULT NULL COMMENT '竞对商品价格',
+  `item_tags` ARRAY(VARCHAR(16)) DEFAULT NULL COMMENT '竞对商品标签',
+  `sku_price` bigint(20) DEFAULT NULL COMMENT '竞对sku价格',
+  `sku_spec` varchar(65535) DEFAULT NULL,
+  `item_sale_count` bigint(20) DEFAULT NULL COMMENT '竞对商品销量',
+  `item_comment_count` bigint(20) DEFAULT NULL COMMENT '竞对商品评论数',
+  `sku_image_url` varchar(2000) DEFAULT NULL COMMENT '竞对sku图片',
+  `item_img_url` varchar(2000) DEFAULT NULL COMMENT '竞对商品主图',
+  `cate_id` varchar(200) DEFAULT NULL COMMENT '竞对叶子类目id',
+  `cate_name` varchar(300) DEFAULT NULL COMMENT '竞对叶子类目名称',
+  `cate_level1_id` varchar(200) DEFAULT NULL COMMENT '竞对一级类目id',
+  `cate_level1_name` varchar(300) DEFAULT NULL COMMENT '竞对一级类目名称',
+  `cate_level2_id` varchar(200) DEFAULT NULL COMMENT '竞对二级类目id',
+  `cate_level2_name` varchar(300) DEFAULT NULL COMMENT '竞对二级类目名称',
+  `cate_level3_id` varchar(200) DEFAULT NULL COMMENT '竞对三级类目id',
+  `cate_level3_name` varchar(300) DEFAULT NULL COMMENT '竞对三级类目名称',
+  `cate_level4_id` varchar(200) DEFAULT NULL COMMENT '竞对四级类目id',
+  `cate_level4_name` varchar(300) DEFAULT NULL COMMENT '竞对四级类目名称',
+  `tb_ind_level1_id` bigint(20) DEFAULT NULL COMMENT '对应淘系一级行业id',
+  `tb_ind_level1_name` varchar(200) DEFAULT NULL COMMENT '对应淘系一级行业名称',
+  `tb_cate_level1_id` bigint(20) DEFAULT NULL COMMENT '对应淘系一级类目id',
+  `tb_cate_level1_name` varchar(200) DEFAULT NULL COMMENT '对应淘系一级类目名称',
+  `tb_cate_level2_id` bigint(20) DEFAULT NULL COMMENT '对应淘系二级类目id',
+  `tb_cate_level2_name` varchar(200) DEFAULT NULL COMMENT '对应淘系二级类目名称',
+  `tb_cate_id` bigint(20) DEFAULT NULL COMMENT '对应淘系叶子类目id',
+  `tb_cate_name` varchar(200) DEFAULT NULL COMMENT '对应淘系叶子类目名称',
+  `extra_info` varchar(65535) DEFAULT NULL,
+  `version` bigint(20) DEFAULT NULL COMMENT '更新版本控制',
+  PRIMARY KEY (`market_code`, `item_id`, `sku_id`),
+  KEY `idx_market_item` (`market_code`, `item_id`) BLOCK_SIZE 16384 LOCAL
+) AUTO_INCREMENT = 471596011 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=4096
+ partition by key(item_id) partitions 64;
+
+ CREATE TABLE `cluster_base` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `gmt_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `item_id` varchar(64) NOT NULL,
+  `sku_id` varchar(128) NOT NULL,
+  `compare_item_id` varchar(64) NOT NULL,
+  `compare_sku_id` varchar(128) NOT NULL,
+  `compare_market_code` varchar(32) NOT NULL,
+  `cluster_tags` ARRAY(VARCHAR(16)) DEFAULT NULL COMMENT '同款标签',
+  `extra_info` varchar(65535) DEFAULT NULL,
+  `version` bigint(20) DEFAULT NULL COMMENT '更新版本控制',
+  PRIMARY KEY (`item_id`, `sku_id`, `compare_item_id`, `compare_sku_id`, `compare_market_code`),
+  KEY `idx_item_sku` (`item_id`, `sku_id`) BLOCK_SIZE 16384 LOCAL,
+  KEY `idx_compare_item_sku` (`compare_item_id`, `compare_sku_id`, `compare_market_code`) BLOCK_SIZE 16384 LOCAL
+) AUTO_INCREMENT = 256905904 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=4096
+ partition by key(item_id) partitions 64 WITH COLUMN GROUP(all columns, each column);
+
+CREATE TABLE `sl_item_pool` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `gmt_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `task_id` varchar(64) NOT NULL,
+  `market_code` varchar(64) NOT NULL,
+  `item_id` varchar(128) NOT NULL,
+  `version` bigint(20) DEFAULT NULL COMMENT '更新版本控制',
+  PRIMARY KEY (`task_id`, `market_code`, `item_id`),
+  KEY `idx_market_item` (`market_code`, `item_id`) BLOCK_SIZE 16384 LOCAL
+) AUTO_INCREMENT = 2183592 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=4096
+ partition by key(item_id) partitions 64;
+
+CREATE TABLE `tb_sku_base` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `gmt_create` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `item_id` varchar(64) NOT NULL,
+  `sku_id` varchar(128) NOT NULL,
+  `seller_id` varchar(200) DEFAULT NULL,
+  `bc_type` varchar(16) DEFAULT NULL,
+  `item_tags` ARRAY(VARCHAR(16)) DEFAULT NULL COMMENT '商品标签',
+  `item_status` varchar(16) DEFAULT NULL COMMENT 'ic商品状态',
+  `extra_info` varchar(65536) DEFAULT NULL,
+  `version` bigint(20) DEFAULT NULL COMMENT '更新版本控制',
+  PRIMARY KEY (`item_id`, `sku_id`),
+  KEY `idx_item` (`item_id`) BLOCK_SIZE 16384 LOCAL
+) AUTO_INCREMENT = 50047164 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=4096
+ partition by key(item_id) WITH COLUMN GROUP(all columns, each column);
+
+ CREATE MATERIALIZED VIEW LOG ON ce_sku_base
+  PARALLEL 20
+ WITH PRIMARY KEY, ROWID, SEQUENCE (`gmt_create` ,
+  `gmt_modified`,
+  `item_title`,
+  `brand_name`,
+  `seller_id`,
+  `seller_nick`,
+  `update_time`,
+  `item_price`,
+  `item_tags`,
+  `sku_price`,
+  `sku_spec`,
+  `item_sale_count`,
+  `item_comment_count`,
+  `sku_image_url`,
+  `item_img_url`,
+  `cate_id`,
+  `cate_name`,
+  `cate_level1_id`,
+  `cate_level1_name`,
+  `cate_level2_id`,
+  `cate_level2_name`,
+  `cate_level3_id`,
+  `cate_level3_name`,
+  `cate_level4_id`,
+  `cate_level4_name`,
+  `tb_ind_level1_id`,
+  `tb_ind_level1_name`,
+  `tb_cate_level1_id`,
+  `tb_cate_level1_name`,
+  `tb_cate_level2_id`,
+  `tb_cate_level2_name`,
+  `tb_cate_id`,
+  `tb_cate_name`,
+  `extra_info`) INCLUDING NEW VALUES
+  PURGE START WITH sysdate() NEXT sysdate() + interval 3 minute;
+
+CREATE MATERIALIZED VIEW LOG ON sl_item_pool
+  PARALLEL 5
+ WITH PRIMARY KEY, ROWID INCLUDING NEW VALUES
+  PURGE START WITH sysdate() NEXT sysdate() + interval 3 minute;
+
+CREATE MATERIALIZED VIEW LOG ON tb_sku_base
+  PARALLEL 20
+ WITH PRIMARY KEY, ROWID, SEQUENCE (
+  `gmt_create`,
+  `gmt_modified`,
+  `seller_id`,
+  `bc_type`,
+  `item_tags`,
+  `item_status`,
+  `extra_info`) INCLUDING NEW VALUES
+  PURGE START WITH sysdate() NEXT sysdate() + interval 3 minute;
+
+CREATE MATERIALIZED VIEW LOG ON cluster_base
+  PARALLEL 20
+ WITH PRIMARY KEY, ROWID, SEQUENCE (
+  `gmt_create`,
+  `gmt_modified`,
+  `cluster_tags`,
+  `extra_info`) INCLUDING NEW VALUES
+  PURGE START WITH sysdate() NEXT sysdate() + interval 3 minute;
+
+CREATE /*+ parallel(64) */  MATERIALIZED VIEW mv_incre_test_2
+PARALLEL 25
+  PARTITION BY KEY(task_id) PARTITIONS 8
+  REFRESH FAST
+START WITH sysdate() + interval 5 minute NEXT sysdate() + interval 3 minute
+AS
+SELECT
+  `ce_sku_base`.`item_id`,
+  `ce_sku_base`.`sku_id`,
+  `ce_sku_base`.`market_code`,
+  `sl_item_pool`.`task_id`,
+  `sl_item_pool`.market_code as sl_market_code,
+  `sl_item_pool`.item_id as sl_item_id,
+  `ce_sku_base`.`gmt_create`,
+  `ce_sku_base`.`gmt_modified`,
+  `ce_sku_base`.`item_title`,
+  `ce_sku_base`.`brand_name`,
+  `ce_sku_base`.`seller_id`,
+  `ce_sku_base`.`seller_nick`,
+  `ce_sku_base`.`update_time`,
+  `ce_sku_base`.`item_price`,
+  `ce_sku_base`.`item_tags`,
+  `ce_sku_base`.`sku_price`,
+  `ce_sku_base`.`sku_spec`,
+  `ce_sku_base`.`item_sale_count`,
+  `ce_sku_base`.`item_comment_count`,
+  `ce_sku_base`.`sku_image_url`,
+  `ce_sku_base`.`item_img_url`,
+  `ce_sku_base`.`cate_id`,
+  `ce_sku_base`.`cate_name`,
+  `ce_sku_base`.`cate_level1_id`,
+  `ce_sku_base`.`cate_level1_name`,
+  `ce_sku_base`.`cate_level2_id`,
+  `ce_sku_base`.`cate_level2_name`,
+  `ce_sku_base`.`cate_level3_id`,
+  `ce_sku_base`.`cate_level3_name`,
+  `ce_sku_base`.`cate_level4_id`,
+  `ce_sku_base`.`cate_level4_name`,
+  `ce_sku_base`.`tb_ind_level1_id`,
+  `ce_sku_base`.`tb_ind_level1_name`,
+  `ce_sku_base`.`tb_cate_level1_id`,
+  `ce_sku_base`.`tb_cate_level1_name`,
+  `ce_sku_base`.`tb_cate_level2_id`,
+  `ce_sku_base`.`tb_cate_level2_name`,
+  `ce_sku_base`.`tb_cate_id`,
+  `ce_sku_base`.`tb_cate_name`,
+  `ce_sku_base`.`extra_info`,
+ `cluster_base`.`item_id` as `cluster_item_id`,
+  `cluster_base`.`sku_id` as `cluster_sku_id`,
+  `cluster_base`.`compare_market_code`,
+  `cluster_base`.`compare_item_id`,
+  `cluster_base`.`compare_sku_id`,
+  `cluster_base`.`cluster_tags`,
+  `cluster_base`.`extra_info` as `cluster_extra_info`,
+  `tb_sku_base`.`item_id` as `tb_item_id`,
+  `tb_sku_base`.`sku_id` as `tb_sku_id`,
+  `tb_sku_base`.`seller_id` as `tb_seller_id`,
+  `tb_sku_base`.`bc_type` as `tb_bc_type`,
+  `tb_sku_base`.`item_tags` as `tb_item_tags`,
+  `tb_sku_base`.`item_status` as `tb_item_status`,
+  `tb_sku_base`.`extra_info` as `tb_extra_info`
+FROM
+  sl_item_pool
+   join ce_sku_base on ce_sku_base.market_code = sl_item_pool.market_code and ce_sku_base.item_id = sl_item_pool.item_id
+   join cluster_base on ce_sku_base.market_code = cluster_base.compare_market_code and ce_sku_base.item_id = cluster_base.compare_item_id and ce_sku_base.sku_id = cluster_base.compare_sku_id
+   join tb_sku_base on cluster_base.item_id = tb_sku_base.item_id and cluster_base.sku_id = tb_sku_base.sku_id
+;
+
+call dbms_mview.refresh('mv_incre_test_2', 'f');
+
+# clear
+drop materialized view mv1;
+drop materialized view mv2;
+drop materialized view mv3;
+drop materialized view log on t1;
+drop table t1;
+
+drop materialized view log on ce_sku_base;
+drop table ce_sku_base;
+drop materialized view log on cluster_base;
+drop table cluster_base;
+drop materialized view log on sl_item_pool;
+drop table sl_item_pool;
+drop materialized view log on tb_sku_base;
+drop table tb_sku_base;
+drop materialized view mv_incre_test_2;
+
+#################### Case1 end ####################
+
+--enable_query_log

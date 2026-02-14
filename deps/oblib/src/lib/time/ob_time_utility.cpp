@@ -28,37 +28,61 @@ OB_SERIALIZE_MEMBER(ObMonotonicTs, mts_);
 static __thread bool systime_error = false;
 
 #ifdef __APPLE__
-struct MachTimeBase {
-  int64_t base_wall_time_us;
-  uint64_t base_mach_time;
-  uint32_t numer;
-  uint32_t denom;
+// Single-layer thread-local design:
+// - Each thread calibrates independently from gettimeofday() every 1 second
+// - Simple, no cross-thread synchronization needed
+// - gettimeofday() is fast on macOS (~25ns, commpage, no real syscall)
+static constexpr uint64_t CALIBRATION_INTERVAL_NS = 1ULL * 1000000000ULL;
 
-  MachTimeBase() {
+// Thread-local time base (each thread calibrates independently)
+// Uses thread_local for automatic initialization on first access
+struct MachTimeBaseLocal {
+  int64_t base_wall_time_us_;
+  uint64_t base_mach_time_;
+  uint64_t next_calibrate_mach_;
+  uint64_t calibration_interval_mach_;
+  uint32_t numer_;
+  uint32_t denom_;
+
+  MachTimeBaseLocal() {
     mach_timebase_info_data_t timebase;
     mach_timebase_info(&timebase);
-    numer = timebase.numer;
-    denom = timebase.denom;
+    numer_ = timebase.numer;
+    denom_ = timebase.denom;
+    calibration_interval_mach_ = CALIBRATION_INTERVAL_NS * denom_ / numer_;
+    calibrate();
+  }
+
+  void calibrate() {
     struct timeval tv;
     gettimeofday(&tv, nullptr);
-    base_wall_time_us = tv.tv_sec * 1000000LL + tv.tv_usec;
-    base_mach_time = mach_absolute_time();
+    uint64_t mach_now = mach_absolute_time();
+    base_wall_time_us_ = tv.tv_sec * 1000000LL + tv.tv_usec;
+    base_mach_time_ = mach_now;
+    next_calibrate_mach_ = mach_now + calibration_interval_mach_;
+  }
+
+  void calibrate_if_needed(uint64_t current_mach) {
+    if (OB_UNLIKELY(current_mach >= next_calibrate_mach_)) {
+      calibrate();
+    }
   }
 };
 
-static MachTimeBase& get_mach_time_base() {
-  static MachTimeBase base;
-  return base;
-}
+static thread_local MachTimeBaseLocal tl_time_base;
 #endif
 
 int64_t ObTimeUtility::current_time()
 {
 #ifdef __APPLE__
-  MachTimeBase& base = get_mach_time_base();
   uint64_t current_mach = mach_absolute_time();
-  uint64_t elapsed_ns = (current_mach - base.base_mach_time) * base.numer / base.denom;
-  return base.base_wall_time_us + static_cast<int64_t>(elapsed_ns / 1000);
+
+  // Recalibrate from gettimeofday() every ~1 second
+  tl_time_base.calibrate_if_needed(current_mach);
+
+  // Hot path: pure local memory access, zero cross-thread contention
+  uint64_t elapsed_ns = (current_mach - tl_time_base.base_mach_time_) * tl_time_base.numer_ / tl_time_base.denom_;
+  return tl_time_base.base_wall_time_us_ + static_cast<int64_t>(elapsed_ns / 1000);
 #else
   int err_ret = 0;
   struct timeval t;

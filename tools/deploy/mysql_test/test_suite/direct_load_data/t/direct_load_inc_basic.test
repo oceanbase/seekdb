@@ -1,0 +1,300 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: jianming.cjq
+# owner group: Storage
+# description: direct load inc case
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_false.inc
+--source mysql_test/test_suite/direct_load_data/include/copy_data_for_direct_load.inc
+
+--disable_warnings
+--disable_query_log
+drop table if exists t_pqTly6tEb1;
+drop table if exists t1_pqTly6tEb1;
+drop table if exists t2_pqTly6tEb1;
+drop table if exists t3_pqTly6tEb1;
+drop table if exists t4_pqTly6tEb1;
+drop table if exists t5_pqTly6tEb1;
+drop table if exists t6_pqTly6tEb1;
+drop table if exists lineitem;
+drop view if exists tab_stat_view;
+drop view if exists col_stat_view;
+drop view if exists modified_data_view;
+--enable_query_log
+--enable_warnings
+
+--echo ================ test rowkey table =========
+create table t_pqTly6tEb1  (c1 int primary key, c2 int);
+
+insert into t_pqTly6tEb1 values(-100, 5);
+
+--disable_query_log
+eval load data /*+ direct(true, 0, 'inc_replace') */ infile '$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/load_data_inc0.csv' into table t_pqTly6tEb1 fields terminated by ',';
+eval load data /*+ direct(true, 0, 'inc_replace') */ infile '$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/load_data_inc1.csv' into table t_pqTly6tEb1 fields terminated by ',';
+eval load data /*+ direct(true, 0, 'inc_replace') */ infile '$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/load_data_inc2.csv' into table t_pqTly6tEb1 fields terminated by ',';
+--enable_query_log
+
+insert into t_pqTly6tEb1 values(100,4);
+
+drop table t_pqTly6tEb1;
+
+
+--echo ================ test heap table =========
+# 测试堆表
+
+create table t_pqTly6tEb1  (c1 int, c2 int);
+
+let $idx = 0;
+
+insert into t_pqTly6tEb1 values(-100, 5);
+
+--disable_query_log
+while ($idx < 16)
+{
+eval load data /*+ direct(true, 0, 'inc_replace') */ infile '$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/load_data_inc0.csv' into table t_pqTly6tEb1 fields terminated by ',';
+inc $idx;
+}
+--enable_query_log
+
+insert into t_pqTly6tEb1 values(100,4);
+
+select * from t_pqTly6tEb1;
+
+drop table t_pqTly6tEb1;
+
+--echo ================ test insert into select =========
+# 测试insert into select
+
+create table t1_pqTly6tEb1  (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 int);
+
+insert into t1_pqTly6tEb1 values(1,2),(3,4),(5,6);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+
+select * from t2_pqTly6tEb1;
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+
+
+--echo ================ test load fail =========
+
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(10));
+
+insert into t2_pqTly6tEb1 values(40, 'kkk1');
+
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long text longer than ten chars'), (4, 'kkk');
+
+--error 1406
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+
+insert into t2_pqTly6tEb1 values(4, 'kkk');
+
+select * from t2_pqTly6tEb1;
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--echo ================ test lob =========
+
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(8000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 text);
+create table t3_pqTly6tEb1  (c1 int primary key, c2 json);
+create table t4_pqTly6tEb1  (c1 int primary key, c2 text);
+
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, repeat('1', 7000)), (4, 'kkk');
+insert into t4_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, repeat('1', 7000)), (4, 'kkk');
+
+insert into t2_pqTly6tEb1 values(40, repeat('1', 7000));
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t4_pqTly6tEb1;
+delete from t2_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t4_pqTly6tEb1;
+
+insert into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t4_pqTly6tEb1;
+delete from t3_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t1_pqTly6tEb1;
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t3_pqTly6tEb1 select c1, json_object('c2', c2) as c2 from t4_pqTly6tEb1;
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+drop table t3_pqTly6tEb1;
+drop table t4_pqTly6tEb1;
+
+--echo ================ test local index =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create index i1 on t2_pqTly6tEb1(c2);
+
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long text longer than ten chars'), (4, 'kkk');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+let $idx1 = query_get_value(select table_name from oceanbase.__all_virtual_table where data_table_id =
+(select table_id from oceanbase.__all_virtual_table where table_name = 't2_pqTly6tEb1'), table_name, 1);
+
+select * from t2_pqTly6tEb1 order by c1;
+
+--disable_query_log
+set ob_enable_index_direct_select = 1;
+eval select * from $idx1  order by c1;
+--enable_query_log
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--echo ================ test local index with head table =========
+create table t1_pqTly6tEb1  (c1 int, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int, c2 varchar(1000));
+create index i1 on t2_pqTly6tEb1(c2);
+
+insert into t1_pqTly6tEb1 values(1,'hello'), (2, 'world'), (3, 'maybe very long text longer than ten chars'), (4, 'kkk');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+let $idx1 = query_get_value(select table_name from oceanbase.__all_virtual_table where data_table_id =
+(select table_id from oceanbase.__all_virtual_table where table_name = 't2_pqTly6tEb1'), table_name, 1);
+
+select * from t2_pqTly6tEb1 order by c2;
+
+--disable_query_log
+set ob_enable_index_direct_select = 1;
+eval select * from $idx1  order by c2;
+--enable_query_log
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--echo ================ test local index with multi partiton =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000), c3 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(1000), c3 int) partition by hash(c1) partitions 3;
+create index i1 on t2_pqTly6tEb1(c3);
+
+insert into t1_pqTly6tEb1 values(1,'hello', 1), (2, 'world', 2), (3, 'maybe very long text longer than ten chars', 3), (4, 'kkk', 4);
+insert into t2_pqTly6tEb1 values(1, 'hello', 0);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+let $idx1 = query_get_value(select table_name from oceanbase.__all_virtual_table where data_table_id =
+(select table_id from oceanbase.__all_virtual_table where table_name = 't2_pqTly6tEb1'), table_name, 1);
+
+select * from t2_pqTly6tEb1 order by c1;
+
+--disable_query_log
+set ob_enable_index_direct_select = 1;
+eval select * from $idx1  order by c1;
+--enable_query_log
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--echo ================ test global index =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 int);
+create index i1 on t2_pqTly6tEb1(c2) global PARTITION BY HASH(c2) PARTITIONS 5;
+
+insert into t1_pqTly6tEb1 values(1, 1), (2, 2), (3, 3), (4, 4);
+--error 1235
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--echo ================ test check row conflict =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+create table t2_pqTly6tEb1  (c1 int primary key, c2 varchar(1000));
+
+insert into t1_pqTly6tEb1 values (1,'hello');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+--error 1062
+insert into t2_pqTly6tEb1 values (1,'hello');
+
+insert into t1_pqTly6tEb1 values (2, 'world');
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+--error 1062
+insert into t2_pqTly6tEb1 values (1,'hello'), (2, 'world');
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--echo ================ test direct load memtable dump =========
+create table t1_pqTly6tEb1  (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1  (c1 int primary key, c2 int);
+
+insert into t1_pqTly6tEb1 values(1,1), (2,2), (3,3), (4,4);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+let $__table_name__ = 't2_pqTly6tEb1';
+--source mysql_test/test_suite/direct_load_data/include/wait_direct_load_memtable_dump.inc
+
+alter table t1_pqTly6tEb1 add (c3 int default 10);
+alter table t2_pqTly6tEb1 add (c3 int);
+insert /*+ enable_parallel_dml parallel(2) direct(true, 0, 'inc_replace') */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+let $__table_name__ = 't2_pqTly6tEb1';
+--source mysql_test/test_suite/direct_load_data/include/wait_direct_load_memtable_dump.inc
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--echo ================ test constraints =========
+create table t5_pqTly6tEb1  (c1 int primary key check (c1 > 10), c2 int);
+--disable_query_log
+--error 1235
+eval load data /*+ direct(true, 0, 'inc') */ infile '$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/load_data_inc0.csv' into table t5_pqTly6tEb1 fields terminated by ',';
+--enable_query_log
+
+create table t6_pqTly6tEb1  (c1 int primary key, c2 int);
+insert into t6_pqTly6tEb1 values (1, 6), (2, 7);
+--error 3819
+insert /* direct(true, 0, 'inc_replace') enable_parallel_dml parallel(2) */ into t5_pqTly6tEb1 select * from t6_pqTly6tEb1;
+drop table t5_pqTly6tEb1;
+drop table t6_pqTly6tEb1;
+
+--echo ================ test sql stats =========
+create table t1_pqTly6tEb1 (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1 (c1 int, c2 int);
+create table t3_pqTly6tEb1 (c1 int primary key, c2 int);
+
+create view tab_stat_view as select OWNER, TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, NUM_ROWS, OBJECT_TYPE from oceanbase.DBA_TAB_STATISTICS where owner = 'test' order by PARTITION_NAME, SUBPARTITION_NAME;
+create view col_stat_view as select OWNER, TABLE_NAME, COLUMN_NAME, LOW_VALUE, HIGH_VALUE, NUM_NULLS from oceanbase.DBA_TAB_COL_STATISTICS where owner = 'test' ORDER BY COLUMN_NAME;
+create view modified_data_view as select TABLE_OWNER, TABLE_NAME, PARTITION_NAME, SUBPARTITION_NAME, INSERTS, UPDATES, DELETES from oceanbase.DBA_TAB_MODIFICATIONS order by PARTITION_NAME, SUBPARTITION_NAME;
+
+insert into t1_pqTly6tEb1 values (1,1), (2,2);
+
+insert /*+ direct(true, 0, 'inc') enable_parallel_dml parallel(2) */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+
+select * from tab_stat_view where table_name = 't2_pqTly6tEb1';
+select * from col_stat_view where table_name = 't2_pqTly6tEb1';
+select * from modified_data_view where table_name = 't2_pqTly6tEb1';
+
+insert /*+ direct(true, 0, 'inc') enable_parallel_dml parallel(2) */ into t3_pqTly6tEb1 select * from t1_pqTly6tEb1;
+
+select * from tab_stat_view where table_name = 't3_pqTly6tEb1';
+select * from col_stat_view where table_name = 't3_pqTly6tEb1';
+select * from modified_data_view where table_name = 't3_pqTly6tEb1';
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+drop table t3_pqTly6tEb1;
+
+drop view tab_stat_view;
+drop view col_stat_view;
+drop view modified_data_view;
+
+--echo ================ test autocommit off =========
+create table t1_pqTly6tEb1 (c1 int primary key, c2 int);
+create table t2_pqTly6tEb1 (c1 int primary key, c2 int);
+
+insert into t1_pqTly6tEb1 values (1,1), (2,2);
+
+set autocommit = OFF;
+--error 1235
+insert /*+ direct(true, 0, 'inc') enable_parallel_dml parallel(2) */ into t2_pqTly6tEb1 select * from t1_pqTly6tEb1;
+
+rollback;
+
+set autocommit = ON;
+
+drop table t1_pqTly6tEb1;
+drop table t2_pqTly6tEb1;
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_true.inc

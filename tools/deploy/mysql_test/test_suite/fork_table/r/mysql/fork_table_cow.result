@@ -1,0 +1,829 @@
+drop database if exists db_fork_cow;
+create database db_fork_cow;
+use db_fork_cow;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+# 启用debug sync
+alter system set debug_sync_timeout = '60s';
+set ob_global_debug_sync = 'reset';
+============================================
+1. Fork过程中源表并发写入（验证快照隔离）
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+# 插入初始数据
+insert into t1 values (1, 'Initial', 100);
+insert into t1 values (101, 'Initial2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for source_write_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t1 to t1_fork;
+# 等待Fork进入BUILD_DATA阶段后，在源表中插入并发数据
+# 在Fork执行过程中向源表插入数据（模拟并发写入）
+insert into t1 values (50, 'Concurrent', 300);
+insert into t1 values (150, 'Concurrent2', 400);
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal source_write_signal';
+# 等待Fork表任务完成
+# 验证Fork表只包含Fork快照时的数据（不包含并发写入的）
+select count(*) as cnt from t1_fork;
+cnt
+2
+select * from t1_fork order by id;
+id	name	value
+1	Initial	100
+101	Initial2	200
+# 验证源表包含所有数据（包括并发写入的）
+select count(*) as cnt from t1;
+cnt
+4
+select * from t1 order by id;
+id	name	value
+1	Initial	100
+50	Concurrent	300
+101	Initial2	200
+150	Concurrent2	400
+============================================
+2. Fork完成后修改Fork表数据（触发COW）
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t2_fork'
+create table t2 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t2 values (1, 'Source1', 100);
+insert into t2 values (101, 'Source2', 200);
+# Fork表
+fork table t2 to t2_fork;
+# 等待Fork表任务完成
+# 修改Fork表数据（应该触发COW）
+update t2_fork set value = 1000 where id = 1;
+update t2_fork set name = 'Fork1' where id = 1;
+# 验证源表数据未变
+select * from t2 order by id;
+id	name	value
+1	Source1	100
+101	Source2	200
+# 验证Fork表数据已修改
+select * from t2_fork order by id;
+id	name	value
+1	Fork1	1000
+101	Source2	200
+============================================
+3. Fork完成后修改源表数据（验证隔离）
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t3'
+drop table if exists t3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t3_fork'
+create table t3 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t3 values (1, 'Source1', 100);
+insert into t3 values (101, 'Source2', 200);
+# Fork表
+fork table t3 to t3_fork;
+# 等待Fork表任务完成
+# 修改源表数据
+update t3 set value = 2000 where id = 1;
+update t3 set name = 'Source1_Updated' where id = 1;
+insert into t3 values (50, 'NewSource', 500);
+# 验证Fork表数据未变
+select * from t3_fork order by id;
+id	name	value
+1	Source1	100
+101	Source2	200
+# 验证源表数据已修改
+select * from t3 order by id;
+id	name	value
+1	Source1_Updated	2000
+50	NewSource	500
+101	Source2	200
+============================================
+4. Fork过程中Fork表并发写入（验证COW）
+============================================
+drop table if exists t4;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t4'
+drop table if exists t4_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t4_fork'
+create table t4 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t4 values (1, 'Source1', 100);
+insert into t4 values (101, 'Source2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for fork_write_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t4 to t4_fork;
+# 等待Fork进入BUILD_DATA阶段后，向Fork表写入
+# 在Fork执行过程中向Fork表插入数据（允许的，会触发COW）
+insert into t4_fork values (50, 'ForkConcurrent', 300);
+update t4_fork set value = 999 where id = 1;
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal fork_write_signal';
+# 等待Fork表任务完成
+# 验证Fork过程中写入的数据已保存
+select * from t4_fork where id = 50;
+id	name	value
+50	ForkConcurrent	300
+select * from t4_fork where id = 1;
+id	name	value
+1	Source1	999
+# Fork完成后，继续修改Fork表数据（触发COW）
+update t4_fork set value = 1000 where id = 1;
+insert into t4_fork values (150, 'ForkNew', 400);
+# 验证源表数据未变
+select * from t4 order by id;
+id	name	value
+1	Source1	100
+101	Source2	200
+# 验证Fork表数据（包含Fork过程中的写入和Fork完成后的写入）
+select * from t4_fork order by id;
+id	name	value
+1	Source1	1000
+50	ForkConcurrent	300
+101	Source2	200
+150	ForkNew	400
+============================================
+5. Fork完成后Fork表和源表并发修改（验证COW隔离）
+============================================
+drop table if exists t5;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t5'
+drop table if exists t5_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t5_fork'
+create table t5 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t5 values (1, 'Source1', 100);
+insert into t5 values (101, 'Source2', 200);
+# Fork表
+fork table t5 to t5_fork;
+# 等待Fork表任务完成
+# 并发修改源表
+update t5 set value = 2000 where id = 1;
+insert into t5 values (50, 'NewSource', 500);
+# 并发修改Fork表（触发COW）
+update t5_fork set value = 3000 where id = 1;
+insert into t5_fork values (150, 'NewFork', 600);
+# 验证数据隔离：源表数据
+select * from t5 order by id;
+id	name	value
+1	Source1	2000
+50	NewSource	500
+101	Source2	200
+# 验证数据隔离：Fork表数据
+select * from t5_fork order by id;
+id	name	value
+1	Source1	3000
+101	Source2	200
+150	NewFork	600
+============================================
+6. Fork表修改大字段数据（验证COW性能）
+============================================
+drop table if exists t6;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t6'
+drop table if exists t6_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t6_fork'
+create table t6 (
+id int primary key,
+name varchar(50),
+large_data text
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t6 values (1, 'Source1', repeat('X', 1000));
+insert into t6 values (101, 'Source2', repeat('Y', 1000));
+# Fork表
+fork table t6 to t6_fork;
+# 等待Fork表任务完成
+# 修改Fork表大字段数据（应该触发COW）
+update t6_fork set large_data = repeat('Z', 2000) where id = 1;
+# 验证源表数据未变
+select id, name, length(large_data) as data_len, substring(large_data, 1, 10) as preview from t6 where id = 1;
+id	name	data_len	preview
+1	Source1	1000	XXXXXXXXXX
+# 验证Fork表数据已修改
+select id, name, length(large_data) as data_len, substring(large_data, 1, 10) as preview from t6_fork where id = 1;
+id	name	data_len	preview
+1	Source1	2000	ZZZZZZZZZZ
+============================================
+7. Fork过程中源表并发查询（验证读隔离）
+============================================
+drop table if exists t7;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t7'
+drop table if exists t7_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t7_fork'
+create table t7 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t7 values (1, 'Data1', 100);
+insert into t7 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for source_read_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t7 to t7_fork;
+# 等待Fork进入BUILD_DATA阶段后，查询源表（应该正常）
+# 在Fork执行过程中查询源表（验证读隔离）
+select * from t7 where id = 1;
+id	name	value
+1	Data1	100
+select * from t7 where id = 101;
+id	name	value
+101	Data2	200
+select count(*) from t7;
+count(*)
+2
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal source_read_signal';
+# 等待Fork表任务完成
+# 验证Fork表数据
+select * from t7_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+============================================
+8. 多个Fork表独立COW
+============================================
+drop table if exists t8;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t8'
+drop table if exists t8_fork1;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t8_fork1'
+drop table if exists t8_fork2;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t8_fork2'
+create table t8 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t8 values (1, 'Original', 100);
+insert into t8 values (101, 'Original2', 200);
+# 创建第一个Fork表
+fork table t8 to t8_fork1;
+# 创建第二个Fork表
+fork table t8 to t8_fork2;
+# 等待Fork表任务完成
+# 修改第一个Fork表（触发COW）
+update t8_fork1 set value = 1001 where id = 1;
+insert into t8_fork1 values (50, 'Fork1New', 500);
+# 修改第二个Fork表（触发COW）
+update t8_fork2 set value = 2002 where id = 1;
+insert into t8_fork2 values (150, 'Fork2New', 600);
+# 修改源表
+update t8 set value = 9999 where id = 1;
+# 验证源表数据
+select * from t8 order by id;
+id	name	value
+1	Original	9999
+101	Original2	200
+# 验证第一个Fork表数据
+select * from t8_fork1 order by id;
+id	name	value
+1	Original	1001
+50	Fork1New	500
+101	Original2	200
+# 验证第二个Fork表数据
+select * from t8_fork2 order by id;
+id	name	value
+1	Original	2002
+101	Original2	200
+150	Fork2New	600
+============================================
+9. Fork过程中Fork表事务操作（验证COW）
+============================================
+drop table if exists t9;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t9'
+drop table if exists t9_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t9_fork'
+create table t9 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t9 values (1, 'Source1', 100);
+insert into t9 values (101, 'Source2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for fork_trx_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t9 to t9_fork;
+# 等待Fork进入BUILD_DATA阶段后，在事务中操作Fork表
+# 在Fork执行过程中，在事务中修改Fork表并提交
+start transaction;
+update t9_fork set value = 999 where id = 1;
+insert into t9_fork values (50, 'ForkTrxCommit', 300);
+commit;
+# 在Fork执行过程中，在事务中修改Fork表并回滚
+start transaction;
+update t9_fork set value = 888 where id = 1;
+insert into t9_fork values (51, 'ForkTrxRollback', 400);
+rollback;
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal fork_trx_signal';
+# 等待Fork表任务完成
+# 验证Fork过程中事务提交的数据已保存
+select * from t9_fork where id = 50;
+id	name	value
+50	ForkTrxCommit	300
+select * from t9_fork where id = 1;
+id	name	value
+1	Source1	999
+# 验证Fork过程中事务回滚的数据未保存
+select * from t9_fork where id = 51;
+id	name	value
+# 验证源表数据未受影响
+select * from t9 order by id;
+id	name	value
+1	Source1	100
+101	Source2	200
+# 验证Fork表最终数据
+select * from t9_fork order by id;
+id	name	value
+1	Source1	999
+50	ForkTrxCommit	300
+101	Source2	200
+============================================
+10. Fork表与事务恢复（源表事务回滚）
+============================================
+drop table if exists t10;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t10'
+drop table if exists t10_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t10_fork'
+create table t10 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t10 values (1, 'Data1', 100);
+# Fork表
+fork table t10 to t10_fork;
+# 等待Fork表任务完成
+# 在事务中修改源表并回滚
+start transaction;
+update t10 set value = 999 where id = 1;
+insert into t10 values (50, 'Transaction', 200);
+rollback;
+# 验证源表数据未变
+select * from t10 order by id;
+id	name	value
+1	Data1	100
+# 验证Fork表数据未受影响
+select * from t10_fork order by id;
+id	name	value
+1	Data1	100
+============================================
+11. Fork表在事务中修改并提交
+============================================
+drop table if exists t11;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t11'
+drop table if exists t11_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t11_fork'
+create table t11 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t11 values (1, 'Data1', 100);
+insert into t11 values (101, 'Data2', 200);
+# Fork表
+fork table t11 to t11_fork;
+# 等待Fork表任务完成
+# 在事务中修改Fork表并提交
+start transaction;
+update t11_fork set value = 1000 where id = 1;
+insert into t11_fork values (50, 'ForkTransaction', 300);
+commit;
+# 验证Fork表数据已修改
+select * from t11_fork order by id;
+id	name	value
+1	Data1	1000
+50	ForkTransaction	300
+101	Data2	200
+# 验证源表数据未受影响
+select * from t11 order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+============================================
+12. Fork表在事务中修改并回滚
+============================================
+drop table if exists t12;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t12'
+drop table if exists t12_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t12_fork'
+create table t12 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t12 values (1, 'Data1', 100);
+insert into t12 values (101, 'Data2', 200);
+# Fork表
+fork table t12 to t12_fork;
+# 等待Fork表任务完成
+# 在事务中修改Fork表并回滚
+start transaction;
+update t12_fork set value = 2000 where id = 1;
+insert into t12_fork values (50, 'ForkTransaction', 400);
+rollback;
+# 验证Fork表数据未变（回滚后）
+select * from t12_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+# 验证源表数据未受影响
+select * from t12 order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+============================================
+13. Fork过程中源表事务提交（验证快照隔离）
+============================================
+drop table if exists t13;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t13'
+drop table if exists t13_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t13_fork'
+create table t13 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t13 values (1, 'Data1', 100);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for trx_commit_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t13 to t13_fork;
+# 等待Fork进入BUILD_DATA阶段后，在事务中修改源表并提交
+# 在Fork执行过程中，在事务中修改源表并提交
+start transaction;
+update t13 set value = 999 where id = 1;
+insert into t13 values (50, 'TransactionCommit', 200);
+commit;
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal trx_commit_signal';
+# 等待Fork表任务完成
+# 验证Fork表只包含Fork快照时的数据（不包含事务提交的）
+select * from t13_fork order by id;
+id	name	value
+1	Data1	100
+# 验证源表包含所有数据（包括事务提交的）
+select * from t13 order by id;
+id	name	value
+1	Data1	999
+50	TransactionCommit	200
+============================================
+14. Fork过程中源表事务回滚（验证快照隔离）
+============================================
+drop table if exists t14;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t14'
+drop table if exists t14_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t14_fork'
+create table t14 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t14 values (1, 'Data1', 100);
+# Fork表
+fork table t14 to t14_fork;
+# 等待Fork表任务完成
+# 在事务中修改源表并回滚（Fork已完成，但验证隔离）
+start transaction;
+update t14 set value = 888 where id = 1;
+insert into t14 values (50, 'TransactionRollback', 200);
+rollback;
+# 验证源表数据未变（回滚后）
+select * from t14 order by id;
+id	name	value
+1	Data1	100
+# 验证Fork表数据未受影响
+select * from t14_fork order by id;
+id	name	value
+1	Data1	100
+============================================
+15. Fork表和源表并发事务操作（验证COW隔离）
+============================================
+drop table if exists t15;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t15'
+drop table if exists t15_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t15_fork'
+create table t15 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t15 values (1, 'Data1', 100);
+insert into t15 values (101, 'Data2', 200);
+# Fork表
+fork table t15 to t15_fork;
+# 等待Fork表任务完成
+# 在事务中修改源表并提交
+start transaction;
+update t15 set value = 5000 where id = 1;
+insert into t15 values (50, 'SourceTransaction', 300);
+commit;
+# 在事务中修改Fork表并提交（触发COW）
+start transaction;
+update t15_fork set value = 6000 where id = 1;
+insert into t15_fork values (150, 'ForkTransaction', 400);
+commit;
+# 验证源表数据
+select * from t15 order by id;
+id	name	value
+1	Data1	5000
+50	SourceTransaction	300
+101	Data2	200
+# 验证Fork表数据（独立修改）
+select * from t15_fork order by id;
+id	name	value
+1	Data1	6000
+101	Data2	200
+150	ForkTransaction	400
+============================================
+16. Fork表长事务操作（验证COW）
+============================================
+drop table if exists t16;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t16'
+drop table if exists t16_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t16_fork'
+create table t16 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t16 values (1, 'Data1', 100);
+insert into t16 values (101, 'Data2', 200);
+# Fork表
+fork table t16 to t16_fork;
+# 等待Fork表任务完成
+# 在长事务中多次修改Fork表
+start transaction;
+update t16_fork set value = 1001 where id = 1;
+insert into t16_fork values (50, 'LongTrx1', 300);
+update t16_fork set value = 1002 where id = 1;
+insert into t16_fork values (51, 'LongTrx2', 400);
+update t16_fork set value = 1003 where id = 1;
+commit;
+# 验证Fork表最终数据
+select * from t16_fork order by id;
+id	name	value
+1	Data1	1003
+50	LongTrx1	300
+51	LongTrx2	400
+101	Data2	200
+# 验证源表数据未受影响
+select * from t16 order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+============================================
+17. Fork前开启事务，Fork完成后事务才提交（验证快照隔离）
+============================================
+drop table if exists t17;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t17'
+drop table if exists t17_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t17_fork'
+create table t17 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t17 values (1, 'Data1', 100);
+insert into t17 values (101, 'Data2', 200);
+# 执行minor freeze
+alter system minor freeze;
+# 创建新连接用于事务操作
+# 开启事务
+start transaction;
+# 在事务中修改源表数据
+update t17 set value = 999 where id = 1;
+insert into t17 values (50, 'TransactionData', 300);
+# 切换回default连接执行Fork操作
+# 在事务未提交时执行Fork操作
+fork table t17 to t17_fork;
+# 等待Fork表任务完成
+# 验证Fork表不包含事务中的数据（基于事务开始前的快照）
+select * from t17_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+# 切换回事务连接提交事务
+commit;
+# 验证源表包含事务提交后的数据
+select * from t17 order by id;
+id	name	value
+1	Data1	999
+50	TransactionData	300
+101	Data2	200
+# 再次验证Fork表仍然不包含事务中的数据（快照隔离）
+select * from t17_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+============================================
+18. Fork前开启事务，Fork卡在BUILD_DATA阶段时查询Fork表（验证快照隔离）
+============================================
+drop table if exists t18;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t18'
+drop table if exists t18_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_cow.t18_fork'
+create table t18 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t18 values (1, 'Data1', 100);
+insert into t18 values (101, 'Data2', 200);
+# 执行minor freeze
+alter system minor freeze;
+# 创建新连接用于事务操作
+# 开启事务
+start transaction;
+# 在事务中修改源表数据
+update t18 set value = 999 where id = 1;
+insert into t18 values (50, 'TransactionData', 300);
+# 切换回default连接，使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for fork_query_signal execute 10000';
+# 在事务未提交时执行Fork操作（会在BUILD_DATA阶段暂停）
+fork table t18 to t18_fork;
+# 等待Fork进入BUILD_DATA阶段后，查询Fork表
+# 在Fork执行过程中查询Fork表（验证不包含事务中的数据）
+select * from t18_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal fork_query_signal';
+# 等待Fork表任务完成
+# 验证Fork表不包含事务中的数据（基于事务开始前的快照）
+select * from t18_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+# 切换回事务连接提交事务
+commit;
+# 验证源表包含事务提交后的数据
+select * from t18 order by id;
+id	name	value
+1	Data1	999
+50	TransactionData	300
+101	Data2	200
+# 再次验证Fork表仍然不包含事务中的数据（快照隔离）
+select * from t18_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+============================================
+19. 清理
+============================================
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop table if exists t5;
+drop table if exists t5_fork;
+drop table if exists t6;
+drop table if exists t6_fork;
+drop table if exists t7;
+drop table if exists t7_fork;
+drop table if exists t8;
+drop table if exists t8_fork1;
+drop table if exists t8_fork2;
+drop table if exists t9;
+drop table if exists t9_fork;
+drop table if exists t10;
+drop table if exists t10_fork;
+drop table if exists t11;
+drop table if exists t11_fork;
+drop table if exists t12;
+drop table if exists t12_fork;
+drop table if exists t13;
+drop table if exists t13_fork;
+drop table if exists t14;
+drop table if exists t14_fork;
+drop table if exists t15;
+drop table if exists t15_fork;
+drop table if exists t16;
+drop table if exists t16_fork;
+drop table if exists t17;
+drop table if exists t17_fork;
+drop table if exists t18;
+drop table if exists t18_fork;
+drop database if exists db_fork_cow;

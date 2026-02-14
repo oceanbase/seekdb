@@ -1,0 +1,44 @@
+result_format: 3
+CREATE DATABASE IF NOT EXISTS load_data_test;
+USE load_data_test;
+DROP TABLE IF EXISTS src_articles;
+DROP TABLE IF EXISTS dst_articles;
+CREATE TABLE src_articles (
+  title VARCHAR(1000),
+  body TEXT
+);
+CREATE TABLE dst_articles (
+  title VARCHAR(1000),
+  body TEXT,
+  FULLTEXT INDEX ctx(title, body)
+);
+INSERT INTO src_articles (title, body)
+VALUES ('An Exploration of Space', 'The cosmos is vast and full of wonders'),
+       ('The Secrets of the Ocean', 'Beneath the waves lies a world teeming with life'),
+       ('Advancements in Renewable Energy', 'Renewable energy is set to change the way we power our lives'),
+       ('The Evolution of Technology', 'Technology has advanced rapidly over the past century'),
+       ('Understanding Artificial Intelligence', 'Artificial Intelligence is one of the most exciting frontiers in technology');
+SELECT count(*) FROM src_articles;
++----------+
+| count(*) |
++----------+
+|        5 |
++----------+
+INSERT INTO dst_articles SELECT * FROM src_articles;
+SELECT * FROM dst_articles;
++---------------------------------------+-----------------------------------------------------------------------------+
+| title                                 | body                                                                        |
++---------------------------------------+-----------------------------------------------------------------------------+
+| An Exploration of Space               | The cosmos is vast and full of wonders                                      |
+| The Secrets of the Ocean              | Beneath the waves lies a world teeming with life                            |
+| Advancements in Renewable Energy      | Renewable energy is set to change the way we power our lives                |
+| The Evolution of Technology           | Technology has advanced rapidly over the past century                       |
+| Understanding Artificial Intelligence | Artificial Intelligence is one of the most exciting frontiers in technology |
++---------------------------------------+-----------------------------------------------------------------------------+
+INSERT /*+ append enable_parallel_dml parallel(16) */ INTO dst_articles SELECT * FROM src_articles;
+SELECT count(*) FROM dst_articles;
++----------+
+| count(*) |
++----------+
+|       10 |
++----------+

@@ -1,0 +1,173 @@
+drop table if exists obright_part;
+CREATE TABLE `obright_part` (
+`grp_id` bigint(20) NOT NULL,
+`row_id` bigint(20) NOT NULL,
+`trx_grp` bigint(20) DEFAULT NULL,
+KEY `obright_part1` (`row_id`) LOCAL
+) partition by key(grp_id) partitions 10;
+insert into obright_part(grp_id, trx_grp, row_id) values  (17, 167271 , 1003626 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (16, 167271 , 1003627 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (15, 167271 , 1003628 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (14, 167271 , 1003629 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (13, 167271 , 1003630 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (12, 167271 , 1003631 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (11, 167272 , 1003632 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (10, 167272 , 1003633 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (9, 167272 , 1003634 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (8, 167272 , 1003635 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (7, 167272 , 1003636 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (6, 167272 , 1003637 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (5, 167273 , 1003638 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (4, 167273 , 1003639 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (3, 167273 , 1003640 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (2, 167273 , 1003641 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (1, 167273 , 1003642 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (0, 167273 , 1003643 );
+select trx_grp, row_id from obright_part a where trx_grp in (167271,167271+1,167271+2) order by row_id;
+trx_grp	row_id
+167271	1003626
+167271	1003627
+167271	1003628
+167271	1003629
+167271	1003630
+167271	1003631
+167272	1003632
+167272	1003633
+167272	1003634
+167272	1003635
+167272	1003636
+167272	1003637
+167273	1003638
+167273	1003639
+167273	1003640
+167273	1003641
+167273	1003642
+167273	1003643
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+grp_id	row_id	trx_grp
+17	1003626	167271
+16	1003627	167271
+15	1003628	167271
+14	1003629	167271
+13	1003630	167271
+12	1003631	167271
+11	1003632	167272
+10	1003633	167272
+9	1003634	167272
+8	1003635	167272
+7	1003636	167272
+6	1003637	167272
+5	1003638	167273
+4	1003639	167273
+3	1003640	167273
+2	1003641	167273
+1	1003642	167273
+0	1003643	167273
+explain delete /*+ index(a obright_part1) */ from obright_part a where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+Query Plan
+===========================================================================
+|ID|OPERATOR                       |NAME            |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------------
+|0 |DISTRIBUTED DELETE             |                |3       |114         |
+|1 |└─LIMIT                        |                |3       |92          |
+|2 |  └─PX COORDINATOR MERGE SORT  |                |3       |92          |
+|3 |    └─EXCHANGE OUT DISTR       |:EX10000        |3       |91          |
+|4 |      └─TOP-N SORT             |                |3       |88          |
+|5 |        └─PX PARTITION ITERATOR|                |3       |87          |
+|6 |          └─TABLE FULL SCAN    |a(obright_part1)|3       |87          |
+===========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+      table_columns([{a: ({obright_part: (a.__pk_increment, a.grp_id, a.row_id, a.trx_grp)})}])
+  1 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      limit(6), offset(nil)
+  2 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      sort_keys([a.row_id, ASC])
+  3 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      dop=1
+  4 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      sort_keys([a.row_id, ASC]), topn(6), local merge sort
+  5 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      force partition granule
+  6 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter([a.trx_grp IN (167271, 167271 + 1, 167271 + 2)]), rowset=16
+      access([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), partitions(p[0-9])
+      limit(6), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([a.row_id], [a.__pk_increment]), range(MIN,MIN ; MAX,MAX)always true
+delete /*+ index(a obright_part1) */ from obright_part a where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+grp_id	row_id	trx_grp
+11	1003632	167272
+10	1003633	167272
+9	1003634	167272
+8	1003635	167272
+7	1003636	167272
+6	1003637	167272
+5	1003638	167273
+4	1003639	167273
+3	1003640	167273
+2	1003641	167273
+1	1003642	167273
+0	1003643	167273
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+grp_id	row_id	trx_grp
+11	1003632	167272
+10	1003633	167272
+9	1003634	167272
+8	1003635	167272
+7	1003636	167272
+6	1003637	167272
+5	1003638	167273
+4	1003639	167273
+3	1003640	167273
+2	1003641	167273
+1	1003642	167273
+0	1003643	167273
+explain update /*+ index(a obright_part1) */ obright_part a set trx_grp = 42 where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+Query Plan
+===========================================================================
+|ID|OPERATOR                       |NAME            |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------------
+|0 |DISTRIBUTED UPDATE             |                |3       |139         |
+|1 |└─LIMIT                        |                |3       |93          |
+|2 |  └─PX COORDINATOR MERGE SORT  |                |3       |93          |
+|3 |    └─EXCHANGE OUT DISTR       |:EX10000        |3       |91          |
+|4 |      └─TOP-N SORT             |                |3       |88          |
+|5 |        └─PX PARTITION ITERATOR|                |3       |88          |
+|6 |          └─TABLE FULL SCAN    |a(obright_part1)|3       |88          |
+===========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+      table_columns([{a: ({obright_part: (a.__pk_increment, a.grp_id, a.row_id, a.trx_grp)})}]),
+      update([a.trx_grp=column_conv(BIGINT,PS:(20,0),NULL,42)])
+  1 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      limit(6), offset(nil)
+  2 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      sort_keys([a.row_id, ASC])
+  3 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      dop=1
+  4 - output([a.__pk_increment], [a.grp_id], [a.row_id], [a.trx_grp]), filter(nil), rowset=16
+      sort_keys([a.row_id, ASC]), topn(6), local merge sort
+  5 - output([a.__pk_increment], [a.grp_id], [a.trx_grp], [a.row_id]), filter(nil), rowset=16
+      force partition granule
+  6 - output([a.__pk_increment], [a.grp_id], [a.trx_grp], [a.row_id]), filter([a.trx_grp IN (167271, 167271 + 1, 167271 + 2)]), rowset=16
+      access([a.__pk_increment], [a.grp_id], [a.trx_grp], [a.row_id]), partitions(p[0-9])
+      limit(6), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false],
+      range_key([a.row_id], [a.__pk_increment]), range(MIN,MIN ; MAX,MAX)always true
+update /*+ index(a obright_part1) */ obright_part a set trx_grp = 42 where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+grp_id	row_id	trx_grp
+11	1003632	42
+10	1003633	42
+9	1003634	42
+8	1003635	42
+7	1003636	42
+6	1003637	42
+5	1003638	167273
+4	1003639	167273
+3	1003640	167273
+2	1003641	167273
+1	1003642	167273
+0	1003643	167273
+drop table obright_part;

@@ -1,0 +1,178 @@
+# owner: yunshan.tys
+# owner group: storage
+# description test parser properties for fulltext search
+
+connect(sys_conn, $OBMYSQL_MS0, root@sys,,oceanbase, $OBMYSQL_PORT);
+connection sys_conn;
+
+--disable_warnings
+drop database if exists fts_parser_properies;
+--enable_warnings
+
+create database fts_parser_properies;
+
+use fts_parser_properies;
+
+let $database_id = query_get_value(SELECT database_id FROM oceanbase.__all_virtual_database WHERE database_name = 'fts_parser_properies' AND tenant_id = 1, database_id, 1);
+
+--result_format 3
+
+--disable_warnings
+DROP TABLE IF EXISTS create_index_with_parser_properties;
+--enable_warnings
+
+create table create_index_with_parser_properties(
+  a varchar(100),
+  b varchar(100),
+  fulltext index fidx1(a) PARSER_PROPERTIES=(min_token_size=2, max_token_size=84)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+
+insert into create_index_with_parser_properties(a, b) values ('3aaa', '3aaa'), ('1a', '1a'), ('2aa', '2aa'),('4aaaa', '4aaaa');
+
+select * from create_index_with_parser_properties where match(a) against('1a');
+
+--error 1064
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=-1);
+
+--error 1210
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=0);
+
+--error 1210
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=11);
+
+alter table create_index_with_parser_properties add fulltext index fidx2(b) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=4);
+
+select * from create_index_with_parser_properties where match(b) against('aaaa');
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=4, max_token_size=3);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=14, max_token_size=13);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=1, max_token_size=0);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(max_token_size=9);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(max_token_size=85);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=0);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=17);
+
+--error 1064
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=-1, max_token_size=0);
+
+--error 1064
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=1, max_token_size=-1);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=0, max_token_size=1);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=5);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(max_ngram_size=1);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(max_ngram_size=17, max_ngram_size=16);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=16, max_ngram_size=17);
+
+--error 1210
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=0, max_ngram_size=1);
+
+
+
+create fulltext index fidx3 on create_index_with_parser_properties(a, b) WITH PARSER space PARSER_PROPERTIES=(min_token_size=4);
+
+select * from create_index_with_parser_properties where match(a, b) against('2aa');
+
+select * from create_index_with_parser_properties where match(a, b) against('3aaa');
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table create_index_with_parser_properties;
+
+show index from create_index_with_parser_properties;
+
+drop table create_index_with_parser_properties;
+
+--disable_warnings
+DROP TABLE IF EXISTS fts_basic_article;
+--enable_warnings
+
+--error 1064
+CREATE TABLE fts_basic_article (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content) WITH PARSER_PROPERTIES=()
+);
+
+CREATE TABLE fts_basic_article (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200),
+    content TEXT,
+    FULLTEXT INDEX ctx(title, content) PARSER_PROPERTIES=(min_token_size=9)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+
+INSERT INTO fts_basic_article (title, content) VALUES
+('OceanBase Tutorial', 'This is a tutorial about Oceanbase Fulltext.'),
+('Fulltext Index', 'Fulltext index can be very useful.'),
+('OceanBase Test Case', 'Writing test cases helps ensure quality.');
+
+INSERT INTO fts_basic_article (title, content) VALUES
+('Optimizing OceanBase', 'This is a query optimization guide for OceanBase Database.'),
+('How to use Database', 'This is a using tutorial about Databases.');
+
+SELECT * FROM fts_basic_article WHERE MATCH(title, content) AGAINST("OceanBase") ORDER BY 1;
+
+UPDATE fts_basic_article SET title = 'Fulltext Indexing' WHERE id = 2;
+
+DELETE FROM fts_basic_article WHERE id = 1;
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g /AUTO_INCREMENT = [0-9]*/AUTO_INCREMENT = auto_increment/g
+SHOW CREATE TABLE fts_basic_article;
+
+SHOW INDEX FROM fts_basic_article;
+
+DROP TABLE fts_basic_article;
+
+--disable_warnings
+DROP TABLE IF EXISTS table_create_with_ngram2;
+--enable_warnings
+
+--error 1235
+CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram PARSER_PROPERTIES=(min_ngram_size=2, max_ngram_size=4));
+
+--error 1210
+CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=5));
+
+CREATE TABLE table_create_with_ngram2(text CHAR(255), FULLTEXT(text) WITH PARSER ngram2 PARSER_PROPERTIES=(min_ngram_size=2, max_ngram_size=4))
+ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin WITH COLUMN GROUP(each column);
+
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+SHOW CREATE TABLE table_create_with_ngram2;
+
+INSERT INTO table_create_with_ngram2 VALUES ('hello world');
+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('world' IN BOOLEAN MODE);
+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('orld' IN BOOLEAN MODE);
+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('hel' IN BOOLEAN MODE);
+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('he' IN BOOLEAN MODE);
+
+SELECT * FROM table_create_with_ngram2 WHERE MATCH(text) AGAINST('w' IN BOOLEAN MODE);
+
+DROP TABLE table_create_with_ngram2;
+
+drop database fts_parser_properies;

@@ -1,0 +1,333 @@
+alter system set debug_sync_timeout = '100s';
+
+
+"=========================================== normal rebuild ==========================================="
+drop table if exists t_vec;
+alter system set ob_vector_memory_limit_percentage = 20;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== rebuilding conflict ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_WAIT_CREATE_NEW_INDEX wait_for continue_signal execute 10000';
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+drop index idx1 on t_vec;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+
+
+"=========================================== rebuilding conflict ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_WAIT_DROP_OLD_INDEX wait_for continue_signal execute 10000';
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+drop index idx1 on t_vec;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+
+
+"=========================================== rebuild when drop index to recyclebin ==========================================="
+drop table if exists t_vec;
+set recyclebin='on';
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop index idx1 on t_vec;
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+ERROR HY000: Incorrect arguments to index name
+
+
+"=========================================== show index of normal index creating ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 int, primary key(c1));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'CREATE_INDEX_REPLICA_BUILD wait_for continue_signal execute 10000';
+create index idx_show on t_vec(c2);
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx_show	1	c2	A	NULL	NULL	NULL	YES	BTREE	unavailable		YES	NULL
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx_show	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+drop table if exists t_vec;
+
+
+"========================= rebuilding when ctrl c in PREPARE state =========================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_PREPARE wait_for continue_signal execute 10000';
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table t_vec;
+
+
+"========================= rebuilding when ctrl c in switch_index_name state =========================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_SWITCH_INDEX_NAME wait_for continue_signal execute 10000';
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table t_vec;
+
+
+"========================= rebuilding when ctrl c in DROP_SCHEMA state =========================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'REBUILD_VEC_INDEX_WAIT_DROP_OLD_INDEX wait_for continue_signal execute 10000';
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now signal continue_signal';
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table t_vec;
+
+
+"=========================================== rebuild when drop table to recyclebin ==========================================="
+drop table if exists t_vec;
+set recyclebin='on';
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table t_vec;
+call dbms_vector.rebuild_index('idx1','t_vec','c2');
+ERROR HY000: Incorrect arguments to base table name
+
+
+"=========================================== rebuild from hnsw to hnsw sq ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=cosine, type=hnsw');
+ERROR 0A000: Not supported feature or function
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=ivf_flat');
+ERROR 0A000: Not supported feature or function
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, m=5');
+ERROR 0A000: the vector index params of distance or type not set is not supported
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','type=hnsw, m=64');
+ERROR 0A000: the vector index params of distance or type not set is not supported
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=xxx');
+ERROR 0A000: Not supported feature or function
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=');
+ERROR HY000: Invalid argument
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type');
+ERROR HY000: Invalid argument
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2');
+ERROR HY000: Invalid argument
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=hnsw');
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_SEARCH=64, EF_CONSTRUCTION=200) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+call dbms_vector.rebuild_index('idx1','t_vec','c2',0.1,'','','distance=l2, type=hnsw_sq');
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW_SQ, LIB=VSAG, M=16, EF_SEARCH=64, EF_CONSTRUCTION=200) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+alter system set ob_vector_memory_limit_percentage = 0;
+PURGE RECYCLEBIN;

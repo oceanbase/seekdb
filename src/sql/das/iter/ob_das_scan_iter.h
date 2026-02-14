@@ -66,6 +66,7 @@ public:
 
   virtual int do_table_scan() override;
   virtual int rescan() override;
+  virtual int advance_scan() override;
   virtual void clear_evaluated_flag() override;
 
   virtual int get_diagnosis_info(ObDiagnosisManager* diagnosis_manager) override {

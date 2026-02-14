@@ -1,0 +1,27 @@
+
+#owner:xiaoyi.xy
+#owner group: sql1
+# tags: optimizer
+
+#bug:
+
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+CREATE TABLE `t1` (
+`c1` varchar(16) NOT NULL,
+`c2` varchar(16) NOT NULL,
+`c3` varchar(16) DEFAULT NULL,
+PRIMARY KEY (`c1`, `c2`),
+UNIQUE KEY `u_idx` (`c3`) BLOCK_SIZE 16384);
+
+select/*+ index(t1 u_idx)*/ c1 from t1 for update wait 1;
+
+--disable_warnings
+drop table t1;
+--enable_warnings

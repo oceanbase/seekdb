@@ -1,0 +1,1055 @@
+# ----------------------------------------------------------------------
+# Test of map type.
+# ----------------------------------------------------------------------
+drop database test;
+create database test;
+use test;
+drop table if exists t1, t2, t3, t4, t_vec;
+select array_append(map(1,11), 1);
+ERROR 22000: Invalid data type for the operation
+select array_append([1], map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_avg(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select cardinality(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_compact(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_concat(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_concat([1], map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_contains(map(1,11), 1);
+ERROR 22000: Invalid data type for the operation
+select array_contains([1], map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_difference(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_distinct(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_filter((x,y) -> (x + y), [1],map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_first((x,y) -> (x + y), [1],map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_length(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_map((x,y) -> (x + y), [1],map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_max(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_overlaps(map(1,11), [1]);
+ERROR 22000: Invalid data type for the operation
+select array_overlaps([1], map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_position(map(1,11), [1]);
+ERROR 22000: Invalid data type for the operation
+select array_position([1], map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_remove(map(1,11), 1);
+ERROR 22000: Invalid data type for the operation
+select array_remove([1], map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_slice(map(1,11), 1, 2);
+ERROR 22000: Invalid data type for the operation
+select array_sort(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_sortby((x,y) -> (x + y), [1],map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_sum(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_to_string(map(1,11),',');
+ERROR 22000: Invalid data type for the operation
+select array_union([1,2,3], map(1,11));
+ERROR 22000: Invalid data type for the operation
+select array_union(map(1,11), [1,2]);
+ERROR 22000: Invalid data type for the operation
+select element_at(map(1,11), 1);
+ERROR 22000: Invalid data type for the operation
+select rb_build(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select WEIGHT_STRING(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select ASCII(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select BIN(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select BIT_LENGTH(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select CHAR(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select CHAR_LENGTH(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select CHARACTER_LENGTH(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select CONCAT(map(1,11), map(2,22));
+ERROR 22000: Invalid data type for the operation
+select CONCAT_WS(map(1,11), map(2,22));
+ERROR 22000: Invalid data type for the operation
+select ELT(1, map(1,11), map(2,22));
+ERROR 22000: Invalid data type for the operation
+select ELT(1, 'a', map(2,22));
+ERROR 22000: Invalid data type for the operation
+select FIELD(map(1,11), map(1,11), map(2,22));
+ERROR 22000: Invalid data type for the operation
+select HEX(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select INSERT('Quadratic',7,3,map(1,11));
+ERROR 22000: Invalid data type for the operation
+select INSERT(map(1,11),7,3,'What');
+ERROR 22000: Invalid data type for the operation
+select INSTR(map(1,11),'1');
+ERROR 22000: Invalid data type for the operation
+select IP2INT(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select LCASE(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select LEFT(map(1,11),2);
+ERROR 22000: Invalid data type for the operation
+select LENGTH(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select LOCATE(map(1,11),'1');
+ERROR 22000: Invalid data type for the operation
+select LOCATE('1',map(1,11));
+ERROR 22000: Invalid data type for the operation
+select LOWER(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select LPAD(map(1,11),1,'1');
+ERROR 22000: Invalid data type for the operation
+select LPAD('1',1,map(1,11));
+ERROR 22000: Invalid data type for the operation
+select LTRIM(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select MAKE_SET(1,'str1',map(1,11));
+ERROR 22000: Invalid data type for the operation
+select MID(map(1,11),1,1);
+ERROR 22000: Invalid data type for the operation
+select OCTET_LENGTH(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select ORD(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select POSITION('1' IN map(1,11));
+ERROR 22000: Invalid data type for the operation
+select QUOTE(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_INSTR(map(1,11), 'ocean');
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_INSTR('ocean base oceanbase', map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_LIKE(map(1,11), map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_REPLACE(map(1,11), 'a', '2');
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_SUBSTR(map(1,11), '[[:blank:]][[:alnum:]]*', 1, 1) FROM DUAL;
+ERROR 22000: Invalid data type for the operation
+SELECT REPEAT(map(1,11), 2);
+ERROR 22000: Invalid data type for the operation
+SELECT REPLACE(map(1,11), 'abc.', 'www');
+ERROR 22000: Invalid data type for the operation
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', map(1,11), 'www');
+ERROR 22000: Invalid data type for the operation
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', 'abc.', map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT REVERSE(map(1,11));
+ERROR 0A000: Not supported feature or function
+SELECT RIGHT(map(1,11),4);
+ERROR 22000: Invalid data type for the operation
+SELECT map(1,11) RLIKE 'a';
+ERROR 22000: Invalid data type for the operation
+SELECT RPAD(map(1,11),5,'?');
+ERROR 22000: Invalid data type for the operation
+SELECT RTRIM(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT STRCMP(map(1,11),map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT SUBSTR(map(1,11), 2);
+ERROR 22000: Invalid data type for the operation
+SELECT SUBSTRING(map(1,11), 2);
+ERROR 22000: Invalid data type for the operation
+SELECT SUBSTRING_INDEX(map(1,11), 'ABC', 0);
+ERROR 22000: Invalid data type for the operation
+SELECT TRIM(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT UCASE(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT UNHEX(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT UPPER(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT TO_BASE64(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT FROM_BASE64(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT SOUNDEX(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT CHARSET(map(1,11));
+CHARSET(map(1,11))
+binary
+SELECT COLLATION(map(1,11));
+COLLATION(map(1,11))
+binary
+SELECT ABS(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT ROUND(map(1,11),0);
+ERROR 22000: Invalid data type for the operation
+SELECT CEILING(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT FLOOR(map(1,11));
+ERROR 22000: Invalid data type for the operation
+SELECT POWER(map(1,11),2);
+ERROR 22000: Invalid data type for the operation
+create table t1 (id int, m1 map(int, varchar(20)), m2 map(int, int), m3 map(int, array(int)));
+insert into t1 values (1, map(1,'a'), map(1,11), map(1, [1]));
+insert into t1 values (2, map(2,'b',3,'c'), map(2,22,3,33), map(2,[22],3,[33]));
+select if (1, m1, id) from t1;
+ERROR HY000: Invalid argument
+select if (1, m1, m1) from t1;
+if (1, m1, m1)
+{1:"a"}
+{2:"b",3:"c"}
+select if (1, m1, m2) from t1;
+if (1, m1, m2)
+{1:"a"}
+{2:"b",3:"c"}
+select if (1, m1, m3) from t1;
+ERROR 22000: array type mismatch found between definition and data
+select case (select m1 from t1) when 1 then (select m2 from t1) END;
+ERROR HY000: Invalid argument
+SELECT
+CASE
+WHEN t1.m1=map(1,"a") THEN 'true'
+        ELSE 'result_value_if_false'
+    END
+FROM t1;
+CASE
+WHEN t1.m1=map(1,"a") THEN 'true'
+        ELSE 'result_value_if_false'
+    END
+true
+result_value_if_false
+SELECT
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE 'result_value_if_false'
+    END
+FROM t1;
+ERROR HY000: Invalid argument
+SELECT
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE m1
+END
+FROM t1;
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE m1
+END
+{1:"a"}
+{2:"b",3:"c"}
+SELECT
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE m2
+END
+FROM t1;
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE m2
+END
+{1:"a"}
+{2:"b",3:"c"}
+select *, COALESCE(m1,m2,m3) from t1;
+ERROR 22000: array type mismatch found between definition and data
+select *, COALESCE(m1,m1) from t1;
+id	m1	m2	m3	COALESCE(m1,m1)
+1	{1:"a"}	{1:11}	{1:[1]}	{1:"a"}
+2	{2:"b",3:"c"}	{2:22,3:33}	{2:[22],3:[33]}	{2:"b",3:"c"}
+drop table t1;
+select cast (map(1,11) as char);
+ERROR 22000: Invalid data type for the operation
+select cast (map(1,11) as json);
+ERROR 22000: Invalid data type for the operation
+select cast (map(1,11) as UNSIGNED);
+ERROR 22000: Invalid data type for the operation
+SELECT CONVERT(map(1,11), CHAR);
+ERROR 22000: Invalid data type for the operation
+select BINARY map(1,11);
+ERROR 22000: Invalid data type for the operation
+select MD5(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select SHA(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select PASSWORD(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select ENCODE(map(1,11),'a');
+ERROR 22000: Invalid data type for the operation
+select COMPRESS(map(1,11));
+ERROR 22000: Invalid data type for the operation
+select map();
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near ')' at line 1
+select map(1,11,2,22);
+map(1,11,2,22)
+{1:11,2:22}
+select map(1.1,'aa',2.2,'bb');
+map(1.1,'aa',2.2,'bb')
+{1.1:"aa",2.2:"bb"}
+select map('aa',100,'bb',200);
+map('aa',100,'bb',200)
+{"aa":100,"bb":200}
+select map('aa',100,'a',200);
+map('aa',100,'a',200)
+{"a":200,"aa":100}
+select map('aa',100,'aa',200);
+map('aa',100,'aa',200)
+{"aa":200}
+select map(1,'a',3.2,4);
+map(1,'a',3.2,4)
+{1:"a",3.2:"4"}
+select map(1,2,3);
+ERROR 42000: Incorrect parameter count
+select map([1],2);
+ERROR 0A000: collection type as map key not supported
+select map('a',[[2]]);
+map('a',[[2]])
+{"a":[[2]]}
+select map(1,map(1,2));
+ERROR 0A000: Not supported feature or function
+select map(NULL,NULL,NULL,NULL);
+map(NULL,NULL,NULL,NULL)
+{NULL:NULL}
+select map(NULL,array_remove([1],1),'a',[2]);
+map(NULL,array_remove([1],1),'a',[2])
+{NULL:[],"a":[2]}
+select map(1,'a',2,'b',1,'c',NULL,'d');
+map(1,'a',2,'b',1,'c',NULL,'d')
+{NULL:"d",1:"c",2:"b"}
+select map(1,'a',NULL,'b',1,'c',NULL,'d');
+map(1,'a',NULL,'b',1,'c',NULL,'d')
+{NULL:"d",1:"c"}
+select map('hi','a','hello','b','hi','c',NULL,'d');
+map('hi','a','hello','b','hi','c',NULL,'d')
+{NULL:"d","hello":"b","hi":"c"}
+select map('hi','a',NULL,'b','hi','c',NULL,'d');
+map('hi','a',NULL,'b','hi','c',NULL,'d')
+{NULL:"d","hi":"c"}
+select map(1,[1,2],2,[3],1,[4,5,6],NULL,[7,8,9]);
+map(1,[1,2],2,[3],1,[4,5,6],NULL,[7,8,9])
+{NULL:[7,8,9],1:[4,5,6],2:[3]}
+select map(1,[1,2],NULL,[3],1,[4,5,6],NULL,[7,8,9]);
+map(1,[1,2],NULL,[3],1,[4,5,6],NULL,[7,8,9])
+{NULL:[7,8,9],1:[4,5,6]}
+create table t_vec (id int, vec1 vector(1), vec3 vector(3));
+insert into t_vec values (1, [10], [1,2,3]);
+insert into t_vec values (2, NULL, NULL);
+select map(vec1,11) from t_vec;
+ERROR 0A000: collection type as map key not supported
+select map(vec1,11,vec3,22) from t_vec;
+ERROR 0A000: collection type as map key not supported
+select map(1,vec1) from t_vec;
+map(1,vec1)
+{1:[10]}
+{1:NULL}
+select map(1,vec3) from t_vec;
+map(1,vec3)
+{1:[1,2,3]}
+{1:NULL}
+select map(1,vec1,2,vec3) from t_vec;
+ERROR 22000: array type mismatch found between definition and data
+select map(1,11,2,22) into @a;
+ERROR 0A000: select array/map into variables not supported
+drop table t_vec;
+create table t1(id int,c varchar(10),a array(int),v vector(2));
+insert into t1 values(1,'test1',[1,2],[3,4]);
+select map(1,c,2,a) from t1;
+ERROR 22000: Invalid data type for the operation
+select map(1,a,2,c) from t1;
+ERROR 22000: Invalid data type for the operation
+select map(1,c,2,v) from t1;
+ERROR 22000: Invalid data type for the operation
+select map(1,v,2,c) from t1;
+ERROR 22000: Invalid data type for the operation
+drop table t1;
+create table t1 as select map(1,1) as m1, map(1,1,2,2,3,3) as m2, map(1.1,1.11) as m3, map('a','b') as m4;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+m1	MAP(BIGINT,BIGINT)	YES		NULL
+m2	MAP(BIGINT,BIGINT)	YES		NULL
+m3	MAP(DOUBLE,DOUBLE)	YES		NULL
+m4	MAP(VARCHAR(262144),VARCHAR(262144))	YES		NULL
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `m1` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m2` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m3` MAP(DOUBLE,DOUBLE) DEFAULT NULL,
+  `m4` MAP(VARCHAR(262144),VARCHAR(262144)) DEFAULT NULL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create table t2 as select map(1,1.11,2.2,'b') as m1, map(1,[1]) as m2, map(1,[['b']]) as m3;
+desc t2;
+Field	Type	Null	Key	Default	Extra
+m1	MAP(DOUBLE,VARCHAR(262144))	YES		NULL
+m2	MAP(BIGINT,ARRAY(BIGINT))	YES		NULL
+m3	MAP(BIGINT,ARRAY(ARRAY(VARCHAR(262144))))	YES		NULL
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `m1` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m2` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m3` MAP(DOUBLE,DOUBLE) DEFAULT NULL,
+  `m4` MAP(VARCHAR(262144),VARCHAR(262144)) DEFAULT NULL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create table t3 as select m1, m2, m3, m4 from t1;
+desc t3;
+Field	Type	Null	Key	Default	Extra
+m1	MAP(BIGINT,BIGINT)	YES		NULL
+m2	MAP(BIGINT,BIGINT)	YES		NULL
+m3	MAP(DOUBLE,DOUBLE)	YES		NULL
+m4	MAP(VARCHAR(262144),VARCHAR(262144))	YES		NULL
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `m1` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m2` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m3` MAP(DOUBLE,DOUBLE) DEFAULT NULL,
+  `m4` MAP(VARCHAR(262144),VARCHAR(262144)) DEFAULT NULL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create table t4 as select m1, m2, m3 from t2;
+desc t4;
+Field	Type	Null	Key	Default	Extra
+m1	MAP(DOUBLE,VARCHAR(262144))	YES		NULL
+m2	MAP(BIGINT,ARRAY(BIGINT))	YES		NULL
+m3	MAP(BIGINT,ARRAY(ARRAY(VARCHAR(262144))))	YES		NULL
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `m1` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m2` MAP(BIGINT,BIGINT) DEFAULT NULL,
+  `m3` MAP(DOUBLE,DOUBLE) DEFAULT NULL,
+  `m4` MAP(VARCHAR(262144),VARCHAR(262144)) DEFAULT NULL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop table t1, t2, t3, t4;
+create table t1 (id int primary key not null auto_increment, m map(int, int));
+insert into t1(m) values ('{1:1,2:2,3:3}');
+insert into t1(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t1(m) values ('{1.5:2, 1.6:"3"}');
+insert into t1(m) values ('{1:"a", 2:2, 3:3}');
+ERROR 01000: Data truncated for column 'm' at row 1
+insert into t1(m) values ('{1:" 11"}');
+ERROR 01000: Data truncated for column 'm' at row 1
+insert into t1(m) values ('{1: "3" , NULL : "1", "2": 22 }');
+insert into t1(m) values ('{1:1,2:2,1:3}');
+insert into t1(m) values ('{null: "1" , "NULL" : 2, Null: 3, null ":4 }');
+insert into t1(m) values ('{null: "1" , 4:2.3,"NULL" : 2, Null: 3 , 5:5}');
+insert into t1(m) values ('{}');
+insert into t1(m) values ('{1.1:1,1.2:2}');
+insert into t1(m) values ('{"1.1":1,"1.2":2}');
+insert into t1(m) values ('{"1.1":1,"1.10":2}');
+insert into t1(m) values (map(1.1,1,1.2,2));
+insert into t1(m) values (map("1.1",1,"1.2",2));
+insert into t1(m) values (map("1.1",1,"1.10",2));
+select * from t1;
+id	m
+1	{1:1,2:2,3:3}
+2	{1:1,2:2,3:3}
+3	{2:3}
+4	{NULL:1,1:3,2:22}
+5	{1:3,2:2}
+6	{NULL:4}
+7	{NULL:3,4:2,5:5}
+8	{}
+9	{1:2}
+10	{1:2}
+11	{1:2}
+12	{1:2}
+13	{1:2}
+14	{1:2}
+delete from t1 where id = 3;
+update t1 set m = '{3:1.1, 2:2.2}' where id = 2;
+select * from t1;
+id	m
+1	{1:1,2:2,3:3}
+2	{2:2,3:1}
+4	{NULL:1,1:3,2:22}
+5	{1:3,2:2}
+6	{NULL:4}
+7	{NULL:3,4:2,5:5}
+8	{}
+9	{1:2}
+10	{1:2}
+11	{1:2}
+12	{1:2}
+13	{1:2}
+14	{1:2}
+create table t2 (id int not null auto_increment, m map(float, double));
+insert into t2(m) values ('{1:1,2:2,3:3}');
+insert into t2(m) values ('{1.1:1.1,2.2:2.2,3.3:3.3}');
+insert into t2(m) values ('{"1":1,1:2}');
+insert into t2(m) values ('{"1.1":1,"1.2":2}');
+insert into t2(m) values ('{"1.1":1,"1.10":2}');
+insert into t2(m) values (map("1.1",1,"1.2",2));
+insert into t2(m) values (map("1.1",1,"1.10",2));
+insert into t2(m) values ('{1.6a:1}');
+ERROR 22032: Invalid JSON text.
+insert into t2(m) values ('{6a:1}');
+ERROR 22032: Invalid JSON text.
+select * from t2;
+id	m
+1	{1:1,2:2,3:3}
+2	{1.1:1.1,2.2:2.2,3.3:3.3}
+3	{1:2}
+4	{1.1:1,1.2:2}
+5	{1.1:2}
+6	{1.1:1,1.2:2}
+7	{1.1:2}
+create table t3 (id int not null auto_increment, m map(int, int[]));
+insert into t3(m) values ('{1:1,2:2,3:3}');
+ERROR 22000: array type mismatch found between definition and data
+insert into t3(m) values ('{1:[1],2:[2],3:[3]}');
+insert into t3(m) values ('{1:NULL}');
+insert into t3(m) values ('{1:[NULL]}');
+insert into t3(m) values ('{1:[11,11], 2:[22,22], 1:[33,33]}');
+insert into t3(m) values ('{1:[]}');
+insert into t3(m) values ('{1:[1],2:[2],1:[3,4]}');
+insert into t3(m) values ('{NULL:[1],1:[1],null:[],2:[2],1:NULL}');
+select * from t3;
+id	m
+1	{1:[1],2:[2],3:[3]}
+2	{1:NULL}
+3	{1:[NULL]}
+4	{1:[33,33],2:[22,22]}
+5	{1:[]}
+6	{1:[3,4],2:[2]}
+7	{NULL:[],1:NULL,2:[2]}
+create table t4 (id int not null auto_increment, m map(int, varchar(100)[][]), m2 map(int, varchar(100)[][][]));
+insert into t4(m) values ('{1:[[]]}');
+insert into t4(m) values ('{1:[]}');
+ERROR 22000: array type mismatch found between definition and data
+insert into t4(m) values ('{1:[[[]]]}');
+ERROR 22000: array type mismatch found between definition and data
+insert into t4(m) values ('{1:[["a","b"],["c"],NULL]}');
+insert into t4(m2) values ('{1:[[]]}');
+ERROR 22000: array type mismatch found between definition and data
+insert into t4(m2) values ('{1:[[],[]]}');
+ERROR 22000: array type mismatch found between definition and data
+insert into t4(m2) values ('{1:[[],[[]]]}');
+ERROR 22000: array type mismatch found between definition and data
+insert into t4(m2) values ('{1:[[[]],[[]]]}');
+select * from t4;
+id	m	m2
+1	{1:[[]]}	NULL
+2	{1:[["a","b"],["c"],NULL]}	NULL
+3	NULL	{1:[[[]],[[]]]}
+select distinct m from t1;
+ERROR 22000: Invalid data type for the operation
+select * from t1 group by m;
+ERROR 22000: Invalid data type for the operation
+select * from t1 order by m;
+ERROR 22000: Invalid data type for the operation
+select sum(m) from t1;
+ERROR 0A000: Not supported feature or function
+select max(m) from t1;
+ERROR HY000: Invalid argument
+select min(m) from t1;
+ERROR HY000: Invalid argument
+drop materialized view if exists mv1, mv2;
+create materialized view mv1 parallel 2 refresh complete on demand  as select * from t1;
+create materialized view mv2 parallel 2 refresh complete on demand  as select * from t2;
+drop materialized view mv1, mv2;
+drop table t1, t2, t3, t4;
+select map(1,1) =  1;
+ERROR 22000: Invalid data type for the operation
+select map(1,11) =  map(1,11);
+map(1,11) =  map(1,11)
+1
+select map(1,11) !=  map(1,11);
+map(1,11) !=  map(1,11)
+0
+select map(1,11) =  map('1',11);
+map(1,11) =  map('1',11)
+1
+select map(1,11) =  map(1,'11');
+map(1,11) =  map(1,'11')
+1
+select map(1,11) =  map(1,11,2,22);
+map(1,11) =  map(1,11,2,22)
+0
+select map(1,11) !=  map(1,11,2,22);
+map(1,11) !=  map(1,11,2,22)
+1
+select map(1,11) =  map(1,11,2,'22');
+map(1,11) =  map(1,11,2,'22')
+0
+select map(1,[11]) =  map(1,[11]);
+map(1,[11]) =  map(1,[11])
+1
+select map(1,[11]) =  map(1,['11']);
+map(1,[11]) =  map(1,['11'])
+1
+select map(1,[11,22,33],2,[44]) =  map(1,[11,22,33], 2,[44]);
+map(1,[11,22,33],2,[44]) =  map(1,[11,22,33], 2,[44])
+1
+select map(1,[11,22,33],2,[44]) !=  map(1,[11,22,33], 2,[44]);
+map(1,[11,22,33],2,[44]) !=  map(1,[11,22,33], 2,[44])
+0
+select map(1,[11,22,33],2,[44]) =  map(1,[11,22,'33'], 2.00,[44.0]);
+map(1,[11,22,33],2,[44]) =  map(1,[11,22,'33'], 2.00,[44.0])
+1
+select map(1,[[11,22,33]],2,[[44],NULL]) =  map(1,[[11,22,'33']], 2.00,[[44.0],NULL]);
+map(1,[[11,22,33]],2,[[44],NULL]) =  map(1,[[11,22,'33']], 2.00,[[44.0],NULL])
+1
+select map(1,[[11,22,33]],2,[[44],NULL]) !=  map(1,[[11,22,'33']], 2.00,[[44.0],NULL]);
+map(1,[[11,22,33]],2,[[44],NULL]) !=  map(1,[[11,22,'33']], 2.00,[[44.0],NULL])
+0
+select map(1,[[11,22,33]],2,[[44]]) =  map(1,[[11,22,'33']], 2.00,[[44.0],NULL]);
+map(1,[[11,22,33]],2,[[44]]) =  map(1,[[11,22,'33']], 2.00,[[44.0],NULL])
+0
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+insert into t1 values (3, NULL, NULL, NULL, NULL);
+alter table t1 add c11 map(int, array(int)) first;
+alter table t1 add c12 map(int, array(int)) after c2;
+alter table t1 add c13 map(int, array(int)) before c2;
+alter table t1 add c14 INT AUTO_INCREMENT;
+alter table t1 add c15 map(int, int) as (concat('{', id, ':', id, '}'));
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c11	MAP(INT,ARRAY(INT))	YES		NULL
+id	int(11)	NO	PRI	NULL
+c1	ARRAY(INT)	YES		NULL
+c13	MAP(INT,ARRAY(INT))	YES		NULL
+c2	MAP(INT,INT)	YES		NULL
+c12	MAP(INT,ARRAY(INT))	YES		NULL
+c3	float	YES		NULL
+c4	json	YES		NULL
+c14	int(11)	NO		NULL	auto_increment
+c15	MAP(INT,INT)	YES		concat('{',`id`,':',`id`,'}')	VIRTUAL GENERATED
+insert into t1(c11,id,c1,c13,c2,c12,c3,c4,c14) values ('{1:[1]}', 4, [1], '{1:[1]}', '{1:1}', '{1:[1]}', 1.1, '{"1":1}', 1);
+insert into t1(c11,id,c1,c13,c2,c12,c3,c4,c14) values ('{2:[2]}', 5, [2], '{2:[2]}', '{2:2}', '{2:[2]}', 2.2, '{"2":2}', 2);
+select * from t1;
+c11	id	c1	c13	c2	c12	c3	c4	c14	c15
+NULL	1	[1,2]	NULL	{1:11,2:22}	NULL	1.1	{"1": 11, "2": 22}	1	{1:1}
+NULL	2	[]	NULL	{}	NULL	0	{}	2	{2:2}
+NULL	3	NULL	NULL	NULL	NULL	NULL	NULL	3	{3:3}
+{1:[1]}	4	[1]	{1:[1]}	{1:1}	{1:[1]}	1.1	{"1": 1}	1	{4:4}
+{2:[2]}	5	[2]	{2:[2]}	{2:2}	{2:[2]}	2.2	{"2": 2}	2	{5:5}
+alter table t1 add column c21 char(10) default ' ';
+alter table t1 add column c22 smallint first;
+alter table t1 add column c23 tinyint before c1;
+alter table t1 add column c24 bigint after c2;
+alter table t1 drop c11, add c25 char(10) default 'a';
+alter table t1 add column c26 int not null, add column c27 int;
+alter table t1 add column c28 int as (c27 + 1);
+ALTER TABLE t1 ADD COLUMN c29 int AS (c27 + 3) STORED;
+insert into t1(c22, id, c23, c1, c13, c2, c24, c12, c3, c4, c14, c21, c25, c26, c27) values (1, 6, 1, [1], '{1:[1]}', '{1:1}', 1, '{1:[1]}', 1.1, '{"1":1}', 1, '1', '1', 1, 1);
+insert into t1(c22, id, c23, c1, c13, c2, c24, c12, c3, c4, c14, c21, c25, c26, c27) values (2, 7, 2, [2], '{2:[2]}', '{2:2}', 2, '{2:[2]}', 2.2, '{"2":2}', 2, '2', '2', 2, 2);
+select * from t1;
+c22	id	c23	c1	c13	c2	c24	c12	c3	c4	c14	c15	c21	c25	c26	c27	c28	c29
+NULL	1	NULL	[1,2]	NULL	{1:11,2:22}	NULL	NULL	1.1	{"1": 11, "2": 22}	1	{1:1}		a	0	NULL	NULL	NULL
+NULL	2	NULL	[]	NULL	{}	NULL	NULL	0	{}	2	{2:2}		a	0	NULL	NULL	NULL
+NULL	3	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	3	{3:3}		a	0	NULL	NULL	NULL
+NULL	4	NULL	[1]	{1:[1]}	{1:1}	NULL	{1:[1]}	1.1	{"1": 1}	1	{4:4}		a	0	NULL	NULL	NULL
+NULL	5	NULL	[2]	{2:[2]}	{2:2}	NULL	{2:[2]}	2.2	{"2": 2}	2	{5:5}		a	0	NULL	NULL	NULL
+1	6	1	[1]	{1:[1]}	{1:1}	1	{1:[1]}	1.1	{"1": 1}	1	{6:6}	1	1	1	1	2	4
+2	7	2	[2]	{2:[2]}	{2:2}	2	{2:[2]}	2.2	{"2": 2}	2	{7:7}	2	2	2	2	3	5
+alter table t1 add column c31 map(int, int) not null;
+ERROR 22004: Invalid use of NULL value
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+alter table t1 modify c3 float not null;
+alter table t1 modify c2 map(int,int) not null;
+ERROR 22004: Invalid use of NULL value
+desc t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO	PRI	NULL
+c1	ARRAY(INT)	YES		NULL
+c2	MAP(INT,INT)	YES		NULL
+c3	float	NO		NULL
+c4	json	YES		NULL
+select * from t1;
+id	c1	c2	c3	c4
+1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
+2	[]	{}	0	{}
+alter table t1 modify c3 int;
+alter table t1 modify c2 map(float,float);
+select * from t1;
+id	c1	c2	c3	c4
+1	[1,2]	{1:11,2:22}	1	{"1": 11, "2": 22}
+2	[]	{}	0	{}
+alter table t1 modify c3 bigint before c2;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO	PRI	NULL
+c1	ARRAY(INT)	YES		NULL
+c3	bigint(20)	YES		NULL
+c2	MAP(FLOAT,FLOAT)	YES		NULL
+c4	json	YES		NULL
+select * from t1;
+id	c1	c3	c2	c4
+1	[1,2]	1	{1:11,2:22}	{"1": 11, "2": 22}
+2	[]	0	{}	{}
+alter table t1 modify id int before c3;
+alter table t1 modify c3 bigint first;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c3	bigint(20)	YES		NULL
+c1	ARRAY(INT)	YES		NULL
+id	int(11)	NO	PRI	NULL
+c2	MAP(FLOAT,FLOAT)	YES		NULL
+c4	json	YES		NULL
+select * from t1;
+c3	c1	id	c2	c4
+1	[1,2]	1	{1:11,2:22}	{"1": 11, "2": 22}
+0	[]	2	{}	{}
+alter table t1 modify c3 int unsigned not null auto_increment;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c3	int(10) unsigned	NO		NULL	auto_increment
+c1	ARRAY(INT)	YES		NULL
+id	int(11)	NO	PRI	NULL
+c2	MAP(FLOAT,FLOAT)	YES		NULL
+c4	json	YES		NULL
+select * from t1;
+c3	c1	id	c2	c4
+1	[1,2]	1	{1:11,2:22}	{"1": 11, "2": 22}
+2	[]	2	{}	{}
+insert into t1 values (1,[1],3,'{1:1}','{"1":1}');
+insert into t1 values (2,[2],4,'{2:2}','{"2":2}');
+select * from t1;
+c3	c1	id	c2	c4
+1	[1,2]	1	{1:11,2:22}	{"1": 11, "2": 22}
+2	[]	2	{}	{}
+1	[1]	3	{1:1}	{"1": 1}
+2	[2]	4	{2:2}	{"2": 2}
+alter table t1 change c3 c3 bigint;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c3	bigint(20)	YES		NULL
+c1	ARRAY(INT)	YES		NULL
+id	int(11)	NO	PRI	NULL
+c2	MAP(FLOAT,FLOAT)	YES		NULL
+c4	json	YES		NULL
+alter table t1 change id id varchar(128);
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c3	bigint(20)	YES		NULL
+c1	ARRAY(INT)	YES		NULL
+id	varchar(128)	NO	PRI	NULL
+c2	MAP(FLOAT,FLOAT)	YES		NULL
+c4	json	YES		NULL
+alter table t1 change id id bigint before c3;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+id	bigint(20)	NO	PRI	NULL
+c3	bigint(20)	YES		NULL
+c1	ARRAY(INT)	YES		NULL
+c2	MAP(FLOAT,FLOAT)	YES		NULL
+c4	json	YES		NULL
+alter table t1 change id id int after c4;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c3	bigint(20)	YES		NULL
+c1	ARRAY(INT)	YES		NULL
+c2	MAP(FLOAT,FLOAT)	YES		NULL
+c4	json	YES		NULL
+id	int(11)	NO	PRI	NULL
+drop table t1;
+create table t1(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), c5 map(int,int), c6 json) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (2, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+alter table t1 modify c1 tinyint;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c1	tinyint(4)	NO	PRI	NULL
+c2	VECTOR(3)	YES		NULL
+c3	varchar(10)	YES		NULL
+c4	int(11)	YES		NULL
+c5	MAP(INT,INT)	YES		NULL
+c6	json	YES		NULL
+alter table t1 modify c3 varchar(5) charset 'gbk';
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c1	tinyint(4)	NO	PRI	NULL
+c2	VECTOR(3)	YES		NULL
+c3	varchar(5)	YES		NULL
+c4	int(11)	YES		NULL
+c5	MAP(INT,INT)	YES		NULL
+c6	json	YES		NULL
+alter table t1 modify c3 char(8) , add c7 int, drop column c6;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c1	tinyint(4)	NO	PRI	NULL
+c2	VECTOR(3)	YES		NULL
+c3	char(8)	YES		NULL
+c4	int(11)	YES		NULL
+c5	MAP(INT,INT)	YES		NULL
+c7	int(11)	YES		NULL
+select * from t1;
+c1	c2	c3	c4	c5	c7
+1	[1,1,1]	1	1	{1:1}	NULL
+2	[2,2,2]	2	2	{2:2}	NULL
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+alter table t1 drop primary key;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO		NULL
+c1	ARRAY(INT)	YES		NULL
+c2	MAP(INT,INT)	YES		NULL
+c3	float	YES		NULL
+c4	json	YES		NULL
+alter table t1 drop column c3;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO		NULL
+c1	ARRAY(INT)	YES		NULL
+c2	MAP(INT,INT)	YES		NULL
+c4	json	YES		NULL
+alter table t1 drop column c2;
+desc t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO		NULL
+c1	ARRAY(INT)	YES		NULL
+c4	json	YES		NULL
+select * from t1;
+id	c1	c4
+1	[1,2]	{"1": 11, "2": 22}
+2	[]	{}
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+alter table t1 add constraint cst1 unique (c3);
+alter table t1 add constraint cst2 check (c2 = '{1:11,2:22}');
+insert into t1 values (2, [1,2], '{1:11}', 1.1, '{"1":11,"2":22}');
+ERROR HY000: check constraint violated
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+alter table t1 add index idx1(c2);
+ERROR 0A000: create index on vector column is not supported
+alter table t1 add index idx1(c3);
+insert into t1 values (3, [1,1], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+create index idx2 on t1(c2);
+ERROR 0A000: create index on vector or array column is not supported
+create index idx2 on t1(c3);
+insert into t1 values (4, [1,1], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+select * from t1;
+id	c1	c2	c3	c4
+1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
+2	[]	{}	0	{}
+3	[1,1]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
+4	[1,1]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
+alter table t1 drop index idx1;
+drop index idx2 on t1;
+drop table t1;
+create table t1 (id int, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+alter table t1 modify id int primary key;
+select * from t1;
+id	c1	c2	c3	c4
+1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
+2	[]	{}	0	{}
+drop table t1;
+create table t1 (id int, c1 array(int), c2 map(int,int), c3 float, c4 json);
+alter table t1 add primary key(id);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+select * from t1;
+id	c1	c2	c3	c4
+1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
+2	[]	{}	0	{}
+drop table t1;
+create table t1(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), c5 map(int,int), c6 json) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (2, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+alter table t1 truncate partition p0,p1;
+select * from t1;
+c1	c2	c3	c4	c5	c6
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (20, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+alter table t1 drop partition p0;
+select * from t1;
+c1	c2	c3	c4	c5	c6
+20	[2,2,2]	2	2	{2:2}	{"2": 2}
+drop table t1;
+create table t1(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), c5 map(int,int), c6 json) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (20, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+insert into t1 value (300, [3,3,3], '3', 3, '{3:3}', '{"3":3}');
+ERROR HY000: Table has no partition for value
+alter table t1 add partition (partition p2 values less than (1000));
+insert into t1 value (300, [3,3,3], '3', 3, '{3:3}', '{"3":3}');
+select * from t1;
+c1	c2	c3	c4	c5	c6
+1	[1,1,1]	1	1	{1:1}	{"1": 1}
+20	[2,2,2]	2	2	{2:2}	{"2": 2}
+300	[3,3,3]	3	3	{3:3}	{"3": 3}
+insert into t1 value (4000, [4,4,4], '4', 4, '{4:4}', '{"4":4}');
+ERROR HY000: Table has no partition for value
+alter table t1 partition by range(c1) (partition p3 values less than (10000));
+insert into t1 value (4000, [4,4,4], '4', 4, '{4:4}', '{"4":4}');
+select * from t1;
+c1	c2	c3	c4	c5	c6
+1	[1,1,1]	1	1	{1:1}	{"1": 1}
+20	[2,2,2]	2	2	{2:2}	{"2": 2}
+300	[3,3,3]	3	3	{3:3}	{"3": 3}
+4000	[4,4,4]	4	4	{4:4}	{"4": 4}
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+create materialized view mv1 refresh complete on demand  as select id,c1,c2,c3,c4 from t1 ;
+CREATE INDEX idx ON mv1 (c3);
+CREATE INDEX idx ON mv1 (c2);
+ERROR 0A000: create index on vector or array column is not supported
+CREATE VECTOR INDEX idx ON mv1 (c2);
+ERROR 0A000: Not supported feature or function
+desc mv1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	YES		NULL
+c1	ARRAY(INT)	YES		NULL
+c2	MAP(INT,INT)	YES		NULL
+c3	float	YES	MUL	NULL
+c4	json	YES		NULL
+select * from mv1;
+id	c1	c2	c3	c4
+1	[1,2]	{1:11,2:22}	1.1	{"1": 11, "2": 22}
+2	[]	{}	0	{}
+drop table t1;
+drop  materialized view mv1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+create materialized view mv1(primary key(c2)) refresh complete on demand  as select c1,c2 from t1 ;
+ERROR 42000: The used storage engine can't index column 'c2'
+create materialized view mv1(primary key(id)) refresh complete on demand  as select id,c1,c2 from t1 ;
+desc mv1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO	PRI	NULL
+c1	ARRAY(INT)	YES		NULL
+c2	MAP(INT,INT)	YES		NULL
+select * from mv1;
+id	c1	c2
+1	[1,2]	{1:11,2:22}
+2	[]	{}
+drop table t1;
+drop  materialized view mv1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+create view v1 as select * from t1;
+insert into v1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into v1 values (2, '[]', '{}', 0, '{}');
+CREATE VECTOR INDEX idx ON v1 (c2);
+ERROR 0A000: Not supported feature or function
+CREATE INDEX idx ON v1 (c2);
+ERROR 0A000: create index on vector or array column is not supported
+CREATE INDEX idx ON v1 (c3);
+ERROR HY000: 'test.v1' is not BASE_TABLE
+CREATE VECTOR INDEX idx ON v1 (c3);
+ERROR HY000: Column 'c3' cannot be part of VECTOR index
+drop table t1;
+drop view v1;
+create table t1(c1 int, c2 vector(3), c3 map(int,int), primary key(c1)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+create table t2(c1 int, c2 vector(3), c3 map(int,int), primary key(c1));
+insert into t1 values (1, [1,1,1], map(1,1));
+insert into t1 values (2, [2,2,2], map(2,2));
+alter table t1 exchange partition p0 with table t2 without validation;
+select * from t1;
+c1	c2	c3
+select * from t2;
+c1	c2	c3
+1	[1,1,1]	{1:1}
+2	[2,2,2]	{2:2}
+drop table t1, t2;
+create table t1 (id int primary key not null auto_increment, m1 map(int, int), m2 map(varchar(20),array(varchar(20))), m3 map(float, array(array(int))))
+PARTITION BY LIST(id) (PARTITION p0 VALUES IN (1,2), PARTITION p1 VALUES IN (3,4), PARTITION p2 VALUES IN (DEFAULT));
+insert into t1 values (1, '{1:11,2:22}', '{"a1":["hi1","hello"], "b1":["ocean1","base"]}', '{1.11:[[11],[2]], 2.21:[[1,2]]}');
+insert into t1 values (2, '{1:12,2:23}', '{"a2":["hi2","hello"], "b2":["ocean2","base"]}', '{1.12:[[12],[2]], 2.22:[[1,2]]}');
+insert into t1 values (3, '{1:12,2:24}', '{"a2":["hi3","hello"], "b3":["ocean2","base"]}', '{1.13:[[13],[2]], 2.23:[[1,2]]}');
+insert into t1 values (4, '{1:13,2:25}', '{"a3":["hi4","hello"], "b4":["ocean3","base"]}', '{1.14:[[14],[2]], 2.24:[[1,2]]}');
+insert into t1 values (5, '{1:14,2:26}', '{"a4":["hi5","hello"], "b5":["ocean5","base"]}', '{1.15:[[15],[2]], 2.25:[[1,2]]}');
+select * from t1 order by id;
+id	m1	m2	m3
+1	{1:11,2:22}	{"a1":["hi1","hello"],"b1":["ocean1","base"]}	{1.11:[[11],[2]],2.21:[[1,2]]}
+2	{1:12,2:23}	{"a2":["hi2","hello"],"b2":["ocean2","base"]}	{1.12:[[12],[2]],2.22:[[1,2]]}
+3	{1:12,2:24}	{"a2":["hi3","hello"],"b3":["ocean2","base"]}	{1.13:[[13],[2]],2.23:[[1,2]]}
+4	{1:13,2:25}	{"a3":["hi4","hello"],"b4":["ocean3","base"]}	{1.14:[[14],[2]],2.24:[[1,2]]}
+5	{1:14,2:26}	{"a4":["hi5","hello"],"b5":["ocean5","base"]}	{1.15:[[15],[2]],2.25:[[1,2]]}
+CREATE TABLE t2(id int, m1 map(TINYINT, TINYINT), m2 map(varchar(10),array(varchar(10))), m3 map(double, array(array(SMALLINT))));
+INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+SELECT * from t2;
+id	m1	m2	m3
+1	{1:11,2:22}	{"a1":["hi1","hello"],"b1":["ocean1","base"]}	{1.1100000143051147:[[11],[2]],2.2100000381469727:[[1,2]]}
+2	{1:12,2:23}	{"a2":["hi2","hello"],"b2":["ocean2","base"]}	{1.1200000047683716:[[12],[2]],2.2200000286102295:[[1,2]]}
+3	{1:12,2:24}	{"a2":["hi3","hello"],"b3":["ocean2","base"]}	{1.1299999952316284:[[13],[2]],2.2300000190734863:[[1,2]]}
+4	{1:13,2:25}	{"a3":["hi4","hello"],"b4":["ocean3","base"]}	{1.1399999856948853:[[14],[2]],2.240000009536743:[[1,2]]}
+5	{1:14,2:26}	{"a4":["hi5","hello"],"b5":["ocean5","base"]}	{1.149999976158142:[[15],[2]],2.25:[[1,2]]}
+ALTER TABLE t1 DROP PARTITION p0;
+ALTER TABLE t1 TRUNCATE PARTITION p1;
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `m1` MAP(INT,INT) DEFAULT NULL,
+  `m2` MAP(VARCHAR(20),ARRAY(VARCHAR(20))) DEFAULT NULL,
+  `m3` MAP(FLOAT,ARRAY(ARRAY(INT))) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX AUTO_INCREMENT = 6 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by list(id)
+(partition `p1` values in (3,4),
+partition `p2` values in (DEFAULT))
+select * from t1 order by id;
+id	m1	m2	m3
+5	{1:14,2:26}	{"a4":["hi5","hello"],"b5":["ocean5","base"]}	{1.15:[[15],[2]],2.25:[[1,2]]}
+insert into t1 values (1, '{1:11,2:22}', '{"a1":["hi1","hello"], "b1":["ocean1","base"]}', '{1.11:[[11],[2]], 2.21:[[1,2]]}');
+insert into t1 values (3, '{1:12,2:24}', '{"a2":["hi3","hello"], "b3":["ocean2","base"]}', '{1.13:[[13],[2]], 2.23:[[1,2]]}');
+select * from t1 order by id;
+id	m1	m2	m3
+1	{1:11,2:22}	{"a1":["hi1","hello"],"b1":["ocean1","base"]}	{1.11:[[11],[2]],2.21:[[1,2]]}
+3	{1:12,2:24}	{"a2":["hi3","hello"],"b3":["ocean2","base"]}	{1.13:[[13],[2]],2.23:[[1,2]]}
+5	{1:14,2:26}	{"a4":["hi5","hello"],"b5":["ocean5","base"]}	{1.15:[[15],[2]],2.25:[[1,2]]}
+drop table t1, t2;
+drop table if exists test;
+create table test (id int, m map(float, float), f float, d double);
+insert into test values (1, '{1e10:1e10}', 1e10, 1e10);
+insert into test values (2, '{1E+1:1E+1}', 1E+1, 1E+1);
+insert into test values (3, '{-1E-10:-1E-10}', -1E-10, -1E-10);
+insert into test values (4, '{3.402823466E+38:3.402823466E+38}', 3.402823466E+38, -1.7976931348623157E+308);
+insert into test values (5, '{1.175494351E-38:1.175494351E-38}', 1.175494351E-38, 2.2250738585072014E-308);
+select * from test;
+id	m	f	d
+1	{10000000000:10000000000}	10000000000	10000000000
+2	{10:10}	10	10
+3	{-0.0000000001:-0.0000000001}	-0.0000000001	-0.0000000001
+4	{3.40282e38:3.40282e38}	3.40282e38	-1.7976931348623157e308
+5	{1.17549e-38:1.17549e-38}	1.17549e-38	2.2250738585072014e-308
+select map(f,f), map(d,d) from test;
+map(f,f)	map(d,d)
+{10000000000:10000000000}	{10000000000:10000000000}
+{10:10}	{10:10}
+{-0.0000000001:-0.0000000001}	{-0.0000000001:-0.0000000001}
+{3.40282e38:3.40282e38}	{-1.7976931348623157e308:-1.7976931348623157e308}
+{1.17549e-38:1.17549e-38}	{2.2250738585072014e-308:2.2250738585072014e-308}
+drop table test;
+SELECT CASE WHEN map(1,1)=map(1,1)   THEN map(1,1) ELSE map(1,2) END;
+CASE WHEN map(1,1)=map(1,1)   THEN map(1,1) ELSE map(1,2) END
+{1:1}
+SELECT CASE WHEN map(1,1)!=map(1,1)   THEN map(1,1) ELSE map(1,2) END;
+CASE WHEN map(1,1)!=map(1,1)   THEN map(1,1) ELSE map(1,2) END
+{1:2}
+SELECT CASE WHEN 1=2  THEN 1 ELSE map(1,2) END;
+ERROR HY000: Invalid argument
+SELECT CASE WHEN 1=1  THEN 1 ELSE map(1,2) END;
+ERROR HY000: Invalid argument
+SELECT CASE WHEN 1=2  THEN map(1,1) ELSE map(1,[2]) END;
+ERROR 22000: array type mismatch found between definition and data
+SELECT CASE WHEN 1=1  THEN map(1,1) ELSE map(1,[2]) END;
+ERROR 22000: array type mismatch found between definition and data
+SELECT CASE WHEN 1=2  THEN map(1,[1]) ELSE map(1,2) END;
+ERROR 22000: array type mismatch found between definition and data
+SELECT CASE WHEN 1=2  THEN map(1,[1]) ELSE map(1,2) END;
+ERROR 22000: array type mismatch found between definition and data

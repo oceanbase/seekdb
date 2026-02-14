@@ -1,0 +1,446 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table并行fork和链式fork测试（并行fork、链式fork A -> B -> C）
+##tags: fork_table parallel chain
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_chain;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_chain;
+use db_fork_chain;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo # 启用debug sync
+connection obsys;
+alter system set debug_sync_timeout = '60s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+connection default;
+
+--echo ============================================
+--echo 1. 基本链式Fork（A -> B -> C）
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork1;
+drop table if exists t1_fork2;
+
+create table t1 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t1 values (1, 'Original', 100);
+insert into t1 values (101, 'Original2', 200);
+
+--echo # 第一次Fork: t1 -> t1_fork1
+fork table t1 to t1_fork1;
+
+--echo # 验证第一次Fork
+select * from t1_fork1 order by id;
+
+--echo # 在源表中插入数据
+insert into t1 values (50, 'Source_After_Fork1', 300);
+
+--echo # 第二次Fork: t1_fork1 -> t1_fork2
+fork table t1_fork1 to t1_fork2;
+
+--echo # 验证第二次Fork
+select * from t1_fork2 order by id;
+
+--echo # 验证各表数据
+select 't1' as table_name, * from t1 order by id;
+select 't1_fork1' as table_name, * from t1_fork1 order by id;
+select 't1_fork2' as table_name, * from t1_fork2 order by id;
+
+--echo # 等待所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 再次验证各表数据（fork任务完全完成后）
+select 't1' as table_name, * from t1 order by id;
+select 't1_fork1' as table_name, * from t1_fork1 order by id;
+select 't1_fork2' as table_name, * from t1_fork2 order by id;
+
+--echo ============================================
+--echo 2. 链式Fork数据隔离测试
+--echo ============================================
+
+--echo # 在源表中修改数据
+update t1 set value = 1000 where id = 1;
+insert into t1 values (150, 'Source_New', 400);
+
+--echo # 在第一次Fork表中修改数据
+update t1_fork1 set value = 2000 where id = 1;
+insert into t1_fork1 values (75, 'Fork1_New', 500);
+
+--echo # 在第二次Fork表中修改数据
+update t1_fork2 set value = 3000 where id = 1;
+insert into t1_fork2 values (25, 'Fork2_New', 600);
+
+--echo # 验证各表数据独立
+select 't1' as table_name, * from t1 order by id;
+select 't1_fork1' as table_name, * from t1_fork1 order by id;
+select 't1_fork2' as table_name, * from t1_fork2 order by id;
+
+--echo ============================================
+--echo 3. 链式Fork快照版本验证
+--echo ============================================
+
+drop table if exists t2;
+drop table if exists t2_fork1;
+drop table if exists t2_fork2;
+
+create table t2 (
+    id int primary key,
+    name varchar(50),
+    value int
+);
+
+insert into t2 values (1, 'Snapshot1', 100);
+
+--echo # 第一次Fork
+fork table t2 to t2_fork1;
+
+--echo # 修改源表
+update t2 set name = 'Snapshot1_Modified', value = 200;
+insert into t2 values (2, 'Snapshot2', 300);
+
+--echo # 第二次Fork（从第一次Fork表）
+fork table t2_fork1 to t2_fork2;
+
+--echo # 验证快照版本
+--echo # t2应该包含所有数据
+select * from t2 order by id;
+
+--echo # t2_fork1应该包含Fork1时刻的快照
+select * from t2_fork1 order by id;
+
+--echo # t2_fork2应该包含Fork2时刻的快照（与t2_fork1相同）
+select * from t2_fork2 order by id;
+
+--echo # 等待所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 再次验证快照版本（fork任务完全完成后）
+select * from t2 order by id;
+select * from t2_fork1 order by id;
+select * from t2_fork2 order by id;
+
+
+--disable_parsing
+TODO(fankun.fan): fixed later
+
+--echo ============================================
+--echo 4. 链式Fork与Copy-on-write
+--echo ============================================
+
+drop table if exists t3;
+drop table if exists t3_fork1;
+drop table if exists t3_fork2;
+
+create table t3 (
+    id int primary key,
+    name varchar(50),
+    large_data text
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+--echo # 插入大量数据
+insert into t3 values (1, 'Data1', repeat('X', 10000));
+insert into t3 values (101, 'Data2', repeat('Y', 10000));
+
+--echo # 第一次Fork
+fork table t3 to t3_fork1;
+
+--echo # 第二次Fork
+fork table t3_fork1 to t3_fork2;
+
+--echo # 验证数据完整性
+select id, name, length(large_data) as data_len from t3 order by id;
+select id, name, length(large_data) as data_len from t3_fork1 order by id;
+select id, name, length(large_data) as data_len from t3_fork2 order by id;
+
+--echo # 修改不同Fork表的数据（验证Copy-on-write）
+update t3_fork1 set large_data = repeat('Z', 10000) where id = 1;
+update t3_fork2 set large_data = repeat('W', 10000) where id = 1;
+
+--echo # 验证修改隔离
+select id, name, substring(large_data, 1, 10) as data_preview from t3 where id = 1;
+select id, name, substring(large_data, 1, 10) as data_preview from t3_fork1 where id = 1;
+select id, name, substring(large_data, 1, 10) as data_preview from t3_fork2 where id = 1;
+
+--echo # 等待所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 再次验证数据完整性和修改隔离（fork任务完全完成后）
+select id, name, length(large_data) as data_len from t3 order by id;
+select id, name, length(large_data) as data_len from t3_fork1 order by id;
+select id, name, length(large_data) as data_len from t3_fork2 order by id;
+select id, name, substring(large_data, 1, 10) as data_preview from t3 where id = 1;
+select id, name, substring(large_data, 1, 10) as data_preview from t3_fork1 where id = 1;
+select id, name, substring(large_data, 1, 10) as data_preview from t3_fork2 where id = 1;
+
+--enable_parsing
+
+--echo ============================================
+--echo 5. 链式Fork与索引
+--echo ============================================
+
+drop table if exists t4;
+drop table if exists t4_fork1;
+drop table if exists t4_fork2;
+
+create table t4 (
+    id int primary key,
+    name varchar(50),
+    email varchar(100),
+    index idx_name(name),
+    index idx_email(email)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t4 values (1, 'Alice', 'alice@example.com');
+insert into t4 values (101, 'Bob', 'bob@example.com');
+
+--echo # 第一次Fork
+fork table t4 to t4_fork1;
+
+--echo # 第二次Fork
+fork table t4_fork1 to t4_fork2;
+
+--echo # 验证索引结构
+show index from t4;
+show index from t4_fork1;
+show index from t4_fork2;
+
+--echo # 验证索引查询
+select * from t4_fork1 where name = 'Alice';
+select * from t4_fork2 where name = 'Alice';
+
+--echo # 等待所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 再次验证索引结构和查询（fork任务完全完成后）
+show index from t4;
+show index from t4_fork1;
+show index from t4_fork2;
+select * from t4_fork1 where name = 'Alice';
+select * from t4_fork2 where name = 'Alice';
+
+--echo ============================================
+--echo 6. 并行Fork测试 - 从同一个源表并行fork多个表
+--echo ============================================
+
+drop table if exists t5;
+drop table if exists t5_fork1;
+drop table if exists t5_fork2;
+
+create table t5 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+--echo # 插入初始数据
+insert into t5 values (1, 'Parallel_Data1', 100);
+insert into t5 values (101, 'Parallel_Data2', 200);
+
+--echo # 设置debug sync信号，让所有fork操作都卡在BUILD_DATA阶段
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for parallel_fork_signal execute 10000';
+sleep 2;
+connection default;
+
+--echo # 顺序执行fork命令（都会在BUILD_DATA阶段暂停，模拟并行）
+fork table t5 to t5_fork1;
+
+fork table t5 to t5_fork2;
+
+--echo # 等待所有fork操作都进入BUILD_DATA阶段
+let $wait_status= BUILD_DATA;
+let $wait_task_cnt = 2;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证所有fork任务都卡在BUILD_DATA阶段
+select count(*) as parallel_fork_count
+from oceanbase.__all_virtual_ddl_task_status
+where ddl_type = 10009;
+
+--echo # 显示所有fork任务的详细信息
+select ddl_type, status
+from oceanbase.__all_virtual_ddl_task_status
+where ddl_type = 10009;
+
+--echo # 释放所有fork操作，让它们继续执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now broadcast parallel_fork_signal';
+connection default;
+
+--echo # 等待所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证所有fork表的数据完整性
+select 't5_fork1' as table_name, * from t5_fork1 order by id;
+select 't5_fork2' as table_name, * from t5_fork2 order by id;
+
+--echo # 验证源表数据未受影响
+select 't5' as table_name, * from t5 order by id;
+
+--echo # 再次等待确认所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 再次验证所有fork表的数据完整性（fork任务完全完成后）
+select 't5_fork1' as table_name, * from t5_fork1 order by id;
+select 't5_fork2' as table_name, * from t5_fork2 order by id;
+select 't5' as table_name, * from t5 order by id;
+
+--echo ============================================
+--echo 7. 并行Fork数据隔离测试
+--echo ============================================
+
+--echo # 修改源表数据
+update t5 set value = 1000 where id = 1;
+insert into t5 values (50, 'Source_After_Parallel', 300);
+
+--echo # 修改不同fork表的数据（验证数据隔离）
+update t5_fork1 set value = 2000 where id = 1;
+insert into t5_fork1 values (75, 'Fork1_New', 400);
+
+update t5_fork2 set value = 3000 where id = 1;
+insert into t5_fork2 values (80, 'Fork2_New', 500);
+
+--echo # 验证各表数据独立
+select 't5' as table_name, * from t5 order by id;
+select 't5_fork1' as table_name, * from t5_fork1 order by id;
+select 't5_fork2' as table_name, * from t5_fork2 order by id;
+
+--echo ============================================
+--echo 8. 并行Fork和链式Fork组合测试
+--echo ============================================
+
+drop table if exists t6;
+drop table if exists t6_fork1;
+drop table if exists t6_fork2;
+drop table if exists t6_fork1_chain;
+drop table if exists t6_fork2_chain;
+
+create table t6 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t6 values (1, 'Combo_Data1', 100);
+insert into t6 values (101, 'Combo_Data2', 200);
+
+--echo # 设置debug sync信号，让所有fork操作都卡在BUILD_DATA阶段
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for combo_fork_signal execute 10000';
+sleep 2;
+connection default;
+
+--echo # 顺序执行fork命令（都会在BUILD_DATA阶段暂停，模拟并行）
+fork table t6 to t6_fork1;
+
+fork table t6 to t6_fork2;
+
+--echo # 等待所有fork操作都进入BUILD_DATA阶段
+let $wait_status= BUILD_DATA;
+let $wait_task_cnt= 2;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 释放所有fork操作，让它们继续执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now broadcast combo_fork_signal';
+connection default;
+
+--echo # 等待所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证并行fork的结果
+select 't6_fork1' as table_name, * from t6_fork1 order by id;
+select 't6_fork2' as table_name, * from t6_fork2 order by id;
+
+--echo # 从并行fork的结果进行链式fork
+fork table t6_fork1 to t6_fork1_chain;
+fork table t6_fork2 to t6_fork2_chain;
+
+--echo # 等待链式fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证链式fork的结果
+select 't6_fork1_chain' as table_name, * from t6_fork1_chain order by id;
+select 't6_fork2_chain' as table_name, * from t6_fork2_chain order by id;
+
+--echo # 修改源表和各个fork表的数据（验证隔离）
+update t6 set value = 1000 where id = 1;
+update t6_fork1 set value = 2000 where id = 1;
+update t6_fork2 set value = 3000 where id = 1;
+update t6_fork1_chain set value = 4000 where id = 1;
+update t6_fork2_chain set value = 5000 where id = 1;
+
+--echo # 验证各表数据独立
+select 't6' as table_name, * from t6 order by id;
+select 't6_fork1' as table_name, * from t6_fork1 order by id;
+select 't6_fork2' as table_name, * from t6_fork2 order by id;
+select 't6_fork1_chain' as table_name, * from t6_fork1_chain order by id;
+select 't6_fork2_chain' as table_name, * from t6_fork2_chain order by id;
+
+--echo # 再次等待确认所有fork任务完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 再次验证各表数据独立（fork任务完全完成后）
+select 't6' as table_name, * from t6 order by id;
+select 't6_fork1' as table_name, * from t6_fork1 order by id;
+select 't6_fork2' as table_name, * from t6_fork2 order by id;
+select 't6_fork1_chain' as table_name, * from t6_fork1_chain order by id;
+select 't6_fork2_chain' as table_name, * from t6_fork2_chain order by id;
+
+--echo ============================================
+--echo 9. 清理
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork1;
+drop table if exists t1_fork2;
+drop table if exists t2;
+drop table if exists t2_fork1;
+drop table if exists t2_fork2;
+drop table if exists t3;
+drop table if exists t3_fork1;
+drop table if exists t3_fork2;
+drop table if exists t4;
+drop table if exists t4_fork1;
+drop table if exists t4_fork2;
+drop table if exists t5;
+drop table if exists t5_fork1;
+drop table if exists t5_fork2;
+drop table if exists t6;
+drop table if exists t6_fork1;
+drop table if exists t6_fork2;
+drop table if exists t6_fork1_chain;
+drop table if exists t6_fork2_chain;
+drop database if exists db_fork_chain;

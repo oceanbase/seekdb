@@ -1,0 +1,728 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table过程中DDL操作测试（Online DDL和Offline DDL）
+##tags: fork_table ddl online_ddl offline_ddl
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_ddl;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_ddl;
+use db_fork_ddl;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+
+--echo # 启用debug sync
+connection obsys;
+alter system set debug_sync_timeout = '60s';
+--echo # 设置DDL超时为1秒
+alter system set _ob_ddl_timeout = '1s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+connection default;
+
+--echo ============================================
+--echo 1. Fork过程中对源表执行Online DDL - CREATE INDEX
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+
+create table t1 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t1 values (1, 'Data1', 100);
+insert into t1 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for create_index_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t1 to t1_fork;
+
+--echo # 在Fork执行过程中对源表创建索引（应该被阻塞或等待）
+--echo # 注意：根据锁机制，CREATE INDEX需要OnlineDDL锁，可能与Fork Table冲突
+--error 4012
+create index idx_name on t1(name);
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal create_index_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+create index idx_name on t1(name);
+
+--echo # 验证Fork表数据
+connection default;
+select * from t1_fork order by id;
+
+--echo # 验证源表索引是否创建成功
+show indexes from t1;
+
+--echo ============================================
+--echo 2. Fork过程中对源表执行Online DDL - ADD COLUMN
+--echo ============================================
+
+drop table if exists t2;
+drop table if exists t2_fork;
+
+create table t2 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t2 values (1, 'Data1', 100);
+insert into t2 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for add_column_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t2 to t2_fork;
+
+--echo # 在Fork执行过程中对源表添加列（应该被阻塞或等待）
+--error 4012
+alter table t2 add column new_col varchar(50) default 'new';
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal add_column_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+alter table t2 add column new_col varchar(50) default 'new';
+
+--echo # 验证Fork表结构（应该不包含新列）
+connection default;
+show create table t2_fork;
+
+--echo # 验证源表结构（应该包含新列）
+show create table t2;
+
+--echo ============================================
+--echo 3. Fork过程中对源表执行Offline DDL - ADD PARTITION
+--echo ============================================
+
+drop table if exists t3;
+drop table if exists t3_fork;
+
+create table t3 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t3 values (1, 'Data1', 100);
+insert into t3 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for add_partition_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t3 to t3_fork;
+
+--echo # 在Fork执行过程中对源表添加分区（应该被阻塞或等待）
+--echo # 注意：ADD PARTITION需要Table Lock (ROW_EXCLUSIVE)，可能与Fork Table冲突
+--error 4012
+alter table t3 add partition (partition p2 values less than (300));
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal add_partition_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+alter table t3 add partition (partition p2 values less than (300));
+
+--echo # 验证Fork表分区结构（应该不包含新分区）
+connection default;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t3_fork;
+
+--echo # 验证源表分区结构（应该包含新分区）
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t3;
+
+--echo ============================================
+--echo 4. Fork过程中对源表执行Offline DDL - DROP PARTITION
+--echo ============================================
+
+drop table if exists t4;
+drop table if exists t4_fork;
+
+create table t4 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200),
+    partition p2 values less than (300)
+);
+
+insert into t4 values (1, 'Data1', 100);
+insert into t4 values (101, 'Data2', 200);
+insert into t4 values (201, 'Data3', 300);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_partition_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t4 to t4_fork;
+
+--echo # 在Fork执行过程中对源表删除分区（应该被阻塞或等待）
+--error 4012
+alter table t4 drop partition p2;
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal drop_partition_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+alter table t4 drop partition p2;
+
+--echo # 验证Fork表分区结构（应该包含所有分区）
+connection default;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t4_fork;
+
+--echo # 验证源表分区结构（p2应该被删除）
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t4;
+
+--echo ============================================
+--echo 5. Fork过程中对目标表执行Online DDL - CREATE INDEX
+--echo ============================================
+
+drop table if exists t5;
+drop table if exists t5_fork;
+
+create table t5 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t5 values (1, 'Data1', 100);
+insert into t5 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_WAIT_DATA_COMPLEMENT阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for dst_create_index_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令（会在WAIT_DATA_COMPLEMENT阶段暂停，此时目标表已创建）
+fork table t5 to t5_fork;
+
+--echo # 在Fork执行过程中对目标表创建索引（应该被阻塞或等待）
+--error 4012
+create index idx_name on t5_fork(name);
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
+set ob_global_debug_sync = 'now signal dst_create_index_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+create index idx_name on t5_fork(name);
+
+--echo # 验证目标表索引是否创建成功
+connection default;
+show indexes from t5_fork;
+
+--echo ============================================
+--echo 6. Fork过程中对目标表执行Online DDL - ADD COLUMN
+--echo ============================================
+
+drop table if exists t6;
+drop table if exists t6_fork;
+
+create table t6 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t6 values (1, 'Data1', 100);
+insert into t6 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_WAIT_DATA_COMPLEMENT阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for dst_add_column_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t6 to t6_fork;
+
+--echo # 在Fork执行过程中对目标表添加列（应该被阻塞或等待）
+--error 4012
+alter table t6_fork add column new_col varchar(50) default 'new';
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
+set ob_global_debug_sync = 'now signal dst_add_column_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+alter table t6_fork add column new_col varchar(50) default 'new';
+
+--echo # 验证目标表结构（应该包含新列）
+connection default;
+show create table t6_fork;
+
+--echo ============================================
+--echo 7. Fork过程中对源表执行Offline DDL - TRUNCATE TABLE
+--echo ============================================
+
+drop table if exists t7;
+drop table if exists t7_fork;
+
+create table t7 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t7 values (1, 'Data1', 100);
+insert into t7 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for truncate_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t7 to t7_fork;
+
+--echo # 在Fork执行过程中对源表执行TRUNCATE（应该被阻塞或等待）
+--echo # 注意：TRUNCATE TABLE需要EXCLUSIVE锁，应该与Fork Table冲突
+--error 4012
+truncate table t7;
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal truncate_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+truncate table t7;
+
+--echo # 验证Fork表数据（应该包含Fork时的数据快照）
+connection default;
+select * from t7_fork order by id;
+
+--echo # 验证源表数据（如果TRUNCATE成功，应该为空）
+select * from t7 order by id;
+
+--echo ============================================
+--echo 8. Fork过程中对源表执行Online DDL - DROP INDEX
+--echo ============================================
+
+drop table if exists t8;
+drop table if exists t8_fork;
+
+create table t8 (
+    id int primary key,
+    name varchar(50),
+    value int,
+    index idx_name(name)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t8 values (1, 'Data1', 100);
+insert into t8 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_index_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t8 to t8_fork;
+
+--echo # 在Fork执行过程中对源表删除索引（应该被阻塞或等待）
+--error 4012
+drop index idx_name on t8;
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal drop_index_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+drop index idx_name on t8;
+
+--echo # 验证Fork表索引（应该包含索引）
+connection default;
+show indexes from t8_fork;
+
+--echo # 验证源表索引（如果DROP成功，应该不包含idx_name）
+show indexes from t8;
+
+--echo ============================================
+--echo 9. Fork过程中对源表执行Online DDL - MODIFY COLUMN
+--echo ============================================
+
+drop table if exists t9;
+drop table if exists t9_fork;
+
+create table t9 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t9 values (1, 'Data1', 100);
+insert into t9 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for modify_column_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t9 to t9_fork;
+
+--echo # 在Fork执行过程中对源表修改列（应该被阻塞或等待）
+--error 4012
+alter table t9 modify column name varchar(100);
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal modify_column_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+alter table t9 modify column name varchar(100);
+
+--echo # 验证Fork表结构（应该保持原始列定义）
+connection default;
+show create table t9_fork;
+
+--echo # 验证源表结构（如果MODIFY成功，应该包含新列定义）
+show create table t9;
+
+--echo ============================================
+--echo 10. Fork过程中对源表执行Offline DDL - DROP COLUMN
+--echo ============================================
+
+drop table if exists t10;
+drop table if exists t10_fork;
+
+create table t10 (
+    id int primary key,
+    name varchar(50),
+    value int,
+    extra_col varchar(50)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t10 values (1, 'Data1', 100, 'extra1');
+insert into t10 values (101, 'Data2', 200, 'extra2');
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_column_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令
+fork table t10 to t10_fork;
+
+--echo # 在Fork执行过程中对源表删除列（应该被阻塞或等待）
+--error 4012
+alter table t10 drop column extra_col;
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal drop_column_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+alter table t10 drop column extra_col;
+
+--echo # 验证Fork表结构（应该包含所有列）
+connection default;
+show create table t10_fork;
+
+--echo # 验证源表结构（如果DROP成功，应该不包含extra_col）
+show create table t10;
+
+--echo ============================================
+--echo 11. Fork过程中在不同阶段执行DDL - BUILD_DATA阶段
+--echo ============================================
+
+drop table if exists t11;
+drop table if exists t11_fork;
+
+create table t11 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t11 values (1, 'Data1', 100);
+insert into t11 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for snapshot_ddl_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t11 to t11_fork;
+
+--echo # 在Fork执行过程中对源表创建索引
+--error 4012
+create index idx_name on t11(name);
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal snapshot_ddl_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+create index idx_name on t11(name);
+
+--echo # 验证Fork表数据
+connection default;
+select * from t11_fork order by id;
+
+--echo # 验证源表索引
+show indexes from t11;
+
+--echo ============================================
+--echo 12. Fork过程中在不同阶段执行DDL - WAIT_FREEZE_END阶段
+--echo ============================================
+
+drop table if exists t12;
+drop table if exists t12_fork;
+
+create table t12 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t12 values (1, 'Data1', 100);
+insert into t12 values (101, 'Data2', 200);
+
+--echo # 使用debug sync point在FORK_TABLE_WAIT_FREEZE_END阶段暂停
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END wait_for freeze_ddl_signal execute 10000';
+sleep 1;
+connection default;
+
+--echo # 执行Fork命令（会在WAIT_FREEZE_END阶段暂停）
+fork table t12 to t12_fork;
+
+--echo # 在Fork执行过程中对源表添加分区
+--error 4012
+alter table t12 add partition (partition p2 values less than (300));
+
+--echo # 继续Fork执行
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END clear';
+set ob_global_debug_sync = 'now signal freeze_ddl_signal';
+connection default;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # Fork完成后重试DDL（应成功）
+alter table t12 add partition (partition p2 values less than (300));
+
+--echo # 验证Fork表分区结构
+connection default;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t12_fork;
+
+--echo # 验证源表分区结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t12;
+
+--echo ============================================
+--echo 13. Fork完成后对源表和目标表执行DDL（验证隔离）
+--echo ============================================
+
+drop table if exists t13;
+drop table if exists t13_fork;
+
+create table t13 (
+    id int primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t13 values (1, 'Data1', 100);
+insert into t13 values (101, 'Data2', 200);
+
+--echo # Fork表
+fork table t13 to t13_fork;
+
+--echo # 等待Fork完成
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 对源表执行DDL
+alter table t13 add column src_new_col varchar(50) default 'src';
+create index idx_src_name on t13(name);
+
+--echo # 对目标表执行DDL
+alter table t13_fork add column dst_new_col varchar(50) default 'dst';
+create index idx_dst_name on t13_fork(name);
+
+--echo # 验证源表结构
+connection default;
+show create table t13;
+
+--echo # 验证目标表结构
+show create table t13_fork;
+
+--echo # 验证源表索引
+show indexes from t13;
+
+--echo # 验证目标表索引
+show indexes from t13_fork;
+
+--echo ============================================
+--echo 14. 清理
+--echo ============================================
+
+--echo # 恢复_ob_ddl_timeout默认值
+connection obsys;
+alter system set _ob_ddl_timeout = '1000s';
+connection default;
+
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop table if exists t5;
+drop table if exists t5_fork;
+drop table if exists t6;
+drop table if exists t6_fork;
+drop table if exists t7;
+drop table if exists t7_fork;
+drop table if exists t8;
+drop table if exists t8_fork;
+drop table if exists t9;
+drop table if exists t9_fork;
+drop table if exists t10;
+drop table if exists t10_fork;
+drop table if exists t11;
+drop table if exists t11_fork;
+drop table if exists t12;
+drop table if exists t12_fork;
+drop table if exists t13;
+drop table if exists t13_fork;
+drop database if exists db_fork_ddl;

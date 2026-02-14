@@ -36,6 +36,8 @@ public:
   OB_INLINE bool is_memtable_valid() const;
   OB_INLINE const ObDatumRowkey& get_start_key() const { return start_key_; }
   OB_INLINE const ObDatumRowkey& get_end_key() const { return end_key_; }
+  OB_INLINE ObDatumRowkey& get_start_key() { return start_key_; }
+  OB_INLINE ObDatumRowkey& get_end_key() { return end_key_; }
   OB_INLINE const ObBorderFlag& get_border_flag() const { return border_flag_; }
   OB_INLINE void set_inclusive(ObBorderFlag flag) { border_flag_.set_inclusive(flag.get_data()); }
   OB_INLINE void set_border_flag(ObBorderFlag flag) { border_flag_ = flag; }

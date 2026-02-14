@@ -1,0 +1,164 @@
+#owner: lana.lgx
+#owner group: data
+#description: xxx_MVREF_STATS_SYS_DEFAULTS, xxx_MVREF_STATS_PARAMS, xxx_MVREF_RUN_STATS, xxx_MVREF_STATS, xxx_MVREF_CHANGE_STATS, xxx_MVREF_STMT_STATS views
+#tags: mview
+#author: suzhi.yt
+
+connect (sys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection default;
+
+--disable_query_log
+let $current_tenant_id = query_get_value(SELECT effective_tenant_id() x, x, 1);
+use test;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--disable_warnings
+drop table if exists t1;
+drop materialized view if exists mv1;
+drop materialized view if exists mv2;
+drop materialized view if exists mv3;
+--enable_warnings
+--enable_query_log
+
+create table t1(c1 int primary key, c2 int, c3 int, c4 int);
+create materialized view log on t1 with primary key, sequence (c2, c3) including new values;
+create materialized view mv1 refresh fast on demand as select c2 as c2, count(*) cnt, count(c3) cnt_c3, sum(c3) sum_c3 from t1 group by c2;
+create materialized view mv2 as select * from t1;
+create materialized view mv3 as select * from t1;
+call dbms_mview_stats.set_mvref_stats_params('mv1', 'ADVANCED', 31);
+call dbms_mview_stats.set_mvref_stats_params('mv2', 'TYPICAL', 20);
+call dbms_mview_stats.set_mvref_stats_params('mv3', 'NONE', 31);
+
+# xxx_MVREF_STATS_SYS_DEFAULTS
+call dbms_mview_stats.set_system_default('COLLECTION_LEVEL', NULL);
+call dbms_mview_stats.set_system_default('RETENTION_PERIOD', NULL);
+SELECT PARAMETER_NAME,VALUE FROM oceanbase.DBA_MVREF_STATS_SYS_DEFAULTS ORDER BY PARAMETER_NAME;
+connection sys;
+--echo SELECT PARAMETER_NAME,VALUE FROM oceanbase.CDB_MVREF_STATS_SYS_DEFAULTS ORDER BY PARAMETER_NAME;
+--disable_query_log
+eval SELECT PARAMETER_NAME,VALUE FROM oceanbase.CDB_MVREF_STATS_SYS_DEFAULTS WHERE TENANT_ID = $current_tenant_id ORDER BY PARAMETER_NAME;
+--enable_query_log
+connection default;
+
+# xxx_MVREF_STATS_PARAMS
+SELECT MV_OWNER,MV_NAME,COLLECTION_LEVEL,RETENTION_PERIOD FROM oceanbase.DBA_MVREF_STATS_PARAMS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT MV_OWNER,MV_NAME,COLLECTION_LEVEL,RETENTION_PERIOD FROM oceanbase.CDB_MVREF_STATS_PARAMS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT MV_OWNER,MV_NAME,COLLECTION_LEVEL,RETENTION_PERIOD FROM oceanbase.CDB_MVREF_STATS_PARAMS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+
+# xxx_MVREF_RUN_STATS, xxx_MVREF_STATS, xxx_MVREF_CHANGE_STATS, xxx_MVREF_STMT_STATS
+insert into t1 values(1,1,1,1);
+call dbms_mview.refresh('mv1');
+call dbms_mview.refresh('mv2');
+call dbms_mview.refresh('mv3');
+    # xxx_MVREF_RUN_STATS
+SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.DBA_MVREF_RUN_STATS WHERE RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+connection sys;
+--echo SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.CDB_MVREF_RUN_STATS WHERE RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+--disable_query_log
+eval SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.CDB_MVREF_RUN_STATS WHERE TENANT_ID = $current_tenant_id AND RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+--enable_query_log
+connection default;
+    # xxx_MVREF_STATS
+SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.DBA_MVREF_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.CDB_MVREF_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.CDB_MVREF_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+    # xxx_MVREF_CHANGE_STATS
+SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.DBA_MVREF_CHANGE_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.CDB_MVREF_CHANGE_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.CDB_MVREF_CHANGE_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+    # xxx_MVREF_STMT_STATS
+SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.DBA_MVREF_STMT_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.CDB_MVREF_STMT_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.CDB_MVREF_STMT_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+
+drop materialized view mv1;
+    # xxx_MVREF_RUN_STATS
+SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.DBA_MVREF_RUN_STATS WHERE RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+connection sys;
+--echo SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.CDB_MVREF_RUN_STATS WHERE RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+--disable_query_log
+eval SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.CDB_MVREF_RUN_STATS WHERE TENANT_ID = $current_tenant_id AND RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+--enable_query_log
+connection default;
+    # xxx_MVREF_STATS
+SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.DBA_MVREF_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.CDB_MVREF_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.CDB_MVREF_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+    # xxx_MVREF_CHANGE_STATS
+SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.DBA_MVREF_CHANGE_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.CDB_MVREF_CHANGE_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.CDB_MVREF_CHANGE_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+    # xxx_MVREF_STMT_STATS
+SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.DBA_MVREF_STMT_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.CDB_MVREF_STMT_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.CDB_MVREF_STMT_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+
+create materialized view mv1 refresh fast on demand as select c2 as c2, count(*) cnt, count(c3) cnt_c3, sum(c3) sum_c3 from t1 group by c2;
+call dbms_mview_stats.set_mvref_stats_params('mv1', 'ADVANCED', 31);
+call dbms_mview.refresh('mv1');
+    # xxx_MVREF_RUN_STATS
+SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.DBA_MVREF_RUN_STATS WHERE RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+connection sys;
+--echo SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.CDB_MVREF_RUN_STATS WHERE RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+--disable_query_log
+eval SELECT RUN_OWNER,MVIEWS,NUM_MVS FROM oceanbase.CDB_MVREF_RUN_STATS WHERE TENANT_ID = $current_tenant_id AND RUN_OWNER = 'admin' AND MVIEWS IN ('mv1', 'mv2', 'mv3') ORDER BY MVIEWS;
+--enable_query_log
+connection default;
+    # xxx_MVREF_STATS
+SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.DBA_MVREF_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.CDB_MVREF_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT MV_OWNER,MV_NAME,REFRESH_METHOD,INITIAL_NUM_ROWS,FINAL_NUM_ROWS FROM oceanbase.CDB_MVREF_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+    # xxx_MVREF_CHANGE_STATS
+SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.DBA_MVREF_CHANGE_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.CDB_MVREF_CHANGE_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT TBL_OWNER,TBL_NAME,MV_OWNER,MV_NAME,NUM_ROWS_INS,NUM_ROWS_UPD,NUM_ROWS_DEL,NUM_ROWS FROM oceanbase.CDB_MVREF_CHANGE_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+    # xxx_MVREF_STMT_STATS
+SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.DBA_MVREF_STMT_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+connection sys;
+--echo SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.CDB_MVREF_STMT_STATS WHERE MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--disable_query_log
+eval SELECT MV_OWNER,MV_NAME,STEP,SQLID,STMT IS NULL FROM oceanbase.CDB_MVREF_STMT_STATS WHERE TENANT_ID = $current_tenant_id AND MV_OWNER = 'test' AND MV_NAME IN ('mv1', 'mv2', 'mv3') ORDER BY MV_NAME;
+--enable_query_log
+connection default;
+
+drop materialized view log on t1;
+drop table t1;
+drop materialized view mv1;
+drop materialized view mv2;
+drop materialized view mv3;

@@ -1673,11 +1673,12 @@ int ObTabletForkUtil::get_participants(
         ret = OB_STATE_NOT_MATCH;
         LOG_WARN("unexpected table type when collecting fork participants", KR(ret), KPC(table));
       } else {
-        // Filter by fork_snapshot_version: only include sstables with start_scn <= fork_snapshot_version
+        // Filter by fork_snapshot_version: sstable scn_range is (start_scn, end_scn]
+        // If start_scn >= fork_snapshot_version, it contributes no data at the snapshot.
         const int64_t table_start_scn = table->get_start_scn().get_val_for_tx();
-        if (table_start_scn > fork_snapshot_version) {
+        if (table_start_scn >= fork_snapshot_version) {
           ++skip_future_cnt;
-          LOG_DEBUG("fork table: skip sstable with start_scn > fork_snapshot_version",
+          LOG_DEBUG("fork table: skip sstable with start_scn >= fork_snapshot_version",
               K(table_start_scn), K(fork_snapshot_version), KPC(table));
         } else if (OB_FAIL(participants.push_back(table))) {
           LOG_WARN("failed to push back sstable", KR(ret), KPC(table));

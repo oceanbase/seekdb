@@ -1,0 +1,241 @@
+#owner: sean.yyj
+#owner group: sql2
+# tags: optimizer
+#test generated column
+
+--disable_warnings
+drop table if exists t, t1, t2, t3;
+--enable_warnings
+--result_format 4
+
+create table t1(c1 varchar(10) primary key, c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int) partition by key(c2) partitions 5;
+
+
+explain basic  insert into t1 (c1, c3) values('abcde', 10);
+
+insert into t1 (c1, c3) values('abcde', 10);
+
+explain basic select * from t1 where c2 = 'bcde';
+
+select * from t1 where c2 = 'bcde';
+
+explain basic update t1 set c1 = 'ab' where c2 = 'bcde';
+
+update t1 set c1 = 'ab' where c2 = 'bcde';
+
+explain basic update t1 set c1 = 'abcde' where c2 = 'bcde';
+
+update t1 set c1 = 'abcde' where c2 = 'bcde';
+
+explain basic delete from t1 where c2 = 'bcde';
+
+delete from t1 where c2 = 'bcde';
+
+sleep 3;
+select/*+read_consistency(weak)*/ * from t1;
+
+#unique index check
+create table t2(c1 varchar(10) primary key, c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int, unique key t31(c3, c1, c2) local) partition by key(c2) partitions 5;
+
+explain basic insert into t2 (c1, c3) values('bcde', 1);
+
+insert into t2 (c1, c3) values('bcde', 1);
+
+explain basic insert into t2 (c1, c3) values('baaaa', 1);
+
+insert into t2 (c1, c3) values('baaaa', 1);
+
+explain basic select * from t2 where c1 = 'bcde';
+
+select * from t2 where c1 = 'bcde';
+
+explain basic select * from t2 where c2 = 'cde' or c2 = 'aaaa';
+
+select * from t2 where c2 = 'cde' or c2 = 'aaaa';
+
+explain basic select * from t2 where c1 = 'bcde' and (c2 = 'cde' or c2 = 'aaaa');
+
+select * from t2 where c1 = 'bcde' and (c2 = 'cde' or c2 = 'aaaa');
+
+explain basic select * from t2 where c1 = 'baaaa';
+
+select * from t2 where c1 = 'baaaa';
+
+create table t3(c1 varchar(10), c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int, unique key t31(c3, c1, c2) local) partition by key(c2, c3) partitions 5;
+
+explain basic select * from t3 where c1 = 'bcde';
+
+drop table t1, t2, t3;
+
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+create table test(pk1 int, pk2 int, first_name varchar(100), last_name varchar(100), primary key(pk1, pk2));
+insert into test values(1,1, 'first                     1', 'last                    1');
+create index test_index ON test(first_name(10));
+insert into test(pk1,pk2,first_name,last_name) values (1, 1, 'first                     1', 'last                    2') on duplicate key update first_name = 'dtew';
+select * from test;
+drop table test;
+
+--disable_warnings
+drop table if exists test_36;
+--enable_warnings
+create table test_36(pk1 int, pk2 int, first_name varchar(100), last_name varchar(100), primary key(pk1, pk2)) COMPRESSION='zstd_1.0';
+create index test_36_index ON test_36(first_name(10));
+insert into test_36 values(1,1, 'first                     1', 'last                    1');
+Replace into test_36(pk1,pk2,first_name,last_name) values (1, 1, 'first                     1', 'last                    2');
+select * from test_36;
+drop table test_36;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(a int, b varchar(10));
+insert into t1 values(1, '1');
+alter table t1 add column c int as (a*b);
+delete from t1;
+drop table t1;
+
+#生成列做list分区的分区键
+--disable_warnings
+drop table if exists pmt_pay_ord_00;
+--enable_warnings
+create table pmt_pay_ord_00 ( payment_id varchar(32) primary key, apply_id varchar(32), partition_id varchar(2) GENERATED ALWAYS AS (substring(payment_id,14,2)), constraint cst check (partition_id=substring(apply_id,14, 2)) ) partition by list columns (partition_id) ( partition p0 values in ('00'), partition p1 values in ('01'), partition p2 values in ('02'));
+insert into pmt_pay_ord_00(payment_id,apply_id) values('000000000000001','000000000000001');
+select * from pmt_pay_ord_00;
+drop table pmt_pay_ord_00;
+
+--disable_warnings
+drop table if exists base_table_virtual_1;
+--enable_warnings
+create table if not exists base_table_virtual_1( c1 varchar(10) primary key, c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int) partition by key(c2) partitions 5;
+insert into base_table_virtual_1 (c1, c3) values('abcde', 10);
+select * from base_table_virtual_1;
+drop table base_table_virtual_1;
+
+--disable_warnings
+drop database if exists jx_db;
+create database jx_db;
+use jx_db;
+--enable_warnings
+##
+# 【obschema】show tables和建表报-4016
+create table jx_t1(
+    obschema_c_0_S bigint(255) NOT NULL default 3,
+    obschema_c_1_E24tu tinyint(255) NOT NULL default 1,
+    obschema_c_2_JERyw datetime(6) NOT NULL default now(6),
+    obschema_c_3_HsEpzXX varchar(1024) NULL default NULL,
+    obschema_c_4_kJ4j4z year(4) NULL default NULL,
+    obschema_c_5_z varchar(1024) NOT NULL,
+    primary key(obschema_c_0_S,obschema_c_1_E24tu),
+    index obschema_i_0_o(obschema_c_3_HsEpzXX(5),obschema_c_4_kJ4j4z,obschema_c_5_z(213)) LOCAL ,
+    index obschema_i_1_4Q(obschema_c_1_E24tu,obschema_c_2_JERyw,obschema_c_3_HsEpzXX(84),obschema_c_4_kJ4j4z,obschema_c_5_z(183)) LOCAL ) ;
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys;
+select column_id, column_name, orig_default_value, cur_default_value, prev_column_id from oceanbase.__all_virtual_column
+    where table_id in (select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+        where a.table_name = 'jx_t1' and b.database_name='jx_db')
+    order by column_id, prev_column_id;
+select column_id, column_name, orig_default_value, cur_default_value, prev_column_id from oceanbase.__all_virtual_column
+    where table_id in (select table_id from oceanbase.__all_virtual_table
+    where data_table_id in (select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+        where a.table_name = 'jx_t1' and b.database_name='jx_db'))
+    order by column_id, prev_column_id;
+connection default;
+
+alter table jx_t1
+    change column obschema_c_0_S obschema_c_0_AOA0Kr bigint(255) NOT NULL default 3,
+    change column obschema_c_1_E24tu obschema_c_1_WVgnv tinyint(255) NOT NULL default 1,
+    change column obschema_c_2_JERyw obschema_c_2_7 datetime(6) NOT NULL default now(6),
+    change column obschema_c_3_HsEpzXX obschema_c_3_lcWP varchar(1024) NULL default NULL,
+    change column obschema_c_4_kJ4j4z obschema_c_4_U year(4) NULL default NULL,
+    change column obschema_c_5_z obschema_c_5_Oz varchar(1024) NOT NULL;
+connection obsys;
+select column_id, column_name, orig_default_value, cur_default_value, prev_column_id from oceanbase.__all_virtual_column
+    where table_id in (select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+        where a.table_name = 'jx_t1' and b.database_name='jx_db')
+    order by column_id, prev_column_id;
+select column_id, column_name, orig_default_value, cur_default_value, prev_column_id from oceanbase.__all_virtual_column
+    where table_id in (select table_id from oceanbase.__all_virtual_table
+    where data_table_id in (select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+        where a.table_name = 'jx_t1' and b.database_name='jx_db'))
+    order by column_id, prev_column_id;
+connection default;
+
+insert into jx_t1 values(1, 2, '20180415', 'hello', '2018', 'ant');
+desc jx_t1;
+show columns from jx_t1;
+--source mysql_test/include/show_create_table_old_version_replica2.inc
+show create table jx_t1;
+select * from jx_t1;
+select obschema_c_3_lcWP, obschema_c_5_Oz from jx_t1;
+
+# 简化版本case
+create table jx_t2(c1 int, c2 varchar(20), index idx(c2(5)), index idx2(c2(7)));
+alter table jx_t2 change column c2 col2 varchar(20);
+drop index idx on jx_t2;
+connection obsys;
+select column_id, column_name, orig_default_value, cur_default_value, prev_column_id from oceanbase.__all_virtual_column
+    where table_id in (select table_id from oceanbase.__all_virtual_table
+    where data_table_id in (select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+        where a.table_name = 'jx_t2' and b.database_name='jx_db'))
+    order by column_id, prev_column_id;
+connection default;
+
+create table jx_t3(c1 int, c2 varchar(20), c3 char(50), index idx(c2(5)), index idx2(c2(7)));
+alter table jx_t3 add index idx3(c3(20));
+alter table jx_t3 change column c2 col2 varchar(20);
+alter table jx_t3 change column c3 col3 char(50);
+drop index idx on jx_t3;
+drop index idx2 on jx_t3;
+connection obsys;
+select column_id, column_name, orig_default_value, cur_default_value, prev_column_id from oceanbase.__all_virtual_column
+    where table_id in (select table_id from oceanbase.__all_virtual_table
+    where data_table_id in (select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+        where a.table_name = 'jx_t3' and b.database_name='jx_db'))
+    order by column_id, prev_column_id;
+connection default;
+
+#bug
+create table t1(c1 varchar (1000) DEFAULT '', key ic1 (c1(255)));
+connection obsys;
+let $table_id = query_get_value(select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+                                     where a.table_name='t1' and b.database_name='jx_db', table_id, 1);
+let $index_table_id = query_get_value(select table_id from oceanbase.__all_virtual_table where data_table_id=$table_id, table_id, 1);
+--replace_regex /table_id=[0-9]*/table_id= 1111/g
+eval select column_name, orig_default_value, cur_default_value from oceanbase.__all_virtual_column where table_id=$table_id;
+--replace_regex /table_id=[0-9]*/table_id= 1111/g
+eval select column_name, orig_default_value, cur_default_value from oceanbase.__all_virtual_column where table_id=$index_table_id;
+connection default;
+insert into t1 values ('wang');
+select * from t1;
+
+create table t2( c1 varchar (1000) DEFAULT 'wang', c2 int, key ic1 (c1(255)));
+connection obsys;
+let $table_id = query_get_value(select table_id from oceanbase.__all_virtual_table a left join oceanbase.__all_virtual_database b on a.database_id=b.database_id
+                                    where table_name='t2' and b.database_name='jx_db', table_id, 1);
+let $index_table_id = query_get_value(select table_id from oceanbase.__all_virtual_table where data_table_id=$table_id, table_id, 1);
+--replace_regex /table_id=[0-9]*/table_id= 1111/g
+eval select column_name, orig_default_value, cur_default_value from oceanbase.__all_virtual_column where table_id=$table_id;
+--replace_regex /table_id=[0-9]*/table_id= 1111/g
+eval select column_name, orig_default_value, cur_default_value from oceanbase.__all_virtual_column where table_id=$index_table_id;
+connection default;
+insert into t2(c2) values (1);
+select * from t2;
+
+--enable_metadata
+create table t(a varchar(10), c int primary key);
+insert into t(a, c) values(1, 1);
+alter table t add column b binary(10) as (concat(a, '6'));
+select * from t;
+delete from t;
+insert into t(a, c) values(1, 1);
+select * from t;
+delete from t;
+create index t_c on t(c) partition by hash(c) partitions 3;
+insert into t(a, c) values(1, 1);
+select * from t;
+delete from t;
+select * from t;
+drop database jx_db;
+disconnect obsys;

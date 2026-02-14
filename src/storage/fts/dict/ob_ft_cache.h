@@ -89,6 +89,7 @@ public:
     return ret;
   }
 
+  TO_STRING_KV(K_(name), K_(tenant), K_(dict_type), K_(range_id));
 private:
   // to change to name
   uint64_t name_; // when build dict

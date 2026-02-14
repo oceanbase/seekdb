@@ -1,0 +1,84 @@
+drop database if exists db_fork_fts;
+create database db_fork_fts;
+use db_fork_fts;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. Fork Table with Fulltext Index
+============================================
+drop table if exists t_src;
+drop table if exists t_fork;
+create table t_src (
+id int primary key,
+title varchar(128),
+body text,
+fulltext index ft_title(title),
+fulltext index ft_body(body),
+fulltext index ft_all(title, body)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t_src values (1, 'Quick brown fox', 'The quick brown fox jumps over the lazy dog');
+insert into t_src values (2, 'OceanBase database', 'OceanBase is a distributed database system');
+insert into t_src values (3, 'Search engine', 'Fulltext search in database systems');
+insert into t_src values (101, 'Fork table', 'Fork table supports copy on write');
+# Fork表
+fork table t_src to t_fork;
+# 验证Fork表全文索引结构
+show create table t_fork;
+Table	Create Table
+t_fork	CREATE TABLE `t_fork` (
+  `id` int(11) NOT NULL,
+  `title` varchar(128) DEFAULT NULL,
+  `body` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  FULLTEXT KEY `ft_title` (`title`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
+  FULLTEXT KEY `ft_body` (`body`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
+  FULLTEXT KEY `ft_all` (`title`, `body`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证全文索引查询
+select id, title from t_fork where match(title) against ('quick') order by id;
+id	title
+1	Quick brown fox
+select id, title from t_fork where match(body) against ('database') order by id;
+id	title
+2	OceanBase database
+3	Search engine
+select id, title from t_fork where match(title, body) against ('fork') order by id;
+id	title
+101	Fork table
+============================================
+2. 全文索引隔离测试 - Fork表/源表独立
+============================================
+# Fork表新增全文数据
+insert into t_fork values (150, 'forkonly row', 'row exists only in fork table');
+select id, title from t_fork where match(title) against ('forkonly') order by id;
+id	title
+150	forkonly row
+select id, title from t_src where match(title) against ('forkonly') order by id;
+id	title
+# 源表修改全文数据
+update t_src set title = 'sourceonly row' where id = 2;
+select id, title from t_src where match(title) against ('sourceonly') order by id;
+id	title
+2	sourceonly row
+select id, title from t_fork where match(title) against ('sourceonly') order by id;
+id	title
+============================================
+3. 源表删除后Fork表全文索引可用
+============================================
+drop table t_src;
+select id, title from t_fork where match(body) against ('fork') order by id;
+id	title
+101	Fork table
+150	forkonly row
+============================================
+4. 清理
+============================================
+drop table if exists t_fork;
+drop database if exists db_fork_fts;

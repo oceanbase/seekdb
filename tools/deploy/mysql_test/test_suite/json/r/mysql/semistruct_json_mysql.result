@@ -1,0 +1,657 @@
+# ----------------------------------------------------------------------
+# Test of the json semistruct encoding
+# ----------------------------------------------------------------------
+drop table if exists json_test;
+drop table if exists json_test2;
+drop table if exists json_patial;
+set @@collation_server = 'utf8mb4_bin';
+set @@collation_connection='utf8mb4_bin';
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+show create table json_test;
+Table	Create Table
+json_test	CREATE TABLE `json_test` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 SEMISTRUCT_ENCODING_TYPE='ENCODING'
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = '';
+show create table json_test;
+Table	Create Table
+json_test	CREATE TABLE `json_test` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = 'encoding';
+show create table json_test;
+Table	Create Table
+json_test	CREATE TABLE `json_test` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 SEMISTRUCT_ENCODING_TYPE='ENCODING'
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = 'encode';
+ERROR HY000: Incorrect arguments to semistruct encoding type, should be none or encoding
+alter table json_test set row_format=DYNAMIC;
+ERROR 0A000: semistruct_encoding is not support if cs encoding is not set not supported
+alter table json_test set row_format=DYNAMIC SEMISTRUCT_ENCODING_TYPE='';
+alter table json_test set SEMISTRUCT_ENCODING_TYPE = 'encoding';
+ERROR 0A000: semistruct_encoding is not support if cs encoding is not set not supported
+alter table json_test set row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE = 'encoding';
+drop table json_test;
+create table json_test(pk int primary key, j json) SEMISTRUCT_ENCODING_TYPE='';
+drop table json_test;
+create table json_test(pk int primary key, j json) SEMISTRUCT_ENCODING_TYPE='encode';
+ERROR HY000: Incorrect arguments to semistruct encoding type, should be none or encoding
+create table json_test(pk int primary key, j json) SEMISTRUCT_ENCODING_TYPE='encoding';
+ERROR 0A000: semistruct_encoding is not support if cs encoding is not set not supported
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+insert into json_test values(1,'{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}');
+insert into json_test values(2,'{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}');
+insert into json_test values(3,'{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(4,'{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(5,'{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}');
+insert into json_test values(6,'{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}');
+insert into json_test values(7,'{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(8,'{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(9,'{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}');
+insert into json_test values(10,'{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}');
+insert into json_test values(11,'{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(12,'{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(13,'{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}');
+insert into json_test values(14,'{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}');
+insert into json_test values(15,'{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}');
+insert into json_test values(16,'{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}');
+insert into json_test values(17,'{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}');
+insert into json_test values(18,'{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}');
+insert into json_test values(19,'{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}');
+insert into json_test values(20, null);
+select pk, md5(j) from json_test;
+pk	md5(j)
+1	707e9a189e7dfb3239e18847fba35a07
+2	0ff4bee45596d35149c035d92bc20dd9
+3	03bd46e55dcb2b20af6062ed14fee49b
+4	e070c2fec865a284e5f8c8ee81951537
+5	ed043eb663f4e0b664de34b193fc1d04
+6	4a1ab4aa363dd45ceb250e032b1a07a2
+7	c0188c175324d07cea9eb46a8e111eb6
+8	f83dfbdab9c95e7d5fc110f5f8c19537
+9	2df8d78018f78d2cbd5e3b32ece97fc4
+10	0a785866beacf0fd87c7716817f90399
+11	87c34fa33f97795b2bee4024e30d85d6
+12	df66526499b603fbfebfc3e36bd8dad7
+13	74524945ece8cfc48b1ed9383c0fd6b3
+14	f384ce7c2d5afbb42b5977035e70ea50
+15	1872111f64fff9d2b37e719e3fae2a95
+16	94e367d06976e98b11ee611cc5b16893
+17	b0999ed07f1e6913f60ae33beb8ccf87
+18	66558e9a0a83ded6e66357087cb6c4fa
+19	f1b0cf8e91b448aa1d2a4a933d6c730f
+20	NULL
+select pk, md5(j), j from json_test where json_value(j, '$.age' RETURNING SIGNED) = 35;
+pk	md5(j)	j
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+alter system major freeze;
+select pk, md5(j) from json_test;
+pk	md5(j)
+1	707e9a189e7dfb3239e18847fba35a07
+2	0ff4bee45596d35149c035d92bc20dd9
+3	03bd46e55dcb2b20af6062ed14fee49b
+4	e070c2fec865a284e5f8c8ee81951537
+5	ed043eb663f4e0b664de34b193fc1d04
+6	4a1ab4aa363dd45ceb250e032b1a07a2
+7	c0188c175324d07cea9eb46a8e111eb6
+8	f83dfbdab9c95e7d5fc110f5f8c19537
+9	2df8d78018f78d2cbd5e3b32ece97fc4
+10	0a785866beacf0fd87c7716817f90399
+11	87c34fa33f97795b2bee4024e30d85d6
+12	df66526499b603fbfebfc3e36bd8dad7
+13	74524945ece8cfc48b1ed9383c0fd6b3
+14	f384ce7c2d5afbb42b5977035e70ea50
+15	1872111f64fff9d2b37e719e3fae2a95
+16	94e367d06976e98b11ee611cc5b16893
+17	b0999ed07f1e6913f60ae33beb8ccf87
+18	66558e9a0a83ded6e66357087cb6c4fa
+19	f1b0cf8e91b448aa1d2a4a933d6c730f
+20	NULL
+select pk, md5(j), j from json_test where json_value(j, '$.age' RETURNING SIGNED) = 35;
+pk	md5(j)	j
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+create table json_test2 like json_test;
+show create table json_test2;
+Table	Create Table
+json_test2	CREATE TABLE `json_test2` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 SEMISTRUCT_ENCODING_TYPE='ENCODING'
+insert  /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test;
+select pk, md5(j) from json_test2;
+pk	md5(j)
+1	707e9a189e7dfb3239e18847fba35a07
+2	0ff4bee45596d35149c035d92bc20dd9
+3	03bd46e55dcb2b20af6062ed14fee49b
+4	e070c2fec865a284e5f8c8ee81951537
+5	ed043eb663f4e0b664de34b193fc1d04
+6	4a1ab4aa363dd45ceb250e032b1a07a2
+7	c0188c175324d07cea9eb46a8e111eb6
+8	f83dfbdab9c95e7d5fc110f5f8c19537
+9	2df8d78018f78d2cbd5e3b32ece97fc4
+10	0a785866beacf0fd87c7716817f90399
+11	87c34fa33f97795b2bee4024e30d85d6
+12	df66526499b603fbfebfc3e36bd8dad7
+13	74524945ece8cfc48b1ed9383c0fd6b3
+14	f384ce7c2d5afbb42b5977035e70ea50
+15	1872111f64fff9d2b37e719e3fae2a95
+16	94e367d06976e98b11ee611cc5b16893
+17	b0999ed07f1e6913f60ae33beb8ccf87
+18	66558e9a0a83ded6e66357087cb6c4fa
+19	f1b0cf8e91b448aa1d2a4a933d6c730f
+20	NULL
+select pk, md5(j), j from json_test where pk = 19;
+pk	md5(j)	j
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test where pk = 20;
+pk	md5(j)	j
+20	NULL	NULL
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) = 35;
+pk	md5(j)	j
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) <= 30;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) < 30;
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) >= 96;
+pk	md5(j)	j
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) > 100;
+pk	md5(j)	j
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) != 33;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) between 30 and 35;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) in (28, 29);
+pk	md5(j)	j
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) is null;
+pk	md5(j)	j
+20	NULL	NULL
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) is not null;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where 100 < json_value(j, '$.age' RETURNING SIGNED);
+pk	md5(j)	j
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) = 'Devin';
+pk	md5(j)	j
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) <= 'Bill';
+pk	md5(j)	j
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) < 'Bill';
+pk	md5(j)	j
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) >= 'Ted';
+pk	md5(j)	j
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) > 'Ted';
+pk	md5(j)	j
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) != 'Devin';
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) between 'Frank' and 'Hunter';
+pk	md5(j)	j
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) in ('Frank', 'Hunter');
+pk	md5(j)	j
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) is null;
+pk	md5(j)	j
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+20	NULL	NULL
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING CHAR) is not null;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING DOUBLE) >= 85;
+pk	md5(j)	j
+select pk, md5(j), j from json_test2 where json_value(j, '$.name' RETURNING DOUBLE) < 85;
+pk	md5(j)	j
+select pk, md5(j), j from json_test2 where json_value(j, '$.score' RETURNING DOUBLE) >= 85;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.score' RETURNING DOUBLE) < 85;
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) = 52;
+pk	md5(j)	j
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) <= 52;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) < 52;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) >= 52;
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) > 52;
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) != 52;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) between 52 and 53;
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) in (52, 1152);
+pk	md5(j)	j
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) is null;
+pk	md5(j)	j
+20	NULL	NULL
+select pk, md5(j), j from json_test2 where json_value(j, '$.int_dict' RETURNING SIGNED) is not null;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) = 'Fake';
+pk	md5(j)	j
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) <= 'Fake';
+pk	md5(j)	j
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) < 'Fake';
+pk	md5(j)	j
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) >= 'Fake';
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) > 'Fake';
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) != 'Fake';
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) between 'Fake' and 'gis';
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) in ('gis', 'xml');
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) is null;
+pk	md5(j)	j
+20	NULL	NULL
+select pk, md5(j), j from json_test2 where json_value(j, '$.str_dict' RETURNING CHAR) is not null;
+pk	md5(j)	j
+1	707e9a189e7dfb3239e18847fba35a07	{"age": 30, "like": [1, 2, 3], "name": "Mike", "score": 89.5, "int_dict": 51, "str_dict": "json"}
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+3	03bd46e55dcb2b20af6062ed14fee49b	{"age": 23, "like": [4, 5, 6], "name": "William", "score": 69.6, "int_dict": 53, "str_dict": "Fake"}
+4	e070c2fec865a284e5f8c8ee81951537	{"age": 24, "like": [5, 6, 7], "name": "Noah", "score": 70.6, "int_dict": 50, "str_dict": "Fake"}
+5	ed043eb663f4e0b664de34b193fc1d04	{"age": 25, "like": [6, 7, 8], "name": "Bill", "score": 71.6, "int_dict": 51, "str_dict": "Fake"}
+6	4a1ab4aa363dd45ceb250e032b1a07a2	{"age": 26, "like": [7, 8, 9], "name": "Christopher", "score": 72.6, "int_dict": 52, "str_dict": "Fake"}
+7	c0188c175324d07cea9eb46a8e111eb6	{"age": 27, "like": [8, 9, 10], "name": "Bruce", "score": 73.6, "int_dict": 53, "str_dict": "Fake"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+17	b0999ed07f1e6913f60ae33beb8ccf87	{"age": 126, "like": [122, null, 8], "name": "Jackson", "score": 11.5, "int_dict": 52, "str_dict": "xml"}
+18	66558e9a0a83ded6e66357087cb6c4fa	{"age": 96, "like": [132, 2, 88], "name": null, "score": 12.5, "int_dict": 50, "str_dict": "struct"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.like[1]' RETURNING SIGNED) >= 10;
+pk	md5(j)	j
+2	0ff4bee45596d35149c035d92bc20dd9	{"age": 26, "like": [1, 10, 8], "name": "Jackson", "score": 79.5, "int_dict": 53, "str_dict": "gis"}
+8	f83dfbdab9c95e7d5fc110f5f8c19537	{"age": 28, "like": [9, 10, 11], "name": "Les", "score": 74.6, "int_dict": 50, "str_dict": "Fake"}
+9	2df8d78018f78d2cbd5e3b32ece97fc4	{"age": 29, "like": [10, 11, 12], "name": "Hunter", "score": 75.6, "int_dict": 51, "str_dict": "Fake"}
+10	0a785866beacf0fd87c7716817f90399	{"age": 30, "like": [11, 12, 13], "name": "Frank", "score": 76.6, "int_dict": 52, "str_dict": "Fake"}
+11	87c34fa33f97795b2bee4024e30d85d6	{"age": 31, "like": [12, 13, 14], "name": "Noel", "score": 77.6, "int_dict": 53, "str_dict": "Fake"}
+12	df66526499b603fbfebfc3e36bd8dad7	{"age": 32, "like": [13, 14, 15], "name": "Ted", "score": 78.6, "int_dict": 50, "str_dict": "Fake"}
+13	74524945ece8cfc48b1ed9383c0fd6b3	{"age": 33, "like": [14, 15, 16], "name": "Andy", "score": 79.6, "int_dict": 51, "str_dict": "Fake"}
+14	f384ce7c2d5afbb42b5977035e70ea50	{"age": 34, "like": [15, 16, 17], "name": "Devin", "score": 80.6, "int_dict": 52, "str_dict": "Fake"}
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+16	94e367d06976e98b11ee611cc5b16893	{"age": 36, "like": [17, 18, 19], "name": "JJJ", "score": 82.6, "int_dict": 50, "str_dict": "Fake"}
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+select pk, md5(j), j from json_test2 where json_value(j, '$.like[0]' RETURNING SIGNED) is null;
+pk	md5(j)	j
+19	f1b0cf8e91b448aa1d2a4a933d6c730f	{"age": 6, "like": [null, 66, 108], "name": "null", "score": null, "int_dict": 1152, "str_dict": "array"}
+20	NULL	NULL
+select pk, md5(j), j from json_test2 where json_value(j, '$.not_exist' RETURNING SIGNED) != -1;
+pk	md5(j)	j
+delete from json_test2;
+insert into json_test values(21, json_object('k1', repeat('1', 10000)));
+insert  /*+ query_timeout(10000000000) append enable_parallel_dml parallel(2) */ into json_test2 select * from json_test;
+select pk, md5(j), j from json_test2 where json_value(j, '$.age' RETURNING SIGNED) = 35;
+pk	md5(j)	j
+15	1872111f64fff9d2b37e719e3fae2a95	{"age": 35, "like": [16, 17, 18], "name": "Gordon", "score": 81.6, "int_dict": 53, "str_dict": "Fake"}
+drop table json_test;
+drop table json_test2;
+alter system set _enable_parallel_table_creation = false;
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+set _show_ddl_in_compat_mode = 1;
+show create table json_test;
+Table	Create Table
+json_test	CREATE TABLE `json_test` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED
+set _show_ddl_in_compat_mode = 0;
+show create table json_test;
+Table	Create Table
+json_test	CREATE TABLE `json_test` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 SEMISTRUCT_ENCODING_TYPE='ENCODING'
+drop table json_test;
+alter system set _enable_parallel_table_creation = true;
+create table json_test(pk int primary key, j json) row_format=COMPRESSED SEMISTRUCT_ENCODING_TYPE='encoding';
+set _show_ddl_in_compat_mode = 1;
+show create table json_test;
+Table	Create Table
+json_test	CREATE TABLE `json_test` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED
+set _show_ddl_in_compat_mode = 0;
+show create table json_test;
+Table	Create Table
+json_test	CREATE TABLE `json_test` (
+  `pk` int(11) NOT NULL,
+  `j` json DEFAULT NULL,
+  PRIMARY KEY (`pk`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 SEMISTRUCT_ENCODING_TYPE='ENCODING'
+drop table json_test;
+set log_row_value_options="partial_json";
+create table json_patial(c1 int primary key, c2 json) row_format=COMPRESSED semistruct_encoding_type='encoding' lob_inrow_threshold=0;
+insert into json_patial values(1, '{"k1": "1234567899999", "k2": 1}');
+insert into json_patial values(2, '{"k1": "1234567899999", "k2": 2}');
+insert into json_patial values(3, '{"k1": "1234567899999", "k2": 3}');
+insert into json_patial values(4, '{"k1": "1234567899999", "k2": 4}');
+insert into json_patial values(5, '{"k1": "1234567899999", "k2": 5}');
+update json_patial set c2 = json_replace(c2, '$.k1', 'x23456789999') where c1=1;
+select * from json_patial;
+c1	c2
+1	{"k1": "x23456789999", "k2": 1}
+2	{"k1": "1234567899999", "k2": 2}
+3	{"k1": "1234567899999", "k2": 3}
+4	{"k1": "1234567899999", "k2": 4}
+5	{"k1": "1234567899999", "k2": 5}
+alter table json_patial set lob_inrow_threshold=8192;
+alter table json_patial set lob_inrow_threshold=8191;
+drop table json_patial;
+set log_row_value_options="";

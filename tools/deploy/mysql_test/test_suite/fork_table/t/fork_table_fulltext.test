@@ -1,0 +1,85 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table全文索引处理测试
+##tags: fork_table fulltext
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_fts;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_fts;
+use db_fork_fts;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo ============================================
+--echo 1. Fork Table with Fulltext Index
+--echo ============================================
+
+--disable_warnings
+drop table if exists t_src;
+drop table if exists t_fork;
+--enable_warnings
+
+create table t_src (
+    id int primary key,
+    title varchar(128),
+    body text,
+    fulltext index ft_title(title),
+    fulltext index ft_body(body),
+    fulltext index ft_all(title, body)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t_src values (1, 'Quick brown fox', 'The quick brown fox jumps over the lazy dog');
+insert into t_src values (2, 'OceanBase database', 'OceanBase is a distributed database system');
+insert into t_src values (3, 'Search engine', 'Fulltext search in database systems');
+insert into t_src values (101, 'Fork table', 'Fork table supports copy on write');
+
+--echo # Fork表
+fork table t_src to t_fork;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 验证Fork表全文索引结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_fork;
+
+--echo # 验证全文索引查询
+select id, title from t_fork where match(title) against ('quick') order by id;
+select id, title from t_fork where match(body) against ('database') order by id;
+select id, title from t_fork where match(title, body) against ('fork') order by id;
+
+--echo ============================================
+--echo 2. 全文索引隔离测试 - Fork表/源表独立
+--echo ============================================
+
+--echo # Fork表新增全文数据
+insert into t_fork values (150, 'forkonly row', 'row exists only in fork table');
+select id, title from t_fork where match(title) against ('forkonly') order by id;
+select id, title from t_src where match(title) against ('forkonly') order by id;
+
+--echo # 源表修改全文数据
+update t_src set title = 'sourceonly row' where id = 2;
+select id, title from t_src where match(title) against ('sourceonly') order by id;
+select id, title from t_fork where match(title) against ('sourceonly') order by id;
+
+--echo ============================================
+--echo 3. 源表删除后Fork表全文索引可用
+--echo ============================================
+
+drop table t_src;
+select id, title from t_fork where match(body) against ('fork') order by id;
+
+--echo ============================================
+--echo 4. 清理
+--echo ============================================
+
+drop table if exists t_fork;
+drop database if exists db_fork_fts;

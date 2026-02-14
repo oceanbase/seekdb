@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include "storage/meta_store/ob_server_storage_meta_persister.h"
+#include "storage/meta_store/ob_server_storage_meta_replayer.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_slog_handler.h"
 #include "storage/slog/ob_storage_logger_manager.h"
 
@@ -43,25 +44,6 @@ public:
   int get_server_slogger(ObStorageLogger *&slogger) const;
   int write_checkpoint(bool is_force);
 
-  class ObTenantItemIterator final
-  {
-  public:
-    explicit ObTenantItemIterator():
-      idx_(0),
-      is_inited_(false),
-      server_super_block_()
-      {}
-    ~ObTenantItemIterator() = default;
-    int init();
-    int get_next_tenant_item(storage::ObTenantItem &item);
-    TO_STRING_KV(K_(idx), K_(is_inited), K_(server_super_block));
-  private:
-    int64_t idx_;
-    bool is_inited_;
-    storage::ObServerSuperBlock server_super_block_;
-    DISALLOW_COPY_AND_ASSIGN(ObTenantItemIterator);
-  };
-
 private:
   ObServerStorageMetaService();
   ~ObServerStorageMetaService() = default;
@@ -72,6 +54,7 @@ private:
   bool is_inited_;
   bool is_started_;
   ObServerStorageMetaPersister persister_;
+  ObServerStorageMetaReplayer replayer_;
   ObStorageLoggerManager slogger_mgr_;
   ObStorageLogger *server_slogger_;
   ObServerCheckpointSlogHandler ckpt_slog_handler_;

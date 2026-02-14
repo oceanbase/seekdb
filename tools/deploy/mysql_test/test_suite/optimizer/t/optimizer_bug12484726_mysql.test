@@ -1,0 +1,19 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+--result_format 3
+#owner:link.zt
+#owner group: sql1
+# tags: optimizer
+## bug
+
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys;
+## one key_v1, one key_v2
+explain basic select /*+use_hash(o,t),leading(o,t)*/ * from oceanbase.__all_outline o, oceanbase.__all_database t where o.tenant_id=t.tenant_id;
+## two key_v1, partition wise join
+explain basic select /*+use_hash(t,mt),leading(t,mt)*/ * from oceanbase.__all_table as t, oceanbase.__all_database as mt where t.tenant_id = mt.tenant_id;
+## two key_v2, partition wise join
+explain basic select /*+use_hash(o,os),leading(o,os)*/ * from oceanbase.__all_outline as o, oceanbase.__all_outline_history as os where o.tenant_id = os.tenant_id;
+disconnect obsys;
+connection default;

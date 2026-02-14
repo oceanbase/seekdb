@@ -1,0 +1,393 @@
+drop database if exists yjl_vec;
+create database yjl_vec;
+use yjl_vec;
+alter system set ob_vector_memory_limit_percentage = 20;
+
+
+"=========================================== add column ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec add column c0 smallint first;
+alter table t_vec add column c3 tinyint before c1;
+alter table t_vec add column c4 bigint after c2;
+alter table t_vec add column c5 int auto_increment;
+alter table t_vec drop c3, add c6 char(10) default 'a';
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c0` smallint(6) DEFAULT NULL,
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c4` bigint(20) DEFAULT NULL,
+  `c5` int(11) NOT NULL AUTO_INCREMENT,
+  `c6` char(10) DEFAULT 'a',
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = 2 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== modify column ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t_vec values(1, 2, '[1,2,1]');
+alter table t_vec modify c1 int before c3;
+alter table t_vec modify c2 varchar(128) first;
+alter table t_vec modify c2 varchar(12) after c1;
+alter table t_vec modify c1 int unsigned not null auto_increment;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `c2` varchar(12) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = 2 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== change column ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec change c1 c1 varchar(128);
+alter table t_vec change c2 c2 varchar(128) before c1;
+ERROR 0A000: For columns with vector indexes, altering the column type is not supported
+alter table t_vec change c1 c1 varchar(128) before c2;
+alter table t_vec change c1 c3 int after c2;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c3`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c3	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== drop column ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t_vec values(1, 2, '[1,2,1]');
+alter table t_vec drop column c1;
+ERROR 0A000: drop rowkey column is not supported
+alter table t_vec drop column c2;
+alter table t_vec drop column c3;
+ERROR HY000: Column 'c3' has a generated column dependency
+alter table t_vec drop primary key;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c3` VECTOR(3) DEFAULT NULL,
+  VECTOR KEY `idx1` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	1	idx1	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== drop index ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec drop index idx1;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+
+
+"=========================================== add index ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec add index idx1(c2);
+ERROR 0A000: create index on vector column is not supported
+alter table t_vec add vector index idx1(c2) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'index idx1(c2) with (distance=l2, type=hnsw)' at line 1
+create index idx1 on t_vec(c2);
+ERROR 0A000: create index on vector or array column is not supported
+create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw);
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== add primary key ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), vector index idx1(c2) with (distance=l2, type=hnsw));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec modify c1 int primary key;
+alter table t_vec add primary key(c1);
+ERROR 42000: Multiple primary key defined
+alter table t_vec modify c1 bigint, add primary key(c1);
+ERROR 42000: Multiple primary key defined
+alter table t_vec drop primary key, add primary key(c1);
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== add/modify partition/rule ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (50));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(c1)
+(partition `p0` values less than (10),
+partition `p1` values less than (50))
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec partition by range(c1) (partition p0 values less than (20), partition p1 values less than (200));
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(c1)
+(partition `p0` values less than (20),
+partition `p1` values less than (200))
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+
+
+"=========================================== complex case ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 int, c4 vector(3), c5 int, c6 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+insert into t_vec values(1, '[1,1,1]', 5, '[1,2,3]', 7, '[1,2,1]');
+alter table t_vec add column c7 int auto_increment;
+create vector index idx2 on  t_vec(c4) with(distance=l2, type=hnsw, lib=vsag);
+alter table t_vec drop column c3;
+insert into t_vec values(2, '[1,0,1]', '[1,2,3]', 7, '[3,2,1]', 2);
+select * from t_vec order by l2_distance(c2, [0.9,0.4,3]);
+c1	c2	c4	c5	c6	c7
+2	[1,0,1]	[1,2,3]	7	[3,2,1]	2
+1	[1,1,1]	[1,2,3]	7	[1,2,1]	1
+alter table t_vec modify c5 varchar(20) before c4;
+create vector index idx3 on t_vec(c6) with(distance=l2, type=hnsw, lib=vsag);
+alter table t_vec drop column c7;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c5` varchar(20) DEFAULT NULL,
+  `c4` VECTOR(3) DEFAULT NULL,
+  `c6` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  VECTOR KEY `idx2` (`c4`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  VECTOR KEY `idx3` (`c6`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	idx2	1	c4	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	idx3	1	c6	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+select * from t_vec order by l2_distance(c6, [0.9,0.4,3]);
+c1	c2	c5	c4	c6
+1	[1,1,1]	7	[1,2,3]	[1,2,1]
+2	[1,0,1]	7	[1,2,3]	[3,2,1]
+truncate table t_vec;
+insert into t_vec values(1, '[1,1,1]', 'a', '[1,2,3]', '[1,2,1]');
+alter table t_vec drop index idx1;
+alter table t_vec drop column c5, add c9 varchar(10) default 'cc';
+select * from t_vec order by l2_distance(c6, [0.9,0.4,3]);
+c1	c2	c4	c6	c9
+1	[1,1,1]	[1,2,3]	[1,2,1]	cc
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c4` VECTOR(3) DEFAULT NULL,
+  `c6` VECTOR(3) DEFAULT NULL,
+  `c9` varchar(10) DEFAULT 'cc',
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx2` (`c4`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  VECTOR KEY `idx3` (`c6`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show index from t_vec;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t_vec	1	idx2	1	c4	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+t_vec	1	idx3	1	c6	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_vec values(1, '[1,1,1]');
+ALTER TABLE t_vec ADD c3 INT AUTO_INCREMENT;
+ALTER TABLE t_vec ADD COLUMN c4 int AS (c1 + 3) STORED;
+alter table t_vec modify c3 tinyint;
+alter table t_vec modify c1 tinyint;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` tinyint(4) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` tinyint(4) DEFAULT NULL,
+  `c4` int(11) GENERATED ALWAYS AS ((`c1` + 3)) STORED,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t_vec values(1, '[1,1,1]', 'cc', 4);
+alter table t_vec modify c1 tinyint;
+alter table t_vec modify c3 varchar(5) charset 'gbk';
+alter table t_vec modify c1 int;
+alter table t_vec add constraint cc check (c1 < 10);
+alter table t_vec modify c3 char(8) , add c5 int, drop column c4;
+alter table t_vec convert to CHARACTER SET 'utf8';
+alter table t_vec convert to CHARACTER SET 'gbk';
+truncate table t_vec;
+show create table t_vec;
+Table	Create Table
+t_vec	CREATE TABLE `t_vec` (
+  `c1` int(11) NOT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` char(8) DEFAULT NULL,
+  `c5` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  VECTOR KEY `idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  CONSTRAINT `cc` CHECK ((`c1` < 10))
+) ORGANIZATION INDEX DEFAULT CHARSET = gbk ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(c1)
+(partition `p0` values less than (10),
+partition `p1` values less than (100))
+drop table if exists t_vec;
+drop database if exists yjl_vec;
+alter system set ob_vector_memory_limit_percentage =0;

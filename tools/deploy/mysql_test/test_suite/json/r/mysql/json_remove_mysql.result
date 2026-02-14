@@ -1,0 +1,214 @@
+# ----------------------------------------------------------------------
+# Test of JSON_REMOVE function.
+# ----------------------------------------------------------------------
+select json_remove( null, '$[1]' );
+json_remove( null, '$[1]' )
+NULL
+select json_remove( null, '$[1]' ) is null;
+json_remove( null, '$[1]' ) is null
+1
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', null );
+json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', null )
+NULL
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', null ) is null;
+json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', null ) is null
+1
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', null );
+json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', null )
+NULL
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', null ) is null;
+json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', null ) is null
+1
+select json_remove( '[ 1, 2, 3 ]', '$[0]' );
+json_remove( '[ 1, 2, 3 ]', '$[0]' )
+[2, 3]
+select json_remove( '[ 1, 2, 3 ]', '$[1]' );
+json_remove( '[ 1, 2, 3 ]', '$[1]' )
+[1, 3]
+select json_remove( '[ 1, 2, 3 ]', '$[2]' );
+json_remove( '[ 1, 2, 3 ]', '$[2]' )
+[1, 2]
+select json_remove( '[ 1, 2, 3 ]', '$[3]' );
+json_remove( '[ 1, 2, 3 ]', '$[3]' )
+[1, 2, 3]
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]' );
+json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]' )
+[1, 5]
+select json_remove( '[ { "a": true }, { "b": false }, { "c": null }, { "a": null } ]', '$[0].a', '$[2].c' );
+json_remove( '[ { "a": true }, { "b": false }, { "c": null }, { "a": null } ]', '$[0].a', '$[2].c' )
+[{}, {"b": false}, {}, {"a": null}]
+select json_remove( '{"id": 123, "name": "systemQA", "array": [1, 2, 3]}', '$[0]' );
+json_remove( '{"id": 123, "name": "systemQA", "array": [1, 2, 3]}', '$[0]' )
+{"id": 123, "name": "systemQA", "array": [1, 2, 3]}
+SELECT JSON_REMOVE
+(
+'{"a" : "foo", "b" : [true, {"c" : 123}]}',
+'$.b[ 1 ]'
+);
+JSON_REMOVE
+(
+'{"a" : "foo", "b" : [true, {"c" : 123}]}',
+'$.b[ 1 ]'
+)
+{"a": "foo", "b": [true]}
+SELECT JSON_REMOVE
+(
+'{ "a" : "foo", "b" : [ true, { "c" : 123, "c" : 456 } ] }',
+'$.b[ 1 ].c'
+);
+JSON_REMOVE
+(
+'{ "a" : "foo", "b" : [ true, { "c" : 123, "c" : 456 } ] }',
+'$.b[ 1 ].c'
+)
+{"a": "foo", "b": [true, {}]}
+SELECT JSON_REMOVE
+(
+'{ "a" : "foo", "b" : [ true, { "c" : 123 } ] }',
+'$.b[ 1 ].c'
+);
+JSON_REMOVE
+(
+'{ "a" : "foo", "b" : [ true, { "c" : 123 } ] }',
+'$.b[ 1 ].c'
+)
+{"a": "foo", "b": [true, {}]}
+SELECT JSON_REMOVE
+(
+'{ "a" : "foo", "b" : [ true, { "c" : 123, "d" : 456 } ] }',
+'$.b[ 1 ].e'
+);
+JSON_REMOVE
+(
+'{ "a" : "foo", "b" : [ true, { "c" : 123, "d" : 456 } ] }',
+'$.b[ 1 ].e'
+)
+{"a": "foo", "b": [true, {"c": 123, "d": 456}]}
+SELECT JSON_REMOVE('[1, 2, [3, 4, 5]]', '$[2][1]', '$[2][1]') AS 'Result';
+Result
+[1, 2, [3]]
+drop table if exists json_test1;
+Warnings:
+Note	1051	Unknown table 'test.json_test1'
+create table json_test1(
+c1 int primary key,
+c2 json);
+insert into json_test1 values(2,'{
+  "width":  "800",
+  "image":  800,
+  "thumbnail": {
+      "url":    "http://www.example.com/image/481989943",
+      "width":  100
+  },
+  "ids": [116, 943, 234, 38793]
+}');
+select json_remove(c2, '$[0].thumbnail.url') from json_test1;
+json_remove(c2, '$[0].thumbnail.url')
+{"ids": [116, 943, 234, 38793], "image": 800, "width": "800", "thumbnail": {"width": 100}}
+drop table json_test1;
+
+# not enough args
+select json_remove();
+ERROR 42000: Incorrect parameter count in the call to native function 'json_remove'
+
+# not enough args
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]' );
+ERROR 42000: Incorrect parameter count in the call to native function 'json_remove'
+
+# not enough args
+select json_remove( '$[1]' );
+ERROR 42000: Incorrect parameter count in the call to native function 'json_remove'
+
+# invalid json text
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ', '$[1]', '$[2]' );
+ERROR 22032: Invalid JSON text in argument.
+
+# invalid json path
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1', '$[2]' );
+ERROR 42000: Invalid JSON path expression.
+
+# invalid json path
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', '$[2' );
+ERROR 42000: Invalid JSON path expression.
+
+# Vacuous path expression
+select json_remove( '[ 1, 2, 3 ]', '$' );
+ERROR 42000: The path expression is not allowed in this context.
+
+# Vacuous path expression
+select json_remove( '[ 1, 2, 3 ]', '$', '$[2]' );
+ERROR 42000: The path expression is not allowed in this context.
+
+# Vacuous path expression
+select json_remove( '[ 1, 2, 3 ]', '$[1]', '$' );
+ERROR 42000: The path expression is not allowed in this context.
+select json_remove( '[ 1, 2, 3 ]', '$[*]' );
+ERROR 42000: In this situation, path expressions may not contain the * and ** tokens.
+select json_remove( '[ 1, 2, 3 ]', '$**[2]' );
+ERROR 42000: In this situation, path expressions may not contain the * and ** tokens.
+select json_remove( '[ 1, 2, 3 ]', '$[2]', '$[*]' );
+ERROR 42000: In this situation, path expressions may not contain the * and ** tokens.
+select json_remove( '[ 1, 2, 3 ]', '$[2]', '$**[2]' );
+ERROR 42000: In this situation, path expressions may not contain the * and ** tokens.
+select json_remove( '[ { "a": { "a": true } } ]', '$**.a' );
+ERROR 42000: In this situation, path expressions may not contain the * and ** tokens.
+select json_remove( '[ { "a": true }, { "b": [ { "c": { "a": true } }  ] }, { "c": null }, { "a": null } ]', '$**.a' );
+ERROR 42000: In this situation, path expressions may not contain the * and ** tokens.
+select json_remove(UNHEX(""), '$[*]');
+ERROR 22032: Cannot create a JSON value from a string.
+drop table if exists  test1;
+create table test1(j json);
+insert into test1 values('["abc"]');
+select json_remove(j,'$[0][0]') from test1;
+json_remove(j,'$[0][0]')
+[]
+drop table test1;
+SELECT JSON_SET('{"":"aa"}', '$[0][0]',null , '$[0].width[0]','23' ) FROM dual;
+JSON_SET('{"":"aa"}', '$[0][0]',null , '$[0].width[0]','23' )
+null
+drop table if exists lyq_test;
+create table lyq_test(v_e json,id int);
+insert into lyq_test values('1',1);
+select JSON_SEARCH(V_E, 'ALL','%\%%' , '' , '$.*' ) from lyq_test;
+JSON_SEARCH(V_E, 'ALL','%\%%' , '' , '$.*' )
+NULL
+drop table lyq_test;
+drop table if exists test;
+create table test(j json);
+insert into test values(concat('{"name": "John","name1":1,"name2":true, "content":{"key":{"key1":"',repeat('x',4100), '"}}}'));
+select JSON_STORAGE_SIZE(j) , JSON_STORAGE_FREE(j)  from test;
+JSON_STORAGE_SIZE(j)	JSON_STORAGE_FREE(j)
+4202	0
+update test set j=json_replace(j,'$[0]',1,'$[1]','test');
+drop table test;
+SELECT JSON_LENGTH('[1,2,3]', '$[0 to 1]');
+JSON_LENGTH('[1,2,3]', '$[0 to 1]')
+2
+SELECT JSON_ARRAY(_utf8mb4'abc') = JSON_ARRAY(_binary'abc');
+JSON_ARRAY(_utf8mb4'abc') = JSON_ARRAY(_binary'abc')
+0
+drop table if exists t;
+CREATE TABLE t(j JSON);
+INSERT INTO t VALUES (JSON_ARRAY('aaa'));
+UPDATE t SET j = JSON_REPLACE(j, '$[0]', REPEAT(CHAR(97), 3));
+SELECT j, JSON_TYPE(j->'$[0]') FROM t;
+j	JSON_TYPE(j->'$[0]')
+["base64:type15:YWFh"]	BLOB
+drop table t;
+SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR CHARSET utf16));
+JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR CHARSET utf16))
+"$[0]"
+drop table if exists json_test;
+create table json_test (id int primary key, data json);
+insert into json_test values(1, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
+update json_test set data = json_remove(data, '$.a');
+select * from json_test;
+id	data
+1	{"b": [1, 2, 3]}
+set log_row_value_options="partial_json";
+update json_test set data = json_remove(data, '$.b[1]');
+select * from json_test;
+id	data
+1	{"b": [1, 3]}
+set log_row_value_options="";
+drop table json_test;

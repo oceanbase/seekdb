@@ -1,0 +1,274 @@
+# owner: handora.qc
+# owner group: transaction 2
+# description: rows lock and duplication check in memtables and sstables during DML.
+
+set @@session.explicit_defaults_for_timestamp=off;
+
+connect (conn8,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (conn7,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (conn6,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (conn5,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (conn4,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (conn3,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (conn2,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+
+connection conn1;
+alter system set minor_compact_trigger = 10;
+
+--disable_warnings
+drop table if exists test_check_rows_exist;
+drop table if exists test_check_rows_exist2;
+--enable_warnings
+create table test_check_rows_exist(c1 int primary key, c2 int);
+
+############ Case 1: multi row duplication check on memtable ###############
+
+connection conn1;
+set SESSION ob_query_timeout = 10000000;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(2, 2), (3, 3), (4, 4), (5, 5), (9, 9);
+delete /*+ log_level(debug) */ from test_check_rows_exist where c1 = 4;
+
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (3, 3), (2, 2);
+
+############ Case 2: multi row conflict check on memtable ###############
+
+connection conn2;
+set SESSION ob_trx_timeout = 10000000000;
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(15, 15);
+
+connection conn1;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(14, 14);
+insert /*+ log_level(debug) */ into test_check_rows_exist values(16, 16);
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15);
+
+############ Case 3: multi row rollbacked on sstable ###############
+connection conn5;
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(31, 31);
+savepoint qcc;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(32, 32), (33, 33);
+
+############ Case 12.1: multiple sstable TSC with max_commit_version on mvcc row ###############
+connection conn6;
+create table test_check_rows_exist2(c1 int primary key, c2 int);
+set SESSION transaction isolation level repeatable read;
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist2 values(120, 120), (121, 121), (1, 1);
+commit;
+
+############ Case 13.1: not check exist on memtable rows ###############
+connection conn8;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(133, 133), (131, 131), (132, 132);
+
+############ ALTER SYSTEM MINOR FREEZE ###############
+connection conn4;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+############ Case 4: multi row duplication check on sstable ###############
+
+connection conn1;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(6, 6), (7, 7);
+
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (3, 3), (2, 2);
+
+delete /*+ log_level(debug) */ from test_check_rows_exist where c1 = 5;
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (4, 4), (5, 5);
+rollback;
+
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (4, 4), (3, 3), (5, 5), (6, 6);
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (4, 4), (5, 5);
+delete /*+ log_level(debug) */ from test_check_rows_exist where c1 = 1 or c1 = 4 or c1 = 5;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (4, 4);
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(4, 4), (5, 5);
+rollback;
+
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (4, 4), (3, 3), (5, 5);
+
+############ Case 5: multi row conflict check on sstable ###############
+
+connection conn3;
+set SESSION ob_trx_timeout = 10000000000;
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(18, 18);
+
+connection conn1;
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15);
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15), (18, 18);
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (14, 14), (15, 15) on duplicate key update c2 = c2 + 1;
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15), (16, 16) on duplicate key update c2 = c2 + 1;
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (14, 14), (16, 16) on duplicate key update c2 = c2 + 1;
+rollback;
+
+############ Case 6: multi row rollbacked on sstable ###############
+connection conn5;
+rollback to savepoint qcc;
+commit;
+
+insert /*+ log_level(debug) */ into test_check_rows_exist values(32, 32), (33, 33);
+
+############ Case 12.2: multiple sstable TSC with max_commit_version on mvcc row ###############
+connection conn7;
+set SESSION transaction isolation level repeatable read;
+begin;
+select * from test_check_rows_exist2;
+
+connection conn6;
+begin;
+update /*+ log_level(debug) */ test_check_rows_exist2 set c2 = c2 + 1 where c1 >= 100;
+commit;
+
+
+############ Case 13.2: not check exist on memtable row ###############
+connection conn8;
+begin;
+delete /*+ log_level(debug) */ from test_check_rows_exist where c1 = 131 or c1 = 132;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(130, 130), (131, 131), (134, 134);
+rollback;
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(130, 130), (131, 131), (135, 135);
+
+############ ALTER SYSTEM MINOR FREEZE ###############
+connection conn4;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+############ Case 7: multi row duplication check on sstables ###############
+connection conn1;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (8, 8);
+
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(3, 3), (4, 4), (5, 5);
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(4, 4), (5, 5);
+rollback;
+
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(4, 4), (5, 5), (9, 9);
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9) on duplicate key update c2 = c2 + 1;
+rollback;
+
+############ Case 8: multi row conflict check on sstables ###############
+
+connection conn1;
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15);
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15), (18, 18);
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (14, 14), (15, 15) on duplicate key update c2 = c2 + 1;
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15), (16, 16) on duplicate key update c2 = c2 + 1;
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (14, 14), (16, 16) on duplicate key update c2 = c2 + 1;
+rollback;
+
+############ Case 12.3: multiple sstable TSC with max_commit_version on mvcc row ###############
+
+connection conn6;
+begin;
+update /*+ log_level(debug) */ test_check_rows_exist2 set c2 = c2 + 1 where c1 >= 100;
+rollback;
+
+connection conn7;
+--error 6235
+update /*+ log_level(debug) */ test_check_rows_exist2 set c2 = c2 + 1 where c1 >= 100;
+
+############ ALTER SYSTEM MINOR FREEZE ###############
+connection conn4;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9) on duplicate key update c2 = c2 + 1;
+rollback;
+
+############ ALTER SYSTEM MINOR FREEZE ###############
+connection conn4;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+
+############ Case 10: multi row duplication check on sstables ###############
+
+--error 1062
+insert /*+ log_level(debug) */ into test_check_rows_exist values(4, 4), (5, 5), (9, 9);
+
+insert /*+ log_level(debug) */ into test_check_rows_exist values(4, 4), (5, 5), (10, 10);
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9), (10, 10) on duplicate key update c2 = c2 + 1;
+rollback;
+
+############ Case 11: multi row conflict check on sstables ###############
+
+connection conn1;
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15);
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15), (18, 18);
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (14, 14), (15, 15) on duplicate key update c2 = c2 + 1;
+
+--error 1205
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (15, 15), (16, 16) on duplicate key update c2 = c2 + 1;
+
+begin;
+insert /*+ log_level(debug) */ into test_check_rows_exist values(11, 11), (12, 12), (14, 14), (16, 16) on duplicate key update c2 = c2 + 1;
+rollback;
+
+connection conn3;
+select  /*+ log_level(debug) */ * from test_check_rows_exist where c1 = 18 for update;
+
+############ Case 10: final operation ###############
+connection conn1;
+commit;
+connection conn2;
+commit;
+connection conn3;
+commit;
+connection conn4;
+commit;
+connection conn5;
+commit;
+connection conn6;
+commit;
+connection conn7;
+commit;
+
+connection conn1;
+select   /*+ log_level(debug) */ * from test_check_rows_exist;
+
+# --disable_warnings
+drop table if exists test_check_rows_exist;
+drop table if exists test_check_rows_exist2;
+# --enable_warnings

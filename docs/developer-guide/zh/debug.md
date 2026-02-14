@@ -44,11 +44,18 @@ pidof seekdb
 ```
 
 2. attach 进程
+
+使用 GDB：
 ```bash
 gdb seekdb <pid>
 ```
 
-接着就可以设置断点，打印变量等。更多信息请参考 [gdb 手册](https://sourceware.org/gdb/current/onlinedocs/gdb.html/)。
+或者使用 LLDB（macOS 上推荐）：
+```bash
+lldb -p <pid>
+```
+
+接着就可以设置断点，打印变量等。更多信息请参考 [GDB 手册](https://sourceware.org/gdb/current/onlinedocs/gdb.html/) 或 [LLDB 手册](https://lldb.llvm.org/use/tutorial.html)。
 
 ## 使用 debug-info 包调试 seekdb
 

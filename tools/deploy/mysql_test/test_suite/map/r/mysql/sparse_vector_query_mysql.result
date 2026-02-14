@@ -1,0 +1,501 @@
+# ----------------------------------------------------------------------
+# Test of sparse vector query
+# ----------------------------------------------------------------------
+drop table if exists test_sparse_vec_tbl;
+create table test_sparse_vec_tbl (
+id int primary key, c1 bool, c2 int, c3 decimal, c4 float, c5 bit,
+c6 date, c7 varchar(50), c8 text, c9 json, c10 GEOMETRY,
+c11 array(int), c12 vector(3), c13 map(int, float), c14 sparsevector, c15 sparsevector) partition by hash(id) partitions 3;
+insert into test_sparse_vec_tbl values(1, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', '{1:123, 2:456}', '{1:123, 3:456}');
+insert into test_sparse_vec_tbl values(2, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', null, null);
+insert into test_sparse_vec_tbl values(3, true, 1, 1, 1.3, 1, '2020-01-01', null, 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', '{2:12.3, 4:4.56}', '{2:12.3, 4:4.56}');
+insert into test_sparse_vec_tbl values(4, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', null, '{2:12.3, 4:4.56}');
+insert into test_sparse_vec_tbl values(5, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', '{1:1.2}', '{}');
+select id, c1, c11, c13, c14 from test_sparse_vec_tbl order by id;
+id	c1	c11	c13	c14
+1	1	[1,2,3,4,5]	{1:123,4:345}	{1:123,2:456}
+2	1	[1,2,3,4,5]	{1:123,4:345}	NULL
+3	1	[1,2,3,4,5]	{1:123,4:345}	{2:12.3,4:4.56}
+4	1	[1,2,3,4,5]	{1:123,4:345}	NULL
+5	1	[1,2,3,4,5]	{1:123,4:345}	{1:1.2}
+select id from test_sparse_vec_tbl order by c14;
+ERROR 22000: Invalid data type for the operation
+select id from test_sparse_vec_tbl group by c14;
+ERROR 22000: Invalid data type for the operation
+select id from test_sparse_vec_tbl where c14 > 0;
+ERROR 22000: Invalid data type for the operation
+select c14+c14 from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select c13+c13 from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select id from test_sparse_vec_tbl where c14 = '{}';
+id
+select id from test_sparse_vec_tbl where c14 != '{}';
+id
+3
+1
+5
+select id from test_sparse_vec_tbl where c15 = '{}';
+id
+5
+select id from test_sparse_vec_tbl where c14 = '{1:123, 2:456}';
+id
+1
+select id from test_sparse_vec_tbl where c14 = '{2:456, 1:123}';
+id
+1
+select sum(c14) from test_sparse_vec_tbl;
+ERROR 0A000: Not supported feature or function
+select max(c14) from test_sparse_vec_tbl;
+ERROR HY000: Invalid argument
+select count(c14) from test_sparse_vec_tbl;
+count(c14)
+3
+select id from test_sparse_vec_tbl where inner_product(c14, c15) = 0;
+id
+5
+select id from test_sparse_vec_tbl where inner_product(c14, c15) > 0;
+id
+3
+1
+select id from test_sparse_vec_tbl group by inner_product(c14, c15);
+id
+3
+1
+4
+5
+select inner_product(c14, c15) from test_sparse_vec_tbl;
+inner_product(c14, c15)
+172.08360862731934
+15129
+NULL
+NULL
+0
+select inner_product(c14, c7) from test_sparse_vec_tbl where id = 3;
+inner_product(c14, c7)
+NULL
+select inner_product(c14, c7) from test_sparse_vec_tbl;
+inner_product(c14, c7)
+NULL
+147.60000610351562
+NULL
+NULL
+1.440000057220459
+select inner_product(c7, c14) from test_sparse_vec_tbl;
+inner_product(c7, c14)
+NULL
+147.60000610351562
+NULL
+NULL
+1.440000057220459
+select inner_product(c14, c2) from test_sparse_vec_tbl;
+ERROR HY000: Invalid argument
+select inner_product(c14, c11) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select inner_product(c14, c12) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select inner_product(c14, c13) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select inner_product(c14, null) from test_sparse_vec_tbl;
+inner_product(c14, null)
+NULL
+NULL
+NULL
+NULL
+NULL
+select inner_product(c14, '{}') from test_sparse_vec_tbl;
+inner_product(c14, '{}')
+0
+0
+NULL
+NULL
+0
+select inner_product(c14, '{1:1}') from test_sparse_vec_tbl;
+inner_product(c14, '{1:1}')
+0
+123
+NULL
+NULL
+1.2000000476837158
+select inner_product(c14, '{100:1}') from test_sparse_vec_tbl;
+inner_product(c14, '{100:1}')
+0
+0
+NULL
+NULL
+0
+select inner_product(c14, '{1:3, 100:1}') from test_sparse_vec_tbl;
+inner_product(c14, '{1:3, 100:1}')
+0
+369
+NULL
+NULL
+3.6000001430511475
+select inner_product(c14, '{a:3, 100:1}') from test_sparse_vec_tbl;
+ERROR HY000: Incorrect integer value
+select inner_product(c14, 'abc') from test_sparse_vec_tbl;
+ERROR 22032: Invalid JSON text.
+select inner_product('{1:2, 100:1}', '{1:3, 100:1}') from test_sparse_vec_tbl;
+ERROR 22032: Invalid JSON text.
+select inner_product(t1.c14, '{1:1}') from test_sparse_vec_tbl t1, test_sparse_vec_tbl t2 where t1.id >= t2.id;
+inner_product(t1.c14, '{1:1}')
+0
+NULL
+1.2000000476837158
+0
+123
+NULL
+NULL
+1.2000000476837158
+NULL
+1.2000000476837158
+0
+NULL
+NULL
+1.2000000476837158
+1.2000000476837158
+select id from test_sparse_vec_tbl where negative_inner_product(c14, c15) = 0;
+id
+5
+select id from test_sparse_vec_tbl where negative_inner_product(c14, c15) > 0;
+id
+select id from test_sparse_vec_tbl group by negative_inner_product(c14, c15);
+id
+3
+1
+4
+5
+select negative_inner_product(c14, c15) from test_sparse_vec_tbl;
+negative_inner_product(c14, c15)
+-172.08360862731934
+-15129
+NULL
+NULL
+0
+select negative_inner_product(c14, c7) from test_sparse_vec_tbl where id = 3;
+negative_inner_product(c14, c7)
+NULL
+select negative_inner_product(c14, c7) from test_sparse_vec_tbl;
+negative_inner_product(c14, c7)
+NULL
+-147.60000610351562
+NULL
+NULL
+-1.440000057220459
+select negative_inner_product(c7, c14) from test_sparse_vec_tbl;
+negative_inner_product(c7, c14)
+NULL
+-147.60000610351562
+NULL
+NULL
+-1.440000057220459
+select negative_inner_product(c14, c2) from test_sparse_vec_tbl;
+ERROR HY000: Invalid argument
+select negative_inner_product(c14, c11) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select negative_inner_product(c14, c12) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select negative_inner_product(c14, c13) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select negative_inner_product(c14, null) from test_sparse_vec_tbl;
+negative_inner_product(c14, null)
+NULL
+NULL
+NULL
+NULL
+NULL
+select negative_inner_product(c14, '{}') from test_sparse_vec_tbl;
+negative_inner_product(c14, '{}')
+0
+0
+NULL
+NULL
+0
+select negative_inner_product(c14, '{1:1}') from test_sparse_vec_tbl;
+negative_inner_product(c14, '{1:1}')
+0
+-123
+NULL
+NULL
+-1.2000000476837158
+select negative_inner_product(c14, '{100:1}') from test_sparse_vec_tbl;
+negative_inner_product(c14, '{100:1}')
+0
+0
+NULL
+NULL
+0
+select negative_inner_product(c14, '{1:3, 100:1}') from test_sparse_vec_tbl;
+negative_inner_product(c14, '{1:3, 100:1}')
+0
+-369
+NULL
+NULL
+-3.6000001430511475
+select negative_inner_product(c14, 'abc') from test_sparse_vec_tbl;
+ERROR 22032: Invalid JSON text.
+select negative_inner_product('{1:2, 100:1}', '{1:3, 100:1}') from test_sparse_vec_tbl;
+ERROR 22032: Invalid JSON text.
+select negative_inner_product(t1.c14, '{1:1}') from test_sparse_vec_tbl t1, test_sparse_vec_tbl t2 where t1.id >= t2.id;
+negative_inner_product(t1.c14, '{1:1}')
+0
+NULL
+-1.2000000476837158
+0
+-123
+NULL
+NULL
+-1.2000000476837158
+NULL
+-1.2000000476837158
+0
+NULL
+NULL
+-1.2000000476837158
+-1.2000000476837158
+select l2_distance(c14, c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select cosine_distance(c14, c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select array_length(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select WEIGHT_STRING(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select ASCII(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select BIN(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select BIT_LENGTH(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select CHAR(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select CHAR_LENGTH(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select CHARACTER_LENGTH(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select CONCAT(c14, c15) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select CONCAT_WS(c14, c15) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select ELT(1, c14, c15) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select ELT(1, 'a', c15) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select FIELD(c14, c14, c15) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select HEX(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select INSERT('Quadratic',7,3,c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select INSERT(c14,7,3,'What') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select INSTR(c14,'1') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select IP2INT(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LCASE(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LEFT(c14,2) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LENGTH(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LOCATE(c14,'1') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LOCATE('1',c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LOWER(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LPAD(c14,1,'1') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LPAD('1',1,c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select LTRIM(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select MAKE_SET(1,'str1',c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select MID(c14,1,1) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select OCTET_LENGTH(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select ORD(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select POSITION('1' IN c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select QUOTE(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_INSTR(c14, 'ocean') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_INSTR('ocean base oceanbase', c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_LIKE(c14, c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_REPLACE(c14, 'a', '2') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REGEXP_SUBSTR(c14, '[[:blank:]][[:alnum:]]*', 1, 1) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REPEAT(c14, 2) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REPLACE(c14, 'abc.', 'www') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', c14, 'www') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', 'abc.', c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT REVERSE(c14) from test_sparse_vec_tbl;
+ERROR 0A000: Not supported feature or function
+SELECT RIGHT(c14,4) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT c14 RLIKE 'a' from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT RPAD(c14,5,'?') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT RTRIM(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT STRCMP(c14,c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT SUBSTR(c14, 2) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT SUBSTRING(c14, 2) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT SUBSTRING_INDEX(c14, 'ABC', 0) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT TRIM(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT UCASE(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT UNHEX(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT UPPER(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT TO_BASE64(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT FROM_BASE64(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT SOUNDEX(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT CHARSET(c14) from test_sparse_vec_tbl;
+CHARSET(c14)
+binary
+binary
+binary
+binary
+binary
+SELECT ABS(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT ROUND(c14,0) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT CEILING(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT FLOOR(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT POWER(c14,2) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select cast (c14 as char) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select cast (c14 as json) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select cast (c14 as UNSIGNED) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+SELECT CONVERT(c14, CHAR) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select BINARY c14 from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select MD5(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select SHA(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select PASSWORD(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select ENCODE(c14,'a') from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+select COMPRESS(c14) from test_sparse_vec_tbl;
+ERROR 22000: Invalid data type for the operation
+drop table if exists test_sparse_vec_tbl;
+drop table if exists t1;
+create table t1 (id int, m1 sparsevector, m2 sparsevector, m3 sparsevector);
+insert into t1 values (1, '{1:1.2}', '{2:2.2}', '{3:3.4}');
+select if (1, m1, id) from t1;
+ERROR HY000: Invalid argument
+select if (1, m1, m1) from t1;
+ERROR 22000: array type mismatch found between definition and data
+select if (1, m1, m2) from t1;
+ERROR 22000: array type mismatch found between definition and data
+select if (1, m1, m3) from t1;
+ERROR 22000: array type mismatch found between definition and data
+SELECT
+CASE
+WHEN t1.m1='{1:1.2}' THEN 'true'
+        ELSE 'result_value_if_false'
+    END
+FROM t1;
+CASE
+WHEN t1.m1='{1:1.2}' THEN 'true'
+        ELSE 'result_value_if_false'
+    END
+true
+SELECT
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE 'result_value_if_false'
+    END
+FROM t1;
+ERROR HY000: Invalid argument
+SELECT
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE m1
+END
+FROM t1;
+ERROR 22000: array type mismatch found between definition and data
+SELECT
+CASE
+WHEN t1.m2=t1.m2 THEN m1
+ELSE m2
+END
+FROM t1;
+ERROR 22000: array type mismatch found between definition and data
+select *, COALESCE(m1,m2,m3) from t1;
+ERROR 22000: array type mismatch found between definition and data
+select *, COALESCE(m1,m1) from t1;
+ERROR 22000: array type mismatch found between definition and data
+drop table t1;
+create table t1 (c1 int  primary key,c2 sparsevector);
+insert into t1(c1,c2) values(1,'{null:null}');
+ERROR 42000: Null value
+insert into t1(c1,c2) values(2,'{1:null}');
+ERROR 42000: Null value
+insert into t1(c1,c2) values(3,'{null:1}');
+ERROR 42000: Null value
+insert into t1(c1,c2) values(4, map(null,1));
+ERROR 42000: Null value
+insert into t1(c1,c2) values(5,map(1,null));
+ERROR 42000: Null value
+insert into t1(c1,c2) values(6,map(null,null));
+ERROR 42000: Null value
+insert into t1(c1,c2) values(7,map(1,2));
+select * from t1 order by c1;
+c1	c2
+7	{1:2}
+drop table t1;
+create table t1 (c1 int  primary key,c2 sparsevector,c3 sparsevector,c4 varchar(200));
+insert into t1(c1,c2,c3,c4) values(4,'{1.123:1}','{1:1.3,1:2.6}','{1.2:1}');
+select inner_product(c2,c4) from t1 order by c1;
+inner_product(c2,c4)
+1
+select vector_dims(c2) from t1;
+vector_dims(c2)
+1
+select vector_norm(c2) from t1;
+ERROR HY000: Invalid argument
+select vector_dims(map(1,1)) from t1;
+ERROR HY000: Invalid argument
+select vector_norm(map(1,1)) from t1;
+ERROR HY000: Invalid argument
+select * from t1;
+c1	c2	c3	c4
+4	{1:1}	{1:2.6}	{1.2:1}
+drop table t1;
+create table t1 (c1 int primary key, c2 sparsevector,c3 sparsevector,c4 datetime,c5 sparsevector as (c4));
+insert into t1(c1,c2,c3,c4) values(1,'{1:1.3,1:2.6}','{1:1.3,1:2.6}','2025-03-14 15:10:59');
+ERROR 0A000: type casting not supported
+drop table t1;

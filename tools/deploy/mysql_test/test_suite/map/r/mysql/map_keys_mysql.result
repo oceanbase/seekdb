@@ -1,0 +1,342 @@
+# ----------------------------------------------------------------------
+# Test of map_keys.
+# ----------------------------------------------------------------------
+drop table if exists t1, t2, t3, t4, t5, output_test;
+select map_keys(NULL);
+map_keys(NULL)
+NULL
+select map_keys(map());
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '))' at line 1
+select map_keys(map(1,2,3));
+ERROR 42000: Incorrect parameter count
+select map_keys(map(1,11,2,22));
+map_keys(map(1,11,2,22))
+[1,2]
+select map_keys(map(1.1,'aa',2.2,'bb'));
+map_keys(map(1.1,'aa',2.2,'bb'))
+[1.1,2.2]
+select map_keys(map('aa',100,'bb',200));
+map_keys(map('aa',100,'bb',200))
+["aa","bb"]
+select map_keys(map('aa',100,'a',200));
+map_keys(map('aa',100,'a',200))
+["a","aa"]
+select map_keys(map('aa',100,'aa',200));
+map_keys(map('aa',100,'aa',200))
+["aa"]
+select map_keys(map(1,'a',3.2,4));
+map_keys(map(1,'a',3.2,4))
+[1,3.2]
+select map_keys(map(9223372036854775807,'a',9223372036854775808,4));
+map_keys(map(9223372036854775807,'a',9223372036854775808,4))
+[9223372036854775807]
+select map_keys(map(9223372036854775807,'a',9223372036854775806,4));
+map_keys(map(9223372036854775807,'a',9223372036854775806,4))
+[9223372036854775806,9223372036854775807]
+select map_keys(map(-9223372036854775807,'a',-9223372036854775808,4));
+map_keys(map(-9223372036854775807,'a',-9223372036854775808,4))
+[-9223372036854775808,-9223372036854775807]
+select map_keys(map(-9223372036854775809,'a',-9223372036854775806,4));
+map_keys(map(-9223372036854775809,'a',-9223372036854775806,4))
+[-9223372036854775808,-9223372036854775806]
+select map_keys(map(1,2,3));
+ERROR 42000: Incorrect parameter count
+select map_keys(map([1],2));
+ERROR 0A000: collection type as map key not supported
+select map_keys(map('a',[[2]]));
+map_keys(map('a',[[2]]))
+["a"]
+select map_keys(map(1,map(1,2)));
+ERROR 0A000: Not supported feature or function
+select map_keys(map(NULL,NULL,NULL,NULL));
+map_keys(map(NULL,NULL,NULL,NULL))
+[NULL]
+select map_keys(map(NULL,array_remove([1],1),'a',[2]));
+map_keys(map(NULL,array_remove([1],1),'a',[2]))
+[NULL,"a"]
+select map_keys(map(1,'a',2,'b',1,'c',NULL,'d'));
+map_keys(map(1,'a',2,'b',1,'c',NULL,'d'))
+[NULL,1,2]
+select map_keys(map(1,'a',NULL,'b',1,'c',NULL,'d'));
+map_keys(map(1,'a',NULL,'b',1,'c',NULL,'d'))
+[NULL,1]
+select map_keys(map('hi','a','hello','b','hi','c',NULL,'d'));
+map_keys(map('hi','a','hello','b','hi','c',NULL,'d'))
+[NULL,"hello","hi"]
+select map_keys(map('hi','a',NULL,'b','hi','c',NULL,'d'));
+map_keys(map('hi','a',NULL,'b','hi','c',NULL,'d'))
+[NULL,"hi"]
+select map_keys(map(1,[1,2],2,[3],1,[4,5,6],NULL,[7,8,9]));
+map_keys(map(1,[1,2],2,[3],1,[4,5,6],NULL,[7,8,9]))
+[NULL,1,2]
+select map_keys(map(1,[1,2],NULL,[3],1,[4,5,6],NULL,[7,8,9]));
+map_keys(map(1,[1,2],NULL,[3],1,[4,5,6],NULL,[7,8,9]))
+[NULL,1]
+select map_keys(map(1,1));
+map_keys(map(1,1))
+[1]
+select map_keys(map(1,"apple"));
+map_keys(map(1,"apple"))
+[1]
+select map_keys(map(1,1.0));
+map_keys(map(1,1.0))
+[1]
+select map_keys(map(1.2,1));
+map_keys(map(1.2,1))
+[1.2]
+select map_keys(map(1.2,"apple"));
+map_keys(map(1.2,"apple"))
+[1.2]
+select map_keys(map(1.2,1.1));
+map_keys(map(1.2,1.1))
+[1.2]
+select map_keys(map(1.2,2,1.5,"apple"));
+map_keys(map(1.2,2,1.5,"apple"))
+[1.2,1.5]
+select map_keys(map("a",1));
+map_keys(map("a",1))
+["a"]
+select map_keys(map("a",1.2));
+map_keys(map("a",1.2))
+["a"]
+select map_keys(map("a","apple"));
+map_keys(map("a","apple"))
+["a"]
+select map_keys(map("a","apple",2,"banana"));
+map_keys(map("a","apple",2,"banana"))
+["2","a"]
+select map_keys(map("a","apple",2.1,"banana"));
+map_keys(map("a","apple",2.1,"banana"))
+["2.1","a"]
+select map_keys(map("a","apple","b","banana"));
+map_keys(map("a","apple","b","banana"))
+["a","b"]
+select map_keys(1);
+ERROR HY000: Invalid argument
+select map_keys(1.1);
+ERROR HY000: Invalid argument
+select map_keys("hello world");
+ERROR HY000: Invalid argument
+select map_keys([1,2,3]);
+ERROR 22000: Invalid data type for the operation
+select map_keys([[1,2,3]]);
+ERROR 22000: Invalid data type for the operation
+select map_keys(NULL);
+map_keys(NULL)
+NULL
+select map_keys(map("a",1), map("a",1));
+ERROR 42000: Incorrect parameter count in the call to native function 'map_keys'
+select map_keys(map("a",1), map("a",1), map("a",1));
+ERROR 42000: Incorrect parameter count in the call to native function 'map_keys'
+select map_keys(map("a",1), 1);
+ERROR 42000: Incorrect parameter count in the call to native function 'map_keys'
+create table t1 (id int not null auto_increment, m map(int, int));
+insert into t1(m) values ('{1:1}');
+insert into t1(m) values ('{1:1,2:2,3:3}');
+insert into t1(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t1(m) values ('{1.5:2, 1.6:"3"}');
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t1;
+map_keys(m)
+[1]
+[1,2,3]
+[1,2,3]
+[2]
+select map_keys(m) from t1;
+map_keys(m)
+[1]
+[1,2,3]
+[1,2,3]
+[2]
+create table t2 (id int not null auto_increment, m map(double, double));
+insert into t2(m) values ('{1.1:1,2.1:2,3.1:3}');
+insert into t2(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t2(m) values ('{1.5:2, 1.6:"3"}');
+insert into t2(m) values ('{1.5:2, 1.6:3.1}');
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t2;
+map_keys(m)
+[1.1,2.1,3.1]
+[1,2,3]
+[1.5,1.6]
+[1.5,1.6]
+select map_keys(m) from t2;
+map_keys(m)
+[1.1,2.1,3.1]
+[1,2,3]
+[1.5,1.6]
+[1.5,1.6]
+create table t3 (id int not null auto_increment, m map(varchar(20), varchar(20)));
+insert into t3(m) values ('{1.1:1,2.1:2,3.1:3}');
+insert into t3(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t3(m) values ('{1.5:2, 1.6:"3"}');
+insert into t3(m) values ('{1.5:2, 1.6:3.1}');
+insert into t3(m) values ('{"1":2, "dog":3.1}');
+insert into t3(m) values ('{"apple":"tengzhen.lk", "dog":"3.1"}');
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t3;
+map_keys(m)
+["1.1","2.1","3.1"]
+["1","2","3 "]
+["1.5","1.6"]
+["1.5","1.6"]
+["1","dog"]
+["dog","apple"]
+select map_keys(m) from t3;
+map_keys(m)
+["1.1","2.1","3.1"]
+["1","2","3 "]
+["1.5","1.6"]
+["1.5","1.6"]
+["1","dog"]
+["dog","apple"]
+create table t4 (id int not null auto_increment, m map(int, int[]));
+insert into t4(m) values ('{1:[1],2:[2],3:[3]}');
+insert into t4(m) values ('{1:NULL}');
+insert into t4(m) values ('{1:[NULL]}');
+insert into t4(m) values ('{1:[11,11], 2:[22,22], 1:[33,33]}');
+insert into t4(m) values ('{1:[]}');
+insert into t4(m) values ('{1:[1],2:[2],1:[3,4]}');
+insert into t4(m) values ('{NULL:[1],1:[1],null:[],2:[2],1:NULL}');
+select * from t4;
+id	m
+1	{1:[1],2:[2],3:[3]}
+2	{1:NULL}
+3	{1:[NULL]}
+4	{1:[33,33],2:[22,22]}
+5	{1:[]}
+6	{1:[3,4],2:[2]}
+7	{NULL:[],1:NULL,2:[2]}
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t4;
+map_keys(m)
+[1,2,3]
+[1]
+[1]
+[1,2]
+[1]
+[1,2]
+[NULL,1,2]
+select map_keys(m) from t4;
+map_keys(m)
+[1,2,3]
+[1]
+[1]
+[1,2]
+[1]
+[1,2]
+[NULL,1,2]
+create table t5 (id int not null auto_increment, m map(int, varchar(100)[][]), m2 map(int, varchar(100)[][][]));
+insert into t5(m) values ('{1:[[]]}');
+insert into t5(m) values ('{1:[["a","b"],["c"],NULL]}');
+insert into t5(m2) values ('{1:[[[]],[[]]]}');
+select * from t5;
+id	m	m2
+1	{1:[[]]}	NULL
+2	{1:[["a","b"],["c"],NULL]}	NULL
+3	NULL	{1:[[[]],[[]]]}
+select /*+ OPT_PARAM('enable_rich_vector_format', 'FALSE') */ map_keys(m) from t5;
+map_keys(m)
+[1]
+[1]
+NULL
+select map_keys(m) from t5;
+map_keys(m)
+[1]
+[1]
+NULL
+CREATE TABLE output_test (
+pk bigint not null AUTO_INCREMENT,
+s_1   Array(varchar(64)),
+i_1   Array(BigInt),
+f_1   Array(float),
+d_1   Array(double),
+i_2   Array(BigInt)
+);
+insert into output_test(i_1)
+select map_keys(m)
+from t1;
+select pk, i_1 from output_test;
+pk	i_1
+1	[1]
+2	[1,2,3]
+3	[1,2,3]
+4	[2]
+select * from output_test;
+pk	s_1	i_1	f_1	d_1	i_2
+1	NULL	[1]	NULL	NULL	NULL
+2	NULL	[1,2,3]	NULL	NULL	NULL
+3	NULL	[1,2,3]	NULL	NULL	NULL
+4	NULL	[2]	NULL	NULL	NULL
+insert into output_test(i_2)
+values (map_keys(map(1,2)));
+select * from output_test;
+pk	s_1	i_1	f_1	d_1	i_2
+1	NULL	[1]	NULL	NULL	NULL
+2	NULL	[1,2,3]	NULL	NULL	NULL
+3	NULL	[1,2,3]	NULL	NULL	NULL
+4	NULL	[2]	NULL	NULL	NULL
+8	NULL	NULL	NULL	NULL	[1]
+update output_test
+SET i_2 = map_values(map(3, 4))
+WHERE i_2 = map_keys(map(1, 2));
+select pk, i_2 from output_test;
+pk	i_2
+1	NULL
+2	NULL
+3	NULL
+4	NULL
+8	[4]
+delete from output_test
+WHERE i_1 = map_keys(map(1, 2));
+select pk, i_1 from output_test;
+pk	i_1
+2	[1,2,3]
+3	[1,2,3]
+4	[2]
+8	NULL
+drop table if EXISTS tt3, tt4;
+create table tt3(id1 int primary key,id2 bool,id3 boolean,id4 TINYINT ,id5  smallint ,id6 int,id7 INTEGER,id8 BIGINT,id9 SERIAL,f float,d double,c varchar(100),a array(int),v vector(2),m map(int,varchar(100)));
+insert into tt3 values(1,127,127,127,32767,2147483647,2147483647,9223372036854775807,18446744073709551615,3.402823466E+38,1.7976931348623157E+308,'test1',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(2,-128,-128,-128,-32768,-2147483648,-2147483648,-9223372036854775808,18446744073709551614,3.402823466E+38,-1.7976931348623157E+308,'test2',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(3,1,2,3,4,5,6,7,8,1.175494351E-38,-2.2250738585072014E-308,'test3',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(4,0,0,0,0,0,0,0,9,1.175494351E-38,2.2250738585072014E-308,'test4',[1,2],[1,2],map(1,'test'));
+insert into tt3 values(5,null,null,null,null,null,null,null,10,null,null,'test4','[]',null,map(1,'test'));
+drop view if EXISTS vtt3;
+create view vtt3 as select * from tt3;
+create table tt4(id int ,m1 map(int,int),m2 map(bigint unsigned,varchar(100)),m3 map(varchar(100),array(varchar(100))),m4 map(double ,float unsigned),
+m5 map(bigint,array(array(int unsigned))),m6 map(bigint,vector(2)));
+insert  /*+ direct(true,100,'inc') enable_parallel_dml parallel(2)*/  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+insert  /*+ direct(true,100) enable_parallel_dml parallel(2) append*/  into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+insert   into tt4 select id1, map(id1,id6),map(id9,c),map(c,[c]),map(d,f),map(id8,[a]),map(id8,v) from tt3;
+select map_keys(m1) m1,map_keys(m2) m2,map_keys(m3) m3,map_keys(m4) m4,map_keys(m5) m5,map_keys(m6) m6 from tt4;
+m1	m2	m3	m4	m5	m6
+[1]	[18446744073709551615]	["test1"]	[1.7976931348623157e308]	[9223372036854775807]	[9223372036854775807]
+[1]	[18446744073709551615]	["test1"]	[1.7976931348623157e308]	[9223372036854775807]	[9223372036854775807]
+[1]	[18446744073709551615]	["test1"]	[1.7976931348623157e308]	[9223372036854775807]	[9223372036854775807]
+[2]	[18446744073709551614]	["test2"]	[-1.7976931348623157e308]	[-9223372036854775808]	[-9223372036854775808]
+[2]	[18446744073709551614]	["test2"]	[-1.7976931348623157e308]	[-9223372036854775808]	[-9223372036854775808]
+[2]	[18446744073709551614]	["test2"]	[-1.7976931348623157e308]	[-9223372036854775808]	[-9223372036854775808]
+[3]	[8]	["test3"]	[-2.2250738585072014e-308]	[7]	[7]
+[3]	[8]	["test3"]	[-2.2250738585072014e-308]	[7]	[7]
+[3]	[8]	["test3"]	[-2.2250738585072014e-308]	[7]	[7]
+[4]	[9]	["test4"]	[2.2250738585072014e-308]	[0]	[0]
+[4]	[9]	["test4"]	[2.2250738585072014e-308]	[0]	[0]
+[4]	[9]	["test4"]	[2.2250738585072014e-308]	[0]	[0]
+[5]	[10]	["test4"]	[NULL]	[NULL]	[NULL]
+[5]	[10]	["test4"]	[NULL]	[NULL]	[NULL]
+[5]	[10]	["test4"]	[NULL]	[NULL]	[NULL]
+select map_values(m1) m1,map_values(m2) m2,map_values(m3) m3,map_values(m4) m4,map_values(m5) m5,map_values(m6) m6 from tt4;
+m1	m2	m3	m4	m5	m6
+[-2147483648]	["test2"]	[["test2"]]	[3.40282e38]	[[[1,2]]]	[[1,2]]
+[-2147483648]	["test2"]	[["test2"]]	[3.40282e38]	[[[1,2]]]	[[1,2]]
+[-2147483648]	["test2"]	[["test2"]]	[3.40282e38]	[[[1,2]]]	[[1,2]]
+[0]	["test4"]	[["test4"]]	[1.17549e-38]	[[[1,2]]]	[[1,2]]
+[0]	["test4"]	[["test4"]]	[1.17549e-38]	[[[1,2]]]	[[1,2]]
+[0]	["test4"]	[["test4"]]	[1.17549e-38]	[[[1,2]]]	[[1,2]]
+[2147483647]	["test1"]	[["test1"]]	[3.40282e38]	[[[1,2]]]	[[1,2]]
+[2147483647]	["test1"]	[["test1"]]	[3.40282e38]	[[[1,2]]]	[[1,2]]
+[2147483647]	["test1"]	[["test1"]]	[3.40282e38]	[[[1,2]]]	[[1,2]]
+[5]	["test3"]	[["test3"]]	[1.17549e-38]	[[[1,2]]]	[[1,2]]
+[5]	["test3"]	[["test3"]]	[1.17549e-38]	[[[1,2]]]	[[1,2]]
+[5]	["test3"]	[["test3"]]	[1.17549e-38]	[[[1,2]]]	[[1,2]]
+[NULL]	["test4"]	[["test4"]]	[NULL]	[[[]]]	[NULL]
+[NULL]	["test4"]	[["test4"]]	[NULL]	[[[]]]	[NULL]
+[NULL]	["test4"]	[["test4"]]	[NULL]	[[[]]]	[NULL]
+drop table t1, t2, t3, t4, t5, output_test, tt3, tt4;

@@ -36,6 +36,7 @@ struct ObFTCacheRangeHandle
   const ObDictCacheKey *key_;
   const ObDictCacheValue *value_;
 
+  TO_STRING_KV(K_(type), K_(handle), KPC_(key), KP_(value));
 public:
   ObFTCacheRangeHandle()
       : type_(ObFTDictType::DICT_TYPE_INVALID), handle_(), key_(nullptr), value_(nullptr)

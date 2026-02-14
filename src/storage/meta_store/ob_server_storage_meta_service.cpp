@@ -31,6 +31,7 @@ ObServerStorageMetaService::ObServerStorageMetaService()
   : is_inited_(false),
     is_started_(false),
     persister_(),
+    replayer_(),
     slogger_mgr_(),
     server_slogger_(nullptr),
     ckpt_slog_handler_() {}
@@ -43,8 +44,8 @@ int ObServerStorageMetaService::init()
     LOG_WARN("has inited", K(ret));
   } else if (OB_FAIL(slogger_mgr_.init(
         OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
-	OB_FILE_SYSTEM_ROUTER.get_sstable_dir(),
-	ObLogConstants::MAX_LOG_FILE_SIZE,
+	      OB_FILE_SYSTEM_ROUTER.get_sstable_dir(),
+	      ObLogConstants::MAX_LOG_FILE_SIZE,
         OB_FILE_SYSTEM_ROUTER.get_slog_file_spec()))) {
     LOG_WARN("fail to init slogger manager", K(ret));
   } else if (OB_FAIL(slogger_mgr_.get_server_slogger(server_slogger_))) {
@@ -53,6 +54,8 @@ int ObServerStorageMetaService::init()
     LOG_WARN("fail to init server checkpoint slog hander", K(ret));
   } else if (OB_FAIL(persister_.init(false, server_slogger_))) {
     LOG_WARN("fail to init persister", K(ret));
+  } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_))) {
+    LOG_WARN("fail to init replayer", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -68,6 +71,8 @@ int ObServerStorageMetaService::start()
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(slogger_mgr_.start())) {
     LOG_WARN("fail to start slogger mgr", K(ret));
+  } else if (OB_FAIL(replayer_.start_replay()))  {
+    LOG_WARN("fail to start replayer", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
     LOG_WARN("fail to start ckpt slog handler", K(ret));
   } else {
@@ -98,6 +103,7 @@ void ObServerStorageMetaService::destroy()
   server_slogger_ = nullptr;
   ckpt_slog_handler_.destroy();
   persister_.destroy();
+  replayer_.destroy();
   is_inited_ = false;
 }
 
@@ -149,8 +155,6 @@ int ObServerStorageMetaService::write_checkpoint(bool is_force)
   }
   return ret;
 }
-
-
 
 } // namespace storage
 } // namespace oceanbase
