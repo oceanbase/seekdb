@@ -19,6 +19,8 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "share/ob_fts_index_builder_util.h"
+#include "share/system_variable/ob_system_variable.h"
+#include "share/system_variable/ob_sys_var_class_type.h"
 namespace oceanbase
 {
 using namespace common;
@@ -678,8 +680,12 @@ int ObSchemaUtils::construct_inner_table_schemas(
             && table_schema.get_table_id() == OB_ALL_CORE_TABLE_TID) {
           // sys tenant's __all_core_table's schema is built separately in bootstrap
         } else {
-          // Set name_case_mode for system tables
-          table_schema.set_name_case_mode(name_case_mode);
+          // System tables must always use OB_ORIGIN_AND_SENSITIVE, regardless of lower_case_table_names
+          if (table_schema.is_sys_table()) {
+            table_schema.set_name_case_mode(OB_ORIGIN_AND_SENSITIVE);
+          } else {
+            table_schema.set_name_case_mode(name_case_mode);
+          }
           
           if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
                   tenant_id, table_schema))) {
@@ -711,7 +717,12 @@ int ObSchemaUtils::construct_inner_table_schemas(
     if (OB_SUCC(ret) && construct_all) {
       for (int64_t i = 0; i < tables.count(); ++i) {
         ObTableSchema &table = tables.at(i);
-        table.set_name_case_mode(name_case_mode);
+        // System tables must always use OB_ORIGIN_AND_SENSITIVE, regardless of lower_case_table_names
+        if (table.is_sys_table()) {
+          table.set_name_case_mode(OB_ORIGIN_AND_SENSITIVE);
+        } else {
+          table.set_name_case_mode(name_case_mode);
+        }
       }
     }
   }

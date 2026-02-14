@@ -2236,11 +2236,8 @@ int ObSchemaMgr::add_table(
     // System tables ALWAYS use case-sensitive mode (OB_ORIGIN_AND_SENSITIVE = 0)
     // regardless of tenant's lower_case_table_names setting
     if (is_system_table) {
-      if (new_table_schema->get_name_case_mode() == OB_NAME_CASE_INVALID) {
-        // System table arrived with invalid mode - set it to case-sensitive
-        new_table_schema->set_name_case_mode(OB_ORIGIN_AND_SENSITIVE);
-      }
-      // Otherwise preserve the mode already set
+      // System table must always use OB_ORIGIN_AND_SENSITIVE
+      new_table_schema->set_name_case_mode(OB_ORIGIN_AND_SENSITIVE);
     } else {
       // For user tables, use tenant's name_case_mode
       new_table_schema->set_name_case_mode(mode);

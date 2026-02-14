@@ -203,10 +203,15 @@ static int parse_args(int argc, char *argv[], ObServerOptions &opts)
     if (!has_lower_case_in_cmdline) {
       const char *env_value = getenv("LOWER_CASE_TABLE_NAMES");
       if (nullptr != env_value && strlen(env_value) > 0) {
-        ObString key("lower_case_table_names");
-        ObString value(env_value);
-        if (OB_FAIL(opts.variables_.push_back(std::make_pair(key, value)))) {
-          MPRINT("Failed to add lower_case_table_names from environment variable, ret=%d", ret);
+        // Validate that the value is 0, 1, or 2
+        if (strlen(env_value) == 1 && (env_value[0] == '0' || env_value[0] == '1' || env_value[0] == '2')) {
+          ObString key("lower_case_table_names");
+          ObString value(env_value);
+          if (OB_FAIL(opts.variables_.push_back(std::make_pair(key, value)))) {
+            MPRINT("Failed to add lower_case_table_names from environment variable, ret=%d", ret);
+          }
+        } else {
+          MPRINT("Invalid LOWER_CASE_TABLE_NAMES environment variable value: %s (must be 0, 1, or 2)", env_value);
         }
       }
     }
