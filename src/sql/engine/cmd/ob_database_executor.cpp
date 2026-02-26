@@ -22,6 +22,7 @@
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"
 #include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
+#include "sql/resolver/ddl/ob_fork_database_stmt.h"
 #include "observer/ob_server_event_history_table_operator.h"
 
 namespace oceanbase
@@ -346,6 +347,46 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
   return ret;
 }
 
+int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  const obrpc::ObForkDatabaseArg &fork_database_arg = stmt.get_fork_database_arg();
+  obrpc::ObForkDatabaseArg &tmp_arg = const_cast<obrpc::ObForkDatabaseArg&>(fork_database_arg);
+  ObString first_stmt;
+  obrpc::ObDDLRes res;
+  ObSQLSessionInfo *my_session = nullptr;
+
+  if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    SQL_ENG_LOG(WARN, "get first statement failed", K(ret));
+  } else if (OB_ISNULL(my_session = ctx.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_ENG_LOG(WARN, "session is null", K(ret));
+  } else {
+    // Fillin ddl params.
+    tmp_arg.ddl_stmt_str_ = first_stmt;
+    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
+    tmp_arg.session_id_ = my_session->get_sessid_for_table();
+
+    ObTaskExecutorCtx *task_exec_ctx = NULL;
+    obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
+
+    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+      ret = OB_NOT_INIT;
+      SQL_ENG_LOG(WARN, "get task executor context failed");
+    } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
+      SQL_ENG_LOG(WARN, "get common rpc proxy failed", K(ret));
+    } else if (OB_ISNULL(common_rpc_proxy)){
+      ret = OB_ERR_UNEXPECTED;
+      SQL_ENG_LOG(WARN, "common rpc proxy should not be null", K(ret));
+    } else if (OB_FAIL(common_rpc_proxy->fork_database(fork_database_arg, res))) {
+      SQL_ENG_LOG(WARN, "rpc proxy fork database failed", K(ret), K(res), K(fork_database_arg));
+    } else {
+      SQL_ENG_LOG(INFO, "fork database executor finished", K(fork_database_arg), K(res));
+    }
+  }
+
+  return ret;
+}
 
 }
 }

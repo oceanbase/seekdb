@@ -17,40 +17,34 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_
 #define OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_
 
-#include "share/ob_fork_table_util.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_autoincrement_service.h"
+#include "share/ob_fork_table_util.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "share/schema/ob_schema_getter_guard.h"
 
-namespace oceanbase
-{
-namespace rootserver
-{
+namespace oceanbase {
+namespace rootserver {
+
+int check_fork_table_supported(const ObTableSchema &src_table_schema,
+                               ObSchemaGetterGuard &schema_guard,
+                               const ObForkTableArg *fork_table_arg = nullptr);
 
 // Helper class for fork table operations
-// This class encapsulates fork table logic to reduce intrusion into create_tables_in_trans
-class ObForkTableHelper
-{
+// This class encapsulates fork table logic to reduce intrusion into
+// create_tables_in_trans
+class ObForkTableHelper {
 public:
   ObForkTableHelper(
       share::schema::ObMultiVersionSchemaService &schema_service,
-      common::ObMySQLProxy &sql_proxy,
-      common::ObMySQLTransaction &trans,
+      common::ObMySQLProxy &sql_proxy, common::ObMySQLTransaction &trans,
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t tenant_id,
-      const share::ObForkTableInfo &fork_table_info,
+      const uint64_t tenant_id, const share::ObForkTableInfo &fork_table_info,
       const share::schema::ObTableSchema *dst_table_schema = nullptr)
-    : schema_service_(schema_service),
-      sql_proxy_(sql_proxy),
-      trans_(trans),
-      schema_guard_(schema_guard),
-      tenant_id_(tenant_id),
-      fork_table_info_(fork_table_info),
-      dst_table_schema_(dst_table_schema),
-      src_table_schema_(nullptr),
-      src_tablet_ids_(),
-      dst_tablet_ids_(),
-      inited_(false) {}
+      : schema_service_(schema_service), sql_proxy_(sql_proxy), trans_(trans),
+        schema_guard_(schema_guard), tenant_id_(tenant_id),
+        fork_table_info_(fork_table_info), dst_table_schema_(dst_table_schema),
+        src_table_schema_(nullptr), src_tablet_ids_(), dst_tablet_ids_(),
+        inited_(false) {}
   ~ObForkTableHelper() {}
   int init(const common::ObIArray<share::schema::ObTableSchema> &table_schemas);
   int execute();
@@ -60,14 +54,12 @@ private:
   int copy_tablet_truncate_info_();
   int copy_table_autoinc_seq_info_();
   int copy_table_statistics_();
-  int copy_stat_info_(
-      const char *table_name,
-      const uint64_t src_table_id,
-      const int64_t src_part_id,
-      const uint64_t dst_table_id,
-      const int64_t dst_part_id);
+  int copy_stat_info_(const char *table_name, const uint64_t src_table_id,
+                      const int64_t src_part_id, const uint64_t dst_table_id,
+                      const int64_t dst_part_id);
   const char *get_table_schema_(const char *table_name);
-  int get_tablet_handle_(const common::ObTabletID &tablet_id, storage::ObTabletHandle &tablet_handle) const;
+  int get_tablet_handle_(const common::ObTabletID &tablet_id,
+                         storage::ObTabletHandle &tablet_handle) const;
   share::schema::ObMultiVersionSchemaService &schema_service_;
   common::ObMySQLProxy &sql_proxy_;
   common::ObMySQLTransaction &trans_;
@@ -89,4 +81,4 @@ private:
 } // namespace rootserver
 } // namespace oceanbase
 
-#endif  // OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_
+#endif // OCEANBASE_ROOTSERVER_OB_FORK_TABLE_HELPER_H_

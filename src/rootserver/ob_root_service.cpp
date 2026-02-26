@@ -4855,6 +4855,32 @@ int ObRootService::fork_table(const obrpc::ObForkTableArg &arg, obrpc::ObDDLRes 
   return ret;
 }
 
+int ObRootService::fork_database(const obrpc::ObForkDatabaseArg &arg, obrpc::ObDDLRes &res)
+{
+  int ret = OB_SUCCESS;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (!arg.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arg", K(arg), K(ret));
+  } else if (OB_FAIL(ddl_service_.fork_database(arg, res))) {
+    LOG_WARN("fork database failed", K(ret));
+  }
+  char database_names_buffer[512] = {0};
+  snprintf(database_names_buffer, sizeof(database_names_buffer), "%.*s -> %.*s",
+           static_cast<int>(arg.src_database_name_.length()), arg.src_database_name_.ptr(),
+           static_cast<int>(arg.dst_database_name_.length()), arg.dst_database_name_.ptr());
+  ROOTSERVICE_EVENT_ADD("ddl scheduler", "fork database",
+                        "tenant_id", arg.tenant_id_,
+                        "ret", ret,
+                        "trace_id", *ObCurTraceId::get_trace_id(),
+                        "task_id", res.task_id_,
+                        "databases", database_names_buffer);
+  LOG_INFO("finish fork database ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  return ret;
+}
+
 int ObRootService::truncate_table(const obrpc::ObTruncateTableArg &arg, obrpc::ObDDLRes &res)
 {
   int ret = OB_SUCCESS;

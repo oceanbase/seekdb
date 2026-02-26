@@ -47,6 +47,7 @@
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
+#include "sql/resolver/ddl/ob_fork_database_stmt.h"
 #include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
@@ -418,6 +419,10 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_FORK_TABLE: {
         DEFINE_EXECUTE_CMD(ObForkTableStmt, ObForkTableExecutor);
+        break;
+      }
+      case stmt::T_FORK_DATABASE: {
+        DEFINE_EXECUTE_CMD(ObForkDatabaseStmt, ObForkDatabaseExecutor);
         break;
       }
       case stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN: {

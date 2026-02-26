@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_ddl_common.h"
+#include "share/ob_rpc_struct.h"
 #include "logservice/ob_log_service.h" // for ObLogService
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
@@ -4472,6 +4473,7 @@ REPLACE_DDL_ARG_FUNC(obrpc::ObDropTableArg)
 REPLACE_DDL_ARG_FUNC(obrpc::ObDropIndexArg)
 REPLACE_DDL_ARG_FUNC(obrpc::ObRebuildIndexArg)
 REPLACE_DDL_ARG_FUNC(obrpc::ObTruncateTableArg)
+REPLACE_DDL_ARG_FUNC(obrpc::ObForkDatabaseArg)
 
 #undef REPLACE_DDL_ARG_FUNC
 
