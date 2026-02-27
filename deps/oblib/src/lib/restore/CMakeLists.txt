@@ -1,4 +1,3 @@
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
 oblib_add_library(restore OBJECT
   ob_i_storage.h
   ob_i_storage.cpp

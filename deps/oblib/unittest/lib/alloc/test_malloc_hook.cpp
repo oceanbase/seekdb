@@ -236,8 +236,8 @@ TEST_F(TestMallocHook, test_cpp_operator)
   size_t n = 10;
   int *ptr_array = new int[n];
   ASSERT_NE(ptr_array, nullptr);
+  ptr_array[n - 1] = 10;
   header = Header::ptr2header((void *)ptr_array);
   ASSERT_TRUE(header->check_magic_code());
-  ptr_array[n - 1] = 10;
   delete[] ptr_array;
 }
