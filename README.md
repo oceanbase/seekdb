@@ -12,8 +12,6 @@ Vector, full-text, and relational in one engine. Embedding, rerank, and LLM are 
 
 </div>
 
----
-
 <div align="center">
 <p>
     <a href="https://oceanbase.ai">
@@ -46,15 +44,9 @@ Vector, full-text, and relational in one engine. Embedding, rerank, and LLM are 
 
 </div>
 
----
-
 ## What is OceanBase seekdb?
 
 OceanBase seekdb is an open-source database that does vector search, full-text search, and SQL in one engine. Embedding, reranking, and LLM inference are built in, so a RAG pipeline can stay in one place instead of calling out to separate services. It uses the OceanBase engine and speaks MySQL protocol; existing MySQL clients and migrations work as-is.
-
-In short: search (vector + full-text + relational) and AI (embedding, rerank, LLM, prompts) are all in the database, with one schema for tables, vectors, text, and JSON.
-
----
 
 ## Quick Start
 
@@ -87,8 +79,6 @@ print(results["documents"])
 
 Other options: [Docker](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) or [binary (RPM)](https://www.oceanbase.ai/docs/seekdb-overview/). Documentation: [seekdb](https://www.oceanbase.ai/docs/seekdb-overview/) and [pyseekdb](https://github.com/oceanbase/pyseekdb).
 
----
-
 ## Capabilities
 
 | Area | Description |
@@ -98,8 +88,6 @@ Other options: [Docker](https://github.com/oceanbase/docker-images/blob/main/see
 | Vector and full-text | Dense and sparse vectors (L2, IP, cosine), HNSW/IVF indexes, BM25 full-text with phrase and boolean. |
 | SQL | OceanBase engine, ACID, MySQL protocol; works with standard MySQL clients and migration tools. |
 | Deployment | Embedded (e.g. pyseekdb), single-node server, or [OceanBase](https://www.oceanbase.com/) for scale-out. |
-
----
 
 ## Use Cases
 
@@ -112,21 +100,15 @@ Other options: [Docker](https://github.com/oceanbase/docker-images/blob/main/see
 
 More: [Use cases on oceanbase.ai](https://www.oceanbase.ai/).
 
----
-
 ## Ecosystem
 
 Supports LangChain, LangGraph, LlamaIndex, Dify, Coze, FastGPT, DB-GPT, Hugging Face, Firecrawl, Spring AI Alibaba, Jina, Ragas, Instructor, Baseten, Cloudflare Workers AI, and others. See the [documentation](https://www.oceanbase.ai/docs/seekdb-overview/) for integration guides.
-
----
 
 ## Community & Support
 
 - [Discord](https://discord.gg/74cF8vbNEs)
 - [GitHub Discussions](https://github.com/oceanbase/seekdb/discussions)
 - [Forum (中文)](https://ask.oceanbase.com/)
-
----
 
 ## Development
 
@@ -138,8 +120,6 @@ bash build.sh debug --init --make
 ```
 
 The developer guide describes how to run and where build outputs go. To contribute: [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
 
 ## License
 

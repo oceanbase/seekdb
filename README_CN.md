@@ -4,7 +4,7 @@
 
 ### AI 原生搜索数据库
 
-向量、全文、关系查询在一个引擎里完成；嵌入、重排和 LLM 内置在数据库中。
+统一的向量、全文、关系查询引擎；内置嵌入、重排和 LLM 等 AI 能力。
 
 </div>
 
@@ -40,15 +40,9 @@
 
 </div>
 
----
-
 ## OceanBase seekdb 是什么？
 
-OceanBase seekdb 是开源数据库，在同一套引擎里提供向量搜索、全文搜索和 SQL。嵌入、重排和 LLM 推理内置在数据库中，做 RAG 时不必再单独接一堆嵌入服务或 API，直接和数据库交互即可。底层是 OceanBase 引擎，协议兼容 MySQL，用现有 MySQL 客户端和迁移方式即可。
-
-总结：搜索（向量 + 全文 + 关系）和 AI（嵌入、重排、LLM、提示词）都在数据库里完成，表、向量、文本、JSON 共用一套 schema。
-
----
+OceanBase seekdb 是一款开源数据库，在统一的引擎中提供向量搜索、全文搜索和 SQL 等能力，并内置嵌入、重排和 LLM 等 AI 相关特性。在 RAG 开发时无需额外对接嵌入服务或 API，只需和 seekdb 直接进行交互。底层是 OceanBase 引擎，协议兼容 MySQL，用现有 MySQL 客户端和迁移方式即可。
 
 ## 快速开始
 
@@ -69,19 +63,18 @@ collection = client.create_collection("docs", dimension=384)
 collection.add(
     ids=["1", "2", "3"],
     documents=[
-        "机器学习是人工智能的一个子集。",
-        "向量数据库支持语义检索。",
-        "自然语言处理帮助计算机理解文本。",
+        "Machine learning is a subset of AI.",
+        "Vector databases enable semantic search.",
+        "Natural language processing helps computers understand text.",
     ],
 )
 
-results = collection.query(query_texts="什么是人工智能？", n_results=2)
+results = collection.query(query_texts="what is AI?", n_results=2)
 print(results["documents"])
 ```
 
 也可通过 [Docker](https://github.com/oceanbase/docker-images/blob/main/seekdb/README_CN.md) 或 [二进制（RPM）](https://www.oceanbase.ai/docs/seekdb-overview/) 运行。文档：[seekdb](https://www.oceanbase.ai/docs/seekdb-overview/)、[pyseekdb](https://github.com/oceanbase/pyseekdb)。
 
----
 
 ## 能力概览
 
@@ -92,8 +85,6 @@ print(results["documents"])
 | 向量与全文 | 稠密/稀疏向量（L2、内积、余弦），HNSW/IVF 索引，BM25 全文支持短语与布尔查询。 |
 | SQL | OceanBase 引擎，ACID，MySQL 协议；可用常见 MySQL 客户端与迁移工具。 |
 | 部署 | 嵌入式（如 pyseekdb）、单机服务，或迁移至 [OceanBase](https://www.oceanbase.com/) 做扩展。 |
-
----
 
 ## 使用场景
 
@@ -106,13 +97,9 @@ print(results["documents"])
 
 更多见 [oceanbase.ai 应用场景](https://www.oceanbase.ai/)。
 
----
-
 ## 生态
 
 支持与 LangChain、LangGraph、LlamaIndex、Dify、Coze、FastGPT、DB-GPT、Hugging Face、Firecrawl、Spring AI Alibaba、Jina、Ragas、Instructor、Baseten、Cloudflare Workers AI 等集成。集成说明见 [文档](https://www.oceanbase.ai/docs/seekdb-overview/)。
-
----
 
 ## 社区与支持
 
@@ -120,8 +107,6 @@ print(results["documents"])
 - [GitHub Discussions](https://github.com/oceanbase/seekdb/discussions)
 - [问答论坛（中文）](https://ask.oceanbase.com/)
 - [钉钉群 33254054](https://h5.dingtalk.com/circle/joinCircle.html?corpId=ding320493024256007024f2f5cc6abecb85&token=be84625101d2c2b2b675e1835e5b7988&groupCode=v1,k1,EoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY=&from=group&ext=%7B%22channel%22%3A%22QR_GROUP_NORMAL%22%2C%22extension%22%3A%7B%22groupCode%22%3A%22v1%2Ck1%2CEoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY%3D%22%2C%22groupFrom%22%3A%22group%22%7D%2C%22inviteId%22%3A1057855%2C%22orgId%22%3A313467091%2C%22shareType%22%3A%22GROUP%22%7D&origin=11?#/)
-
----
 
 ## 开发
 
@@ -133,8 +118,6 @@ bash build.sh debug --init --make
 ```
 
 开发者指南中说明了如何运行以及构建产物的位置。贡献指南见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
----
 
 ## 许可证
 
