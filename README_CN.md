@@ -58,7 +58,7 @@ pip install -U pyseekdb
 import pyseekdb
 
 client = pyseekdb.Client(path="./seekdb.db", database="test")
-collection = client.create_collection("docs", dimension=384)
+collection = client.create_collection("docs")
 
 collection.add(
     ids=["1", "2", "3"],
