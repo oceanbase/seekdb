@@ -217,17 +217,14 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
       if (OB_FAIL(range_container.fetch_info_for_dict(handle))) {
         LOG_WARN("Failed to fetch info for dict.", K(ret), K(i));
       } else if (OB_FAIL(handles.push_back(handle))) {
-        OB_DELETEx(ObFTCacheRangeHandle, &tmp_alloc, handle);
         LOG_WARN("Failed to push back handle", K(ret), K(i));
       }
     }
     if (OB_FAIL(ret)) {
-      for (int64_t i = 0; i < handles.size(); i++) {
-        OB_DELETEx(ObFTCacheRangeHandle, &tmp_alloc, handles[i]);
-      }
       handles.reset();
     } else {
       DATBuilderThreadPool pool;
+      pool.set_run_wrapper(MTL_CTX());
       pool.set_tries(&all_tries);
       pool.set_desc(&desc);
       pool.set_thread_count(static_cast<int64_t>(all_tries.size()));

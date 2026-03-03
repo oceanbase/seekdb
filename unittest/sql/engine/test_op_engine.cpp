@@ -171,7 +171,7 @@ int TestOpEngine::prepare_io(const std::string & test_data_name_suffix)
                                                                     async_io_thread_count,
                                                                     sync_io_thread_count, max_io_depth))) {
     LOG_WARN("add device channel failed", K(ret));
-  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init(false/*is_shared_storage*/))) {
+  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     LOG_WARN("fail to init storage meta service", K(ret));
   } else if (FALSE_IT(SERVER_STORAGE_META_SERVICE.get_slogger_manager().need_reserved_ = false)) {
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(false, storage_env_.default_block_size_))) {

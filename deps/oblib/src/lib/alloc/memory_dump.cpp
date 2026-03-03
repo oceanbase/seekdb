@@ -627,9 +627,7 @@ void ObMemoryDump::handle(void *task)
       ma->print_tenant_ctx_memory_usage(tenant_id);
     }
 
-#ifdef FATAL_ERROR_HANG
     print_malloc_sample_info();
-#endif
   } else {
     int fd = -1;
     if (-1 == (fd = ::open(LOG_FILE,

@@ -365,6 +365,9 @@ int inner_main(int argc, char *argv[])
   const char *const PID_FILE_NAME             = "run/seekdb.pid";
   int               ret                       = OB_SUCCESS;
 
+  MPRINT("Starting seekdb (%s %s %s) source revision %s.",
+    OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION, build_version());
+
   // change signal mask first.
   if (OB_FAIL(ObSignalHandle::change_signal_mask())) {
     MPRINT("change signal mask failed, ret=%d", ret);
@@ -398,12 +401,12 @@ int inner_main(int argc, char *argv[])
       opts->base_dir_.ptr(), strerror(errno));
   } else {
     MPRINT("Change working directory to base dir. path='%s'", opts->base_dir_.ptr());
-    fprintf(stderr, "The log file is in the directory: ");
+    fprintf(stderr, "The log file is in the directory: '");
     fprintf(stderr, opts->base_dir_.ptr());
     if (opts->base_dir_.ptr()[opts->base_dir_.length() - 1] != '/') {
       fprintf(stderr, "/");
     }
-    fprintf(stderr, "log/\n");
+    fprintf(stderr, "log/'\n");
   }
 
   if (OB_FAIL(ret)) {
@@ -455,8 +458,6 @@ int inner_main(int argc, char *argv[])
     }
     // print in log file.
     LOG_INFO("Build basic information for each syslog file", "info", syslog_file_info);
-    print_args(argc, argv);
-    ObCommandLineParser::print_version();
     print_all_limits();
     dl_iterate_phdr(callback, NULL);
 

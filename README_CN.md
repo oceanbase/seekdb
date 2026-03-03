@@ -382,9 +382,9 @@ seekdb 继承了 OceanBase 单机存储引擎、执行引擎、事务引擎、�
     </a>
 </p>
 
-<p>
-更多详情请参考[用户指南](docs/user-guide/README.md)。
-</p>
+<br/>
+
+更多详情请参考[用户指南](https://www.oceanbase.ai/docs/seekdb-overview/)。
 
 
 </div>

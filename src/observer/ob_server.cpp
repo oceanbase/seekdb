@@ -65,7 +65,6 @@
 #include "logservice/arbserver/ob_arb_server_config.h"
 #endif
 #include "lib/xml/ob_libxml2_sax_handler.h"
-#include "ob_check_params.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/shared_storage/prewarm/ob_replica_prewarm_struct.h"
 #endif
@@ -236,10 +235,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
                   DBA_STEP_INC_INFO(server_start),
                   "observer init begin.");
 
-  //check os params
-  if (OB_SUCC(ret) && OB_FAIL(check_os_params(GCONF.strict_check_os_params))) {
-    LOG_ERROR("check OS params failed", K(GCONF.strict_check_os_params));
-  }
   // set large page param
   ObLargePageHelper::set_param(config_.use_large_pages);
 
@@ -425,7 +420,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init tenant manager failed", KR(ret));
     } else if (OB_FAIL(startup_accel_handler_.init(SERVER_ACCEL))) {
       LOG_ERROR("init server startup task handler failed", KR(ret));
-    } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init(GCTX.is_shared_storage_mode()))) {
+    } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
       LOG_ERROR("init server storage meta handler failed", KR(ret));
     } else if (OB_FAIL(common::occam::ObThreadHungDetector::get_instance().init())) {
       LOG_ERROR("init sObThreadHungDetector failed", KR(ret));
