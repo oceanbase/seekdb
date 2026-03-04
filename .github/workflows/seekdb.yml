@@ -23,9 +23,9 @@ env:
   SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
 
 jobs:
-  seekdb-native:
-    if: ${{ github.repository_owner == 'oceanbase' && !github.event.pull_request.draft }}
-    name: seekdb-native
+  seekdb:
+    if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
+    name: seekdb
     # 使用已注册的 Runner：seekdb-test-arc-runner（若该 Runner 的 label 不是此名，请改成实际 label）
     runs-on: seekdb-test-arc-runner
     steps:
