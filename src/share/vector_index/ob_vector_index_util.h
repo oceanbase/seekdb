@@ -369,23 +369,30 @@ public:
   ObExprVecIvfCenterIdCache()
     : table_id_(ObCommonID::INVALID_ID),
       tablet_id_(),
+      center_prefix_(0),
       centers_(),
       allocator_("IvfCIdCache", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
   {}
   virtual ~ObExprVecIvfCenterIdCache() {}
   bool hit(ObTableID table_id, ObTabletID tablet_id) { return table_id == table_id_ && tablet_id == tablet_id_; }
   int get_centers(ObIArray<float*> &centers) { return centers.assign(centers_); }
-  int update_cache(ObTableID table_id, ObTabletID tablet_id, ObIArray<float*> &centers)
+  int update_cache(ObTableID table_id, ObTabletID tablet_id, ObIArray<float*> &centers, uint64_t center_prefix)
   {
     table_id_ = table_id;
     tablet_id_ = tablet_id;
+    center_prefix_ = center_prefix;
     return centers_.assign(centers);
   }
+  void set_center_prefix(uint64_t center_prefix) { center_prefix_ = center_prefix; }
+  uint64_t get_center_prefix() const { return center_prefix_; }
+  ObCenterId get_center_id(int64_t center_idx) const { return ObCenterId(center_prefix_, center_idx); }
   ObArenaAllocator &get_allocator() { return allocator_; }
-  void reuse() { table_id_ = ObCommonID::INVALID_ID; tablet_id_.reset(); centers_.reuse(); allocator_.reuse(); }
+  void reuse() { table_id_ = ObCommonID::INVALID_ID; tablet_id_.reset(); center_prefix_ = 0; centers_.reuse(); allocator_.reuse(); }
+  TO_STRING_KV(K_(table_id), K_(tablet_id), K_(center_prefix), K_(centers));
 private:
   ObTableID table_id_;
   ObTabletID tablet_id_;
+  uint64_t center_prefix_; // prefix of center_id, now, it is tablet_id stored in centroid table
   ObSEArray<float*, 8> centers_;
   ObArenaAllocator allocator_;
 };
@@ -768,7 +775,8 @@ public:
                                     ObTabletID &tablet_id,
                                     ObVectorIndexDistAlgorithm &dis_algo,
                                     bool &contain_null,
-                                    ObIArrayType *&arr);
+                                    ObIArrayType *&arr,
+                                    uint64_t &center_prefix);
   static int estimate_hnsw_memory(
       uint64_t num_vectors,
       const ObVectorIndexParam &param,
@@ -794,8 +802,12 @@ public:
                                   ObExprVecIvfCenterIdCache *cache,
                                   const ObTableID &table_id,
                                   const ObTabletID &tablet_id,
+                                  const ObTabletID &cent_tablet_id,
+                                  const bool is_pq_cache,
                                   common::ObIAllocator &allocator,
-                                  ObIArray<float*> &centers);
+                                  ObIArray<float*> &centers,
+                                  uint64_t &center_prefix,
+                                  int64_t m = 0);
   static int split_vector(ObIAllocator &alloc, int pq_m, int dim, float *vector, ObIArray<float *> &splited_arrs);
   static int split_vector(int pq_m, int dim, float *vector, ObIArray<float *> &splited_arrs);
   static bool column_id_asc_compare(uint64_t lhs, uint64_t rhs) { return lhs < rhs; }
@@ -832,6 +844,13 @@ public:
                                                const ObString &new_idx_params,
                                                const ObTableSchema &index_table_schema,
                                                bool &need_embedding_when_rebuild);
+  static int get_partition_name_by_tablet(
+    const ObTableSchema &table_schema,
+    const ObTableSchema &data_table_schema,
+    const ObTabletID index_tablet_id,
+    ObPartitionLevel &part_level,
+    ObString &partition_name);
+
 private:
   static void save_column_schema(
       const ObColumnSchemaV2 *&old_column,

@@ -136,11 +136,6 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
              KR(ret), K(src_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED,
                    "fork table on table with semantic index is");
-  } else if (has_ivf_index) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("fork table on table with ivf index is not supported", KR(ret),
-             K(src_table_schema));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table with ivf index is");
   } else if (has_spatial_index) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("fork table on table with spatial index is not supported", KR(ret),

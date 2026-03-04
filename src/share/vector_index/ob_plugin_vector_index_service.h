@@ -436,7 +436,9 @@ public:
       const uint64_t table_id,
       const ObTabletID tablet_id,
       ObIAllocator &allocator,
-      ObIArray<float*> &aux_info);
+      bool is_pq_type,
+      ObIArray<float*> &aux_info,
+      uint64_t &center_prefix);
   // NOTE(liyao): int callback_func(int64_t dim, float *data);
   //              data should be deep copied if used outside callback_func
   template<class CallbackFunc>
@@ -507,7 +509,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
   int ret = OB_SUCCESS;
   bool is_hidden_table = false;
   ObSqlString sql_string;
-  static_assert(std::is_same<typename std::invoke_result<CallbackFunc, int64_t, float*>::type, int>::value,
+  static_assert(std::is_same<typename std::invoke_result<CallbackFunc, const common::ObString&, int64_t, float*>::type, int>::value,
         "process_ivf_aux_info callback format error");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -530,10 +532,14 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
         OB_LOG(WARN, "failed to execute sql", K(ret), K(sql_string));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          const int64_t col_idx = 0;
+          const int64_t cid_col_idx = 0;
+          const int64_t vec_col_idx = 1;
+          ObObj cid_obj;
           ObObj vec_obj;
           ObString blob_data;
-          if (OB_FAIL(result->get_obj(col_idx, vec_obj))) {
+          if (OB_FAIL(result->get_obj(cid_col_idx, cid_obj))) {
+            OB_LOG(WARN, "failed to get center id", K(ret));
+          } else if (OB_FAIL(result->get_obj(vec_col_idx, vec_obj))) {
             OB_LOG(WARN, "failed to get vid", K(ret));
           } else if (FALSE_IT(blob_data = vec_obj.get_string())) {
           } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator,
@@ -544,7 +550,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
             OB_LOG(WARN, "fail to get real data.", K(ret), K(blob_data));
           } else {
             int64_t dim = blob_data.length() / sizeof(float);
-            if (OB_FAIL(callback_func(dim, reinterpret_cast<float*>(blob_data.ptr())))) {
+            if (OB_FAIL(callback_func(cid_obj.get_string(), dim, reinterpret_cast<float*>(blob_data.ptr())))) {
               OB_LOG(WARN, "fail to do callback func", K(ret), K(dim));
             }
           }

@@ -309,6 +309,258 @@ c1	c2
 drop table t_src6;
 drop table t_fork6_l1;
 drop table t_fork6_l2;
-# 9. Cleanup
+# 7. Fork table with IVF vector index
+drop table if exists t_src_ivf;
+drop table if exists t_fork_ivf;
+create table t_src_ivf(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_flat));
+insert into t_src_ivf values(1, '[1,1,1]');
+insert into t_src_ivf values(2, '[2,2,2]');
+insert into t_src_ivf values(3, '[3,3,3]');
+insert into t_src_ivf values(4, '[4,4,4]');
+insert into t_src_ivf values(5, '[5,5,5]');
+# Fork table with IVF index
+fork table t_src_ivf to t_fork_ivf;
+# Vector query on fork table with IVF index
+select * from t_fork_ivf order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+select * from t_fork_ivf order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# DML on fork table with IVF index
+update t_fork_ivf set c2 = '[0.5,0.5,0.5]' where c1 = 1;
+insert into t_fork_ivf values(10, '[0,0,0]');
+delete from t_fork_ivf where c1 = 5;
+# Vector query after DML
+select * from t_fork_ivf order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+10	[0,0,0]
+1	[0.5,0.5,0.5]
+2	[2,2,2]
+select * from t_fork_ivf order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+10	[0,0,0]
+1	[0.5,0.5,0.5]
+2	[2,2,2]
+# Verify source table unchanged
+select * from t_src_ivf order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+4	[4,4,4]
+5	[5,5,5]
+drop table t_src_ivf;
+drop table t_fork_ivf;
+# 8. Fork source IVF table with incr/snap data
+drop table if exists t_src_ivf2;
+drop table if exists t_fork_ivf_incr;
+drop table if exists t_fork_ivf_snap;
+create table t_src_ivf2(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_flat));
+# Insert data (IVF incremental)
+insert into t_src_ivf2 values(1, '[1,1,1]');
+insert into t_src_ivf2 values(2, '[2,2,2]');
+insert into t_src_ivf2 values(3, '[3,3,3]');
+# Fork when data is fresh (IVF delta)
+fork table t_src_ivf2 to t_fork_ivf_incr;
+# Vector query on incr fork
+select * from t_fork_ivf_incr order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Rebuild source IVF index
+call dbms_vector.rebuild_index('idx1','t_src_ivf2','c2');
+# Verify source table works after rebuild
+select * from t_src_ivf2 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Fork after rebuild
+fork table t_src_ivf2 to t_fork_ivf_snap;
+# Vector query on snap fork (exact query first)
+select * from t_fork_ivf_snap order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Vector query on snap fork (approximate query)
+select * from t_fork_ivf_snap order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Both forks have same data
+select count(*) from t_fork_ivf_incr;
+count(*)
+3
+select count(*) from t_fork_ivf_snap;
+count(*)
+3
+drop table t_src_ivf2;
+drop table t_fork_ivf_incr;
+drop table t_fork_ivf_snap;
+# 9. Fork table with IVF_PQ vector index
+drop table if exists t_src_ivfpq;
+drop table if exists t_fork_ivfpq;
+create table t_src_ivfpq(c1 int, c2 vector(4), primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_pq, nlist=2, sample_per_nlist=5, m=2));
+insert into t_src_ivfpq values(1,  '[0.1,0.1,0.1,0.1]');
+insert into t_src_ivfpq values(2,  '[0.2,0.2,0.2,0.2]');
+insert into t_src_ivfpq values(3,  '[0.3,0.3,0.3,0.3]');
+insert into t_src_ivfpq values(4,  '[0.4,0.4,0.4,0.4]');
+insert into t_src_ivfpq values(5,  '[0.5,0.5,0.5,0.5]');
+insert into t_src_ivfpq values(6,  '[0.6,0.6,0.6,0.6]');
+insert into t_src_ivfpq values(7,  '[0.7,0.7,0.7,0.7]');
+insert into t_src_ivfpq values(8,  '[0.8,0.8,0.8,0.8]');
+insert into t_src_ivfpq values(9,  '[0.9,0.9,0.9,0.9]');
+insert into t_src_ivfpq values(10, '[1.0,1.0,1.0,1.0]');
+insert into t_src_ivfpq values(11, '[1.1,1.1,1.1,1.1]');
+insert into t_src_ivfpq values(12, '[1.2,1.2,1.2,1.2]');
+insert into t_src_ivfpq values(13, '[1.3,1.3,1.3,1.3]');
+insert into t_src_ivfpq values(14, '[1.4,1.4,1.4,1.4]');
+insert into t_src_ivfpq values(15, '[1.5,1.5,1.5,1.5]');
+insert into t_src_ivfpq values(16, '[1.6,1.6,1.6,1.6]');
+insert into t_src_ivfpq values(17, '[1.7,1.7,1.7,1.7]');
+insert into t_src_ivfpq values(18, '[1.8,1.8,1.8,1.8]');
+insert into t_src_ivfpq values(19, '[1.9,1.9,1.9,1.9]');
+insert into t_src_ivfpq values(20, '[2.0,2.0,2.0,2.0]');
+# Fork table with IVF_PQ index
+fork table t_src_ivfpq to t_fork_ivfpq;
+# Exact vector query on fork table with IVF_PQ index
+select * from t_fork_ivfpq order by l2_distance(c2, [0,0,0,0]) limit 3;
+c1	c2
+1	[0.1,0.1,0.1,0.1]
+2	[0.2,0.2,0.2,0.2]
+3	[0.3,0.3,0.3,0.3]
+# Approximate vector query on fork table
+select * from t_fork_ivfpq order by l2_distance(c2, [0,0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[0.1,0.1,0.1,0.1]
+2	[0.2,0.2,0.2,0.2]
+3	[0.3,0.3,0.3,0.3]
+# DML on fork table with IVF_PQ index
+insert into t_fork_ivfpq values(100, '[0,0,0,0]');
+update t_fork_ivfpq set c2 = '[0.05,0.05,0.05,0.05]' where c1 = 1;
+delete from t_fork_ivfpq where c1 = 20;
+# Exact query after DML on fork table
+select * from t_fork_ivfpq order by l2_distance(c2, [0,0,0,0]) limit 3;
+c1	c2
+100	[0,0,0,0]
+1	[0.05,0.05,0.05,0.05]
+2	[0.2,0.2,0.2,0.2]
+# Source table unchanged after DML on fork
+select count(*) from t_src_ivfpq;
+count(*)
+20
+select * from t_src_ivfpq where c1 in (1, 20) order by c1;
+c1	c2
+1	[0.1,0.1,0.1,0.1]
+20	[2,2,2,2]
+drop table t_src_ivfpq;
+drop table t_fork_ivfpq;
+# 10. Fork IVF table on partitioned table (KEY partition)
+drop table if exists t_src_ivf_part;
+drop table if exists t_fork_ivf_part;
+create table t_src_ivf_part(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_flat)) PARTITION BY KEY(c1) partitions 4;
+insert into t_src_ivf_part values(1, '[1,1,1]');
+insert into t_src_ivf_part values(2, '[2,2,2]');
+insert into t_src_ivf_part values(3, '[3,3,3]');
+insert into t_src_ivf_part values(4, '[4,4,4]');
+insert into t_src_ivf_part values(5, '[5,5,5]');
+insert into t_src_ivf_part values(6, '[6,6,6]');
+insert into t_src_ivf_part values(7, '[7,7,7]');
+insert into t_src_ivf_part values(8, '[8,8,8]');
+# Fork partitioned IVF table
+fork table t_src_ivf_part to t_fork_ivf_part;
+# Exact vector query on fork table (partitioned IVF)
+select * from t_fork_ivf_part order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Approximate vector query on fork table (partitioned IVF)
+select * from t_fork_ivf_part order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# DML on fork table
+insert into t_fork_ivf_part values(10, '[0,0,0]');
+delete from t_fork_ivf_part where c1 = 8;
+# Exact query after DML
+select * from t_fork_ivf_part order by l2_distance(c2, [0,0,0]) limit 3;
+c1	c2
+10	[0,0,0]
+1	[1,1,1]
+2	[2,2,2]
+# Source table unchanged (data count and content)
+select count(*) from t_src_ivf_part;
+count(*)
+8
+select * from t_src_ivf_part order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+4	[4,4,4]
+5	[5,5,5]
+6	[6,6,6]
+7	[7,7,7]
+8	[8,8,8]
+drop table t_src_ivf_part;
+drop table t_fork_ivf_part;
+# 11. COW isolation: source DML/rebuild does not affect fork IVF table
+drop table if exists t_src_ivf3;
+drop table if exists t_fork_ivf3;
+create table t_src_ivf3(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_flat));
+insert into t_src_ivf3 values(1, '[1,1,1]');
+insert into t_src_ivf3 values(2, '[2,2,2]');
+insert into t_src_ivf3 values(3, '[3,3,3]');
+insert into t_src_ivf3 values(4, '[4,4,4]');
+insert into t_src_ivf3 values(5, '[5,5,5]');
+fork table t_src_ivf3 to t_fork_ivf3;
+# Record fork table data before source modification
+select * from t_fork_ivf3 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+4	[4,4,4]
+5	[5,5,5]
+# Modify source IVF table: update/delete/insert
+update t_src_ivf3 set c2 = '[100,100,100]' where c1 = 1;
+delete from t_src_ivf3 where c1 = 2;
+insert into t_src_ivf3 values(100, '[0,0,0]');
+# Rebuild source IVF index
+call dbms_vector.rebuild_index('idx1','t_src_ivf3','c2');
+# Verify fork table unchanged (COW isolation)
+select * from t_fork_ivf3 order by c1;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+4	[4,4,4]
+5	[5,5,5]
+select * from t_fork_ivf3 order by l2_distance(c2, [0,0,0]) APPROXIMATE limit 3;
+c1	c2
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+# Verify source table changed
+select * from t_src_ivf3 order by c1;
+c1	c2
+1	[100,100,100]
+3	[3,3,3]
+4	[4,4,4]
+5	[5,5,5]
+100	[0,0,0]
+drop table t_src_ivf3;
+drop table t_fork_ivf3;
+# 12. Cleanup
 drop database if exists db_fork_vec;
 alter system set ob_vector_memory_limit_percentage = 0;

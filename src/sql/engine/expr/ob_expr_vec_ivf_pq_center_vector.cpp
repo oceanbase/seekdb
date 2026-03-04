@@ -107,8 +107,9 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
     ObSEArray<float*, 64> centers;
     bool contain_null = false;
     ObIArrayType *arr = NULL;
+    uint64_t center_prefix = 0;
     if (OB_FAIL(ObVectorIndexUtil::eval_ivf_centers_common(
-        tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr))) {
+        tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
       LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing

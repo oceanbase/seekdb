@@ -361,6 +361,7 @@ void ObIvfCentCache::reuse()
 {
   MEMSET(centroids_, 0, sizeof(float) * capacity_ * cent_vec_dim_);
   count_ = 0;
+  center_prefix_ = 0;
   ObIvfICache::reuse();
 }
 
@@ -382,6 +383,7 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
   if (OB_FAIL(ObIvfICache::inner_init(parent_mem_ctx, all_vsag_use_mem))) {
     LOG_WARN("fail to do ObIvfICache inner init", K(ret));
   } else {
+    center_prefix_ = 0;
     switch (key.type_) {
       case IvfCacheType::IVF_CENTROID_CACHE: {
         if (OB_ISNULL(centroids_ = static_cast<float *>(

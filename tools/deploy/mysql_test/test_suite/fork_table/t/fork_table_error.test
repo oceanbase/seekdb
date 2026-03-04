@@ -283,45 +283,29 @@ create table t13_semantic (
 fork table t13_semantic to t13_semantic_fork;
 
 --echo ============================================
---echo 14. Fork IVF索引表（不支持）
+--echo 14. Fork空间索引表（不支持）
 --echo ============================================
 
-drop table if exists t14_ivf;
-drop table if exists t14_ivf_fork;
+drop table if exists t14_spatial;
+drop table if exists t14_spatial_fork;
 
-create table t14_ivf (
-    id int primary key,
-    vec vector(3),
-    vector index idx1(vec) with (distance=L2,type=ivf_flat)
-);
-
---error 1235
-fork table t14_ivf to t14_ivf_fork;
-
---echo ============================================
---echo 15. Fork空间索引表（不支持）
---echo ============================================
-
-drop table if exists t15_spatial;
-drop table if exists t15_spatial_fork;
-
-create table t15_spatial (
+create table t14_spatial (
     id int primary key,
     g geometry not null,
     spatial index idx_g (g)
 );
 
 --error 1235
-fork table t15_spatial to t15_spatial_fork;
+fork table t14_spatial to t14_spatial_fork;
 
 --echo ============================================
---echo 16. Fork带全局索引的分区表（不支持）
+--echo 15. Fork带全局索引的分区表（不支持）
 --echo ============================================
 
-drop table if exists t16_gidx;
-drop table if exists t16_gidx_fork;
+drop table if exists t15_gidx;
+drop table if exists t15_gidx_fork;
 
-create table t16_gidx (
+create table t15_gidx (
     id int primary key,
     c1 int
 ) partition by range (id) (
@@ -329,13 +313,13 @@ create table t16_gidx (
     partition p1 values less than (20)
 );
 
-create index idx_c1 on t16_gidx(c1) global partition by hash(c1) partitions 4;
+create index idx_c1 on t15_gidx(c1) global partition by hash(c1) partitions 4;
 
 --error 1235
-fork table t16_gidx to t16_gidx_fork;
+fork table t15_gidx to t15_gidx_fork;
 
 --echo ============================================
---echo 17. 清理
+--echo 16. 清理
 --echo ============================================
 
 drop table if exists t1;
@@ -354,7 +338,6 @@ drop table if exists t11_mock_fk_src;
 drop table if exists t12_trig;
 drop table if exists t12_trig_fork;
 drop table if exists t13_semantic;
-drop table if exists t14_ivf;
-drop table if exists t15_spatial;
-drop table if exists t16_gidx;
+drop table if exists t14_spatial;
+drop table if exists t15_gidx;
 drop database if exists db_fork_error;

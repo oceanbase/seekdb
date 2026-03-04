@@ -276,7 +276,22 @@ int ObVectorClusterHelper::set_pq_center_id_to_string(
   return ret;
 }
 
-
+uint64_t ObVectorClusterHelper::get_center_prefix(const ObString &center_id, bool is_pq_centroid /*= false*/)
+{
+  int ret = OB_SUCCESS;
+  uint64_t prefix = 0;
+  if (OB_ISNULL(center_id.ptr()) || OB_UNLIKELY(center_id.length() < OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid cluster center id str", K(ret), KP(center_id.ptr()), K(center_id.length()));
+  } else if (is_pq_centroid) {
+    const ObPqCenterId *pq_center_id_ptr = reinterpret_cast<const ObPqCenterId *>(center_id.ptr());
+    prefix = ntohll(pq_center_id_ptr->tablet_id_);
+  } else {
+    const ObCenterId *center_id_ptr = reinterpret_cast<const ObCenterId *>(center_id.ptr());
+    prefix = ntohll(center_id_ptr->tablet_id_);
+  }
+  return prefix;
+}
 
 void ObVectorClusterHelper::release_inner_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *&session)
 {
