@@ -129,9 +129,10 @@ def request(method, url, params=None, payload=None, timeout=10, data=None, witho
             exit(1)
 
 
-def monitor_tasks(oss_proxy: OssProxy, github_pipeline_id, timeout):
+def monitor_tasks(oss_proxy: OssProxy, github_pipeline_id, timeout, result_out_path=None):
     end_time = time.time() + int(timeout)
     end_task = False
+    task_data = None
     while time.time() <= end_time:
         if end_task is True:
             pass
@@ -142,20 +143,36 @@ def monitor_tasks(oss_proxy: OssProxy, github_pipeline_id, timeout):
         time.sleep(1)
         if task_data is not None:
             task_status = int(task_data["status"])
+            output_url = "https://ce-farm.oceanbase-dev.com/farm2/ci/?id={}".format(task_data["task_id"])
             if task_status <= TaskStatusEnum.fail.value:
                 print(TaskStatusEnum._value2member_map_[task_status])
-                print("there is the output url: {}".format(
-                    "https://ce-farm.oceanbase-dev.com/farm2/ci/?id={}".format(task_data["task_id"])))
+                print("there is the output url: {}".format(output_url))
+                if result_out_path:
+                    _write_result_json(result_out_path, task_data, success=False)
                 return False
             elif task_status >= TaskStatusEnum.success.value:
                 print(TaskStatusEnum._value2member_map_[task_status])
-                print("there is the output url: {}".format(
-                    "https://ce-farm.oceanbase-dev.com/farm2/ci/?id={}".format(task_data["task_id"])))
+                print("there is the output url: {}".format(output_url))
+                if result_out_path:
+                    _write_result_json(result_out_path, task_data, success=True)
                 return True
 
         time.sleep(5)
-    else:
-        ...
+    if result_out_path:
+        _write_result_json(result_out_path, task_data or {}, success=False, timeout=True)
+    return False
+
+
+def _write_result_json(path, task_data, success, timeout=False):
+    out = {
+        "success": success,
+        "timeout": timeout,
+        "task_id": task_data.get("task_id") if task_data else None,
+        "status": task_data.get("status") if task_data else None,
+        "output_url": "https://ce-farm.oceanbase-dev.com/farm2/ci/?id={}".format(task_data["task_id"]) if task_data and task_data.get("task_id") else None,
+    }
+    with open(path, "w") as f:
+        json.dump(out, f, indent=2)
 
 
 def get_task_res(oss_proxy: OssProxy, github_pipeline_id):
@@ -167,7 +184,7 @@ def get_task_res(oss_proxy: OssProxy, github_pipeline_id):
         return
 
 
-def main(pipeline_id, project, timeout):
+def main(pipeline_id, project, timeout, result_out_path=None):
     print("create a new task")
     print("working....")
     logo = text2art('seekdb Farm2')
@@ -177,7 +194,7 @@ def main(pipeline_id, project, timeout):
     job_info = github_proxy.get_job_by_id(project, pipeline_id)
     attempt_number = job_info["run_attempt"]
     run_pipeline_id = "{}-{}".format(pipeline_id, attempt_number)
-    result = monitor_tasks(oss_proxy, run_pipeline_id, timeout)
+    result = monitor_tasks(oss_proxy, run_pipeline_id, timeout, result_out_path=result_out_path)
     if not result:
         exit(1)
 
@@ -188,4 +205,5 @@ if __name__ == "__main__":
         print("Missing relevant parameters !")
         OUTPUT.update({"success": -1})
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    out_path = sys.argv[4] if len(sys.argv) > 4 else None
+    main(sys.argv[1], sys.argv[2], sys.argv[3], result_out_path=out_path)
