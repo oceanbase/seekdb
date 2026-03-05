@@ -1297,7 +1297,16 @@ int check_will_be_having_domain_index_operation(
               share::schema::ObSchemaGetterGuard &schema_guard,
               ObDDLSQLTransaction &trans,
               common::ObIAllocator &allocator,
-              ObDDLTaskRecord &task_record);
+              ObDDLTaskRecord &task_record,
+              common::hash::ObHashMap<uint64_t, uint64_t> *table_id_map = nullptr,
+              common::ObSArray<share::schema::ObTableSchema> *out_table_schemas = nullptr);
+  int rebuild_fk_in_trans_(
+              const uint64_t tenant_id,
+              const common::ObIArray<const share::schema::ObTableSchema *> &user_table_schemas,
+              const common::ObIArray<share::schema::ObForeignKeyInfo> &intra_db_fk_infos,
+              common::hash::ObHashMap<uint64_t, uint64_t> &table_id_map,
+              const common::ObIArray<common::ObSArray<share::schema::ObTableSchema>> &all_dst_table_schemas,
+              ObDDLSQLTransaction &trans);
   int print_view_expanded_definition(
       const share::schema::ObTableSchema &table_schema,
       ObString &ddl_stmt_str,

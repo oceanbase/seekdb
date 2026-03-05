@@ -36,7 +36,9 @@ int ObDDLService::fork_single_table_in_trans_(
     const ObString &dst_table_name, const int64_t fork_snapshot_version,
     const uint64_t session_id, const ObString &ddl_stmt_str,
     ObSchemaGetterGuard &schema_guard, ObDDLSQLTransaction &trans,
-    ObIAllocator &allocator, ObDDLTaskRecord &task_record) {
+    ObIAllocator &allocator, ObDDLTaskRecord &task_record,
+    common::hash::ObHashMap<uint64_t, uint64_t> *table_id_map,
+    ObSArray<ObTableSchema> *out_table_schemas) {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_->get_schema_service();
   ObArenaAllocator inner_allocator(ObModIds::OB_RS_PARTITION_TABLE_TEMP);
@@ -66,6 +68,67 @@ int ObDDLService::fork_single_table_in_trans_(
       LOG_WARN("failed to generate tables tablet id", KR(ret), K(table_schemas));
     } else if (table_schemas.count() > 0) {
       dst_table_schema = &table_schemas.at(0);
+    }
+
+    // Build table_id_map: src_table_id/src_index_id -> dst_table_id/dst_index_id
+    if (OB_SUCC(ret) && OB_NOT_NULL(table_id_map) && table_schemas.count() > 0) {
+      // Main table mapping
+      if (OB_FAIL(table_id_map->set_refactored(
+              src_table_schema.get_table_id(), table_schemas.at(0).get_table_id()))) {
+        LOG_WARN("failed to insert main table id mapping", KR(ret),
+                 "src_id", src_table_schema.get_table_id(),
+                 "dst_id", table_schemas.at(0).get_table_id());
+      }
+      // Index table mappings: match by index name (strip data_table_id prefix)
+      if (OB_SUCC(ret)) {
+        ObSEArray<ObAuxTableMetaInfo, 16> src_index_infos;
+        if (OB_FAIL(src_table_schema.get_simple_index_infos(src_index_infos))) {
+          LOG_WARN("failed to get src simple index infos", KR(ret));
+        }
+        for (int64_t idx = 0; OB_SUCC(ret) && idx < src_index_infos.count(); ++idx) {
+          const uint64_t src_index_id = src_index_infos.at(idx).table_id_;
+          const ObTableSchema *src_index_schema = nullptr;
+          if (OB_FAIL(schema_guard.get_table_schema(tenant_id, src_index_id, src_index_schema))) {
+            LOG_WARN("failed to get src index schema", KR(ret), K(src_index_id));
+          } else if (OB_ISNULL(src_index_schema)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("src index schema is null", KR(ret), K(src_index_id));
+          } else {
+            ObString src_index_name;
+            if (OB_FAIL(ObTableSchema::get_index_name(inner_allocator,
+                    src_table_schema.get_table_id(),
+                    src_index_schema->get_table_name_str(),
+                    src_index_name))) {
+              LOG_WARN("failed to get src index name", KR(ret));
+            } else {
+              bool found = false;
+              for (int64_t k = 1; !found && OB_SUCC(ret) && k < table_schemas.count(); ++k) {
+                ObString dst_index_name;
+                if (OB_FAIL(ObTableSchema::get_index_name(inner_allocator,
+                        table_schemas.at(0).get_table_id(),
+                        table_schemas.at(k).get_table_name_str(),
+                        dst_index_name))) {
+                  LOG_WARN("failed to get dst index name", KR(ret));
+                } else if (0 == src_index_name.compare(dst_index_name)) {
+                  if (OB_FAIL(table_id_map->set_refactored(
+                          src_index_id, table_schemas.at(k).get_table_id()))) {
+                    LOG_WARN("failed to insert index id mapping", KR(ret),
+                             K(src_index_id), "dst_index_id", table_schemas.at(k).get_table_id());
+                  }
+                  found = true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Copy table_schemas to out_table_schemas if requested.
+    if (OB_SUCC(ret) && OB_NOT_NULL(out_table_schemas)) {
+      if (OB_FAIL(out_table_schemas->assign(table_schemas))) {
+        LOG_WARN("failed to assign table schemas to output", KR(ret));
+      }
     }
 
     // Create tables using fork logic.
