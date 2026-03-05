@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_expr_bm25.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "ob_block_stat_iter.h"
 #include "ob_inv_idx_param_estimator.h"
 
@@ -27,6 +28,33 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+struct ObAvgDocLenCache
+{
+  ObAvgDocLenCache()
+    : lock_(common::ObLatchIds::DEFAULT_SPIN_LOCK),
+      tablet_id_(),
+      ls_id_(),
+      total_doc_cnt_(0),
+      avg_doc_token_cnt_(0.0),
+      is_valid_(false)
+  {}
+  common::ObSpinLock lock_;
+  common::ObTabletID tablet_id_;
+  share::ObLSID ls_id_;
+  int64_t total_doc_cnt_;
+  double avg_doc_token_cnt_;
+  bool is_valid_;
+};
+
+ObAvgDocLenCache &get_avg_doc_len_cache()
+{
+  static ObAvgDocLenCache cache;
+  return cache;
+}
+} // namespace
+
 int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
     sql::ObExpr &avg_doc_token_cnt_expr,
     sql::ObEvalCtx &eval_ctx,
@@ -34,6 +62,23 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
 {
   int ret = OB_SUCCESS;
   result = 0.0;
+  const ObTableScanParam *scan_param = doc_length_est_param_.get_scan_param();
+  const bool can_use_cache = nullptr != scan_param
+      && scan_param->tablet_id_.is_valid()
+      && scan_param->ls_id_.is_valid()
+      && total_doc_cnt_ > 0;
+  if (can_use_cache) {
+    ObAvgDocLenCache &cache = get_avg_doc_len_cache();
+    common::ObSpinLockGuard guard(cache.lock_);
+    if (cache.is_valid_
+        && cache.total_doc_cnt_ == total_doc_cnt_
+        && cache.tablet_id_ == scan_param->tablet_id_
+        && cache.ls_id_ == scan_param->ls_id_) {
+      result = cache.avg_doc_token_cnt_;
+      avg_doc_token_cnt_expr.locate_datum_for_write(eval_ctx).set_double(result);
+      return ret;
+    }
+  }
   ObBlockStatIterator stat_iter;
   ObStorageDatum tmp_result;
   number::ObNumber zero_num;
@@ -97,6 +142,15 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
       const double default_avg_doc_token_cnt = sql::ObExprBM25::DEFAULT_AVG_DOC_TOKEN_CNT;
       result = avg_doc_token_cnt > default_avg_doc_token_cnt ? avg_doc_token_cnt : default_avg_doc_token_cnt;
       avg_doc_token_cnt_expr.locate_datum_for_write(eval_ctx).set_double(result);
+      if (can_use_cache) {
+        ObAvgDocLenCache &cache = get_avg_doc_len_cache();
+        common::ObSpinLockGuard guard(cache.lock_);
+        cache.tablet_id_ = scan_param->tablet_id_;
+        cache.ls_id_ = scan_param->ls_id_;
+        cache.total_doc_cnt_ = total_doc_cnt_;
+        cache.avg_doc_token_cnt_ = result;
+        cache.is_valid_ = true;
+      }
       LOG_DEBUG("[Sparse Retrieval] estimated avg doc token cnt",
           K(doc_len_num), K(doc_cnt_num), K(result_num), K(avg_doc_token_cnt), K(result));
     }

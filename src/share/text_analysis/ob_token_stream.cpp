@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/text_analysis/ob_token_stream.h"
+#include "share/text_analysis/ob_english_stemmer.h"
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
@@ -313,7 +314,33 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
       if (OB_FAIL(ObCharset::tolower(cs_, norm_alnum_token, norm_lower_token, norm_allocator_))) {
         LOG_WARN("norm token to lower case failed", K(ret), K_(cs), K(norm_alnum_token));
       } else {
-        next_token.set_string(norm_lower_token);
+        // Apply Porter stemming to the lowercased ASCII token
+        // Only stem pure ASCII tokens to avoid corrupting multibyte chars
+        bool is_ascii = true;
+        for (uint32_t i = 0; i < norm_lower_token.length(); ++i) {
+          if ((unsigned char)norm_lower_token.ptr()[i] > 127) {
+            is_ascii = false;
+            break;
+          }
+        }
+        if (is_ascii && norm_lower_token.length() > 0) {
+          // Copy to writable buffer for in-place stemming
+          char *stem_buf = static_cast<char *>(norm_allocator_.alloc(norm_lower_token.length()));
+          if (OB_NOT_NULL(stem_buf)) {
+            MEMCPY(stem_buf, norm_lower_token.ptr(), norm_lower_token.length());
+            int stem_len = ob_snowball_stem(stem_buf, static_cast<int>(norm_lower_token.length()));
+            if (stem_len > 0) {
+              next_token.set_string(stem_buf, static_cast<uint32_t>(stem_len));
+            } else {
+              // Safety: if stemmer returns 0, use original lowercased token
+              next_token.set_string(norm_lower_token);
+            }
+          } else {
+            next_token.set_string(norm_lower_token);
+          }
+        } else {
+          next_token.set_string(norm_lower_token);
+        }
       }
     }
   }

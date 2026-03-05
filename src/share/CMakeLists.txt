@@ -666,6 +666,7 @@ endif()
 ob_set_subtarget(ob_share text_analysis
   text_analysis/ob_text_analyzer.cpp
   text_analysis/ob_token_stream.cpp
+  text_analysis/ob_english_stemmer.cpp
 )
 
 ob_set_subtarget(ob_share throttle

@@ -7712,10 +7712,13 @@ int ObOptimizerUtil::check_filter_before_indexback(const ObIArray<ObRawExpr*> &f
 {
   int ret = OB_SUCCESS;
   bool contains = false;
+  bool all_rowkey_cols = false;
   ObRawExpr *expr = NULL;
   ObSEArray<uint64_t, 8> filter_ids;
+  ObSEArray<ObRawExpr *, 8> filter_col_exprs;
   for (int64_t i = 0; OB_SUCC(ret) && i < filter_exprs.count(); i++) {
     filter_ids.reuse();
+    filter_col_exprs.reuse();
     if (OB_ISNULL(expr = filter_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
@@ -7733,6 +7736,28 @@ int ObOptimizerUtil::check_filter_before_indexback(const ObIArray<ObRawExpr*> &f
       LOG_WARN("failed to extract column ids", K(ret));
     } else {
       contains = ObOptimizerUtil::is_subset(filter_ids, index_columns);
+      if (!contains) {
+        all_rowkey_cols = true;
+        if (OB_FAIL(ObRawExprUtils::extract_column_exprs(expr, filter_col_exprs, false, false))) {
+          LOG_WARN("failed to extract column exprs", K(ret));
+        } else if (filter_col_exprs.empty()) {
+          all_rowkey_cols = false;
+        } else {
+          for (int64_t j = 0; OB_SUCC(ret) && all_rowkey_cols && j < filter_col_exprs.count(); ++j) {
+            if (OB_ISNULL(filter_col_exprs.at(j))) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("unexpected null filter column expr", K(ret));
+            } else if (!filter_col_exprs.at(j)->is_column_ref_expr()) {
+              all_rowkey_cols = false;
+            } else if (!static_cast<const ObColumnRefRawExpr *>(filter_col_exprs.at(j))->is_rowkey_column()) {
+              all_rowkey_cols = false;
+            }
+          }
+        }
+        if (OB_SUCC(ret) && all_rowkey_cols) {
+          contains = true;
+        }
+      }
       if (OB_FAIL(filter_before_index_back.push_back(contains))) {
         LOG_WARN("failed to push back element", K(ret));
       } else { /*do nothjing*/ }

@@ -617,7 +617,8 @@ add_library(oceanbase_static
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)
 
 target_link_libraries(oceanbase_static
-  PUBLIC ob_base "${ob_objects}" ob_sql_static ob_storage_static ob_share_static oblib objit ob_plugin ${HYPERSCAN_LIB})
+  PUBLIC ob_base "${ob_objects}" ob_sql_static ob_storage_static ob_share_static oblib objit ob_plugin ${HYPERSCAN_LIB}
+  /usr/lib/x86_64-linux-gnu/libstemmer.a)
 
 if (OB_GPERF_MODE)
   target_link_libraries(oceanbase_static

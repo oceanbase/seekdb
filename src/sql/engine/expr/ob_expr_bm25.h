@@ -77,8 +77,11 @@ public:
   static constexpr double DEFAULT_AVG_DOC_TOKEN_CNT = 10.0;
 private:
   static constexpr double p_k1 = 1.2;
-  static constexpr double p_b = 0.75;
-  static constexpr double p_epsilon = 0.25;
+  static constexpr double p_b = 0.15;
+  static constexpr double p_epsilon = 0.5;
+  static constexpr double p_k1_plus_1 = 1.0 + p_k1;
+  static constexpr double p_k1_1_minus_b = p_k1 * (1.0 - p_b);
+  static constexpr double p_k1_mul_b = p_k1 * p_b;
   DISALLOW_COPY_AND_ASSIGN(ObExprBM25);
 };
 

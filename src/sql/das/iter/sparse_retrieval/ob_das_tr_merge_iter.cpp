@@ -1386,6 +1386,7 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
 int ObDASTRMergeIter::init_topk_limit()
 {
   int ret = OB_SUCCESS;
+  constexpr int64_t PRE_FILTER_TOPK_FACTOR = 128;
   topk_limit_ = 0;
   ObExpr *topk_limit_expr = ir_ctdef_->topk_limit_expr_;
   ObExpr *topk_offset_expr = ir_ctdef_->topk_offset_expr_;
@@ -1407,6 +1408,13 @@ int ObDASTRMergeIter::init_topk_limit()
         offset = (topk_offset_datum->is_null() || topk_offset_datum->get_int() < 0) ? 0 : topk_offset_datum->get_int();
       }
       topk_limit_ = limit + offset;
+      if (topk_limit_ > 0 && PRE_FILTER_TOPK_FACTOR > 1) {
+        if (topk_limit_ > INT64_MAX / PRE_FILTER_TOPK_FACTOR) {
+          topk_limit_ = INT64_MAX;
+        } else {
+          topk_limit_ *= PRE_FILTER_TOPK_FACTOR;
+        }
+      }
     }
   }
   return ret;
