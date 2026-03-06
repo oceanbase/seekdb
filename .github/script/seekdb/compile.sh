@@ -27,7 +27,7 @@ if [[ ! -x "$WORKSPACE/build.sh" ]]; then
   echo "[compile.sh] No build.sh, skip."
 else
   # Step 1: Build init（与 buildbase 一致，只传 init，先拉取/安装 deps 再才能用 cmake）
-  bash build.sh "$BUILD_TARGET" --init 2>&1 | tee "$TASK_DIR/compile_init.output"
+  ./build.sh "$BUILD_TARGET" --init 2>&1 | tee "$TASK_DIR/compile_init.output"
   [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1  # Step 3: make（与 buildbase "cd build_debug && make -j4" 一致）
   set +e
   (cd "$WORKSPACE/$BUILD_DIR" && $MAKE $MAKE_ARGS observer) 2>&1 | tee "$TASK_DIR/compile.output"
