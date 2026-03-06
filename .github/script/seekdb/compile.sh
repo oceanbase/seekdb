@@ -1,63 +1,52 @@
 #!/usr/bin/env bash
-# Compile: run farm_compile (and farm_post_compile), output observer.zst / obproxy.zst to SEEKDB_TASK_DIR
-# Required env: GITHUB_WORKSPACE, GITHUB_RUN_ID, SEEKDB_TASK_DIR
-# Optional: RELEASE_MODE, FORWARDING_HOST
+# Compile: 步骤与 .github/workflows/buildbase 一致（init → build.sh $TARGET → cd build_* && make）。
+# Required env: GITHUB_WORKSPACE, SEEKDB_TASK_DIR
+# Optional: RELEASE_MODE, FORWARDING_HOST, MAKE, MAKE_ARGS
 set -e
 
 WORKSPACE="${GITHUB_WORKSPACE:?}"
 TASK_DIR="${SEEKDB_TASK_DIR:?}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$SCRIPT_DIR/scripts"
 
 export GITHUB_WORKSPACE="$WORKSPACE"
 export SEEKDB_TASK_DIR="$TASK_DIR"
 export PACKAGE_TYPE="${RELEASE_MODE:+release}"
 export PACKAGE_TYPE="${PACKAGE_TYPE:-debug}"
-export CREATE_AGENTSERVER=0
-export CREATE_LIBOBSERVER_SO=0
-export ENABLE_LIBOBLOG=0
-export BUILD_TARGET=""
-export REPO="server"
+export MAKE="${MAKE:-make}"
+export MAKE_ARGS="${MAKE_ARGS:--j32}"
+export PATH="$WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
 [[ -n "$FORWARDING_HOST" ]] && echo "$FORWARDING_HOST mirrors.oceanbase.com" >> /etc/hosts 2>/dev/null || true
 
 cd "$WORKSPACE"
-# Source frame (env) then run compile
-if [[ -f "$SCRIPTS_DIR/frame.sh" ]]; then
-  # shellcheck source=.github/script/seekdb/scripts/frame.sh
-  source "$SCRIPTS_DIR/frame.sh"
-fi
-
-if [[ "$PACKAGE_TYPE" == "release" ]] && [[ -x "$SCRIPTS_DIR/farm_compile_release.sh" ]]; then
-  script_name=farm_compile_release.sh
-else
-  script_name=farm_compile.sh
-fi
-
 mkdir -p "$TASK_DIR"
-set +e
-if [[ -x "$SCRIPTS_DIR/$script_name" ]]; then
-  bash "$SCRIPTS_DIR/$script_name" 2>&1 | tee "$TASK_DIR/compile.output"
-  compile_ret=$?
+
+BUILD_TARGET="${PACKAGE_TYPE:-debug}"
+BUILD_DIR="build_${BUILD_TARGET}"
+compile_ret=0
+
+if [[ ! -x "$WORKSPACE/build.sh" ]]; then
+  echo "[compile.sh] No build.sh, skip."
 else
-  echo "[compile.sh] No $SCRIPTS_DIR/$script_name, skip compile."
-  compile_ret=0
+  # Step 1: Build init（与 buildbase 一致，只传 init，先拉取/安装 deps 再才能用 cmake）
+  bash build.sh "$BUILD_TARGET" --init 2>&1 | tee "$TASK_DIR/compile_init.output"
+  [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1  # Step 3: make（与 buildbase "cd build_debug && make -j4" 一致）
+  set +e
+  (cd "$WORKSPACE/$BUILD_DIR" && $MAKE $MAKE_ARGS observer) 2>&1 | tee "$TASK_DIR/compile.output"
+  compile_ret=${PIPESTATUS[0]}
+  set -e
 fi
-set -e
 
-if [[ -x "$SCRIPTS_DIR/farm_post_compile.sh" ]]; then
-  bash "$SCRIPTS_DIR/farm_post_compile.sh" "$compile_ret"
-fi
-
-# Copy artifacts to task dir if produced in workspace
-for f in observer.zst obproxy.zst; do
-  if [[ -f "$WORKSPACE/$f" ]]; then
-    cp -f "$WORKSPACE/$f" "$TASK_DIR/" || true
+# 产物落到 build_*，打包 observer/obproxy 为 zst 并拷贝到任务目录
+for binary in observer obproxy; do
+  for base in . build_debug build_release build; do
+    if [[ -f "$WORKSPACE/$base/$binary" ]]; then
+      cp -f "$WORKSPACE/$base/$binary" "$WORKSPACE/$binary" 2>/dev/null || true
+      break
+    fi
+  done
+  if [[ -f "$WORKSPACE/$binary" ]]; then
+    command -v zstd >/dev/null 2>&1 && zstd -f "$WORKSPACE/$binary" || true
+    [[ -f "$WORKSPACE/$binary.zst" ]] && cp -f "$WORKSPACE/$binary.zst" "$TASK_DIR/" || true
   fi
 done
-if [[ -f "$TASK_DIR/compile.output" ]]; then
-  : # already written
-elif [[ -f "$WORKSPACE/compile.output" ]]; then
-  cp -f "$WORKSPACE/compile.output" "$TASK_DIR/" || true
-fi
 
 exit "$compile_ret"

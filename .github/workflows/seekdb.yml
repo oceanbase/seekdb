@@ -1,7 +1,7 @@
 # SeekDB CI - 执行下沉版（Native）
 # 编译与测试在 self-hosted Runner 上直接执行，不经过 Farm2。
 # farm 脚本已从 farm-jenkins 复制到 .github/script/seekdb/scripts/，无需 clone。可选：FARM2_WORKER_IMAGE。
-name: SeekDB CI (Native)
+name: SeekDB CI 
 
 on:
   pull_request:
@@ -23,14 +23,20 @@ env:
   SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
 
 jobs:
-  seekdb-native:
-    if: ${{ github.repository_owner == 'oceanbase' && !github.event.pull_request.draft }}
-    name: seekdb-native
+  seekdb:
+    if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
+    name: seekdb
     # 使用已注册的 Runner：seekdb-test-arc-runner（若该 Runner 的 label 不是此名，请改成实际 label）
     runs-on: seekdb-test-arc-runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-seekdb-deps-el9-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
+          path: deps/3rd
 
       - name: Prepare (jobargs, run_jobs)
         run: |
@@ -50,6 +56,8 @@ jobs:
           export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
           export RELEASE_MODE="${{ vars.RELEASE_MODE || '' }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
+          # 保证 gen_parser.sh 使用 deps 里的 bison 2.4.1，不依赖系统 bison（Ubuntu 24 为 3.x）
+          export PATH="${{ github.workspace }}/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           if [[ -n "${{ vars.FARM2_WORKER_IMAGE || '' }}" ]]; then
             docker run --rm \
               -v "${{ github.workspace }}:/workspace" \
@@ -59,8 +67,9 @@ jobs:
               -e SEEKDB_TASK_DIR="/workspace/seekdb_build/${{ github.run_id }}" \
               -e RELEASE_MODE="${{ vars.RELEASE_MODE || '' }}" \
               -e FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}" \
+              -e PATH="/workspace/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH" \
               "${{ vars.FARM2_WORKER_IMAGE }}" \
-              /bin/bash -c '. /workspace/.github/script/seekdb/compile.sh'
+              /bin/bash -x /workspace/.github/script/seekdb/compile.sh
           else
             .github/script/seekdb/compile.sh
           fi
@@ -68,6 +77,20 @@ jobs:
       - name: Record compile failure
         if: steps.compile.outcome == 'failure'
         run: echo '++compile++' >> "${{ env.SEEKDB_TASK_DIR }}/fail_cases.output"
+
+      - name: Show parser error (if any)
+        if: always() && (steps.compile.outcome == 'failure' || steps.compile.outcome == 'success')
+        run: |
+          WS="${{ github.workspace }}"
+          ERR="$WS/src/sql/parser/_gen_parser.error"
+          OUT="$WS/src/sql/parser/_gen_parser.output"
+          echo "workspace=$WS"
+          echo "looking for: $ERR"
+          ls -la "$WS/src/sql/parser/" 2>/dev/null || true
+          echo "--- _gen_parser.error ---"
+          if [[ -f "$ERR" ]]; then cat "$ERR"; else echo "(file not found)"; fi
+          echo "--- _gen_parser.output (last 80 lines) ---"
+          if [[ -f "$OUT" ]]; then tail -80 "$OUT"; else echo "(file not found)"; fi
 
       - name: Mysqltest slice 0
         if: success()
