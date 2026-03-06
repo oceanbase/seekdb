@@ -277,7 +277,7 @@ select * from t5 order by id, name;
 insert into t5_fork(name) values ('Fork_Data');
 select * from t5_fork order by id, name;
 
---disable_parsing
+
 
 --echo ============================================
 --echo 10. Fork Table复制truncate info功能验证
@@ -313,14 +313,15 @@ select /*+index(t_trunc idx_k)*/ count(*) from t_trunc;
 select /*+index(t_trunc idx_k)*/ count(*) from t_trunc where id in (1,2);
 
 --echo # 执行Fork并等待完成
+--error 1235
 fork table t_trunc to t_trunc_fork;
 --source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
 
 --echo # 目标表校验：应只包含新数据，截断过的数据不应出现
-select /*+index(t_trunc_fork idx_k)*/ count(*) from t_trunc_fork;
-select /*+index(t_trunc_fork idx_k)*/ count(*) from t_trunc_fork where id in (1,2);
+#select /*+index(t_trunc_fork idx_k)*/ count(*) from t_trunc_fork;
+#select /*+index(t_trunc_fork idx_k)*/ count(*) from t_trunc_fork where id in (1,2);
 
---enable_parsing
+
 
 --echo ============================================
 --echo 6. 清理
