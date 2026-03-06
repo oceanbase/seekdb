@@ -97,6 +97,17 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPurgeDatabaseExecutor);
 };
 
+class ObForkDatabaseStmt;
+class ObForkDatabaseExecutor
+{
+public:
+  ObForkDatabaseExecutor() {}
+  virtual ~ObForkDatabaseExecutor() {}
+  int execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObForkDatabaseExecutor);
+};
+
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* OCEANBASE_SRC_SQL_ENGINE_CMD_OB_DATABASE_EXECUTOR_H_ */

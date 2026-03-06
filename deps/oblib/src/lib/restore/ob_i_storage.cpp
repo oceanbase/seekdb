@@ -154,6 +154,18 @@ int get_storage_prefix_from_path(const common::ObString &uri, const char *&prefi
     prefix = OB_FILE_PREFIX;
   } else if (uri.prefix_match(OB_AZBLOB_PREFIX)) {
     prefix = OB_AZBLOB_PREFIX;
+  } else if (uri.prefix_match(OB_OSS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
+    STORAGE_LOG(WARN, "OSS storage is not supported", K(ret), K(uri));
+  } else if (uri.prefix_match(OB_COS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "COS storage");
+    STORAGE_LOG(WARN, "COS storage is not supported", K(ret), K(uri));
+  } else if (uri.prefix_match(OB_HDFS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
+    STORAGE_LOG(WARN, "HDFS storage is not supported", K(ret), K(uri));
   } else {
     ret = OB_INVALID_BACKUP_DEST;
     STORAGE_LOG(ERROR, "invalid backup uri", K(ret), K(uri));

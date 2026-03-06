@@ -10,7 +10,7 @@ repo=https://mirrors.aliyun.com/oceanbase/development-kit/darwin/15/arm64
 
 [deps]
 devdeps-abseil-cpp-20211102.0-20251205.tar.gz
-devdeps-apache-arrow-9.0.0-20251208.tar.gz
+devdeps-apache-arrow-20.0.0-20260204.tar.gz
 devdeps-apache-orc-1.8.8-20251208.tar.gz
 devdeps-boost-1.74.0-20251205.tar.gz
 devdeps-fast-float-6.1.3-20251205.tar.gz

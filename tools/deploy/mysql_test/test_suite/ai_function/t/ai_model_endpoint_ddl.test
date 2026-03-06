@@ -1,0 +1,202 @@
+#owner: shenyunlong.syl
+#owner group: shenzhen
+
+connection default;
+
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint1');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint2');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint3');
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('my_model1');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('my_model3');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('my_model4');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_model1', '{
+    "type": "completion",
+    "model_name": "qwen-plus"
+ }');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_model3', '{
+    "type": "completion",
+    "model_name": "qwen-plus"
+ }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_model4', '{
+    "type": "completion",
+    "model_name": "qwen-plus"
+ }');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+
+--error 11113
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'my_model_endpoint2', '{
+    "ai_model_name": "my_model1",
+    "scope": "all",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint2';
+
+--error 11113
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+
+--error 11114
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'my_model_endpoint3', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_transform_fn": "text_embedding_request_fn",
+    "response_transform_fn": "text_embedding_reponse_fn"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint3';
+
+
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "provider" : "aliyun-openai"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "url" : "https://www.baidu.com/"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "access_key" : "sk2-xxxxxxxxxxxx"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+--error 11116
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "ai_model_name" : "my_model_3"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+
+--error 11114
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint1', '{
+    "provider" : "",
+    "request_transform_fn": "text_embedding_request_fn",
+    "response_transform_fn": "text_embedding_reponse_fn"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+
+--error 11112
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'my_model_endpoint4', '{
+    "ai_model_name" : "my_model3"
+  }');
+
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint1');
+
+### test cdb view
+connect (sys_conn,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
+connection sys_conn;
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'my_model_endpoint4', '{
+    "ai_model_name": "my_model4",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.CDB_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4') ORDER BY TENANT_ID;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
+
+connection default;
+--error 11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint2');
+--error 11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint3');
+--error 11114
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('');
+
+### test_ai_user
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys;
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('user_ai_model_endpoint_1');
+--disable_warnings
+DROP USER IF EXISTS test_ai_user@'%';
+--enable_warnings
+CREATE USER test_ai_user@'%' IDENTIFIED BY '123456';
+GRANT SELECT ON test.* TO 'test_ai_user'@'%';
+SHOW GRANTS FOR test_ai_user@'%';
+
+connect (ai_user,$OBMYSQL_MS0,test_ai_user,'123456',test,$OBMYSQL_PORT);
+
+connection ai_user;
+--error 1227
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'user_ai_model_endpoint_1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+
+connection obsys;
+GRANT CREATE AI MODEL ON *.* TO test_ai_user@'%';
+connection ai_user;
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+  'user_ai_model_endpoint_1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+--error 1227
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'user_ai_model_endpoint_1', '{
+    "provider" : "aliyun-openai"
+  }');
+connection obsys;
+GRANT ALTER AI MODEL ON *.* TO test_ai_user@'%';
+connection ai_user;
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+  'user_ai_model_endpoint_1', '{
+    "provider" : "aliyun-openai"
+  }');
+--error 1227
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('user_ai_model_endpoint_1');
+connection obsys;
+GRANT DROP AI MODEL ON *.* TO test_ai_user@'%';
+connection ai_user;
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('user_ai_model_endpoint_1');
+connection obsys;
+DROP USER test_ai_user@'%';

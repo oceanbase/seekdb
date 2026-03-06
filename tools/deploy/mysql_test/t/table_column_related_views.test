@@ -1,0 +1,20 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner: jingyu.cr
+#owner group: rs
+create table test_table_1 (c1 int primary key, c2 int, c3 int);
+create index test_table_1_idx1 on test_table_1(c2) global partition by hash(c2) partitions 4;
+create index test_table_1_idx2 on test_table_1(c3) local;
+select table_name, column_name from oceanbase.DBA_TAB_COL_STATISTICS where table_name like '%TEST_TABLE%' order by table_name, column_name;
+
+connect (obsys_stfmt,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
+connection obsys_stfmt;
+select table_name, column_name from CDB_TAB_COLS_V$ where table_name like '%TEST_TABLE%' order by table_name, column_name;
+select table_name, column_name from CDB_TAB_COLS where table_name like '%TEST_TABLE%' order by table_name, column_name;
+select table_name, column_name from CDB_TAB_COL_STATISTICS where table_name like '%TEST_TABLE%' order by table_name, column_name;
+
+connection default;
+drop index test_table_1_idx1 on test_table_1;
+drop index test_table_1_idx2 on test_table_1;
+drop table test_table_1;

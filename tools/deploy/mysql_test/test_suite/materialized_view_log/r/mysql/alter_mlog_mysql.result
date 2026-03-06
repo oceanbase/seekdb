@@ -1,0 +1,121 @@
+drop materialized view log on t1;
+DROP TABLE IF EXISTS t1;
+CREATE TABLE t1 (
+id int primary key,
+name varchar(10),
+age int
+);
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO	PRI	NULL
+age	int(11)	YES		NULL
+SEQUENCE$$	bigint(20)	NO	PRI	NULL
+DMLTYPE$$	varchar(1)	NO		NULL
+OLD_NEW$$	varchar(1)	NO		NULL
+alter table mlog$_t1 add column new_col varchar(20);
+ERROR 0A000: alter materialized view log is not supported
+rename table mlog$_t1 to mlog2;
+ERROR 0A000: rename materialized view log is not supported
+alter table mlog$_t1 rename to mlog2;
+ERROR 0A000: alter materialized view log is not supported
+truncate mlog$_t1;
+ERROR 0A000: truncate materialized view log is not supported
+rename table t1 to t2;
+ERROR 0A000: rename table with materialized view log is not supported
+alter table t1 rename to t2;
+ERROR 0A000: this alter table to table with materialized view log is not supported
+truncate t1;
+ERROR 0A000: truncate table with materialized view log is not supported
+alter table t1 drop primary key;
+ERROR 0A000: drop the primary key of table with materialized view log is not supported
+drop materialized view log on t1;
+alter table t1 drop primary key;
+create materialized view log on t1 with (id, age) including new values;
+alter table t1 add primary key(id);
+ERROR 0A000: add primary key to table with materialized view log is not supported
+alter table t1 add constraint pk1 primary key(id);
+ERROR 0A000: add primary key to table with materialized view log is not supported
+alter table t1 add column new_col varchar(20);
+alter table t1 drop column name;
+ERROR 0A000: modify column to table with materialized view log is not supported
+alter table t1 rename column age to age2;
+ERROR 0A000: modify column to table with materialized view log is not supported
+alter table t1 modify name varchar(20);
+ERROR 0A000: modify column to table with materialized view log is not supported
+alter table t1 modify name varchar(10) not null;
+ERROR 0A000: modify column to table with materialized view log is not supported
+alter table t1 alter column age set default 1;
+ERROR 0A000: modify column to table with materialized view log is not supported
+drop materialized view log on t2;
+DROP TABLE IF EXISTS t2;
+CREATE TABLE t2 (
+id int,
+name varchar(10),
+age int
+)
+partition by range(age)
+(
+partition p1 values less than(10),
+partition p2 values less than(20),
+partition p3 values less than(30),
+partition p4 values less than(40),
+partition p5 values less than(50)
+);
+create materialized view log on t2 with primary key (id, age) including new values;
+alter table mlog$_t2 add partition (partition p6 values less than(60));
+ERROR 0A000: alter materialized view log is not supported
+alter table t2 add partition (partition p6 values less than(60));
+ERROR 0A000: this alter table to table with materialized view log is not supported
+alter table mlog$_t2 drop partition p3;
+ERROR 0A000: alter materialized view log is not supported
+alter table t2 drop partition p3;
+ERROR 0A000: this alter table to table with materialized view log is not supported
+alter table mlog$_t2 partition by range(age)
+(
+partition p1 values less than(15),
+partition p2 values less than(25),
+partition p3 values less than(35),
+partition p4 values less than(45),
+partition p5 values less than(55)
+);
+ERROR HY000: A PRIMARY KEY must include all columns in the table's partitioning function
+alter table t2 partition by range(age)
+(
+partition p1 values less than(15),
+partition p2 values less than(25),
+partition p3 values less than(35),
+partition p4 values less than(45),
+partition p5 values less than(55)
+);
+ERROR 0A000: this alter table to table with materialized view log is not supported
+drop tablegroup if exists test_tg;
+create tablegroup test_tg;
+alter tablegroup test_tg add table t1;
+ERROR 0A000: alter tablegroup of table with materialized view log is not supported
+alter tablegroup test_tg add table mlog$_t1;
+ERROR 0A000: alter tablegroup of materialized view log is not supported
+drop tablegroup test_tg;
+alter table t1 compression 'NONE';
+ERROR 0A000: alter option of table with materialized view log is not supported
+alter table mlog$_t1 compression 'NONE';
+ERROR 0A000: alter materialized view log is not supported
+alter table mlog$_t1 comment 'mlog table comment';
+ERROR 0A000: alter materialized view log is not supported
+alter table t1 add index k1(age);
+alter table t1 drop index k1;
+alter table t1 add unique(age);
+alter table t1 drop index age;
+alter table t1 add constraint uk1 unique(age);
+drop index uk1 on t1;
+CREATE TABLE fk_t1 (
+age int primary key
+);
+drop table fk_t1;
+alter table t1 add constraint chk_constraint check (age > 0);
+alter table t1 drop constraint chk_constraint;
+alter table t1 comment 'base table comment';
+drop materialized view log on t1;
+drop table t1;
+drop materialized view log on t2;
+drop table t2;

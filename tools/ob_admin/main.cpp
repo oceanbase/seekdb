@@ -24,9 +24,6 @@
 #include "io_bench/ob_admin_io_adapter_bench.h"
 #include "io_device/ob_admin_test_io_device_executor.h"
 #include "object_storage_driver_quality/ob_admin_object_storage_driver_quality.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "tools/ob_admin/shared_storage_tool/ob_admin_shared_storage_tool_executor.h"
-#endif
 #include "deps/oblib/src/lib/alloc/malloc_hook.h"
 #include "tools/ob_admin/sql_tool/ob_admin_uncompress_plan_executor.h"
 
@@ -40,10 +37,6 @@ void print_usage()
          "       ob_admin dumpsst\n"
          "       ob_admin dump_enum_value\n"
          "       ob_admin dump_backup\n"
-#ifdef OB_BUILD_SHARED_STORAGE
-         "       ob_admin dump_obj_storage\n"
-         "       ob_admin ss_tool\n"
-#endif
          "       ob_admin log_tool ## './ob_admin log_tool' for more detail\n"
          "       ob_admin -h127.0.0.1 -p2883 xxx\n"
          "       ob_admin -h127.0.0.1 -p2883 (-sintl/-ssm -mbkmi/-mlocal) [command]\n"
@@ -141,10 +134,6 @@ int main(int argc, char *argv[])
       executor = new ObAdminDumpEnumValueExecutor();
     } else if (0 == strcmp("dumpsst", argv[1])) {
       executor = new ObAdminDumpsstExecutor();
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (0 == strcmp("ss_tool", argv[1])) {
-      executor = new ObAdminSSToolExecutor();
-#endif
     } else if (0 == strcmp("log_tool", argv[1])) {
       executor = new ObAdminLogExecutor();
     } else if (0 == strcmp("dump_backup", argv[1])) {

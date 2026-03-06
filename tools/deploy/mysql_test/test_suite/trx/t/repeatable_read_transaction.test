@@ -1,0 +1,7 @@
+#owner: gjw228474
+#owner group: trans
+#description: test repeatable read in mysql mode
+
+let $ser_or_rr = REPEATABLE READ;
+
+--source mysql_test/test_suite/trx/include/serializable_or_rr_trans_basic.inc

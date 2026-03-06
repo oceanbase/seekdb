@@ -38,6 +38,7 @@ message(STATUS "This is SOURCE dir " ${PROJECT_SOURCE_DIR})
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 add_definitions(-g -O2 -frtti)
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use

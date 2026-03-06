@@ -1,0 +1,215 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner : yangjiali.yjl
+#owner group: obkv
+#description: basic test ob create table with vector index
+
+connect (conn_user,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
+connection conn_user;
+
+--disable_warnings
+drop database if exists yjl_vec;
+create database yjl_vec;
+use yjl_vec;
+
+alter system set ob_vector_memory_limit_percentage = 20;
+sleep 3;
+--echo
+--echo
+--echo "=========================================== add column ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, '[1,2,1]');
+#normal add column first is ONLINE DDL now
+alter table t_vec add column c0 smallint first;
+alter table t_vec add column c3 tinyint before c1;
+alter table t_vec add column c4 bigint after c2;
+#add auto_increment column is OFFLINE DDL
+alter table t_vec add column c5 int auto_increment;
+alter table t_vec drop c3, add c6 char(10) default 'a';
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== modify column ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, 2, '[1,2,1]');
+alter table t_vec modify c1 int before c3;
+alter table t_vec modify c2 varchar(128) first;
+alter table t_vec modify c2 varchar(12) after c1;
+alter table t_vec modify c1 int unsigned not null auto_increment;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== change column ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec change c1 c1 varchar(128);
+--error 1235
+alter table t_vec change c2 c2 varchar(128) before c1;
+alter table t_vec change c1 c1 varchar(128) before c2;
+alter table t_vec change c1 c3 int after c2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== drop column ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, 2, '[1,2,1]');
+--error 1235
+alter table t_vec drop column c1;
+alter table t_vec drop column c2;
+--error 3108
+alter table t_vec drop column c3;
+alter table t_vec drop primary key;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== drop index ================================================="
+# not support alter table drop index yet
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec drop index idx1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== add index ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, '[1,2,1]');
+--error 1235
+alter table t_vec add index idx1(c2);
+# not support alter table add vector index grammar
+--error 1064
+alter table t_vec add vector index idx1(c2) with (distance=l2, type=hnsw);
+--error 1235
+create index idx1 on t_vec(c2);
+create vector index idx1 on t_vec(c2) with (distance=l2, type=hnsw);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== add primary key ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec modify c1 int primary key;
+--error 1068
+alter table t_vec add primary key(c1);
+--error 1068
+alter table t_vec modify c1 bigint, add primary key(c1);
+alter table t_vec drop primary key, add primary key(c1);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== add/modify partition/rule ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (50));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+insert into t_vec values(1, '[1,2,1]');
+alter table t_vec partition by range(c1) (partition p0 values less than (20), partition p1 values less than (200));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+--echo
+--echo
+--echo "=========================================== complex case ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 int, c4 vector(3), c5 int, c6 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+insert into t_vec values(1, '[1,1,1]', 5, '[1,2,3]', 7, '[1,2,1]');
+alter table t_vec add column c7 int auto_increment;
+create vector index idx2 on  t_vec(c4) with(distance=l2, type=hnsw, lib=vsag);
+alter table t_vec drop column c3;
+insert into t_vec values(2, '[1,0,1]', '[1,2,3]', 7, '[3,2,1]', 2);
+select * from t_vec order by l2_distance(c2, [0.9,0.4,3]);
+alter table t_vec modify c5 varchar(20) before c4;
+create vector index idx3 on t_vec(c6) with(distance=l2, type=hnsw, lib=vsag);
+alter table t_vec drop column c7;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+select * from t_vec order by l2_distance(c6, [0.9,0.4,3]);
+truncate table t_vec;
+insert into t_vec values(1, '[1,1,1]', 'a', '[1,2,3]', '[1,2,1]');
+alter table t_vec drop index idx1;
+alter table t_vec drop column c5, add c9 varchar(10) default 'cc';
+select * from t_vec order by l2_distance(c6, [0.9,0.4,3]);
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_vec values(1, '[1,1,1]');
+ALTER TABLE t_vec ADD c3 INT AUTO_INCREMENT;
+ALTER TABLE t_vec ADD COLUMN c4 int AS (c1 + 3) STORED;
+alter table t_vec modify c3 tinyint;
+alter table t_vec modify c1 tinyint;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t_vec values(1, '[1,1,1]', 'cc', 4);
+alter table t_vec modify c1 tinyint;
+alter table t_vec modify c3 varchar(5) charset 'gbk';
+alter table t_vec modify c1 int;
+alter table t_vec add constraint cc check (c1 < 10);
+alter table t_vec modify c3 char(8) , add c5 int, drop column c4;
+alter table t_vec convert to CHARACTER SET 'utf8';
+alter table t_vec convert to CHARACTER SET 'gbk';
+truncate table t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+
+connection conn_user;
+drop table if exists t_vec;
+drop database if exists yjl_vec;
+alter system set ob_vector_memory_limit_percentage =0;

@@ -443,34 +443,56 @@ int ObForkTableUtil::get_tablet_ids(
   return ret;
 }
 
+// Obtain snapshot for multiple tables at once to ensure consistency
 int ObForkTableUtil::obtain_snapshot(
     common::ObMySQLTransaction &trans,
     schema::ObSchemaGetterGuard &schema_guard,
-    const ObTableSchema &data_table_schema,
+    const uint64_t tenant_id,
+    const common::ObIArray<const ObTableSchema*> &data_table_schemas,
     int64_t &new_fetched_snapshot)
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = data_table_schema.get_tenant_id();
-  const int64_t schema_version = data_table_schema.get_schema_version();
   rootserver::ObDDLService &ddl_service = GCTX.root_service_->get_ddl_service();
   new_fetched_snapshot = 0;
-  ObSEArray<ObTabletID, 4> tablet_ids;
+  ObSEArray<ObTabletID, 16> tablet_ids;
   SCN snapshot_scn;
-  if (OB_FAIL(ObDDLUtil::calc_snapshot_with_gts(new_fetched_snapshot, tenant_id))) {
+  int64_t max_schema_version = 0;
+
+  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
+  } else if (OB_UNLIKELY(data_table_schemas.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("data_table_schemas is empty", K(ret));
+  } else if (OB_FAIL(ObDDLUtil::calc_snapshot_with_gts(new_fetched_snapshot, tenant_id))) {
     LOG_WARN("fail to calc snapshot with gts", K(ret), K(new_fetched_snapshot));
   } else if (new_fetched_snapshot <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the snapshot is not valid", K(ret), K(new_fetched_snapshot));
   } else if (OB_FAIL(snapshot_scn.convert_for_tx(new_fetched_snapshot))) {
     LOG_WARN("failed to convert snapshot", K(ret), K(new_fetched_snapshot));
-  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id, data_table_schema, tablet_ids))) {
-    LOG_WARN("fail to collect tablet ids", K(ret), K(data_table_schema));
   } else {
+    // Collect tablet ids from all tables
+    for (int64_t i = 0; OB_SUCC(ret) && i < data_table_schemas.count(); ++i) {
+      const ObTableSchema *table_schema = data_table_schemas.at(i);
+      if (OB_ISNULL(table_schema)) {
+        ret = OB_BAD_NULL_ERROR;
+        LOG_WARN("table schema is null", K(ret), K(i));
+      } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(
+                     schema_guard, tenant_id, *table_schema, tablet_ids))) {
+        LOG_WARN("fail to collect tablet ids", K(ret), K(table_schema->get_table_id()));
+      } else {
+        max_schema_version = std::max(max_schema_version, table_schema->get_schema_version());
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
     const int64_t retry_interval_us = 10 * 1000; // 10ms
     int64_t retry_count = 0;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
-              trans, SNAPSHOT_FOR_DDL, tenant_id, data_table_schema.get_schema_version(),
+              trans, SNAPSHOT_FOR_DDL, tenant_id, max_schema_version,
               snapshot_scn, nullptr, tablet_ids))) {
         if (OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret) {
           const bool has_timeout = THIS_WORKER.is_timeout_ts_valid();
@@ -483,7 +505,7 @@ int ObForkTableUtil::obtain_snapshot(
               LOG_INFO("retry batch acquire snapshot on nowait conflict",
                        KR(ret), K(tenant_id), K(retry_count));
             }
-	    // clear last error to keep transaction usable for next retry
+            // clear last error to keep transaction usable for next retry
             trans.reset_last_error();
             ret = OB_SUCCESS;
             ++retry_count;
@@ -497,41 +519,59 @@ int ObForkTableUtil::obtain_snapshot(
       break;
     }
     if (OB_SUCC(ret)) {
-      LOG_INFO("hold snapshot finished", K(snapshot_scn), K(schema_version), "tablet_cnt", tablet_ids.count());
-      LOG_DEBUG("hold snapshot detail", K(snapshot_scn), K(schema_version), K(tablet_ids));
+      LOG_INFO("hold snapshot finished for multiple tables", K(snapshot_scn), K(max_schema_version),
+               "table_cnt", data_table_schemas.count(), "tablet_cnt", tablet_ids.count());
+      LOG_DEBUG("hold snapshot detail", K(snapshot_scn), K(max_schema_version), K(tablet_ids));
     }
   }
   return ret;
 }
 
+// Release snapshot for multiple tables at once
 int ObForkTableUtil::release_snapshot(
     rootserver::ObDDLTask* task,
     schema::ObSchemaGetterGuard &schema_guard,
-    const uint64_t table_id,
+    const uint64_t tenant_id,
+    const common::ObIArray<uint64_t> &table_ids,
     const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObTabletID, 2> tablet_ids;
+  ObSEArray<ObTabletID, 16> tablet_ids;
   if (OB_ISNULL(task)) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("invalid argument", K(ret));
   } else if (!task->is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("args have not been inited", K(ret), K(task->get_task_type()));
+  } else if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
+  } else if (OB_UNLIKELY(table_ids.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("table_ids is empty", K(ret));
   } else {
-    uint64_t tenant_id = task->get_src_tenant_id();
     int64_t schema_version = task->get_src_schema_version();
     if (OB_FAIL(DDL_SIM(tenant_id, task->get_task_id(), DDL_TASK_RELEASE_SNAPSHOT_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(task->get_task_id()));
-    } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id, table_id, tablet_ids))) {
-      LOG_WARN("failed to get tablet ids", K(ret), K(tenant_id), K(table_id));
-    } else if (OB_FAIL(task->batch_release_snapshot(snapshot_version, tablet_ids))) {
-      LOG_WARN("failed to release snapshot", K(ret));
+    } else {
+      // Collect tablet ids from all tables
+      for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
+        const uint64_t table_id = table_ids.at(i);
+        if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(
+                schema_guard, tenant_id, table_id, tablet_ids))) {
+          LOG_WARN("failed to get tablet ids", K(ret), K(tenant_id), K(table_id));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(task->batch_release_snapshot(snapshot_version, tablet_ids))) {
+        LOG_WARN("failed to release snapshot", K(ret));
+      }
     }
     task->add_event_info("release snapshot finish");
-    LOG_INFO("release snapshot finished", K(snapshot_version), K(table_id), K(schema_version),
-        "tablet_cnt", tablet_ids.count(), "ddl_event_info", ObDDLEventInfo());
-    LOG_DEBUG("release snapshot detail", K(snapshot_version), K(table_id), K(schema_version), K(tablet_ids));
+    LOG_INFO("release snapshot finished for multiple tables", K(snapshot_version), K(schema_version),
+        "table_cnt", table_ids.count(), "tablet_cnt", tablet_ids.count(), "ddl_event_info", ObDDLEventInfo());
+    LOG_DEBUG("release snapshot detail", K(snapshot_version), K(schema_version), K(table_ids), K(tablet_ids));
   }
   return ret;
 }

@@ -1,0 +1,53 @@
+# owner: zg410411
+# owner group: mv
+# tags:
+# descriotion: mv should not be visiable before the mv_available flag being set
+#
+
+# 0. prepare
+connect (sys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection sys;
+alter system set debug_sync_timeout = '100000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+connection default;
+set recyclebin = OFF;
+set ob_query_timeout = 10000000000;
+
+--disable_warnings
+drop database if exists test_mv_schema_check;
+--enable_warnings
+create database test_mv_schema_check;
+use test_mv_schema_check;
+
+connect (conn1,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test_mv_schema_check,$OBMYSQL_PORT);
+
+# 1. test mv is not visible before the mv_available flag being set
+connection default;
+create table t1(c1 int);
+insert into t1 values(1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+connection sys;
+set ob_global_debug_sync = 'BEFORE_MV_FINISH_COMPLETE_REFRESH wait_for signalxxx execute 10000';
+sleep 10;
+connection conn1;
+send create materialized view mv1 as select * from t1;
+
+connection default;
+sleep 5;
+--error 1146
+select * from mv1;
+
+connection sys;
+set ob_global_debug_sync = 'now signal signalxxx';
+set ob_global_debug_sync = 'reset';
+sleep 10;
+
+connection conn1;
+reap;
+
+connection default;
+select * from mv1 order by c1;
+
+# 2. clean up
+drop database test_mv_schema_check;

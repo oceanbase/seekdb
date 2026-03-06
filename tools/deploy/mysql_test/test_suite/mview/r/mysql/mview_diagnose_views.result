@@ -1,0 +1,44 @@
+alter system set debug_sync_timeout = '100000s';
+set ob_global_debug_sync = 'reset';
+set recyclebin = OFF;
+set ob_query_timeout = 10000000000;
+drop database if exists test_mv_diagnose_views;
+create database test_mv_diagnose_views;
+use test_mv_diagnose_views;
+create table dv_t1(c1 int primary key, c2 int);
+create materialized view log on dv_t1 with primary key (c2);
+insert into dv_t1 values(1, 1);
+insert into dv_t1 values(2, 2);
+create materialized view dv_mv1(c1, c2, primary key(c1)) refresh fast as select c1, count(*) c2 from dv_t1 group by c1;
+select data_sync_scn from oceanbase.__all_mview;
+select data_sync_scn, data_sync_delay from oceanbase.DBA_MVIEWS;
+set ob_global_debug_sync = 'BEFORE_MV_FINISH_RUNNING_JOB wait_for signalxxx execute 10000';
+alter materialized view dv_mv1 refresh start with sysdate() + interval 1 second;
+select TABLE_ID, JOB_TYPE from oceanbase.__all_virtual_mview_running_job;
+select TABLE_NAME, JOB_TYPE from oceanbase.DBA_MVIEW_RUNNING_JOBS;
+TABLE_NAME	JOB_TYPE
+dv_mv1	FAST REFRESH
+select TABLE_NAME, JOB_TYPE from oceanbase.DBA_MVIEW_RUNNING_JOBS;
+TABLE_NAME	JOB_TYPE
+dv_mv1	FAST REFRESH
+select TABLE_NAME, JOB_TYPE from oceanbase.CDB_MVIEW_RUNNING_JOBS;
+TABLE_NAME	JOB_TYPE
+dv_mv1	FAST REFRESH
+set ob_global_debug_sync = 'now signal signalxxx';
+set ob_global_debug_sync = 'reset';
+select PURGE_DOP, LAST_PURGE_TIME from oceanbase.DBA_MVIEW_LOGS;
+select PURGE_DOP, LAST_PURGE_TIME from oceanbase.CDB_MVIEW_LOGS;
+select * from oceanbase.DBA_MVIEW_DEPS where mview_owner = 'test_mv_diagnose_views';
+MVIEW_OWNER	MVIEW_NAME	DEP_OWNER	DEP_NAME	DEP_TYPE
+test_mv_diagnose_views	dv_mv1	test_mv_diagnose_views	dv_t1	TABLE
+update test_mv_diagnose_views.dv_t1 set c2 = 100 where c1 = 1;
+call dbms_mview.refresh('dv_mv1', 'c');
+num_rows_upd
+1
+num_rows_upd
+1
+base_tables
+dv_t1
+base_tables
+dv_t1
+drop database test_mv_diagnose_views;

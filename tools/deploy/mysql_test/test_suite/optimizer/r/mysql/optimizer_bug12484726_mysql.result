@@ -1,0 +1,125 @@
+result_format: 3
+explain basic select /*+use_hash(o,t),leading(o,t)*/ * from oceanbase.__all_outline o, oceanbase.__all_database t where o.tenant_id=t.tenant_id;
+Query Plan
+===========================
+|ID|OPERATOR         |NAME|
+---------------------------
+|0 |HASH JOIN        |    |
+|1 |├─TABLE FULL SCAN|o   |
+|2 |└─TABLE FULL SCAN|t   |
+===========================
+Outputs & filters:
+-------------------------------------
+  0 - output([o.gmt_create], [o.gmt_modified], [o.tenant_id], [o.outline_id], [o.database_id], [o.schema_version], [o.name], [o.signature], [o.outline_content],
+       [o.sql_text], [o.owner], [o.used], [o.version], [o.compatible], [o.enabled], [o.format], [o.outline_params], [o.outline_target], [o.sql_id], [o.owner_id],
+       [o.format_sql_text], [o.format_sql_id], [o.format_outline], [t.gmt_create], [t.gmt_modified], [t.tenant_id], [t.database_id], [t.database_name], [t.collation_type],
+       [t.comment], [t.read_only], [t.default_tablegroup_id], [t.in_recyclebin]), filter(nil), rowset=16
+      equal_conds([o.tenant_id = t.tenant_id]), other_conds(nil)
+  1 - output([o.tenant_id], [o.outline_id], [o.gmt_create], [o.gmt_modified], [o.database_id], [o.schema_version], [o.name], [o.signature], [o.outline_content],
+       [o.sql_text], [o.owner], [o.used], [o.version], [o.compatible], [o.enabled], [o.format], [o.outline_params], [o.outline_target], [o.sql_id], [o.owner_id],
+       [o.format_sql_text], [o.format_sql_id], [o.format_outline]), filter(nil), rowset=16
+      access([o.tenant_id], [o.outline_id], [o.gmt_create], [o.gmt_modified], [o.database_id], [o.schema_version], [o.name], [o.signature], [o.outline_content],
+       [o.sql_text], [o.owner], [o.used], [o.version], [o.compatible], [o.enabled], [o.format], [o.outline_params], [o.outline_target], [o.sql_id], [o.owner_id],
+       [o.format_sql_text], [o.format_sql_id], [o.format_outline]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([o.tenant_id], [o.outline_id]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t.tenant_id], [t.database_id], [t.gmt_create], [t.gmt_modified], [t.database_name], [t.collation_type], [t.comment], [t.read_only], [t.default_tablegroup_id],
+       [t.in_recyclebin]), filter(nil), rowset=16
+      access([t.tenant_id], [t.database_id], [t.gmt_create], [t.gmt_modified], [t.database_name], [t.collation_type], [t.comment], [t.read_only], [t.default_tablegroup_id],
+       [t.in_recyclebin]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t.tenant_id], [t.database_id]), range(MIN,MIN ; MAX,MAX)always true
+explain basic select /*+use_hash(t,mt),leading(t,mt)*/ * from oceanbase.__all_table as t, oceanbase.__all_database as mt where t.tenant_id = mt.tenant_id;
+Query Plan
+===========================
+|ID|OPERATOR         |NAME|
+---------------------------
+|0 |HASH JOIN        |    |
+|1 |├─TABLE FULL SCAN|t   |
+|2 |└─TABLE FULL SCAN|mt  |
+===========================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.gmt_create], [t.gmt_modified], [t.tenant_id], [t.table_id], [t.table_name], [t.database_id], [t.table_type], [t.load_type], [t.def_type],
+       [t.rowkey_column_num], [t.index_column_num], [t.max_used_column_id], [t.autoinc_column_id], [t.auto_increment], [t.read_only], [t.rowkey_split_pos], [t.compress_func_name],
+       [t.expire_condition], [t.is_use_bloomfilter], [t.comment], [t.block_size], [t.collation_type], [t.data_table_id], [t.index_status], [t.tablegroup_id],
+      [t.progressive_merge_num], [t.index_type], [t.part_level], [t.part_func_type], [t.part_func_expr], [t.part_num], [t.sub_part_func_type], [t.sub_part_func_expr],
+       [t.sub_part_num], [t.schema_version], [t.view_definition], [t.view_check_option], [t.view_is_updatable], [t.index_using_type], [t.parser_name], [t.index_attributes_set],
+       [t.tablet_size], [t.pctfree], [t.partition_status], [t.partition_schema_version], [t.session_id], [t.pk_comment], [t.sess_active_time], [t.row_store_type],
+       [t.store_format], [t.duplicate_scope], [t.progressive_merge_round], [t.storage_format_version], [t.table_mode], [t.encryption], [t.tablespace_id], [t.sub_part_template_flags],
+       [t.dop], [t.character_set_client], [t.collation_connection], [t.auto_part_size], [t.auto_part], [t.association_table_id], [t.tablet_id], [t.max_dependency_version],
+       [t.define_user_id], [t.transition_point], [t.b_transition_point], [t.interval_range], [t.b_interval_range], [t.object_status], [t.table_flags], [t.truncate_version],
+       [t.external_file_location], [t.external_file_location_access_info], [t.external_file_format], [t.external_file_pattern], [t.ttl_definition], [t.kv_attributes],
+       [t.name_generated_type], [t.lob_inrow_threshold], [t.max_used_column_group_id], [t.column_store], [t.auto_increment_cache_size], [t.external_properties],
+       [t.local_session_vars], [t.duplicate_read_consistency], [t.index_params], [t.micro_index_clustered], [t.mv_mode], [t.parser_properties], [t.enable_macro_block_bloom_filter],
+       [t.storage_cache_policy], [t.merge_engine_type], [t.semistruct_encoding_type], [t.dynamic_partition_policy], [t.external_location_id], [t.external_sub_path],
+       [mt.gmt_create], [mt.gmt_modified], [mt.tenant_id], [mt.database_id], [mt.database_name], [mt.collation_type], [mt.comment], [mt.read_only], [mt.default_tablegroup_id],
+       [mt.in_recyclebin]), filter(nil), rowset=256
+      equal_conds([t.tenant_id = mt.tenant_id]), other_conds(nil)
+  1 - output([t.tenant_id], [t.table_id], [t.gmt_create], [t.gmt_modified], [t.table_name], [t.database_id], [t.table_type], [t.load_type], [t.def_type],
+       [t.rowkey_column_num], [t.index_column_num], [t.max_used_column_id], [t.autoinc_column_id], [t.auto_increment], [t.read_only], [t.rowkey_split_pos], [t.compress_func_name],
+       [t.expire_condition], [t.is_use_bloomfilter], [t.comment], [t.block_size], [t.collation_type], [t.data_table_id], [t.index_status], [t.tablegroup_id],
+      [t.progressive_merge_num], [t.index_type], [t.part_level], [t.part_func_type], [t.part_func_expr], [t.part_num], [t.sub_part_func_type], [t.sub_part_func_expr],
+       [t.sub_part_num], [t.schema_version], [t.view_definition], [t.view_check_option], [t.view_is_updatable], [t.index_using_type], [t.parser_name], [t.index_attributes_set],
+       [t.tablet_size], [t.pctfree], [t.partition_status], [t.partition_schema_version], [t.session_id], [t.pk_comment], [t.sess_active_time], [t.row_store_type],
+       [t.store_format], [t.duplicate_scope], [t.progressive_merge_round], [t.storage_format_version], [t.table_mode], [t.encryption], [t.tablespace_id], [t.sub_part_template_flags],
+       [t.dop], [t.character_set_client], [t.collation_connection], [t.auto_part_size], [t.auto_part], [t.association_table_id], [t.tablet_id], [t.max_dependency_version],
+       [t.define_user_id], [t.transition_point], [t.b_transition_point], [t.interval_range], [t.b_interval_range], [t.object_status], [t.table_flags], [t.truncate_version],
+       [t.external_file_location], [t.external_file_location_access_info], [t.external_file_format], [t.external_file_pattern], [t.ttl_definition], [t.kv_attributes],
+       [t.name_generated_type], [t.lob_inrow_threshold], [t.max_used_column_group_id], [t.column_store], [t.auto_increment_cache_size], [t.external_properties],
+       [t.local_session_vars], [t.duplicate_read_consistency], [t.index_params], [t.micro_index_clustered], [t.mv_mode], [t.parser_properties], [t.enable_macro_block_bloom_filter],
+       [t.storage_cache_policy], [t.merge_engine_type], [t.semistruct_encoding_type], [t.dynamic_partition_policy], [t.external_location_id], [t.external_sub_path]), filter(nil), rowset=256
+      access([t.tenant_id], [t.table_id], [t.gmt_create], [t.gmt_modified], [t.table_name], [t.database_id], [t.table_type], [t.load_type], [t.def_type],
+       [t.rowkey_column_num], [t.index_column_num], [t.max_used_column_id], [t.autoinc_column_id], [t.auto_increment], [t.read_only], [t.rowkey_split_pos], [t.compress_func_name],
+       [t.expire_condition], [t.is_use_bloomfilter], [t.comment], [t.block_size], [t.collation_type], [t.data_table_id], [t.index_status], [t.tablegroup_id],
+      [t.progressive_merge_num], [t.index_type], [t.part_level], [t.part_func_type], [t.part_func_expr], [t.part_num], [t.sub_part_func_type], [t.sub_part_func_expr],
+       [t.sub_part_num], [t.schema_version], [t.view_definition], [t.view_check_option], [t.view_is_updatable], [t.index_using_type], [t.parser_name], [t.index_attributes_set],
+       [t.tablet_size], [t.pctfree], [t.partition_status], [t.partition_schema_version], [t.session_id], [t.pk_comment], [t.sess_active_time], [t.row_store_type],
+       [t.store_format], [t.duplicate_scope], [t.progressive_merge_round], [t.storage_format_version], [t.table_mode], [t.encryption], [t.tablespace_id], [t.sub_part_template_flags],
+       [t.dop], [t.character_set_client], [t.collation_connection], [t.auto_part_size], [t.auto_part], [t.association_table_id], [t.tablet_id], [t.max_dependency_version],
+       [t.define_user_id], [t.transition_point], [t.b_transition_point], [t.interval_range], [t.b_interval_range], [t.object_status], [t.table_flags], [t.truncate_version],
+       [t.external_file_location], [t.external_file_location_access_info], [t.external_file_format], [t.external_file_pattern], [t.ttl_definition], [t.kv_attributes],
+       [t.name_generated_type], [t.lob_inrow_threshold], [t.max_used_column_group_id], [t.column_store], [t.auto_increment_cache_size], [t.external_properties],
+       [t.local_session_vars], [t.duplicate_read_consistency], [t.index_params], [t.micro_index_clustered], [t.mv_mode], [t.parser_properties], [t.enable_macro_block_bloom_filter],
+       [t.storage_cache_policy], [t.merge_engine_type], [t.semistruct_encoding_type], [t.dynamic_partition_policy], [t.external_location_id], [t.external_sub_path]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([t.tenant_id], [t.table_id]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([mt.tenant_id], [mt.database_id], [mt.gmt_create], [mt.gmt_modified], [mt.database_name], [mt.collation_type], [mt.comment], [mt.read_only],
+       [mt.default_tablegroup_id], [mt.in_recyclebin]), filter(nil), rowset=256
+      access([mt.tenant_id], [mt.database_id], [mt.gmt_create], [mt.gmt_modified], [mt.database_name], [mt.collation_type], [mt.comment], [mt.read_only],
+       [mt.default_tablegroup_id], [mt.in_recyclebin]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([mt.tenant_id], [mt.database_id]), range(MIN,MIN ; MAX,MAX)always true
+explain basic select /*+use_hash(o,os),leading(o,os)*/ * from oceanbase.__all_outline as o, oceanbase.__all_outline_history as os where o.tenant_id = os.tenant_id;
+Query Plan
+===========================
+|ID|OPERATOR         |NAME|
+---------------------------
+|0 |HASH JOIN        |    |
+|1 |├─TABLE FULL SCAN|o   |
+|2 |└─TABLE FULL SCAN|os  |
+===========================
+Outputs & filters:
+-------------------------------------
+  0 - output([o.gmt_create], [o.gmt_modified], [o.tenant_id], [o.outline_id], [o.database_id], [o.schema_version], [o.name], [o.signature], [o.outline_content],
+       [o.sql_text], [o.owner], [o.used], [o.version], [o.compatible], [o.enabled], [o.format], [o.outline_params], [o.outline_target], [o.sql_id], [o.owner_id],
+       [o.format_sql_text], [o.format_sql_id], [o.format_outline], [os.gmt_create], [os.gmt_modified], [os.tenant_id], [os.outline_id], [os.schema_version], [os.is_deleted],
+       [os.database_id], [os.name], [os.signature], [os.outline_content], [os.sql_text], [os.owner], [os.used], [os.version], [os.compatible], [os.enabled], [os.format],
+       [os.outline_params], [os.outline_target], [os.sql_id], [os.owner_id], [os.format_sql_text], [os.format_sql_id], [os.format_outline]), filter(nil), rowset=16
+      equal_conds([o.tenant_id = os.tenant_id]), other_conds(nil)
+  1 - output([o.tenant_id], [o.outline_id], [o.gmt_create], [o.gmt_modified], [o.database_id], [o.schema_version], [o.name], [o.signature], [o.outline_content],
+       [o.sql_text], [o.owner], [o.used], [o.version], [o.compatible], [o.enabled], [o.format], [o.outline_params], [o.outline_target], [o.sql_id], [o.owner_id],
+       [o.format_sql_text], [o.format_sql_id], [o.format_outline]), filter(nil), rowset=16
+      access([o.tenant_id], [o.outline_id], [o.gmt_create], [o.gmt_modified], [o.database_id], [o.schema_version], [o.name], [o.signature], [o.outline_content],
+       [o.sql_text], [o.owner], [o.used], [o.version], [o.compatible], [o.enabled], [o.format], [o.outline_params], [o.outline_target], [o.sql_id], [o.owner_id],
+       [o.format_sql_text], [o.format_sql_id], [o.format_outline]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([o.tenant_id], [o.outline_id]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([os.tenant_id], [os.outline_id], [os.schema_version], [os.gmt_create], [os.gmt_modified], [os.is_deleted], [os.database_id], [os.name], [os.signature],
+       [os.outline_content], [os.sql_text], [os.owner], [os.used], [os.version], [os.compatible], [os.enabled], [os.format], [os.outline_params], [os.outline_target],
+       [os.sql_id], [os.owner_id], [os.format_sql_text], [os.format_sql_id], [os.format_outline]), filter(nil), rowset=16
+      access([os.tenant_id], [os.outline_id], [os.schema_version], [os.gmt_create], [os.gmt_modified], [os.is_deleted], [os.database_id], [os.name], [os.signature],
+       [os.outline_content], [os.sql_text], [os.owner], [os.used], [os.version], [os.compatible], [os.enabled], [os.format], [os.outline_params], [os.outline_target],
+       [os.sql_id], [os.owner_id], [os.format_sql_text], [os.format_sql_id], [os.format_outline]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([os.tenant_id], [os.outline_id], [os.schema_version]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true

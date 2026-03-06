@@ -19,11 +19,6 @@
 #include "share/ob_tenant_mem_limit_getter.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/tablet/ob_tablet.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "close_modules/shared_storage/meta_store/ob_shared_storage_obj_meta.h"
-#include "close_modules/shared_storage/storage/shared_storage/ob_public_block_gc_service.h"
-#include "close_modules/shared_storage/storage/shared_storage/prewarm/ob_mc_prewarm_struct.h"
-#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -106,21 +101,6 @@ int ObAdminDumpsstExecutor::execute(int argc, char *argv[])
         case DUMP_STORAGE_SCHEMA:
           dump_storage_schema(dump_macro_context_);
           break;
-#ifdef OB_BUILD_SHARED_STORAGE
-        case DUMP_PREWARM_INDEX:
-          dump_prewarm_index(dump_macro_context_);
-          break;
-        case DUMP_PREWARM_DATA:
-          dump_prewarm_data(dump_macro_context_);
-          break;
-        case DUMP_IS_DELETED_OBJ:
-          dump_is_deleted_obj(dump_macro_context_);
-          break;
-        case DUMP_META_LIST:
-        case DUMP_GC_INFO:
-          dump_meta_list(dump_macro_context_);
-          break;
-#endif
         default:
           print_usage();
           exit(1);
@@ -209,18 +189,6 @@ int ObAdminDumpsstExecutor::parse_cmd(int argc, char *argv[])
         cmd_ = DUMP_TABLE_STORE;
       } else if (0 == strcmp(optarg, "storage_schema")) {
         cmd_ = DUMP_STORAGE_SCHEMA;
-#ifdef OB_BUILD_SHARED_STORAGE
-      } else if (0 == strcmp(optarg, "prewarm_index")) {
-        cmd_ = DUMP_PREWARM_INDEX;
-      } else if (0 == strcmp(optarg, "prewarm_data")) {
-        cmd_ = DUMP_PREWARM_DATA;
-      } else if (0 == strcmp(optarg, "meta_list")) {
-        cmd_ = DUMP_META_LIST;
-      } else if (0 == strcmp(optarg, "is_deleted_obj")) {
-        cmd_ = DUMP_IS_DELETED_OBJ;
-      } else if (0 == strcmp(optarg, "gc_info")) {
-        cmd_ = DUMP_GC_INFO;
-#endif
       } else {
         print_usage();
         exit(1);
@@ -511,187 +479,6 @@ void ObAdminDumpsstExecutor::dump_storage_schema(const ObDumpMacroBlockContext &
   }
 }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObAdminDumpsstExecutor::do_dump_prewarm_index(
-    const char *path, 
-    storage::ObHotTabletInfoIndex &index)
-{
-  int ret = OB_SUCCESS;
-  if (STRLEN(path) == 0) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(ERROR, "file path is null", KR(ret), K(path));
-  } else {
-    io_allocator_.reuse();
-    int64_t pos = 0;
-    int64_t read_size = 0;
-    char *macro_buf = nullptr;
-    ObIOFd fd;
-    const int64_t offset = 0;
-    const int64_t size = DEFAULT_MACRO_BLOCK_SIZE;
-    if (OB_ISNULL(macro_buf = reinterpret_cast<char*>(io_allocator_.alloc(size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(ERROR, "failed to alloc macro read info buffer", KR(ret), K(size));
-    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.open(path, O_RDONLY, 0, fd))) {
-      STORAGE_LOG(ERROR, "fail to open file", KR(ret), K(path));
-    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.pread(fd, offset, size, macro_buf, read_size))) {
-      STORAGE_LOG(ERROR, "fail to read file", KR(ret), K(fd), K(offset), K(size), KP(macro_buf));
-    } else if (OB_FAIL(index.deserialize(macro_buf, read_size, pos))) {
-      STORAGE_LOG(ERROR, "fail to deserialize prewarm index", KR(ret), K(read_size), K(pos), KP(macro_buf));
-    }
-
-    if (fd.is_valid()) {
-      (void) LOCAL_DEVICE_INSTANCE.close(fd);
-    }
-  }
-  return ret;
-}
-
-void ObAdminDumpsstExecutor::dump_prewarm_index(const ObDumpMacroBlockContext &macro_block_context)
-{
-  int ret = OB_SUCCESS;
-  ObHotTabletInfoIndex index;
-  if (STRLEN(macro_block_context.object_file_path_) == 0) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(ERROR, "object path is null", K(ret), K_(macro_block_context.object_file_path));
-  } else if (OB_FAIL(do_dump_prewarm_index(macro_block_context.object_file_path_, index))) {
-    STORAGE_LOG(ERROR, "fail to parse prewarm_index", KR(ret), K_(macro_block_context.object_file_path));
-  } else {
-    ObCStringHelper helper;
-    fprintf(stdout, "ObHotTabletInfoIndex: %s\n", helper.convert(index));
-  }
-
-  if (OB_FAIL(ret)) {
-    fprintf(stderr, "fail to dump_prewarm_index, ret=%s\n", ob_error_name(ret));
-  }
-}
-
-void ObAdminDumpsstExecutor::dump_prewarm_data(const ObDumpMacroBlockContext &macro_block_context)
-{
-  int ret = OB_SUCCESS;
-  ObIOFd fd;
-  ObHotTabletInfoIndex index;
-  if (STRLEN(macro_block_context.object_file_path_) == 0 || STRLEN(macro_block_context.prewarm_index_) == 0) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(ERROR, "file path is null", KR(ret), K_(macro_block_context.object_file_path), K_(macro_block_context.prewarm_index));
-  } else if (OB_FAIL(do_dump_prewarm_index(macro_block_context.prewarm_index_, index))) {
-    STORAGE_LOG(ERROR, "fail to parse prewarm_index", KR(ret), K_(macro_block_context.object_file_path));
-  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.open(macro_block_context.object_file_path_, O_RDONLY, 0, fd))) {
-    STORAGE_LOG(ERROR, "fail to open file", KR(ret), K_(macro_block_context.object_file_path));
-  } else {
-    ObCStringHelper helper;
-    fprintf(stdout, "ObHotTabletInfoIndex: %s\n\n", helper.convert(index));
-    const int64_t cnt = index.sizes_.count();
-    int64_t cur_offset = 0;
-    for (int64_t i = 0; (i < cnt) && OB_SUCC(ret); ++i) {
-      io_allocator_.reuse();
-      char *buf = nullptr;
-      const int64_t size = index.sizes_.at(i);
-      int64_t read_size = 0;
-      int64_t pos = 0;
-      ObHotTabletInfo hot_tablet_info;
-      if (OB_ISNULL(buf = static_cast<char *>(io_allocator_.alloc(size)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        STORAGE_LOG(ERROR, "fail to alloc memory", KR(ret), K(size));
-      } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.pread(fd, cur_offset, size, buf, read_size))) {
-        STORAGE_LOG(ERROR, "fail to read data", KR(ret), K(fd), K(cur_offset), K(size), KP(buf));
-      } else if (OB_UNLIKELY(size != read_size)) {
-        ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(ERROR, "read size is wrong", KR(ret), K(size), K(read_size));
-      } else if (OB_FAIL(hot_tablet_info.deserialize(buf, size, pos))) {
-        STORAGE_LOG(ERROR, "fail to serialize", KR(ret), K(size), K(pos));
-      } else {
-        ObCStringHelper helper;
-        fprintf(stdout, "i=%ld\n ObHotTabletInfo=%s\n", i, helper.convert(hot_tablet_info));
-      }
-      cur_offset += size;
-    }
-  }
-  if (fd.is_valid()) {
-    (void)LOCAL_DEVICE_INSTANCE.close(fd);
-  }
-  if (OB_FAIL(ret)) {
-    fprintf(stderr, "fail to dump_prewarm_data, ret=%s\n", ob_error_name(ret));
-  }
-}
-
-void ObAdminDumpsstExecutor::dump_is_deleted_obj(const ObDumpMacroBlockContext &macro_block_context)
-{
-  int ret = OB_SUCCESS;
-  if (STRLEN(macro_block_context.object_file_path_) <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(ERROR, "object path is null", K(ret), KP(macro_block_context.object_file_path_));
-  } else {
-    io_allocator_.reuse();
-    int64_t pos = 0;
-    int64_t read_size = 0;
-    char *macro_buf = nullptr;
-    ObIOFd fd;
-    const int64_t offset = 0;
-    const int64_t size = DEFAULT_MACRO_BLOCK_SIZE;
-    ObIsDeletedObj is_deleted_obj;
-
-    if (OB_ISNULL(macro_buf = reinterpret_cast<char*>(io_allocator_.alloc(size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(size));
-    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.open(macro_block_context.object_file_path_, O_RDONLY, 0, fd))) {
-      STORAGE_LOG(ERROR, "open file failed", K(macro_block_context));
-    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.pread(fd, offset, size, macro_buf, read_size))) {
-      STORAGE_LOG(ERROR, "read block failed", K(macro_block_context));
-    } else if (OB_FAIL(is_deleted_obj.deserialize(macro_buf, read_size, pos))) {
-      STORAGE_LOG(ERROR, "fail to deserialize is_deleted_obj", K(ret), K(read_size), K(pos), K(macro_block_context));
-    } else {
-      ObCStringHelper helper;
-      fprintf(stdout, "ObIsDeletedObj: %s\n", helper.convert(is_deleted_obj));
-    }
-
-    if (fd.is_valid()) {
-      (void) LOCAL_DEVICE_INSTANCE.close(fd);
-    }
-  }
-  if (OB_FAIL(ret)) {
-    fprintf(stderr, "fail to dump_is_deleted_obj, ret=%s\n", ob_error_name(ret));
-  }
-}
-
-void ObAdminDumpsstExecutor::dump_meta_list(const ObDumpMacroBlockContext &macro_block_context)
-{
-  int ret = OB_SUCCESS;
-  if (STRLEN(macro_block_context.object_file_path_) <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(ERROR, "object path is null", K(ret), KP(macro_block_context.object_file_path_));
-  } else {
-    io_allocator_.reuse();
-    int64_t pos = 0;
-    int64_t read_size = 0;
-    char *macro_buf = nullptr;
-    ObIOFd fd;
-    const int64_t offset = 0;
-    const int64_t size = DEFAULT_MACRO_BLOCK_SIZE;
-    ObGCTabletMetaInfoList meta_info;
-
-    if (OB_ISNULL(macro_buf = reinterpret_cast<char*>(io_allocator_.alloc(size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret), K(size));
-    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.open(macro_block_context.object_file_path_, O_RDONLY, 0, fd))) {
-      STORAGE_LOG(ERROR, "open file failed", K(macro_block_context));
-    } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.pread(fd, offset, size, macro_buf, read_size))) {
-      STORAGE_LOG(ERROR, "read block failed", K(macro_block_context));
-    } else if (OB_FAIL(meta_info.deserialize(macro_buf, read_size, pos))) {
-      STORAGE_LOG(ERROR, "fail to deserialize GCTabletMetaInfoList", K(ret), K(read_size), K(pos), K(macro_block_context));
-    } else {
-      ObCStringHelper helper;
-      fprintf(stdout, "ObGCTabletMetaInfoList: %s\n", helper.convert(meta_info));
-    }
-
-    if (fd.is_valid()) {
-      (void) LOCAL_DEVICE_INSTANCE.close(fd);
-    }
-  }
-  if (OB_FAIL(ret)) {
-    fprintf(stderr, "fail to dump_meta_list, ret=%s\n", ob_error_name(ret));
-  }
-}
-#endif
 
 void ObAdminDumpsstExecutor::print_usage()
 {
@@ -721,25 +508,6 @@ void ObAdminDumpsstExecutor::print_usage()
   printf("  dump specified block in the small sstable macro block: \n");
   printf("\tob_admin dumpsst -d macro_block -f block_file_path -a macro_id -t tablet_id -s logical_version\n\n");
 
-  printf("SS mode commands:\n");
-  printf("  dump data macro block: \n");
-  printf("\tob_admin dumpsst -d macro_block -o object_file_path\n");
-  printf("  dump tablet meta: \n");
-  printf("\tob_admin dumpsst -d tablet_meta -o object_file_path\n");
-  printf("  dump table store: \n");
-  printf("\tob_admin dumpsst -d table_store -o object_file_path\n");
-  printf("  dump storage schema: \n");
-  printf("\tob_admin dumpsst -d storage_schema -o object_file_path -p offset\n");
-  printf("  dump is_deleted_obj: \n");
-  printf("\tob_admin dumpsst -d is_deleted_obj -o object_file_path\n");
-  printf("  dump meta_list: \n");
-  printf("\tob_admin dumpsst -d meta_list -o object_file_path\n");
-  printf("  dump gc_info: \n");
-  printf("\tob_admin dumpsst -d gc_info -o object_file_path\n");
-  printf("  dump prewarm_index: \n");
-  printf("\tob_admin dumpsst -d prewarm_index -o object_file_path\n");
-  printf("  dump prewarm_data: \n");
-  printf("\tob_admin dumpsst -d prewarm_data -o object_file_path --prewarm_index index_file\n");
 }
 } //namespace tools
 } //namespace oceanbase

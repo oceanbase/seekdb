@@ -1,0 +1,51 @@
+#owner: shenyunlong.syl
+#owner group: shenzhen
+
+### Test when lower_case_table_names = 1, cafe, CAFE, café are the same
+
+connection default;
+### By default tenant's lower_case_table_names = 1
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL('cafe');
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'cafe', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'cafe';
+
+--error 11119
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'café', '{
+    "type": "sparse_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+
+--error 11119
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'CAFE', '{
+    "type": "sparse_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+
+call DBMS_AI_SERVICE.DROP_AI_MODEL('CAFE');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'cafe';
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'cafe', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'café';
+call DBMS_AI_SERVICE.DROP_AI_MODEL('café');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'cafe';
+
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+  'café', '{
+    "type": "dense_embedding",
+    "model_name": "text-embedding-v1"
+  }');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'CAFE';
+call DBMS_AI_SERVICE.DROP_AI_MODEL('CAFE');
+select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS where NAME = 'cafe';

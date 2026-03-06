@@ -1,0 +1,538 @@
+# owner: xiongliyao.xly
+# owner group: shenzhen
+# description: test basic ivfflat vector index
+
+connect (conn_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection conn_user;
+
+alter system set ob_vector_memory_limit_percentage = 34;
+sleep 3;
+
+--echo # 单分区先建索引
+--disable_warnings
+drop table if exists hhst1;
+--enable_warnings
+
+CREATE TABLE hhst1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
+VECTOR INDEX idx1(c4)
+WITH (distance=l2, type=ivf_flat));
+
+insert into hhst1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(3,'[3,1,2]','[3,2,2]','[3,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(4,'[4,1,2]','[5,2,3]','[4,4,4]');
+insert into hhst1(c1,c2,c3,c4) values(5,'[5,1,2]','[5,2,3]','[5,5,5]');
+
+insert into hhst1(c1,c2,c3,c4) values(6,'[1,1,2]','[2,2,3]','[6,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(7,'[2,1,2]','[2,2,2]','[4,7,4]');
+insert into hhst1(c1,c2,c3,c4) values(8,'[3,1,2]','[3,2,2]','[8,3,4]');
+insert into hhst1(c1,c2,c3,c4) values(9,'[4,1,2]','[5,2,3]','[9,9,4]');
+insert into hhst1(c1,c2,c3,c4) values(0,'[5,1,2]','[5,2,3]','[10,10,10]');
+
+let $database_id = `select database_id from oceanbase.__all_database where database_name='test';`;
+let $table_id = `select table_id from oceanbase.__all_table where database_id=$database_id and table_name = 'hhst1';`;
+let $center_id_table = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $cid_vector_table = `select CONCAT('__idx_', $table_id , '_idx1_ivf_cid_vector') from dual;`;
+let $rowkey_cid_table = `select CONCAT('__idx_', $table_id , '_idx1_ivf_rowkey_cid') from dual;`;
+
+set ob_enable_index_direct_select = 1;
+
+--echo # 查询索引表
+--disable_query_log
+eval select count(*) from $center_id_table;
+eval select count(*) from $cid_vector_table;
+eval select count(*) from $rowkey_cid_table;
+--enable_query_log
+
+update hhst1 set c4 = '[2,2,2]' where c1 = 2;
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]') ON DUPLICATE KEY UPDATE c4 = '[9,8,7]';
+delete from hhst1 where c1 = 3;
+insert into hhst1(c1,c2,c3,c4) values(3,'[2,1,2]','[2,2,2]','[2,3,2]') ON DUPLICATE KEY UPDATE c3 = '[1,1,1]';
+update hhst1 set c4 = '[1,2,3]' where c1 = 1;
+
+--echo # 查询索引表
+--disable_query_log
+eval select count(*) from $center_id_table;
+eval select count(*) from $cid_vector_table;
+eval select count(*) from $rowkey_cid_table;
+--enable_query_log
+
+drop table hhst1;
+
+--echo # 多分区先建索引
+--disable_warnings
+drop table if exists hhst1;
+--enable_warnings
+
+CREATE TABLE hhst1 (c1 int primary key, c4 vector(3),
+VECTOR INDEX idx1(c4)
+WITH (distance=l2, type=ivf_flat))
+PARTITION BY RANGE(c1) (
+    PARTITION p0 VALUES less than(10),
+    PARTITION p1 VALUES less than(20),
+    PARTITION p2 VALUES less than(MAXVALUE)
+);
+
+insert into hhst1(c1,c4) values(1,'[1,3,2]');
+insert into hhst1(c1,c4) values(2,'[2,3,2]');
+insert into hhst1(c1,c4) values(3,'[3,3,2]');
+insert into hhst1(c1,c4) values(4,'[4,4,4]');
+insert into hhst1(c1,c4) values(5,'[5,5,5]');
+insert into hhst1(c1,c4) values(6,'[6,3,2]');
+insert into hhst1(c1,c4) values(7,'[4,7,4]');
+insert into hhst1(c1,c4) values(8,'[8,3,4]');
+insert into hhst1(c1,c4) values(9,'[9,9,4]');
+insert into hhst1(c1,c4) values(0,'[10,10,10]');
+
+insert into hhst1(c1,c4) values(10,'[1,3,2]');
+insert into hhst1(c1,c4) values(11,'[2,3,2]');
+insert into hhst1(c1,c4) values(12,'[3,3,2]');
+insert into hhst1(c1,c4) values(13,'[4,4,4]');
+insert into hhst1(c1,c4) values(14,'[5,5,5]');
+insert into hhst1(c1,c4) values(15,'[6,3,2]');
+insert into hhst1(c1,c4) values(16,'[4,7,4]');
+insert into hhst1(c1,c4) values(17,'[8,3,4]');
+insert into hhst1(c1,c4) values(18,'[9,9,4]');
+insert into hhst1(c1,c4) values(19,'[10,10,10]');
+
+insert into hhst1(c1,c4) values(20,'[1,3,2]');
+insert into hhst1(c1,c4) values(21,'[2,3,2]');
+insert into hhst1(c1,c4) values(22,'[3,3,2]');
+insert into hhst1(c1,c4) values(23,'[4,4,4]');
+insert into hhst1(c1,c4) values(24,'[5,5,5]');
+insert into hhst1(c1,c4) values(25,'[6,3,2]');
+insert into hhst1(c1,c4) values(26,'[4,7,4]');
+insert into hhst1(c1,c4) values(27,'[8,3,4]');
+insert into hhst1(c1,c4) values(28,'[9,9,4]');
+insert into hhst1(c1,c4) values(29,'[10,10,10]');
+
+let $table_id = `select table_id from oceanbase.__all_table where database_id=$database_id and table_name = 'hhst1';`;
+let $center_id_table = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $cid_vector_table = `select CONCAT('__idx_', $table_id , '_idx1_ivf_cid_vector') from dual;`;
+let $rowkey_cid_table = `select CONCAT('__idx_', $table_id , '_idx1_ivf_rowkey_cid') from dual;`;
+
+--echo # 查询索引表
+--disable_query_log
+eval select count(*) from $center_id_table;
+eval select count(*) from $cid_vector_table;
+eval select count(*) from $rowkey_cid_table;
+--enable_query_log
+
+update hhst1 set c4 = '[2,2,2]' where c1 = 2;
+insert into hhst1(c1,c4) values(2,'[2,3,2]') ON DUPLICATE KEY UPDATE c4 = '[9,8,7]';
+delete from hhst1 where c1 = 3;
+insert into hhst1(c1,c4) values(3,'[2,3,2]') ON DUPLICATE KEY UPDATE c4 = '[1,1,1]';
+update hhst1 set c4 = '[1,2,3]' where c1 = 1;
+
+--echo # 查询索引表
+--disable_query_log
+eval select count(*) from $center_id_table;
+eval select count(*) from $cid_vector_table;
+eval select count(*) from $rowkey_cid_table;
+--enable_query_log
+
+drop table hhst1;
+
+--echo ################# complex dml operation ##################
+--disable_warnings
+DROP TABLE IF EXISTS vec;
+DROP TABLE IF EXISTS normal;
+DROP VIEW IF EXISTS vec_view;
+--enable_warnings
+
+create table vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_flat));
+create table normal(c1 int, c2 vector(3), primary key(c1));
+CREATE VIEW vec_view as select * from vec;
+
+let $table_id = `select table_id from oceanbase.__all_table where database_id=$database_id and table_name = 'vec';`;
+let $cid_vector_table = `select CONCAT('__idx_', $table_id , '_idx1_ivf_cid_vector') from dual;`;
+let $cid_vector_table_id = `select table_id from oceanbase.__all_table where database_id=$database_id and table_name = '$cid_vector_table';`;
+let $cid_vector_data_column = `select column_name from oceanbase.__all_column where table_id = $cid_vector_table_id and column_name like '%__ivf_data_vector%';`;
+
+INSERT INTO vec values (1, '[1,2,3]'), (2, '[3,4,5]');
+INSERT INTO normal values (1, '[1,2,3]'), (2, '[3,4,5]');
+
+insert into vec values (1, '[1,2,3]') ON DUPLICATE KEY UPDATE c2 = '[1,2,3]';
+insert into normal values (1, '[1,2,3]') ON DUPLICATE KEY UPDATE c2 = '[1,2,3]';
+
+replace into vec (c1, c2) values (1, '[1,2,3]');
+replace into normal (c1, c2) values (1, '[1,2,3]');
+
+insert into vec_view values (3, '[5,6,7]'), (4, '[7,8,9]');
+insert into normal (c1, c2) values (3, '[1,2,3]');
+
+select * from vec_view;
+select * from normal;
+--disable_query_log
+--error 5083
+eval select /*+leading(t1 t2) use_merge(t2)*/ count(*) from $cid_vector_table t1 inner join vec t2 on t1.c1 = t2.c1 and t1.$cid_vector_data_column = t2.c2;
+--enable_query_log
+
+update vec join normal on vec.c1 = normal.c1 set vec.c2 = '[7,8,9]', normal.c2 = '[9,10,11]';
+select * from vec_view;
+select * from normal;
+--disable_query_log
+--error 5083
+eval select /*+leading(t1 t2) use_merge(t2)*/ count(*) from $cid_vector_table t1 inner join vec t2 on t1.c1 = t2.c1 and t1.$cid_vector_data_column = t2.c2;
+--enable_query_log
+
+update vec join normal on vec.c1 = normal.c1 set vec.c2 = '[7,8,9]';
+update vec join normal on vec.c1 = normal.c1 set normal.c2 = vec.c2;
+select * from normal;
+select * from vec;
+--disable_query_log
+--error 5083
+eval select /*+leading(t1 t2) use_merge(t2)*/count(*) from $cid_vector_table t1 inner join vec t2 on t1.c1 = t2.c1 and t1.$cid_vector_data_column = t2.c2;
+--enable_query_log
+
+update vec_view join normal on vec_view.c1 = normal.c1 set vec_view.c2 = '[7,8,9]', normal.c2 = '[9,10,11]';
+update vec_view set c2 = '[7,8,9]';
+select * from vec;
+select * from vec_view;
+--disable_query_log
+--error 5083
+eval select /*+leading(t1 t2) use_merge(t2)*/count(*) from $cid_vector_table t1 inner join vec t2 on t1.c1 = t2.c1 and t1.$cid_vector_data_column = t2.c2;
+--enable_query_log
+
+delete vec, normal from vec join normal on vec.c1 = normal.c1;
+delete vec from vec join normal on vec.c1 = normal.c1;
+delete vec from vec join normal on vec.c1 = normal.c1;
+
+delete normal from vec_view join normal on vec_view.c1 = normal.c1 and 1=0;
+delete from vec_view where c2 = '[7,8,9]';
+
+drop table vec;
+drop table normal;
+drop view vec_view;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
+VECTOR INDEX vector_idx(c2)
+WITH (distance=l2, type=ivf_flat));
+insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t1 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t1 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+update t1 set c1 = 10 where c3 is null;
+drop table t1;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int, c2 vector(10) not null, primary key(c1));
+--error 1048
+insert ignore into t1 values(1, null);
+drop table t1;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=ivf_flat));
+insert into t1 values(1, [1,1,1]);
+select c2,123 from t1 for update;
+select /*+ opt_param('rowsets_enabled', 'false') */ c2,123 from t1 for update;
+drop table t1;
+
+--echo # 单分区先建混合向量索引
+--disable_warnings
+drop table if exists hhst1;
+--enable_warnings
+
+CREATE TABLE hhst1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
+VECTOR INDEX idx1(c4)
+WITH (distance=l2, type=ivf_flat),
+VECTOR INDEX idx2(c3)
+WITH (distance=l2, type=hnsw));
+
+insert into hhst1(c1,c2,c3,c4) values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(3,'[3,1,2]','[3,2,2]','[3,3,2]');
+insert into hhst1(c1,c2,c3,c4) values(4,'[4,1,2]','[5,2,3]','[4,4,4]');
+insert into hhst1(c1,c2,c3,c4) values(5,'[5,1,2]','[5,2,3]','[5,5,5]');
+
+insert ignore into hhst1(c1,c2,c3,c4) values(5,'[5,1,2]','[4,3,2]','[5,5,5]');
+update hhst1 set c4 = '[2,2,2]' where c1 = 2;
+insert into hhst1(c1,c2,c3,c4) values(2,'[2,1,2]','[2,2,2]','[2,3,2]') ON DUPLICATE KEY UPDATE c4 = '[9,8,7]';
+delete from hhst1 where c1 = 3;
+insert into hhst1(c1,c2,c3,c4) values(3,'[2,1,2]','[2,2,2]','[2,3,2]') ON DUPLICATE KEY UPDATE c3 = '[1,1,1]';
+update hhst1 set c4 = '[1,2,3]' where c1 = 1;
+
+drop table hhst1;
+
+--echo # 多分区先建混合向量索引
+--disable_warnings
+drop table if exists hhst1;
+drop table if exists normal;
+drop view if exists vec_view;
+--enable_warnings
+
+CREATE TABLE hhst1 (c1 int primary key, c3 vector(3) ,c4 vector(3),
+VECTOR INDEX idx1(c4)
+WITH (distance=l2, type=ivf_flat),
+VECTOR INDEX idx2(c3)
+WITH (distance=l2, type=hnsw))
+PARTITION BY RANGE(c1) (
+    PARTITION p0 VALUES less than(10),
+    PARTITION p1 VALUES less than(20),
+    PARTITION p2 VALUES less than(MAXVALUE)
+);
+
+insert into hhst1(c1,c3,c4) values(1,'[1,3,2]','[1,3,2]');
+insert into hhst1(c1,c3,c4) values(2,'[2,3,2]','[2,3,2]');
+insert into hhst1(c1,c3,c4) values(3,'[3,3,2]','[3,3,2]');
+insert into hhst1(c1,c3,c4) values(4,'[4,4,4]','[4,4,4]');
+insert into hhst1(c1,c3,c4) values(5,'[5,5,5]','[5,5,5]');
+insert into hhst1(c1,c3,c4) values(6,'[6,3,2]','[6,3,2]');
+insert into hhst1(c1,c3,c4) values(7,'[4,7,4]','[4,7,4]');
+insert into hhst1(c1,c3,c4) values(8,'[8,3,4]','[8,3,4]');
+insert into hhst1(c1,c3,c4) values(9,'[9,9,4]','[9,9,4]');
+insert into hhst1(c1,c3,c4) values(0,'[10,10,10]','[10,10,10]');
+
+insert into hhst1(c1,c3,c4) values(10,'[1,3,2]','[1,3,2]');
+insert into hhst1(c1,c3,c4) values(12,'[2,3,2]','[2,3,2]');
+insert into hhst1(c1,c3,c4) values(13,'[3,3,2]','[3,3,2]');
+insert into hhst1(c1,c3,c4) values(14,'[4,4,4]','[4,4,4]');
+insert into hhst1(c1,c3,c4) values(15,'[5,5,5]','[5,5,5]');
+insert into hhst1(c1,c3,c4) values(16,'[6,3,2]','[6,3,2]');
+insert into hhst1(c1,c3,c4) values(17,'[4,7,4]','[4,7,4]');
+insert into hhst1(c1,c3,c4) values(18,'[8,3,4]','[8,3,4]');
+insert into hhst1(c1,c3,c4) values(19,'[9,9,4]','[9,9,4]');
+insert into hhst1(c1,c3,c4) values(11,'[10,10,10]','[10,10,10]');
+
+insert into hhst1(c1,c3,c4) values(20,'[1,3,2]','[1,3,2]');
+insert into hhst1(c1,c3,c4) values(22,'[2,3,2]','[2,3,2]');
+insert into hhst1(c1,c3,c4) values(23,'[3,3,2]','[3,3,2]');
+insert into hhst1(c1,c3,c4) values(24,'[4,4,4]','[4,4,4]');
+insert into hhst1(c1,c3,c4) values(25,'[5,5,5]','[5,5,5]');
+insert into hhst1(c1,c3,c4) values(26,'[6,3,2]','[6,3,2]');
+insert into hhst1(c1,c3,c4) values(27,'[4,7,4]','[4,7,4]');
+insert into hhst1(c1,c3,c4) values(28,'[8,3,4]','[8,3,4]');
+insert into hhst1(c1,c3,c4) values(29,'[9,9,4]','[9,9,4]');
+insert into hhst1(c1,c3,c4) values(21,'[10,10,10]','[10,10,10]');
+
+create table normal(c1 int, c3 vector(3), c4 vector(3), primary key(c1));
+CREATE VIEW vec_view as select * from hhst1;
+
+INSERT INTO normal select * from hhst1 where c1 % 2 = 0;
+
+update hhst1 set c4 = '[2,2,2]' where c1 = 2;
+insert into hhst1 values (3, '[2,3,4]', '[1,2,3]') ON DUPLICATE KEY UPDATE c3 = '[1,2,3]';
+select * from hhst1 where c1 = 3;
+
+replace into hhst1 (c1, c3, c4) values (21, '[1,2,3]', '[1,2,3]');
+select * from hhst1 where c1 = 21;
+
+insert into vec_view values (30, '[1,2,3]', '[5,6,7]');
+insert ignore into vec_view values (30, '[1,2,3]', '[5,6,7]');
+select count(*) from vec_view;
+
+update hhst1 join normal on hhst1.c1 = normal.c1 set hhst1.c4 = '[7,8,9]', normal.c4 = '[9,10,11]';
+select * from vec_view;
+select * from normal;
+
+update hhst1 join normal on hhst1.c1 = normal.c1 set hhst1.c3 = '[7,8,9]';
+update hhst1 join normal on hhst1.c1 = normal.c1 set normal.c3 = hhst1.c3;
+select * from normal;
+select * from hhst1;
+
+update vec_view join normal on vec_view.c1 = normal.c1 set vec_view.c4 = '[7,8,9]', normal.c4 = '[9,10,11]';
+update vec_view set c4 = '[7,8,9]';
+select * from hhst1;
+select * from vec_view;
+
+delete hhst1, normal from hhst1 join normal on hhst1.c1 = normal.c1;
+delete hhst1 from hhst1 join normal on hhst1.c1 = normal.c1;
+delete hhst1 from hhst1 join normal on hhst1.c1 = normal.c1;
+
+delete normal from vec_view join normal on vec_view.c1 = normal.c1 and 1=0;
+delete from vec_view where c3 = '[7,8,9]';
+
+select * from hhst1;
+select * from vec_view;
+
+set ob_enable_index_direct_select = 0;
+
+drop table hhst1;
+drop table normal;
+drop view vec_view;
+
+# lob threshold 0
+--disable_warnings
+drop table if exists vec;
+--enable_warnings
+--error 1235
+create table vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_flat)) LOB_INROW_THRESHOLD = 0;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
+VECTOR INDEX vector_idx1(c3)
+WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40),
+VECTOR INDEX vector_idx2(c4)
+WITH (distance=l2, type=ivf_flat));
+create view v1 as select * from t1;
+replace into v1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+replace into v1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+select * from v1;
+select * from t1;
+drop view v1;
+drop table t1;
+
+--disable_warnings
+drop table if exists t1;
+drop view if exists v1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 VARCHAR(30),c3 vector(3) ,c4 vector(3),
+VECTOR INDEX vector_idx1(c3)
+WITH (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=12, ef_search=40),
+VECTOR INDEX vector_idx2(c4)
+WITH (distance=l2, type=ivf_flat)) partition by list columns (c1)(
+  PARTITION p0 VALUES in(10),
+  PARTITION p1 VALUES in(50)
+);
+create view v1 as select * from t1;
+--error 1526
+replace into v1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+replace into v1 values(10,'[1,1,2]','[2,2,3]','[1,3,2]');
+replace into v1 values(10,'[1,1,2]','[2,2,3]','[1,3,2]');
+select * from v1;
+select * from t1;
+drop view v1;
+drop table t1;
+
+--disable_warnings
+drop table if exists t1;
+drop view if exists v1;
+--enable_warnings
+create table t1 (c1 int primary key, c2 vector(3), c3 vector(3), c4 varchar(4096),
+  vector index idx1(c2) with (type=hnsw, distance=l2),
+  fulltext index idx2(c4),
+  vector index idx3(c3) with (type=ivf_flat, distance=l2, nlist=2));
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265]', '[0.203846,0.205289,0.880265]', "Gerard A. Gerry Salton (8 March 1927 – 28 August 1995) was a professor of Computer Science at Cornell University. Salton was perhaps the leading computer scientist working in the field of information retrieval during his time, and the father of Information Retrieval");
+insert into t1 values(2, '[0.735541,0.670776,0.903237]', '[0.735541,0.670776,0.903237]', "Edgar Frank Ted Codd (19 August 1923 – 18 April 2003) was an English computer scientist who, while working for IBM, invented the relational model for database management, the theoretical basis for relational databases and relational database management systems. ");
+insert into t1 values(3, '[0.327936,0.048756,0.084670]', '[0.327936,0.048756,0.084670]', "Michael Ralph Stonebraker (born October 11, 1943[6]) is a computer scientist specializing in database systems. Through a series of academic prototypes and commercial startups, Stonebraker's research and products are central to many relational databases. ");
+insert into t1 values(4, '[0.148869,0.878546,0.028024]', '[0.148869,0.878546,0.028024]', "Geoffrey Everest Hinton CC FRS FRSC (born 6 December 1947) is a British-Canadian computer scientist and cognitive psychologist, most noted for his work on artificial neural networks.");
+insert into t1 values(5, '[0.334970,0.857377,0.886132]', '[0.334970,0.857377,0.886132]', "Yann André LeCun[1] (born 8 July 1960) is a Turing Award winning French computer scientist working primarily in the fields of machine learning, computer vision, mobile robotics and computational neuroscience.");
+insert into t1 values(6, '[0.117582,0.302352,0.471198]', '[0.117582,0.302352,0.471198]', "Kenneth Lane Thompson (born February 4, 1943) is an American pioneer of computer science. Thompson worked at Bell Labs for most of his career where he designed and implemented the original Unix operating system. ");
+insert into t1 values(7, '[0.551185,0.231134,0.075354]', '[0.551185,0.231134,0.075354]', "Gordon David Plotkin, FRS FRSE MAE (born 9 September 1946) is a theoretical computer scientist in the School of Informatics at the University of Edinburgh. Plotkin is probably best known for his introduction of structural operational semantics (SOS) and his work on denotational semantics.");
+insert into t1 values(8, '[0.185221,0.315131,0.558301]', '[0.185221,0.315131,0.558301]', "Leslie B. Lamport (born February 7, 1941) is an American computer scientist and mathematician. Lamport is best known for his seminal work in distributed systems, and as the initial developer of the document preparation system LaTeX");
+insert into t1 values(9, '[0.928764,0.254038,0.272721]', '[0.928764,0.254038,0.272721]', "asdavoiajf oweirjweoifjsofmcspodkow cmdowm owejocwpe fowecofow ow weor pksdkm foe owei");
+insert into t1 values(10, '[0.345999,0.254102,0.950869]', '[0.345999,0.254102,0.950869]', "pqowepqo pweuijkfn dmclsjrqowep kdlsnvkfdjh oweifj oqfj oewijfpqwo kpew jfpqokd wpqkc owq");
+
+create view v1 as select * from t1;
+
+select * from t1 order by l2_distance(c2, [0,0,0]) limit 5;
+select * from t1 order by l2_distance(c2, [0,0,0]) approx limit 5;
+
+select c1,c4 from t1 where match (c4) against ("distributed database");
+select c1,c4 from t1 where match (c4) against ("database");
+select c1,c4 from t1 where match (c4) against ("computer");
+select c1,c4 from t1 where match (c4) against (1943);
+select c1,c4 from t1 where match (c4) against (0xFF);
+
+insert into t1(c1,c2,c3,c4) values(11, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c2='[1,9,3]';
+insert into t1(c1,c2,c3,c4) values(11, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c3='[1,1,1]';
+insert into t1(c1,c2,c3,c4) values(11, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c4="aldno wjdoi wodj owi jodi";
+insert into t1(c1,c2,c3,c4) values(1, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c2='[1,1,1]', c3='[3,3,3]', c4="aldno wjdoi wodj owi jodi kwdnowi o ioi";
+replace into t1 (c1, c2, c3, c4) values (10, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+replace into t1 (c1, c2, c3, c4) values (10, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+
+update t1 set c4 = "abcdefghijklmn iasoqw opqoweq nkqndk qjwkjq" where c1 = 1;
+update t1 set c2=[2,3,4], c3=[1,2,3], c4="qiweobkcjncoaijdoiqj odqwij o" where c1=2;
+update t1 set c2=[5,6,7] where c1=3;
+update t1 set c3=[1,1,1];
+update t1 set c4="oqijeoi jaiofj oijd qoij oqi qoi qp dpq jdpq p";
+
+select * from v1;
+insert into v1(c1,c2,c3,c4) values(1, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c2='[1,9,3]';
+insert into v1(c1,c2,c3,c4) values(1, '[1,1,1]', '[1,1,1]', "aldno wjdoi wodj owi jodi") ON DUPLICATE KEY UPDATE c3='[1,9,3]';
+update t1 set c2='[1,5,6]' where match (c4) against ("distributed database");
+delete from t1 where match (c4) against ("distributed database");
+replace into v1 (c1, c2, c3, c4) values (2, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+replace into v1 (c1, c2, c3, c4) values (2, '[1,2,3]', '[1,2,3]', "aldno wjdoi wodj owi jodi");
+
+drop table t1;
+drop view v1;
+
+create table t1 (c1 int PRIMARY KEY, c2 int, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3), INDEX (c2, c3))
+PARTITION BY RANGE COLUMNS(c1)
+(
+  PARTITION p0 VALUES LESS THAN(10),
+  PARTITION p1 VALUES LESS THAN(20),
+  PARTITION p2 VALUES LESS THAN(30),
+  PARTITION p3 VALUES LESS THAN(100),
+  PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+
+INSERT INTO t1 VALUES(1 , 20, 1 , 'str1 ', '[-0.933,0.938,-0.358]', '[-0.144,0.645,0.476]');
+INSERT INTO t1 VALUES(2 , 19, 1 , 'str1 ', '[-0.557,-0.717,-0.805]', '[-0.106,0.938,-0.274]');
+INSERT INTO t1 VALUES(3 , 18, 2 , 'str2 ', '[0.968,-0.479,0.074]', '[-0.205,0.477,-0.102]');
+INSERT INTO t1 VALUES(4 , 17, 2 , 'str2 ', '[-0.104,-0.801,-0.295]', '[0.875,-0.486,-0.236]');
+INSERT INTO t1 VALUES(5 , 16, 3 , 'str3 ', '[-0.062,0.682,0.809]', '[0.394,0.794,-0.758]');
+INSERT INTO t1 VALUES(6 , 15, 3 , 'str3 ', '[-0.925,0.017,-0.666]', '[-0.517,-0.543,-0.021]');
+INSERT INTO t1 VALUES(7 , 14, 4 , 'str4 ', '[0.558,0.73,-0.177]', '[0.783,-0.284,-0.23]');
+INSERT INTO t1 VALUES(8 , 13, 4 , 'str4 ', '[-0.72,-0.934,0.965]', '[0.833,-0.772,0.262]');
+INSERT INTO t1 VALUES(9 , 12, 5 , 'str5 ', '[-0.253,-0.16,-0.899]', '[-0.734,-0.252,-0.351]');
+INSERT INTO t1 VALUES(10, 11, 5 , 'str5 ', '[-0.269,-0.967,-0.539]', '[0.36,0.591,0.008]');
+INSERT INTO t1 VALUES(11, 10, 6 , 'str6 ', '[0.53,0.888,0.5]', '[-0.408,0.772,-0.296]');
+INSERT INTO t1 VALUES(12, 9 , 6 , 'str6 ', '[-0.321,-0.021,-0.322]', '[0.477,0.111,-0.597]');
+INSERT INTO t1 VALUES(13, 8 , 7 , 'str7 ', '[-0.641,-0.658,-0.073]', '[0.097,0.039,-0.302]');
+INSERT INTO t1 VALUES(14, 7 , 7 , 'str7 ', '[0.749,0.888,0.217]', '[-0.951,-0.702,-0.736]');
+INSERT INTO t1 VALUES(15, 6 , 8 , 'str8 ', '[0.193,0.567,0.0]', '[0.416,0.418,0.223]');
+INSERT INTO t1 VALUES(16, 5 , 8 , 'str8 ', '[-0.899,0.398,0.985]', '[0.344,-0.105,0.392]');
+INSERT INTO t1 VALUES(17, 4 , 9 , 'str9 ', '[-0.465,0.358,0.729]', '[-0.243,-0.8,0.921]');
+INSERT INTO t1 VALUES(18, 3 , 9 , 'str9 ', '[0.502,0.929,0.108]', '[-0.855,-0.961,0.959]');
+INSERT INTO t1 VALUES(19, 2 , 10, 'str10', '[-0.575,-0.555,-0.563]', '[-0.703,-0.483,-0.569]');
+INSERT INTO t1 VALUES(20, 1 , 10, 'str10', '[0.139,-0.096,0.94]', '[0.16,0.952,-0.454]');
+INSERT INTO t1 VALUES(21, 0 , 10, 'str10', '[0.139,-0.096,0.94]', '[0.16,0.952,-0.454]');
+create vector index idx1 on t1 (c5) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3);
+
+select * from t1 where c1 -1 > 9 and c1 - 1 < 19 order by l2_distance(c5, [-0.933,0.938,-0.358]) APPROXIMATE limit 5;
+
+drop table t1;
+
+# bugfix: 2025020800107162375
+--disable_warnings
+drop table if exists tv;
+--enable_warnings
+--error 1235
+create table tv (c1 int, vec vector(513), vector index idv(vec) with(distance=l2, type=ivf_flat)) LOB_INROW_THRESHOLD=2048;
+
+let $before_lob_inrow = query_get_value(SHOW VARIABLES LIKE 'ob_default_lob_inrow_threshold', Value, 1);
+set ob_default_lob_inrow_threshold=1024;
+--error 1235
+create table tv (c1 int, vec vector(257), vector index idv(vec) with(distance=l2, type=ivf_flat));
+create table tv (c1 int, vec vector(257));
+--error 1235
+create vector index idx1 on tv (vec) with (distance=l2, type=ivf_flat);
+drop table tv;
+set ob_default_lob_inrow_threshold=8192;
+
+create table tv (c1 int, vec vector(256), vector index idv(vec) with(distance=l2, type=ivf_flat));
+
+let $data_table_id = query_get_value(SELECT table_id
+                                     FROM oceanbase.__all_virtual_table
+                                     WHERE table_name = 'tv', table_id, 1);
+
+# expect 3 vec aux index tables, all 8192
+--disable_query_log
+--replace_regex /__idx_[0-9]*/__idx_DATA_TABLE_ID/g
+eval SELECT table_name
+     FROM oceanbase.__all_virtual_table
+     WHERE data_table_id = $data_table_id
+       AND table_name LIKE '__idx%' and lob_inrow_threshold = 8192;
+--enable_query_log
+alter table tv set lob_inrow_threshold = 1024;
+
+drop table tv;
+--disable_query_log
+eval set ob_default_lob_inrow_threshold = $before_lob_inrow;
+--enable_query_log
+
+--echo clear
+alter system set ob_vector_memory_limit_percentage = 0;

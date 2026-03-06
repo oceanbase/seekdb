@@ -1,0 +1,349 @@
+#owner: lb446709
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of sparse vector query
+--echo # ----------------------------------------------------------------------
+
+--disable_warnings
+drop table if exists test_sparse_vec_tbl;
+--enable_warnings
+
+create table test_sparse_vec_tbl (
+  id int primary key, c1 bool, c2 int, c3 decimal, c4 float, c5 bit,
+  c6 date, c7 varchar(50), c8 text, c9 json, c10 GEOMETRY,
+  c11 array(int), c12 vector(3), c13 map(int, float), c14 sparsevector, c15 sparsevector) partition by hash(id) partitions 3;
+
+insert into test_sparse_vec_tbl values(1, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', '{1:123, 2:456}', '{1:123, 3:456}');
+insert into test_sparse_vec_tbl values(2, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', null, null);
+insert into test_sparse_vec_tbl values(3, true, 1, 1, 1.3, 1, '2020-01-01', null, 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', '{2:12.3, 4:4.56}', '{2:12.3, 4:4.56}');
+insert into test_sparse_vec_tbl values(4, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', null, '{2:12.3, 4:4.56}');
+insert into test_sparse_vec_tbl values(5, true, 1, 1, 1.3, 1, '2020-01-01', '{1:1.2, 5:2.1}', 'abc', '{"a":1}', ST_GeomFromText('POINT(1 1)'), [1,2,3,4,5], [1,2,3], '{1:123, 4:345}', '{1:1.2}', '{}');
+select id, c1, c11, c13, c14 from test_sparse_vec_tbl order by id;
+
+--error 5083
+select id from test_sparse_vec_tbl order by c14;
+--error 5083
+select id from test_sparse_vec_tbl group by c14;
+--error 5083
+select id from test_sparse_vec_tbl where c14 > 0;
+--error 5083
+select c14+c14 from test_sparse_vec_tbl;
+--error 5083
+select c13+c13 from test_sparse_vec_tbl;
+
+select id from test_sparse_vec_tbl where c14 = '{}';
+select id from test_sparse_vec_tbl where c14 != '{}';
+select id from test_sparse_vec_tbl where c15 = '{}';
+select id from test_sparse_vec_tbl where c14 = '{1:123, 2:456}';
+select id from test_sparse_vec_tbl where c14 = '{2:456, 1:123}';
+
+--error 1235
+select sum(c14) from test_sparse_vec_tbl;
+--error 1210
+select max(c14) from test_sparse_vec_tbl;
+select count(c14) from test_sparse_vec_tbl;
+
+# ip distance
+select id from test_sparse_vec_tbl where inner_product(c14, c15) = 0;
+select id from test_sparse_vec_tbl where inner_product(c14, c15) > 0;
+select id from test_sparse_vec_tbl group by inner_product(c14, c15);
+select inner_product(c14, c15) from test_sparse_vec_tbl;
+
+select inner_product(c14, c7) from test_sparse_vec_tbl where id = 3;
+select inner_product(c14, c7) from test_sparse_vec_tbl;
+select inner_product(c7, c14) from test_sparse_vec_tbl;
+
+--error 1210
+select inner_product(c14, c2) from test_sparse_vec_tbl;
+--error 5083
+select inner_product(c14, c11) from test_sparse_vec_tbl;
+--error 5083
+select inner_product(c14, c12) from test_sparse_vec_tbl;
+--error 5083
+select inner_product(c14, c13) from test_sparse_vec_tbl;
+
+select inner_product(c14, null) from test_sparse_vec_tbl;
+select inner_product(c14, '{}') from test_sparse_vec_tbl;
+select inner_product(c14, '{1:1}') from test_sparse_vec_tbl;
+select inner_product(c14, '{100:1}') from test_sparse_vec_tbl;
+select inner_product(c14, '{1:3, 100:1}') from test_sparse_vec_tbl;
+--error 1366
+select inner_product(c14, '{a:3, 100:1}') from test_sparse_vec_tbl;
+--error 3140
+select inner_product(c14, 'abc') from test_sparse_vec_tbl;
+--error 3140
+select inner_product('{1:2, 100:1}', '{1:3, 100:1}') from test_sparse_vec_tbl;
+select inner_product(t1.c14, '{1:1}') from test_sparse_vec_tbl t1, test_sparse_vec_tbl t2 where t1.id >= t2.id;
+
+# negative ip distance
+select id from test_sparse_vec_tbl where negative_inner_product(c14, c15) = 0;
+select id from test_sparse_vec_tbl where negative_inner_product(c14, c15) > 0;
+select id from test_sparse_vec_tbl group by negative_inner_product(c14, c15);
+select negative_inner_product(c14, c15) from test_sparse_vec_tbl;
+
+select negative_inner_product(c14, c7) from test_sparse_vec_tbl where id = 3;
+select negative_inner_product(c14, c7) from test_sparse_vec_tbl;
+select negative_inner_product(c7, c14) from test_sparse_vec_tbl;
+
+--error 1210
+select negative_inner_product(c14, c2) from test_sparse_vec_tbl;
+--error 5083
+select negative_inner_product(c14, c11) from test_sparse_vec_tbl;
+--error 5083
+select negative_inner_product(c14, c12) from test_sparse_vec_tbl;
+--error 5083
+select negative_inner_product(c14, c13) from test_sparse_vec_tbl;
+
+select negative_inner_product(c14, null) from test_sparse_vec_tbl;
+select negative_inner_product(c14, '{}') from test_sparse_vec_tbl;
+select negative_inner_product(c14, '{1:1}') from test_sparse_vec_tbl;
+select negative_inner_product(c14, '{100:1}') from test_sparse_vec_tbl;
+select negative_inner_product(c14, '{1:3, 100:1}') from test_sparse_vec_tbl;
+--error 3140
+select negative_inner_product(c14, 'abc') from test_sparse_vec_tbl;
+--error 3140
+select negative_inner_product('{1:2, 100:1}', '{1:3, 100:1}') from test_sparse_vec_tbl;
+select negative_inner_product(t1.c14, '{1:1}') from test_sparse_vec_tbl t1, test_sparse_vec_tbl t2 where t1.id >= t2.id;
+
+--error 5083
+select l2_distance(c14, c14) from test_sparse_vec_tbl;
+--error 5083
+select cosine_distance(c14, c14) from test_sparse_vec_tbl;
+
+--error 5083
+select array_length(c14) from test_sparse_vec_tbl;
+--error 5083
+select WEIGHT_STRING(c14) from test_sparse_vec_tbl;
+--error 5083
+select ASCII(c14) from test_sparse_vec_tbl;
+--error 5083
+select BIN(c14) from test_sparse_vec_tbl;
+--error 5083
+select BIT_LENGTH(c14) from test_sparse_vec_tbl;
+--error 5083
+select CHAR(c14) from test_sparse_vec_tbl;
+--error 5083
+select CHAR_LENGTH(c14) from test_sparse_vec_tbl;
+--error 5083
+select CHARACTER_LENGTH(c14) from test_sparse_vec_tbl;
+--error 5083
+select CONCAT(c14, c15) from test_sparse_vec_tbl;
+--error 5083
+select CONCAT_WS(c14, c15) from test_sparse_vec_tbl;
+--error 5083
+select ELT(1, c14, c15) from test_sparse_vec_tbl;
+--error 5083
+select ELT(1, 'a', c15) from test_sparse_vec_tbl;
+--error 5083
+select FIELD(c14, c14, c15) from test_sparse_vec_tbl;
+--error 5083
+select HEX(c14) from test_sparse_vec_tbl;
+--error 5083
+select INSERT('Quadratic',7,3,c14) from test_sparse_vec_tbl;
+--error 5083
+select INSERT(c14,7,3,'What') from test_sparse_vec_tbl;
+--error 5083
+select INSTR(c14,'1') from test_sparse_vec_tbl;
+--error 5083
+select IP2INT(c14) from test_sparse_vec_tbl;
+--error 5083
+select LCASE(c14) from test_sparse_vec_tbl;
+--error 5083
+select LEFT(c14,2) from test_sparse_vec_tbl;
+--error 5083
+select LENGTH(c14) from test_sparse_vec_tbl;
+--error 5083
+select LOCATE(c14,'1') from test_sparse_vec_tbl;
+--error 5083
+select LOCATE('1',c14) from test_sparse_vec_tbl;
+--error 5083
+select LOWER(c14) from test_sparse_vec_tbl;
+--error 5083
+select LPAD(c14,1,'1') from test_sparse_vec_tbl;
+--error 5083
+select LPAD('1',1,c14) from test_sparse_vec_tbl;
+--error 5083
+select LTRIM(c14) from test_sparse_vec_tbl;
+--error 5083
+select MAKE_SET(1,'str1',c14) from test_sparse_vec_tbl;
+--error 5083
+select MID(c14,1,1) from test_sparse_vec_tbl;
+--error 5083
+select OCTET_LENGTH(c14) from test_sparse_vec_tbl;
+--error 5083
+select ORD(c14) from test_sparse_vec_tbl;
+--error 5083
+select POSITION('1' IN c14) from test_sparse_vec_tbl;
+--error 5083
+select QUOTE(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT REGEXP_INSTR(c14, 'ocean') from test_sparse_vec_tbl;
+--error 5083
+SELECT REGEXP_INSTR('ocean base oceanbase', c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT REGEXP_LIKE(c14, c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT REGEXP_REPLACE(c14, 'a', '2') from test_sparse_vec_tbl;
+--error 5083
+SELECT REGEXP_SUBSTR(c14, '[[:blank:]][[:alnum:]]*', 1, 1) from test_sparse_vec_tbl;
+--error 5083
+SELECT REPEAT(c14, 2) from test_sparse_vec_tbl;
+--error 5083
+SELECT REPLACE(c14, 'abc.', 'www') from test_sparse_vec_tbl;
+--error 5083
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', c14, 'www') from test_sparse_vec_tbl;
+--error 5083
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', 'abc.', c14) from test_sparse_vec_tbl;
+--error 1235
+SELECT REVERSE(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT RIGHT(c14,4) from test_sparse_vec_tbl;
+--error 5083
+SELECT c14 RLIKE 'a' from test_sparse_vec_tbl;
+--error 5083
+SELECT RPAD(c14,5,'?') from test_sparse_vec_tbl;
+--error 5083
+SELECT RTRIM(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT STRCMP(c14,c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT SUBSTR(c14, 2) from test_sparse_vec_tbl;
+--error 5083
+SELECT SUBSTRING(c14, 2) from test_sparse_vec_tbl;
+--error 5083
+SELECT SUBSTRING_INDEX(c14, 'ABC', 0) from test_sparse_vec_tbl;
+--error 5083
+SELECT TRIM(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT UCASE(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT UNHEX(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT UPPER(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT TO_BASE64(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT FROM_BASE64(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT SOUNDEX(c14) from test_sparse_vec_tbl;
+# zixia to check
+SELECT CHARSET(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT ABS(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT ROUND(c14,0) from test_sparse_vec_tbl;
+--error 5083
+SELECT CEILING(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT FLOOR(c14) from test_sparse_vec_tbl;
+--error 5083
+SELECT POWER(c14,2) from test_sparse_vec_tbl;
+--error 5083
+# zixia to check
+select cast (c14 as char) from test_sparse_vec_tbl;
+--error 5083
+select cast (c14 as json) from test_sparse_vec_tbl;
+--error 5083
+select cast (c14 as UNSIGNED) from test_sparse_vec_tbl;
+--error 5083
+SELECT CONVERT(c14, CHAR) from test_sparse_vec_tbl;
+--error 5083
+select BINARY c14 from test_sparse_vec_tbl;
+--error 5083
+select MD5(c14) from test_sparse_vec_tbl;
+--error 5083
+select SHA(c14) from test_sparse_vec_tbl;
+--error 5083
+select PASSWORD(c14) from test_sparse_vec_tbl;
+--error 5083
+select ENCODE(c14,'a') from test_sparse_vec_tbl;
+--error 5083
+select COMPRESS(c14) from test_sparse_vec_tbl;
+
+drop table if exists test_sparse_vec_tbl;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1 (id int, m1 sparsevector, m2 sparsevector, m3 sparsevector);
+insert into t1 values (1, '{1:1.2}', '{2:2.2}', '{3:3.4}');
+--error 1210
+select if (1, m1, id) from t1;
+--error 7602
+select if (1, m1, m1) from t1;
+--error 7602
+select if (1, m1, m2) from t1;
+--error 7602
+select if (1, m1, m3) from t1;
+
+SELECT
+    CASE
+        WHEN t1.m1='{1:1.2}' THEN 'true'
+        ELSE 'result_value_if_false'
+    END
+FROM t1;
+
+--error 1210
+SELECT
+    CASE
+        WHEN t1.m2=t1.m2 THEN m1
+        ELSE 'result_value_if_false'
+    END
+FROM t1;
+
+--error 7602
+SELECT
+    CASE
+        WHEN t1.m2=t1.m2 THEN m1
+        ELSE m1
+    END
+FROM t1;
+
+--error 7602
+SELECT
+    CASE
+        WHEN t1.m2=t1.m2 THEN m1
+        ELSE m2
+    END
+FROM t1;
+
+--error 7602
+select *, COALESCE(m1,m2,m3) from t1;
+--error 7602
+select *, COALESCE(m1,m1) from t1;
+drop table t1;
+
+create table t1 (c1 int  primary key,c2 sparsevector);
+--error 4152
+insert into t1(c1,c2) values(1,'{null:null}');
+--error 4152
+insert into t1(c1,c2) values(2,'{1:null}');
+--error 4152
+insert into t1(c1,c2) values(3,'{null:1}');
+--error 4152
+insert into t1(c1,c2) values(4, map(null,1));
+--error 4152
+insert into t1(c1,c2) values(5,map(1,null));
+--error 4152
+insert into t1(c1,c2) values(6,map(null,null));
+insert into t1(c1,c2) values(7,map(1,2));
+select * from t1 order by c1;
+
+drop table t1;
+create table t1 (c1 int  primary key,c2 sparsevector,c3 sparsevector,c4 varchar(200));
+insert into t1(c1,c2,c3,c4) values(4,'{1.123:1}','{1:1.3,1:2.6}','{1.2:1}');
+select inner_product(c2,c4) from t1 order by c1;
+select vector_dims(c2) from t1;
+-- error 1210
+select vector_norm(c2) from t1;
+-- error 1210
+select vector_dims(map(1,1)) from t1;
+-- error 1210
+select vector_norm(map(1,1)) from t1;
+select * from t1;
+drop table t1;
+create table t1 (c1 int primary key, c2 sparsevector,c3 sparsevector,c4 datetime,c5 sparsevector as (c4));
+-- error 1235
+insert into t1(c1,c2,c3,c4) values(1,'{1:1.3,1:2.6}','{1:1.3,1:2.6}','2025-03-14 15:10:59');
+drop table t1;

@@ -30,7 +30,7 @@ class ObServerStorageMetaService
 {
 public:
   static ObServerStorageMetaService &get_instance();
-  int init(const bool is_share_storage);
+  int init();
   int start();
   void stop();
   void wait();
@@ -44,29 +44,6 @@ public:
   int get_server_slogger(ObStorageLogger *&slogger) const;
   int write_checkpoint(bool is_force);
 
-  class ObTenantItemIterator final
-  {
-  public:
-    explicit ObTenantItemIterator():
-      idx_(0),
-      is_inited_(false),
-      server_super_block_()
-      {}
-    ~ObTenantItemIterator() = default;
-    int init();
-    int get_next_tenant_item(storage::ObTenantItem &item);
-    TO_STRING_KV(K_(idx), K_(is_inited), K_(server_super_block));
-  private:
-    int64_t idx_;
-    bool is_inited_;
-    storage::ObServerSuperBlock server_super_block_;
-    DISALLOW_COPY_AND_ASSIGN(ObTenantItemIterator);
-  };
-
-  int get_tenant_items_by_status(
-      const storage::ObTenantCreateStatus status,
-      ObIArray<storage::ObTenantItem> &tenant_items);
-
 private:
   ObServerStorageMetaService();
   ~ObServerStorageMetaService() = default;
@@ -76,7 +53,6 @@ private:
 private:
   bool is_inited_;
   bool is_started_;
-  bool is_shared_storage_;
   ObServerStorageMetaPersister persister_;
   ObServerStorageMetaReplayer replayer_;
   ObStorageLoggerManager slogger_mgr_;

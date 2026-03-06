@@ -1,0 +1,156 @@
+#owner: fanfangzhou.ffz
+#owner group: RS
+#tags: rs
+#description:
+# test parallel create table with foreign key (foreign_key_checks = on)
+
+# setup
+connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
+
+connect (mysql,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
+
+set @@session.recyclebin = off;
+set @@session.foreign_key_checks = on;
+let $orig_value = `select value from __all_virtual_tenant_parameter_stat where name = '_enable_parallel_table_creation' limit 1`;
+alter system set _enable_parallel_table_creation = true;
+sleep 5;
+
+# case 1: self reference
+--disable_warnings
+drop database if exists yanmu_parallel_ddl;
+--enable_warnings
+
+create database yanmu_parallel_ddl;
+use yanmu_parallel_ddl;
+
+# column not exist
+--error 5031
+create table t1(c1 int primary key, c2 int, constraint foreign key(c3) references t1(c1));
+--error 5031
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references t1(c3));
+# column type not match
+--error 1215
+create table t1(c1 int primary key, c2 varchar(20), c3 int, constraint foreign key(c2) references t1(c1));
+# not unique key or rowkey or index key
+--error 1215
+create table t1(c1 int primary key, c2 int, c3 int, constraint foreign key(c2) references t1(c3));
+drop table if exists t1;
+create table t1(c1 int primary key, c2 int, c3 int, index i1(c2), constraint foreign key(c3) references t1(c2));
+drop table if exists t1;
+create table t1(c1 int primary key, c2 int, c3 int, c4 int, unique index i1(c2, c3), constraint foreign key(c4) references t1(c2));
+drop table if exists t1;
+## can't add fk on temporary table
+#--error 1215
+#create temporary table `t1`(c1 int primary key, c2 int, constraint foreign key(c2) references `t1`(c1));
+
+# case compare
+create table `t1`(c1 int primary key, c2 int, constraint foreign key(c2) references `T1`(c1));
+create table `t2`(c1 int , c2 varchar(20), c3 int, c4 varchar(20), primary key(c1, c2), constraint foreign key(c3, c4) references `T2`(c1, c2));
+create table `t3`(c1 int primary key, c2 int, c3 int, unique index i1(c2), constraint foreign key(c3) references `T3`(c2));
+create table `t4`(c1 int primary key, c2 int, c3 varchar(20), c4 int, c5 varchar(20), unique index i1(c2, c3), constraint foreign key(c4, c5) references `T4`(c2, c3));
+
+--error 1452
+insert into t1 values(1, 2);
+insert into t1 values(1, 1);
+select * from t1;
+
+--error 1452
+insert into t2 values(1, "2", 1, "3");
+insert into t2 values(1, "2", 1, "2");
+select * from t2;
+
+--error 1452
+insert into t3 values(1, 2, 3);
+insert into t3 values(1, 2, 2);
+select * from t3;
+
+--error 1452
+insert into t4 values(1, 1, "2", 1, "3");
+insert into t4 values(1, 1, "2", 1, "2");
+select * from t4;
+
+# case 2: basic
+--disable_warnings
+drop database if exists yanmu_parallel_ddl;
+--enable_warnings
+
+create database yanmu_parallel_ddl;
+use yanmu_parallel_ddl;
+
+create table p1(c1 int primary key, c2 int);
+create table p2(c1 varchar(20) primary key, c2 int);
+create table p3(c1 int primary key, c2 int, key i1(c2));
+create table p4(c1 int primary key, c2 int, unique key i1(c2));
+create table p5(c1 int primary key, c2 int, c3 varchar(20), unique key i1(c2, c3));
+create table p6(c1 int, c2 varchar(20), primary key(c1, c2));
+#create temporary table p7(c1 int primary key);
+# table/column not exist
+--error 5031
+create table t1(c1 int primary key, c2 int, constraint foreign key(c3) references p1(c1));
+--error 5031
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p1(c3));
+--error 1146
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p0(c1));
+# column type not match
+--error 1215
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p2(c1));
+# not unique key or rowkey or index
+--error 1215
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p1(c2));
+drop table if exists t1;
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p3(c2));
+drop table if exists t1;
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p5(c2));
+drop table if exists t1;
+## can't add fk on temporary table
+#--error 1215
+#create temporary table `t1`(c1 int primary key, c2 int, constraint foreign key(c2) references `t1`(c1));
+## can't reference temporary table
+#--error 1215
+#create table `t1`(c1 int primary key, c2 int, constraint foreign key(c2) references `p7`(c1));
+
+# case compare
+create table `t1`(c1 int primary key, c2 int, constraint foreign key(c2) references `P1`(c1));
+create table `t2`(c1 int, c2 varchar(20), constraint foreign key(c1, c2) references `P6`(c1, c2));
+create table `t3`(c1 int primary key, c2 int, constraint foreign key(c2) references `P4`(c2));
+create table `t4`(c1 int primary key, c2 int, c3 varchar(20), constraint foreign key(c2, c3) references `P5`(c2, c3));
+create table `t5`(c1 int primary key, c2 int, c3 varchar(20), c4 int, c5 varchar(20), constraint foreign key(c2, c3) references `P5`(c2, c3), constraint foreign key(c4, c5) references `P6`(c1, c2));
+
+insert p1 values(1, 1);
+--error 1452
+insert t1 values(1, 2);
+insert t1 values(1, 1);
+select * from t1;
+
+insert into p6 values(1, "2");
+--error 1452
+insert into t2 values(1, "3");
+insert into t2 values(1, "2");
+select * from t2;
+
+insert into p4 values(1, 2);
+--error 1452
+insert into t3 values(1, 3);
+insert into t3 values(1, 2);
+select * from t3;
+
+insert into p5 values(1, 1, "2");
+--error 1452
+insert into t4 values(1, 1, "3");
+insert into t4 values(1, 1, "2");
+select * from t4;
+
+--error 1452
+insert into t5 values(1, 1, "3", 1, "2");
+--error 1452
+insert into t5 values(1, 1, "2", 1, "3");
+insert into t5 values(1, 1, "2", 1, "2");
+select * from t5;
+
+# clean & recovery
+connection mysql;
+set @@session.recyclebin = off;
+--disable_warnings
+drop database if exists yanmu_parallel_ddl;
+--enable_warnings
+eval alter system set _enable_parallel_table_creation = '$orig_value';

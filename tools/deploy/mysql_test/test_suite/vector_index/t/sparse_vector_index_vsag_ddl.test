@@ -1,0 +1,428 @@
+# owner: ningxin.ning
+# owner group: shenzhen
+# description: test sparse vector index ddl
+# connect (conn_user,$OBMYSQL_MS0,root@mysql,,test,$OBMYSQL_PORT);
+# connection conn_user;
+alter system set ob_vector_memory_limit_percentage = 44;
+
+--echo # 随表创建索引
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+# 可以不指定lib
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (type=sindi, distance=inner_product));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, distance=inner_product));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (type=sindi));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (distance=inner_product));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag));
+
+# 参数检查
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=true, drop_ratio_build=0.1, drop_ratio_search=0.5, refine_k=2.0));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+# prune
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=false, drop_ratio_build=0.0));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=false, drop_ratio_build=0.9));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine=true, drop_ratio_build=0.1));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=false, drop_ratio_build=0.95));
+
+# drop_ratio_search
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.0));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.5));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.5));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.95));
+
+# refine_k
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=1.0));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=1000.0));
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=1001.0));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=0.9));
+
+# extra_info
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, extra_info_max_size=512));
+
+# distance
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=l2));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=cosine));
+
+# 不支持磁盘稀疏向量
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=ob, type=spiv, distance=inner_product));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (type=spiv, distance=inner_product));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (type=spiv));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (distance=inner_product));
+
+# 其他不支持的参数
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, m=10));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, nlist=10));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, ef_search=10));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, nbits=10));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product, sample_per_nlist=10));
+
+# 稀疏向量上建其他索引
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=ob, type=ivf_flat, distance=l2, m=10));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=ob, type=ivf_pq, distance=l2, m=10));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=hnsw, distance=l2));
+
+# 其他类型上创建稀疏向量索引
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 vector(3), vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product));
+--error 1235
+CREATE TABLE t1 (c1 int primary key, c2 varchar(32), vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product));
+
+# 列存表
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product)) with column group(each column);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+--echo # 后建索引
+
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+create vector index idx1 on t1(c2) with (distance=inner_product, type=sindi);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+# 参数检查
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=true, drop_ratio_build=0.1, drop_ratio_search=0.5, refine_k=2.0);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+# prune
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=false, drop_ratio_build=0.0);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=false, drop_ratio_build=0.9);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine=true, drop_ratio_build=0.1);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, prune=true, refine=false, drop_ratio_build=0.95);
+
+# drop_ratio_search
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.0);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.5);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int, c2 sparsevector);
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.5);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, drop_ratio_search=0.95);
+
+# refine_k
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=1.0);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=1000.0);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 sparsevector);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=1001.0);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, refine_k=0.9);
+
+# extra_info
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, extra_info_max_size=512);
+
+# distance
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=l2);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=cosine);
+
+# 不支持磁盘稀疏向量
+--error 1235
+create vector index idx1 on t1(c2) with (lib=ob, type=spiv, distance=inner_product);
+--error 1235
+create vector index idx1 on t1(c2) with (type=spiv, distance=inner_product);
+--error 1235
+create vector index idx1 on t1(c2) with (type=spiv);
+--error 1235
+create vector index idx1 on t1(c2) with (distance=inner_product);
+
+# 其他不支持的参数
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, m=10);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, nlist=10);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, ef_search=10);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, nbits=10);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product, sample_per_nlist=10);
+
+# 稀疏向量上建其他索引
+--error 1235
+create vector index idx1 on t1(c2) with (lib=ob, type=ivf_flat, distance=l2, m=10);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=ob, type=ivf_pq, distance=l2, m=10);
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=hnsw, distance=l2);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+# 其他类型上创建稀疏向量索引
+CREATE TABLE t1 (c1 int primary key, c2 vector(3));
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 varchar(32));
+--error 1235
+create vector index idx1 on t1(c2) with (lib=vsag, type=sindi, distance=inner_product);
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+# 正交场景
+
+## hnsw和sparse vector同时存在
+# 随表建
+create table t1(c1 int, c2 vector(10), c3 sparsevector, primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag), vector index idx2(c3) with (distance=inner_product, type=sindi, lib=vsag));
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '{1:0.1,2:0.2, 3:0.3}');
+insert into t1 values(2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '{3:0.3, 2:0.2, 4:0.4}');
+insert into t1 values(3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '{3:0.3, 4:0.4, 5:0.5}');
+insert into t1 values(4, '[0.148869,0.878546,0.028024,0.326642,0.044912,0.144034,0.717580,0.442633,0.637534,0.633993]', '{5:0.5, 4:0.4, 6:0.6}');
+insert into t1 values(5, '[0.334970,0.857377,0.886132,0.668270,0.983913,0.418145,0.208459,0.190118,0.959676,0.796483]', '{5:0.5, 6:0.6, 7:0.7}');
+insert into t1 values(6, '[0.117582,0.302352,0.471198,0.248725,0.315868,0.717533,0.028496,0.710370,0.007130,0.710913]', '{7:0.7, 6:0.6, 8:0.8}');
+insert into t1 values(7, '[0.551185,0.231134,0.075354,0.230557,0.248149,0.383390,0.483179,0.238120,0.289662,0.970101]', '{7:0.7, 8:0.8, 9:0.9}');
+insert into t1 values(8, '[0.185221,0.315131,0.558301,0.543172,0.335010,0.556101,0.595842,0.168794,0.567442,0.062338]', '{9:0.9, 8:0.8, 10:1.0}');
+insert into t1 values(9, '[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]', '{9:0.9, 10:1.0, 11:1.1}');
+insert into t1 values(10, '[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]', '{11:1.1, 10:1.0, 12:1.2}');
+
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 where c1>5 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+drop index idx1 on t1;
+drop index idx2 on t1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+
+# 后建索引
+create table t1(c1 int, c2 vector(10), c3 sparsevector, primary key(c1));
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '{1:0.1,2:0.2, 3:0.3}');
+insert into t1 values(2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '{3:0.3, 2:0.2, 4:0.4}');
+insert into t1 values(3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '{3:0.3, 4:0.4, 5:0.5}');
+insert into t1 values(4, '[0.148869,0.878546,0.028024,0.326642,0.044912,0.144034,0.717580,0.442633,0.637534,0.633993]', '{5:0.5, 4:0.4, 6:0.6}');
+insert into t1 values(5, '[0.334970,0.857377,0.886132,0.668270,0.983913,0.418145,0.208459,0.190118,0.959676,0.796483]', '{5:0.5, 6:0.6, 7:0.7}');
+insert into t1 values(6, '[0.117582,0.302352,0.471198,0.248725,0.315868,0.717533,0.028496,0.710370,0.007130,0.710913]', '{7:0.7, 6:0.6, 8:0.8}');
+insert into t1 values(7, '[0.551185,0.231134,0.075354,0.230557,0.248149,0.383390,0.483179,0.238120,0.289662,0.970101]', '{7:0.7, 8:0.8, 9:0.9}');
+insert into t1 values(8, '[0.185221,0.315131,0.558301,0.543172,0.335010,0.556101,0.595842,0.168794,0.567442,0.062338]', '{9:0.9, 8:0.8, 10:1.0}');
+insert into t1 values(9, '[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]', '{9:0.9, 10:1.0, 11:1.1}');
+insert into t1 values(10, '[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]', '{11:1.1, 10:1.0, 12:1.2}');
+
+create vector index idx1 on t1(c2) with (distance=l2, type=hnsw, lib=vsag);
+create vector index idx2 on t1(c3) with (distance=inner_product, type=sindi, lib=vsag);
+
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 where c1>5 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+drop index idx1 on t1;
+drop index idx2 on t1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+# 快照+增量并存
+create table t1(c1 int, c2 vector(10), c3 sparsevector, primary key(c1));
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '{1:0.1,2:0.2, 3:0.3}');
+insert into t1 values(2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '{3:0.3, 2:0.2, 4:0.4}');
+insert into t1 values(3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '{3:0.3, 4:0.4, 5:0.5}');
+insert into t1 values(4, '[0.148869,0.878546,0.028024,0.326642,0.044912,0.144034,0.717580,0.442633,0.637534,0.633993]', '{5:0.5, 4:0.4, 6:0.6}');
+insert into t1 values(5, '[0.334970,0.857377,0.886132,0.668270,0.983913,0.418145,0.208459,0.190118,0.959676,0.796483]', '{5:0.5, 6:0.6, 7:0.7}');
+insert into t1 values(6, '[0.117582,0.302352,0.471198,0.248725,0.315868,0.717533,0.028496,0.710370,0.007130,0.710913]', '{7:0.7, 6:0.6, 8:0.8}');
+insert into t1 values(7, '[0.551185,0.231134,0.075354,0.230557,0.248149,0.383390,0.483179,0.238120,0.289662,0.970101]', '{7:0.7, 8:0.8, 9:0.9}');
+insert into t1 values(8, '[0.185221,0.315131,0.558301,0.543172,0.335010,0.556101,0.595842,0.168794,0.567442,0.062338]', '{9:0.9, 8:0.8, 10:1.0}');
+insert into t1 values(9, '[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]', '{9:0.9, 10:1.0, 11:1.1}');
+create vector index idx1 on t1(c2) with (distance=l2, type=hnsw, lib=vsag);
+create vector index idx2 on t1(c3) with (distance=inner_product, type=sindi, lib=vsag);
+insert into t1 values(10, '[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]', '{11:1.1, 10:1.0, 12:1.2}');
+
+
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 where c1>5 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{10:1, 11:1}') APPROXIMATE limit 2;
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{12:1, 13:1}') APPROXIMATE limit 2;
+
+drop index idx1 on t1;
+select * from t1 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+drop index idx2 on t1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+## ivf和sparse vector同时存在
+# 随表建索引
+create table t1(c1 int, c2 vector(10), c3 sparsevector, primary key(c1), vector index idx1(c2) with (distance=l2, type=ivf_flat, lib=ob, nlist=2, sample_per_nlist=3), vector index idx2(c3) with (distance=inner_product, type=sindi, lib=vsag));
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '{1:0.1,2:0.2, 3:0.3}');
+insert into t1 values(2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '{3:0.3, 2:0.2, 4:0.4}');
+insert into t1 values(3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '{3:0.3, 4:0.4, 5:0.5}');
+insert into t1 values(4, '[0.148869,0.878546,0.028024,0.326642,0.044912,0.144034,0.717580,0.442633,0.637534,0.633993]', '{5:0.5, 4:0.4, 6:0.6}');
+insert into t1 values(5, '[0.334970,0.857377,0.886132,0.668270,0.983913,0.418145,0.208459,0.190118,0.959676,0.796483]', '{5:0.5, 6:0.6, 7:0.7}');
+insert into t1 values(6, '[0.117582,0.302352,0.471198,0.248725,0.315868,0.717533,0.028496,0.710370,0.007130,0.710913]', '{7:0.7, 6:0.6, 8:0.8}');
+insert into t1 values(7, '[0.551185,0.231134,0.075354,0.230557,0.248149,0.383390,0.483179,0.238120,0.289662,0.970101]', '{7:0.7, 8:0.8, 9:0.9}');
+insert into t1 values(8, '[0.185221,0.315131,0.558301,0.543172,0.335010,0.556101,0.595842,0.168794,0.567442,0.062338]', '{9:0.9, 8:0.8, 10:1.0}');
+insert into t1 values(9, '[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]', '{9:0.9, 10:1.0, 11:1.1}');
+insert into t1 values(10, '[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]', '{11:1.1, 10:1.0, 12:1.2}');
+
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 where c1>5 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+drop index idx2 on t1;
+select * from t1 where c1>5 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+drop index idx1 on t1;
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+## 后建索引
+create table t1(c1 int, c2 vector(10), c3 sparsevector, primary key(c1));
+
+insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]', '{1:0.1,2:0.2, 3:0.3}');
+insert into t1 values(2, '[0.735541,0.670776,0.903237,0.447223,0.232028,0.659316,0.765661,0.226980,0.579658,0.933939]', '{3:0.3, 2:0.2, 4:0.4}');
+insert into t1 values(3, '[0.327936,0.048756,0.084670,0.389642,0.970982,0.370915,0.181664,0.940780,0.013905,0.628127]', '{3:0.3, 4:0.4, 5:0.5}');
+insert into t1 values(4, '[0.148869,0.878546,0.028024,0.326642,0.044912,0.144034,0.717580,0.442633,0.637534,0.633993]', '{5:0.5, 4:0.4, 6:0.6}');
+insert into t1 values(5, '[0.334970,0.857377,0.886132,0.668270,0.983913,0.418145,0.208459,0.190118,0.959676,0.796483]', '{5:0.5, 6:0.6, 7:0.7}');
+insert into t1 values(6, '[0.117582,0.302352,0.471198,0.248725,0.315868,0.717533,0.028496,0.710370,0.007130,0.710913]', '{7:0.7, 6:0.6, 8:0.8}');
+insert into t1 values(7, '[0.551185,0.231134,0.075354,0.230557,0.248149,0.383390,0.483179,0.238120,0.289662,0.970101]', '{7:0.7, 8:0.8, 9:0.9}');
+insert into t1 values(8, '[0.185221,0.315131,0.558301,0.543172,0.335010,0.556101,0.595842,0.168794,0.567442,0.062338]', '{9:0.9, 8:0.8, 10:1.0}');
+insert into t1 values(9, '[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]', '{9:0.9, 10:1.0, 11:1.1}');
+insert into t1 values(10, '[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]', '{11:1.1, 10:1.0, 12:1.2}');
+
+create vector index idx1 on t1(c2) with (distance=l2, type=ivf_flat, lib=ob, nlist=2, sample_per_nlist=3);
+create vector index idx2 on t1(c3) with (distance=inner_product, type=sindi, lib=vsag);
+
+select * from t1 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 where c1>5 order by l2_distance(c2, [0.712338,0.603321,0.133444,0.428146,0.876387,0.763293,0.408760,0.765300,0.560072,0.900498]) APPROXIMATE limit 2;
+
+select * from t1 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+
+drop index idx1 on t1;
+select * from t1 where c1 > 5 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
+drop index idx2 on t1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings

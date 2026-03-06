@@ -1,0 +1,236 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+# owner: jianming.cjq
+# owner group: Storage Group
+# description: direct load datatype error test
+
+--source mysql_test/test_suite/direct_load_data/include/copy_data_for_direct_load.inc
+connect (conn_query,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
+--disable_warnings
+connection default;
+--enable_query_log
+use test;
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_false.inc
+
+# TEST 1 int type error
+
+# Create table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+
+# Start load data
+--disable_query_log
+--error 1292
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-inttype-error.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+
+
+# TEST 2 decimal type error
+
+# Create table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+
+# Start load data
+--disable_query_log
+--error 1292
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-decimaltype-error.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+
+
+# TEST 3 date type error
+
+# Create table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(64),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+
+# Start load data
+--disable_query_log
+--error 1292
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-datetype-error.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+
+# TEST 4 bit type error
+# Create table
+--disable_warnings
+drop table if exists bit_table;
+--enable_warnings
+create table bit_table (
+    c1 bit(6) default NULL
+);
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+
+# Start load data
+--disable_query_log
+--error 1235
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/bittype-error1.csv" into table bit_table fields terminated by '|' lines starting by '' terminated by '\n' (@c1) set c1=cast(CONV(@c1, 2, 10) AS UNSIGNED);
+--error 1235
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/bittype-error2.csv" into table bit_table fields terminated by '|' lines starting by '' terminated by '\n' (@c1) set c1=cast(CONV(MID(@c1, 3, LENGTH(@c1)-2), 2, 10) AS UNSIGNED);
+--error 1235
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/misc/bittype-error3.csv" into table bit_table fields terminated by '|' lines starting by '' terminated by '\n' (@c1) set c1=cast(CONV(MID(@c1, 3, LENGTH(@c1)-3), 2, 10) AS UNSIGNED);
+--enable_query_log
+
+# TEST 5 all data type test
+# Create table
+--disable_warnings
+drop table if exists lineitem;
+--enable_warnings
+create table lineitem (
+    c01 int(255) NOT NULL,
+    c02 numeric,
+    c03 bit(6),
+    c04 char(4),
+    c05 binary(255),
+    c06 varbinary(255),
+    c07 datetime(6),
+    c08 timestamp(6) NULL DEFAULT NULL,
+    c09 enum('male', 'female'),
+    c10 set('red', 'green', 'blue', 'yellow'),
+    tbool bool,
+	  tboolean boolean,
+    tchar char(64) not null,
+    ttinyint tinyint,
+    tsmallint smallint,
+    tmediumint mediumint,
+    tinteger integer,
+    tbigint bigint,
+    tfloat float,
+    tdouble double,
+    tdecimal decimal(10,5),
+    tdate date,
+    ttime time,
+    tyear year,
+    tdatetime datetime,
+    ttimestamp timestamp NULL DEFAULT NULL,
+    tvarchar varchar(128),
+    ttinyint1 tinyint(1),
+    ttinyint4 tinyint(4),
+    tblob blob,
+    ttinyblob tinyblob,
+    tmediumblob mediumblob,
+    tlongblob longblob,
+    ttext text,
+    ttinytext tinytext,
+    tmediumtext mediumtext,
+    tlongtext longtext,
+    tjson json,
+    primary key (c01)
+) partition by hash(c01) partitions 10;
+
+set @@ob_query_timeout = 1000000*60*60*10, @@ob_trx_timeout=1000000*60*60*10;
+
+# Start load data
+--disable_query_log
+eval load data /*+ direct(true,0) parallel(1) */ infile "$OBSERVER_DIR/$DATA_FOLDER_NAME/lineitem/lineitem-datatype.tbl" into table lineitem fields terminated by '|' enclosed by '' lines starting by '' terminated by '\n';
+--enable_query_log
+# Query table
+select count(*) from lineitem;
+disconnect conn_query;
+
+# Clean Up
+drop table lineitem;
+drop table bit_table;
+
+--source mysql_test/test_suite/direct_load_data/include/set_direct_load_allow_fallback_true.inc

@@ -656,15 +656,12 @@ int ObDASIvfBaseScanIter::gen_near_cid_heap_from_cache(ObIvfCentCache &cent_cach
   uint64_t capacity = cent_cache.get_count();
   float *cid_vec = nullptr;
   ObString cid_str;
-  ObCenterId center_id;
-  center_id.tablet_id_ = centroid_tablet_id_.id();
   CenterSaveMode center_save_mode = save_center_vec ? CenterSaveMode::DEEP_COPY_CENTER_VEC : CenterSaveMode::NOT_SAVE_CENTER_VEC;
   // NOTE(liyao): valid center id start from 1
   for (uint64_t i = 1; i <= capacity && OB_SUCC(ret); ++i) {
     if (OB_FAIL(cent_cache.read_centroid(i, cid_vec))) {
       LOG_WARN("fail to read centroid", K(ret), K(i));
-    } else if (FALSE_IT(center_id.center_id_ = i)) {
-    } else if (OB_FAIL(nearest_cid_heap.push_center(center_id, cid_vec, dim_, center_save_mode))) {
+    } else if (OB_FAIL(nearest_cid_heap.push_center(cent_cache.get_center_id(i), cid_vec, dim_, center_save_mode))) {
       LOG_WARN("failed to push center.", K(ret));
     }
   }
@@ -717,8 +714,15 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
                           has_lob_header,
                           cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(cent_id, cid, ObVectorClusterHelper::IVF_PARSE_CENTER_ID))) {
+          } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
+          } else if (cent_id.tablet_id_ == 0) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("centroid cache center_prefix is 0", K(ret), K(cent_id));
+          } else if (0 == cent_cache.get_center_prefix() && OB_FALSE_IT(cent_cache.set_center_prefix(cent_id.tablet_id_))) {
+          } else if (cent_cache.get_center_prefix() != cent_id.tablet_id_) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("centroid cache center_prefix mismatch", K(ret), "cache_prefix", cent_cache.get_center_prefix(), "row_prefix", cent_id.tablet_id_);
           } else if (OB_FAIL(cent_cache.write_centroid(cent_id.center_id_, reinterpret_cast<float*>(cid_vec.ptr()), cid_vec.length()))) {
             LOG_WARN("fail to write centroid", K(ret), K(center_idx), KPHEX(cid_vec.ptr(), cid_vec.length()));
           }
@@ -745,9 +749,15 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, ObLongTextType, CS_TYPE_BINARY,
                                                                 has_lob_header, cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(
-                         cent_id, cid, ObVectorClusterHelper::IVF_PARSE_CENTER_ID))) {
+          } else if (OB_FAIL(ObVectorClusterHelper::get_center_id_from_string(cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
+          } else if (cent_id.tablet_id_ == 0) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("centroid cache center_prefix is 0", K(ret), K(cent_id));
+          } else if (0 == cent_cache.get_center_prefix() && OB_FALSE_IT(cent_cache.set_center_prefix(cent_id.tablet_id_))) {
+          } else if (cent_cache.get_center_prefix() != cent_id.tablet_id_) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("centroid cache center_prefix mismatch", K(ret), "cache_prefix", cent_cache.get_center_prefix(), "row_prefix", cent_id.tablet_id_);
           } else if (OB_FAIL(cent_cache.write_centroid(cent_id.center_id_, reinterpret_cast<float *>(cid_vec.ptr()),
                                                        cid_vec.length()))) {
             LOG_WARN("fail to write centroid", K(ret), K(center_idx), KPHEX(cid_vec.ptr(), cid_vec.length()));
@@ -2854,9 +2864,15 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
                           has_lob_header,
                           cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid,
-            ObVectorClusterHelper::IVF_PARSE_M_ID | ObVectorClusterHelper::IVF_PARSE_CENTER_ID))) {
+          } else if (OB_FAIL(ObVectorClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
+          } else if (pq_cent_id.tablet_id_ == 0) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("centroid cache center_prefix is 0", K(ret), K(pq_cent_id));
+          } else if (0 == cent_cache.get_center_prefix() && OB_FALSE_IT(cent_cache.set_center_prefix(pq_cent_id.tablet_id_))) {
+          } else if (cent_cache.get_center_prefix() != pq_cent_id.tablet_id_) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("pq centroid cache center_prefix mismatch", K(ret), "cache_prefix", cent_cache.get_center_prefix(), "row_prefix", pq_cent_id.tablet_id_);
           } else if (OB_FAIL(cent_cache.write_pq_centroid(
                 pq_cent_id.m_id_, pq_cent_id.center_id_, reinterpret_cast<float*>(cid_vec.ptr()), cid_vec.length()))) {
             LOG_WARN("fail to write centroid", K(ret), K(pq_cent_id), KPHEX(cid_vec.ptr(), cid_vec.length()));
@@ -2886,9 +2902,15 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
                           has_lob_header,
                           cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
-          } else if (OB_FAIL(ObVectorClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid,
-            ObVectorClusterHelper::IVF_PARSE_M_ID | ObVectorClusterHelper::IVF_PARSE_CENTER_ID))) {
+          } else if (OB_FAIL(ObVectorClusterHelper::get_pq_center_id_from_string(pq_cent_id, cid))) {
             LOG_WARN("fail to get center idx from string", K(ret), KPHEX(cid.ptr(), cid.length()));
+          } else if (pq_cent_id.tablet_id_ == 0) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("centroid cache center_prefix is 0", K(ret), K(pq_cent_id));
+          } else if (0 == cent_cache.get_center_prefix() && OB_FALSE_IT(cent_cache.set_center_prefix(pq_cent_id.tablet_id_))) {
+          } else if (cent_cache.get_center_prefix() != pq_cent_id.tablet_id_) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("pq centroid cache center_prefix mismatch", K(ret), "cache_prefix", cent_cache.get_center_prefix(), "row_prefix", pq_cent_id.tablet_id_);
           } else if (OB_FAIL(cent_cache.write_pq_centroid(
                 pq_cent_id.m_id_, pq_cent_id.center_id_, reinterpret_cast<float*>(cid_vec.ptr()), cid_vec.length()))) {
             LOG_WARN("fail to write centroid", K(ret), K(pq_cent_id), KPHEX(cid_vec.ptr(), cid_vec.length()));

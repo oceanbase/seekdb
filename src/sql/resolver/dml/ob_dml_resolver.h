@@ -508,6 +508,7 @@ protected:
                          TableItem &table_item);
   int resolve_sample_clause(const ParseNode *part_node,
                             TableItem &table_item);
+  int generate_ddl_sample_info_if_needed(TableItem &table_item);
 
 protected:
   int check_basic_column_generated(const ObColumnRefRawExpr *col_expr,

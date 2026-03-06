@@ -274,6 +274,18 @@ int ObSelectIntoOp::calc_url_and_set_access_info()
     file_location_ = IntoFileLocation::REMOTE_S3;
   } else if (path.prefix_match_ci(OB_AZBLOB_PREFIX)) {
     file_location_ = IntoFileLocation::REMOTE_AZBLOB;
+  } else if (path.prefix_match_ci(OB_OSS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "OSS storage");
+    LOG_WARN("OSS storage is not supported", K(ret));
+  } else if (path.prefix_match_ci(OB_COS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "COS storage");
+    LOG_WARN("COS storage is not supported", K(ret));
+  } else if (path.prefix_match_ci(OB_HDFS_PREFIX)) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "HDFS storage");
+    LOG_WARN("HDFS storage is not supported", K(ret));
   } else {
     file_location_ = IntoFileLocation::SERVER_DISK;
   }

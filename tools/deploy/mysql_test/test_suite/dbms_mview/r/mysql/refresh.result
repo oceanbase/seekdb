@@ -1,0 +1,24 @@
+#
+# Case1 Basic test
+#
+# refresh in default method
+c2	cnt	cnt_c3	sum_c3
+1	1	1	1
+2	1	1	2
+refresh_method
+COMPLETE
+cnt	cnt_c3	sum_c3
+2	2	3
+refresh_method
+FAST
+# refresh in specify method
+c2	cnt	cnt_c3	sum_c3
+1	1	1	1
+2	1	1	2
+refresh_method
+FAST
+cnt	cnt_c3	sum_c3
+4	4	10
+refresh_method
+COMPLETE
+ERROR HY000: Invalid argument

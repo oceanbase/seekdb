@@ -1,0 +1,112 @@
+#owner: xuqijia.xqj
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Base test of rb_and_null2empty_cardinality, rb_or_null2empty_cardinality, rb_andnot_null2empty_cardinality.
+--echo # ----------------------------------------------------------------------
+
+
+--disable_warnings
+drop table if exists t1,t2,t3;
+--enable_warnings
+
+# empty
+SET @p1 = x'0100';
+# single: 1
+SET @p2 = x'010101000000';
+# single: 2
+SET @p3 = x'010102000000';
+# set: 1,2,3
+SET @p4 = x'010303010000000200000003000000';
+# set: 2,3,4
+SET @p5 = x'010303020000000300000004000000';
+# bitmap: 0~32
+SET @p6 = x'01060100000000000000000000003a30000001000000000020001000000000000100020003000400050006000700080009000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f002000';
+# bitmap: 10~42
+SET @p7 = x'01060100000000000000000000003a3000000100000000002000100000000a000b000c000d000e000f0010001100120013001400150016001700180019001a001b001c001d001e001f0020002100220023002400250026002700280029002a00';
+
+select rb_and_null2empty_cardinality(NULL, @p1);
+select rb_and_null2empty_cardinality(@p1, NULL);
+select rb_and_null2empty_cardinality(NULL, @p2);
+select rb_and_null2empty_cardinality(@p2, NULL);
+select rb_and_null2empty_cardinality(NULL, @p4);
+select rb_and_null2empty_cardinality(@p4, NULL);
+select rb_and_null2empty_cardinality(NULL, @p6);
+select rb_and_null2empty_cardinality(@p6, NULL);
+select rb_and_null2empty_cardinality(@p1, @p2);
+select rb_and_null2empty_cardinality(@p2, @p1);
+select rb_and_null2empty_cardinality(@p1, @p4);
+select rb_and_null2empty_cardinality(@p4, @p1);
+select rb_and_null2empty_cardinality(@p1, @p6);
+select rb_and_null2empty_cardinality(@p6, @p1);
+select rb_and_null2empty_cardinality(@p2, @p3);
+select rb_and_null2empty_cardinality(@p3, @p2);
+select rb_and_null2empty_cardinality(@p2, @p4);
+select rb_and_null2empty_cardinality(@p4, @p2);
+select rb_and_null2empty_cardinality(@p2, @p6);
+select rb_and_null2empty_cardinality(@p6, @p2);
+select rb_and_null2empty_cardinality(@p4, @p5);
+select rb_and_null2empty_cardinality(@p5, @p4);
+select rb_and_null2empty_cardinality(@p4, @p6);
+select rb_and_null2empty_cardinality(@p6, @p4);
+select rb_and_null2empty_cardinality(@p4, @p7);
+select rb_and_null2empty_cardinality(@p7, @p4);
+select rb_and_null2empty_cardinality(@p6, @p7);
+select rb_and_null2empty_cardinality(@p7, @p6);
+
+select rb_or_null2empty_cardinality(NULL, @p1);
+select rb_or_null2empty_cardinality(@p1, NULL);
+select rb_or_null2empty_cardinality(NULL, @p2);
+select rb_or_null2empty_cardinality(@p2, NULL);
+select rb_or_null2empty_cardinality(NULL, @p4);
+select rb_or_null2empty_cardinality(@p4, NULL);
+select rb_or_null2empty_cardinality(NULL, @p6);
+select rb_or_null2empty_cardinality(@p6, NULL);
+select rb_or_null2empty_cardinality(@p1, @p2);
+select rb_or_null2empty_cardinality(@p2, @p1);
+select rb_or_null2empty_cardinality(@p1, @p4);
+select rb_or_null2empty_cardinality(@p4, @p1);
+select rb_or_null2empty_cardinality(@p1, @p6);
+select rb_or_null2empty_cardinality(@p6, @p1);
+select rb_or_null2empty_cardinality(@p2, @p3);
+select rb_or_null2empty_cardinality(@p3, @p2);
+select rb_or_null2empty_cardinality(@p2, @p4);
+select rb_or_null2empty_cardinality(@p4, @p2);
+select rb_or_null2empty_cardinality(@p2, @p6);
+select rb_or_null2empty_cardinality(@p6, @p2);
+select rb_or_null2empty_cardinality(@p4, @p5);
+select rb_or_null2empty_cardinality(@p5, @p4);
+select rb_or_null2empty_cardinality(@p4, @p6);
+select rb_or_null2empty_cardinality(@p6, @p4);
+select rb_or_null2empty_cardinality(@p4, @p7);
+select rb_or_null2empty_cardinality(@p7, @p4);
+select rb_or_null2empty_cardinality(@p6, @p7);
+select rb_or_null2empty_cardinality(@p7, @p6);
+
+select rb_andnot_null2empty_cardinality(NULL, @p1);
+select rb_andnot_null2empty_cardinality(@p1, NULL);
+select rb_andnot_null2empty_cardinality(NULL, @p2);
+select rb_andnot_null2empty_cardinality(@p2, NULL);
+select rb_andnot_null2empty_cardinality(NULL, @p4);
+select rb_andnot_null2empty_cardinality(@p4, NULL);
+select rb_andnot_null2empty_cardinality(NULL, @p6);
+select rb_andnot_null2empty_cardinality(@p6, NULL);
+select rb_andnot_null2empty_cardinality(@p1, @p2);
+select rb_andnot_null2empty_cardinality(@p2, @p1);
+select rb_andnot_null2empty_cardinality(@p1, @p4);
+select rb_andnot_null2empty_cardinality(@p4, @p1);
+select rb_andnot_null2empty_cardinality(@p1, @p6);
+select rb_andnot_null2empty_cardinality(@p6, @p1);
+select rb_andnot_null2empty_cardinality(@p2, @p3);
+select rb_andnot_null2empty_cardinality(@p3, @p2);
+select rb_andnot_null2empty_cardinality(@p2, @p4);
+select rb_andnot_null2empty_cardinality(@p4, @p2);
+select rb_andnot_null2empty_cardinality(@p2, @p6);
+select rb_andnot_null2empty_cardinality(@p6, @p2);
+select rb_andnot_null2empty_cardinality(@p4, @p5);
+select rb_andnot_null2empty_cardinality(@p5, @p4);
+select rb_andnot_null2empty_cardinality(@p4, @p6);
+select rb_andnot_null2empty_cardinality(@p6, @p4);
+select rb_andnot_null2empty_cardinality(@p4, @p7);
+select rb_andnot_null2empty_cardinality(@p7, @p4);
+select rb_andnot_null2empty_cardinality(@p6, @p7);
+select rb_andnot_null2empty_cardinality(@p7, @p6);

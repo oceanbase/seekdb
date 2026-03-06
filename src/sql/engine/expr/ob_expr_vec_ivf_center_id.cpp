@@ -104,8 +104,9 @@ int ObExprVecIVFCenterID::calc_center_id(
     bool contain_null = false;
     ObIArrayType *arr = NULL;
     int64_t center_idx = 0; // use 0 as center idx if vector is null
+    uint64_t center_prefix = 0;
     if (OB_FAIL(ObVectorIndexUtil::eval_ivf_centers_common(
-        tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr))) {
+        tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
       LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing
@@ -128,7 +129,7 @@ int ObExprVecIVFCenterID::calc_center_id(
       int64_t buf_len = OB_DOC_ID_COLUMN_BYTE_LENGTH;
       char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
       ObString str(buf_len, 0, buf);
-      ObCenterId center_id(tablet_id.id(), center_idx);
+      ObCenterId center_id(center_prefix, center_idx);
       if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, str))) {
         LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
       } else {

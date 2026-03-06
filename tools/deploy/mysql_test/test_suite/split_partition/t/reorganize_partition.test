@@ -1,0 +1,133 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+
+# owner: wanyue.wy
+# owner group: trans
+# tags: ddl
+
+--disable_warnings
+drop table if exists pt;
+drop table if exists pt2;
+drop table if exists no_pk_pt;
+drop table if exists pt_lob;
+--enable_warnings
+
+CREATE TABLE pt (c1 INT, c2 INT, primary key(c1), index(c2))
+    PARTITION BY RANGE(c1) (
+        PARTITION p0 VALUES LESS THAN (30),
+        PARTITION p1 VALUES LESS THAN (40),
+        PARTITION p2 VALUES LESS THAN (50)
+    );
+ALTER TABLE pt REORGANIZE PARTITION p0 INTO (
+    PARTITION p0 VALUES LESS THAN (5),
+    PARTITION s1 VALUES LESS THAN (10),
+    PARTITION s2 VALUES LESS THAN (15),
+    PARTITION s3 VALUES LESS THAN (20),
+    PARTITION s4 VALUES LESS THAN (25),
+    PARTITION s5 VALUES LESS THAN (30)
+);
+
+let $table_id=query_get_value(select table_id from oceanbase.__all_table where table_name='pt',table_id,1);
+let $local_index_id = query_get_value(select table_id from oceanbase.__all_table where data_table_id=$table_id order by table_id, table_id, 1);
+
+--disable_query_log
+eval select part_name, high_bound_val, part_idx, partition_type from oceanbase.__all_part where table_id = $table_id order by part_name, partition_type;
+--enable_query_log
+drop table pt;
+
+CREATE TABLE pt (c1 INT, c2 INT, primary key(c1))
+    PARTITION BY RANGE(c1) (
+        PARTITION p0 VALUES LESS THAN (30),
+        PARTITION p1 VALUES LESS THAN (40),
+        PARTITION p2 VALUES LESS THAN (MAXVALUE)
+    );
+
+--error 1735
+ALTER TABLE pt REORGANIZE PARTITION p3 INTO (
+    PARTITION s0 VALUES LESS THAN (50),
+    PARTITION s1 VALUES LESS THAN (MAXVALUE)
+);
+--error 1493
+ALTER TABLE pt REORGANIZE PARTITION p0 INTO (
+    PARTITION s1 VALUES LESS THAN (30),
+    PARTITION s0 VALUES LESS THAN (20)
+);
+--error 1493
+ALTER TABLE pt REORGANIZE PARTITION p1 INTO (
+    PARTITION s0 VALUES LESS THAN (20),
+    PARTITION s1 VALUES LESS THAN (40)
+);
+
+--error 1493
+ALTER TABLE pt REORGANIZE PARTITION p1 INTO (
+    PARTITION s0 VALUES LESS THAN (35),
+    PARTITION s1 VALUES LESS THAN (45)
+);
+
+--error 1517
+ALTER TABLE pt REORGANIZE PARTITION p0 INTO (
+    PARTITION s0 VALUES LESS THAN (20),
+    PARTITION p1 VALUES LESS THAN (30)
+);
+
+CREATE TABLE no_pk_pt (c1 int auto_increment, c2 int)
+        PARTITION BY RANGE (c1)
+        (PARTITION p0 VALUES LESS THAN(100),
+         PARTITION p1 VALUES LESS THAN(200),
+         PARTITION p_max VALUES LESS THAN MAXVALUE
+        );
+--error 1235
+ALTER TABLE no_pk_pt REORGANIZE PARTITION p1 INTO (
+    PARTITION s0 VALUES LESS THAN (20),
+    PARTITION s1 VALUES LESS THAN (30)
+);
+
+CREATE TABLE pt2 (c1 INT, c2 INT, c3 INT, primary key(c1,c2))
+    PARTITION BY RANGE(c2) (
+        PARTITION p0 VALUES LESS THAN (30),
+        PARTITION p1 VALUES LESS THAN (40),
+        PARTITION p2 VALUES LESS THAN (50)
+    );
+--error 1235
+ALTER TABLE pt2 REORGANIZE PARTITION p0 INTO (
+    PARTITION s0 VALUES LESS THAN (20),
+    PARTITION s1 VALUES LESS THAN (30)
+);
+
+drop table pt;
+drop table pt2;
+drop table no_pk_pt;
+
+CREATE TABLE pt_lob (c1 INT, c2 INT, c3 BLOB, primary key(c1))
+    PARTITION BY RANGE(c1) (
+        PARTITION p0 VALUES LESS THAN (30),
+        PARTITION p1 VALUES LESS THAN (40),
+        PARTITION p2 VALUES LESS THAN (50)
+    );
+
+insert into pt_lob values(1, 2, repeat('a', 5000));
+insert into pt_lob values(20, 2, repeat('c', 5000));
+
+ALTER TABLE pt_lob REORGANIZE PARTITION p0 INTO (
+    PARTITION p0 VALUES LESS THAN (5),
+    PARTITION s1 VALUES LESS THAN (10),
+    PARTITION s2 VALUES LESS THAN (15),
+    PARTITION s3 VALUES LESS THAN (20),
+    PARTITION s4 VALUES LESS THAN (25),
+    PARTITION s5 VALUES LESS THAN (30)
+);
+
+select substr(c3, 1, 10) from pt_lob;
+
+drop table pt_lob;
+
+
+--echo test split one tablet into multiple tablets such that the memory usage would be greater than tenant mem limit
+
+--disable_warnings
+drop table if exists t88;
+create table t88(a int , b VARCHAR(150), c int, d VARCHAR(4000),primary key(a,b,c))  partition by range(a) (partition p0 values less than (100000000));
+--enable_warnings
+--source mysql_test/include/split_into_1000_partitions.sql
+drop table t88;

@@ -19,6 +19,8 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_vec_index_builder_util.h"
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/vector_type/ob_vector_common_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -1692,11 +1694,14 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
     const uint64_t table_id,
     const ObTabletID tablet_id,
     ObIAllocator &allocator,
-    ObIArray<float*> &aux_info)
+    bool is_pq_type,
+    ObIArray<float*> &aux_info,
+    uint64_t &center_prefix)
 {
   int ret = OB_SUCCESS;
   bool is_hidden_table = false;
   ObSqlString sql_string;
+  center_prefix = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObPluginVectorIndexService is not inited", KR(ret), K_(tenant_id));
@@ -1718,10 +1723,15 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
         LOG_WARN("failed to execute sql", K(ret), K(sql_string));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          const int64_t col_idx = 0;
+          const int64_t cid_col_idx = 0;
+          const int64_t vec_col_idx = 1;
+          ObObj cid_obj;
           ObObj vec_obj;
           ObString blob_data;
-          if (OB_FAIL(result->get_obj(col_idx, vec_obj))) {
+          uint64_t cid_prefix = 0;
+          if (OB_FAIL(result->get_obj(cid_col_idx, cid_obj))) {
+            LOG_WARN("failed to get center id", K(ret));
+          } else if (OB_FAIL(result->get_obj(vec_col_idx, vec_obj))) {
             LOG_WARN("failed to get vid", K(ret));
           } else if (FALSE_IT(blob_data = vec_obj.get_string())) {
           } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator,
@@ -1730,6 +1740,11 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
                                                                         true,
                                                                         blob_data))) {
             LOG_WARN("fail to get real data.", K(ret), K(blob_data));
+          } else if (OB_FALSE_IT(cid_prefix = ObVectorClusterHelper::get_center_prefix(cid_obj.get_string(), is_pq_type))) {
+          } else if (center_prefix == 0 && OB_FALSE_IT(center_prefix = cid_prefix)) {
+          } else if (center_prefix != cid_prefix) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("center prefix mismatch", K(ret), K(center_prefix), K(cid_prefix));
           } else {
             int64_t dim = blob_data.length() / sizeof(float);
             float *data = nullptr;
@@ -1821,28 +1836,44 @@ int ObPluginVectorIndexService::generate_get_aux_info_sql(
       }
     }
     if (OB_SUCC(ret)) {
-      if (0 == strlen(query_col) || 0 == strlen(filter_col)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null col name", K(ret), K(query_col), K(filter_col));
+      // get partition name by tablet_id
+      ObPartitionLevel part_level;
+      ObString partition_name;
+      if (OB_FAIL(ObVectorIndexUtil::get_partition_name_by_tablet(
+              *table_schema, *data_table_schema, tablet_id, part_level, partition_name))) {
+        LOG_WARN("failed to get partition name by tablet", K(ret), K(tablet_id));
       } else {
-        uint64_t min_center_id = 0;
-        uint64_t max_center_id = UINT64_MAX;
-        const ObString &table_name = table_schema->get_table_name_str();
-        if (OB_FAIL(sql_string.assign_fmt("SELECT %.*s FROM `%.*s`.`%.*s` WHERE %.*s >= X'%016lx%016lx' and %.*s <= X'%016lx%016lx'",
-            static_cast<int>(strlen(query_col)), query_col,
-            static_cast<int>(database_name.length()), database_name.ptr(),
-            static_cast<int>(table_name.length()), table_name.ptr(),
-            static_cast<int>(strlen(filter_col)), filter_col,
-            tablet_id.id(), min_center_id,
-            static_cast<int>(strlen(filter_col)), filter_col,
-            tablet_id.id(), max_center_id))) {
-          LOG_WARN("failed to assign sql string", K(ret));
+        if (0 == strlen(query_col) || 0 == strlen(filter_col)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null col name", K(ret), K(query_col), K(filter_col));
         } else {
-          LOG_DEBUG("success to generate sql string", K(ret), K(sql_string), K(table_id), K(tablet_id));
+          const ObString &table_name = table_schema->get_table_name_str();
+          if (PARTITION_LEVEL_ZERO == part_level) {
+            // non-partitioned table, no PARTITION clause
+            if (OB_FAIL(sql_string.assign_fmt("SELECT %.*s, %.*s FROM `%.*s`.`%.*s`",
+                static_cast<int>(strlen(filter_col)), filter_col,
+                static_cast<int>(strlen(query_col)), query_col,
+                static_cast<int>(database_name.length()), database_name.ptr(),
+                static_cast<int>(table_name.length()), table_name.ptr()))) {
+              LOG_WARN("failed to assign sql string", K(ret));
+            }
+          } else {
+            // partitioned table, use PARTITION clause
+            if (OB_FAIL(sql_string.assign_fmt("SELECT %.*s, %.*s FROM `%.*s`.`%.*s` PARTITION (`%.*s`)",
+                static_cast<int>(strlen(filter_col)), filter_col,
+                static_cast<int>(strlen(query_col)), query_col,
+                static_cast<int>(database_name.length()), database_name.ptr(),
+                static_cast<int>(table_name.length()), table_name.ptr(),
+                static_cast<int>(partition_name.length()), partition_name.ptr()))) {
+              LOG_WARN("failed to assign sql string", K(ret));
+            }
+          }
+          if (OB_SUCC(ret)) {
+            LOG_INFO("success to generate sql string", K(ret), K(sql_string), K(table_id), K(tablet_id));
+          }
         }
       }
     }
-    
   }
   return ret;
 }

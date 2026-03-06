@@ -274,6 +274,7 @@ public:
             || stmt_type == stmt::T_CREATE_DATABASE
             || stmt_type == stmt::T_ALTER_DATABASE
             || stmt_type == stmt::T_DROP_DATABASE
+            || stmt_type == stmt::T_FORK_DATABASE
             // tablegroup
             || stmt_type == stmt::T_CREATE_TABLEGROUP
             || stmt_type == stmt::T_ALTER_TABLEGROUP

@@ -1,0 +1,301 @@
+#owner: lana.lgx
+#owner group: data
+
+#1: create mlog on empty table
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t1;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on t2;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on tjson1;
+--source mysql_test/include/ignore_drop_mlog_err_mysql.inc
+drop materialized view log on tgis1;
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+DROP TABLE IF EXISTS t2;
+DROP TABLE IF EXISTS tjson1;
+DROP TABLE IF EXISTS tgis1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int primary key,
+  name varchar(10),
+  age int
+);
+#excluding new values is not supported
+--error 1235
+create materialized view log on t1 with primary key (age) excluding new values;
+
+#only support including new values
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+select count(*) from t1;
+select count(*) from mlog$_t1;
+select count(*) from oceanbase.__all_mlog where mlog_id in (select table_id from oceanbase.__all_table where table_name='mlog$_t1');
+
+#drop base table with mlog
+--error 1235
+drop table t1;
+
+#drop mlog first
+drop materialized view log on t1;
+drop table t1;
+
+#2: create mlog on non-empty table
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int primary key,
+  name varchar(10),
+  age int
+);
+insert into t1 values (1, 'Andy', 20), (2, 'Lucy', 18), (3, 'Mary', 24), (4, 'Jack', 30), (5, 'Rose', 26), (6, 'Tom', 19), (7, 'Lily', 28), (8, 'Abel', 35), (9, 'Hanna', 29), (10, 'Linda', 24);
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+select count(*) from t1;
+select count(*) from mlog$_t1;
+select count(*) from oceanbase.__all_mlog where mlog_id in (select table_id from oceanbase.__all_table where table_name='mlog$_t1');
+
+#drop base table with mlog
+--error 1235
+drop table t1;
+
+#drop mlog first
+drop materialized view log on t1;
+drop table t1;
+
+#3 create mlog on heap table
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int,
+  name varchar(10),
+  age int
+);
+
+#with/without parameters
+create materialized view log on t1 with (id, age);
+desc mlog$_t1;
+drop materialized view log on t1;
+
+#with/without including new values has no effect
+create materialized view log on t1 with (id, age) including new values;
+desc mlog$_t1;
+drop materialized view log on t1;
+
+# with/without primary key has no effect
+create materialized view log on t1 with primary key (id, age) including new values;
+desc mlog$_t1;
+drop materialized view log on t1;
+
+# with/without rowid has no effect
+create materialized view log on t1 with rowid (id, age) including new values;
+desc mlog$_t1;
+drop materialized view log on t1;
+
+# with/without sequence has no effect
+create materialized view log on t1 with sequence (id, age) including new values;
+desc mlog$_t1;
+drop materialized view log on t1;
+
+# create mlog with parallel options
+create materialized view log on t1 parallel 4 with (id, age) including new values;
+desc mlog$_t1;
+
+#drop base table with mlog
+--error 1235
+drop table t1;
+
+#drop mlog first
+drop materialized view log on t1;
+drop table t1;
+
+#4 create mlog on non-empty heap table
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int,
+  name varchar(10),
+  age int
+);
+insert into t1 values (1, 'Andy', 20), (2, 'Lucy', 18), (3, 'Mary', 24), (4, 'Jack', 30), (5, 'Rose', 26), (6, 'Tom', 19), (7, 'Lily', 28), (8, 'Abel', 35), (9, 'Hanna', 29), (10, 'Linda', 24);
+create materialized view log on t1 with sequence, rowid (id, age) including new values;
+desc mlog$_t1;
+select count(*) from t1;
+select count(*) from mlog$_t1;
+select count(*) from oceanbase.__all_mlog where mlog_id in (select table_id from oceanbase.__all_table where table_name='mlog$_t1');
+
+#drop base table with mlog
+--error 1235
+drop table t1;
+
+#drop mlog first
+drop materialized view log on t1;
+drop table t1;
+
+#5: create mlog on table with composite PK
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id1 int,
+  age int,
+  id2 int,
+  name varchar(10),
+  primary key (id1, id2)
+);
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+select count(*) from t1;
+select count(*) from mlog$_t1;
+select count(*) from oceanbase.__all_mlog where mlog_id in (select table_id from oceanbase.__all_table where table_name='mlog$_t1');
+
+#drop base table with mlog
+--error 1235
+drop table t1;
+
+#drop mlog first
+drop materialized view log on t1;
+drop table t1;
+
+#6: create mlog on partition table
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int,
+  name varchar(10),
+  age int
+)
+partition by range(age)
+(
+partition p1 values less than(10),
+partition p2 values less than(20),
+partition p3 values less than(30),
+partition p4 values less than(40),
+partition p5 values less than(50)
+);
+create materialized view log on t1 with primary key (id, age) including new values;
+desc mlog$_t1;
+select count(*) from oceanbase.__all_mlog where mlog_id in (select table_id from oceanbase.__all_table where table_name='mlog$_t1');
+insert into t1 values (1, 'Andy', 5), (2, 'Lucy', 10), (3, 'Mary', 24), (4, 'Jack', 30), (5, 'Rose', 26), (6, 'Tom', 19), (7, 'Lily', 38), (8, 'Abel', 45), (9, 'Hanna', 29), (10, 'Linda', 40);
+select count(*) from t1;
+select count(*) from mlog$_t1;
+select id, age from t1 partition(p1);
+select id, age from mlog$_t1 partition(p1);
+select id, age from t1 partition(p2);
+select id, age from mlog$_t1 partition(p2);
+select id, age from t1 partition(p3);
+select id, age from mlog$_t1 partition(p3);
+select id, age from t1 partition(p4);
+select id, age from mlog$_t1 partition(p4);
+select id, age from t1 partition(p5);
+select id, age from mlog$_t1 partition(p5);
+
+drop materialized view log on t1;
+drop table t1;
+
+#7: create mlog on non-user tables
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+--enable_warnings
+CREATE TABLE t1 (
+  id int primary key,
+  name varchar(10),
+  age int
+);
+#create mlog on a view is not supported
+create view v1 as select id, age from t1;
+--error 1235
+create materialized view log on v1 with primary key (age) including new values;
+drop view v1;
+
+# create mlog on a hidden table (e.g. index table) is not supported
+create index idx1 on t1(id, age) local;
+--error 1146
+create materialized view log on idx1 with primary key (age) including new values;
+drop index idx1 on t1;
+
+# create mlog on another mlog is not supported
+create materialized view log on t1 with primary key (age) including new values;
+--error 1235
+create materialized view log on mlog$_t1 with primary key (age) including new values;
+drop materialized view log on t1;
+
+# #8: create mlog on lob columns
+# --disable_warnings
+# DROP TABLE IF EXISTS t1;
+# --enable_warnings
+# CREATE TABLE t1 (
+#   id int primary key,
+#   name varchar(10),
+#   age int,
+#   tblob blob
+# );
+# # create mlog on log columns is not supported
+# --error 1235
+# create materialized view log on t1 with primary key (tblob) including new values;
+
+#9: create mlog on generated columns
+# create mlog on virtual generated columns is not supported
+CREATE TABLE t2 (
+  id int primary key,
+  gen_col int generated always as (id * 10) virtual
+);
+--error 1235
+create materialized view log on t2 with (gen_col) including new values;
+
+# create mlog on stored generated columns is not supported
+DROP TABLE t2;
+CREATE TABLE t2 (
+  id int primary key,
+  gen_col int generated always as (id * 10) stored
+);
+--error 1235
+create materialized view log on t2 with (gen_col) including new values;
+
+create materialized view log on t2 including new values;
+drop materialized view log on t2;
+DROP TABLE t2;
+
+#10: create mlog with long name
+# base table name length = 58
+create table t1234567890123456789012345678901234567890123456789012len58 (
+  id int primary key,
+  name varchar(10),
+  age int
+);
+# mlog table name length = 64
+create materialized view log on t1234567890123456789012345678901234567890123456789012len58;
+desc mlog$_t1234567890123456789012345678901234567890123456789012len58;
+drop materialized view log on t1234567890123456789012345678901234567890123456789012len58;
+drop table t1234567890123456789012345678901234567890123456789012len58;
+
+# base table name length = 59
+create table t12345678901234567890123456789012345678901234567890123len59 (
+  id int primary key,
+  name varchar(10),
+  age int
+);
+# mlog table name length = 65
+--error 1059
+create materialized view log on t12345678901234567890123456789012345678901234567890123len59;
+drop table t12345678901234567890123456789012345678901234567890123len59;
+
+#11: create mlog on udt related columns
+# create table tjson1(c1 int, c2 json);
+# # create mlog on json columns is not supported
+# --error 1235
+# create materialized view log on tjson1 with primary key (c2) including new values;
+# drop table tjson1;
+
+# create table tgis1(c1 int, c2 geometry);
+# # create mlog on geometry columns is not supported
+# --error 1235
+# create materialized view log on tgis1 with primary key (c2) including new values;
+# drop table tgis1;
+
+#clean up
+DROP TABLE t1;

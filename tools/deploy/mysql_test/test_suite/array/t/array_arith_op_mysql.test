@@ -1,0 +1,580 @@
+#owner: ht353245
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of array ddl/dml.
+--echo # ----------------------------------------------------------------------
+
+--disable_warnings
+drop table if exists t,test,tt0,t2, t1;
+--enable_warnings
+
+--error 1235
+set @a = [1,2,3,4];
+--error 1235
+set @a=(select [1,2,3] from dual);
+--error 1235
+set @a = array(1,2,3,4);
+--error 1235
+set @a=(select array(1,2,3,4) from dual);
+
+--disable_warnings
+drop table if exists arr_t1, arr_t2;
+--enable_warnings
+
+--error 1690
+select [9223372036854775807] + [1];
+--error 1690
+select [-9223372036854775808] + [-1];
+--error 1690
+select [-9223372036854775808] - [1];
+--error 1690
+select [1.7976931348623157E+308] - [-1.1E+300];
+--error 1690
+select [1.7976931348623157E+308] + [1.0E+308];
+
+CREATE TABLE arr_t1(c1 int, c2 ARRAY(ARRAY(FLOAT)), c3 ARRAY(ARRAY(FLOAT)), c4 array(int), c5 array(double));
+insert into arr_t1 values(1, [[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]],[[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]], [1, 2, 3, 4], [1.33, 2.44, 3.55, 4.66]);
+insert into arr_t1 values(2, [[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]],[[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]], [1, 2, 3, 4], [1.33, 2.44, 3.55, 4.66]);
+insert into arr_t1 values(3, [[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]],[[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]], [1, 2, 3, 4], [1.33, 2.44, 3.55, 4.66]);
+insert into arr_t1 values(4, [[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]],[[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]], [1, 2, 3, 4], [1.33, 2.44, 3.55, 4.66]);
+--let $loop=30
+while($loop > 0)
+{
+  insert into arr_t1 values(5, [[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]],[[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]], [1, 2, 3, 4], [1.33, 2.44, 3.55, 4.66]);
+  dec $loop;
+}
+
+select c2+c3 from arr_t1;
+select c4+c5 from arr_t1;
+select c3-c2 from arr_t1;
+select c2-c3 from arr_t1;
+select c5-c4 from arr_t1;
+select c4-c5 from arr_t1;
+select c2+[[5.55,7.87,44],[66,123.67,95.27],[1.28,3.1415,289.33]] from arr_t1;
+select c2-[[1.55,1.87,1.44],[1.66,123.67,1.9527],[1.28,3.1415,2.8933]] from arr_t1;
+select c4+[4,3,2,1] from arr_t1;
+select c4-[4,3,2,1] from arr_t1;
+select [4,3,2,1]+c4 from arr_t1;
+select [4,3,2,1]-c4 from arr_t1;
+
+create table arr_t2 select * from arr_t1;
+select t1.c2 + t2.c2 from arr_t1 t1, arr_t2 t2;
+--error 1235
+select @var1 := c2 from arr_t1;
+
+drop table arr_t1;
+drop table arr_t2;
+
+#########################################################################
+# test cmp (= != > < ), only = != supported
+#########################################################################
+--error 5083
+select [1,2] > [1,null];
+--error 5083
+select [1,2] < [1,null];
+select [1,2] = [1,null];
+select [1,2] != [1,null];
+select [1,2] = "[1,2]";
+select [1,2,3,4,5] = [1,2,3,4,5];
+select [1,2] = [1.0, 2.0];
+select [1,2] = [1.0000000000001, 2.0];
+--error 5083
+select [1,2] < [1,null,3];
+--error 5083
+select [1,2] < [[1,null,3]];
+--error 5083
+select [1,2] < [[1,3.2,3]];
+select [[1,2], [3,4]] = [[1,2], [3,4]];
+--error 5083
+select [[1,2], [3,4]] < [[1,2,3],[4]];
+select [1,2] = ["1", "2"];
+select [["hello", "hi"], ["what", "is", "your", "name"]] = [["hello", "hi"], ["what", "is", "your", "name"]];
+select [["hello", "hi"], ["what", "is", "your", "name"]] = [["hello", "hi", "what"], ["is", "your", "name"]];
+select [["hello", "hi"], [null, "is", "your", "name"]] = [["hello", "hi"], [null, "is", "your", "name"]];
+select [null, ["what", "is", "your", "name"]] = [null, ["what", "is", "your", "name"]];
+select [["hello", "hi"], null] = [["hello", "hi"], null];
+select [["hello", "hi"], ["what", "is"], ["your", "name"]] = [["hello", "hi"], ["what", "is"], ["your", "name"]];
+select [["hello", "hi"], null, ["your", "name"]] = [["hello", "hi"], ["what", "is"], ["your", "name"]];
+select [["hello", "hi"], null, ["your", "name"]] = [["hello", "hi"], null, ["your", "name"]];
+
+create table arr_t1(c1 int, c2 ARRAY(ARRAY(double)), c3 ARRAY(ARRAY(double)), c4 array(array(varchar(16))), c5 array(array(varchar(16))));
+insert into arr_t1 values(1, [[1,2], [3,4]], [[1,2], [3,4]], [["hello", "hi"], ["what", "is", "your", "name"]], [["hello", "hi"], ["what", "is", "your", "name"]]),
+                         (2, [[1,2,3], [4]], [[1,2.333333333], [3,4]], [["hello", "hi"], ["xhat", "is", "your", "name"]], [["hello", "hi"], ["hat", "is", "your", "name"]]),
+                         (3, [[1,2,3,4], [5,6]], [[1,2,3], [4]], [["hello", "hi"], null], [null, ["hello", "hi"]]),
+                         (4, [[1,2], [3,4], [5,6]], [[1,2], [3.0,4], [5,6]], [["hello", "hi"], null, ["your", "name"]], [["hello", "hi"], [null, "is", "your", "name"]]);
+
+--error 5083
+select c2 > c3 from arr_t1;
+select c2 != c3 from arr_t1;
+select c2 = c3 from arr_t1;
+--error 5083
+select c2 < c3 from arr_t1;
+--error 5083
+select c4>c5 from arr_t1;
+select c4=c5 from arr_t1;
+--error 5083
+select c4<c5 from arr_t1;
+--error 5083
+select c3>c4 from arr_t1;
+drop table arr_t1;
+
+CREATE TABLE `arr_t1` (
+  `c1` int(11) DEFAULT NULL,
+  `c2` ARRAY(TINYINT) DEFAULT NULL,
+  `c3` ARRAY(SMALLINT) DEFAULT NULL,
+  `c4` ARRAY(INT) DEFAULT NULL,
+  `c5` ARRAY(BIGINT) DEFAULT NULL,
+  `c6` ARRAY(TINYINT UNSIGNED) DEFAULT NULL,
+  `c7` ARRAY(SMALLINT UNSIGNED) DEFAULT NULL,
+  `c8` ARRAY(INT UNSIGNED) DEFAULT NULL,
+  `c9` ARRAY(BIGINT UNSIGNED) DEFAULT NULL,
+  `c10` ARRAY(float) DEFAULT NULL
+);
+
+# Functional index is not supported
+--error 3762
+CREATE INDEX idx_func ON arr_t1((c2+c3));
+
+--error 1264
+insert into arr_t1 values(1, [255, 256, 257, 258],
+  [65535, 65536, 65537, 65538],
+  [4294967295, 4294967296, 4294967297, 4294967298],
+  [18446744073709551615, 18446744073709551616, 18446744073709551617, 18446744073709551618],
+  [255, 256, 257, 258], [65535, 65536, 65537, 65538],
+  [4294967295, 4294967296, 4294967297, 4294967298],
+  [18446744073709551615, 18446744073709551616, 18446744073709551617, 18446744073709551618],
+  [5.37, 6.78, 7.89, 8.90]);
+
+--error 1264
+insert into arr_t1(c2) values([128, -128, 2]);
+--error 1264
+insert into arr_t1(c2) values([18446744073709551615]);
+--error 1264
+insert into arr_t1(c2) values([127, -129, 2]);
+--error 1264
+insert into arr_t1(c3) values([32768, -32768, 3]);
+--error 1264
+insert into arr_t1(c3) values([32767, -32769, 3]);
+--error 1264
+insert into arr_t1(c4) values([2147483648, -2147483648, 4]);
+--error 1264
+insert into arr_t1(c4) values([2147483647, -2147483649, 4]);
+--error 1264
+insert into arr_t1(c5) values([9223372036854775808, -9223372036854775808, 5]);
+#insert into arr_t1(c5) values([9223372036854775807, -9223372036854775809, 5]);
+--error 1264
+insert into arr_t1(c6) values([-1, 255, 6]);
+--error 1264
+insert into arr_t1(c6) values([0, 256, 6]);
+--error 1264
+insert into arr_t1(c7) values([-1, 65535, 7]);
+--error 1264
+insert into arr_t1(c7) values([0, 65536, 7]);
+--error 1264
+insert into arr_t1(c8) values([-1, 4294967295, 8]);
+--error 1264
+insert into arr_t1(c8) values([0, 4294967296, 8]);
+--error 1264
+insert into arr_t1(c9) values([-1, 9223372036854775807, 9]);
+--error 1264
+insert into arr_t1(c9) values([0, 9223372036854775808, 9]);
+
+--error 1264
+insert into arr_t1(c2) values('[128, -128, 2]');
+--error 1264
+insert into arr_t1(c2) values('[127, -129, 2]');
+--error 1264
+insert into arr_t1(c3) values('[32768, -32768, 3]');
+--error 1264
+insert into arr_t1(c3) values('[32767, -32769, 3]');
+--error 1264
+insert into arr_t1(c4) values('[2147483648, -2147483648, 4]');
+--error 1264
+insert into arr_t1(c4) values('[2147483647, -2147483649, 4]');
+--error 1264
+insert into arr_t1(c6) values('[-1, 255, 6]');
+--error 1264
+insert into arr_t1(c6) values('[0, 256, 6]');
+--error 1264
+insert into arr_t1(c7) values('[-1, 65535, 7]');
+--error 1264
+insert into arr_t1(c7) values('[0, 65536, 7]');
+--error 1264
+insert into arr_t1(c8) values('[-1, 4294967295, 8]');
+--error 1264
+insert into arr_t1(c8) values('[0, 4294967296, 8]');
+insert into arr_t1(c9) values('[-1, 9223372036854775807, 9]');
+insert into arr_t1(c9) values('[0, 9223372036854775808, 9]');
+select * from arr_t1;
+truncate table arr_t1;
+
+# array max size test: max_cnt : 2000000, max_size: 16M
+--error 4019
+insert into arr_t1(c2) values(CONCAT('[1', repeat(',1', 2000000) ,']'));
+--error 4019
+insert into arr_t1(c3) values(CONCAT('[1', repeat(',1', 2000000) ,']'));
+--error 4019
+insert into arr_t1(c5) values(CONCAT('[1', repeat(',1', 2000000) ,']'));
+# ARRAY(BIGINT), array size exceed max
+--error 4019
+insert into arr_t1(c5) values(CONCAT('[1', repeat(',1', 1900000) ,']'));
+
+insert into arr_t1 values(1, [127, -128, 2],
+  [32767, -32768, 3],
+  [2147483647, -2147483648, 4],
+  [9223372036854775807, -9223372036854775808, 5],
+  [0, 255, 6],
+  [0, 65535, 7],
+  [0, 4294967295, 8],
+  [0, 9223372036854775807, 9],
+  [5.37, 6.78, 7.89]);
+
+select c2+c2 from arr_t1;
+select c2+c3 from arr_t1;
+select c2+c4 from arr_t1;
+--error 1690
+select c2+c5 from arr_t1;
+select c2+c6 from arr_t1;
+select c2+c7 from arr_t1;
+select c2+c8 from arr_t1;
+select c2+c9 from arr_t1;
+
+select c10+c2 from arr_t1;
+select c10+c3 from arr_t1;
+select c10+c4 from arr_t1;
+select c10+c5 from arr_t1;
+select c10+c6 from arr_t1;
+select c10+c7 from arr_t1;
+select c10+c8 from arr_t1;
+select c10+c9 from arr_t1;
+
+drop table arr_t1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1(id int primary key,c1 bigint[],c2 bigint[]);
+insert into t1 values(4,[9223372036854775807],[9223372036854775807, 9223372036854775807, 9223372036854775807, 9223372036854775807, 9223372036854775807]);
+--error 1264
+insert into t1 values(5,[9223372036854775808],[9223372036854775808, 9223372036854775808,9223372036854775808, 9223372036854775808, 9223372036854775808]);
+insert into t1 values(6,[-9223372036854775808],[-9223372036854775808,-9223372036854775808, -9223372036854775808, -9223372036854775808, -9223372036854775808]);
+--error 1264
+insert into t1 values(7,[-9223372036854775809],[-9223372036854775809,-9223372036854775809, -9223372036854775809, -9223372036854775809, -9223372036854775809]);
+--error 1264
+insert into t1 values(8,[-9223372036854775909],[-9223372036854775909,-9223372036854775909, -9223372036854775909, -9223372036854775909, -9223372036854775909]);
+--error 1264
+insert into t1 values(9,[-9223372036854776909],[-9223372036854775909,-9223372036854775909, -9223372036854775909, -9223372036854775909, -9223372036854775909]);
+select * from t1;
+drop table t1;
+
+create table t1(c1 int, c2 vector(3)) partition by hash(c1);
+insert into t1 values(1,'[1,1,3]');
+insert into t1 values(2,'[1,2,4]');
+insert into t1 values(3,'[2,4,1]');
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ into t1(c2) select sum(c2)+avg(c2) from t1;
+insert /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ into t1(c2) select sum(c2)+avg(c2) from t1;
+select * from t1 order by c1;
+drop table t1;
+
+CREATE TABLE `arr_t1` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` ARRAY(INT) DEFAULT NULL,
+  `c3` int(11) DEFAULT NULL,
+  `c4` varchar(64) DEFAULT NULL
+);
+
+insert into arr_t1(c1,c2) values([1,2,3],[1,3,5] );
+select   if( EXISTS ( select   ref_1.c2 as c0,  36 as c1,  35 as c2,  22 as c3,  21 as c4 from  (arr_t1 as ref_1 inner join arr_t1 as ref_2 on (EXISTS ( select   91 as c0 from  arr_t1 as ref_3 where EXISTS ( select   79 as c0,  59 as c1 from  arr_t1 as ref_4 where EXISTS ( select   51 as c0,  67 as c1 from  arr_t1 as ref_5 where 61 in ( 89,  100,  59)) limit 34)))) where ref_0.c3 in ( 40,  50)) , ref_0.c4 , cast(null as CHAR) )  as c0,  case when EXISTS ( select   96 as c0,  2 as c1,  97 as c2,  ref_0.c1 as c3,  53 as c4,  94 as c5 from  arr_t1 as ref_6 where EXISTS ( select   13 as c0,  52 as c1,  92 as c2 from  arr_t1 as ref_7 where (EXISTS ( select   19 as c0,  58 as c1,  58 as c2,  77 as c3,  51 as c4 from  arr_t1 as ref_8 where 39 != 55 limit 76))  and (EXISTS ( select   2 as c0,  45 as c1 from  arr_t1 as ref_9 where 0))) limit 165) then ref_0.c1 else ref_0.c1 end  as c1 from  arr_t1 as ref_0 where EXISTS ( select   ref_10.c2 as c0 from  arr_t1 as ref_10 where EXISTS ( select   20 as c0,  19 as c1 from  arr_t1 as ref_11 where 76 OR 58)) limit 116  for update;
+drop table arr_t1;
+
+--disable_warnings
+drop table if exists t1,t2;
+--enable_warnings
+CREATE TABLE t1 (c1 int primary key, c2 vector(3), c3 array(int), c4 array(varchar(24)), c5 varchar(24)[][]);
+insert into t1 values(1, '[1,1,2]', '[2,2,3]' , ["中文ing123","1","1"], [["中文ing123","1","1"]]);
+insert into t1 values(2, '[1,0,3]', '[1,3,2]' , ["中文ing456","2","2"], [["中文ing456","2","2"]]);
+insert into t1 values(3, NULL, NULL, NULL, NULL);
+insert into t1 values(4, '[1,0,3]', '[1,3,2]' , [NULL], [[NULL]]);
+
+CREATE TABLE t2 (a1 int primary key, a2 vector(3), a3 array(int), a4 array(varchar(24)), a5 varchar(24)[][]);
+insert into t2 select * from t1;
+select count(c1), c4, a2,a3,a4,a5 from t1,t2;
+select * from t1 a,t1 b,t1 c;
+drop table if exists t1,t2;
+
+CREATE TABLE t1 (c1 int primary key auto_increment, c2 int[],c3 float[],c4 varchar(256)[]);
+--let $loop=1
+--let $val = 0
+while($loop < 10)
+{
+  if ($val == 0) {
+    insert into t1(c2,c3,c4) values([1,2,3,4],[1.2,2.3,6.9,-1.02],['中文ing123',1,'1']);
+    inc $val;
+  }
+  if ($val != 0) {
+    insert into t1(c2,c3,c4) values([1,2,3,4],[5.2,6.3,7.9,-10.02],['中文ing123',1,'1']);
+    dec $val;
+  }
+  inc $loop;
+}
+insert into t1(c2,c3,c4) values(null,null,null);
+create table t2 like t1;
+replace into t2 select * from t1;
+explain select * from t1,t2 where t1.c3<>t2.c3 order by t1.c1,t2.c1;
+select /*+ query_timeout(100000000) */ * from t1,t2 where t1.c3<>t2.c3 order by t1.c1,t2.c1;
+drop table if exists t1,t2;
+
+--disable_warnings
+drop table if exists tbl_42;
+--enable_warnings
+CREATE TABLE `tbl_42` (
+  `col_524` timestamp NOT NULL,
+  `col_525` varchar(74) DEFAULT NULL,
+  `col_526` tinyint(4) DEFAULT '36',
+  `col_527` text NOT NULL,
+  `col_528` smallint(6) DEFAULT '-31371',
+  `col_529` ARRAY(ARRAY(ARRAY(ARRAY(ARRAY(DOUBLE))))) DEFAULT NULL,
+  `col_530` date DEFAULT NULL,
+  `col_531` mediumint(9) NOT NULL,
+  `col_532` mediumint(9) NOT NULL,
+  `col_533` tinyint(3) unsigned DEFAULT NULL,
+  `col_534` year(4) NOT NULL,
+  `col_535` timestamp NULL DEFAULT NULL,
+  `col_536` text NOT NULL,
+  `col_537` enum('Alice','Bob','Charlie','David') DEFAULT NULL,
+  PRIMARY KEY (`col_531`, `col_534`, `col_524`),
+  UNIQUE KEY `idx_585` (`col_535`, `col_528`, `col_530`) BLOCK_SIZE 16384 GLOBAL,
+  KEY `idx_92` (`col_532`) BLOCK_SIZE 16384 GLOBAL
+) DEFAULT CHARSET = gbk ROW_FORMAT = CONDENSED COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(all columns, each column);
+
+--disable_result_log
+--disable_query_log
+INSERT /*+ query_timeout(1000000000)*/ INTO `tbl_42` (`col_524`,`col_525`,`col_526`,`col_527`,`col_528`,`col_529`,`col_530`,`col_531`,`col_532`,`col_533`,`col_534`,`col_535`,`col_536`,`col_537`) VALUES ('1977-11-23 00:00:00','g(WPYlf',96,'wB',-4180,
+  concat('[[[[[', repeat('3,',1000000), '3]]]]]'),
+  '1974-12-24',-4919697,-6663717,138,'2029',null,'$Z-bcOuW!5LS+x)#','Charlie');
+
+SELECT
+	/*+  NO_USE_HASH_AGGREGATION ,  PARALLEL( 7 ) */
+	tbl_42.col_529 AS r0 ,
+	RANK() OVER w AS r1 ,
+	sum(tbl_42.col_527) AS r2 ,
+	group_concat( tbl_42.col_532
+ORDER BY
+	tbl_42.col_532 ) AS r3 ,
+	stddev_pop(tbl_42.col_537) AS r4
+FROM
+	tbl_42
+WHERE
+	NOT( IsNull(tbl_42.col_531) )
+	OR IsNull(tbl_42.col_525) WINDOW w AS ( PARTITION BY col_529,
+	col_534,
+	col_527,
+	col_526,
+	col_532,
+	col_533,
+	col_537,
+	col_530,
+	col_528,
+	col_536,
+	col_524,
+	col_525,
+	col_535,
+	col_531
+ORDER BY
+	col_526,
+	col_529,
+	col_536,
+	col_535,
+	col_531,
+	col_527,
+	col_537,
+	col_532,
+	col_528,
+	col_524,
+	col_534,
+	col_525,
+	col_533,
+	col_530 ROWS BETWEEN 0 PRECEDING AND CURRENT ROW )
+ORDER BY
+	r0,
+	r1,
+	r2,
+	r3,
+	r4
+LIMIT 79 for update ;
+--enable_result_log
+--enable_query_log
+drop table tbl_42;
+
+--disable_warnings
+drop table if exists t,test,tt0,t2;
+--enable_warnings
+create table test (id int, c1 VECTOR(3), c2 VECTOR(3), c3 vector(3)) partition by hash(id);
+insert into test values(1,'[1,1,2]','[2,2,3]',[2,3,4]);
+insert into test values(2,'[1,0,3]','[1,0,3]',[5,3,4]);
+insert into test values(3,'[-1,2,2]','[-3,2,3]',[6,3,4]);
+insert into test values(4,'[-1,-2,-2]','[-4,2,3]',[1,2,4]);
+insert into test values(5, null, null, null);
+insert into test values(6, null, null, null);
+insert into test values(7,null,'[-1,-2,-2]',[5,3,4]);
+create table tt0 like test;
+insert into tt0 select * from test;
+create table t like test;
+insert into t select * from test;
+create table t2 like test;
+insert into t2 select * from test;
+
+select   ref_0.id as c0,  ref_0.c2 as c1 from  test as ref_0 where EXISTS ( select   24 as c0,  ref_1.c1 as c1,  86 as c2,  cast(nullif(68, ref_0.id) as DECIMAL) as c3,  ref_0.c3 as c4,  51 as c5,  46 as c6,  if( EXISTS ( select   41 as c0,  3 as c1,  20 as c2,  86 as c3,  57 as c4,  70 as c5,  95 as c6,  41 as c7,  99 as c8,  48 as c9 from  test as ref_2 where EXISTS ( select   58 as c0,  97 as c1,  53 as c2,  73 as c3,  41 as c4,  8 as c5,  60 as c6,  90 as c7,  25 as c8,  81 as c9,  16 as c10,  95 as c11,  59 as c12,  28 as c13,  38 as c14,  16 as c15,  16 as c16,  97 as c17,  21 as c18,  93 as c19 from  tt0 as ref_3 where EXISTS ( select   27 as c0,  46 as c1,  43 as c2,  81 as c3,  61 as c4,  67 as c5,  59 as c6,  21 as c7,  55 as c8,  75 as c9,  28 as c10,  25 as c11 from  test as ref_4 where EXISTS ( select   46 as c0,  32 as c1,  44 as c2,  53 as c3,  7 as c4,  5 as c5,  34 as c6,  8 as c7 from  t as ref_5 where 58 != 44)))) , 79 , ref_1.id )  as c7,  58 as c8,  98 as c9,  28 as c10,  cast(nullif(69, 58) as DECIMAL) as c11 from  t as ref_1 where EXISTS ( select   54 as c0,  ref_1.id as c1,  88 as c2,  43 as c3,  18 as c4,  74 as c5,  ref_6.c1 as c6,  92 as c7,  99 as c8,  20 as c9 from  t2 as ref_6 where ref_0.id % 3 limit 25) limit 170)  for update;
+--disable_warnings
+drop table if exists t,test,tt0,t2, t1, t1_vector, t2_vector;
+--enable_warnings
+
+CREATE TABLE `test` (
+  `id` int(11) DEFAULT NULL,
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` VECTOR(4) DEFAULT NULL,
+  `c4` ARRAY(INT) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column);
+
+insert into test values ( 1,[1,-1,1],[1,2,-3],[1,2,3,4],[1,2,3]),
+( 2,[2.2,2.3,2.4],[-1.5,2.566,3.44],[1,2,3,4],[1,2,3,4]),
+( 3,[3.55,3.66,3.777],[1.123,2,3] ,[1,2,3,4],[1,NULL,3] ),
+( 1,[-1.1122,2.3322,3],NULL ,[2.22,3.33,45.55,3.2],[11,2,3] ),
+(NULL,NULL,NULL,NULL,NULL),
+(NULL,[0.1,0.2,0.3],[0.1,0.2,0.3],[0.1,0.2,0.3,0.4],NULL),
+(1,[-0.777,0.12346,-1.2556],[1,2,-0.666] ,[3,4,5,6],NULL),
+(1,NULL,NULL,NULL,NULL ),
+(2,[3,4,5],[1,2,3],NULL,[1,2,3,4,5] ),
+(3,[100000,500001,1.22222] ,[1.333,2,3],[1.33333,4.55555,6.12346,0],[1,2,3,4,5]);
+
+CREATE TABLE `t1` (
+  `c1` int(11) DEFAULT NULL,
+  `c2` char(30) DEFAULT NULL,
+  `c3` varchar(30) DEFAULT NULL,
+  `c4` binary(30) DEFAULT NULL,
+  `c5` varbinary(30) DEFAULT NULL,
+  `c6` tinytext DEFAULT NULL,
+  `c7` tinytext DEFAULT NULL,
+  `c8` mediumtext DEFAULT NULL,
+  `c9` longtext DEFAULT NULL,
+  `c10` tinyblob DEFAULT NULL,
+  `c11` tinyblob DEFAULT NULL,
+  `c12` mediumblob DEFAULT NULL,
+  `c13` longblob DEFAULT NULL,
+  `f1` float DEFAULT NULL,
+  `v1` VECTOR(3) DEFAULT NULL
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column);
+
+insert into t1 values ( 1,'[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]','[1.0,1,2]', 1.1,'[2,2,3]');
+
+CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `c1` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 WITH COLUMN GROUP(each column);
+
+insert into t values(1,[1,1,1]), (2,[2.2,3.3,4.4]), (3,[3.33,4.44,5.55]);
+
+create table t1_vector(c1 vector(3));
+insert into t1_vector values(null), (null), (null), (null), (null), (null), (null), (null), (null);
+create table t2_vector(c1 vector(3));
+insert into t2_vector values(null), ('[1,2,3]'), ('[1,2,3]'), ('[2,2,3]'), (null), ('[1,2,3]'), ('[1,2,3]'), ('[1,2,3]'), ('[1,2,3]');
+
+set ob_query_timeout=100000000;
+alter system minor freeze;
+--source mysql_test/include/wait_minor_merge.inc
+alter system major freeze;
+--source mysql_test/include/wait_daily_merge.inc
+
+select   ref_0.id as c0,  ref_0.c1 as c1 from  test as ref_0 where (EXISTS (select   8 as c0 from  t as ref_1 where (ref_0.id <= cast(nullif(93, 14) as DECIMAL))  or (ref_0.id  in ( 95,  12,  ref_0.id)) limit 18)) or (EXISTS ( select   ref_0.c3 as c0,  cast(nullif(28, 44) as  DECIMAL) as c1,  30 as c2,  ref_0.c2 as c3 from  t1 as ref_2 limit 31)) limit 69;
+
+select sum(c1) from  t1_vector;
+select avg(c1) from  t1_vector;
+select sum(c1) from  t2_vector;
+select avg(c1) from  t2_vector;
+--disable_warnings
+drop table if exists t,test,tt0,t2, t1, t1_vector, t2_vector;
+--enable_warnings
+
+set ob_default_lob_inrow_threshold=0;
+create table t1(c1 int,c2 tinyint[],c3 vector(3),c4 smallint[],c5 varchar(30),c6 int[],c7 vector(3) as (c5*c4+c6)) PARTITION BY KEY(c1) PARTITIONS 100;
+insert into t1(c1,c2,c3,c4,c5,c6) values(1,'[1,1,2]','[2,2,3]',array(1,3,2),'[1,2,3]',[2,3,4]);
+insert into t1(c1,c2,c3,c4,c5,c6) values(2,'[1,0,3]','[1,0,3]',array(2,3,2),'[2,2,3]',[5,3,4]);
+insert into t1(c1,c2,c3,c4,c5,c6) values(3,'[-1,2,2]','[-3,2,3]',array(4,3,3),'[3,2,3]',[6,3,4]);
+insert into t1(c1,c2,c3,c4,c5,c6) values(4,'[-1,-2,-2]','[-4,2,3]',array(4,2,3),'[4,2,3]',[1,2,4]);
+insert into t1(c1,c2,c3,c4,c5,c6) values(7,null,'[-1,-2,-2]',array(2,3,1),'[5,2,3]',[5,3,4]);
+insert /*+enable_parallel_dml parallel(2) */ into t1(c1,c2,c3,c4,c5,c6) select c1,c2,c3,c4,c5,c6 from t1 order by l2_distance(c3, [1,2,3]) APPROX limit 100000000;
+insert /*+enable_parallel_dml parallel(2) */ into t1(c1,c2,c3,c4,c5,c6) select c1,c2,c3,c4,c5,c6 from t1 order by l2_distance(c3, [1,2,3]) APPROX limit 100000000;
+select * from t1 order by c1;
+drop table t1;
+
+set ob_default_lob_inrow_threshold=4096;
+
+# bugfix 2024121300106465268
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+create table t1(c1 int[],c2 varchar(0)[]);
+--error 1406
+insert into t1 values([1,2,1],[1]);
+--error 1406
+insert into t1 values([1,2,1],[2]);
+select * from t1;
+desc t1;
+drop table t1;
+
+--disable_warnings
+drop table if exists tt;
+--enable_warnings
+
+create table tt(id int, arr_int int[], arr_dint array(array(int)), arr_vec array(vector(1)), arr_char array(varchar(10)));
+insert into tt values(1, [1], [[1], [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(2, null, [[1], [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(3, array_remove([1], 1), [[1], [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(4, [null, 1], [[1], [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(5, [null], [[1], [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(6, [1], null, [[1], [2]], ['a', 'b']);
+insert into tt values(7, [1], array_remove([[1]], [1]), [[1], [2]], ['a', 'b']);
+insert into tt values(8, [1], [null, [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(9, [1], array_append(array_remove([[1]],[1]), null), [[1], [2]], ['a', 'b']);
+insert into tt values(10, [1], [[null], [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(11, [1], [[null, 1], [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(12, [1], [array_remove([1], 1)], [[1], [2]], ['a', 'b']);
+insert into tt values(13, [1], [array_remove([1], 1), [2]], [[1], [2]], ['a', 'b']);
+insert into tt values(14, [1], [[1], [2]], null, ['a', 'b']);
+insert into tt values(15, [1], [[1], [2]], array_remove([[1]], [1]), ['a', 'b']);
+insert into tt values(16, [1], [[1], [2]], array_append(array_remove([[1]],[1]), null), ['a', 'b']);
+insert into tt values(17, [1], [[1], [2]], [[1], [2]], null);
+insert into tt values(18, [1], [[1], [2]], [[1], [2]], array_remove(['a'], 'a'));
+insert into tt values(19, [1], [[1], [2]], [[1], [2]], array_append(array_remove(['a'],'a'), null));
+
+select null + null;
+select null - null;
+select null = null;
+select null + 1;
+select null - 1;
+select null != null;
+select id, arr_int + [1] from tt where id = 2;
+select id, arr_int - [1] from tt where id = 2;
+select id, arr_int = [1] from tt where id = 2;
+select id, arr_int != [1] from tt where id = 2;
+select id, arr_int + array_remove([1], 1) from tt where id = 3;
+select id, arr_int - array_remove([1], 1) from tt where id = 3;
+select id, arr_int = array_remove([1], 1) from tt where id = 3;
+select id, arr_int != array_remove([1], 1) from tt where id = 3;
+select id, arr_int + null from tt;
+select id, arr_int - null from tt;
+select id, arr_int = null from tt;
+select id, arr_int != null from tt;
+select id, arr_dint + [[1]] from tt where id = 6;
+select id, arr_dint - [[1]] from tt where id = 6;
+select id, arr_dint = [[1]] from tt where id = 6;
+select id, arr_dint != [[1]] from tt where id = 6;
+select id, arr_dint + array_remove([[1]], [1]) from tt where id = 7;
+select id, arr_dint = array_remove([[1]], [1]) from tt where id = 7;
+select id, arr_dint != array_remove([[1]], [1]) from tt where id = 7;
+
+--disable_warnings
+drop table if exists tt;
+--enable_warnings

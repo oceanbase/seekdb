@@ -18,6 +18,7 @@
 
 #include "ob_vector_index_ivf_cache_util.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "share/vector_type/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -25,10 +26,19 @@ using namespace sql;
 using namespace common;
 namespace share
 {
-int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(int64_t dim, float *data)
+int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(const common::ObString &center_id, int64_t dim, float *data)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(cent_cache_.write_centroid_with_real_idx(cent_idx_, data, dim * sizeof(float)))) {
+  uint64_t center_prefix = ObVectorClusterHelper::get_center_prefix(center_id, is_pq_centroid_);
+  if (OB_UNLIKELY(center_prefix == 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid center id", K(ret), K(center_id), K(is_pq_centroid_));
+  } else if (cent_cache_.get_center_prefix() == 0 &&
+      OB_FALSE_IT(cent_cache_.set_center_prefix(center_prefix))) {
+  } else if (OB_UNLIKELY(cent_cache_.get_center_prefix() != center_prefix)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("center prefix mismatch", K(ret), K(center_id), K(cent_cache_.get_center_prefix()), K(center_prefix));
+  } else if (OB_FAIL(cent_cache_.write_centroid_with_real_idx(cent_idx_, data, dim * sizeof(float)))) {
     LOG_WARN("fail to write centroid", K(ret), K(cent_idx_), K(dim));
   } else {
     ++cent_idx_;
@@ -39,13 +49,14 @@ int ObIvfCacheUtil::ObIvfWriteCacheFunc::operator()(int64_t dim, float *data)
 int ObIvfCacheUtil::scan_and_write_ivf_cent_cache(ObPluginVectorIndexService &service,
                                                   const ObTableID &table_id,
                                                   const ObTabletID &tablet_id,
-                                                  ObIvfCentCache &cent_cache)
+                                                  ObIvfCentCache &cent_cache,
+                                                  bool is_pq_centroid)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator tmp_allocator;
   if (cent_cache.set_writing_if_idle()) {
     RWLock::WLockGuard guard(cent_cache.get_lock());
-    ObIvfWriteCacheFunc write_func(cent_cache);
+    ObIvfWriteCacheFunc write_func(cent_cache, is_pq_centroid);
     if (OB_FAIL(service.process_ivf_aux_info(table_id, tablet_id, tmp_allocator, write_func))) {
       LOG_WARN("failed to get centers", K(ret));
       cent_cache.reuse();

@@ -1,0 +1,21 @@
+create table test_table_1 (c1 int primary key, c2 int, c3 int) ;
+create index test_table_1_idx1 on test_table_1(c2) global partition by hash(c2) partitions 4;
+create index test_table_1_idx2 on test_table_1(c3) local;
+show create table test_table_1;
+Table	Create Table
+test_table_1	CREATE TABLE `test_table_1` (
+  `c1` int(11) NOT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  KEY `test_table_1_idx1` (`c2`) BLOCK_SIZE 16384 GLOBAL
+ partition by hash(c2)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`),
+  KEY `test_table_1_idx2` (`c3`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop index test_table_1_idx1 on test_table_1;
+drop index test_table_1_idx2 on test_table_1;
+drop table test_table_1;

@@ -1,0 +1,703 @@
+drop database if exists db_fork_ddl;
+create database db_fork_ddl;
+use db_fork_ddl;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+# 启用debug sync
+alter system set debug_sync_timeout = '60s';
+# 设置DDL超时为1秒
+alter system set _ob_ddl_timeout = '1s';
+set ob_global_debug_sync = 'reset';
+============================================
+1. Fork过程中对源表执行Online DDL - CREATE INDEX
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t1 values (1, 'Data1', 100);
+insert into t1 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for create_index_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t1 to t1_fork;
+# 在Fork执行过程中对源表创建索引（应该被阻塞或等待）
+# 注意：根据锁机制，CREATE INDEX需要OnlineDDL锁，可能与Fork Table冲突
+create index idx_name on t1(name);
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal create_index_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+create index idx_name on t1(name);
+# 验证Fork表数据
+select * from t1_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+# 验证源表索引是否创建成功
+show indexes from t1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t1	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t1	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+============================================
+2. Fork过程中对源表执行Online DDL - ADD COLUMN
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t2_fork'
+create table t2 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t2 values (1, 'Data1', 100);
+insert into t2 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for add_column_signal execute 10000';
+# 执行Fork命令
+fork table t2 to t2_fork;
+# 在Fork执行过程中对源表添加列（应该被阻塞或等待）
+alter table t2 add column new_col varchar(50) default 'new';
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal add_column_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+alter table t2 add column new_col varchar(50) default 'new';
+# 验证Fork表结构（应该不包含新列）
+show create table t2_fork;
+Table	Create Table
+t2_fork	CREATE TABLE `t2_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证源表结构（应该包含新列）
+show create table t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  `new_col` varchar(50) DEFAULT 'new',
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+============================================
+3. Fork过程中对源表执行Offline DDL - ADD PARTITION
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t3'
+drop table if exists t3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t3_fork'
+create table t3 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t3 values (1, 'Data1', 100);
+insert into t3 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for add_partition_signal execute 10000';
+# 执行Fork命令
+fork table t3 to t3_fork;
+# 在Fork执行过程中对源表添加分区（应该被阻塞或等待）
+# 注意：ADD PARTITION需要Table Lock (ROW_EXCLUSIVE)，可能与Fork Table冲突
+alter table t3 add partition (partition p2 values less than (300));
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal add_partition_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+alter table t3 add partition (partition p2 values less than (300));
+# 验证Fork表分区结构（应该不包含新分区）
+show create table t3_fork;
+Table	Create Table
+t3_fork	CREATE TABLE `t3_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证源表分区结构（应该包含新分区）
+show create table t3;
+Table	Create Table
+t3	CREATE TABLE `t3` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300))
+============================================
+4. Fork过程中对源表执行Offline DDL - DROP PARTITION
+============================================
+drop table if exists t4;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t4'
+drop table if exists t4_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t4_fork'
+create table t4 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200),
+partition p2 values less than (300)
+);
+insert into t4 values (1, 'Data1', 100);
+insert into t4 values (101, 'Data2', 200);
+insert into t4 values (201, 'Data3', 300);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_partition_signal execute 10000';
+# 执行Fork命令
+fork table t4 to t4_fork;
+# 在Fork执行过程中对源表删除分区（应该被阻塞或等待）
+alter table t4 drop partition p2;
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal drop_partition_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+alter table t4 drop partition p2;
+# 验证Fork表分区结构（应该包含所有分区）
+show create table t4_fork;
+Table	Create Table
+t4_fork	CREATE TABLE `t4_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300))
+# 验证源表分区结构（p2应该被删除）
+show create table t4;
+Table	Create Table
+t4	CREATE TABLE `t4` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+============================================
+5. Fork过程中对目标表执行Online DDL - CREATE INDEX
+============================================
+drop table if exists t5;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t5'
+drop table if exists t5_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t5_fork'
+create table t5 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t5 values (1, 'Data1', 100);
+insert into t5 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_WAIT_DATA_COMPLEMENT阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for dst_create_index_signal execute 10000';
+# 执行Fork命令（会在WAIT_DATA_COMPLEMENT阶段暂停，此时目标表已创建）
+fork table t5 to t5_fork;
+# 在Fork执行过程中对目标表创建索引（应该被阻塞或等待）
+create index idx_name on t5_fork(name);
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
+set ob_global_debug_sync = 'now signal dst_create_index_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+create index idx_name on t5_fork(name);
+# 验证目标表索引是否创建成功
+show indexes from t5_fork;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t5_fork	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t5_fork	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+============================================
+6. Fork过程中对目标表执行Online DDL - ADD COLUMN
+============================================
+drop table if exists t6;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t6'
+drop table if exists t6_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t6_fork'
+create table t6 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t6 values (1, 'Data1', 100);
+insert into t6 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_WAIT_DATA_COMPLEMENT阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT wait_for dst_add_column_signal execute 10000';
+# 执行Fork命令
+fork table t6 to t6_fork;
+# 在Fork执行过程中对目标表添加列（应该被阻塞或等待）
+alter table t6_fork add column new_col varchar(50) default 'new';
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_DATA_COMPLEMENT clear';
+set ob_global_debug_sync = 'now signal dst_add_column_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+alter table t6_fork add column new_col varchar(50) default 'new';
+# 验证目标表结构（应该包含新列）
+show create table t6_fork;
+Table	Create Table
+t6_fork	CREATE TABLE `t6_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  `new_col` varchar(50) DEFAULT 'new',
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+============================================
+7. Fork过程中对源表执行Offline DDL - TRUNCATE TABLE
+============================================
+drop table if exists t7;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t7'
+drop table if exists t7_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t7_fork'
+create table t7 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t7 values (1, 'Data1', 100);
+insert into t7 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for truncate_signal execute 10000';
+# 执行Fork命令
+fork table t7 to t7_fork;
+# 在Fork执行过程中对源表执行TRUNCATE（应该被阻塞或等待）
+# 注意：TRUNCATE TABLE需要EXCLUSIVE锁，应该与Fork Table冲突
+truncate table t7;
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal truncate_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+truncate table t7;
+# 验证Fork表数据（应该包含Fork时的数据快照）
+select * from t7_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+# 验证源表数据（如果TRUNCATE成功，应该为空）
+select * from t7 order by id;
+id	name	value
+============================================
+8. Fork过程中对源表执行Online DDL - DROP INDEX
+============================================
+drop table if exists t8;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t8'
+drop table if exists t8_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t8_fork'
+create table t8 (
+id int primary key,
+name varchar(50),
+value int,
+index idx_name(name)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t8 values (1, 'Data1', 100);
+insert into t8 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_index_signal execute 10000';
+# 执行Fork命令
+fork table t8 to t8_fork;
+# 在Fork执行过程中对源表删除索引（应该被阻塞或等待）
+drop index idx_name on t8;
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal drop_index_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+drop index idx_name on t8;
+# 验证Fork表索引（应该包含索引）
+show indexes from t8_fork;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t8_fork	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t8_fork	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+# 验证源表索引（如果DROP成功，应该不包含idx_name）
+show indexes from t8;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t8	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+============================================
+9. Fork过程中对源表执行Online DDL - MODIFY COLUMN
+============================================
+drop table if exists t9;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t9'
+drop table if exists t9_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t9_fork'
+create table t9 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t9 values (1, 'Data1', 100);
+insert into t9 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for modify_column_signal execute 10000';
+# 执行Fork命令
+fork table t9 to t9_fork;
+# 在Fork执行过程中对源表修改列（应该被阻塞或等待）
+alter table t9 modify column name varchar(100);
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal modify_column_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+alter table t9 modify column name varchar(100);
+# 验证Fork表结构（应该保持原始列定义）
+show create table t9_fork;
+Table	Create Table
+t9_fork	CREATE TABLE `t9_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证源表结构（如果MODIFY成功，应该包含新列定义）
+show create table t9;
+Table	Create Table
+t9	CREATE TABLE `t9` (
+  `id` int(11) NOT NULL,
+  `name` varchar(100) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+============================================
+10. Fork过程中对源表执行Offline DDL - DROP COLUMN
+============================================
+drop table if exists t10;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t10'
+drop table if exists t10_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t10_fork'
+create table t10 (
+id int primary key,
+name varchar(50),
+value int,
+extra_col varchar(50)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t10 values (1, 'Data1', 100, 'extra1');
+insert into t10 values (101, 'Data2', 200, 'extra2');
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for drop_column_signal execute 10000';
+# 执行Fork命令
+fork table t10 to t10_fork;
+# 在Fork执行过程中对源表删除列（应该被阻塞或等待）
+alter table t10 drop column extra_col;
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal drop_column_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+alter table t10 drop column extra_col;
+# 验证Fork表结构（应该包含所有列）
+show create table t10_fork;
+Table	Create Table
+t10_fork	CREATE TABLE `t10_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  `extra_col` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证源表结构（如果DROP成功，应该不包含extra_col）
+show create table t10;
+Table	Create Table
+t10	CREATE TABLE `t10` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+============================================
+11. Fork过程中在不同阶段执行DDL - BUILD_DATA阶段
+============================================
+drop table if exists t11;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t11'
+drop table if exists t11_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t11_fork'
+create table t11 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t11 values (1, 'Data1', 100);
+insert into t11 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_BUILD_DATA阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA wait_for snapshot_ddl_signal execute 10000';
+# 执行Fork命令（会在BUILD_DATA阶段暂停）
+fork table t11 to t11_fork;
+# 在Fork执行过程中对源表创建索引
+create index idx_name on t11(name);
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_BUILD_DATA clear';
+set ob_global_debug_sync = 'now signal snapshot_ddl_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+create index idx_name on t11(name);
+# 验证Fork表数据
+select * from t11_fork order by id;
+id	name	value
+1	Data1	100
+101	Data2	200
+# 验证源表索引
+show indexes from t11;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t11	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t11	1	idx_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+============================================
+12. Fork过程中在不同阶段执行DDL - WAIT_FREEZE_END阶段
+============================================
+drop table if exists t12;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t12'
+drop table if exists t12_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t12_fork'
+create table t12 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t12 values (1, 'Data1', 100);
+insert into t12 values (101, 'Data2', 200);
+# 使用debug sync point在FORK_TABLE_WAIT_FREEZE_END阶段暂停
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END wait_for freeze_ddl_signal execute 10000';
+# 执行Fork命令（会在WAIT_FREEZE_END阶段暂停）
+fork table t12 to t12_fork;
+# 在Fork执行过程中对源表添加分区
+alter table t12 add partition (partition p2 values less than (300));
+ERROR HY000: Timeout
+# 继续Fork执行
+set ob_global_debug_sync = 'FORK_TABLE_WAIT_FREEZE_END clear';
+set ob_global_debug_sync = 'now signal freeze_ddl_signal';
+# 等待Fork完成
+# Fork完成后重试DDL（应成功）
+alter table t12 add partition (partition p2 values less than (300));
+# 验证Fork表分区结构
+show create table t12_fork;
+Table	Create Table
+t12_fork	CREATE TABLE `t12_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证源表分区结构
+show create table t12;
+Table	Create Table
+t12	CREATE TABLE `t12` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300))
+============================================
+13. Fork完成后对源表和目标表执行DDL（验证隔离）
+============================================
+drop table if exists t13;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t13'
+drop table if exists t13_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_ddl.t13_fork'
+create table t13 (
+id int primary key,
+name varchar(50),
+value int
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t13 values (1, 'Data1', 100);
+insert into t13 values (101, 'Data2', 200);
+# Fork表
+fork table t13 to t13_fork;
+# 等待Fork完成
+# 对源表执行DDL
+alter table t13 add column src_new_col varchar(50) default 'src';
+create index idx_src_name on t13(name);
+# 对目标表执行DDL
+alter table t13_fork add column dst_new_col varchar(50) default 'dst';
+create index idx_dst_name on t13_fork(name);
+# 验证源表结构
+show create table t13;
+Table	Create Table
+t13	CREATE TABLE `t13` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  `src_new_col` varchar(50) DEFAULT 'src',
+  PRIMARY KEY (`id`),
+  KEY `idx_src_name` (`name`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证目标表结构
+show create table t13_fork;
+Table	Create Table
+t13_fork	CREATE TABLE `t13_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `value` int(11) DEFAULT NULL,
+  `dst_new_col` varchar(50) DEFAULT 'dst',
+  PRIMARY KEY (`id`),
+  KEY `idx_dst_name` (`name`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证源表索引
+show indexes from t13;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t13	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t13	1	idx_src_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+# 验证目标表索引
+show indexes from t13_fork;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t13_fork	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t13_fork	1	idx_dst_name	1	name	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+============================================
+14. 清理
+============================================
+# 恢复_ob_ddl_timeout默认值
+alter system set _ob_ddl_timeout = '1000s';
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop table if exists t5;
+drop table if exists t5_fork;
+drop table if exists t6;
+drop table if exists t6_fork;
+drop table if exists t7;
+drop table if exists t7_fork;
+drop table if exists t8;
+drop table if exists t8_fork;
+drop table if exists t9;
+drop table if exists t9_fork;
+drop table if exists t10;
+drop table if exists t10_fork;
+drop table if exists t11;
+drop table if exists t11_fork;
+drop table if exists t12;
+drop table if exists t12_fork;
+drop table if exists t13;
+drop table if exists t13_fork;
+drop database if exists db_fork_ddl;

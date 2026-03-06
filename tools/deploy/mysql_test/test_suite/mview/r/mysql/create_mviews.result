@@ -1,0 +1,132 @@
+use test;
+drop materialized view if exists mv1;
+drop materialized view if exists mv2;
+drop materialized view if exists mv3;
+drop materialized view if exists mv4;
+drop materialized view if exists mv5;
+drop materialized view if exists mv6;
+drop materialized view if exists mv7;
+drop materialized view if exists lob_mv1;
+drop materialized view if exists mv_once;
+drop materialized view if exists mv_interval;
+drop materialized view log on t1;
+drop materialized view log on t2;
+drop materialized view log on t3;
+drop materialized view log on lob_t1;
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop table if exists lob_t1;
+create table t1 (c1 int, c2 int);
+insert into t1 values(1,2),(3,4);
+create materialized view mv1 never refresh as select * from t1;
+select refresh_mode, refresh_method, refresh_start, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv1');
+refresh_mode	refresh_method	refresh_start	refresh_next	refresh_job is null
+0	0	NULL	NULL	1
+select * from mv1;
+c1	c2
+1	2
+3	4
+truncate mv1;
+ERROR 0A000: truncate materialized view is not supported
+select k.c1 from mv1 as k;
+c1
+1
+3
+call dbms_mview.refresh('mv1', 'c');
+ERROR HY000: cannot explicitly refresh a NEVER REFRESH materialized view
+create materialized view mv2 refresh complete on demand as select * from t1;
+select refresh_mode, refresh_method, refresh_start, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv2');
+refresh_mode	refresh_method	refresh_start	refresh_next	refresh_job is null
+1	1	NULL	NULL	1
+select * from mv2;
+c1	c2
+1	2
+3	4
+create materialized view mv3 refresh complete on demand start with now() next now() + interval 1 day as select * from t1;
+select refresh_mode, refresh_method, refresh_start is null, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv3');
+refresh_mode	refresh_method	refresh_start is null	refresh_next	refresh_job is null
+1	1	0	now() + interval 1 day	0
+select * from mv3;
+c1	c2
+1	2
+3	4
+create materialized view mv4 refresh complete on demand start with now() as select * from t1;
+select refresh_mode, refresh_method, refresh_start is null, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv4');
+refresh_mode	refresh_method	refresh_start is null	refresh_next	refresh_job is null
+1	1	0	NULL	0
+select * from mv4;
+c1	c2
+1	2
+3	4
+create materialized view mv5 refresh complete on demand next now() + interval 1 day as select * from t1;
+select refresh_mode, refresh_method, refresh_start is null, refresh_next, refresh_job is null  from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv5');
+refresh_mode	refresh_method	refresh_start is null	refresh_next	refresh_job is null
+1	1	0	now() + interval 1 day	0
+select * from mv5;
+c1	c2
+1	2
+3	4
+create index i1 on mv1(c1);
+create index i2 on mv1(c1);
+show index from mv1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+mv1	1	i1	1	c1	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+mv1	1	i2	1	c1	A	NULL	NULL	NULL	YES	BTREE	available		YES	NULL
+drop index i1 on mv1;
+drop index i2 on mv1;
+create index i3 on mv1((c2 + 1));
+ERROR 0A000: use functional index on materialized view not supported
+show index from mv1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+analyze table mv1 compute statistics;
+call dbms_stats.gather_table_stats('test', 'mv1');
+drop materialized view mv1;
+select count(1) from oceanbase.__all_mview where mview_id in (select table_id from oceanbase.__all_table where table_name = 'mv1');
+count(1)
+0
+# create partition mv
+create materialized view mv1 partition by range(c1) (partition p0 values less than(5)) as select * from t1;
+drop materialized view mv1;
+create materialized view mv1 partition by hash(c1) partitions 5 as select * from t1;
+drop materialized view mv1;
+# create mview options
+# on commit attribute is not compatible with start with/next options
+create materialized view mv6 refresh COMPLETE on commit start with sysdate() next sysdate() + interval 1 day as select * from t1;
+ERROR 0A000: mview refresh on commit not supported
+# on statement attribute is not compatible with start with/next options
+create materialized view mv6 refresh COMPLETE on statement start with sysdate() next sysdate() + interval 1 day as select * from t1;
+ERROR 0A000: mview refresh on statement not supported
+# only on demand attribute is compatible with start with/next options
+create materialized view mv6 refresh COMPLETE on demand start with sysdate() next sysdate() + interval 1 day as select * from t1;
+# on demand attribute can be omitted
+create materialized view mv7 refresh COMPLETE start with sysdate() next sysdate() + interval 1 day as select * from t1;
+# mview with lob
+create table lob_t1(pk int primary key, c1 text);
+insert into lob_t1 values(1, repeat('1', 100));
+create materialized view lob_mv1 as select * from lob_t1;
+table_type
+3
+table_type
+LOB AUX TABLE
+LOB AUX TABLE
+select * from lob_mv1;
+pk	c1
+1	1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+insert into lob_t1 values(2, repeat('2', 100));
+call dbms_mview.refresh('lob_mv1');
+select * from lob_mv1;
+pk	c1
+1	1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+2	2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222
+drop materialized view lob_mv1;
+table_type
+table_type
+drop table lob_t1;
+drop materialized view mv2;
+drop materialized view mv3;
+drop materialized view mv4;
+drop materialized view mv5;
+drop materialized view mv6;
+drop materialized view mv7;
+drop table t1;

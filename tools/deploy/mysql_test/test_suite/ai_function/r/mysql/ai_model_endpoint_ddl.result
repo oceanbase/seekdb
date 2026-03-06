@@ -1,0 +1,170 @@
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint1');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint2');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint3');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('my_model1');
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('my_model3');
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('my_model4');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_model1', '{
+    "type": "completion",
+    "model_name": "qwen-plus"
+ }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_model3', '{
+    "type": "completion",
+    "model_name": "qwen-plus"
+ }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'my_model4', '{
+    "type": "completion",
+    "model_name": "qwen-plus"
+ }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	openai	text-embedding-v2	NULL	NULL	NULL
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'my_model_endpoint2', '{
+    "ai_model_name": "my_model1",
+    "scope": "all",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+ERROR HY000: The ai model endpoint 'my_model_endpoint1' has the same ai model name 'my_model1'
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint2';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+ERROR HY000: This ai model endpoint 'my_model_endpoint1' is already exists
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'my_model_endpoint3', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_transform_fn": "text_embedding_request_fn",
+    "response_transform_fn": "text_embedding_reponse_fn"
+  }');
+ERROR HY000: The param 'provider' is empty or null
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint3';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "provider" : "aliyun-openai"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "url" : "https://www.baidu.com/"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "access_key" : "sk2-xxxxxxxxxxxx"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "ai_model_name" : "my_model_3"
+  }');
+ERROR HY000: The value of param 'ai_model_name' is invalid
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint1', '{
+    "provider" : "",
+    "request_transform_fn": "text_embedding_request_fn",
+    "response_transform_fn": "text_embedding_reponse_fn"
+  }');
+ERROR HY000: The param 'provider' is empty or null
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk2-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME = 'my_model_endpoint1';
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk2-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint1	my_model1	ALL	https://www.baidu.com/	1	aliyun-openai	text-embedding-v2	NULL	NULL	NULL
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'my_model_endpoint4', '{
+    "ai_model_name" : "my_model3"
+  }');
+ERROR HY000: This ai model endpoint 'my_model_endpoint4' not found in the tenant
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint1');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'my_model_endpoint4', '{
+    "ai_model_name": "my_model4",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.CDB_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4') ORDER BY TENANT_ID;
+ENDPOINT_NAME	AI_MODEL_NAME	SCOPE	URL	ACCESS_KEY = 'sk-xxxxxxxxxxxx'	PROVIDER	REQUEST_MODEL_NAME	PARAMETERS	REQUEST_TRANSFORM_FN	RESPONSE_TRANSFORM_FN
+my_model_endpoint4	my_model4	ALL	https://www.baidu.com/	1	openai	text-embedding-v2	NULL	NULL	NULL
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint2');
+ERROR HY000: This ai model endpoint 'my_model_endpoint2' not found in the tenant
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint3');
+ERROR HY000: This ai model endpoint 'my_model_endpoint3' not found in the tenant
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('');
+ERROR HY000: The param 'name' is empty or null
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('user_ai_model_endpoint_1');
+DROP USER IF EXISTS test_ai_user@'%';
+CREATE USER test_ai_user@'%' IDENTIFIED BY '123456';
+GRANT SELECT ON test.* TO 'test_ai_user'@'%';
+SHOW GRANTS FOR test_ai_user@'%';
+Grants for test_ai_user@%
+GRANT USAGE ON *.* TO 'test_ai_user'
+GRANT SELECT ON `test`.* TO 'test_ai_user'
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'user_ai_model_endpoint_1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+ERROR 42501: Access denied; you need (at least one of) the create ai model endpoint privilege(s) for this operation
+GRANT CREATE AI MODEL ON *.* TO test_ai_user@'%';
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'user_ai_model_endpoint_1', '{
+    "ai_model_name": "my_model1",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "text-embedding-v2",
+    "provider": "openai"
+  }');
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'user_ai_model_endpoint_1', '{
+    "provider" : "aliyun-openai"
+  }');
+ERROR 42501: Access denied; you need (at least one of) the alter ai model endpoint privilege(s) for this operation
+GRANT ALTER AI MODEL ON *.* TO test_ai_user@'%';
+call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT (
+'user_ai_model_endpoint_1', '{
+    "provider" : "aliyun-openai"
+  }');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('user_ai_model_endpoint_1');
+ERROR 42501: Access denied; you need (at least one of) the drop ai model endpoint privilege(s) for this operation
+GRANT DROP AI MODEL ON *.* TO test_ai_user@'%';
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('user_ai_model_endpoint_1');
+DROP USER test_ai_user@'%';

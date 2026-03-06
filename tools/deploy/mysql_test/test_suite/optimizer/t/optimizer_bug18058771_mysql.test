@@ -1,0 +1,57 @@
+#owner: yibo.tyf
+#owner group: sql1
+# tags: optimizer
+#tag: opimizer
+#bug:
+
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+
+--disable_warnings
+drop table if exists obright_part;
+--enable_warnings
+
+CREATE TABLE `obright_part` (
+  `grp_id` bigint(20) NOT NULL,
+  `row_id` bigint(20) NOT NULL,
+  `trx_grp` bigint(20) DEFAULT NULL,
+  KEY `obright_part1` (`row_id`) LOCAL
+) partition by key(grp_id) partitions 10;
+
+insert into obright_part(grp_id, trx_grp, row_id) values  (17, 167271 , 1003626 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (16, 167271 , 1003627 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (15, 167271 , 1003628 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (14, 167271 , 1003629 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (13, 167271 , 1003630 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (12, 167271 , 1003631 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (11, 167272 , 1003632 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (10, 167272 , 1003633 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (9, 167272 , 1003634 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (8, 167272 , 1003635 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (7, 167272 , 1003636 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (6, 167272 , 1003637 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (5, 167273 , 1003638 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (4, 167273 , 1003639 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (3, 167273 , 1003640 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (2, 167273 , 1003641 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (1, 167273 , 1003642 );
+insert into obright_part(grp_id, trx_grp, row_id) values  (0, 167273 , 1003643 );
+
+
+select trx_grp, row_id from obright_part a where trx_grp in (167271,167271+1,167271+2) order by row_id;
+
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+explain delete /*+ index(a obright_part1) */ from obright_part a where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+delete /*+ index(a obright_part1) */ from obright_part a where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+
+
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+explain update /*+ index(a obright_part1) */ obright_part a set trx_grp = 42 where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+update /*+ index(a obright_part1) */ obright_part a set trx_grp = 42 where trx_grp in (167271,167271+1,167271+2) order by row_id limit 6;
+select /*+ index(a obright_part1) */ * from obright_part a order by row_id;
+
+--disable_warnings
+drop table obright_part;
+--enable_warnings

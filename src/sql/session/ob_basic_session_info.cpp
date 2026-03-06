@@ -2013,6 +2013,23 @@ int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id,
 }
 
 int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id,
+                                         ObBasicSysVar *&val) const
+{
+  int ret = OB_SUCCESS;
+  val = NULL;
+  if (OB_UNLIKELY(SYS_VAR_INVALID == sys_var_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid sys_var_id", K(ret), K(sys_var_id));
+  } else if (OB_FAIL(inner_get_sys_var(sys_var_id, val))) {
+    LOG_WARN("fail to get sys var", K(ret), K(sys_var_id));
+  } else if (OB_ISNULL(val)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("succ to get sys var, but sys var is NULL", K(ret), K(sys_var_id));
+  }
+  return ret;
+}
+
+int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id,
                                          common::ObString &val) const
 {
   int ret = OB_SUCCESS;

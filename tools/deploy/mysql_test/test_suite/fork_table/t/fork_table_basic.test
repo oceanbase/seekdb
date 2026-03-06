@@ -1,0 +1,344 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table基础功能测试
+##tags: fork_table basic
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_basic;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_basic;
+use db_fork_basic;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo ============================================
+--echo 1. 基本Fork Table功能测试
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+
+--echo # 创建源表并插入数据
+create table t1 (
+    id int primary key,
+    name varchar(50),
+    age int,
+    status int default 0
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200),
+    partition p2 values less than (300)
+);
+
+insert into t1 values (1, 'Alice', 25, 1);
+insert into t1 values (101, 'Bob', 30, 1);
+insert into t1 values (201, 'Charlie', 35, 1);
+insert into t1 values (50, 'David', 28, 1);
+insert into t1 values (150, 'Eve', 32, 1);
+
+--echo # 执行Fork Table
+fork table t1 to t1_fork;
+
+--echo # 验证Fork后的表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1_fork;
+
+--echo # 验证Fork后的数据
+select count(*) as cnt from t1_fork;
+select * from t1_fork order by id;
+
+--echo # 验证源表数据未受影响
+select count(*) as cnt from t1;
+select * from t1 order by id;
+
+--echo ============================================
+--echo 2. 数据隔离测试 - Fork表修改不影响源表
+--echo ============================================
+
+--echo # 在Fork表中插入新数据
+insert into t1_fork values (99, 'Fork_New', 40, 1);
+insert into t1_fork values (299, 'Fork_New2', 45, 1);
+
+--echo # 验证Fork表有新数据
+select count(*) as cnt from t1_fork;
+select * from t1_fork where id in (99, 299);
+
+--echo # 验证源表数据未受影响
+select count(*) as cnt from t1;
+select * from t1 where id in (99, 299);
+
+--echo # 在源表中插入新数据
+insert into t1 values (88, 'Source_New', 50, 1);
+insert into t1 values (288, 'Source_New2', 55, 1);
+
+--echo # 验证源表有新数据
+select count(*) as cnt from t1;
+select * from t1 where id in (88, 288);
+
+--echo # 验证Fork表数据未受影响
+select count(*) as cnt from t1_fork;
+select * from t1_fork where id in (88, 288);
+
+--echo ============================================
+--echo 3. 数据修改隔离测试
+--echo ============================================
+
+--echo # 修改Fork表中的数据
+update t1_fork set name = 'Fork_Updated', age = 100 where id = 1;
+update t1_fork set name = 'Fork_Updated2', age = 200 where id = 101;
+
+--echo # 验证Fork表数据已修改
+select * from t1_fork where id in (1, 101);
+
+--echo # 验证源表数据未受影响
+select * from t1 where id in (1, 101);
+
+--echo # 修改源表中的数据
+update t1 set name = 'Source_Updated', age = 300 where id = 201;
+update t1 set name = 'Source_Updated2', age = 400 where id = 50;
+
+--echo # 验证源表数据已修改
+select * from t1 where id in (201, 50);
+
+--echo # 验证Fork表数据未受影响
+select * from t1_fork where id in (201, 50);
+
+--echo ============================================
+--echo 4. 删除数据隔离测试
+--echo ============================================
+
+--echo # 从Fork表中删除数据
+delete from t1_fork where id = 50;
+
+--echo # 验证Fork表数据已删除
+select count(*) as cnt from t1_fork;
+select * from t1_fork where id = 50;
+
+--echo # 验证源表数据未受影响
+select count(*) as cnt from t1;
+select * from t1 where id = 50;
+
+--echo # 从源表中删除数据
+delete from t1 where id = 150;
+
+--echo # 验证源表数据已删除
+select count(*) as cnt from t1;
+select * from t1 where id = 150;
+
+--echo # 验证Fork表数据未受影响
+select count(*) as cnt from t1_fork;
+select * from t1_fork where id = 150;
+
+--echo ============================================
+--echo 5. 空表Fork测试
+--echo ============================================
+
+drop table if exists t2;
+drop table if exists t2_fork;
+
+create table t2 (
+    id int primary key,
+    name varchar(50)
+);
+
+--echo # Fork空表
+fork table t2 to t2_fork;
+
+--echo # 验证Fork表结构
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t2_fork;
+
+--echo # 验证Fork表为空
+select count(*) as cnt from t2_fork;
+
+--echo # 在Fork表中插入数据
+insert into t2_fork values (1, 'Fork_Data');
+
+--echo # 验证Fork表有新数据
+select * from t2_fork;
+
+--echo # 验证源表仍为空
+select count(*) as cnt from t2;
+
+--echo ============================================
+--echo 6. Fork带自增列的表
+--echo ============================================
+
+drop table if exists t3;
+drop table if exists t3_fork;
+
+create table t3 (
+    id int auto_increment primary key,
+    name varchar(50),
+    value int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t3(name, value) values ('Alice', 100);
+insert into t3(name, value) values ('Bob', 200);
+insert into t3(name, value) values ('Charlie', 300);
+
+--echo # Fork表
+fork table t3 to t3_fork;
+
+--echo # 验证Fork表数据
+select * from t3_fork order by id;
+
+--echo # 在Fork表中插入数据，验证自增列从正确位置开始
+insert into t3_fork(name, value) values ('Fork_Test', 999);
+select * from t3_fork order by id;
+
+--echo ============================================
+--echo 7. Fork表自增列隔离测试
+--echo ============================================
+
+--echo # 在源表中插入数据
+insert into t3(name, value) values ('Source_New', 400);
+select * from t3 order by id;
+
+--echo # 在Fork表中插入数据，验证自增列独立工作
+insert into t3_fork(name, value) values ('Fork_New', 500);
+select * from t3_fork order by id;
+
+--echo # 再次在源表和Fork表中插入数据，验证自增列继续独立递增
+insert into t3(name, value) values ('Source_New2', 600);
+insert into t3_fork(name, value) values ('Fork_New2', 700);
+select * from t3 order by id;
+select * from t3_fork order by id;
+
+--echo ============================================
+--echo 8. Fork表自增列手动设置
+--echo ============================================
+
+drop table if exists t4;
+drop table if exists t4_fork;
+
+create table t4 (
+    id int auto_increment primary key,
+    name varchar(50)
+);
+
+insert into t4(name) values ('Data1');
+insert into t4(name) values ('Data2');
+
+--echo # 手动设置自增值
+alter table t4 auto_increment = 100;
+
+--echo # Fork表
+fork table t4 to t4_fork;
+
+--echo # 在Fork表中插入数据，验证自增列从手动设置的值开始
+insert into t4_fork(name) values ('Fork_Data');
+select * from t4_fork order by id;
+
+--echo # 继续插入，验证自增列递增
+insert into t4_fork(name) values ('Fork_Data2');
+select * from t4_fork order by id;
+
+--echo ============================================
+--echo 9. Fork表自增列与分区
+--echo ============================================
+
+drop table if exists t5;
+drop table if exists t5_fork;
+
+create table t5 (
+    id int auto_increment,
+    name varchar(50),
+    primary key(id, name)
+) partition by hash(id) partitions 2;
+
+insert into t5(name) values ('Data1');
+insert into t5(name) values ('Data2');
+insert into t5(name) values ('Data3');
+
+--echo # Fork表
+fork table t5 to t5_fork;
+
+--echo # 先验证原表各分区数据
+select * from t5 order by id, name;
+
+--echo # 验证Fork表各分区数据
+select * from t5_fork order by id, name;
+
+--echo # 先在原表插入数据，验证原表自增列
+insert into t5(name) values ('Source_Data');
+select * from t5 order by id, name;
+
+--echo # 在Fork表插入数据，验证自增列独立工作
+insert into t5_fork(name) values ('Fork_Data');
+select * from t5_fork order by id, name;
+
+--disable_parsing
+
+--echo ============================================
+--echo 10. Fork Table复制truncate info功能验证
+--echo ============================================
+
+connection obsys;
+alter system set _ob_enable_truncate_partition_preserve_global_index = true;
+connection default;
+
+drop table if exists t_trunc;
+drop table if exists t_trunc_fork;
+
+create table t_trunc (
+    id int primary key,
+    k int,
+    c varchar(20)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+create unique index idx_k on t_trunc(k) global partition by hash(k) partitions 2;
+
+insert into t_trunc values (1, 1, 'a'), (2, 2, 'b'), (120, 3, 'c');
+
+--echo # 生成truncate info并保留索引
+alter table t_trunc truncate partition p0;
+
+--echo # 截断后重新写入数据，验证旧数据不会被fork带回
+insert into t_trunc values (5, 5, 'p0_new'), (6, 6, 'p0_new2');
+
+--echo # 源表校验（使用全局索引访问）
+select /*+index(t_trunc idx_k)*/ count(*) from t_trunc;
+select /*+index(t_trunc idx_k)*/ count(*) from t_trunc where id in (1,2);
+
+--echo # 执行Fork并等待完成
+fork table t_trunc to t_trunc_fork;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # 目标表校验：应只包含新数据，截断过的数据不应出现
+select /*+index(t_trunc_fork idx_k)*/ count(*) from t_trunc_fork;
+select /*+index(t_trunc_fork idx_k)*/ count(*) from t_trunc_fork where id in (1,2);
+
+--enable_parsing
+
+--echo ============================================
+--echo 6. 清理
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop table if exists t5;
+drop table if exists t5_fork;
+drop table if exists t_trunc;
+drop table if exists t_trunc_fork;
+drop database if exists db_fork_basic;
+connection obsys;
+alter system set _ob_enable_truncate_partition_preserve_global_index = false;
+connection default;

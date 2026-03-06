@@ -5427,7 +5427,8 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
                                               ObTabletID &tablet_id,
                                               ObVectorIndexDistAlgorithm &dis_algo,
                                               bool &contain_null,
-                                              ObIArrayType *&arr)
+                                              ObIArrayType *&arr,
+                                              uint64_t &center_prefix)
 {
   int ret = OB_SUCCESS;
   table_id = OB_INVALID_ID;
@@ -5435,6 +5436,7 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
   dis_algo = VIDA_MAX;
   contain_null = false;
   arr = nullptr;
+  center_prefix = 0;
   if (OB_UNLIKELY(4 != expr.arg_cnt_) || OB_ISNULL(expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(expr), KP(expr.args_));
@@ -5447,12 +5449,10 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
     if (OB_ISNULL(calc_vector_expr) || calc_vector_expr->datum_meta_.type_ != ObCollectionSQLType) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("calc vector expr is invalid", K(ret), KPC(calc_vector_expr));
-    } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(calc_vector_expr), eval_ctx, allocator, arr, contain_null))) {
+    } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(calc_vector_expr), eval_ctx, allocator, arr, contain_null))) { // if vector is null, continue get center_prefix
       LOG_WARN("failed to get vector", K(ret), KPC(calc_vector_expr));
     } else if (OB_FAIL(ObVectorIndexUtil::calc_location_ids(eval_ctx, calc_table_id_expr, calc_part_id_expr, table_id, tablet_id))) {
       LOG_WARN("fail to calc location ids", K(ret), K(table_id), K(tablet_id), KP(calc_table_id_expr), KP(calc_part_id_expr));
-    } else if (contain_null) {
-      // do nothing
     } else if (OB_ISNULL(calc_distance_algo_expr) || calc_distance_algo_expr->datum_meta_.type_ != ObUInt64Type) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("calc distance algo expr is invalid", K(ret), KPC(calc_distance_algo_expr));
@@ -5465,7 +5465,7 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
     } else {
       ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
       ObExprVecIvfCenterIdCache *cache = get_ivf_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_);
-      if (OB_FAIL(get_ivf_aux_info(service, cache, table_id, tablet_id, allocator, centers))) {
+      if (OB_FAIL(get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, allocator, centers, center_prefix, 0))) {
         LOG_WARN("failed to get ivf aux info", K(ret));
       }
     }
@@ -5643,30 +5643,52 @@ int ObVectorIndexUtil::get_ivf_aux_info(share::ObPluginVectorIndexService *servi
                                             ObExprVecIvfCenterIdCache *cache,
                                             const ObTableID &table_id,
                                             const ObTabletID &tablet_id,
+                                            const ObTabletID &cent_tablet_id,
+                                            const bool is_pq_cache,
                                             common::ObIAllocator &allocator,
-                                            ObIArray<float*> &centers)
+                                            ObIArray<float*> &centers,
+                                            uint64_t &center_prefix,
+                                            int64_t m)
 {
   int ret = OB_SUCCESS;
+  bool cache_hit = false;
+  center_prefix = 0;
   if (OB_ISNULL(service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("service is nullptr", K(ret));
   } else {
-    if (OB_ISNULL(cache)) {
-      if (OB_FAIL(service->get_ivf_aux_info(table_id, tablet_id, allocator, centers))) {
-        LOG_WARN("failed to get centers", K(ret));
+    if (OB_NOT_NULL(cache) && cache->hit(table_id, tablet_id)) {
+      cache_hit = true;
+      if (OB_FAIL(cache->get_centers(centers))) {
+        LOG_WARN("failed to get centers from cache", K(ret));
       }
-    } else {
-      if (cache->hit(table_id, tablet_id)) {
-        if (OB_FAIL(cache->get_centers(centers))) {
-          LOG_WARN("failed to get centers from cache", K(ret));
+    }
+
+    if (!cache_hit && OB_SUCC(ret)) {
+      if (OB_ISNULL(cache)) {
+        if (OB_FAIL(service->get_ivf_aux_info(table_id, tablet_id, allocator, is_pq_cache, centers, center_prefix))) {
+          LOG_WARN("failed to get centers", K(ret));
         }
       } else {
         cache->reuse();
-        if (OB_FAIL(service->get_ivf_aux_info(table_id, tablet_id, cache->get_allocator(), centers))) {
+        if (OB_FAIL(service->get_ivf_aux_info(table_id, tablet_id, cache->get_allocator(), is_pq_cache, centers, center_prefix))) {
           LOG_WARN("failed to get centers", K(ret));
-        } else if (OB_FAIL(cache->update_cache(table_id, tablet_id, centers))) {
+        } else if (OB_FAIL(cache->update_cache(table_id, tablet_id, centers, center_prefix))) {
           LOG_WARN("failed to update ivf center id cache", K(ret));
         }
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      if (OB_NOT_NULL(cache)) {
+        center_prefix = cache->get_center_prefix();
+      }
+      if (centers.empty()) {
+        center_prefix = 1; // special case: empty meta table, set center_prefix to 1
+      }
+      if (center_prefix == 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("center prefix is 0", K(ret), K(cache_hit), KPC(cache), K(is_pq_cache));
       }
     }
   }
@@ -6381,6 +6403,42 @@ int ObVectorIndexUtil::check_need_embedding_when_rebuild(const ObString &old_idx
     }
   } else {
     // do nothing, other type vec index.
+  }
+  return ret;
+}
+
+int ObVectorIndexUtil::get_partition_name_by_tablet(
+    const ObTableSchema &table_schema,
+    const ObTableSchema &data_table_schema,
+    const ObTabletID index_tablet_id,
+    ObPartitionLevel &part_level,
+    ObString &partition_name)
+{
+  int ret = OB_SUCCESS;
+
+  part_level = data_table_schema.get_part_level();
+  if (OB_SUCC(ret) && PARTITION_LEVEL_ZERO != part_level) {
+    int64_t part_index = -1;
+    int64_t subpart_index = -1;
+    if (OB_FAIL(table_schema.get_part_idx_by_tablet(index_tablet_id, part_index, subpart_index))) {
+      LOG_WARN("failed to get part idx by tablet", K(ret), K(index_tablet_id), K(part_index), K(subpart_index));
+    } else {
+      ObPartition **data_partitions = data_table_schema.get_part_array();
+      if (OB_ISNULL(data_partitions)) {
+        ret = OB_PARTITION_NOT_EXIST;
+        LOG_WARN("data table part array is null", K(ret));
+      } else if (PARTITION_LEVEL_ONE == part_level) {
+        partition_name = data_partitions[part_index]->get_part_name();
+      } else if (PARTITION_LEVEL_TWO == part_level) {
+        ObSubPartition **data_subpart_array = data_partitions[part_index]->get_subpart_array();
+        if (OB_ISNULL(data_subpart_array)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("subpart array is null", K(ret), K(part_index));
+        } else {
+          partition_name = data_subpart_array[subpart_index]->get_part_name();
+        }
+      }
+    }
   }
   return ret;
 }

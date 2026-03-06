@@ -25,19 +25,8 @@ using namespace oceanbase;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
-#ifdef __APPLE__
-  static inline int64_t get_aligned_thread_stack_size() {
-    // macOS needs a larger default stack size for some complex functions
-    // 8MB is a safe default on macOS
-    const int64_t size = (1L << 23) - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
-    const ssize_t ps = ob_get_page_size();
-    return (size + ps - 1) & ~(ps - 1);
-  }
-  int64_t global_thread_stack_size = get_aligned_thread_stack_size();
-#else
-  int64_t global_thread_stack_size = (1L << 19) - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
-#endif
-
+// Use 512KB stack size, OB has SMART_CALL mechanism to extend stack when needed
+int64_t global_thread_stack_size = (1L << 19) - SIG_STACK_SIZE - ACHUNK_PRESERVE_SIZE;
 thread_local uint64_t ThreadPool::thread_idx_ = 0;
 // Get the thread-local tenant context, for use when checking at thread pool startup
 IRunWrapper *&Threads::get_expect_run_wrapper()

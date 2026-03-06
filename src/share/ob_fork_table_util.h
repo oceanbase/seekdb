@@ -137,16 +137,20 @@ public:
 
   static bool is_domain_or_aux_index(const share::schema::ObTableSchema &index_schema);
 
+  // Obtain snapshot for multiple tables at once to ensure consistency
   static int obtain_snapshot(
       common::ObMySQLTransaction &trans,
       schema::ObSchemaGetterGuard &schema_guard,
-      const share::schema::ObTableSchema &data_table_schema,
+      const uint64_t tenant_id,
+      const common::ObIArray<const share::schema::ObTableSchema*> &data_table_schemas,
       int64_t &new_fetched_snapshot);
 
+  // Release snapshot for multiple tables at once
   static int release_snapshot(
       rootserver::ObDDLTask* task,
       schema::ObSchemaGetterGuard &schema_guard,
-      const uint64_t table_id,
+      const uint64_t tenant_id,
+      const common::ObIArray<uint64_t> &table_ids,
       const int64_t snapshot_version);
 };
 

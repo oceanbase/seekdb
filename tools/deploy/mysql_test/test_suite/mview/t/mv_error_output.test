@@ -1,0 +1,175 @@
+# owner: zg410411
+# owner group: mv
+# tags:
+# descriotion: materialized view error output test
+#
+
+--disable_warnings
+drop database if exists mv_error_test;
+create database mv_error_test;
+--enable_warnings
+
+use mv_error_test;
+
+create table t1(c1 int, c2 int primary key, c3 int) partition by range(c2) (
+    partition p0 values less than (10),
+    partition p1 values less than (20)
+);
+create table t2(c1 int, c2 int);
+create table t3(c1 int, c2 int);
+create materialized view log on t1 with primary key (c1) including new values;
+create materialized view log on t3 with primary key (c1) including new values;
+
+--echo # 1. set operation is not supported
+--error 9760
+create materialized view mv1_1 refresh fast on demand as select c1, c2 from t1 union select c1, c2 from t2;
+--error 9760
+create materialized view mv1_2 refresh fast on demand as select c1, c2 from t1 minus select c1, c2 from t2;
+--error 9760
+create materialized view mv1_3 refresh fast on demand as select c1, c2 from t1 intersect select c1, c2 from t2;
+
+--echo # 2. query with subquery is not supported
+--error 9760
+create materialized view mv2_1 refresh fast on demand as select (select count(*) from t2), c1, c2 from t1;
+
+--echo # 3. query with order by or limit operators is not supported
+--error 9760
+create materialized view mv3_1 refresh fast on demand as select c1, c2 from t1 order by c1;
+--error 9760
+create materialized view mv3_2 refresh fast on demand as select c1, c2 from t1 limit 10;
+
+--echo # 4. query with rollup, grouping sets, cube, or having operators is not supported
+# rollup, grouping sets, cube are for oracle mode
+--error 9760
+create materialized view mv4_1 refresh fast on demand as select c1, sum(c2) from t1 having c1 > 0;
+
+--echo # 5. hierarchical query is not supported
+# hierarchical query is for oracle mode
+
+--echo # 6. window function is not supported
+--error 9760
+create materialized view mv6_1 refresh fast on demand as select c1, sum(c2) over (partition by c1) from t1;
+--error 9760
+create materialized view mv6_2 refresh fast on demand as select c1, rank() over (partition by c1 order by c2) from t1;
+
+--echo # 7. query with assignment operator is not supported
+--error 9760
+create materialized view mv7_1 refresh fast on demand as select (@v:=c1) from t1;
+
+--echo # 8. query with sequence is not supported
+create sequence seq increment by 1 start with 1;
+--error 4315
+create materialized view mv8_1 refresh fast on demand as select seq.NEXTVAL from t1;
+
+--echo # 9. query with rownum/rowid/ora_rowscn pseudocolumns is not supported
+--error 9760
+create materialized view mv9_1 refresh fast on demand as select c1, ora_rowscn from t1;
+# create materialized view mv9_2 refresh fast on demand as select c1, rownum from t1; -- oracle mode
+
+--echo # 10. non-deterministic query is not supported
+--error 9760
+create materialized view mv10_1 refresh fast on demand as select c1, floor(rand()) from t1;
+--error 9760
+create materialized view mv10_2 refresh fast on demand as select c1, sysdate() from t1;
+
+--echo # 11. query with duplicted select items is not supported
+--error 9760
+create materialized view mv11_1 refresh fast on demand as select c1, c2, c2 c2_dup from t1;
+
+--echo # 12. query with duplicted group by items is not supported
+--error 9760
+create materialized view mv12_1 refresh fast on demand as select c1, sum(c2) from t1 group by c1, c1;
+
+--echo # 13. table type not valid, basic table is suppored only
+--error 9760
+create materialized view mv13_1 refresh fast on demand as select c1, c2 from (select * from t1);
+create view v13_1 as select * from t1;
+--error 9760
+create materialized view mv13_2 refresh fast on demand as select c1, c2 from v13_1;
+
+--echo # 14. flashback query is not supported
+--error 9760
+create materialized view mv14_1 refresh fast on demand as select c1, c2 from t1 as of snapshot 1;
+
+--echo # 15. query with partition hint for table is not supported
+--error 9760
+create materialized view mv15_1 refresh fast on demand as select c1, c2 from t1 partition(p1);
+
+--echo # 16. base table xxx doesn't have corresponding mlog table
+--error 9760
+create materialized view mv16_1 refresh fast on demand as select c1, c2, count(*) cnt from t3 group by c1, c2;
+
+--echo # 17. the mlog table of xxx doesn't contain required columns in the query
+--error 9760
+create materialized view mv17_1 refresh fast on demand as select c1, c2, c3, count(*) cnt from t1 group by c1, c2, c3;
+
+--echo # 18. a count(*) item is required in the select list
+--error 9760
+create materialized view mv18_1 refresh fast on demand as select c1 from t1 group by c1;
+
+--echo # 19. select output is not standard group by for mysql mode
+--error 9760
+create materialized view mv19_1 refresh fast on demand as select c1, c2, count(*) cnt from t1 group by c1;
+
+--echo # 20. all group by column are required in the select list
+--error 9760
+create materialized view mv20_1 refresh fast on demand as select c1, count(*) cnt from t1 group by c1, c2;
+
+--echo # 21. query with distinct keyword is not supported
+--error 9760
+create materialized view mv21_1 refresh fast on demand as select c1, count(distinct(c2)), count(*) cnt from t1 group by c1;
+
+# --echo # 22. query with nested aggregate function is not supported
+# NO NEED FOR NOW
+
+--echo # 23. count aggr need add as select output
+--error 9760
+create materialized view mv23_1 refresh fast on demand as select c1, count(c2) * 4, count(*) cnt from t1 group by c1;
+
+--echo # 24. sum aggr need add as select output
+--error 9760
+create materialized view mv24_1 refresh fast on demand as select c1, sum(c2) * 4, count(*) cnt from t1 group by c1;
+
+--echo # 25. the corresponding count() funciton is required to be added with the sum/avg/stddev/variance function in select list
+--error 9760
+create materialized view mv25_1 refresh fast on demand as select c1, sum(c2), count(*) cnt from t1 group by c1;
+--error 9760
+create materialized view mv25_1 refresh fast on demand as select c1, avg(c2), count(*) cnt from t1 group by c1;
+--error 9760
+create materialized view mv25_1 refresh fast on demand as select c1, stddev(c2), count(*) cnt from t1 group by c1;
+--error 9760
+create materialized view mv25_1 refresh fast on demand as select c1, variance(c2), count(*) cnt from t1 group by c1;
+
+--echo # 26. the aggregate function type is not supported yet (only count/sum/avg/stddev/variance is supported)
+--error 9760
+create materialized view mv26_1 refresh fast on demand as select c1, max(c2), count(*) cnt from t1 group by c1;
+--error 9760
+create materialized view mv26_1 refresh fast on demand as select c1, min(c2), count(*) cnt from t1 group by c1;
+
+--echo # 27. single table query supported after 4.3.5.3
+create materialized view mv27_1 refresh fast on demand as select c1, c2 from t1;
+drop materialized view mv27_1;
+
+--echo # 28. outer join is not supported
+--error 9760
+create materialized view mv28_1 refresh fast on demand as select t1.c1, t2.c2 from t1 left join t2 on t1.c1 = t2.c1;
+
+--echo # 29. primary key definition is required for base tables
+--error 9760
+create materialized view mv29_1 refresh fast on demand as select c1, c2, count(*) cnt from t3 group by c1, c2;
+
+--echo # 30. primary keys of all base tables are required in the select list
+--error 9760
+create materialized view mv30_1 refresh fast on demand as select t1.c1 mc1, t3.c1 mc2 from t1 join t3 on t1.c1 = t3.c1;
+
+--echo # 31. test the error output of invoking fast refresh
+create table t4(c1 int, c2 int primary key);
+create materialized view log on t4 with primary key (c1) including new values;
+create materialized view mv31_1 refresh fast on demand as select c1, c2, count(*) cnt from t4 group by c1, c2;
+call DBMS_MVIEW.refresh('mv31_1', 'f');
+drop materialized view log on t4;
+--error 9760
+call DBMS_MVIEW.refresh('mv31_1', 'f');
+
+
+drop database mv_error_test;

@@ -1,0 +1,753 @@
+# ----------------------------------------------------------------------
+# Test of array ddl/dml.
+# ----------------------------------------------------------------------
+drop table if exists t1, t2, t3, t4;
+create table t1(c1 array(int), c2 array(varchar(256)), c3 array(bigint), c4 array(TINYINT), c5 array(float), c6 array(double),
+c7 array(SMALLINT));
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c1	ARRAY(INT)	YES		NULL
+c2	ARRAY(VARCHAR(256))	YES		NULL
+c3	ARRAY(BIGINT)	YES		NULL
+c4	ARRAY(TINYINT)	YES		NULL
+c5	ARRAY(FLOAT)	YES		NULL
+c6	ARRAY(DOUBLE)	YES		NULL
+c7	ARRAY(SMALLINT)	YES		NULL
+create table t2(c1 array(array(int)), c2 array(array(varchar(256))), c3 array(array(bigint)), c4 array(array(TINYINT)),
+c5 array(array(bool)), c6 array(array(TINYINT)), c7 array(array(float)), c8 array(array(double)));
+desc t2;
+Field	Type	Null	Key	Default	Extra
+c1	ARRAY(ARRAY(INT))	YES		NULL
+c2	ARRAY(ARRAY(VARCHAR(256)))	YES		NULL
+c3	ARRAY(ARRAY(BIGINT))	YES		NULL
+c4	ARRAY(ARRAY(TINYINT))	YES		NULL
+c5	ARRAY(ARRAY(TINYINT))	YES		NULL
+c6	ARRAY(ARRAY(TINYINT))	YES		NULL
+c7	ARRAY(ARRAY(FLOAT))	YES		NULL
+c8	ARRAY(ARRAY(DOUBLE))	YES		NULL
+create table t3(c1 int[], c2 varchar(256)[], c3 bigint[], c4 TINYINT[], c5 float[], c6 double[], c7 SMALLINT[]);
+desc t3;
+Field	Type	Null	Key	Default	Extra
+c1	ARRAY(INT)	YES		NULL
+c2	ARRAY(VARCHAR(256))	YES		NULL
+c3	ARRAY(BIGINT)	YES		NULL
+c4	ARRAY(TINYINT)	YES		NULL
+c5	ARRAY(FLOAT)	YES		NULL
+c6	ARRAY(DOUBLE)	YES		NULL
+c7	ARRAY(SMALLINT)	YES		NULL
+create table t4(c1 int[][], c2 varchar(256)[][], c3 bigint[][], c4 TINYINT[][], c5 float[][], c6 double[][], c7 SMALLINT[][]);
+desc t4;
+Field	Type	Null	Key	Default	Extra
+c1	ARRAY(ARRAY(INT))	YES		NULL
+c2	ARRAY(ARRAY(VARCHAR(256)))	YES		NULL
+c3	ARRAY(ARRAY(BIGINT))	YES		NULL
+c4	ARRAY(ARRAY(TINYINT))	YES		NULL
+c5	ARRAY(ARRAY(FLOAT))	YES		NULL
+c6	ARRAY(ARRAY(DOUBLE))	YES		NULL
+c7	ARRAY(ARRAY(SMALLINT))	YES		NULL
+drop table t3, t4;
+create table t3(c1 int);
+alter table t3 add column c2 array(varchar(256));
+alter table t3 add column c3 array(array(TIMESTAMP(6)));
+ERROR 0A000: Not supported feature or function
+alter table t3 add column c3 array(int) not null;
+ERROR 22004: Invalid use of NULL value
+alter table t3 add column c3 vector(2) not null;
+ERROR 22004: Invalid use of NULL value
+desc t3;
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES		NULL
+c2	ARRAY(VARCHAR(256))	YES		NULL
+alter table t3 drop column c2;
+desc t3;
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES		NULL
+create table t4 (id int, c2 int[] not null, c3 int[]);
+insert into t4 values (1, [1], NULL);
+alter table t4 modify c2 float[] not null;
+ERROR 22004: Invalid use of NULL value
+alter table t4 modify c3 float[] not null;
+ERROR 22004: Invalid use of NULL value
+drop table t1, t2, t3, t4;
+create table t1(id int,c varchar(10),a array(int),v vector(2));
+insert into t1 values(1,'test1',[1,2],[3,4]);
+select [c,a] from t1;
+ERROR 22000: Invalid data type for the operation
+select [a,c] from t1;
+ERROR 22000: Invalid data type for the operation
+select [c,v] from t1;
+ERROR 22000: Invalid data type for the operation
+select [v,c] from t1;
+ERROR 22000: Invalid data type for the operation
+drop table t1;
+create table t1 (c1 int[][][][][][]);
+desc t1;
+Field	Type	Null	Key	Default	Extra
+c1	ARRAY(ARRAY(ARRAY(ARRAY(ARRAY(ARRAY(INT))))))	YES		NULL
+insert into t1 values ([[[[[[1,2,3],[4,5,6]]]]]]);
+select * from t1;
+c1
+[[[[[[1,2,3],[4,5,6]]]]]]
+drop table t1;
+create table t1 (c1 int[][][][][][][]);
+ERROR 0A000: ARRAY DEPTH exceeds the maximum allowed(6) not supported
+CREATE TABLE t1 (c1 int PRIMARY KEY, c2 set('A','[1]','W','12','999','NULL','中文'),c3 vector(3) as (c2));
+ERROR 22000: Invalid data type for the operation
+CREATE TABLE t1 (c1 int PRIMARY KEY, c2 enum('A','[1]','W','12','999','NULL','中文'),c3 vector(3) as (c2));
+ERROR 22000: Invalid data type for the operation
+select [[[[[[1,2], [3,4], [5,6]], [[12], [3,4], [5,6]]]]]];
+[[[[[[1,2], [3,4], [5,6]], [[12], [3,4], [5,6]]]]]]
+[[[[[[1,2],[3,4],[5,6]],[[12],[3,4],[5,6]]]]]]
+select [[[[[[[1,2], [3,4], [5,6]], [[12], [3,4], [5,6]]]]]]];
+ERROR 0A000: Not supported feature or function
+drop table if exists arr_t1;
+create table arr_t1(c1 array(int), c2 array(bigint), c3 array(float), c4 array(double));
+select * from arr_t1;
+c1	c2	c3	c4
+insert into arr_t1 values(array(1, 2, 3, 4, 5),
+array(8589934592, 8592031744, 8592033792, 8592164864),
+array(52314.234657, 5.123123, 0.0000000234, 10000),
+array(52314.234657, 5.123123, 0.0000000234, 10000));
+insert into arr_t1 values(array(1.55, 2.23, 323.689, 4.88888, 5.0),
+array(1.55, 2.23, 323.689, 4.88888, 5.0),
+array(8589934592, 8592031744, 8592033792, 8592164864),
+array(1, 2, 3, 4, 5));
+insert into arr_t1(c1) values(['']);
+ERROR HY000: Incorrect integer value for column 'c1' at row 1
+insert into arr_t1(c2) values(['']);
+ERROR HY000: Incorrect integer value for column 'c2' at row 1
+insert into arr_t1(c3) values(['']);
+ERROR 01000: Data truncated for column 'c3' at row 1
+insert into arr_t1(c4) values(['']);
+ERROR 01000: Data truncated for column 'c4' at row 1
+select * from arr_t1;
+c1	c2	c3	c4
+[1,2,3,4,5]	[8589934592,8592031744,8592033792,8592164864]	[52314.2,5.12312,0.0000000234,10000]	[52314.234657,5.123123,0.0000000234,10000]
+[2,2,324,5,5]	[2,2,324,5,5]	[8589930000,8592030000,8592030000,8592160000]	[1,2,3,4,5]
+drop table arr_t1;
+drop table if exists vector_t1;
+create table vector_t1(c1 array(float), c2 vector(4), c3 array(double));
+insert into vector_t1 values([5, 5.11111, 5.0, 5.888888, 57584], [5, 5.11111, 5.0, 5.888888], [5, 5.11111, 5.0, 5.888888, 57584]),
+([5.11111, 5.0, 5.888888], "[5, 5.11111, 5.0, 5.888888]", [5.11111, 5.0, 5.888888]),
+([5.11111, 5.0, 5.888888], '[5, 5.11111, 5.0, 5.888888]', [5.11111, 5.0, 5.888888]),
+([5.0], [5.11111, 5.0, 5, 5.888888], [5.0]);
+insert into vector_t1(c1) values([57584]);
+insert into vector_t1 values(null, null, null);
+insert into vector_t1(c2) values([57584]);
+ERROR 22000: inconsistent dimension: expected 4 got 1
+insert into vector_t1(c2) values([57584, 1, 2]);
+ERROR 22000: inconsistent dimension: expected 4 got 3
+insert into vector_t1(c2) values([57584, 1, 2, 3.14159]);
+insert into vector_t1(c2) values("[57584, 1, 2]");
+ERROR 22000: inconsistent dimension: expected 4 got 3
+insert into vector_t1(c2) values("[57584, 1, 2, 3.14159]");
+insert into vector_t1(c2) values("[57");
+ERROR HY000: Invalid argument
+insert into vector_t1(c2) values("[57,");
+ERROR HY000: Invalid argument
+insert into vector_t1(c2) values("[-");
+ERROR HY000: Invalid argument
+insert into vector_t1(c3) values("[1, NULL, 3.14159]");
+insert into vector_t1(c3) values("[1, null, 3.14159]");
+insert into vector_t1 values([5, 5.11111, 5.0, 5.888888, 57584], "[5, 5.11111, 5.888888]", [5, 5.11111, 5.0, 5.888888, 57584]);
+ERROR 22000: inconsistent dimension: expected 4 got 3
+select * from vector_t1;
+c1	c2	c3
+[5,5.11111,5,5.88889,57584]	[5,5.11111,5,5.88889]	[5,5.11111,5,5.888888,57584]
+[5.11111,5,5.88889]	[5,5.11111,5,5.88889]	[5.11111,5,5.888888]
+[5.11111,5,5.88889]	[5,5.11111,5,5.88889]	[5.11111,5,5.888888]
+[5]	[5.11111,5,5,5.88889]	[5]
+[57584]	NULL	NULL
+NULL	NULL	NULL
+NULL	[57584,1,2,3.14159]	NULL
+NULL	[57584,1,2,3.14159]	NULL
+NULL	NULL	[1,NULL,3.14159]
+NULL	NULL	[1,NULL,3.14159]
+select * from vector_t1 where cast((any_value("[4")) in (c2) AS TIME);
+ERROR HY000: Invalid argument
+drop table vector_t1;
+create table arr_t1(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t1 values(1, [5, 2, null, 5], [2.1, 3.2, 4.3], [2.111144455, 3.444555666, null]);
+insert into arr_t1 values(2, [null, 2, 3, 5], [2.1, 3.2, 4.3], [null, 2.111144455, 3.444555666, null]);
+insert into arr_t1 values(3, [null, "2", "3", "5"], ["2.1", "3.2", "4.3"], [null, "2.111144455", "3.444555666", null]);
+insert into arr_t1 values(3, [null, "a", "3", "5"], ["2.1", "3.2", "4.3"], [null, "2.111144455", "3.444555666", null]);
+ERROR HY000: Incorrect integer value for column 'arr1' at row 1
+select * from arr_t1;
+c1	arr1	vec1	arr2
+1	[5,2,NULL,5]	[2.1,3.2,4.3]	[2.111144455,3.444555666,NULL]
+2	[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+3	[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+update arr_t1 set vec1=[1,7,1] where c1=2;
+update arr_t1 set vec1='[1,7,1]' where c1=1;
+select * from arr_t1;
+c1	arr1	vec1	arr2
+1	[5,2,NULL,5]	[1,7,1]	[2.111144455,3.444555666,NULL]
+2	[NULL,2,3,5]	[1,7,1]	[NULL,2.111144455,3.444555666,NULL]
+3	[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+delete from arr_t1 where c1=2;
+select * from arr_t1;
+c1	arr1	vec1	arr2
+1	[5,2,NULL,5]	[1,7,1]	[2.111144455,3.444555666,NULL]
+3	[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+drop table arr_t1;
+create table arr_t1(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t1 values(1, [5, 2, null, 5], [2.1, 3.2, 4.3], [2.111144455, 3.444555666, null]);
+insert into arr_t1 values(2, [null, 2, 3, 5], [2.1, 3.2, 4.3], [null, 2.111144455, 3.444555666, null]);
+insert into arr_t1(vec1) select [3.14159, 5.88, 4.88];
+create table arr_t2(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t2 select * from arr_t1;
+select * from arr_t2;
+c1	arr1	vec1	arr2
+1	[5,2,NULL,5]	[2.1,3.2,4.3]	[2.111144455,3.444555666,NULL]
+2	[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+NULL	NULL	[3.14159,5.88,4.88]	NULL
+drop table if exists arr_t2, arr_t3;
+drop view if exists arr_v1;
+create table arr_t2 as select * from arr_t1;
+desc arr_t2;
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES		NULL
+arr1	ARRAY(INT)	YES		NULL
+vec1	VECTOR(3)	YES		NULL
+arr2	ARRAY(DOUBLE)	YES		NULL
+select * from arr_t2;
+c1	arr1	vec1	arr2
+1	[5,2,NULL,5]	[2.1,3.2,4.3]	[2.111144455,3.444555666,NULL]
+2	[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+NULL	NULL	[3.14159,5.88,4.88]	NULL
+select arr1, vec1, arr2 from arr_t2;
+arr1	vec1	arr2
+[5,2,NULL,5]	[2.1,3.2,4.3]	[2.111144455,3.444555666,NULL]
+[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+NULL	[3.14159,5.88,4.88]	NULL
+create table arr_t3 as select vec1 from arr_t1;
+desc arr_t3;
+Field	Type	Null	Key	Default	Extra
+vec1	VECTOR(3)	YES		NULL
+insert into arr_t3 select vec1 from arr_t1 where c1 = 1;
+select * from arr_t3;
+vec1
+[2.1,3.2,4.3]
+[2.1,3.2,4.3]
+[3.14159,5.88,4.88]
+[2.1,3.2,4.3]
+create view arr_v1 as select * from arr_t1;
+desc arr_v1;
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES		NULL
+arr1	ARRAY(INT)	YES		NULL
+vec1	VECTOR(3)	YES		NULL
+arr2	ARRAY(DOUBLE)	YES		NULL
+select * from arr_v1;
+c1	arr1	vec1	arr2
+1	[5,2,NULL,5]	[2.1,3.2,4.3]	[2.111144455,3.444555666,NULL]
+2	[NULL,2,3,5]	[2.1,3.2,4.3]	[NULL,2.111144455,3.444555666,NULL]
+NULL	NULL	[3.14159,5.88,4.88]	NULL
+select vec1 from arr_v1;
+vec1
+[2.1,3.2,4.3]
+[2.1,3.2,4.3]
+[3.14159,5.88,4.88]
+drop table arr_t1;
+drop table arr_t2;
+drop table arr_t3;
+drop view arr_v1;
+create table arr_t1(c1 int, c2 vector(4) default "[3.14, 4.56, 7.88, 9.777]");
+ERROR 42000: BLOB, TEXT, GEOMETRY or JSON column 'c2' can't have a default value
+select ["hello", "world", null, "hi"];
+["hello", "world", null, "hi"]
+["hello","world",NULL,"hi"]
+create table arr_t1(c1 int, c2 array(varchar(16)));
+insert into arr_t1 values(1, ["hello", "world", null, "hi"]);
+insert into arr_t1 values(2, [null, "hello", "world", "hi"]);
+insert into arr_t1 values(3, ["hello", "world", "hi", null]);
+insert into arr_t1 values(4, ["hello", "蚂蚁", "hi", null]);
+insert into arr_t1 values(5, ["hello", "worldddddddddddd", "hi", null]);
+insert into arr_t1 values(6, ["hello", "worlddddddddddddd", "hi", null]);
+ERROR 22001: Data too long for column 'c2' at row 1
+select * from arr_t1;
+c1	c2
+1	["hello","world",NULL,"hi"]
+2	[NULL,"hello","world","hi"]
+3	["hello","world","hi",NULL]
+4	["hello","蚂蚁","hi",NULL]
+5	["hello","worldddddddddddd","hi",NULL]
+drop table arr_t1;
+create table arr_t1(c1 int, c2 array(varchar(2)));
+insert into arr_t1 values(1, ['ab', 'c']);
+insert into arr_t1 values(1, ['ab', 'csdf']);
+ERROR 22001: Data too long for column 'c2' at row 1
+select * from arr_t1;
+c1	c2
+1	["ab","c"]
+drop table arr_t1;
+CREATE TABLE arr_t1 (c1 int primary key, c2 int[],c3 float[],c4 varchar(2560000000000000000)[]);
+ERROR 42000: Column length too big for column 'varchar' (max = 262144)
+create table arr_t1(c1 int, c2 array(array(varchar(16))), c3 array(array(float)), c4 array(array(array(double))));
+insert into arr_t1 values(1, [["hello", "world"], [null, "hi"]],
+[[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]],
+[[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]);
+insert into arr_t1 values(2, [null, [null, "hi"]],
+[[5.55, 7.87, 44], null, [null, 3.1415, 289.33]],
+[[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], null]);
+insert into arr_t1 values(3, [null, [null, null]],
+[null, null, [null, null, null]],
+[[[null]]]);
+insert into arr_t1 values(3, [null, [null, null]],
+[null, null, [null, null, null]],
+[[null,[null]]]);
+insert into arr_t1 values(3, [null, [null, null]],
+[null, null, [null, null, null]],
+[null]);
+ERROR 22000: array type mismatch found between definition and data
+insert into arr_t1 values(4, [["hello", "world"], [null, "hi"]],
+[[5, 7, 44], [66, 123, null], [null, 31415, 28933]],
+[[[100, 314, 456, 788], [555, 787, 44]], [[null, 31415, 28933],[2115, 3444, null]]]);
+insert into arr_t1(c3) values([[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]);
+ERROR 22000: array type mismatch found between definition and data
+insert into arr_t1(c4) values([[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]]);
+ERROR 22000: array type mismatch found between definition and data
+insert into arr_t1(c1, c2) values(5, [[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]]);
+insert into arr_t1(c1, c3) values(6, [["5.55", "7.87", "44"], ["66", "123.67", null], [null, "3.1415", "289.33"]]);
+insert into arr_t1 values(7, "[[\"hello\", \"world\"], [null, \"hi\"]]",
+"[[5.55, 7.87, 44], [66, 123.67, null], [null, 3.1415, 289.33]]",
+"[[[100, 3.1415926, 4.56, 7.88], [5.55, 7.87, 44]], [[null, 3.1415, 289.33],[2.111144455, 3.444555666, null]]]");
+select * from arr_t1;
+c1	c2	c3	c4
+1	[["hello","world"],[NULL,"hi"]]	[[5.55,7.87,44],[66,123.67,NULL],[NULL,3.1415,289.33]]	[[[100,3.1415926,4.56,7.88],[5.55,7.87,44]],[[NULL,3.1415,289.33],[2.111144455,3.444555666,NULL]]]
+2	[NULL,[NULL,"hi"]]	[[5.55,7.87,44],NULL,[NULL,3.1415,289.33]]	[[[100,3.1415926,4.56,7.88],[5.55,7.87,44]],NULL]
+3	[NULL,[NULL,NULL]]	[NULL,NULL,[NULL,NULL,NULL]]	[[[NULL]]]
+3	[NULL,[NULL,NULL]]	[NULL,NULL,[NULL,NULL,NULL]]	[[NULL,[NULL]]]
+4	[["hello","world"],[NULL,"hi"]]	[[5,7,44],[66,123,NULL],[NULL,31415,28933]]	[[[100,314,456,788],[555,787,44]],[[NULL,31415,28933],[2115,3444,NULL]]]
+5	[["5.55","7.87","44"],["66","123.67",NULL],[NULL,"3.1415","289.33"]]	NULL	NULL
+6	NULL	[[5.55,7.87,44],[66,123.67,NULL],[NULL,3.1415,289.33]]	NULL
+7	[["hello","world"],[NULL,"hi"]]	[[5.55,7.87,44],[66,123.67,NULL],[NULL,3.1415,289.33]]	[[[100,3.1415926,4.56,7.88],[5.55,7.87,44]],[[NULL,3.1415,289.33],[2.111144455,3.444555666,NULL]]]
+drop table arr_t1;
+create table arr_t1(c1 vector(3), c2 array(float), c3 int, c4 varchar(64));
+insert into arr_t1(c1, c2) values ('[1,2,3]', [1.33, 2.77, 4.88]);
+alter table arr_t1 modify c1 vector(4);
+ERROR 22000: Invalid dimension for vector.
+alter table arr_t1 modify c2 vector(3);
+select * from arr_t1;
+c1	c2	c3	c4
+[1,2,3]	[1.33,2.77,4.88]	NULL	NULL
+alter table arr_t1 modify c2 array(int);
+select * from arr_t1;
+c1	c2	c3	c4
+[1,2,3]	[1,3,5]	NULL	NULL
+alter table arr_t1 modify c2 array(array(int));
+ERROR 22000: array type mismatch found between definition and data
+alter table arr_t1 modify c2 array(varchar(64));
+select * from arr_t1;
+c1	c2	c3	c4
+[1,2,3]	["1","3","5"]	NULL	NULL
+alter table arr_t1 modify c2 array(int);
+select * from arr_t1;
+c1	c2	c3	c4
+[1,2,3]	[1,3,5]	NULL	NULL
+alter table arr_t1 add column c5 array(float) GENERATED ALWAYS AS ( ltrim( c3 / c4 ) ) STORED;
+desc arr_t1;
+Field	Type	Null	Key	Default	Extra
+c1	VECTOR(3)	YES		NULL
+c2	ARRAY(INT)	YES		NULL
+c3	int(11)	YES		NULL
+c4	varchar(64)	YES		NULL
+c5	ARRAY(FLOAT)	YES		ltrim((`c3` / `c4`))	STORED GENERATED
+drop table arr_t1;
+create table arr_t1(c1 int, arr1 array(int), vec1 vector(3), arr2 array(double));
+insert into arr_t1 values(1, [5, 2, null, 5], [2.1, 3.2, 4.3], [2.111144455, 3.444555666, null]);
+insert into arr_t1 values(2, [null, 2, 3, 5], [2.1, 3.2, 4.3], [null, 2.111144455, 3.444555666, null]);
+insert into arr_t1 values(3, [1, 2, 3, 5], [2.1, 3.2, 4.3], [1.23, 2.111144455, 3.444555666, 4.57]);
+insert into arr_t1 values(2, [5, 8, 7, 5], [9.1, 2.2, 3.3], [7.23, 8.111144455, 3.444555666, 7.57]);
+insert into arr_t1 values(1, [6, 5, 8, 2], [1.1, 2.2, 3.3], [4.76, 11.1144455, 4.68, 7.57]);
+insert into arr_t1(vec1) select [3.14159, 5.88, 4.88];
+select distinct vec1 + [1,1,1]  from arr_t1;
+ERROR 22000: Invalid data type for the operation
+select c1 from arr_t1 group by arr1;
+ERROR 22000: Invalid data type for the operation
+select c1 from arr_t1 order by arr1;
+ERROR 22000: Invalid data type for the operation
+select sum(arr1) from arr_t1;
+ERROR 0A000: Not supported feature or function
+select max(arr1) from arr_t1;
+ERROR HY000: Invalid argument
+select min(arr1) from arr_t1;
+ERROR HY000: Invalid argument
+drop table arr_t1;
+DROP TABLE if exists t1, t2;
+drop materialized view if exists mv1, mv2;
+CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t1 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t1 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+create materialized view mv1  parallel 2 refresh complete on demand  as select * from t1;
+drop table t1;
+drop materialized view mv1;
+CREATE TABLE t2 (c1 int primary key, c2 array(int),c3 array(int) ,c4 array(int));
+insert into t2 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t2 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t2 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+insert into t2 values(4,'[-1,-2,-2]','[-4,2,3]',null);
+insert into t2 values(5,'[-1,-3,-2]',null,'[2,3,1]');
+create materialized view mv2  parallel 2 refresh complete on demand  as select * from t2;
+drop table t2;
+drop materialized view mv2;
+CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3));
+insert into t1 values(1,'[1,1,2]','[2,2,3]','[1,3,2]');
+insert into t1 values(2,'[1,0,3]','[1,0,3]','[2,3,2]');
+insert into t1 values(3,'[-1,2,2]','[-3,2,3]','[4,3,3]');
+select * from t1 order by l2_distance(c2,'[2,3,1.5]'),l2_distance(c3,'[2,10,2.5]');
+c1	c2	c3	c4
+1	[1,1,2]	[2,2,3]	[1,3,2]
+3	[-1,2,2]	[-3,2,3]	[4,3,3]
+2	[1,0,3]	[1,0,3]	[2,3,2]
+CREATE TABLE t2 (a1 int , a2 vector(3),a3 vector(3) ,a4 vector(3));
+insert into t2 select c1,c2,c3,c4 from t1;
+select /*+NO_USE_HASH_SET(@"SET$1")*/* from t1 union  select * from t2 order by c1;
+ERROR 22000: Invalid data type for the operation
+update t1 set c4 = (select sum(c3) from t1), c3 = (select avg(c4) from t1)  where c1 = 3;
+select * from t1;
+c1	c2	c3	c4
+1	[1,1,2]	[2,2,3]	[1,3,2]
+2	[1,0,3]	[1,0,3]	[2,3,2]
+3	[-1,2,2]	[2.33333,3,2.33333]	[0,4,9]
+drop table t1;
+drop table t2;
+CREATE TABLE t1(c1 TINYINT[], c2 SMALLINT[], c3 INT[]);
+INSERT INTO t1 VALUES([-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72], [-10,15,39,-12,110,62,113,-31,29,-72]);
+CREATE TABLE t2(c1 INT[], c2 TINYINT[], c3 SMALLINT[]);
+INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+SELECT * from t2;
+c1	c2	c3
+[-10,15,39,-12,110,62,113,-31,29,-72]	[-10,15,39,-12,110,62,113,-31,29,-72]	[-10,15,39,-12,110,62,113,-31,29,-72]
+drop table t1;
+drop table t2;
+CREATE TABLE t2 (c1 int primary key, c2 array(int),c3 array(int));
+insert into t2 values(1,'[1,1,2]','[2,2,3]');
+insert into t2 values(1,'[1,1,2]','[2,2,3]') on duplicate key update c2 = values(c3), c3 = values(c2);
+select * from t2;
+c1	c2	c3
+1	[2,2,3]	[1,1,2]
+drop table t2;
+create table t1(c1 float[], c2 TINYINT[] generated always as (c1 + [2, 3, 4]) stored);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `c1` ARRAY(FLOAT) DEFAULT NULL,
+  `c2` ARRAY(TINYINT) GENERATED ALWAYS AS ((`c1` + array(2,3,4))) STORED
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t1(c1) values([1,2,3]), ([1.2, 3.4, 5.6]);
+select * from t1;
+c1	c2
+[1,2,3]	[3,5,7]
+[1.2,3.4,5.6]	[3,6,10]
+drop table t1;
+CREATE TABLE t1 (c1 smallint(5) unsigned NOT NULL DEFAULT '7252', c2 varbinary(467) NOT NULL, c4 tinyblob DEFAULT NULL);
+alter table t1 add column ( c3 float [] GENERATED ALWAYS AS ( ltrim( c1 / c2 ) ) STORED );
+alter table t1 modify c3 float [] GENERATED ALWAYS AS ( ltrim( c4 / c2 ) ) STORED;
+ERROR 0A000: Modify generated column definition not supported
+drop table t1;
+select [null];
+[null]
+[NULL]
+select [18446744073709551615];
+[18446744073709551615]
+[18446744073709551615]
+select [null, null, null];
+[null, null, null]
+[NULL,NULL,NULL]
+select [null, null, 3.33];
+[null, null, 3.33]
+[NULL,NULL,3.33]
+select [null, null, "hello"];
+[null, null, "hello"]
+[NULL,NULL,"hello"]
+select [[1,2], [null]];
+[[1,2], [null]]
+[[1,2],[NULL]]
+select [[null]];
+[[null]]
+[[NULL]]
+select [null, 3.33, 12];
+[null, 3.33, 12]
+[NULL,3.33,12]
+select [3.33, null, 12];
+[3.33, null, 12]
+[3.33,NULL,12]
+select [null, null, 12, 3.33];
+[null, null, 12, 3.33]
+[NULL,NULL,12,3.33]
+select [false, 1, true];
+[false, 1, true]
+[0,1,1]
+select [false, true, 1];
+[false, true, 1]
+[0,1,1]
+select [false, 3.33, true];
+[false, 3.33, true]
+[0,3.33,1]
+select [3.33, true, false];
+[3.33, true, false]
+[3.33,1,0]
+select [true, true, false];
+[true, true, false]
+[1,1,0]
+select [1,null,'',null,3];
+[1,null,'',null,3]
+["1",NULL,"",NULL,"3"]
+select [null, 1, null, '', 3];
+[null, 1, null, '', 3]
+[NULL,"1",NULL,"","3"]
+select vector_dims(array(true, 1, false));
+vector_dims(array(true, 1, false))
+3
+select vector_dims(array(true, true, 0));
+vector_dims(array(true, true, 0))
+3
+select vector_dims([false, 1, true]);
+vector_dims([false, 1, true])
+3
+select vector_dims([false, true, 1]);
+vector_dims([false, true, 1])
+3
+select vector_dims([false, true, false]);
+vector_dims([false, true, false])
+3
+drop table if exists tt1, tt2;
+create table tt1(c1 int unsigned, c2 tinyint unsigned ,c3 smallint unsigned ,c4 bigint unsigned);
+insert into tt1 values(1,2,3,4);
+select [c1] from tt1;
+[c1]
+[1]
+select [c2] from tt1;
+[c2]
+[2]
+select array(c3) from tt1;
+array(c3)
+[3]
+select array(c4) from tt1;
+array(c4)
+[4]
+create table tt2 as select [c2] from tt1;
+desc tt2;
+Field	Type	Null	Key	Default	Extra
+[c2]	ARRAY(INT UNSIGNED)	YES		NULL
+drop table tt1, tt2;
+drop table if exists tt1, tt2, tt3;
+create table tt1(c1 FLOAT unsigned, c2 double unsigned);
+insert into tt1 values(1.1, 2.2);
+select [c1], [c2] from tt1;
+[c1]	[c2]
+[1.1]	[2.2]
+select array(c1), array(c2) from tt1;
+array(c1)	array(c2)
+[1.1]	[2.2]
+select array_append([c1], c1), array_append([c2], c2) from tt1;
+array_append([c1], c1)	array_append([c2], c2)
+[1.1,1.1]	[2.2,2.2]
+create table tt2 as select [c1], [c2] from tt1;
+desc tt2;
+Field	Type	Null	Key	Default	Extra
+[c1]	ARRAY(FLOAT)	YES		NULL
+[c2]	ARRAY(DOUBLE)	YES		NULL
+create table tt3 (id int, c1 array(float unsigned), c2 array(double unsigned), c3 array(array(float unsigned)), c4 array(array(double unsigned)));
+desc tt3;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	YES		NULL
+c1	ARRAY(FLOAT UNSIGNED)	YES		NULL
+c2	ARRAY(DOUBLE UNSIGNED)	YES		NULL
+c3	ARRAY(ARRAY(FLOAT UNSIGNED))	YES		NULL
+c4	ARRAY(ARRAY(DOUBLE UNSIGNED))	YES		NULL
+insert into tt3 values (1, [1.1], [2.2], [[3.3]], [[4.4]]);
+select * from tt3;
+id	c1	c2	c3	c4
+1	[1.1]	[2.2]	[[3.3]]	[[4.4]]
+select array_append(c1, 1.2), array_append(c2, 2.2), array_append(c3, [3.3]), array_append(c4, [4.4]) from tt3;
+array_append(c1, 1.2)	array_append(c2, 2.2)	array_append(c3, [3.3])	array_append(c4, [4.4])
+[1.1,1.2]	[2.2,2.2]	[[3.299999952316284],[3.3]]	[[4.4],[4.4]]
+drop table tt1, tt2, tt3;
+drop table if exists test;
+create table test(id int,a varchar(100));
+insert into test values(1,'["test"]');
+insert into test values(2,'"');
+insert into test values(3,'""');
+insert into test values(4,'t"');
+insert into test values(5,'"t');
+select array_agg(a) from test;
+array_agg(a)
+["[\"test\"]","\"","\"\"","t\"","\"t"]
+select [a] from test;
+[a]
+["[\"test\"]"]
+["\""]
+["\"\""]
+["t\""]
+["\"t"]
+drop table test;
+drop table if exists test;
+create table test(c array(bigint unsigned));
+insert into test values([18446744073709551615]);
+insert into test values([1, 9223372036854775807]);
+insert into test values([1, 9223372036854775808]);
+ERROR 22003: Out of range value for column 'c' at row 1
+insert into test values([-1, 9223372036854775807]);
+ERROR 22003: Out of range value for column 'c' at row 1
+insert into test values([-1, 9223372036854775808]);
+ERROR 22003: Out of range value for column 'c' at row 1
+select * from test;
+c
+[18446744073709551615]
+[1,9223372036854775807]
+drop table test;
+create table test (c1 varchar(262144));
+desc test;
+Field	Type	Null	Key	Default	Extra
+c1	varchar(262144)	YES		NULL
+drop table test;
+create table test (c1 varchar(262145));
+ERROR 42000: Column length too big for column 'c1' (max = 262144)
+create table test as select ['中文',1] from dual;
+desc test;
+Field	Type	Null	Key	Default	Extra
+['中文',1]	ARRAY(VARCHAR(262144))	YES		NULL
+drop table if exists tt1, tt2;
+create table tt1(id int, c1 varchar(5), c2 array(varchar(50)), c3 vector(3));
+insert into tt1 values(1, 'abc', ['abc'], [1,2,3]);
+create table tt2 as (select [c1] from tt1);
+desc tt2;
+Field	Type	Null	Key	Default	Extra
+[c1]	ARRAY(VARCHAR(262144))	YES		NULL
+drop table tt2;
+create table tt2 as (select c2 from tt1);
+desc tt2;
+Field	Type	Null	Key	Default	Extra
+c2	ARRAY(VARCHAR(50))	YES		NULL
+drop table tt2;
+create table tt2 as (select [c3] from tt1);
+desc tt2;
+Field	Type	Null	Key	Default	Extra
+[c3]	ARRAY(VECTOR(3))	YES		NULL
+drop table tt2;
+create table tt2 as select array_agg('ocean');
+desc tt2;
+Field	Type	Null	Key	Default	Extra
+array_agg('ocean')	ARRAY(VARCHAR(5))	YES		NULL
+insert into tt2 values(["test"]);
+drop table tt2;
+create table tt2 as select array_agg(c1) from tt1;
+desc tt2;
+Field	Type	Null	Key	Default	Extra
+array_agg(c1)	ARRAY(VARCHAR(5))	YES		NULL
+drop table tt1, tt2;
+create table tt1 (c1 array(varbinary(50)));
+ERROR 0A000: array element in binary type not supported
+create table tt1 (c1 array(binary(50)));
+ERROR 0A000: Not supported feature or function
+create table tt1 (c1 varbinary(50), c2 binary(50));
+insert into tt1 values ('abc', 'abc');
+insert into tt1 values ('A', 'A');
+select [c1] from tt1;
+ERROR 0A000: array element in binary type not supported
+select [c2] from tt1;
+ERROR 0A000: array element type not supported
+select array_agg(c1) from tt1;
+ERROR 0A000: array element in binary type not supported
+select array_agg(c2) from tt1;
+ERROR 0A000: array element type not supported
+select array_map(x -> (c1) , [1]) from tt1;
+ERROR 0A000: array element in binary type not supported
+select array_map(x -> (c2) , [1]) from tt1;
+ERROR 0A000: array element type not supported
+drop table tt1;
+drop table if exists test;
+create table test(v vector(2),c1 float[],c2 int[],c3 varchar(50)[]);
+insert into  test values([1,3],[1,3],[1,3],['1','3']);
+insert into  test values([1,3],[1,3],[1,3],['test','test']);
+select [v,c1,c2,c3] from test;
+[v,c1,c2,c3]
+[[1,3],[1,3],[1,3],[1,3]]
+[[1,3],[1,3],[1,3],[0,0]]
+Warnings:
+Warning	1292	Truncated incorrect DOUBLE value: 'test'
+Warning	1292	Truncated incorrect DOUBLE value: 'test'
+select [[v,c1,c2,c3]] from test;
+[[v,c1,c2,c3]]
+[[[1,3],[1,3],[1,3],[1,3]]]
+[[[1,3],[1,3],[1,3],[0,0]]]
+Warnings:
+Warning	1292	Truncated incorrect DOUBLE value: 'test'
+Warning	1292	Truncated incorrect DOUBLE value: 'test'
+select [[v],[c1],[c2],[c3]] from test;
+[[v],[c1],[c2],[c3]]
+[[["1","3"]],[["1","3"]],[["1","3"]],[["1","3"]]]
+[[["1","3"]],[["1","3"]],[["1","3"]],[["test","test"]]]
+select [[[v]],[[c1]],[[c2]],[[c3]]] from test;
+[[[v]],[[c1]],[[c2]],[[c3]]]
+[[[["1","3"]]],[[["1","3"]]],[[["1","3"]]],[[["1","3"]]]]
+[[[["1","3"]]],[[["1","3"]]],[[["1","3"]]],[[["test","test"]]]]
+drop table if exists test;
+select [array_remove([1],1),null ,[1,2]];
+[array_remove([1],1),null ,[1,2]]
+[[],NULL,[1,2]]
+select [null,array_remove([1],1),[1,2]];
+[null,array_remove([1],1),[1,2]]
+[NULL,[],[1,2]]
+select [null,[1,2],array_remove([1],1)];
+[null,[1,2],array_remove([1],1)]
+[NULL,[1,2],[]]
+select [array_remove([1],1),null ,['a','b']];
+[array_remove([1],1),null ,['a','b']]
+[[],NULL,["a","b"]]
+select [null,array_remove([1],1),['a','b']];
+[null,array_remove([1],1),['a','b']]
+[NULL,[],["a","b"]]
+select [null,['a','b'],array_remove([1],1)];
+[null,['a','b'],array_remove([1],1)]
+[NULL,["a","b"],[]]
+create table test (id int, c1 int[], c2 int[][], c3 int[][][]);
+insert into test(c1) values ('');
+ERROR 42000: Null value
+insert into test(c1) values ('[]');
+insert into test(c1) values ('[[]]');
+ERROR 22000: array type mismatch found between definition and data
+insert into test(c1) values ('[[],[]]');
+ERROR 22000: array type mismatch found between definition and data
+insert into test(c2) values ('[]');
+ERROR 22000: array type mismatch found between definition and data
+insert into test(c2) values ('[[]]');
+insert into test(c2) values ('[[],[]]');
+insert into test(c2) values ('[[[]]]');
+ERROR 22000: array type mismatch found between definition and data
+insert into test(c2) values ('[[],[[]]]');
+ERROR 22000: array type mismatch found between definition and data
+insert into test(c3) values ('[[]]');
+ERROR 22000: array type mismatch found between definition and data
+insert into test(c3) values ('[[[]]]');
+insert into test(c3) values ('[[[[]]]]');
+ERROR 22000: array type mismatch found between definition and data
+drop table test;
+create table test(arr ARRAY(FLOAT), c1 int, c2 float, c3 decimal(3,3), c4 bit(20), c5 geometry, c6 roaringbitmap, c7 json);
+select * from test where arr = c1;
+ERROR 22000: Invalid data type for the operation
+select * from test where arr = c2;
+ERROR 22000: Invalid data type for the operation
+select * from test where arr = c3;
+ERROR 22000: Invalid data type for the operation
+select * from test where arr = c4;
+ERROR 22000: Invalid data type for the operation
+select * from test where arr = c5;
+ERROR 22000: Invalid data type for the operation
+select * from test where arr = c6;
+ERROR 22000: Invalid data type for the operation
+select * from test where arr = c7;
+ERROR 22000: Invalid data type for the operation
+drop table test;
+drop table if exists t1;
+create table t1(c1 bigint unsigned[]);
+insert into t1 values('[9223372036854775809,18446744073709551614,18446744073709551615]');
+select * from t1;
+c1
+[9223372036854775809,18446744073709551614,18446744073709551615]
+drop table t1;

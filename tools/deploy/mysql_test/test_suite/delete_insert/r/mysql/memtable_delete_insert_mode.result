@@ -1,0 +1,118 @@
+mem_scan_perf_test;
+tt1;
+pool_mem_scan_perf_test;
+unit_mem_scan_perf_test;
+set SESSION ob_query_timeout = 5 * 3600 * 1000 * 1000;
+set SESSION ob_trx_timeout = 5 * 3600 * 1000 * 1000;
+set SESSION ob_trx_idle_timeout = 5 * 3600 * 1000 * 1000;
+alter system set freeze_trigger_percentage = 59;
+create table memtable_delete_insert_test_t (col_0 bigint primary key, col_1 bigint, col_2 bigint, col_3 bigint, col_4 bigint, col_5 varchar(20)) merge_engine = delete_insert;
+create sequence s1 cache 1000000 noorder;
+create sequence s2 cache 1000000 noorder;
+INSERT INTO memtable_delete_insert_test_t SELECT
+s1.nextval col_0,
+s2.nextval col_1,
+zipf(1, 100, random(269381)) col_2,
+normal(0, 1, random(269381)) col_3,
+uniform(1, 100, random(269381)) col_4,
+randstr(1+zipf(1, 20, random(269381)), random(269381)) col_5
+FROM
+table(generator(500));
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 >= 100 and col_1 <= 110;
+col_0	col_1	col_2	col_3	col_4	col_5
+100	100	22	-1	72	PMHYt6Z
+101	101	2	-1	35	V2
+102	102	71	0	94	aloxo9Yza7U9wzE9
+103	103	0	0	9	b
+104	104	0	2	18	V
+105	105	76	0	95	J0161CZuloNufSpcZ
+106	106	3	-1	38	S5
+107	107	24	-1	74	CbA1yrQh
+108	108	0	0	13	1
+109	109	46	0	86	yLmxWxUvI1kV
+110	110	11	1	60	9OFOf
+UPDATE memtable_delete_insert_test_t SET col_2 = 777 WHERE col_1 >= 100 && col_1 <= 110;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 >= 100 && col_1 <= 111;
+col_0	col_1	col_2	col_3	col_4	col_5
+100	100	777	-1	72	PMHYt6Z
+101	101	777	-1	35	V2
+102	102	777	0	94	aloxo9Yza7U9wzE9
+103	103	777	0	9	b
+104	104	777	2	18	V
+105	105	777	0	95	J0161CZuloNufSpcZ
+106	106	777	-1	38	S5
+107	107	777	-1	74	CbA1yrQh
+108	108	777	0	13	1
+109	109	777	0	86	yLmxWxUvI1kV
+110	110	777	1	60	9OFOf
+111	111	0	1	2	B
+UPDATE memtable_delete_insert_test_t SET col_4 = 777 WHERE col_1 >= 100 && col_1 <= 110;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 >= 100 && col_1 <= 111;
+col_0	col_1	col_2	col_3	col_4	col_5
+100	100	777	-1	777	PMHYt6Z
+101	101	777	-1	777	V2
+102	102	777	0	777	aloxo9Yza7U9wzE9
+103	103	777	0	777	b
+104	104	777	2	777	V
+105	105	777	0	777	J0161CZuloNufSpcZ
+106	106	777	-1	777	S5
+107	107	777	-1	777	CbA1yrQh
+108	108	777	0	777	1
+109	109	777	0	777	yLmxWxUvI1kV
+110	110	777	1	777	9OFOf
+111	111	0	1	2	B
+DELETE FROM memtable_delete_insert_test_t WHERE col_1 >= 100 && col_1 <= 110;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 >= 100 && col_1 <= 111;
+col_0	col_1	col_2	col_3	col_4	col_5
+111	111	0	1	2	B
+alter system minor freeze tenant sys;
+UPDATE memtable_delete_insert_test_t SET col_3 = 100 WHERE col_1 > 110 and col_1 < 115;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 > 110 and col_1 + 5 < 120;
+col_0	col_1	col_2	col_3	col_4	col_5
+111	111	0	100	2	B
+112	112	12	100	61	JQ5A7
+113	113	0	100	12	1
+114	114	0	100	6	I
+UPDATE memtable_delete_insert_test_t SET col_4 = 101 WHERE col_1 > 110 and col_1 < 115;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 > 110 and col_1 + 5 < 120;
+col_0	col_1	col_2	col_3	col_4	col_5
+111	111	0	100	101	B
+112	112	12	100	101	JQ5A7
+113	113	0	100	101	1
+114	114	0	100	101	I
+UPDATE memtable_delete_insert_test_t SET col_3 = 102 WHERE col_1 > 110 and col_1 < 115;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 > 110 and col_1 + 5 < 120;
+col_0	col_1	col_2	col_3	col_4	col_5
+111	111	0	102	101	B
+112	112	12	102	101	JQ5A7
+113	113	0	102	101	1
+114	114	0	102	101	I
+UPDATE memtable_delete_insert_test_t SET col_4 = 103 WHERE col_1 > 110 and col_1 < 115;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 > 110 and col_1 + 5 < 120;
+col_0	col_1	col_2	col_3	col_4	col_5
+111	111	0	102	103	B
+112	112	12	102	103	JQ5A7
+113	113	0	102	103	1
+114	114	0	102	103	I
+INSERT INTO memtable_delete_insert_test_t VALUES(888666, 888666, 1, 1, 1, 'gengli');
+UPDATE memtable_delete_insert_test_t SET col_2 = 600, col_3 = 700 WHERE col_1 = 888666;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 = 888666;
+col_0	col_1	col_2	col_3	col_4	col_5
+888666	888666	600	700	1	gengli
+UPDATE memtable_delete_insert_test_t SET col_2 = 650, col_3 = 750 WHERE col_1 = 888666;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 = 888666;
+col_0	col_1	col_2	col_3	col_4	col_5
+888666	888666	650	750	1	gengli
+UPDATE memtable_delete_insert_test_t SET col_2 = 777, col_3 = 888 WHERE col_1 = 888666;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 = 888666;
+col_0	col_1	col_2	col_3	col_4	col_5
+888666	888666	777	888	1	gengli
+UPDATE memtable_delete_insert_test_t SET col_2 = 999, col_3 = 888 WHERE col_1 = 888666;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 = 888666;
+col_0	col_1	col_2	col_3	col_4	col_5
+888666	888666	999	888	1	gengli
+UPDATE memtable_delete_insert_test_t SET col_2 = 8866, col_3 = 6688 WHERE col_1 = 888666;
+SELECT * FROM memtable_delete_insert_test_t WHERE col_1 = 888666;
+col_0	col_1	col_2	col_3	col_4	col_5
+888666	888666	8866	6688	1	gengli
+alter system set freeze_trigger_percentage = 20;

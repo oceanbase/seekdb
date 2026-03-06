@@ -1,0 +1,828 @@
+#drop column and add column offline
+set @@session.recyclebin = off;
+alter system set default_table_store_format = 'compound';
+#add column offline
+drop table xingrui_add_offline;
+create table xingrui_add_offline(col1 int, col2 int, col3 int as(col1 + col2) stored);
+alter table xingrui_add_offline add column col4 int auto_increment;
+drop table xingrui_add_offline;
+drop table xingrui_create_table_like;
+create table xingrui_add_offline(col1 int, col2 int, col3 int as(col1 + col2) stored);
+insert into xingrui_add_offline (col1, col2) values(1, 2);
+insert into xingrui_add_offline (col1, col2) values(1, 2);
+insert into xingrui_add_offline (col1, col2) values(1, 2);
+alter table xingrui_add_offline drop column col3;
+create table xingrui_create_table_like like xingrui_add_offline;
+insert into xingrui_create_table_like (col1, col2) values(1, 2);
+insert into xingrui_create_table_like (col1, col2) values(1, 2);
+insert into xingrui_create_table_like (col1, col2) values(1, 2);
+count(*)
+3
+alter table xingrui_add_offline add column col4 int auto_increment;
+drop table xingrui_add_offline;
+drop table xingrui_create_table_like;
+create table xingrui_add_offline(col1 int, col2 int, col3 int as(col1 + col2) stored, col4 int);
+alter table xingrui_add_offline drop column col3;
+create table xingrui_create_table_like like xingrui_add_offline;
+insert into xingrui_create_table_like values(1, 2, 3);
+count(*)
+4
+alter table xingrui_add_offline add column col5 int, drop column col4;
+drop table xingrui_add_offline;
+to test with truncate table.
+alter system set _parallel_ddl_control = "TRUNCATE_TABLE:OFF" tenant = sys;
+alter system set default_table_store_format = 'row';
+drop table xingrui_truncate_table;
+drop table xingrui_create_table_like;
+create table xingrui_truncate_table  (SEED bigint NOT NULL, COL0 char(34)) PARTITION BY HASH(SEED) PARTITIONS 10;
+CREATE INDEX IDX_TEST_WITH_TRUNCATE ON xingrui_truncate_table(SEED);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL0 from  table(generator(10));
+ALTER TABLE xingrui_truncate_table DROP COLUMN COL0;
+create table xingrui_create_table_like like xingrui_truncate_table;
+insert into xingrui_create_table_like select random()SEED from table(generator(10));
+count(*)
+3
+count(*)
+2
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+truncate table xingrui_truncate_table;
+truncate table xingrui_create_table_like;
+count(*)
+2
+count(*)
+2
+count(*)
+0
+ALTER TABLE xingrui_truncate_table ADD COL1 char(34);
+alter table xingrui_create_table_like add column COL1 char(34);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+insert into xingrui_create_table_like select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+count(*)
+3
+count(*)
+3
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+1	18
+drop table xingrui_truncate_table;
+drop table xingrui_create_table_like;
+CREATE TABLE xingrui_truncate_table(c1 int auto_increment, c2 int, c3 int);
+insert into xingrui_truncate_table values(1,1,1);
+insert into xingrui_truncate_table values(2,1,1);
+alter table xingrui_truncate_table drop column c2;
+create table xingrui_create_table_like like xingrui_truncate_table;
+insert into xingrui_create_table_like values(3,1);
+insert into xingrui_create_table_like values(4,1);
+truncate table xingrui_truncate_table;
+insert into xingrui_truncate_table values(3,1);
+insert into xingrui_truncate_table values(4,1);
+alter table xingrui_truncate_table drop column c1;
+truncate table xingrui_truncate_table;
+select count(*) from xingrui_truncate_table;
+count(*)
+0
+insert into xingrui_truncate_table values(6);
+insert into xingrui_truncate_table values(7);
+insert into xingrui_truncate_table values(null);
+truncate table xingrui_truncate_table;
+select count(*) from xingrui_truncate_table;
+count(*)
+0
+alter system set _parallel_ddl_control = "TRUNCATE_TABLE:ON" tenant = sys;
+drop table xingrui_truncate_table;
+drop table xingrui_create_table_like;
+create table xingrui_truncate_table  (SEED bigint NOT NULL, COL0 char(34)) PARTITION BY HASH(SEED) PARTITIONS 10;
+CREATE INDEX IDX_TEST_WITH_TRUNCATE ON xingrui_truncate_table(SEED);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL0 from  table(generator(10));
+ALTER TABLE xingrui_truncate_table DROP COLUMN COL0;
+create table xingrui_create_table_like like xingrui_truncate_table;
+insert into xingrui_truncate_table select random()SEED from  table(generator(10));
+count(*)
+3
+count(*)
+2
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+truncate table xingrui_truncate_table;
+truncate table xingrui_create_table_like;
+count(*)
+3
+count(*)
+2
+truncate table xingrui_truncate_table;
+count(*)
+1
+ALTER TABLE xingrui_truncate_table ADD COL1 char(34);
+ALTER TABLE xingrui_create_table_like ADD COL1 char(34);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+insert into xingrui_create_table_like select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+count(*)
+4
+count(*)
+3
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+1	18
+to test with truncate table compound
+alter system set _parallel_ddl_control = "TRUNCATE_TABLE:OFF" tenant = sys;
+alter system set default_table_store_format = 'compound';
+drop table xingrui_truncate_table;
+drop table xingrui_create_table_like;
+create table xingrui_truncate_table  (SEED bigint NOT NULL, COL0 char(34)) PARTITION BY HASH(SEED) PARTITIONS 10;
+CREATE INDEX IDX_TEST_WITH_TRUNCATE ON xingrui_truncate_table(SEED);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL0 from  table(generator(10));
+ALTER TABLE xingrui_truncate_table DROP COLUMN COL0;
+create table xingrui_create_table_like like xingrui_truncate_table;
+insert into xingrui_create_table_like select random()SEED from table(generator(10));
+count(*)
+3
+count(*)
+2
+truncate table xingrui_truncate_table;
+truncate table xingrui_create_table_like;
+count(*)
+2
+count(*)
+0
+count(*)
+0
+ALTER TABLE xingrui_truncate_table ADD COL1 char(34);
+alter table xingrui_create_table_like add column COL1 char(34);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+insert into xingrui_create_table_like select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+alter table xingrui_truncate_table drop column group(each column, all columns);
+alter table xingrui_create_table_like drop column group(each column, all columns);
+count(*)
+3
+count(*)
+3
+drop table xingrui_truncate_table;
+drop table xingrui_create_table_like;
+CREATE TABLE xingrui_truncate_table(c1 int auto_increment, c2 int, c3 int);
+insert into xingrui_truncate_table values(1,1,1);
+insert into xingrui_truncate_table values(2,1,1);
+alter table xingrui_truncate_table drop column c2;
+create table xingrui_create_table_like like xingrui_truncate_table;
+insert into xingrui_create_table_like values(3,1);
+insert into xingrui_create_table_like values(4,1);
+truncate table xingrui_truncate_table;
+insert into xingrui_truncate_table values(3,1);
+insert into xingrui_truncate_table values(4,1);
+alter table xingrui_truncate_table drop column c1;
+truncate table xingrui_truncate_table;
+select count(*) from xingrui_truncate_table;
+count(*)
+0
+insert into xingrui_truncate_table values(6);
+insert into xingrui_truncate_table values(7);
+insert into xingrui_truncate_table values(null);
+truncate table xingrui_truncate_table;
+select count(*) from xingrui_truncate_table;
+count(*)
+0
+alter system set _parallel_ddl_control = "TRUNCATE_TABLE:ON" tenant = sys;
+drop table xingrui_truncate_table;
+drop table xingrui_create_table_like;
+create table xingrui_truncate_table (SEED bigint NOT NULL, COL0 char(34), COL1 char(34), COL2 char(34), COL3 char(34), COL4 char(34)) PARTITION BY HASH(SEED) PARTITIONS 10;
+CREATE INDEX IDX_TEST_WITH_TRUNCATE ON xingrui_truncate_table(SEED);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL0, randstr(10, random())COL1, randstr(10, random())COL2, randstr(10, random())COL3, randstr(10, random())COL4 from  table(generator(10));
+ALTER TABLE xingrui_truncate_table drop column col0, drop column col1, drop column col2, drop column col3, drop column col4;
+create table xingrui_create_table_like like xingrui_truncate_table;
+insert into xingrui_truncate_table select random()SEED from  table(generator(10));
+count(*)
+7
+count(*)
+2
+truncate table xingrui_truncate_table;
+truncate table xingrui_create_table_like;
+count(*)
+7
+count(*)
+2
+truncate table xingrui_truncate_table;
+count(*)
+5
+ALTER TABLE xingrui_truncate_table ADD COL1 char(34);
+ALTER TABLE xingrui_create_table_like ADD COL1 char(34);
+insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+insert into xingrui_create_table_like select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+alter table xingrui_truncate_table drop column group(each column, all columns);
+alter table xingrui_create_table_like drop column group(each column, all columns);
+count(*)
+3
+count(*)
+3
+
+to test with pk.
+drop table xingrui_table_with_pk;
+CREATE TABLE xingrui_table_with_pk(C1 bigint, C2 varchar(30), CONSTRAINT PK_C1 PRIMARY KEY (C1));
+CREATE INDEX IDX_TEST_WITH_PK ON xingrui_table_with_pk(C1, C2);
+INSERT INTO xingrui_table_with_pk(C1, C2) VALUES(NULL, 'AB');
+ERROR 23000: Column 'C1' cannot be null
+INSERT INTO xingrui_table_with_pk(C1, C2) VALUES(NULL, 'CD');
+ERROR 23000: Column 'C1' cannot be null
+ALTER TABLE xingrui_table_with_pk DROP COLUMN C1;
+ERROR 0A000: drop rowkey column is not supported
+
+to test with modify col.
+alter system set default_table_store_format = 'row';
+drop table xingrui_modify_table;
+drop table xingrui_create_table_like;
+create table xingrui_modify_table (SEED bigint NOT NULL, COL0 CHAR(34), COL1 CHAR(34)) PARTITION BY HASH(SEED) PARTITIONS 10;
+CREATE INDEX IDX_TEST_WITH_MODIFY_COL ON xingrui_modify_table(SEED, COL0);
+insert into xingrui_modify_table select random()SEED ,randstr(10, random())COL0, randstr(10, random())COL1 from  table(generator(10));
+ALTER TABLE xingrui_modify_table DROP COLUMN COL0;
+INSERT INTO xingrui_modify_table select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
+alter table xingrui_modify_table add col2 bigint;
+create table xingrui_create_table_like like xingrui_modify_table;
+INSERT INTO xingrui_create_table_like select random()SEED ,randstr(10, random())COL1, random()col2 from  table(generator(10));
+count(*)
+4
+ALTER TABLE xingrui_modify_table MODIFY COL1 VARCHAR(34), drop column col2;
+ALTER TABLE xingrui_create_table_like MODIFY COL1 VARCHAR(34), drop column col2;
+alter table xingrui_modify_table add column group(each column, all columns);
+alter table xingrui_create_table_like add column group(each column, all columns);
+count(*)
+0
+count(*)
+0
+
+to test with add col, drop col.
+drop table xingrui_add_column;
+drop table xingrui_create_table_like;
+create table xingrui_add_column  (SEED bigint NOT NULL, COL0 CHAR(34), COL1 CHAR(34));
+CREATE INDEX IDX_TEST_WITH_ADD_COL ON xingrui_add_column(SEED, COL0);
+insert into xingrui_add_column select random()SEED ,randstr(10, random())COL0, randstr(10, random())COL1 from  table(generator(10));
+ALTER TABLE xingrui_add_column DROP COLUMN SEED;
+INSERT INTO xingrui_add_column select randstr(10, random())COL0, randstr(10, random())COL1 from  table(generator(10));
+create table xingrui_create_table_like like xingrui_add_column;
+INSERT INTO xingrui_create_table_like select randstr(10, random())COL0 ,randstr(10, random())COL1 from  table(generator(10));
+count(*)
+3
+ALTER TABLE xingrui_add_column ADD COL2 VARCHAR(34), DROP COLUMN COL0;
+ALTER TABLE xingrui_create_table_like ADD COL2 VARCHAR(34), DROP COLUMN COL0;
+alter table xingrui_add_column add column group(each column, all columns);
+alter table xingrui_create_table_like add column group(each column, all columns);
+count(*)
+0
+count(*)
+0
+
+to test repartition.
+drop table xingrui_repartition;
+drop table xingrui_create_table_like;
+create table xingrui_repartition (SEED bigint NOT NULL, COL0 CHAR(34));
+CREATE INDEX IDX_xingrui_repartition ON xingrui_repartition(SEED, COL0);
+insert into xingrui_repartition select random()SEED ,randstr(10, random())COL0 from  table(generator(10));
+ALTER TABLE xingrui_repartition DROP COLUMN COL0;
+INSERT INTO xingrui_repartition select random()SEED from table(generator(10));
+create table xingrui_create_table_like like xingrui_repartition;
+INSERT INTO xingrui_create_table_like select random()SEED from  table(generator(10));
+ALTER TABLE xingrui_repartition MODIFY PARTITION BY HASH(SEED) PARTITIONS 10;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'BY HASH(SEED) PARTITIONS 10' at line 1
+alter table xingrui_repartition add column group(each column, all columns);
+alter table xingrui_create_table_like add column group(each column, all columns);
+count(*)
+0
+count(*)
+0
+#分区交换
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 bigint, c2 char(10)) partition by range(c1)(partition p0 values less than(10),
+partition p1 values less than(100));
+insert into xingrui_pt values(1, '2');
+create table xingrui_nt(c1 bigint, c2 char(10), c3 int);
+insert into xingrui_nt values(1, '2', 3);
+alter table xingrui_nt drop column c3;
+alter table xingrui_pt exchange partition p1 with table xingrui_nt without validation;
+ERROR 0A000: Table has drop column instant, exchange partition not supported
+alter table xingrui_pt add column group(each column, all columns);
+alter table xingrui_nt add column group(each column, all columns);
+select * from xingrui_pt;
+c1	c2
+1	2
+select * from xingrui_nt;
+c1	c2
+1	2
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 int, c2 int, c3 int as (c1 + c2) stored) partition by range(c1)(partition p0 values less than(10),
+partition p1 values less than(100));
+insert into xingrui_pt (c1, c2) values(1, 2);
+create table xingrui_nt(c1 int, c2 int, c3 int as (c1 + c2) stored);
+insert into xingrui_nt (c1, c2) values(1, 2);
+alter table xingrui_nt drop column c3;
+alter table xingrui_pt exchange partition p1 with table xingrui_nt without validation;
+ERROR 0A000: Table has drop column instant, exchange partition not supported
+alter table xingrui_pt add column group(each column, all columns);
+alter table xingrui_nt add column group(each column, all columns);
+select * from xingrui_pt;
+c1	c2	c3
+1	2	3
+select * from xingrui_nt;
+c1	c2
+1	2
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 bigint, c2 char(10)) partition by range(c1)(partition p0 values less than(10),
+partition p1 values less than(100));
+insert into xingrui_pt values(1, '2');
+create table xingrui_nt(c1 bigint, c2 char(10));
+insert into xingrui_nt values(1, '2');
+alter table xingrui_pt exchange partition p1 with table xingrui_nt without validation, drop column c2;
+select * from xingrui_pt;
+c1	c2
+1	2
+1	2
+select * from xingrui_nt;
+c1	c2
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 bigint, c2 char(10), c3 int) partition by range(c1)(partition p0 values less than(10),
+partition p1 values less than(100));
+insert into xingrui_pt values(1, '2', 3);
+create table xingrui_nt(c1 bigint, c2 char(10), c3 char(10));
+insert into xingrui_nt values(1, '2', '3');
+alter table xingrui_nt drop column c3;
+alter table xingrui_pt drop column c3;
+alter table xingrui_pt exchange partition p1 with table xingrui_nt  without validation;
+ERROR 0A000: Table has drop column instant, exchange partition not supported
+alter table xingrui_pt add column group(each column, all columns);
+alter table xingrui_nt add column group(each column, all columns);
+select * from xingrui_pt;
+c1	c2
+1	2
+select * from xingrui_nt;
+c1	c2
+1	2
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 bigint, c2 char(10), c3 int) partition by range(c1)(partition p0 values less than(10),
+partition p1 values less than(100));
+insert into xingrui_pt values(1, '2', 3);
+create table xingrui_nt(c1 bigint, c2 char(10), c3 int);
+insert into xingrui_nt values(1, '2', 3);
+alter table xingrui_nt drop column c3;
+alter table xingrui_pt drop column c3;
+alter table xingrui_pt exchange partition p1 with table xingrui_nt without validation;
+ERROR 0A000: Table has drop column instant, exchange partition not supported
+alter table xingrui_pt add column group(each column, all columns);
+alter table xingrui_nt add column group(each column, all columns);
+select * from xingrui_pt;
+c1	c2
+1	2
+select * from xingrui_nt;
+c1	c2
+1	2
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 bigint, c2 char(10), c3 int) partition by range(c1)(partition p0 values less than(10),
+partition p1 values less than(100));
+insert into xingrui_pt values(1, '2', 3);
+create table xingrui_nt(c1 bigint, c2 char(10), c3 int);
+insert into xingrui_nt values(1, '2', 3);
+alter table xingrui_nt drop column c2;
+alter table xingrui_pt drop column c3;
+alter table xingrui_pt exchange partition p1 with table xingrui_nt  without validation;
+ERROR 0A000: Table has drop column instant, exchange partition not supported
+alter table xingrui_pt add column group(each column, all columns);
+alter table xingrui_nt add column group(each column, all columns);
+select * from xingrui_pt;
+c1	c2
+1	2
+select * from xingrui_nt;
+c1	c3
+1	3
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 bigint, c2 char(10), c3 int,c4 int auto_increment) partition by range(c1)(partition p0 values less than(10), partition p1 values less than(100));
+create table xingrui_nt(c1 bigint, c2 char(10), c3 int,c4 int auto_increment);
+insert into xingrui_pt (c1, c2, c3) values(1, '2', 3);
+insert into xingrui_nt (c1, c2, c3) values(1, '2', 3);
+alter table xingrui_nt drop column c3;
+alter table xingrui_pt drop column c3;
+alter table xingrui_pt exchange partition p1 with table xingrui_nt without validation;
+ERROR 0A000: Table has drop column instant, exchange partition not supported
+alter table xingrui_pt add column group(each column, all columns);
+alter table xingrui_nt add column group(each column, all columns);
+select * from xingrui_pt;
+c1	c2	c4
+1	2	1
+select * from xingrui_nt;
+c1	c2	c4
+1	2	1
+drop table xingrui_pt;
+drop table xingrui_nt;
+create table xingrui_pt(c1 bigint, c2 char(10), c3 int) partition by range(c1)(partition p0 values less than(10), partition p1 values less than(100));
+create table xingrui_nt(c1 bigint, c2 char(10), c3 int);
+insert into xingrui_pt (c1, c2, c3) values(1, '2', 3);
+insert into xingrui_nt (c1, c2, c3) values(2, '3', 4);
+alter table xingrui_pt exchange partition p1 with table xingrui_nt without validation;
+alter table xingrui_nt drop column c3;
+alter table xingrui_pt drop column c3;
+select * from xingrui_pt;
+c1	c2
+1	2
+2	3
+select * from xingrui_nt;
+c1	c2
+#分区分裂
+alter system set default_table_store_format = 'row';
+drop table xingrui_split_table;
+create table xingrui_split_table(
+c1 bigint,
+c2 varchar(30),
+c3 int,
+PRIMARY key(c1)
+)PARTITION BY RANGE(c1)(
+PARTITION p0 VALUES LESS THAN(50),
+PARTITION P1 VALUES LESS THAN(100),
+PARTITION P2 VALUES LESS THAN(150)
+);
+insert into xingrui_split_table values(1, '2', 3);
+alter table xingrui_split_table drop column c2;
+insert into xingrui_split_table values(3, 3);
+insert into xingrui_split_table values(26, 3);
+alter table xingrui_split_table REORGANIZE PARTITION p0 into
+(
+PARTITION p3 VALUES LESS THAN (45),
+PARTITION p4 VALUES LESS THAN (50)
+);
+insert into xingrui_split_table values(27, '2');
+select * from xingrui_split_table;
+c1	c3
+1	3
+3	3
+26	3
+27	2
+delete from xingrui_split_table;
+drop table xingrui_split_table;
+create table xingrui_split_table(
+c1 bigint,
+c2 varchar(30),
+c3 int,
+PRIMARY key(c1)
+)PARTITION BY RANGE(c1)(
+PARTITION p0 VALUES LESS THAN(50),
+PARTITION P1 VALUES LESS THAN(100),
+PARTITION P2 VALUES LESS THAN(150)
+);
+insert into xingrui_split_table values(1, '2', 3);
+insert into xingrui_split_table values(3, '2', 3);
+insert into xingrui_split_table values(26,'2', 3);
+alter table xingrui_split_table REORGANIZE PARTITION p0 into
+(
+PARTITION p3 VALUES LESS THAN (45),
+PARTITION p4 VALUES LESS THAN (50)
+), drop column c3;
+ERROR HY000: Internal error
+insert into xingrui_split_table values(27, '2', 3);
+alter system set default_table_store_format = 'compound';
+drop table xingrui_split_table;
+create table xingrui_split_table(
+c1 bigint,
+c2 varchar(30),
+c3 int,
+PRIMARY key(c1)
+)PARTITION BY RANGE(c1)(
+PARTITION p0 VALUES LESS THAN(50),
+PARTITION P1 VALUES LESS THAN(100),
+PARTITION P2 VALUES LESS THAN(150)
+);
+insert into xingrui_split_table values(1, '2', 3);
+insert into xingrui_split_table values(26,'2', 3);
+alter table xingrui_split_table split PARTITION p0 at(25) into(PARTITION p0_1,PARTITION p0_2);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'split PARTITION p0 at(25) into(PARTITION p0_1,PARTITION p0_2)' at line 1
+#column group
+alter system set default_table_store_format = 'compound';
+drop table xingrui_column_group_table;
+drop table xingrui_create_table_like;
+create table xingrui_column_group_table(col1 int, col2 int, col3 int) with column group(all columns, each column);
+insert into xingrui_column_group_table values(1, 2, 3);
+alter table xingrui_column_group_table drop column col2;
+insert into xingrui_column_group_table values(1, 3);
+alter table xingrui_column_group_table add col4 int generated always as (col1 * 2) virtual;
+alter table xingrui_column_group_table drop column col4;
+create table xingrui_create_table_like like xingrui_column_group_table;
+column_group_id
+1
+1001
+1003
+1004
+1005
+1006
+column_group_id	column_id
+1001	1
+1001	16
+1001	17
+1001	18
+1003	1
+1004	16
+1005	17
+1006	18
+select * from xingrui_column_group_table;
+col1	col3
+1	3
+1	3
+alter table xingrui_column_group_table drop column group(all columns, each column);
+alter table xingrui_create_table_like drop column group(all columns, each column);
+insert into xingrui_column_group_table values(2, 3);
+alter table xingrui_column_group_table drop column col3;
+insert into xingrui_column_group_table (col1) values(3);
+select * from xingrui_column_group_table;
+col1
+1
+1
+2
+3
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+1	17
+alter table xingrui_column_group_table force;
+select * from xingrui_column_group_table;
+col1
+1
+1
+2
+3
+drop table xingrui_column_group_table;
+drop table xingrui_create_table_like;
+create table xingrui_column_group_table(col1 int, col2 int, col3 int) with column group(each column);
+insert into xingrui_column_group_table values(1, 2, 3);
+alter table xingrui_column_group_table drop column col2;
+insert into xingrui_column_group_table values(1, 3);
+alter table xingrui_column_group_table add col4 int generated always as (col1 * 2) virtual;
+alter table xingrui_column_group_table drop column col4;
+create table xingrui_create_table_like like xingrui_column_group_table;
+column_group_id
+1
+1002
+1003
+1004
+1005
+1006
+column_group_id	column_id
+1002	1
+1003	1
+1004	16
+1005	17
+1006	18
+select * from xingrui_column_group_table;
+col1	col3
+1	3
+1	3
+alter table xingrui_column_group_table drop column group(each column);
+alter table xingrui_create_table_like drop column group(each column);
+insert into xingrui_column_group_table values(2, 3);
+insert into xingrui_create_table_like values(2, 3);
+alter table xingrui_column_group_table drop column col3;
+alter table xingrui_create_table_like drop column col3;
+insert into xingrui_column_group_table (col1) values(3);
+insert into xingrui_create_table_like (col1) values(3);
+select * from xingrui_column_group_table;
+col1
+1
+1
+2
+3
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+1	17
+alter table xingrui_column_group_table force;
+drop table xingrui_column_group_table;
+drop table xingrui_create_table_like;
+create table xingrui_column_group_table(col1 int, col2 int) with column group(all columns);
+insert into xingrui_column_group_table values(1, 2);
+create index xingrui_index on xingrui_column_group_table(col2) storing(col1) with column group(each column);
+alter table xingrui_column_group_table add col3 int;
+insert into xingrui_column_group_table values(1, 3, 2);
+alter table xingrui_column_group_table drop column col2;
+alter table xingrui_column_group_table add col4 int generated always as (col1 * 2) virtual;
+insert into xingrui_column_group_table (col1, col3) values(2, 3);
+alter table xingrui_column_group_table drop column col4;
+create table xingrui_create_table_like like xingrui_column_group_table;
+column_group_id
+1
+1001
+column_group_id	column_id
+1001	1
+1001	16
+1001	17
+select * from xingrui_column_group_table;
+col1	col3
+1	NULL
+1	2
+2	3
+alter table xingrui_column_group_table drop column group(all columns);
+alter table xingrui_create_table_like drop column group(all columns);
+insert into xingrui_column_group_table values(2, 3);
+alter table xingrui_column_group_table drop column col3;
+insert into xingrui_column_group_table (col1) values(3);
+select * from xingrui_column_group_table;
+col1
+1
+1
+2
+2
+3
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+1	17
+alter table xingrui_column_group_table force;
+drop table xingrui_column_group_table;
+drop table xingrui_create_table_like;
+create table xingrui_column_group_table(col1 int, col2 int);
+insert into xingrui_column_group_table values(1, 2);
+alter table xingrui_column_group_table add col3 int;
+insert into xingrui_column_group_table values(1, 2, 3);
+alter table xingrui_column_group_table add col4 int generated always as (col1 * 2) virtual;
+alter table xingrui_column_group_table drop column col4;
+insert into xingrui_column_group_table (col1, col3) values(2, 3);
+alter table xingrui_column_group_table drop column col2;
+create table xingrui_create_table_like like xingrui_column_group_table;
+column_group_id
+1
+1001
+1003
+1004
+1005
+1006
+column_group_id	column_id
+1001	1
+1001	16
+1001	17
+1001	18
+1003	1
+1004	16
+1005	17
+1006	18
+select * from xingrui_column_group_table;
+col1	col3
+1	NULL
+1	3
+2	3
+alter table xingrui_column_group_table drop column group(all columns);
+alter table xingrui_column_group_table drop column group(each column);
+alter table xingrui_create_table_like drop column group(all columns);
+alter table xingrui_create_table_like drop column group(each column);
+insert into xingrui_column_group_table values(2, 3);
+alter table xingrui_column_group_table drop column col3;
+alter table xingrui_create_table_like drop column col3;
+insert into xingrui_column_group_table (col1) values(3);
+select * from xingrui_column_group_table;
+col1
+1
+1
+2
+2
+3
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+1	17
+alter table xingrui_column_group_table force;
+alter table xingrui_create_table_like force;
+alter system set default_table_store_format = 'row';
+drop table xingrui_column_group_table;
+drop table xingrui_create_table_like;
+create table xingrui_column_group_table(col1 int, col2 int);
+insert into xingrui_column_group_table values(1, 2);
+alter table xingrui_column_group_table add col3 int;
+insert into xingrui_column_group_table values(1, 2, 3);
+alter table xingrui_column_group_table add col4 int generated always as (col1 * 2) virtual;
+alter table xingrui_column_group_table drop column col4;
+alter table xingrui_column_group_table add column group(all columns, each column);
+insert into xingrui_column_group_table (col1, col3) values(2, 3);
+alter table xingrui_column_group_table drop column col2;
+create table xingrui_create_table_like like xingrui_column_group_table;
+column_group_id
+1
+1001
+1003
+1004
+1005
+1006
+column_group_id	column_id
+1001	1
+1001	16
+1001	17
+1001	18
+1003	1
+1004	16
+1005	17
+1006	18
+select * from xingrui_column_group_table;
+col1	col3
+1	NULL
+1	3
+2	3
+alter table xingrui_column_group_table drop column group(all columns, each column);
+alter table xingrui_create_table_like drop column group(all columns, each column);
+insert into xingrui_column_group_table values(2, 3);
+insert into xingrui_create_table_like values(2, 3);
+alter table xingrui_column_group_table drop column col3;
+alter table xingrui_create_table_like drop column col3;
+insert into xingrui_column_group_table (col1) values(3);
+insert into xingrui_create_table_like (col1) values(3);
+select * from xingrui_column_group_table;
+col1
+1
+1
+2
+2
+3
+select * from xingrui_create_table_like;
+col1
+2
+3
+column_group_id
+1
+column_group_id	column_id
+1	1
+1	16
+1	17
+alter table xingrui_column_group_table force;
+alter table xingrui_create_table_like force;
+drop table xingrui_column_group_table;
+create table xingrui_column_group_table(col1 int, col2 int, col3 int);
+insert into xingrui_column_group_table values(1, 2, 3);
+alter table xingrui_column_group_table drop column col2, add column group(each column);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'group(each column)' at line 1
+"ceate table like"
+drop table xingrui_create_like_orig;
+drop table xingrui_create_table_like;
+create table xingrui_create_like_orig(col1 int, col2 int, col3 int, key index_1(col2));
+insert into xingrui_create_like_orig values(1, 2, 3);
+alter table xingrui_create_like_orig drop column col1;
+create table xingrui_create_table_like like xingrui_create_like_orig;
+insert into xingrui_create_like_orig values(1, 2);
+"mlog"
+drop materialized view log on xingrui_mlog_table;
+drop table xingrui_mlog_table;
+create table xingrui_mlog_table (c1 int, c2 int, c3 int, primary key(c1));
+create materialized view log on xingrui_mlog_table with primary key (c2) including new values;
+alter table xingrui_mlog_table drop column c1;
+ERROR 0A000: modify column to table with materialized view log is not supported
+alter table xingrui_mlog_table force;
+ERROR 0A000: modify column to table with materialized view log is not supported
+drop materialized view xingrui_collect_info_mv;
+drop table xingrui_collect_info;
+drop table xingrui_collect_item;
+create table xingrui_collect_info(user_id int, item_id int, c3 int, c4 int, primary key(user_id, item_id)) partition by hash(user_id) partitions 4;
+alter table xingrui_collect_info drop column c4;
+create table xingrui_collect_item(item_id int, price int, c3 int, c4 int, primary key(item_id)) duplicate_scope = 'cluster' duplicate_read_consistency = 'weak';
+alter table xingrui_collect_item drop column c4;
+create materialized view xingrui_collect_info_mv (primary key(user_id, item_id)) partition by hash(user_id) partitions 4 refresh fast enable query rewrite enable on query computation as select xingrui_collect_info.user_id, xingrui_collect_info.item_id, xingrui_collect_item.item_id dup_item_id, xingrui_collect_item.price from xingrui_collect_info inner join xingrui_collect_item on xingrui_collect_info.item_id = xingrui_collect_item.item_id;
+alter table xingrui_collect_info drop column c3;
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table xingrui_collect_item drop column c3;
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table xingrui_collect_info force;
+ERROR 0A000: modify column to table required by materialized view is not supported
+alter table xingrui_collect_item force;
+ERROR 0A000: modify column to table required by materialized view is not supported
+drop materialized view xingrui_collect_info_mv;
+drop table xingrui_collect_info;
+drop table xingrui_collect_item;
+"external table"
+drop table xingrui_external_table;
+create external table xingrui_external_table (c1 int,c2 int,c3 int) location='mysqltest_data_for_external_table/external_table_lineitem' format ( type = 'csv');
+alter table xingrui_external_table drop column c1;
+ERROR 0A000: alter table type not supported
+drop table xingrui_truncate_table;
+drop table xingrui_table_with_pk;
+drop table xingrui_modify_table;
+drop table xingrui_add_column;
+drop table xingrui_repartition;
+drop table xingrui_pt;
+drop table xingrui_nt;
+drop table xingrui_column_group_table;
+drop table xingrui_create_like_orig;
+drop table xingrui_create_table_like;
+drop table xingrui_external_table;
+alter system set default_table_store_format = 'row';

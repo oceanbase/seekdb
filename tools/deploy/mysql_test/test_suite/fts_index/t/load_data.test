@@ -1,0 +1,49 @@
+# owner: yunshan.tys
+# owner group: storage
+# description test load data for full-text search
+
+connect(sys_conn, $OBMYSQL_MS0, root@sys,,oceanbase, $OBMYSQL_PORT);
+connection sys_conn;
+
+--enable_query_log
+
+--result_format 3
+
+--disable_warnings
+CREATE DATABASE IF NOT EXISTS load_data_test;
+--enable_warnings
+
+USE load_data_test;
+
+--disable_warnings
+DROP TABLE IF EXISTS src_articles;
+DROP TABLE IF EXISTS dst_articles;
+--enable_warnings
+
+CREATE TABLE src_articles (
+  title VARCHAR(1000),
+  body TEXT
+);
+
+CREATE TABLE dst_articles (
+  title VARCHAR(1000),
+  body TEXT,
+  FULLTEXT INDEX ctx(title, body)
+);
+
+INSERT INTO src_articles (title, body)
+VALUES ('An Exploration of Space', 'The cosmos is vast and full of wonders'),
+       ('The Secrets of the Ocean', 'Beneath the waves lies a world teeming with life'),
+       ('Advancements in Renewable Energy', 'Renewable energy is set to change the way we power our lives'),
+       ('The Evolution of Technology', 'Technology has advanced rapidly over the past century'),
+       ('Understanding Artificial Intelligence', 'Artificial Intelligence is one of the most exciting frontiers in technology');
+
+SELECT count(*) FROM src_articles;
+
+INSERT INTO dst_articles SELECT * FROM src_articles;
+
+SELECT * FROM dst_articles;
+
+INSERT /*+ append enable_parallel_dml parallel(16) */ INTO dst_articles SELECT * FROM src_articles;
+
+SELECT count(*) FROM dst_articles;

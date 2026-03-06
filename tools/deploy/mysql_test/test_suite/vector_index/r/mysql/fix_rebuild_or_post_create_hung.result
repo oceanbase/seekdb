@@ -1,0 +1,25 @@
+drop database if exists yjl_vec;
+create database yjl_vec;
+use yjl_vec;
+alter system set ob_vector_memory_limit_percentage = 20;
+
+
+"=========================================== rebuild hung ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag));
+insert into t_vec values(1, '[0.303846,0.305389,0.880365]');
+insert into t_vec values(2, '[0.484536,0.669954,0.986755]');
+insert into t_vec values(3, '[0.337936,0.048756,0.084670]');
+call dbms_vector.rebuild_index('idx1','t_vec','',0.2,'','','',2);
+
+
+"=========================================== post create hung ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 vector(3), c2 int unsigned auto_increment, c3 json, c4 date, c5 varchar(20), index idx_0(c4), primary key(c2));
+create vector index idx_1 on t_vec(c1) with (distance=l2, type=hnsw);
+insert into t_vec values('[1,2,3]', default, '{}', '2024-05-06', 'tom');
+alter table t_vec add c6 vector(3);
+create vector index idx_2 on t_vec(c6) with (distance=inner_product, type=hnsw);
+alter system set ob_vector_memory_limit_percentage = 0;
+drop table if exists t_vec;
+drop database if exists yjl_vec;

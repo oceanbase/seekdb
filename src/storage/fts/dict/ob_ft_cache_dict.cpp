@@ -87,7 +87,6 @@ int ObFTCacheDict::make_and_fetch_cache_entry(const ObFTDictDesc &desc,
 {
   int ret = OB_SUCCESS;
   ObDictCache &cache = ObDictCache::get_instance();
-
   uint64_t name = static_cast<uint64_t>(desc.type_);
   const ObDictCacheKey put_key(name, MTL_ID(), desc.type_, range_id);
   const ObDictCacheValue put_value(dat_buff);

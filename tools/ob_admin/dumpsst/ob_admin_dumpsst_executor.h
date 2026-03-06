@@ -70,14 +70,6 @@ private:
   void dump_tablet_meta(const ObDumpMacroBlockContext &macro_block_context);
   void dump_table_store(const ObDumpMacroBlockContext &macro_block_context);
   void dump_storage_schema(const ObDumpMacroBlockContext &macro_block_context);
-#ifdef OB_BUILD_SHARED_STORAGE
-  void dump_prewarm_index(const ObDumpMacroBlockContext &macro_block_context);
-  void dump_prewarm_data(const ObDumpMacroBlockContext &macro_block_context);
-  void dump_is_deleted_obj(const ObDumpMacroBlockContext &macro_block_context);
-  void dump_meta_list(const ObDumpMacroBlockContext &macro_block_context);
-  void dump_gc_info(const ObDumpMacroBlockContext &macro_block_context);
-  int do_dump_prewarm_index(const char *path, storage::ObHotTabletInfoIndex &index);
-#endif
 
   bool is_quiet_;
   ObAdminDumpsstCmd cmd_;

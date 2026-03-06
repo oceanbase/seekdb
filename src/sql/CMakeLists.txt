@@ -1305,6 +1305,8 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_flashback_resolver.cpp
   resolver/ddl/ob_fork_table_resolver.cpp
   resolver/ddl/ob_fork_table_stmt.cpp
+  resolver/ddl/ob_fork_database_resolver.cpp
+  resolver/ddl/ob_fork_database_stmt.cpp
   resolver/ddl/ob_lock_table_resolver.cpp
   resolver/ddl/ob_lock_table_stmt.cpp
   resolver/ddl/ob_lock_tenant_resolver.cpp
@@ -1463,8 +1465,6 @@ ob_set_subtarget(ob_sql udr
   udr/ob_udr_callback.cpp
   udr/ob_udr_utils.cpp
 )
-
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
 
 ob_add_new_object_target(ob_sql ob_sql)
 ob_add_new_object_target(ob_sql_extra ob_sql_extra)

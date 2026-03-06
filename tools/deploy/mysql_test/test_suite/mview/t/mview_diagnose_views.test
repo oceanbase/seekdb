@@ -1,0 +1,81 @@
+# owner: zg410411
+# owner group: mv
+# tags:
+# descriotion: test the behavior of mview diagnose related inner tables and system views
+#
+
+# 0. prepare
+connect (sys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection sys;
+alter system set debug_sync_timeout = '100000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+connection default;
+set recyclebin = OFF;
+set ob_query_timeout = 10000000000;
+
+--disable_warnings
+drop database if exists test_mv_diagnose_views;
+--enable_warnings
+create database test_mv_diagnose_views;
+use test_mv_diagnose_views;
+
+create table dv_t1(c1 int primary key, c2 int);
+create materialized view log on dv_t1 with primary key (c2);
+insert into dv_t1 values(1, 1);
+insert into dv_t1 values(2, 2);
+create materialized view dv_mv1(c1, c2, primary key(c1)) refresh fast as select c1, count(*) c2 from dv_t1 group by c1;
+
+# 1. check data_sync_scn and data_sync_delay columns
+--disable_result_log
+select data_sync_scn from oceanbase.__all_mview;
+select data_sync_scn, data_sync_delay from oceanbase.DBA_MVIEWS;
+--enable_result_log
+
+# 2. check __all_virtual_mview_running_job, DBA_MVIEW_RUNNING_JOBS, CDB_MVIEW_RUNNING_JOBS
+connection sys;
+set ob_global_debug_sync = 'BEFORE_MV_FINISH_RUNNING_JOB wait_for signalxxx execute 10000';
+sleep 10;
+connection default;
+alter materialized view dv_mv1 refresh start with sysdate() + interval 1 second;
+sleep 30;
+--disable_result_log
+select TABLE_ID, JOB_TYPE from oceanbase.__all_virtual_mview_running_job;
+--enable_result_log
+select TABLE_NAME, JOB_TYPE from oceanbase.DBA_MVIEW_RUNNING_JOBS;
+connection sys;
+select TABLE_NAME, JOB_TYPE from oceanbase.DBA_MVIEW_RUNNING_JOBS;
+select TABLE_NAME, JOB_TYPE from oceanbase.CDB_MVIEW_RUNNING_JOBS;
+set ob_global_debug_sync = 'now signal signalxxx';
+set ob_global_debug_sync = 'reset';
+sleep 10;
+
+# 3. check DBA_MVIEW_LOGS, CDB_MVIEW_LOGS
+connection default;
+--disable_result_log
+select PURGE_DOP, LAST_PURGE_TIME from oceanbase.DBA_MVIEW_LOGS;
+connection sys;
+select PURGE_DOP, LAST_PURGE_TIME from oceanbase.CDB_MVIEW_LOGS;
+--enable_result_log
+
+# 4. check DBA_MVIEW_DEPS
+connection default;
+select * from oceanbase.DBA_MVIEW_DEPS where mview_owner = 'test_mv_diagnose_views';
+
+# 5. check num_rows_upd of __all_mview_refresh_change_stats
+update test_mv_diagnose_views.dv_t1 set c2 = 100 where c1 = 1;
+call dbms_mview.refresh('dv_mv1', 'c');
+let $refresh_id = query_get_value(select refresh_id from oceanbase.DBA_MVREF_RUN_STATS where MVIEWS = 'dv_mv1' order by START_TIME desc limit 1, refresh_id, 1);
+--disable_query_log
+eval select num_rows_upd from oceanbase.__all_mview_refresh_change_stats where refresh_id = $refresh_id;
+eval select num_rows_upd from oceanbase.DBA_MVREF_CHANGE_STATS where refresh_id = $refresh_id;
+--enable_query_log
+
+# 6. check base_tables of __all_mview_refresh_run_stats
+--disable_query_log
+eval select base_tables from oceanbase.__all_mview_refresh_run_stats where refresh_id = $refresh_id;
+eval select base_tables from oceanbase.DBA_MVREF_RUN_STATS where refresh_id = $refresh_id;
+--enable_query_log
+
+# 7. clean up
+drop database test_mv_diagnose_views;

@@ -1240,6 +1240,7 @@ PCODE_DEF(OB_DROP_LOCATION, 0x166A)
 // mysql obj priv
 PCODE_DEF(OB_REVOKE_OBJECT, 0x166B)
 PCODE_DEF(OB_FORK_TABLE, 0x166C)
+PCODE_DEF(OB_FORK_DATABASE, 0x166D)
 
 //**** Note: Add new RPC ID before this line ******
 //

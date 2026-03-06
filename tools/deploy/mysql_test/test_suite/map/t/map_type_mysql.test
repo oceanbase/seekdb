@@ -1,0 +1,719 @@
+#owner: xuqijia.xqj
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of map type.
+--echo # ----------------------------------------------------------------------
+
+--disable_warnings
+drop database test;
+create database test;
+use test;
+drop table if exists t1, t2, t3, t4, t_vec;
+--enable_warnings
+
+--error 5083
+select array_append(map(1,11), 1);
+--error 5083
+select array_append([1], map(1,11));
+--error 5083
+select array_avg(map(1,11));
+--error 5083
+select cardinality(map(1,11));
+--error 5083
+select array_compact(map(1,11));
+--error 5083
+select array_concat(map(1,11));
+--error 5083
+select array_concat([1], map(1,11));
+--error 5083
+select array_contains(map(1,11), 1);
+--error 5083
+select array_contains([1], map(1,11));
+--error 5083
+select array_difference(map(1,11));
+--error 5083
+select array_distinct(map(1,11));
+--error 5083
+select array_filter((x,y) -> (x + y), [1],map(1,11));
+--error 5083
+select array_first((x,y) -> (x + y), [1],map(1,11));
+--error 5083
+select array_length(map(1,11));
+--error 5083
+select array_map((x,y) -> (x + y), [1],map(1,11));
+--error 5083
+select array_max(map(1,11));
+--error 5083
+select array_overlaps(map(1,11), [1]);
+--error 5083
+select array_overlaps([1], map(1,11));
+--error 5083
+select array_position(map(1,11), [1]);
+--error 5083
+select array_position([1], map(1,11));
+--error 5083
+select array_remove(map(1,11), 1);
+--error 5083
+select array_remove([1], map(1,11));
+--error 5083
+select array_slice(map(1,11), 1, 2);
+--error 5083
+select array_sort(map(1,11));
+--error 5083
+select array_sortby((x,y) -> (x + y), [1],map(1,11));
+--error 5083
+select array_sum(map(1,11));
+--error 5083
+select array_to_string(map(1,11),',');
+--error 5083
+select array_union([1,2,3], map(1,11));
+--error 5083
+select array_union(map(1,11), [1,2]);
+--error 5083
+select element_at(map(1,11), 1);
+--error 5083
+select rb_build(map(1,11));
+
+--error 5083
+select WEIGHT_STRING(map(1,11));
+--error 5083
+select ASCII(map(1,11));
+--error 5083
+select BIN(map(1,11));
+--error 5083
+select BIT_LENGTH(map(1,11));
+--error 5083
+select CHAR(map(1,11));
+--error 5083
+select CHAR_LENGTH(map(1,11));
+--error 5083
+select CHARACTER_LENGTH(map(1,11));
+--error 5083
+select CONCAT(map(1,11), map(2,22));
+--error 5083
+select CONCAT_WS(map(1,11), map(2,22));
+--error 5083
+select ELT(1, map(1,11), map(2,22));
+--error 5083
+select ELT(1, 'a', map(2,22));
+--error 5083
+select FIELD(map(1,11), map(1,11), map(2,22));
+--error 5083
+select HEX(map(1,11));
+--error 5083
+select INSERT('Quadratic',7,3,map(1,11));
+--error 5083
+select INSERT(map(1,11),7,3,'What');
+--error 5083
+select INSTR(map(1,11),'1');
+--error 5083
+select IP2INT(map(1,11));
+--error 5083
+select LCASE(map(1,11));
+--error 5083
+select LEFT(map(1,11),2);
+--error 5083
+select LENGTH(map(1,11));
+--error 5083
+select LOCATE(map(1,11),'1');
+--error 5083
+select LOCATE('1',map(1,11));
+--error 5083
+select LOWER(map(1,11));
+--error 5083
+select LPAD(map(1,11),1,'1');
+--error 5083
+select LPAD('1',1,map(1,11));
+--error 5083
+select LTRIM(map(1,11));
+--error 5083
+select MAKE_SET(1,'str1',map(1,11));
+--error 5083
+select MID(map(1,11),1,1);
+--error 5083
+select OCTET_LENGTH(map(1,11));
+--error 5083
+select ORD(map(1,11));
+--error 5083
+select POSITION('1' IN map(1,11));
+--error 5083
+select QUOTE(map(1,11));
+#--error 5083
+#SELECT
+#     1234 REGEXP 1,
+#     map(1,11) RLIKE 'h%'
+#     \G
+--error 5083
+SELECT REGEXP_INSTR(map(1,11), 'ocean');
+--error 5083
+SELECT REGEXP_INSTR('ocean base oceanbase', map(1,11));
+--error 5083
+SELECT REGEXP_LIKE(map(1,11), map(1,11));
+--error 5083
+SELECT REGEXP_REPLACE(map(1,11), 'a', '2');
+--error 5083
+SELECT REGEXP_SUBSTR(map(1,11), '[[:blank:]][[:alnum:]]*', 1, 1) FROM DUAL;
+--error 5083
+SELECT REPEAT(map(1,11), 2);
+--error 5083
+SELECT REPLACE(map(1,11), 'abc.', 'www');
+--error 5083
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', map(1,11), 'www');
+--error 5083
+SELECT REPLACE('abc.efg.gpg.nowdew.abc.dabc.e', 'abc.', map(1,11));
+--error 1235
+SELECT REVERSE(map(1,11));
+--error 5083
+SELECT RIGHT(map(1,11),4);
+--error 5083
+SELECT map(1,11) RLIKE 'a';
+--error 5083
+SELECT RPAD(map(1,11),5,'?');
+--error 5083
+SELECT RTRIM(map(1,11));
+--error 5083
+SELECT STRCMP(map(1,11),map(1,11));
+--error 5083
+SELECT SUBSTR(map(1,11), 2);
+--error 5083
+SELECT SUBSTRING(map(1,11), 2);
+--error 5083
+SELECT SUBSTRING_INDEX(map(1,11), 'ABC', 0);
+--error 5083
+SELECT TRIM(map(1,11));
+--error 5083
+SELECT UCASE(map(1,11));
+--error 5083
+SELECT UNHEX(map(1,11));
+--error 5083
+SELECT UPPER(map(1,11));
+--error 5083
+SELECT TO_BASE64(map(1,11));
+--error 5083
+SELECT FROM_BASE64(map(1,11));
+--error 5083
+SELECT SOUNDEX(map(1,11));
+SELECT CHARSET(map(1,11));
+SELECT COLLATION(map(1,11));
+--error 5083
+SELECT ABS(map(1,11));
+--error 5083
+SELECT ROUND(map(1,11),0);
+--error 5083
+SELECT CEILING(map(1,11));
+--error 5083
+SELECT FLOOR(map(1,11));
+--error 5083
+SELECT POWER(map(1,11),2);
+
+create table t1 (id int, m1 map(int, varchar(20)), m2 map(int, int), m3 map(int, array(int)));
+insert into t1 values (1, map(1,'a'), map(1,11), map(1, [1]));
+insert into t1 values (2, map(2,'b',3,'c'), map(2,22,3,33), map(2,[22],3,[33]));
+--error 1210
+select if (1, m1, id) from t1;
+select if (1, m1, m1) from t1;
+select if (1, m1, m2) from t1;
+--error 7602
+select if (1, m1, m3) from t1;
+--error 1210
+select case (select m1 from t1) when 1 then (select m2 from t1) END;
+
+SELECT
+    CASE
+        WHEN t1.m1=map(1,"a") THEN 'true'
+        ELSE 'result_value_if_false'
+    END
+FROM t1;
+
+--error 1210
+SELECT
+    CASE
+        WHEN t1.m2=t1.m2 THEN m1
+        ELSE 'result_value_if_false'
+    END
+FROM t1;
+
+SELECT
+    CASE
+        WHEN t1.m2=t1.m2 THEN m1
+        ELSE m1
+    END
+FROM t1;
+
+SELECT
+    CASE
+        WHEN t1.m2=t1.m2 THEN m1
+        ELSE m2
+    END
+FROM t1;
+
+--error 7602
+select *, COALESCE(m1,m2,m3) from t1;
+select *, COALESCE(m1,m1) from t1;
+drop table t1;
+
+--error 5083
+select cast (map(1,11) as char);
+--error 5083
+select cast (map(1,11) as json);
+--error 5083
+select cast (map(1,11) as UNSIGNED);
+--error 5083
+SELECT CONVERT(map(1,11), CHAR);
+
+--error 5083
+select BINARY map(1,11);
+--error 5083
+select MD5(map(1,11));
+--error 5083
+select SHA(map(1,11));
+--error 5083
+select PASSWORD(map(1,11));
+--error 5083
+select ENCODE(map(1,11),'a');
+--error 5083
+select COMPRESS(map(1,11));
+
+# map expr
+--error 1064
+select map();
+select map(1,11,2,22);
+select map(1.1,'aa',2.2,'bb');
+select map('aa',100,'bb',200);
+select map('aa',100,'a',200);
+select map('aa',100,'aa',200);
+select map(1,'a',3.2,4);
+--error 1582
+select map(1,2,3);
+--error 1235
+select map([1],2);
+select map('a',[[2]]);
+--error 1235
+select map(1,map(1,2));
+select map(NULL,NULL,NULL,NULL);
+select map(NULL,array_remove([1],1),'a',[2]);
+select map(1,'a',2,'b',1,'c',NULL,'d');
+select map(1,'a',NULL,'b',1,'c',NULL,'d');
+select map('hi','a','hello','b','hi','c',NULL,'d');
+select map('hi','a',NULL,'b','hi','c',NULL,'d');
+select map(1,[1,2],2,[3],1,[4,5,6],NULL,[7,8,9]);
+select map(1,[1,2],NULL,[3],1,[4,5,6],NULL,[7,8,9]);
+
+create table t_vec (id int, vec1 vector(1), vec3 vector(3));
+insert into t_vec values (1, [10], [1,2,3]);
+insert into t_vec values (2, NULL, NULL);
+--error 1235
+select map(vec1,11) from t_vec;
+--error 1235
+select map(vec1,11,vec3,22) from t_vec;
+select map(1,vec1) from t_vec;
+select map(1,vec3) from t_vec;
+--error 7602
+select map(1,vec1,2,vec3) from t_vec;
+--error 1235
+select map(1,11,2,22) into @a;
+drop table t_vec;
+
+create table t1(id int,c varchar(10),a array(int),v vector(2));
+insert into t1 values(1,'test1',[1,2],[3,4]);
+--error 5083
+select map(1,c,2,a) from t1;
+--error 5083
+select map(1,a,2,c) from t1;
+--error 5083
+select map(1,c,2,v) from t1;
+--error 5083
+select map(1,v,2,c) from t1;
+drop table t1;
+
+create table t1 as select map(1,1) as m1, map(1,1,2,2,3,3) as m2, map(1.1,1.11) as m3, map('a','b') as m4;
+desc t1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1;
+create table t2 as select map(1,1.11,2.2,'b') as m1, map(1,[1]) as m2, map(1,[['b']]) as m3;
+desc t2;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1;
+create table t3 as select m1, m2, m3, m4 from t1;
+desc t3;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1;
+create table t4 as select m1, m2, m3 from t2;
+desc t4;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1;
+drop table t1, t2, t3, t4;
+
+# string to map
+create table t1 (id int primary key not null auto_increment, m map(int, int));
+insert into t1(m) values ('{1:1,2:2,3:3}');
+insert into t1(m) values ('{"1":1,  2  : 2 , "3 " : 3}');
+insert into t1(m) values ('{1.5:2, 1.6:"3"}');
+--error 1265
+insert into t1(m) values ('{1:"a", 2:2, 3:3}');
+--error 1265
+insert into t1(m) values ('{1:" 11"}');
+insert into t1(m) values ('{1: "3" , NULL : "1", "2": 22 }');
+insert into t1(m) values ('{1:1,2:2,1:3}');
+insert into t1(m) values ('{null: "1" , "NULL" : 2, Null: 3, null ":4 }');
+insert into t1(m) values ('{null: "1" , 4:2.3,"NULL" : 2, Null: 3 , 5:5}');
+insert into t1(m) values ('{}');
+insert into t1(m) values ('{1.1:1,1.2:2}');
+insert into t1(m) values ('{"1.1":1,"1.2":2}');
+insert into t1(m) values ('{"1.1":1,"1.10":2}');
+insert into t1(m) values (map(1.1,1,1.2,2));
+insert into t1(m) values (map("1.1",1,"1.2",2));
+insert into t1(m) values (map("1.1",1,"1.10",2));
+select * from t1;
+delete from t1 where id = 3;
+update t1 set m = '{3:1.1, 2:2.2}' where id = 2;
+select * from t1;
+
+create table t2 (id int not null auto_increment, m map(float, double));
+insert into t2(m) values ('{1:1,2:2,3:3}');
+insert into t2(m) values ('{1.1:1.1,2.2:2.2,3.3:3.3}');
+insert into t2(m) values ('{"1":1,1:2}');
+insert into t2(m) values ('{"1.1":1,"1.2":2}');
+insert into t2(m) values ('{"1.1":1,"1.10":2}');
+insert into t2(m) values (map("1.1",1,"1.2",2));
+insert into t2(m) values (map("1.1",1,"1.10",2));
+--error 3140
+insert into t2(m) values ('{1.6a:1}');
+--error 3140
+insert into t2(m) values ('{6a:1}');
+select * from t2;
+
+create table t3 (id int not null auto_increment, m map(int, int[]));
+--error 7602
+insert into t3(m) values ('{1:1,2:2,3:3}');
+insert into t3(m) values ('{1:[1],2:[2],3:[3]}');
+insert into t3(m) values ('{1:NULL}');
+insert into t3(m) values ('{1:[NULL]}');
+insert into t3(m) values ('{1:[11,11], 2:[22,22], 1:[33,33]}');
+insert into t3(m) values ('{1:[]}');
+insert into t3(m) values ('{1:[1],2:[2],1:[3,4]}');
+insert into t3(m) values ('{NULL:[1],1:[1],null:[],2:[2],1:NULL}');
+select * from t3;
+
+create table t4 (id int not null auto_increment, m map(int, varchar(100)[][]), m2 map(int, varchar(100)[][][]));
+insert into t4(m) values ('{1:[[]]}');
+--error 7602
+insert into t4(m) values ('{1:[]}');
+--error 7602
+insert into t4(m) values ('{1:[[[]]]}');
+insert into t4(m) values ('{1:[["a","b"],["c"],NULL]}');
+--error 7602
+insert into t4(m2) values ('{1:[[]]}');
+--error 7602
+insert into t4(m2) values ('{1:[[],[]]}');
+--error 7602
+insert into t4(m2) values ('{1:[[],[[]]]}');
+insert into t4(m2) values ('{1:[[[]],[[]]]}');
+select * from t4;
+
+# not supported case
+--error 5083
+select distinct m from t1;
+--error 5083
+select * from t1 group by m;
+--error 5083
+select * from t1 order by m;
+--error 1235
+select sum(m) from t1;
+--error 1210
+select max(m) from t1;
+--error 1210
+select min(m) from t1;
+
+# materialized view
+--disable_warnings
+drop materialized view if exists mv1, mv2;
+--enable_warnings
+create materialized view mv1 parallel 2 refresh complete on demand  as select * from t1;
+create materialized view mv2 parallel 2 refresh complete on demand  as select * from t2;
+drop materialized view mv1, mv2;
+
+drop table t1, t2, t3, t4;
+
+# equal operator
+--error 5083
+select map(1,1) =  1;
+select map(1,11) =  map(1,11);
+select map(1,11) !=  map(1,11);
+select map(1,11) =  map('1',11);
+select map(1,11) =  map(1,'11');
+select map(1,11) =  map(1,11,2,22);
+select map(1,11) !=  map(1,11,2,22);
+select map(1,11) =  map(1,11,2,'22');
+select map(1,[11]) =  map(1,[11]);
+select map(1,[11]) =  map(1,['11']);
+select map(1,[11,22,33],2,[44]) =  map(1,[11,22,33], 2,[44]);
+select map(1,[11,22,33],2,[44]) !=  map(1,[11,22,33], 2,[44]);
+select map(1,[11,22,33],2,[44]) =  map(1,[11,22,'33'], 2.00,[44.0]);
+select map(1,[[11,22,33]],2,[[44],NULL]) =  map(1,[[11,22,'33']], 2.00,[[44.0],NULL]);
+select map(1,[[11,22,33]],2,[[44],NULL]) !=  map(1,[[11,22,'33']], 2.00,[[44.0],NULL]);
+select map(1,[[11,22,33]],2,[[44]]) =  map(1,[[11,22,'33']], 2.00,[[44.0],NULL]);
+
+# 1. ADD COLUMN
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+insert into t1 values (3, NULL, NULL, NULL, NULL);
+alter table t1 add c11 map(int, array(int)) first;
+alter table t1 add c12 map(int, array(int)) after c2;
+alter table t1 add c13 map(int, array(int)) before c2;
+alter table t1 add c14 INT AUTO_INCREMENT;
+alter table t1 add c15 map(int, int) as (concat('{', id, ':', id, '}'));
+desc t1;
+insert into t1(c11,id,c1,c13,c2,c12,c3,c4,c14) values ('{1:[1]}', 4, [1], '{1:[1]}', '{1:1}', '{1:[1]}', 1.1, '{"1":1}', 1);
+insert into t1(c11,id,c1,c13,c2,c12,c3,c4,c14) values ('{2:[2]}', 5, [2], '{2:[2]}', '{2:2}', '{2:[2]}', 2.2, '{"2":2}', 2);
+select * from t1;
+alter table t1 add column c21 char(10) default ' ';
+alter table t1 add column c22 smallint first;
+alter table t1 add column c23 tinyint before c1;
+alter table t1 add column c24 bigint after c2;
+alter table t1 drop c11, add c25 char(10) default 'a';
+alter table t1 add column c26 int not null, add column c27 int;
+alter table t1 add column c28 int as (c27 + 1);
+ALTER TABLE t1 ADD COLUMN c29 int AS (c27 + 3) STORED;
+insert into t1(c22, id, c23, c1, c13, c2, c24, c12, c3, c4, c14, c21, c25, c26, c27) values (1, 6, 1, [1], '{1:[1]}', '{1:1}', 1, '{1:[1]}', 1.1, '{"1":1}', 1, '1', '1', 1, 1);
+insert into t1(c22, id, c23, c1, c13, c2, c24, c12, c3, c4, c14, c21, c25, c26, c27) values (2, 7, 2, [2], '{2:[2]}', '{2:2}', 2, '{2:[2]}', 2.2, '{"2":2}', 2, '2', '2', 2, 2);
+select * from t1;
+--error 1138
+alter table t1 add column c31 map(int, int) not null;
+drop table t1;
+
+# 2. MODIFY COLUMN
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+alter table t1 modify c3 float not null;
+--error 1138
+alter table t1 modify c2 map(int,int) not null;
+desc t1;
+select * from t1;
+alter table t1 modify c3 int;
+alter table t1 modify c2 map(float,float);
+select * from t1;
+alter table t1 modify c3 bigint before c2;
+desc t1;
+select * from t1;
+alter table t1 modify id int before c3;
+alter table t1 modify c3 bigint first;
+desc t1;
+select * from t1;
+alter table t1 modify c3 int unsigned not null auto_increment;
+desc t1;
+select * from t1;
+insert into t1 values (1,[1],3,'{1:1}','{"1":1}');
+insert into t1 values (2,[2],4,'{2:2}','{"2":2}');
+select * from t1;
+
+# 3. CHANGE COLUMN
+alter table t1 change c3 c3 bigint;
+desc t1;
+alter table t1 change id id varchar(128);
+desc t1;
+alter table t1 change id id bigint before c3;
+desc t1;
+alter table t1 change id id int after c4;
+desc t1;
+drop table t1;
+create table t1(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), c5 map(int,int), c6 json) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (2, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+alter table t1 modify c1 tinyint;
+desc t1;
+alter table t1 modify c3 varchar(5) charset 'gbk';
+desc t1;
+alter table t1 modify c3 char(8) , add c7 int, drop column c6;
+desc t1;
+select * from t1;
+
+# 4. DROP COLUMN
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+alter table t1 drop primary key;
+desc t1;
+alter table t1 drop column c3;
+desc t1;
+alter table t1 drop column c2;
+desc t1;
+select * from t1;
+
+# 5. ADD CONSTRAINT
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+alter table t1 add constraint cst1 unique (c3);
+alter table t1 add constraint cst2 check (c2 = '{1:11,2:22}');
+--error 3819
+insert into t1 values (2, [1,2], '{1:11}', 1.1, '{"1":11,"2":22}');
+
+# 6. ADD/DROP INDEX
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+--error 1235
+alter table t1 add index idx1(c2);
+alter table t1 add index idx1(c3);
+insert into t1 values (3, [1,1], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+--error 1235
+create index idx2 on t1(c2);
+create index idx2 on t1(c3);
+insert into t1 values (4, [1,1], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+select * from t1;
+alter table t1 drop index idx1;
+drop index idx2 on t1;
+
+# 7. ADD PRIMARY KEY
+drop table t1;
+create table t1 (id int, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+alter table t1 modify id int primary key;
+select * from t1;
+drop table t1;
+create table t1 (id int, c1 array(int), c2 map(int,int), c3 float, c4 json);
+alter table t1 add primary key(id);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+select * from t1;
+
+# 8. TRUNCATE/DROP PARTITION
+drop table t1;
+create table t1(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), c5 map(int,int), c6 json) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (2, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+alter table t1 truncate partition p0,p1;
+select * from t1;
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (20, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+alter table t1 drop partition p0;
+select * from t1;
+
+# 9. ADD/MODIFY PARTITION/RULE
+drop table t1;
+create table t1(c1 int, c2 vector(3), c3 varchar(10), c4 int, primary key(c1), c5 map(int,int), c6 json) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+insert into t1 value (1, [1,1,1], '1', 1, '{1:1}', '{"1":1}');
+insert into t1 value (20, [2,2,2], '2', 2, '{2:2}', '{"2":2}');
+--error 1526
+insert into t1 value (300, [3,3,3], '3', 3, '{3:3}', '{"3":3}');
+alter table t1 add partition (partition p2 values less than (1000));
+insert into t1 value (300, [3,3,3], '3', 3, '{3:3}', '{"3":3}');
+select * from t1;
+--error 1526
+insert into t1 value (4000, [4,4,4], '4', 4, '{4:4}', '{"4":4}');
+alter table t1 partition by range(c1) (partition p3 values less than (10000));
+insert into t1 value (4000, [4,4,4], '4', 4, '{4:4}', '{"4":4}');
+select * from t1;
+
+# 10. MVIEW/VIEW
+drop table t1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+create materialized view mv1 refresh complete on demand  as select id,c1,c2,c3,c4 from t1 ;
+CREATE INDEX idx ON mv1 (c3);
+--error 1235
+CREATE INDEX idx ON mv1 (c2);
+--error 1235
+CREATE VECTOR INDEX idx ON mv1 (c2);
+desc mv1;
+--sorted_result
+select * from mv1;
+
+drop table t1;
+drop  materialized view mv1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+insert into t1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into t1 values (2, '[]', '{}', 0, '{}');
+--error 1167
+create materialized view mv1(primary key(c2)) refresh complete on demand  as select c1,c2 from t1 ;
+create materialized view mv1(primary key(id)) refresh complete on demand  as select id,c1,c2 from t1 ;
+desc mv1;
+--sorted_result
+select * from mv1;
+
+drop table t1;
+drop  materialized view mv1;
+create table t1 (id int primary key, c1 array(int), c2 map(int,int), c3 float, c4 json);
+create view v1 as select * from t1;
+insert into v1 values (1, [1,2], '{1:11,2:22}', 1.1, '{"1":11,"2":22}');
+insert into v1 values (2, '[]', '{}', 0, '{}');
+--error 1235
+CREATE VECTOR INDEX idx ON v1 (c2);
+--error 1235
+CREATE INDEX idx ON v1 (c2);
+--error 1347
+CREATE INDEX idx ON v1 (c3);
+--error 7601
+CREATE VECTOR INDEX idx ON v1 (c3);
+drop table t1;
+drop view v1;
+
+# 11. 分区交换
+create table t1(c1 int, c2 vector(3), c3 map(int,int), primary key(c1)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+create table t2(c1 int, c2 vector(3), c3 map(int,int), primary key(c1));
+insert into t1 values (1, [1,1,1], map(1,1));
+insert into t1 values (2, [2,2,2], map(2,2));
+alter table t1 exchange partition p0 with table t2 without validation;
+select * from t1;
+select * from t2;
+drop table t1, t2;
+
+# direct load
+create table t1 (id int primary key not null auto_increment, m1 map(int, int), m2 map(varchar(20),array(varchar(20))), m3 map(float, array(array(int))))
+  PARTITION BY LIST(id) (PARTITION p0 VALUES IN (1,2), PARTITION p1 VALUES IN (3,4), PARTITION p2 VALUES IN (DEFAULT));
+insert into t1 values (1, '{1:11,2:22}', '{"a1":["hi1","hello"], "b1":["ocean1","base"]}', '{1.11:[[11],[2]], 2.21:[[1,2]]}');
+insert into t1 values (2, '{1:12,2:23}', '{"a2":["hi2","hello"], "b2":["ocean2","base"]}', '{1.12:[[12],[2]], 2.22:[[1,2]]}');
+insert into t1 values (3, '{1:12,2:24}', '{"a2":["hi3","hello"], "b3":["ocean2","base"]}', '{1.13:[[13],[2]], 2.23:[[1,2]]}');
+insert into t1 values (4, '{1:13,2:25}', '{"a3":["hi4","hello"], "b4":["ocean3","base"]}', '{1.14:[[14],[2]], 2.24:[[1,2]]}');
+insert into t1 values (5, '{1:14,2:26}', '{"a4":["hi5","hello"], "b5":["ocean5","base"]}', '{1.15:[[15],[2]], 2.25:[[1,2]]}');
+select * from t1 order by id;
+CREATE TABLE t2(id int, m1 map(TINYINT, TINYINT), m2 map(varchar(10),array(varchar(10))), m3 map(double, array(array(SMALLINT))));
+INSERT /*+ direct(true,100) enable_parallel_dml parallel(2) append*/ INTO t2  SELECT * from t1;
+--sorted_result
+SELECT * from t2;
+ALTER TABLE t1 DROP PARTITION p0;
+ALTER TABLE t1 TRUNCATE PARTITION p1;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1;
+select * from t1 order by id;
+insert into t1 values (1, '{1:11,2:22}', '{"a1":["hi1","hello"], "b1":["ocean1","base"]}', '{1.11:[[11],[2]], 2.21:[[1,2]]}');
+insert into t1 values (3, '{1:12,2:24}', '{"a2":["hi3","hello"], "b3":["ocean2","base"]}', '{1.13:[[13],[2]], 2.23:[[1,2]]}');
+select * from t1 order by id;
+drop table t1, t2;
+
+# bugfix: 2025032100107684907
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+create table test (id int, m map(float, float), f float, d double);
+insert into test values (1, '{1e10:1e10}', 1e10, 1e10);
+insert into test values (2, '{1E+1:1E+1}', 1E+1, 1E+1);
+insert into test values (3, '{-1E-10:-1E-10}', -1E-10, -1E-10);
+insert into test values (4, '{3.402823466E+38:3.402823466E+38}', 3.402823466E+38, -1.7976931348623157E+308);
+insert into test values (5, '{1.175494351E-38:1.175494351E-38}', 1.175494351E-38, 2.2250738585072014E-308);
+select * from test;
+select map(f,f), map(d,d) from test;
+drop table test;
+
+# bugfix: 2025032400107734693
+SELECT CASE WHEN map(1,1)=map(1,1)   THEN map(1,1) ELSE map(1,2) END;
+SELECT CASE WHEN map(1,1)!=map(1,1)   THEN map(1,1) ELSE map(1,2) END;
+--error 1210
+SELECT CASE WHEN 1=2  THEN 1 ELSE map(1,2) END;
+--error 1210
+SELECT CASE WHEN 1=1  THEN 1 ELSE map(1,2) END;
+--error 7602
+SELECT CASE WHEN 1=2  THEN map(1,1) ELSE map(1,[2]) END;
+--error 7602
+SELECT CASE WHEN 1=1  THEN map(1,1) ELSE map(1,[2]) END;
+--error 7602
+SELECT CASE WHEN 1=2  THEN map(1,[1]) ELSE map(1,2) END;
+--error 7602
+SELECT CASE WHEN 1=2  THEN map(1,[1]) ELSE map(1,2) END;

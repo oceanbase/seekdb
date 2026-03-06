@@ -78,16 +78,16 @@ int ObExprVecIVFPQCenterIds::cg_expr(
   return ret;
 }
 
-// [version(uint32_t)][tablet_id(uint64_t)][pq_id(uint32_t)...]
-int ObExprVecIVFPQCenterIds::generate_empty_pq_ids(char *buf, int pq_m, int nbits, uint64_t tablet_id)
+// [version(uint32_t)][center_prefix(uint64_t)][pq_id(uint32_t)...]
+int ObExprVecIVFPQCenterIds::generate_empty_pq_ids(char *buf, int pq_m, int nbits, uint64_t center_prefix)
 {
   int ret = OB_SUCCESS;
   int64_t buf_pos = 0;
   // version
   *(int32_t*)buf = ObVecIVFPQCenterIDS::CUR_VERSION;
   buf_pos += ObVecIVFPQCenterIDS::VERSION_SIZE;
-  // tablet_id
-  *(uint64_t*)(buf + buf_pos) = tablet_id;
+  // center_prefix
+  *(uint64_t*)(buf + buf_pos) = center_prefix;
   buf_pos += ObVecIVFPQCenterIDS::TABLET_ID_SIZE;
   // 8 or 16 or 32
   int64_t pq_id_size = ObVecIVFPQCenterIDS::get_pq_id_size(nbits);
@@ -112,15 +112,14 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     int64_t res_len = 0;
     uint64_t pq_m = 1;
     uint64_t nbits = 1;
-    uint64_t pq_cent_tablet_id = 1;
+    uint64_t center_prefix = 1;
     if (FALSE_IT(res_len = ObVecIVFPQCenterIDS::get_total_size(pq_m, nbits))) {
     } else if (OB_ISNULL(vb_buf = expr.get_str_res_mem(eval_ctx, res_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc res buf", K(ret), K(res_len), K(expr));
     } else if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits,
-                                             pq_cent_tablet_id))) {
-      LOG_WARN("fail to gen empty pq ids", K(ret), K(pq_m),
-               K(pq_cent_tablet_id));
+                                             center_prefix))) {  // center_prefix is 1
+      LOG_WARN("fail to gen empty pq ids", K(ret), K(pq_m), K(center_prefix));
     }
     if (OB_SUCC(ret)) {
       ObString res_str;
@@ -169,6 +168,8 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     uint64_t pq_m = 0;
     ObTableID pq_cent_table_id;
     ObTabletID pq_cent_tablet_id;
+    ObTableID cent_table_id;
+    ObTabletID cent_tablet_id;
     uint64_t nbits = 0;
     int64_t pq_id_size = 0;
     if (OB_FAIL(ret)) {
@@ -196,8 +197,26 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
           pq_cent_tablet_id))) {
       LOG_WARN("fail to calc location ids", 
                 K(ret), K(pq_cent_table_id), K(pq_cent_tablet_id), KP(calc_pq_centroid_table_id_expr), KP(calc_pq_centroid_part_id_expr));
+    } else if (OB_FAIL(ObVectorIndexUtil::calc_location_ids(
+          eval_ctx,
+          calc_centroid_table_id_expr,
+          calc_centroid_part_id_expr,
+          cent_table_id,
+          cent_tablet_id))) {
+      LOG_WARN("fail to calc location ids", K(ret), K(cent_table_id), K(cent_tablet_id), KP(calc_centroid_table_id_expr), KP(calc_centroid_part_id_expr));
     } else if (is_empty_pq_ids) {
-      if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, pq_cent_tablet_id.id()))) {
+      // need get center prefix
+      uint64_t center_prefix = 0;
+      ObSEArray<float *, 64> pq_centers;
+      share::ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+      ObExprVecIvfCenterIdCache *cache = nullptr;
+      ObExprVecIvfCenterIdCache *pq_cache = nullptr;
+      ObVectorIndexUtil::get_ivf_pq_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_, cache, pq_cache);
+      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, pq_cache, pq_cent_table_id, pq_cent_tablet_id,
+                                                      cent_tablet_id, true /* is_pq_cache */, tmp_allocator,
+                                                      pq_centers, center_prefix, pq_m))) {
+        LOG_WARN("failed to get centers", K(ret));
+      } else if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix))) {
         LOG_WARN("fail to gen empty pq ids", K(ret), K(pq_m), K(pq_cent_tablet_id));
       }
     } else if (OB_ISNULL(arr) || pq_m > arr->size()) {
@@ -224,27 +243,19 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     float *residual_vec = nullptr;
     share::ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
     ObVectorNormalizeInfo norm_info;
-    ObTableID cent_table_id;
-    ObTabletID cent_tablet_id;
     ObArray<float *> splited_residual;
     ObExprVecIvfCenterIdCache *cache = nullptr;
     ObExprVecIvfCenterIdCache *pq_cache = nullptr;
     ObVectorIndexUtil::get_ivf_pq_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_, cache, pq_cache);
     if (OB_FAIL(ret) || is_empty_pq_ids) {
-    } else if (OB_FAIL(ObVectorIndexUtil::calc_location_ids(
-          eval_ctx, 
-          calc_centroid_table_id_expr, 
-          calc_centroid_part_id_expr, 
-          cent_table_id, 
-          cent_tablet_id))) {
-      LOG_WARN("fail to calc location ids", K(ret), K(cent_table_id), K(cent_tablet_id), KP(calc_centroid_table_id_expr), KP(calc_centroid_part_id_expr));
     } else {
       ObSEArray<float*, 64> centers;
-      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, cent_table_id, cent_tablet_id, tmp_allocator, centers))) {
+      uint64_t center_prefix = 0;
+      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, cent_table_id, cent_tablet_id, cent_tablet_id, false /* is_pq_cache */, tmp_allocator, centers, center_prefix, 0))) {
         LOG_WARN("failed to get centers", K(ret));
       } else if (centers.empty()) {
         is_empty_pq_ids = true;
-        if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, pq_cent_tablet_id.id()))) {
+        if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix))) { // center_prefix is 1
           LOG_WARN("fail to gen empty pq ids", K(ret), K(pq_m), K(pq_cent_tablet_id));
         }
       } else if (OB_FAIL(ObVectorIndexUtil::calc_residual_vector(
@@ -261,9 +272,10 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     // 4. calc pq cent id
     if (OB_SUCC(ret) && !is_empty_pq_ids) {
       ObSEArray<float*, 64> pq_centers;
+      uint64_t center_prefix = 0;
       int64_t center_size_per_m = 0;
       int64_t pq_dim = arr->size() / pq_m;
-      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, pq_cache, pq_cent_table_id, pq_cent_tablet_id, tmp_allocator, pq_centers))) {
+      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, pq_cache, pq_cent_table_id, pq_cent_tablet_id, cent_tablet_id, true /* is_pq_cache */, tmp_allocator, pq_centers, center_prefix, pq_m))) {
         LOG_WARN("failed to get centers", K(ret));
       } else if (pq_centers.count() == 0 || pq_centers.count() % pq_m != 0) {
         ret = OB_INVALID_ARGUMENT;
@@ -278,8 +290,8 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       // version
       *(int32_t*)vb_buf = ObVecIVFPQCenterIDS::CUR_VERSION;
       buf_pos += ObVecIVFPQCenterIDS::VERSION_SIZE;
-      // tablet_id
-      *(uint64_t*)(vb_buf + buf_pos) = pq_cent_tablet_id.id();
+      // center_prefix
+      *(uint64_t*)(vb_buf + buf_pos) = center_prefix;
       buf_pos += ObVecIVFPQCenterIDS::TABLET_ID_SIZE;
       // row_i = pq_centers[m_id - 1][center_id - 1] since m_id and center_id start from 1
       PQEncoderGeneric encoder((uint8_t*)(vb_buf + buf_pos), nbits);

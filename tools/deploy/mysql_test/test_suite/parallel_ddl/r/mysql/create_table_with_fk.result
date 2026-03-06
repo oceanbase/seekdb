@@ -1,0 +1,119 @@
+set @@session.recyclebin = off;
+set @@session.foreign_key_checks = on;
+alter system set _enable_parallel_table_creation = true;
+drop database if exists yanmu_parallel_ddl;
+create database yanmu_parallel_ddl;
+use yanmu_parallel_ddl;
+create table t1(c1 int primary key, c2 int, constraint foreign key(c3) references t1(c1));
+ERROR HY000: Column not found
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references t1(c3));
+ERROR HY000: Column not found
+create table t1(c1 int primary key, c2 varchar(20), c3 int, constraint foreign key(c2) references t1(c1));
+ERROR HY000: Cannot add foreign key constraint
+create table t1(c1 int primary key, c2 int, c3 int, constraint foreign key(c2) references t1(c3));
+ERROR HY000: Cannot add foreign key constraint
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'yanmu_parallel_ddl.t1'
+create table t1(c1 int primary key, c2 int, c3 int, index i1(c2), constraint foreign key(c3) references t1(c2));
+drop table if exists t1;
+create table t1(c1 int primary key, c2 int, c3 int, c4 int, unique index i1(c2, c3), constraint foreign key(c4) references t1(c2));
+drop table if exists t1;
+create table `t1`(c1 int primary key, c2 int, constraint foreign key(c2) references `T1`(c1));
+create table `t2`(c1 int , c2 varchar(20), c3 int, c4 varchar(20), primary key(c1, c2), constraint foreign key(c3, c4) references `T2`(c1, c2));
+create table `t3`(c1 int primary key, c2 int, c3 int, unique index i1(c2), constraint foreign key(c3) references `T3`(c2));
+create table `t4`(c1 int primary key, c2 int, c3 varchar(20), c4 int, c5 varchar(20), unique index i1(c2, c3), constraint foreign key(c4, c5) references `T4`(c2, c3));
+insert into t1 values(1, 2);
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t1 values(1, 1);
+select * from t1;
+c1	c2
+1	1
+insert into t2 values(1, "2", 1, "3");
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t2 values(1, "2", 1, "2");
+select * from t2;
+c1	c2	c3	c4
+1	2	1	2
+insert into t3 values(1, 2, 3);
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t3 values(1, 2, 2);
+select * from t3;
+c1	c2	c3
+1	2	2
+insert into t4 values(1, 1, "2", 1, "3");
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t4 values(1, 1, "2", 1, "2");
+select * from t4;
+c1	c2	c3	c4	c5
+1	1	2	1	2
+drop database if exists yanmu_parallel_ddl;
+create database yanmu_parallel_ddl;
+use yanmu_parallel_ddl;
+create table p1(c1 int primary key, c2 int);
+create table p2(c1 varchar(20) primary key, c2 int);
+create table p3(c1 int primary key, c2 int, key i1(c2));
+create table p4(c1 int primary key, c2 int, unique key i1(c2));
+create table p5(c1 int primary key, c2 int, c3 varchar(20), unique key i1(c2, c3));
+create table p6(c1 int, c2 varchar(20), primary key(c1, c2));
+create table t1(c1 int primary key, c2 int, constraint foreign key(c3) references p1(c1));
+ERROR HY000: Column not found
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p1(c3));
+ERROR HY000: Column not found
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p0(c1));
+ERROR 42S02: Table doesn't exist
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p2(c1));
+ERROR HY000: Cannot add foreign key constraint
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p1(c2));
+ERROR HY000: Cannot add foreign key constraint
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'yanmu_parallel_ddl.t1'
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p3(c2));
+drop table if exists t1;
+create table t1(c1 int primary key, c2 int, constraint foreign key(c2) references p5(c2));
+drop table if exists t1;
+create table `t1`(c1 int primary key, c2 int, constraint foreign key(c2) references `P1`(c1));
+create table `t2`(c1 int, c2 varchar(20), constraint foreign key(c1, c2) references `P6`(c1, c2));
+create table `t3`(c1 int primary key, c2 int, constraint foreign key(c2) references `P4`(c2));
+create table `t4`(c1 int primary key, c2 int, c3 varchar(20), constraint foreign key(c2, c3) references `P5`(c2, c3));
+create table `t5`(c1 int primary key, c2 int, c3 varchar(20), c4 int, c5 varchar(20), constraint foreign key(c2, c3) references `P5`(c2, c3), constraint foreign key(c4, c5) references `P6`(c1, c2));
+insert p1 values(1, 1);
+insert t1 values(1, 2);
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert t1 values(1, 1);
+select * from t1;
+c1	c2
+1	1
+insert into p6 values(1, "2");
+insert into t2 values(1, "3");
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t2 values(1, "2");
+select * from t2;
+c1	c2
+1	2
+insert into p4 values(1, 2);
+insert into t3 values(1, 3);
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t3 values(1, 2);
+select * from t3;
+c1	c2
+1	2
+insert into p5 values(1, 1, "2");
+insert into t4 values(1, 1, "3");
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t4 values(1, 1, "2");
+select * from t4;
+c1	c2	c3
+1	1	2
+insert into t5 values(1, 1, "3", 1, "2");
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t5 values(1, 1, "2", 1, "3");
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t5 values(1, 1, "2", 1, "2");
+select * from t5;
+c1	c2	c3	c4	c5
+1	1	2	1	2
+set @@session.recyclebin = off;
+drop database if exists yanmu_parallel_ddl;
+alter system set _enable_parallel_table_creation = 'True';

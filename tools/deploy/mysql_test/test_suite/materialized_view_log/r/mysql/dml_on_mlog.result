@@ -1,0 +1,43 @@
+drop materialized view log on t1;
+DROP TABLE IF EXISTS t1;
+CREATE TABLE t1 (
+id int primary key,
+name varchar(10),
+age int
+);
+create materialized view log on t1 with primary key (age) including new values;
+desc mlog$_t1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO	PRI	NULL
+age	int(11)	YES		NULL
+SEQUENCE$$	bigint(20)	NO	PRI	NULL
+DMLTYPE$$	varchar(1)	NO		NULL
+OLD_NEW$$	varchar(1)	NO		NULL
+insert into t1 values (1, 'Lucy', 21), (2, 'Tommy', 24), (3, 'Jack', 30), (4, 'May', 22), (5, 'Rose', 23), (6, 'Grace', 34), (7, 'Nancy', 24), (8, 'Jones', 32), (9, 'Jerry', 23), (10, 'Marry', 25);
+select count(*) from t1;
+count(*)
+10
+select dmltype$$, old_new$$, id from mlog$_t1;
+dmltype$$	old_new$$	id
+I	N	1
+I	N	2
+I	N	3
+I	N	4
+I	N	5
+I	N	6
+I	N	7
+I	N	8
+I	N	9
+I	N	10
+insert into mlog$_t1 values (1, 'I', 'N', 20, 30);
+ERROR 0A000: DML operation on materialized view (log) is not supported
+insert into mlog$_t1 values (10, 'U', 'N', 15, 25);
+ERROR 0A000: DML operation on materialized view (log) is not supported
+insert into mlog$_t1 values (100, 'D', 'O', 40, 20);
+ERROR 0A000: DML operation on materialized view (log) is not supported
+update mlog$_t1 set age = age + 1;
+ERROR 0A000: DML operation on materialized view (log) is not supported
+delete from mlog$_t1;
+ERROR 0A000: DML operation on materialized view (log) is not supported
+drop materialized view log on t1;
+drop table t1;

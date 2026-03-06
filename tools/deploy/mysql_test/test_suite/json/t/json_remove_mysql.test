@@ -1,0 +1,198 @@
+#owner: lb446709
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of JSON_REMOVE function.
+--echo # ----------------------------------------------------------------------
+
+# null args
+select json_remove( null, '$[1]' );
+select json_remove( null, '$[1]' ) is null;
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', null );
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', null ) is null;
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', null );
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', null ) is null;
+
+
+# simple matches
+
+select json_remove( '[ 1, 2, 3 ]', '$[0]' );
+select json_remove( '[ 1, 2, 3 ]', '$[1]' );
+select json_remove( '[ 1, 2, 3 ]', '$[2]' );
+select json_remove( '[ 1, 2, 3 ]', '$[3]' );
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]' );
+
+# multiple paths
+select json_remove( '[ { "a": true }, { "b": false }, { "c": null }, { "a": null } ]', '$[0].a', '$[2].c' );
+
+# nonsense path
+select json_remove( '{"id": 123, "name": "systemQA", "array": [1, 2, 3]}', '$[0]' );
+
+# examples from wl7909 spec
+# returns the document {"a": "foo", "b": [true]}
+SELECT JSON_REMOVE
+(
+  '{"a" : "foo", "b" : [true, {"c" : 123}]}',
+  '$.b[ 1 ]'
+);
+
+# returns {"a": "foo", "b": [true, {}]} due to normalization
+SELECT JSON_REMOVE
+(
+  '{ "a" : "foo", "b" : [ true, { "c" : 123, "c" : 456 } ] }',
+  '$.b[ 1 ].c'
+);
+
+# returns {"a": "foo", "b": [true, {}]}
+SELECT JSON_REMOVE
+(
+  '{ "a" : "foo", "b" : [ true, { "c" : 123 } ] }',
+  '$.b[ 1 ].c'
+);
+
+# returns the original document because the path doesn't identify an element
+SELECT JSON_REMOVE
+(
+  '{ "a" : "foo", "b" : [ true, { "c" : 123, "d" : 456 } ] }',
+  '$.b[ 1 ].e'
+);
+
+# duplicate path
+SELECT JSON_REMOVE('[1, 2, [3, 4, 5]]', '$[2][1]', '$[2][1]') AS 'Result';
+
+drop table if exists json_test1;
+create table json_test1(
+c1 int primary key,
+c2 json);
+insert into json_test1 values(2,'{
+  "width":  "800",
+  "image":  800,
+  "thumbnail": {
+      "url":    "http://www.example.com/image/481989943",
+      "width":  100
+  },
+  "ids": [116, 943, 234, 38793]
+}');
+select json_remove(c2, '$[0].thumbnail.url') from json_test1;
+drop table json_test1;
+
+# too few args
+
+--echo
+--echo # not enough args
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select json_remove();
+--echo
+--echo # not enough args
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]' );
+--echo
+--echo # not enough args
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select json_remove( '$[1]' );
+
+# malformed args
+--echo
+--echo # invalid json text
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ', '$[1]', '$[2]' );
+--echo
+--echo # invalid json path
+--error ER_INVALID_JSON_PATH
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1', '$[2]' );
+--echo
+--echo # invalid json path
+--error ER_INVALID_JSON_PATH
+select json_remove( '[ 1, { "a": true, "b": false, "c": null }, 5 ]', '$[1]', '$[2' );
+--echo
+--echo # Vacuous path expression
+--error ER_JSON_VACUOUS_PATH
+select json_remove( '[ 1, 2, 3 ]', '$' );
+--echo
+--echo # Vacuous path expression
+--error ER_JSON_VACUOUS_PATH
+select json_remove( '[ 1, 2, 3 ]', '$', '$[2]' );
+--echo
+--echo # Vacuous path expression
+--error ER_JSON_VACUOUS_PATH
+select json_remove( '[ 1, 2, 3 ]', '$[1]', '$' );
+
+# wildcard/ellipsis not allowed in paths
+--error ER_INVALID_JSON_PATH_WILDCARD
+select json_remove( '[ 1, 2, 3 ]', '$[*]' );
+--error ER_INVALID_JSON_PATH_WILDCARD
+select json_remove( '[ 1, 2, 3 ]', '$**[2]' );
+--error ER_INVALID_JSON_PATH_WILDCARD
+select json_remove( '[ 1, 2, 3 ]', '$[2]', '$[*]' );
+--error ER_INVALID_JSON_PATH_WILDCARD
+select json_remove( '[ 1, 2, 3 ]', '$[2]', '$**[2]' );
+
+# one match nested inside another
+--error ER_INVALID_JSON_PATH_WILDCARD
+select json_remove( '[ { "a": { "a": true } } ]', '$**.a' );
+
+# ellipsis with matches at different levels
+--error ER_INVALID_JSON_PATH_WILDCARD
+select json_remove( '[ { "a": true }, { "b": [ { "c": { "a": true } }  ] }, { "c": null }, { "a": null } ]', '$**.a' );
+
+--error ER_INVALID_JSON_CHARSET
+select json_remove(UNHEX(""), '$[*]');
+
+--disable_warnings
+drop table if exists  test1;
+--enable_warnings
+create table test1(j json);
+insert into test1 values('["abc"]');
+
+select json_remove(j,'$[0][0]') from test1;
+
+drop table test1;
+
+SELECT JSON_SET('{"":"aa"}', '$[0][0]',null , '$[0].width[0]','23' ) FROM dual;
+
+--disable_warnings
+drop table if exists lyq_test;
+--enable_warnings
+create table lyq_test(v_e json,id int);
+insert into lyq_test values('1',1);
+
+select JSON_SEARCH(V_E, 'ALL','%\%%' , '' , '$.*' ) from lyq_test;
+drop table lyq_test;
+
+--disable_warnings
+drop table if exists test;
+--enable_warnings
+create table test(j json);
+insert into test values(concat('{"name": "John","name1":1,"name2":true, "content":{"key":{"key1":"',repeat('x',4100), '"}}}'));
+select JSON_STORAGE_SIZE(j) , JSON_STORAGE_FREE(j)  from test;
+update test set j=json_replace(j,'$[0]',1,'$[1]','test');
+drop table test;
+
+SELECT JSON_LENGTH('[1,2,3]', '$[0 to 1]');
+
+SELECT JSON_ARRAY(_utf8mb4'abc') = JSON_ARRAY(_binary'abc');
+
+--disable_warnings
+drop table if exists t;
+--enable_warnings
+CREATE TABLE t(j JSON);
+INSERT INTO t VALUES (JSON_ARRAY('aaa'));
+UPDATE t SET j = JSON_REPLACE(j, '$[0]', REPEAT(CHAR(97), 3));
+SELECT j, JSON_TYPE(j->'$[0]') FROM t;
+
+drop table t;
+
+SELECT JSON_SEARCH('["abc"]', 'one', CAST('abc' AS CHAR CHARSET utf16));
+
+--disable_warnings
+drop table if exists json_test;
+create table json_test (id int primary key, data json);
+insert into json_test values(1, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
+update json_test set data = json_remove(data, '$.a');
+select * from json_test;
+
+set log_row_value_options="partial_json";
+update json_test set data = json_remove(data, '$.b[1]');
+select * from json_test;
+set log_row_value_options="";
+
+drop table json_test;

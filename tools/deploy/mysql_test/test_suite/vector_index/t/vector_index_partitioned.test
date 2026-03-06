@@ -1,0 +1,441 @@
+#owner: gehao.wh
+#owner group: shenzhen
+--echo # Vector Index Multi Partitioned Test
+
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+
+set ob_enable_index_direct_select = 1;
+alter system set ob_vector_memory_limit_percentage = 25;
+alter system set vector_index_optimize_duty_time = '[00:00:00, 00:00:00]';
+sleep 3;
+
+#########################################################################
+# Level One partitioned
+#########################################################################
+
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+                primary key(c1),
+                vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag),
+                vector index idx2(c4) with (distance=l2, type=hnsw, lib=vsag))
+PARTITION BY RANGE COLUMNS(c1)
+(
+  PARTITION p0 VALUES LESS THAN(100),
+  PARTITION p1 VALUES LESS THAN(200),
+  PARTITION p2 VALUES LESS THAN(300),
+  PARTITION p3 VALUES LESS THAN(10000),
+  PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+
+--source mysql_test/test_suite/vector_index/include/multi_partition_data.inc
+
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+let $table_id = `select table_id from oceanbase.__all_table where table_name = 't1' order by gmt_create desc limit 1;`;
+let $index_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $index_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2') from dual;`;
+let $index_id_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_id_table') from dual;`;
+let $index_id_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_id_table') from dual;`;
+let $index_snapshot_data_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_snapshot_data_table') from dual;`;
+let $index_snapshot_data_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_snapshot_data_table') from dual;`;
+call dbms_vector.refresh_index('idx1', 't1', 'c3', 1, 'FAST');
+call dbms_vector.rebuild_index('idx2','t1','c4');
+--disable_query_log
+eval select count(*) from $index_table_idx1;
+eval select count(*) from $index_table_idx2;
+eval select count(*) from $index_id_table_idx1;
+eval select count(*) from $index_id_table_idx2;
+eval select count(*) from $index_snapshot_data_table_idx1;
+eval select count(*) from $index_snapshot_data_table_idx2;
+--enable_query_log
+
+# query again
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+drop table t1;
+
+#########################################################################
+# Level One partitioned with post create index before insert data
+#########################################################################
+
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+                primary key(c1))
+PARTITION BY RANGE COLUMNS(c1)
+(
+  PARTITION p0 VALUES LESS THAN(100),
+  PARTITION p1 VALUES LESS THAN(200),
+  PARTITION p2 VALUES LESS THAN(300),
+  PARTITION p3 VALUES LESS THAN(10000),
+  PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+
+create vector index idx1 on t1(c3) with (distance=l2, type=hnsw, lib=vsag);
+
+--source mysql_test/test_suite/vector_index/include/multi_partition_data.inc
+
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+let $table_id = `select table_id from oceanbase.__all_table where table_name = 't1' order by gmt_create desc limit 1;`;
+let $index_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $index_id_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_id_table') from dual;`;
+let $index_snapshot_data_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_snapshot_data_table') from dual;`;
+call dbms_vector.refresh_index('idx1', 't1', 'c3', 1, 'FAST');
+call dbms_vector.rebuild_index('idx1','t1','c3');
+--disable_query_log
+eval select count(*) from $index_table_idx1;
+eval select count(*) from $index_id_table_idx1;
+eval select count(*) from $index_snapshot_data_table_idx1;
+--enable_query_log
+
+# query again
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+drop table t1;
+
+#########################################################################
+# Level One partitioned with post create index after insert data
+#########################################################################
+
+CREATE TABLE t1(c1 INT, c3 vector(3), c4 vector(5),
+                primary key(c1))
+PARTITION BY RANGE COLUMNS(c1)
+(
+  PARTITION p0 VALUES LESS THAN(100),
+  PARTITION p1 VALUES LESS THAN(200),
+  PARTITION p2 VALUES LESS THAN(300),
+  PARTITION p3 VALUES LESS THAN(10000),
+  PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+
+--source mysql_test/test_suite/vector_index/include/multi_partition_data.inc
+
+create vector index idx1 on t1(c3) with (distance=l2, type=hnsw, lib=vsag);
+
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+let $table_id = `select table_id from oceanbase.__all_table where table_name = 't1' order by gmt_create desc limit 1;`;
+let $index_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $index_id_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_id_table') from dual;`;
+let $index_snapshot_data_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_snapshot_data_table') from dual;`;
+call dbms_vector.refresh_index('idx1', 't1', 'c3', 1, 'FAST');
+call dbms_vector.rebuild_index('idx1','t1','c3');
+--disable_query_log
+eval select count(*) from $index_table_idx1;
+eval select count(*) from $index_id_table_idx1;
+eval select count(*) from $index_snapshot_data_table_idx1;
+--enable_query_log
+
+# query again
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+drop table t1;
+
+#########################################################################
+# Level Two partitioned
+#########################################################################
+
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+                primary key(c1,c2),
+                vector index idx1(c3) with (distance=l2, type=hnsw, lib=vsag),
+                vector index idx2(c4) with (distance=l2, type=hnsw, lib=vsag))
+PARTITION BY RANGE COLUMNS(c1)
+SUBPARTITION BY LIST COLUMNS(c2)
+SUBPARTITION TEMPLATE
+(
+  SUBPARTITION mp0 VALUES IN (1,2,3,4,5),
+  SUBPARTITION mp1 VALUES IN (6,7,8,9,10),
+  SUBPARTITION mp2 VALUES IN (11,12,13,14,15),
+  SUBPARTITION mp3 VALUES IN (16,17,18,19,20)
+)
+(
+  PARTITION p0 VALUES LESS THAN(100),
+  PARTITION p1 VALUES LESS THAN(200),
+  PARTITION p2 VALUES LESS THAN(300),
+  PARTITION p3 VALUES LESS THAN(10000),
+  PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+
+--source mysql_test/test_suite/vector_index/include/multi_l2_partition_data.inc
+
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+let $table_id = `select table_id from oceanbase.__all_table where table_name = 't1' order by gmt_create desc limit 1;`;
+let $index_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $index_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2') from dual;`;
+let $index_id_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_id_table') from dual;`;
+let $index_id_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_id_table') from dual;`;
+let $index_snapshot_data_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_snapshot_data_table') from dual;`;
+let $index_snapshot_data_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_snapshot_data_table') from dual;`;
+call dbms_vector.refresh_index('idx1', 't1', 'c3', 1, 'FAST');
+call dbms_vector.rebuild_index('idx2','t1','c4');
+--disable_query_log
+eval select count(*) from $index_table_idx1;
+eval select count(*) from $index_table_idx2;
+eval select count(*) from $index_id_table_idx1;
+eval select count(*) from $index_id_table_idx2;
+eval select count(*) from $index_snapshot_data_table_idx1;
+eval select count(*) from $index_snapshot_data_table_idx2;
+--enable_query_log
+
+# query again
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+drop table t1;
+
+#########################################################################
+# Level Two partitioned
+#########################################################################
+
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+                primary key(c1,c2))
+PARTITION BY RANGE COLUMNS(c1)
+SUBPARTITION BY LIST COLUMNS(c2)
+SUBPARTITION TEMPLATE
+(
+  SUBPARTITION mp0 VALUES IN (1,2,3,4,5),
+  SUBPARTITION mp1 VALUES IN (6,7,8,9,10),
+  SUBPARTITION mp2 VALUES IN (11,12,13,14,15),
+  SUBPARTITION mp3 VALUES IN (16,17,18,19,20)
+)
+(
+  PARTITION p0 VALUES LESS THAN(100),
+  PARTITION p1 VALUES LESS THAN(200),
+  PARTITION p2 VALUES LESS THAN(300),
+  PARTITION p3 VALUES LESS THAN(10000),
+  PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+
+create vector index idx1 on t1(c3) with (distance=l2, type=hnsw, lib=vsag);
+create vector index idx2 on t1(c4) with (distance=l2, type=hnsw, lib=vsag);
+
+--source mysql_test/test_suite/vector_index/include/multi_l2_partition_data.inc
+
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+let $table_id = `select table_id from oceanbase.__all_table where table_name = 't1' order by gmt_create desc limit 1;`;
+let $index_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $index_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2') from dual;`;
+let $index_id_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_id_table') from dual;`;
+let $index_id_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_id_table') from dual;`;
+let $index_snapshot_data_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_snapshot_data_table') from dual;`;
+let $index_snapshot_data_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_snapshot_data_table') from dual;`;
+call dbms_vector.refresh_index('idx1', 't1', 'c3', 1, 'FAST');
+call dbms_vector.rebuild_index('idx2','t1','c4');
+--disable_query_log
+eval select count(*) from $index_table_idx1;
+eval select count(*) from $index_table_idx2;
+eval select count(*) from $index_id_table_idx1;
+eval select count(*) from $index_id_table_idx2;
+eval select count(*) from $index_snapshot_data_table_idx1;
+eval select count(*) from $index_snapshot_data_table_idx2;
+--enable_query_log
+
+# query again
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+drop table t1;
+
+#########################################################################
+# Level Two partitioned
+#########################################################################
+
+CREATE TABLE t1(c1 INT not null auto_increment, c2 INT, c3 vector(3), c4 vector(5),
+                primary key(c1,c2))
+PARTITION BY RANGE COLUMNS(c1)
+SUBPARTITION BY LIST COLUMNS(c2)
+SUBPARTITION TEMPLATE
+(
+  SUBPARTITION mp0 VALUES IN (1,2,3,4,5),
+  SUBPARTITION mp1 VALUES IN (6,7,8,9,10),
+  SUBPARTITION mp2 VALUES IN (11,12,13,14,15),
+  SUBPARTITION mp3 VALUES IN (16,17,18,19,20)
+)
+(
+  PARTITION p0 VALUES LESS THAN(100),
+  PARTITION p1 VALUES LESS THAN(200),
+  PARTITION p2 VALUES LESS THAN(300),
+  PARTITION p3 VALUES LESS THAN(10000),
+  PARTITION p4 VALUES LESS THAN MAXVALUE
+);
+
+--source mysql_test/test_suite/vector_index/include/multi_l2_partition_data.inc
+
+create vector index idx1 on t1(c3) with (distance=l2, type=hnsw, lib=vsag);
+create vector index idx2 on t1(c4) with (distance=l2, type=hnsw, lib=vsag);
+
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p0) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p1) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p2) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p3) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 partition(p4) order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+let $table_id = `select table_id from oceanbase.__all_table where table_name = 't1' order by gmt_create desc limit 1;`;
+let $index_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1') from dual;`;
+let $index_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2') from dual;`;
+let $index_id_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_id_table') from dual;`;
+let $index_id_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_id_table') from dual;`;
+let $index_snapshot_data_table_idx1 = `select CONCAT('__idx_', $table_id , '_idx1_index_snapshot_data_table') from dual;`;
+let $index_snapshot_data_table_idx2 = `select CONCAT('__idx_', $table_id , '_idx2_index_snapshot_data_table') from dual;`;
+call dbms_vector.refresh_index('idx1', 't1', 'c3', 1, 'FAST');
+call dbms_vector.rebuild_index('idx2','t1','c4');
+--disable_query_log
+eval select count(*) from $index_table_idx1;
+eval select count(*) from $index_table_idx2;
+eval select count(*) from $index_id_table_idx1;
+eval select count(*) from $index_id_table_idx2;
+eval select count(*) from $index_snapshot_data_table_idx1;
+eval select count(*) from $index_snapshot_data_table_idx2;
+--enable_query_log
+
+# query again
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8;
+select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8;
+select count(*) from (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) APPROXIMATE limit 8) as tmp1, (select * from t1 order by l2_distance(c3, [0.428146,0.408760,0.765300]) limit 8) as tmp2 where tmp1.c1=tmp2.c1;
+
+drop table t1;
+alter system set ob_vector_memory_limit_percentage = 0;
+
+--sleep 25
+select count(*) as count from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_virtual_table b  where a.data_table_id = b.table_id and b.table_name = 't1';
+
+# check virtual table later
+PURGE RECYCLEBIN;

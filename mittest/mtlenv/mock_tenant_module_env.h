@@ -747,7 +747,7 @@ int MockTenantModuleEnv::init_before_start_mtl()
     STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(startup_accel_handler_.init(observer::SERVER_ACCEL))) {
     STORAGE_LOG(WARN, "init server startup task handler failed", KR(ret));
-  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init(GCTX.is_shared_storage_mode()))) {
+  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     STORAGE_LOG(ERROR, "init server checkpoint slog handler fail", K(ret));
   } else if (OB_FAIL(multi_tenant_.init(self_addr_, &sql_proxy_, false))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));

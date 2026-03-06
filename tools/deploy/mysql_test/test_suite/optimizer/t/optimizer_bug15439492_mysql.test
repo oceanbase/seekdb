@@ -1,0 +1,44 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner:yibo.tyf
+#owner group: sql1
+# tags: optimizer
+#bug
+
+--disable_warnings
+drop table if exists t1, t2;
+--enable_warnings
+create table t1(a int, b int, c int) partition by hash(a) partitions 5;
+create table t2(a int, b int, c int) partition by hash(a) partitions 5;
+insert into t1 values (1, 1, 1);
+insert into t1 values (1, 1, 1);
+insert into t1 values (3, 3, 3);
+insert into t1 values (4, 4, 4);
+insert into t2 values (2, 2, 2);
+insert into t2 values (3, 3, 3);
+insert into t2 values (4, 4, 4);
+insert into t2 values (5, 5, 5);
+--sleep 1
+
+--result_format 4
+--explain_protocol 2
+###test case where we can normal result
+select * from (select 1 c1, 1 c2) t3 inner join t1 on t3.c1 = t1.a;
+select * from (select 1 c1, 1 c2) t3 left join t1 on t3.c1 = t1.a;
+select * from (select 1 c1, 1 c2) t3 right join t1 on t3.c1 = t1.a;
+select * from (select 1 c1, 1 c2) t3 full join t1 on t3.c1 = t1.a;
+select * from t1 inner join (select 1 c1, 1 c2) t3 on t3.c1 = t1.a;
+select * from t1 left join (select 1 c1, 1 c2) t3 on t3.c1 = t1.a;
+select * from t1 right join (select 1 c1, 1 c2) t3 on t3.c1 = t1.a;
+select * from t1 full join (select 1 c1, 1 c2) t3 on t3.c1 = t1.a;
+
+###test case where we get null results
+select * from (select 1 c1, 1 c2) t3 inner join t2 on t3.c1 = t2.a;
+select * from (select 1 c1, 1 c2) t3 left join t2 on t3.c1 = t2.a;
+select * from (select 1 c1, 1 c2) t3 right join t2 on t3.c1 = t2.a;
+select * from (select 1 c1, 1 c2) t3 full join t2 on t3.c1 = t2.a;
+select * from t2 inner join (select 1 c1, 1 c2) t3 on t3.c1 = t2.a;
+select * from t2 left join (select 1 c1, 1 c2) t3 on t3.c1 = t2.a;
+select * from t2 right join (select 1 c1, 1 c2) t3 on t3.c1 = t2.a;
+select * from t2 full join (select 1 c1, 1 c2) t3 on t3.c1 = t2.a;

@@ -1,0 +1,70 @@
+drop table if exists t1;
+drop table if exists t2;
+alter system set ob_vector_memory_limit_percentage = 10;
+create table t1(c1 int, c2 vector(10), primary key(c1));
+create table t2 (c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag)) partition by hash(c1) partitions 2;
+create vector index idx1 on t1(c2) with (distance=l2, type=hnsw);
+insert into t1 values(1, '[0.203846,0.205289,0.880265,0.824340,0.615737,0.496899,0.983632,0.865571,0.248373,0.542833]');
+insert into t2 values(1, [1,1,1]);
+insert into t2 values(2, [2,2,2]);
+select count(distinct inc_index_tablet_id) as count
+from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_virtual_table b
+where a.data_table_id = b.table_id and b.table_name in ('t1', 't2');
+count
+3
+drop table t1;
+drop index idx1 on t2;
+select count(*) as count
+from oceanbase.__all_virtual_vector_index_info a, oceanbase.__all_virtual_table b
+where a.data_table_id = b.table_id and b.table_name in ('t1', 't2');
+count
+0
+drop table t2;
+PURGE RECYCLEBIN;
+create table t3 (c1 int, c2 vector(3), primary key(c1));
+insert into t3 values(1, [1,1,1]);
+insert into t3 values(2, [2,2,2]);
+create vector index idx3 on t3(c2) with (distance=l2, type=ivf_flat);
+create table t4 (c1 int, c2 vector(3), primary key(c1));
+insert into t4 values(1, [1,1,1]);
+insert into t4 values(2, [2,2,2]);
+create vector index idx4 on t4(c2) with (distance=l2, type=ivf_pq, m=1);
+select * from t3 order by l2_distance(c2, [2, 2, 2]) approximate limit 2;
+c1	c2
+2	[2,2,2]
+1	[1,1,1]
+select count(*) as count
+from oceanbase.__all_virtual_vector_index_info v
+join oceanbase.__all_table i on v.rowkey_vid_tablet_id = i.tablet_id
+join oceanbase.__all_table t on t.table_id = i.data_table_id
+where t.table_name = 't3';
+count
+1
+select * from t4 order by l2_distance(c2, [2, 2, 2]) approximate limit 2;
+c1	c2
+2	[2,2,2]
+1	[1,1,1]
+select count(*) as count
+from oceanbase.__all_virtual_vector_index_info v
+join oceanbase.__all_table i on v.rowkey_vid_tablet_id = i.tablet_id
+join oceanbase.__all_table t on t.table_id = i.data_table_id
+where t.table_name = 't4';
+count
+1
+drop table t3, t4;
+PURGE RECYCLEBIN;
+select count(*) as count
+from oceanbase.__all_virtual_vector_index_info v
+join oceanbase.__all_table i on v.rowkey_vid_tablet_id = i.tablet_id
+join oceanbase.__all_table t on t.table_id = i.data_table_id
+where t.table_name = 't3';
+count
+0
+select count(*) as count
+from oceanbase.__all_virtual_vector_index_info v
+join oceanbase.__all_table i on v.rowkey_vid_tablet_id = i.tablet_id
+join oceanbase.__all_table t on t.table_id = i.data_table_id
+where t.table_name = 't4';
+count
+0
+alter system set ob_vector_memory_limit_percentage = 0;

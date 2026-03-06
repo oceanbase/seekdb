@@ -1,0 +1,226 @@
+drop database if exists db_fork_lob;
+create database db_fork_lob;
+use db_fork_lob;
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+============================================
+1. Fork Table with TEXT/CLOB
+============================================
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t1'
+drop table if exists t1_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t1_fork'
+create table t1 (
+id int primary key,
+name varchar(50),
+description text,
+content longtext
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t1 values (1, 'Alice', 'Short description', 'This is a long text content for testing LOB handling in fork table');
+insert into t1 values (101, 'Bob', 'Another description', repeat('X', 10000));
+# Fork表
+fork table t1 to t1_fork;
+# 验证Fork表的LOB数据
+select id, name, description, length(content) as content_len from t1_fork order by id;
+id	name	description	content_len
+1	Alice	Short description	66
+101	Bob	Another description	10000
+# 验证LOB数据完整性
+select id, name, substring(description, 1, 20) as desc_preview, substring(content, 1, 50) as content_preview from t1_fork where id = 1;
+id	name	desc_preview	content_preview
+1	Alice	Short description	This is a long text content for testing LOB handli
+select id, name, length(content) as content_len from t1_fork where id = 101;
+id	name	content_len
+101	Bob	10000
+============================================
+2. Fork Table with BLOB
+============================================
+drop table if exists t2;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t2'
+drop table if exists t2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t2_fork'
+create table t2 (
+id int primary key,
+name varchar(50),
+image_data blob,
+binary_data longblob
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t2 values (1, 'Alice', unhex('48656C6C6F'), unhex(repeat('FF', 1000)));
+insert into t2 values (101, 'Bob', unhex('576F726C64'), unhex(repeat('AA', 2000)));
+# Fork表
+fork table t2 to t2_fork;
+# 验证Fork表的BLOB数据
+select id, name, length(image_data) as image_len, length(binary_data) as binary_len from t2_fork order by id;
+id	name	image_len	binary_len
+1	Alice	5	1000
+101	Bob	5	2000
+# 验证BLOB数据完整性
+select id, name, hex(image_data) as image_hex from t2_fork where id = 1;
+id	name	image_hex
+1	Alice	48656C6C6F
+select id, name, length(binary_data) as binary_len from t2_fork where id = 101;
+id	name	binary_len
+101	Bob	2000
+============================================
+3. Fork Table with Large LOB Data
+============================================
+drop table if exists t3;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t3'
+drop table if exists t3_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t3_fork'
+create table t3 (
+id int primary key,
+name varchar(50),
+large_text longtext,
+large_blob longblob
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+# 插入大LOB数据
+insert into t3 values (1, 'LargeData', repeat('A', 100000), unhex(repeat('FF', 50000)));
+# Fork表
+fork table t3 to t3_fork;
+# 验证大LOB数据
+select id, name, length(large_text) as text_len, length(large_blob) as blob_len from t3_fork;
+id	name	text_len	blob_len
+1	LargeData	100000	50000
+# 验证大LOB数据内容
+select id, name, substring(large_text, 1, 100) as text_preview from t3_fork where id = 1;
+id	name	text_preview
+1	LargeData	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+============================================
+4. LOB数据隔离测试
+============================================
+# 在Fork表中插入新的LOB数据
+insert into t1_fork values (50, 'Fork_User', 'Fork description', 'Fork large text content for isolation test');
+# 验证Fork表有新LOB数据
+select id, name, description, length(content) as content_len from t1_fork where id = 50;
+id	name	description	content_len
+50	Fork_User	Fork description	42
+# 验证源表LOB数据未受影响
+select id, name, description, length(content) as content_len from t1 where id = 50;
+id	name	description	content_len
+# 在源表中插入新的LOB数据
+insert into t1 values (150, 'Source_User', 'Source description', 'Source large text content for isolation test');
+# 验证源表有新LOB数据
+select id, name, description, length(content) as content_len from t1 where id = 150;
+id	name	description	content_len
+150	Source_User	Source description	44
+# 验证Fork表LOB数据未受影响
+select id, name, description, length(content) as content_len from t1_fork where id = 150;
+id	name	description	content_len
+============================================
+5. LOB数据修改隔离测试
+============================================
+# 修改Fork表中的LOB数据
+update t1_fork set description = 'Updated Fork description', content = 'Updated Fork large text content' where id = 1;
+# 验证Fork表LOB数据已修改
+select id, name, description, substring(content, 1, 50) as content_preview from t1_fork where id = 1;
+id	name	description	content_preview
+1	Alice	Updated Fork description	Updated Fork large text content
+# 验证源表LOB数据未受影响
+select id, name, description, substring(content, 1, 50) as content_preview from t1 where id = 1;
+id	name	description	content_preview
+1	Alice	Short description	This is a long text content for testing LOB handli
+# 修改源表中的LOB数据
+update t1 set description = 'Updated Source description', content = 'Updated Source large text content' where id = 101;
+# 验证源表LOB数据已修改
+select id, name, description, substring(content, 1, 50) as content_preview from t1 where id = 101;
+id	name	description	content_preview
+101	Bob	Updated Source description	Updated Source large text content
+# 验证Fork表LOB数据未受影响
+select id, name, description, substring(content, 1, 50) as content_preview from t1_fork where id = 101;
+id	name	description	content_preview
+101	Bob	Another description	XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+============================================
+6. Fork Table with LOB Index
+============================================
+drop table if exists t4;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t4'
+drop table if exists t4_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_lob.t4_fork'
+create table t4 (
+id int primary key,
+name varchar(50),
+description text,
+index idx_desc(description(100))
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+insert into t4 values (1, 'Alice', 'Description with LOB data for testing LOB index');
+insert into t4 values (101, 'Bob', 'Another description with LOB data for testing LOB index');
+insert into t4 values (50, 'Charlie', 'Different LOB content for index testing');
+# Fork表
+fork table t4 to t4_fork;
+# 先验证原表的LOB索引
+show create table t4;
+Table	Create Table
+t4	CREATE TABLE `t4` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_desc` (`description`(100)) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证Fork表的LOB索引
+show create table t4_fork;
+Table	Create Table
+t4_fork	CREATE TABLE `t4_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_desc` (`description`(100)) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+# 验证通过LOB前缀索引查询数据（使用like查询，可能使用索引）
+select id, name, substring(description, 1, 50) as desc_preview from t4 where description like 'Description%' order by id;
+id	name	desc_preview
+1	Alice	Description with LOB data for testing LOB index
+select id, name, substring(description, 1, 50) as desc_preview from t4_fork where description like 'Description%' order by id;
+id	name	desc_preview
+1	Alice	Description with LOB data for testing LOB index
+# 在原表中插入新数据，验证原表LOB索引
+insert into t4 values (25, 'Source_New', 'New LOB data for source table');
+select id, name, substring(description, 1, 50) as desc_preview from t4 where description like 'New%' order by id;
+id	name	desc_preview
+25	Source_New	New LOB data for source table
+# 在Fork表中插入新数据，验证Fork表LOB索引独立工作
+insert into t4_fork values (75, 'Fork_New', 'New LOB data for fork table');
+select id, name, substring(description, 1, 50) as desc_preview from t4_fork where description like 'New%' order by id;
+id	name	desc_preview
+75	Fork_New	New LOB data for fork table
+============================================
+7. 清理
+============================================
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop table if exists t4;
+drop table if exists t4_fork;
+drop database if exists db_fork_lob;

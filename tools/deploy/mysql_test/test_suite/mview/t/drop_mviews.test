@@ -1,0 +1,85 @@
+# owner: lana.lgx
+# owner group: data
+# tags:
+# descriotion:
+# 删除mv的测试
+#
+
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+
+--disable_warnings
+drop database if exists db_for_mv_test;
+purge recyclebin;
+--enable_warnings
+
+# 有回收站
+SET @@recyclebin = ON;
+
+create database db_for_mv_test;
+
+use db_for_mv_test;
+
+create table t1 (c1 int, c2 int);
+create materialized view m1 as select * from t1;
+
+drop materialized view m1;
+
+show recyclebin;
+
+create materialized view m1 as select * from t1;
+
+
+use test;
+
+drop database db_for_mv_test;
+
+
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys;
+let $db_objname = query_get_value(select object_name from oceanbase.__all_virtual_recyclebin where original_name = 'db_for_mv_test', object_name, 1);
+disconnect obsys;
+connection default;
+
+sleep 1;
+--echo flashback database db_for_mv_test
+--disable_query_log
+--eval FLASHBACK DATABASE $db_objname TO BEFORE DROP;
+--enable_query_log
+
+
+use db_for_mv_test;
+
+select * from m1;
+
+use test;
+
+let $db_id = query_get_value(select database_id from oceanbase.__all_database where database_name = 'db_for_mv_test', database_id, 1);
+drop database db_for_mv_test;
+
+--disable_query_log
+--eval select table_name from oceanbase.__all_table where table_name = 'm1' and database_id = $db_id;
+--enable_query_log
+
+PURGE RECYCLEBIN;
+
+--disable_query_log
+--eval select table_name from oceanbase.__all_table where table_name = 'm1' and database_id = $db_id;
+--enable_query_log
+
+
+# 无回收站
+
+SET @@recyclebin = OFF;
+
+create database db_for_mv_test;
+
+use db_for_mv_test;
+
+create table t1 (c1 int, c2 int);
+create materialized view m1 as select * from t1;
+
+use test;
+
+drop database db_for_mv_test;

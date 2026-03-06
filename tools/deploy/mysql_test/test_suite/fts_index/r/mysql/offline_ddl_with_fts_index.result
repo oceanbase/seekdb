@@ -1,0 +1,202 @@
+DROP TABLE IF EXISTS fts_table_1;
+CREATE TABLE fts_table_1 (
+id int,
+name varchar(20),
+title varchar(20),
+content varchar(20),
+existing_stored_col int GENERATED ALWAYS AS(id + 1) STORED,
+/*Indices*/
+FULLTEXT INDEX f101(name, title) WITH PARSER space);
+ALTER TABLE fts_table_1 ADD COLUMN col int AFTER id;
+ALTER TABLE fts_table_1 ADD COLUMN col2 int primary key;
+ERROR 0A000: Not supported feature or function
+ALTER TABLE fts_table_1 MODIFY COLUMN content varchar(20) FIRST;
+ALTER TABLE fts_table_1 ADD COLUMN auto_inc_col int AUTO_INCREMENT;
+ALTER TABLE fts_table_1 MODIFY COLUMN id int AUTO_INCREMENT;
+ERROR 42000: Incorrect table definition; there can be only one auto column
+ALTER TABLE fts_table_1 MODIFY content varchar(10);
+ALTER TABLE fts_table_1 MODIFY COLUMN id int PRIMARY KEY;
+ALTER TABLE fts_table_1 ADD COLUMN (stored_col int GENERATED ALWAYS AS(id + 1) STORED);
+ALTER TABLE fts_table_1 DROP COLUMN existing_stored_col;
+ALTER TABLE fts_table_1 DROP COLUMN id;
+ERROR HY000: Column 'id' has a generated column dependency
+ALTER TABLE fts_table_1 DROP COLUMN id, ADD COLUMN id2 int;
+ERROR HY000: Column 'id' has a generated column dependency
+DROP TABLE IF EXISTS fts_table_1;
+DROP TABLE IF EXISTS fts_table;
+create table fts_table(c1 int, c2 varchar(20), primary key(c1), fulltext index f102(c2));
+alter table fts_table add column c3 char(10) default ' ';
+alter table fts_table drop c3, add c4 char(10) default 'a';
+ALTER TABLE fts_table ADD c5 INT AUTO_INCREMENT;
+ALTER TABLE fts_table ADD COLUMN c6 int AS (c1 + 3) STORED;
+alter table fts_table drop primary key;
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c1` int(11) NOT NULL,
+  `c2` varchar(20) DEFAULT NULL,
+  `c4` char(10) DEFAULT 'a',
+  `c5` int(11) NOT NULL AUTO_INCREMENT,
+  `c6` int(11) GENERATED ALWAYS AS ((`c1` + 3)) STORED,
+  FULLTEXT KEY `f102` (`c2`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = 1 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+DROP TABLE IF EXISTS fts_table;
+create table fts_table(c1 int, c2 int, c3 varchar(20), primary key(c1),  fulltext index f102(c3));
+alter table fts_table modify c1 int before c3;
+alter table fts_table modify c2 varchar(128) first;
+alter table fts_table modify c2 varchar(12) after c1;
+alter table fts_table modify c1 int unsigned not null auto_increment;
+alter table fts_table modify c3 char(30);
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c1` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `c2` varchar(12) DEFAULT NULL,
+  `c3` char(30) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  FULLTEXT KEY `f102` (`c3`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = 1 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+DROP TABLE IF EXISTS fts_table;
+create table fts_table(c1 int, c2 varchar(20), primary key(c1), fulltext index f102(c2));
+alter table fts_table change c1 c1 varchar(128);
+alter table fts_table change c1 c1 varchar(128) before c2;
+alter table fts_table change c1 c3 int after c2;
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c2` varchar(20) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c3`),
+  FULLTEXT KEY `f102` (`c2`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop index f102 on fts_table;
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c2` varchar(20) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+DROP TABLE IF EXISTS fts_table;
+DROP TABLE IF EXISTS fts_add_pk_1;
+CREATE TABLE fts_add_pk_1 (
+id int,
+name varchar(20),
+title varchar(20),
+content varchar(20),
+/*Indices*/
+FULLTEXT INDEX f101(name, title) WITH PARSER space);
+ALTER TABLE fts_add_pk_1 ADD PRIMARY KEY(id);
+DROP TABLE IF EXISTS fts_add_pk_1;
+DROP TABLE IF EXISTS fts_drop_pk_1;
+CREATE TABLE fts_drop_pk_1 (
+id int PRIMARY KEY,
+name varchar(20),
+title varchar(20),
+content varchar(20),
+/*Indices*/
+FULLTEXT INDEX f101(name, title) WITH PARSER space);
+ALTER TABLE fts_drop_pk_1 DROP PRIMARY KEY;
+DROP TABLE IF EXISTS fts_drop_pk_1;
+DROP TABLE IF EXISTS fts_table;
+create table fts_table(c1 int, c2 varchar(20), fulltext index f102(c2));
+alter table fts_table modify c1 int primary key;
+alter table fts_table drop primary key;
+alter table fts_table add primary key(c1);
+alter table fts_table drop primary key;
+alter table fts_table modify c1 bigint, add primary key(c1);
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c1` bigint(20) NOT NULL,
+  `c2` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  FULLTEXT KEY `f102` (`c2`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table fts_table drop primary key, add primary key(c1);
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c1` bigint(20) NOT NULL,
+  `c2` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  FULLTEXT KEY `f102` (`c2`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+DROP TABLE IF EXISTS fts_table;
+DROP TABLE IF EXISTS fts_character_set_table_1;
+CREATE TABLE fts_character_set_table_1 (
+id int,
+name varchar(20),
+title varchar(20),
+content varchar(20),
+/*Indices*/
+FULLTEXT INDEX f101(name, title) WITH PARSER space);
+ALTER TABLE fts_character_set_table_1 convert to character set gbk;
+DROP TABLE IF EXISTS fts_character_set_table_1;
+DROP TABLE IF EXISTS fts_table;
+create table fts_table(c1 int, c2 varchar(20), c3 varchar(10), c4 int, primary key(c1), fulltext index f102(c2)) partition by range(c1) (partition p0 values less than (10), partition p1 values less than (100));
+alter table fts_table modify c1 tinyint;
+alter table fts_table modify c3 varchar(5) charset 'gbk';
+alter table fts_table modify c3 char(8) , add c5 int, drop column c4;
+alter table fts_table convert to CHARACTER SET 'gbk';
+alter table fts_table modify c3 varchar(5) charset 'utf8';
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c1` tinyint(4) NOT NULL,
+  `c2` varchar(20) DEFAULT NULL,
+  `c3` varchar(5) CHARACTER SET utf8mb4 DEFAULT NULL,
+  `c5` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`),
+  FULLTEXT KEY `f102` (`c2`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = gbk ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(c1)
+(partition `p0` values less than (10),
+partition `p1` values less than (100))
+alter table fts_table drop index f102;
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c1` tinyint(4) NOT NULL,
+  `c2` varchar(20) DEFAULT NULL,
+  `c3` varchar(5) CHARACTER SET utf8mb4 DEFAULT NULL,
+  `c5` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = gbk ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(c1)
+(partition `p0` values less than (10),
+partition `p1` values less than (100))
+alter table fts_table partition by range(c1) (partition p0 values less than (20), partition p1 values less than (200));
+show create table fts_table;
+Table	Create Table
+fts_table	CREATE TABLE `fts_table` (
+  `c1` tinyint(4) NOT NULL,
+  `c2` varchar(20) DEFAULT NULL,
+  `c3` varchar(5) CHARACTER SET utf8mb4 DEFAULT NULL,
+  `c5` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) ORGANIZATION INDEX DEFAULT CHARSET = gbk ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(c1)
+(partition `p0` values less than (20),
+partition `p1` values less than (200))
+DROP TABLE IF EXISTS fts_table;
+DROP TABLE IF EXISTS fts_partition_table_1;
+CREATE TABLE fts_partition_table_1 (
+id int PRIMARY KEY,
+name varchar(20),
+fulltext index f102(name))
+PARTITION BY RANGE(id)
+(PARTITION p1 VALUES LESS THAN(100),
+PARTITION p2 VALUES LESS THAN(200));
+ALTER TABLE fts_partition_table_1 ADD PARTITION (PARTITION p3 VALUES LESS THAN(300));
+ALTER TABLE fts_partition_table_1 TRUNCATE PARTITION p2;
+ALTER TABLE fts_partition_table_1 DROP PARTITION p2;
+DROP TABLE IF EXISTS fts_partition_table_1;
+drop table if exists fts_table;
+create table fts_table(c1 int, c2 int, c3 int, c4 text, fulltext index idx2(c4));
+insert into fts_table(c1,c2,c3,c4) values(1, 1, 1, '9v3UPuQnER QnOjVY3Izh');
+insert into fts_table(c1,c2,c3,c4) values(1, 1, 2, 'RP9k84ovQJ CFP9LvY3Sr');
+delete from fts_table where c3 = 1;
+alter table fts_table add column a1 int auto_increment;
+insert into fts_table(c1,c2,c3,c4) values(1, 1, 101, 'NqJdemuM2u k47fI1Lo6z');
+drop table fts_table;

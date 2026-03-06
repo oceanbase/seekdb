@@ -1,0 +1,80 @@
+#owner: lb446709
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of JSON_REPLACE function.
+--echo # ----------------------------------------------------------------------
+
+# NULLs
+#select json_replace(NULL, '$.b', cast(1 as json);
+select json_replace('[1,2,3]', NULL, cast(1 as json));
+select json_replace('[1,2,3]', '$[2]', NULL);
+
+# positive test cases
+
+select json_replace('[1,2,3]', '$[2]', 4);
+select json_replace('[1,2,3]', '$[3]', 4);
+select json_replace('[1,2,3]', '$[10]', 4);
+
+select json_replace('{"c":4}', '$.c', 5);
+select json_replace('{"c":4}', '$.a', 5);
+
+select json_replace('1', '$', 4);
+select json_replace('1', '$[0]', 4);
+select json_replace('1', '$[1]', 4);
+select json_replace('1', '$[10]', '4', '$[11]', 5);
+
+select json_replace('[1,2,3]', '$[2][0]', 4);
+select json_replace('[1,2,3]', '$[2][2]', 4);
+
+select json_replace('{"a": 3}', '$.a[0]', 4);
+select json_replace('{"a": 3}', '$.a[1]', 4, '$.a[2]', '5');
+
+
+# Examples from the specification
+
+# returns the original document because the path doesn't exist
+SELECT JSON_REPLACE('{ "a" : "foo", "b" : [ 1, 2, 3 ] }',
+                '$.c',
+                true);
+
+# returns '{ "a" : true, "b" : [ 1, 2, 3 ] }'
+SELECT JSON_REPLACE('{ "a" : "foo", "b" : [ 1, 2, 3 ] }',
+                '$.a[0]',
+                true);
+
+# returns the original document because the path doesn't exist
+SELECT JSON_REPLACE('{ "a" : "foo", "b" : [ 1, 2, 3 ] }',
+                '$.b[5]',
+                true);
+
+# wrong # args
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select json_replace(NULL);
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select json_replace(NULL, NULL);
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+select json_replace(NULL, NULL, NULL, NULL);
+
+--error ER_INVALID_JSON_CHARSET
+select json_replace(UNHEX(""), '$[0]', 4);
+
+--disable_warnings
+drop table if exists json_test;
+create table json_test (id int primary key, data json);
+insert into json_test values(1, '{ "a" : "foo", "b" : [ 1, 2, 3 ] }');
+update json_test set data = json_replace(data, '$.a', 'woo');
+select * from json_test;
+
+set log_row_value_options="partial_json";
+update json_test set data = json_replace(data, '$.a', 'xoo') where id = 1;
+select * from json_test;
+
+insert into json_test values(2, '{ "a" : "foo", "b" : [ 1, 2, 3 ] , "c" : 100}');
+update json_test set data = json_replace(json_replace(data, '$.a', 'xoo'), '$.c', 200) where id = 2;
+select * from json_test where id=2;
+update json_test set data = json_replace(json_replace(data, '$.a', 'boo'), '$.c', 100) where id = 2;
+select * from json_test where id=2;
+
+set log_row_value_options="";
+
+drop table json_test;

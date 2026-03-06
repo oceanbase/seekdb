@@ -509,6 +509,7 @@ public:
   int mview_complete_refresh(const obrpc::ObMViewCompleteRefreshArg &arg, obrpc::ObMViewCompleteRefreshRes &res);
   int rename_table(const obrpc::ObRenameTableArg &arg);
   int fork_table(const obrpc::ObForkTableArg &arg, obrpc::ObDDLRes &res);
+  int fork_database(const obrpc::ObForkDatabaseArg &arg, obrpc::ObDDLRes &res);
   int truncate_table(const obrpc::ObTruncateTableArg &arg, obrpc::ObDDLRes &res);
   int truncate_table_v2(const obrpc::ObTruncateTableArg &arg, obrpc::ObDDLRes &res);
   int exchange_partition(const obrpc::ObExchangePartitionArg &arg, obrpc::ObAlterTableRes &res);

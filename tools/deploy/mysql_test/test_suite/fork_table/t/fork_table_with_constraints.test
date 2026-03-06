@@ -1,0 +1,132 @@
+##owner: fankun.fan
+##owner group: 底层引擎部-轻量版
+##description: Fork Table约束测试
+##tags: fork_table constraints
+##author: fankun.fan
+
+--disable_warnings
+drop database if exists db_fork_constraints;
+--enable_warnings
+
+connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connection default;
+create database db_fork_constraints;
+use db_fork_constraints;
+
+SET wait_timeout=30000000;
+SET ob_trx_timeout = 100000000;
+SET ob_query_timeout = 100000000;
+
+--echo ============================================
+--echo 1. Fork表与NOT NULL约束
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+
+create table t1 (
+    id int primary key,
+    name varchar(50) not null,
+    email varchar(100) not null,
+    age int
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t1 values (1, 'Alice', 'alice@example.com', 25);
+insert into t1 values (101, 'Bob', 'bob@example.com', 30);
+
+--echo # Fork表
+fork table t1 to t1_fork;
+
+--echo # 验证Fork表约束
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t1_fork;
+
+--echo # 验证NOT NULL约束在Fork表中生效
+--error 1364
+insert into t1_fork(id, name) values (50, 'Test');
+
+--echo # 正常插入
+insert into t1_fork values (50, 'Test', 'test@example.com', 35);
+select * from t1_fork where id = 50;
+
+--echo ============================================
+--echo 2. Fork表与CHECK约束
+--echo ============================================
+
+drop table if exists t2;
+drop table if exists t2_fork;
+
+create table t2 (
+    id int primary key,
+    age int check (age >= 0 and age <= 150),
+    score int check (score >= 0 and score <= 100)
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t2 values (1, 25, 85);
+insert into t2 values (101, 30, 90);
+
+--echo # Fork表
+fork table t2 to t2_fork;
+
+--echo # 验证CHECK约束在Fork表中生效
+--error 3819
+insert into t2_fork values (50, -1, 50);
+
+--error 3819
+insert into t2_fork values (50, 200, 50);
+
+--error 3819
+insert into t2_fork values (50, 25, 150);
+
+--echo # 正常插入
+insert into t2_fork values (50, 25, 85);
+select * from t2_fork where id = 50;
+
+--echo ============================================
+--echo 3. Fork表与DEFAULT约束
+--echo ============================================
+
+drop table if exists t3;
+drop table if exists t3_fork;
+
+create table t3 (
+    id int primary key,
+    name varchar(50) default 'Unknown',
+    create_seq int default 0,
+    status int default 0
+) partition by range(id) (
+    partition p0 values less than (100),
+    partition p1 values less than (200)
+);
+
+insert into t3(id) values (1);
+insert into t3(id, name) values (101, 'Bob');
+
+--echo # Fork表
+fork table t3 to t3_fork;
+
+--echo # 验证DEFAULT约束在Fork表中生效
+insert into t3_fork(id) values (50);
+select * from t3_fork where id = 50;
+
+--echo # 验证默认值独立
+insert into t3_fork(id, name) values (150, 'Fork_User');
+select * from t3_fork where id = 150;
+
+--echo ============================================
+--echo 4. 清理
+--echo ============================================
+
+drop table if exists t1;
+drop table if exists t1_fork;
+drop table if exists t2;
+drop table if exists t2_fork;
+drop table if exists t3;
+drop table if exists t3_fork;
+drop database if exists db_fork_constraints;

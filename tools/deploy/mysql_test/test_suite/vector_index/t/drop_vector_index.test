@@ -1,0 +1,266 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#owner : yangjiali.yjl
+#owner group: obkv
+#description: basic test ob create table with vector index
+
+connect (conn_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connect (conn_sys,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+connection conn_user;
+
+--disable_warnings
+drop database if exists yjl_vec;
+create database yjl_vec;
+use yjl_vec;
+
+alter system set ob_vector_memory_limit_percentage = 20;
+sleep 3;
+# __all_ddl_operation
+--echo
+--echo
+--echo "=========================================== __all_ddl_operation ==========================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+select ddl_stmt_str from oceanbase.__all_ddl_operation where database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec') and ddl_stmt_str != '' order by schema_version;
+
+# 索引名有转义字符
+--echo
+--echo
+--echo "=========================================== 索引名有转义字符 ================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index `idx\n1`(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop index `idx\n1` on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# 索引名有大小写
+--echo
+--echo
+--echo "=========================================== 索引名有大小写 ==================================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index iDx1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# 多个大小写名字下，会创建失败
+--echo
+--echo
+--echo "======================================= 多个大小写名字下，会创建失败 ============================================"
+drop table if exists t_vec;
+--error 1061
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index iDx1(c2) with (distance=l2, type=hnsw), vector index idx1(c3) with (distance=l2, type=hnsw));
+
+# 索引名有特殊字符
+# case 1
+--echo
+--echo
+--echo "========================================== 索引名有特殊字符 001 ==============================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index iDx$1(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop index iDx$1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+# case 2
+--echo
+--echo
+--echo "========================================== 索引名有特殊字符 002 ==============================================="
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index café(c2) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop index cafe on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+# case 特殊字符下，创建多个索引，预期内部处理成一个索引，认为创建同名索引失败
+--echo
+--echo
+--echo "========================================== 索引名有特殊字符 003 ==============================================="
+drop table if exists t_vec;
+--error 1061
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index cafe(c2) with (distance=l2, type=hnsw), vector index café(c3) with (distance=l2, type=hnsw));
+
+# 删除多个向量索引中的1个
+--echo
+--echo
+--echo "==========================================  删除多个向量索引中的1个 ============================================"
+connection conn_user;
+use yjl_vec;
+drop table if exists t_vec;
+# create
+create table t_vec(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), vector index idx2(c3) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+
+connection conn_sys;
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+# drop
+connection conn_user;
+use yjl_vec;
+drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+connection conn_sys;
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+connection conn_user;
+use yjl_vec;
+select * from t_vec;
+# drop
+drop index idx2 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+connection conn_sys;
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+
+# 删除混合索引
+--echo
+--echo
+--echo "==========================================  删除混合索引  ============================================"
+connection conn_user;
+use yjl_vec;
+sleep 2;
+--error 0,11112
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT ('ob_embed_endpoint');
+--error 0,11118
+call DBMS_AI_SERVICE.DROP_AI_MODEL ('ob_embed');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL(
+'ob_embed', '{
+    "type": "dense_embedding",
+    "model_name": "bge-M3"
+  }');
+call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
+'ob_embed_endpoint', '{
+    "ai_model_name": "ob_embed",
+    "scope": "all",
+    "url": "https://www.baidu.com/",
+    "access_key": "sk-xxxxxxxxxxxx",
+    "request_model_name": "bge-M3",
+    "provider": "openai"
+  }');
+drop table if exists t_vec;
+# create
+create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index idx1(c2) WITH (distance=L2, type=hnsw, dim=1024, model=ob_embed, sync_mode=immediate));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+drop table if exists t_vec;
+create table t_vec(c1 int, c2 varchar(100), c3 vector(3), primary key(c1), vector index idx1(c2) WITH (distance=L2, type=hnsw, dim=1024, model=ob_embed, sync_mode=immediate), vector index idx2(c3) with (distance=l2, type=hnsw));
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+connection conn_sys;
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+connection conn_user;
+use yjl_vec;
+drop index idx1 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+connection conn_sys;
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+connection conn_user;
+use yjl_vec;
+drop index idx2 on t_vec;
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t_vec;
+show index from t_vec;
+select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+connection conn_sys;
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+connection conn_user;
+use yjl_vec;
+call DBMS_AI_SERVICE.DROP_AI_MODEL('ob_embed');
+call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('ob_embed_endpoint');
+
+# 当同时存在fts和vec索引时，能正确删掉共享表
+#--echo
+#--echo
+#--echo "==========================================  删除共享表 ============================================"
+#connection conn_user;
+#use yjl_vec;
+#drop table if exists t_vec;
+#create table t_vec(c1 int, c2 vector(3), c3 varchar(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw), fulltext index idx2(c3));
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+#show create table t_vec;
+#show index from t_vec;
+
+#connection conn_sys;
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+
+#connection conn_user;
+#use yjl_vec;
+#select * from t_vec;
+# drop
+#drop index idx1 on t_vec;
+#--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+#show create table t_vec;
+#show index from t_vec;
+#select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
+#connection conn_sys;
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+#select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+
+--echo
+connection conn_user;
+use yjl_vec;
+alter system set ob_vector_memory_limit_percentage = 0;
+drop table if exists t_vec;
+drop database if exists yjl_vec;
+PURGE RECYCLEBIN;

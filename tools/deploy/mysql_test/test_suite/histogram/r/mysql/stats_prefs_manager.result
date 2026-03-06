@@ -1,0 +1,515 @@
+drop table if exists t1, t_part, t_subpart;
+create table t1 (c1 int, c2 int, c3 int);
+create table t_part (c1 int, c2 int, c3 int) partition by hash(c1) partitions 4;
+create table t_subpart (c1 int, c2 int, c3 int) partition by hash(c1)
+subpartition by hash(c2)
+subpartition template
+(
+subpartition sp0,
+subpartition sp1,
+subpartition sp2
+)
+partitions 3;
+insert into t1 values(1,1,1), (2,2,2), (3,3,3), (4,4,4), (5,5,5), (6,6,6), (7,7,7), (8,8,8), (9,9,9), (10,10,10);
+insert into t1 values(11,1,1), (12,2,2), (13,3,3), (14,4,4), (15,5,5), (16,6,6), (17,7,7), (18,8,8), (19,9,9), (20,10,10);
+insert into t1 values(21,1,1), (22,2,2), (23,3,3), (24,4,4), (25,5,5), (26,6,6), (27,7,7), (28,8,8), (29,9,9), (30,10,10);
+insert into t1 values(31,1,1), (32,2,2), (33,3,3), (34,4,4), (35,5,5), (36,6,6), (37,7,7), (38,8,8), (39,9,9), (40,10,10);
+insert into t1 values(41,1,1), (42,2,2), (43,3,3), (44,4,4), (45,5,5), (46,6,6), (47,7,7), (48,8,8), (49,9,9), (50,10,10);
+insert into t1 values(51,1,1), (52,2,2), (53,3,3), (54,4,4), (55,5,5), (56,6,6), (57,7,7), (58,8,8), (59,9,9), (60,10,10);
+insert into t1 values(61,1,1), (62,2,2), (63,3,3), (64,4,4), (65,5,5), (66,6,6), (67,7,7), (68,8,8), (69,9,9), (70,10,10);
+insert into t1 values(71,1,1), (72,2,2), (73,3,3), (74,4,4), (75,5,5), (76,6,6), (77,7,7), (78,8,8), (79,9,9), (80,10,10);
+insert into t1 values(81,1,1), (82,2,2), (83,3,3), (84,4,4), (85,5,5), (86,6,6), (87,7,7), (88,8,8), (89,9,9), (90,10,10);
+insert into t1 values(91,1,1), (92,2,2), (93,3,3), (94,4,4), (95,5,5), (96,6,6), (97,7,7), (98,8,8), (99,9,9), (100,10,10);
+insert into t_part values(101,1,1), (102,2,2), (103,3,3), (104,4,4), (105,5,5), (106,6,6), (107,7,7), (108,8,8), (109,9,9), (110,10,10);
+insert into t_part values(111,1,1), (112,2,2), (113,3,3), (114,4,4), (115,5,5), (116,6,6), (117,7,7), (118,8,8), (119,9,9), (120,10,10);
+insert into t_part values(121,1,1), (122,2,2), (123,3,3), (124,4,4), (125,5,5), (126,6,6), (127,7,7), (128,8,8), (129,9,9), (130,10,10);
+insert into t_part values(131,1,1), (132,2,2), (133,3,3), (134,4,4), (135,5,5), (136,6,6), (137,7,7), (138,8,8), (139,9,9), (140,10,10);
+insert into t_part values(141,1,1), (142,2,2), (143,3,3), (144,4,4), (145,5,5), (146,6,6), (147,7,7), (148,8,8), (149,9,9), (150,10,10);
+insert into t_part values(151,1,1), (152,2,2), (153,3,3), (154,4,4), (155,5,5), (156,6,6), (157,7,7), (158,8,8), (159,9,9), (160,10,10);
+insert into t_part values(161,1,1), (162,2,2), (163,3,3), (164,4,4), (165,5,5), (166,6,6), (167,7,7), (168,8,8), (169,9,9), (170,10,10);
+insert into t_part values(171,1,1), (172,2,2), (173,3,3), (174,4,4), (175,5,5), (176,6,6), (177,7,7), (178,8,8), (179,9,9), (180,10,10);
+insert into t_part values(181,1,1), (182,2,2), (183,3,3), (184,4,4), (185,5,5), (186,6,6), (187,7,7), (188,8,8), (189,9,9), (190,10,10);
+insert into t_part values(191,1,1), (192,2,2), (193,3,3), (194,4,4), (195,5,5), (196,6,6), (197,7,7), (198,8,8), (199,9,9), (200,10,10);
+insert into t_part select * from t_part;
+insert into t_part select * from t_part;
+insert into t_part select * from t_part;
+insert into t_part select * from t_part;
+insert into t_subpart select * from t_part;
+insert into t_subpart select * from t_subpart;
+insert into t_subpart select * from t_subpart;
+insert into t_subpart select * from t_subpart;
+result_format: 4
+##show relation system table
+desc oceanbase.__all_optstat_global_prefs;
++--------------+---------------+------+-----+----------------------+--------------------------------+
+| Field        | Type          | Null | Key | Default              | Extra                          |
++--------------+---------------+------+-----+----------------------+--------------------------------+
+| gmt_create   | timestamp(6)  | YES  |     | CURRENT_TIMESTAMP(6) |                                |
+| gmt_modified | timestamp(6)  | YES  |     | CURRENT_TIMESTAMP(6) | ON UPDATE CURRENT_TIMESTAMP(6) |
+| sname        | varchar(30)   | NO   | PRI | NULL                 |                                |
+| sval1        | decimal(38,0) | YES  |     | NULL                 |                                |
+| sval2        | timestamp(6)  | YES  |     | NULL                 |                                |
+| spare1       | bigint(20)    | YES  |     | NULL                 |                                |
+| spare2       | bigint(20)    | YES  |     | NULL                 |                                |
+| spare3       | bigint(20)    | YES  |     | NULL                 |                                |
+| spare4       | varchar(4096) | YES  |     | NULL                 |                                |
+| spare5       | varchar(4096) | YES  |     | NULL                 |                                |
+| spare6       | timestamp(6)  | YES  |     | NULL                 |                                |
++--------------+---------------+------+-----+----------------------+--------------------------------+
+
+desc oceanbase.__all_optstat_user_prefs;
++--------------+---------------+------+-----+----------------------+--------------------------------+
+| Field        | Type          | Null | Key | Default              | Extra                          |
++--------------+---------------+------+-----+----------------------+--------------------------------+
+| gmt_create   | timestamp(6)  | YES  |     | CURRENT_TIMESTAMP(6) |                                |
+| gmt_modified | timestamp(6)  | YES  |     | CURRENT_TIMESTAMP(6) | ON UPDATE CURRENT_TIMESTAMP(6) |
+| tenant_id    | bigint(20)    | NO   | PRI | NULL                 |                                |
+| table_id     | bigint(20)    | NO   | PRI | NULL                 |                                |
+| pname        | varchar(30)   | NO   | PRI | NULL                 |                                |
+| valnum       | bigint(20)    | YES  |     | NULL                 |                                |
+| valchar      | varchar(4000) | YES  |     | NULL                 |                                |
+| chgtime      | timestamp(6)  | YES  |     | NULL                 |                                |
+| spare1       | bigint(20)    | YES  |     | NULL                 |                                |
++--------------+---------------+------+-----+----------------------+--------------------------------+
+
+##test query global prefs
+select SNAME, SVAL1, SPARE4 from oceanbase.__all_optstat_global_prefs;
++------------------------------+-------+-----------------------------+
+| SNAME                        | SVAL1 | SPARE4                      |
++------------------------------+-------+-----------------------------+
+| APPROXIMATE_NDV              |  NULL | TRUE                        |
+| ASYNC_GATHER_FULL_TABLE_SIZE |  NULL | 10000000                    |
+| ASYNC_GATHER_SAMPLE_SIZE     |  NULL | 1000000                     |
+| ASYNC_GATHER_STALE_RATIO     |  NULL | 2                           |
+| ASYNC_STALE_MAX_TABLE_SIZE   |  NULL | 100000000                   |
+| AUTO_SAMPLE_ROW_COUNT        |  NULL | 5000000                     |
+| BLOCK_SAMPLE                 |  NULL | FALSE                       |
+| CASCADE                      |  NULL | DBMS_STATS.AUTO_CASCADE     |
+| DEGREE                       |  NULL | NULL                        |
+| ESTIMATE_BLOCK               |  NULL | TRUE                        |
+| ESTIMATE_PERCENT             |  NULL | DBMS_STATS.AUTO_SAMPLE_SIZE |
+| GATHER_STATS_BATCH_SIZE      |  NULL | 16                          |
+| GRANULARITY                  |  NULL | AUTO                        |
+| HIST_BLOCK_SAMPLE            |  NULL | FALSE                       |
+| HIST_EST_PERCENT             |  NULL | DBMS_STATS.AUTO_SAMPLE_SIZE |
+| INCREMENTAL                  |  NULL | FALSE                       |
+| INCREMENTAL_LEVEL            |  NULL | PARTITION                   |
+| METHOD_OPT                   |  NULL | FOR ALL COLUMNS SIZE AUTO   |
+| NO_INVALIDATE                |  NULL | DBMS_STATS.AUTO_INVALIDATE  |
+| ONLINE_ESTIMATE_PERCENT      |  NULL | 1                           |
+| OPTIONS                      |  NULL | GATHER                      |
+| SKIP_RATE_SAMPLE_COUNT       |  NULL | 0                           |
+| STALE_PERCENT                |  NULL | 10                          |
+| STATS_RETENTION              |    31 | NULL                        |
++------------------------------+-------+-----------------------------+
+
+##test set prefs
+call dbms_stats.set_global_prefs('APPROXIMATE_NDV', 'FALSE');
+select dbms_stats.get_prefs('APPROXIMATE_NDV') from dual;
++-----------------------------------------+
+| dbms_stats.get_prefs('APPROXIMATE_NDV') |
++-----------------------------------------+
+| FALSE                                   |
++-----------------------------------------+
+
+call dbms_stats.set_param('CASCADE', 'true');
+select dbms_stats.get_param('CASCADE') from dual;
++---------------------------------+
+| dbms_stats.get_param('CASCADE') |
++---------------------------------+
+| TRUE                            |
++---------------------------------+
+
+call dbms_stats.set_global_prefs('degree', '2');
+select dbms_stats.get_prefs('DEGREE') from dual;
++--------------------------------+
+| dbms_stats.get_prefs('DEGREE') |
++--------------------------------+
+| 2                              |
++--------------------------------+
+
+call dbms_stats.set_param('ESTIMATE_PERCENT', '50');
+select dbms_stats.get_param('ESTIMATE_PERCENT') from dual;
++------------------------------------------+
+| dbms_stats.get_param('ESTIMATE_PERCENT') |
++------------------------------------------+
+| 50                                       |
++------------------------------------------+
+
+call dbms_stats.set_global_prefs('GRANULARITY', 'ALL');
+select dbms_stats.get_param('GRANULARITY') from dual;
++-------------------------------------+
+| dbms_stats.get_param('GRANULARITY') |
++-------------------------------------+
+| ALL                                 |
++-------------------------------------+
+
+call dbms_stats.set_param('INCREMENTAL', 'TRUE');
+select dbms_stats.get_prefs('INCREMENTAL') from dual;
++-------------------------------------+
+| dbms_stats.get_prefs('INCREMENTAL') |
++-------------------------------------+
+| TRUE                                |
++-------------------------------------+
+
+call dbms_stats.set_param('INCREMENTAL_LEVEL', NULL);
+select dbms_stats.get_prefs('INCREMENTAL_LEVEL') from dual;
++-------------------------------------------+
+| dbms_stats.get_prefs('INCREMENTAL_LEVEL') |
++-------------------------------------------+
+| PARTITION                                 |
++-------------------------------------------+
+
+call dbms_stats.set_global_prefs('method_OPT', 'FOR ALL COLUMNS SIZE 5');
+select dbms_stats.get_prefs('METHOD_OPT') from dual;
++------------------------------------+
+| dbms_stats.get_prefs('METHOD_OPT') |
++------------------------------------+
+| FOR ALL COLUMNS SIZE 5             |
++------------------------------------+
+
+call dbms_stats.set_global_prefs('method_OPT', NULL);
+select dbms_stats.get_prefs('METHOD_OPT') from dual;
++------------------------------------+
+| dbms_stats.get_prefs('METHOD_OPT') |
++------------------------------------+
+| FOR ALL COLUMNS SIZE AUTO          |
++------------------------------------+
+
+call dbms_stats.set_param('NO_INVALIDATE', 'TRUE');
+select dbms_stats.get_prefs('NO_INVALIDATE') from dual;
++---------------------------------------+
+| dbms_stats.get_prefs('NO_INVALIDATE') |
++---------------------------------------+
+| TRUE                                  |
++---------------------------------------+
+
+call dbms_stats.set_global_prefs('OPTIONS', 'GATHER AUTO');
+select dbms_stats.get_prefs('OPTIONS') from dual;
++---------------------------------+
+| dbms_stats.get_prefs('OPTIONS') |
++---------------------------------+
+| GATHER AUTO                     |
++---------------------------------+
+
+call dbms_stats.set_global_prefs('STALE_PERCENT', '50');
+select dbms_stats.get_prefs('STALE_PERCENT') from dual;
++---------------------------------------+
+| dbms_stats.get_prefs('STALE_PERCENT') |
++---------------------------------------+
+| 50                                    |
++---------------------------------------+
+
+call dbms_stats.set_global_prefs('STALE_PERCENT', NULL);
+select dbms_stats.get_prefs('STALE_PERCENT') from dual;
++---------------------------------------+
+| dbms_stats.get_prefs('STALE_PERCENT') |
++---------------------------------------+
+| 10                                    |
++---------------------------------------+
+
+select dbms_stats.get_param('ESTIMATE_BLOCK') from dual;
++----------------------------------------+
+| dbms_stats.get_param('ESTIMATE_BLOCK') |
++----------------------------------------+
+| TRUE                                   |
++----------------------------------------+
+call dbms_stats.set_global_prefs('ESTIMATE_BLOCK', 'FALSE');
+select dbms_stats.get_param('ESTIMATE_BLOCK') from dual;
++----------------------------------------+
+| dbms_stats.get_param('ESTIMATE_BLOCK') |
++----------------------------------------+
+| FALSE                                  |
++----------------------------------------+
+call dbms_stats.set_global_prefs('ESTIMATE_BLOCK', null);
+select dbms_stats.get_param('ESTIMATE_BLOCK') from dual;
++----------------------------------------+
+| dbms_stats.get_param('ESTIMATE_BLOCK') |
++----------------------------------------+
+| TRUE                                   |
++----------------------------------------+
+
+call dbms_stats.set_table_prefs('TEST', 'T1', 'degree', '3');
+select dbms_stats.get_prefs('degree', 'TEST', 'T1') from dual;
++----------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T1') |
++----------------------------------------------+
+| 3                                            |
++----------------------------------------------+
+
+call dbms_stats.set_table_prefs('TEST', 'T1', 'degree', NULL);
+select dbms_stats.get_prefs('degree', 'TEST', 'T1') from dual;
++----------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T1') |
++----------------------------------------------+
+| NULL                                         |
++----------------------------------------------+
+
+call dbms_stats.set_table_prefs('TEST', 'T1', 'ESTIMATE_PERCENT', '30');
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') from dual;
++--------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') |
++--------------------------------------------------------+
+| 30                                                     |
++--------------------------------------------------------+
+
+call dbms_stats.set_table_prefs('TEST', 'T1', 'GRANULARITY', 'global');
+select dbms_stats.get_prefs('GRANULARITY', 'TEST', 'T1') from dual;
++---------------------------------------------------+
+| dbms_stats.get_prefs('GRANULARITY', 'TEST', 'T1') |
++---------------------------------------------------+
+| GLOBAL                                            |
++---------------------------------------------------+
+
+call dbms_stats.set_table_prefs('TEST', 'T1', 'method_OPT', 'FOR ALL COLUMNS SIZE 10');
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') from dual;
++--------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') |
++--------------------------------------------------+
+| FOR ALL COLUMNS SIZE 10                          |
++--------------------------------------------------+
+
+call dbms_stats.set_table_prefs('TEST', 'T1', 'method_OPT', NULL);
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') from dual;
++--------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') |
++--------------------------------------------------+
+| FOR ALL COLUMNS SIZE AUTO                        |
++--------------------------------------------------+
+
+call dbms_stats.set_schema_prefs('TEST', 'degree', '4');
+select dbms_stats.get_prefs('degree', 'TEST', 'T1') from dual;
++----------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T1') |
++----------------------------------------------+
+| 4                                            |
++----------------------------------------------+
+select dbms_stats.get_prefs('degree', 'TEST', 'T_PART') from dual;
++--------------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T_PART') |
++--------------------------------------------------+
+| 4                                                |
++--------------------------------------------------+
+select dbms_stats.get_prefs('degree', 'TEST', 'T_SUBPART') from dual;
++-----------------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T_SUBPART') |
++-----------------------------------------------------+
+| 4                                                   |
++-----------------------------------------------------+
+
+call dbms_stats.set_schema_prefs('TEST', 'ESTIMATE_PERCENT', '60');
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') from dual;
++--------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') |
++--------------------------------------------------------+
+| 60                                                     |
++--------------------------------------------------------+
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_PART') from dual;
++------------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_PART') |
++------------------------------------------------------------+
+| 60                                                         |
++------------------------------------------------------------+
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_SUBPART') from dual;
++---------------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_SUBPART') |
++---------------------------------------------------------------+
+| 60                                                            |
++---------------------------------------------------------------+
+
+call dbms_stats.set_schema_prefs('TEST', 'method_OPT', 'FOR ALL COLUMNS size 100');
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') from dual;
++--------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') |
++--------------------------------------------------+
+| FOR ALL COLUMNS SIZE 100                         |
++--------------------------------------------------+
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T_PART') from dual;
++------------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T_PART') |
++------------------------------------------------------+
+| FOR ALL COLUMNS SIZE 100                             |
++------------------------------------------------------+
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T_SUBPART') from dual;
++---------------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T_SUBPART') |
++---------------------------------------------------------+
+| FOR ALL COLUMNS SIZE 100                                |
++---------------------------------------------------------+
+
+##test drop prefs
+call dbms_stats.reset_param_defaults();
+select SNAME, SVAL1, SPARE4 from oceanbase.__all_optstat_global_prefs;
++------------------------------+-------+-----------------------------+
+| SNAME                        | SVAL1 | SPARE4                      |
++------------------------------+-------+-----------------------------+
+| APPROXIMATE_NDV              |  NULL | TRUE                        |
+| ASYNC_GATHER_FULL_TABLE_SIZE |  NULL | 10000000                    |
+| ASYNC_GATHER_SAMPLE_SIZE     |  NULL | 1000000                     |
+| ASYNC_GATHER_STALE_RATIO     |  NULL | 2                           |
+| ASYNC_STALE_MAX_TABLE_SIZE   |  NULL | 100000000                   |
+| AUTO_SAMPLE_ROW_COUNT        |  NULL | 5000000                     |
+| BLOCK_SAMPLE                 |  NULL | FALSE                       |
+| CASCADE                      |  NULL | DBMS_STATS.AUTO_CASCADE     |
+| DEGREE                       |  NULL | NULL                        |
+| ESTIMATE_BLOCK               |  NULL | TRUE                        |
+| ESTIMATE_PERCENT             |  NULL | DBMS_STATS.AUTO_SAMPLE_SIZE |
+| GATHER_STATS_BATCH_SIZE      |  NULL | 16                          |
+| GRANULARITY                  |  NULL | AUTO                        |
+| HIST_BLOCK_SAMPLE            |  NULL | FALSE                       |
+| HIST_EST_PERCENT             |  NULL | DBMS_STATS.AUTO_SAMPLE_SIZE |
+| INCREMENTAL                  |  NULL | FALSE                       |
+| INCREMENTAL_LEVEL            |  NULL | PARTITION                   |
+| METHOD_OPT                   |  NULL | FOR ALL COLUMNS SIZE AUTO   |
+| NO_INVALIDATE                |  NULL | DBMS_STATS.AUTO_INVALIDATE  |
+| ONLINE_ESTIMATE_PERCENT      |  NULL | 1                           |
+| OPTIONS                      |  NULL | GATHER                      |
+| SKIP_RATE_SAMPLE_COUNT       |  NULL | 0                           |
+| STALE_PERCENT                |  NULL | 10                          |
+| STATS_RETENTION              |    31 | NULL                        |
++------------------------------+-------+-----------------------------+
+
+call dbms_stats.reset_global_pref_defaults();
+select SNAME, SVAL1, SPARE4 from oceanbase.__all_optstat_global_prefs;
++------------------------------+-------+-----------------------------+
+| SNAME                        | SVAL1 | SPARE4                      |
++------------------------------+-------+-----------------------------+
+| APPROXIMATE_NDV              |  NULL | TRUE                        |
+| ASYNC_GATHER_FULL_TABLE_SIZE |  NULL | 10000000                    |
+| ASYNC_GATHER_SAMPLE_SIZE     |  NULL | 1000000                     |
+| ASYNC_GATHER_STALE_RATIO     |  NULL | 2                           |
+| ASYNC_STALE_MAX_TABLE_SIZE   |  NULL | 100000000                   |
+| AUTO_SAMPLE_ROW_COUNT        |  NULL | 5000000                     |
+| BLOCK_SAMPLE                 |  NULL | FALSE                       |
+| CASCADE                      |  NULL | DBMS_STATS.AUTO_CASCADE     |
+| DEGREE                       |  NULL | NULL                        |
+| ESTIMATE_BLOCK               |  NULL | TRUE                        |
+| ESTIMATE_PERCENT             |  NULL | DBMS_STATS.AUTO_SAMPLE_SIZE |
+| GATHER_STATS_BATCH_SIZE      |  NULL | 16                          |
+| GRANULARITY                  |  NULL | AUTO                        |
+| HIST_BLOCK_SAMPLE            |  NULL | FALSE                       |
+| HIST_EST_PERCENT             |  NULL | DBMS_STATS.AUTO_SAMPLE_SIZE |
+| INCREMENTAL                  |  NULL | FALSE                       |
+| INCREMENTAL_LEVEL            |  NULL | PARTITION                   |
+| METHOD_OPT                   |  NULL | FOR ALL COLUMNS SIZE AUTO   |
+| NO_INVALIDATE                |  NULL | DBMS_STATS.AUTO_INVALIDATE  |
+| ONLINE_ESTIMATE_PERCENT      |  NULL | 1                           |
+| OPTIONS                      |  NULL | GATHER                      |
+| SKIP_RATE_SAMPLE_COUNT       |  NULL | 0                           |
+| STALE_PERCENT                |  NULL | 10                          |
+| STATS_RETENTION              |    31 | NULL                        |
++------------------------------+-------+-----------------------------+
+
+call dbms_stats.delete_table_prefs('TEST', 'T1', 'DEGREE');
+select dbms_stats.get_prefs('degree', 'TEST', 'T1') from dual;
++----------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T1') |
++----------------------------------------------+
+| NULL                                         |
++----------------------------------------------+
+
+call dbms_stats.delete_table_prefs('TEST', 'T1', 'ESTIMATE_PERCENT');
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') from dual;
++--------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') |
++--------------------------------------------------------+
+| DBMS_STATS.AUTO_SAMPLE_SIZE                            |
++--------------------------------------------------------+
+
+call dbms_stats.delete_table_prefs('TEST', 'T1', 'GRANULARITY');
+select dbms_stats.get_prefs('GRANULARITY', 'TEST', 'T1') from dual;
++---------------------------------------------------+
+| dbms_stats.get_prefs('GRANULARITY', 'TEST', 'T1') |
++---------------------------------------------------+
+| AUTO                                              |
++---------------------------------------------------+
+
+call dbms_stats.delete_table_prefs('TEST', 'T1', 'method_OPT');
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') from dual;
++--------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') |
++--------------------------------------------------+
+| FOR ALL COLUMNS SIZE AUTO                        |
++--------------------------------------------------+
+
+call dbms_stats.delete_schema_prefs('TEST', 'degree');
+select dbms_stats.get_prefs('degree', 'TEST', 'T1') from dual;
++----------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T1') |
++----------------------------------------------+
+| NULL                                         |
++----------------------------------------------+
+select dbms_stats.get_prefs('degree', 'TEST', 'T_PART') from dual;
++--------------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T_PART') |
++--------------------------------------------------+
+| NULL                                             |
++--------------------------------------------------+
+select dbms_stats.get_prefs('degree', 'TEST', 'T_SUBPART') from dual;
++-----------------------------------------------------+
+| dbms_stats.get_prefs('degree', 'TEST', 'T_SUBPART') |
++-----------------------------------------------------+
+| NULL                                                |
++-----------------------------------------------------+
+
+call dbms_stats.delete_schema_prefs('TEST', 'ESTIMATE_PERCENT');
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') from dual;
++--------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T1') |
++--------------------------------------------------------+
+| DBMS_STATS.AUTO_SAMPLE_SIZE                            |
++--------------------------------------------------------+
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_PART') from dual;
++------------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_PART') |
++------------------------------------------------------------+
+| DBMS_STATS.AUTO_SAMPLE_SIZE                                |
++------------------------------------------------------------+
+select dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_SUBPART') from dual;
++---------------------------------------------------------------+
+| dbms_stats.get_prefs('ESTIMATE_PERCENT', 'TEST', 'T_SUBPART') |
++---------------------------------------------------------------+
+| DBMS_STATS.AUTO_SAMPLE_SIZE                                   |
++---------------------------------------------------------------+
+
+call dbms_stats.delete_schema_prefs('TEST', 'method_OPT');
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') from dual;
++--------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T1') |
++--------------------------------------------------+
+| FOR ALL COLUMNS SIZE AUTO                        |
++--------------------------------------------------+
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T_PART') from dual;
++------------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T_PART') |
++------------------------------------------------------+
+| FOR ALL COLUMNS SIZE AUTO                            |
++------------------------------------------------------+
+select dbms_stats.get_prefs('method_OPT', 'TEST', 'T_SUBPART') from dual;
++---------------------------------------------------------+
+| dbms_stats.get_prefs('method_OPT', 'TEST', 'T_SUBPART') |
++---------------------------------------------------------+
+| FOR ALL COLUMNS SIZE AUTO                               |
++---------------------------------------------------------+
+
+##invalid test
+call dbms_stats.set_global_prefs('APPROXIMATE_NDV123', 'FALSE');
+ERROR HY000: Invalid input values for pname, Only Support CASCADE|DEGREE|ESTIMATE_PERCENT|GRANULARITY|INCREMENTAL|INCREMENTAL_LEVEL|METHOD_OPT|NO_INVALIDATE|OPTIONS|STALE_PERCENT|ESTIMATE_BLOCK|ASYNC_GATHER_STALE_RATIO|ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|SKIP_RATE_SAMPLE_COUNT prefs
+select dbms_stats.get_param('CASCADE123') from dual;
+ERROR HY000: Invalid input values for pname, Only Support CASCADE|DEGREE|ESTIMATE_PERCENT|GRANULARITY|INCREMENTAL|INCREMENTAL_LEVEL|METHOD_OPT|NO_INVALIDATE|OPTIONS|STALE_PERCENT|ESTIMATE_BLOCK|ASYNC_GATHER_STALE_RATIO|ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|SKIP_RATE_SAMPLE_COUNT prefs
+call dbms_stats.set_param('CASCADE', 'TRUE123');
+ERROR HY000: Illegal value for CASCADE : must be {TRUE, FALSE, DBMS_STATS.AUTO_CASCADE}
+call dbms_stats.set_table_prefs('TEST', 'T1', 'APPROXIMATE_NDV', 'false');
+ERROR HY000: Invalid input values for pname, Only Support CASCADE|DEGREE|ESTIMATE_PERCENT|GRANULARITY|INCREMENTAL|INCREMENTAL_LEVEL|METHOD_OPT|NO_INVALIDATE|OPTIONS|STALE_PERCENT|ESTIMATE_BLOCK|ASYNC_GATHER_STALE_RATIO|ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|SKIP_RATE_SAMPLE_COUNT prefs
+call dbms_stats.set_schema_prefs('TEST', '123', 'false');
+ERROR HY000: Invalid input values for pname, Only Support CASCADE|DEGREE|ESTIMATE_PERCENT|GRANULARITY|INCREMENTAL|INCREMENTAL_LEVEL|METHOD_OPT|NO_INVALIDATE|OPTIONS|STALE_PERCENT|ESTIMATE_BLOCK|ASYNC_GATHER_STALE_RATIO|ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|SKIP_RATE_SAMPLE_COUNT prefs
+call dbms_stats.delete_table_prefs('TEST', 'T1', 'GRANULARITY123');
+ERROR HY000: Invalid input values for pname, Only Support CASCADE|DEGREE|ESTIMATE_PERCENT|GRANULARITY|INCREMENTAL|INCREMENTAL_LEVEL|METHOD_OPT|NO_INVALIDATE|OPTIONS|STALE_PERCENT|ESTIMATE_BLOCK|ASYNC_GATHER_STALE_RATIO|ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|SKIP_RATE_SAMPLE_COUNT prefs
+call dbms_stats.delete_schema_prefs('TEST', 'APPROXIMATE_NDV');
+ERROR HY000: Invalid input values for pname, Only Support CASCADE|DEGREE|ESTIMATE_PERCENT|GRANULARITY|INCREMENTAL|INCREMENTAL_LEVEL|METHOD_OPT|NO_INVALIDATE|OPTIONS|STALE_PERCENT|ESTIMATE_BLOCK|ASYNC_GATHER_STALE_RATIO|ASYNC_GATHER_SAMPLE_SIZE|ASYNC_GATHER_FULL_TABLE_SIZE|ASYNC_STALE_MAX_TABLE_SIZE|HIST_EST_PERCENT|HIST_BLOCK_SAMPLE|APPROXIMATE_NDV(global prefs unique)|ONLINE_ESTIMATE_PERCENT|AUTO_SAMPLE_ROW_COUNT(global prefs unique)|GATHER_STATS_BATCH_SIZE|SKIP_RATE_SAMPLE_COUNT prefs
+call dbms_stats.set_global_prefs('STALE_PERCENT','CASCADE123');
+ERROR HY000: Illegal staleness percentage, must be a non-negative number
+
+drop table t1;
+drop table t_part;
+drop table t_subpart;
