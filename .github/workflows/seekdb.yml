@@ -40,6 +40,12 @@ jobs:
           key: ${{ runner.os }}-seekdb-deps-el9-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
           path: deps/3rd
 
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq && apt-get install -y wget rpm rpm2cpio cpio make build-essential binutils m4 libtool-bin libncurses5 python3
+
       - name: Prepare (jobargs, run_jobs)
         shell: bash
         run: |
