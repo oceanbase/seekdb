@@ -36,11 +36,13 @@ else
   # Step 1: Build init（与 buildbase 一致，只传 init，先拉取/安装 deps 再才能用 cmake）
   bash "$WORKSPACE/build.sh" init 2>&1 | tee "$TASK_DIR/compile_init.output"
   [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1
-  bash build.sh debug -DOB_USE_CCACHE=ON 2>&1 | tee "$TASK_DIR/compile_configure.output"
+  bash "$WORKSPACE/build.sh" "$BUILD_TARGET" -DOB_USE_CCACHE=ON -DNEED_PARSER_CACHE=OFF 2>&1 | tee "$TASK_DIR/compile_configure.output"
   [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1
   set +e
+  command -v ccache >/dev/null 2>&1 && ccache -z || true
   (cd "$WORKSPACE/$BUILD_DIR" && $MAKE $MAKE_ARGS observer) 2>&1 | tee "$TASK_DIR/compile.output"
   compile_ret=${PIPESTATUS[0]}
+  command -v ccache >/dev/null 2>&1 && ccache -s || true
   set -e
 fi
 

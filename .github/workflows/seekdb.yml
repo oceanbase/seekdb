@@ -1,6 +1,5 @@
 # SeekDB CI - 执行下沉版（Native）
-# 编译与测试在 self-hosted Runner 上直接执行，不经过 Farm2。
-# farm 脚本已从 farm-jenkins 复制到 .github/script/seekdb/scripts/，无需 clone。可选：FARM2_WORKER_IMAGE。
+# 步骤顺序与 compile.yml 对齐：Checkout → Install → Cache deps → Build（Prepare + Compile + ccache + mysqltest）。
 name: SeekDB CI 
 
 on:
@@ -21,25 +20,29 @@ on:
 env:
   MYSQLTEST_SLICES: "4"
   SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
+  cache-name: cache-deps
 
 jobs:
   seekdb:
     if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
     name: seekdb
-    # 使用已注册的 Runner：seekdb-test-arc-runner（若该 Runner 的 label 不是此名，请改成实际 label）
-    runs-on: seekdb-test-arc-runner-k8s
-    container:
-      image: harbor.oceanbase-dev.com/obrde-test/seekdb-actions-runner:0.0.2
+    runs-on: seekdb-test-arc-runner
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install ubuntu environment
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y git wget rpm rpm2cpio cpio make build-essential binutils m4 libtool-bin libncurses5 python3 ccache
+
       - name: Cache deps
         uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-seekdb-deps-el9-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-el9.x86_64-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
           path: deps/3rd
-
 
       - name: Prepare (jobargs, run_jobs)
         shell: bash
@@ -51,13 +54,19 @@ jobs:
           export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
           .github/script/seekdb/prepare.sh
 
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2.11
+        with:
+          max-size: 800M
+          save: ${{ github.event_name == 'push' }}
+          key: seekdb
+
       - name: Compile
         id: compile
         shell: bash
         run: |
           chmod +x .github/script/seekdb/compile.sh
           export GITHUB_RUN_ID="${{ github.run_id }}"
-          # k8s runner 可能把 github.workspace 设为 /home/runner/_work/... 而 checkout 在 /__w/...，以实际有 build.sh 的目录为准
           WS="${{ github.workspace }}"
           if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
             export GITHUB_WORKSPACE="$(pwd)"
@@ -68,21 +77,7 @@ jobs:
           export RELEASE_MODE="${{ vars.RELEASE_MODE || '' }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
-          if [[ -n "${{ vars.FARM2_WORKER_IMAGE || '' }}" ]]; then
-            docker run --rm \
-              -v "$GITHUB_WORKSPACE:/workspace" \
-              -w /workspace \
-              -e GITHUB_RUN_ID="${{ github.run_id }}" \
-              -e GITHUB_WORKSPACE="/workspace" \
-              -e SEEKDB_TASK_DIR="/workspace/seekdb_build/${{ github.run_id }}" \
-              -e RELEASE_MODE="${{ vars.RELEASE_MODE || '' }}" \
-              -e FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}" \
-              -e PATH="/workspace/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH" \
-              "${{ vars.FARM2_WORKER_IMAGE }}" \
-              /bin/bash -x /workspace/.github/script/seekdb/compile.sh
-          else
-            .github/script/seekdb/compile.sh
-          fi
+          .github/script/seekdb/compile.sh
 
       - name: Record compile failure
         if: steps.compile.outcome == 'failure'
@@ -116,21 +111,7 @@ jobs:
           export SLICES="${{ env.MYSQLTEST_SLICES }}"
           export BRANCH="${{ github.ref_name }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          if [[ -n "${{ vars.FARM2_WORKER_IMAGE || '' }}" ]]; then
-            docker run --rm \
-              -v "${{ github.workspace }}:/workspace" \
-              -w /workspace \
-              -e GITHUB_RUN_ID="${{ github.run_id }}" \
-              -e SEEKDB_TASK_DIR="/workspace/seekdb_build/${{ github.run_id }}" \
-              -e SLICE_IDX=0 \
-              -e SLICES="${{ env.MYSQLTEST_SLICES }}" \
-              -e BRANCH="${{ github.ref_name }}" \
-              -e FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}" \
-              "${{ vars.FARM2_WORKER_IMAGE }}" \
-              /bin/bash -c '. /workspace/.github/script/seekdb/mysqltest_slice.sh'
-          else
-            .github/script/seekdb/mysqltest_slice.sh
-          fi
+          .github/script/seekdb/mysqltest_slice.sh
 
       - name: Mysqltest slice 1
         if: success()
@@ -143,16 +124,7 @@ jobs:
           export SLICES="${{ env.MYSQLTEST_SLICES }}"
           export BRANCH="${{ github.ref_name }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          if [[ -n "${{ vars.FARM2_WORKER_IMAGE || '' }}" ]]; then
-            docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -e GITHUB_RUN_ID="${{ github.run_id }}" -e SEEKDB_TASK_DIR="/workspace/seekdb_build/${{ github.run_id }}" \
-              -e SLICE_IDX=1 -e SLICES="${{ env.MYSQLTEST_SLICES }}" -e BRANCH="${{ github.ref_name }}" \
-              -e FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}" \
-              "${{ vars.FARM2_WORKER_IMAGE }}" \
-              /bin/bash -c '. /workspace/.github/script/seekdb/mysqltest_slice.sh'
-          else
-            .github/script/seekdb/mysqltest_slice.sh
-          fi
+          .github/script/seekdb/mysqltest_slice.sh
 
       - name: Mysqltest slice 2
         if: success()
@@ -161,14 +133,7 @@ jobs:
           export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
           export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}" SLICE_IDX=2 SLICES="${{ env.MYSQLTEST_SLICES }}"
           export BRANCH="${{ github.ref_name }}" FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          if [[ -n "${{ vars.FARM2_WORKER_IMAGE || '' }}" ]]; then
-            docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -e GITHUB_RUN_ID="${{ github.run_id }}" -e SEEKDB_TASK_DIR="/workspace/seekdb_build/${{ github.run_id }}" \
-              -e SLICE_IDX=2 -e SLICES="${{ env.MYSQLTEST_SLICES }}" -e BRANCH="${{ github.ref_name }}" -e FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}" \
-              "${{ vars.FARM2_WORKER_IMAGE }}" /bin/bash -c '. /workspace/.github/script/seekdb/mysqltest_slice.sh'
-          else
-            .github/script/seekdb/mysqltest_slice.sh
-          fi
+          .github/script/seekdb/mysqltest_slice.sh
 
       - name: Mysqltest slice 3
         if: success()
@@ -177,14 +142,7 @@ jobs:
           export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
           export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}" SLICE_IDX=3 SLICES="${{ env.MYSQLTEST_SLICES }}"
           export BRANCH="${{ github.ref_name }}" FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          if [[ -n "${{ vars.FARM2_WORKER_IMAGE || '' }}" ]]; then
-            docker run --rm -v "${{ github.workspace }}:/workspace" -w /workspace \
-              -e GITHUB_RUN_ID="${{ github.run_id }}" -e SEEKDB_TASK_DIR="/workspace/seekdb_build/${{ github.run_id }}" \
-              -e SLICE_IDX=3 -e SLICES="${{ env.MYSQLTEST_SLICES }}" -e BRANCH="${{ github.ref_name }}" -e FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}" \
-              "${{ vars.FARM2_WORKER_IMAGE }}" /bin/bash -c '. /workspace/.github/script/seekdb/mysqltest_slice.sh'
-          else
-            .github/script/seekdb/mysqltest_slice.sh
-          fi
+          .github/script/seekdb/mysqltest_slice.sh
 
       - name: Collect result
         if: success() || failure()
