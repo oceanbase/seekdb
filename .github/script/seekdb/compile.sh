@@ -7,6 +7,12 @@ set -e
 WORKSPACE="${GITHUB_WORKSPACE:?}"
 TASK_DIR="${SEEKDB_TASK_DIR:?}"
 
+# 调试：便于排查 k8s/container 下 No build.sh
+echo "[compile.sh] WORKSPACE=$WORKSPACE"
+echo "[compile.sh] pwd=$(pwd)"
+ls -la "$WORKSPACE/" 2>/dev/null | head -20 || true
+echo "[compile.sh] build.sh: -f=$([[ -f "$WORKSPACE/build.sh" ]] && echo 1 || echo 0) -x=$([[ -x "$WORKSPACE/build.sh" ]] && echo 1 || echo 0)"
+
 export GITHUB_WORKSPACE="$WORKSPACE"
 export SEEKDB_TASK_DIR="$TASK_DIR"
 export PACKAGE_TYPE="${RELEASE_MODE:+release}"
@@ -23,12 +29,13 @@ BUILD_TARGET="${PACKAGE_TYPE:-debug}"
 BUILD_DIR="build_${BUILD_TARGET}"
 compile_ret=0
 
-if [[ ! -x "$WORKSPACE/build.sh" ]]; then
-  echo "[compile.sh] No build.sh, skip."
+# 存在即可（不要求 -x），用 bash 执行
+if [[ ! -f "$WORKSPACE/build.sh" ]]; then
+  echo "[compile.sh] No build.sh at $WORKSPACE/build.sh, skip."
 else
   # Step 1: Build init（与 buildbase 一致，只传 init，先拉取/安装 deps 再才能用 cmake）
-  ./build.sh "$BUILD_TARGET" --init 2>&1 | tee "$TASK_DIR/compile_init.output"
-  [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1  # Step 3: make（与 buildbase "cd build_debug && make -j4" 一致）
+  bash "$WORKSPACE/build.sh" "$BUILD_TARGET" --init 2>&1 | tee "$TASK_DIR/compile_init.output"
+  [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1
   set +e
   (cd "$WORKSPACE/$BUILD_DIR" && $MAKE $MAKE_ARGS observer) 2>&1 | tee "$TASK_DIR/compile.output"
   compile_ret=${PIPESTATUS[0]}
