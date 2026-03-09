@@ -35,8 +35,8 @@ jobs:
         shell: bash
         run: |
           export DEBIAN_FRONTEND=noninteractive
-          apt-get update -qq
-          apt-get install -y git wget rpm rpm2cpio cpio make build-essential binutils m4 libtool-bin libncurses5 python3 ccache
+          sudo apt-get update -qq
+          sudo apt-get install -y git wget rpm rpm2cpio cpio make build-essential binutils m4 libtool-bin libncurses5 python3 ccache
 
       - name: Cache deps
         uses: actions/cache@v4
