@@ -56,15 +56,20 @@ jobs:
         run: |
           chmod +x .github/script/seekdb/compile.sh
           export GITHUB_RUN_ID="${{ github.run_id }}"
-          export GITHUB_WORKSPACE="${{ github.workspace }}"
+          # k8s runner 可能把 github.workspace 设为 /home/runner/_work/... 而 checkout 在 /__w/...，以实际有 build.sh 的目录为准
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            export GITHUB_WORKSPACE="$(pwd)"
+          else
+            export GITHUB_WORKSPACE="$WS"
+          fi
           export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
           export RELEASE_MODE="${{ vars.RELEASE_MODE || '' }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          # 保证 gen_parser.sh 使用 deps 里的 bison 2.4.1，不依赖系统 bison（Ubuntu 24 为 3.x）
-          export PATH="${{ github.workspace }}/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
+          export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           if [[ -n "${{ vars.FARM2_WORKER_IMAGE || '' }}" ]]; then
             docker run --rm \
-              -v "${{ github.workspace }}:/workspace" \
+              -v "$GITHUB_WORKSPACE:/workspace" \
               -w /workspace \
               -e GITHUB_RUN_ID="${{ github.run_id }}" \
               -e GITHUB_WORKSPACE="/workspace" \
