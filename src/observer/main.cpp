@@ -318,9 +318,13 @@ int inner_main(int argc, char *argv[])
 #ifdef ENABLE_SANITY
   backtrace_symbolize_func = oceanbase::common::backtrace_symbolize;
 #endif
+#ifndef __ANDROID__
   if (0 != pthread_getname_np(pthread_self(), ob_get_tname(), OB_THREAD_NAME_BUF_LEN)) {
     snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
   }
+#else
+  snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
+#endif
   ObStackHeaderGuard stack_header_guard;
   int64_t memory_used = get_virtual_memory_used();
 #ifndef OB_USE_ASAN
@@ -461,7 +465,7 @@ int inner_main(int argc, char *argv[])
     print_all_limits();
     dl_iterate_phdr(callback, NULL);
 
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
     static const int DEFAULT_MMAP_MAX_VAL = 1024 * 1024 * 1024;
     mallopt(M_MMAP_MAX, DEFAULT_MMAP_MAX_VAL);
     mallopt(M_ARENA_MAX, 1); // disable malloc multiple arena pool

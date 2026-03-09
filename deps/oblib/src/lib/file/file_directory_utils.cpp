@@ -521,7 +521,8 @@ int FileDirectoryUtils::to_absolute_path(ObSqlString &dir)
 {
   int ret = OB_SUCCESS;
   if (!dir.empty() && dir.ptr()[0] != '\0' && dir.ptr()[0] != '/') {
-    char real_path[OB_MAX_FILE_NAME_LENGTH] = {0};
+    // Android Bionic's fortified realpath requires buffer >= PATH_MAX
+    char real_path[PATH_MAX] = {0};
     if (NULL == realpath(dir.ptr(), real_path)) {
       LIB_LOG(WARN, "Failed to get absolute path", K(dir), KCSTRING(strerror(errno)));
       ret = OB_ERR_UNEXPECTED;

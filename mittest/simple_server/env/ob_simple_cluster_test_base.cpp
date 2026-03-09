@@ -95,7 +95,7 @@ ObSimpleClusterTestBase::ObSimpleClusterTestBase(const std::string &env_prefix,
                                                           log_disk_size,
                                                           memory_limit,
                                                           datafile_size);
-    curr_dir_ = get_current_dir_name();
+    curr_dir_ = getcwd(NULL, 0);
   }
 }
 

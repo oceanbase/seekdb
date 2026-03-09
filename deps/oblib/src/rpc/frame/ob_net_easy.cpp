@@ -238,7 +238,7 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
     uint64_t ui64;
     int width, sign, hex, frac_width, slen, width_sign;
     char *last, *start, *fstart;
-    char length_modifier;
+    int length_modifier;
 
     start = buf;
     last = buf + size - 1;
@@ -254,7 +254,7 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
             hex = 0;
             frac_width = 6;
             slen = -1;
-            length_modifier = '0';
+            length_modifier = 0;
             fstart = buf;
 
             while (*fmt >= '0' && *fmt <= '9') {
@@ -315,7 +315,7 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
                     p = (char *) "(null)";
                 }
 
-                while (slen-- && buf < last) {
+                while (slen-- && *p && buf < last) {
                     *buf++ = *p++;
                 }
                 break;
@@ -325,7 +325,7 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
                 break;
 
             case 'd':
-                i64 = (length_modifier == 'l') ? va_arg(args, int64_t) : va_arg(args, int);
+                i64 = (length_modifier >= 1) ? va_arg(args, int64_t) : va_arg(args, int);
                 if (i64 < 0) {
                     *buf++ = '-';
                     i64 = -i64;
@@ -335,19 +335,19 @@ int easy_vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
                 break;
 
             case 'u':
-                ui64 = (length_modifier == 'l') ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
+                ui64 = (length_modifier >= 1) ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
                 p = easy_sprintf_num(buf, last, ui64, zero, 0, width, 0);
                 buf = p;
                 break;
 
             case 'x':
-                ui64 = (length_modifier == 'l') ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
+                ui64 = (length_modifier >= 1) ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
                 p = easy_sprintf_num(buf, last, ui64, zero, 1, width, 0);
                 buf = p;
                 break;
 
             case 'X':
-                ui64 = (length_modifier == 'l') ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
+                ui64 = (length_modifier >= 1) ? va_arg(args, uint64_t) : va_arg(args, unsigned int);
                 p = easy_sprintf_num(buf, last, ui64, zero, 1, width, 0);
                 buf = p;
                 break;
@@ -498,11 +498,12 @@ static char *easy_sprintf_num(char *buf, char *last, uint64_t ui64, char zero, i
             }
         }
     } else if (hexadecimal == 1) {
+        static const char hex_digits[] = "0123456789abcdef";
         if (ui64 == 0) {
             *--p = '0';
         } else {
             while (ui64) {
-                *--p = (char) (ui64 % 16 + '0');
+                *--p = hex_digits[ui64 % 16];
                 ui64 /= 16;
             }
         }

@@ -448,7 +448,7 @@ add_library(ob_malloc STATIC)
 target_link_libraries(ob_malloc ob_malloc_object)
 
 # malloc_hook is only available on Linux (uses Linux-specific syscall and weak alias)
-if(NOT APPLE)
+if(NOT APPLE AND NOT ANDROID)
   add_library(malloc_hook STATIC
       alloc/malloc_hook.cpp
       alloc/malloc_hook.h
@@ -465,7 +465,28 @@ target_link_libraries(oblib_lib
   ${DEP_DIR}/lib/liblzma.a
 )
 
-if (NOT BUILD_CDC_ONLY)
+if (NOT BUILD_CDC_ONLY AND ANDROID)
+# vsag vector library -- Android: all libs installed to DEP_DIR/lib by ob-deps
+target_link_directories(
+  oblib_lib PUBLIC
+  ${DEP_DIR}/lib
+)
+target_compile_options(oblib_lib PUBLIC -fopenmp)
+target_link_libraries(oblib_lib
+  PUBLIC
+  libvsag_static.a
+  libantlr4-autogen.a
+  libantlr4-runtime.a
+  libdiskann.a
+  libsimd.a
+  libcpuinfo.a
+  libfmt.a
+  libopenblas.a
+  libspdlog.a
+  libroaring.a
+  -fopenmp -static-openmp
+)
+elseif (NOT BUILD_CDC_ONLY AND NOT ANDROID)
 # vsag vector library
 target_link_directories(
   oblib_lib PUBLIC ${DEP_DIR}/lib ${DEP_DIR}/lib/vsag_lib

@@ -156,6 +156,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(AllocatorWrapper);
 };
 
+// Android's sys/user.h defines PAGE_SIZE as a macro, which conflicts with the
+// PAGE_SIZE class member below.
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+
 class ObDedupQueue : public lib::ThreadPool
 {
 public:

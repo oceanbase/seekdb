@@ -33,6 +33,11 @@
 #ifndef __UINT64_C
 #define __UINT64_C(c) c##ULL
 #endif
+// Android's sys/user.h defines PAGE_SIZE as a macro which clashes with
+// class member names (ObDedupQueue::PAGE_SIZE, etc.) throughout the codebase.
+#ifdef __ANDROID__
+#undef PAGE_SIZE
+#endif
 // basic headers, do not add other headers here
 #include "lib/coro/co_var.h"
 #include "lib/utility/ob_macro_utils.h"

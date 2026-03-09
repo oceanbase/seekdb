@@ -22,6 +22,7 @@ BUILD_ARGS=()
 MAKE_ARGS=(-j $CPU_CORES)
 NEED_MAKE=false
 NEED_INIT=false
+ANDROID_BUILD=false
 LLD_OPTION=ON
 ASAN_OPTION=ON
 STATIC_LINK_LGPL_DEPS_OPTION=ON
@@ -48,6 +49,7 @@ function usage
 
     echo -e "\nOPTIONS:"
     echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
+    echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
     echo -e "\tMakeOptions => Options to make command, default: -j N"
 
     echo -e "\nExamples:"
@@ -56,6 +58,9 @@ function usage
 
     echo -e "\n\t# Init and build with release mode but not compile."
     echo -e "\t./build.sh release --init"
+
+    echo -e "\n\t# Build for Android with release mode."
+    echo -e "\t./build.sh release --android --init"
 
     echo -e "\n\t# Build with rpm mode and make with default arguments."
     echo -e "\t./build.sh rpm --make"
@@ -68,6 +73,9 @@ function parse_args
         if [[ "$i" == "--init" ]]
         then
             NEED_INIT=true
+        elif [[ "$i" == "--android" ]]
+        then
+            ANDROID_BUILD=true
         elif [[ "$i" == "--make" ]]
         then
             NEED_MAKE=make
@@ -115,6 +123,9 @@ function try_init
 function prepare_build_dir
 {
     TYPE=$1
+    if [[ $ANDROID_BUILD == true ]]; then
+      TYPE="android_${TYPE}"
+    fi
     mkdir -p $TOPDIR/build_$TYPE && cd $TOPDIR/build_$TYPE
 }
 
@@ -138,7 +149,11 @@ function get_timestamp_ms
 function do_init
 {
     time1_ms=$(get_timestamp_ms)
-    (cd $TOPDIR/deps/init && bash dep_create.sh)
+    if [[ $ANDROID_BUILD == true ]]; then
+      (cd $TOPDIR/deps/init && bash android_deps_install.sh)
+    else
+      (cd $TOPDIR/deps/init && bash dep_create.sh)
+    fi
     if [ $? -ne 0 ]; then
       exit $?
     fi
@@ -176,7 +191,20 @@ function do_build
 
     TYPE=$1; shift
     prepare_build_dir $TYPE || return
-    ${CMAKE_COMMAND} ${TOPDIR} "$@"
+
+    ANDROID_CMAKE_ARGS=""
+    if [[ $ANDROID_BUILD == true ]]; then
+      ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/26.3.11579264}"
+      if [ ! -d "$ANDROID_NDK_HOME" ]; then
+        echo_err "ANDROID_NDK_HOME not found: $ANDROID_NDK_HOME"
+        echo_err "Set ANDROID_NDK_HOME or install the NDK"
+        exit 1
+      fi
+      ANDROID_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28"
+      echo_log "Android NDK: $ANDROID_NDK_HOME"
+    fi
+
+    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"
     if [ $? -ne 0 ]; then
       echo_err "Failed to generate Makefile"
       exit 1

@@ -92,6 +92,11 @@ inline void ObAsyncTask::set_last_execute_time(const int64_t execute_time)
   last_execute_time_ = execute_time;
 }
 
+// Android's sys/user.h defines PAGE_SIZE as a macro, conflicts with class member below.
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+
 class ObAsyncTaskQueue : public ObReentrantThread
 {
 public:

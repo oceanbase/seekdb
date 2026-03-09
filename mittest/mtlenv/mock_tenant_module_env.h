@@ -504,7 +504,7 @@ int MockTenantModuleEnv::init_dir()
   char buf[PATH_MAX];
   curr_dir_ = getcwd(buf, sizeof(buf));
 #else
-  curr_dir_ = get_current_dir_name();
+  curr_dir_ = getcwd(NULL, 0);
 #endif
 
   int ret = OB_SUCCESS;

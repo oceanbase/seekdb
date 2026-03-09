@@ -3440,12 +3440,12 @@ int ObSetSysVar::find_set(const ObString &str)
   } else if (OB_UNLIKELY(str.length() >=  MAX_STR_BUF_LEN)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("system variable string is too long", K(ret), K(str));
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
     // strndupa uses alloca (stack allocation), automatically freed on function return
   } else if (OB_ISNULL(buf = strndupa(str.ptr(), str.length()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to alloc memory", K(ret));
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(__ANDROID__)
     // macOS doesn't support strndupa, use strndup (heap allocation) and free manually
   } else if (OB_ISNULL(buf = strndup(str.ptr(), str.length()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

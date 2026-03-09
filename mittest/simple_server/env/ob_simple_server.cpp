@@ -142,7 +142,7 @@ int ObSimpleServer::simple_init()
   //opts.devname_ = "eth0";
   opts.use_ipv6_ = false;
 
-  char *curr_dir = get_current_dir_name();
+  char *curr_dir = getcwd(NULL, 0);
   oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
 
 

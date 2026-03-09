@@ -135,9 +135,9 @@ target_compile_features(oblib_base INTERFACE cxx_std_11)
 
 set(_LIB_PATH "${DEP_DIR}/lib64/")
 set(LIBAIO_LINK_OPTION "-laio")
-if(APPLE)
+if(APPLE OR ANDROID)
   set(_LIB_PATH "${DEP_DIR}/lib/")
-  # macOS doesn't have libaio
+  # macOS and Android don't have libaio
   set(LIBAIO_LINK_OPTION "")
 endif()
 set(OBLIB_ABSEIL_LIST   
@@ -203,7 +203,7 @@ target_link_libraries(oblib_base_without_pass
   ${DEP_DIR}/lib/libcurl.a
   ${DEP_DIR}/lib/libssl.a
   ${DEP_DIR}/lib/libcrypto.a
-  ${DEP_DIR}/lib64/libs2.a
+  ${_LIB_PATH}/libs2.a
   ${OBLIB_ABSEIL_LIST}
   ${DEP_DIR}/lib/libroaring.a
   ${LGPL_DEPS}
@@ -215,20 +215,21 @@ target_link_libraries(oblib_base_without_pass
   ${DEP_DIR}/lib/libprotobuf-c.a
   ${_LIB_PATH}/libarrow.a
   ${_LIB_PATH}/libparquet.a
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:${DEP_DIR}/lib64/libarrow_bundled_dependencies.a>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
   $<$<PLATFORM_ID:Darwin>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2>
-  ${DEP_DIR}/lib64/liborc.a
-  ${DEP_DIR}/lib64/libsnappy.a
-  ${DEP_DIR}/lib64/libprotoc.a
-  ${DEP_DIR}/lib64/libprotobuf.a
-  ${DEP_DIR}/lib64/liblz4.a
-  ${DEP_DIR}/lib64/libzstd.a
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
-  ${LIBAIO_LINK_OPTION} -lpthread -ldl
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-lrt>
+  ${_LIB_PATH}/liborc.a
+  ${_LIB_PATH}/libsnappy.a
+  $<$<NOT:$<BOOL:${ANDROID}>>:${_LIB_PATH}/libprotoc.a>
+  ${_LIB_PATH}/libprotobuf.a
+  ${_LIB_PATH}/liblz4.a
+  ${_LIB_PATH}/libzstd.a
+  $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
+  ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
+  $<$<BOOL:${ANDROID}>:-llog>
+  $<$<PLATFORM_ID:Linux>:-lrt>
   $<$<PLATFORM_ID:Darwin>:-Wl,-framework,Security -Wl,-framework,CoreFoundation -Wl,-framework,SystemConfiguration -liconv>
   ${ARCH_LDFLAGS}
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:${DEP_DIR}/lib/libisal.a>
+  $<$<PLATFORM_ID:Linux>:${DEP_DIR}/lib/libisal.a>
  )
 target_link_libraries(oblib_base INTERFACE oblib_base_without_pass oblib_pass)
 

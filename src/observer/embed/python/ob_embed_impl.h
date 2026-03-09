@@ -18,7 +18,9 @@
 #include <string>
 #include <thread>
 #include "observer/ob_inner_sql_connection.h"
+#ifndef SEEKDB_NO_PYTHON
 #include <pybind11/pybind11.h>
+#endif
 
 
 namespace oceanbase
@@ -35,7 +37,9 @@ public:
   void begin();
   void commit();
   void rollback();
+#ifndef SEEKDB_NO_PYTHON
   ObLiteEmbedCursor cursor();
+#endif
   int execute(const char* sql, uint64_t &affected_rows, int64_t &result_seq, std::string &errmsg);
   void reset();
   void reset_result();
@@ -51,6 +55,7 @@ private:
   sql::ObSQLSessionInfo* session_;
 };
 
+#ifndef SEEKDB_NO_PYTHON
 class ObLiteEmbedCursor
 {
 public:
@@ -66,6 +71,7 @@ private:
   std::shared_ptr<ObLiteEmbedConn> embed_conn_;
   int64_t result_seq_;
 };
+#endif
 
 class ObLiteEmbed
 {
@@ -81,6 +87,7 @@ private:
   static int do_open_(const char* db_dir, int64_t port);
 };
 
+#ifndef SEEKDB_NO_PYTHON
 class ObLiteEmbedUtil
 {
 public:
@@ -94,6 +101,7 @@ public:
                                      ObCollationType col_collation,
                                      ObString &out_str);
 };
+#endif
 
 } // end embed
 } // end oceanbase

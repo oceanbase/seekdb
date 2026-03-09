@@ -685,6 +685,12 @@ private:
   int64_t thread_num_;
 };
 
+// Android's sys/user.h defines PAGE_SIZE as a macro (via system headers included
+// above), which conflicts with ObDedupQueue::PAGE_SIZE class member.
+#ifdef __ANDROID__
+#undef PAGE_SIZE
+#endif
+
 class TG_DEDUP_QUEUE : public ITG
 {
 public:

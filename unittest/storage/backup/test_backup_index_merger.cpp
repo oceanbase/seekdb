@@ -377,7 +377,7 @@ void TestBackupIndexMerger::inner_init_()
   char buf[PATH_MAX];
   ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_index_merger_dir", getcwd(buf, sizeof(buf)));
 #else
-  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_index_merger_dir", get_current_dir_name());
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_index_merger_dir", getcwd(NULL, 0));
 #endif
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_);

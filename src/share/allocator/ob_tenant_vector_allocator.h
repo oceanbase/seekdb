@@ -116,7 +116,7 @@ public:
 private:
   uint64_t *all_vsag_use_mem_;
   lib::MemoryContext mem_context_;
-  constexpr static int64_t MEM_PTR_HEAD_SIZE = sizeof(int64_t);
+  constexpr static int64_t MEM_PTR_HEAD_SIZE = 16;
 };
 
 class ObIvfMemContext : public ObVectorMemContext
@@ -159,7 +159,7 @@ public:
 private:
   uint64_t *all_vsag_use_mem_;
   lib::MemoryContext mem_context_;
-  constexpr static int64_t MEM_PTR_HEAD_SIZE = sizeof(int64_t);
+  constexpr static int64_t MEM_PTR_HEAD_SIZE = 16;
 };
 
 }  // namespace share

@@ -18,7 +18,7 @@
 
 #include "utility.h"
 #include "dirent.h"
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
 #include <gnu/libc-version.h>
 #endif
 #ifdef __APPLE__
@@ -1803,12 +1803,10 @@ struct tm *ob_localtime(const time_t *unix_sec, struct tm *result)
   static const int MAGIC_UNKONWN_FIRST = 146097;
   static const int MAGIC_UNKONWN_SEC = 1461;
   //use __timezone from glibc/time/tzset.c, default value is -480 for china
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
   const int32_t tz_minutes = static_cast<int32_t>(__timezone / 60);
-#elif defined(__APPLE__)
-  // macOS uses timezone variable (seconds west of UTC, negative for east)
-  // timezone is declared in <time.h> on macOS
-  #include <time.h>
+#elif defined(__APPLE__) || defined(__ANDROID__)
+  // macOS/Android use POSIX timezone variable (seconds west of UTC)
   const int32_t tz_minutes = static_cast<int32_t>(timezone / 60);
 #endif
 
@@ -2072,13 +2070,13 @@ void get_glibc_version(int &major, int &minor)
 {
   major = 0;
   minor = 0;
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
   const char *glibc_version = gnu_get_libc_version();
   if (NULL != glibc_version) {
     sscanf(glibc_version, "%d.%d", &major, &minor);
   }
-#elif defined(__APPLE__)
-  // macOS doesn't use glibc, return 0,0
+#elif defined(__APPLE__) || defined(__ANDROID__)
+  // macOS/Android don't use glibc, return 0,0
   (void)major;
   (void)minor;
 #endif

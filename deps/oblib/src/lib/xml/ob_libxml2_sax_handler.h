@@ -38,7 +38,7 @@ public:
     const xmlChar *system_id);
   static void entity_reference(void *ctx, const xmlChar *name);
   // for error msg
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__ANDROID__)
   static void structured_error(void *ctx, xmlError *error);
 #else
   static void structured_error(void *ctx, const xmlError *error);

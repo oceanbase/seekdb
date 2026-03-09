@@ -15,7 +15,7 @@
  */
 
 #include "lib/checksum/ob_crc64.h"
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
 #include "isa-l/crc64.h"
 #include "isa-l/crc.h"
 #endif
@@ -1049,10 +1049,10 @@ uint64_t ob_crc64_isal(uint64_t uCRC64, const char* buf, int64_t cb)
   if (buf == NULL || cb <= 0) {
     return uCRC64;
   }
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
   return crc32_iscsi((unsigned char*)(buf), cb, uCRC64);
-#elif defined(__APPLE__)
-  // macOS: ISA-L is not available, use crc64_sse42 implementation
+#else
+  // macOS/Android: ISA-L is not available, use crc64_sse42 implementation
   return crc64_sse42(uCRC64, buf, cb);
 #endif
 }
@@ -1071,7 +1071,7 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
   vendor_info[3]='\0';
 
   if (strcmp((char*)vendor_info, "GenuineIntel") == 0) {
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ANDROID__)
     ob_crc64_sse42_func = &ob_crc64_isal;
     _OB_LOG_RET(WARN, OB_SUCCESS, "Use ISAL for crc64 calculate");
 #else

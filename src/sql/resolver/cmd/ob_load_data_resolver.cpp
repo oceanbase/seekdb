@@ -665,6 +665,10 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to allocate memory", K(ret));
         } else if (exist_wildcard(file_name)) {
+#ifdef __ANDROID__
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("wildcard patterns in LOAD DATA not supported on Android", K(ret));
+#else
           sub_file_name = file_name.trim_space_only();
           if (OB_FAIL(ob_write_string(*allocator_, sub_file_name, cstyle_file_name, true))) {
             LOG_WARN("fail to write string", K(ret));
@@ -689,6 +693,7 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
               globfree(&glob_result);
             }
           }
+#endif
         } else {
           while (OB_SUCC(ret) && !file_name.empty()) {
             p = file_name.find(',');
