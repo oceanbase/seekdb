@@ -34,7 +34,9 @@ if [[ ! -f "$WORKSPACE/build.sh" ]]; then
   echo "[compile.sh] No build.sh at $WORKSPACE/build.sh, skip."
 else
   # Step 1: Build init（与 buildbase 一致，只传 init，先拉取/安装 deps 再才能用 cmake）
-  bash "$WORKSPACE/build.sh" "$BUILD_TARGET" --init 2>&1 | tee "$TASK_DIR/compile_init.output"
+  bash "$WORKSPACE/build.sh" init 2>&1 | tee "$TASK_DIR/compile_init.output"
+  [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1
+  bash build.sh debug -DOB_USE_CCACHE=ON 2>&1 | tee "$TASK_DIR/compile_configure.output"
   [[ ${PIPESTATUS[0]} -ne 0 ]] && exit 1
   set +e
   (cd "$WORKSPACE/$BUILD_DIR" && $MAKE $MAKE_ARGS observer) 2>&1 | tee "$TASK_DIR/compile.output"
