@@ -25,8 +25,8 @@ for f in observer.zst obproxy.zst; do
   fi
 done
 
-if [[ -x "$SCRIPTS_DIR/mysqltest_for_farm.sh" ]]; then
-  bash "$SCRIPTS_DIR/mysqltest_for_farm.sh" "$@"
+if [[ -f "$SCRIPTS_DIR/mysqltest_for_seekdb.sh" ]]; then
+  bash "$SCRIPTS_DIR/mysqltest_for_seekdb.sh" "$@"
 else
-  echo "[mysqltest_slice.sh] No mysqltest_for_farm.sh, skip slice $SLICE_IDX."
+  echo "[mysqltest_slice.sh] No mysqltest_for_seekdb.sh, skip slice $SLICE_IDX."
 fi
