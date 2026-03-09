@@ -2,7 +2,6 @@
 # passed via -D when cross-compiling with the NDK toolchain.
 if(ANDROID_ABI)
   set(OB_ANDROID ON)
-  set(OB_ENABLE_UNITY OFF)
   message(STATUS "Android NDK cross-compilation detected (ABI: ${ANDROID_ABI})")
 else()
   set(OB_ANDROID OFF)

@@ -25,6 +25,18 @@ if [[ ! -f "$DEP_FILE" ]]; then
 fi
 echo_log "check dependencies profile for ${DEP_FILE}... FOUND"
 
+# --- Check if already initialized (same mechanism as dep_create.sh) ---
+if command -v md5sum >/dev/null 2>&1; then
+    MD5=$(md5sum "$DEP_FILE" | cut -d" " -f1)
+else
+    MD5=$(md5 -r "$DEP_FILE" | cut -d" " -f1)
+fi
+
+if [[ -f "${TARGET_DIR}/${MD5}" && -f "${TARGET_DIR}/DONE" ]]; then
+    echo_log "dependencies already initialized (${MD5}), skipping"
+    exit 0
+fi
+
 # --- Parse deps file ---
 REPO_URL=""
 DEPS_PKGS=()
@@ -130,3 +142,8 @@ if [[ ${#TOOLS_PKGS[@]} -gt 0 ]]; then
 
     echo_log "installed ${#TOOLS_PKGS[@]} host devtools to $DEVTOOLS_DIR"
 fi
+
+# --- Mark as done ---
+touch "${TARGET_DIR}/${MD5}"
+touch "${TARGET_DIR}/DONE"
+echo_log "initialization complete"

@@ -288,6 +288,10 @@ ob_set_subtarget(ob_share common
   ob_srs_importer.cpp
 )
 
+# ob_local_device.cpp defines AIO emulation types/functions for Android/macOS that
+# conflict with stub definitions in ob_file.h when merged into the same translation unit.
+set_source_files_properties(ob_local_device.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
 ob_set_subtarget(ob_share common_mixed
   client_feedback/ob_client_feedback_basic.cpp
   client_feedback/ob_client_feedback_manager.cpp
