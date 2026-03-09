@@ -32,6 +32,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-seekdb-deps-el9-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
+          path: deps/3rd
+
+
       - name: Prepare (jobargs, run_jobs)
         shell: bash
         run: |
