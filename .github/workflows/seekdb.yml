@@ -28,7 +28,7 @@ jobs:
     name: seekdb
     runs-on: seekdb-test-arc-runner-k8s
     container:
-      image: harbor.oceanbase-dev.com/obrde-test/seekdb-actions-runner:0.0.5
+      image: harbor.oceanbase-dev.com/obrde-test/seekdb-actions-runner:test-20260310
     steps:
       - name: Checkout
         uses: actions/checkout@v4
