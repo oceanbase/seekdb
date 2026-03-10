@@ -80,32 +80,12 @@ function prepare_bin {
     mkdir -p $DOWNLOAD_DIR || return 1
 
     cd $HOME
-    if [ "$WITH_PROXY" ] && [ "$WITH_PROXY" != "0" ]
-    then
-        # 先从$HOME目录获取
-        if [[ -x $HOME/obproxy ]]
-        then
-            echo "从根目录读取obproxy..."
-            mv obproxy $DOWNLOAD_DIR/ || return 3
-        elif [[ -x $HOME/seekdb/tools/obproxy/obproxy ]]
-        then
-            echo "从ob代码库获取obproxy..."
-            cp $HOME/seekdb/tools/obproxy/obproxy $DOWNLOAD_DIR/ || return 1
-        else
-            (
-                cd $DOWNLOAD_DIR &&
-                    wget http://11.166.86.153:8877/obproxy.release -O obproxy &&
-                    chmod +x obproxy
-            ) || return 2
-            echo "从8877获取obproxy..."
-        fi
-    fi
 
     if [ ! -x observer ]
     then
         (
             cd $DOWNLOAD_DIR &&
-                wget http://11.166.86.153:8877/observer -O observer &&
+                wget http://6.12.233.4:5000/observer -O observer &&
                 chmod +x observer
         ) || return 1
     else
