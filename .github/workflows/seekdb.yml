@@ -33,12 +33,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install runtime deps (libaio for observer)
-        shell: bash
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update -qq && apt-get install -y --no-install-recommends libaio1 || true
-          apt-get install -y --no-install-recommends libaio1t64 2>/dev/null || true
 
       - name: Cache deps
         uses: actions/cache@v4
@@ -113,7 +107,19 @@ jobs:
           if [[ -f "$ERR" ]]; then cat "$ERR"; else echo "(file not found)"; fi
           if [[ -f "$OUT" ]]; then tail -80 "$OUT"; else echo "(file not found)"; fi
 
- 
+      - name: Upload observer for mysqltest jobs
+        shell: bash
+        run: |
+          if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
+          echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null)"
+        continue-on-error: false
+
+      - name: Upload observer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: seekdb-observer
+          path: observer
+          retention-days: 1
 
   seekdb-mysqltest:
     if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
@@ -130,27 +136,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install runtime deps (libaio for observer)
-        shell: bash
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update -qq && apt-get install -y --no-install-recommends libaio1 || true
-          apt-get install -y --no-install-recommends libaio1t64 2>/dev/null || true
-
-      - name: Download observer
+      - name: Download observer from artifact
+        id: get-observer
         uses: actions/download-artifact@v4
         with:
           name: seekdb-observer
+        continue-on-error: true
 
-      - name: Place observer
+      - name: Place observer (or fallback wget)
         shell: bash
         run: |
           if [[ -f seekdb-observer ]]; then
             mv seekdb-observer observer
+          elif [[ -f seekdb-observer/observer ]]; then
+            mv seekdb-observer/observer observer
           else
-            mv seekdb-observer/observer observer 2>/dev/null || mv seekdb-observer observer
+            echo "Artifact not found, falling back to wget"
+            URL="${{ vars.SEEKDB_OBSERVER_URL }}"
+            [[ -z "$URL" ]] && URL="http://6.12.233.4:5000/observer"
+            wget -q -O observer "$URL" || exit 1
           fi
           chmod +x observer
+          ls -la observer
 
       - name: Run mysqltest slice
         shell: bash
