@@ -69,7 +69,12 @@ jobs:
             echo "vars.SEEKDB_OBSERVER_URL not set, using default"
             URL="http://6.12.233.4:5000/observer"
           fi
-          wget -q -O "$WS/observer" "$URL" && chmod +x "$WS/observer"
+          echo "Downloading observer from $URL"
+          if ! wget -O "$WS/observer" "$URL"; then
+            echo "wget failed (check URL, network, or set vars.SEEKDB_OBSERVER_URL)"
+            exit 1
+          fi
+          chmod +x "$WS/observer"
 
       - name: Compile
         id: compile
