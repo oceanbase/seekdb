@@ -351,7 +351,7 @@ function obd_prepare_bin {
     then
         (
             cd $DOWNLOAD_DIR/bin &&
-                wget http://11.166.86.153:8877/observer -O observer &&
+                wget http://6.12.233.4:5000/observer -O observer &&
                 chmod +x observer
         ) || return 1
     else
