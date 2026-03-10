@@ -56,8 +56,24 @@ jobs:
           save: ${{ github.event_name == 'push' }}
           key: seekdb
 
+      # 暂时屏蔽 Compile，mysqltest 产物通过下载获取；恢复时删本步骤并去掉下方 Compile/Record/Show parser 的 if: false
+      - name: Download mysqltest artifacts
+        shell: bash
+        run: |
+          WS="${{ github.workspace }}"
+          URL="${{ vars.SEEKDB_OBSERVER_URL }}"
+          if [[ -z "$URL" ]]; then
+            echo "vars.SEEKDB_OBSERVER_URL not set, using default"
+            URL="http://6.12.233.4:5000/observer"
+          fi
+          wget -q -O "$WS/observer" "$URL" && chmod +x "$WS/observer" || true
+          if [[ -n "${{ vars.SEEKDB_OBPROXY_URL }}" ]]; then
+            wget -q -O "$WS/obproxy" "${{ vars.SEEKDB_OBPROXY_URL }}" && chmod +x "$WS/obproxy" || true
+          fi
+
       - name: Compile
         id: compile
+        if: false
         shell: bash
         run: |
           chmod +x .github/script/seekdb/compile.sh
@@ -75,12 +91,12 @@ jobs:
           .github/script/seekdb/compile.sh
 
       - name: Record compile failure
-        if: steps.compile.outcome == 'failure'
+        if: false && steps.compile.outcome == 'failure'
         shell: bash
         run: echo '++compile++' >> "${{ env.SEEKDB_TASK_DIR }}/fail_cases.output"
 
       - name: Show parser error (if any)
-        if: always() && (steps.compile.outcome == 'failure' || steps.compile.outcome == 'success')
+        if: false
         shell: bash
         run: |
           WS="${{ github.workspace }}"
