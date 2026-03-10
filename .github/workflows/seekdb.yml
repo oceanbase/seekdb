@@ -50,6 +50,7 @@ jobs:
           .github/script/seekdb/prepare.sh
 
       - name: Setup ccache
+        if: false
         uses: hendrikmuhs/ccache-action@v1.2.11
         with:
           max-size: 800M
