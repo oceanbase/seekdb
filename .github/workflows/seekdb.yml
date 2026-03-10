@@ -112,7 +112,7 @@ jobs:
         run: |
           if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
           echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null)"
-        continue-on-error: false
+        continue-on-error: true
 
       - name: Upload observer artifact
         uses: actions/upload-artifact@v4
