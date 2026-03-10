@@ -14,9 +14,6 @@ export SLICE_IDX="${SLICE_IDX:-0}"
 export SLICES="${SLICES:-4}"
 export BRANCH="${BRANCH:-master}"
 
-if [[ -f "$SCRIPTS_DIR/frame.sh" ]]; then
-  source "$SCRIPTS_DIR/frame.sh"
-fi
 
 # Copy compile artifacts from task dir to workspace if running in container
 for f in observer.zst obproxy.zst; do

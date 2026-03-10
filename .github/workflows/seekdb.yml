@@ -59,6 +59,7 @@ jobs:
       # 暂时屏蔽 Compile，mysqltest 产物通过下载获取；恢复时删本步骤并去掉下方 Compile/Record/Show parser 的 if: false
       - name: Download mysqltest artifacts
         shell: bash
+        if: false
         run: |
           WS="${{ github.workspace }}"
           URL="${{ vars.SEEKDB_OBSERVER_URL }}"
