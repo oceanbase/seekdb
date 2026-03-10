@@ -1,5 +1,5 @@
 # SeekDB CI - 执行下沉版（Native）
-# 步骤顺序与 compile.yml 对齐：Checkout → Install → Cache deps → Build（Prepare + Compile + ccache + mysqltest）。
+# setup 准备 observer → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
 name: SeekDB CI 
 
 on:
@@ -23,9 +23,9 @@ env:
   cache-name: cache-deps
 
 jobs:
-  seekdb:
+  seekdb-setup:
     if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
-    name: seekdb
+    name: setup
     runs-on: seekdb-test-arc-runner-k8s
     container:
       image: harbor.oceanbase-dev.com/obrde-test/seekdb-actions-runner:test-20260310
@@ -38,7 +38,6 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -qq && apt-get install -y --no-install-recommends libaio1 || true
-          # Ubuntu 24+ 包名为 libaio1t64
           apt-get install -y --no-install-recommends libaio1t64 2>/dev/null || true
 
       - name: Cache deps
@@ -66,7 +65,7 @@ jobs:
           save: ${{ github.event_name == 'push' }}
           key: seekdb
 
-      # 暂时屏蔽 Compile，mysqltest 产物通过下载获取；恢复时删本步骤并去掉下方 Compile/Record/Show parser 的 if: false
+      # 暂时用下载获取 observer；恢复编译时去掉本步的 if: false，并给下方 Compile 去掉 if: false、用编译产物作为 observer
       - name: Download mysqltest artifacts
         shell: bash
         run: |
@@ -110,76 +109,116 @@ jobs:
           ERR="$WS/src/sql/parser/_gen_parser.error"
           OUT="$WS/src/sql/parser/_gen_parser.output"
           echo "workspace=$WS"
-          echo "looking for: $ERR"
           ls -la "$WS/src/sql/parser/" 2>/dev/null || true
-          echo "--- _gen_parser.error ---"
           if [[ -f "$ERR" ]]; then cat "$ERR"; else echo "(file not found)"; fi
-          echo "--- _gen_parser.output (last 80 lines) ---"
           if [[ -f "$OUT" ]]; then tail -80 "$OUT"; else echo "(file not found)"; fi
 
-      - name: Mysqltest slice 0
-        if: success()
+ 
+
+  seekdb-mysqltest:
+    if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
+    name: mysqltest-slice-${{ matrix.slice }}
+    needs: seekdb-setup
+    runs-on: seekdb-test-arc-runner-k8s
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [0, 1, 2, 3]
+    container:
+      image: harbor.oceanbase-dev.com/obrde-test/seekdb-actions-runner:test-20260310
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install runtime deps (libaio for observer)
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq && apt-get install -y --no-install-recommends libaio1 || true
+          apt-get install -y --no-install-recommends libaio1t64 2>/dev/null || true
+
+      - name: Download observer
+        uses: actions/download-artifact@v4
+        with:
+          name: seekdb-observer
+
+      - name: Place observer
+        shell: bash
+        run: |
+          if [[ -f seekdb-observer ]]; then
+            mv seekdb-observer observer
+          else
+            mv seekdb-observer/observer observer 2>/dev/null || mv seekdb-observer observer
+          fi
+          chmod +x observer
+
+      - name: Run mysqltest slice
         shell: bash
         run: |
           chmod +x .github/script/seekdb/mysqltest_slice.sh
-          export GITHUB_RUN_ID="${{ github.run_id }}"
-          export GITHUB_WORKSPACE="${{ github.workspace }}"
-          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
-          export SLICE_IDX=0
-          export SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export BRANCH="${{ github.ref_name }}"
-          export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          .github/script/seekdb/mysqltest_slice.sh
-
-      - name: Mysqltest slice 1
-        if: success()
-        shell: bash
-        run: |
-          export GITHUB_RUN_ID="${{ github.run_id }}"
-          export GITHUB_WORKSPACE="${{ github.workspace }}"
-          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
-          export SLICE_IDX=1
-          export SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export BRANCH="${{ github.ref_name }}"
-          export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          .github/script/seekdb/mysqltest_slice.sh
-
-      - name: Mysqltest slice 2
-        if: success()
-        shell: bash
-        run: |
           export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
-          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}" SLICE_IDX=2 SLICES="${{ env.MYSQLTEST_SLICES }}"
+          export SEEKDB_TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
+          export SLICE_IDX=${{ matrix.slice }} SLICES="${{ env.MYSQLTEST_SLICES }}"
           export BRANCH="${{ github.ref_name }}" FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
+          mkdir -p "$SEEKDB_TASK_DIR"
           .github/script/seekdb/mysqltest_slice.sh
 
-      - name: Mysqltest slice 3
-        if: success()
-        shell: bash
-        run: |
-          export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
-          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}" SLICE_IDX=3 SLICES="${{ env.MYSQLTEST_SLICES }}"
-          export BRANCH="${{ github.ref_name }}" FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
-          .github/script/seekdb/mysqltest_slice.sh
-
-      - name: Collect result
+      - name: Collect slice result
         if: success() || failure()
         shell: bash
         run: |
           chmod +x .github/script/seekdb/collect_result.sh
-          export GITHUB_RUN_ID="${{ github.run_id }}"
-          export GITHUB_WORKSPACE="${{ github.workspace }}"
-          export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
+          export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
+          export SEEKDB_TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           .github/script/seekdb/collect_result.sh "${{ github.workspace }}/seekdb_result.json"
+        continue-on-error: true
 
-      - name: Output result to log
+      - name: Upload slice result
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seekdb-result-slice-${{ matrix.slice }}
+          path: seekdb_result.json
+          retention-days: 1
+        continue-on-error: true
+
+  seekdb-collect:
+    if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
+    name: collect
+    needs: seekdb-mysqltest
+    runs-on: seekdb-test-arc-runner-k8s
+    container:
+      image: harbor.oceanbase-dev.com/obrde-test/seekdb-actions-runner:test-20260310
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all slice results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: seekdb-result-slice-*
+          path: slice_results
+          merge-multiple: true
+
+      - name: Merge results and upload
         shell: bash
         run: |
+          WORKSPACE="${{ github.workspace }}"
+          RUN_ID="${{ github.run_id }}"
+          FAILED=""
+          SUCCESS="true"
+          while IFS= read -r f; do
+            [[ -f "$f" ]] || continue
+            grep -q '"success":false' "$f" 2>/dev/null && SUCCESS="false"
+            while IFS= read -r c; do
+              [[ -n "$c" ]] && FAILED="${FAILED}${FAILED:+,}\"${c//\"/\\\"}\""
+            done < <(grep -oP '"failed_cases":\[\K[^\]]*' "$f" 2>/dev/null | tr ',' '\n' | sed 's/^"\|"$//g')
+          done < <(find slice_results -name 'seekdb_result.json' 2>/dev/null)
+          echo "{\"success\":$SUCCESS,\"run_id\":\"$RUN_ID\",\"failed_cases\":[${FAILED:-}]}" > "$WORKSPACE/seekdb_result.json"
           echo "=== SeekDB native result ==="
-          cat "${{ github.workspace }}/seekdb_result.json" 2>/dev/null || echo "(no seekdb_result.json)"
+          cat "$WORKSPACE/seekdb_result.json"
 
       - name: Upload SeekDB result as artifact
-        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: seekdb-result-native
