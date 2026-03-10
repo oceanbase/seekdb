@@ -378,6 +378,7 @@ function obd_prepare_bin {
     then
         obs_version=$(cat $HOME/seekdb/tools/deploy/obd/.observer_obd_plugin_version)
     else
+        $DOWNLOAD_DIR/bin/observer -V
         obs_version=`$DOWNLOAD_DIR/bin/observer -V 2>&1 | grep -E "(observer|seekdb) \(OceanBase([ \_]CE|[ \_]Lite|[ \_]SeekDB|[ \_]seekdb)? [0-9]" | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1`
     fi
 
