@@ -6,7 +6,17 @@ set -x
 SEEKDB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # seekdb native：GITHUB_WORKSPACE=仓库根，SLICE_IDX=slice 序号（0,1,2,3）
-export GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$(cd "$SEEKDB_SCRIPT_DIR/../.." && pwd)}"
+# 脚本在 .github/script/seekdb/scripts/，仓库根为 4 级上级
+REPO_ROOT_BY_SCRIPT="$(cd "$SEEKDB_SCRIPT_DIR/../../../.." && pwd)"
+export GITHUB_WORKSPACE="${GITHUB_WORKSPACE:-$REPO_ROOT_BY_SCRIPT}"
+# 若传入的 GITHUB_WORKSPACE 在容器内无 build.sh（如 runner 传主机路径），改用实际存在的仓库根
+if [[ ! -f "$GITHUB_WORKSPACE/build.sh" ]]; then
+  if [[ -f "$REPO_ROOT_BY_SCRIPT/build.sh" ]]; then
+    export GITHUB_WORKSPACE="$REPO_ROOT_BY_SCRIPT"
+  elif [[ -f "$(pwd)/build.sh" ]]; then
+    export GITHUB_WORKSPACE="$(pwd)"
+  fi
+fi
 export USER="${USER:-$(whoami)}"
 SEEKDB_HOME="${GITHUB_WORKSPACE}/seekdb_home_${SLICE_IDX:-0}"
 mkdir -p "$SEEKDB_HOME"
