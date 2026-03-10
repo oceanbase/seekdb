@@ -33,6 +33,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install runtime deps (libaio for observer)
+        shell: bash
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq && apt-get install -y --no-install-recommends libaio1 || true
+          # Ubuntu 24+ 包名为 libaio1t64
+          apt-get install -y --no-install-recommends libaio1t64 2>/dev/null || true
+
       - name: Cache deps
         uses: actions/cache@v4
         if: false
