@@ -68,10 +68,7 @@ jobs:
             echo "vars.SEEKDB_OBSERVER_URL not set, using default"
             URL="http://6.12.233.4:5000/observer"
           fi
-          wget -q -O "$WS/observer" "$URL" && chmod +x "$WS/observer" || true
-          if [[ -n "${{ vars.SEEKDB_OBPROXY_URL }}" ]]; then
-            wget -q -O "$WS/obproxy" "${{ vars.SEEKDB_OBPROXY_URL }}" && chmod +x "$WS/obproxy" || true
-          fi
+          wget -q -O "$WS/observer" "$URL" && chmod +x "$WS/observer"
 
       - name: Compile
         id: compile
