@@ -194,7 +194,7 @@ function do_build
 
     ANDROID_CMAKE_ARGS=""
     if [[ $ANDROID_BUILD == true ]]; then
-      ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/26.3.11579264}"
+      ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/27.3.13750724}"
       if [ ! -d "$ANDROID_NDK_HOME" ]; then
         echo_err "ANDROID_NDK_HOME not found: $ANDROID_NDK_HOME"
         echo_err "Set ANDROID_NDK_HOME or install the NDK"

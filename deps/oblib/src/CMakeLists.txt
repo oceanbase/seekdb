@@ -63,7 +63,8 @@ if (OB_USE_CLANG)
     -Wno-unused-value -Wno-macro-redefined -Wno-reinterpret-base-class -Wno-register
     -Wno-implicit-fallthrough -Wno-deprecated-non-prototype
     -Wno-ambiguous-reversed-operator -Wno-invalid-partial-specialization
-    -Wno-string-concatenation)
+    -Wno-string-concatenation
+    -Wno-vla -Wno-vla-cxx-extension)
     
   target_compile_options(oblib_base_without_pass INTERFACE ${OBLIB_COMPILE_DEFINITIONS})
   if (ENABLE_SANITY)
