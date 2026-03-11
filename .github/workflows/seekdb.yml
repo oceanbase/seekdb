@@ -216,7 +216,8 @@ jobs:
           fi
 
   seekdb-collect:
-    if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft }}
+    # 仅在 4 个 mysqltest slice 都跑完（成功或失败）时执行；若 mysqltest 被 skip 则不跑
+    if: ${{ github.repository_owner == 'guoyan1996' && !github.event.pull_request.draft && (always() && (needs.seekdb-mysqltest.result == 'success' || needs.seekdb-mysqltest.result == 'failure')) }}
     name: collect
     needs: seekdb-mysqltest
     runs-on: seekdb-test-arc-runner-k8s
