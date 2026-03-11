@@ -112,18 +112,19 @@ jobs:
           if [[ -f "$ERR" ]]; then cat "$ERR"; else echo "(file not found)"; fi
           if [[ -f "$OUT" ]]; then tail -80 "$OUT"; else echo "(file not found)"; fi
 
-      - name: Upload observer for mysqltest jobs
+      - name: Compress and upload observer
         shell: bash
         run: |
           if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
-          echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null)"
-        continue-on-error: true
+          echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null) bytes"
+          zstd -f -q -T0 -o observer.zst observer
+          echo "observer.zst size: $(stat -c%s observer.zst 2>/dev/null || stat -f%z observer.zst 2>/dev/null) bytes"
 
-      - name: Upload observer artifact
+      - name: Upload observer artifact (zst)
         uses: actions/upload-artifact@v4
         with:
           name: seekdb-observer
-          path: observer
+          path: observer.zst
           retention-days: 1
 
   seekdb-mysqltest:
@@ -148,20 +149,22 @@ jobs:
           name: seekdb-observer
         continue-on-error: true
 
-      - name: Place observer (or fallback wget)
+      - name: Place observer (decompress or fallback wget)
         shell: bash
         run: |
           if [[ -f seekdb-observer ]]; then
-            mv seekdb-observer observer
+            zstd -d -f -q -o observer seekdb-observer && chmod +x observer
+          elif [[ -f seekdb-observer/observer.zst ]]; then
+            zstd -d -f -q -o observer seekdb-observer/observer.zst && chmod +x observer
           elif [[ -f seekdb-observer/observer ]]; then
-            mv seekdb-observer/observer observer
+            mv seekdb-observer/observer observer && chmod +x observer
           else
             echo "Artifact not found, falling back to wget"
             URL="${{ vars.SEEKDB_OBSERVER_URL }}"
             [[ -z "$URL" ]] && URL="http://6.12.233.4:5000/observer"
-            wget -q -O observer "$URL" || exit 1
+            wget -O observer "$URL" || exit 1
+            chmod +x observer
           fi
-          chmod +x observer
           ls -la observer
 
       - name: Run mysqltest slice
