@@ -63,18 +63,18 @@ jobs:
       - name: Download mysqltest artifacts
         shell: bash
         run: |
-          WS="${{ github.workspace }}"
           URL="${{ vars.SEEKDB_OBSERVER_URL }}"
           if [[ -z "$URL" ]]; then
             echo "vars.SEEKDB_OBSERVER_URL not set, using default"
             URL="http://6.12.233.4:5000/observer"
           fi
-          echo "Downloading observer from $URL"
-          if ! wget -O "$WS/observer" "$URL"; then
+          echo "Downloading observer from $URL (cwd: $(pwd))"
+          if ! wget -O observer "$URL"; then
             echo "wget failed (check URL, network, or set vars.SEEKDB_OBSERVER_URL)"
             exit 1
           fi
-          chmod +x "$WS/observer"
+          chmod +x observer
+          ls -la observer
 
       - name: Compile
         id: compile
