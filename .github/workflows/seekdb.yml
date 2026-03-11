@@ -237,7 +237,6 @@ jobs:
       - name: Merge results and upload
         shell: bash
         run: |
-          WORKSPACE="${{ github.workspace }}"
           RUN_ID="${{ github.run_id }}"
           FAILED=""
           SUCCESS="true"
@@ -248,9 +247,9 @@ jobs:
               [[ -n "$c" ]] && FAILED="${FAILED}${FAILED:+,}\"${c//\"/\\\"}\""
             done < <(grep -oP '"failed_cases":\[\K[^\]]*' "$f" 2>/dev/null | tr ',' '\n' | sed 's/^"\|"$//g')
           done < <(find slice_results -name 'seekdb_result.json' 2>/dev/null)
-          echo "{\"success\":$SUCCESS,\"run_id\":\"$RUN_ID\",\"failed_cases\":[${FAILED:-}]}" > "$WORKSPACE/seekdb_result.json"
+          echo "{\"success\":$SUCCESS,\"run_id\":\"$RUN_ID\",\"failed_cases\":[${FAILED:-}]}" > seekdb_result.json
           echo "=== SeekDB native result ==="
-          cat "$WORKSPACE/seekdb_result.json"
+          cat seekdb_result.json
 
       - name: Upload SeekDB result as artifact
         uses: actions/upload-artifact@v4
