@@ -62,6 +62,7 @@ jobs:
       # 暂时用下载获取 observer；恢复编译时去掉本步的 if: false，并给下方 Compile 去掉 if: false、用编译产物作为 observer
       - name: Download mysqltest artifacts
         shell: bash
+        if: false
         run: |
           URL="${{ vars.SEEKDB_OBSERVER_URL }}"
           if [[ -z "$URL" ]]; then
@@ -78,7 +79,6 @@ jobs:
 
       - name: Compile
         id: compile
-        if: false
         shell: bash
         run: |
           chmod +x .github/script/seekdb/compile.sh
