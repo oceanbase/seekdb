@@ -75,11 +75,6 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
-      - name: Record compile failure
-        if: steps.compile.outcome == 'failure'
-        shell: bash
-        run: echo '++compile++' >> "${{ env.SEEKDB_TASK_DIR }}/fail_cases.output"
-
       - name: Prepare observer
         shell: bash
         run: |
