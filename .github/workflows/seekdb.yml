@@ -112,11 +112,26 @@ jobs:
           if [[ -f "$ERR" ]]; then cat "$ERR"; else echo "(file not found)"; fi
           if [[ -f "$OUT" ]]; then tail -80 "$OUT"; else echo "(file not found)"; fi
 
+      - name: Prepare observer
+        shell: bash
+        run: |
+          if [[ ! -x observer ]]; then
+            for base in build_debug build_release build; do
+              for cand in "$base/observer" "$base/src/observer/observer"; do
+                if [[ -f "$cand" ]] && [[ -x "$cand" ]]; then
+                  cp -f "$cand" observer && chmod +x observer
+                  echo "observer copied from $cand"
+                  break 2
+                fi
+              done
+            done
+          fi
+          if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
+          echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null) bytes"
+
       - name: Compress and upload observer
         shell: bash
         run: |
-          if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
-          echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null) bytes"
           zstd -f -q -T0 -o observer.zst observer
           echo "observer.zst size: $(stat -c%s observer.zst 2>/dev/null || stat -f%z observer.zst 2>/dev/null) bytes"
 
