@@ -36,7 +36,6 @@ jobs:
 
       - name: Cache deps
         uses: actions/cache@v4
-        if: false
         with:
           key: ${{ runner.os }}-build-${{ env.cache-name }}-el9.x86_64-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
           path: deps/3rd
@@ -52,30 +51,11 @@ jobs:
           .github/script/seekdb/prepare.sh
 
       - name: Setup ccache
-        if: false
         uses: hendrikmuhs/ccache-action@v1.2.11
         with:
           max-size: 800M
           save: ${{ github.event_name == 'push' }}
           key: seekdb
-
-      # 暂时用下载获取 observer；恢复编译时去掉本步的 if: false，并给下方 Compile 去掉 if: false、用编译产物作为 observer
-      - name: Download mysqltest artifacts
-        shell: bash
-        if: false
-        run: |
-          URL="${{ vars.SEEKDB_OBSERVER_URL }}"
-          if [[ -z "$URL" ]]; then
-            echo "vars.SEEKDB_OBSERVER_URL not set, using default"
-            URL="http://6.12.233.4:5000/observer"
-          fi
-          echo "Downloading observer from $URL (cwd: $(pwd))"
-          if ! wget -O observer "$URL"; then
-            echo "wget failed (check URL, network, or set vars.SEEKDB_OBSERVER_URL)"
-            exit 1
-          fi
-          chmod +x observer
-          ls -la observer
 
       - name: Compile
         id: compile
@@ -96,21 +76,9 @@ jobs:
           .github/script/seekdb/compile.sh
 
       - name: Record compile failure
-        if: false && steps.compile.outcome == 'failure'
+        if: steps.compile.outcome == 'failure'
         shell: bash
         run: echo '++compile++' >> "${{ env.SEEKDB_TASK_DIR }}/fail_cases.output"
-
-      - name: Show parser error (if any)
-        if: false
-        shell: bash
-        run: |
-          WS="${{ github.workspace }}"
-          ERR="$WS/src/sql/parser/_gen_parser.error"
-          OUT="$WS/src/sql/parser/_gen_parser.output"
-          echo "workspace=$WS"
-          ls -la "$WS/src/sql/parser/" 2>/dev/null || true
-          if [[ -f "$ERR" ]]; then cat "$ERR"; else echo "(file not found)"; fi
-          if [[ -f "$OUT" ]]; then tail -80 "$OUT"; else echo "(file not found)"; fi
 
       - name: Prepare observer
         shell: bash
