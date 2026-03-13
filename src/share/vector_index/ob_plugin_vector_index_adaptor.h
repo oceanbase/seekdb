@@ -40,6 +40,7 @@ namespace share
 {
 struct ObPluginVectorIndexTaskCtx;
 class ObVsagMemContext;
+class ObPluginVectorIndexMgr;
 
 struct ObVectorIndexInfo
 {
@@ -600,7 +601,7 @@ public:
     }
   }
 
-  int renew_single_snap_index();
+  int renew_single_snap_index(bool mem_saving_mode);
   int set_adaptor_ctx_flag(ObVectorQueryAdaptorResultContext *ctx);
 
   ObString &get_index_identity() { return index_identity_; };

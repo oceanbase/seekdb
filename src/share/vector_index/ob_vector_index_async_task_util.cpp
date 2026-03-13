@@ -534,6 +534,15 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
                   ret = OB_SUCCESS; // continue
                 }
               }
+
+              if (OB_FAIL(ret)) {
+              } else if (task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD ||
+                         task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
+                need_resumed = false;
+              }
+
+              LOG_INFO("resume task", K(ret), K(need_resumed), K(is_read_tenant_async_task),
+                       K(OB_NOT_NULL(ls) ? ls->get_ls_id() : ObLSID()), K(task_result));
               if (OB_FAIL(ret) || !need_resumed) {  // skip
               } else if (task_result.status_ != ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_FINISH) { // resume not finish task
                 ObVecIndexAsyncTaskCtx *task_ctx = nullptr;
@@ -1629,7 +1638,7 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(refresh_snapshot_index_data(adaptor, tx_desc, snapshot))) {
     LOG_WARN("failed to refresh snapshot index data", K(ret));
-  } else if (OB_FAIL(adaptor.renew_single_snap_index())) {
+  } else if (OB_FAIL(adaptor.renew_single_snap_index(adaptor.get_snap_index_type() == VIAT_HNSW_BQ))) {
     LOG_WARN("fail to renew single snap index", K(ret));
   }
   /* Warning!!!

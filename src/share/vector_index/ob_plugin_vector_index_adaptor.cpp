@@ -2849,11 +2849,11 @@ int ObPluginVectorIndexAdaptor::serialize(ObIAllocator *allocator, ObOStreamBuf:
   return ret;
 }
 
-int ObPluginVectorIndexAdaptor::renew_single_snap_index()
+int ObPluginVectorIndexAdaptor::renew_single_snap_index(bool mem_saving_mode)
 {
   int ret = OB_SUCCESS;
   ObVectorIndexAlgorithmType index_type = get_snap_index_type();
-  if (index_type == VIAT_HNSW_BQ) {
+  if (mem_saving_mode) {
     ObString invalid_prefix("renew");
     if (OB_ISNULL(snap_data_)) {
       ret = OB_ERR_UNEXPECTED;
