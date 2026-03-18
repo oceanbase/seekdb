@@ -144,10 +144,7 @@ int ObSysVariableSqlService::gen_sys_variable_dml(ObDMLSqlSplicer &dml, const Ob
   const uint64_t tenant_id = sysvar_schema.get_tenant_id();
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
 #define FORMAT_STR(str) (str.empty() ? ObString("") : str)
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                exec_tenant_id, sysvar_schema.get_tenant_id())))
-            || OB_FAIL(dml.add_pk_column("name", ObHexEscapeSqlStr(FORMAT_STR(sysvar_schema.get_name()))))
-            || OB_FAIL(dml.add_pk_column("zone", ObHexEscapeSqlStr(FORMAT_STR(sysvar_schema.get_zone().str()))))
+  if (OB_FAIL(dml.add_pk_column("name", ObHexEscapeSqlStr(FORMAT_STR(sysvar_schema.get_name()))))
             || OB_FAIL(dml.add_column("data_type", sysvar_schema.get_data_type()))
             || OB_FAIL(dml.add_column("value", ObHexEscapeSqlStr(FORMAT_STR(sysvar_schema.get_value()))))
             || OB_FAIL(dml.add_column("min_val", ObHexEscapeSqlStr(FORMAT_STR(sysvar_schema.get_min_val()))))

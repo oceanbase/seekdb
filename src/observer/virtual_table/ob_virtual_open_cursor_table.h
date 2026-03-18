@@ -80,10 +80,7 @@ public:
 private:
   // https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/V-OPEN_CURSOR.html
   enum {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    SADDR,                      // session point addr
+        SADDR,                      // session point addr
     SID,                        // session id
     USER_NAME,                  // cur user name
     ADDRESS,                    // now is null

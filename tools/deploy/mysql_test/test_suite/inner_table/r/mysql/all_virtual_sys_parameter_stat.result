@@ -6,8 +6,6 @@ desc __all_virtual_sys_parameter_stat;
 Field	Type	Null	Key	Default	Extra
 zone	varchar(128)	NO		NULL	
 svr_type	varchar(16)	NO		NULL	
-svr_ip	varchar(46)	NO		NULL	
-svr_port	bigint(20)	NO		NULL	
 name	varchar(128)	NO		NULL	
 data_type	varchar(128)	YES		NULL	
 value	varchar(65536)	NO		NULL	
@@ -106,6 +104,8 @@ enable_record_trace_log
 enable_rereplication
 enable_rich_error_msg
 enable_rpc_authentication_bypass
+enable_rpc_service
+enable_rpc_tls
 enable_sql_audit
 enable_sql_extension
 enable_sql_operator_dump
@@ -120,6 +120,7 @@ fuse_row_cache_priority
 global_background_cpu_quota
 global_index_auto_split_policy
 ha_high_thread_score
+ha_info
 ha_low_thread_score
 ha_mid_thread_score
 high_priority_net_thread_count
@@ -154,13 +155,13 @@ log_disk_throttling_percentage
 log_disk_utilization_limit_threshold
 log_disk_utilization_threshold
 log_restore_concurrency
+log_restore_source
 log_storage_compress_all
 log_storage_compress_func
 log_storage_warning_tolerance_time
 log_transport_compress_all
 log_transport_compress_func
 ls_gc_delay_time
-ls_meta_table_check_interval
 major_compact_trigger
 major_freeze_duty_time
 max_partition_num
@@ -223,7 +224,6 @@ recover_table_dop
 recyclebin_object_expire_time
 redo_dir
 redundancy_level
-replica_parallel_migration_mode
 resource_hard_limit
 result_cache_max_result
 result_cache_max_size
@@ -239,12 +239,10 @@ rpc_server_authentication_method
 rpc_timeout
 schema_history_expire_time
 schema_history_recycle_interval
-server_balance_cpu_mem_tolerance_percent
-server_balance_critical_disk_waterlevel
-server_balance_disk_tolerance_percent
 server_check_interval
 server_cpu_quota_max
 server_cpu_quota_min
+server_create_time
 server_permanent_offline_time
 shared_log_retention
 spill_compression_codec
@@ -602,7 +600,6 @@ _with_subquery
 _xa_gc_interval
 _xa_gc_timeout
 _xsolapi_generate_with_clause
-__balance_controller
 __easy_memory_limit
 __easy_memory_reserved_percentage
 __min_full_resource_pool_memory

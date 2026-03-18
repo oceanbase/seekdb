@@ -45,7 +45,6 @@
 #include "sql/monitor/flt/ob_flt_extra_info.h"
 #include "sql/ob_optimizer_trace_impl.h"
 #include "sql/monitor/flt/ob_flt_span_mgr.h"
-#include "share/ob_service_name_proxy.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 
@@ -78,7 +77,6 @@ namespace share
 {
 struct ObSequenceValue;
 }
-using share::ObServiceNameString;
 using common::ObPsStmtId;
 namespace sql
 {
@@ -1476,12 +1474,9 @@ public:
   int64_t get_plsql_exec_time();
   int64_t get_plsql_compile_time() { return plsql_compile_time_; }
   void update_pure_sql_exec_time(int64_t elapsed_time);
-  const ObServiceNameString& get_service_name() const { return service_name_; }
   bool get_failover_mode() const { return failover_mode_; }
   void set_failover_mode(const bool failover_mode) { failover_mode_ = failover_mode; }
-  void reset_service_name() { service_name_.reset(); }
   bool has_ccl_rule() const { return has_ccl_rule_; }
-  int set_service_name(const ObString& service_name);
   int check_service_name_and_failover_mode() const;
   int check_service_name_and_failover_mode(const uint64_t tenant_id) const;
   int64_t get_tx_id_with_thread_data_lock() { 
@@ -1772,7 +1767,6 @@ private:
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
   bool failover_mode_;
-  ObServiceNameString service_name_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
   uint64_t unit_gc_min_sup_proxy_version_;

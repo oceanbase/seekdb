@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_storage_ha_tablet_builder.h"
+#include "storage/high_availability/ob_restore_helper.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/high_availability/ob_storage_ha_utils.h"
 #include "storage/ob_storage_schema_util.h"
@@ -243,14 +244,6 @@ int ObStorageHATabletsBuilder::update_pending_tablets_with_remote()
           // However, the meta from new leader is still PENDING.
           ret = OB_TABLET_NOT_EXIST;
           LOG_WARN("remote tablet is PENDING", K(ret), K(tablet_info));
-        } else if (tablet->get_tablet_meta().transfer_info_.transfer_seq_ != tablet_info.param_.transfer_info_.transfer_seq_) {
-          // If remote tablet's transfer sequence is not equal with
-          // local tablet, it is also considered as same as the indicated
-          // tablet is not exist.
-          LOG_INFO("transfer sequence not equal, reset tablet not exist", K(tablet_id),
-            "remote_transfer_info", tablet_info.param_.transfer_info_,
-            "local_transfer_info", tablet->get_tablet_meta().transfer_info_);
-          tablet_info.status_ = ObCopyTabletStatus::TABLET_NOT_EXIST;
         }
       }
 
@@ -379,9 +372,7 @@ int ObStorageHATabletsBuilder::create_or_update_tablet_(
   } else if (tablet_info.param_.is_empty_shell() || tablet_info.param_.ha_status_.is_restore_status_undefined()) {
     // empty shell or UNDEFINED tablet does not need to reuse any sstable.
   } else {
-    if (tablet_info.param_.transfer_info_.has_transfer_table_) {
-      //do nothing
-    } else if (OB_FAIL(create_tablet_with_major_sstables_(ls, tablet_info, major_tables, major_sstables_param, is_only_replace_major))) {
+    if (OB_FAIL(create_tablet_with_major_sstables_(ls, tablet_info, major_tables, major_sstables_param, is_only_replace_major))) {
       LOG_WARN("failed to create tablet with major sstables", K(ret), KPC(ls), K(tablet_info), K(major_tables));
     } else {
       LOG_INFO("succeed build ha table new table store", K(tablet_info), K(major_tables));
@@ -1467,43 +1458,15 @@ int ObStorageHATableInfoMgr::get_tablet_meta(
 
 /******************ObStorageHACopySSTableParam*********************/
 ObStorageHACopySSTableParam::ObStorageHACopySSTableParam()
-  : tenant_id_(OB_INVALID_ID),
-    ls_id_(),
-    tablet_id_(),
-    copy_table_key_array_(),
-    src_info_(),
-    src_ls_rebuild_seq_(-1),
-    need_check_seq_(false),
-    is_leader_restore_(false),
-    restore_action_(ObTabletRestoreAction::RESTORE_NONE),
-    bandwidth_throttle_(nullptr),
-    svr_rpc_proxy_(nullptr),
-    storage_rpc_(nullptr),
-    restore_base_info_(nullptr),
-    meta_index_store_(nullptr),
-    second_meta_index_store_(nullptr)
+  : copy_table_key_array_(),
+    helper_(nullptr)
 {
 }
 
 
 bool ObStorageHACopySSTableParam::is_valid() const
 {
-  bool bool_ret = false;
-  bool_ret = OB_INVALID_ID != tenant_id_
-      && ls_id_.is_valid()
-      && tablet_id_.is_valid()
-      && ((need_check_seq_ && src_ls_rebuild_seq_ >= 0) || !need_check_seq_);
-  if (bool_ret) {
-    if (!is_leader_restore_) {
-      bool_ret = src_info_.is_valid() && OB_NOT_NULL(bandwidth_throttle_)
-          && OB_NOT_NULL(svr_rpc_proxy_) && OB_NOT_NULL(storage_rpc_);
-    } else {
-      bool_ret = OB_NOT_NULL(restore_base_info_)
-        && OB_NOT_NULL(meta_index_store_)
-        && OB_NOT_NULL(second_meta_index_store_);
-    }
-  }
-  return bool_ret;
+  return OB_NOT_NULL(helper_) && helper_->is_valid();
 }
 
 int ObStorageHACopySSTableParam::assign(const ObStorageHACopySSTableParam &param)
@@ -1515,20 +1478,7 @@ int ObStorageHACopySSTableParam::assign(const ObStorageHACopySSTableParam &param
   } else if (OB_FAIL(copy_table_key_array_.assign(param.copy_table_key_array_))) {
     LOG_WARN("failed to assign table key info array", K(ret), K(param));
   } else {
-    tenant_id_ = param.tenant_id_;
-    ls_id_ = param.ls_id_;
-    tablet_id_ = param.tablet_id_;
-    src_info_ = param.src_info_;
-    src_ls_rebuild_seq_ = param.src_ls_rebuild_seq_;
-    need_check_seq_ = param.need_check_seq_;
-    is_leader_restore_ = param.is_leader_restore_;
-    restore_action_ = param.restore_action_;
-    bandwidth_throttle_ = param.bandwidth_throttle_;
-    svr_rpc_proxy_ = param.svr_rpc_proxy_;
-    storage_rpc_ = param.storage_rpc_;
-    restore_base_info_ = param.restore_base_info_;
-    meta_index_store_ = param.meta_index_store_;
-    second_meta_index_store_ = param.second_meta_index_store_;
+    helper_ = param.helper_;
   }
   return ret;
 }
@@ -1586,31 +1536,36 @@ int ObStorageHACopySSTableInfoMgr::init(const ObStorageHACopySSTableParam &param
 int ObStorageHACopySSTableInfoMgr::build_sstable_macro_range_info_map_()
 {
   int ret = OB_SUCCESS;
-  ObICopySSTableMacroInfoReader *reader = nullptr;
-  ObCopySSTableMacroRangeInfo sstable_macro_range_info;
-  void *buf = nullptr;
-  ObCopySSTableMacroRangeInfo *sstable_macro_range_info_ptr = nullptr;
-
   if (!param_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("param should not be invalid", K(ret), K(param_));
   } else if (param_.copy_table_key_array_.empty()) {
     LOG_INFO("tablet do not has any sstable", K(ret), K(param_));
-  } else if (OB_FAIL(get_sstable_macro_range_info_reader_(reader))) {
-    if (OB_TABLET_NOT_EXIST == ret) {
-      LOG_INFO("src tablet do not exist", K(param_));
-      status_ = ObCopyTabletStatus::TABLET_NOT_EXIST;
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get sstable macro range info reader", K(ret), K(param_));
-    }
   } else {
+    ObCopySSTableMacroRangeInfo sstable_macro_range_info;
+    void *buf = nullptr;
+    ObCopySSTableMacroRangeInfo *sstable_macro_range_info_ptr = nullptr;
+    ObArenaAllocator allocator("CopySStable");
+    restore::ObIRestoreHelper *helper = nullptr;
+    if (OB_FAIL(param_.helper_->copy_for_task(allocator, helper))) {
+      LOG_WARN("failed to copy helper", K(ret), K(param_));
+    } else if (OB_ISNULL(helper)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("helper should not be NULL", K(ret), K(param_));
+    } else if (OB_FAIL(helper->init_for_sstable_macro_range(param_.copy_table_key_array_))) {
+      LOG_WARN("failed to init helper for sstable macro range", K(ret), K(param_));
+    }
     while (OB_SUCC(ret)) {
       sstable_macro_range_info.reset();
       buf = nullptr;
       sstable_macro_range_info_ptr = nullptr;
-      if (OB_FAIL(reader->get_next_sstable_range_info(sstable_macro_range_info))) {
+      if (OB_FAIL(helper->fetch_next_sstable_macro_range_info(sstable_macro_range_info))) {
         if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+          break;
+        } else if (OB_TABLET_NOT_EXIST == ret) {
+          LOG_INFO("src tablet do not exist", K(param_));
+          status_ = ObCopyTabletStatus::TABLET_NOT_EXIST;
           ret = OB_SUCCESS;
           break;
         } else {
@@ -1634,88 +1589,10 @@ int ObStorageHACopySSTableInfoMgr::build_sstable_macro_range_info_map_()
         sstable_macro_range_info_ptr->~ObCopySSTableMacroRangeInfo();
       }
     }
-  }
-
-  if (OB_NOT_NULL(reader)) {
-    free_sstable_macro_range_info_reader_(reader);
-  }
-  return ret;
-}
-
-int ObStorageHACopySSTableInfoMgr::get_sstable_macro_range_info_reader_(
-    ObICopySSTableMacroInfoReader *&reader)
-{
-  int ret = OB_SUCCESS;
-  reader = nullptr;
-  if (!param_.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param should not be invalid", K(ret), K(param_));
-  } else if (param_.is_leader_restore_) {
-    if (OB_FAIL(get_sstable_macro_range_info_restore_reader_(reader))) {
-      LOG_WARN("failed to get sstable macro range info restore reader", K(ret), K(param_));
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid reader", K(ret), K(param_));
-  }
-  return ret;
-}
-
-void ObStorageHACopySSTableInfoMgr::free_sstable_macro_range_info_reader_(ObICopySSTableMacroInfoReader *&reader)
-{
-  if (nullptr != reader) {
-    reader->~ObICopySSTableMacroInfoReader();
-    mtl_free(reader);
-    reader = nullptr;
-  }
-}
-
-int ObStorageHACopySSTableInfoMgr::get_sstable_macro_range_info_restore_reader_(
-    ObICopySSTableMacroInfoReader *&reader)
-{
-  int ret = OB_SUCCESS;
-  reader = nullptr;
-  void *buf = nullptr;
-  obrpc::ObCopySSTableMacroRangeInfoArg arg;
-  ObCopySSTableMacroRestoreReader *restore_reader = nullptr;
-
-  if (!param_.is_valid() || !param_.is_leader_restore_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param should not be invalid", K(ret), K(param_));
-  } else if (FALSE_IT(buf = mtl_malloc(sizeof(ObCopySSTableMacroRestoreReader), "MacroInfoReRead"))) {
-  } else if (OB_ISNULL(buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret), KP(buf));
-  } else if (FALSE_IT(restore_reader = new (buf) ObCopySSTableMacroRestoreReader())) {
-  } else if (FALSE_IT(reader = restore_reader)) {
-  } else if (OB_FAIL(arg.copy_table_key_array_.assign(param_.copy_table_key_array_))) {
-    LOG_WARN("failed to assign copy table key info", K(ret), K(param_));
-  } else {
-    arg.tenant_id_ = param_.tenant_id_;
-    arg.ls_id_ = param_.ls_id_;
-    arg.tablet_id_ = param_.tablet_id_;
-    arg.macro_range_max_marco_count_ = MACRO_RANGE_MAX_MACRO_COUNT;
-    arg.need_check_seq_ = false;
-    arg.ls_rebuild_seq_ = -1;
-#ifdef ERRSIM
-  if (OB_SUCC(ret)) {
-    ret = OB_E(EventTable::EN_RESTORE_COPY_MACRO_BLOCK_NUM) OB_SUCCESS;
-    if (OB_FAIL(ret)) {
-      arg.macro_range_max_marco_count_ = 8;
-      ret = OB_SUCCESS;
-      STORAGE_LOG(ERROR, "fake restore MACRO_RANGE_MAX_MACRO_COUNT", K(ret), K(arg));
-    }
-  }
-#endif
-    if (OB_FAIL(restore_reader->init(arg, *param_.restore_base_info_, param_.restore_action_,
-          *param_.meta_index_store_, *param_.second_meta_index_store_))) {
-      LOG_WARN("failed to init copy sstable macro restore reader", K(ret), K(param_));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    if (OB_NOT_NULL(reader)) {
-      free_sstable_macro_range_info_reader_(reader);
+    if (OB_NOT_NULL(helper)) {
+      helper->destroy();
+      allocator.free(helper);
+      helper = nullptr;
     }
   }
   return ret;
@@ -2005,7 +1882,7 @@ int ObStorageHATabletBuilderUtil::build_tablet_for_row_store_(
   } else if (OB_FAIL(get_tablet_(tablet_id, ls, tablet_handle))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id), KPC(ls));
   } else if (FALSE_IT(tablet = tablet_handle.get_obj())) {
-  } else if (FALSE_IT(transfer_seq = tablet->get_tablet_meta().transfer_info_.transfer_seq_)) {
+  } else if (FALSE_IT(transfer_seq = 0)) {
   } else if (OB_FAIL(calc_multi_version_start_with_major_(major_tables, tablet, multi_version_start))) {
     LOG_WARN("failed to calc multi version start with major", K(ret), KPC(tablet));
   } else if (OB_FAIL(major_tables.get_tables(major_table_array))) {
@@ -2187,7 +2064,7 @@ int ObStorageHATabletBuilderUtil::build_tablet_with_co_tables_(
     const BatchBuildTabletTablesExtraParam &extra_batch_param)
 {
   int ret = OB_SUCCESS;
-  int64_t transfer_seq = tablet->get_tablet_meta().transfer_info_.transfer_seq_;
+  int64_t transfer_seq = 0;
 
   BuildTabletTableExtraParam extra_param;
   bool exist_extra_param = false;
@@ -2298,9 +2175,7 @@ int ObStorageHATabletBuilderUtil::inner_update_tablet_table_store_with_major_(
                             static_cast<const blocksstable::ObSSTable *>(table),
                             true/*allow_duplicate_sstable*/);
     if (OB_FAIL(param.init_with_ha_info(
-            ObHATableStoreParam(transfer_seq, 
-                                true /*need_check_sstable*/,
-                                batch_extra_param.need_replace_remote_sstable_,
+            ObHATableStoreParam(batch_extra_param.need_replace_remote_sstable_,
                                 batch_extra_param.is_only_replace_major_)))) {
       LOG_WARN("failed to init with ha info", KR(ret));
     } else if (OB_FAIL(param.init_with_compaction_info(

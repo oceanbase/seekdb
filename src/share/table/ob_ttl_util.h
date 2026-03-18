@@ -20,8 +20,6 @@
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_srv_rpc_proxy.h"
 #include "rootserver/ob_rs_async_rpc_proxy.h"
-#include "rootserver/ob_server_manager.h"
-#include "rootserver/ob_unit_manager.h"
 #include "share/table/redis/ob_redis_common.h"
 
 namespace oceanbase

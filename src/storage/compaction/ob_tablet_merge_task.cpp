@@ -261,7 +261,6 @@ ObTabletMergeDagParam::ObTabletMergeDagParam()
      exec_mode_(ObExecMode::EXEC_MODE_LOCAL),
      merge_type_(INVALID_MERGE_TYPE),
      merge_version_(0),
-     schedule_transfer_seq_(-1),
      ls_id_(),
      tablet_id_()
 {
@@ -270,15 +269,13 @@ ObTabletMergeDagParam::ObTabletMergeDagParam()
 ObTabletMergeDagParam::ObTabletMergeDagParam(
     const compaction::ObMergeType merge_type,
     const share::ObLSID &ls_id,
-    const ObTabletID &tablet_id,
-    const int64_t schedule_transfer_seq)
+    const ObTabletID &tablet_id)
   :  skip_get_tablet_(false),
      need_swap_tablet_flag_(false),
      is_reserve_mode_(false),
      exec_mode_(ObExecMode::EXEC_MODE_LOCAL),
      merge_type_(merge_type),
      merge_version_(0),
-     schedule_transfer_seq_(schedule_transfer_seq),
      ls_id_(ls_id),
      tablet_id_(tablet_id)
 {
@@ -336,10 +333,6 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
     if (OB_NO_NEED_MERGE != ret) {
       LOG_WARN("failed to check need merge", K(ret));
     }
-  } else if (OB_FAIL(ObTablet::check_transfer_seq_equal(*tmp_tablet_handle.get_obj(), param_.schedule_transfer_seq_))) {
-    LOG_WARN("tmp tablet transfer seq not eq with old transfer seq", K(ret),
-        "tmp_tablet_meta", tmp_tablet_handle.get_obj()->get_tablet_meta(),
-        "old_transfer_seq", param_.schedule_transfer_seq_);
   } else if (FALSE_IT(compat_mode_ = tmp_tablet_handle.get_obj()->get_tablet_meta().compat_mode_)) {
   } else if (is_mini_merge(merge_type_)) {
     int64_t inc_sstable_cnt = 0;

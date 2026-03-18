@@ -73,29 +73,6 @@ int PalfHandle::set_initial_member_list(const common::ObMemberList &member_list,
   return palf_handle_impl_->set_initial_member_list(member_list, paxos_replica_num, learner_list);
 }
 
-#ifdef OB_BUILD_ARBITRATION
-int PalfHandle::set_initial_member_list(const common::ObMemberList &member_list,
-                                        const common::ObMember &arb_member,
-                                        const int64_t paxos_replica_num,
-                                        const common::GlobalLearnerList &learner_list)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->set_initial_member_list(member_list, arb_member, paxos_replica_num, learner_list);
-}
-
-int PalfHandle::get_remote_arb_member_info(ArbMemberInfo &arb_member_info) const
-{
-  CHECK_VALID;
-  return palf_handle_impl_->get_remote_arb_member_info(arb_member_info);
-}
-
-int PalfHandle::get_arbitration_member(common::ObMember &arb_member) const
-{
-  CHECK_VALID;
-  return palf_handle_impl_->get_arbitration_member(arb_member);
-}
-#endif
-
 int PalfHandle::append(const PalfAppendOptions &opts,
                        const void *buffer,
                        const int64_t nbytes,
@@ -438,48 +415,6 @@ int PalfHandle::replace_member_with_learner(const common::ObMember &added_member
   return palf_handle_impl_->replace_member_with_learner(added_member, removed_member, config_version, timeout_us);
 }
 
-#ifdef OB_BUILD_ARBITRATION
-int PalfHandle::add_arb_member(const common::ObMember &member,
-                               const int64_t timeout_us)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->add_arb_member(member, timeout_us);
-}
-
-int PalfHandle::remove_arb_member(const common::ObMember &member,
-                                  const int64_t timeout_us)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->remove_arb_member(member, timeout_us);
-}
-
-int PalfHandle::degrade_acceptor_to_learner(const LogMemberAckInfoList &degrade_servers,
-                                            const int64_t timeout_us)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->degrade_acceptor_to_learner(degrade_servers, timeout_us);
-}
-
-int PalfHandle::upgrade_learner_to_acceptor(const LogMemberAckInfoList &upgrade_servers,
-                                            const int64_t timeout_us)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->upgrade_learner_to_acceptor(upgrade_servers, timeout_us);
-}
-
-int PalfHandle::set_election_silent_flag(const bool election_silent_flag)
-{
-  CHECK_VALID;
-  return palf_handle_impl_->set_election_silent_flag(election_silent_flag);
-}
-
-bool PalfHandle::is_election_silent() const
-{
-  CHECK_VALID;
-  return palf_handle_impl_->is_election_silent();
-}
-#endif
-
 int PalfHandle::change_leader_to(const common::ObAddr &dst_addr)
 {
   int ret = OB_SUCCESS;
@@ -761,31 +696,6 @@ int PalfHandle::reset_locality_cb()
     PALF_LOG(WARN, "reset_locality_cb failed", KR(ret));
   } else {
     PALF_LOG(INFO, "reset_locality_cb success", KR(ret));
-  }
-  return ret;
-}
-
-int PalfHandle::set_reconfig_checker_cb(palf::PalfReconfigCheckerCb *reconfig_checker)
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  if (OB_ISNULL(reconfig_checker)) {
-    PALF_LOG(INFO, "no need set_reconfig_checker_cb", KR(ret), KP(reconfig_checker));
-  } else if (OB_FAIL(palf_handle_impl_->set_reconfig_checker_cb(reconfig_checker))) {
-    PALF_LOG(WARN, "set_reconfig_checker_cb failed", KR(ret));
-  } else {
-  }
-  return ret;
-}
-
-int PalfHandle::reset_reconfig_checker_cb()
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  if (OB_FAIL(palf_handle_impl_->reset_reconfig_checker_cb())) {
-    PALF_LOG(WARN, "reset_reconfig_checker_cb failed", KR(ret));
-  } else {
-    PALF_LOG(INFO, "reset_reconfig_checker_cb success", KR(ret));
   }
   return ret;
 }

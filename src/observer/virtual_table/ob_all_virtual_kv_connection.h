@@ -35,11 +35,8 @@ public:
 private:
   enum CONN_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    CLIENT_IP,
+        CLIENT_IP = common::OB_APP_MIN_COLUMN_ID,
     CLIENT_PORT,
-    TENANT_ID,
     USER_ID,
     DATABASE_ID,
     FIRST_ACTIVE_TIME,

@@ -69,19 +69,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPurgeDatabaseResolver);
 };
 
-class ObPurgeTenantResolver : public ObDDLResolver
-{
-  static const int TENANT_NODE = 0;
-public:
-  explicit ObPurgeTenantResolver(ObResolverParams &params)
-    : ObDDLResolver(params){}
-  virtual ~ObPurgeTenantResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObPurgeTenantResolver);
-};
-
 class ObPurgeRecycleBinResolver : public ObDDLResolver
 {
 public:

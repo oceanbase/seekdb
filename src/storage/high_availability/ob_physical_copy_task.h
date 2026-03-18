@@ -20,6 +20,7 @@
 #include "lib/thread/ob_work_queue.h"
 #include "lib/thread/ob_dynamic_thread_pool.h"
 #include "lib/atomic/ob_atomic.h"
+#include "lib/allocator/page_arena.h"
 #include "share/ob_common_rpc_proxy.h" // ObCommonRpcProxy
 #include "share/ob_srv_rpc_proxy.h" // ObPartitionServiceRpcProxy
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
@@ -38,6 +39,10 @@
 
 namespace oceanbase
 {
+namespace restore
+{
+class ObIRestoreHelper;
+}
 namespace storage
 {
 
@@ -55,6 +60,28 @@ public:
   virtual int generate_next_task(ObITask *&next_task) override;
   VIRTUAL_TO_STRING_KV(K("ObPhysicalCopyFinishTask"), KP(this), KPC(copy_ctx_));
 private:
+  class ObCopyMacroBlockHelperReader final : public ObICopyMacroBlockReader
+  {
+  public:
+    ObCopyMacroBlockHelperReader();
+    virtual ~ObCopyMacroBlockHelperReader() override;
+    int init(
+        restore::ObIRestoreHelper *proto_helper,
+        const ObITable::TableKey &table_key,
+        const ObCopyMacroRangeInfo &range_info,
+        const share::SCN &backfill_tx_scn,
+        const int64_t data_version,
+        ObMacroBlockReuseMgr *reuse_mgr);
+    virtual int get_next_macro_block(CopyMacroBlockReadData &read_data) override;
+    virtual Type get_type() const override { return MACRO_BLOCK_OB_READER; }
+    virtual int64_t get_data_size() const override { return 0; }
+
+  private:
+    common::ObArenaAllocator allocator_;
+    restore::ObIRestoreHelper *helper_;
+    bool is_inited_;
+    DISALLOW_COPY_AND_ASSIGN(ObCopyMacroBlockHelperReader);
+  };
   int fetch_macro_block_with_retry_(
       ObMacroBlocksWriteCtx &copied_ctx);
   int fetch_macro_block_(
@@ -63,27 +90,12 @@ private:
   int build_macro_block_copy_info_(ObSSTableCopyFinishTask *finish_task);
   int get_macro_block_reader_(
       ObICopyMacroBlockReader *&reader);
-  int get_restore_reader_(
-      const ObCopyMacroBlockReaderInitParam &init_param,
-      ObICopyMacroBlockReader *&reader);
-  int get_macro_block_restore_reader_(
-      const ObCopyMacroBlockReaderInitParam &init_param,
-      ObICopyMacroBlockReader *&reader);
-  int get_ddl_macro_block_restore_reader_(
-      const ObCopyMacroBlockReaderInitParam &init_param,
-      ObICopyMacroBlockReader *&reader);
-  int get_remote_macro_block_restore_reader_(
-      const ObCopyMacroBlockReaderInitParam &init_param,
-      ObICopyMacroBlockReader *&reader);
   int get_macro_block_writer_(
       ObICopyMacroBlockReader *reader,
       ObIndexBlockRebuilder *index_block_rebuilder,
       ObStorageHAMacroBlockWriter *&writer);
   void free_macro_block_reader_(ObICopyMacroBlockReader *&reader);
   void free_macro_block_writer_(ObStorageHAMacroBlockWriter *&writer);
-  int build_copy_macro_block_reader_init_param_(
-      ObCopyMacroBlockReaderInitParam &init_param);
-  int build_data_version_for_macro_block_reuse_(ObCopyMacroBlockReaderInitParam &init_param);
   int record_server_event_();
 private:
   // For rebuilder can not retry, define MAX_RETRY_TIMES as 1.

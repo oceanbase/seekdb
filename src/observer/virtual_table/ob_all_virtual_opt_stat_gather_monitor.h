@@ -46,10 +46,7 @@ private:
   char svr_ip_[common::MAX_IP_ADDR_LENGTH + 2];
   enum COLUMNS
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    SESSION_ID,
+        SESSION_ID = common::OB_APP_MIN_COLUMN_ID,
     TRACE_ID,
     TASK_ID,
     TYPE,

@@ -96,7 +96,6 @@ public:
     oceanbase::rpc::frame::ObReqTransport req_transport(NULL, NULL);
     oceanbase::obrpc::ObSrvRpcProxy rpc_proxy;
     oceanbase::obrpc::ObCommonRpcProxy rs_rpc_proxy;
-    oceanbase::share::ObRsMgr rs_mgr;
     self.set_ip_addr("127.0.0.1", 8086);
     EXPECT_EQ(OB_SUCCESS, ret);
     ret = getter.add_tenant(tenant_id_,

@@ -25,11 +25,6 @@ namespace share
 {
 struct ObUserResourceCalculateArg;
 }
-namespace obrpc
-{
-struct ObGetTenantResArg;
-struct ObTenantLogicalRes;
-}
 namespace pl
 {
 
@@ -49,20 +44,6 @@ public:
       sql::ParamStore &params,
       common::ObObj &result);
 private:
-  static int cal_tenant_logical_res_for_standby_(
-      const uint64_t tenant_id,
-      const int64_t standby_unit_num,
-      ObUserResourceCalculateArg &arg);
-  static int get_tenant_resource_server_for_calc_(
-      const uint64_t tenant_id,
-      common::ObIArray<ObAddr> &servers);
-  static int get_server_resource_info_(
-      const common::ObIArray<ObAddr> &servers,
-      const uint64_t tenant_id,
-      common::ObIArray<obrpc::ObTenantLogicalRes> &res);
-  static int check_server_resource_(
-      const uint64_t tenant_id,
-      common::ObIArray<obrpc::ObTenantLogicalRes> &res);
   static int parse_dict_like_args_(
       const char* ptr,
       share::ObUserResourceCalculateArg &arg);
@@ -78,14 +59,6 @@ private:
       char *buf,
       const int64_t buf_len,
       int64_t &pos);
-  static int get_max_ls_count_of_server_(
-      const uint64_t tenant_id,
-      int64_t &ls_count);
-  static int get_max_value_of_logical_res_(
-      const int64_t &logical_type,
-      const int64_t &server_cnt,
-      const common::ObIArray<obrpc::ObTenantLogicalRes> &res,
-      int64_t &max_logical_value);
 };
 
 } // namespace pl

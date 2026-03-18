@@ -619,8 +619,7 @@ bool ObConfigMemoryLimitChecker::check(const ObConfigItem &t) const
   bool is_valid = false;
   int64_t value = ObConfigCapacityParser::get(t.str(), is_valid, false);
   if (is_valid) {
-    int64_t min_memory_size = OBSERVER.is_arbitration_mode() ? lib::ObRunningModeConfig::instance().MIN_MEM :
-                                                               lib::ObRunningModeConfig::instance().MINI_MEM_LOWER;
+    int64_t min_memory_size = lib::ObRunningModeConfig::instance().MINI_MEM_LOWER;
     is_valid = 0 == value || value >= min_memory_size;
   }
   return is_valid;

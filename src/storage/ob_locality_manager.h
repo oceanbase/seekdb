@@ -18,13 +18,8 @@
 #define OCEANBASE_STORAGE_OB_LOCALITY_MANAGER_H_
 
 #include "lib/mysqlclient/ob_mysql_proxy.h"
-#ifdef OB_BUILD_ARBITRATION
-#include "share/arbitration_service/ob_arbitration_service_table_operator.h"
-#endif
 #include "share/ob_locality_info.h"
-#include "share/ob_locality_table_operator.h"
 #include "common/ob_zone_type.h"
-#include "share/ob_alive_server_tracer.h"
 #include "share/ob_i_server_auth.h"
 #include "lib/queue/ob_dedup_queue.h"
 
@@ -36,7 +31,7 @@ class ObRemoteSqlProxy;
 }
 namespace storage
 {
-class ObLocalityManager : public share::ObILocalityManager, public share::ObIServerAuth
+class ObLocalityManager : public share::ObIServerAuth
 {
   static const int64_t REFRESH_LOCALITY_TASK_NUM = 5;
   static const int64_t RELOAD_LOCALITY_INTERVAL = 10 * 1000 * 1000L; //10S
@@ -52,19 +47,12 @@ public:
   int is_server_legitimate(const common::ObAddr& addr, bool& is_valid);
   void set_ssl_invited_nodes(const common::ObString &new_value);
   int load_region();
-  int set_version(int64_t version);
-  virtual int get_server_locality_array(common::ObIArray<share::ObServerLocality> &server_locality_array,
-                                        bool &has_readonly_zone) const;
   virtual int get_server_zone_type(const common::ObAddr &server, common::ObZoneType &zone_type) const;
   virtual int get_server_region(const common::ObAddr &server, common::ObRegion &region) const;
   virtual int get_server_idc(const common::ObAddr &server, common::ObIDC &idc) const;
-#ifdef OB_BUILD_ARBITRATION
-  int load_arb_service_info();
-  int get_arb_service_addr(common::ObAddr &arb_service_addr) const;
-#endif
   int get_server_zone(const common::ObAddr &server, common::ObZone &zone) const;
-  virtual int is_local_zone_read_only(bool &is_readonly);
-  virtual int is_local_server(const common::ObAddr &server, bool &is_local);
+  int is_local_zone_read_only(bool &is_readonly);
+  int is_local_server(const common::ObAddr &server, bool &is_local);
   int is_same_zone(const common::ObAddr &server, bool &is_same_zone);
 private:
   class ReloadLocalityTask : public common::ObTimerTask
@@ -93,7 +81,6 @@ private:
     ObLocalityManager *locality_mgr_;
   };
 private:
-  int set_locality_info(share::ObLocalityInfo &locality_info);
   int check_if_locality_has_been_loaded();
   int add_refresh_locality_task();
 private:
@@ -101,15 +88,8 @@ private:
   mutable common::SpinRWLock rwlock_;
   common::ObAddr self_;
   common::ObMySQLProxy *sql_proxy_;
-  share::ObLocalityInfo locality_info_;
-  share::ObServerLocalityCache server_locality_cache_;
-  share::ObLocalityTableOperator locality_operator_;
   common::ObDedupQueue refresh_locality_task_queue_;
   ReloadLocalityTask reload_locality_task_;
-#ifdef OB_BUILD_ARBITRATION
-  common::ObAddr arb_service_addr_;
-  share::ObArbitrationServiceTableOperator arbitration_service_table_operator_;
-#endif
   char *ssl_invited_nodes_buf_;//common::OB_MAX_CONFIG_VALUE_LEN, use new
   bool is_loaded_;
   static const int64_t FAIL_TO_LOAD_LOCALITY_CACHE_TIMEOUT = 60L * 1000L * 1000L;

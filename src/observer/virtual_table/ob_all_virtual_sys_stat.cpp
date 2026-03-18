@@ -138,7 +138,6 @@ int ObAllVirtualSysStat::update_all_stats_(const int64_t tenant_id, common::ObDi
     stat_events.get(ObStatEventIds::ASYNC_LOG_FLUSH_SPEED - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_async_flush_log_speed() : 0;
 
-
     stat_events.get(ObStatEventIds::ASYNC_GENERIC_LOG_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_generic_log_write_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_USER_REQUEST_LOG_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
@@ -337,19 +336,6 @@ int ObAllVirtualSysStat::process_curr_tenant(ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch(col_id) {
-          case TENANT_ID: {
-            cells[cell_idx].set_int(tenant_id_);
-            break;
-          }
-          case SVR_IP: {
-            cells[cell_idx].set_varchar(ipstr_);
-            cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-          case SVR_PORT: {
-            cells[cell_idx].set_int(port_);
-            break;
-          }
           case STATISTIC: {
             if (stat_iter_ < ObStatEventIds::STAT_EVENT_ADD_END) {
               cells[cell_idx].set_int(stat_iter_);

@@ -1286,34 +1286,6 @@ void ObDASLocationRouter::refresh_location_cache_by_errno(bool is_nonblock, int 
 
 void ObDASLocationRouter::force_refresh_location_cache(bool is_nonblock, int err_no)
 {
-  int ret = OB_SUCCESS;
-  lib::ContextParam param;
-  param.set_mem_attr(MTL_ID(), "DasRefrLoca", ObCtxIds::DEFAULT_CTX_ID)
-    .set_properties(lib::USE_TL_PAGE_OPTIONAL)
-    .set_page_size(OB_MALLOC_NORMAL_BLOCK_SIZE)
-    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
-  CREATE_WITH_TEMP_CONTEXT(param) {
-    ObList<ObTabletID, ObIAllocator> failed_list(CURRENT_CONTEXT->get_allocator());
-    FOREACH_X(id_iter, all_tablet_list_, OB_SUCC(ret)) {
-      if (!element_exist(succ_tablet_list_, *id_iter) && !element_exist(failed_list, *id_iter)) {
-        if (OB_FAIL(failed_list.push_back(*id_iter))) {
-          LOG_WARN("store failed tablet id failed", KR(ret), K(id_iter));
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(GCTX.location_service_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("GCTX.location_service_ is null", KR(ret));
-      } else if (OB_FAIL(GCTX.location_service_->batch_renew_tablet_locations(MTL_ID(),
-                                                                              failed_list,
-                                                                              err_no,
-                                                                              is_nonblock))) {
-        LOG_WARN("batch renew tablet locations failed", KR(ret),
-            "tenant_id", MTL_ID(), K(err_no), K(is_nonblock), K(failed_list));
-      }
-    }
-  }
   all_tablet_list_.clear();
   succ_tablet_list_.clear();
 }

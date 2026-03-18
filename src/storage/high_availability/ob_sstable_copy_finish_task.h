@@ -35,6 +35,10 @@
 
 namespace oceanbase
 {
+namespace restore
+{
+class ObIRestoreHelper;
+}
 namespace storage
 {
 
@@ -50,19 +54,11 @@ struct ObPhysicalCopyTaskInitParam final
   TO_STRING_KV(K_(tenant_id), 
                K_(ls_id), 
                K_(tablet_id), 
-               K_(src_info), 
                KPC_(sstable_param),
                K_(sstable_macro_range_info), 
                KP_(tablet_copy_finish_task),
                KP_(ls), 
-               K_(is_leader_restore), 
-               K_(restore_action),
-               KP_(restore_base_info),
-               KP_(meta_index_store),
-               KP_(second_meta_index_store),
-               K_(need_sort_macro_meta),
-               K_(need_check_seq),
-               K_(ls_rebuild_seq),
+               KP_(helper),
                KP_(macro_block_reuse_mgr),
                KPC_(extra_info));
 
@@ -70,19 +66,11 @@ struct ObPhysicalCopyTaskInitParam final
   uint64_t tenant_id_;
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
-  ObStorageHASrcInfo src_info_;
   const ObMigrationSSTableParam *sstable_param_;
   ObCopySSTableMacroRangeInfo sstable_macro_range_info_;
   ObTabletCopyFinishTask *tablet_copy_finish_task_;
   ObLS *ls_;
-  bool is_leader_restore_;
-  ObTabletRestoreAction::ACTION restore_action_;
-  const ObRestoreBaseInfo *restore_base_info_;
-  backup::ObBackupMetaIndexStoreWrapper *meta_index_store_;
-  backup::ObBackupMetaIndexStoreWrapper *second_meta_index_store_;
-  bool need_sort_macro_meta_; // not use
-  bool need_check_seq_;
-  int64_t ls_rebuild_seq_;
+  restore::ObIRestoreHelper *helper_;
   ObMacroBlockReuseMgr *macro_block_reuse_mgr_;
   ObCopyTabletRecordExtraInfo *extra_info_;
 
@@ -270,8 +258,6 @@ private:
       ObTablet *tablet,
       const blocksstable::ObSSTableMergeRes &res,
       ObTabletCreateSSTableParam &param);
-  int build_restore_macro_block_id_mgr_(
-      const ObPhysicalCopyTaskInitParam &init_param);
   int check_sstable_valid_();
   int check_sstable_meta_(
       const ObMigrationSSTableParam &src_meta,
@@ -299,7 +285,6 @@ private:
   storage::ObLS *ls_;
   ObLSTabletService *tablet_service_;
   ObSSTableIndexBuilder sstable_index_builder_;
-  ObRestoreMacroBlockIdMgr *restore_macro_block_id_mgr_;
   DISALLOW_COPY_AND_ASSIGN(ObSSTableCopyFinishTask);
 };
 

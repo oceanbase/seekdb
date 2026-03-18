@@ -43,7 +43,6 @@ ObTransService::ObTransService()
       location_adapter_(&location_adapter_def_),
       schema_service_(NULL),
       ts_mgr_(NULL),
-      server_tracer_(NULL),
       input_queue_count_(0),
       output_queue_count_(0),
 #ifdef ENABLE_DEBUG_LOG
@@ -64,7 +63,6 @@ int ObTransService::mtl_init(ObTransService *&it)
   share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   obrpc::ObBatchRpc *batch_rpc = GCTX.batch_rpc_;
   obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
-  share::ObAliveServerTracer *server_tracer = GCTX.server_tracer_;
   ObSrvNetworkFrame *net_frame = GCTX.net_frame_;
   rpc::frame::ObReqTransport *req_transport = net_frame->get_req_transport();
   if (OB_FAIL(it->rpc_def_.init(it, req_transport, self, batch_rpc))) {
@@ -79,8 +77,7 @@ int ObTransService::mtl_init(ObTransService *&it)
                               &it->gti_source_def_,
                               &OB_TS_MGR,
                               rpc_proxy,
-                              schema_service,
-                              server_tracer))) {
+                              schema_service))) {
     TRANS_LOG(ERROR, "trans-service init error", KR(ret), KPC(it));
   }
   return ret;
@@ -92,8 +89,7 @@ int ObTransService::init(const ObAddr &self,
                          ObIGtiSource *gti_source,
                          ObTsMgr *ts_mgr,
                          obrpc::ObSrvRpcProxy *rpc_proxy,
-                         share::schema::ObMultiVersionSchemaService *schema_service,
-                         share::ObAliveServerTracer *server_tracer)
+                         share::schema::ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
   ObLinkQueueThreadPool::set_run_wrapper(MTL_CTX());
@@ -115,12 +111,11 @@ int ObTransService::init(const ObAddr &self,
              || OB_ISNULL(gti_source)
              || OB_ISNULL(ts_mgr)
              || OB_ISNULL(rpc_proxy)
-             || OB_ISNULL(schema_service)
-             || OB_ISNULL(server_tracer)) {
+             || OB_ISNULL(schema_service)) {
     TRANS_LOG(WARN, "invalid argument", K(self),
               KP(location_adapter), KP(rpc), 
               KP(location_adapter), KP(ts_mgr),
-              KP(rpc_proxy), KP(schema_service), KP(server_tracer));
+              KP(rpc_proxy), KP(schema_service));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(timer_.init("TransTimeWheel"))) {
     TRANS_LOG(ERROR, "timer init error", KR(ret));
@@ -147,7 +142,6 @@ int ObTransService::init(const ObAddr &self,
     rpc_proxy_ = rpc_proxy;
     schema_service_ = schema_service;
     ts_mgr_ = ts_mgr;
-    server_tracer_ = server_tracer;
     rollback_sp_msg_sequence_ = ObTimeUtil::current_time();
     is_inited_ = true;
     TRANS_LOG(INFO, "transaction service inited success", KPC(this), K(tenant_memory_limit), K_(tablet_to_ls_cache));
@@ -632,16 +626,6 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
                   K(type));
       } else if (OB_FAIL(tx_result.merge_result(result.tx_result_))) {
         TRANS_LOG(WARN, "merge tx result failed", KR(ret), K(result));
-      }
-
-      if (OB_NOT_MASTER == ret) {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_SUCCESS
-            != (tmp_ret = location_adapter_->nonblock_renew(tx_desc.cluster_id_, tx_desc.tenant_id_,
-                                                            ls_id))) {
-          TRANS_LOG(WARN, "refresh location cache failed", KR(tmp_ret), K(tx_desc), K(ls_id),
-                    K(type));
-        }
       }
     } while (OB_NOT_MASTER == ret && this->self_ == tx_desc.addr_);
 

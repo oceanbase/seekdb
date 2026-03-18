@@ -37,7 +37,6 @@ int ObDDLChecksumOperator::fill_one_item(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(item));
   } else if (OB_FAIL(dml.add_pk_column("execution_id", item.execution_id_))
-      || OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
       || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, item.table_id_)))
       // task_id is the primary key in __all_ddl_task_status, so it can uniquely identify a DDL.
       || OB_FAIL(dml.add_pk_column("ddl_task_id", item.ddl_task_id_))
@@ -239,9 +238,9 @@ int ObDDLChecksumOperator::get_part_column_checksum(
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(table_id), K(execution_id), K(ddl_task_id), K(sql_proxy.is_inited()), K(column_checksum_map.created()));
   } else if (OB_FAIL(sql.assign_fmt(
     "SELECT column_id, checksum FROM %s "
-    "WHERE execution_id = %ld AND tenant_id = %ld AND table_id = %ld AND tablet_id = %ld AND ddl_task_id = %ld AND task_id %s "
+    "WHERE execution_id = %ld AND table_id = %ld AND tablet_id = %ld AND ddl_task_id = %ld AND task_id %s "
     "ORDER BY column_id", OB_ALL_DDL_CHECKSUM_TNAME,
-    execution_id, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), table_id, tablet_id, ddl_task_id, is_unique_index_checking ? "< 0" : ">= 0"))) {
+    execution_id, table_id, tablet_id, ddl_task_id, is_unique_index_checking ? "< 0" : ">= 0"))) {
     LOG_WARN("fail to assign fmt", K(ret), K(OB_ALL_DDL_CHECKSUM_TNAME), K(execution_id), K(ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)), K(table_id), K(tablet_id), K(ddl_task_id), K(is_unique_index_checking));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -321,8 +320,8 @@ int ObDDLChecksumOperator::get_tablet_latest_execution_id(
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(index_table_id), K(ddl_task_id), K(tablet_id), K(sql_proxy.is_inited()));
   } else if (OB_FAIL(sql.assign_fmt(
     "SELECT max(execution_id) as execution_id FROM %s "
-    "WHERE  tenant_id = %ld AND table_id = %ld AND ddl_task_id = %ld AND task_id = %ld",
-    OB_ALL_DDL_CHECKSUM_TNAME, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), index_table_id, ddl_task_id, tablet_id))) {
+    "WHERE  table_id = %ld AND ddl_task_id = %ld AND task_id = %ld",
+    OB_ALL_DDL_CHECKSUM_TNAME, index_table_id, ddl_task_id, tablet_id))) {
     LOG_WARN("fail to assign fmt", K(ret), K(OB_ALL_DDL_CHECKSUM_TNAME), K(ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)), K(index_table_id), K(ddl_task_id), K(tablet_id));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -427,11 +426,10 @@ int ObDDLChecksumOperator::get_tablet_checksum_record(
         if ((i != 0 && i % batch_size == 0) /* reach batch size */ || i == tablet_ids.count() - 1 /* reach end */) {
           if (OB_FAIL(sql.assign_fmt(
               "SELECT task_id FROM %s "
-              "WHERE execution_id = %ld AND tenant_id = %ld AND table_id = %ld AND ddl_task_id = %ld AND task_id >= %ld and task_id <= %ld "
+              "WHERE execution_id = %ld AND table_id = %ld AND ddl_task_id = %ld AND task_id >= %ld and task_id <= %ld "
               "GROUP BY task_id", 
               OB_ALL_DDL_CHECKSUM_TNAME,
               execution_id, 
-              ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
               ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id), 
               ddl_task_id, 
               batch_tablet_array.at(0), // first tablet_id in one batch
@@ -485,10 +483,9 @@ int ObDDLChecksumOperator::get_local_index_tablet_finish_status(
         const uint64_t last_tablet_id = batch_tablet_array.at(batch_tablet_array.count() - 1);
         if (OB_FAIL(sql.assign_fmt(
             "SELECT task_id FROM %s "
-            "WHERE tenant_id = %ld AND table_id = %ld AND ddl_task_id = %ld AND task_id >= %ld and task_id <= %ld "
+            "WHERE table_id = %ld AND ddl_task_id = %ld AND task_id >= %ld and task_id <= %ld "
             "GROUP BY task_id",
             OB_ALL_DDL_CHECKSUM_TNAME,
-            ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
             ObSchemaUtils::get_extract_schema_id(exec_tenant_id, index_table_id),
             ddl_task_id,
             first_tablet_id, // first tablet id in one batch
@@ -525,9 +522,9 @@ int ObDDLChecksumOperator::get_table_column_checksum(
     LOG_WARN("ddl sim failure", K(ret), K(tenant_id), K(ddl_task_id));
   } else if (OB_FAIL(sql.assign_fmt(
       "SELECT column_id, checksum FROM %s "
-      "WHERE execution_id = %ld AND tenant_id = %ld AND table_id = %ld AND ddl_task_id = %ld AND task_id %s "
+      "WHERE execution_id = %ld AND table_id = %ld AND ddl_task_id = %ld AND task_id %s "
       "ORDER BY column_id", OB_ALL_DDL_CHECKSUM_TNAME,
-      execution_id, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
+      execution_id,
       ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id), ddl_task_id, is_unique_index_checking ? "< 0" : ">= 0"))) {
     LOG_WARN("fail to assign fmt", K(ret));
   } else if (OB_FAIL(DDL_SIM(tenant_id, ddl_task_id, GET_TABLE_COLUMN_CHECKSUM_SLOW))) {
@@ -718,7 +715,7 @@ int ObDDLChecksumOperator::delete_checksum(
     LOG_WARN("assign fmt failed", K(ret), K(tablet_task_id), K(remove_tablet_chksum_sql));
   } else if (OB_FAIL(sql.assign_fmt(
       "DELETE /*+ use_plan_cache(none) */ FROM %s "
-      "WHERE tenant_id = 0 AND execution_id = %ld AND ddl_task_id = %ld AND table_id IN (%ld, %ld) %.*s",
+      "WHERE execution_id = %ld AND ddl_task_id = %ld AND table_id IN (%ld, %ld) %.*s",
       OB_ALL_DDL_CHECKSUM_TNAME, execution_id, ddl_task_id, source_table_id, dest_table_id,
       static_cast<int>(remove_tablet_chksum_sql.length()), remove_tablet_chksum_sql.ptr()))) {
     LOG_WARN("fail to assign fmt", K(ret), K(remove_tablet_chksum_sql));

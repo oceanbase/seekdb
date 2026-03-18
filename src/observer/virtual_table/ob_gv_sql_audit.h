@@ -69,10 +69,7 @@ private:
 private:
   enum WAIT_COLUMN
   {
-    SERVER_IP = common::OB_APP_MIN_COLUMN_ID,
-    SERVER_PORT,
-    TENANT_ID,
-    REQUEST_ID,
+        REQUEST_ID = common::OB_APP_MIN_COLUMN_ID,
     TRACE_ID,
     CLIENT_IP,
     CLIENT_PORT,
@@ -189,15 +186,7 @@ private:
     INSERT_DUPLICATE_ROW_COUNT,
   };
 
-  const static int64_t PRI_KEY_IP_IDX        = 0;
-  const static int64_t PRI_KEY_PORT_IDX      = 1;
-  const static int64_t PRI_KEY_TENANT_ID_IDX = 2;
-  const static int64_t PRI_KEY_REQ_ID_IDX    = 3;
-
-  const static int64_t IDX_KEY_TENANT_ID_IDX = 0;
-  const static int64_t IDX_KEY_REQ_ID_IDX    = 1;
-  const static int64_t IDX_KEY_IP_IDX        = 2;
-  const static int64_t IDX_KEY_PORT_IDX      = 3;
+  const static int64_t PRI_KEY_REQ_ID_IDX    = 0;
 
 
   DISALLOW_COPY_AND_ASSIGN(ObGvSqlAudit);

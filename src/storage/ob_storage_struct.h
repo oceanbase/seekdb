@@ -366,18 +366,13 @@ public:
 struct ObHATableStoreParam final
 {
 public:
-  ObHATableStoreParam();
   ObHATableStoreParam(
-    const int64_t transfer_seq,
-    const bool need_check_transfer_seq,
     const bool need_replace_remote_sstable = false,
     const bool is_only_replace_major = false);
   ~ObHATableStoreParam() = default;
   bool is_valid() const;
-  TO_STRING_KV(K_(transfer_seq), K_(need_check_transfer_seq), K_(need_replace_remote_sstable), K_(is_only_replace_major));
+  TO_STRING_KV(K_(need_replace_remote_sstable), K_(is_only_replace_major));
 public:
-  int64_t transfer_seq_;
-  bool need_check_transfer_seq_;
   bool need_replace_remote_sstable_; // only true for restore replace sstable.
   bool is_only_replace_major_;
 };
@@ -449,8 +444,6 @@ struct ObUpdateTableStoreParam
     PARAM_DEFINE_FUNC(var_type, ha_info_, var_name)
   #define COMP_PARAM_FUNC(var_type, var_name) \
     PARAM_DEFINE_FUNC(var_type, compaction_info_, var_name)
-  HA_PARAM_FUNC(bool, need_check_transfer_seq);
-  HA_PARAM_FUNC(int64_t, transfer_seq);
   COMP_PARAM_FUNC(compaction::ObMergeType, merge_type);
   COMP_PARAM_FUNC(const blocksstable::ObMajorChecksumInfo&, major_ckm_info);
   COMP_PARAM_FUNC(share::SCN, clog_checkpoint_scn);

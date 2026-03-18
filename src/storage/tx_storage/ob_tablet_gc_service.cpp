@@ -488,11 +488,7 @@ int ObTabletGCHandler::check_tablet_from_aborted_tx(const ObTablet &tablet, Tabl
   const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   share::SCN rec_scn;
 
-  if (tablet.get_tablet_meta().has_transfer_table()) {
-    gc_status = TabletGCStatus::NEED_GC_IMMEDIATELY;
-    STORAGE_LOG(INFO, "tablet has transfer table, should delete tablet instantly",
-        K(ret), K(ls_id), K(tablet_id), "transfer_info", tablet.get_tablet_meta().transfer_info_);
-  } else if (OB_FAIL(tablet.get_mds_table_rec_scn(rec_scn))) {
+  if (OB_FAIL(tablet.get_mds_table_rec_scn(rec_scn))) {
     STORAGE_LOG(WARN, "failed to get mds table rec scn", K(ret), K(ls_id), K(tablet_id));
   } else if (rec_scn.is_max()) {
     gc_status = TabletGCStatus::NEED_GC_IMMEDIATELY;
@@ -709,7 +705,7 @@ int ObTabletGCHandler::gc_tablets(const common::ObIArray<ObTabletHandle> &delete
         SERVER_EVENT_SYNC_ADD("tablet_gc", "gc_tablet_finish",
                               "ls_id", tablet_handle.get_obj()->get_tablet_meta().ls_id_.id(),
                               "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_.id(),
-                              "transfer_seq", tablet_handle.get_obj()->get_tablet_meta().transfer_info_.transfer_seq_);
+                              "transfer_seq", 0);
 #endif
         STORAGE_LOG(INFO, "gc tablet finish", K(ret),
                           "ls_id", tablet_handle.get_obj()->get_tablet_meta().ls_id_,

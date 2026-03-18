@@ -179,10 +179,6 @@ int ObAllVirtualSessionPsInfo::fill_cells(uint64_t tenant_id,
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
-        case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::TENANT_ID: {
-          cells[i].set_int(tenant_id);
-          break;
-        }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::PROXY_SESSION_ID: {
           cells[i].set_uint64(cur_session_info_->get_proxy_sessid());
           break;
@@ -197,21 +193,6 @@ int ObAllVirtualSessionPsInfo::fill_cells(uint64_t tenant_id,
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::PS_INNER_STMT_ID: {
           cells[i].set_int(fetcher_.get_inner_stmt_id());
-          break;
-        }
-        case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::SVR_IP: {
-          ObString ipstr;
-          if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-            SERVER_LOG(WARN, "get server ip failed", K(ret));
-          } else {
-            cells[i].set_varchar(ipstr);
-            cells[i].set_collation_type(ObCharset::get_default_collation(
-                ObCharset::get_default_charset()));
-          }
-          break;
-        }
-        case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::SVR_PORT: {
-          cells[i].set_int(GCTX.self_addr().get_port());
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::STMT_TYPE: {

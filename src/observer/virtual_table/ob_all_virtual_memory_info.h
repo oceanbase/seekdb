@@ -35,16 +35,12 @@ public:
 private:
   enum CACHE_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    CTX_ID,
+        CTX_ID = common::OB_APP_MIN_COLUMN_ID,
     LABEL,
     CTX_NAME,
     MOD_TYPE,
     MOD_ID,
     MOD_NAME,
-    ZONE,
     HOLD,
     USED,
     COUNT,

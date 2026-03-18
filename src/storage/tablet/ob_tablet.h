@@ -473,7 +473,6 @@ public:
       const int64_t len,
       share::ObLSID &ls_id,
       common::ObTabletID &tablet_id);
-  static int check_transfer_seq_equal(const ObTablet &tablet, const int64_t transfer_seq);
 
   // migration section
   // used for migration source generating create tablet rpc argument
@@ -536,7 +535,7 @@ public:
   share::SCN get_mds_checkpoint_scn() const { return tablet_meta_.mds_checkpoint_scn_; }
   int64_t get_snapshot_version() const { return tablet_meta_.snapshot_version_; }
   int64_t get_multi_version_start() const { return tablet_meta_.multi_version_start_; }
-  int64_t get_transfer_seq() const { return tablet_meta_.transfer_info_.transfer_seq_; }
+  int64_t get_transfer_seq() const { return 0; }
   int get_snapshot_version(share::SCN &scn) const;
 
   //TODO huronghui.hrh: rename function for row store sstable

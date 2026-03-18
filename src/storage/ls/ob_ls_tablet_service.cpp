@@ -38,6 +38,7 @@
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tablet/ob_tablet_service_clog_replay_executor.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/table_load/ob_table_load_coordinator.h"
 #include "observer/table_load/ob_table_load_store.h"
@@ -799,7 +800,7 @@ int ObLSTabletService::rebuild_tablet_with_old(
   const common::ObTabletID &tablet_id = mig_tablet_param.tablet_id_;
   const share::ObLSID &ls_id = mig_tablet_param.ls_id_;
   const ObTabletMapKey key(ls_id, tablet_id);
-  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, mig_tablet_param.transfer_info_.transfer_seq_);
+  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, 0);
 
   if (OB_FAIL(direct_get_tablet(tablet_id, old_tablet_hdl))) {
     LOG_WARN("failed to get tablet", K(ret), K(key));
@@ -843,7 +844,7 @@ int ObLSTabletService::migrate_update_tablet(
   ObTablet *new_tablet = nullptr;
   ObMetaDiskAddr disk_addr;
   ObFreezer *freezer = ls_->get_freezer();
-  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, mig_tablet_param.transfer_info_.transfer_seq_);
+  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, 0);
   const bool is_transfer = false;
 
   if (OB_FAIL(direct_get_tablet(tablet_id, old_tablet_hdl))) {
@@ -884,7 +885,7 @@ int ObLSTabletService::migrate_create_tablet(
   ObTabletHandle tmp_tablet_hdl;
   ObTabletHandle tablet_handle;
   ObMetaDiskAddr disk_addr;
-  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, mig_tablet_param.transfer_info_.transfer_seq_);
+  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, 0);
   ObTransService *tx_svr = MTL(ObTransService*);
   const bool is_transfer = false;
 
@@ -1621,8 +1622,6 @@ int ObLSTabletService::update_tablet_restore_status(
       LOG_WARN("can not change restore status", K(ret), K(current_status), K(restore_status), KPC(tablet));
     } else if (OB_FAIL(tablet->tablet_meta_.ha_status_.set_restore_status(restore_status))) {
       LOG_WARN("failed to set restore status", K(ret), K(restore_status), KPC(tablet));
-    } else if (need_reset_transfer_flag
-               && OB_FALSE_IT((void)tablet->tablet_meta_.reset_transfer_table())) {
     } else if (need_to_set_split_data_complete
                && OB_FALSE_IT((void)tablet->tablet_meta_.split_info_.set_data_incomplete(false))) {
     } else {
@@ -1637,7 +1636,7 @@ int ObLSTabletService::update_tablet_restore_status(
       } else if (OB_FAIL(safe_update_cas_tablet(key, disk_addr, tablet_handle, new_tablet_handle, time_guard))) {
         LOG_WARN("fail to update tablet", K(ret), K(key), K(disk_addr));
       } else {
-        LOG_INFO("succeeded to build new tablet", K(ret), K(key), K(disk_addr), K(restore_status), K(need_reset_transfer_flag), K(tablet_handle));
+        LOG_INFO("succeeded to build new tablet", K(ret), K(key), K(disk_addr), K(restore_status), K(tablet_handle));
 #ifdef ERRSIM
         SERVER_EVENT_SYNC_ADD("storage_ha", "update_tablet_restore_status",
                               "tablet_id", tablet_id.id(),
@@ -1651,8 +1650,6 @@ int ObLSTabletService::update_tablet_restore_status(
         if (OB_SUCCESS != (tmp_ret = tablet->tablet_meta_.ha_status_.set_restore_status(current_status))) {
           LOG_WARN("failed to set restore status", K(tmp_ret), K(current_status), KPC(tablet));
           ob_abort();
-        } else if (need_reset_transfer_flag) { //rollback has_transfer_table
-          tablet->tablet_meta_.transfer_info_.has_transfer_table_ = current_has_transfer_table;
         }
         tablet->tablet_meta_.split_info_.set_data_incomplete(current_split_data_incomplete_status);
       }
@@ -2021,9 +2018,6 @@ int ObLSTabletService::ss_replay_create_tablet_for_trans_info_tmp(
       LOG_WARN("fail to check and set initial state", K(ret), KPC(tmp_tablet));
     } else if (OB_FAIL(tmp_tablet->start_direct_load_task_if_need())) {
       LOG_WARN("start ddl if need failed", K(ret));
-    } else if (tmp_tablet->get_tablet_meta().transfer_info_.has_transfer_table() &&
-        OB_FAIL(ObTabletReplayCreateHandler::record_ls_transfer_info_tmp(ls_handle, tmp_tablet->get_tablet_id(), tmp_tablet->get_tablet_meta().transfer_info_))) {
-      LOG_WARN("fail to record_ls_transfer_info", K(ret), K(tmp_tablet->get_tablet_id()), K(tmp_tablet->get_tablet_meta().transfer_info_));
     }
 
     if (OB_FAIL(ret)) {
@@ -2105,8 +2099,7 @@ int ObLSTabletService::replay_create_tablet(
     const ObMetaDiskAddr &disk_addr,
     const char *buf,
     const int64_t buf_len,
-    const ObTabletID &tablet_id,
-    ObTabletTransferInfo &tablet_transfer_info)
+    const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   bool b_exist = false;
@@ -2182,8 +2175,6 @@ int ObLSTabletService::replay_create_tablet(
     }
 
     if (OB_SUCC(ret)) {
-      tablet_transfer_info = tablet->get_tablet_meta().transfer_info_;
-      FLOG_INFO("succeeded to replay create one tablet", K(ret), K(ls_id), K(tablet_id), K(try_cache_size), K(pool_type), KPC(tablet));
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(rollback_remove_tablet_without_lock(ls_id, tablet_id))) {
@@ -2464,7 +2455,7 @@ int ObLSTabletService::create_inner_tablet(
   ObFreezer *freezer = ls_->get_freezer();
   ObTabletHandle tmp_tablet_hdl;
   ObMetaDiskAddr disk_addr;
-  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, ObTabletTransferInfo::TRANSFER_INIT_SEQ);
+  const ObTabletPersisterParam param(ls_id, ls_->get_ls_epoch(), tablet_id, 0);
   ObTimeGuard time_guard("ObLSTabletService::create_inner_tablet", 10_ms);
   const share::SCN clog_checkpoint_scn = ObTabletMeta::INIT_CLOG_CHECKPOINT_SCN;
   const share::SCN mds_checkpoint_scn = ObTabletMeta::INIT_CLOG_CHECKPOINT_SCN;
@@ -2629,7 +2620,7 @@ int ObLSTabletService::create_empty_shell_tablet(
     ObTabletHandle tablet_handle;
     ObTablet *new_tablet = nullptr;
     ObMetaDiskAddr disk_addr;
-    const ObTabletPersisterParam persist_param(ls_id, ls_->get_ls_epoch(), tablet_id, param.transfer_info_.transfer_seq_);
+    const ObTabletPersisterParam persist_param(ls_id, ls_->get_ls_epoch(), tablet_id, 0);
     if (OB_FAIL(tmp_tablet->init_with_migrate_param(allocator, param, false/*is_update*/, freezer, is_transfer))) {
       LOG_WARN("failed to init tablet", K(ret), K(param));
     } else if (FALSE_IT(time_guard.click("InitTablet"))) {
@@ -8605,9 +8596,6 @@ int ObLSTabletService::check_rollback_tablet_is_same_(
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet should not be NULL", K(ret), K(ls_id), K(tablet_id));
-  } else if (transfer_start_scn != tablet->get_tablet_meta().transfer_info_.transfer_start_scn_) {
-    is_same = false;
-    LOG_ERROR("rollback tablet is not same, cannot rollback", K(ls_id), K(tablet_id), K(transfer_start_scn), KPC(tablet));
   } else {
     is_same = true;
   }

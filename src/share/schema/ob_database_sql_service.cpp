@@ -47,9 +47,7 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     ObDMLSqlSplicer dml;
     if (OB_SUCC(ret)) {
       const int64_t INVALID_REPLICA_NUM = -1;
-      if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                 exec_tenant_id, database_schema.get_tenant_id())))
-          || OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
+      if (OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
                                                       exec_tenant_id, database_schema.get_database_id())))
           || OB_FAIL(dml.add_column("database_name", ObHexEscapeSqlStr(database_schema.get_database_name_str())))
           || OB_FAIL(dml.add_column("collation_type", database_schema.get_collation_type()))
@@ -122,9 +120,7 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
     ObDMLSqlSplicer dml;
     if (OB_SUCC(ret)) {
       const int64_t INVALID_REPLICA_NUM = -1;
-      if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                    exec_tenant_id, database_schema.get_tenant_id())))
-          || OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
+      if (OB_FAIL(dml.add_pk_column("database_id", ObSchemaUtils::get_extract_schema_id(
                                        exec_tenant_id, database_schema.get_database_id())))
           || OB_FAIL(dml.add_column("database_name", ObHexEscapeSqlStr(database_schema.get_database_name_str())))
           || OB_FAIL(dml.add_column(OBJ_GET_K(database_schema, collation_type)))
@@ -195,9 +191,8 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
 
   // delete from __all_database
-  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %lu AND database_id = %lu",
+  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %lu",
                             OB_ALL_DATABASE_TNAME,
-                            ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                             ObSchemaUtils::get_extract_schema_id(exec_tenant_id, database_id)))) {
     LOG_WARN("assign_fmt failed", K(ret));
   } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -207,10 +202,9 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
     LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
   } else {
     // mark delete in __all_database_history
-    if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(tenant_id, database_id, schema_version, is_deleted) "
-                               "VALUES(%lu, %lu, %ld, %ld)",
+    if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(database_id, schema_version, is_deleted) "
+                               "VALUES(%lu, %ld, %ld)",
                                OB_ALL_DATABASE_HISTORY_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                ObSchemaUtils::get_extract_schema_id(exec_tenant_id, database_id),
                                new_schema_version, IS_DELETED))) {
     } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {

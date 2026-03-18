@@ -16,7 +16,6 @@
 
 #include "share/ai_service/ob_ai_service_proxy.h"
 #include "share/ob_server_struct.h"
-#include "share/ob_service_epoch_proxy.h"
 #include "share/ob_max_id_fetcher.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "observer/ob_inner_sql_connection.h"
@@ -36,9 +35,7 @@ int ObAiServiceProxy::insert_ai_endpoint(const uint64_t tenant_id, ObMySQLTransa
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
   uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
-  if (OB_FAIL(sql.add_pk_column("tenant_id", user_tenant_id))) {
-    LOG_WARN("failed to add column", K(ret), K(user_tenant_id));
-  } else if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
+  if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
     LOG_WARN("failed to add column", K(ret), K(endpoint));
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
     LOG_WARN("failed to add column", K(ret), K(endpoint));
@@ -87,9 +84,7 @@ int ObAiServiceProxy::update_ai_endpoint(const uint64_t tenant_id, ObMySQLTransa
   ObSqlString buffer;
   int64_t affected_rows = 0;
   uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
-  if (OB_FAIL(sql.add_pk_column("tenant_id", user_tenant_id))) {
-    LOG_WARN("failed to add column", K(ret), K(user_tenant_id));
-  } else if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
+  if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
     LOG_WARN("failed to add column", K(ret), K(endpoint));
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
     LOG_WARN("failed to add column", K(ret), K(endpoint));
@@ -136,8 +131,8 @@ int ObAiServiceProxy::select_ai_endpoint(const uint64_t tenant_id, ObArenaAlloca
   uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
     LOG_WARN("failed to set timeout ctx", KR(ret), K(ctx), K(default_timeout));
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE tenant_id = %lu AND endpoint_name = ",
-      OB_ALL_AI_MODEL_ENDPOINT_TNAME, user_tenant_id))) {
+  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE endpoint_name = ",
+      OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
     LOG_WARN("sql assign_fmt failed", KR(ret), K(sql), K(user_tenant_id));
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
     LOG_WARN("failed to append name", KR(ret), K(name));
@@ -185,17 +180,17 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(
   uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
     LOG_WARN("failed to set timeout ctx", KR(ret), K(ctx), K(default_timeout));
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE tenant_id = %lu", OB_ALL_AI_MODEL_ENDPOINT_TNAME, user_tenant_id))) {
+  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s ", OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
     LOG_WARN("sql assign_fmt failed", KR(ret), K(sql), K(user_tenant_id));
   } else {
     if (OB_ORIGIN_AND_INSENSITIVE == name_case_mode || OB_LOWERCASE_AND_INSENSITIVE == name_case_mode) {
-      if (OB_FAIL(sql.append(" AND ai_model_name = "))) {
+      if (OB_FAIL(sql.append(" WHERE ai_model_name = "))) {
         LOG_WARN("failed to append sql string", KR(ret));
       } else if (OB_FAIL(sql_append_hex_escape_str(ai_model_name, sql))) {
         LOG_WARN("failed to append ai model name", KR(ret), K(ai_model_name));
       }
     } else if (OB_ORIGIN_AND_SENSITIVE == name_case_mode) {
-      if (OB_FAIL(sql.append(" AND ai_model_name COLLATE utf8mb4_bin = "))) {
+      if (OB_FAIL(sql.append(" WHERE ai_model_name COLLATE utf8mb4_bin = "))) {
         LOG_WARN("failed to append sql string", KR(ret));
       } else if (OB_FAIL(sql_append_hex_escape_str(ai_model_name, sql))) {
         LOG_WARN("failed to append ai model name", KR(ret), K(ai_model_name));
@@ -301,8 +296,8 @@ int ObAiServiceProxy::drop_ai_model_endpoint(const uint64_t tenant_id, ObMySQLTr
   ObSqlString sql;
   int64_t affected_rows = 0;
   uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
-  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %lu AND endpoint_name = ",
-      OB_ALL_AI_MODEL_ENDPOINT_TNAME, user_tenant_id))) {
+  if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE endpoint_name = ",
+      OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
     LOG_WARN("failed to assign sql", KR(ret), K(user_tenant_id));
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
     LOG_WARN("failed to append name", KR(ret), K(name));
@@ -328,8 +323,8 @@ int ObAiServiceProxy::check_ai_endpoint_exists(const uint64_t tenant_id, ObArena
   int64_t count = 0;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
     LOG_WARN("failed to set timeout ctx", KR(ret), K(ctx), K(default_timeout));
-  } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) FROM %s WHERE tenant_id = %lu AND endpoint_name = ",
-      OB_ALL_AI_MODEL_ENDPOINT_TNAME, user_tenant_id))) {
+  } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) FROM %s WHERE endpoint_name = ",
+      OB_ALL_AI_MODEL_ENDPOINT_TNAME))) {
     LOG_WARN("sql assign_fmt failed", KR(ret), K(sql), K(user_tenant_id));
   } else if (OB_FAIL(sql_append_hex_escape_str(name, sql))) {
     LOG_WARN("failed to append name", KR(ret), K(name));

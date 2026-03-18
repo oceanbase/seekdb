@@ -38,10 +38,6 @@ public:
                                       ObRestoreMajorFreezeService *restore_major_freeze_service,
                                       ObMajorFreezeService *&major_freeze_service,
                                       bool &is_primary_service);
-  static int check_epoch_periodically(common::ObISQLClient &sql_proxy,
-                                      const uint64_t tenant_id,
-                                      const int64_t expected_epoch,
-                                      int64_t &last_check_us);
 private:
   static const int64_t CHECK_EPOCH_INTERVAL_US = 60 * 1000L * 1000L; // 60s
 };

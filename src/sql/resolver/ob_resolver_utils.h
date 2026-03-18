@@ -872,7 +872,6 @@ public:
                             ObObjParam &obj_param,
                             bool &is_param,
                             const bool enable_decimal_int);
-  static int check_not_supported_tenant_name(const common::ObString &tenant_name);
   static int check_allowed_alter_operations_for_mlog(const obrpc::ObAlterTableArg &arg,
                                                   const share::schema::ObTableSchema &table_schema);
   static int fast_get_param_type(const ParseNode &parse_node,

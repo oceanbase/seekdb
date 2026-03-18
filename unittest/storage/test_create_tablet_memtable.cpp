@@ -27,13 +27,11 @@
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 #include "storage/ob_pg_ddl_kv_mgr.h"
 #include "logservice/palf/palf_options.h"
-#include "share/ob_alive_server_tracer.h"
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "storage/slog/ob_storage_logger_manager.h"
 #include "storage/slog/ob_storage_logger.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 #include "lib/file/file_directory_utils.h"
-#include "storage/mock_ob_meta_report.h"
 #include "storage/ob_super_block_struct.h"
 #include "storage/mock_gctx.h"
 
@@ -93,10 +91,8 @@ void TestTabletCreateMemtable::SetUp()
   share::ObLocationService location_service;
   obrpc::ObBatchRpc batch_rpc;
   share::schema::ObMultiVersionSchemaService schema_service;
-  share::ObAliveServerTracer server_tracer;
   palf::PalfDiskOptions disk_options;
   rpc::frame::ObReqTransport req_transport(NULL, NULL);
-  MockObMetaReport reporter;
   ObAddr self_addr(ObAddr::IPV4, "127.0.0.1", 52965);
   palf::PalfHandle palf_handle;
   ObTenantSuperBlock super_block(1);

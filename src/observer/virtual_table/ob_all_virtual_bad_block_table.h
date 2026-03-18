@@ -38,9 +38,7 @@ public:
 private:
   enum BAD_BLOCK_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    DISK_ID,
+        DISK_ID = common::OB_APP_MIN_COLUMN_ID,
     STORE_FILE_PATH,
     MACRO_BLOCK_INDEX,
     ERROR_TYPE,

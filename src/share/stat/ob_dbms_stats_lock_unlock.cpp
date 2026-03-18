@@ -25,10 +25,9 @@ using namespace sql;
 namespace common {
 
 #define UPDATE_STAT_STATTYPE_LOCKED "UPDATE __all_table_stat set stattype_locked = stattype_locked %c %u \
-                                     where tenant_id = %lu and table_id = %lu %s%s;"
+                                     where table_id = %lu %s%s;"
 
-#define INSERT_TABLE_STAT_SQL "INSERT INTO __all_table_stat(tenant_id, \
-                                                            table_id, \
+#define INSERT_TABLE_STAT_SQL "INSERT INTO __all_table_stat(table_id, \
                                                             partition_id, \
                                                             index_type,\
                                                             object_type, \
@@ -44,14 +43,14 @@ namespace common {
                                                             stattype_locked) VALUES"
 
 #define CHECK_TABLE_STAT_EXISTS "select partition_id from __all_table_stat where \
-                                 tenant_id = %lu and table_id = %lu;"
+                                 table_id = %lu;"
 
 #define GET_LOCKED_PARTITION_STAT "select partition_id, stattype_locked from __all_table_stat \
-                                  where %s and tenant_id = %lu and table_id = %lu;"
+                                  where %s and table_id = %lu;"
 
 // for index, should get the date table's locked partition
 #define GET_INDEX_LOCKED_PARTITION_STAT "select partition_id, stattype_locked from __all_table_stat \
-                                  where %s and tenant_id = %lu and table_id in (%lu, %lu);"
+                                  where %s and table_id in (%lu, %lu);"
 
 int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
                                                 const ObTableStatParam &param,
@@ -89,7 +88,6 @@ int ObDbmsStatsLockUnlock::set_table_stats_lock(ObExecContext &ctx,
   } else if (OB_FAIL(raw_sql.append_fmt(UPDATE_STAT_STATTYPE_LOCKED,
                                         set_locked ? '|' : '^',
                                         param.stattype_,
-                                        ext_tenant_id,
                                         pure_table_id,
                                         specify_part ? "and partition_id in" : "",
                                         specify_part ? partition_list.ptr() : ""))) {
@@ -154,7 +152,6 @@ int ObDbmsStatsLockUnlock::get_stats_history_sql(ObExecContext &ctx,
   } else {//specify table
     if (OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                    set_locked ? lock_str.ptr() : unlock_str.ptr(),
-                                   ext_tenant_id,
                                    pure_table_id))) {
       LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
     } else if (OB_FAIL(get_stat_locked_partition_ids(ctx, param.tenant_id_, raw_sql,
@@ -203,13 +200,11 @@ int ObDbmsStatsLockUnlock::check_stat_locked(ObExecContext &ctx,
   if (!param.is_index_param() &&
       OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                  "stattype_locked > 0",
-                                 ext_tenant_id,
                                  pure_table_id))) {
     LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (param.is_index_param() &&
              OB_FAIL(raw_sql.append_fmt(GET_INDEX_LOCKED_PARTITION_STAT,
                                         "stattype_locked > 0",
-                                        ext_tenant_id,
                                         pure_table_id,
                                         share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.data_table_id_)))) {
     LOG_WARN("failed to append sql stmt", K(ret));
@@ -244,7 +239,6 @@ int ObDbmsStatsLockUnlock::fill_stat_locked(ObExecContext &ctx,
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, param.table_id_);
   if (OB_FAIL(raw_sql.append_fmt(GET_LOCKED_PARTITION_STAT,
                                  "stattype_locked > 0",
-                                 ext_tenant_id,
                                  pure_table_id))) {
     LOG_WARN("failed to append sql stmt", K(ret), K(raw_sql));
   } else if (OB_FAIL(get_stat_locked_partition_ids(ctx,
@@ -631,9 +625,8 @@ int ObDbmsStatsLockUnlock::get_insert_locked_type_sql(const ObTableStatParam &pa
         stat_level = PARTITION_LEVEL;
       }
       char suffix = (i == no_stats_partition_ids.count() - 1 ? ';' : ',');
-      if (OB_FAIL(insert_sql.append_fmt("(%lu, %ld, %ld, %d, %u, 0, -1, -1, 0, 0, -1,\
+      if (OB_FAIL(insert_sql.append_fmt("(%ld, %ld, %d, %u, 0, -1, -1, 0, 0, -1,\
                                         -1, 0, 0, %ld)%c",
-                                        ext_tenant_id,
                                         pure_table_id,
                                         no_stats_partition_ids.at(i),
                                         param.is_index_stat_,

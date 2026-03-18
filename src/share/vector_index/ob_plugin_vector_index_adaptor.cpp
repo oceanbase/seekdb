@@ -21,7 +21,6 @@
 #include "share/vector_index/ob_vector_index_util.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
-#include "share/ls/ob_ls_operator.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "share/allocator/ob_tenant_vector_allocator.h"
 

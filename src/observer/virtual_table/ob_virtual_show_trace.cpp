@@ -28,7 +28,6 @@ namespace observer {
 ObVirtualShowTrace::ObVirtualShowTrace() :
     ObVirtualTableScannerIterator(),
     ref_(),
-    addr_(NULL),
     ipstr_(),
     port_(0),
     tenant_id_(common::OB_INVALID_ID),
@@ -53,7 +52,6 @@ void ObVirtualShowTrace::reset()
   is_use_index_ = false;
   tenant_id_ = common::OB_INVALID_ID;
   tenant_id_array_.reset();
-  addr_ = nullptr;
   port_ = 0;
   ipstr_.reset();
   alloc_.reset();
@@ -66,12 +64,6 @@ int ObVirtualShowTrace::inner_open()
   // retrive span info from virtual span
   SERVER_LOG(DEBUG, "tenant ids", K(effective_tenant_id_), K(tenant_id_array_));
 
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(set_ip(addr_))) {
-      SERVER_LOG(WARN, "failed to set server ip addr", K(ret));
-    } else {
-    }
-  }
   return ret;
 }
 
@@ -91,15 +83,14 @@ int ObVirtualShowTrace::retrive_all_span_info()
     int sql_len = 0;
     is_row_format_ = session_->is_row_traceformat();
     SMART_VAR(char[OB_MAX_SQL_LENGTH], sql) {
-      const uint64_t exec_tenant_id = effective_tenant_id_;
+      const uint64_t exec_tenant_id = OB_SYS_TENANT_ID;
       const char *table_name = OB_ALL_VIRTUAL_TRACE_SPAN_INFO_TNAME;
       trace_id = session_->get_last_flt_trace_id();
       sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
-                           "SELECT svr_ip, svr_port, tenant_id, trace_id, request_id, span_id, "
+                           "SELECT trace_id, request_id, span_id, "
                            "parent_span_id, span_name, ref_type, start_ts, end_ts, tags, logs "
-                           "FROM %s WHERE tenant_id = %lu AND trace_id = '%s'",
+                           "FROM %s WHERE trace_id = '%s'",
                            table_name,
-                           effective_tenant_id_,
                            trace_id.ptr());
       LOG_TRACE("send inner sql to retrive records", KP(session_), K(session_->get_proxy_sessid()),
                                                      K(session_->get_server_sid()), K(table_name),
@@ -144,7 +135,6 @@ int ObVirtualShowTrace::retrive_all_span_info()
           }
           // deep copy data
 
-
         }
       }
     }
@@ -183,17 +173,22 @@ int ObVirtualShowTrace::read_show_trace_rec_from_result(sqlclient::ObMySQLResult
     // span_name
     EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "span_name", span_name_buf, OB_MAX_SPAN_LENGTH, span_name_len);
     // tenant_id
-    EXTRACT_INT_FIELD_MYSQL(mysql_result, "tenant_id", rec.data_.tenant_id_, int64_t);
+    rec.data_.tenant_id_ = OB_SYS_TENANT_ID;
     // request_id
     EXTRACT_INT_FIELD_MYSQL(mysql_result, "request_id", rec.data_.req_id_, int64_t);
     // start_ts
     EXTRACT_INT_FIELD_MYSQL(mysql_result, "start_ts", rec.data_.start_ts_, int64_t);
     // end_ts
     EXTRACT_INT_FIELD_MYSQL(mysql_result, "end_ts", rec.data_.end_ts_, int64_t);
-    // trace_id
-    EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "svr_ip", ipstr_buf, common::MAX_IP_ADDR_LENGTH + 2, ipstr_len);
-    // prot
-    EXTRACT_INT_FIELD_MYSQL(mysql_result, "svr_port", rec.port_, int64_t);
+    // svr_ip/svr_port are no longer fetched from result set, fill from local address instead.
+    const ObAddr &self_addr = GCTX.self_addr();
+    if (!self_addr.ip_to_string(ipstr_buf, sizeof(ipstr_buf))) {
+      ipstr_buf[0] = '\0';
+      ipstr_len = 0;
+    } else {
+      ipstr_len = static_cast<int64_t>(strlen(ipstr_buf));
+    }
+    rec.port_ = static_cast<int64_t>(self_addr.get_port());
 
     // tags
     if (OB_FAIL(ret)) {
@@ -630,7 +625,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
     }
   }
 
-
   // invalid span check
   for (int64_t i = 0; OB_SUCC(ret) && i < tmp_arr.count(); ++i) {
     if (arr.count() > 0) {
@@ -732,18 +726,7 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
       uint64_t col_id = output_column_ids_.at(cell_idx);
       switch(col_id) {
         //server ip
-      case SVR_IP: {
-        cells[cell_idx].set_varchar(ipstr_); //ipstr_ and port_ were set in set_ip func call
-        cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                             ObCharset::get_default_charset()));
-      } break;
         //server port
-      case SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-      } break;
-      case TENANT_ID: {
-        cells[cell_idx].set_int(record.data_.tenant_id_);
-      } break;
       case TRACE_ID: {
         cells[cell_idx].set_varchar(record.data_.trace_id_);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
@@ -751,16 +734,6 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
       } break;
       case REQUEST_ID: {
         cells[cell_idx].set_int(record.data_.req_id_);
-      } break;
-        //rec server ip
-      case REC_SVR_IP: {
-        cells[cell_idx].set_varchar(record.ipstr_); //ipstr_ and port_ were set in set_ip func call
-        cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                             ObCharset::get_default_charset()));
-      } break;
-        //rec server port
-      case REC_SVR_PORT: {
-        cells[cell_idx].set_int(record.port_);
       } break;
       case SPAN_ID: {
         cells[cell_idx].set_varchar(record.data_.span_id_);
@@ -819,22 +792,6 @@ int ObVirtualShowTrace::fill_cells(sql::ObFLTShowTraceRec &record)
       } break;
       }
     }
-  }
-  return ret;
-}
-
-int ObVirtualShowTrace::set_ip(common::ObAddr *addr)
-{
-  int ret = OB_SUCCESS;
-  MEMSET(server_ip_, 0, sizeof(server_ip_));
-  if (NULL == addr){
-    ret = OB_ENTRY_NOT_EXIST;
-  } else if (!addr_->ip_to_string(server_ip_, sizeof(server_ip_))) {
-    SERVER_LOG(ERROR, "ip to string failed");
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ipstr_ = ObString::make_string(server_ip_);
-    port_ = addr_->get_port();
   }
   return ret;
 }

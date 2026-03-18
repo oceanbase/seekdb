@@ -220,42 +220,6 @@ int LogConfigMgr::set_initial_member_list(const ObMemberList &member_list,
   return ret;
 }
 
-int LogConfigMgr::set_initial_member_list(const common::ObMemberList &member_list,
-                                          const common::ObMember &arb_member,
-                                          const int64_t replica_num,
-                                          const common::GlobalLearnerList &learner_list,
-                                          const int64_t proposal_id,
-                                          LogConfigVersion &init_config_version)
-{
-  int ret = OB_SUCCESS;
-  SpinLockGuard guard(lock_);
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "LogConfigMgr not init", KR(ret));
-  } else if (!member_list.is_valid() ||
-             !arb_member.is_valid() ||
-             replica_num <= 0 ||
-             replica_num > OB_MAX_MEMBER_NUMBER ||
-             INVALID_PROPOSAL_ID == proposal_id ||
-             false == can_memberlist_majority_(member_list.get_member_number(), replica_num)) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", KR(ret), K_(palf_id), K_(self), K(member_list), K(arb_member), K(replica_num));
-  } else {
-    LogConfigInfoV2 config_info = log_ms_meta_.curr_;
-    config_info.config_.log_sync_memberlist_ = member_list;
-    config_info.config_.log_sync_replica_num_ = replica_num;
-    config_info.config_.arbitration_member_ = arb_member;
-    config_info.config_.learnerlist_ = learner_list;
-    if (OB_FAIL(set_initial_config_info_(config_info, proposal_id, init_config_version))) {
-      PALF_LOG(WARN, "set_initial_config_info failed", K(ret), K_(palf_id), K_(self), K(config_info), K(proposal_id));
-    } else {
-      forwarding_config_proposal_id_ = proposal_id;
-      PALF_LOG(INFO, "set_initial_member_list success", K(ret), K_(palf_id), K_(self), K_(log_ms_meta), K(member_list), K(arb_member), K(replica_num), K(proposal_id));
-    }
-  }
-  return ret;
-}
-
 int LogConfigMgr::set_initial_config_info_(const LogConfigInfoV2 &config_info,
                                            const int64_t proposal_id,
                                            LogConfigVersion &init_config_version)
@@ -375,18 +339,6 @@ int LogConfigMgr::get_degraded_learner_list(common::GlobalLearnerList &degraded_
     PALF_LOG(WARN, "deep_copy degraded_learnerlist_ failed", KR(ret), K_(palf_id), K_(self));
   } else {
     // pass
-  }
-  return ret;
-}
-
-int LogConfigMgr::get_arbitration_member(common::ObMember &arb_member) const
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "LogConfigMgr not init", KR(ret));
-  } else {
-    arb_member = log_ms_meta_.curr_.config_.arbitration_member_;
   }
   return ret;
 }
@@ -1191,49 +1143,6 @@ int LogConfigMgr::check_config_change_args_by_type_(const LogConfigChangeArgs &a
         }
         break;
       }
-      case ADD_ARB_MEMBER:
-      {
-        if (is_in_learnerlist || is_in_degraded_learnerlist || is_in_log_sync_memberlist) {
-          ret = OB_INVALID_ARGUMENT;
-          PALF_LOG(WARN, "server is learner/normal member, can not add_arb_member/replace_arb_member", KR(ret), K_(palf_id), K_(self), K_(log_ms_meta),
-              K(is_in_learnerlist), K(is_in_log_sync_memberlist), K(member));
-        } else if (is_arb_replica) {
-          if (new_replica_num == curr_replica_num) {
-            // config change has finished successfully, do not need change again
-            is_already_finished = true;
-            PALF_LOG(INFO, "arb replica already exists, don't need add_arb_member/replace_arb_member", KR(ret), K_(palf_id), K_(self),
-                K_(log_ms_meta), K(member), K(new_replica_num), K_(alive_paxos_replica_num));
-          } else {
-            ret = OB_INVALID_ARGUMENT;
-            PALF_LOG(INFO, "arb replica already exists, but new_replica_num not equal to curr val", KR(ret), K_(palf_id), K_(self),
-                K_(log_ms_meta), K(member), K(new_replica_num), K_(alive_paxos_replica_num));
-          }
-        } else if (true == has_arb_replica) {
-          ret = OB_INVALID_ARGUMENT;
-          PALF_LOG(WARN, "arbitration replica exists, can not add_arb_member", KR(ret), K_(palf_id), K_(self), K_(log_ms_meta), K(member));
-        }
-        break;
-      }
-      case REMOVE_ARB_MEMBER:
-      {
-        if (is_in_learnerlist || is_in_degraded_learnerlist || is_in_log_sync_memberlist) {
-          ret = OB_INVALID_ARGUMENT;
-          PALF_LOG(WARN, "server is learner/normal member, can not remove_arb_member/replace_arb_member", KR(ret), K_(palf_id), K_(self), K_(log_ms_meta),
-              K(is_in_learnerlist), K(is_in_log_sync_memberlist), K(member));
-        } else if (!is_arb_replica) {
-          if (new_replica_num == curr_replica_num) {
-            // config change has finished successfully, do not need change again
-            is_already_finished = true;
-            PALF_LOG(INFO, "member already exists, don't need add_arb_member", KR(ret), K_(palf_id), K_(self),
-                K_(log_ms_meta), K(member), K(new_replica_num), K_(alive_paxos_replica_num));
-          } else {
-            ret = OB_INVALID_ARGUMENT;
-            PALF_LOG(INFO, "arb replica does not exists, but new_replica_num not equal to curr val", KR(ret), K_(palf_id), K_(self),
-                K_(log_ms_meta), K(member), K(new_replica_num), K_(alive_paxos_replica_num));
-          }
-        }
-        break;
-      }
       case ADD_LEARNER:
       {
         if (is_in_log_sync_memberlist || is_in_degraded_learnerlist || is_arb_replica) {
@@ -1704,8 +1613,6 @@ int LogConfigMgr::generate_new_config_info_(const int64_t proposal_id,
         new_log_sync_replica_num = new_config_info.config_.log_sync_replica_num_;
       } else if (is_remove_log_sync_member_list(cc_type) && false == is_remove_degraded_learner) {
         new_log_sync_replica_num = new_config_info.config_.log_sync_replica_num_ - 1;
-      } else if (is_arb_member_change_type(cc_type)) {
-        new_log_sync_replica_num = new_config_info.config_.log_sync_replica_num_;
       } else {
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(ERROR, "unexpected config change type", KR(ret), K_(palf_id), K_(self), K(args), K(new_config_info));

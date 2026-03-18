@@ -127,25 +127,6 @@ int ObAllVirtualTabletLocalCache::process_curr_tenant(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-      case SVR_IP: {
-        if (addr.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "fail to execute ip_to_string", KR(ret), K(addr));
-        }
-        break;
-      }
-      case SVR_PORT: {
-        cells[i].set_int(addr.get_port());
-        break;
-      }
-      case TENANT_ID: {
-        cells[i].set_int(tenant_id_);
-        break;
-      }
       case TABLET_ID: {
         cells[i].set_int(tablet_id.id());
         break;

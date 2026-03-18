@@ -2142,10 +2142,6 @@ int LogSlidingWindow::get_leader_from_cache_(common::ObAddr &leader) const
     leader = state_mgr_leader;
   } else if (broadcast_leader.is_valid()) {
     leader = broadcast_leader;
-  } else if (palf_reach_time_interval(PALF_FETCH_LOG_RENEW_LEADER_INTERVAL_US,
-             last_fetch_log_renew_leader_ts_us_) &&
-             OB_FAIL(plugins_->nonblock_renew_leader(palf_id_))) {
-    PALF_LOG(WARN, "nonblock_renew_leader failed", KR(ret), K_(palf_id), K_(self));
   } else if (OB_FAIL(plugins_->nonblock_get_leader(palf_id_, leader))) {
     if (palf_reach_time_interval(5 * 1000 * 1000, lc_cb_get_warn_time_)) {
       PALF_LOG(WARN, "nonblock_get_leader failed", KR(ret), K_(palf_id), K_(self));
@@ -2784,49 +2780,6 @@ int LogSlidingWindow::get_ack_info_array(LogMemberAckInfoList &ack_info_array) c
         ack_info.last_flushed_end_lsn_ = tmp_val.lsn_;
         ack_info_array.push_back(ack_info);
         PALF_LOG(TRACE, "push ack info for degraded_learner_list success", K(ack_info), K(degraded_learner_list));
-      }
-    }
-  }
-  return ret;
-}
-
-int LogSlidingWindow::pre_check_before_degrade_upgrade(const LogMemberAckInfoList &servers,
-                                                       bool is_degrade)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (is_degrade) {
-    // for degrading, double check if last_ack_ts of degraded servers has changed.
-    // if current last_ack_ts == ack_ts, do degrade
-    ObSpinLockGuard guard(match_lsn_map_lock_);
-    for (int i = 0; OB_SUCC(ret) && i < servers.count(); i++) {
-      LsnTsInfo tmp_val;
-      const LogMemberAckInfo &ack_info = servers.at(i);
-      const common::ObAddr &server = ack_info.member_.get_server();
-      if (OB_FAIL(match_lsn_map_.get(server, tmp_val))) {
-        PALF_LOG(WARN, "do not degrade, arb_reason: match_lsn_map_ get failed", K(ret), K_(palf_id), K_(self), K(server));
-        ret = OB_OP_NOT_ALLOW;
-      } else if (tmp_val.last_ack_time_us_ != ack_info.last_ack_time_us_) {
-        PALF_LOG(WARN, "do not degrade, arb_reason: last_ack_ts has changed", K(ret), K_(palf_id), K_(self), K(ack_info), K(tmp_val));
-        ret = OB_OP_NOT_ALLOW;
-      }
-    }
-  } else {
-    // for upgrading, double check if last_lsn of degraded servers has inc updated
-    // if current match_lsn >= last_lsn, do upgrade
-    ObSpinLockGuard guard(match_lsn_map_lock_);
-    for (int i = 0; OB_SUCC(ret) && i < servers.count(); i++) {
-      LsnTsInfo tmp_val;
-      const LogMemberAckInfo &ack_info = servers.at(i);
-      const common::ObAddr &server = ack_info.member_.get_server();
-      if (OB_FAIL(match_lsn_map_.get(server, tmp_val))) {
-        PALF_LOG(WARN, "do not upgrade, arb_reason: match_lsn_map_ get failed", K(ret), K_(palf_id), K_(self), K(server));
-        ret = OB_OP_NOT_ALLOW;
-      } else if (tmp_val.lsn_ < ack_info.last_flushed_end_lsn_) {
-        PALF_LOG(WARN, "do not degrade, arb_reason: current match_lsn is less than ack_info", K(ret), K_(palf_id), K_(self),
-            K(ack_info), K(tmp_val));
-        ret = OB_OP_NOT_ALLOW;
       }
     }
   }

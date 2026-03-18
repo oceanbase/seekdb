@@ -34,7 +34,6 @@ public:
 private:
   const static char *TENANT_BLACK_PARAMETER_LIST[];
   const static char *CLUSTER_BLACK_PARAMETER_LIST[];
-  static int construct_tenant_param_sql_(const uint64_t tenant_id, common::ObSqlString &sql);
   static int construct_cluster_param_sql_(common::ObSqlString &sql);
   static int construct_query_sql_(const uint64_t tenant_id, common::ObSqlString &sql);
   static int handle_one_result_(ObExternParamInfoDesc &param_info,

@@ -96,7 +96,7 @@ int ObMviewUpdateCacheTask::get_mview_refresh_scn_sql(const int refresh_mode,
                               LAST_REFRESH_SCN, \
                               CAST(REFRESH_MODE AS UNSIGNED) AS REFRESH_MODE \
                               FROM `%s`.`%s` \
-                              WHERE TENANT_ID = 0 and REFRESH_MODE = %d",
+                              WHERE REFRESH_MODE = %d",
                             OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_TNAME, refresh_mode))) {
     LOG_WARN("fail to get sql", KR(ret), K(sql));
   }

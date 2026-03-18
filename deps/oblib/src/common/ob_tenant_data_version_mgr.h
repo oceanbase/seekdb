@@ -84,12 +84,7 @@ public:
   }
   static bool need_set_for_rpc(obrpc::ObRpcPacketCode pcode) 
   {
-    // these RPC are used when adding a server to the cluster. we can't ensure the correct status
-    // of the new server, so we should not sync its data_version to the cluster in case of
-    // data_version corruption. 
-    // TODO: add the new RPC of shared-storage mode later.
-    return pcode != obrpc::OB_PREPARE_SERVER_FOR_ADDING_SERVER && 
-           pcode != obrpc::OB_CHECK_SERVER_EMPTY;
+    return true;
   }
   // for unittest
   void set_mock_data_version(const uint64_t data_version) 

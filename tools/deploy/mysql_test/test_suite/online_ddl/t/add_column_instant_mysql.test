@@ -44,15 +44,13 @@ drop table if exists xingrui_timestamp_table;
 connection sys;
 #open data defensive
 alter system set _enable_defensive_check = '2';
-let $alter_tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name = 'sys', tenant_id, 1);
-let $oracle_tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name = 'oracle', tenant_id, 1);
 
 #case 1.add simple column
 connection mysql;
 create table xingrui_normal_table(col1 int, col2 char(10));
 insert into xingrui_normal_table values(1, 'a');
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_normal_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_normal_table', table_id, 1);
 connection mysql;
 alter table xingrui_normal_table add column col3 int after col1;
 alter table xingrui_normal_table add column col4 varchar(10) after col1;
@@ -61,7 +59,7 @@ alter table xingrui_normal_table add column col6 timestamp after col1;
 insert into xingrui_normal_table values(1, '2023-01-01 00:00:00', 3.3, 'b', 6, 'c');
 select * from xingrui_normal_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_normal_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_normal_table', table_id, 1);
 if ($table_id1 != $table_id2)
 {
   --echo "error table_id is not equal, add column become offline ddl"
@@ -74,13 +72,13 @@ connection mysql;
 create table xingrui_comment_table(col1 varchar(100), col2 int);
 insert into xingrui_comment_table values('a', 1);
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_comment_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_comment_table', table_id, 1);
 connection mysql;
 alter table xingrui_comment_table add column col3 varchar(100) comment "test" after col1;
 insert into xingrui_comment_table values('a', '666', 1);
 select * from xingrui_comment_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_comment_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_comment_table', table_id, 1);
 if ($table_id1 != $table_id2)
 {
   --echo "error table_id is not equal, add column become offline ddl"
@@ -91,13 +89,13 @@ connection mysql;
 create table xingrui_default_table(col1 int, col2 int);
 insert into xingrui_default_table values(1, 2);
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_default_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_default_table', table_id, 1);
 connection mysql;
 alter table xingrui_default_table add column col3 int default 100 after col1;
 insert into xingrui_default_table values(1, 2, 100);
 select * from xingrui_default_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_default_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_default_table', table_id, 1);
 if ($table_id1 != $table_id2)
 {
   --echo "error table_id is not equal, add column become offline ddl"
@@ -108,12 +106,12 @@ connection mysql;
 #empty table
 create table xingrui_not_null_table(col1 int, col2 int);
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table', table_id, 1);
 connection mysql;
 alter table xingrui_not_null_table add column col3 int not null after col1;
 select * from xingrui_not_null_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table', table_id, 1);
 if ($table_id1 != $table_id2)
 {
   --echo "error table_id is not equal, add column become offline ddl"
@@ -124,14 +122,14 @@ connection mysql;
 drop table xingrui_not_null_table;
 create table xingrui_not_null_table(col1 int, col2 int);
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table', table_id, 1);
 connection mysql;
 insert into xingrui_not_null_table values(1,2);
 insert into xingrui_not_null_table values(1,2);
 alter table xingrui_not_null_table add column col3 int not null after col1;
 select * from xingrui_not_null_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_not_null_table', table_id, 1);
 if ($table_id1 != $table_id2)
 {
   --echo "error table_id is not equal, add column become offline ddl"
@@ -142,13 +140,13 @@ connection mysql;
 create table xingrui_virtual_table (col1 int, col2 int);
 insert into xingrui_virtual_table values(1, 2);
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_virtual_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_virtual_table', table_id, 1);
 connection mysql;
 alter table xingrui_virtual_table add column col3 int generated always as (col1 + 1) virtual after col1;
 insert into xingrui_virtual_table (col1, col2) values(1,2);
 select * from xingrui_virtual_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_virtual_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_virtual_table', table_id, 1);
 if ($table_id1 != $table_id2)
 {
   --echo "error table_id is not equal, add column become offline ddl"
@@ -168,13 +166,13 @@ create table xingrui_increment_table(col1 int, col2 int);
 insert into xingrui_increment_table values(1, 2);
 
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_increment_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_increment_table', table_id, 1);
 connection mysql;
 alter table xingrui_increment_table add column col3 int auto_increment after col1;
 insert into xingrui_increment_table values(1, 2, 1);
 select * from xingrui_increment_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_increment_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_increment_table', table_id, 1);
 if ($table_id1 == $table_id2)
 {
   --echo "error table_id is equal, add column become online ddl"
@@ -202,13 +200,13 @@ connection mysql;
 create table xingrui_check_table(col1 int, col2 int);
 insert into xingrui_check_table values(1,2);
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_check_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_check_table', table_id, 1);
 connection mysql;
 alter table xingrui_check_table add column col3 int check(col3 > 10) after col1;
 insert into xingrui_check_table values(1,20,3);
 select * from xingrui_check_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_check_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_check_table', table_id, 1);
 if ($table_id1 == $table_id2)
 {
   --echo "error table_id is equal, add column become online ddl"
@@ -219,13 +217,13 @@ connection mysql;
 create table xingrui_unique_table(col1 int,col2 int);
 insert into xingrui_unique_table values(1,2);
 connection sys;
-let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_unique_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id1 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_unique_table', table_id, 1);
 connection mysql;
 alter table xingrui_unique_table add column col3 int unique after col1;
 insert into xingrui_unique_table values(1,2,3);
 select * from xingrui_unique_table;
 connection sys;
-let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_unique_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id2 = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_unique_table', table_id, 1);
 if ($table_id1 == $table_id2)
 {
   --echo "error table_id is equal, add column become online ddl"
@@ -334,11 +332,11 @@ drop table xingrui_primary_table;
 create table xingrui_primary_table(col1 int, col2 int);
 alter table xingrui_primary_table add column col3 int after col1;
 connection sys;
-let $before_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table') and column_name = "col3", column_id, 1);
 connection mysql;
 alter table xingrui_primary_table add primary key(col1);
 connection sys;
-let $after_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table') and column_name = "col3", column_id, 1);
 if ($before_primary_key == $after_primary_key)
 {
   --echo "error add column instant's column id should change after add primary key"
@@ -351,9 +349,9 @@ alter table xingrui_primary_table add column col4 int after col1;
 alter table xingrui_primary_table add primary key(col1);
 
 connection sys;
-let $data_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table' and tenant_id = $alter_tenant_id) and column_name = "col2" and tenant_id = $alter_tenant_id, column_id, 1);
-let $data_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_primary_table' and tenant_id = $alter_tenant_id, table_id, 1);
-let $index_table_col = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where data_table_id = $data_table_id and tenant_id = $alter_tenant_id) and column_name = "col2" and tenant_id = $alter_tenant_id, column_id, 1);
+let $data_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table') and column_name = "col2", column_id, 1);
+let $data_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_primary_table', table_id, 1);
+let $index_table_col = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where data_table_id = $data_table_id) and column_name = "col2", column_id, 1);
 if ($data_column_id != $index_table_col)
 {
   --echo "error add column instant's column id should not change after add primary key"
@@ -365,11 +363,11 @@ drop table xingrui_primary_table;
 create table xingrui_primary_table(col1 int, col2 int primary key);
 alter table xingrui_primary_table add column col3 int after col1;
 connection sys;
-let $before_drop_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_drop_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table') and column_name = "col3", column_id, 1);
 connection mysql;
 alter table xingrui_primary_table drop primary key;
 connection sys;
-let $after_drop_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_drop_primary_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_primary_table') and column_name = "col3", column_id, 1);
 if ($before_drop_primary_key == $after_drop_primary_key)
 {
   --echo "error add column instant's column id should change after drop primary key"
@@ -380,11 +378,11 @@ connection mysql;
 create table xingrui_character_table(col1 int,col2 int);
 alter table xingrui_character_table add column col3 int after col1;
 connection sys;
-let $before_character = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_character = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table') and column_name = "col3", column_id, 1);
 connection mysql;
 alter table xingrui_character_table convert to character set 'utf16' COLLATE 'utf16_bin';
 connection sys;
-let $after_character = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_character = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table') and column_name = "col3", column_id, 1);
 if ($before_character == $after_character)
 {
   --echo "error add column instant's column id should change after change character"
@@ -395,11 +393,11 @@ connection mysql;
 create table xingrui_partition_table (col1 int, col2 int);
 alter table xingrui_partition_table add column col3 int after col1;
 connection sys;
-let $before_partition = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_partition_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_partition = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_partition_table') and column_name = "col3", column_id, 1);
 connection mysql;
 alter table xingrui_partition_table partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
 connection sys;
-let $after_partition = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_partition_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_partition = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_partition_table') and column_name = "col3", column_id, 1);
 #partition by is specail case, column id not redistribute
 if ($before_partition != $after_partition)
 {
@@ -411,11 +409,11 @@ connection mysql;
 create table xingrui_lob_inrow_table (col1 text, col2 text) DEFAULT_LOB_INROW_THRESHOLD=4444;
 alter table xingrui_lob_inrow_table add column col3 int after col1;
 connection sys;
-let $before_lob_inrow = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_lob_inrow_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_lob_inrow = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_lob_inrow_table') and column_name = "col3", column_id, 1);
 connection mysql;
 alter table xingrui_lob_inrow_table set lob_inrow_threshold = 1026;
 connection sys;
-let $after_lob_inrow = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_lob_inrow_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_lob_inrow = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_lob_inrow_table') and column_name = "col3", column_id, 1);
 if ($before_lob_inrow == $after_lob_inrow)
 {
   --echo "error add column instant's column id should change after change lob in row"
@@ -428,7 +426,7 @@ create table xingrui_index_column_table(col1 int, col2 int);
 insert into xingrui_index_column_table values(1, 2);
 alter table xingrui_index_column_table add col3 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_index_column_table add index xingrui_index(col3);
@@ -436,7 +434,7 @@ insert into xingrui_index_column_table values(1, 2, 3);
 select * from xingrui_index_column_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error table id should not change after index column"
@@ -450,14 +448,14 @@ create index xingrui_index on xingrui_index_column_table(col1) global;
 insert into xingrui_index_column_table values(1, 2);
 alter table xingrui_index_column_table add col3 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_index_column_table truncate partition p1;
 select * from xingrui_index_column_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error table id should not change after rebuild index column"
@@ -472,7 +470,7 @@ insert into xingrui_index_column_table values(1, 'a', 2);
 alter table xingrui_index_column_table add index xingrui_index(col3);
 alter table xingrui_index_column_table add col4 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_index_column_table drop index xingrui_index;
@@ -480,7 +478,7 @@ insert into xingrui_index_column_table values(1, 2, 'a', 3);
 select * from xingrui_index_column_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error table id should not change after rebuild index column"
@@ -494,14 +492,14 @@ alter table xingrui_index_column_table add index xingrui_index(col3);
 insert into xingrui_index_column_table values(1, 'a', 2);
 alter table xingrui_index_column_table add col4 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_index_column_table alter index xingrui_index invisible;
 select * from xingrui_index_column_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error table id should not change after rebuild index column"
@@ -515,14 +513,14 @@ alter table xingrui_index_column_table add index xingrui_index(col3);
 insert into xingrui_index_column_table values(1, 'a', 2);
 alter table xingrui_index_column_table add col4 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_index_column_table alter index xingrui_index parallel 2;
 select * from xingrui_index_column_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error table id should not change after rebuild index column"
@@ -537,14 +535,14 @@ alter table xingrui_index_column_table add index xingrui_index(col3);
 insert into xingrui_index_column_table values(1, 'a', 2);
 alter table xingrui_index_column_table add col4 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_index_column_table rename index xingrui_index to xingrui_index1;
 select * from xingrui_index_column_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_index_column_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error table id should not change after rebuild index column"
@@ -558,14 +556,14 @@ insert into xingrui_constraint_table values(1, 2);
 #case 20.1 add column instant with add constraint
 alter table xingrui_constraint_table add column col3 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_constraint_table add constraint xingrui_constraint check(col3 > 0);
 select * from xingrui_constraint_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error column id should not change after add constraint"
@@ -579,14 +577,14 @@ insert into xingrui_constraint_table values(1, 2);
 alter table xingrui_constraint_table add constraint xingrui_constraint check(col2 > 0);
 alter table xingrui_constraint_table add column col3 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 alter table xingrui_constraint_table drop constraint xingrui_constraint;
 select * from xingrui_constraint_table;
 
 connection sys;
-let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table') and column_name = "col3", column_id, 1);
 if ($before_index_column != $after_index_column)
 {
   --echo "error column id should not change after add constraint"
@@ -601,7 +599,7 @@ insert into xingrui_constraint_table values(1, 2);
 alter table xingrui_constraint_table add constraint xingrui_constraint check(col2 > 0);
 alter table xingrui_constraint_table add column col3 int after col1;
 connection sys;
-let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table' and tenant_id = $alter_tenant_id) and column_name = "col3" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_index_column = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_constraint_table') and column_name = "col3", column_id, 1);
 
 connection mysql;
 --error 1064
@@ -613,7 +611,7 @@ drop table xingrui_character_table;
 create table xingrui_character_table(col1 int,col2 int,col3 int);
 alter table xingrui_character_table add column col4 int after col1;
 connection sys;
-let $before_character =query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table' and tenant_id = $alter_tenant_id) and column_name = "col4" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_character =query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table') and column_name = "col4", column_id, 1);
 
 connection mysql;
 alter table xingrui_character_table convert to character set 'utf16' COLLATE 'utf16_bin';
@@ -621,7 +619,7 @@ insert into xingrui_character_table values(1, 2, 3, 4);
 select * from xingrui_character_table;
 
 connection sys;
-let $after_character =query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table' and tenant_id = $alter_tenant_id) and column_name = "col4" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_character =query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table') and column_name = "col4", column_id, 1);
 if ($before_character == $after_character)
 {
   --echo "error table id should change after add column instant with change character column"
@@ -634,14 +632,14 @@ create table xingrui_fk_parent_table (id int primary key, number int);
 create table xingrui_fk_child_table (parent_id int, number int);
 alter table xingrui_fk_child_table add column child_id int after parent_id;
 connection sys;
-let $before_foreign_key =query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table' and tenant_id = $alter_tenant_id) and column_name = "col4" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_foreign_key =query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table') and column_name = "col4", column_id, 1);
 
 connection mysql;
 alter table xingrui_fk_child_table add constraint child_fk foreign key (parent_id) references xingrui_fk_parent_table(id);
 select * from xingrui_fk_child_table;
 
 connection sys;
-let $after_foreign_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table' and tenant_id = $alter_tenant_id) and column_name = "col4" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_foreign_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table') and column_name = "col4", column_id, 1);
 if ($before_foreign_key != $after_foreign_key)
 {
   --echo "error table id should not change after add column instant with add foreign column"
@@ -657,7 +655,7 @@ alter table xingrui_fk_child_table add constraint child_fk foreign key (parent_i
 alter table xingrui_fk_child_table add column child_id int after parent_id;
 
 connection sys;
-let $before_drop_foreign_key = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_fk_child_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $before_drop_foreign_key = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_fk_child_table', table_id, 1);
 
 connection mysql;
 alter table xingrui_fk_child_table drop foreign key child_fk;
@@ -665,7 +663,7 @@ insert into xingrui_fk_child_table values(1, 2, 3);
 select * from xingrui_fk_child_table;
 
 connection sys;
-let $after_foreign_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table' and tenant_id = $alter_tenant_id) and column_name = "col4" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_foreign_key = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_character_table') and column_name = "col4", column_id, 1);
 if ($before_foreign_key != $after_foreign_key)
 {
   --echo "error table id should not change after add column instant with change character column"
@@ -690,9 +688,9 @@ insert into xingrui_modify_column_table values(1, 2, 3);
 insert into xingrui_modify_column_table values(1, 2, 3);
 alter table xingrui_modify_column_table add column col4 int after col1;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table', table_id, 1);
 --disable_query_log
-eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id and tenant_id = $alter_tenant_id;
+eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -700,9 +698,9 @@ insert into xingrui_modify_column_table values(1, 4, 2, 3);
 insert into xingrui_modify_column_table values(1, 4, 2, 3);
 alter table xingrui_modify_column_table modify col4 int after col3;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table', table_id, 1);
 --disable_query_log
-eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id and tenant_id = $alter_tenant_id;
+eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -711,9 +709,9 @@ insert into xingrui_modify_column_table values(1, 2, 3, 4);
 
 alter table xingrui_modify_column_table add column col5 int after col1;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table', table_id, 1);
 --disable_query_log
-eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id and tenant_id = $alter_tenant_id;
+eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -721,9 +719,9 @@ insert into xingrui_modify_column_table values(1, 5, 2, 3, 4);
 insert into xingrui_modify_column_table values(1, 5, 2, 3, 4);
 alter table xingrui_modify_column_table modify col5 int after col3;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table', table_id, 1);
 --disable_query_log
-eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id and tenant_id = $alter_tenant_id;
+eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -735,18 +733,18 @@ create table xingrui_modify_column_table(col1 int, col2 int, col3 int);
 alter table xingrui_modify_column_table add column col4 int after col1;
 insert into xingrui_modify_column_table values(1, 4, 2, 3);
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table', table_id, 1);
 --disable_query_log
-eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id and tenant_id = $alter_tenant_id;
+eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
 alter table xingrui_modify_column_table rename column col4 to test, modify col2 int after col3;
 insert into xingrui_modify_column_table values(1, 4, 3, 2);
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table', table_id, 1);
 --disable_query_log
-eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id and tenant_id = $alter_tenant_id;
+eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -755,9 +753,9 @@ insert into xingrui_modify_column_table values(1, 5, 4, 3, 2);
 alter table xingrui_modify_column_table rename column col5 to test1, modify col1 int after col3;
 insert into xingrui_modify_column_table values(5, 4, 3, 1, 2);
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_modify_column_table', table_id, 1);
 --disable_query_log
-eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id and tenant_id = $alter_tenant_id;
+eval select column_name, column_id, prev_column_id from __all_virtual_column where table_id = $table_id;
 --enable_query_log
 
 #case 26.table with ftx,can do online add column, can not do offline ddl
@@ -794,7 +792,7 @@ create table xingrui_fts_table(
   existing_stored_col int GENERATED ALWAYS AS(id + 1) STORED);
 connection sys;
 alter system set _enable_add_fulltext_index_to_existing_table = true;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_fts_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_fts_table', table_id, 1);
 connection mysql;
 --error 1235
 alter table xingrui_fts_table add column col1 text after name, add fulltext index(name);
@@ -813,14 +811,14 @@ drop table xingrui_ttl_table;
 create table xingrui_ttl_table(col1 int, col2 datetime) TTL(col2 + INTERVAL 1 hour);
 insert into xingrui_ttl_table values(1, '2024-10-24');
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_ttl_table' and tenant_id = $alter_tenant_id, table_id, 1);
-let $before_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_ttl_table' and tenant_id = $alter_tenant_id) and column_name = "col2" and tenant_id = $alter_tenant_id, column_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_ttl_table', table_id, 1);
+let $before_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_ttl_table') and column_name = "col2", column_id, 1);
 connection mysql;
 alter table xingrui_ttl_table add column col3 int after col1;
 insert into xingrui_ttl_table values(2, 3, '2024-10-24');
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_ttl_table' and tenant_id = $alter_tenant_id, table_id, 1);
-let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_ttl_table' and tenant_id = $alter_tenant_id) and column_name = "col2" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_ttl_table', table_id, 1);
+let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_ttl_table') and column_name = "col2", column_id, 1);
 if ($before_table_id != $after_table_id)
 {
   --echo "error table id should not change when add ttl and add column instant"
@@ -858,13 +856,13 @@ CREATE TABLE xingrui_json_multivalue_table (
 );
 insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}');
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table', table_id, 1);
 connection mysql;
 alter table xingrui_json_multivalue_table add column col2 JSON after col1;
 insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}', '{"key":[7,932,22]}');
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table' and tenant_id = $alter_tenant_id, table_id, 1);
-let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_json_multivalue_table' and tenant_id = $alter_tenant_id) and column_name = "data" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table', table_id, 1);
+let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_json_multivalue_table') and column_name = "data", column_id, 1);
 if ($before_table_id != $after_table_id)
 {
   --echo "error table id should not change when add column instant has json multivalue"
@@ -885,15 +883,15 @@ CREATE TABLE xingrui_json_multivalue_table (
 );
 insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}');
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table', table_id, 1);
 connection mysql;
 alter table xingrui_json_multivalue_table add column col2 JSON after col1;
 insert into xingrui_json_multivalue_table values(1, 2, '{"key":[7,932,22]}', '{"key":[7,932,22]}');
 --error 1235
 alter table xingrui_json_multivalue_table drop index zips2, add column col3 int after col1;
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table' and tenant_id = $alter_tenant_id, table_id, 1);
-let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_json_multivalue_table' and tenant_id = $alter_tenant_id) and column_name = "data" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_json_multivalue_table', table_id, 1);
+let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_json_multivalue_table') and column_name = "data", column_id, 1);
 if ($before_table_id == $after_table_id)
 {
   --echo "error table id should change when add column instant with drop json multivalue"
@@ -912,7 +910,7 @@ sleep 10;
 create table xingrui_vector_table(col1 int, col2 vector(3), vector index idx1(col2) with (distance=l2, type=hnsw));
 insert into xingrui_vector_table values(1, '[4,5,6]');
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table', table_id, 1);
 
 connection mysql;
 alter table xingrui_vector_table add column col3 vector(3) after col1;
@@ -923,8 +921,8 @@ alter table xingrui_vector_table add vector index idx1(c3) with (distance=l2, ty
 insert into xingrui_vector_table values(1, '[4,5,6]', '[1,2,3]');
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table' and tenant_id = $alter_tenant_id, table_id, 1);
-let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_vector_table' and tenant_id = $alter_tenant_id) and column_name = "col2" and tenant_id = $alter_tenant_id, column_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table', table_id, 1);
+let $after_column_id = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_vector_table') and column_name = "col2", column_id, 1);
 if ($before_table_id != $after_table_id)
 {
   --echo "error table id should not change when add column instant has vector"
@@ -952,14 +950,14 @@ drop table xingrui_vector_table;
 create table xingrui_vector_table(col1 int, col2 vector(3), vector index idx1(col2) with (distance=l2, type=hnsw));
 insert into xingrui_vector_table values(1, '[4,5,6]');
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table', table_id, 1);
 
 connection mysql;
 --error 1235
 alter table xingrui_vector_table drop index idx1, add column col3 int after col1;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table' and tenant_id = $alter_tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name='xingrui_vector_table', table_id, 1);
 if ($before_table_id == $after_table_id)
 {
   --echo "error table id should change when add column instant and drop vector index"
@@ -983,7 +981,7 @@ add column col5 binary(255) NOT NULL default 'col5' BEFORE col2;
 
 connection sys;
 --disable_query_log
-eval select column_name, column_id, prev_column_id, hex(orig_default_value_v2), hex(cur_default_value_v2) from __all_virtual_column_history where tenant_id = $alter_tenant_id and table_id in (select table_id from __all_virtual_table where table_name = "xingrui_binary_table" and tenant_id = $alter_tenant_id) and column_name in ("col3", "col5");
+eval select column_name, column_id, prev_column_id, hex(orig_default_value_v2), hex(cur_default_value_v2) from __all_virtual_column_history where table_id in (select table_id from __all_virtual_table where table_name = "xingrui_binary_table") and column_name in ("col3", "col5");
 --enable_query_log
 
 connection mysql;
@@ -999,7 +997,7 @@ add column col4 int after col1;
 
 connection sys;
 --disable_query_log
-eval select column_name, column_id, prev_column_id, hex(orig_default_value_v2), hex(cur_default_value_v2) from __all_virtual_column_history where tenant_id = $alter_tenant_id and table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table" and tenant_id = $alter_tenant_id) and column_name = "col3";
+eval select column_name, column_id, prev_column_id, hex(orig_default_value_v2), hex(cur_default_value_v2) from __all_virtual_column_history where table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table") and column_name = "col3";
 --enable_query_log
 
 connection mysql;
@@ -1016,7 +1014,7 @@ add column col4 int after col1;
 
 connection sys;
 --disable_query_log
-eval select column_name, column_id, prev_column_id, IF(orig_default_value_v2 IS NOT NULL, 1, NULL) AS orig_default_value_v2_non_null, IF(cur_default_value_v2 IS NOT NULL, 1, NULL) AS cur_default_value_v2_non_null from __all_virtual_column_history where tenant_id = $alter_tenant_id and table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table" and tenant_id = $alter_tenant_id) and column_name = "col3";
+eval select column_name, column_id, prev_column_id, IF(orig_default_value_v2 IS NOT NULL, 1, NULL) AS orig_default_value_v2_non_null, IF(cur_default_value_v2 IS NOT NULL, 1, NULL) AS cur_default_value_v2_non_null from __all_virtual_column_history where table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table") and column_name = "col3";
 --enable_query_log
 
 connection mysql;
@@ -1032,7 +1030,7 @@ alter table xingrui_timestamp_table add column col3 timestamp NOT NULL default C
 
 connection sys;
 --disable_query_log
-eval select column_name, column_id, prev_column_id, IF(orig_default_value_v2 IS NOT NULL, 1, NULL) AS orig_default_value_v2_non_null, IF(cur_default_value_v2 IS NOT NULL, 1, NULL) AS cur_default_value_v2_non_null  from __all_virtual_column_history where tenant_id = $alter_tenant_id and table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table" and tenant_id = $alter_tenant_id) and column_name = "col3";
+eval select column_name, column_id, prev_column_id, IF(orig_default_value_v2 IS NOT NULL, 1, NULL) AS orig_default_value_v2_non_null, IF(cur_default_value_v2 IS NOT NULL, 1, NULL) AS cur_default_value_v2_non_null  from __all_virtual_column_history where table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table") and column_name = "col3";
 --enable_query_log
 
 connection mysql;
@@ -1049,7 +1047,7 @@ add column col4 int after col1;
 
 connection sys;
 --disable_query_log
-eval select column_name, column_id, prev_column_id, hex(orig_default_value_v2), hex(cur_default_value_v2) from __all_virtual_column_history where tenant_id = $alter_tenant_id and table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table" and tenant_id = $alter_tenant_id) and column_name = "col3";
+eval select column_name, column_id, prev_column_id, hex(orig_default_value_v2), hex(cur_default_value_v2) from __all_virtual_column_history where table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table") and column_name = "col3";
 --enable_query_log
 
 connection mysql;
@@ -1066,7 +1064,7 @@ add column col4 int after col1;
 
 connection sys;
 --disable_query_log
-eval select column_name, column_id, prev_column_id, IF(orig_default_value_v2 IS NOT NULL, 1, NULL) AS orig_default_value_v2_non_null, IF(cur_default_value_v2 IS NOT NULL, 1, NULL) AS cur_default_value_v2_non_null  from __all_virtual_column_history where tenant_id = $alter_tenant_id and table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table" and tenant_id = $alter_tenant_id) and column_name = "col3";
+eval select column_name, column_id, prev_column_id, IF(orig_default_value_v2 IS NOT NULL, 1, NULL) AS orig_default_value_v2_non_null, IF(cur_default_value_v2 IS NOT NULL, 1, NULL) AS cur_default_value_v2_non_null  from __all_virtual_column_history where table_id in (select table_id from __all_virtual_table where table_name = "xingrui_timestamp_table") and column_name = "col3";
 --enable_query_log
 
 connection mysql;

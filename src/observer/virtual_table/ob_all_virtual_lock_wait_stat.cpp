@@ -80,9 +80,7 @@ int ObAllVirtualLockWaitStat::process_curr_tenant(ObNewRow *&row)
     int type = 0; // 1-TR 2-TX 3-TM
     get_lock_type(node_iter_->hash_, type);
     const int64_t col_count = output_column_ids_.count();
-    ObString ipstr;
-
-    // resolve compatibility problem
+        // resolve compatibility problem
     const int column_id_fix_offset = BLOCK_SESSION_ID;
     ObString column_name;
     bool exist = false;
@@ -122,26 +120,6 @@ int ObAllVirtualLockWaitStat::process_curr_tenant(ObNewRow *&row)
         }
       }
       switch (col_id) {
-        // svr_ip
-        case SVR_IP: {
-          ipstr.reset();
-          if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-            SERVER_LOG(ERROR, "get server ip failed", K(ret));
-          } else {
-            cur_row_.cells_[i].set_varchar(ipstr);
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          }
-          break;
-        }
-        // svr_port
-        case SVR_PORT: {
-          cur_row_.cells_[i].set_int(GCTX.self_addr().get_port());
-          break;
-        }
-        case TENANT_ID: {
-          cur_row_.cells_[i].set_int(MTL_ID());
-          break;
-        }
         case TABLET_ID:
           cur_row_.cells_[i].set_int(node_iter_->tablet_id_);
           break;
@@ -263,10 +241,6 @@ int ObAllVirtualLockWaitStat::process_curr_tenant(ObNewRow *&row)
         case HOLDER_SESSION_ID:
           cur_row_.cells_[i].set_int(node_iter_->holder_sessid_);
           break;
-        case LS_ID: {
-          cur_row_.cells_[i].set_int(0);
-          break;
-        }
         case ASSOC_SESS_ID: {
           cur_row_.cells_[i].set_int(0);
           break;

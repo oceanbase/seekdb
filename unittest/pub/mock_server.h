@@ -95,9 +95,6 @@ private:
     switch (pkt.get_pcode()) {
       REG_PKT(OB_GET_CONFIG);
       REG_PKT(OB_SET_CONFIG);
-      REG_PKT(OB_BOOTSTRAP);
-      REG_PKT(OB_EXECUTE_BOOTSTRAP);
-      REG_PKT(OB_CHECK_SERVER_EMPTY);
       REG_PKT(OB_FETCH_SCHEMA);
       default: { }
     }

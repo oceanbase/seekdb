@@ -654,9 +654,6 @@ void ObLogDeliver::handle(void *task)
 //     case obrpc::OB_LOG_GET_MC_ST: {
 //       PROCESS(LogGetMCStP)
 //     }
-//     case obrpc::OB_LOG_ARB_PROBE_MSG: {
-//       PROCESS(logservice::LogServerProbeP)
-//     }
 //     case obrpc::OB_LOG_CONFIG_CHANGE_CMD: {
 //       PROCESS(LogMembershipChangeP)
 //     }

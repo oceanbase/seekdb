@@ -64,11 +64,6 @@ namespace common
 class ObAddr;
 }
 
-namespace share
-{
-class ObAliveServerTracer;
-}
-
 namespace storage
 {
 class ObIMemtable;
@@ -181,8 +176,7 @@ public:
            ObIGtiSource *gti_source,
            ObTsMgr *ts_mgr,
            obrpc::ObSrvRpcProxy *rpc_proxy,
-           share::schema::ObMultiVersionSchemaService *schema_service,
-           share::ObAliveServerTracer *server_tracer);
+           share::schema::ObMultiVersionSchemaService *schema_service);
   int start();
   void stop();
   void wait() { wait_(); }
@@ -210,7 +204,6 @@ public:
   common::ObMySQLProxy *get_mysql_proxy() { return GCTX.sql_proxy_; }
   bool is_running() const { return is_running_; }
   ObTsMgr *get_ts_mgr() { return ts_mgr_; }
-  share::ObAliveServerTracer *get_server_tracer() { return server_tracer_; }
   share::schema::ObMultiVersionSchemaService *get_schema_service() { return schema_service_; }
   ObTxVersionMgr &get_tx_version_mgr() { return tx_version_mgr_; }
   int register_mds_into_tx(ObTxDesc &tx_desc,
@@ -293,8 +286,6 @@ protected:
   share::schema::ObMultiVersionSchemaService *schema_service_;
 private:
   ObTsMgr *ts_mgr_;
-  // server alive tracker
-  share::ObAliveServerTracer *server_tracer_;
   // account task qeuue's inqueue and dequeue
   uint32_t input_queue_count_;
   uint32_t output_queue_count_;

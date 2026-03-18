@@ -18,7 +18,7 @@
 
 #include "ob_major_mv_merge_info.h"
 #include "storage/tablet/ob_tablet_iterator.h"
-#include "rootserver/mview/ob_collect_mv_merge_info_task.h"
+#include "storage/tx_storage/ob_ls_service.h" // ObLSService
 
 namespace oceanbase
 {
@@ -314,65 +314,6 @@ int ObMVCheckReplicaHelper::get_merge_info(
 }
 
 ERRSIM_POINT_DEF(ERRSIM_RECONFIG_CHECK_FAILED);
-
-int ObMVCheckReplicaHelper::check_can_add_member(
-      const common::ObAddr &server,
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      const uint64_t rpc_timeout)
-{
-  int ret = OB_SUCCESS;
-
-  ObMajorMVMergeInfo leader_merge_info;
-  ObMajorMVMergeInfo member_merge_info;
-  if (!server.is_valid() || tenant_id == OB_INVALID_TENANT_ID || !ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(ls_id), K(tenant_id), K(server));
-  } else if (ls_id.is_sys_ls()) {
-    // do nothing
-  } else if (OB_FAIL(rootserver::ObCollectMvMergeInfoTask::sync_get_ls_member_merge_info(server,
-                                                                                  tenant_id,
-                                                                                  ls_id,
-                                                                                  member_merge_info,
-                                                                                  rpc_timeout,
-                                                                                  false/*check_leader*/))) {
-    LOG_WARN("sync get ls member merge info failed", K(ret),
-             K(server), K(ls_id), K(tenant_id));
-  } else if (OB_FAIL(get_merge_info(ls_id, leader_merge_info))) {
-    LOG_WARN("get and update local merge info failed", K(ret), K(ls_id));
-  } else if (leader_merge_info.major_mv_merge_scn_ > member_merge_info.major_mv_merge_scn_) {
-    ret = NEW_MV_MAJOR_VERSION_NOT_MATCH;
-    LOG_WARN("ls mv merge scn is small than leader", K(ret),
-             K(leader_merge_info), K(ls_id), K(member_merge_info));
-  } else {
-    LOG_INFO("ls reconfig check success",  K(ret),
-              K(leader_merge_info), K(ls_id), K(member_merge_info));
-  }
-  if (NEW_MV_MAJOR_VERSION_NOT_MATCH == ret) {
-    if (OB_FAIL(rootserver::ObCollectMvMergeInfoTask::sync_get_ls_member_merge_info(server,
-                                                                                  tenant_id,
-                                                                                  ls_id,
-                                                                                  member_merge_info,
-                                                                                  rpc_timeout,
-                                                                                  false/*check_leader*/,
-                                                                                  true/*need_update*/))) {
-      LOG_WARN("sync get ls member merge info failed", K(ret),
-              K(server), K(ls_id), K(tenant_id));
-    } else if (leader_merge_info.major_mv_merge_scn_ > member_merge_info.major_mv_merge_scn_) {
-      ret = NEW_MV_MAJOR_VERSION_NOT_MATCH;
-      LOG_WARN("ls mv merge scn is small than leader", K(ret),
-              K(leader_merge_info), K(ls_id), K(member_merge_info));
-    }
-    LOG_INFO("push dest mv merge scn to avoid failed", K(ret), K(tenant_id), K(server),
-             K(ls_id), K(member_merge_info), K(leader_merge_info));
-  }
-  if (OB_UNLIKELY(ERRSIM_RECONFIG_CHECK_FAILED == NEW_MV_MAJOR_VERSION_NOT_MATCH) && !ls_id.is_sys_ls()) {
-    ret = NEW_MV_MAJOR_VERSION_NOT_MATCH;
-    LOG_INFO("error sim to check failed",  K(ret),
-             K(leader_merge_info), K(ls_id), K(member_merge_info));
-  }
-  return ret;
-}
 
 }
 }

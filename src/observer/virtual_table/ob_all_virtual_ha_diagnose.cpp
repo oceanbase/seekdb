@@ -93,24 +93,6 @@ int ObAllVirtualHADiagnose::insert_stat_(storage::DiagnoseInfo &diagnose_info)
   for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
-      case TENANT_ID:
-        cur_row_.cells_[i].set_int(MTL_ID());
-        break;
-      case LS_ID:
-        cur_row_.cells_[i].set_int(diagnose_info.ls_id_);
-        break;
-      case SVR_IP:
-        if (false == GCTX.self_addr().ip_to_string(ip_, common::OB_IP_PORT_STR_BUFF)) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "ip_to_string failed", K(ret));
-        } else {
-          cur_row_.cells_[i].set_varchar(ObString::make_string(ip_));
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        }
-        break;
-      case SVR_PORT:
-        cur_row_.cells_[i].set_int(GCTX.self_addr().get_port());
-        break;
       case ELECTION_ROLE:
         if (OB_FAIL(role_to_string(diagnose_info.palf_diagnose_info_.election_role_,
                                    election_role_str_, sizeof(election_role_str_)))) {
@@ -246,9 +228,6 @@ int ObAllVirtualHADiagnose::insert_stat_(storage::DiagnoseInfo &diagnose_info)
         break;
       case ARB_SRV_INFO:
         cur_row_.cells_[i].set_varchar(ObString(""));
-#ifdef OB_BUILD_ARBITRATION
-        cur_row_.cells_[i].set_varchar(diagnose_info.arb_srv_diagnose_info_.diagnose_str_.string());
-#endif
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
                                               ObCharset::get_default_charset()));
         break;

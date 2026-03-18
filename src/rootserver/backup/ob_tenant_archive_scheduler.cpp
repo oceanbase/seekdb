@@ -16,12 +16,11 @@
 
 #define USING_LOG_PREFIX ARCHIVE
 #include "rootserver/backup/ob_tenant_archive_scheduler.h"
+#include "rootserver/ob_rs_event_history_table_operator.h" // for ROOTSERVICE_EVENT_ADD
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/backup/ob_tenant_archive_mgr.h"
 #include "share/backup/ob_archive_store.h"
 #include "share/backup/ob_backup_connectivity.h"
-#include "share/ls/ob_ls_operator.h"
-#include "rootserver/tenant_snapshot/ob_tenant_snapshot_util.h"
 
 using namespace oceanbase;
 using namespace rootserver;
@@ -466,7 +465,6 @@ int ObArchiveHandler::close_archive_mode()
 {
   int ret = OB_SUCCESS;
   ObArchiveMode archive_mode;
-  bool has_tenant_snapshot = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("tenant archive scheduler not init", K(ret));
@@ -479,13 +477,6 @@ int ObArchiveHandler::close_archive_mode()
     ret = OB_ALREADY_IN_NOARCHIVE_MODE;
     LOG_USER_ERROR(OB_ALREADY_IN_NOARCHIVE_MODE);
     LOG_WARN("already in noarchive mode", K(ret), K_(tenant_id));
-  } else if (OB_FAIL(ObTenantSnapshotUtil::check_tenant_has_snapshot(*sql_proxy_,
-                                        tenant_id_, has_tenant_snapshot))) {
-    LOG_WARN("failed to check whether tenant has snapshot", K(ret));
-  } else if (has_tenant_snapshot) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("can not close log archive while tenant snapshots exist", KR(ret));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "tenant snapshots exist, close log archive");
   } else if (OB_FAIL(archive_table_op_.close_archive_mode(*sql_proxy_))) {
     LOG_WARN("failed to close archive mode", K(ret), K_(tenant_id));
   } else {
@@ -608,18 +599,10 @@ int ObArchiveHandler::disable_archive(const int64_t dest_no)
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObTenantArchiveRoundAttr new_round_attr;
-  bool has_tenant_snapshot = false;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("tenant archive scheduler not init", K(ret));
-  } else if (OB_FAIL(ObTenantSnapshotUtil::check_tenant_has_snapshot(*sql_proxy_,
-                                        tenant_id_, has_tenant_snapshot))) {
-    LOG_WARN("failed to check whether tenant has snapshot", K(ret));
-  } else if (has_tenant_snapshot) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("can not disable archive while tenant snapshots exist", KR(ret));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "tenant snapshots exist, disable log archive");
   } else if (OB_FAIL(round_handler_.disable_archive(dest_no, new_round_attr))) {
     LOG_WARN("failed to disable archive", K(ret), K_(tenant_id), K(dest_no));
   } else {
@@ -815,8 +798,6 @@ int ObArchiveHandler::notify_(const ObTenantArchiveRoundAttr &round)
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   UNUSED(round);
-  share::ObLSAttrArray ls_array;
-  share::ObLSAttrOperator ls_operator(tenant_id_, sql_proxy_);
   hash::ObHashSet<ObAddr> notify_addr_set;
   share::ObLocationService *location_service = GCTX.location_service_;
   const bool force_renew = true;
@@ -824,18 +805,13 @@ int ObArchiveHandler::notify_(const ObTenantArchiveRoundAttr &round)
   obrpc::ObNotifyArchiveArg arg;
   arg.tenant_id_ = tenant_id_;
 
-  if (OB_FAIL(ls_operator.get_all_ls_by_order(ls_array))) {
-    LOG_WARN("failed to get all ls info", K(ret), K(tenant_id_));
-  } else if (OB_FAIL(notify_addr_set.create(ls_array.count()))) {
+  if (OB_FAIL(notify_addr_set.create(1))) {
     LOG_WARN("failed to create notify addr set", K(ret));
   } else {
-    ARRAY_FOREACH_N(ls_array, i, cnt) {
-      const ObLSAttr &ls_attr = ls_array.at(i);
-      if(OB_FAIL(location_service->get_leader(GCONF.cluster_id, tenant_id_, ls_attr.get_ls_id(), force_renew, leader_addr))) {
-        LOG_WARN("failed to get leader addr", K(ret), KP(location_service), "ls_id", ls_attr.get_ls_id());
-      } else if(OB_FAIL(notify_addr_set.set_refactored(leader_addr))) {
-        LOG_WARN("failed to set server_addr in notify_addr_set", K(ret), "ls_id", ls_attr.get_ls_id(), K(leader_addr));
-      }
+    if(OB_FAIL(location_service->get_leader(GCONF.cluster_id, tenant_id_, SYS_LS, force_renew, leader_addr))) {
+      LOG_WARN("failed to get leader addr", K(ret), KP(location_service));
+    } else if(OB_FAIL(notify_addr_set.set_refactored(leader_addr))) {
+      LOG_WARN("failed to set server_addr in notify_addr_set", K(ret), K(leader_addr));
     }
     LOG_INFO("leader_addr_set to be notified archive:", K(notify_addr_set));
     for (hash::ObHashSet<ObAddr>::const_iterator it = notify_addr_set.begin(); it != notify_addr_set.end(); it++) {

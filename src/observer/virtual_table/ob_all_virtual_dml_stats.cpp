@@ -51,19 +51,6 @@ int ObOptDmlStatMapGetter::operator()(common::hash::HashMapPair<StatKey, ObOptDm
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
-      case ObAllVirtualDMmlStats::COLUMNS::SVR_IP: {
-        cells[cell_idx].set_varchar(svr_ip_);
-        cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case ObAllVirtualDMmlStats::COLUMNS::SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-        break;
-      }
-      case ObAllVirtualDMmlStats::COLUMNS::TENANT_ID: {
-        cells[cell_idx].set_int(dml_stat.tenant_id_);
-        break;
-      }
       case ObAllVirtualDMmlStats::COLUMNS::TABLE_ID: {
         cells[cell_idx].set_int(dml_stat.table_id_);
         break;
@@ -108,7 +95,6 @@ ObAllVirtualDMmlStats::~ObAllVirtualDMmlStats()
 {
   reset();
 }
-
 
 void ObAllVirtualDMmlStats::reset()
 {

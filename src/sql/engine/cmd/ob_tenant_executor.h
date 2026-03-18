@@ -37,60 +37,12 @@ namespace sql
   }
 
 class ObExecContext;
-class ObCreateTenantStmt;
-class ObDropTenantStmt;
-class ObLockTenantStmt;
-class ObModifyTenantStmt;
-class ObChangeTenantStmt;
 class ObFlashBackTenantStmt;
-class ObPurgeTenantStmt;
 class ObPurgeRecycleBinStmt;
 class ObCreateRestorePointStmt;
 class ObDropRestorePointStmt;
 
-class ObCreateTenantExecutor
-{
-public:
-  ObCreateTenantExecutor() {}
-  virtual ~ObCreateTenantExecutor() {}
-  int execute(ObExecContext &ctx, ObCreateTenantStmt &stmt);
-private:
-  int wait_schema_refreshed_(const uint64_t tenant_id);
-  int wait_user_ls_valid_(const uint64_t tenant_id);
-  DISALLOW_COPY_AND_ASSIGN(ObCreateTenantExecutor);
-};
-
-class ObCreateStandbyTenantExecutor
-{
-public:
-  ObCreateStandbyTenantExecutor() {}
-  virtual ~ObCreateStandbyTenantExecutor() {}
-  int execute(ObExecContext &ctx, ObCreateTenantStmt &stmt);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObCreateStandbyTenantExecutor);
-};
-
-class ObDropTenantExecutor
-{
-public:
-  ObDropTenantExecutor() {}
-  virtual ~ObDropTenantExecutor() {}
-  int execute(ObExecContext &ctx, ObDropTenantStmt &stmt);
-private:
-  int check_tenant_has_been_dropped_(
-      ObExecContext &ctx,
-      ObDropTenantStmt &stmt,
-      const uint64_t tenant_id);
-  DISALLOW_COPY_AND_ASSIGN(ObDropTenantExecutor);
-};
-
-DEF_SIMPLE_EXECUTOR(ObModifyTenant);
-
-DEF_SIMPLE_EXECUTOR(ObLockTenant);
-
 DEF_SIMPLE_EXECUTOR(ObFlashBackTenant);
-
-DEF_SIMPLE_EXECUTOR(ObPurgeTenant);
 
 DEF_SIMPLE_EXECUTOR(ObPurgeRecycleBin);
 

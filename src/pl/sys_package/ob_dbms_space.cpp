@@ -22,20 +22,20 @@
 #include "share/stat/ob_dbms_stats_utils.h"
 
 #define GET_COMPRESSED_INFO_SQL "select sum(occupy_size)/sum(original_size) as compression_ratio from oceanbase.__all_virtual_tablet_sstable_macro_info "\
-                                "where tablet_id in (%.*s) and (svr_ip, svr_port) in (%.*s) and tenant_id = %lu;"\
+                                "where tablet_id in (%.*s);"\
 
 #define GET_TABLET_INFO_SQL "select case when tablet_id is null then 0 else tablet_id end as tablet_id,"\
                                   " sum(original_size)/sum(row_count) as row_len,"\
                                   " sum(row_count) as row_count, "\
                                   " sum(occupy_size)/sum(original_size) as compression_ratio "\
                             "from __all_virtual_tablet_sstable_macro_info "\
-                            "where tablet_id in (%.*s) and (svr_ip, svr_port) in (%.*s) and tenant_id = %lu "\
+                            "where tablet_id in (%.*s) "\
                             "group by __all_virtual_tablet_sstable_macro_info.tablet_id with rollup;"
 
 
 #define GET_TABLET_SIZE_SQL "select case when tablet_id is null then 0 else tablet_id end as tablet_id, sum(occupy_size) as tablet_size "\
                             "from __all_virtual_tablet_pointer_status "\
-                            "where tablet_id in (%.*s) and (svr_ip, svr_port) in (%.*s) and tenant_id = %lu "\
+                            "where tablet_id in (%.*s) "\
                             "group by __all_virtual_tablet_pointer_status.tablet_id;"
 
 namespace oceanbase
@@ -306,10 +306,7 @@ int ObDbmsSpace::inner_get_compressed_ratio(ObMySQLProxy *sql_proxy,
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(compression_ratio_sql.assign_fmt(GET_COMPRESSED_INFO_SQL,
                                                    static_cast<int32_t>(tablet_predicate.length()),
-                                                   tablet_predicate.ptr(),
-                                                   static_cast<int32_t>(svr_addr_predicate.length()),
-                                                   svr_addr_predicate.ptr(),
-                                                   info.table_tenant_id_))) {
+                                                   tablet_predicate.ptr()))) {
         SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(result, OB_SYS_TENANT_ID, compression_ratio_sql.ptr()))) {
         SQL_ENG_LOG(WARN, "exec query fail", K(ret));
@@ -533,10 +530,7 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(get_tablet_size_sql.assign_fmt(GET_TABLET_INFO_SQL,
                                                  static_cast<int32_t>(tablet_predicate.length()),
-                                                 tablet_predicate.ptr(),
-                                                 static_cast<int32_t>(svr_addr_predicate.length()),
-                                                 svr_addr_predicate.ptr(),
-                                                 info.table_tenant_id_))) {
+                                                 tablet_predicate.ptr()))) {
         SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(result, OB_SYS_TENANT_ID, get_tablet_size_sql.ptr()))) {
         SQL_ENG_LOG(WARN, "exec query fail", K(ret));
@@ -588,10 +582,7 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(get_tablet_size_sql.assign_fmt(GET_TABLET_SIZE_SQL,
                                                  static_cast<int32_t>(tablet_predicate.length()),
-                                                 tablet_predicate.ptr(),
-                                                 static_cast<int32_t>(svr_addr_predicate.length()),
-                                                 svr_addr_predicate.ptr(),
-                                                 table_tenant_id))) {
+                                                 tablet_predicate.ptr()))) {
         SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(result, OB_SYS_TENANT_ID, get_tablet_size_sql.ptr()))) {
         SQL_ENG_LOG(WARN, "exec query fail", K(ret));

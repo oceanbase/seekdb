@@ -35,7 +35,7 @@ namespace observer
                     "a.gmt_modified as update_time " \
                     "from " \
                     "(" \
-                    "select tenant_id," \
+                    "select " \
                            "database_id," \
                            "table_id," \
                            "table_name," \
@@ -45,9 +45,8 @@ namespace observer
                     "from oceanbase.__all_table) a " \
                     "join oceanbase.__all_database b " \
                     "on a.database_id = b.database_id " \
-                    "and a.tenant_id = b.tenant_id " \
                     "left join (" \
-                      "select tenant_id," \
+                      "select " \
                              "table_id," \
                              "row_cnt," \
                              "avg_row_len," \
@@ -55,7 +54,6 @@ namespace observer
                       "from oceanbase.__all_table_stat " \
                       "where partition_id = -1 or partition_id = table_id) ts " \
                     "on a.table_id = ts.table_id " \
-                    "and a.tenant_id = ts.tenant_id " \
                     "and a.table_type in (0, 1, 2, 3, 4, 14) " \
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \

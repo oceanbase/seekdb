@@ -61,10 +61,7 @@ private:
 private:
   enum WAIT_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    PLAN_ID,
-    SVR_IP,
-    SVR_PORT,
+    PLAN_ID = common::OB_APP_MIN_COLUMN_ID,
     SQL_ID,
     DB_ID,
     PLAN_HASH,
@@ -110,11 +107,8 @@ private:
     OTHER_XML
   };
 
-  const static int64_t KEY_TENANT_ID_IDX = 0;
-  const static int64_t KEY_PLAN_ID_IDX   = 1;
-  const static int64_t KEY_IP_IDX        = 2;
-  const static int64_t KEY_PORT_IDX      = 3;
-  const static int64_t ROWKEY_COUNT      = 4;
+  const static int64_t KEY_PLAN_ID_IDX   = 0;
+  const static int64_t ROWKEY_COUNT      = 1;
   const static int64_t MAX_LENGTH        = 4000;
 
   struct PlanInfo {

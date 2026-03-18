@@ -23,24 +23,21 @@ insert /*+ append enable_parallel_dml parallel(4) */ into ddl_t1
         from table(generator(1000));
 
 alter system minor freeze;
-select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
-                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 14;
 +----------+
 | count(*) |
 +----------+
 |        1 |
 +----------+
-select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
-                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 21;
 +----------+
 | count(*) |
 +----------+
 |        0 |
 +----------+
-select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
-                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 22;
 +----------+
 | count(*) |
@@ -65,24 +62,21 @@ set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE wait_for si
 alter table ddl_t1 add column group(all columns, each column);
 
 alter system minor freeze;
-select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
-                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 14;
 +----------+
 | count(*) |
 +----------+
 |        0 |
 +----------+
-select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
-                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 21;
 +----------+
 | count(*) |
 +----------+
 |        1 |
 +----------+
-select count(*) from __all_virtual_table_mgr where tenant_id = (select effective_tenant_id())
-                                             and tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
+select count(*) from __all_virtual_table_mgr where tablet_id = (select tablet_id from __all_virtual_table where table_name like concat('%', (select table_id from __all_virtual_table where table_name like "ddl_t1"), '%'))
                                              and table_type = 22;
 +----------+
 | count(*) |
@@ -92,7 +86,7 @@ select count(*) from __all_virtual_table_mgr where tenant_id = (select effective
 
 set ob_global_debug_sync = 'now signal signal1';
 set ob_global_debug_sync = 'BEFORE_TABLET_FULL_DIRECT_LOAD_MGR_CLOSE clear';
-select count(*) from __all_virtual_column_group where table_id = (select table_id from __all_virtual_table where table_name like "ddl_t1" and tenant_id = (select effective_tenant_id())) and tenant_id = (select effective_tenant_id());
+select count(*) from __all_virtual_column_group where table_id = (select table_id from __all_virtual_table where table_name like "ddl_t1");
 +----------+
 | count(*) |
 +----------+

@@ -110,9 +110,6 @@ int ObBackupHelper::set_backup_dest(const share::ObBackupPathString &backup_dest
 
 int ObBackupHelper::init_backup_parameter_table_operator_(ObInnerKVTableOperator &kv_table_operator) const
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(kv_table_operator.init(OB_ALL_BACKUP_PARAMETER_TNAME, *this))) {
-    LOG_WARN("failed to init backup parameter table operator", K(ret), K(this));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }

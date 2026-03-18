@@ -29,7 +29,6 @@ namespace oceanbase
 {
 namespace share
 {
-class ObIServerTrace;
 namespace schema
 {
 class ObMultiVersionSchemaService;
@@ -51,8 +50,7 @@ public:
   int init(const bool is_primary_service,
            common::ObMySQLProxy &sql_proxy,
            common::ObServerConfig &config,
-           share::schema::ObMultiVersionSchemaService &schema_service,
-           share::ObIServerTrace &server_trace);
+           share::schema::ObMultiVersionSchemaService &schema_service);
 
   int start();
   void stop();

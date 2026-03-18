@@ -29,6 +29,7 @@ int64_t upper_align(int64_t input, int64_t align);
 int64_t ob_pwrite(const int fd, const char *buf, const int64_t count, const int64_t offset);
 int64_t ob_pread(const int fd, char *buf, const int64_t count, const int64_t offset);
 int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_name);
+char* upper_align_buf(char *in_buf, int64_t align);
 }
 }
 #endif /* OB_UTILITY_H_ */

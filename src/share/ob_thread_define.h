@@ -46,7 +46,6 @@ TG_DEF(DDLPQueueTh, DDLPQueueTh, THREAD_POOL, ThreadCountPair(GET_THREAD_NUM_BY_
 TG_DEF(DiagnoseQueueTh, DiagnoseQueueTh, THREAD_POOL, ThreadCountPair(observer::ObSrvDeliver::MYSQL_DIAG_TASK_THREAD_CNT, observer::ObSrvDeliver::MINI_MODE_MYSQL_DIAG_TASK_THREAD_CNT))
 TG_DEF(DdlBuild, DdlBuild, ASYNC_TASK_QUEUE, ThreadCountPair(16, 1), 4 << 10)
 TG_DEF(LSService, LSService, REENTRANT_THREAD_POOL, 1)
-TG_DEF(ObCreateStandbyFromNetActor, ObCreateStandbyFromNetActor, REENTRANT_THREAD_POOL, 1)
 TG_DEF(SimpleLSService, SimpleLSService, REENTRANT_THREAD_POOL, 1)
 // TG_DEF(IntermResGC, IntermResGC, TIMER)
 TG_DEF(ServerGTimer, ServerGTimer, TIMER)
@@ -131,24 +130,13 @@ TG_DEF(RCService, RCSrv, QUEUE_THREAD,
        logservice::ObRoleChangeService::MAX_THREAD_NUM),
        logservice::ObRoleChangeService::MAX_RC_EVENT_TASK)
 TG_DEF(ApplyService, ApplySrv, LINK_QUEUE_THREAD, 1, (common::APPLY_TASK_QUEUE_SIZE + 1) * OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET)
-TG_DEF(GlobalCtxTimer, GlobalCtxTimer, TIMER)
 TG_DEF(StorageLogWriter, StorageLogWriter, THREAD_POOL, 1)
 TG_DEF(ReqMemEvict, ReqMemEvict, TIMER)
 TG_DEF(ReplayProcessStat, ReplayProcessStat, TIMER)
 TG_DEF(ActiveSessHist, ActiveSessHist, TIMER)
 TG_DEF(CTASCleanUpTimer, CTASCleanUpTimer, TIMER)
 TG_DEF(DDLScanTask, DDLScanTask, TIMER)
-TG_DEF(TenantLSMetaChecker, LSMetaCh, TIMER)
 TG_DEF(TenantTabletMetaChecker, TbMetaCh, TIMER)
-TG_DEF(ServerMetaChecker, SvrMetaCh, TIMER)
-#ifdef OB_BUILD_ARBITRATION
-TG_DEF(ArbNormalRpcQueueTh, ArbNormalRpcQueueTh, THREAD_POOL, ThreadCountPair(arbserver::ObArbSrvDeliver::get_normal_rpc_thread_num(), arbserver::ObArbSrvDeliver::MINI_MODE_RPC_QUEUE_CNT))
-TG_DEF(ArbServerRpcQueueTh, ArbSrvRpcQueueTh, THREAD_POOL, ThreadCountPair(arbserver::ObArbSrvDeliver::get_server_rpc_thread_num(), arbserver::ObArbSrvDeliver::MINI_MODE_RPC_QUEUE_CNT))
-#endif
-TG_DEF(ArbGCSTh, ArbGCTimerP, TIMER)
-#ifdef OB_BUILD_ARBITRATION
-TG_DEF(ArbServerTimer, ArbServerTimer, TIMER)
-#endif
 TG_DEF(DataDictTimer, DataDictTimer, TIMER)
 TG_DEF(CDCService, CDCSrv, THREAD_POOL, 1)
 TG_DEF(LogUpdater, LogUpdater, TIMER)
@@ -228,4 +216,5 @@ TG_DEF(TenantFreezer, FrzTrigger, TIMER)
 TG_DEF(CommonLSService, COMMONLSSe, TIMER)
 TG_DEF(PxTargetMgr, PxTargetMgr, TIMER)
 TG_DEF(TLD_HTimer, TLD_HTimer, TIMER)
+TG_DEF(SysTntLoadSysPacTimer, SysTntLoadSysPacTimer, TIMER)
 #endif

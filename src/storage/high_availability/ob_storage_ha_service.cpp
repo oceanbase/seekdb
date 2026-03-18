@@ -219,29 +219,7 @@ int ObStorageHAService::scheduler_ls_ha_handler_()
 
 int ObStorageHAService::do_ha_handler_(const share::ObLSID &ls_id)
 {
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  ObLSHandle ls_handle;
-  ObLS *ls = nullptr;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("storage ha service do not init", K(ret));
-  } else if (!ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("do ha handler get invalid argument", K(ret), K(ls_id));
-  } else if (OB_FAIL(ls_service_->get_ls(ls_id, ls_handle, ObLSGetMod::HA_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(ls_id));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls should not be NULL", K(ret), KP(ls), K(ls_id));
-  } else {
-    if (OB_SUCCESS != (tmp_ret = ls->get_ls_restore_handler()->process())) {
-      LOG_WARN("failed to do ls restore handler process", K(tmp_ret), K(ls_id));
-    }
-
-    //ls->tablets transfer
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

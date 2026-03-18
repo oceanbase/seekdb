@@ -92,23 +92,20 @@ int ObLogFlashbackService::flashback(const uint64_t tenant_id, const SCN &flashb
     // 5. send Flashback msg and wait all ls replicas returns OB_SUCCESS
     FLOG_INFO("[FLASHBACK_STAGE 0] start flashback", COMMON_LOG_INFO);
     common::ObTimeGuard time_guard("flashback", 1 * 1000 * 1000);
-    share::ObLSStatusInfoArray ls_array;
     ChangeModeOpArray stop_mode_op_array, flashback_mode_op_array;
     const int64_t begin_time_us = common::ObTimeUtility::current_time();
     int64_t curr_time_us = 0;
     #define REMAIN_TIMEOUT (timeout_us - (common::ObTimeUtility::current_time() - begin_time_us))
-    if (OB_FAIL(get_ls_list_(tenant_id, ls_array))) {
-      CLOG_LOG(WARN, "get_ls_list_ failed", COMMON_LOG_INFO);
-    } else if (FALSE_IT(time_guard.click("get_ls_list")) ||
+    if (FALSE_IT(time_guard.click("get_ls_list")) ||
         OB_FAIL(get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::PREPARE_FLASHBACK,
-        ls_array, REMAIN_TIMEOUT, stop_mode_op_array))) {
+        REMAIN_TIMEOUT, stop_mode_op_array))) {
       CLOG_LOG(WARN, "get_and_change_access_mode_ failed", COMMON_LOG_INFO);
     } else if (FALSE_IT(time_guard.click("change_to_prepare_flshback_mode")) ||
-        OB_FAIL(wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, ls_array, REMAIN_TIMEOUT))) {
+        OB_FAIL(wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, REMAIN_TIMEOUT))) {
       CLOG_LOG(WARN, "wait_all_ls_replicas_log_sync_ failed", COMMON_LOG_INFO);
     } else if (FALSE_IT(time_guard.click("wait_log_sync")) ||
         OB_FAIL(get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::FLASHBACK,
-        ls_array, REMAIN_TIMEOUT, flashback_mode_op_array))) {
+        REMAIN_TIMEOUT, flashback_mode_op_array))) {
       CLOG_LOG(WARN, "get_and_change_access_mode_ failed", COMMON_LOG_INFO);
     } else if (FALSE_IT(time_guard.click("change_to_flashback_mode")) ||
         OB_FAIL(do_flashback_(tenant_id, flashback_scn, flashback_mode_op_array, REMAIN_TIMEOUT))) {
@@ -126,29 +123,9 @@ int ObLogFlashbackService::flashback(const uint64_t tenant_id, const SCN &flashb
   return ret;
 }
 
-int ObLogFlashbackService::get_ls_list_(const uint64_t tenant_id,
-                                        share::ObLSStatusInfoArray &ls_array)
-{
-  int ret = OB_SUCCESS;
-  share::ObLSStatusOperator ls_status_op;
-  ls_array.reset();
-  if (!is_user_tenant(tenant_id)|| OB_ISNULL(sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support flashback user tenant", KR(ret), K(tenant_id), KP(sql_proxy_));
-  } else if (OB_FAIL(ls_status_op.get_all_ls_status_by_order_for_switch_tenant(
-                                  tenant_id, 
-                                  false/* ignore_need_create_abort */, 
-                                  ls_array, 
-                                  *sql_proxy_))) {
-    LOG_WARN("fail to get_all_ls_status_by_order_for_switch_tenant", KR(ret), K(tenant_id), KP(sql_proxy_));
-  }
-  return ret;
-}
-
 int ObLogFlashbackService::wait_all_ls_replicas_log_sync_(
     const uint64_t tenant_id,
     const SCN &flashback_scn,
-    const share::ObLSStatusInfoArray &ls_array,
     const int64_t timeout_us) const
 {
   int ret = OB_SUCCESS;
@@ -156,7 +133,7 @@ int ObLogFlashbackService::wait_all_ls_replicas_log_sync_(
   // 1. constructs ls operator list
   // 2. motivates all ls operator until success, timeout or fail
   CheckLogOpArray check_log_op_array;
-  if (OB_FAIL(construct_ls_operator_list_(tenant_id, flashback_scn, ls_array, check_log_op_array))) {
+  if (OB_FAIL(construct_ls_operator_list_(tenant_id, flashback_scn, check_log_op_array))) {
     CLOG_LOG(WARN, "construct_ls_operator_list_ failed", COMMON_LOG_INFO);
   } else {
     palf::TimeoutChecker not_timeout(timeout_us);
@@ -198,7 +175,6 @@ int ObLogFlashbackService::get_and_change_access_mode_(
     const uint64_t tenant_id,
     const SCN &flashback_scn,
     const palf::AccessMode &dst_mode,
-    const share::ObLSStatusInfoArray &ls_array,
     const int64_t timeout_us,
     ChangeModeOpArray &change_mode_op_array)
 {
@@ -206,7 +182,7 @@ int ObLogFlashbackService::get_and_change_access_mode_(
   #define COMMON_LOG_INFO K(ret), K_(self), K(tenant_id), K(dst_mode), K(flashback_scn)
   // 1. constructs ls operator list
   // 2. motivates all ls operator until success or fail
-  if (OB_FAIL(construct_ls_operator_list_(tenant_id, flashback_scn, ls_array, change_mode_op_array))) {
+  if (OB_FAIL(construct_ls_operator_list_(tenant_id, flashback_scn, change_mode_op_array))) {
     CLOG_LOG(WARN, "construct_ls_operator_list_ failed", COMMON_LOG_INFO);
   } else {
     for (int64_t i = 0; i < change_mode_op_array.count(); i++) {
@@ -291,24 +267,19 @@ template<typename T=ObLogFlashbackService::BaseLSOperator>
 int ObLogFlashbackService::construct_ls_operator_list_(
     const uint64_t tenant_id,
     const SCN &flashback_scn,
-    const share::ObLSStatusInfoArray &ls_array,
     common::ObArray<T> &ls_operator_array) const
 {
   int ret = OB_SUCCESS;
   ls_operator_array.reset();
-  for (int i = 0; i < ls_array.count(); i++) {
-    const share::ObLSStatusInfo &ls_status = ls_array.at(i);
-    const share::ObLSID &ls_id = ls_status.ls_id_;
-    T op(tenant_id, ls_id, self_, flashback_scn, location_adapter_, rpc_proxy_);
-    if (false == op.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      CLOG_LOG(WARN, "FlashbackService Operator invalid", K(ret), K_(self), K(ls_id), K(op));
-    } else if (OB_FAIL(ls_operator_array.push_back(op))) {
-      CLOG_LOG(WARN, "push_back failed", K(ret), K_(self), K(ls_id));
-    }
+  T op(tenant_id, SYS_LS/*ls_id*/, self_, flashback_scn, location_adapter_, rpc_proxy_);
+  if (false == op.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    CLOG_LOG(WARN, "FlashbackService Operator invalid", K(ret), K_(self), K(op));
+  } else if (OB_FAIL(ls_operator_array.push_back(op))) {
+    CLOG_LOG(WARN, "push_back failed", K(ret), K_(self));
   }
   CLOG_LOG(INFO, "construct_ls_operator_list_ finish", K(ret), K_(self), K(flashback_scn),
-      K(ls_array), K(ls_operator_array));
+      K(ls_operator_array));
   return ret;
 }
 
@@ -373,7 +344,6 @@ int ObLogFlashbackService::BaseLSOperator::update_leader_()
   leader_.reset();
   if (OB_FAIL(location_adapter_->nonblock_get_leader(tenant_id_, ls_id_.id(), leader_))) {
     CLOG_LOG(INFO, "nonblock_get_leader failed", K(ret), K_(ls_id));
-    location_adapter_->nonblock_renew_leader(tenant_id_, ls_id_.id());
   }
   return ret;
 }

@@ -64,7 +64,6 @@ public:
 
 private:
   int get_leader_(const uint64_t tenant_id, common::ObAddr &leader);
-  int refresh_location_(const uint64_t tenant_id);
 
 private:
   bool is_inited_;

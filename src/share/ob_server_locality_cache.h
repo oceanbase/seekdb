@@ -84,40 +84,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObServerLocality);
 };
 
-class ObServerLocalityCache
-{
-public:
-  ObServerLocalityCache();
-  virtual ~ObServerLocalityCache();
-  int init();
-  void reset();
-  void destroy();
-  int get_server_zone_type(const common::ObAddr &server, common::ObZoneType &zone_type) const; 
-  int get_server_region(const common::ObAddr &server, common::ObRegion &region) const;
-  int get_server_idc(const common::ObAddr &server, common::ObIDC &idc) const;
-  int get_server_zone(const common::ObAddr &server, common::ObZone &zone) const;
-  int get_noempty_zone_region(const common::ObZone &zone, common::ObRegion &region) const;
-  int get_server_locality_array(common::ObIArray<ObServerLocality> &server_locality_array, bool &has_readonly_zone) const;
-  int set_server_locality_array(const common::ObIArray<ObServerLocality> &server_locality_array, bool has_readonly_zone);
-  int get_server_cluster_id(const common::ObAddr &server, int64_t &cluster_id) const;
-  int record_server_cluster_id(const common::ObAddr &server, const int64_t &cluster_id);
-  int record_server_region(const common::ObAddr &server, const common::ObRegion &region);
-  int record_server_idc(const common::ObAddr &server, const common::ObIDC &idc);
-  TO_STRING_KV(K_(server_locality_array), K_(has_readonly_zone));
-private:
-  int get_server_region_from_map_(const common::ObAddr &server, common::ObRegion &region) const;
-  int get_server_idc_from_map_(const common::ObAddr &server, common::ObIDC &idc) const;
-private:
-  mutable common::SpinRWLock rwlock_;
-  common::ObSEArray<ObServerLocality, 32> server_locality_array_;
-  common::ObLinearHashMap<common::ObAddr, int64_t> server_cid_map_;  // store <server, cluster_id>
-  common::ObLinearHashMap<common::ObAddr, common::ObRegion> server_region_map_;
-  common::ObLinearHashMap<common::ObAddr, common::ObIDC> server_idc_map_;
-  bool has_readonly_zone_;
-  bool is_inited_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObServerLocalityCache);
-};
 }
 }
 #endif /* OCEANBASE_SHARE_OB_SERVER_LOCALITY_CACHE_ */

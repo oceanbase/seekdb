@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX OBLOG
+
+#include "ob_log_config.h"
+
+#include "lib/container/ob_array.h"             // ObArray
+#include "lib/allocator/ob_malloc.h"            // ob_malloc/ob_free
+
+
+using namespace oceanbase::common;
+namespace oceanbase
+{
+namespace logfetcher
+{
+int ObLogFetcherConfig::init()
+{
+  int ret = OB_SUCCESS;
+
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_ERROR("init twice", KR(ret), K(is_inited_));
+  } else if (OB_FAIL(ObBaseConfig::init())){
+    LOG_ERROR("init ObBaseConfig failed", KR(ret));
+  } else {
+    is_inited_ = true;
+  }
+
+  return ret;
+}
+
+void ObLogFetcherConfig::destroy()
+{
+  if (is_inited_) {
+    ObBaseConfig::destroy();
+    is_inited_ = false;
+  }
+}
+
+int ObLogFetcherConfig::load_from_map(const ConfigMap &configs,
+    const int64_t version /* = 0 */,
+    const bool check_name /* = false */)
+{
+  int ret = OB_SUCCESS;
+
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_ERROR("ObLogFetcherConfig has not been initialized", KR(ret));
+  } else {
+    std::map<std::string, std::string>::const_iterator iter = configs.begin();
+    for (; OB_SUCCESS == ret && iter != configs.end(); iter++) {
+      ObConfigItem *const *pp_item = NULL;
+
+      if (NULL == (pp_item = container_.get(ObConfigStringKey(iter->first.c_str())))) {
+        if (check_name) {
+          _LOG_WARN("invalid config string, unknown config item! name: [%s] value: [%s]",
+              iter->first.c_str(), iter->second.c_str());
+          ret = OB_INVALID_ARGUMENT;
+        }
+      } else {
+        (*pp_item)->set_value(iter->second.c_str());
+        _LOG_INFO("load config succ, %s=%s", iter->first.c_str(), iter->second.c_str());
+      }
+    }
+  }
+
+  return ret;
+}
+
+} // namespace logfetcher
+} // namespace oceanbase

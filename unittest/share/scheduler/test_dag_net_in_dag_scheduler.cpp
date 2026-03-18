@@ -1800,7 +1800,6 @@ TEST_F(TestDagScheduler, test_add_multi_co_merge_dag_net)
     param.tablet_id_ = tablet_id;
     param.merge_type_ = compaction::ObMergeType::CONVERT_CO_MAJOR_MERGE;
     param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    param.schedule_transfer_seq_ = 0;
     ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
     EXPECT_EQ(OB_SUCCESS, ret);
     COMMON_LOG(INFO, "Success to create and add co convert dag net", K(ret));
@@ -1811,7 +1810,6 @@ TEST_F(TestDagScheduler, test_add_multi_co_merge_dag_net)
     param.tablet_id_ = tablet_id;
     param.merge_type_ = compaction::ObMergeType::CONVERT_CO_MAJOR_MERGE;
     param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    param.schedule_transfer_seq_ = 0;
     ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
     EXPECT_EQ(OB_TASK_EXIST, ret);
     COMMON_LOG(INFO, "Success to create and add co convert dag net", K(ret));
@@ -1822,7 +1820,6 @@ TEST_F(TestDagScheduler, test_add_multi_co_merge_dag_net)
     param.tablet_id_ = tablet_id;
     param.merge_type_ = compaction::ObMergeType::MAJOR_MERGE;
     param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    param.schedule_transfer_seq_ = 0;
     ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
     EXPECT_EQ(OB_SUCCESS, ret);
     COMMON_LOG(INFO, "Success to create and add co major dag net", K(ret));
@@ -1832,7 +1829,6 @@ TEST_F(TestDagScheduler, test_add_multi_co_merge_dag_net)
     param.tablet_id_ = tablet_id;
     param.merge_type_ = compaction::ObMergeType::MEDIUM_MERGE;
     param.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-    param.schedule_transfer_seq_ = 0;
     ret = scheduler->create_and_add_dag_net<compaction::ObCOMergeDagNet>(&param);
     EXPECT_EQ(OB_SUCCESS, ret);
     COMMON_LOG(INFO, "Success to create and add co medium dag net", K(ret));

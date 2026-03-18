@@ -258,7 +258,6 @@ public:
   DAG_PARAM_FUNC(const ObLSID &, ls_id);
   DAG_PARAM_FUNC(const ObTabletID &, tablet_id);
   DAG_PARAM_FUNC(int64_t, merge_version);
-  DAG_PARAM_FUNC(int64_t, schedule_transfer_seq);
   DAG_PARAM_FUNC(ObExecMode, exec_mode);
   STATIC_PARAM_FUNC(bool, is_tenant_major_merge);
   STATIC_PARAM_FUNC(bool, is_full_merge);

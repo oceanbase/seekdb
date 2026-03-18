@@ -69,12 +69,9 @@ private:
 
   enum INSPECT_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TRACE_ID,
+        TRACE_ID = common::OB_APP_MIN_COLUMN_ID,
     DATAHUB_ID,
     MESSAGE_TYPE,
-    TENANT_ID,
     HOLD_SIZE,
     TIMEOUT_TS,
     START_TIME

@@ -35,7 +35,6 @@ public:
   void set_collation_type(const common::ObCollationType type);
   void set_charset_type(const common::ObCharsetType type);
   common::ObCharsetType get_charset_type() const;
-  int set_primary_zone(const common::ObString &zone);
   void set_read_only(const bool read_only);
   int set_default_tablegroup_name(const common::ObString &tablegroup_name);
   void set_alter_option_set(const common::ObBitSet<> &alter_option_set);

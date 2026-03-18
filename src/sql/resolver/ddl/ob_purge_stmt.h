@@ -147,41 +147,6 @@ inline void ObPurgeDatabaseStmt::set_db_name(const common::ObString &db_name)
   purge_db_arg_.db_name_ = db_name;
 }
 
-
-
-/**
- * purge tenant
- */
-
-class ObPurgeTenantStmt : public ObDDLStmt
-{
-public:
-  ObPurgeTenantStmt() : ObDDLStmt(stmt::T_PURGE_TENANT) {}
-  explicit ObPurgeTenantStmt(common::ObIAllocator *name_pool)
-    : ObDDLStmt(name_pool, stmt::T_PURGE_TENANT)
-  {}
-  virtual ~ObPurgeTenantStmt() {}
-  const obrpc::ObPurgeTenantArg& get_purge_tenant_arg() const { return purge_tenant_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  uint64_t get_tenant_id() const { return purge_tenant_arg_.tenant_id_; }
-  void set_tenant_name(const common::ObString &tenant_name);
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return purge_tenant_arg_; }
-  TO_STRING_KV(K_(stmt_type),K_(purge_tenant_arg));
-private:
-  obrpc::ObPurgeTenantArg purge_tenant_arg_;
-  DISALLOW_COPY_AND_ASSIGN(ObPurgeTenantStmt);
-};
-
-inline void ObPurgeTenantStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  purge_tenant_arg_.tenant_id_ = tenant_id;
-}
-
-inline void ObPurgeTenantStmt::set_tenant_name(const common::ObString &tenant_name)
-{
-  purge_tenant_arg_.tenant_name_ = tenant_name;
-}
-
 /**
  * purge recyclebin
  */

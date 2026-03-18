@@ -1660,9 +1660,9 @@ int ObExternalTableFileManager::delete_auto_refresh_job(ObExecContext &ctx, ObMy
   int ret = OB_SUCCESS;
   ObSqlString sql;
   if (OB_FAIL(sql.append_fmt(
-          "delete from %s where tenant_id = %lu and job_name= '%s'",
+          "delete from %s where job_name= '%s'",
           share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-          0UL, auto_refresh_job_name))) {
+          auto_refresh_job_name))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     int64_t affected_rows = 0;

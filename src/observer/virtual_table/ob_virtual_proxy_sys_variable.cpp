@@ -137,10 +137,6 @@ int ObVirtualProxySysVariable::get_all_sys_variable()
               cur_row_.cells_[cell_idx].set_collation_type(coll_type);
               break;
             }
-            case TENANT_ID: {
-              cur_row_.cells_[cell_idx].set_int(sysvar_schema->get_tenant_id());
-              break;
-            }
             case DATA_TYPE: {
               cur_row_.cells_[cell_idx].set_int(sysvar_schema->get_data_type());
               break;

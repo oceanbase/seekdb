@@ -153,95 +153,18 @@ int ObRoutePolicy::calculate_replica_priority(const ObAddr &local_server,
   }
   return ret;
 }
-// local locality has not been initialized, so it is impossible to determine the pos type, therefore, it is uniformly set to other
-int ObRoutePolicy::calc_position_type(const ObServerLocality &candi_locality,
-                                      CandidateReplica &candi_replica)
-{
-  int ret = OB_SUCCESS;
-  if (local_addr_ == candi_replica.get_server()) {
-    candi_replica.attr_.pos_type_ = SAME_SERVER;
-  } else if (OB_UNLIKELY(false == local_locality_.is_init())) {
-    candi_replica.attr_.pos_type_ = OTHER_REGION;
-  } else if (OB_UNLIKELY(false == candi_locality.is_init())) {
-    candi_replica.attr_.pos_type_ = OTHER_REGION;
-  } else if (is_same_idc(local_locality_, candi_locality)) {
-    candi_replica.attr_.pos_type_ = SAME_IDC;
-  } else if (is_same_region(local_locality_, candi_locality)) {
-    candi_replica.attr_.pos_type_ = SAME_REGION;
-  } else {
-    candi_replica.attr_.pos_type_ = OTHER_REGION;
-  }
-  return ret;
-}
 
-int ObRoutePolicy::init_candidate_replica(const ObIArray<share::ObServerLocality> &server_locality_array,
-                                          CandidateReplica &candi_replica)
+int ObRoutePolicy::init_candidate_replica(CandidateReplica &candi_replica)
 {
   int ret = OB_SUCCESS;
   ObServerLocality candi_locality;
-  if (OB_FAIL(get_server_locality(candi_replica.get_server(), server_locality_array, candi_locality))) {
-    LOG_WARN("fail to get server locality", K(server_locality_array), K(candi_locality), K(ret));
-  } else if (OB_UNLIKELY(false == candi_locality.is_init())) {
-    //if can't get candi_replica locality, mark it's filter.
-    candi_replica.is_filter_ = true;
-  } else if (OB_FAIL(get_merge_status(candi_locality, candi_replica))) {
-    LOG_WARN("fail to get merge status", K(candi_locality), K(candi_replica), K(ret));
-  } else if (OB_FAIL(get_zone_status(candi_locality, candi_replica))) {
-    LOG_WARN("fail to get zone status", K(candi_locality), K(candi_replica), K(ret));
-  } else if (OB_FAIL(calc_position_type(candi_locality, candi_replica))) {
-    LOG_WARN("fail to calc postion type", K(server_locality_array), K(ret));
-  } else {
-    candi_replica.attr_.zone_type_ = candi_locality.get_zone_type();
-    candi_replica.attr_.start_service_time_ = candi_locality.get_start_service_time();
-    candi_replica.attr_.server_stop_time_ = candi_locality.get_server_stop_time();
-    candi_replica.attr_.server_status_ = candi_locality.get_server_status();
-  }
-  return ret;
-}
-
-int ObRoutePolicy::get_merge_status(const ObServerLocality &candi_locality,
-                                    CandidateReplica &candi_replica)
-{
-  int ret = OB_SUCCESS;
-  // from ob4.0, server do not have merge status
-  UNUSED(candi_locality);
+  candi_replica.attr_.zone_status_ = ObZoneStatus::ACTIVE;
   candi_replica.attr_.merge_status_ = NOMERGING;
-  return ret;
-}
-
-int ObRoutePolicy::get_zone_status(const ObServerLocality &candi_locality,
-                                   CandidateReplica &candi_replica)
-{
-  int ret = OB_SUCCESS;
-  if (candi_locality.is_active()) {
-    candi_replica.attr_.zone_status_ = ObZoneStatus::ACTIVE;
-  } else {
-    candi_replica.attr_.zone_status_ = ObZoneStatus::INACTIVE;
-  }
-  return ret;
-}
-
-int ObRoutePolicy::get_server_locality(const ObAddr &addr,
-                                       const ObIArray<share::ObServerLocality> &server_locality_array,
-                                       share::ObServerLocality &svr_locality)
-{
-  int ret = OB_SUCCESS;
-  bool is_found = false;
-  for(int64_t i = 0; OB_SUCC(ret) && !is_found && i < server_locality_array.count(); ++i) {
-    const ObServerLocality &cur_locality = server_locality_array.at(i);
-    if (addr == cur_locality.get_addr()) {
-      if (OB_FAIL(svr_locality.assign(cur_locality))) {
-        LOG_WARN("fail to assign locality", K(addr), K(cur_locality), K(server_locality_array), K(ret));
-      } else {
-        is_found = true;
-      }
-    }
-  }
-  if (!is_found) {
-    // Here no error is reported. When locality is not found, pos_type cannot be correctly set later, and each replica will become other region
-    // This situation is equivalent to randomly selecting a replica, weak reads should try to ensure executability
-    LOG_WARN("not found locality", K(addr), K(server_locality_array), K(ret));
-  }
+  candi_replica.attr_.pos_type_ = SAME_SERVER;
+  candi_replica.attr_.zone_type_ = ObZoneType::ZONE_TYPE_READWRITE;
+  candi_replica.attr_.start_service_time_ = GCTX.start_service_time_;
+  candi_replica.attr_.server_stop_time_ = 0;
+  candi_replica.attr_.server_status_ = ObServerStatus::OB_SERVER_ACTIVE;
   return ret;
 }
 
@@ -253,8 +176,8 @@ int ObRoutePolicy::init_candidate_replicas(common::ObIArray<CandidateReplica> &c
     LOG_WARN("not init", K(ret));
   }
   for (int64_t i = 0 ; OB_SUCC(ret) && i < candi_replicas.count(); ++i) {
-    if (OB_FAIL(init_candidate_replica(server_locality_array_, candi_replicas.at(i)))) {
-      LOG_WARN("fail to candidate replica", K(i), K(server_locality_array_), K(candi_replicas), K(ret));
+    if (OB_FAIL(init_candidate_replica(candi_replicas.at(i)))) {
+      LOG_WARN("fail to candidate replica", K(i), K(candi_replicas), K(ret));
     }
   }
   return ret;
@@ -451,13 +374,6 @@ int ObRoutePolicy::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(GCTX.locality_manager_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("locality manager is null", K(ret), KP(GCTX.locality_manager_));
-  } else if (OB_FAIL(GCTX.locality_manager_->get_server_locality_array(server_locality_array_, has_readonly_zone_))) {
-    LOG_WARN("fail to get server locality", K(ret));
-  } else if (OB_FAIL(get_server_locality(local_addr_, server_locality_array_, local_locality_))) {
-    LOG_WARN("fail to get local locality", K(ret));
   } else {
     is_inited_ = true;
   }

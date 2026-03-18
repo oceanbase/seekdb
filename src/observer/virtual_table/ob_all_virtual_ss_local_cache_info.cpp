@@ -18,10 +18,6 @@
 #include "share/ob_server_struct.h"
 #include "share/ash/ob_di_util.h"
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_disk_space_manager.h"
-#endif
-
 using namespace oceanbase::storage;
 
 namespace oceanbase
@@ -61,7 +57,6 @@ int ObAllVirtualSSLocalCacheInfo::inner_open()
   int ret = OB_SUCCESS;
   return ret;
 }
-
 
 int ObAllVirtualSSLocalCacheInfo::inner_get_next_row(common::ObNewRow *&row)
 {
@@ -341,25 +336,7 @@ int ObAllVirtualSSLocalCacheInfo::process_curr_tenant(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-      case SVR_IP: {
-        if (addr.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "fail to execute ip_to_string", KR(ret));
-        }
-        break;
-      }
-      case SVR_PORT: {
-        cells[i].set_int(addr.get_port());
-        break;
-      }
-      case TENANT_ID: {
-        cells[i].set_int(tenant_id_);
-        break;
-      }
+
       case CACHE_NAME: {
         cells[i].set_varchar(inst_list_[cur_idx_].cache_name_);
         cells[i].set_collation_type(

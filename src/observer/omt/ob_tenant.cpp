@@ -24,9 +24,6 @@
 #include "lib/worker.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/ob_file_system_router.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_disk_space_manager.h"
-#endif
 #include "share/rc/ob_tenant_module_init_ctx.h"
 #include "sql/engine/px/ob_px_worker.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"

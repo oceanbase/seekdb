@@ -261,10 +261,6 @@ int ObTenantWeakReadService::get_cluster_version_by_rpc_(SCN &version)
     } else {
       version = resp.version_;
     }
-
-    if (OB_SUCCESS != ret) {
-      refresh_cluster_service_master_();
-    }
   }
   return ret;
 }
@@ -272,29 +268,7 @@ int ObTenantWeakReadService::get_cluster_version_by_rpc_(SCN &version)
 int ObTenantWeakReadService::get_cluster_service_master_(common::ObAddr &cluster_service_master)
 {
   int ret = OB_SUCCESS;
-  bool force_renew = false;  // force renew location cache or not
-  ObTabletID tablet_id = cluster_service_.get_cluster_service_tablet_id();
-  const int64_t cluster_id = obrpc::ObRpcNetHandler::CLUSTER_ID;
-  DEFINE_TIME_GUARD("get_cluster_service_master", LOCATION_CACHE_GET_WARN_THRESHOLD);
-  ObLSID ls_id;
-  const uint64_t superior_tenant_id = get_private_table_exec_tenant_id(MTL_ID());
-  if (OB_ISNULL(GCTX.location_service_) || OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("GCTX not init", KR(ret));
-  } else if (OB_FAIL(GCTX.location_service_->nonblock_get(MTL_ID(), tablet_id, ls_id))) {
-    LOG_WARN("get lsid error", KR(ret), K(tablet_id), "tenant_id", MTL_ID());
-  } else if (!GCTX.schema_service_->is_tenant_full_schema(superior_tenant_id)) {
-    ret = OB_NEED_WAIT;
-    if (REACH_TIME_INTERVAL(1000 * 1000L)) { // 1s
-      LOG_WARN("tenant schema is not ready, need wait", KR(ret), K(superior_tenant_id));
-    }
-  } else if (OB_FAIL(GCTX.location_service_->get_leader(
-                    cluster_id, MTL_ID(), ls_id, force_renew, cluster_service_master))) {
-    LOG_WARN("get tenant weak read cluster service partition leader from location cache fail",
-        KR(ret), K(tablet_id), K(force_renew));
-  } else {
-    // success
-  }
+  cluster_service_master = GCTX.self_addr();
   return ret;
 }
 
@@ -378,30 +352,6 @@ void ObTenantWeakReadService::get_weak_read_stat(ObTenantWeakReadStat &wrs_stat)
   wrs_stat.is_cluster_master_ = cluster_service_.is_service_master()?1:0;
 }
 
-void ObTenantWeakReadService::refresh_cluster_service_master_()
-{
-  int ret = OB_SUCCESS;
-  int64_t cur_tstamp = ObTimeUtility::current_time();
-  const int64_t last_refresh_tstamp = ATOMIC_LOAD(&last_refresh_locaction_cache_tstamp_);
-
-  if (OB_NOT_NULL(GCTX.location_service_)
-      && cur_tstamp - last_refresh_tstamp > REFRESH_LOCATION_CACHE_INTERVAL) {
-    ObTabletID tablet_id = cluster_service_.get_cluster_service_tablet_id();
-    const int64_t cluster_id = obrpc::ObRpcNetHandler::CLUSTER_ID;
-    ObLSID ls_id;
-    if (OB_FAIL(GCTX.location_service_->nonblock_get(MTL_ID(), tablet_id, ls_id))) {
-      LOG_WARN("get lsid error", K(ret), K(tablet_id), "tenant_id", MTL_ID());
-    } else if (OB_FAIL(GCTX.location_service_->nonblock_renew(cluster_id, MTL_ID(), ls_id))) {
-      LOG_WARN("nonblock renew error", K(ret), K(cluster_id), "tennant_id", MTL_ID(), K(ls_id));
-    } else {
-      // do nothing
-    }
-
-    cur_tstamp = ObTimeUtility::current_time();
-    ATOMIC_SET(&last_refresh_locaction_cache_tstamp_, cur_tstamp);
-  }
-}
-
 void ObTenantWeakReadService::set_force_self_check_(bool need_stop_service)
 {
   if (OB_UNLIKELY(need_stop_service)) {
@@ -447,9 +397,7 @@ void ObTenantWeakReadService::process_cluster_heartbeat_rpc_cb(
   } else {
     int ret = err_code;
     LOG_WARN("tenant weak read service cluster heartbeat RPC fail", K(ret), K(rcode), K(tenant_id_),
-        K(dst), "cluster_service_tablet_id", cluster_service_.get_cluster_service_tablet_id());
-    // force refresh cluster service master
-    refresh_cluster_service_master_();
+        K(dst));
   }
 }
 
@@ -529,7 +477,6 @@ void ObTenantWeakReadService::print_stat_()
       K(get_cluster_version_err),
       "cluster_version_delta", (in_cluster_service ? cur_tstamp - cluster_version.convert_to_ts(ignore_invalid) : -1),
       K_(cluster_service_master),
-      "cluster_service_tablet_id", cluster_service_.get_cluster_service_tablet_id(),
       K_(post_cluster_heartbeat_count),
       K_(succ_cluster_heartbeat_count),
       K_(cluster_heartbeat_interval),
@@ -816,8 +763,7 @@ void ObTenantWeakReadService::set_cluster_service_master_(const ObAddr &addr)
 {
   if (cluster_service_master_ != addr) {
     cluster_service_master_ = addr;
-    ISTAT("cluster service master changed", K_(tenant_id), K_(cluster_service_master),
-        "cluster_service_tablet_id", cluster_service_.get_cluster_service_tablet_id());
+    ISTAT("cluster service master changed", K_(tenant_id), K_(cluster_service_master));
   }
 }
 
@@ -875,7 +821,6 @@ void ObTenantWeakReadService::do_cluster_heartbeat_()
   if (OB_SUCCESS != ret) {
     LOG_WARN("tenant weak read service do cluster heartbeat fail", KR(ret), K(tenant_id_),
         K(last_post_cluster_heartbeat_tstamp_), K(cluster_heartbeat_interval_),
-        "cluster_service_tablet_id", cluster_service_.get_cluster_service_tablet_id(),
         K_(cluster_service_master));
 
     // increase the interval in case of failure
@@ -906,11 +851,10 @@ int ObTenantWeakReadService::post_cluster_heartbeat_rpc_(const SCN version,
   if (OB_ISNULL(wrs_rpc_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(get_cluster_service_master_(cluster_service_master))) {
-    LOG_TRACE("get cluster service master fail", KR(ret), K(tenant_id_),
-        "cluster_service_tablet_id", cluster_service_.get_cluster_service_tablet_id());
+    LOG_TRACE("get cluster service master fail", KR(ret), K(tenant_id_));
   } else if (OB_FAIL(wrs_rpc_->post_cluster_heartbeat(cluster_service_master, tenant_id_, req))) {
     LOG_WARN("post cluster heartbeat fail", KR(ret), K(cluster_service_master), K(tenant_id_),
-        K(req), "cluster_service_tablet_id", cluster_service_.get_cluster_service_tablet_id());
+        K(req));
   } else {
     // success
     LOG_DEBUG("post cluster heartbeat success", K_(tenant_id), K(cluster_service_master), K(req),

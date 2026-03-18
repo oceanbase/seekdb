@@ -131,7 +131,6 @@ ObMergeInfoItem &ObMergeInfoItem::operator =(const ObMergeInfoItem &item)
 
 ObZoneMergeInfo::ObZoneMergeInfo()
   : tenant_id_(OB_INVALID_TENANT_ID),
-    zone_(),
     CONSTRUCT_ZONE_MERGE_INFO(),
     start_merge_fail_times_(0)
 {
@@ -142,7 +141,6 @@ int ObZoneMergeInfo::assign(const ObZoneMergeInfo &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     tenant_id_ = other.tenant_id_;
-    zone_ = other.zone_;
     start_merge_fail_times_ = other.start_merge_fail_times_;
     ObMergeInfoItem *it = list_.get_first();
     const ObMergeInfoItem *o_it = other.list_.get_first();
@@ -166,7 +164,6 @@ int ObZoneMergeInfo::assign_value(
   int ret = OB_SUCCESS;
   if (this != &other) {
     tenant_id_ = other.tenant_id_;
-    zone_ = other.zone_;
     start_merge_fail_times_ = other.start_merge_fail_times_;
     ObMergeInfoItem *it = list_.get_first();
     const ObMergeInfoItem *o_it = other.list_.get_first();
@@ -206,7 +203,6 @@ bool ObZoneMergeInfo::is_valid() const
 
 ///////////////////////////////////////////////////////////////////////////////
 #define CONSTRUCT_GLOBAL_MERGE_INFO() \
-  INIT_VAL_ITEM(cluster, 0, false),                              \
   INIT_SCN_ITEM(frozen_scn, SCN::base_scn(), false),             \
   INIT_SCN_ITEM(global_broadcast_scn, SCN::base_scn(), false),   \
   INIT_SCN_ITEM(last_merged_scn, SCN::base_scn(), false),        \
@@ -270,8 +266,7 @@ bool ObGlobalMergeInfo::is_in_verifying_status() const
 bool ObGlobalMergeInfo::is_valid() const
 {
   bool is_valid = true;
-  if ((OB_INVALID_TENANT_ID == tenant_id_)
-      || (!frozen_scn_.is_valid())
+  if ((!frozen_scn_.is_valid())
       || (!global_broadcast_scn_.is_valid())
       || (!last_merged_scn_.is_valid())) {
     is_valid = false;

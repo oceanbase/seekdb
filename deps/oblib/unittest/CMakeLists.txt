@@ -45,4 +45,5 @@ endfunction()
 
 add_subdirectory(lib)
 add_subdirectory(rpc)
+add_subdirectory(grpc)
 add_subdirectory(common)

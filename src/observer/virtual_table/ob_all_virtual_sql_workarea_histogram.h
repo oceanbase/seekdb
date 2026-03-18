@@ -60,15 +60,12 @@ public:
 private:
   enum STORAGE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    LOW_OPTIMAL_SIZE,
+        LOW_OPTIMAL_SIZE = common::OB_APP_MIN_COLUMN_ID,
     HIGH_OPTIMAL_SIZE,
     OPTIMAL_EXECUTIONS,
     ONEPASS_EXECUTIONS, // OB_APP_MIN_COLUMN_ID + 5
     MULTIPASSES_EXECUTIONS,
     TOTAL_EXECUTIONS,
-    TENAND_ID,         // OB_APP_MIN_COLUMN_ID + 18
   };
   int fill_row(
     uint64_t tenant_id,

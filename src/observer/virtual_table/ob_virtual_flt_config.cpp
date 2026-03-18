@@ -172,9 +172,6 @@ int ObVirtualFLTConfig::fill_cells(ObFLTConfRec &record)
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
       uint64_t col_id = output_column_ids_.at(cell_idx);
       switch(col_id) {
-      case TENANT_ID: {
-        cells[cell_idx].set_int(record.tenant_id_);
-      } break;
       case TYPE: {
         if (record.type_ == FLT_TENANT_TYPE) {
           cells[cell_idx].set_varchar("TENANT");

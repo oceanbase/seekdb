@@ -109,7 +109,7 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
       SHARE_SCHEMA_LOG(WARN, "table_format_or_properties is empty", K(ret));
     } else if (OB_FAIL(format.load_from_string(table_format_or_properties, allocator))) {
       SHARE_SCHEMA_LOG(WARN, "fail to load from json string", K(ret));
-    } else if (!(format.format_type_ > ObExternalFileFormat::INVALID_FORMAT 
+    } else if (!(format.format_type_ > ObExternalFileFormat::INVALID_FORMAT
                  && format.format_type_ < ObExternalFileFormat::MAX_FORMAT)) {
       ret = OB_NOT_SUPPORTED;
       SHARE_SCHEMA_LOG(WARN, "unsupported to print file format", K(ret), K(format.format_type_));
@@ -203,8 +203,8 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
         SHARE_SCHEMA_LOG(WARN, "fail to print ODPS_INFO", K(ret));
       } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  %s = '%.*s',", ObODPSGeneralFormat::OPTION_NAMES[option_names_idx++], odps.region_.length(), odps.region_.ptr()))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print ODPS_INFO", K(ret));
-      } 
-      
+      }
+
       if (OB_SUCC(ret)) {
         ObString str;
         if (odps.api_mode_ == ObODPSGeneralFormat::ApiMode::TUNNEL_API) {
@@ -242,13 +242,7 @@ int ObSchemaPrinter::print_external_table_file_info(const ObTableSchema &table_s
         }
       }
     } else if (OB_SUCC(ret) && ObExternalFileFormat::ORC_FORMAT == format.format_type_) {
-      const ObOrcGeneralFormat &orc = format.orc_format_;
-      const char *column_index_type = column_index_type_to_string(orc.column_index_type_);
-      if (sql::ColumnIndexType::NAME != orc.column_index_type_ &&
-        OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  COLUMN_INDEX_TYPE = '%.*s',",
-                                static_cast<int>(STRLEN(column_index_type)), column_index_type))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to print column index type", K(ret));
-      }
+      ret = OB_NOT_SUPPORTED;
     } else if (OB_SUCC(ret) && ObExternalFileFormat::PARQUET_FORMAT == format.format_type_) {
       const ObParquetGeneralFormat &parquet = format.parquet_format_;
       const char *column_index_type = column_index_type_to_string(parquet.column_index_type_);

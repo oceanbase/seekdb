@@ -40,19 +40,11 @@ ObPhysicalCopyTaskInitParam::ObPhysicalCopyTaskInitParam()
   : tenant_id_(OB_INVALID_ID),
     ls_id_(),
     tablet_id_(),
-    src_info_(),
     sstable_param_(nullptr),
     sstable_macro_range_info_(),
     tablet_copy_finish_task_(nullptr),
     ls_(nullptr),
-    is_leader_restore_(false),
-    restore_action_(ObTabletRestoreAction::RESTORE_NONE),
-    restore_base_info_(nullptr),
-    meta_index_store_(nullptr),
-    second_meta_index_store_(nullptr),
-    need_sort_macro_meta_(true),
-    need_check_seq_(false),
-    ls_rebuild_seq_(-1),
+    helper_(nullptr),
     macro_block_reuse_mgr_(nullptr),
     extra_info_(nullptr)
 {
@@ -72,17 +64,7 @@ bool ObPhysicalCopyTaskInitParam::is_valid() const
              && sstable_macro_range_info_.is_valid()
              && OB_NOT_NULL(tablet_copy_finish_task_) 
              && OB_NOT_NULL(ls_)
-             && ((need_check_seq_ && ls_rebuild_seq_ >= 0) || !need_check_seq_);
-
-  if (bool_ret) {
-    if (!is_leader_restore_) {
-      bool_ret = src_info_.is_valid();
-    } else if (OB_ISNULL(restore_base_info_)
-               || OB_ISNULL(meta_index_store_)
-               || OB_ISNULL(second_meta_index_store_)) {
-      bool_ret = false;
-    }
-  }
+             && OB_NOT_NULL(helper_);
 
   return bool_ret;
 }
@@ -453,24 +435,18 @@ ObSSTableCopyFinishTask::ObSSTableCopyFinishTask()
     tablet_copy_finish_task_(nullptr),
     ls_(nullptr),
     tablet_service_(nullptr),
-    sstable_index_builder_(false /* not use writer buffer*/),
-    restore_macro_block_id_mgr_(nullptr)
+    sstable_index_builder_(false /* not use writer buffer*/)
 {
 }
 
 ObSSTableCopyFinishTask::~ObSSTableCopyFinishTask()
 {
-  if (OB_NOT_NULL(restore_macro_block_id_mgr_)) {
-    ob_delete(restore_macro_block_id_mgr_);
-  }
 }
 
 int ObSSTableCopyFinishTask::init(const ObPhysicalCopyTaskInitParam &init_param)
 {
   int ret = OB_SUCCESS;
-  common::ObInOutBandwidthThrottle *bandwidth_throttle = nullptr;
   ObLSService *ls_service = nullptr;
-  ObStorageRpcProxy *svr_rpc_proxy = nullptr;
   ObStorageHADag *ha_dag = nullptr;
 
   if (IS_INIT) {
@@ -482,31 +458,20 @@ int ObSSTableCopyFinishTask::init(const ObPhysicalCopyTaskInitParam &init_param)
   } else if (OB_ISNULL(ls_service = (MTL(ObLSService *)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service should not be NULL", K(ret), KP(ls_service));
-  } else if (FALSE_IT(bandwidth_throttle = GCTX.bandwidth_throttle_)) {
-  } else if (FALSE_IT(svr_rpc_proxy = ls_service->get_storage_rpc_proxy())) {
   } else if (FALSE_IT(ha_dag = static_cast<ObStorageHADag *>(this->get_dag()))) {
   } else if (OB_FAIL(sstable_macro_range_info_.assign(init_param.sstable_macro_range_info_))) {
     LOG_WARN("failed to assign sstable macro range info", K(ret), K(init_param));
-  } else if (OB_FAIL(build_restore_macro_block_id_mgr_(init_param))) {
-    LOG_WARN("failed to build restore macro block id mgr", K(ret), K(init_param));
+  } else if (OB_FAIL(init_param.helper_->copy_for_task(copy_ctx_.allocator_, copy_ctx_.helper_))) {
+    LOG_WARN("failed to copy helper for task", K(ret));
+  } else if (OB_ISNULL(copy_ctx_.helper_) || !copy_ctx_.helper_->is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("copied helper should not be null or invalid", K(ret), KP(copy_ctx_.helper_));
   } else {
     copy_ctx_.tenant_id_ = init_param.tenant_id_;
     copy_ctx_.ls_id_ = init_param.ls_id_;
     copy_ctx_.tablet_id_ = init_param.tablet_id_;
-    copy_ctx_.src_info_ = init_param.src_info_;
-    copy_ctx_.bandwidth_throttle_ = bandwidth_throttle;
-    copy_ctx_.svr_rpc_proxy_ = svr_rpc_proxy;
-    copy_ctx_.is_leader_restore_ = init_param.is_leader_restore_;
-    copy_ctx_.restore_action_ = init_param.restore_action_;
-    copy_ctx_.restore_base_info_ = init_param.restore_base_info_;
-    copy_ctx_.meta_index_store_ = init_param.meta_index_store_;
-    copy_ctx_.second_meta_index_store_ = init_param.second_meta_index_store_;
     copy_ctx_.ha_dag_ = ha_dag;
     copy_ctx_.sstable_index_builder_ = &sstable_index_builder_;
-    copy_ctx_.restore_macro_block_id_mgr_ = restore_macro_block_id_mgr_;
-    copy_ctx_.need_sort_macro_meta_ = init_param.need_sort_macro_meta_;
-    copy_ctx_.need_check_seq_ = init_param.need_check_seq_;
-    copy_ctx_.ls_rebuild_seq_ = init_param.ls_rebuild_seq_;
     copy_ctx_.table_key_ = init_param.sstable_param_->table_key_;
     copy_ctx_.macro_block_reuse_mgr_ = init_param.macro_block_reuse_mgr_;
     copy_ctx_.extra_info_ = init_param.extra_info_;
@@ -859,17 +824,7 @@ int ObSSTableCopyFinishTask::get_cluster_version_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid args", K(ret), K(init_param));
   } else {
-    // if restore use backup cluster version
-    if (init_param.is_leader_restore_) {
-      if (OB_ISNULL(init_param.restore_base_info_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("restore base info is null", K(ret), K(init_param));
-      } else {
-        cluster_version = init_param.restore_base_info_->backup_cluster_version_;
-      }
-    } else {
-      cluster_version = static_cast<int64_t>(GET_MIN_CLUSTER_VERSION());
-    }
+    cluster_version = static_cast<int64_t>(GET_MIN_CLUSTER_VERSION());
   }
   return ret;
 }
@@ -884,10 +839,9 @@ bool ObSSTableCopyFinishTask::is_sstable_should_rebuild_index_(const ObMigration
 
 bool ObSSTableCopyFinishTask::is_shared_sstable_without_copy_(const ObMigrationSSTableParam *sstable_param) const
 {
-  // Shared SSTable is the SSTable whose macro blocks, including data and index blocks,
-  // are all in shared storage or backup storage. During migration or follower restore, 
-  // macro blocks are no need to be copied.
-  return !copy_ctx_.is_leader_restore_ && sstable_param->is_shared_sstable();
+  // In standby restore from primary, always treat as "need copy" to avoid skipping.
+  UNUSED(sstable_param);
+  return false;
 }
 
 int ObSSTableCopyFinishTask::prepare_sstable_index_builder_(
@@ -963,56 +917,6 @@ int ObSSTableCopyFinishTask::create_sstable_()
 
   if (OB_NOT_NULL(sstable_creator)) {
     free_sstable_creator_(sstable_creator);
-  }
-  return ret;
-}
-
-int ObSSTableCopyFinishTask::build_restore_macro_block_id_mgr_(
-    const ObPhysicalCopyTaskInitParam &init_param)
-{
-  int ret = OB_SUCCESS;
-  ObRestoreMacroBlockIdMgr *restore_macro_block_id_mgr = nullptr;
-
-  if (!init_param.is_leader_restore_) {
-    restore_macro_block_id_mgr_ = nullptr;
-  } else if (ObTabletRestoreAction::is_restore_remote_sstable(init_param.restore_action_)) {
-    // restore index/meta tree for backup sstable, macro blocks should be got by iterator.
-    restore_macro_block_id_mgr_ = nullptr;
-  } else if (ObTabletRestoreAction::is_restore_replace_remote_sstable(init_param.restore_action_)) {
-    restore_macro_block_id_mgr_ = nullptr;
-  } else {
-    void *buf = mtl_malloc(sizeof(ObRestoreMacroBlockIdMgr), "RestoreMacIdMgr");
-    ObTabletHandle tablet_handle;
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret), KP(buf));
-    } else if (FALSE_IT(restore_macro_block_id_mgr = new(buf) ObRestoreMacroBlockIdMgr())) {
-    } else if (OB_FAIL(init_param.ls_->ha_get_tablet(init_param.tablet_id_, tablet_handle))) {
-      LOG_WARN("failed to get tablet", K(ret), K(init_param));
-    } else if (OB_FAIL(restore_macro_block_id_mgr->init(init_param.tablet_id_,
-                                                        tablet_handle,
-                                                        init_param.sstable_macro_range_info_.copy_table_key_, 
-                                                        *init_param.restore_base_info_,
-                                                        *init_param.meta_index_store_, 
-                                                        *init_param.second_meta_index_store_))) {
-      LOG_WARN("failed to init restore macro block id mgr", K(ret), K(init_param));
-    } else {
-      restore_macro_block_id_mgr_ = restore_macro_block_id_mgr;
-      restore_macro_block_id_mgr = NULL;
-    }
-
-    if (OB_FAIL(ret)) {
-      if (NULL != restore_macro_block_id_mgr_) {
-        restore_macro_block_id_mgr_->~ObRestoreMacroBlockIdMgr();
-        mtl_free(restore_macro_block_id_mgr_);
-        restore_macro_block_id_mgr_ = nullptr;
-      }
-    }
-    if (NULL != restore_macro_block_id_mgr) {
-      restore_macro_block_id_mgr->~ObRestoreMacroBlockIdMgr();
-      mtl_free(restore_macro_block_id_mgr);
-      restore_macro_block_id_mgr = nullptr;
-    }
   }
   return ret;
 }
@@ -1142,10 +1046,6 @@ int ObSSTableCopyFinishTask::get_space_optimization_mode_(
     LOG_WARN("sstable_param is null", K(ret));
   } else if (sstable_param->table_key_.is_ddl_sstable()) {
     mode = ObSSTableIndexBuilder::DISABLE;
-  } else if (ObTabletRestoreAction::is_restore_remote_sstable(copy_ctx_.restore_action_)) {
-    mode = ObSSTableIndexBuilder::DISABLE;
-  } else if (ObTabletRestoreAction::is_restore_replace_remote_sstable(copy_ctx_.restore_action_)) {
-    mode = ObSSTableIndexBuilder::ENABLE;
   } else if (sstable_param->is_small_sstable_) {
     mode = ObSSTableIndexBuilder::ENABLE;
   } else {

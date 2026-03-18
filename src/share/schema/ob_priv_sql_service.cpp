@@ -326,9 +326,8 @@ int ObPrivSqlService::gen_delete_routine_priv_sql(
 
   ObSqlString sql;
 
-  if (OB_FAIL(sql.append_fmt("SELECT routine_name FROM %s WHERE tenant_id=%d AND user_id=%lu AND database_name=",
+  if (OB_FAIL(sql.append_fmt("SELECT routine_name FROM %s WHERE user_id=%lu AND database_name=",
                              OB_ALL_ROUTINE_PRIVILEGE_TNAME,
-                             0,
                              routine_priv_key.user_id_))) {
     LOG_WARN("failed to append_fmt", K(ret), K(sql));
   } else if (OB_FAIL(sql_append_hex_escape_str(routine_priv_key.db_, sql))) {
@@ -550,8 +549,7 @@ int ObPrivSqlService::gen_column_priv_dml(
   if ((priv_set & OB_PRIV_INSERT) != 0) { all_priv |= 2; }
   if ((priv_set & OB_PRIV_UPDATE) != 0) { all_priv |= 4; }
   if ((priv_set & OB_PRIV_REFERENCES) != 0) { all_priv |= 8; }
-  if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
-      || OB_FAIL(dml.add_pk_column("user_id", column_priv_key.user_id_))
+  if (OB_FAIL(dml.add_pk_column("user_id", column_priv_key.user_id_))
       || OB_FAIL(dml.add_pk_column("priv_id", priv_id))
       || OB_FAIL(dml.add_column("database_name", column_priv_key.db_))
       || OB_FAIL(dml.add_column("table_name", column_priv_key.table_))
@@ -708,9 +706,7 @@ int ObPrivSqlService::delete_db_priv(
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client, exec_tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("TENANT_ID", ObSchemaUtils::get_extract_tenant_id(
-                                               exec_tenant_id, org_db_key.tenant_id_)))
-        || OB_FAIL(dml.add_pk_column("USER_ID", ObSchemaUtils::get_extract_schema_id(
+    if (OB_FAIL(dml.add_pk_column("USER_ID", ObSchemaUtils::get_extract_schema_id(
                                                exec_tenant_id, org_db_key.user_id_)))
         || OB_FAIL(dml.add_pk_column("DATABASE_NAME", ObHexEscapeSqlStr(org_db_key.db_)))
         || OB_FAIL(dml.add_gmt_modified())) {
@@ -792,9 +788,7 @@ int ObPrivSqlService::delete_table_priv(
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client, exec_tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("TENANT_ID", ObSchemaUtils::get_extract_tenant_id(
-                                               exec_tenant_id, table_priv_key.tenant_id_)))
-        || OB_FAIL(dml.add_pk_column("USER_ID", ObSchemaUtils::get_extract_schema_id(
+    if (OB_FAIL(dml.add_pk_column("USER_ID", ObSchemaUtils::get_extract_schema_id(
                                                 exec_tenant_id, table_priv_key.user_id_)))
         || OB_FAIL(dml.add_pk_column("DATABASE_NAME", ObHexEscapeSqlStr(table_priv_key.db_)))
         || OB_FAIL(dml.add_pk_column("TABLE_NAME", ObHexEscapeSqlStr(table_priv_key.table_)))
@@ -1001,8 +995,6 @@ int ObPrivSqlService::gen_obj_priv_dml_ora(
     bool is_deleted)
 {
   int ret = OB_SUCCESS;
-  OZ (dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                              exec_tenant_id, obj_priv_key.tenant_id_)));
   OZ (dml.add_pk_column("obj_id", ObSchemaUtils::get_extract_schema_id(
                                               exec_tenant_id, obj_priv_key.obj_id_)));
   OZ (dml.add_pk_column("objtype", obj_priv_key.obj_type_));
@@ -1031,9 +1023,7 @@ int ObPrivSqlService::gen_table_priv_dml(
   ObPrivSet priv_others = 0;
   priv_others |= (priv_set & OB_PRIV_REFERENCES) != 0 ? OB_PRIV_OTHERS_REFERENCES : 0;
   priv_others |= (priv_set & OB_PRIV_TRIGGER) != 0 ? OB_PRIV_OTHERS_TRIGGER : 0;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id, table_priv_key.tenant_id_)))
-      || OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
                                               exec_tenant_id, table_priv_key.user_id_)))
       || OB_FAIL(dml.add_pk_column("database_name", ObHexEscapeSqlStr(table_priv_key.db_)))
       || OB_FAIL(dml.add_pk_column("table_name", ObHexEscapeSqlStr(table_priv_key.table_)))
@@ -1073,8 +1063,7 @@ int ObPrivSqlService::gen_routine_priv_dml(
   if ((priv_set & OB_PRIV_EXECUTE) != 0) { all_priv |= 1; }
   if ((priv_set & OB_PRIV_ALTER_ROUTINE) != 0) { all_priv |= 2; } 
   if ((priv_set & OB_PRIV_GRANT) != 0) { all_priv |= 4; } 
-  if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
-      || OB_FAIL(dml.add_pk_column("user_id", routine_priv_key.user_id_))
+  if (OB_FAIL(dml.add_pk_column("user_id", routine_priv_key.user_id_))
       || OB_FAIL(dml.add_pk_column("database_name", ObHexEscapeSqlStr(routine_priv_key.db_)))
       // add routine_name outside
       // || OB_FAIL(dml.add_pk_column("routine_name", ObHexEscapeSqlStr(routine_priv_key.routine_)))
@@ -1112,9 +1101,7 @@ int ObPrivSqlService::gen_db_priv_dml(
   uint64_t compat_version = 0;
   if (OB_FAIL(GET_MIN_DATA_VERSION(exec_tenant_id, compat_version))) {
     LOG_WARN("fail to get data version", KR(ret), K(exec_tenant_id));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id, db_priv_key.tenant_id_)))
-      || OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
+  } else if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
                                               exec_tenant_id, db_priv_key.user_id_)))
       || OB_FAIL(dml.add_pk_column("database_name", ObHexEscapeSqlStr(db_priv_key.db_)))
       || OB_FAIL(dml.add_column("PRIV_ALTER", priv_set & OB_PRIV_ALTER ? 1 : 0))
@@ -1150,10 +1137,7 @@ int ObPrivSqlService::gen_grant_sys_priv_dml(
 
   pure_grantee_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id, grantee_id);
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id,
-                                             tenant_id)))
-      || OB_FAIL(dml.add_pk_column("grantee_id", pure_grantee_id))
+  if (OB_FAIL(dml.add_pk_column("grantee_id", pure_grantee_id))
       || OB_FAIL(dml.add_pk_column("priv_id", raw_priv))
       || OB_FAIL(dml.add_column("priv_option", option))
       || OB_FAIL(dml.add_gmt_modified())) {
@@ -1189,9 +1173,7 @@ int ObPrivSqlService::alter_user_default_role(
       dml.reset();
 
       role_id = role_id_array.at(i);
-      if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                exec_tenant_id, tenant_id)))
-          || OB_FAIL(dml.add_pk_column("grantee_id", ObSchemaUtils::get_extract_schema_id(
+      if (OB_FAIL(dml.add_pk_column("grantee_id", ObSchemaUtils::get_extract_schema_id(
                                                   exec_tenant_id, user_id)))
           || OB_FAIL(dml.add_pk_column("role_id", ObSchemaUtils::get_extract_schema_id(
                                                   exec_tenant_id, role_id)))
@@ -1274,8 +1256,7 @@ int ObPrivSqlService::grant_revoke_role(
           }
         }
         // gmt_create, gmt_modified
-        if (FAILEDx(sql.append_fmt("(now(6), now(6), %lu, %lu, %lu, %lu, %lu)",
-            ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, user_info.get_tenant_id()),
+        if (FAILEDx(sql.append_fmt("(now(6), now(6), %lu, %lu, %lu, %lu)",
             ObSchemaUtils::get_extract_schema_id(exec_tenant_id, grantee_id),
             ObSchemaUtils::get_extract_schema_id(exec_tenant_id, role_id),
             option,
@@ -1289,9 +1270,8 @@ int ObPrivSqlService::grant_revoke_role(
     }
   } else {
     // revoke role from grantee
-    if (OB_FAIL(sql.append_fmt("DELETE FROM %s WHERE TENANT_ID = %lu and GRANTEE_ID = %lu and ROLE_ID IN (",
+    if (OB_FAIL(sql.append_fmt("DELETE FROM %s WHERE GRANTEE_ID = %lu and ROLE_ID IN (",
         OB_ALL_TENANT_ROLE_GRANTEE_MAP_TNAME,
-        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, user_info.get_tenant_id()),
         ObSchemaUtils::get_extract_schema_id(exec_tenant_id, grantee_id)))) {
       LOG_WARN("append table name failed, ", K(ret));
     }
@@ -1330,8 +1310,7 @@ int ObPrivSqlService::grant_revoke_role(
           LOG_WARN("append sql failed, ", K(ret));
         }
       }
-      if (FAILEDx(sql.append_fmt("(now(6), now(6), %lu, %lu, %lu, %ld, %ld, %lu, %lu)",
-          ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, user_info.get_tenant_id()),
+      if (FAILEDx(sql.append_fmt("(now(6), now(6), %lu, %lu, %ld, %ld, %lu, %lu)",
           ObSchemaUtils::get_extract_schema_id(exec_tenant_id, grantee_id),
           ObSchemaUtils::get_extract_schema_id(exec_tenant_id, role_id),
           new_schema_version,
@@ -1659,8 +1638,7 @@ int ObPrivSqlService::gen_obj_mysql_priv_dml(
   if ((priv_set & OB_PRIV_READ) != 0) { all_priv |= 1; }
   if ((priv_set & OB_PRIV_WRITE) != 0) { all_priv |= 2; }
   if ((priv_set & OB_PRIV_GRANT) != 0) {all_priv |= 4; }
-  if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
-      || OB_FAIL(dml.add_pk_column("user_id", obj_mysql_priv_key.user_id_))
+  if (OB_FAIL(dml.add_pk_column("user_id", obj_mysql_priv_key.user_id_))
       || OB_FAIL(dml.add_pk_column("obj_name", ObHexEscapeSqlStr(obj_mysql_priv_key.object_name_)))
       || OB_FAIL(dml.add_pk_column("obj_type", obj_mysql_priv_key.object_type_))
       || OB_FAIL(dml.add_column("all_priv", all_priv))) {

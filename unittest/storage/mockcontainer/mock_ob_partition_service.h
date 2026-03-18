@@ -59,10 +59,10 @@ public:
   MOCK_METHOD0(force_refresh_locality_info, int());
 
 
-  MOCK_METHOD5(init,
+  MOCK_METHOD4(init,
                int(const blocksstable::ObStorageEnv &env, const common::ObAddr &self_addr,
                    share::schema::ObMultiVersionSchemaService *schema_service,
-                   share::ObRsMgr *rs_mgr, rpc::frame::ObReqTransport *req_transport));
+                   rpc::frame::ObReqTransport *req_transport));
 
   MOCK_METHOD0(start,
                int());

@@ -81,28 +81,8 @@ int ObDatabaseResolver<T>::resolve_database_options(T *stmt, ParseNode *node, Ob
 template <class T>
 int ObDatabaseResolver<T>::resolve_primary_zone(T *stmt, ParseNode *node)
 {
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
-    ret = common::OB_INVALID_ARGUMENT;
-    SQL_LOG(WARN, "invalid primary_zone argument", K(ret), K(node));
-  } else if (node->type_ == T_DEFAULT) {
-    // do nothing
-  } else if (T_RANDOM == node->type_) {
-    if (OB_FAIL(stmt->set_primary_zone(common::ObString(common::OB_RANDOM_PRIMARY_ZONE)))) {
-      SQL_RESV_LOG(WARN, "fail to set primary zone", K(ret));
-    }
-  } else {
-    common::ObString primary_zone;
-    primary_zone.assign_ptr(const_cast<char *>(node->str_value_),
-                            static_cast<int32_t>(node->str_len_));
-    if (OB_UNLIKELY(primary_zone.empty())) {
-      ret = OB_OP_NOT_ALLOW;
-      SQL_RESV_LOG(WARN, "set primary_zone empty is not allowed now", K(ret));
-      LOG_USER_ERROR(OB_OP_NOT_ALLOW, "set primary_zone empty");
-    } else if (OB_FAIL(stmt->set_primary_zone(primary_zone))) {
-      SQL_RESV_LOG(WARN, "fail to set primary zone", K(ret));
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
+  SQL_LOG(WARN, "database with primary_zone", KR(ret));
   return ret;
 }
 
@@ -134,16 +114,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
         break;
       }
       case T_PRIMARY_ZONE: {
-        if (NULL == option_node->children_ || option_node->num_child_ != 1) {
-          ret = common::OB_INVALID_ARGUMENT;
-          SQL_RESV_LOG(WARN, "invalid primary_zone argument", K(ret), "num_child", option_node->num_child_); 
-        } else if (OB_FAIL(ObDatabaseResolver<T>::resolve_primary_zone(stmt, option_node->children_[0]))) {
-          SQL_RESV_LOG(WARN, "failed to resolve primary zone", K(ret));
-        } else if (stmt::T_ALTER_DATABASE == stmt->get_stmt_type()) {
-          if (OB_FAIL(alter_option_bitset_.add_member(obrpc::ObAlterDatabaseArg::PRIMARY_ZONE))) {
-            SQL_RESV_LOG(WARN, "failed to add member to bitset!", K(ret));
-          }
-        }
         break;
       }
       case T_CHARSET:

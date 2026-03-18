@@ -19,8 +19,6 @@
 #include "ob_root_minor_freeze.h"
 
 #include "share/location_cache/ob_location_service.h"
-#include "share/ob_all_server_tracer.h"
-#include "rootserver/ob_unit_manager.h"
 
 namespace oceanbase
 {
@@ -34,8 +32,7 @@ namespace rootserver
 ObRootMinorFreeze::ObRootMinorFreeze()
     :inited_(false),
      stopped_(false),
-     rpc_proxy_(NULL),
-     unit_manager_(NULL)
+     rpc_proxy_(NULL)
 {
 }
 
@@ -47,8 +44,7 @@ ObRootMinorFreeze::~ObRootMinorFreeze()
   }
 }
 
-int ObRootMinorFreeze::init(ObSrvRpcProxy &rpc_proxy,
-                            ObUnitManager &unit_manager)
+int ObRootMinorFreeze::init(ObSrvRpcProxy &rpc_proxy)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
@@ -56,7 +52,6 @@ int ObRootMinorFreeze::init(ObSrvRpcProxy &rpc_proxy,
     LOG_WARN("init twice", K(ret));
   } else {
     rpc_proxy_ = &rpc_proxy;
-    unit_manager_ = &unit_manager;
     stopped_ = false;
     inited_ = true;
   }
@@ -98,17 +93,7 @@ int ObRootMinorFreeze::check_cancel() const
 inline
 bool ObRootMinorFreeze::is_server_alive(const ObAddr &server) const
 {
-  int ret = OB_SUCCESS;
-  bool is_alive = false;
-
-  if (OB_LIKELY(server.is_valid())) {
-    if (OB_FAIL(SVR_TRACER.check_server_alive(server, is_alive))) {
-      LOG_WARN("fail to check whether server is alive, ", K(server), K(ret));
-      is_alive = false;
-    }
-  }
-
-  return is_alive;
+  return true;
 }
 
 int ObRootMinorFreeze::try_minor_freeze(const obrpc::ObRootMinorFreezeArg &arg) const
@@ -203,18 +188,7 @@ int ObRootMinorFreeze::is_server_belongs_to_zone(const ObAddr &addr,
                                                  bool &server_in_zone) const
 {
   int ret = OB_SUCCESS;
-  ObZone server_zone;
-
-  if (0 == zone.size()) {
-    server_in_zone = true;
-  } else if (OB_FAIL(SVR_TRACER.get_server_zone(addr, server_zone))) {
-    LOG_WARN("fail to get server zone", KR(ret), K(addr));
-  } else if (server_zone == zone) {
-    server_in_zone = true;
-  } else {
-    server_in_zone = false;
-  }
-
+  server_in_zone = true;
   return ret;
 }
 
@@ -278,41 +252,9 @@ int ObRootMinorFreeze::init_params_by_tenant(const ObIArray<uint64_t> &tenant_id
                                              ParamsContainer &params) const
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObAddr, 256> target_server_list;
-
-  for (int i = 0; i < tenant_ids.count() && OB_SUCC(ret); ++i) {
-    if (server_list.count() > 0) {
-      for (int j = 0; j < server_list.count() && OB_SUCC(ret); ++j) {
-        if (is_server_alive(server_list.at(j))) {
-          if (OB_FAIL(params.push_back_param(server_list.at(j), tenant_ids.at(i)))) {
-            LOG_WARN("fail to add tenant & server, ", K(ret));
-          }
-        } else {
-          ret = OB_SERVER_NOT_ACTIVE;
-          LOG_WARN("server not alive or invalid", "server", server_list.at(j), K(ret));
-        }
-      }
-    } else {
-      // TODO: filter servers according to tenant_id
-      if (OB_ISNULL(unit_manager_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unit_manager_ is null", KR(ret), KP(unit_manager_));
-      } else if (OB_FAIL(unit_manager_->get_tenant_alive_servers_non_block(tenant_ids.at(i), target_server_list))) {
-        LOG_WARN("fail to get tenant server list, ", K(ret));
-      } else {
-        bool server_in_zone = false;
-        for (int j = 0; j < target_server_list.count() && OB_SUCC(ret); ++j) {
-          const ObAddr &server = target_server_list.at(j);
-          if (OB_FAIL(is_server_belongs_to_zone(server, zone, server_in_zone))) {
-            LOG_WARN("fail to check server", K(ret));
-          } else if (server_in_zone && OB_FAIL(params.push_back_param(server, tenant_ids.at(i)))) {
-            LOG_WARN("fail to add tenant & server", K(ret));
-          }
-        }
-      }
-    }
+  if (OB_FAIL(params.push_back_param(GCTX.self_addr(), OB_SYS_TENANT_ID))) {
+    LOG_WARN("fail to add tenant & server", KR(ret));
   }
-
   return ret;
 }
 
@@ -320,23 +262,11 @@ int ObRootMinorFreeze::init_params_by_zone(const ObZone &zone,
                                            ParamsContainer &params) const
 {
   int ret = OB_SUCCESS;
-  ObArray<ObAddr> target_server_list;
 
   if (OB_UNLIKELY(0 == zone.size())) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    if (OB_FAIL(SVR_TRACER.get_servers_of_zone(zone, target_server_list))) {
-      LOG_WARN("fail to get tenant server list, ", KR(ret), K(zone));
-    } else if (0 == target_server_list.count()) {
-      ret = OB_ZONE_NOT_ACTIVE;
-      LOG_WARN("empty zone or invalid", K(zone), K(ret));
-    } else {
-      for (int i = 0; i < target_server_list.count() && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(params.push_back_param(target_server_list.at(i)))) {
-          LOG_WARN("fail to add server", K(ret));
-        }
-      }
-    }
+  } else if (OB_FAIL(params.push_back_param(GCTX.self_addr()))) {
+    LOG_WARN("fail to add server", K(ret));
   }
   return ret;
 }
@@ -356,20 +286,8 @@ int ObRootMinorFreeze::init_params_by_server(const ObIArray<ObAddr> &server_list
         LOG_WARN("server not alive or invalid", "server", server_list.at(i), K(ret));
       }
     }
-  } else {
-    ObZone zone; // empty zone, get all server status
-    ObSEArray<ObAddr, 256> target_server_list;
-
-    // get all alive server
-    if (OB_FAIL(SVR_TRACER.get_alive_servers(zone, target_server_list))) {
-      LOG_WARN("fail to get alive servers, ", KR(ret), K(zone));
-    } else {
-      for (int i = 0; i < target_server_list.count() && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(params.push_back_param(target_server_list.at(i)))) {
-          LOG_WARN("fail to add server, ", K(ret));
-        }
-      }
-    }
+  } else if (OB_FAIL(params.push_back_param(GCTX.self_addr()))) {
+    LOG_WARN("fail to add server", K(ret));
   }
 
   return ret;

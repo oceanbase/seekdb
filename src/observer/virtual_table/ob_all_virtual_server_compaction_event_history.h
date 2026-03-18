@@ -29,11 +29,7 @@ class ObAllVirtualServerCompactionEventHistory : public common::ObVirtualTableSc
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    ZONE,
-    TENANT_ID,
-    MERGE_TYPE,
+        MERGE_TYPE = common::OB_APP_MIN_COLUMN_ID,
     COMPACTION_SCN,
     EVENT_TIMESTAMP,
     EVENT,

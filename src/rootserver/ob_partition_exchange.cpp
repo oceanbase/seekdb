@@ -2803,9 +2803,9 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t tena
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(new_table_id), K(new_stat_level), K(old_partition_id), K(new_partition_id), K(tablet_id));
   } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, object_type = %ld"
-        " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld",
+        " WHERE table_id = %ld and partition_id = %ld",
         OB_ALL_TABLE_STAT_TNAME, new_table_id, new_partition_id, new_stat_level,
-        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), orig_table_schema.get_table_id(), old_partition_id))) {
+        orig_table_schema.get_table_id(), old_partition_id))) {
     LOG_WARN("fail to assign sql string", K(ret), K(new_table_id), K(new_partition_id), K(new_stat_level), K(tenant_id), K(orig_table_schema.get_table_id()), K(old_partition_id));
   } else if (OB_FAIL(trans.write(tenant_id, sql_string.ptr(), affected_rows))) {
     LOG_WARN("fail to update __all_table_stat", K(ret), K(sql_string));
@@ -2824,14 +2824,14 @@ int ObPartitionExchange::sync_exchange_partition_stats_info_(const uint64_t tena
       } else if (col->get_column_id() < OB_APP_MIN_COLUMN_ID) {
         // bypass hidden column
       } else if (OB_FAIL(column_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld, object_type = %ld"
-          " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld and column_id = %ld",
+          " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
           OB_ALL_COLUMN_STAT_TNAME, new_table_id, new_partition_id, col->get_column_id(), new_stat_level,
-          ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), orig_table_schema.get_table_id(), old_partition_id, col->get_column_id()))) {
+          orig_table_schema.get_table_id(), old_partition_id, col->get_column_id()))) {
         LOG_WARN("fail to assign sql string", K(ret), K(new_table_id), K(new_partition_id), K(col->get_column_id()), K(new_stat_level), K(tenant_id), K(orig_table_schema.get_table_id()), K(old_partition_id), K(col->get_column_id()));
       } else if (OB_FAIL(histogram_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld, object_type = %ld"
-          " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld and column_id = %ld",
+          " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
           OB_ALL_HISTOGRAM_STAT_TNAME, new_table_id, new_partition_id, col->get_column_id(), new_stat_level,
-          ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), orig_table_schema.get_table_id(), old_partition_id, col->get_column_id()))) {
+          orig_table_schema.get_table_id(), old_partition_id, col->get_column_id()))) {
         LOG_WARN("fail to assign sql string", K(ret), K(new_table_id), K(new_partition_id), K(col->get_column_id()), K(new_stat_level), K(tenant_id), K(orig_table_schema.get_table_id()), K(old_partition_id), K(col->get_column_id()));
       } else if (OB_FAIL(trans.write(tenant_id, column_sql_string.ptr(), affected_rows))) {
         LOG_WARN("fail to update __all_column_stat", K(ret), K(tenant_id), K(column_sql_string));
@@ -2854,8 +2854,8 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t tenan
   if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == new_table_id || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(new_table_id), K(tablet_id));
-  } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE tenant_id = %ld and table_id = %ld and tablet_id = %ld", 
-             OB_ALL_MONITOR_MODIFIED_TNAME, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), orig_table_schema.get_table_id(), tablet_id.id()))) {
+  } else if (OB_FAIL(monitor_modified_read_sql_string.assign_fmt("SELECT last_inserts, last_updates, last_deletes, inserts, updates, deletes FROM %s WHERE table_id = %ld and tablet_id = %ld",
+             OB_ALL_MONITOR_MODIFIED_TNAME, orig_table_schema.get_table_id(), tablet_id.id()))) {
     LOG_WARN("fail to assign sql string", K(ret), K(tenant_id), K(orig_table_schema.get_table_id()), K(tablet_id));
   } else {
     bool need_update = false;
@@ -2890,11 +2890,11 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t tenan
       }
     }
     if (OB_SUCC(ret) && need_update) {
-      if (OB_FAIL(monitor_modified_insert_sql_string.assign_fmt("INSERT INTO %s(tenant_id, table_id, tablet_id, last_inserts, last_updates, last_deletes, inserts, updates, deletes) VALUES (%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld) ON DUPLICATE KEY UPDATE tenant_id = %ld, table_id = %ld, tablet_id = %ld", OB_ALL_MONITOR_MODIFIED_TNAME,
-        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), new_table_id, tablet_id.id(), last_inserts, last_updates, last_deletes, inserts, updates, deletes, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), new_table_id, tablet_id.id()))) {
+      if (OB_FAIL(monitor_modified_insert_sql_string.assign_fmt("INSERT INTO %s(table_id, tablet_id, last_inserts, last_updates, last_deletes, inserts, updates, deletes) VALUES (%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld) ON DUPLICATE KEY UPDATE table_id = %ld, tablet_id = %ld", OB_ALL_MONITOR_MODIFIED_TNAME,
+        new_table_id, tablet_id.id(), last_inserts, last_updates, last_deletes, inserts, updates, deletes, new_table_id, tablet_id.id()))) {
         LOG_WARN("fail to assign sql string", K(ret));
-      } else if (OB_FAIL(monitor_modified_delete_sql_string.assign_fmt("DELETE FROM %s WHERE tenant_id = %ld AND table_id = %ld AND tablet_id = %ld", OB_ALL_MONITOR_MODIFIED_TNAME,
-        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), orig_table_schema.get_table_id(), tablet_id.id()))) {
+      } else if (OB_FAIL(monitor_modified_delete_sql_string.assign_fmt("DELETE FROM %s WHERE table_id = %ld AND tablet_id = %ld", OB_ALL_MONITOR_MODIFIED_TNAME,
+        orig_table_schema.get_table_id(), tablet_id.id()))) {
         LOG_WARN("fail to assign sql string", K(ret));
       } else if (OB_FAIL(trans.write(tenant_id, monitor_modified_insert_sql_string.ptr(), affected_rows))) {
         LOG_WARN("fail to insert __all_monitor_modified", K(ret), K(monitor_modified_insert_sql_string));

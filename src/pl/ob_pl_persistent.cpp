@@ -711,17 +711,14 @@ int ObRoutinePersistentInfo::delete_dll_from_disk(common::ObISQLClient &trans,
 {
   int ret = OB_SUCCESS;
 
-  share::ObTenantRole tenant_role;
   ObMySQLProxy *sql_proxy = nullptr;
+  bool is_primary_cluster = true;
   if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected sql proxy", K(ret));
-  } else if (OB_FAIL(ObAllTenantInfoProxy::get_tenant_role(sql_proxy, tenant_id, tenant_role))) {
-    LOG_WARN("fail to get tenant role", K(ret));
-  } else if (!tenant_role.is_valid()) {
-    ret = OB_NEED_WAIT;
-    LOG_WARN("tenant role is not ready", K(ret));
-  } else if (tenant_role.is_standby()) {
+  } else if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+    LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+  } else if (!is_primary_cluster) {
     // do nothing
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);

@@ -195,6 +195,10 @@ public:
   #endif
 
 
+  int64_t get_recommend_concurrency_in_single_file() const
+  {
+    return palf::PALF_PHY_BLOCK_SIZE / SINGLE_TASK_MINIMUM_SIZE;
+  }
   TO_STRING_KV(K_(concurrency), K_(capacity), K_(is_running), K_(is_inited), KP(handle_adapter_), KP(this));
 private:
   // CONCURRENCY LIMIT is 128.

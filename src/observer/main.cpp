@@ -129,35 +129,6 @@ static int create_observer_softlink()
   }
   return ret;
 }
-static int dump_config_to_json()
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(g_config_mem_attr);
-  ObJsonArray j_arr(&allocator);
-  ObJsonBuffer j_buf(&allocator);
-  FILE *out_file = nullptr;
-  const char *out_path = "./ob_all_available_parameters.json";
-  if (OB_FAIL(ObServerConfig::get_instance().to_json_array(allocator, j_arr))) {
-    MPRINT("dump cluster config to json failed, ret=%d\n", ret);
-  } else if (OB_FAIL(j_arr.print(j_buf, false))) {
-    MPRINT("print json array to buffer failed, ret=%d\n", ret);
-  } else if (nullptr == j_buf.ptr()) {
-    ret = OB_ERR_NULL_VALUE;
-    MPRINT("json buffer is null, ret=%d\n", ret);
-  } else if (nullptr == (out_file = fopen(out_path, "w"))) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to open file, errno=%d, ret=%d\n", errno, ret);
-  } else if (EOF == fputs(j_buf.ptr(), out_file)) {
-    ret = OB_IO_ERROR;
-    MPRINT("write json buffer to file failed, errno=%d, ret=%d\n", errno, ret);
-  }
-
-  if (nullptr != out_file) {
-    fclose(out_file);
-  }
-  return ret;
-}
-
 static void print_args(int argc, char *argv[])
 {
   for (int i = 0; i < argc - 1; ++i) {

@@ -57,10 +57,7 @@ public:
 
 private:
   enum SYS_COLUMN {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    QUERY_RESPPONSE_TIME,
+        QUERY_RESPPONSE_TIME = common::OB_APP_MIN_COLUMN_ID,
     COUNT,
     TOTAL,
     SQL_TYPE

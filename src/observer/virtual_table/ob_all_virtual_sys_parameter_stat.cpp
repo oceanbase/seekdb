@@ -75,12 +75,9 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
     ret = OB_ITER_END;
   } else {
     ObObj *cells = cur_row_.cells_;
-    ObString ipstr;
     if (OB_UNLIKELY(NULL == cells)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
-    } else if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-      SERVER_LOG(ERROR, "get server ip failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
         const uint64_t col_id = output_column_ids_.at(i);
@@ -95,16 +92,6 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
             cells[i].set_varchar("observer");
             cells[i].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-        case SERVER_IP: {
-            cells[i].set_varchar(ipstr);
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-        case SERVER_PORT: {
-            cells[i].set_int(GCONF.self_addr_.get_port());
             break;
           }
         case NAME: {

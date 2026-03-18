@@ -181,19 +181,6 @@ int ObAllVirtualSessionWaitHistory::inner_get_next_row(ObNewRow *&row)
             }
             break;
           }
-          case TENANT_ID: {
-            cells[cell_idx].set_int(collect_->base_value_.get_tenant_id());
-            break;
-          }
-          case SVR_IP: {
-            cells[cell_idx].set_varchar(ipstr_);
-            cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-          case SVR_PORT: {
-            cells[cell_idx].set_int(port_);
-            break;
-          }
           case SEQ_NO: {
             cells[cell_idx].set_int(event_iter_ + 1);
             break;

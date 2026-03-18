@@ -30,7 +30,6 @@
 #include <type_traits>
 #include <assert.h>
 #include "logservice/leader_coordinator/failure_event.h"
-#include "logservice/leader_coordinator/ob_leader_coordinator.h"
 
 namespace oceanbase
 {
@@ -111,11 +110,6 @@ private:
   int compare_in_blacklist_flag_(int &ret, const PriorityV1&, ObStringHolder &) const;
   int compare_manual_leader_flag_(int &ret, const PriorityV1&) const;
   int compare_zone_priority_(int &ret, const PriorityV1&) const;
-
-  int get_ls_election_reference_info(
-      const uint64_t &tenant_id,
-      const share::ObLSID &ls_id,
-      LsElectionReferenceInfo &election_reference_info);
 
   bool is_observer_stopped_;// kill -15
   bool is_server_stopped_;

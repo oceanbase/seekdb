@@ -39,11 +39,7 @@ public:
   // please think carefully about circular dependencies before adding inner table into the white list
   static bool in_inner_table_lock_white_list(const uint64_t inner_table_id)
   {
-    bool b_ret = share::OB_ALL_BALANCE_JOB_TID == inner_table_id
-              || share::OB_ALL_RECOVER_TABLE_JOB_TID == inner_table_id
-              || share::OB_ALL_LS_REPLICA_TASK_TID == inner_table_id
-              || share::OB_ALL_TRANSFER_PARTITION_TASK_TID == inner_table_id
-              || share::OB_FT_DICT_IK_UTF8_TID == inner_table_id
+    bool b_ret = share::OB_FT_DICT_IK_UTF8_TID == inner_table_id
               || share::OB_FT_STOPWORD_IK_UTF8_TID == inner_table_id
               || share::OB_FT_QUANTIFIER_IK_UTF8_TID == inner_table_id
               || share::OB_ALL_AI_MODEL_ENDPOINT_TID == inner_table_id;

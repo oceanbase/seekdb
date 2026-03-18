@@ -24,7 +24,6 @@
 #define private public
 #include "mittest/mtlenv/mock_tenant_module_env.h"
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
-#include "storage/shared_storage/ob_disk_space_manager.h"
 #include "storage/shared_storage/ob_dir_manager.h"
 #include "storage/shared_storage/ob_file_manager.h"
 #include "storage/shared_storage/ob_ss_format_util.h"

@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2025 OceanBase.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
+ * Licensed under the Apache License, Version 3.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
@@ -125,48 +125,6 @@ public:
     return set_value_with_lock(string);
 #endif
   }
-  bool set_value(const char *str)
-  {
-#ifdef CONFIG_LOCK_EXEMPTION
-    return set_value_unsafe(str);
-#else
-    return set_value_with_lock(str);
-#endif
-  }
-  // Configuration items that take effect on restart need to be saved and dumped to the spfile
-  bool set_reboot_value(const char *str)
-  {
-    int64_t pos = 0;
-    int ret = OB_SUCCESS;
-    const char *ptr = value_reboot_ptr();
-    if (nullptr == ptr) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      ret = databuff_printf(const_cast<char *>(ptr), value_reboot_len(), pos, "%s", str);
-    }
-    return ret == OB_SUCCESS;
-  }
-  virtual bool set_dump_value(const char *str)
-  {
-    UNUSED(str);
-    return false;
-  }
-  virtual void set_dump_value_updated()
-  {
-    // do nothing
-  }
-  virtual bool dump_value_updated() const
-  {
-    return false;
-  }
-  void set_value_updated()
-  {
-    value_updated_ = true;
-  }
-  bool value_updated()
-  {
-    return value_updated_;
-  }
   void set_name(const char *name)
   {
     name_str_ = name;
@@ -179,9 +137,6 @@ public:
   {
     range_str_ = range;
   }
-  void set_version(int64_t version) { version_ = version; }
-  void set_dumped_version(int64_t version) { dumped_version_ = version; }
-
   const char *str() const
   {
     ObLatchRGuard rd_guard(const_cast<ObLatch&>(lock_), ObLatchIds::CONFIG_LOCK);
@@ -197,17 +152,6 @@ public:
     ObLatchRGuard rd_guard(const_cast<ObLatch&>(lock_), ObLatchIds::CONFIG_LOCK);
     return value_default_ptr();
   }
-  virtual const char *spfile_str() const
-  {
-    const char *ret = nullptr;
-    ObLatchRGuard rd_guard(const_cast<ObLatch&>(lock_), ObLatchIds::CONFIG_LOCK);
-    if (reboot_effective() && is_initial_value_set()) {
-      ret = value_reboot_ptr();
-    } else {
-      ret = value_ptr();
-    }
-    return ret;
-  }
   const char *name() const { return name_str_; }
   const char *info() const { return info_str_; }
   const char *range() const { return range_str_; }
@@ -217,11 +161,6 @@ public:
   const char *source() const { return attr_.get_source(); }
   const char *edit_level() const { return attr_.get_edit_level(); }
   const char *data_type() const;
-  /*Set this value for the initial read library configuration when obs starts*/
-  void initial_value_set() { initial_value_set_ = true; }
-  bool is_initial_value_set() const { return initial_value_set_; }
-  int64_t version() const { return version_; }
-  int64_t dumped_version() const { return dumped_version_; }
 
   bool invisible() const
   {
@@ -247,22 +186,18 @@ public:
   virtual ObConfigItemType get_config_item_type() const {
     return ObConfigItemType::OB_CONF_ITEM_TYPE_UNKNOWN;
   }
-  int to_json_obj(ObIAllocator &allocator, ObJsonObject &j_obj) const;
   virtual const char *optional_configuration_values() const { return nullptr; }
+  int64_t version() const { return version_; }
 protected:
   //use current value to do input operation
   virtual bool set(const char *str) = 0;
   virtual const char *value_ptr() const = 0;
-  virtual const char *value_reboot_ptr() const = 0;
   virtual const char *value_default_ptr() const = 0;
   virtual uint64_t value_len() const = 0;
-  virtual uint64_t value_reboot_len() const = 0;
   const ObConfigChecker *ck_;
+  ObConfigUpdateCb *update_cb_;
   int64_t version_;
-  int64_t dumped_version_;
   bool inited_;
-  bool initial_value_set_;
-  bool value_updated_;
   bool value_valid_;
   const char* name_str_;
   const char* info_str_;
@@ -272,9 +207,7 @@ private:
   // without lock, only used inner
   bool set_value_unsafe(const common::ObString &string);
   // without lock, only used inner
-  bool set_value_unsafe(const char *str);
   bool set_value_with_lock(const common::ObString &string);
-  bool set_value_with_lock(const char *str);
 private:
   ObParameterAttr attr_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigItem);
@@ -315,17 +248,9 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
-  }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
   }
   static const int64_t MAX_INDEX_SIZE = 64;
   struct ObInnerConfigIntListItem
@@ -345,7 +270,6 @@ protected:
   struct ObInnerConfigIntListItem value_;
   static const uint64_t VALUE_BUF_SIZE = 32 * MAX_INDEX_SIZE;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigIntListItem);
 };
@@ -453,21 +377,11 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
-
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigStrListItem);
 };
@@ -588,23 +502,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 64UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
-
 private:
   double value_;
   double min_value_;
@@ -669,22 +573,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 32UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigCapacityItem);
@@ -727,22 +622,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 32UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigTimeItem);
@@ -784,22 +670,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 32UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigIntItem);
@@ -858,21 +735,12 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
   static const uint64_t VALUE_BUF_SIZE = 64UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 
 private:
   struct ObInnerConfigMomentItem value_;
@@ -905,22 +773,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 8UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 private:
   bool value_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigBoolItem);
@@ -979,22 +838,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 8192UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 
 private:
   const char *optional_values_;
@@ -1116,22 +966,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 2048UL;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigLogArchiveOptionsItem);
@@ -1159,34 +1000,6 @@ public:
   virtual ObConfigItemType get_config_item_type() const {
     return ObConfigItemType::OB_CONF_ITEM_TYPE_VERSION;
   }
-  bool set_dump_value(const char *str) override
-  {
-    int64_t pos = 0;
-    int ret = OB_SUCCESS;
-    ret = databuff_printf(value_dump_str_, sizeof(value_dump_str_), pos, "%s", str);
-    return ret == OB_SUCCESS;
-  }
-  void set_dump_value_updated() override
-  {
-    dump_value_updated_ = true;
-  }
-  bool dump_value_updated() const override
-  {
-    return dump_value_updated_;
-  }
-  const char *spfile_str() const override
-  {
-    const char *ret = nullptr;
-    ObLatchRGuard rd_guard(const_cast<ObLatch&>(lock_), ObLatchIds::CONFIG_LOCK);
-    if (dump_value_updated()) {
-      ret = value_dump_str_;
-    } else if (reboot_effective() && is_initial_value_set()) {
-      ret = value_reboot_str_;
-    } else {
-      ret = value_str_;
-    }
-    return ret;
-  }
   ObConfigVersionItem &operator = (int64_t value);
 protected:
   virtual bool set(const char *str) override;
@@ -1195,24 +1008,13 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
 
   static const uint64_t VALUE_BUF_SIZE = 32UL; // 32 is enough for version like 4.2.0.0
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
-  char value_dump_str_[VALUE_BUF_SIZE];
-  bool dump_value_updated_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigVersionItem);
@@ -1294,24 +1096,14 @@ protected:
   {
     return value_str_;
   }
-  const char *value_reboot_ptr() const override
-  {
-    return value_reboot_str_;
-  }
   uint64_t value_len() const override
   {
     return sizeof(value_str_);
   }
-  uint64_t value_reboot_len() const override
-  {
-    return sizeof(value_reboot_str_);
-  }
-
 protected:
   static const uint64_t VALUE_BUF_SIZE = 8192UL;
   ObConfigParser *parser_;
   char value_str_[VALUE_BUF_SIZE];
-  char value_reboot_str_[VALUE_BUF_SIZE];
   // max bits size: 8 * 32 = 256
   uint8_t value_[MAX_MODE_BYTES];
 private:

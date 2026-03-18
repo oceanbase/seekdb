@@ -76,20 +76,6 @@ int ObAllVirtualTabletCompactionProgress::fill_cells()
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
-    case SVR_IP:
-      //svr_ip
-      if (ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-        cells[i].set_varchar(ip_buf_);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      }
-      break;
-    case SVR_PORT:
-      //svr_port
-      cells[i].set_int(ObServerConfig::get_instance().self_addr_.get_port());
-      break;
-    case TENANT_ID:
-      cells[i].set_int(progress_.tenant_id_);
-      break;
     case MERGE_TYPE:
       cells[i].set_varchar(merge_type_to_str(progress_.merge_type_));
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -111,9 +97,6 @@ int ObAllVirtualTabletCompactionProgress::fill_cells()
     case STATUS:
       cells[i].set_varchar(share::ObIDag::get_dag_status_str(progress_.status_));
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      break;
-    case LS_ID:
-      cells[i].set_int(progress_.ls_id_);
       break;
     case TABLET_ID:
       cells[i].set_int(progress_.tablet_id_);

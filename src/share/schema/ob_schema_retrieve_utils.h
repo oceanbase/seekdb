@@ -22,13 +22,10 @@
 #include "lib/mysqlclient/ob_mysql_result.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_utils.h"
-#include "share/ob_primary_zone_util.h"
 #include "share/system_variable/ob_system_variable_alias.h"
-#include "share/ob_replica_info.h"
 #include "share/ob_time_zone_info_manager.h"
 #include "observer/ob_server_struct.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "rootserver/ob_locality_util.h"
 
 namespace oceanbase
 {
@@ -260,10 +257,6 @@ public:
  *
  ******************************************************************/
 
-  template<typename T, typename S>
-  static int retrieve_tenant_schema(common::ObISQLClient &client,
-                                    T &result,
-                                    common::ObIArray<S> &tenant_schema_array);
   template<typename T, typename SCHEMA>
   static int retrieve_system_variable(const uint64_t tenant_id, T &result, SCHEMA &tenant_schema);
 
@@ -480,10 +473,6 @@ public:
                                       SCHEMA_TYPE &schema,    \
                                       bool &is_deleted);
   //for simple schema
-  template<typename T>
-  static int fill_tenant_schema(T &result,
-                                ObSimpleTenantSchema &schema,
-                                bool &is_deleted);
   FILL_SCHEMA_FUNC_DECLARE(user, ObSimpleUserSchema);
   FILL_SCHEMA_FUNC_DECLARE(database, ObSimpleDatabaseSchema);
   FILL_SCHEMA_FUNC_DECLARE(tablegroup, ObSimpleTablegroupSchema);
@@ -501,10 +490,6 @@ public:
   FILL_SCHEMA_FUNC_DECLARE(ccl_rule, ObSimpleCCLRuleSchema);
 
   //for full schema
-  template<typename T>
-  static int fill_tenant_schema(T &result,
-                                ObTenantSchema &schema,
-                                bool &is_deleted);
   FILL_SCHEMA_FUNC_DECLARE(user, ObUserInfo);
   FILL_SCHEMA_FUNC_DECLARE(database, ObDatabaseSchema);
   FILL_SCHEMA_FUNC_DECLARE(tablegroup, ObTablegroupSchema);
@@ -666,9 +651,6 @@ public:
                               common::ObArray<T *> &table_schema_array);
   template<typename T>
   static int fill_temp_table_schema(const uint64_t tenant_id, T &result, ObTableSchema &table_schema);
-
-  template<typename T>
-  static int retrieve_drop_tenant_infos(T &result, ObIArray<ObDropTenantInfo> &drop_tenant_infos);
 
   template<typename TABLE_SCHEMA>
   static int cascaded_generated_column(TABLE_SCHEMA &table_schema);

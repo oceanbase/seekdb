@@ -61,35 +61,6 @@ int ObCSReplicaUtil::check_need_process_for_cs_replica_for_ddl(
   return ret;
 }
 
-int ObCSReplicaUtil::check_cs_replica_global_visible(
-    const ObLSInfo &ls_info,
-    bool &is_global_visible)
-{
-  int ret = OB_SUCCESS;
-  is_global_visible = false;
-  bool has_leader = false;
-  bool has_cs_replica = false;
-  for (int64_t idx = 0; OB_SUCC(ret) && idx < ls_info.get_replicas().count(); ++idx) {
-    const ObLSReplica &replica = ls_info.get_replicas().at(idx);
-    if (ObRole::LEADER == replica.get_role()) {
-      has_leader = true;
-    }
-    if (replica.is_column_replica()) {
-      has_cs_replica = true;
-    }
-  }
-  is_global_visible = has_leader && has_cs_replica;
-#ifdef ERRSIM
-  if (OB_SUCC(ret)) {
-    if (EN_LS_NOT_SEE_CS_REPLICA) {
-      is_global_visible = false;
-      LOG_INFO("ERRSIM EN_LS_NOT_SEE_CS_REPLICA", K(ret), K(is_global_visible));
-    }
-  }
-#endif
-  return ret;
-}
-
 int ObCSReplicaUtil::get_cs_replica_ls_set(
     const ObIArray<share::ObLSID> &ls_id_array,
     int64_t tenant_id,
@@ -100,13 +71,9 @@ int ObCSReplicaUtil::get_cs_replica_ls_set(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (ls_id_array.empty()) {
-  } else if (OB_ISNULL(GCTX.lst_operator_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lst operator is null", K(ret));
   } else if (!is_user_tenant(tenant_id)) {
   } else {
     const int64_t cluster_id = GCONF.cluster_id;
-    ObSEArray<ObLSInfo, 4> ls_infos;
     ObSEArray<share::ObLSID, 4> sorted_ls_id_array;
     ObSEArray<share::ObLSID, 4> unique_ls_id_array;
     if (OB_FAIL(sorted_ls_id_array.reserve(ls_id_array.count()))) {
@@ -121,23 +88,6 @@ int ObCSReplicaUtil::get_cs_replica_ls_set(
         } else if (idx >= 1 && sorted_ls_id_array.at(idx) == sorted_ls_id_array.at(idx - 1)) {
         } else if (OB_FAIL(unique_ls_id_array.push_back(sorted_ls_id_array.at(idx)))) {
           LOG_WARN("failed to push back", K(ret));
-        }
-      }
-    }
-
-    if (OB_FAIL(ret) || unique_ls_id_array.empty()) {
-    } else if (OB_FAIL(GCTX.lst_operator_->batch_get(cluster_id, tenant_id, unique_ls_id_array, ObLSTable::DEFAULT_MODE, ls_infos))) {
-      LOG_WARN("failed to get ls infos", K(ret), K(cluster_id), K(tenant_id), K(unique_ls_id_array));
-    } else {
-      // batch get will drop duplicate ls id, so no need to check duplicate
-      for (int64_t idx = 0; OB_SUCC(ret) && idx < ls_infos.count(); ++idx) {
-        const ObLSInfo &ls_info = ls_infos.at(idx);
-        bool is_global_visible = false;
-        if (OB_FAIL(check_cs_replica_global_visible(ls_info, is_global_visible))) {
-          LOG_WARN("failed to check need process cs replica", K(ret), K(ls_info));
-        } else if (!is_global_visible) {
-        } else if (OB_FAIL(contain_cs_replica_ls_id_set.set_refactored(ls_info.get_ls_id()))) {
-          LOG_WARN("failed to set ls id", K(ret), K(ls_info));
         }
       }
     }
@@ -164,27 +114,6 @@ int ObCSReplicaUtil::check_need_process_cs_replica_for_offline_ddl(
     need_process = false;
     LOG_INFO("ERRSIM EN_LS_NOT_SEE_CS_REPLICA_FOR_COMPLEMENT_DAG, not see cs replica when set ddl type", K(tmp_ret), K(need_process));
 #endif
-  } else {
-    ObSEArray<ObLSInfo, 8> ls_infos;
-    if (OB_ISNULL(GCTX.lst_operator_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("lst_operator is null", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(GCTX.lst_operator_->get_by_tenant(tenant_id, false/*inner_table_only*/, ls_infos))) {
-      LOG_WARN("fail to get ls infos", KR(ret), K(tenant_id));
-    } else {
-      // 3. update ls_infos cached in memory
-      for (int64_t i = 0; OB_SUCC(ret) && i < ls_infos.count(); ++i) {
-        const ObLSInfo &ls_info = ls_infos.at(i);
-        bool is_global_visible = false;
-        if (OB_FAIL(check_cs_replica_global_visible(ls_info, is_global_visible))) {
-          LOG_WARN("failed to check need process cs replica", K(ret), K(ls_info));
-        } else if (is_global_visible) {
-          need_process = true;
-          LOG_INFO("[CS-Replica] Finish checking for complement data rely on dag", K(ret), K(ls_infos));
-          break;
-        }
-      }
-    }
   }
   return ret;
 }

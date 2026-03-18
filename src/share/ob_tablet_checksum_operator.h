@@ -53,7 +53,7 @@ public:
   
   uint64_t tenant_id_;
   common::ObTabletID tablet_id_;
-  share::ObLSID ls_id_;
+  ObLSID ls_id_;
   int64_t data_checksum_;
   int64_t row_count_;
   SCN compaction_scn_;
@@ -109,7 +109,7 @@ public:
   static int load_all_compaction_scn(
       common::ObISQLClient &sql_client, 
       const uint64_t tenant_id,
-      common::ObIArray<share::SCN> &compaction_scn_arr);
+      common::ObIArray<SCN> &compaction_scn_arr);
   static int is_first_tablet_in_sys_ls_exist(
       common::ObISQLClient &sql_client, 
       const uint64_t tenant_id, 

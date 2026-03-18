@@ -42,7 +42,6 @@
 #include "share/scn.h"
 #include "storage/tablet/ob_tablet_mds_data.h"
 #include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
-#include "storage/high_availability/ob_tablet_transfer_info.h"
 #include "storage/tablet/ob_tablet_space_usage.h"
 #include "storage/blocksstable/ob_major_checksum_info.h"
 #include "storage/column_store/ob_column_store_replica_ddl_helper.h"
@@ -121,13 +120,13 @@ public:
       const int64_t len,
       int64_t &pos);
   int64_t get_serialize_size() const;
-  int reset_transfer_table();
   bool has_transfer_table() const;
   share::SCN get_ddl_sstable_start_scn() const;
   // Return the max replayed scn which is the max scn among clog_checkpoint_scn,
   // mds_checkpoint_scn and ddl_checkpoint_scn.
   // Note, if a new type of checkpoint scn is added, donot forget to modify the returned scn.
   // for column store replica
+  share::SCN get_max_replayed_scn() const;
   bool is_cs_replica_global_visible_when_ddl() const;
   bool is_cs_replica_global_visible_and_replay_row_store() const;
   bool is_cs_replica_global_visible_and_replay_column_store() const;
@@ -175,7 +174,6 @@ public:
                K_(ddl_data_format_version),
                K_(ddl_commit_scn),
                K_(mds_checkpoint_scn),
-               K_(transfer_info),
                K_(extra_medium_info),
                K_(last_persisted_committed_tablet_status),
                K_(create_schema_version),
@@ -215,7 +213,6 @@ public:
   share::SCN ddl_commit_scn_; // alignment: 8B, size: 8B
   share::SCN mds_checkpoint_scn_; // alignment: 8B, size: 8B
   share::SCN min_ss_tablet_version_; // alignment: 8B, size: 8B
-  ObTabletTransferInfo transfer_info_; // alignment: 8B, size: 32B
   compaction::ObExtraMediumInfo extra_medium_info_;
   ObTabletCreateDeleteMdsUserData last_persisted_committed_tablet_status_; // quick access for tablet status in sstables
   ObTabletSpaceUsage space_usage_; // calculated by tablet persist, ObMigrationTabletParam doesn't need it
@@ -331,7 +328,6 @@ public:
                K_(ddl_commit_scn),
                K_(mds_checkpoint_scn),
                K_(mds_data),
-               K_(transfer_info),
                K_(create_schema_version),
                K_(micro_index_clustered),
                K_(major_ckm_info),
@@ -386,7 +382,6 @@ public:
   share::SCN ddl_commit_scn_;
   share::SCN mds_checkpoint_scn_;
   ObTabletFullMemoryMdsData mds_data_;
-  ObTabletTransferInfo transfer_info_;
   int64_t create_schema_version_;
   bool micro_index_clustered_;
   blocksstable::ObMajorChecksumInfo major_ckm_info_; // from table store

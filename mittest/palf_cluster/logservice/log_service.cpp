@@ -24,7 +24,6 @@
 #include "share/ob_ls_id.h"
 #include "share/allocator/ob_tenant_mutil_allocator.h"
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
-#include "share/ob_tenant_info_proxy.h"
 #include "share/ob_unit_getter.h"
 #include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_tenant_module_init_ctx.h"
@@ -284,7 +283,6 @@ palf::AccessMode LogService::get_palf_access_mode(const share::ObTenantRole &ten
       break;
     case share::ObTenantRole::STANDBY_TENANT:
     case share::ObTenantRole::RESTORE_TENANT:
-    case share::ObTenantRole::CLONE_TENANT:
       mode = palf::AccessMode::RAW_WRITE;
       break;
     default:

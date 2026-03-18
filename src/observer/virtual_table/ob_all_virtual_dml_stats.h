@@ -70,10 +70,7 @@ public:
 private:
   enum COLUMNS
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TABLE_ID,
+        TABLE_ID = common::OB_APP_MIN_COLUMN_ID,
     TABLET_ID,
     INSERT_ROW_COUNT,
     UPDATE_ROW_COUNT,

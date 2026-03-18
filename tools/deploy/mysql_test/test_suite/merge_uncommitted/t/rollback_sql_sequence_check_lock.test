@@ -27,7 +27,7 @@ drop table if exists t1;
 create table t1(num int, str varchar(2000), tag int);
 connection conn0;
 let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= 't1', table_id, 1);
-let $__svr_cnt__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ count(*) as c from oceanbase.__all_server, c, 1);
+let $__svr_cnt__=1;
 connection conn1;
 insert into t1 values(1, repeat('Hello OceanBase', 50), 1);
 #事务开始 插入数据

@@ -214,24 +214,6 @@ int ObAllVirtualSessionInfo::FillScanner::operator()(
             }
             break;
           }
-          case SVR_IP: {
-            if (!server.get_self().ip_to_string(ip_buf, common::OB_IP_STR_BUFF)) {
-              ret = OB_ERR_UNEXPECTED;
-              SERVER_LOG(WARN, "fail to get ip string", K(ret), K(server.get_self()));
-            } else {
-              cur_row_->cells_[cell_idx].set_varchar(ObString::make_string(ip_buf));
-              cur_row_->cells_[cell_idx].set_collation_type(default_collation);
-            }
-            break;
-          }
-          case SVR_PORT: {
-            cur_row_->cells_[cell_idx].set_int(server.get_self().get_port());
-            break;
-          }
-          case SQL_PORT: {
-            cur_row_->cells_[cell_idx].set_int(GCONF.mysql_port);
-            break;
-          }
           case PROXY_SESSID: {
             if (ObBasicSessionInfo::VALID_PROXY_SESSID == sess_info->get_proxy_sessid()) {
               cur_row_->cells_[cell_idx].set_null();

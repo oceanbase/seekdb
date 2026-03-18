@@ -53,7 +53,6 @@ private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   char state_name_[common::MAX_LS_STATE_LENGTH];
   /* The resources for cross-tenant access must be handled and released by ObMultiTenantOperator */
-  int64_t ls_id_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualLSInfo);

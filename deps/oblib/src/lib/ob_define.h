@@ -132,7 +132,6 @@ const int64_t MAX_ZONE_LIST_LENGTH = MAX_ZONE_LENGTH * MAX_ZONE_NUM;
 const int64_t MAX_ZONE_STATUS_LENGTH = 16;
 const int64_t MAX_REPLICA_STATUS_LENGTH = 64;
 const int64_t MAX_REPLICA_TYPE_LENGTH = 16;
-const int64_t MAX_DISASTER_RECOVERY_TASK_TYPE_LENGTH = 64;
 const int64_t MAX_ARB_REPLICA_TASK_TYPE_LENGTH = 32;
 const int64_t MAX_TENANT_STATUS_LENGTH = 64;
 const int64_t MAX_RESOURCE_POOL_NAME_LEN = 128;
@@ -634,11 +633,6 @@ enum ObServerRole
   OB_SERVER = 6,
   OB_PROXY = 7,
   OB_OBLOG = 8, // liboblog
-};
-
-enum ObServerManagerOp
-{
-  OB_SHUTDOWN = 1, OB_RESTART = 2, OB_ADD = 3, OB_DELETE = 4,
 };
 
 const int OB_FAKE_MS_PORT = 2828;

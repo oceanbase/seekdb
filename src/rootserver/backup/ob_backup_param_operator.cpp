@@ -100,39 +100,10 @@ const char *ObBackupParamOperator::CLUSTER_BLACK_PARAMETER_LIST[] = {
   "debug_sync_timeout",
 };
 
-int ObBackupParamOperator::construct_tenant_param_sql_(const uint64_t tenant_id,
-  common::ObSqlString &sql)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(sql.assign_fmt("select name, value from %s", OB_TENANT_PARAMETER_TNAME))) {
-    LOG_WARN("failed to assign fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" where tenant_id=%lu", tenant_id))) {
-    LOG_WARN("failed to append sql", K(ret));
-  } else if (OB_FAIL(sql.append(" and zone='' and svr_ip='ANY' and scope='TENANT'"))) {
-    LOG_WARN("failed to append sql", K(ret));
-  } else {
-    const int64_t list_len = sizeof(TENANT_BLACK_PARAMETER_LIST) / sizeof(char *);
-    for (int64_t i = 0; OB_SUCC(ret) && i < list_len; i++) {
-      const char *name = TENANT_BLACK_PARAMETER_LIST[i];
-      if (0 == i && OB_FAIL(sql.append_fmt(" and name not in ('%s'", name))) {
-        LOG_WARN("failed to apend sql", K(ret));
-      } else if (0 < i && OB_FAIL(sql.append_fmt(",'%s'", name))) {
-        LOG_WARN("failed to apend sql", K(ret));
-      }
-      if (OB_FAIL(ret)) {
-      } else if (i == list_len - 1 && OB_FAIL(sql.append(")"))) {
-        LOG_WARN("failed to apend sql", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObBackupParamOperator::construct_cluster_param_sql_(common::ObSqlString &sql)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql.assign_fmt("select name, value from %s", OB_ALL_SYS_PARAMETER_TNAME))) {
+  if (OB_FAIL(sql.assign_fmt("select name, value from %s", OB_ALL_VIRTUAL_SYS_PARAMETER_TNAME))) {
     LOG_WARN("failed to assign fmt", K(ret));
   } else if (OB_FAIL(sql.append(" where zone='' and svr_ip='ANY' and scope='CLUSTER'"))) {
     LOG_WARN("failed to apend sql", K(ret));
@@ -161,10 +132,6 @@ int ObBackupParamOperator::construct_query_sql_(const uint64_t tenant_id,
   if (OB_SYS_TENANT_ID == tenant_id) {
     if (OB_FAIL(construct_cluster_param_sql_(sql))) {
       LOG_WARN("failed to construct cluster parameters sql", K(ret), K(tenant_id));
-    }
-  } else {
-    if (OB_FAIL(construct_tenant_param_sql_(tenant_id, sql))) {
-      LOG_WARN("failed to construct tenant parameters sql", K(ret), K(tenant_id));
     }
   }
   return ret;

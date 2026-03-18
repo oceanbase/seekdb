@@ -996,7 +996,7 @@ int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
 {
   int ret = OB_SUCCESS;
   obrpc::ObCalcColumnChecksumResponseArg arg;
-  ObAddr rs_addr;
+  ObAddr rs_addr = GCTX.self_addr();
   arg.tablet_id_ = tablet_id_;
   arg.target_table_id_ = index_id_;
   arg.ret_code_ = ret_code;
@@ -1011,11 +1011,9 @@ int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
     }
 #endif
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_) || OB_ISNULL(GCTX.rs_mgr_)) {
+  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_ERR_SYS;
     STORAGE_LOG(WARN, "innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
-  } else if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_addr))) {
-    STORAGE_LOG(WARN, "fail to get rootservice address", K(ret));
   } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).calc_column_checksum_response(arg))) {
     STORAGE_LOG(WARN, "fail to check unique index response", K(ret), K(arg));
   } else {

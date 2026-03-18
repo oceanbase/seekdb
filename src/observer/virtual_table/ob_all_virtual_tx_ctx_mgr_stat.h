@@ -48,7 +48,6 @@ public:
 private:
   int prepare_start_to_read_();
 private:
-  char ip_buffer_[common::OB_IP_STR_BUFF];
   char memstore_version_buffer_[common::MAX_VERSION_LENGTH];
 private:
   transaction::ObTransService *trans_service_;

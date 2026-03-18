@@ -179,7 +179,6 @@ public:
     ObAddr self;
     obrpc::ObSrvRpcProxy rpc_proxy;
     obrpc::ObCommonRpcProxy rs_rpc_proxy;
-    share::ObRsMgr rs_mgr;
     self.set_ip_addr("127.0.0.1", 8086);
     rpc::frame::ObReqTransport req_transport(NULL, NULL);
     const int64_t ulmt = 128LL << 30;

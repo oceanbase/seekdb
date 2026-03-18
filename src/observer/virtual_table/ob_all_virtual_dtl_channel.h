@@ -126,12 +126,9 @@ public:
 private:
   enum STORAGE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    CHANNEL_ID,
+        CHANNEL_ID = common::OB_APP_MIN_COLUMN_ID,
     OP_ID,
     PEER_ID,
-    TENANT_ID, // OB_APP_MIN_COLUMN_ID + 5
     IS_LOCAL,
     IS_DATA,
     IS_TRANSMIT,

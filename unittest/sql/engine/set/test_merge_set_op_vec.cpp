@@ -703,14 +703,13 @@ int ObMergeSetVecTest::init_tenant_mgr()
   oceanbase::rpc::frame::ObReqTransport req_transport(NULL, NULL);
   oceanbase::obrpc::ObSrvRpcProxy rpc_proxy;
   oceanbase::obrpc::ObCommonRpcProxy rs_rpc_proxy;
-  oceanbase::share::ObRsMgr rs_mgr;
   uint64_t cluster_version = CLUSTER_VERSION_1_0_0_0;
   common::ObClusterVersion::get_instance().update_cluster_version(cluster_version);
   EXPECT_EQ(cluster_version, common::ObClusterVersion::get_instance().get_cluster_version());
   int64_t tenant_id = OB_SYS_TENANT_ID;
   self.set_ip_addr("127.0.0.1", 8086);
   EXPECT_EQ(OB_SUCCESS, ret);
-  ret = tm.init(self, rpc_proxy, rs_rpc_proxy, rs_mgr, &req_transport, &ObServerConfig::get_instance());
+  ret = tm.init(self, rpc_proxy, rs_rpc_proxy, &req_transport, &ObServerConfig::get_instance());
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = tm.add_tenant(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);

@@ -130,7 +130,6 @@ class ObIOCalibration final
 {
 public:
   static ObIOCalibration &get_instance();
-  static int parse_calibration_table(ObIOAbility &io_ability);
   static int parse_calibration_string(const ObString &calibration_string, ObIOBenchResult &item);
   int init();
   void destroy();

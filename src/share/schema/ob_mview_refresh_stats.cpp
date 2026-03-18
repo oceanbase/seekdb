@@ -171,8 +171,7 @@ int ObMViewRefreshRunStats::gen_insert_run_stats_dml(uint64_t exec_tenant_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(exec_tenant_id), KPC(this));
   } else {
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
+    if (OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
         OB_FAIL(dml.add_column("run_user_id", run_user_id_)) ||
         OB_FAIL(dml.add_column("num_mvs_total", num_mvs_total_)) ||
         OB_FAIL(dml.add_column("num_mvs_current", num_mvs_current_)) ||
@@ -242,7 +241,7 @@ int ObMViewRefreshRunStats::dec_num_mvs_current(ObISQLClient &sql_client, uint64
     ObSqlString sql;
     int64_t affected_rows = 0;
     if (OB_FAIL(sql.assign_fmt("update %s set num_mvs_current = num_mvs_current - %ld"
-                               " where tenant_id = 0 and refresh_id = %ld;",
+                               " where refresh_id = %ld;",
                                OB_ALL_MVIEW_REFRESH_RUN_STATS_TNAME, dec_val, refresh_id))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -266,7 +265,7 @@ int ObMViewRefreshRunStats::drop_empty_run_stats(ObISQLClient &sql_client, uint6
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("delete from %s where tenant_id = 0 and num_mvs_current <= 0",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where num_mvs_current <= 0",
                                OB_ALL_MVIEW_REFRESH_RUN_STATS_TNAME))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
@@ -377,8 +376,7 @@ int ObMViewRefreshStats::gen_insert_refresh_stats_dml(uint64_t exec_tenant_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(exec_tenant_id), KPC(this));
   } else {
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
+    if (OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
         OB_FAIL(dml.add_pk_column("retry_id", retry_id_)) ||
         OB_FAIL(dml.add_column("refresh_type", refresh_type_)) ||
@@ -461,8 +459,7 @@ int ObMViewRefreshStats::drop_refresh_stats_record(ObISQLClient &sql_client, uin
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("refresh_id", record_id.refresh_id_)) ||
+    if (OB_FAIL(dml.add_pk_column("refresh_id", record_id.refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", record_id.mview_id_)) ||
         OB_FAIL(dml.add_pk_column("retry_id", record_id.retry_id_))) {
       LOG_WARN("add column failed", KR(ret));
@@ -495,7 +492,7 @@ int ObMViewRefreshStats::collect_record_ids(ObISQLClient &sql_client, uint64_t t
       ObSqlString sql;
       ObMViewRefreshStatsRecordId record_id;
       if (OB_FAIL(
-            sql.assign_fmt("select refresh_id, mview_id, retry_id from %s where tenant_id = 0",
+            sql.assign_fmt("select refresh_id, mview_id, retry_id from %s where 0 = 0",
                            OB_ALL_MVIEW_REFRESH_STATS_TNAME))) {
         LOG_WARN("fail to assign sql", KR(ret));
       } else if (filter_param.has_mview_id() &&
@@ -629,8 +626,7 @@ int ObMViewRefreshChangeStats::gen_insert_change_stats_dml(uint64_t exec_tenant_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(exec_tenant_id), KPC(this));
   } else {
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
+    if (OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
         OB_FAIL(dml.add_pk_column("retry_id", retry_id_)) ||
         OB_FAIL(dml.add_pk_column("detail_table_id", detail_table_id_)) ||
@@ -681,8 +677,7 @@ int ObMViewRefreshChangeStats::drop_change_stats_record(
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("refresh_id", record_id.refresh_id_)) ||
+    if (OB_FAIL(dml.add_pk_column("refresh_id", record_id.refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", record_id.mview_id_)) ||
         OB_FAIL(dml.add_pk_column("retry_id", record_id.retry_id_))) {
       LOG_WARN("add column failed", KR(ret));
@@ -803,8 +798,7 @@ int ObMViewRefreshStmtStats::gen_insert_stmt_stats_dml(uint64_t exec_tenant_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(exec_tenant_id), KPC(this));
   } else {
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
+    if (OB_FAIL(dml.add_pk_column("refresh_id", refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
         OB_FAIL(dml.add_pk_column("retry_id", retry_id_)) ||
         OB_FAIL(dml.add_pk_column("step", step_)) ||
@@ -858,8 +852,7 @@ int ObMViewRefreshStmtStats::drop_stmt_stats_record(ObISQLClient &sql_client, ui
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("refresh_id", record_id.refresh_id_)) ||
+    if (OB_FAIL(dml.add_pk_column("refresh_id", record_id.refresh_id_)) ||
         OB_FAIL(dml.add_pk_column("mview_id", record_id.mview_id_)) ||
         OB_FAIL(dml.add_pk_column("retry_id", record_id.retry_id_))) {
       LOG_WARN("add column failed", KR(ret));

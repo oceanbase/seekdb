@@ -1330,8 +1330,7 @@ int ObTenantTabletScheduler::schedule_tablet_minor_merge(
       const int64_t parallel_dag_cnt = minor_range_mgr.exe_range_array_.count() + parallel_results.count();
       const int64_t total_sstable_cnt = result.handle_.get_count();
       const int64_t create_time = common::ObTimeUtility::fast_current_time();
-      ObTabletMergeDagParam dag_param(merge_type, ls_id, tablet_id,
-          tablet_handle.get_obj()->get_tablet_meta().transfer_info_.transfer_seq_);
+      ObTabletMergeDagParam dag_param(merge_type, ls_id, tablet_id);
       for (int64_t k = 0; OB_SUCC(ret) && k < parallel_results.count(); ++k) {
         if (OB_UNLIKELY(parallel_results.at(k).handle_.get_count() <= 1)) {
           LOG_WARN("invalid parallel result", K(ret), K(k), K(parallel_results));

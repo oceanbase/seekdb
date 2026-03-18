@@ -18,7 +18,6 @@
 #define _OB_RS_TEST_UTILS_H 1
 #include <gtest/gtest.h>
 #include "lib/utility/ob_test_util.h"
-#include "rootserver/ob_server_manager.h"
 #include "rootserver/ob_root_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/json/ob_json.h"
@@ -26,28 +25,6 @@ namespace oceanbase
 {
 namespace rootserver
 {
-class ObFakeCB : public ObIStatusChangeCallback
-{
-public:
-  ObFakeCB() {}
-  int wakeup_balancer() { return OB_SUCCESS; }
-  int wakeup_daily_merger() { return OB_SUCCESS; }
-  int on_start_server(const common::ObAddr &server) {UNUSED(server); return OB_SUCCESS;}
-  int on_stop_server(const common::ObAddr &server) {UNUSED(server); return OB_SUCCESS;}
-  int on_server_status_change(const common::ObAddr &server) {UNUSED(server); return OB_SUCCESS;}
-};
-
-class ObFakeServerChangeCB : public ObIServerChangeCallback
-{
-public:
-  ObFakeServerChangeCB() {}
-  virtual ~ObFakeServerChangeCB() {}
-  virtual int on_server_change()
-  {
-    return OB_SUCCESS;
-  }
-};
-
 
 class ObNeverStopForTestOnly : public share::ObCheckStopProvider
 {

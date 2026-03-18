@@ -122,21 +122,6 @@ int ObAllVirtualActivityMetric::process_curr_tenant(ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
-        case SERVER_IP:
-          if (!addr_.ip_to_string(ip_buffer_, common::OB_IP_STR_BUFF)) {
-            STORAGE_LOG(ERROR, "ip to string failed");
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            cells[i].set_varchar(ip_buffer_);
-            cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          }
-          break;
-        case SERVER_PORT:
-          cells[i].set_int(addr_.get_port());
-          break;
-        case TENANT_ID:
-          cells[i].set_int(MTL_ID());
-          break;
         case ACTIVITY_TIMESTAMP:
           cells[i].set_timestamp(stat.last_captured_timestamp_);
           break;

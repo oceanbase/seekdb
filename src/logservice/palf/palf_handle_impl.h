@@ -237,22 +237,6 @@ public:
   virtual int set_initial_member_list(const common::ObMemberList &member_list,
                                       const int64_t paxos_replica_num,
                                       const common::GlobalLearnerList &learner_list) = 0;
-#ifdef OB_BUILD_ARBITRATION
-  // after creating palf which includes arbitration replica successfully,
-  // set initial memberlist(can only be called once)
-  // @param [in] ObMemberList, the initial member list, do not include arbitration replica
-  // @param [in] arb_member, arbitration replica
-  // @param [in] paxos_replica_num, number of paxos replicas
-  // @param [in] learner_list, learner_list
-  // @return :TODO
-  virtual int set_initial_member_list(const common::ObMemberList &member_list,
-                                      const common::ObMember &arb_member,
-                                      const int64_t paxos_replica_num,
-                                      const common::GlobalLearnerList &learner_list) = 0;
-  virtual int get_remote_arb_member_info(ArbMemberInfo &arb_member_info) = 0;
-  virtual int get_arb_member_info(ArbMemberInfo &arb_member_info) const = 0;
-  virtual int get_arbitration_member(common::ObMember &arb_member) const = 0;
-#endif
   // Submit content that needs to be persisted, the submitted content is logged locally and synchronized to other replicas in the Paxos member list
   // At the same time, if there are read-only replicas or physical standby databases, logs will be synchronized to the corresponding nodes when conditions are met
   // After the majority of replicas in the Paxos member list successfully persist, it will call log_ctx->on_success() to notify the caller
@@ -480,52 +464,6 @@ public:
                                           const common::ObMember &removed_member,
                                           const LogConfigVersion &config_version,
                                           const int64_t timeout_us) = 0;
-#ifdef OB_BUILD_ARBITRATION
-  // @brief, add an arbitration member to paxos group
-  // @param[in] common::ObMember &member: arbitration member which will be added
-  // @param[in] const int64_t timeout_us: add member timeout, us
-  // @return
-  // - OB_SUCCESS: add arbitration member successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: add arbitration member timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - other: bug
-  virtual int add_arb_member(const common::ObMember &added_member,
-                             const int64_t timeout_us) = 0;
-  // @brief, remove an arbitration member from paxos group
-  // @param[in] common::ObMember &member: arbitration member which will be removed
-  // @param[in] const int64_t timeout_us: remove member timeout, us
-  // @return
-  // - OB_SUCCESS: remove arbitration member successfully
-  // - OB_INVALID_ARGUMENT: invalid argumemt or not supported config change
-  // - OB_TIMEOUT: remove arbitration member timeout
-  // - OB_NOT_MASTER: not leader or rolechange during membership changing
-  // - other: bug
-  virtual int remove_arb_member(const common::ObMember &arb_member,
-                                const int64_t timeout_us) = 0;
-  // @brief: degrade an acceptor(full replica) to learner(special read only replica) in this cluster
-  // @param[in] const common::ObMemberList &member_list: acceptors will be degraded to learner
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS
-  // - OB_INVALID_ARGUMENT: invalid argument
-  // - OB_TIMEOUT: timeout
-  // - OB_NOT_MASTER: not leader
-  virtual int degrade_acceptor_to_learner(const LogMemberAckInfoList &degrade_servers,
-                                          const int64_t timeout_us) = 0;
-  // @brief: upgrade a learner(special read only replica) to acceptor(full replica) in this cluster
-  // @param[in] const common::ObMemberList &learner_list: learners will be upgraded to acceptors
-  // @param[in] const int64_t timeout_us
-  // @return
-  // - OB_SUCCESS
-  // - OB_INVALID_ARGUMENT: invalid argument
-  // - OB_TIMEOUT: timeout
-  // - OB_NOT_MASTER: not leader
-  virtual int upgrade_learner_to_acceptor(const LogMemberAckInfoList &upgrade_servers,
-                                          const int64_t timeout_us) = 0;
-  virtual int set_election_silent_flag(const bool election_silent_flag) = 0;
-  virtual bool is_election_silent() const = 0;
-#endif
   // Set the recyclable point of the log file, log files with LSN less than or equal to lsn can be safely recycled
   //
   // @param [in] lsn, the log file position that can be recycled
@@ -778,8 +716,6 @@ public:
   virtual int reset_election_priority() = 0;
   virtual int set_locality_cb(palf::PalfLocalityInfoCb *locality_cb) = 0;
   virtual int reset_locality_cb() = 0;
-  virtual int set_reconfig_checker_cb(palf::PalfReconfigCheckerCb *reconfig_checker) = 0;
-  virtual int reset_reconfig_checker_cb() = 0;
   // ==================== Callback end ========================
   virtual int advance_election_epoch_and_downgrade_priority(const int64_t proposal_id, 
                                                             const int64_t downgrade_priority_time_us,
@@ -855,12 +791,6 @@ public:
   int set_initial_member_list(const common::ObMemberList &member_list,
                               const int64_t paxos_replica_num,
                               const common::GlobalLearnerList &learner_list) override final;
-#ifdef OB_BUILD_ARBITRATION
-  int set_initial_member_list(const common::ObMemberList &member_list,
-                              const common::ObMember &arb_member,
-                              const int64_t paxos_replica_num,
-                              const common::GlobalLearnerList &learner_list) override final;
-#endif
   int submit_log(const PalfAppendOptions &opts,
                  const char *buf,
                  const int64_t buf_len,
@@ -925,21 +855,6 @@ public:
                                   const common::ObMember &removed_member,
                                   const LogConfigVersion &config_version,
                                   const int64_t timeout_us) override final;
-#ifdef OB_BUILD_ARBITRATION
-  int add_arb_member(const common::ObMember &added_member,
-                     const int64_t timeout_us) override final;
-  int remove_arb_member(const common::ObMember &arb_member,
-                        const int64_t timeout_us) override final;
-  int degrade_acceptor_to_learner(const LogMemberAckInfoList &degrade_servers,
-                                  const int64_t timeout_us) override final;
-  int upgrade_learner_to_acceptor(const LogMemberAckInfoList &upgrade_servers,
-                                  const int64_t timeout_us) override final;
-  int get_remote_arb_member_info(ArbMemberInfo &arb_member_info) override final;
-  int get_arb_member_info(ArbMemberInfo &arb_member_info) const override final;
-  int get_arbitration_member(common::ObMember &arb_member) const override final;
-  int set_election_silent_flag(const bool election_silent_flag) override final;
-  bool is_election_silent() const override final;
-#endif
   int set_base_lsn(const LSN &lsn) override final;
   int enable_sync() override final;
   int disable_sync() override final;
@@ -997,8 +912,6 @@ public:
   int reset_election_priority() override final;
   int set_locality_cb(palf::PalfLocalityInfoCb *locality_cb) override final;
   int reset_locality_cb() override final;
-  int set_reconfig_checker_cb(palf::PalfReconfigCheckerCb *reconfig_checker) override final;
-  int reset_reconfig_checker_cb() override final;
   // ==================== Callback end ========================
 public:
   int get_begin_lsn(LSN &lsn) const override final;
@@ -1274,8 +1187,6 @@ private:
   int get_block_id_by_scn_(const share::SCN &scn, block_id_t &result_block_id);
   int get_block_id_by_scn_for_flashback_(const share::SCN &scn, block_id_t &result_block_id);
   void inc_update_last_locate_block_scn_(const block_id_t &block_id, const share::SCN &scn);
-  int pre_check_before_degrade_upgrade_(const LogMemberAckInfoList &servers,
-                                        const LogConfigChangeType &type);
   int can_change_config_(const LogConfigChangeArgs &args, int64_t &proposal_id);
   int check_args_and_generate_config_(const LogConfigChangeArgs &args,
                                       const int64_t proposal_id,
@@ -1321,7 +1232,6 @@ private:
   void get_last_rebuild_meta_info_(RebuildMetaInfo &rebuild_meta_info) const;
   // ======================= report event begin =======================================
   void report_set_initial_member_list_(const int64_t paxos_replica_num, const common::ObMemberList &member_list);
-  void report_set_initial_member_list_with_arb_(const int64_t paxos_replica_num, const common::ObMemberList &member_list, const common::ObMember &arb_member);
   void report_force_set_as_single_replica_(const int64_t prev_replica_num, const int64_t curr_replica_num, const ObMember &member);
   void report_force_set_member_list(const int64_t prev_replica_num, const int64_t curr_replica_num, const common::ObMemberList &member_list);
   void report_change_replica_num_(const int64_t prev_replica_num, const int64_t curr_replica_num, const common::ObMemberList &member_list);
@@ -1333,15 +1243,10 @@ private:
                               const char *event_name);
   void report_add_learner_(const common::ObMember &added_learner);
   void report_remove_learner_(const common::ObMember &removed_learner);
-  void report_add_arb_member_(const common::ObMember &added_arb_member);
-  void report_remove_arb_member_(const common::ObMember &removed_arb_member);
   void report_switch_learner_to_acceptor_(const common::ObMember &learner);
   void report_switch_acceptor_to_learner_(const common::ObMember &acceptor);
   void report_replace_learners_(const common::ObMemberList &added_learners,
                                 const common::ObMemberList &removed_learners);
-#ifdef OB_BUILD_ARBITRATION
-  void report_election_silent_event_(const char *event_name);
-#endif
   // ======================= report event end =======================================
   bool check_need_hook_fetch_log_(const FetchLogType fetch_type, const LSN &start_lsn);
   template<typename LogEntryType>

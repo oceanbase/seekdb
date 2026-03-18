@@ -20,7 +20,6 @@
 #include "common/ob_tablet_id.h"
 #include "lib/mysqlclient/ob_isql_client.h"
 #include "ob_storage_ha_struct.h"
-#include "ob_transfer_struct.h"
 #include "storage/ob_storage_rpc.h"
 
 namespace oceanbase
@@ -28,11 +27,17 @@ namespace oceanbase
 namespace share
 {
 class SCN;
+class ObIDagNet;
+}
+namespace restore
+{
+class ObIRestoreHelper;
 }
 namespace storage
 {
 class ObBackfillTXCtx;
 class ObTransferHandler;
+class ObStorageHATableInfoMgr;
 class ObStorageHAUtils
 {
 public:
@@ -52,6 +57,11 @@ public:
       const ObTabletHandle &tablet_handle, int64_t &data_macro_block_count);
   static int check_tenant_will_be_deleted(
       bool &is_deleted);
+  static int make_macro_id_to_datum(
+      const common::ObIArray<MacroBlockId> &macro_block_id_array,
+      char *buf,
+      const int64_t buf_size,
+      ObDatumRowkey &end_key);
   static int extract_macro_id_from_datum(
       const ObDatumRowkey &end_key,
       common::ObIArray<MacroBlockId> &macro_block_id_array);
@@ -70,6 +80,11 @@ public:
   static void sort_table_key_array_by_snapshot_version(common::ObArray<ObITable::TableKey> &table_key_array);
   static int get_tablet_backup_size_in_bytes(const ObLSID &ls_id, const ObTabletID &tablet_id, int64_t &backup_size);
   static int get_tablet_occupy_size_in_bytes(const ObLSID &ls_id, const ObTabletID &tablet_id, int64_t &occupy_size);
+  static int build_tablets_sstable_info_with_helper(
+      restore::ObIRestoreHelper *helper,
+      ObStorageHATableInfoMgr *ha_table_info_mgr,
+      share::ObIDagNet *dag_net,
+      const common::ObIArray<ObTabletHandle> &tablet_handle_array);
 private:
   struct TableKeySnapshotVersionComparator final
   {
@@ -83,7 +98,6 @@ private:
       share::SCN &compaction_scn);
   static int check_tablet_replica_checksum_(const uint64_t tenant_id, const common::ObTabletID &tablet_id,
       const share::ObLSID &ls_id, const share::SCN &compaction_scn, common::ObISQLClient &sql_client);
-  static int get_readable_scn_(share::SCN &readable_scn);
   static int get_latest_major_sstable_array_(
       ObTableHandleV2 &latest_major, 
       common::ObArray<ObSSTableWrapper> &major_sstables);
@@ -105,10 +119,6 @@ public:
   static int get_gts(const uint64_t tenant_id, share::SCN &gts);
   static void set_transfer_module();
   static void clear_transfer_module();
-  static void set_transfer_related_info(
-      const share::ObLSID &dest_ls_id,
-      const share::ObTransferTaskID &task_id, 
-      const share::SCN &start_scn);
   static void reset_related_info(const share::ObLSID &dest_ls_id);
 
 private:

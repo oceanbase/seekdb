@@ -31,13 +31,6 @@ class MockMetaReporter : public ObIMetaReport
 public:
   MockMetaReporter() { }
   ~MockMetaReporter() { }
-  int submit_ls_update_task(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id)
-  {
-    UNUSEDx(tenant_id, ls_id);
-    return OB_SUCCESS;
-  }
   int submit_tablet_checksums_task(
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,

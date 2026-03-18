@@ -19,7 +19,6 @@
 
 #include "share/ob_define.h"
 #include "logservice/ob_log_base_type.h"  //ObIRoleChangeSubHandler ObICheckpointSubHandler ObIReplaySubHandler
-#include "rootserver/ob_primary_ls_service.h"        //ObTenantThreadHelper
 #include "observer/net/ob_net_endpoint_ingress_rpc_proxy.h"
 
 namespace oceanbase

@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_EXTERNAL_SERVER_BLACKLIST_H_
+#define OCEANBASE_EXTERNAL_SERVER_BLACKLIST_H_
+
+#include "lib/container/ob_array.h"     // ObArray
+#include "lib/net/ob_addr.h"            // ObAddr
+#include "lib/lock/ob_spin_rwlock.h"    // SpinRWLock, SpinRLockGuard, SpinWLockGuard
+#include "logservice/common_util/ob_log_time_utils.h"             // _K_
+
+namespace oceanbase
+{
+namespace logservice
+{
+class ObLogSvrBlacklist
+{
+public:
+  ObLogSvrBlacklist();
+  ~ObLogSvrBlacklist();
+
+  int init(const char *svrs_list_str,
+      const bool is_sql_server);
+  void destroy();
+
+  // get current svr count
+  int64_t count() const;
+  /// Determine if the server is available: if it is on the server blacklist, it is not available; otherwise it is available
+  ///
+  /// @param [in] svr      query server
+  ///
+  /// @retval true         not exist in blacklist
+  /// @retval false        exist
+  bool is_exist(const common::ObAddr &svr) const;
+  ///  Parsing server_blacklist in the configuration file
+  ///
+  /// @param [in] svrs_list_str    server blacklist string
+  ///
+  void refresh(const char *svrs_list_str);
+
+private:
+  typedef common::ObArray<common::ObAddr> ExceptionalSvrArray;
+  static const int64_t MAX_SVR_BUF_SIZE = 4 * _K_;
+
+  int set_svrs_str_(const char *svrs_list_str,
+      const int64_t cur_svr_list_idx);
+  int build_svr_patterns_(char *svrs_buf,
+      ExceptionalSvrArray &exceptional_svrs);
+
+  int64_t get_cur_svr_list_idx_() const;
+  int64_t get_bak_cur_svr_list_idx_() const;
+  void switch_svr_list_();
+
+private:
+  bool is_inited_;
+  bool is_sql_server_;
+  mutable common::SpinRWLock lock_;
+  char *svrs_buf_[2];
+  int64_t svrs_buf_size_;
+
+  int64_t cur_svr_list_idx_;
+  ExceptionalSvrArray svrs_[2];
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObLogSvrBlacklist);
+};
+
+} // namespace logservice
+} // namespace oceanbase
+#endif

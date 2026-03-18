@@ -15,6 +15,7 @@
  */
 
 #include "ob_cluster_event_history_table_operator.h"
+#include "share/ob_server_struct.h"
 namespace oceanbase
 {
 namespace observer
@@ -22,13 +23,11 @@ namespace observer
 using namespace common;
 using namespace share;
 
-int ObAllClusterEventHistoryTableOperator::init(common::ObMySQLProxy &proxy)
+int ObAllClusterEventHistoryTableOperator::init(ObSQLiteConnectionPool *pool)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObEventHistoryTableOperator::init(proxy))) {
-    SHARE_LOG(WARN, "fail to init event history table operator", KR(ret));
-  } else {
-    set_event_table(share::OB_ALL_CLUSTER_EVENT_HISTORY_TNAME);
+  if (OB_FAIL(ObEventHistoryTableOperator::init(pool, ObEventHistoryType::CLUSTER))) {
+    SHARE_LOG(WARN, "fail to init event history table operator with SQLite", KR(ret));
   }
   return ret;
 }

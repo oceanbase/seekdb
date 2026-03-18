@@ -19,6 +19,7 @@
 
 #include "rootserver/ob_ddl_service.h"
 #include "ob_pl_ddl_operator.h"
+#include "rootserver/ob_root_utils.h" // for RS_TRACE
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_dependency_info.h"
@@ -31,6 +32,7 @@ using namespace share;
 namespace rootserver
 {
 class ObDDLSQLTransaction;
+class ObDDLService;
 
 class ObPLDDLService
 {

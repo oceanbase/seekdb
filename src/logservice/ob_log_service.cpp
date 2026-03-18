@@ -26,6 +26,8 @@
 #include "log/ob_shared_log_utils.h"      // ObSharedLogUtils
 #endif
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
+#include "logservice/cdcservice/ob_cdc_service.h"  // ObCdcService
+#include "logservice/restoreservice/ob_log_restore_service.h"  // ObLogRestoreService
 
 namespace oceanbase
 {
@@ -41,6 +43,7 @@ using namespace oceanbase::common;
 ObLogService::ObLogService() :
   is_inited_(false),
   is_running_(false),
+  enable_shared_storage_(false),
   self_(),
   palf_env_(NULL),
   net_keepalive_adapter_(NULL),
@@ -51,16 +54,15 @@ ObLogService::ObLogService() :
   location_adapter_(),
   ls_adapter_(),
   rpc_proxy_(),
-  reporter_(),
 #ifdef OB_BUILD_SHARED_STORAGE
   shared_log_service_(),
 #endif
-#ifdef OB_BUILD_ARBITRATION
-  arb_service_(),
-#endif
   flashback_service_(),
   monitor_(),
-  locality_adapter_()
+  update_palf_opts_lock_(),
+  locality_adapter_(),
+  restore_service_(),
+  cdc_service_()
 {}
 
 ObLogService::~ObLogService()
@@ -79,7 +81,6 @@ int ObLogService::mtl_init(ObLogService* &logservice)
   const char *tenant_clog_dir = MTL_INIT_CTX()->tenant_clog_dir_;
   const char *clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
   ObLocationService *location_service = GCTX.location_service_;
-  observer::ObIMetaReport *reporter = GCTX.ob_service_;
   ObServerLogBlockMgr *log_block_mgr = GCTX.log_block_mgr_;
   common::ObILogAllocator *alloc_mgr = NULL;
   common::ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
@@ -99,7 +100,6 @@ int ObLogService::mtl_init(ObLogService* &logservice)
                                       GCTX.batch_rpc_,
                                       MTL(ObLSService*),
                                       location_service,
-                                      reporter,
                                       log_block_mgr,
                                       mysql_proxy,
                                       net_keepalive_adapter,
@@ -143,6 +143,10 @@ int ObLogService::start()
   } else if (enable_shared_storage_ && OB_FAIL(shared_log_service_.start())) {
     CLOG_LOG(WARN, "failed to start shared_log_service_");
 #endif
+  } else if (OB_FAIL(restore_service_.start())) {
+    CLOG_LOG(WARN, "failed to start restore_service_", K(ret));
+  } else if (OB_FAIL(cdc_service_.start())) {
+    CLOG_LOG(WARN, "failed to start cdc_service_", K(ret));
   } else {
     is_running_ = true;
     FLOG_INFO("ObLogService is started");
@@ -157,14 +161,14 @@ void ObLogService::stop()
   (void)apply_service_.stop();
   (void)replay_service_.stop();
   (void)role_change_service_.stop();
+  (void)cdc_service_.stop();
 #ifdef OB_BUILD_SHARED_STORAGE
   if (enable_shared_storage_) {
     shared_log_service_.stop();
   }
 #endif
-#ifdef OB_BUILD_ARBITRATION
-  (void)arb_service_.stop();
-#endif
+  restore_service_.stop();
+  cdc_service_.stop();
   FLOG_INFO("ObLogService is stopped");
 }
 
@@ -173,14 +177,14 @@ void ObLogService::wait()
   apply_service_.wait();
   replay_service_.wait();
   role_change_service_.wait();
+  cdc_service_.wait();
 #ifdef OB_BUILD_SHARED_STORAGE
   if (enable_shared_storage_) {
     shared_log_service_.wait();
   }
 #endif
-#ifdef OB_BUILD_ARBITRATION
-  arb_service_.wait();
-#endif
+  restore_service_.wait();
+  cdc_service_.wait();
 }
 
 void ObLogService::destroy()
@@ -193,18 +197,17 @@ void ObLogService::destroy()
   location_adapter_.destroy();
   ls_adapter_.destroy();
   rpc_proxy_.destroy();
-  reporter_.destroy();
 #ifdef OB_BUILD_SHARED_STORAGE
   shared_log_service_.destroy();
 #endif
-#ifdef OB_BUILD_ARBITRATION
-  arb_service_.destroy();
-#endif
   flashback_service_.destroy();
+  restore_service_.destroy();
+  cdc_service_.destroy();
   if (NULL != palf_env_) {
     PalfEnv::destroy_palf_env(palf_env_);
     palf_env_ = NULL;
   }
+  cdc_service_.destroy();
   if (NULL != net_keepalive_adapter_) {
     MTL_DELETE(IObNetKeepAliveAdapter, "logservice", net_keepalive_adapter_);
     net_keepalive_adapter_ = NULL;
@@ -240,7 +243,6 @@ int ObLogService::init(const PalfOptions &options,
                        obrpc::ObBatchRpc *batch_rpc,
                        ObLSService *ls_service,
                        ObLocationService *location_service,
-                       observer::ObIMetaReport *reporter,
                        palf::ILogBlockPool *log_block_pool,
                        common::ObMySQLProxy *sql_proxy,
                        IObNetKeepAliveAdapter *net_keepalive_adapter,
@@ -256,14 +258,14 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
   } else if (false == options.is_valid() || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
       || OB_ISNULL(alloc_mgr) || OB_ISNULL(transport) || OB_ISNULL(batch_rpc) || OB_ISNULL(ls_service)
-      || OB_ISNULL(location_service) || OB_ISNULL(reporter) || OB_ISNULL(log_block_pool)
+      || OB_ISNULL(location_service) || OB_ISNULL(log_block_pool)
       || OB_ISNULL(sql_proxy) || OB_ISNULL(net_keepalive_adapter) || OB_ISNULL(locality_manager)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
-             KP(alloc_mgr), KP(transport), KP(batch_rpc), KP(ls_service), KP(location_service), KP(reporter),
+             KP(alloc_mgr), KP(transport), KP(batch_rpc), KP(ls_service), KP(location_service),
              KP(log_block_pool), KP(sql_proxy), KP(net_keepalive_adapter));
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self, transport, batch_rpc,
-                                              alloc_mgr, log_block_pool, &monitor_, LOG_IO_DEVICE_WRAPPER.get_local_device(), 
+                                              alloc_mgr, log_block_pool, &monitor_, LOG_IO_DEVICE_WRAPPER.get_local_device(),
                                               &G_RES_MGR, &OB_IO_MANAGER, palf_env_))) {
     CLOG_LOG(WARN, "failed to create_palf_env", K(base_dir), K(ret));
   } else if (OB_ISNULL(palf_env_)) {
@@ -281,8 +283,6 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "failed to init location_adapter_", K(ret));
   } else if (OB_FAIL(rpc_proxy_.init(transport))) {
     CLOG_LOG(WARN, "LogServiceRpcProxy init failed", K(ret));
-  } else if (OB_FAIL(reporter_.init(reporter))) {
-    CLOG_LOG(WARN, "ReporterAdapter init failed", K(ret));
 #ifdef OB_BUILD_SHARED_STORAGE
   } else if (FALSE_IT(enable_shared_storage_ = GCTX.is_shared_storage_mode())) {
   } else if (enable_shared_storage_ &&
@@ -291,14 +291,15 @@ int ObLogService::init(const PalfOptions &options,
              palf_env_->get_palf_env_impl()->get_log_shared_queue_thread()))) {
     CLOG_LOG(WARN, "failed to init shared_log_service_", K(self), K(tenant_id));
 #endif
-#ifdef OB_BUILD_ARBITRATION
-  } else if (OB_FAIL(arb_service_.init(self, palf_env_, &rpc_proxy_, net_keepalive_adapter, &monitor_, &location_adapter_))) {
-    CLOG_LOG(WARN, "failed to init arb_service_", K(ret), K(self), KP(palf_env_));
-#endif
   } else if (OB_FAIL(flashback_service_.init(self, &location_adapter_, &rpc_proxy_, sql_proxy))) {
     CLOG_LOG(WARN, "failed to init flashback_service_", K(ret));
   } else if (OB_FAIL(locality_adapter_.init(locality_manager))) {
     CLOG_LOG(WARN, "failed to init locality_adapter_", K(ret));
+  } else if (OB_FAIL(restore_service_.init(transport, ls_service, this))) {
+    CLOG_LOG(WARN, "failed to init restore_service_", K(ret));
+  } else if (OB_FAIL(cdc_service_.init(tenant_id, ls_service))) {
+    // Initialize CDC service for log fetcher (standby log sync server side)
+    CLOG_LOG(WARN, "init cdc_service_ failed", K(ret), K(tenant_id));
   } else {
     net_keepalive_adapter_ = net_keepalive_adapter;
     alloc_mgr_ = alloc_mgr;
@@ -326,7 +327,6 @@ palf::AccessMode ObLogService::get_palf_access_mode(const share::ObTenantRole &t
       break;
     case share::ObTenantRole::STANDBY_TENANT:
     case share::ObTenantRole::RESTORE_TENANT:
-    case share::ObTenantRole::CLONE_TENANT:
       mode = palf::AccessMode::RAW_WRITE;
       break;
     default:
@@ -341,7 +341,8 @@ int ObLogService::create_ls(const share::ObLSID &id,
                             const share::ObTenantRole &tenant_role,
                             const palf::PalfBaseInfo &palf_base_info,
                             const bool allow_log_sync,
-                            ObLogHandler &log_handler
+                            ObLogHandler &log_handler,
+                            ObLogRestoreHandler &restore_handler
                             )
 {
   int ret = OB_SUCCESS;
@@ -353,18 +354,19 @@ int ObLogService::create_ls(const share::ObLSID &id,
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(id), K(replica_type),
              K(tenant_role), K(palf_base_info));
   } else if (OB_FAIL(create_ls_(id, replica_type, tenant_role, palf_base_info,
-    allow_log_sync, log_handler))) {
+    allow_log_sync, log_handler, restore_handler))) {
     CLOG_LOG(WARN, "create ls failed", K(ret), K(id), K(replica_type),
              K(tenant_role), K(palf_base_info));
   } else {
-    FLOG_INFO("ObLogService create_ls success", K(ret), K(id), K(replica_type), K(tenant_role),
-      K(palf_base_info), K(log_handler));
+    FLOG_INFO("ObLogService create_ls success", K(ret), K(id), K(replica_type), K(tenant_role), K(palf_base_info),
+              K(log_handler), K(restore_handler));
   }
   return ret;
 }
 
 int ObLogService::remove_ls(const ObLSID &id,
-                            ObLogHandler &log_handler)
+                            ObLogHandler &log_handler,
+                            ObLogRestoreHandler &restore_handler)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -380,13 +382,14 @@ int ObLogService::remove_ls(const ObLSID &id,
     // NB: remove palf_handle lastly.
 #endif
   } else {
-    // NB: can not execute destroy, otherwise, each interface in log_handler
+    // NB: can not execute destroy, otherwise, each interface in log_handler or restore_handler
     // may return OB_NOT_INIT.
-    // TODO by runlin: create_ls don't init ObLogHandler
+    // TODO by runlin: create_ls don't init ObLogHandler and ObLogRestoreHandler.
     //
     // In normal case(for gc), stop has been executed, this stop has no effect.
     // In abnormal case(create ls failed, need remove ls directlly), there is no possibility for dead lock.
     log_handler.stop();
+    restore_handler.stop();
     if (OB_FAIL(palf_env_->remove(id.id()))) {
       CLOG_LOG(WARN, "failed to remove from palf_env_", K(ret), K(id));
     } else {
@@ -421,7 +424,8 @@ int ObLogService::check_palf_exist(const ObLSID &id, bool &exist) const
 }
 
 int ObLogService::add_ls(const ObLSID &id,
-                         ObLogHandler &log_handler)
+                         ObLogHandler &log_handler,
+                         ObLogRestoreHandler &restore_handler)
 {
   int ret = OB_SUCCESS;
   PalfHandle &log_handler_palf_handle = log_handler.palf_handle_;
@@ -446,6 +450,8 @@ int ObLogService::add_ls(const ObLSID &id,
   } else if (enable_shared_storage_ && OB_FAIL(log_handler.init_log_fast_rebuild_engine(shared_log_service_.get_log_fast_rebuild_engine()))) {
     CLOG_LOG(WARN, "init_log_fast_rebuild_engine failed", K(ret), K(id));
 #endif
+  } else if (OB_FAIL(restore_handler.init(id.id(), palf_env_))) {
+    CLOG_LOG(WARN, "ObLogRestoreHandler init failed", K(ret), K(id), KP(palf_env_));
   } else if (OB_FAIL(log_handler_palf_handle.register_role_change_cb(rc_cb))) {
     CLOG_LOG(WARN, "register_role_change_cb failed", K(ret));
   } else if (OB_FAIL(log_handler_palf_handle.set_location_cache_cb(loc_cache_cb))) {
@@ -662,7 +668,8 @@ int ObLogService::create_ls_(const share::ObLSID &id,
                              const share::ObTenantRole &tenant_role,
                              const palf::PalfBaseInfo &palf_base_info,
                              const bool allow_log_sync,
-                             ObLogHandler &log_handler)
+                             ObLogHandler &log_handler,
+                             ObLogRestoreHandler &restore_handler)
 {
   int ret = OB_SUCCESS;
   PalfHandle palf_handle;
@@ -703,6 +710,8 @@ int ObLogService::create_ls_(const share::ObLSID &id,
     } else if (enable_shared_storage_ && OB_FAIL(log_handler.init_log_fast_rebuild_engine(shared_log_service_.get_log_fast_rebuild_engine()))) {
       CLOG_LOG(WARN, "init_log_fast_rebuild_engine failed", K(ret), K(id));
 #endif
+    } else if (OB_FAIL(restore_handler.init(id.id(), palf_env_))) {
+      CLOG_LOG(WARN, "ObLogRestoreHandler init failed", K(ret), K(id), KP(palf_env_));
     } else if (OB_FAIL(log_handler_palf_handle.register_role_change_cb(rc_cb))) {
       CLOG_LOG(WARN, "register_role_change_cb failed", K(ret), K(id));
     } else if (OB_FAIL(log_handler_palf_handle.set_location_cache_cb(loc_cache_cb))) {
@@ -713,17 +722,18 @@ int ObLogService::create_ls_(const share::ObLSID &id,
       CLOG_LOG(INFO, "ObLogService create_ls success", K(ret), K(id), K(log_handler));
     }
     if (palf_handle.is_valid() && nullptr != palf_env_) {
-      palf_env_->close(palf_handle); 
+      palf_env_->close(palf_handle);
     }
     if (OB_FAIL(ret)) {
       CLOG_LOG(ERROR, "create_ls failed!!!", KR(ret), K(id));
+      restore_handler.destroy();
       replay_service_.remove_ls(id);
       apply_service_.remove_ls(id);
       log_handler.destroy();
       palf_env_->close(palf_handle);
       palf_env_->remove(id.id());
     }
-  } 
+  }
   return ret;
 }
 
@@ -791,23 +801,6 @@ int ObLogService::diagnose_apply(const share::ObLSID &id,
   }
   return ret;
 }
-
-#ifdef OB_BUILD_ARBITRATION
-int ObLogService::diagnose_arb_srv(const share::ObLSID &id,
-                                   LogArbSrvDiagnoseInfo &diagnose_info)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "log_service is not inited", K(ret));
-  } else if (OB_FAIL(arb_service_.diagnose(id, diagnose_info))) {
-    CLOG_LOG(WARN, "arb_service_ diagnose failed", K(ret), K(id));
-  } else {
-    // do nothing
-  }
-  return ret;
-}
-#endif
 
 int ObLogService::get_io_start_time(int64_t &last_working_time)
 {
@@ -898,6 +891,11 @@ int ObLogService::GetUnrecycableLogDiskSizeFunctor::operator()(ObLS *ls)
     unrecycable_log_disk_size_ += (end_lsn - base_lsn);
   }
   return ret;
+}
+
+cdc::ObCdcService *ObLogService::get_cdc_service()
+{
+  return &cdc_service_;
 }
 
 }//end of namespace logservice

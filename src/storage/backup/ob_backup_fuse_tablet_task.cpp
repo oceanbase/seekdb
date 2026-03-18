@@ -813,13 +813,6 @@ int ObBackupTabletFuseTask::inner_fuse_tablet_item_(
   if (!param_v1.is_valid() || !param_v2.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid args", K(ret), K(param_v1), K(param_v2));
-  } else if (param_v1.transfer_info_.transfer_seq_ != param_v2.transfer_info_.transfer_seq_) {
-    if (OB_FAIL(output_param.assign(param_v1))) {
-      LOG_WARN("failed to assign param", K(ret), K(param_v1));
-    } else {
-      fuse_type_ = ObBackupFuseTabletType::FUSE_TABLET_META_USE_V1;
-      output_param.ha_status_.set_restore_status(ObTabletRestoreStatus::UNDEFINED);
-    }
   } else {
     if (OB_FAIL(output_param.assign(param_v2))) {
       LOG_WARN("failed to assign param", K(ret), K(param_v1));

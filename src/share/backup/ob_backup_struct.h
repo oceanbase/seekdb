@@ -1074,7 +1074,6 @@ public:
   static int check_is_tmp_file(const common::ObString &file_name, bool &is_tmp_file);
   static int get_backup_scn(const uint64_t &tenant_id, share::SCN &scn);
   static int check_tenant_data_version_match(const uint64_t tenant_id, const uint64_t data_version);
-  static int get_full_replica_num(const uint64_t tenant_id, int64_t &replica_num);
   static int backup_scn_to_str(const uint64_t tenant_id, const share::SCN &scn, char *buf, int64_t buf_len);
   static int get_tenant_sys_time_zone_wrap(const uint64_t tenant_id, 
                                            ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> &time_zone,

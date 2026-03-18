@@ -1756,9 +1756,6 @@ bool ObDynamicSamplingUtils::is_ds_virtual_table(const int64_t table_id)
           table_id == share::OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID ||
           table_id == share::OB_ALL_VIRTUAL_DML_STATS_TID ||
           table_id == share::OB_ALL_VIRTUAL_DATA_TYPE_TID ||
-          table_id == share::OB_ALL_VIRTUAL_TENANT_MYSQL_SYS_AGENT_TID ||
-          table_id == share::OB_ALL_VIRTUAL_TENANT_INFO_TID ||
-          table_id == share::OB_ALL_VIRTUAL_CORE_META_TABLE_TID ||
           table_id == share::OB_TENANT_VIRTUAL_COLLATION_TID);
 }
 

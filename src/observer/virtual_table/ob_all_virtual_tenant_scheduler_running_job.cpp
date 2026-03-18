@@ -116,19 +116,6 @@ int ObAllVirtualTenantSchedulerRunningJob::FillScanner::operator()(
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
-        case SVR_IP: {
-          cur_row_->cells_[cell_idx].set_varchar(ip_buf_);
-          cur_row_->cells_[cell_idx].set_collation_type(default_collation);
-          break;
-        }
-        case SVR_PORT: {
-          cur_row_->cells_[cell_idx].set_int(port_);
-          break;
-        }
-        case TENANT_ID: {
-          cur_row_->cells_[cell_idx].set_int(sess_info->get_effective_tenant_id());
-          break;
-        }
         case OWNER: {
           if (sess_info->get_is_deserialized()) {
             cur_row_->cells_[cell_idx].set_varchar("");

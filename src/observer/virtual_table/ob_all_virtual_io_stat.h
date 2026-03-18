@@ -33,9 +33,7 @@ public:
 private:
   enum IOStatColumn
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    DISK_TYPE,
+        DISK_TYPE = common::OB_APP_MIN_COLUMN_ID,
     SYS_IO_UP_LIMIT_IN_MB,
     SYS_IO_BAND_IN_MB,
     SYS_IO_LOW_WATERMARK_IN_MB,

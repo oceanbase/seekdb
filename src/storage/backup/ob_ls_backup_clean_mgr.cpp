@@ -240,12 +240,11 @@ uint64_t ObLSBackupCleanDagNet::hash() const
 int ObLSBackupCleanDagNet::fill_comment(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
-  const int64_t MAX_TRACE_ID_LENGTH = 64;
-  char task_id_str[MAX_TRACE_ID_LENGTH] = { 0 };
+  char task_id_str[OB_MAX_TRACE_ID_BUFFER_SIZE] = { 0 };
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("log stream backup clean dag net do not init ", K(ret));
-  } else if (OB_UNLIKELY(0 > param_.trace_id_.to_string(task_id_str, MAX_TRACE_ID_LENGTH))) {
+  } else if (OB_UNLIKELY(0 > param_.trace_id_.to_string(task_id_str, OB_MAX_TRACE_ID_BUFFER_SIZE))) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("failed to get trace id string", K(ret), K(param_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len,

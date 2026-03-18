@@ -59,9 +59,7 @@ enum LogConfigChangeType
   INVALID_LOG_CONFIG_CHANGE_TYPE = 0,
   CHANGE_REPLICA_NUM,
   ADD_MEMBER,
-  ADD_ARB_MEMBER,
   REMOVE_MEMBER,
-  REMOVE_ARB_MEMBER,
   ADD_MEMBER_AND_NUM,
   REMOVE_MEMBER_AND_NUM,
   ADD_LEARNER,
@@ -86,9 +84,7 @@ inline const char *LogConfigChangeType2Str(const LogConfigChangeType state)
   {
     CHECK_LOG_CONFIG_TYPE_STR(CHANGE_REPLICA_NUM);
     CHECK_LOG_CONFIG_TYPE_STR(ADD_MEMBER);
-    CHECK_LOG_CONFIG_TYPE_STR(ADD_ARB_MEMBER);
     CHECK_LOG_CONFIG_TYPE_STR(REMOVE_MEMBER);
-    CHECK_LOG_CONFIG_TYPE_STR(REMOVE_ARB_MEMBER);
     CHECK_LOG_CONFIG_TYPE_STR(ADD_MEMBER_AND_NUM);
     CHECK_LOG_CONFIG_TYPE_STR(REMOVE_MEMBER_AND_NUM);
     CHECK_LOG_CONFIG_TYPE_STR(ADD_LEARNER);
@@ -135,17 +131,12 @@ inline bool is_remove_log_sync_member_list(const LogConfigChangeType type)
 
 inline bool is_add_member_list(const LogConfigChangeType type)
 {
-  return is_add_log_sync_member_list(type) || ADD_ARB_MEMBER == type;
+  return is_add_log_sync_member_list(type);
 }
 
 inline bool is_remove_member_list(const LogConfigChangeType type)
 {
-  return is_remove_log_sync_member_list(type) || REMOVE_ARB_MEMBER == type;
-}
-
-inline bool is_arb_member_change_type(const LogConfigChangeType type)
-{
-  return ADD_ARB_MEMBER == type || REMOVE_ARB_MEMBER == type;
+  return is_remove_log_sync_member_list(type);
 }
 
 inline bool is_add_learner_list(const LogConfigChangeType type)
@@ -365,13 +356,6 @@ public:
                                       const common::GlobalLearnerList &learner_list,
                                       const int64_t proposal_id,
                                       LogConfigVersion &config_version);
-  // require caller holds WLock in PalfHandleImpl
-  virtual int set_initial_member_list(const common::ObMemberList &member_list,
-                                      const common::ObMember &arb_member,
-                                      const int64_t replica_num,
-                                      const common::GlobalLearnerList &learner_list,
-                                      const int64_t proposal_id,
-                                      LogConfigVersion &config_version);
   // set region for self
   int get_region(common::ObRegion &region) const;
   int set_region(const common::ObRegion &region);
@@ -431,7 +415,6 @@ public:
       int64_t &curr_replica_num,
       bool &is_before_barrier,
       LSN &barrier_lsn) const;
-  virtual int get_arbitration_member(common::ObMember &arb_member) const;
   virtual int get_prev_member_list(common::ObMemberList &member_list) const;
   virtual int get_children_list(LogLearnerList &children) const;
   virtual int get_log_sync_children_list(LogLearnerList &children) const;

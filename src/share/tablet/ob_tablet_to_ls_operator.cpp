@@ -182,22 +182,6 @@ int ObTabletToLSTableOperator::construct_ls_white_list_where_sql_(
     ObSqlString &subsql)
 {
   int ret = OB_SUCCESS;
-  const int64_t ls_cnt = ls_white_list.count();
-  if (ls_cnt <= 0) {
-    // do nothing
-  } else if (OB_FAIL(subsql.assign_fmt(" and ls_id in ("))) {
-    LOG_WARN("assign string fail", KR(ret), K(subsql));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < ls_cnt; i++) {
-      const ObLSID &ls_id = ls_white_list.at(i);
-      const char *str = (i < ls_cnt - 1) ? "," : ")";
-
-      if (OB_FAIL(subsql.append_fmt("%ld%s", ls_id.id(), str))) {
-        LOG_WARN("append fmt for sql string fail", KR(ret), K(subsql), K(ls_id), K(str), K(i),
-            K(ls_cnt));
-      }
-    }
-  }
   return ret;
 }
 
@@ -228,7 +212,7 @@ int ObTabletToLSTableOperator::inner_batch_get_(
     ObIArray<ObLSID> &ls_ids)
 {
   int ret = OB_SUCCESS;
-  const char *query_column_str = "ls_id";
+  const char *query_column_str = "tablet_id";
   const bool keep_order = true;
   INNER_BATCH_GET(sql_proxy, tenant_id, tablet_ids, start_idx, end_idx,
       query_column_str, keep_order, ls_ids);
@@ -243,11 +227,8 @@ int ObTabletToLSTableOperator::construct_results_(
   UNUSED(tenant_id);
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && OB_SUCC(res.next())) {
-    int64_t ls_id = ObLSID::INVALID_LS_ID;
-    if (OB_FAIL(res.get_int("ls_id", ls_id))) {
-      LOG_WARN("fail to get uint from res", KR(ret));
-    } else if (OB_FAIL(ls_ids.push_back(ObLSID(ls_id)))) {
-      LOG_WARN("fail to push back", KR(ret), K(ls_ids), K(ls_id));
+    if (OB_FAIL(ls_ids.push_back(SYS_LS))) {
+      LOG_WARN("fail to push back", KR(ret), K(ls_ids));
     }
   }
   if (OB_ITER_END != ret) {
@@ -343,7 +324,6 @@ int ObTabletToLSTableOperator::inner_batch_update_by_sql_(
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid TabletToLSInfo", KR(ret), K(info));
       } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", info.get_tablet_id().id()))
-          || OB_FAIL(dml_splicer.add_column("ls_id", info.get_ls_id().id()))
           || OB_FAIL(dml_splicer.add_column("table_id", info.get_table_id())
           || OB_FAIL(dml_splicer.add_column("transfer_seq", info.get_transfer_seq())))) {
         LOG_WARN("fail to add column", KR(ret), K(info));
@@ -436,65 +416,6 @@ int ObTabletToLSTableOperator::inner_batch_remove_by_sql_(
   return ret;
 }
 
-int ObTabletToLSTableOperator::update_ls_id_and_transfer_seq(
-    common::ObISQLClient &sql_proxy,
-    const uint64_t tenant_id,
-    const ObTabletID &tablet_id,
-    const int64_t old_transfer_seq,
-    const ObLSID &old_ls_id,
-    const int64_t new_transfer_seq,
-    const ObLSID &new_ls_id,
-    const int32_t group_id)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id 
-      || 0 > old_transfer_seq
-      || 0 > new_transfer_seq 
-      || old_transfer_seq == new_transfer_seq 
-      || !tablet_id.is_valid()
-      || !old_ls_id.is_valid()
-      || !new_ls_id.is_valid()
-      || old_ls_id ==  new_ls_id
-      || group_id < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id),
-        K(tablet_id), K(old_transfer_seq), K(new_transfer_seq), K(old_ls_id), K(new_ls_id), K(group_id));
-  } else if (OB_FAIL(sql.append_fmt(
-      "UPDATE %s SET transfer_seq = %ld, ls_id = %ld "
-      "WHERE tablet_id = %lu AND transfer_seq = %ld AND ls_id = %ld", 
-      OB_ALL_TABLET_TO_LS_TNAME, 
-      new_transfer_seq, 
-      new_ls_id.id(), 
-      tablet_id.id(), 
-      old_transfer_seq, 
-      old_ls_id.id()))) {
-    LOG_WARN("fail to assign sql", KR(ret), K(sql), K(tenant_id),
-        K(tablet_id), K(old_ls_id), K(new_ls_id), K(old_transfer_seq), K(new_transfer_seq));
-  } else {
-    int64_t affected_rows = 0;
-    if (OB_FAIL(sql_proxy.write(tenant_id, sql.ptr(), group_id, affected_rows))) {
-      LOG_WARN("fail to write sql", KR(ret), K(sql), K(tenant_id));
-    } else if (0 == affected_rows) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("no affected rows, the reason might be the tablet is not in the old ls, "
-          "or old_transfer_seq does not match the transfer sequence value "
-          "in table __all_tablet_to_ls.", 
-          KR(ret), K(sql), K(tenant_id), K(affected_rows), K(tablet_id), 
-          K(old_ls_id), K(new_ls_id), K(old_transfer_seq), K(new_transfer_seq));
-    } else if (OB_UNLIKELY(1 != affected_rows)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The error should not occur",  KR(ret), K(sql), 
-          K(tenant_id), K(affected_rows), K(tablet_id), 
-          K(old_ls_id), K(new_ls_id), K(old_transfer_seq), K(new_transfer_seq));
-    } else {
-      LOG_TRACE("update ls_id and transfer_seq in table __all_tablet_to_ls successfully", 
-          KR(ret), K(sql), K(tenant_id), K(affected_rows), K(tablet_id), 
-          K(old_ls_id), K(new_ls_id), K(old_transfer_seq), K(new_transfer_seq));
-    }
-  }
-  return ret;
-}
 
 int ObTabletToLSTableOperator::batch_get(
     common::ObISQLClient &sql_proxy,
@@ -539,13 +460,12 @@ int ObTabletToLSTableOperator::construct_results_(
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && OB_SUCC(res.next())) {
     int64_t tablet_id = ObTabletID::INVALID_TABLET_ID;
-    int64_t ls_id = ObLSID::INVALID_LS_ID;
+    int64_t ls_id = ObLSID::SYS_LS_ID;
     uint64_t table_id = OB_INVALID_ID;
     int64_t transfer_seq = 0;
     ObTabletToLSInfo info;
 
     EXTRACT_INT_FIELD_MYSQL(res, "tablet_id", tablet_id, int64_t);
-    EXTRACT_INT_FIELD_MYSQL(res, "ls_id", ls_id, int64_t);
     EXTRACT_INT_FIELD_MYSQL(res, "table_id", table_id, uint64_t);
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(res, "transfer_seq", transfer_seq, int64_t,
         true/*skip_null_error*/, true/*skip_column_error*/, 0/*default value*/);
@@ -576,10 +496,9 @@ int ObTabletToLSTableOperator::construct_results_(
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && OB_SUCC(res.next())) {
     int64_t tablet_id = ObTabletID::INVALID_TABLET_ID;
-    int64_t ls_id = ObLSID::INVALID_LS_ID;
+    int64_t ls_id = ObLSID::SYS_LS_ID;
 
     EXTRACT_INT_FIELD_MYSQL(res, "tablet_id", tablet_id, int64_t);
-    EXTRACT_INT_FIELD_MYSQL(res, "ls_id", ls_id, int64_t);
 
     if (FAILEDx(pairs.push_back(ObTabletLSPair(ObTabletID(tablet_id), ObLSID(ls_id))))) {
       LOG_WARN("fail to push back", KR(ret), K(tablet_id), K(ls_id));
@@ -674,10 +593,9 @@ int ObTabletToLSTableOperator::construct_results_(
   while (OB_SUCC(ret) && OB_SUCC(res.next())) {
     tablet_ls_cache.reset();
     uint64_t tablet_id = ObTabletID::INVALID_TABLET_ID;
-    int64_t ls_id = ObLSID::INVALID_LS_ID;
+    int64_t ls_id = ObLSID::SYS_LS_ID;
     int64_t transfer_seq = OB_INVALID_TRANSFER_SEQ;
     EXTRACT_INT_FIELD_MYSQL(res, "tablet_id", tablet_id, uint64_t);
-    EXTRACT_INT_FIELD_MYSQL(res, "ls_id", ls_id, int64_t);
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
       res, "transfer_seq", transfer_seq, int64_t,
       false/*skip null error*/, true/*skip column error*/, 0 /*default value*/);
@@ -732,7 +650,7 @@ int ObTabletToLSTableOperator::inner_batch_get_(
     ObIArray<ObTabletLSPair> &tablet_ls_pairs)
 {
   int ret = OB_SUCCESS;
-  const char *query_column_str = "tablet_id, ls_id";
+  const char *query_column_str = "tablet_id";
   const bool keep_order = false;
   INNER_BATCH_GET(sql_proxy, tenant_id, tablet_ids, start_idx, end_idx,
       query_column_str, keep_order, tablet_ls_pairs);

@@ -58,9 +58,7 @@ public:
 private:
   enum STORAGE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    MAX_WORKAREA_SIZE,
+        MAX_WORKAREA_SIZE = common::OB_APP_MIN_COLUMN_ID,
     WORKAREA_HOLD_SIZE,
     MAX_AUTO_WORKAREA_SIZE,
     MEM_TARGET, // OB_APP_MIN_COLUMN_ID + 5
@@ -69,7 +67,6 @@ private:
     DRIFT_SIZE,
     WORKAREA_COUNT,
     MANUAL_CALC_COUNT,      // OB_APP_MIN_COLUMN_ID + 10
-    TENAND_ID,         // OB_APP_MIN_COLUMN_ID + 11
   };
   int get_server_ip_and_port();
   int fill_row(

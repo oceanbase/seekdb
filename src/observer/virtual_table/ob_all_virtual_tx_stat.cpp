@@ -27,7 +27,6 @@ namespace observer
 {
 void ObGVTxStat::reset()
 {
-  ip_buffer_[0] = '\0';
   participants_buffer_[0] = '\0';
   scheduler_buffer_[0] = '\0';
   ctx_addr_buffer_[0] = '\0';
@@ -41,7 +40,6 @@ void ObGVTxStat::reset()
 
 void ObGVTxStat::destroy()
 {
-  memset(ip_buffer_, 0, common::OB_IP_STR_BUFF);
   memset(participants_buffer_, 0, OB_MAX_BUFFER_SIZE);
   memset(scheduler_buffer_, 0, MAX_IP_PORT_LENGTH + 8);
   memset(ctx_addr_buffer_, 0, CTX_ADDR_BUFFER_SIZE);
@@ -100,7 +98,6 @@ int ObGVTxStat::init()
   }
   return ret;
 }
-
 
 int ObGVTxStat::get_next_tx_info_(ObTxStat &tx_stat)
 {
@@ -167,17 +164,6 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case TENANT_ID:
-          cur_row_.cells_[i].set_int(tx_stat.tenant_id_);
-          break;
-        case SVR_IP:
-          (void)tx_stat.addr_.ip_to_string(ip_buffer_, common::OB_IP_STR_BUFF);
-          cur_row_.cells_[i].set_varchar(ip_buffer_);
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case SVR_PORT:
-          cur_row_.cells_[i].set_int(tx_stat.addr_.get_port());
-          break;
         case TX_TYPE:
           cur_row_.cells_[i].set_int(tx_stat.tx_type_);
           break;
@@ -194,9 +180,6 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
           break;
         case IS_DECIDED:
           cur_row_.cells_[i].set_bool(tx_stat.has_decided_);
-          break;
-        case LS_ID:
-          cur_row_.cells_[i].set_int(tx_stat.ls_id_.id());
           break;
         case PARTICIPANTS:
           // if participants' count is equal to 0, then its value is NULL

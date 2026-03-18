@@ -105,19 +105,16 @@ public:
       const uint64_t tenant_id,
       const uint64_t global_broadcast_scn_val,
       const common::ObIArray<ObTabletLSPair> &tablet_pairs,
-      const ObTabletReplica::ScnStatus &except_status,
-      const int64_t expected_epoch);
+      const ObTabletReplica::ScnStatus &except_status);
   // after major_freeze, update all tablets' report_scn to global_broadcast_scn_val
   static int batch_update_report_scn(
       const uint64_t tenant_id,
       const uint64_t global_broadcast_scn_val,
       const ObTabletReplica::ScnStatus &except_status,
-      const volatile bool &stop,
-      const int64_t expected_epoch);
+      const volatile bool &stop);
   // designed for 'clear merge error'. it updates all tablets' status to SCN_STATUS_IDLE
   static int batch_update_status(
-      const uint64_t tenant_id,
-      const int64_t expected_epoch);
+      const uint64_t tenant_id);
   static int batch_update_unequal_report_scn_tablet(
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
@@ -155,20 +152,6 @@ private:
       const uint64_t tenant_id,
       const bool is_update_finish_scn,
       const common::ObIArray<share::ObTabletReplica> &replicas);
-  static int do_select(
-      ObISQLClient &sql_client,
-      const bool select_with_update,
-      const ObTabletCompactionScnInfo &input_info,
-      ObTabletCompactionScnInfo &ret_info);
-  static int execute_select_sql(
-      ObISQLClient &sql_client,
-      const int64_t meta_tenant_id,
-      const ObSqlString &sql,
-      ObTabletCompactionScnInfo &ret_info);
-  // construct compaction_scn_info based on part of the fileds defined in the schema
-  static int construct_compaction_related_info(
-      sqlclient::ObMySQLResult &result,
-      ObTabletCompactionScnInfo &info);
   static int inner_batch_update_unequal_report_scn_tablet(
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
@@ -190,16 +173,6 @@ private:
       const uint64_t tenant_id,
       const ObSqlString &sql,
       common::ObIArray<ObTabletID> &tablet_ids);
-  static int construct_batch_update_report_scn_sql_str_(
-      const uint64_t tenant_id,
-      const uint64_t global_braodcast_scn_val,
-      const ObTabletReplica::ScnStatus &except_status,
-      const common::ObIArray<ObTabletID> &tablet_ids,
-      ObSqlString &sql);
-  static int construct_batch_update_status_sql_str_(
-      const uint64_t tenant_id,
-      const common::ObIArray<ObTabletID> &tablet_ids,
-      ObSqlString &sql);
   static int get_next_batch_tablet_ids(
       const uint64_t tenant_id,
       const int64_t batch_update_cnt,

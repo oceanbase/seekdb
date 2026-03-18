@@ -125,11 +125,6 @@ struct ObMVCheckReplicaHelper
   static int get_and_update_merge_info(
       const share::ObLSID &ls_id, 
       ObMajorMVMergeInfo &info);
-  static int check_can_add_member(
-      const common::ObAddr &server,
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      const uint64_t rpc_timeout);
   static int get_merge_info(
       const share::ObLSID &ls_id, 
       ObMajorMVMergeInfo &info);

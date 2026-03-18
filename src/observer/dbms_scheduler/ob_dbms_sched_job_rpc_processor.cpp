@@ -138,11 +138,11 @@ int ObRpcDBMSSchedPurgeP::process()
     if (OB_FAIL(table_operator.init(GCTX.sql_proxy_))) {
       LOG_WARN("failed to init table_operator", K(ret), K(tenant_id));
     } else {
-      bool is_tenant_standby = false;
-      if (OB_FAIL(ObAllTenantInfoProxy::is_standby_tenant(GCTX.sql_proxy_, tenant_id, is_tenant_standby))) {
-        LOG_WARN("check is standby tenant failed", K(ret), K(tenant_id));
-      } else if (is_tenant_standby) {
-        LOG_INFO("tenant is standby, not GC", K(tenant_id));
+      bool is_primary_cluster = true;
+      if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+        LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+      } else if (!is_primary_cluster) {
+        LOG_INFO("tenant is standby, not GC", K(tenant_id), K(is_primary_cluster));
       } else {
         const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
         THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + PURGE_RUN_DETAIL_TIMEOUT);

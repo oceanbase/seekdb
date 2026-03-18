@@ -29,7 +29,7 @@ int ObITabletMdsInterface::get_src_tablet_handle_and_base_ptr_(
     ObITabletMdsInterface *&base_ptr) const
 {
   int ret = OB_SUCCESS;
-  const share::ObLSID &ls_id = get_tablet_meta_().transfer_info_.ls_id_;
+  const share::ObLSID &ls_id = ObLSID(SYS_LS);
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
   ObLSService *ls_service = MTL(ObLSService*);
   ObLSHandle ls_handle;

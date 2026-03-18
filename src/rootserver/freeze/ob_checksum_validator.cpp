@@ -18,7 +18,6 @@
 
 #include "ob_checksum_validator.h"
 #include "rootserver/freeze/ob_major_merge_progress_checker.h"
-#include "share/ob_service_epoch_proxy.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "observer/ob_server_event_history_table_operator.h"
 
@@ -55,19 +54,17 @@ int ObChecksumValidator::init(
 }
 
 int ObChecksumValidator::set_basic_info(
-    const share::ObFreezeInfo &freeze_info,
-    const int64_t expected_epoch)
+    const share::ObFreezeInfo &freeze_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!freeze_info.is_valid() || expected_epoch < 0)) {
+  if (OB_UNLIKELY(!freeze_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(freeze_info), K(expected_epoch));
+    LOG_WARN("invalid argument", KR(ret), K(freeze_info));
   } else if (FALSE_IT(freeze_info_ = freeze_info)) {
   } else if (FALSE_IT(major_merge_start_us_ = ObTimeUtility::fast_current_time())) {
   } else if (OB_FAIL(set_need_validate())) { // init freeze_info_ before call this func
     LOG_WARN("failed to set need_validate", K(ret), K_(tenant_id), K_(is_primary_service));
   } else {
-    expected_epoch_ = expected_epoch;
     statistics_.reset();
   }
   return ret;
@@ -169,10 +166,10 @@ int ObChecksumValidator::check_inner_status()
   } else if (stop_) {
     ret = OB_CANCELED;
     LOG_WARN("already stop", KR(ret), K_(tenant_id));
-  } else if (OB_UNLIKELY(!freeze_info_.is_valid() || expected_epoch_ < 0 || nullptr == schema_guard_)) {
+  } else if (OB_UNLIKELY(!freeze_info_.is_valid() || nullptr == schema_guard_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid freeze_info/expected_epoch/schema_guard_", KR(ret), K_(tenant_id),
-      K_(freeze_info), K_(expected_epoch), KP_(schema_guard));
+    LOG_WARN("invalid freeze_info/schema_guard_", KR(ret), K_(tenant_id),
+      K_(freeze_info), KP_(schema_guard));
   } else if (OB_FAIL(check_tablet_checksum_sync_finish(false /*force_check*/))) {
     LOG_WARN("failed to set need_validate", K(ret), K_(tenant_id));
   }
@@ -419,7 +416,7 @@ int ObChecksumValidator::validate_cross_cluster_checksum()
     if (need_validate_cross_cluster_ckm_) { // need to validate cross-cluster checksum
       if (cross_cluster_ckm_sync_finish_ && OB_FAIL(validate_replica_and_tablet_checksum())) {
         LOG_WARN("fail to validate cross-cluster checksum", KR(ret), K_(stop),
-                 "compaction_scn", get_compaction_scn(), K_(expected_epoch), K_(table_id));
+                 "compaction_scn", get_compaction_scn(), K_(table_id));
       }
     } else { // no need to validate cross-cluster checksum, write checksum to inner_table
       if (OB_FAIL(try_update_tablet_checksum_items())) {
@@ -444,21 +441,9 @@ int ObChecksumValidator::validate_cross_cluster_checksum()
 int ObChecksumValidator::batch_write_tablet_ckm()
 {
   int ret = OB_SUCCESS;
-  bool is_match = false;
   if (finish_tablet_ckm_array_.empty()) {
   } else if (!is_primary_service_) {
     // only primary major_freeze_service need to write tablet checksum
-  } else if (OB_FAIL(ObServiceEpochProxy::check_service_epoch(*sql_proxy_, tenant_id_,
-              ObServiceEpochProxy::FREEZE_SERVICE_EPOCH, expected_epoch_, is_match))) {
-    LOG_WARN("fail to check freeze service epoch", KR(ret), K_(tenant_id), K_(expected_epoch));
-    // Can not select freeze_service_epoch for update and update tablet_checksum_items in one same
-    // transaction, since __all_service_epoch and __all_tablet_checksum are not in one same tenant.
-    // Therefore, just get and check freeze_service_epoch here. However, this does not impact the
-    // correctness of updating tablet_checksum_items.
-  } else if (!is_match) {
-    ret = OB_FREEZE_SERVICE_EPOCH_MISMATCH;
-    LOG_WARN("no need to update tablet checksum items, cuz freeze_service_epoch mismatch",
-             K_(tenant_id), K_(expected_epoch));
   } else {
     const int64_t IMMEDIATE_RETRY_CNT = 5;
     int64_t fail_count = 0;
@@ -491,8 +476,7 @@ int ObChecksumValidator::batch_update_report_scn()
   } else if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(
           tenant_id_, get_compaction_scn_val(),
           finish_tablet_ls_pair_array_,
-          ObTabletReplica::ScnStatus::SCN_STATUS_ERROR /*except_status*/,
-          expected_epoch_))) {
+          ObTabletReplica::ScnStatus::SCN_STATUS_ERROR /*except_status*/))) {
     LOG_WARN("fail to batch update report_scn", KR(ret), K_(tenant_id),
              K_(finish_tablet_ls_pair_array));
   } else {

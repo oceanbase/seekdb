@@ -17,7 +17,6 @@
 #include "ob_tx_data_functor.h"
 #include "storage/tx/ob_trans_service.h"
 #include "observer/virtual_table/ob_all_virtual_tx_data.h"
-#include "storage/high_availability/ob_tablet_group_restore.h"
 
 namespace oceanbase
 {
@@ -404,9 +403,6 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
         } else if (ObTimeUtility::current_time() + MIN(i, MAX_SLEEP_US) >= lock_expire_ts) {
           ret = OB_ERR_SHARED_LOCK_CONFLICT;
           break;
-        } else if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID() && OB_SUCC(check_for_standby(tx_data.tx_id_))) {
-          TRANS_LOG(INFO, "read by standby tenant success", K(tx_data), KPC(tx_cc_ctx), KPC(this));
-          break;
         } else if (i < 10) {
           PAUSE();
         } else {
@@ -436,22 +432,17 @@ int LockForReadFunctor::operator()(const ObTxData &tx_data, ObTxCCCtx *tx_cc_ctx
 int LockForReadFunctor::check_clog_disk_full_()
 {
   int ret = OB_SUCCESS;
-  logservice::coordinator::ObFailureDetector *detector =
-    MTL(logservice::coordinator::ObFailureDetector *);
-
-  if (NULL != detector && detector->is_clog_disk_has_fatal_error()) {
-    if (detector->is_clog_disk_has_full_error()) {
-      ret = OB_LOG_OUTOF_DISK_SPACE;
-      TRANS_LOG(ERROR, "disk full error", K(ret), KPC(this));
-    } else if (detector->is_clog_disk_has_hang_error()) {
-      ret = OB_CLOG_DISK_HANG;
-      TRANS_LOG(ERROR, "disk hang error", K(ret), KPC(this));
-    } else {
-      ret = OB_IO_ERROR;
-      TRANS_LOG(ERROR, "unexpected io error", K(ret), KPC(this));
-    }
+  bool clog_is_full = false;
+  bool clog_is_hang = false;
+  if (OB_FAIL(ObShareUtil::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
+    TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
+  } else if (clog_is_full) {
+    ret = OB_LOG_OUTOF_DISK_SPACE;
+    TRANS_LOG(ERROR, "disk full error", K(ret), KPC(this));
+  } else if (clog_is_hang) {
+    ret = OB_CLOG_DISK_HANG;
+    TRANS_LOG(ERROR, "disk hang error", K(ret), KPC(this));
   }
-
   return ret;
 }
 

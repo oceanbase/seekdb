@@ -64,10 +64,7 @@ public:
   int init(ObMultiTenant *omt, common::ObMySQLProxy &sql_proxy,
     const common::ObAddr &myaddr);
 
-  int handle_notify_unit_resource(const obrpc::TenantServerUnitConfig &arg);
-  int notify_create_tenant(const obrpc::TenantServerUnitConfig &unit);
-
-  int try_notify_drop_tenant(const int64_t tenant_id);
+  int notify_create_tenant();
 
   int get_server_allocated_resource(ServerResource &server_resource);
 

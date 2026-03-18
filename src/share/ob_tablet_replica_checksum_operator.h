@@ -28,6 +28,14 @@
 #include "share/ob_column_checksum_error_operator.h"
 #include "share/scn.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
+
+// Forward declaration
+namespace oceanbase {
+namespace share {
+class ObSQLiteConnection;
+class ObTabletReplicaChecksumTableStorage;
+}
+}
 #include "storage/compaction/ob_tenant_medium_checker.h"
 #include "share/compaction/ob_array_with_map.h"
 
@@ -66,7 +74,7 @@ public:
   int64_t get_string(char *buf, const int64_t buf_len) const;
   int64_t get_string_length() const;
   TO_STRING_KV(K_(compat_version), K_(checksum_method), K_(checksum_bytes), K_(column_checksums));
-  
+
   int set_with_str(const int64_t compaction_scn_val, const ObString &str);
   int set_with_str(const ObDataChecksumType type, const ObString &str);
   int get_str_obj(
@@ -127,10 +135,14 @@ public:
   SCN co_base_snapshot_version_;
 };
 typedef ObArrayWithMap<share::ObTabletReplicaChecksumItem> ObReplicaCkmArray;
+
 // Operator for __all_tablet_replica_checksum
 class ObTabletReplicaChecksumOperator
 {
 public:
+  // Initialize SQLite storage (called once at startup)
+  static int init();
+
   // Get a batch of checksum_items
   // Default: checksum_items' compaction_scn = @compaction_scn
   // If include_larger_than = true: checksum_items' compaction_scn >= @compaction_scn
@@ -142,14 +154,16 @@ public:
       ObReplicaCkmArray &items,
       const bool include_larger_than,
       const int32_t group_id);
+  // Update checksum items within a SQLite transaction
   static int batch_update_with_trans(
-      common::ObMySQLTransaction &trans,
+      share::ObSQLiteConnection *conn,
       const uint64_t tenant_id,
       const common::ObIArray<ObTabletReplicaChecksumItem> &item);
+  // Remove checksum items within a SQLite transaction
   static int batch_remove_with_trans(
-      common::ObMySQLTransaction &trans,
+      share::ObSQLiteConnection *conn,
       const uint64_t tenant_id,
-      const common::ObIArray<share::ObTabletReplica> &tablet_replicas);
+      const common::ObIArray<ObTabletReplica> &tablet_replicas);
   static int remove_residual_checksum(
       common::ObISQLClient &sql_client,
       const uint64_t tenant_id,
@@ -190,95 +204,12 @@ public:
       SCN &min_compaction_scn);
 
 private:
-  struct ObSimpleCkmInfo
-  {
-    ObSimpleCkmInfo()
-      : ls_id_(),
-        compaction_scn_(0)
-    {}
-    void reset() {
-      ls_id_.reset();
-      compaction_scn_ = 0;
-    }
-    TO_STRING_KV(K_(ls_id), K_(compaction_scn));
-    ObLSID ls_id_;
-    int64_t compaction_scn_;
-  };
-
-  typedef common::hash::ObHashMap<ObTabletID, ObSimpleCkmInfo> ObTabletSimpleCkmInfoMap;
-
-  static int range_get_(
-      const uint64_t tenant_id,
-      const ObSqlString &sql,
-      const int32_t group_id,
-      const int64_t range_size,
-      common::ObISQLClient &sql_proxy,
-      ObIArray<ObTabletReplicaChecksumItem> &items,
-      int64_t &tablet_cnt);
-  static int inner_batch_insert_or_update_by_sql_(
-      const uint64_t tenant_id,
-      const common::ObIArray<ObTabletReplicaChecksumItem> &items,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      common::ObISQLClient &sql_client);
-#ifdef OB_BUILD_SHARED_STORAGE
-public:
-  static int batch_select_and_update_with_trans(
-      const uint64_t tenant_id,
-      const common::ObIArray<ObTabletReplicaChecksumItem> &items);
-private:
-  static int inner_batch_select_and_update_by_sql_(
-      const uint64_t tenant_id,
-      const common::ObIArray<ObTabletReplicaChecksumItem> &items,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      common::ObISQLClient &sql_client,
-      ObTabletSimpleCkmInfoMap &map);
-  static int build_ckm_info_map_(
-      const uint64_t tenant_id,
-      const ObIArray<ObTabletReplicaChecksumItem> &items,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      ObISQLClient &sql_client,
-      ObTabletSimpleCkmInfoMap &map);
-  static int update_with_map_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletReplicaChecksumItem> &items,
-    const int64_t start_idx,
-    const int64_t end_idx,
-    ObISQLClient &sql_client,
-    ObTabletSimpleCkmInfoMap &map);
-  static int gene_select_sql_(
-      const uint64_t tenant_id,
-      const ObIArray<ObTabletReplicaChecksumItem> &items,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      ObSqlString &sql);
-#endif
-  static int inner_batch_remove_by_sql_(
-      const uint64_t tenant_id,
-      const common::ObIArray<share::ObTabletReplica> &tablet_replicas,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      common::ObMySQLTransaction &trans);
-
-  static int inner_batch_get_by_sql_(
-      const uint64_t tenant_id,
-      const common::ObSqlString &sql,
-      const int32_t group_id,
-      common::ObISQLClient &sql_client,
-      ObReplicaCkmArray &items);
-
-  template<typename T>
-  static int construct_batch_get_sql_str_(
-      const uint64_t tenant_id,
-      const SCN &compaction_scn,
-      const common::ObIArray<T> &pairs,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      common::ObSqlString &sql,
-      const bool include_larger_than,
-      const bool with_compaction_scn);
+  // ObSimpleCkmInfo and ObTabletSimpleCkmInfoMap removed - only used in OB_BUILD_SHARED_STORAGE
+  // range_get_ removed - no longer used
+  // inner_batch_insert_or_update_by_sql_ removed - no longer used
+  // OB_BUILD_SHARED_STORAGE related functions removed
+  // inner_batch_get_by_sql_ removed - no longer used, replaced by SQLite storage
+  // construct_batch_get_sql_str_ removed - no longer used, replaced by SQLite storage
 
   static int construct_tablet_replica_checksum_items_(
       common::sqlclient::ObMySQLResult &res,
@@ -291,19 +222,8 @@ private:
       common::sqlclient::ObMySQLResult &res,
       ObTabletReplicaChecksumItem &item);
 
-  static int batch_iterate_replica_checksum_range_(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
-      const int64_t last_end_tablet_id,
-      const int64_t batch_size,
-      int64_t &start_tablet_id,
-      int64_t &end_tablet_id,
-      bool &is_finished);
-  static int batch_check_tablet_checksum_in_range_(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id, 
-      const common::ObTabletID &start_tablet_id,
-      const common::ObTabletID &end_tablet_id); 
+  // batch_iterate_replica_checksum_range_ removed - no longer used
+  // batch_check_tablet_checksum_in_range_ removed - no longer used
 
 public:
   // get column checksum from item and store result in map
@@ -316,55 +236,14 @@ public:
       ObReplicaCkmArray &items);
   static int construct_tablet_id_list(const ObIArray<ObTabletID> &tablet_ids, ObSqlString &sql);
 private:
+  static ObTabletReplicaChecksumTableStorage storage_;
+
   const static int64_t MAX_BATCH_COUNT = 128;
   const static int64_t PRINT_LOG_INVERVAL = 2 * 60 * 1000 * 1000L; // 2m
   const static int64_t MOCK_COLUMN_CHECKSUM = 580000000000000;
 };
 
-template<typename T>
-int ObTabletReplicaChecksumOperator::construct_batch_get_sql_str_(
-    const uint64_t tenant_id,
-    const SCN &compaction_scn,
-    const ObIArray<T> &pairs,
-    const int64_t start_idx,
-    const int64_t end_idx,
-    ObSqlString &sql,
-    const bool include_larger_than,
-    const bool with_compaction_scn)
-{
-  int ret = OB_SUCCESS;
-  const int64_t pairs_cnt = pairs.count();
-  if (start_idx < 0 || end_idx > pairs_cnt || start_idx > end_idx ||
-      pairs_cnt < 1) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid argument", KR(ret), K(start_idx), K(end_idx), K(pairs_cnt));
-  } else if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE tenant_id = '%lu' AND (tablet_id, ls_id) IN ((", 
-      OB_ALL_TABLET_REPLICA_CHECKSUM_TNAME, tenant_id))) {
-    SHARE_LOG(WARN, "fail to assign sql", KR(ret), K(tenant_id));
-  }
-  if (OB_SUCC(ret)) {
-    for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
-      const T &pair = pairs.at(idx);
-      if (OB_UNLIKELY(!pair.is_valid())) {
-        ret = OB_INVALID_ARGUMENT;
-        SHARE_LOG(WARN, "invalid tablet_ls_pair", KR(ret), K(tenant_id), K(pair));
-      } else if (OB_FAIL(sql.append_fmt(
-          "'%lu', %ld%s",
-          pair.get_tablet_id().id(),
-          pair.get_ls_id().id(),
-          ((idx == end_idx - 1) ? "))" : "), (")))) {
-        SHARE_LOG(WARN,"fail to assign sql", KR(ret), K(tenant_id), K(pair));
-      }
-    } // end of for
-    if (OB_SUCC(ret) && with_compaction_scn) {
-      if (OB_FAIL(sql.append_fmt(" AND compaction_scn %s %ld", 
-          include_larger_than ? ">=" : "=", compaction_scn.get_val_for_inner_table_field()))) {
-        SHARE_LOG(WARN, "fail to assign sql", KR(ret), K(tenant_id), K(compaction_scn));
-      }
-    }
-  }
-  return ret;
-}
+// construct_batch_get_sql_str_ template removed - no longer used, replaced by SQLite storage
 
 class ObTabletDataChecksumChecker
 {
@@ -377,7 +256,7 @@ public:
   TO_STRING_KV(KPC_(normal_ckm_item), K_(cs_replica_ckm_items));
 private:
   const ObTabletReplicaChecksumItem *normal_ckm_item_;
-  ObSEArray<const ObTabletReplicaChecksumItem *, 3> cs_replica_ckm_items_; // at most support 3 cs replicas now 
+  ObSEArray<const ObTabletReplicaChecksumItem *, 3> cs_replica_ckm_items_; // at most support 3 cs replicas now
 };
 
 } // share

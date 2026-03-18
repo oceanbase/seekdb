@@ -127,16 +127,6 @@ int ObAllVirtualKvClientInfo::process_curr_tenant(ObNewRow *&row)
         case CLI_INFO_COLUMN::CLIENT_PORT:
           cells[i].set_int(cli_info.client_addr_.get_port());
           break;
-        case CLI_INFO_COLUMN::SVR_IP:
-          cells[i].set_varchar(ObString::make_string(svr_ip_buf_));
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case CLI_INFO_COLUMN::SVR_PORT:
-          cells[i].set_int(svr_addr_.get_port());
-          break;
-        case CLI_INFO_COLUMN::TENANT_ID:
-          cells[i].set_int(MTL_ID());
-          break;
         case CLI_INFO_COLUMN::USER_NAME:
           cells[i].set_varchar(cli_info.user_name_);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

@@ -835,8 +835,7 @@ int ObTscCgService::generate_ext_tbl_filter_pd_level(const ObLogTableScan &op,
     if (OB_FAIL(ObSQLUtils::get_external_table_type(scan_ctdef.external_file_format_str_.str_,
                                                     format_type))) {
       LOG_WARN("fail to get external table format", K(ret));
-    } else if (ObExternalFileFormat::PARQUET_FORMAT == format_type ||
-               ObExternalFileFormat::ORC_FORMAT == format_type) {
+    } else if (ObExternalFileFormat::PARQUET_FORMAT == format_type) {
       need_pd_level = true;
     }
   }
@@ -849,10 +848,11 @@ int ObTscCgService::generate_ext_tbl_filter_pd_level(const ObLogTableScan &op,
       if (ObExternalFileFormat::PARQUET_FORMAT == format_type) {
         pd_level = tenant_config->_parquet_filter_pushdown_level;
       } else if (ObExternalFileFormat::ORC_FORMAT == format_type) {
-        pd_level = tenant_config->_orc_filter_pushdown_level;
+        ret = OB_NOT_SUPPORTED;
       }
     }
-    if (OB_ISNULL(log_plan->get_stmt()) || OB_ISNULL(log_plan->get_stmt()->get_query_ctx())) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(log_plan->get_stmt()) || OB_ISNULL(log_plan->get_stmt()->get_query_ctx())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("stmt or query ctx is null", K(ret));
     } else {
@@ -863,9 +863,10 @@ int ObTscCgService::generate_ext_tbl_filter_pd_level(const ObLogTableScan &op,
       if (ObExternalFileFormat::PARQUET_FORMAT == format_type) {
         param_type = ObOptParamHint::OptParamType::PARQUET_FILTER_PUSHDOWN_LEVEL;
       } else if (ObExternalFileFormat::ORC_FORMAT == format_type) {
-        param_type = ObOptParamHint::OptParamType::ORC_FILTER_PUSHDOWN_LEVEL;
+        ret = OB_NOT_SUPPORTED;
       }
-      if (ObOptParamHint::OptParamType::INVALID_OPT_PARAM_TYPE == param_type) {
+      if (OB_FAIL(ret)) {
+      } else if (ObOptParamHint::OptParamType::INVALID_OPT_PARAM_TYPE == param_type) {
       } else if (OB_FAIL(opt_params->get_opt_param(param_type, pd_level_val))) {
         LOG_WARN("fail to get pushdown filter level opt param from hint", K(ret));
       } else if (pd_level_val.is_int()) { // valid
@@ -5548,4 +5549,3 @@ int ObTscCgService::generate_match_ctdef(const ObLogTableScan &op,
 }
 }  // namespace sql
 }  // namespace oceanbase
-

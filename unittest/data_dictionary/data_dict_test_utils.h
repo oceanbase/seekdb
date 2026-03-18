@@ -58,7 +58,6 @@ public:
     EXPECT_EQ(OB_SUCCESS, get_random_str_(tenant_schema.tenant_name_));
     tenant_schema.charset_type_ = ObCharsetType::CHARSET_GB18030;
     tenant_schema.collation_type_ = ObCollationType::CS_TYPE_GB18030_ZH2_0900_AS_CS;
-    tenant_schema.drop_tenant_time_ = get_random_int64_();
     tenant_schema.compatibility_mode_ = ObCompatibilityMode::MYSQL_MODE;
     tenant_schema.status_ = ObTenantStatus::TENANT_STATUS_RESTORE;
     return ret;

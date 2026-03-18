@@ -74,24 +74,6 @@ int ObAllVirtualLoadDataStat::inner_get_next_row(ObNewRow *&row)
       const uint64_t col_id = output_column_ids_.at(i);
 
       switch (col_id) {
-        case TENANT_ID: {
-          cells[i].set_int(job_status->tenant_id_);
-          break;
-        }
-        case SVR_IP: {
-          if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cells[i].set_varchar(ip_buf_);
-            cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-          }
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
         case JOB_ID: {
           cells[i].set_int(job_status->job_id_);
           break;

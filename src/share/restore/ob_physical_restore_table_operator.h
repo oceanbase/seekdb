@@ -133,12 +133,6 @@ public:
       bool &is_finished, 
       bool &is_success);
   
-    /*
-   * description: check all ls has finished quick restore
-   * @param[out] return true if has finished quick restore.
-   * */
-  int check_all_ls_finish_quick_restore(bool &is_finish);
-
 public:
   static const char* get_physical_restore_mod_str(PhysicalRestoreMod mod);
   static const char* get_restore_status_str(PhysicalRestoreStatus status);
@@ -184,34 +178,7 @@ int ObPhysicalRestoreTableOperator::update_restore_option(
     const char *option_name,
     const T &option_value)
 {
-  int ret = common::OB_SUCCESS;
-  if (!inited_) {
-    ret = common::OB_NOT_INIT;
-    SHARE_LOG(WARN, "physical restore table operator not init", KR(ret));
-  } else {
-    share::ObDMLSqlSplicer dml;
-    common::ObSqlString sql;
-    int64_t affected_rows = 0;
-    const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-    if (OB_FAIL(dml.add_pk_column("job_id", job_id))) {
-      SHARE_LOG(WARN, "fail to add pk column", KR(ret), K(job_id));
-    } else if (OB_FAIL(dml.add_pk_column("tenant_id", tenant_id_))) {
-      SHARE_LOG(WARN, "fail to add pk column", KR(ret), K(tenant_id_));
-    } else if (OB_FAIL(dml.add_pk_column("name", option_name))) {
-      SHARE_LOG(WARN, "fail to add pk column", KR(ret), K(option_name));
-    } else if (OB_FAIL(dml.add_column("value", option_value))) {
-      SHARE_LOG(WARN, "fail to add column", KR(ret), K(option_value));
-    } else if (OB_FAIL(dml.splice_update_sql(OB_ALL_RESTORE_JOB_TNAME, sql))) {
-      SHARE_LOG(WARN, "splice_insert_sql failed", KR(ret));
-    } else if (OB_FAIL(sql_client_->write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-      SHARE_LOG(WARN, "execute sql failed", K(sql), KR(ret), K(exec_tenant_id));
-    } else if (affected_rows <= 0) {
-      ret = OB_ERR_UNEXPECTED;
-      SHARE_LOG(WARN, "invalid affected rows", KR(ret), K(affected_rows));
-    }
-  }
-  SHARE_LOG(INFO, "[RESTORE] update job restore option",
-            KR(ret), K(job_id), K(option_name), K(option_value));
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

@@ -97,10 +97,7 @@ private:
 private:
   enum STORAGE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    CHANNEL_TOTAL_CNT,
+        CHANNEL_TOTAL_CNT = common::OB_APP_MIN_COLUMN_ID,
     CHANNEL_BLOCK_CNT,
     MAX_PARALLEL_CNT,         // OB_APP_MIN_COLUMN_ID + 5
     MAX_BLOCKED_BUFFER_SIZE,

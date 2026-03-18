@@ -19,8 +19,7 @@
 
 #include "share/ob_define.h"
 #include "sql/resolver/cmd/ob_alter_system_stmt.h"
-#include "sql/resolver/cmd/ob_switch_tenant_stmt.h"
-#include "sql/resolver/cmd/ob_clear_balance_task_stmt.h"
+#include "sql/resolver/cmd/ob_switch_role_stmt.h"
 
 namespace oceanbase
 {
@@ -29,7 +28,6 @@ namespace sql
 class ObExecContext;
 class ObAdminServerStmt;
 class ObAdminZoneStmt;
-class ObAdminStorageStmt;
 
 #define DEF_SIMPLE_EXECUTOR(name)                          \
   class name##Executor                                     \
@@ -42,8 +40,6 @@ class ObAdminStorageStmt;
     DISALLOW_COPY_AND_ASSIGN(name##Executor);              \
   }
 
-DEF_SIMPLE_EXECUTOR(ObAdminStorage);
-
 DEF_SIMPLE_EXECUTOR(ObFreeze);
 
 DEF_SIMPLE_EXECUTOR(ObFlushCache);
@@ -55,14 +51,6 @@ DEF_SIMPLE_EXECUTOR(ObFlushIlogCache);
 DEF_SIMPLE_EXECUTOR(ObFlushDagWarnings);
 
 DEF_SIMPLE_EXECUTOR(ObFlushSSMicroCache);
-
-DEF_SIMPLE_EXECUTOR(ObSwitchReplicaRole);
-
-DEF_SIMPLE_EXECUTOR(ObSwitchRSRole);
-
-DEF_SIMPLE_EXECUTOR(ObReportReplica);
-
-DEF_SIMPLE_EXECUTOR(ObRecycleReplica);
 
 DEF_SIMPLE_EXECUTOR(ObAdminMerge);
 
@@ -82,23 +70,7 @@ DEF_SIMPLE_EXECUTOR(ObSetConfig);
 
 DEF_SIMPLE_EXECUTOR(ObChangeExternalStorageDest);
 
-DEF_SIMPLE_EXECUTOR(ObClearLocationCache);
-
-DEF_SIMPLE_EXECUTOR(ObReloadUnit);
-
-DEF_SIMPLE_EXECUTOR(ObReloadServer);
-
-DEF_SIMPLE_EXECUTOR(ObReloadZone);
-
 DEF_SIMPLE_EXECUTOR(ObClearMergeError);
-
-DEF_SIMPLE_EXECUTOR(ObAlterLSReplica);
-
-DEF_SIMPLE_EXECUTOR(ObAddArbitrationService);
-
-DEF_SIMPLE_EXECUTOR(ObRemoveArbitrationService);
-
-DEF_SIMPLE_EXECUTOR(ObReplaceArbitrationService);
 
 DEF_SIMPLE_EXECUTOR(ObUpgradeVirtualSchema);
 
@@ -106,7 +78,6 @@ DEF_SIMPLE_EXECUTOR(ObAdminUpgradeCmd);
 
 DEF_SIMPLE_EXECUTOR(ObAdminRollingUpgradeCmd);
 
-DEF_SIMPLE_EXECUTOR(ObRunJob);
 DEF_SIMPLE_EXECUTOR(ObRunUpgradeJob);
 DEF_SIMPLE_EXECUTOR(ObStopUpgradeJob);
 
@@ -117,9 +88,6 @@ DEF_SIMPLE_EXECUTOR(ObEnableSqlThrottle);
 DEF_SIMPLE_EXECUTOR(ObDisableSqlThrottle);
 
 DEF_SIMPLE_EXECUTOR(ObSetDiskValid);
-DEF_SIMPLE_EXECUTOR(ObClearBalanceTask);
-DEF_SIMPLE_EXECUTOR(ObSwitchTenant);
-DEF_SIMPLE_EXECUTOR(ObRecoverTenant);
 DEF_SIMPLE_EXECUTOR(ObAddDisk);
 DEF_SIMPLE_EXECUTOR(ObDropDisk);
 
@@ -138,18 +106,12 @@ DEF_SIMPLE_EXECUTOR(ObBackupSetDecryption);
 DEF_SIMPLE_EXECUTOR(ObAddRestoreSource);
 DEF_SIMPLE_EXECUTOR(ObClearRestoreSource);
 DEF_SIMPLE_EXECUTOR(ObRecoverTable);
+DEF_SIMPLE_EXECUTOR(ObSwitchRole);
 DEF_SIMPLE_EXECUTOR(ObTableTTL);
-
-DEF_SIMPLE_EXECUTOR(ObSetRegionBandwidth);
 
 DEF_SIMPLE_EXECUTOR(ObCheckpointSlog);
 DEF_SIMPLE_EXECUTOR(ObResetConfig);
 
-DEF_SIMPLE_EXECUTOR(ObCancelClone);
-
-DEF_SIMPLE_EXECUTOR(ObTransferPartition);
-DEF_SIMPLE_EXECUTOR(ObServiceName);
-DEF_SIMPLE_EXECUTOR(ObLoadLicense);
 class ObCancelTaskExecutor
 {
 public:
@@ -169,51 +131,6 @@ private:
       common::ObAddr &task_server);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCancelTaskExecutor);
-};
-
-class ObChangeTenantExecutor
-{
-public:
-  ObChangeTenantExecutor()
-  {
-  }
-  virtual ~ObChangeTenantExecutor()
-  {
-  }
-  int execute(ObExecContext &ctx, ObChangeTenantStmt &stmt);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObChangeTenantExecutor);
-};
-
-class ObAdminZoneExecutor
-{
-public:
-  ObAdminZoneExecutor() {}
-  virtual ~ObAdminZoneExecutor() {}
-  int execute(ObExecContext &ctx, ObAdminZoneStmt &stmt);
-private:
-  // wait leader switch out
-  // @params[in]  sql_proxy, the proxy to use
-  // @params[in]  arg, which zone to stop
-  int wait_leader_switch_out_(
-      ObISQLClient &sql_proxy,
-      const obrpc::ObAdminZoneArg &arg);
-  // construct sql to check waiting-result
-  // @params[in]  arg, which zone to stop
-  // @params[out] sql, the sql builded
-  int construct_wait_leader_switch_sql_(
-      const obrpc::ObAdminZoneArg &arg,
-      ObSqlString &sql);
-  // construct server infos in this zone
-  // @params[in]  sql_proxy, the proxy to use
-  // @params[in]  arg, which zone to stop
-  // @params[out] svr_list, which servers to stop
-  int construct_servers_in_zone_(
-      ObISQLClient &sql_proxy,
-      const obrpc::ObAdminZoneArg &arg,
-      obrpc::ObServerList &svr_list);
-  DISALLOW_COPY_AND_ASSIGN(ObAdminZoneExecutor);
 };
 
 DEF_SIMPLE_EXECUTOR(ObModuleData);

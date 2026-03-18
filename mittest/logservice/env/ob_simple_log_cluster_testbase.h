@@ -22,7 +22,7 @@
 #include <string>
 #include "lib/hash/ob_array_hash_map.h"         // ObArrayHashMap
 #include "ob_simple_log_server.h"
-#include "ob_simple_arb_server.h"
+#include "ob_simple_log_server.h"
 
 namespace oceanbase
 {

@@ -45,21 +45,19 @@ public:
   int get_snapshot(share::ObGlobalMergeInfo &global_info,
                    common::ObIArray<share::ObZoneMergeInfo> &info_array);
   int get_snapshot(share::ObGlobalMergeInfo &global_info);
-  virtual int finish_all_zone_merge(const int64_t expected_epoch,
-                                    const uint64_t &merged_scn_val);
+  virtual int finish_all_zone_merge(const uint64_t &merged_scn_val);
 
-  virtual int start_zone_merge(const common::ObZone &zone, const int64_t expected_epoch);
+  virtual int start_zone_merge(const common::ObZone &zone);
   virtual int finish_zone_merge(const common::ObZone &zone,
-                                const int64_t expected_epoch,
                                 const share::SCN &new_last_merged_scn,
                                 const share::SCN &new_all_merged_scn);
-  int suspend_merge(const int64_t expected_epoch);
-  int resume_merge(const int64_t expected_epoch);
-  int set_merge_status(const int64_t merge_error, const int64_t expected_epoch);
+  int suspend_merge();
+  int resume_merge();
+  int set_merge_status(const int64_t merge_error);
 
-  int set_zone_merging(const common::ObZone &zone, const int64_t expected_epoch);
+  int set_zone_merging(const common::ObZone &zone);
   int check_need_broadcast(const share::SCN &frozen_scn, bool &need_broadcast);
-  int set_global_freeze_info(const share::SCN &frozen_scn, const int64_t expected_epoch);
+  int set_global_freeze_info(const share::SCN &frozen_scn);
 
   int get_global_broadcast_scn(share::SCN &global_broadcast_scn) const;
   int get_global_last_merged_scn(share::SCN &global_last_merged_scn) const;
@@ -67,33 +65,19 @@ public:
   int get_global_last_merged_time(int64_t &global_last_merged_time) const;
   int get_global_merge_start_time(int64_t &global_merge_start_time) const;
 
-  virtual int generate_next_global_broadcast_scn(const int64_t expected_epoch, share::SCN &next_scn);
-  virtual int try_update_global_last_merged_scn(const int64_t expected_epoch);
-  virtual int update_global_merge_info_after_merge(const int64_t expected_epoch);
-  virtual int try_update_zone_merge_info(const int64_t expected_epoch);
-  virtual int adjust_global_merge_info(const int64_t expected_epoch);
+  virtual int generate_next_global_broadcast_scn(share::SCN &next_scn);
+  virtual int try_update_global_last_merged_scn();
+  virtual int update_global_merge_info_after_merge();
+  virtual int adjust_global_merge_info();
 
 private:
   int check_valid(const common::ObZone &zone, int64_t &idx) const;
-  int find_zone(const common::ObZone &zone, int64_t &idx) const;
   inline int check_inner_stat() const;
-  int check_freeze_service_epoch(common::ObMySQLTransaction &trans, const int64_t expected_epoch);
-  void handle_trans_stat(common::ObMySQLTransaction &trans, int &ret);
 
-  int suspend_or_resume_zone_merge(const bool suspend, const int64_t expected_epoch);
+  int suspend_or_resume_zone_merge(const bool suspend);
 
   int get_tenant_zone_list(common::ObIArray<ObZone> &zone_list);
-  int str2zone_list(const char *str, common::ObIArray<ObZone> &zone_list);
-  int handle_zone_merge_info_to_delete(common::ObMySQLTransaction &trans,
-                                       const common::ObIArray<share::ObZoneMergeInfo> &ori_merge_infos,
-                                       const common::ObIArray<common::ObZone> &zone_list,
-                                       common::ObIArray<common::ObZone> &to_delete_infos);
-  int handle_zone_merge_info_to_insert(common::ObMySQLTransaction &trans,
-                                       const common::ObIArray<share::ObZoneMergeInfo> &ori_merge_infos,
-                                       const common::ObIArray<common::ObZone> &zone_list,
-                                       common::ObIArray<share::ObZoneMergeInfo> &to_insert_infos);
-  int inner_adjust_global_merge_info(const share::SCN &frozen_scn,
-                                     const int64_t expected_epoch);
+  int inner_adjust_global_merge_info(const share::SCN &frozen_scn);
 protected:
   common::SpinRWLock lock_;
   static int copy_infos(ObZoneMergeManagerBase &dest, const ObZoneMergeManagerBase &src);
@@ -149,7 +133,6 @@ public:
   ZONE_MERGE_MANAGER_FUNC(generate_next_global_broadcast_scn);
   ZONE_MERGE_MANAGER_FUNC(try_update_global_last_merged_scn);
   ZONE_MERGE_MANAGER_FUNC(update_global_merge_info_after_merge);
-  ZONE_MERGE_MANAGER_FUNC(try_update_zone_merge_info);
   ZONE_MERGE_MANAGER_FUNC(adjust_global_merge_info);
 public:
   class ObZoneMergeMgrGuard

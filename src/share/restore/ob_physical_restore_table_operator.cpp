@@ -103,31 +103,7 @@ int ObPhysicalRestoreTableOperator::init(common::ObISQLClient *sql_client,
 
 int ObPhysicalRestoreTableOperator::insert_job(const ObPhysicalRestoreJob &job_info)
 {
-  int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("physical restore table operator not init", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == exec_tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id is invalid", KR(ret), K(exec_tenant_id));
-  } else {
-    share::ObDMLSqlSplicer dml;
-    common::ObSqlString sql;
-    int64_t affected_rows = 0;
-    // insert __all_restore_job
-    if (OB_FAIL(fill_dml_splicer(dml, job_info))) {
-      LOG_WARN("fail to fill dml splicer", KR(ret), K(tenant_id_), K(job_info));
-    } else if (OB_FAIL(dml.splice_batch_insert_sql(OB_ALL_RESTORE_JOB_TNAME, sql))) {
-      LOG_WARN("splice_insert_sql failed", KR(ret));
-    } else if (OB_FAIL(sql_client_->write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-      LOG_WARN("execute sql failed", KR(ret), K(exec_tenant_id), K(sql));
-    } else if (affected_rows <= 0) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid affected rows", KR(ret), K(affected_rows), K(sql));
-    }
-  }
-  LOG_INFO("[RESTORE] insert job", KR(ret), K(tenant_id_), K(job_info));
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -344,77 +320,7 @@ int ObPhysicalRestoreTableOperator::fill_dml_splicer(
 int ObPhysicalRestoreTableOperator::get_jobs(
     common::ObIArray<ObPhysicalRestoreJob> &jobs)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
-    common::sqlclient::ObMySQLResult *result = NULL;
-    jobs.reset();
-    if (!inited_) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("physical restore table operator not init", K(ret));
-    } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == exec_tenant_id)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("tenant id is invalid", KR(ret), K(exec_tenant_id));
-    } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s ORDER BY job_id, name",
-                                      OB_ALL_RESTORE_JOB_TNAME))) {
-      LOG_WARN("failed to assign sql", K(ret));
-    } else if (OB_FAIL(sql_client_->read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-      LOG_WARN("execute sql failed", K(ret), K(exec_tenant_id), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is null", K(ret));
-    } else {
-      HEAP_VAR(ObPhysicalRestoreJob, current) {
-        while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          //in tenant, job_id is primary key, only check primary key
-          int64_t job_id = OB_INVALID_ID;
-          uint64_t tenant_id = OB_INVALID_TENANT_ID;
-          const int64_t current_job_id = current.get_restore_key().job_id_;
-          EXTRACT_INT_FIELD_MYSQL(*result, "job_id", job_id, int64_t);
-          EXTRACT_INT_FIELD_MYSQL(*result, "tenant_id", tenant_id, int64_t);
-          if (OB_FAIL(ret)) {
-          } else if (OB_INVALID_ID != current_job_id && job_id != current_job_id) {
-            if (!current.is_valid()) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid job", K(ret), K(current));
-            } else if (OB_FAIL(jobs.push_back(current))) {
-              LOG_WARN("push back job info failed", K(ret), K(current));
-            } else {
-              LOG_DEBUG("retrieve restore job", K(ret), "job", current);
-              current.reset();
-            }
-          } else {
-            // first or in current job_info
-          }
-
-          if (FAILEDx(current.init_restore_key(tenant_id, job_id))) {
-            LOG_WARN("failed to init restore key", KR(ret), K(tenant_id), K(job_id));
-          } else if (OB_FAIL(retrieve_restore_option(*result, current))) {
-            LOG_WARN("fail to retrieve restore option", K(ret), K(current));
-          } else {
-            LOG_DEBUG("current job", K(ret), K(current));
-          }
-        } // end for
-
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          if (current.is_valid()) {
-            if (OB_FAIL(jobs.push_back(current))) {
-              LOG_WARN("push back job info failed", K(ret), K(current));
-            } else {
-              LOG_DEBUG("retrieve restore job", K(ret), "job", current);
-            }
-          } else {
-            LOG_DEBUG("restore job is invalid", K(ret), "job", current);
-          }
-        } else {
-          LOG_WARN("get jobs fail", K(ret));
-        }
-      }
-    }
-    LOG_INFO("[RESTORE] get restore jobs", K(ret), "job_cnt", jobs.count());
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -771,94 +677,14 @@ int ObPhysicalRestoreTableOperator::check_job_exist(
     const int64_t job_id,
     bool &exist)
 {
-  int ret = OB_SUCCESS;
-  exist = false;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
-    common::sqlclient::ObMySQLResult *result = NULL;
-    if (!inited_) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("physical restore table operator not init", K(ret));
-    } else if (job_id < 0 || is_user_tenant(exec_tenant_id)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid job_id", K(ret), K(exec_tenant_id), K(job_id));
-    } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) as count FROM %s WHERE job_id = %ld",
-                                      OB_ALL_RESTORE_JOB_TNAME, job_id))) {
-      LOG_WARN("failed to assign sql", K(ret));
-    } else if (OB_FAIL(sql_client_->read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-      LOG_WARN("execute sql failed", K(ret), K(exec_tenant_id), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is null", K(ret), K(sql));
-    } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get row", K(ret), K(job_id), K(sql));
-    } else {
-      int64_t count = 0;
-      EXTRACT_INT_FIELD_MYSQL(*result, "count", count, int64_t);
-      if (OB_FAIL(ret)) {
-        LOG_WARN("failed to get cell", KR(ret), K(exec_tenant_id), K(sql));
-      } else {
-        exist = (count > 0);
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObPhysicalRestoreTableOperator::get_job(
     const int64_t job_id, ObPhysicalRestoreJob &job_info)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
-    common::sqlclient::ObMySQLResult *result = NULL;
-    if (!inited_) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("physical restore table operator not init", K(ret));
-    } else if (job_id < 0 || is_user_tenant(exec_tenant_id)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid job_id", K(ret), K(job_id));
-    } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE job_id = %ld",
-                                      OB_ALL_RESTORE_JOB_TNAME, job_id))) {
-      LOG_WARN("failed to assign sql", K(ret));
-    } else if (OB_FAIL(sql_client_->read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-      LOG_WARN("execute sql failed", K(ret), K(exec_tenant_id), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is null", K(ret));
-    } else {
-      int64_t idx = 0;
-      while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-        int64_t tmp_job_id = OB_INVALID_ID;
-        uint64_t tenant_id = OB_INVALID_TENANT_ID;
-        EXTRACT_INT_FIELD_MYSQL(*result, "job_id", tmp_job_id, int64_t);
-        EXTRACT_INT_FIELD_MYSQL(*result, "tenant_id", tenant_id, int64_t);
-        if (OB_FAIL(ret)) {
-          LOG_WARN("failed to get cell", KR(ret), K(exec_tenant_id), K(sql));
-        } else if (job_id != tmp_job_id || tenant_id != tenant_id_) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("job_info job is invalid", K(ret), K(tmp_job_id), K(job_id),
-          K(tenant_id), K(tenant_id_));
-        } else if (OB_FAIL(job_info.init_restore_key(tenant_id, job_id))) {
-          LOG_WARN("failed to init restore key", KR(ret), K(tenant_id), K(job_id));
-        } else if (OB_FAIL(retrieve_restore_option(*result, job_info))) {
-          LOG_WARN("fail to retrieve restore option", K(ret), K(job_info));
-        }
-      }
-      if (OB_ITER_END == ret) {
-        if (!job_info.is_valid()) {
-          ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("job is invalid", K(ret), K(job_id), K(job_info));
-        } else {
-          ret = OB_SUCCESS;
-        }
-      } else {
-        LOG_WARN("get jobs fail", K(ret));
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -869,109 +695,21 @@ int ObPhysicalRestoreTableOperator::update_job_error_info(
     const common::ObCurTraceId::TraceId &trace_id,
     const common::ObAddr &addr)
 {
-  int ret = OB_SUCCESS;
-  const char *mod_str = get_physical_restore_mod_str(mod);
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("physical restore table operator not init", KR(ret));
-  } else if (job_id < 0
-             || OB_SUCCESS == return_ret
-             || OB_ISNULL(mod_str)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(job_id), K(return_ret), K(mod));
-  } else {
-    ObSqlString sql;
-    int64_t affected_rows = 0;
-    char addr_str[OB_IP_PORT_STR_BUFF] = {'\0'};
-    char trace_id_str[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
-    int64_t addr_pos = 0;
-    int64_t trace_id_pos = 0;
-    // update __all_restore_info
-    if (OB_FAIL(databuff_printf(addr_str, sizeof(addr_str), addr_pos, addr))) {
-      LOG_WARN("call databuff_printf failed", K(ret), K(addr), K(addr_pos));
-    } else if (OB_FAIL(databuff_printf(
-        trace_id_str, sizeof(trace_id_str), trace_id_pos, trace_id))) {
-      LOG_WARN("call databuff_printf failed", K(ret), K(trace_id), K(trace_id_pos));
-    } else if (OB_FAIL(sql.assign_fmt("UPDATE %s SET value = '%s : %s(%d) on %s with traceid %s' "
-                               "WHERE job_id = %ld AND name = 'comment'",
-                               OB_ALL_RESTORE_JOB_TNAME, mod_str,
-                               ob_error_name(return_ret), return_ret,
-                               addr_str, trace_id_str,
-                               job_id))) {
-      LOG_WARN("failed to set sql", K(ret), K(mod_str), K(return_ret), K(trace_id), K(addr));
-    } else if (OB_FAIL(sql_client_->write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-      LOG_WARN("execute sql failed", K(sql), KR(ret), K(exec_tenant_id));
-    } else if (!is_single_row(affected_rows)
-               && !is_zero_row(affected_rows)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("update succeeded but affected_rows more than one", KR(ret), K(affected_rows));
-    }
-  }
-  LOG_INFO("[RESTORE] update job error info", KR(ret), K(job_id), K(return_ret), K(mod));
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObPhysicalRestoreTableOperator::update_job_status(
     int64_t job_id, int64_t status)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  const char *status_str = ObPhysicalRestoreTableOperator::get_restore_status_str(
-                             static_cast<PhysicalRestoreStatus>(status));
-  // update __all_restore_job
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("physical restore table operator not init", K(ret));
-  } else if (job_id < 0 || is_user_tenant(exec_tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid job_id", K(ret), K(job_id), K(exec_tenant_id));
-  } else if (OB_ISNULL(status_str)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid status", K(ret), K(status));
-  } else if (OB_FAIL(sql.assign_fmt("UPDATE %s SET value = '%s' WHERE job_id = %ld "
-                                    "AND name = 'status' AND value != 'RESTORE_FAIL'",
-                                    OB_ALL_RESTORE_JOB_TNAME, status_str, job_id))) {
-    LOG_WARN("fail to assign fmt", K(ret), K(sql));
-  } else if (OB_FAIL(sql_client_->write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("execute sql failed", K(sql), K(ret), K(exec_tenant_id));
-  } else if (!is_single_row(affected_rows)
-             && !is_zero_row(affected_rows)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("update succeeded but affected_rows more than one", K(ret), K(affected_rows));
-  }
-
-  LOG_INFO("[RESTORE] update job status", K(ret), K(job_id), K(status));
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObPhysicalRestoreTableOperator::remove_job(
   int64_t job_id)
 {
-  int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("physical restore table operator not init", K(ret));
-  } else {
-    share::ObDMLSqlSplicer dml;
-    common::ObSqlString sql;
-    int64_t affected_rows = 0;
-    // remove from __all_restore_job
-    if (OB_FAIL(dml.add_pk_column("job_id", job_id))) {
-      LOG_WARN("failed to add pk column", K(ret), K(job_id));
-    } else if (OB_FAIL(dml.splice_delete_sql(OB_ALL_RESTORE_JOB_TNAME, sql))) {
-      LOG_WARN("splice_delete_sql failed", K(ret));
-    } else if (OB_FAIL(sql_client_->write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-      LOG_WARN("execute sql failed", K(sql), K(ret), K(exec_tenant_id));
-    } else {
-      // no need to check affected_rows
-    }
-  }
-  LOG_INFO("[RESTORE] remove job", K(ret), K(job_id));
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -979,25 +717,7 @@ int ObPhysicalRestoreTableOperator::get_job_by_tenant_id(
     const uint64_t restore_tenant_id,
     ObPhysicalRestoreJob &job_info)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_INVALID_TENANT_ID == exec_tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid exec_tenant_id", K(ret), K(exec_tenant_id));
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE job_id in (SELECT job_id "
-                                    "FROM %s WHERE name = 'tenant_id' AND value = '%lu')",
-                                    OB_ALL_RESTORE_JOB_TNAME,
-                                    OB_ALL_RESTORE_JOB_TNAME,
-                                    restore_tenant_id))) {
-    LOG_WARN("failed to assign sql", K(ret));
-  } else if (OB_FAIL(get_restore_job_by_sql_(exec_tenant_id, sql, job_info))) {
-    LOG_WARN("failed to get restore job by sql", KR(ret), K(exec_tenant_id), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1005,24 +725,7 @@ int ObPhysicalRestoreTableOperator::get_job_by_tenant_name(
     const ObString &tenant_name,
     ObPhysicalRestoreJob &job_info)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_UNLIKELY(tenant_name.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid exec_tenant_id", K(ret), K(tenant_name));
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE job_id in (SELECT job_id "
-                                    "FROM %s WHERE name = 'tenant_name' AND value = '%.*s')",
-                                    OB_ALL_RESTORE_JOB_TNAME,
-                                    OB_ALL_RESTORE_JOB_TNAME,
-                                    tenant_name.length(), tenant_name.ptr()))) {
-    LOG_WARN("failed to assign sql", K(ret), K(tenant_name));
-  } else if (OB_FAIL(get_restore_job_by_sql_(exec_tenant_id, sql, job_info))) {
-    LOG_WARN("failed to get restore job by sql", KR(ret), K(sql), K(exec_tenant_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1030,24 +733,7 @@ int ObPhysicalRestoreTableOperator::get_job_by_restore_tenant_name(
     const ObString &tenant_name,
     ObPhysicalRestoreJob &job_info)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_UNLIKELY(tenant_name.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid exec_tenant_id", K(ret), K(tenant_name));
-  } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE job_id in (SELECT job_id "
-                                    "FROM %s WHERE name = 'restore_tenant_name' AND value = '%.*s')",
-                                    OB_ALL_RESTORE_JOB_TNAME,
-                                    OB_ALL_RESTORE_JOB_TNAME,
-                                    tenant_name.length(), tenant_name.ptr()))) {
-    LOG_WARN("failed to assign sql", K(ret), K(tenant_name));
-  } else if (OB_FAIL(get_restore_job_by_sql_(exec_tenant_id, sql, job_info))) {
-    LOG_WARN("failed to get restore job by sql", KR(ret), K(sql), K(exec_tenant_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 int ObPhysicalRestoreTableOperator::get_restore_job_by_sql_(
@@ -1113,115 +799,7 @@ int ObPhysicalRestoreTableOperator::check_finish_restore_to_target_status(
     bool &is_finished, 
     bool &is_success)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (is_sys_tenant(exec_tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id cannot be sys", KR(ret), K_(tenant_id));
-  } else {
-    is_finished = true;
-    is_success = true;
-    SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
-      ObSqlString sql;
-      common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("select a.ls_id, b.restore_status, b.replica_status from %s as a "
-              "left join %s as b on a.ls_id = b.ls_id",
-              OB_ALL_LS_STATUS_TNAME, OB_ALL_LS_META_TABLE_TNAME))) {
-        LOG_WARN("failed to assign sql", K(ret));
-      } else if (OB_FAIL(sql_client_->read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret), K(sql));
-      } else {
-        int64_t ls_id = 0;
-        share::ObLSRestoreStatus ls_restore_status;
-        int32_t restore_status = -1;
-        while (OB_SUCC(ret) && OB_SUCC(result->next())
-            && !(is_finished && !is_success)) {
-          EXTRACT_INT_FIELD_MYSQL(*result, "ls_id", ls_id, int64_t);
-          EXTRACT_INT_FIELD_MYSQL(*result, "restore_status", restore_status, int32_t);
-
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(ls_restore_status.set_status(restore_status))) {
-            LOG_WARN("failed to set status", KR(ret), K(restore_status));
-          } else if (!ls_restore_status.is_valid_restore_status() || ls_restore_status.is_failed()) {
-            //restore failed
-            is_finished = true;
-            is_success = false;
-            LOG_WARN_RET(OB_SUCCESS, "ls restore failed", K(ls_id));
-          } else {
-            ObLSID tmp_ls_id(ls_id);
-            if (tmp_ls_id.is_sys_ls() && ls_restore_status == sys_ls_target_status) {
-            } else if (tmp_ls_id.is_user_ls() && ls_restore_status == user_ls_target_status) {
-            } else {
-              is_finished = false;
-            }
-          }
-        } // while
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-
-        if (OB_SUCC(ret) && is_finished && !is_success) {
-          LOG_INFO("tenant restore failed", K(ls_id), K(ls_restore_status));
-        }
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObPhysicalRestoreTableOperator::check_all_ls_finish_quick_restore(bool &is_finish)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const uint64_t exec_tenant_id = get_exec_tenant_id(tenant_id_);
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (is_sys_tenant(exec_tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant id cannot be sys", KR(ret), K_(tenant_id));
-  } else {
-    is_finish = true;
-    SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
-      ObSqlString sql;
-      common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("select a.ls_id, b.restore_status, b.replica_status from %s as a "
-              "left join %s as b on a.ls_id = b.ls_id",
-              OB_ALL_LS_STATUS_TNAME, OB_ALL_LS_META_TABLE_TNAME))) {
-        LOG_WARN("failed to assign sql", K(ret));
-      } else if (OB_FAIL(sql_client_->read(res, exec_tenant_id, sql.ptr(), group_id_))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret), K(sql));
-      } else {
-        int64_t ls_id = 0;
-        share::ObLSRestoreStatus ls_restore_status;
-        int32_t restore_status = -1;
-        while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          EXTRACT_INT_FIELD_MYSQL(*result, "ls_id", ls_id, int64_t);
-          EXTRACT_INT_FIELD_MYSQL(*result, "restore_status", restore_status, int32_t);
-
-          if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(ls_restore_status.set_status(restore_status))) {
-            LOG_WARN("failed to set status", KR(ret), K(restore_status));
-          } else if (ObLSRestoreStatus::Status::RESTORE_START <= ls_restore_status
-                     &&  ObLSRestoreStatus::Status::QUICK_RESTORE >= ls_restore_status) {
-            is_finish = false;
-          }
-        } // while
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-      }
-    }
-  }
-  return ret;
-}

@@ -1035,7 +1035,7 @@ int ObLogPlan::strong_select_replicas(const ObAddr &local_server,
                                       ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                                       bool &is_hit_partition,
                                       bool sess_in_retry,      // current session is in retry
-                                      bool is_dup_ls_modified) 
+                                      bool is_dup_ls_modified)
 {
   int ret = OB_SUCCESS;
   // Select all as leader
@@ -8427,8 +8427,7 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_select_item_size(); i++) {
       if (!into_item->external_properties_.empty()
-          && (external_properties.format_type_ == ObExternalFileFormat::FormatType::PARQUET_FORMAT
-              || external_properties.format_type_ == ObExternalFileFormat::FormatType::ORC_FORMAT)
+          && (external_properties.format_type_ == ObExternalFileFormat::FormatType::PARQUET_FORMAT)
           && is_contain(select_into->get_alias_names(), stmt->get_select_item(i).alias_name_)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("alias names should be different", K(ret));

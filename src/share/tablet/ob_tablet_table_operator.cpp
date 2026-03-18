@@ -18,14 +18,51 @@
 
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/resource_manager/ob_cgroup_ctrl.h"
+#include "share/ob_server_struct.h"
 namespace oceanbase
 {
 using namespace common;
 
 namespace share
 {
+// Get shared storage from GCTX for static methods
+static int get_shared_storage(ObTabletMetaTableStorage *&storage)
+{
+  int ret = OB_SUCCESS;
+  storage = nullptr;
+
+  // Try to get from GCTX (if available)
+  if (GCTX.is_inited() && nullptr != GCTX.meta_db_pool_) {
+    // Create a temporary ObTabletMetaTableStorage that uses the shared pool
+    // For static methods, we need to create a temporary instance
+    static ObTabletMetaTableStorage *g_static_storage = nullptr;
+    if (OB_ISNULL(g_static_storage)) {
+      void *buf = ob_malloc(sizeof(ObTabletMetaTableStorage), "TabletMetaStor");
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate memory for static storage", K(ret));
+      } else {
+        g_static_storage = new(buf) ObTabletMetaTableStorage();
+        if (OB_FAIL(g_static_storage->init(GCTX.meta_db_pool_))) {
+          LOG_WARN("failed to init static storage", K(ret));
+          g_static_storage->~ObTabletMetaTableStorage();
+          ob_free(buf);
+          g_static_storage = nullptr;
+        } else {
+          storage = g_static_storage;
+        }
+      }
+    } else {
+      storage = g_static_storage;
+    }
+  } else {
+    ret = OB_NOT_INIT;
+    LOG_WARN("GCTX not inited or meta_db_storage not available", K(ret));
+  }
+  return ret;
+}
 ObTabletTableOperator::ObTabletTableOperator()
-    : inited_(false), sql_proxy_(NULL), batch_size_(MAX_BATCH_COUNT), group_id_(0)
+    : inited_(false), batch_size_(MAX_BATCH_COUNT), group_id_(0)
 {
 }
 
@@ -34,35 +71,25 @@ ObTabletTableOperator::~ObTabletTableOperator()
   reset();
 }
 
-int ObTabletTableOperator::init(ObISQLClient &sql_proxy)
+int ObTabletTableOperator::init(share::ObSQLiteConnectionPool *pool)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else {
-    sql_proxy_ = &sql_proxy;
-    batch_size_ = MAX_BATCH_COUNT;
-    group_id_ = 0; /*OBCG_DEFAULT*/
-    inited_ = true;
-  }
-  return ret;
-}
-
-int ObTabletTableOperator::init(const int32_t group_id, common::ObISQLClient &sql_proxy)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
-  } else if (group_id < 0) {
+  } else if (OB_ISNULL(pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("init tablet table operator get invalid argument", K(ret), K(group_id));
+    LOG_WARN("invalid pool", K(ret));
   } else {
-    sql_proxy_ = &sql_proxy;
-    batch_size_ = MAX_BATCH_COUNT;
-    group_id_ = group_id;
-    inited_ = true;
+    // Initialize storage with shared instance
+    if (OB_FAIL(storage_.init(pool))) {
+      LOG_WARN("failed to init storage", K(ret));
+    } else {
+      batch_size_ = MAX_BATCH_COUNT;
+      group_id_ = 0; /*OBCG_DEFAULT*/
+      inited_ = true;
+      LOG_INFO("tablet table operator init success");
+    }
   }
   return ret;
 }
@@ -70,7 +97,8 @@ int ObTabletTableOperator::init(const int32_t group_id, common::ObISQLClient &sq
 void ObTabletTableOperator::reset()
 {
   inited_ = false;
-  sql_proxy_ = NULL;
+  // storage_ is now a pointer to shared storage, don't destroy it
+  storage_.~ObTabletMetaTableStorage();
   batch_size_ = 0;
 }
 
@@ -82,25 +110,13 @@ int ObTabletTableOperator::get(
     ObTabletReplica &tablet_replica)
 {
   int ret = OB_SUCCESS;
-  ObTabletInfo tablet_info;
-  if (OB_UNLIKELY(!inited_) || OB_ISNULL(sql_proxy_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(get(tenant_id, tablet_id, ls_id, tablet_info))) {
-    LOG_WARN("failed to get tablet info", K(ret), K(tenant_id), K(tablet_id), K(ls_id));
   } else {
-    bool find = false;
-    const ObArray<ObTabletReplica> &replicas = tablet_info.get_replicas();
-    for (int64_t i = 0; OB_SUCC(ret) && i < replicas.count(); ++i) {
-      tablet_replica = replicas.at(i);
-      if (tablet_replica.get_server() == addr) {
-        find = true;
-        break;
-      }
-    }
-    if (OB_SUCC(ret) && !find) {
-      ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("not find entry", K(tablet_info));
+    ret = storage_.get(tenant_id, tablet_id, ls_id, addr, tablet_replica);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to get tablet replica from storage", K(ret), K(tenant_id), K(tablet_id), K(ls_id), K(addr));
     }
   }
   return ret;
@@ -115,21 +131,16 @@ int ObTabletTableOperator::get(
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
-  if (OB_UNLIKELY(!inited_) || OB_ISNULL(sql_proxy_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else {
-    ObSEArray<ObTabletLSPair, 1> tablet_ls_pairs;
-    ObSEArray<ObTabletInfo, 1> tablet_infos;
-    if (OB_FAIL(tablet_ls_pairs.push_back(ObTabletLSPair(tablet_id, ls_id)))) {
-      LOG_WARN("fail to push back tablet ls pair", KR(ret), K(tablet_id), K(ls_id));
-    } else if (OB_FAIL(batch_get(tenant_id, tablet_ls_pairs, tablet_infos))) {
-      LOG_WARN("fail to get tablet info", KR(ret), K(tenant_id), K(tablet_ls_pairs));
-    } else if (1 != tablet_infos.count()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet_infos count should be one", KR(ret), "count", tablet_infos.count());
-    } else if (OB_FAIL(tablet_info.assign(tablet_infos.at(0)))) {
-      LOG_WARN("fail to assign tablet info", KR(ret), K(tablet_infos));
+    ret = storage_.get(tenant_id, tablet_id, ls_id, tablet_info);
+    if (OB_FAIL(ret) && OB_ENTRY_NOT_EXIST != ret) {
+      LOG_WARN("fail to get tablet info from storage", KR(ret), K(tenant_id), K(tablet_id), K(ls_id));
+    } else if (OB_ENTRY_NOT_EXIST == ret) {
+      // Return empty tablet_info when not exist
+      ret = OB_SUCCESS;
     }
   }
   return ret;
@@ -143,32 +154,32 @@ int ObTabletTableOperator::batch_get_tablet_info(
     ObArrayWithMap<ObTabletInfo> &tablet_infos)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(sql_proxy)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sql_proxy));
+  // Legacy method: ignore sql_proxy and use SQLite storage
+  ObTabletMetaTableStorage *storage = nullptr;
+  if (OB_FAIL(get_shared_storage(storage))) {
+    LOG_WARN("failed to get shared storage", K(ret));
   } else {
-    int64_t pairs_count = tablet_ls_infos.count();
-    int64_t start_idx = 0;
-    int64_t end_idx = min(MAX_BATCH_COUNT, pairs_count);
-    while (OB_SUCC(ret) && (start_idx < end_idx)) {
-      if (OB_FAIL(inner_batch_get_by_sql_(
-          *sql_proxy,
-          tenant_id,
-          tablet_ls_infos,
-          start_idx,
-          end_idx,
-          group_id,
-          tablet_infos))) {
-        LOG_WARN("fail to inner batch get by sql",
-            KR(ret), K(tenant_id), K(tablet_ls_infos), K(start_idx), K(end_idx));
-      } else {
-        start_idx = end_idx;
-        end_idx = min(start_idx + MAX_BATCH_COUNT, pairs_count);
+    // Convert ObTabletCheckInfo to ObTabletLSPair
+    ObSEArray<ObTabletLSPair, 64> tablet_ls_pairs;
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ls_infos.count(); ++i) {
+      const compaction::ObTabletCheckInfo &check_info = tablet_ls_infos.at(i);
+      if (OB_FAIL(tablet_ls_pairs.push_back(ObTabletLSPair(check_info.get_tablet_id(), check_info.get_ls_id())))) {
+        LOG_WARN("failed to push back tablet ls pair", K(ret));
       }
     }
-  }
-  if (OB_SUCC(ret) && tablet_ls_infos.count() != tablet_infos.count()) {
-    LOG_WARN("tablet_infos count is not same as tablet_ls_pairs count ", KR(ret), K(tablet_infos.count()), K(tablet_ls_infos.count()));
+    if (OB_SUCC(ret)) {
+      ObSEArray<ObTabletInfo, 64> infos;
+      if (OB_FAIL(storage->batch_get(tenant_id, tablet_ls_pairs, infos))) {
+        LOG_WARN("failed to batch get from storage", K(ret));
+      } else {
+        // Convert to ObArrayWithMap
+        for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
+          if (OB_FAIL(tablet_infos.push_back(infos.at(i)))) {
+            LOG_WARN("failed to push back tablet info", K(ret));
+          }
+        }
+      }
+    }
   }
   return ret;
 }
@@ -182,7 +193,7 @@ int ObTabletTableOperator::batch_get(
   tablet_infos.reset();
   const int64_t pairs_cnt = tablet_ls_pairs.count();
   hash::ObHashMap<ObTabletLSPair, bool> pairs_map;
-  if (OB_UNLIKELY(!inited_) || OB_ISNULL(sql_proxy_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(pairs_cnt < 1 || OB_INVALID_TENANT_ID == tenant_id)) {
@@ -212,27 +223,10 @@ int ObTabletTableOperator::batch_get(
       LOG_WARN("invalid pairs_map size", "size", pairs_map.size(), K(pairs_cnt));
     }
   }
-  // Step 2: cut tablet_ls_pairs into small batches
-  if (FAILEDx(tablet_infos.reserve(pairs_cnt))) {
-    LOG_WARN("fail to reserve tablet_infos", KR(ret), K(pairs_cnt));
-  } else {
-    int64_t start_idx = 0;
-    int64_t end_idx = min(batch_size_, pairs_cnt);
-    while (OB_SUCC(ret) && (start_idx < end_idx)) {
-      if (OB_FAIL(inner_batch_get_by_sql_(
-          *sql_proxy_,
-          tenant_id,
-          tablet_ls_pairs,
-          start_idx,
-          end_idx,
-          share::OBCG_DEFAULT,
-          tablet_infos))) {
-        LOG_WARN("fail to inner batch get by sql",
-            KR(ret), K(tenant_id), K(tablet_ls_pairs), K(start_idx), K(end_idx));
-      } else {
-        start_idx = end_idx;
-        end_idx = min(start_idx + batch_size_, pairs_cnt);
-      }
+  // Step 2: get from SQLite storage
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(storage_.batch_get(tenant_id, tablet_ls_pairs, tablet_infos))) {
+      LOG_WARN("fail to batch get from storage", KR(ret), K(tenant_id), K(tablet_ls_pairs));
     }
   }
   // Step 3: check tablet_infos and push back empty tablet_info for tablets not exist
@@ -268,69 +262,9 @@ int ObTabletTableOperator::batch_get(
   return ret;
 }
 
-template <typename T, typename P>
-int ObTabletTableOperator::inner_batch_get_by_sql_(
-    ObISQLClient &sql_client,
-    const uint64_t tenant_id,
-    const ObIArray<T> &tablet_ls_pairs,
-    const int64_t start_idx,
-    const int64_t end_idx,
-    const int32_t group_id,
-    P &tablet_infos)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(tablet_ls_pairs.empty()
-      || OB_INVALID_TENANT_ID == tenant_id
-      || start_idx < 0
-      || start_idx >= end_idx
-      || end_idx > tablet_ls_pairs.count())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(tablet_ls_pairs), K(start_idx), K(end_idx));
-  } else {
-    const uint64_t sql_tenant_id = gen_meta_tenant_id(tenant_id);
-    ObSqlString sql;
-    SMART_VAR(ObISQLClient::ReadResult, result) {
-      if (OB_FAIL(sql.append_fmt(
-          "SELECT * FROM %s WHERE tenant_id = %ld and (tablet_id,ls_id) IN (",
-          OB_ALL_TABLET_META_TABLE_TNAME, tenant_id))) {
-        LOG_WARN("fail to assign sql", KR(ret));
-      } else {
-        for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
-          const ObTabletID &tablet_id = tablet_ls_pairs.at(idx).get_tablet_id();
-          const ObLSID &ls_id = tablet_ls_pairs.at(idx).get_ls_id();
-          if (OB_UNLIKELY(!tablet_id.is_valid_with_tenant(tenant_id)
-              || !ls_id.is_valid_with_tenant(tenant_id))) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid tablet_id with tenant", KR(ret), K(tenant_id), K(tablet_id), K(ls_id));
-          } else if (OB_FAIL(sql.append_fmt(
-              "%s (%lu,%lu)",
-              start_idx == idx ? "" : ",",
-              tablet_id.id(),
-              ls_id.id()))) {
-            LOG_WARN("fail to assign sql", KR(ret), K(tablet_id));
-          }
-        }
-      }
-      if (FAILEDx(sql.append_fmt(") ORDER BY tenant_id, tablet_id, ls_id, svr_ip, svr_port ASC"))) {
-        LOG_WARN("assign sql string failed", KR(ret));
-      } else if (OB_FAIL(sql_client.read(result, sql_tenant_id, sql.ptr(), group_id))) {
-        LOG_WARN("execute sql failed", KR(ret),
-            K(tenant_id), K(sql_tenant_id), "sql", sql.ptr());
-      } else if (OB_ISNULL(result.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get mysql result failed", KR(ret), "sql", sql.ptr());
-      } else if (OB_FAIL(construct_tablet_infos(*result.get_result(), tablet_infos))) {
-        LOG_WARN("construct tablet info failed", KR(ret), K(tablet_infos));
-      }
-    }
-  }
-  return ret;
-}
-
-template <typename T>
 int ObTabletTableOperator::construct_tablet_infos(
     sqlclient::ObMySQLResult &res,
-    T &tablet_infos)
+    std::function<int(ObTabletInfo&)> &&push_tablet)
 {
   int ret = OB_SUCCESS;
   ObTabletInfo tablet_info;
@@ -356,7 +290,7 @@ int ObTabletTableOperator::construct_tablet_infos(
         }
       } else {
         if (tablet_info.is_valid()) {
-          if (OB_FAIL(tablet_infos.push_back(tablet_info))) {
+          if (OB_FAIL(push_tablet(tablet_info))) {
             LOG_WARN("fail to push back", KR(ret), K(tablet_info));
           }
         }
@@ -369,7 +303,7 @@ int ObTabletTableOperator::construct_tablet_infos(
   } // end while
   if (OB_SUCC(ret) && tablet_info.is_valid()) {
     // last tablet info
-    if (OB_FAIL(tablet_infos.push_back(tablet_info))) {
+    if (OB_FAIL(push_tablet(tablet_info))) {
       LOG_WARN("fail to push back", KR(ret), K(tablet_info));
     }
   }
@@ -442,120 +376,35 @@ int ObTabletTableOperator::batch_update(
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!inited_) || OB_ISNULL(sql_proxy_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else {
-    common::ObMySQLTransaction trans;
-    const uint64_t sql_tenant_id = gen_meta_tenant_id(tenant_id);
-    if (OB_FAIL(trans.start(sql_proxy_, sql_tenant_id))) {
-      LOG_WARN("start transaction failed", KR(ret), K(sql_tenant_id));
-    } else if (OB_FAIL(batch_update(trans, tenant_id, replicas))) {
-      LOG_WARN("fail to batch update", KR(ret), K(tenant_id));
-    }
-
-    if (trans.is_started()) {
-      int trans_ret = trans.end(OB_SUCCESS == ret);
-      if (OB_SUCCESS != trans_ret) {
-        LOG_WARN("end transaction failed", KR(trans_ret));
-        ret = OB_SUCCESS == ret ? trans_ret : ret;
-      }
+    ret = storage_.batch_update(tenant_id, replicas);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to batch update in storage", KR(ret), K(tenant_id));
     }
   }
   return ret;
 }
 
 int ObTabletTableOperator::batch_update(
-    ObISQLClient &sql_client,
+    ObSQLiteConnection *conn,
     const uint64_t tenant_id,
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || replicas.count() <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), "replicas count", replicas.count());
-  } else {
-    int64_t start_idx = 0;
-    int64_t end_idx = min(batch_size_, replicas.count());
-    while (OB_SUCC(ret) && (start_idx < end_idx)) {
-      if (OB_FAIL(inner_batch_update_by_sql_(tenant_id, replicas, start_idx, end_idx, sql_client))) {
-        LOG_WARN("fail to inner batch update", KR(ret), K(tenant_id), K(replicas), K(start_idx));
-      } else {
-        start_idx = end_idx;
-        end_idx = min(start_idx + batch_size_, replicas.count());
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTabletTableOperator::inner_batch_update_by_sql_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletReplica> &replicas,
-    const int64_t start_idx,
-    const int64_t end_idx,
-    common::ObISQLClient &sql_client)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_) || OB_ISNULL(sql_proxy_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
-      || replicas.count() <= 0
-      || start_idx < 0
-      || start_idx >= end_idx
-      || end_idx > replicas.count())) {
+  } else if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret),
-        K(tenant_id), "replicas count", replicas.count(), K(start_idx), K(end_idx));
+    LOG_WARN("invalid connection", K(ret));
   } else {
-    int64_t affected_rows = 0;
-    ObSqlString sql;
-    ObDMLSqlSplicer dml;
-    const uint64_t sql_tenant_id = gen_meta_tenant_id(tenant_id);
-    for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
-      const ObTabletReplica &replica = replicas.at(idx);
-      if (OB_UNLIKELY(!replica.is_valid() || tenant_id != replica.get_tenant_id())) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid replica", KR(ret), K(tenant_id), K(replica));
-      } else if (OB_FAIL(fill_dml_splicer_(replica, dml))) {
-        LOG_WARN("fail to fill dml splicer", KR(ret), K(replica));
-      } else if (OB_FAIL(dml.finish_row())) {
-        LOG_WARN("fail to finish row", KR(ret), K(replica));
-      }
+    ret = storage_.batch_update(conn, tenant_id, replicas);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to batch update", K(ret), K(tenant_id));
     }
-    if (FAILEDx(dml.splice_batch_insert_update_sql(OB_ALL_TABLET_META_TABLE_TNAME, sql))) {
-      LOG_WARN("fail to splice batch insert update sql", KR(ret), K(sql));
-    } else if (OB_FAIL(sql_client.write(sql_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(tenant_id), K(sql_tenant_id), K(sql));
-    }
-  }
-  return ret;
-}
-
-int ObTabletTableOperator::fill_dml_splicer_(
-    const ObTabletReplica &replica,
-    ObDMLSqlSplicer &dml_splicer)
-{
-  int ret = OB_SUCCESS;
-  const uint64_t snapshot_version = replica.get_snapshot_version() < 0 ? 0 : replica.get_snapshot_version();
-  char ip[OB_MAX_SERVER_ADDR_SIZE] = "";
-  if (OB_UNLIKELY(!replica.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid replica", KR(ret), K(replica));
-  } else if (OB_UNLIKELY(!replica.get_server().ip_to_string(ip, sizeof(ip)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("convert server ip to string failed", KR(ret), "server", replica.get_server());
-  } else if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", replica.get_tenant_id()))
-      || OB_FAIL(dml_splicer.add_pk_column("tablet_id", replica.get_tablet_id().id()))
-      || OB_FAIL(dml_splicer.add_pk_column("svr_ip", ip))
-      || OB_FAIL(dml_splicer.add_pk_column("svr_port", replica.get_server().get_port()))
-      || OB_FAIL(dml_splicer.add_pk_column("ls_id", replica.get_ls_id().id()))
-      || OB_FAIL(dml_splicer.add_uint64_column("compaction_scn", snapshot_version))
-      || OB_FAIL(dml_splicer.add_column("data_size", replica.get_data_size()))
-      || OB_FAIL(dml_splicer.add_column("required_size", replica.get_required_size()))) {
-    LOG_WARN("add column failed", KR(ret), K(replica));
   }
   return ret;
 }
@@ -568,7 +417,7 @@ int ObTabletTableOperator::range_get(
 {
   int ret = OB_SUCCESS;
   tablet_infos.reset();
-  if (OB_UNLIKELY(!inited_) || OB_ISNULL(sql_proxy_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(
@@ -577,121 +426,50 @@ int ObTabletTableOperator::range_get(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(start_tablet_id), K(range_size));
   } else {
-    SMART_VAR(ObISQLClient::ReadResult, result) {
-      const uint64_t sql_tenant_id = gen_meta_tenant_id(tenant_id);
-      ObSqlString sql;
-      if (OB_FAIL(sql.append_fmt(
-          "SELECT * FROM %s WHERE tenant_id = %lu and tablet_id > %lu LIMIT %ld",
-          OB_ALL_TABLET_META_TABLE_TNAME,
-          tenant_id,
-          start_tablet_id.id(),
-          range_size))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(sql));
-      } else if (OB_FAIL(sql_proxy_->read(result, sql_tenant_id, sql.ptr(), group_id_))) {
-        LOG_WARN("execute sql failed", KR(ret), K(tenant_id), K(sql_tenant_id), K(sql));
-      } else if (OB_ISNULL(result.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get mysql result failed", KR(ret), K(sql));
-      } else if (OB_FAIL(construct_tablet_infos(*result.get_result(), tablet_infos))) {
-        LOG_WARN("construct tablet info failed", KR(ret), K(sql), K(tablet_infos));
-      } else if (OB_UNLIKELY(tablet_infos.count() > range_size)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get too much tablets", KR(ret), K(sql),
-            K(range_size), "tablet_infos count", tablet_infos.count());
-      }
+    ret = storage_.range_get(tenant_id, start_tablet_id, range_size, tablet_infos);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to range get from storage", KR(ret), K(tenant_id), K(start_tablet_id), K(range_size));
     }
   }
   return ret;
 }
 
 
+
 int ObTabletTableOperator::batch_remove(
-    ObISQLClient &sql_client,
+    ObSQLiteConnection *conn,
     const uint64_t tenant_id,
     const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || replicas.count() <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), "replicas count", replicas.count());
-  } else {
-    int64_t start_idx = 0;
-    int64_t end_idx = min(batch_size_, replicas.count());
-    while (OB_SUCC(ret) && (start_idx < end_idx)) {
-      if (OB_FAIL(inner_batch_remove_by_sql_(tenant_id, replicas, start_idx, end_idx, sql_client))) {
-        LOG_WARN("fail to inner batch remove", KR(ret), K(tenant_id), K(replicas), K(start_idx));
-      } else {
-        start_idx = end_idx;
-        end_idx = min(start_idx + batch_size_, replicas.count());
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTabletTableOperator::inner_batch_remove_by_sql_(
-    const uint64_t tenant_id,
-    const ObIArray<ObTabletReplica> &replicas,
-    const int64_t start_idx,
-    const int64_t end_idx,
-    common::ObISQLClient &sql_client)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_) || OB_ISNULL(sql_proxy_)) {
+  if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
-      || replicas.count() <= 0
-      || start_idx < 0
-      || start_idx >= end_idx
-      || end_idx > replicas.count())) {
+  } else if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret),
-        K(tenant_id), "replicas count", replicas.count(), K(start_idx), K(end_idx));
+    LOG_WARN("invalid connection", K(ret));
   } else {
-    int64_t affected_rows = 0;
-    ObSqlString sql;
-    ObDMLSqlSplicer dml;
-    const uint64_t sql_tenant_id = gen_meta_tenant_id(tenant_id);
-    for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
-      const ObTabletReplica &replica = replicas.at(idx);
-      if (OB_UNLIKELY(!replica.primary_keys_are_valid() || tenant_id != replica.get_tenant_id())) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid replica", KR(ret), K(tenant_id), K(replica));
-      } else if (OB_FAIL(fill_remove_dml_splicer_(replica, dml))) {
-        LOG_WARN("fail to fill dml splicer", KR(ret), K(replica));
-      } else if (OB_FAIL(dml.finish_row())) {
-        LOG_WARN("fail to finish row", KR(ret), K(replica));
-      }
-    }
-    if (FAILEDx(dml.splice_batch_delete_sql(OB_ALL_TABLET_META_TABLE_TNAME, sql))) {
-      LOG_WARN("fail to splice batch delete sql", KR(ret), K(sql));
-    } else if (OB_FAIL(sql_client.write(sql_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-      LOG_WARN("execute sql failed", KR(ret), K(tenant_id), K(sql_tenant_id), K(sql));
+    ret = storage_.batch_remove(conn, tenant_id, replicas);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to batch remove", K(ret), K(tenant_id));
     }
   }
   return ret;
 }
 
-// remove tablet replica by primary key
-int ObTabletTableOperator::fill_remove_dml_splicer_(
-    const ObTabletReplica &replica,
-    ObDMLSqlSplicer &dml_splicer)
+int ObTabletTableOperator::batch_remove(
+    const uint64_t tenant_id,
+    const ObIArray<ObTabletReplica> &replicas)
 {
   int ret = OB_SUCCESS;
-  char ip[OB_MAX_SERVER_ADDR_SIZE] = "";
-  if (OB_UNLIKELY(!replica.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid replica", KR(ret), K(replica));
-  } else if (OB_UNLIKELY(!replica.get_server().ip_to_string(ip, sizeof(ip)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("convert server ip to string failed", KR(ret), "server", replica.get_server());
-  } else if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", replica.get_tenant_id()))
-      || OB_FAIL(dml_splicer.add_pk_column("tablet_id", replica.get_tablet_id().id()))
-      || OB_FAIL(dml_splicer.add_pk_column("svr_ip", ip))
-      || OB_FAIL(dml_splicer.add_pk_column("svr_port", replica.get_server().get_port()))
-      || OB_FAIL(dml_splicer.add_pk_column("ls_id", replica.get_ls_id().id()))) {
-    LOG_WARN("add column failed", KR(ret), K(replica));
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
+  } else {
+    ret = storage_.batch_remove(tenant_id, replicas);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to batch remove in storage", KR(ret), K(tenant_id));
+    }
   }
   return ret;
 }
@@ -703,11 +481,8 @@ int ObTabletTableOperator::remove_residual_tablet(
     const int64_t limit,
     int64_t &affected_rows)
 {
+  // Legacy method: ignore sql_client and use SQLite storage
   int ret = OB_SUCCESS;
-  affected_rows = 0;
-  char ip[OB_MAX_SERVER_ADDR_SIZE] = "";
-  ObSqlString sql;
-  const uint64_t sql_tenant_id = gen_meta_tenant_id(tenant_id);
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
@@ -717,21 +492,11 @@ int ObTabletTableOperator::remove_residual_tablet(
       || !server.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(server));
-  } else if (OB_UNLIKELY(!server.ip_to_string(ip, sizeof(ip)))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("convert server ip to string failed", KR(ret), K(server));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "DELETE FROM %s WHERE tenant_id = %lu AND svr_ip = '%s' AND svr_port = %d limit %ld",
-      OB_ALL_TABLET_META_TABLE_TNAME,
-      tenant_id,
-      ip,
-      server.get_port(),
-      limit))) {
-    LOG_WARN("assign sql string failed", KR(ret), K(sql));
-  } else if (OB_FAIL(sql_client.write(sql_tenant_id, sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("execute sql failed", KR(ret), K(sql), K(sql_tenant_id));
-  } else if (affected_rows > 0) {
-    LOG_INFO("finish to remove residual tablet", KR(ret), K(tenant_id), K(affected_rows));
+  } else {
+    ret = storage_.remove_residual_tablet(tenant_id, server, limit, affected_rows);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("fail to remove residual tablet in storage", KR(ret), K(tenant_id), K(server));
+    }
   }
   return ret;
 }

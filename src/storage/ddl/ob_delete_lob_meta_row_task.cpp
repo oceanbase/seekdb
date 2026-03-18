@@ -219,7 +219,7 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
     }
 #endif
     obrpc::ObDDLBuildSingleReplicaResponseArg arg;
-    ObAddr rs_addr;
+    ObAddr rs_addr = GCTX.self_addr();
     arg.tenant_id_ = param_.tenant_id_;
     arg.dest_tenant_id_ = param_.tenant_id_;
     arg.ls_id_ = param_.ls_id_;
@@ -236,11 +236,9 @@ int ObDeleteLobMetaRowDag::report_replica_build_status()
     arg.server_addr_ = GCTX.self_addr();
     FLOG_INFO("send replica build status response to RS", K(ret), K(arg));
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_) || OB_ISNULL(GCTX.rs_mgr_)) {
+    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
       ret = OB_ERR_SYS;
-      LOG_WARN("innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), KP(GCTX.rs_mgr_));
-    } else if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_addr))) {
-      LOG_WARN("fail to get rootservice address", K(ret));
+      LOG_WARN("innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret));
     } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
     }

@@ -50,15 +50,6 @@ int ObVirtualBadBlockTable::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id){
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
         case DISK_ID: {
           cells[i].set_int(bad_block_info.disk_id_);
           break;
@@ -133,5 +124,4 @@ int ObVirtualBadBlockTable::init(const common::ObAddr &addr)
 
 }// namespace observer
 }// namespace oceanbase
-
 

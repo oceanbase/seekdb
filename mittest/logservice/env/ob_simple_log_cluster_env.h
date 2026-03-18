@@ -103,21 +103,6 @@ struct PalfHandleImplGuard
 private:
   DISALLOW_COPY_AND_ASSIGN(PalfHandleImplGuard);
 };
-struct PalfHandleLiteGuard
-{
-  PalfHandleLiteGuard();
-  ~PalfHandleLiteGuard();
-  bool is_valid() const;
-  palflite::PalfHandleLite *get_palf_handle_impl() const { return palf_handle_lite_; }
-  void reset();
-  TO_STRING_KV(K_(palf_id), KP_(palf_handle_lite), KP_(palf_env_lite));
-
-  int64_t palf_id_;
-  palflite::PalfHandleLite *palf_handle_lite_;
-  palflite::PalfEnvLite *palf_env_lite_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(PalfHandleLiteGuard);
-};
 class MockLocCB : public palf::PalfLocationCacheCb
 {
 public:
@@ -133,22 +118,12 @@ public:
     leader = leader_;
     return OB_SUCCESS;
   }
-  int nonblock_renew_leader(const int64_t id) override final
-  {
-    UNUSED(id);
-    return OB_SUCCESS;
-  }
   int nonblock_get_leader(const uint64_t tenant_id,
                           int64_t id,
                           common::ObAddr &leader) override final
   {
     UNUSEDx(tenant_id, id);
     leader = leader_;
-    return OB_SUCCESS;
-  }
-  int nonblock_renew_leader(const uint64_t tenant_id, int64_t id) override final
-  {
-    UNUSEDx(tenant_id, id);
     return OB_SUCCESS;
   }
 };
@@ -205,7 +180,6 @@ public:
   virtual int get_log_pool(const int64_t leader_idx, logservice::ObServerLogBlockMgr *&pool);
   virtual int get_leader(const int64_t id, PalfHandleImplGuard &leader, int64_t &leader_idx);
   virtual int get_cluster_palf_handle_guard(const int64_t palf_id, std::vector<PalfHandleImplGuard*> &palf_list);
-  virtual int get_arb_member_guard(const int64_t palf_id, PalfHandleLiteGuard &guard);
   virtual int revert_cluster_palf_handle_guard(std::vector<PalfHandleImplGuard*> &palf_list);
   virtual int get_palf_handle_guard(const std::vector<PalfHandleImplGuard*> &palf_list, const common::ObAddr &server, PalfHandleImplGuard &palf_handle);
   virtual int switch_leader(const int64_t id, const int64_t new_leader_idx, PalfHandleImplGuard &leader);

@@ -60,12 +60,10 @@ private:
   enum TENANT_STATUS_COLUMN
   {
     TENANT_NAME = common::OB_APP_MIN_COLUMN_ID,
-    HOST,
-    PORT,
     READ_ONLY,
     MAX_TENANT_STATUS_COLUMN
   };
-  static const int64_t TENANT_STATUS_COLUMN_COUNT = 4;
+  static const int64_t TENANT_STATUS_COLUMN_COUNT = 2;
   DISALLOW_COPY_AND_ASSIGN(ObShowTenantStatus);
 };
 

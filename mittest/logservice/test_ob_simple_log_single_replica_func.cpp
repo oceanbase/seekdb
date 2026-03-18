@@ -47,10 +47,6 @@ int ObLogService::start()
     CLOG_LOG(WARN, "failed to start cdc_service_", K(ret));
   } else if (OB_FAIL(restore_service_.start())) {
     CLOG_LOG(WARN, "failed to start restore_service_", K(ret));
-#ifdef OB_BUILD_ARBITRATION
-  } else if (OB_FAIL(arb_service_.start())) {
-    CLOG_LOG(WARN, "failed to start arb_service_", K(ret));
-#endif
   } else {
     is_running_ = true;
     FLOG_INFO("ObLogService is started");

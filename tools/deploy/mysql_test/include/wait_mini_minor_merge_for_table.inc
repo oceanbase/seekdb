@@ -12,7 +12,7 @@ while ($i > 0)
 {
   sleep 1;
   dec $i;
-  let $cur_minor_count = query_get_value(select count(*) > 0 as c from oceanbase.__all_virtual_tablet_compaction_history where type = 'MINOR_MERGE' and tenant_id = $__tenant_id__ and tablet_id in (select tablet_id from oceanbase.__all_virtual_tablet_to_ls where table_id = $__table_id__ and tenant_id = $__tenant_id__) and finish_time >= '$__now_time__', c, 1);
+  let $cur_minor_count = query_get_value(select count(*) > 0 as c from oceanbase.__all_virtual_tablet_compaction_history where type = 'MINOR_MERGE' and tablet_id in (select tablet_id from oceanbase.__all_virtual_tablet_to_ls where table_id = $__table_id__) and finish_time >= '$__now_time__', c, 1);
   if ($cur_minor_count > 0)
   {
     let $i = -5;

@@ -40,8 +40,10 @@ public:
       : rpc_pkt_(NULL), sh_(NULL), sc_(NULL), is_stream_(false), is_stream_end_(false),
         require_rerouting_(false), preserve_recv_data_(false), preserved_buf_(NULL),
         uncompressed_buf_(NULL), timeout_(0), using_buffer_(NULL), send_timestamp_(0), pkt_size_(0), tenant_id_(0),
-        result_compress_type_(common::INVALID_COMPRESSOR)
+        result_compress_type_(common::INVALID_COMPRESSOR),
+        skip_ash_check_(false)
   {}
+  void set_skip_ash_check() { skip_ash_check_ = true; }
 
   virtual ~ObRpcProcessorBase();
   void set_ob_request(rpc::ObRequest &req)
@@ -181,6 +183,7 @@ protected:
   int64_t tenant_id_;
   // compress the result if not INVALID_COMPRESSOR
   common::ObCompressorType result_compress_type_;
+  bool skip_ash_check_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRpcProcessorBase);
 }; // end of class ObRpcProcessorBase

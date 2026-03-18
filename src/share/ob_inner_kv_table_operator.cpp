@@ -266,9 +266,7 @@ bool ObInnerKVItemTenantIdWrapper::is_valid() const
 int ObInnerKVItemTenantIdWrapper::fill_pkey_dml(share::ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column(TENANT_ID_COLUMN_NAME, tenant_id_))) {
-    LOG_WARN("failed to add column", K(ret));
-  } else if (OB_FAIL(item_->fill_pkey_dml(dml))) {
+  if (OB_FAIL(item_->fill_pkey_dml(dml))) {
     LOG_WARN("failed to fill item pkey dml", K(ret));
   }
 
@@ -294,9 +292,9 @@ int ObInnerKVItemTenantIdWrapper::fill_dml(share::ObDMLSqlSplicer &dml) const
 int ObInnerKVItemTenantIdWrapper::parse_from(sqlclient::ObMySQLResult &result)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = OB_INVALID_TENANT_ID;
+  uint64_t tenant_id = OB_SYS_TENANT_ID;
 
-  EXTRACT_INT_FIELD_MYSQL(result, TENANT_ID_COLUMN_NAME, tenant_id, uint64_t);
+  //EXTRACT_INT_FIELD_MYSQL(result, TENANT_ID_COLUMN_NAME, tenant_id, uint64_t);
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(set_tenant_id(tenant_id))) {

@@ -26,7 +26,6 @@
 #include "share/ob_local_device.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_tablet_service.h"
-#include "storage/mock_ob_meta_report.h"
 #include "storage/mock_disk_usage_report.h"
 #include "storage/meta_mem/ob_tenant_meta_mem_mgr.h"
 #include "lib/file/file_directory_utils.h"
@@ -232,7 +231,6 @@ public:
   static compaction::ObCompactionMemoryContext mem_ctx_;
   char test_name_[100];
 
-  MockObMetaReport rs_reporter_;
   MockDiskUsageReport disk_reporter_;
 };
 

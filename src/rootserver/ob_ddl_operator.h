@@ -105,29 +105,6 @@ public:
                             common::ObMySQLTransaction &trans,
                             const common::ObString *ddl_stmt_str = NULL);
 
-  virtual int drop_tenant(const uint64_t tenant_id, common::ObMySQLTransaction &trans,
-                          const common::ObString *ddl_stmt_str = NULL);
-  virtual int alter_tenant(share::schema::ObTenantSchema &tenant_schema,
-                           common::ObMySQLTransaction &trans,
-                           const common::ObString *ddl_stmt_str = NULL);
-  virtual int rename_tenant(share::schema::ObTenantSchema &tenant_schema,
-                           common::ObMySQLTransaction &trans,
-                           const common::ObString *ddl_stmt_str = NULL);
-  virtual int delay_to_drop_tenant(share::schema::ObTenantSchema &tenant_schema,
-                                   common::ObMySQLTransaction &trans,
-                                   const common::ObString *ddl_stmt_str = NULL);
-  virtual int drop_tenant_to_recyclebin(common::ObSqlString &new_tenant_name,
-                                        share::schema::ObTenantSchema &tenant_schema,
-                                        common::ObMySQLTransaction &trans,
-                                        const common::ObString *ddl_stmt_str = NULL);
-  virtual int flashback_tenant_from_recyclebin(const share::schema::ObTenantSchema &tenant_schema,
-                                               common::ObMySQLTransaction &trans,
-                                               const common::ObString &new_tenant_name,
-                                               share::schema::ObSchemaGetterGuard &schema_guard,
-                                               const common::ObString &ddl_stmt_str);
-  virtual int purge_tenant_in_recyclebin(const share::schema::ObTenantSchema &tenant_schema,
-                                         common::ObMySQLTransaction &trans,
-                                         const common::ObString *ddl_stmt_str);
   virtual int replace_sys_variable(share::schema::ObSysVariableSchema &sys_variable_schema,
                                    const int64_t schema_version,
                                    common::ObMySQLTransaction &trans,
@@ -886,10 +863,6 @@ private:
                                common::ObMySQLTransaction &trans);
   virtual int init_tenant_srs(const uint64_t tenant_id,
                               common::ObMySQLTransaction &trans);
-  virtual int init_sys_tenant_charset(common::ObMySQLTransaction &trans);
-
-  virtual int init_sys_tenant_collation(common::ObMySQLTransaction &trans);
-  virtual int init_sys_tenant_privilege(common::ObMySQLTransaction &trans);
   int check_tenant_exist(share::schema::ObSchemaGetterGuard &schema_guard,
                          const common::ObString &tenant_name,
                          bool &is_exist);
@@ -1005,14 +978,13 @@ private:
       share::schema::ObUserInfo &user,
       common::ObMySQLTransaction &trans,
       const bool is_oracle_mode);
-
   int init_tenant_optimizer_stats_info(const share::schema::ObSysVariableSchema &sys_variable,
                                        uint64_t tenant_id,
                                        ObMySQLTransaction &trans);
-                                   
+
   int init_tenant_recompile_pl_obj(const share::schema::ObSysVariableSchema &sys_variable,
                                        uint64_t tenant_id,
-                                       ObMySQLTransaction &trans);                                   
+                                       ObMySQLTransaction &trans);
   int init_tenant_scheduled_job(
       const share::schema::ObSysVariableSchema &sys_variable,
       const uint64_t tenant_id,

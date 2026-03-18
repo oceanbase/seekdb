@@ -71,13 +71,8 @@ int ObVecITaskExecutor::resume_task()
     const bool for_update = true; // select for update
     ObVecIndexAsyncTaskOption &task_opt = index_ls_mgr->get_async_task_opt();
     ObVecIndexFieldArray filters;
-    ObVecIndexTaskStatusField field;
-    field.field_name_ = "tenant_id";
-    field.data_.uint_ = ObSchemaUtils::get_extract_tenant_id(tenant_id_, tenant_id_);
     
-    if (OB_FAIL(filters.push_back(field))) {
-      LOG_WARN("fail to push back field", K(ret));
-    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
+    if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
         tenant_id_, OB_ALL_VECTOR_INDEX_TASK_TNAME, for_update, filters, ls_,  *GCTX.sql_proxy_, task_opt))) {
       LOG_WARN("fail to resume task from inner table", K(ret), K(tenant_id_));
     }

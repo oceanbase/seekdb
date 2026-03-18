@@ -39,19 +39,18 @@ ObMajorMergeProgressChecker::ObMajorMergeProgressChecker(
     const uint64_t tenant_id, volatile bool &stop)
     : is_inited_(false), first_loop_in_cur_round_(true), stop_(stop),
       loop_cnt_(0), last_errno_(OB_SUCCESS), tenant_id_(tenant_id),
-      freeze_info_(), expected_epoch_(OB_INVALID_ID), sql_proxy_(nullptr),
-      schema_service_(nullptr), server_trace_(nullptr), progress_(),
-      tablet_status_map_(), table_compaction_map_(), fts_group_array_(), ls_locality_cache_(),
+      freeze_info_(), sql_proxy_(nullptr),
+      schema_service_(nullptr), progress_(),
+      tablet_status_map_(), table_compaction_map_(), fts_group_array_(),
       ckm_validator_(tenant_id, stop_, tablet_ls_pair_cache_, tablet_status_map_,
                      table_compaction_map_, idx_ckm_validate_array_, validator_statistics_,
-                     finish_tablet_ls_pair_array_, finish_tablet_ckm_array_, uncompact_info_, fts_group_array_, ls_locality_cache_),
+                     finish_tablet_ls_pair_array_, finish_tablet_ckm_array_, uncompact_info_, fts_group_array_),
       uncompact_info_(), total_time_guard_(), validator_statistics_(), batch_size_mgr_() {}
 
 int ObMajorMergeProgressChecker::init(
     const bool is_primary_service,
     ObMySQLProxy &sql_proxy,
     schema::ObMultiVersionSchemaService &schema_service,
-    ObIServerTrace &server_trace,
     ObMajorMergeInfoManager &merge_info_mgr)
 {
   int ret = OB_SUCCESS;
@@ -64,8 +63,6 @@ int ObMajorMergeProgressChecker::init(
     LOG_WARN("fail to create table compaction info map", KR(ret), K_(tenant_id), K(TABLE_MAP_BUCKET_CNT));
   } else if (OB_FAIL(ckm_validator_.init(is_primary_service, sql_proxy))) {
     LOG_WARN("fail to init checksum validator", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(ls_locality_cache_.init(tenant_id_, &merge_info_mgr))) {
-    LOG_WARN("failed to init ls locality cache", K(ret));
   } else {
     (void) tablet_ls_pair_cache_.set_tenant_id(tenant_id_);
     idx_ckm_validate_array_.set_attr(ObMemAttr(tenant_id_, "RSCompCkmPair"));
@@ -73,7 +70,6 @@ int ObMajorMergeProgressChecker::init(
     finish_tablet_ckm_array_.set_attr(ObMemAttr(tenant_id_, "RSCompCkmArray"));
     sql_proxy_ = &sql_proxy;
     schema_service_ = &schema_service;
-    server_trace_ = &server_trace;
     merge_info_mgr_ = &merge_info_mgr;
     is_inited_ = true;
   }
@@ -99,21 +95,19 @@ int ObMajorMergeProgressChecker::rebuild_tablet_status_map()
 }
 
 int ObMajorMergeProgressChecker::set_basic_info(
-    const share::ObFreezeInfo &freeze_info,
-    const int64_t expected_epoch)
+    const share::ObFreezeInfo &freeze_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!freeze_info.is_valid() || expected_epoch < 0)) {
+  if (OB_UNLIKELY(!freeze_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K_(tenant_id), K(freeze_info), K(expected_epoch));
+    LOG_WARN("invalid argument", KR(ret), K_(tenant_id), K(freeze_info));
   } else if (OB_FAIL(clear_cached_info())) {
     LOG_WARN("fail to clear cached info", KR(ret));
-  } else if (OB_FAIL(ckm_validator_.set_basic_info(freeze_info, expected_epoch))) {
-    LOG_WARN("failed to set basic info", KR(ret), K(freeze_info), K(expected_epoch));
+  } else if (OB_FAIL(ckm_validator_.set_basic_info(freeze_info))) {
+    LOG_WARN("failed to set basic info", KR(ret), K(freeze_info));
   } else {
     freeze_info_ = freeze_info;
-    expected_epoch_ = expected_epoch;
-    LOG_INFO("success to set basic info", KR(ret), "compaction_scn", get_compaction_scn(), K_(expected_epoch));
+    LOG_INFO("success to set basic info", KR(ret), "compaction_scn", get_compaction_scn());
   }
   return ret;
 }
@@ -128,7 +122,6 @@ int ObMajorMergeProgressChecker::clear_cached_info()
   } else {
     LOG_INFO("success to clear cached info", KR(ret), K_(tenant_id), "compaction_scn", get_compaction_scn());
     freeze_info_.reset();
-    expected_epoch_ = OB_INVALID_ID;
     first_loop_in_cur_round_ = true;
     table_ids_.reset();
     idx_ckm_validate_array_.reset();
@@ -178,8 +171,6 @@ int ObMajorMergeProgressChecker::check_verification(
         ret = tmp_ret;
         if (OB_CHECKSUM_ERROR == ret) {
           LOG_ERROR("checksum error", KR(ret), K(table_id));
-        } else if (OB_FREEZE_SERVICE_EPOCH_MISMATCH == ret) {
-          LOG_INFO("freeze service epoch mismatch", KR(ret));
         }
       } else {
         LOG_WARN("failed to verify table", KR(tmp_ret), K(idx), K(table_id), KPC(table_compaction_info_ptr));
@@ -274,8 +265,7 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
         } else if (OB_TMP_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(tenant_id_,
                                                                                             get_compaction_scn_val(),
                                                                                             finish_tablet_ls_pair_array_,
-                                                                                            ObTabletReplica::ScnStatus::SCN_STATUS_ERROR /*except_status*/,
-                                                                                            expected_epoch_))) {
+                                                                                            ObTabletReplica::ScnStatus::SCN_STATUS_ERROR /*except_status*/))) {
           LOG_WARN("fail to batch update report_scn", KR(tmp_ret), K_(tenant_id), K_(finish_tablet_ls_pair_array));
         } else {
           LOG_INFO("success to batch update report_scn", K_(tenant_id), "table_cnt", finish_tablet_ls_pair_array_.count());
@@ -616,9 +606,7 @@ int ObMajorMergeProgressChecker::prepare_check_progress(
   int ret = OB_SUCCESS;
   exist_uncompacted_table = true;
   table_ids_.start_looping();
-  if (OB_FAIL(ls_locality_cache_.refresh_ls_locality(first_loop_in_cur_round_ /*force_refresh*/))) {
-    LOG_WARN("failed to refresh ls locality", K(ret));
-  } else if (first_loop_in_cur_round_) {
+  if (first_loop_in_cur_round_) {
     total_time_guard_.reuse();
     if (OB_FAIL(prepare_unfinish_table_ids())) {
       LOG_WARN("fail to prepare table_id_map", KR(ret), K_(tenant_id));
@@ -675,7 +663,7 @@ int ObMajorMergeProgressChecker::check_index_and_rest_table()
 #endif
     if (OB_FAIL(ckm_validator_.deal_with_special_table_at_last(finish_validate))) {
       LOG_WARN("fail to handle table with first tablet in sys ls", KR(ret), K_(tenant_id),
-        "compaction_scn", get_compaction_scn(), K_(expected_epoch));
+        "compaction_scn", get_compaction_scn());
     } else if (finish_validate) {
       progress_.deal_with_special_tablet();
     }
@@ -699,9 +687,9 @@ int ObMajorMergeProgressChecker::check_progress()
   } else if (stop_) {
     ret = OB_CANCELED;
     LOG_WARN("already stop", KR(ret), K_(tenant_id));
-  } else if (OB_UNLIKELY(expected_epoch_ < 0 || !freeze_info_.is_valid())) {
+  } else if (OB_UNLIKELY(!freeze_info_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cached info may be cleared", KR(ret), K_(expected_epoch), "compaction_scn", get_compaction_scn());
+    LOG_WARN("cached info may be cleared", KR(ret), "compaction_scn", get_compaction_scn());
   } else if (OB_FAIL(prepare_check_progress(tmp_time_guard, exist_uncompacted_table))) {
     LOG_WARN("failed to prepare check progress", KR(ret));
   } else {
@@ -718,10 +706,7 @@ int ObMajorMergeProgressChecker::check_progress()
       ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK);
       int64_t last_epoch_check_us = 0;
       while (OB_SUCC(ret) && !table_ids_.loop_finish() && !stop_) { // split batch table_ids
-        if (OB_FAIL(ObMajorFreezeUtil::check_epoch_periodically(
-                *sql_proxy_, tenant_id_, expected_epoch_, last_epoch_check_us))) {
-          LOG_WARN("fail to check freeze service epoch", KR(ret), K_(tenant_id), K_(expected_epoch), "compaction_scn", get_compaction_scn());
-        } else if (OB_FAIL(schema_service_->get_tenant_refreshed_schema_version(tenant_id_, tenant_schema_version))) {
+        if (OB_FAIL(schema_service_->get_tenant_refreshed_schema_version(tenant_id_, tenant_schema_version))) {
           LOG_WARN("failed to get schema version", K(ret), K_(tenant_id));
         } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard,
             tenant_schema_version, OB_INVALID_VERSION,
@@ -738,7 +723,7 @@ int ObMajorMergeProgressChecker::check_progress()
 #endif
         if (FAILEDx(check_verification(schema_guard, unfinish_table_id_array))) {
           // check tablet_replica_checksum & table_index_checksum & cross_cluter_checksum
-          LOG_WARN("failed to check verification", KR(ret), "compaction_scn", get_compaction_scn(), K_(expected_epoch));
+          LOG_WARN("failed to check verification", KR(ret), "compaction_scn", get_compaction_scn());
           // only record OB_CHECKSUM_ERROR, and thus avoid confusing DBA
           if (TC_REACH_TIME_INTERVAL(ADD_RS_EVENT_INTERVAL) && (OB_CHECKSUM_ERROR == ret)) {
             ROOTSERVICE_EVENT_ADD("daily_merge", "verification", K_(tenant_id),
@@ -1088,7 +1073,7 @@ int ObMajorMergeProgressChecker::generate_tablet_status_map()
   int64_t idx = 0;
   bool filter = false;
   ObCompactionTabletMetaIterator iter(!is_extra_check_round(), get_compaction_scn_val());
-  if (OB_FAIL(iter.init(tenant_id_, batch_size_mgr_.get_inner_table_scan_batch_size(), *server_trace_))) {
+  if (OB_FAIL(iter.init(tenant_id_, batch_size_mgr_.get_inner_table_scan_batch_size()))) {
     LOG_WARN("failed to init iter", KR(ret));
   }
   while (OB_SUCC(ret) && !stop_) {
@@ -1107,47 +1092,9 @@ int ObMajorMergeProgressChecker::generate_tablet_status_map()
       SCN replica_snapshot_scn;
       SCN report_scn;
       const ObLSID &ls_id = tablet_info.get_ls_id();
-      ObLSInfo ls_info;
-      if (OB_FAIL(ls_locality_cache_.get_ls_info(ls_id, ls_info))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-          LOG_TRACE("can't find ls_info from ls_locality_cache", KR(ret), K(ls_id), K_(tenant_id));
-          continue;
-        } else {
-          LOG_WARN("fail to get ls_info from ls_locality_cache", KR(ret), K(ls_id), K_(tenant_id));
-        }
-      }
-      const ObLSReplica *ls_replica = nullptr;
       FOREACH_CNT_X(replica, tablet_info.get_replicas(), OB_SUCC(ret)) {
         filter = false;
-        if (!ls_info.is_valid()) {
-          // do nothing
-          LOG_TRACE("ls info is invalid", KR(ret), K(ls_id), K_(tenant_id), K(ls_info));
-        } else if (OB_FAIL(ls_info.find(replica->get_server(), ls_replica))) {
-          if (OB_ENTRY_NOT_EXIST == ret) {
-            // Ignore tablet replicas that are not in ls_info. E.g., after ls replica migration,
-            // source ls meta has been deleted, but source tablet meta has not been deleted yet.
-            ret = OB_SUCCESS;  // ignore ret
-            filter = true;
-            if (REACH_TIME_INTERVAL(10_s)) {
-              LOG_INFO("ignore this tablet replica, sicne it is not in ls_info", K_(tenant_id),
-                    KPC(replica), K(ls_info));
-            }
-          } else {
-            LOG_WARN("fail to find ls replica", KR(ret), KPC(replica), K_(tenant_id));
-          }
-        } else if (OB_UNLIKELY(nullptr == ls_replica)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid ls replica", KR(ret), KPC(replica));
-        } else if ((REPLICA_TYPE_LOGONLY == ls_replica->get_replica_type()
-            || REPLICA_TYPE_ENCRYPTION_LOGONLY == ls_replica->get_replica_type())) {
-          // logonly replica no need check
-          filter = true;
-        }
-        if (OB_FAIL(ret) || filter) {
-          // replica is filtered
-          // do nothing
-        } else if (OB_FAIL(replica_snapshot_scn.convert_for_tx(replica->get_snapshot_version()))) {
+        if (OB_FAIL(replica_snapshot_scn.convert_for_tx(replica->get_snapshot_version()))) {
           LOG_WARN("fail to convert val to SCN", KR(ret), KPC(replica));
         } else if (OB_UNLIKELY(ObTabletReplica::ScnStatus::SCN_STATUS_ERROR == replica->get_status())) {
           ret = OB_CHECKSUM_ERROR;

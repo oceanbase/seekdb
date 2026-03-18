@@ -21,7 +21,6 @@
 #include "storage/meta_mem/ob_tablet_map_key.h"
 #include "storage/ob_super_block_struct.h"
 #include "storage/ls/ob_ls_meta.h"
-#include "storage/high_availability/ob_tablet_transfer_info.h"
 #include "storage/slog_ckpt/ob_tenant_storage_checkpoint_reader.h"
 #include "storage/slog_ckpt/ob_tenant_storage_checkpoint_writer.h"
 #include "storage/slog/ob_storage_log_struct.h"

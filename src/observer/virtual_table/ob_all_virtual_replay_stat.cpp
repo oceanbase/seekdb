@@ -80,24 +80,6 @@ int ObAllVirtualReplayStat::insert_stat_(logservice::LSReplayStat &replay_stat)
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case OB_APP_MIN_COLUMN_ID:
-        cur_row_.cells_[i].set_int(MTL_ID());
-        break;
-      case OB_APP_MIN_COLUMN_ID + 1:
-        cur_row_.cells_[i].set_int(replay_stat.ls_id_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 2:
-        if (false == GCTX.self_addr().ip_to_string(ip_, common::OB_IP_PORT_STR_BUFF)) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "ip_to_string failed", K(ret));
-        } else {
-          cur_row_.cells_[i].set_varchar(ObString::make_string(ip_));
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        }
-        break;
-      case OB_APP_MIN_COLUMN_ID + 3:
-        cur_row_.cells_[i].set_int(GCTX.self_addr().get_port());
-        break;
-      case OB_APP_MIN_COLUMN_ID + 4:
         if (OB_FAIL(role_to_string(replay_stat.role_, role_str_, sizeof(role_str_)))) {
           SERVER_LOG(WARN, "role_to_string failed", K(ret), K(replay_stat));
         } else {
@@ -106,21 +88,21 @@ int ObAllVirtualReplayStat::insert_stat_(logservice::LSReplayStat &replay_stat)
                                                 ObCharset::get_default_charset()));
         }
         break;
-      case OB_APP_MIN_COLUMN_ID + 5:
+      case OB_APP_MIN_COLUMN_ID + 1:
         cur_row_.cells_[i].set_uint64(replay_stat.end_lsn_.val_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 6:
+      case OB_APP_MIN_COLUMN_ID + 2:
         cur_row_.cells_[i].set_bool(replay_stat.enabled_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 7:
+      case OB_APP_MIN_COLUMN_ID + 3:
         //TODO:SCN
         cur_row_.cells_[i].set_uint64(replay_stat.unsubmitted_lsn_.val_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 8: {
+      case OB_APP_MIN_COLUMN_ID + 4: {
         cur_row_.cells_[i].set_uint64(replay_stat.unsubmitted_scn_.get_val_for_inner_table_field());
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 9:
+      case OB_APP_MIN_COLUMN_ID + 5:
         cur_row_.cells_[i].set_int(replay_stat.pending_cnt_);
         break;
       default:

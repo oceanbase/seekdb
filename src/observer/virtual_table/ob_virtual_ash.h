@@ -46,11 +46,8 @@ protected:
 protected:
   enum COLUMN_ID
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    SAMPLE_ID,
+    SAMPLE_ID = common::OB_APP_MIN_COLUMN_ID,
     SAMPLE_TIME,
-    TENANT_ID,
     USER_ID,
     SESSION_ID,
     SESSION_TYPE,

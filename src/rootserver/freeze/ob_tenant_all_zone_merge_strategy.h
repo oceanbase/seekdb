@@ -23,7 +23,6 @@ namespace oceanbase
 {
 namespace rootserver
 {
-class ObZoneManager;
 
 class ObTenantAllZoneMergeStrategy : public ObTenantMajorMergeStrategy
 {

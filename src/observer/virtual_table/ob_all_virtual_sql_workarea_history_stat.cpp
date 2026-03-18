@@ -142,20 +142,11 @@ int ObSqlWorkareaHistoryStat::fill_row(
   common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
+  UNUSED(tenant_id);
   ObObj *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
-      case SVR_IP: {
-        cells[cell_idx].set_varchar(ipstr_);
-        cells[cell_idx].set_collation_type(
-          ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-        break;
-      }
       case PLAN_ID: {
         cells[cell_idx].set_int(wa_stat.get_plan_id());
         break;
@@ -236,10 +227,6 @@ int ObSqlWorkareaHistoryStat::fill_row(
       }
       case LAST_TEMPSEG_SIZE: {
         cells[cell_idx].set_int(wa_stat.get_last_temp_size());
-        break;
-      }
-      case TENAND_ID: {
-        cells[cell_idx].set_int(tenant_id);
         break;
       }
       case POLICY: {

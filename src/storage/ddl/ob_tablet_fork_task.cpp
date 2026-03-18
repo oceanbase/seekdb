@@ -1773,7 +1773,7 @@ int ObTabletForkUtil::freeze_tablet(
     LOG_WARN("invalid arguments", K(ret), K(ls_id), K(tablet_id));
   } else {
     // Freeze the tablet
-    const bool is_sync = true;
+    const bool is_sync = false;
     const int64_t max_retry_time_us = 0; // Not used for sync freeze
     const bool need_rewrite_tablet_meta = false;
     const ObFreezeSourceFlag source = ObFreezeSourceFlag::FREEZE_TRIGGER;

@@ -405,16 +405,6 @@ public:
     UNUSEDx(member, new_replica_num, timeout_us);
     return ret;
   }
-  int add_arbitration_member(const common::ObMember &added_member, const int64_t timeout_us)
-  {
-    UNUSEDx(added_member, timeout_us);
-    return OB_SUCCESS;
-  }
-  int remove_arbitration_member(const common::ObMember &removed_member, const int64_t timeout_us)
-  {
-    UNUSEDx(removed_member, timeout_us);
-    return OB_SUCCESS;
-  }
   int degrade_acceptor_to_learner(const palf::LogMemberAckInfoList &degrade_servers,
                                   const int64_t timeout_us)
   {

@@ -5025,32 +5025,7 @@ int ObLSBackupPrepareTask::get_sys_ls_turn_and_retry_id_(int64_t &turn_id, int64
 
 int ObLSBackupPrepareTask::check_ls_created_after_backup_start_(const ObLSID &ls_id, bool &created_after_backup)
 {
-  int ret = OB_SUCCESS;
-  ObBackupDataStore store;
-  ObBackupDataLSAttrDesc ls_info;
-  created_after_backup = true;
-  ObBackupSetTaskAttr task_attr;
-  common::ObMySQLProxy *sql_proxy = nullptr;
-  if (!ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_id));
-  } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql prxoy must not be null", K(ret));
-  } else if (OB_FAIL(ObBackupTaskOperator::get_backup_task(
-        *sql_proxy, param_.job_desc_.job_id_, param_.tenant_id_, false, task_attr))) {
-    LOG_WARN("failed to get backup task", K(ret), K_(param));
-  } else if (OB_FAIL(store.init(param_.backup_dest_, param_.backup_set_desc_))) {
-    LOG_WARN("failed to init backup data source", K(ret), K_(param));
-  } else if (OB_FAIL(store.read_ls_attr_info(task_attr.meta_turn_id_, ls_info))) {
-    LOG_WARN("failed to readd ls attr info", K(ret));
-  } else {
-    ARRAY_FOREACH(ls_info.ls_attr_array_, i) {
-      if (ls_info.ls_attr_array_.at(i).get_ls_id() == ls_id) {
-        created_after_backup = false;
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

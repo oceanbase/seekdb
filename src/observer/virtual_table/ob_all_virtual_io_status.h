@@ -52,9 +52,7 @@ public:
 private:
   enum COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    STORAGE_NAME,
+        STORAGE_NAME = common::OB_APP_MIN_COLUMN_ID,
     STATUS,
     START_TIME,
     FINISH_TIME,
@@ -78,9 +76,7 @@ public:
 private:
   enum COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    STORAGE_NAME,
+        STORAGE_NAME = common::OB_APP_MIN_COLUMN_ID,
     MODE,
     SIZE,
     IOPS,
@@ -107,10 +103,7 @@ public:
 private:
   enum COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    GROUP_ID,
+        GROUP_ID = common::OB_APP_MIN_COLUMN_ID,
     MODE,
     SIZE,
     MIN_IOPS,
@@ -165,10 +158,7 @@ public:
 private:
   enum COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    GROUP_ID,
+        GROUP_ID = common::OB_APP_MIN_COLUMN_ID,
     GROUP_NAME,
     MODE,
     MIN_IOPS,
@@ -239,10 +229,7 @@ public:
 private:
   enum COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    FUNCTION_NAME,
+        FUNCTION_NAME = common::OB_APP_MIN_COLUMN_ID,
     MODE,
     SIZE,
     REAL_IOPS,

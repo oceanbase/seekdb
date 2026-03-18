@@ -20,7 +20,6 @@
 #include "storage/tx/ob_trans_service.h"
 #include "lib/string/ob_sql_string.h"
 #include "rpc/obrpc/ob_rpc_proxy.h"
-#include "share/ob_rs_mgr.h"
 #include "share/ob_srv_rpc_proxy.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/tx/ob_gts_rpc.h"
@@ -37,7 +36,6 @@
 
 #include "mock_ob_schema_service.h"
 #include "../../share/schema/mock_schema_service.h"
-#include "share/ob_alive_server_tracer.h"
 
 #define MAX_PATH_SIZE 1024
 #define DATADIR "data"
@@ -112,7 +110,6 @@ protected:
   //MockObSchemaService schema_service_;
   ObRestoreSchema restore_schema_;
   MockSchemaService *schema_service_;
-  share::ObRsMgr rs_mgr_;
   ObGlobalContext &gctx_;
   ObSrvNetworkFrame net_frame_;
   obrpc::ObBatchRpc batch_rpc_;
@@ -121,7 +118,6 @@ protected:
   MockRootRpcProxy rs_rpc_proxy_;
   ObService ob_service_;
   ObSQLSessionMgr session_mgr_;
-  share::ObAliveServerTracer server_tracer_;
   int64_t warm_up_start_time_;
 protected:
   ObServerOptions opts_;

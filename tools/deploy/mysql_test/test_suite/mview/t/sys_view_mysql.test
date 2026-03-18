@@ -28,8 +28,6 @@ select * from information_schema.partitions where table_name='mv' order by 1,2,3
 
 select * from oceanbase.DBA_TAB_SUBPARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
 select * from oceanbase.DBA_TAB_PARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
---replace_column 3 "table_id" 9 "tablet_id" 10 "ls_id" 12 "ip" 13 "port" 18 "object_id"
-select * from oceanbase.DBA_OB_TABLE_LOCATIONS where table_name='mv' and role='LEADER' order by 1,2,3,4,5,6,7;
 select * from oceanbase.DBA_PART_INDEXES where table_name='mv' order by 1,2,3,4,5,6,7;
 
 connect (obsys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
@@ -38,8 +36,6 @@ connection obsys;
 select * from oceanbase.CDB_TAB_SUBPARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
 --replace_column 1 "tenant_id"
 select * from oceanbase.CDB_TAB_PARTITIONS where table_name='mv' order by 1,2,3,4,5,6,7;
---replace_column 1 "tenant_id" 4 "table_id" 10 "tablet_id" 11 "ls_id" 13 "ip" 14 "port" 19 "object_id"
-select * from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name='mv' and role='LEADER' order by 1,2,3,4,5,6,7;
 --replace_column 1 "tenant_id"
 select * from oceanbase.CDB_PART_INDEXES where table_name='mv' order by 1,2,3,4,5,6,7;
 --replace_column 1 "tenant_id"

@@ -20,13 +20,11 @@
 #include <gmock/gmock.h>
 
 #include "logservice/palf/palf_options.h"
-#include "share/ob_alive_server_tracer.h"
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "storage/slog/ob_storage_logger_manager.h"
 #include "storage/slog/ob_storage_logger.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 #include "lib/file/file_directory_utils.h"
-#include "storage/mock_ob_meta_report.h"
 
 namespace oceanbase
 {
@@ -71,10 +69,8 @@ private:
   share::ObLocationService location_service_;
   obrpc::ObBatchRpc batch_rpc_;
   share::schema::ObMultiVersionSchemaService schema_service_;
-  share::ObAliveServerTracer server_tracer_;
   palf::PalfDiskOptions disk_options_;
   rpc::frame::ObReqTransport req_transport_;
-  MockObMetaReport reporter_;
   ObAddr self_addr_;
   char dir_[128];
   blocksstable::ObLogFileSpec log_file_spec_;

@@ -28,6 +28,54 @@ using namespace share::schema;
 namespace observer
 {
 
+static OB_INLINE bool is_safe_tail3_key_obj(const common::ObObj &obj)
+{
+  bool ret = true;
+  // Allow MIN/MAX sentinel to avoid type mismatch comparisons.
+  if (obj.is_min_value() || obj.is_max_value()) {
+    ret = true;
+  } else {
+    const common::ObObjTypeClass tc = obj.get_type_class();
+    ret = (tc == common::ObIntTC
+           || tc == common::ObUIntTC
+           || tc == common::ObNumberTC
+           || tc == common::ObDecimalIntTC);
+  }
+  return ret;
+}
+
+static OB_INLINE bool normalize_key_range_to_tail3(
+    const common::ObNewRange &in,
+    common::ObNewRange &out3,
+    common::ObObj (&sk3)[3],
+    common::ObObj (&ek3)[3])
+{
+  bool ret = true;
+  const int64_t sk_len = in.start_key_.length();
+  const int64_t ek_len = in.end_key_.length();
+  if (sk_len < 3 || ek_len < 3) {
+    ret = false;
+  } else {
+    const common::ObObj *sk = in.start_key_.get_obj_ptr() + (sk_len - 3);
+    const common::ObObj *ek = in.end_key_.get_obj_ptr() + (ek_len - 3);
+    if (!(is_safe_tail3_key_obj(sk[0]) && is_safe_tail3_key_obj(sk[1]) && is_safe_tail3_key_obj(sk[2])
+          && is_safe_tail3_key_obj(ek[0]) && is_safe_tail3_key_obj(ek[1]) && is_safe_tail3_key_obj(ek[2]))) {
+      ret = false;
+    } else {
+      sk3[0] = sk[0]; sk3[1] = sk[1]; sk3[2] = sk[2];
+      ek3[0] = ek[0]; ek3[1] = ek[1]; ek3[2] = ek[2];
+      out3.table_id_ = in.table_id_;
+      out3.start_key_.assign(sk3, 3);
+      out3.end_key_.assign(ek3, 3);
+      // Keep conservative (closed) border to avoid skipping too aggressively.
+      out3.border_flag_.set_inclusive_start();
+      out3.border_flag_.set_inclusive_end();
+      ret = true;
+    }
+  }
+  return ret;
+}
+
 ObAllVirtualTabletSSTableMacroInfo::MacroInfo::MacroInfo()
   : data_seq_(0),
     macro_logic_version_(0),
@@ -75,7 +123,6 @@ ObAllVirtualTabletSSTableMacroInfo::ObAllVirtualTabletSSTableMacroInfo()
     tablet_allocator_("VTTable"),
     tablet_handle_(),
     cols_desc_(),
-    ls_id_(share::ObLSID::INVALID_LS_ID),
     table_store_iter_(),
     curr_sstable_(nullptr),
     curr_sstable_meta_handle_(),
@@ -99,7 +146,6 @@ void ObAllVirtualTabletSSTableMacroInfo::reset()
 {
   omt::ObMultiTenantOperator::reset();
   addr_.reset();
-  ls_id_ = share::ObLSID::INVALID_LS_ID;
 
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
@@ -333,15 +379,29 @@ int ObAllVirtualTabletSSTableMacroInfo::set_key_ranges(const ObIArray<ObNewRange
     for (int64_t i = 0; OB_SUCC(ret) && i < key_ranges.count(); ++i) {
       const ObNewRange &key_range = key_ranges.at(i);
       ObNewRange range = key_range;
-      range.start_key_.set_length(range.start_key_.length() - 1);
-      range.end_key_.set_length(range.end_key_.length() - 1);
       range.border_flag_.set_inclusive_start();
       range.border_flag_.set_inclusive_end();
-      if (key_range.start_key_.ptr()[key_range.start_key_.length() -1].is_max_value()) {
-        range.border_flag_.unset_inclusive_start();
+      // Some scan params append a tail MIN/MAX obj to represent open interval.
+      // Make it robust: only trim when the tail is MIN/MAX.
+      const int64_t sk_len = key_range.start_key_.length();
+      if (sk_len > 0) {
+        const ObObj &sk_tail = key_range.start_key_.ptr()[sk_len - 1];
+        if (sk_tail.is_max_value() || sk_tail.is_min_value()) {
+          range.start_key_.set_length(sk_len - 1);
+        }
+        if (sk_tail.is_max_value()) {
+          range.border_flag_.unset_inclusive_start();
+        }
       }
-      if (key_range.end_key_.ptr()[key_range.end_key_.length() -1].is_min_value()) {
-        range.border_flag_.unset_inclusive_end();
+      const int64_t ek_len = key_range.end_key_.length();
+      if (ek_len > 0) {
+        const ObObj &ek_tail = key_range.end_key_.ptr()[ek_len - 1];
+        if (ek_tail.is_max_value() || ek_tail.is_min_value()) {
+          range.end_key_.set_length(ek_len - 1);
+        }
+        if (ek_tail.is_min_value()) {
+          range.border_flag_.unset_inclusive_end();
+        }
       }
       if (OB_FAIL(key_ranges_.push_back(range))) {
         SERVER_LOG(WARN, "push_back failed", K(ret));
@@ -364,23 +424,6 @@ int ObAllVirtualTabletSSTableMacroInfo::gen_row(
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
-      case SVR_IP:
-        //svr_ip
-        cur_row_.cells_[i].set_varchar(ip_buf_);
-        cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      case SVR_PORT:
-        //svr_port
-        cur_row_.cells_[i].set_int(addr_.get_port());
-        break;
-      case TENANT_ID:
-        //tenant_id
-        cur_row_.cells_[i].set_int(MTL_ID());
-        break;
-      case LS_ID:
-        //ls_id
-        cur_row_.cells_[i].set_int(ls_id_);
-        break;
       case TABLET_ID:
         //tablet_id
         cur_row_.cells_[i].set_int(table_key.tablet_id_.id());
@@ -614,7 +657,6 @@ int ObAllVirtualTabletSSTableMacroInfo::get_next_tablet()
     	  } else if (OB_FAIL(ObMultiVersionRowkeyHelpper::add_extra_rowkey_cols(cols_desc_))) {
     	    SERVER_LOG(WARN, "fail to add extra rowkey info, ", K(ret));
     	  } else {
-          ls_id_ = tablet_handle_.get_obj()->get_tablet_meta().ls_id_.id();
     	    break;
     	  }
       }
@@ -688,113 +730,101 @@ int ObAllVirtualTabletSSTableMacroInfo::get_next_sstable()
 
 bool ObAllVirtualTabletSSTableMacroInfo::check_tenant_need_ignore(uint64_t tenant_id)
 {
-  int ret = OB_SUCCESS;
-  ObNewRange range;
-  bool need_ignore = true;
-
-  int index = 0;
-  objs_[index].set_varchar(ip_buf_);
-  objs_[index].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-  index++;
-  objs_[index++].set_int(ObServerConfig::get_instance().self_addr_.get_port());
-  objs_[index++].set_int(tenant_id); // Do not use MTL_ID here
-
-  ObRowkey rowkey(objs_, index + 4);
-  for (int64_t i = 0; i < key_ranges_.count() && need_ignore; ++i) {
-    if (key_ranges_.at(i).border_flag_.inclusive_start()) {
-      objs_[index] = key_ranges_.at(i).start_key_.get_obj_ptr()[index]; // ls_id
-      objs_[index+1] = key_ranges_.at(i).start_key_.get_obj_ptr()[index+1]; // tablet_id
-      objs_[index+2] = key_ranges_.at(i).start_key_.get_obj_ptr()[index+2]; // end_log_scn
-      objs_[index+3] = key_ranges_.at(i).start_key_.get_obj_ptr()[index+3]; // macro_idx_in_sstable
-    } else {
-      objs_[index].set_int(key_ranges_.at(i).start_key_.get_obj_ptr()[index].get_int() + 1);
-      objs_[index+1].set_int(key_ranges_.at(i).start_key_.get_obj_ptr()[index+1].get_int() + 1);
-      objs_[index+2].set_uint64(key_ranges_.at(i).start_key_.get_obj_ptr()[index+2].get_uint64() + 1);
-      objs_[index+3].set_int(key_ranges_.at(i).start_key_.get_obj_ptr()[index+3].get_int() + 1);
-    }
-    if (OB_FAIL(range.build_range(OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID, rowkey))) {
-      SERVER_LOG(WARN, "build_range failed", K(ret), K(rowkey));
-    } else if (key_ranges_.at(i).include(range)) {
-      need_ignore = false;
-    }
-  }
-  if (OB_FAIL(ret)) {
-    need_ignore = false; // if error, wont skip
-  }
-  SERVER_LOG(DEBUG, "sstable_macro_info try to skip tenant", K(ret), K(need_ignore), K(range), K(tenant_id));
-  return need_ignore;
+  // In this feature branch, rowkey of __all_virtual_tablet_sstable_macro_info is:
+  //   (tablet_id, end_log_scn, macro_idx_in_sstable)
+  // It doesn't contain tenant_id/svr_ip/svr_port/ls_id, so we cannot safely prune tenants by key_ranges_.
+  UNUSED(tenant_id);
+  return false;
 }
 
 bool ObAllVirtualTabletSSTableMacroInfo::check_tablet_need_ignore(const ObTabletMeta &tablet_meta)
 {
-  int ret = OB_SUCCESS;
-  ObNewRange range;
   bool need_ignore = true;
+  ObNewRange tablet_range;
+  if (key_ranges_.empty()) {
+    need_ignore = false;
+  } else {
+    ObObj start_objs[3];
+    ObObj end_objs[3];
+    start_objs[0].set_int(tablet_meta.tablet_id_.id());
+    start_objs[1].set_min_value();
+    start_objs[2].set_min_value();
+    end_objs[0].set_int(tablet_meta.tablet_id_.id());
+    end_objs[1].set_max_value();
+    end_objs[2].set_max_value();
 
-  int index = 0;
-  objs_[index].set_varchar(ip_buf_);
-  objs_[index].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-  index++;
-  objs_[index++].set_int(ObServerConfig::get_instance().self_addr_.get_port());
-  objs_[index++].set_int(MTL_ID()); // tenant_id
-  objs_[index++].set_int(tablet_meta.ls_id_.id()); // ls_id
-  objs_[index++].set_int(tablet_meta.tablet_id_.id()); // tablet_id
+    tablet_range.table_id_ = OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID;
+    tablet_range.start_key_.assign(start_objs, 3);
+    tablet_range.end_key_.assign(end_objs, 3);
+    tablet_range.border_flag_.set_inclusive_start();
+    tablet_range.border_flag_.set_inclusive_end();
 
-  ObRowkey rowkey(objs_, index + 2);
-  for (int64_t i = 0; i < key_ranges_.count() && need_ignore; ++i) {
-    if (key_ranges_.at(i).border_flag_.inclusive_start()) {
-      objs_[index] = key_ranges_.at(i).start_key_.get_obj_ptr()[index]; // end_log_scn
-      objs_[index+1] = key_ranges_.at(i).start_key_.get_obj_ptr()[index+1]; // macro_idx_in_sstable
-    } else {
-      objs_[index].set_uint64(key_ranges_.at(i).start_key_.get_obj_ptr()[index].get_uint64() + 1);
-      objs_[index+1].set_int(key_ranges_.at(i).start_key_.get_obj_ptr()[index+1].get_int() + 1);
-    }
-    if (OB_FAIL(range.build_range(OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID, rowkey))) {
-      SERVER_LOG(WARN, "build_range failed", K(ret), K(rowkey));
-    } else if (key_ranges_.at(i).include(range)) {
-      need_ignore = false;
+    for (int64_t i = 0; i < key_ranges_.count() && need_ignore; ++i) {
+      const ObNewRange &kr = key_ranges_.at(i);
+      if (kr.table_id_ != OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID) {
+        need_ignore = false; // unexpected, do not skip
+      } else {
+        ObNewRange kr3;
+        ObObj sk3[3];
+        ObObj ek3[3];
+        if (!normalize_key_range_to_tail3(kr, kr3, sk3, ek3)) {
+          need_ignore = false; // cannot safely compare, do not skip
+        } else if (kr3.compare_endkey_with_startkey(tablet_range) >= 0
+            && tablet_range.compare_endkey_with_startkey(kr3) >= 0) {
+          need_ignore = false;
+        }
+      }
     }
   }
-  if (OB_FAIL(ret)) {
-    need_ignore = false; // if error, wont skip
-  }
-  SERVER_LOG(DEBUG, "sstable_macro_info try to skip tablet", K(ret), K(need_ignore), K(range), K(tablet_meta));
+  SERVER_LOG(DEBUG, "sstable_macro_info try to skip tablet", K(need_ignore), K(tablet_range), K(tablet_meta));
   return need_ignore;
 }
 
-
 bool ObAllVirtualTabletSSTableMacroInfo::check_sstable_need_ignore(const ObITable::TableKey &table_key)
 {
-  int ret = OB_SUCCESS;
-  ObNewRange range;
   bool need_ignore = true;
-  int index = 0;
-  objs_[index].set_varchar(ip_buf_);
-  objs_[index].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-  index++;
-  objs_[index++].set_int(ObServerConfig::get_instance().self_addr_.get_port());
-  objs_[index++].set_int(MTL_ID()); // tenant_id
-  objs_[index++].set_int(ls_id_); // ls_id
-  objs_[index++].set_int(table_key.tablet_id_.id()); // tablet_id
-  objs_[index++].set_uint64(!table_key.get_end_scn().is_valid() ? 0 : table_key.get_end_scn().get_val_for_inner_table_field());
+  ObNewRange sstable_range;
 
-  ObRowkey rowkey(objs_, index + 1);
-  for (int64_t i = 0; i < key_ranges_.count() && need_ignore; ++i) {
-    if (key_ranges_.at(i).border_flag_.inclusive_start()) {
-      objs_[index] = key_ranges_.at(i).start_key_.get_obj_ptr()[index]; // macro_idx_in_sstable
-    } else {
-      objs_[index].set_int(key_ranges_.at(i).start_key_.get_obj_ptr()[index].get_int() + 1);
-    }
-    if (OB_FAIL(range.build_range(OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID, rowkey))) {
-      SERVER_LOG(WARN, "build_range failed", K(ret), K(rowkey));
-    } else if (key_ranges_.at(i).include(range)) {
-      need_ignore = false;
+  if (key_ranges_.empty()) {
+    need_ignore = false;
+  } else {
+    const uint64_t end_log_scn = !table_key.get_end_scn().is_valid()
+        ? 0
+        : table_key.get_end_scn().get_val_for_inner_table_field();
+
+    ObObj start_objs[3];
+    ObObj end_objs[3];
+    start_objs[0].set_int(table_key.tablet_id_.id());
+    start_objs[1].set_uint64(end_log_scn);
+    start_objs[2].set_min_value();
+    end_objs[0].set_int(table_key.tablet_id_.id());
+    end_objs[1].set_uint64(end_log_scn);
+    end_objs[2].set_max_value();
+
+    sstable_range.table_id_ = OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID;
+    sstable_range.start_key_.assign(start_objs, 3);
+    sstable_range.end_key_.assign(end_objs, 3);
+    sstable_range.border_flag_.set_inclusive_start();
+    sstable_range.border_flag_.set_inclusive_end();
+
+    for (int64_t i = 0; i < key_ranges_.count() && need_ignore; ++i) {
+      const ObNewRange &kr = key_ranges_.at(i);
+      if (kr.table_id_ != OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID) {
+        need_ignore = false; // unexpected, do not skip
+      } else {
+        ObNewRange kr3;
+        ObObj sk3[3];
+        ObObj ek3[3];
+        if (!normalize_key_range_to_tail3(kr, kr3, sk3, ek3)) {
+          need_ignore = false; // cannot safely compare, do not skip
+        } else if (kr3.compare_endkey_with_startkey(sstable_range) >= 0
+            && sstable_range.compare_endkey_with_startkey(kr3) >= 0) {
+          need_ignore = false;
+        }
+      }
     }
   }
-  if (OB_FAIL(ret)) {
-    need_ignore = false; // if error, wont skip
-  }
-  SERVER_LOG(DEBUG, "sstable_macro_info try to skip sstable", K(ret), K(need_ignore), K(range), K(table_key));
+  SERVER_LOG(DEBUG, "sstable_macro_info try to skip sstable", K(need_ignore), K(sstable_range), K(table_key));
   return need_ignore;
 }
 

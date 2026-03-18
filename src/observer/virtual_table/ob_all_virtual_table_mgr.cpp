@@ -29,12 +29,10 @@ ObAllVirtualTableMgr::ObAllVirtualTableMgr()
       tablet_iter_(nullptr),
       tablet_allocator_("VTTable"),
       tablet_handle_(),
-      ls_id_(share::ObLSID::INVALID_LS_ID),
       table_store_iter_(),
       iter_buf_(nullptr)
 {
 }
-
 
 ObAllVirtualTableMgr::~ObAllVirtualTableMgr()
 {
@@ -45,7 +43,6 @@ void ObAllVirtualTableMgr::reset()
 {
   omt::ObMultiTenantOperator::reset();
   addr_.reset();
-  ls_id_ = share::ObLSID::INVALID_LS_ID;
 
   if (OB_NOT_NULL(iter_buf_)) {
     allocator_->free(iter_buf_);
@@ -126,8 +123,6 @@ int ObAllVirtualTableMgr::get_next_tablet()
   } else if (OB_UNLIKELY(!tablet_handle_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "unexpected invalid tablet", K(ret), K(tablet_handle_));
-  } else {
-    ls_id_ = tablet_handle_.get_obj()->get_tablet_meta().ls_id_.id();
   }
 
   return ret;
@@ -192,24 +187,6 @@ int ObAllVirtualTableMgr::process_curr_tenant(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case SVR_IP:
-          if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cur_row_.cells_[i].set_varchar(ip_buf_);
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-          }
-          break;
-        case SVR_PORT:
-          cur_row_.cells_[i].set_int(addr_.get_port());
-          break;
-        case TENANT_ID:
-          cur_row_.cells_[i].set_int(MTL_ID());
-          break;
-        case LS_ID:
-          cur_row_.cells_[i].set_int(ls_id_);
-          break;
         case TABLET_ID:
           cur_row_.cells_[i].set_int(table_key.tablet_id_.id());
           break;

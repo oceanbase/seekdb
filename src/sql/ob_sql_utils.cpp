@@ -1311,17 +1311,13 @@ bool ObSQLUtils::cause_implicit_commit(ParseResult &result)
         || T_CREATE_TABLE == type
         || T_ALTER_DATABASE == type
         || T_DROP_DATABASE == type
-        || T_CREATE_TENANT == type
-        || T_CREATE_STANDBY_TENANT == type
         || T_CREATE_VIEW == type
         || T_DROP_TABLE == type
         || T_DROP_INDEX == type
         || T_CREATE_DATABASE == type
-        || T_MODIFY_TENANT == type
         || T_CREATE_INDEX == type
         || T_CREATE_MLOG == type
         || T_DROP_MLOG == type
-        || T_DROP_TENANT == type
         /* pl item type*/
         || T_SP_CREATE_TYPE == type
         || T_SP_DROP_TYPE == type
@@ -1369,16 +1365,6 @@ bool ObSQLUtils::is_commit_stmt(const ParseResult &result)
   return bret;
 }
 
-bool ObSQLUtils::is_modify_tenant_stmt(ParseResult &result)
-{
-  ObItemType type = T_INVALID;
-  if (NULL != result.result_tree_
-      && NULL != result.result_tree_->children_
-      && NULL != result.result_tree_->children_[0]) {
-    type = result.result_tree_->children_[0]->type_;
-  }
-  return type == T_MODIFY_TENANT;
-}
 // Used to determine the statement types not supported by prepare statements in mysql mode
 bool ObSQLUtils::is_mysql_ps_not_support_stmt(const ParseResult &result)
 {
@@ -2739,96 +2725,12 @@ int ObSQLUtils::choose_best_partition_replica_addr(const ObAddr &local_addr,
 {
   int ret = OB_SUCCESS;
   selected_addr.reset();
-
-  ObServerLocality local_locality;
-  ObSEArray<ObServerLocality, 8> all_server_arr;
-  bool has_read_only_zone = false; // UNUSED;
-  if (OB_ISNULL(GCTX.locality_manager_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("locality manager should not be null", K(ret), KP(GCTX.locality_manager_));
-  } else if (OB_FAIL(GCTX.locality_manager_->get_server_locality_array(all_server_arr,
-                                                                       has_read_only_zone))) {
-    LOG_WARN("fail to get server locality", K(ret));
-  } else if (OB_FAIL(ObRoutePolicy::get_server_locality(local_addr,
-                                                        all_server_arr,
-                                                        local_locality))) {
-    LOG_WARN("fail to get local locality", K(ret));
+  if (GCTX.start_service_time_ > 0) {
+    selected_addr = GCTX.self_addr();
   } else {
-    bool  need_continue = true;
-    const ObIArray<ObRoutePolicy::CandidateReplica> &candi_replicas =
-        phy_part_loc_info.get_partition_location().get_replica_locations();
-    ObSEArray<ObAddr, 5> same_idc_addr;
-    ObSEArray<ObAddr, 5> same_region_addr;
-    ObSEArray<ObAddr, 5> other_region_addr;
-    for (int64_t i = 0 ;
-         need_continue && OB_SUCC(ret) && i < candi_replicas.count();
-         ++i) {
-      // Use local if available
-      // Otherwise select from remote
-      // Priority: same_idc, same_region
-      ObServerLocality candi_locality;
-      const ObAddr &candi_addr = candi_replicas.at(i).get_server();
-      if (!is_est_block_count &&
-          candi_replicas.at(i).get_property().get_memstore_percent() == 0) {
-        // skip replica whose memstore percent is zero
-      } else if (OB_FAIL(ObRoutePolicy::get_server_locality(candi_addr,
-                                                            all_server_arr,
-                                                            candi_locality))) {
-        LOG_WARN("fail to get server locality", K(all_server_arr), K(candi_addr), K(ret));
-      } else if (OB_UNLIKELY(!candi_locality.is_init())) {
-        //maybe the locality cache hasn't been flushed yet, we just trust it.
-        if (local_addr == candi_addr) {
-          selected_addr = candi_addr;
-          need_continue = false;
-        } else if (OB_FAIL(other_region_addr.push_back(candi_addr))) {
-          LOG_WARN("failed to push back other region candidate address", K(ret));
-        } else {/*do nothing*/}
-      } else if (!candi_locality.is_active()
-                 || ObServerStatus::OB_SERVER_ACTIVE != candi_locality.get_server_status()
-                 || 0 == candi_locality.get_start_service_time()
-                 || 0 != candi_locality.get_server_stop_time()) {
-        // server may not serving
-      } else if (local_addr == candi_addr) {
-        selected_addr = candi_addr;
-        need_continue = false;
-      } else if (local_locality.is_init()
-                 && ObRoutePolicy::is_same_idc(local_locality, candi_locality)) {
-        if (OB_FAIL(same_idc_addr.push_back(candi_addr))) {
-          LOG_WARN("failed to push back same idc candidate address", K(ret));
-        }
-      } else if (local_locality.is_init()
-                 && ObRoutePolicy::is_same_region(local_locality, candi_locality)) {
-        if (OB_FAIL(same_region_addr.push_back(candi_addr))) {
-          LOG_WARN("failed to push back same region candidate address", K(ret));
-        }
-      } else if (OB_FAIL(other_region_addr.push_back(candi_addr))) {
-        LOG_WARN("failed to push back other region candidate address", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (selected_addr.is_valid()) {
-        // do noting, find local addr
-        LOG_TRACE("has local replica", K(selected_addr));
-      } else if (!same_idc_addr.empty()) {
-        int64_t selected_idx = rand() % same_idc_addr.count();
-        selected_addr = same_idc_addr.at(selected_idx);
-        LOG_TRACE("has same idc replica", K(selected_addr));
-      } else if (!same_region_addr.empty()) {
-        int64_t selected_idx = rand() % same_region_addr.count();
-        selected_addr = same_region_addr.at(selected_idx);
-        LOG_TRACE("has same region replica", K(selected_addr));
-      } else if (!other_region_addr.empty()) {
-        int64_t selected_idx = rand() % other_region_addr.count();
-        selected_addr = other_region_addr.at(selected_idx);
-        LOG_TRACE("has other region replica", K(selected_addr));
-      } else {
-        ret = OB_NO_READABLE_REPLICA;
-        LOG_WARN("No useful replica found", K(ret), K(local_addr), K(candi_replicas), 
-                 K(all_server_arr));
-      }
-    }
+    ret = OB_NO_READABLE_REPLICA;
+    LOG_WARN("No useful replica found", K(ret));
   }
-
   return ret;
 }
 

@@ -56,7 +56,6 @@ int ObAllVirtualServerStorage::inner_open()
           STRCPY(item.path_, tmp_device_config.path_);
           STRCPY(item.endpoint_, tmp_device_config.endpoint_);
           STRCPY(item.used_for_, tmp_device_config.used_for_);
-          STRCPY(item.zone_, GCONF.zone.str());
           item.storage_id_ = tmp_device_config.storage_id_;
           item.max_iops_ = tmp_device_config.max_iops_;
           item.max_bandwidth_ = tmp_device_config.max_bandwidth_;
@@ -96,21 +95,6 @@ int ObAllVirtualServerStorage::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
-        case SVR_IP: {
-          if (item.addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cells[i].set_varchar(ip_buf_);
-            cells[i].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-          }
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(item.addr_.get_port());
-          break;
-        }
         case PATH: {
           cells[i].set_varchar(item.path_);
           cells[i].set_collation_type(
@@ -125,12 +109,6 @@ int ObAllVirtualServerStorage::inner_get_next_row(ObNewRow *&row)
         }
         case USED_FOR: {
           cells[i].set_varchar(item.used_for_);
-          cells[i].set_collation_type(
-            ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case ZONE: {
-          cells[i].set_varchar(item.zone_);
           cells[i].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;

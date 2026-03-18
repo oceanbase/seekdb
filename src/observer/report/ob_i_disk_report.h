@@ -17,8 +17,6 @@
 #ifndef OCEANBASE_OBSERVER_OB_I_DISK_REPORT
 #define OCEANBASE_OBSERVER_OB_I_DISK_REPORT
 
-#include "share/ob_disk_usage_table_operator.h"
-
 namespace oceanbase
 {
 

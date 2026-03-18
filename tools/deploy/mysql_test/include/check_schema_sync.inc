@@ -6,7 +6,7 @@ let $i = 10;
 while($i > 0)
 {
   sleep 1;
-  let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, cnt, 1);
+  let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, cnt, 1);
   dec $i;
   if ($cnt == 0)
   {

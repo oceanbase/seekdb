@@ -1588,9 +1588,7 @@ int ObVectorIndexDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_NOT_INIT;
     LOG_WARN("ObVectorIndexDag has not been initialized", K(is_inited_), K_(param));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, "vector index memdata sync task: "
-                                     "tenant_id = %ld, ls_id = %ld, table_id = %ld, tablet_id = %ld",
-                                     param_.tenant_id_,
-                                     param_.ls_id_.id(),
+                                     "table_id = %ld, tablet_id = %ld",
                                      param_.table_id_,
                                      param_.tablet_id_.id()))) {
     LOG_WARN("fail to fill dag key", KR(ret), K(param_));

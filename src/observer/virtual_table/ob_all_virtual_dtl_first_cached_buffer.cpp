@@ -24,7 +24,6 @@ using namespace oceanbase::sql::dtl;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
-
 ObAllVirtualDtlFirstCachedBufferIterator::ObAllVirtualDtlFirstCachedBufferIterator(ObArenaAllocator *allocator) :
   cur_tenant_idx_(0),
   cur_buffer_idx_(0),
@@ -108,7 +107,6 @@ int ObAllVirtualDtlFirstCachedBufferIterator::get_next_tenant_buffer_infos()
   }
   return ret;
 }
-
 
 ObAllVirtualDtlFirstCachedBuffer::ObAllVirtualDtlFirstCachedBuffer() :
   ipstr_(),

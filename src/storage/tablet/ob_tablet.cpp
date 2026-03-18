@@ -218,7 +218,7 @@ ObTablet::ObTablet(const bool is_external_tablet)
     is_external_tablet_(is_external_tablet)
 {
 #if defined(__x86_64__) && !defined(ENABLE_OBJ_LEAK_CHECK)
-  check_size<ObTablet, ObRowkeyReadInfo, 1536>();
+  check_size<ObTablet, ObRowkeyReadInfo, 1504>();
 #endif
   MEMSET(memtables_, 0x0, sizeof(memtables_));
 }
@@ -435,8 +435,6 @@ int ObTablet::init_for_merge(
       || OB_ISNULL(log_handler_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet pointer handle is invalid", K(ret), K_(pointer_hdl), K_(log_handler));
-  } else if (param.get_need_check_transfer_seq() && OB_FAIL(check_transfer_seq_equal(old_tablet, param.get_transfer_seq()))) {
-    LOG_WARN("failed to check transfer seq eq", K(ret), K(old_tablet), K(param));
   } else if (OB_FAIL(old_tablet.get_max_sync_storage_schema_version(max_sync_schema_version))) {
     LOG_WARN("failed to get max sync storage schema version", K(ret));
   } else if (OB_FAIL(old_tablet.load_storage_schema(tmp_arena_allocator, old_storage_schema))) {
@@ -571,8 +569,6 @@ int ObTablet::init_for_shared_merge(
   } else if (OB_UNLIKELY(old_tablet.is_row_store() != param.storage_schema_->is_row_store())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("Unexpected schema", K(ret), KPC(param.storage_schema_), K(old_tablet));
-  } else if (param.get_need_check_transfer_seq() && OB_FAIL(check_transfer_seq_equal(old_tablet, param.get_transfer_seq()))) {
-    LOG_WARN("failed to check transfer seq eq", K(ret), K(old_tablet), K(param));
   } else if (OB_FAIL(tablet_meta_.init(
             old_tablet.tablet_meta_.ls_id_,
             old_tablet.tablet_meta_.tablet_id_,
@@ -883,8 +879,6 @@ int ObTablet::handle_transfer_replace_(const ObBatchUpdateTableStoreParam &param
   if (!param.is_valid() || !param.is_transfer_replace_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(param));
-  } else if (OB_FAIL(tablet_meta_.reset_transfer_table())) {
-    LOG_WARN("failed to set finish tansfer replace", K(ret), K(tablet_meta_), K(param));
   } else if (OB_FAIL(tablet_meta_.ha_status_.set_restore_status(param.restore_status_))) {
     LOG_WARN("failed to set tablet restore status", K(ret), "restore_status", param.restore_status_);
   } else if (OB_FAIL(fetch_table_store(wrapper))) {
@@ -1781,8 +1775,6 @@ int ObTablet::init_with_mds_sstable(
   } else if (OB_UNLIKELY(!is_mds_merge(param.compaction_info_.merge_type_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected merge type", K(ret), K(param));
-  } else if (param.ha_info_.need_check_transfer_seq_ && OB_FAIL(check_transfer_seq_equal(old_tablet, param.ha_info_.transfer_seq_))) {
-    LOG_WARN("failed to check transfer seq eq", K(ret), K(old_tablet), K(param));
   } else if (CLICK_FAIL(old_tablet.fetch_table_store(old_table_store_wrapper))) {
     LOG_WARN("failed to fetch old table store", K(ret), K(old_tablet));
   } else if (CLICK_FAIL(old_table_store_wrapper.get_member(old_table_store))) {
@@ -2585,8 +2577,6 @@ int ObTablet::load_deserialize_v1(
   } else if (OB_FAIL(ObTabletMeta::update_meta_last_persisted_committed_tablet_status(tx_data, tablet_meta_.create_scn_, tablet_meta_.last_persisted_committed_tablet_status_))) {
     LOG_WARN("fail to init last_persisted_committed_tablet_status from tx data", K(ret),
         K(tx_data), K(tablet_meta_.create_scn_));
-  } else if (OB_FAIL(tablet_meta_.transfer_info_.init())) {
-    LOG_WARN("failed to init transfer info", K(ret), K(tablet_meta_));
   } else {
     tablet_meta_.extra_medium_info_ = info_list.get_extra_medium_info();
     tablet_meta_.mds_checkpoint_scn_ = tablet_meta_.clog_checkpoint_scn_;
@@ -5721,7 +5711,6 @@ int ObTablet::build_migration_tablet_param(
     mig_tablet_param.ddl_replay_status_ = tablet_meta_.ddl_replay_status_;
     mig_tablet_param.report_status_ = tablet_meta_.report_status_;
     mig_tablet_param.mds_checkpoint_scn_ = tablet_meta_.mds_checkpoint_scn_;
-    mig_tablet_param.transfer_info_ = tablet_meta_.transfer_info_;
     mig_tablet_param.is_empty_shell_ = is_empty_shell();
     mig_tablet_param.split_info_ = tablet_meta_.split_info_;
     mig_tablet_param.has_truncate_info_ = tablet_meta_.has_truncate_info_;
@@ -7527,18 +7516,7 @@ int ObTablet::build_transfer_tablet_param_current_(
       LOG_INFO("mds data is deprecated under current data version", K(ret));
     }
 
-    const int64_t transfer_seq = tablet_meta_.transfer_info_.transfer_seq_ + 1;
-    if ((transfer_seq & MacroBlockId::MAX_TRANSFER_SEQ) == MacroBlockId::MAX_TRANSFER_SEQ) {
-      /*
-        For transfer_seq in transfer_info, it is an int64_t;
-        For transfer_seq recorded in MacroBlockID.forth_id, it only has 20 bit.
-      */
-      LOG_ERROR("WARNING: TRANSFER_SEQ has exceed (2^20 - 1)", K(ret), K(transfer_seq), KPC(this));
-    }
-
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(mig_tablet_param.transfer_info_.init(tablet_meta_.ls_id_, user_data.transfer_scn_, transfer_seq))) {
-      LOG_WARN("failed to init transfer info", K(ret), K(tablet_meta_), K(user_data));
     } else {
       mig_tablet_param.version_ = ObMigrationTabletParam::PARAM_VERSION_V3;
       LOG_INFO("succeed build_transfer_tablet_param_mds", K(user_data), K(mig_tablet_param), KPC(this));
@@ -8599,19 +8577,6 @@ int ObTablet::check_snapshot_readable(const ObDDLInfoCache& ddl_info_cache, cons
     } else {
       ret = OB_SNAPSHOT_DISCARDED;
       LOG_WARN("read data before ddl", K(ret), K(ddl_info_cache), K(snapshot_version), K(schema_version));
-    }
-  }
-  return ret;
-}
-
-int ObTablet::check_transfer_seq_equal(const ObTablet &tablet, const int64_t transfer_seq)
-{
-  int ret = OB_SUCCESS;
-  if (0 <= transfer_seq) {
-    if (tablet.get_tablet_meta().transfer_info_.transfer_seq_ != transfer_seq) {
-      ret = OB_TABLET_TRANSFER_SEQ_NOT_MATCH;
-      LOG_WARN("tablet transfer seq not eq with transfer seq",
-          "tablet_meta", tablet.get_tablet_meta(), K(transfer_seq));
     }
   }
   return ret;

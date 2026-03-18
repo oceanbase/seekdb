@@ -143,7 +143,6 @@ private:
   bool is_inited_;
   bool stop_;
   common::ObAddr host_;
-  QueueThread *lease_queue_;
   QueueThread *ddl_queue_;
   QueueThread *ddl_parallel_queue_;
   QueueThread *mysql_queue_;

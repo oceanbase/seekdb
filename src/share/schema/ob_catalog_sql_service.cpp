@@ -81,8 +81,6 @@ int ObCatalogSqlService::gen_sql(ObSqlString &sql,
   int ret = OB_SUCCESS;
   uint64_t tenant_id = schema.get_tenant_id();
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_tenant_id(
-                       exec_tenant_id, schema.get_tenant_id()), "tenant_id", "%lu");
   SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
                        exec_tenant_id, schema.get_catalog_id()), "catalog_id", "%lu");
   SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_catalog_name_str().ptr(),
@@ -196,9 +194,8 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
     LOG_WARN("invalid input argument", K(ret), K(schema));
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %lu AND catalog_id = %lu",
+    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE catalog_id = %lu",
                               tname[THE_SYS_TABLE_IDX],
-                              ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                               ObSchemaUtils::get_extract_schema_id(exec_tenant_id, schema.get_catalog_id())))) {
       LOG_WARN("fail to assign sql format", K(ret));
     } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -241,9 +238,7 @@ int ObCatalogSqlService::gen_catalog_priv_dml(const uint64_t exec_tenant_id,
                                               share::ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id, catalog_priv_key.tenant_id_)))
-      || OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
                                               exec_tenant_id, catalog_priv_key.user_id_)))
       || OB_FAIL(dml.add_pk_column("catalog_name", ObHexEscapeSqlStr(catalog_priv_key.catalog_)))
       || OB_FAIL(dml.add_column("priv_set", priv_set))

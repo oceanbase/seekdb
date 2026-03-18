@@ -74,109 +74,93 @@ int ObAllVirtualMacroBlockMarkerStatus::inner_get_next_row(common::ObNewRow *&ro
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
       case OB_APP_MIN_COLUMN_ID: {
-        // svr_ip
-        if (!OBSERVER.get_self().ip_to_string(svr_ip_, sizeof(svr_ip_))) {
-          ret = OB_BUF_NOT_ENOUGH;
-          SERVER_LOG(WARN, "buffer not enough", K(ret));
-        } else {
-          cur_row_.cells_[i].set_varchar(svr_ip_);
-          cur_row_.cells_[i].set_collation_type(collcation_type);
-        }
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 1: {
-        // svr_port
-        cur_row_.cells_[i].set_int(OBSERVER.get_self().get_port());
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 2: {
         // total_block_count
         cur_row_.cells_[i].set_int(marker_status_.total_block_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 3: {
+      case OB_APP_MIN_COLUMN_ID + 1: {
         // reserved_block_count
         cur_row_.cells_[i].set_int(marker_status_.reserved_block_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 4: {
+      case OB_APP_MIN_COLUMN_ID + 2: {
         // meta_block_count
         cur_row_.cells_[i].set_int(marker_status_.linked_block_count_
                                  + marker_status_.ids_block_count_
                                  + marker_status_.index_block_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 5: {
+      case OB_APP_MIN_COLUMN_ID + 3: {
         // shared_meta_block_count
         cur_row_.cells_[i].set_int(marker_status_.shared_meta_block_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 6: {
+      case OB_APP_MIN_COLUMN_ID + 4: {
         // tmp_file_block_count
         cur_row_.cells_[i].set_int(marker_status_.tmp_file_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 7: {
+      case OB_APP_MIN_COLUMN_ID + 5: {
         // data_block_count
         cur_row_.cells_[i].set_int(marker_status_.data_block_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 8: {
+      case OB_APP_MIN_COLUMN_ID + 6: {
         // shared_data_block_count
         cur_row_.cells_[i].set_int(marker_status_.shared_data_block_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 9: {
+      case OB_APP_MIN_COLUMN_ID + 7: {
         // disk_block_count_
         cur_row_.cells_[i].set_int(marker_status_.disk_block_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 10: {
+      case OB_APP_MIN_COLUMN_ID + 8: {
         // bloomfilter_count_
         cur_row_.cells_[i].set_int(marker_status_.bloomfiter_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 11: {
+      case OB_APP_MIN_COLUMN_ID + 9: {
         // hold_count_
         cur_row_.cells_[i].set_int(marker_status_.hold_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 12: {
+      case OB_APP_MIN_COLUMN_ID + 10: {
         // pending_free_count_
         cur_row_.cells_[i].set_int(marker_status_.pending_free_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 13: {
+      case OB_APP_MIN_COLUMN_ID + 11: {
         // free_count_
         cur_row_.cells_[i].set_int(marker_status_.free_count_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 14: {
+      case OB_APP_MIN_COLUMN_ID + 12: {
         // mark_cost_time
         cur_row_.cells_[i].set_int(marker_status_.mark_cost_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 15: {
+      case OB_APP_MIN_COLUMN_ID + 13: {
         // sweep_cost_time
         cur_row_.cells_[i].set_int(marker_status_.sweep_cost_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 16: {
+      case OB_APP_MIN_COLUMN_ID + 14: {
         // start_marker_time
         cur_row_.cells_[i].set_timestamp(marker_status_.start_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 17: {
+      case OB_APP_MIN_COLUMN_ID + 15: {
         // last_marker_end_time
         cur_row_.cells_[i].set_timestamp(marker_status_.last_end_time_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 18: {
+      case OB_APP_MIN_COLUMN_ID + 16: {
         // whether finished marking
         cur_row_.cells_[i].set_bool(marker_status_.mark_finished_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 19: {
+      case OB_APP_MIN_COLUMN_ID + 17: {
         // comment
         cur_row_.cells_[i].set_varchar(comment_);
         cur_row_.cells_[i].set_collation_type(collcation_type);

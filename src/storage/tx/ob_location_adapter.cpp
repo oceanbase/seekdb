@@ -140,32 +140,6 @@ int ObLocationAdapter::get_leader_(const int64_t cluster_id,
   } else {
     if (OB_FAIL(location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader))) {
       TRANS_LOG(DEBUG, "nonblock get leader from locatition cache error", K(ret), K(ls_id));
-      int tmp_ret = OB_SUCCESS;
-      // Asynchronous get leader failed, temporarily do not clear the cache of location;
-      if (OB_SUCCESS != (tmp_ret = location_service_->nonblock_renew(cluster_id, tenant_id, ls_id))) {
-        TRANS_LOG(WARN, "nonblock renew from location cache error", "ret", tmp_ret, K(ls_id));
-      }
-    }
-  }
-  if (OB_LS_LOCATION_NOT_EXIST == ret) {
-    int tmp_ret = OB_SUCCESS;
-    ObLSExistState state;
-    if (OB_SUCCESS != (tmp_ret = ObLocationService::check_ls_exist(tenant_id, ls_id, state))) {
-      TRANS_LOG(WARN, "check if ls exist failed", K(tmp_ret), K(ls_id));
-      if (OB_TENANT_NOT_EXIST == tmp_ret) {
-        bool has_dropped = false;
-        if (OB_TMP_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(tenant_id, has_dropped))) {
-          TRANS_LOG(WARN, "failed to check tenant has been dropped", K(tmp_ret), K(tenant_id));
-        } else if (has_dropped) {
-          ret = OB_TENANT_HAS_BEEN_DROPPED;
-        }
-      }
-    } else if (state.is_deleted()) {
-      // rewrite ret
-      ret = OB_LS_IS_DELETED;
-      TRANS_LOG(INFO, "ls is deleted", K(ret), K(ls_id));
-    } else {
-      // do nothing
     }
   }
   if (OB_SUCC(ret)) {
@@ -180,25 +154,6 @@ int ObLocationAdapter::get_leader_(const int64_t cluster_id,
     ++error_count_;
   }
   statistics();
-
-  return ret;
-}
-
-int ObLocationAdapter::nonblock_renew(const int64_t cluster_id, const int64_t tenant_id, const ObLSID &ls_id)
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    TRANS_LOG(WARN, "ob location adapter not inited");
-    ret = OB_NOT_INIT;
-  } else if (!ls_id.is_valid()) {
-    TRANS_LOG(WARN, "invalid argument", K(ls_id));
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_SUCCESS != (ret = location_service_->nonblock_renew(cluster_id, tenant_id, ls_id))) {
-    TRANS_LOG(WARN, "nonblock renew error", KR(ret), K(ls_id));
-  } else {
-    ++renew_access_;
-  }
 
   return ret;
 }
@@ -232,29 +187,6 @@ int ObLocationAdapter::nonblock_get(const int64_t cluster_id,
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(cluster_id), K(tenant_id), K(ls_id));
   } else if (OB_FAIL(location_service_->nonblock_get(cluster_id, tenant_id, ls_id, location))) {
     TRANS_LOG(WARN, "nonblock get failed", KR(ret), K(cluster_id), K(tenant_id), K(ls_id));
-  } else {
-    // do nothing
-  }
-  if (OB_LS_LOCATION_NOT_EXIST == ret) {
-    int tmp_ret = OB_SUCCESS;
-    ObLSExistState state;
-    if (OB_SUCCESS != (tmp_ret = ObLocationService::check_ls_exist(tenant_id, ls_id, state))) {
-      TRANS_LOG(WARN, "check if ls exist failed", K(tmp_ret), K(ls_id));
-      if (OB_TENANT_NOT_EXIST == tmp_ret) {
-        bool has_dropped = false;
-        if (OB_TMP_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(tenant_id, has_dropped))) {
-          TRANS_LOG(WARN, "failed to check tenant has been dropped", K(tmp_ret), K(tenant_id));
-        } else if (has_dropped) {
-          ret = OB_TENANT_HAS_BEEN_DROPPED;
-        }
-      }
-    } else if (state.is_deleted()) {
-      // rewrite ret
-      ret = OB_LS_IS_DELETED;
-      TRANS_LOG(INFO, "ls is deleted", K(ret), K(ls_id));
-    } else {
-      // do nothing
-    }
   }
   return ret;
 }

@@ -133,8 +133,7 @@ uint64_t ObBackupTabletFuseDagNet::hash() const
 int ObBackupTabletFuseDagNet::fill_comment(char *buf, const int64_t buf_len) const
 {
   int ret = OB_SUCCESS;
-  const int64_t MAX_TRACE_ID_LENGTH = 64;
-  char task_id_str[MAX_TRACE_ID_LENGTH] = { 0 };
+  char task_id_str[OB_MAX_TRACE_ID_BUFFER_SIZE] = { 0 };
   int64_t pos = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

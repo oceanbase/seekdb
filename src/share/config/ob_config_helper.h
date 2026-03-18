@@ -36,6 +36,17 @@ class ObConfigItem;
 class ObConfigIntegralItem;
 class ObConfigAlwaysTrue;
 
+class ObConfigUpdateCb
+{
+public:
+  ObConfigUpdateCb() {}
+  virtual ~ObConfigUpdateCb() {}
+  virtual int64_t update_version() = 0;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObConfigUpdateCb);
+};
+
 class ObConfigChecker
 {
 public:
@@ -997,7 +1008,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigKvGroupCommitRWModeChecker);
 };
 
-class ObConfigRegexpEngineChecker 
+class ObConfigRegexpEngineChecker
   : public ObConfigChecker
 {
 public:

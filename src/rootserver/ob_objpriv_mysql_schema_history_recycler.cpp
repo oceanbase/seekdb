@@ -179,7 +179,7 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_fill_schema_history_sql(
     LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (OB_FAIL(sql.assign_fmt(
     "select user_id, obj_name, obj_type, all_priv, grantor, grantor_host, schema_version, is_deleted "
-    "from %s where tenant_id = 0 and schema_version <= %ld "
+    "from %s where schema_version <= %ld "
     "order by user_id, obj_name, obj_type, all_priv, grantor, grantor_host, schema_version "
     "limit %ld, %ld",
     table_name_,  schema_version_,
@@ -269,7 +269,7 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_compress_schema_history_sq
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
-    if (OB_FAIL(sql.assign_fmt("delete from %s where tenant_id = 0 and ( ",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where ( ",
                                 table_name_))) {
       LOG_WARN("fail to assign sql", KR(ret), K_(tenant_id), K_(schema_version));
     }

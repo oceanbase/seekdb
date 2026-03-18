@@ -368,9 +368,7 @@ int ObTestSSLogMetaService::build_update_table_store_param_(ObArenaAllocator &al
     param.sstable_ = sstable;
     param.allow_duplicate_sstable_ = true;
 
-    if (FAILEDx(param.init_with_ha_info(ObHATableStoreParam(
-            tablet_handle.get_obj()->get_tablet_meta().transfer_info_.transfer_seq_,
-            true /*need_check_transfer_seq*/)))) {
+    if (FAILEDx(param.init_with_ha_info(ObHATableStoreParam()))) {
       LOG_WARN("failed to init with ha info", KR(ret));
     } else if (OB_FAIL(param.init_with_compaction_info(ObCompactionTableStoreParam(
                       merge_type,
@@ -393,13 +391,6 @@ TEST_F(ObTestSSLogMetaService, test_create_ls)
 
   share::ObTenantSwitchGuard tenant_guard;
   ASSERT_EQ(OB_SUCCESS, tenant_guard.switch_to(tenant_id));
-
-  ObGarbageCollector *gc_service = MTL(logservice::ObGarbageCollector *);
-  ASSERT_EQ(true, gc_service != NULL);
-  gc_service->stop();
-  ObSSGarbageCollectorService *ss_gc_service = MTL(ObSSGarbageCollectorService *);
-  ASSERT_EQ(true, ss_gc_service != NULL);
-  ss_gc_service->stop();
 
   int ret = OB_SUCCESS;
   ObLSService *ls_svr = MTL(ObLSService *);

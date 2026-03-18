@@ -15,6 +15,7 @@
  */
 
 #include "ob_rs_event_history_table_operator.h"
+#include "share/ob_server_struct.h"
 namespace oceanbase
 {
 namespace rootserver
@@ -22,16 +23,14 @@ namespace rootserver
 using namespace common;
 using namespace share;
 
-int ObRsEventHistoryTableOperator::init(common::ObMySQLProxy &proxy,
-                                        const common::ObAddr &self_addr)
+int ObRsEventHistoryTableOperator::init(ObSQLiteConnectionPool *pool, const common::ObAddr &self_addr)
 {
   int ret = OB_SUCCESS;
   const bool is_rs_event = true;
   const bool is_server_event = false;
   set_addr(self_addr, is_rs_event, is_server_event);
-  if (OB_FAIL(ObEventHistoryTableOperator::init(proxy))) {
-  } else {
-    set_event_table(share::OB_ALL_ROOTSERVICE_EVENT_HISTORY_TNAME);
+  if (OB_FAIL(ObEventHistoryTableOperator::init(pool, ObEventHistoryType::ROOTSERVICE))) {
+    SHARE_LOG(WARN, "failed to init with SQLite", K(ret));
   }
   return ret;
 }

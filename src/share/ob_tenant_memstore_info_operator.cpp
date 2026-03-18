@@ -49,18 +49,16 @@ int ObTenantMemstoreInfoOperator::get(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to convert ip to string", K(ret));
       } else if (OB_FAIL(unit_servers_str.append_fmt(
-              "%s(svr_ip='%s' and svr_port=%d)",
-              (0 != i) ? " or " : "",
-              svr_ip_str,
-              unit_server.get_port()))) {
+              "%s(1 = 1)",
+              (0 != i) ? " or " : ""))) {
         LOG_WARN("fail to append fmt", K(ret));
       } else {} // no more to do
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(sql.assign_fmt("SELECT tenant_id, svr_ip, svr_port, active_span, "
+    } else if (OB_FAIL(sql.assign_fmt("SELECT active_span, "
         "memstore_used, freeze_trigger, memstore_limit FROM %s "
-        "WHERE tenant_id = %ld and (%s)",
-        OB_ALL_VIRTUAL_TENANT_MEMSTORE_INFO_TNAME, tenant_id, unit_servers_str.ptr()))) {
+        "WHERE (%s)",
+        OB_ALL_VIRTUAL_TENANT_MEMSTORE_INFO_TNAME, unit_servers_str.ptr()))) {
       LOG_WARN("assign_fmt failed", K(ret));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -72,9 +70,6 @@ int ObTenantMemstoreInfoOperator::get(
           LOG_WARN("execute sql failed", K(sql), K(ret));
         } else {
           TenantServerMemInfo mem_info;
-          int64_t tmp_real_str_len = 0; // It is only used to fill out the parameters and does not work. It is necessary to ensure that there is no'\0' character in the corresponding string
-          char svr_ip[OB_IP_STR_BUFF] = "";
-          int64_t svr_port = 0;
           while (OB_SUCC(ret)) {
             if (OB_FAIL(result->next())) {
               if (OB_ITER_END != ret) {
@@ -84,10 +79,7 @@ int ObTenantMemstoreInfoOperator::get(
                 break;
               }
             } else {
-              EXTRACT_INT_FIELD_MYSQL(*result, "tenant_id", mem_info.tenant_id_, uint64_t);
-              EXTRACT_STRBUF_FIELD_MYSQL(*result, "svr_ip", svr_ip, OB_IP_STR_BUFF, tmp_real_str_len);
-              (void) tmp_real_str_len; // make compiler happy
-              EXTRACT_INT_FIELD_MYSQL(*result, "svr_port", svr_port, int64_t);
+              mem_info.tenant_id_ = OB_SYS_TENANT_ID;
               EXTRACT_INT_FIELD_MYSQL(*result, "active_span",
                   mem_info.active_memstore_used_, int64_t);
               EXTRACT_INT_FIELD_MYSQL(*result, "memstore_used",
@@ -97,10 +89,8 @@ int ObTenantMemstoreInfoOperator::get(
               EXTRACT_INT_FIELD_MYSQL(*result, "memstore_limit",
                   mem_info.memstore_limit_, int64_t);
               if (OB_SUCC(ret)) {
-                if (!mem_info.server_.set_ip_addr(svr_ip, static_cast<int32_t>(svr_port))) {
-                  ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid svr_ip or invalid svr_port", K(svr_ip), K(svr_port), K(ret));
-                } else if (OB_FAIL(mem_infos.push_back(mem_info))) {
+                mem_info.server_ = GCTX.self_addr();
+                if (OB_FAIL(mem_infos.push_back(mem_info))) {
                   LOG_WARN("push_back failed", K(ret));
                 }
               }

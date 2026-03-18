@@ -88,8 +88,8 @@ static bool check_range(const ObConfigRangeOpts left_opt,
 
 // ObConfigItem
 ObConfigItem::ObConfigItem()
-    : ck_(NULL), version_(0), dumped_version_(0), inited_(false), initial_value_set_(false),
-      value_updated_(false), value_valid_(false), name_str_(nullptr), info_str_(nullptr),
+    : ck_(NULL), update_cb_(NULL), version_(0), inited_(false),
+      value_valid_(false), name_str_(nullptr), info_str_(nullptr),
       range_str_(nullptr), lock_()
 {
 }
@@ -108,12 +108,6 @@ bool ObConfigItem::set_value_with_lock(const common::ObString &string)
   return set_value_unsafe(string);
 }
 
-bool ObConfigItem::set_value_with_lock(const char *str)
-{
-  DRWLock::WRLockGuard guard(GCONF.rwlock_);
-  return set_value_unsafe(str);
-}
-
 bool ObConfigItem::set_value_unsafe(const common::ObString &string)
 {
   int64_t pos = 0;
@@ -127,28 +121,9 @@ bool ObConfigItem::set_value_unsafe(const common::ObString &string)
     value_valid_ = false;
   } else {
     value_valid_ = set(ptr);
-    if (inited_ && value_valid_) {
-      value_updated_ = true;
-    }
   }
-  return value_valid_;
-}
-
-bool ObConfigItem::set_value_unsafe(const char *str)
-{
-  int64_t pos = 0;
-  int ret = OB_SUCCESS;
-  ObLatchWGuard wr_guard(lock_, ObLatchIds::CONFIG_LOCK);
-  const char *ptr = value_ptr();
-  if (nullptr == ptr) {
-    value_valid_ = false;
-  } else if (OB_FAIL(databuff_printf(const_cast<char *>(ptr), value_len(), pos, "%s", str))) {
-    value_valid_ = false;
-  } else {
-    value_valid_ = set(str);
-    if (inited_ && value_valid_) {
-      value_updated_ = true;
-    }
+  if (value_valid_ && update_cb_) {
+    version_ = update_cb_->update_version();
   }
   return value_valid_;
 }
@@ -231,7 +206,7 @@ const char *ObConfigItem::data_type() const
       break;
     }
     default: {
-      // default: ObConfigItemType::OB_CONF_ITEM_TYPE_UNKNOWN and 
+      // default: ObConfigItemType::OB_CONF_ITEM_TYPE_UNKNOWN and
       // other unexpected situations, return "UNKNOWN"
       type_ptr = DATA_TYPE_UNKNOWN;
       break;
@@ -246,82 +221,6 @@ bool ObConfigItem::is_default(const char *value_str_,
   return 0 == strncasecmp(value_str_, value_default_str_, size);
 }
 
-int ObConfigItem::to_json_obj(ObIAllocator &allocator, ObJsonObject &j_obj) const
-{
-  int ret = OB_SUCCESS;
-  ObString k_name("name");
-  ObString k_type("type");
-  ObString k_default_value("default_value");
-  ObString k_range("range");
-  ObString k_scope("scope");
-  ObString k_section("section");
-  ObString k_edit_level("edit_level");
-  ObString k_description_en("description");
-  ObString k_optional_values("optional_values");
-
-  ObJsonString *v_name = nullptr;
-  ObJsonString *v_type = nullptr;
-  ObJsonString *v_default_value = nullptr;
-  ObJsonString *v_range = nullptr;
-  ObJsonString *v_scope = nullptr;
-  ObJsonString *v_section = nullptr;
-  ObJsonString *v_edit_level = nullptr;
-  ObJsonString *v_description_en = nullptr;
-  ObJsonString *v_optional_values = nullptr;
-
-  if (nullptr == (v_name = OB_NEW(ObJsonString, g_config_mem_attr, ObString(name())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'name' failed", K(ret));
-  } else if (nullptr == (v_type = OB_NEW(ObJsonString, g_config_mem_attr, ObString(data_type())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'type' failed", K(ret));
-  } else if (nullptr == (v_default_value = OB_NEW(ObJsonString, g_config_mem_attr, ObString(default_str())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'default_value' failed", K(ret));
-  } else if (nullptr == (v_range = OB_NEW(ObJsonString, g_config_mem_attr, ObString(range())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'range' failed", K(ret));
-  } else if (nullptr == (v_scope = OB_NEW(ObJsonString, g_config_mem_attr, ObString(scope())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'scope' failed", K(ret));
-  } else if (nullptr == (v_section = OB_NEW(ObJsonString, g_config_mem_attr, ObString(section())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'section' failed", K(ret));
-  } else if (nullptr == (v_edit_level = OB_NEW(ObJsonString, g_config_mem_attr, ObString(edit_level())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'edit_level' failed", K(ret));
-  } else if (nullptr == (v_description_en = OB_NEW(ObJsonString, g_config_mem_attr, ObString(info())))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "create json value 'description_en' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_name, v_name))) {
-    OB_LOG(WARN, "add json kv 'name' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_type, v_type))) {
-    OB_LOG(WARN, "add json kv 'type' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_default_value, v_default_value))) {
-    OB_LOG(WARN, "add json kv 'default_value' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_range, v_range))) {
-    OB_LOG(WARN, "add json kv 'range' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_scope, v_scope))) {
-    OB_LOG(WARN, "add json kv 'scope' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_section, v_section))) {
-    OB_LOG(WARN, "add json kv 'section' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_edit_level, v_edit_level))) {
-    OB_LOG(WARN, "add json kv 'edit_level' failed", K(ret));
-  } else if (OB_FAIL(j_obj.add(k_description_en, v_description_en))) {
-    OB_LOG(WARN, "add json kv 'description_en' failed", K(ret));
-  } else {
-    if (nullptr != optional_configuration_values()) {
-      if (nullptr == (v_optional_values = OB_NEW(ObJsonString, g_config_mem_attr, ObString(optional_configuration_values())))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        OB_LOG(WARN, "create json value 'optional_values' failed", K(ret));
-      } else if (OB_FAIL(j_obj.add(k_optional_values, v_optional_values))) {
-        OB_LOG(WARN, "add json kv 'optional_values' failed", K(ret));
-      }
-   }
-  }
-  return ret;
-}
-
 // ObConfigIntListItem
 ObConfigIntListItem::ObConfigIntListItem(ObConfigContainer *container,
                                          Scope::ScopeInfo scope_info,
@@ -332,7 +231,6 @@ ObConfigIntListItem::ObConfigIntListItem(ObConfigContainer *container,
     : value_()
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -384,7 +282,6 @@ ObConfigStrListItem::ObConfigStrListItem(ObConfigContainer *container,
     : value_()
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -570,7 +467,7 @@ bool ObConfigIntegralItem::check() const
   // check order: value_valid_ --> range --> customized checker (for DEF_XXX_WITH_CHECKER)
   bool bool_ret = false;
   if (!value_valid_) {
-  } else if (!check_range(left_interval_opt_, right_interval_opt_, 
+  } else if (!check_range(left_interval_opt_, right_interval_opt_,
                           value_, min_value_, max_value_)) {
   } else if (ck_ && !ck_->check(*this)) {
   } else {
@@ -592,7 +489,6 @@ ObConfigDoubleItem::ObConfigDoubleItem(ObConfigContainer *container,
       right_interval_opt_(ObConfigRangeOpts::OB_CONF_RANGE_NONE)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -610,7 +506,6 @@ ObConfigDoubleItem::ObConfigDoubleItem(ObConfigContainer *container,
       right_interval_opt_(ObConfigRangeOpts::OB_CONF_RANGE_NONE)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -719,7 +614,7 @@ bool ObConfigDoubleItem::check() const
   // check order: value_valid_ --> range --> customized checker (for DEF_XXX_WITH_CHECKER)
   bool bool_ret = false;
   if (!value_valid_) {
-  } else if (!check_range(left_interval_opt_, right_interval_opt_, 
+  } else if (!check_range(left_interval_opt_, right_interval_opt_,
                           value_, min_value_, max_value_)) {
   } else if (ck_ && !ck_->check(*this)) {
   } else {
@@ -738,7 +633,6 @@ ObConfigCapacityItem::ObConfigCapacityItem(ObConfigContainer *container,
                                            const ObParameterAttr attr)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -753,7 +647,6 @@ ObConfigCapacityItem::ObConfigCapacityItem(ObConfigContainer *container,
                                            const ObParameterAttr attr)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -779,7 +672,6 @@ ObConfigTimeItem::ObConfigTimeItem(ObConfigContainer *container,
                                    const ObParameterAttr attr)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -794,7 +686,6 @@ ObConfigTimeItem::ObConfigTimeItem(ObConfigContainer *container,
                                    const ObParameterAttr attr)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -820,7 +711,6 @@ ObConfigIntItem::ObConfigIntItem(ObConfigContainer *container,
                                  const ObParameterAttr attr)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -835,7 +725,6 @@ ObConfigIntItem::ObConfigIntItem(ObConfigContainer *container,
                                  const ObParameterAttr attr)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -861,7 +750,6 @@ ObConfigMomentItem::ObConfigMomentItem(ObConfigContainer *container,
     : value_()
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -897,7 +785,6 @@ ObConfigBoolItem::ObConfigBoolItem(ObConfigContainer *container,
     : value_(false)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -941,7 +828,6 @@ ObConfigStringItem::ObConfigStringItem(ObConfigContainer *container,
                                        const char *optional_values)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -1287,14 +1173,14 @@ ObConfigModeItem::ObConfigModeItem(ObConfigContainer *container,
   init(scope_info, name, def, info, attr);
 }
 
-ObConfigModeItem::~ObConfigModeItem() 
+ObConfigModeItem::~ObConfigModeItem()
 {
   if (parser_ != NULL) {
     delete parser_;
   }
 }
 
-bool ObConfigModeItem::set(const char *str) 
+bool ObConfigModeItem::set(const char *str)
 {
   bool valid = false;
   if (str == NULL || parser_ == NULL) {
@@ -1325,11 +1211,8 @@ ObConfigVersionItem::ObConfigVersionItem(ObConfigContainer *container,
                                          const char *range,
                                          const char *info,
                                          const ObParameterAttr attr)
-    : dump_value_updated_(false)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
-  MEMSET(value_dump_str_, 0, sizeof(value_dump_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -1342,11 +1225,8 @@ ObConfigVersionItem::ObConfigVersionItem(ObConfigContainer *container,
                                          const char *def,
                                          const char *info,
                                          const ObParameterAttr attr)
-    : dump_value_updated_(false)
 {
   MEMSET(value_str_, 0, sizeof(value_str_));
-  MEMSET(value_reboot_str_, 0, sizeof(value_reboot_str_));
-  MEMSET(value_dump_str_, 0, sizeof(value_dump_str_));
   if (OB_LIKELY(NULL != container)) {
     container->set_refactored(ObConfigStringKey(name), this, 1);
   }
@@ -1356,15 +1236,11 @@ ObConfigVersionItem::ObConfigVersionItem(ObConfigContainer *container,
 bool ObConfigVersionItem::set(const char *str)
 {
   int64_t old_value = get_value();
-  bool value_update = value_updated();
   bool valid = ObConfigIntegralItem::set(str);
   int64_t new_value = get_value();
-  if (valid && value_update && old_value > new_value) {
-    OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "Attention!!! data version is retrogressive", K(old_value), K(new_value));
-  }
-  if (value_update && old_value != new_value) {
+  if (old_value != new_value) {
     ObTaskController::get().allow_next_syslog();
-    OB_LOG(INFO, "Config data version changed", K(old_value), K(new_value), K(value_update), K(valid));
+    OB_LOG(INFO, "Config data version changed", K(old_value), K(new_value), K(valid));
   }
   return valid;
 }

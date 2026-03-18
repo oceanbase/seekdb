@@ -124,8 +124,8 @@ int ObTimezoneImporter::import_timezone_info(const ObString &file_path)
   if (OB_SUCC(ret)) {
     // 3. insert version into __all_sys_stat
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("replace into %s(tenant_id, zone, data_type, name, value, info) "
-                  "values(0, '' ,5, 'current_timezone_version', 1, 'current time zone version')",
+    if (OB_FAIL(sql.assign_fmt("replace into %s(data_type, name, value, info) "
+                  "values(5, 'current_timezone_version', 1, 'current time zone version')",
                   OB_ALL_SYS_STAT_TNAME))) {
       LOG_WARN("assign fmt failed", K(ret));
     } else if (OB_FAIL(trans.write(tenant_id_, sql.ptr(), affected_rows))) {

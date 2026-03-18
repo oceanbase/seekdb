@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
@@ -1344,8 +1345,6 @@ int ObTabletDDLUtil::update_ddl_table_store(
         }
       } else { // incremental direct load
         table_store_param.compaction_info_.clog_checkpoint_scn_ = sstable->get_end_scn();
-        table_store_param.ha_info_.need_check_transfer_seq_ = true;
-        table_store_param.ha_info_.transfer_seq_ = tablet.get_tablet_meta().transfer_info_.transfer_seq_;
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ls.update_tablet_table_store(ddl_param.table_key_.get_tablet_id(), table_store_param, new_tablet_handle))) {

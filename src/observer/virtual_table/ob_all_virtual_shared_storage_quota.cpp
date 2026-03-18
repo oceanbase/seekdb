@@ -186,15 +186,6 @@ int ObVirtualSharedStorageQuota::add_row(
     const uint64_t col_id = output_column_ids_.at(i);
     ObObj *cells = cur_row_.cells_;
     switch (col_id) {
-      case SVR_IP: {
-        cells[i].set_varchar(ip_buf_);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case SVR_PORT: {
-        cells[i].set_int(GCONF.self_addr_.get_port());
-        break;
-      }
       case MODULE: {
         const ObStorageInfoType &storage_type = limit.key_.get_category();
         if (storage_type == ObStorageInfoType::ALL_ZONE_STORAGE) {

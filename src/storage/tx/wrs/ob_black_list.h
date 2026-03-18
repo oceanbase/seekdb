@@ -34,12 +34,12 @@
 // The timeout time for executing internal SQL, the hint for internal SQL does not take effect, and the timeout time needs to be specified in the interface
 #define INNER_SQL_QUERY_TIMEOUT           2000000L     // 2s
 // Query statement for __all_virtual_ls_info, with a timeout set to 2s
-// select /*+query_timeout(2000000)*/ a.svr_ip, a.svr_port, a.tenant_id, a.ls_id, a.role, nvl(b.weak_read_scn, 1) as weak_read_scn, nvl(b.migrate_status, 0) as migrate_status, nvl(b.tx_blocked, 0) as tx_blocked from oceanbase.__all_virtual_ls_meta_table a left join oceanbase.__all_virtual_ls_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port and a.tenant_id = b.tenant_id and a.ls_id = b.ls_id;
+// select /*+query_timeout(2000000)*/ a.svr_ip, a.svr_port, a.tenant_id, a.ls_id, a.role, nvl(b.weak_read_scn, 1) as weak_read_scn, nvl(b.migrate_status, 0) as migrate_status, nvl(b.tx_blocked, 0) as tx_blocked from oceanbase.__all_virtual_ls_meta_table a left join oceanbase.__all_virtual_ls_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port and a.tenant_id = b.tenant_id;
 #define BLACK_LIST_SELECT_LS_INFO_STMT \
   "select a.svr_ip, a.svr_port, a.tenant_id, a.ls_id, a.role, \
   nvl(b.weak_read_scn, 1) as weak_read_scn, nvl(b.migrate_status, 0) as migrate_status, nvl(b.tx_blocked, 0) as tx_blocked \
   from oceanbase.__all_virtual_ls_meta_table a left join oceanbase.__all_virtual_ls_info b \
-  on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port and a.tenant_id = b.tenant_id and a.ls_id = b.ls_id;"
+  on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port and a.tenant_id = b.tenant_id;"
 
 namespace oceanbase
 {

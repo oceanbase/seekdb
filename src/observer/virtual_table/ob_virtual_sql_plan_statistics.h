@@ -42,10 +42,7 @@ int fill_cells(const sql::ObOperatorStat &pstat);
 private:
   enum COLUMN_ID
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    PLAN_ID,
+        PLAN_ID = common::OB_APP_MIN_COLUMN_ID,
     OPERATION_ID,
     EXECUTIONS,
     OUTPUT_ROWS,

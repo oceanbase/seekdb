@@ -127,21 +127,6 @@ int ObAllVirtualTenantVectorMemInfo::inner_get_next_row(ObNewRow *&row)
           for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
             uint64_t col_id = output_column_ids_.at(i);
             switch (col_id) {
-              case SVR_IP:
-                if (!addr_.ip_to_string(ip_buf, sizeof(ip_buf))) {
-                  STORAGE_LOG(ERROR, "ip to string failed");
-                  ret = OB_ERR_UNEXPECTED;
-                } else {
-                  cells[i].set_varchar(ip_buf);
-                  cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-                }
-                break;
-              case SVR_PORT:
-                cells[i].set_int(addr_.get_port());
-                break;
-              case TENANT_ID:
-                cells[i].set_int(tenant_id);
-                break;
               case RAW_MALLOC_SIZE:
                 cells[i].set_int(glibc_used);
                 break;

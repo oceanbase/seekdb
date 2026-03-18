@@ -68,8 +68,7 @@ public:
 private:
   int do_parse_sub_config_(const common::ObString &config_str);  
   int do_parse_restore_service_host_(const common::ObString &name, const common::ObString &value);
-  int do_parse_restore_service_user_(const common::ObString &name, const common::ObString &value);
-  int do_parse_restore_service_passwd_(const common::ObString &name, const common::ObString &value);
+  // Note: do_parse_restore_service_user_ and do_parse_restore_service_passwd_ removed (ip_list only)
   int check_doing_service_restore_(common::ObISQLClient &trans, bool &is_doing);
   int update_data_backup_dest_config_(common::ObISQLClient &trans);
   int construct_restore_sql_proxy_(ObLogRestoreProxyUtil &log_restore_proxy);

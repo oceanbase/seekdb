@@ -16,9 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/high_availability/ob_physical_copy_task.h"
+#include "storage/high_availability/ob_restore_helper.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#endif
 
 namespace oceanbase
 {
@@ -26,6 +25,62 @@ using namespace share;
 using namespace compaction;
 namespace storage
 {
+ObPhysicalCopyTask::ObCopyMacroBlockHelperReader::ObCopyMacroBlockHelperReader()
+  : allocator_("HelperMacReader"),
+    helper_(nullptr),
+    is_inited_(false)
+{
+}
+
+ObPhysicalCopyTask::ObCopyMacroBlockHelperReader::~ObCopyMacroBlockHelperReader()
+{
+  if (OB_NOT_NULL(helper_)) {
+    helper_->destroy();
+    allocator_.free(helper_);
+    helper_ = nullptr;
+  }
+  is_inited_ = false;
+  allocator_.reset();
+}
+
+int ObPhysicalCopyTask::ObCopyMacroBlockHelperReader::init(
+    restore::ObIRestoreHelper *proto_helper,
+    const ObITable::TableKey &table_key,
+    const ObCopyMacroRangeInfo &range_info,
+    const share::SCN &backfill_tx_scn,
+    const int64_t data_version,
+    ObMacroBlockReuseMgr *reuse_mgr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(proto_helper) || !table_key.is_valid() || !range_info.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(proto_helper), K(table_key), K(range_info));
+  } else if (OB_FAIL(proto_helper->copy_for_task(allocator_, helper_))) {
+    LOG_WARN("failed to copy helper for task", K(ret), KP(proto_helper));
+  } else if (OB_ISNULL(helper_) || !helper_->is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("task helper should not be null or invalid", K(ret), KP(helper_));
+  } else if (OB_FAIL(helper_->init_for_macro_block_copy(
+      table_key, range_info, backfill_tx_scn, data_version, reuse_mgr))) {
+    LOG_WARN("failed to init helper for macro block copy", K(ret), K(table_key), K(range_info));
+  } else {
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObPhysicalCopyTask::ObCopyMacroBlockHelperReader::get_next_macro_block(CopyMacroBlockReadData &read_data)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT || OB_ISNULL(helper_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("helper macro reader not init", K(ret), K_(is_inited), KP(helper_));
+  } else if (OB_FAIL(helper_->fetch_next_macro_block(read_data))) {
+    LOG_WARN("failed to fetch next macro block", K(ret), KP_(helper));
+  }
+  return ret;
+}
+
 /******************ObPhysicalCopyTask*********************/
 ObPhysicalCopyTask::ObPhysicalCopyTask()
   : ObITask(TASK_TYPE_MIGRATE_COPY_PHYSICAL),
@@ -244,155 +299,33 @@ int ObPhysicalCopyTask::get_macro_block_reader_(
     ObICopyMacroBlockReader *&reader)
 {
   int ret = OB_SUCCESS;
-  ObCopyMacroBlockReaderInitParam init_param;
-
+  reader = nullptr;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("physical copy task do not init", K(ret));
-  } else if (OB_FAIL(build_copy_macro_block_reader_init_param_(init_param))) {
-    LOG_WARN("failed to build macro block reader init param", K(ret), KPC(copy_ctx_));
-  } else if (copy_ctx_->is_leader_restore_) {
-    if (OB_FAIL(get_restore_reader_(init_param, reader))) {
-      LOG_WARN("failed to get_macro_block_restore_reader_", K(ret));
-    }
-  } else {
+  } else if (OB_ISNULL(copy_ctx_) || OB_ISNULL(copy_ctx_->helper_) || OB_ISNULL(copy_macro_range_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid reader type", K(ret));
-  }
-  return ret;
-}
-
-int ObPhysicalCopyTask::get_restore_reader_(
-    const ObCopyMacroBlockReaderInitParam &init_param,
-    ObICopyMacroBlockReader *&reader)
-{
-  int ret = OB_SUCCESS;
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("physical copy task do not init", K(ret));
-  } else if (!copy_ctx_->is_leader_restore_ || !init_param.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get macro block restore reader get invalid argument", K(ret), KPC(copy_ctx_), K(init_param));
+    LOG_WARN("copy ctx/helper/macro range info should not be NULL", K(ret), KP(copy_ctx_), KP(copy_macro_range_info_));
   } else {
-    const bool is_shared_macro_blocks = finish_task_->get_sstable_param()->basic_meta_.table_shared_flag_.is_shared_macro_blocks();
-    if (init_param.table_key_.is_ddl_dump_sstable() && is_shared_macro_blocks) {
-      if (OB_FAIL(get_ddl_macro_block_restore_reader_(init_param, reader))) {
-        LOG_WARN("failed to get ddl macro block restore reader", K(ret), K(init_param));
-      }
-    } else if (ObTabletRestoreAction::is_restore_replace_remote_sstable(copy_ctx_->restore_action_)) {
-      // Restore action is to replace remote sstables in table store with local sstables, macro block list
-      // can be obtained by remote sstable in table store.
-      if (OB_FAIL(get_remote_macro_block_restore_reader_(init_param, reader))) {
-        LOG_WARN("failed to get_remote_macro_block_restore_reader_", K(ret));
-      }
-    } else {
-      if (OB_FAIL(get_macro_block_restore_reader_(init_param, reader))) {
-        LOG_WARN("failed to get macro block restore reader", K(ret), K(init_param));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPhysicalCopyTask::get_macro_block_restore_reader_(
-    const ObCopyMacroBlockReaderInitParam &init_param,
-    ObICopyMacroBlockReader *&reader)
-{
-  int ret = OB_SUCCESS;
-  ObCopyMacroBlockRestoreReader *tmp_reader = NULL;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("physical copy task do not init", K(ret));
-  } else if (!copy_ctx_->is_leader_restore_ || !init_param.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get macro block restore reader get invalid argument", K(ret), KPC(copy_ctx_), K(init_param));
-  } else {
-    void *buf = mtl_malloc(sizeof(ObCopyMacroBlockRestoreReader), "MacroRestReader");
-    if (OB_ISNULL(buf)) {
+    // Helper-driven macro block reader: copy a task-local helper via copy_for_task(), and own its lifecycle.
+    ObCopyMacroBlockHelperReader *tmp_reader = MTL_NEW(ObCopyMacroBlockHelperReader, "HelperMacReader");
+    if (OB_ISNULL(tmp_reader)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory", K(ret), KP(buf));
-    } else if (FALSE_IT(tmp_reader = new(buf) ObCopyMacroBlockRestoreReader())) {
-    } else if (OB_FAIL(tmp_reader->init(init_param))) {
-      STORAGE_LOG(WARN, "failed to init restore reader", K(ret), K(init_param), KPC(copy_ctx_));
+      LOG_WARN("failed to alloc helper macro reader", K(ret));
     } else {
-      reader = tmp_reader;
-      tmp_reader = NULL;
-    }
-
-    if (OB_FAIL(ret)) {
-      if (NULL != reader) {
-        reader->~ObICopyMacroBlockReader();
-        mtl_free(reader);
-        reader = NULL;
+      const share::SCN backfill_tx_scn = finish_task_->get_sstable_param()->basic_meta_.filled_tx_scn_;
+      const int64_t data_version = 0; // TODO: compute data version for macro block reuse if needed
+      if (OB_FAIL(tmp_reader->init(copy_ctx_->helper_, copy_table_key_, *copy_macro_range_info_,
+                                   backfill_tx_scn, data_version, copy_ctx_->macro_block_reuse_mgr_))) {
+        LOG_WARN("failed to init helper macro reader", K(ret));
+        MTL_DELETE(ObCopyMacroBlockHelperReader, "HelperMacReader", tmp_reader);
+        tmp_reader = nullptr;
+      } else {
+        reader = tmp_reader;
+        tmp_reader = nullptr;
       }
     }
-    if (NULL != tmp_reader) {
-      tmp_reader->~ObCopyMacroBlockRestoreReader();
-      mtl_free(tmp_reader);
-      tmp_reader = NULL;
-    }
   }
-  return ret;
-}
-
-int ObPhysicalCopyTask::get_ddl_macro_block_restore_reader_(
-    const ObCopyMacroBlockReaderInitParam &init_param,
-    ObICopyMacroBlockReader *&reader)
-{
-  int ret = OB_SUCCESS;
-  ObCopyDDLMacroBlockRestoreReader *tmp_reader = NULL;
-
-  reader = nullptr;
-  if (!copy_ctx_->is_leader_restore_ 
-      || !init_param.is_valid() 
-      || !init_param.table_key_.is_ddl_dump_sstable()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get ddl macro block restore reader get invalid argument", K(ret), KPC(copy_ctx_), K(init_param));
-  } else if (OB_ISNULL(tmp_reader = MTL_NEW(ObCopyDDLMacroBlockRestoreReader, "MacroDDLReader"))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc ObCopyDDLMacroBlockRestoreReader", K(ret));
-  } else if (OB_FAIL(tmp_reader->init(init_param))) {
-    LOG_WARN("failed to init ddl macro block restore reader", K(ret), K(init_param), KPC(copy_ctx_));
-  } else {
-    reader = tmp_reader;
-    tmp_reader = nullptr;
-  }
-
-  if (OB_NOT_NULL(tmp_reader)) {
-    MTL_DELETE(ObCopyDDLMacroBlockRestoreReader, "MacroDDLReader", tmp_reader);
-  }
-
-  return ret;
-}
-
-int ObPhysicalCopyTask::get_remote_macro_block_restore_reader_(
-    const ObCopyMacroBlockReaderInitParam &init_param,
-    ObICopyMacroBlockReader *&reader)
-{
-  int ret = OB_SUCCESS;
-  ObCopyRemoteSSTableMacroBlockRestoreReader *tmp_reader = nullptr;
-
-  reader = nullptr;
-  if (!copy_ctx_->is_leader_restore_ 
-      || !ObTabletRestoreAction::is_restore_replace_remote_sstable(copy_ctx_->restore_action_) 
-      || !init_param.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get remote macro block restore reader get invalid argument", K(ret), KPC(copy_ctx_), K(init_param));
-  } else if (OB_ISNULL(tmp_reader = MTL_NEW(ObCopyRemoteSSTableMacroBlockRestoreReader, "RMacroRReader"))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc ObCopyRemoteSSTableMacroBlockRestoreReader", K(ret));
-  } else if (OB_FAIL(tmp_reader->init(init_param))) {
-    LOG_WARN("failed to init remote macro block restore reader", K(ret), K(init_param), KPC(copy_ctx_));
-  } else {
-    reader = tmp_reader;
-    tmp_reader = nullptr;
-  }
-
-  if (OB_NOT_NULL(tmp_reader)) {
-    MTL_DELETE(ObCopyRemoteSSTableMacroBlockRestoreReader, "RMacroRReader", tmp_reader);
-  }
-  
   return ret;
 }
 
@@ -470,8 +403,8 @@ int ObPhysicalCopyTask::generate_next_task(ObITask *&next_task)
 void ObPhysicalCopyTask::free_macro_block_reader_(ObICopyMacroBlockReader *&reader)
 {
   if (OB_NOT_NULL(reader)) {
-    reader->~ObICopyMacroBlockReader();
-    mtl_free(reader);
+    // Use virtual destructor dispatch to release helper owned by derived reader.
+    MTL_DELETE(ObICopyMacroBlockReader, "HelperMacReader", reader);
     reader = nullptr;
   }
 }
@@ -479,89 +412,6 @@ void ObPhysicalCopyTask::free_macro_block_reader_(ObICopyMacroBlockReader *&read
 void ObPhysicalCopyTask::free_macro_block_writer_(ObStorageHAMacroBlockWriter *&writer)
 {
   MTL_DELETE(ObStorageHAMacroBlockWriter, "MacroObWriter", writer);
-}
-
-int ObPhysicalCopyTask::build_copy_macro_block_reader_init_param_(
-    ObCopyMacroBlockReaderInitParam &init_param)
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("physical copy task do not init", K(ret));
-  } else if (OB_ISNULL(finish_task_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("finish task should not be null", K(ret));
-  } else {
-    init_param.tenant_id_ = copy_ctx_->tenant_id_;
-    init_param.ls_id_ = copy_ctx_->ls_id_;
-    init_param.table_key_ = copy_table_key_;
-    init_param.is_leader_restore_ = copy_ctx_->is_leader_restore_;
-    init_param.restore_action_ = copy_ctx_->restore_action_;
-    init_param.src_info_ = copy_ctx_->src_info_;
-    init_param.bandwidth_throttle_ = copy_ctx_->bandwidth_throttle_;
-    init_param.svr_rpc_proxy_ = copy_ctx_->svr_rpc_proxy_;
-    init_param.restore_base_info_ = copy_ctx_->restore_base_info_;
-    init_param.meta_index_store_ = copy_ctx_->meta_index_store_;
-    init_param.second_meta_index_store_ = copy_ctx_->second_meta_index_store_;
-    init_param.restore_macro_block_id_mgr_ = copy_ctx_->restore_macro_block_id_mgr_;
-    init_param.copy_macro_range_info_ = copy_macro_range_info_;
-    init_param.need_check_seq_ = copy_ctx_->need_check_seq_;
-    init_param.ls_rebuild_seq_ = copy_ctx_->ls_rebuild_seq_;
-    init_param.backfill_tx_scn_ = finish_task_->get_sstable_param()->basic_meta_.filled_tx_scn_;
-    init_param.macro_block_reuse_mgr_ = copy_ctx_->macro_block_reuse_mgr_;
-    init_param.data_version_ = 0;
-
-    if (OB_FAIL(build_data_version_for_macro_block_reuse_(init_param))) {
-      LOG_WARN("failed to check enable macro block reuse", K(ret), K(init_param));
-    } else if (!init_param.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("copy macro block reader init param is invalid", K(ret), K(init_param));
-    } else {
-      LOG_INFO("succeed init param", KPC(copy_macro_range_info_), K(init_param));
-    }
-  }
-  return ret;
-}
-
-int ObPhysicalCopyTask::build_data_version_for_macro_block_reuse_(ObCopyMacroBlockReaderInitParam &init_param)
-{
-  int ret = OB_SUCCESS;
-  int64_t snapshot_version = 0;
-  int64_t co_base_snapshot_version = 0;
-  int64_t src_co_base_snapshot_version = 0;
-  uint64_t compat_version = 0;
-  init_param.data_version_ = 0;
-
-  if (OB_ISNULL(copy_ctx_->macro_block_reuse_mgr_)) {
-    // skip reuse
-    init_param.data_version_ = 0;
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(copy_ctx_->tenant_id_, compat_version))) {
-    LOG_INFO("failed to get min data version", K(ret), KPC(copy_ctx_));
-  } else if (finish_task_->get_sstable_param()->is_small_sstable_) {
-    // skip reuse for small sstable
-    init_param.data_version_ = 0;
-    LOG_INFO("skip reuse for small sstable", KPC(copy_ctx_));
-  } else if (OB_FAIL(copy_ctx_->macro_block_reuse_mgr_->get_major_snapshot_version(copy_ctx_->table_key_, snapshot_version, co_base_snapshot_version))) {
-    if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("failed to get reuse major snapshot version", K(ret), KPC(copy_ctx_));
-    } else {
-      ret = OB_SUCCESS;
-      init_param.data_version_ = 0;
-      LOG_INFO("major snapshot version not exist, maybe copying first major in this tablet or copying F major to C replica, skip reuse, set data_version_ to 0", K(ret), KPC(copy_ctx_), K(init_param));
-    }
-  } else if (FALSE_IT(src_co_base_snapshot_version = finish_task_->get_sstable_param()->basic_meta_.get_co_base_snapshot_version())) {
-  } else if (co_base_snapshot_version != src_co_base_snapshot_version) {
-    // when co_base_snapshot_version not match (dst C's major is converted from different version of src major), skip reuse
-    init_param.data_version_ = 0;
-    LOG_INFO("co_base_snapshot_version not match, skip reuse, set data_version_ to 0", K(snapshot_version), K(co_base_snapshot_version),
-        K(src_co_base_snapshot_version), KPC(copy_ctx_), K(init_param));
-  } else {
-    init_param.data_version_ = snapshot_version;
-    LOG_INFO("succeed get and set reuse major max snapshot version", K(snapshot_version), K(co_base_snapshot_version), K(src_co_base_snapshot_version), KPC(copy_ctx_), K(init_param));
-  }
-
-  return ret;
 }
 
 int ObPhysicalCopyTask::record_server_event_()
@@ -576,8 +426,7 @@ int ObPhysicalCopyTask::record_server_event_()
         "ls_id", copy_ctx_->ls_id_.id(),
         "tablet_id", copy_ctx_->tablet_id_.id(),
         "table_key", copy_table_key_,
-        "macro_block_count", copy_macro_range_info_->macro_block_count_,
-        "src", copy_ctx_->src_info_.src_addr_);
+        "macro_block_count", copy_macro_range_info_->macro_block_count_);
   } 
   return ret;
 }

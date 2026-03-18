@@ -370,9 +370,6 @@ drop table if exists t_dim_table;
 --disable_result_log
 connect (conn_admin, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection conn_admin;
-let $old_primary_zone=query_get_value(select primary_zone from oceanbase.__all_tenant where tenant_name='sys',primary_zone,1);
-alter tenant sys set primary_zone='RANDOM';
-sleep 3;
 connection default;
 --enable_result_log
 --enable_query_log
@@ -408,7 +405,6 @@ drop table if exists t_many_partitions;
 --disable_query_log
 --disable_result_log
 connection conn_admin;
-eval alter tenant sys set primary_zone='$old_primary_zone';
 connection default;
 --enable_result_log
 --enable_query_log

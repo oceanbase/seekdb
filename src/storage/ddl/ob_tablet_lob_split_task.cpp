@@ -560,7 +560,7 @@ int ObTabletLobSplitDag::report_lob_split_status()
     LOG_WARN("invalid param", K(ret), K(param_));
   } else {
     obrpc::ObDDLBuildSingleReplicaResponseArg arg;
-    ObAddr rs_addr;
+    ObAddr rs_addr = GCTX.self_addr();
     arg.tenant_id_ = param_.tenant_id_;
     arg.dest_tenant_id_ = param_.tenant_id_;
     arg.ls_id_ = param_.ls_id_;
@@ -579,11 +579,9 @@ int ObTabletLobSplitDag::report_lob_split_status()
     arg.physical_row_count_ = context_.physical_row_count_;
     FLOG_INFO("send tablet split response to RS", K(ret), K(context_), K(arg), K(param_));
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_) || OB_ISNULL(GCTX.rs_mgr_)) {
+    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
       ret = OB_ERR_SYS;
       LOG_WARN("innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
-    } else if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_addr))) {
-      LOG_WARN("fail to get rootservice address", K(ret));
     } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build split tablet data response", K(ret), K(arg));
     }
@@ -674,11 +672,11 @@ int ObTabletLobBuildMapTask::process()
     #ifdef ERRSIM
       ret = OB_E(EventTable::EN_BLOCK_LOB_SPLIT_BEFORE_SSTABLES_SPLIT) OB_SUCCESS;
       if (OB_FAIL(ret)) { // errsim trigger.
-        common::ObZone self_zone;
         ObString zone1_str("z1");
-        if (OB_FAIL(SVR_TRACER.get_server_zone(GCTX.self_addr(), self_zone))) { // overwrite ret is expected.
+        if (OB_ISNULL(GCTX.config_) { // overwrite ret is expected.
+          ret = OB_INVALID_ARGUMENT;
           LOG_WARN("get server zone failed", K(ret));
-        } else if (0 != ObCharset::instr(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, self_zone.str().ptr(), self_zone.str().length(), 
+        } else if (0 != ObCharset::instr(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, GCTX.config_->zone.str().ptr(), GCTX.config_->zone.str().length(),
             zone1_str.ptr(), zone1_str.length())) {
           ret = OB_EAGAIN;
           LOG_INFO("set eagain for tablet split", K(ret));

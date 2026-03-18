@@ -27,27 +27,25 @@ namespace common {
 #define FETCH_TAB_STATS_HISTROY "SELECT table_id, partition_id, object_type, row_cnt row_count, \
                                  avg_row_len avg_row_size, macro_blk_cnt macro_block_num,\
                                  micro_blk_cnt micro_block_num, stattype_locked,last_analyzed FROM \
-                                 %s T WHERE tenant_id = %lu and table_id = %ld and \
+                                 %s T WHERE table_id = %ld and \
                                  partition_id in %s and savtime in (SELECT min(savtime) From \
-                                 %s TF where TF.tenant_id = T.tenant_id \
-                                 and TF.table_id = T.table_id and TF.partition_id = T.partition_id \
+                                 %s TF where TF.table_id = T.table_id and TF.partition_id = T.partition_id \
                                  and savtime >= usec_to_time('%ld'));"
 
 #define FETCH_COL_STATS_HISTROY "SELECT table_id, partition_id, column_id, object_type stat_level,\
                                  distinct_cnt num_distinct, null_cnt num_null, b_max_value,\
                                  b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size,\
                                  histogram_type, sample_size, bucket_cnt, density, last_analyzed, spare1 as compress_type %s%s\
-                                 FROM %s T WHERE tenant_id = %lu and table_id = %ld \
+                                 FROM %s T WHERE table_id = %ld \
                                  and partition_id in %s and savtime in (SELECT min(savtime) From \
-                                 %s TF where TF.tenant_id = T.tenant_id \
-                                 and TF.table_id = T.table_id and TF.partition_id = T.partition_id \
+                                 %s TF where TF.table_id = T.table_id and TF.partition_id = T.partition_id \
                                  and savtime >= usec_to_time('%ld'));"
 
 #define FETCH_HISTOGRAM_HISTROY "SELECT endpoint_num, b_endpoint_value, endpoint_repeat_cnt\
-                                 FROM %s T WHERE TENANT_ID=%lu AND\
+                                 FROM %s T WHERE \
                                  table_id=%ld and partition_id = %ld and column_id = %ld and \
                                  savtime in (SELECT min(savtime) From %s \
-                                 TF where TF.tenant_id = T.tenant_id and TF.table_id = T.table_id \
+                                 TF where TF.table_id = T.table_id \
                                  and TF.partition_id = T.partition_id and savtime >= \
                                  usec_to_time('%ld')) ORDER BY ENDPOINT_NUM;"
 
@@ -61,8 +59,7 @@ namespace common {
 
 #define DELETE_STAT_HISTORY "DELETE /*+QUERY_TIMEOUT(%ld)*/FROM %s %s LIMIT %ld;"
 
-#define INSERT_TABLE_STAT_HISTORY "INSERT INTO %s(tenant_id,           \
-                                                  table_id,            \
+#define INSERT_TABLE_STAT_HISTORY "INSERT INTO %s(table_id,            \
                                                   partition_id,        \
                                                   savtime,             \
                                                   object_type,         \
@@ -80,8 +77,7 @@ namespace common {
                                                   stattype_locked,     \
                                                   spare1) %s"
 
-#define SELECT_TABLE_STAT                "SELECT tenant_id,           \
-                                                  table_id,            \
+#define SELECT_TABLE_STAT                "SELECT table_id,            \
                                                   partition_id,        \
                                                   usec_to_time(%ld),   \
                                                   object_type,         \
@@ -99,12 +95,11 @@ namespace common {
                                                   stattype_locked,     \
                                                   spare1               \
                                              FROM %s                   \
-                                             WHERE tenant_id = %lu and table_id = %lu %s"
+                                             WHERE table_id = %lu %s"
 
-#define TABLE_STAT_MOCK_VALUE_PATTERN "(%lu, %lu, %ld, usec_to_time(%ld), 0, 0, 0, 0, -1, -1, 0, 0, -1, 0, 0, 0, 0, 0)"
+#define TABLE_STAT_MOCK_VALUE_PATTERN "(%lu, %ld, usec_to_time(%ld), 0, 0, 0, 0, -1, -1, 0, 0, -1, 0, 0, 0, 0, 0)"
 
-#define INSERT_COLUMN_STAT_HISTORY "INSERT INTO %s(tenant_id,                 \
-                                                   table_id,                  \
+#define INSERT_COLUMN_STAT_HISTORY "INSERT INTO %s(table_id,                  \
                                                    partition_id,              \
                                                    column_id,                 \
                                                    savtime,                   \
@@ -126,8 +121,7 @@ namespace common {
                                                    histogram_type,            \
                                                    spare1%s%s) %s"
 
-#define SELECT_COLUMN_STAT               "SELECT   tenant_id,                 \
-                                                   table_id,                  \
+#define SELECT_COLUMN_STAT               "SELECT   table_id,                  \
                                                    partition_id,              \
                                                    column_id,                 \
                                                    usec_to_time(%ld),         \
@@ -151,11 +145,10 @@ namespace common {
                                              FROM %s                          \
                                              WHERE %s"
 
-#define COLUMN_STAT_MOCK_VALUE_PATTERN "(%lu, %lu, %ld, %lu, usec_to_time(%ld), 0, 0, usec_to_time(%ld), 0, 0, \
+#define COLUMN_STAT_MOCK_VALUE_PATTERN "(%lu, %ld, %lu, usec_to_time(%ld), 0, 0, usec_to_time(%ld), 0, 0, \
                                          %s, '%.*s', %s, '%.*s', 0, '', 0, -1, 0.000000, 0, 0, NULL%s%s)"
 
-#define INSERT_HISTOGRAM_STAT_HISTORY "INSERT INTO %s(tenant_id,                \
-                                                      table_id,                 \
+#define INSERT_HISTOGRAM_STAT_HISTORY "INSERT INTO %s(table_id,                 \
                                                       partition_id,             \
                                                       column_id,                \
                                                       endpoint_num,             \
@@ -165,8 +158,7 @@ namespace common {
                                                       endpoint_value,           \
                                                       b_endpoint_value,         \
                                                       endpoint_repeat_cnt)      \
-                                              SELECT  tenant_id,                \
-                                                      table_id,                 \
+                                              SELECT  table_id,                 \
                                                       partition_id,             \
                                                       column_id,                \
                                                       endpoint_num,             \
@@ -179,11 +171,9 @@ namespace common {
                                                 FROM %s                         \
                                                 WHERE %s"
 
-#define CHECK_TABLE_STAT "SELECT partition_id FROM %s WHERE tenant_id = %lu \
-                          and table_id = %lu %s"
+#define CHECK_TABLE_STAT "SELECT partition_id FROM %s WHERE table_id = %lu %s"
 
-#define CHECK_COLUMN_STAT "SELECT partition_id, column_id FROM %s WHERE tenant_id = %lu \
-                           and table_id = %lu %s"
+#define CHECK_COLUMN_STAT "SELECT partition_id, column_id FROM %s WHERE table_id = %lu %s"
 
 int ObDbmsStatsHistoryManager::backup_opt_stats(ObExecContext &ctx,
                                                 ObMySQLTransaction &trans,
@@ -268,7 +258,6 @@ int ObDbmsStatsHistoryManager::calssify_table_stat_part_ids(ObExecContext &ctx,
     LOG_WARN("failed to append fmt", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(CHECK_TABLE_STAT,
                                         share::OB_ALL_TABLE_STAT_TNAME,
-                                        share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                         share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                         is_specify_partition ? extra_where_str.ptr() : " "))) {
     LOG_WARN("failed to append fmt", K(ret));
@@ -357,7 +346,6 @@ int ObDbmsStatsHistoryManager::backup_having_table_part_stats(ObMySQLTransaction
   } else if (OB_FAIL(select_sql.append_fmt(SELECT_TABLE_STAT,
                                            saving_time,
                                            share::OB_ALL_TABLE_STAT_TNAME,
-                                           share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                            share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                            is_specify_partition ? extra_where_str.ptr() : " "))) {
     LOG_WARN("failed to append fmt", K(ret));
@@ -392,7 +380,6 @@ int ObDbmsStatsHistoryManager::backup_no_table_part_stats(ObMySQLTransaction &tr
       for (int64_t i = 0; OB_SUCC(ret) && i < MAX_NUM_OF_WRITE_STATS && idx < partition_ids.count(); ++i) {
         ObSqlString value;
         if (OB_FAIL(value.append_fmt(TABLE_STAT_MOCK_VALUE_PATTERN,
-                                     share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                      share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                      partition_ids.at(idx++),
                                      saving_time))) {
@@ -511,7 +498,6 @@ int ObDbmsStatsHistoryManager::generate_having_stat_part_col_map(ObExecContext &
     LOG_WARN("failed to append fmt", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(CHECK_COLUMN_STAT,
                                         share::OB_ALL_COLUMN_STAT_TNAME,
-                                        share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                         share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                         (is_specify_partition || is_specify_column) ? extra_where_str.ptr() : " "))) {
     LOG_WARN("failed to append fmt", K(ret));
@@ -582,8 +568,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
     bool need_backup = true;
     if (OB_LIKELY(having_stat_part_col_map.size() == partition_ids.count() * column_ids.count())) {
       if (!is_specify_gather) {
-        if (OB_FAIL(where_str.append_fmt(" tenant_id = %lu and table_id = %lu",
-                                         share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
+        if (OB_FAIL(where_str.append_fmt(" table_id = %lu",
                                          share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
           LOG_WARN("failed to append fmt", K(ret));
         }
@@ -594,8 +579,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
           LOG_WARN("failed to gen partition list", K(ret));
         } else if (OB_FAIL(gen_column_list(column_ids, column_list))) {
           LOG_WARN("failed to gen partition list", K(ret));
-        } else if (OB_FAIL(where_str.append_fmt(" tenant_id = %lu and table_id = %lu and partition_id in %s and column_id in %s",
-                                                share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
+        } else if (OB_FAIL(where_str.append_fmt(" table_id = %lu and partition_id in %s and column_id in %s",
                                                 share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                                 partition_list.ptr(),
                                                 column_list.ptr()))) {
@@ -667,8 +651,7 @@ int ObDbmsStatsHistoryManager::backup_having_column_stats(ObMySQLTransaction &tr
           LOG_WARN("failed to append fmt", K(ret));
         } else if (part_col_where1.empty() && part_col_where2.empty()) {
           need_backup = false;
-        } else if (OB_FAIL(where_str.append_fmt(" tenant_id = %lu and table_id = %lu and (%s %s %s)",
-                                                share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
+        } else if (OB_FAIL(where_str.append_fmt(" table_id = %lu and (%s %s %s)",
                                                 share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                                 part_col_where1.empty() ? " " : part_col_where1.ptr(),
                                                 !part_col_where1.empty() && !part_col_where2.empty() ? "or" : " ",
@@ -739,7 +722,6 @@ int ObDbmsStatsHistoryManager::backup_no_column_stats(ObMySQLTransaction &trans,
               ret = OB_SUCCESS;
               ObSqlString value;
               if (OB_FAIL(value.append_fmt(COLUMN_STAT_MOCK_VALUE_PATTERN,
-                                           share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                            share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                            partition_ids.at(i),
                                            column_ids.at(j),
@@ -843,8 +825,7 @@ int ObDbmsStatsHistoryManager::backup_histogram_stats(ObMySQLTransaction &trans,
                                                   is_specify_partition ? extra_partition_str.ptr() : " ",
                                                   is_specify_column ? extra_column_str.ptr() : " "))) {
       LOG_WARN("failed to append fmt", K(ret));
-    } else if (OB_FAIL(where_str.append_fmt(" tenant_id = %lu and table_id = %lu %s",
-                                            share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
+    } else if (OB_FAIL(where_str.append_fmt(" table_id = %lu %s",
                                             share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                             (is_specify_partition || is_specify_column) ? extra_where_str.ptr() : " "))) {
         LOG_WARN("failed to append fmt", K(ret));
@@ -1141,7 +1122,6 @@ int ObDbmsStatsHistoryManager::fetch_table_stat_histrory(ObExecContext &ctx,
     LOG_WARN("failed to gen partition list", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(FETCH_TAB_STATS_HISTROY,
                                         share::OB_ALL_TABLE_STAT_HISTORY_TNAME,
-                                        share::schema::ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                         share::schema::ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_),
                                         partition_list.ptr(),
                                         share::OB_ALL_TABLE_STAT_HISTORY_TNAME,
@@ -1246,7 +1226,6 @@ int ObDbmsStatsHistoryManager::fetch_column_stat_history(ObExecContext &ctx,
                                         ",cg_macro_blk_cnt, cg_micro_blk_cnt",
                                         ", cg_skip_rate",
                                         share::OB_ALL_COLUMN_STAT_HISTORY_TNAME,
-                                        share::schema::ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                         share::schema::ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_),
                                         partition_list.ptr(),
                                         share::OB_ALL_TABLE_STAT_HISTORY_TNAME,
@@ -1438,7 +1417,6 @@ int ObDbmsStatsHistoryManager::fetch_histogram_stat_histroy(ObExecContext &ctx,
     uint64_t exec_tenant_id = share::schema::ObSchemaUtils::get_exec_tenant_id(tenant_id);
     if (OB_FAIL(raw_sql.append_fmt(FETCH_HISTOGRAM_HISTROY,
                                    share::OB_ALL_HISTOGRAM_STAT_HISTORY_TNAME,
-                                   share::schema::ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                    share::schema::ObSchemaUtils::get_extract_schema_id(exec_tenant_id, col_stat.get_table_id()),
                                    col_stat.get_partition_id(),
                                    col_stat.get_column_id(),
@@ -1632,8 +1610,8 @@ int ObDbmsStatsHistoryManager::remove_useless_column_stats(ObMySQLTransaction &t
                                                           query_timeout))) {
       LOG_WARN("failed to get valid duration time", K(ret));
     } else if (OB_FAIL(delete_col_stat_sql.append_fmt("DELETE /*+QUERY_TIMEOUT(%ld)*/ FROM %s c WHERE (NOT EXISTS (SELECT 1 " \
-                                                      "FROM %s t, %s db WHERE t.tenant_id = db.tenant_id AND t.database_id = db.database_id "\
-                                                      "AND t.table_id = c.table_id AND t.tenant_id = c.tenant_id AND db.database_name != '__recyclebin')) "\
+                                                      "FROM %s t, %s db WHERE t.database_id = db.database_id "\
+                                                      "AND t.table_id = c.table_id AND db.database_name != '__recyclebin')) "\
                                                       "AND table_id > %ld limit %ld;",
                                                       query_timeout,
                                                       share::OB_ALL_COLUMN_STAT_TNAME,
@@ -1656,8 +1634,8 @@ int ObDbmsStatsHistoryManager::remove_useless_column_stats(ObMySQLTransaction &t
                                                           query_timeout))) {
       LOG_WARN("failed to get valid duration time", K(ret));
     } else if (OB_FAIL(delete_hist_stat_sql.append_fmt("DELETE /*+QUERY_TIMEOUT(%ld)*/ FROM %s hist WHERE (NOT EXISTS (SELECT 1 " \
-                                                       "FROM %s t, %s db WHERE t.tenant_id = db.tenant_id AND t.database_id = db.database_id "\
-                                                       "AND t.table_id = hist.table_id AND t.tenant_id = hist.tenant_id AND db.database_name != '__recyclebin')) "\
+                                                       "FROM %s t, %s db WHERE t.database_id = db.database_id "\
+                                                       "AND t.table_id = hist.table_id AND db.database_name != '__recyclebin')) "\
                                                        "AND table_id > %ld limit %ld;",
                                                        query_timeout,
                                                        share::OB_ALL_HISTOGRAM_STAT_TNAME,

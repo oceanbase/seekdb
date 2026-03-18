@@ -27,8 +27,6 @@ public:
   ObVirtualShowTrace();
   int inner_open();
   int extract_tenant_ids();
-  inline void set_addr(common::ObAddr &addr) {addr_ = &addr;}
-  virtual int set_ip(common::ObAddr *addr);
   virtual ~ObVirtualShowTrace();
   virtual int inner_get_next_row(common::ObNewRow *&row);
   virtual void reset();
@@ -54,10 +52,7 @@ public:
 private:
   enum SYS_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TRACE_ID,
+        TRACE_ID = common::OB_APP_MIN_COLUMN_ID,
     REQUEST_ID,
     REC_SVR_IP,
     REC_SVR_PORT,
@@ -76,7 +71,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObVirtualShowTrace);
 
   common::ObRaQueue::Ref ref_;
-  common::ObAddr *addr_;
   common::ObString ipstr_;
   int32_t port_;
   char server_ip_[common::MAX_IP_ADDR_LENGTH + 2];

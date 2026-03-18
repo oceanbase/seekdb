@@ -515,9 +515,6 @@ LABEL_ITEM_DEF(OB_GTS_REQUEST_RPC, GtsRequestRpc)
 LABEL_ITEM_DEF(OB_END_TRANS_CB_TASK, EndTransCbTask)
 LABEL_ITEM_DEF(OB_TRANS_CLOG_ENCRYPT_INFO, CLogEncryptInfo)
 
-// rootservice
-LABEL_ITEM_DEF(OB_LOCALITY_UTIL, LocalityUtil)
-
 // storage_test
 LABEL_ITEM_DEF(OB_RING_BUFFER, RingBuffer)
 LABEL_ITEM_DEF(OB_CONCURRENT_HASH_MAP, ConcurHashMap)
@@ -682,7 +679,7 @@ struct InnerModIds
   #undef LABEL_ITEM_DEF
   };
   enum { LABEL_COUNT_LIMIT = InnerModIds::OB_MOD_END };
-  STATIC_ASSERT(LABEL_COUNT_LIMIT == 452, "forbidden to add new label!!!");
+  STATIC_ASSERT(LABEL_COUNT_LIMIT == 451, "forbidden to add new label!!!");
 };
 
 #define ObNewModIds ObModIds

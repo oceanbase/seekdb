@@ -43,10 +43,7 @@ class ObAllVirtualStorageMetaMemoryStatus : public common::ObVirtualTableScanner
 private:
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    NAME,
+        NAME = common::OB_APP_MIN_COLUMN_ID,
     USED_SIZE,
     TOTAL_SIZE,
     USED_OBJ_CNT,

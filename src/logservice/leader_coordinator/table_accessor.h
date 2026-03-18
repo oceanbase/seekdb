@@ -27,7 +27,6 @@
 #include "share/ob_table_access_helper.h"
 #include "common_define.h"
 #include <cstring>
-#include "ob_leader_coordinator.h"
 namespace oceanbase
 {
 namespace unittest
@@ -127,7 +126,6 @@ private:
   int get_row_from_table_();
   int start_and_read_();
   int write_and_commit_();
-  int schedule_refresh_priority_task_();
   int set_user_row_for_specific_reason_(const common::ObAddr &server, InsertElectionBlacklistReason reason);
 private:
   const uint64_t tenant_id_;
@@ -163,7 +161,6 @@ class TableAccessor
   };
   static ServerZoneNameCache SERVER_ZONE_NAME_CACHE;
 public:
-  static int get_all_ls_election_reference_info(common::ObIArray<LsElectionReferenceInfo> &all_ls_election_reference_info);
   static int get_self_zone_name(ObStringHolder &zone_name_holder);
   static int get_self_zone_region(const ObStringHolder &zone_name_holder, ObStringHolder &region_name_holder);
   static int is_primary_region(const ObStringHolder &region_name_holder, bool &is_primary_region);

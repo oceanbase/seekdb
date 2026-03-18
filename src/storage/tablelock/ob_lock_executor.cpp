@@ -571,7 +571,7 @@ int ObLockExecutor::get_lock_session_(ObLockContext &ctx,
     {
       ObSqlString sql;
       common::sqlclient::ObMySQLResult *result = nullptr;
-      OZ (sql.assign_fmt("SELECT svr_ip, svr_port, server_session_id"
+      OZ (sql.assign_fmt("SELECT server_session_id"
                          " FROM %s WHERE client_session_id = %" PRIu32 " AND client_session_create_ts = %" PRIu64,
                          table_name,
                          client_session_id,
@@ -589,20 +589,16 @@ int ObLockExecutor::get_first_session_info_(common::sqlclient::ObMySQLResult &re
                                             uint32_t &server_session_id)
 {
   int ret = OB_SUCCESS;
-  ObString svr_ip;
-  int64_t svr_port;
   uint64_t tmp_session_id = 0;
 
   OZ (res.next());
   if (OB_ITER_END == ret) {
     ret = OB_EMPTY_RESULT;
   }
-  OX (GET_COL_IGNORE_NULL(res.get_varchar, "svr_ip", svr_ip));
-  OX (GET_COL_IGNORE_NULL(res.get_int, "svr_port", svr_port));
   OX (GET_COL_IGNORE_NULL(res.get_uint, "server_session_id", tmp_session_id));
   OX (server_session_id = static_cast<uint32_t>(tmp_session_id));
+  // session_addr is no longer stored in table, reset to invalid
   OX (session_addr.reset());
-  OV (session_addr.set_ip_addr(to_cstring(svr_ip), svr_port), OB_ERR_UNEXPECTED, svr_ip, svr_port);
 
   return ret;
 }
@@ -615,8 +611,6 @@ int ObLockExecutor::update_session_table_(ObLockContext &ctx,
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer insert_dml;
   ObSqlString insert_sql;
-  char svr_ip[OB_MAX_SERVER_ADDR_SIZE] = "";
-  const ObAddr &self_addr = GCTX.self_addr();
 
   int64_t affected_rows = 0;
   const int64_t now = ObTimeUtility::current_time();
@@ -624,14 +618,11 @@ int ObLockExecutor::update_session_table_(ObLockContext &ctx,
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
   lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
-  OV (self_addr.ip_to_string(svr_ip, MAX_IP_ADDR_LENGTH), OB_INVALID_ARGUMENT, self_addr);
   OZ (insert_dml.add_gmt_create(now));
   OZ (insert_dml.add_gmt_modified(now));
   OZ (insert_dml.add_pk_column("server_session_id", server_session_id));
   OZ (insert_dml.add_column("client_session_id", client_session_id));
   OZ (insert_dml.add_time_column("client_session_create_ts", client_session_create_ts));
-  OZ (insert_dml.add_column("svr_ip", svr_ip));
-  OZ (insert_dml.add_column("svr_port", self_addr.get_port()));
   OZ (insert_dml.splice_insert_update_sql(table_name,
                                           insert_sql));
   OZ (ctx.execute_write(insert_sql, affected_rows));
@@ -645,29 +636,12 @@ int ObLockExecutor::get_sql_port_(ObLockContext &ctx,
                                   int32_t &sql_port)
 {
   int ret = OB_SUCCESS;
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {'\0'};
-  char svr_ip[MAX_IP_ADDR_LENGTH] = {'\0'};
-  int32_t svr_port = svr_addr.get_port();
-  int64_t tmp_sql_port = 0;
-
-  OZ (databuff_printf(
-     table_name, MAX_FULL_TABLE_NAME_LENGTH, "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_LS_META_TABLE_TNAME));
-  OV (svr_addr.ip_to_string(svr_ip, MAX_IP_ADDR_LENGTH), OB_ERR_UNEXPECTED, svr_addr);
-  OX (
-    SMART_VAR(ObMySQLProxy::MySQLResult, res)
-    {
-      ObSqlString sql;
-      common::sqlclient::ObMySQLResult *result = nullptr;
-      OZ (sql.assign_fmt("SELECT sql_port FROM %s"
-                        " WHERE svr_ip = '%s' AND svr_port = %" PRId32 " LIMIT 1",
-                        table_name, svr_ip, svr_port));
-      OZ (ctx.execute_read(sql, res));
-      OV (OB_NOT_NULL(result = res.get_result()), OB_ERR_UNEXPECTED, svr_addr, svr_ip, svr_port);
-      OZ (result->next());
-      OX (GET_COL_IGNORE_NULL(result->get_int, "sql_port", tmp_sql_port));
-    }  // end SMART_VAR
-  )
-  OX (sql_port = static_cast<int32_t>(tmp_sql_port));
+  if (OB_ISNULL(GCTX.config_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
+  } else {
+    sql_port = GCTX.config_->mysql_port/*sql_port*/;
+  }
   return ret;
 }
 

@@ -1536,8 +1536,8 @@ int ObPartitionSplitTask::delete_stat_info(common::ObMySQLTransaction &trans,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parameter invalid", K(ret), KP(table_name), K(table_id), K(src_part_id));
   } else if (OB_FAIL(sql_string.assign_fmt("DELETE FROM %s "
-      " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld;",
-      table_name, 0l /*tenant_id*/, table_id, src_part_id))) {
+      " WHERE table_id = %ld and partition_id = %ld;",
+      table_name, table_id, src_part_id))) {
     LOG_WARN("failed to assign sql string", K(ret), K(table_name), K(table_id), K(src_part_id));
   } else if (OB_FAIL(trans.write(tenant_id_, sql_string.ptr(), affected_rows))) {
     LOG_WARN("failed to delete source_partition information from ", K(ret), K(sql_string));
@@ -1618,11 +1618,11 @@ const char *ObPartitionSplitTask::get_table_schema(const char *table_name)
 {
   const char *ret_table_schema = "UNKNOWN_TABLE_NAME";
   if (OB_ALL_TABLE_STAT_TNAME == table_name) {
-    ret_table_schema = "gmt_create, gmt_modified, tenant_id, table_id, object_type, last_analyzed, sstable_row_cnt, sstable_avg_row_len, macro_blk_cnt, micro_blk_cnt, memtable_row_cnt, memtable_avg_row_len, row_cnt, avg_row_len, global_stats, user_stats, stattype_locked, stale_stats, spare1, spare2, spare3, spare4, spare5, spare6, index_type"; 
+    ret_table_schema = "gmt_create, gmt_modified, table_id, object_type, last_analyzed, sstable_row_cnt, sstable_avg_row_len, macro_blk_cnt, micro_blk_cnt, memtable_row_cnt, memtable_avg_row_len, row_cnt, avg_row_len, global_stats, user_stats, stattype_locked, stale_stats, spare1, spare2, spare3, spare4, spare5, spare6, index_type";
   } else if (OB_ALL_COLUMN_STAT_TNAME == table_name) {
-    ret_table_schema = "gmt_create, gmt_modified, tenant_id, table_id, column_id, object_type, last_analyzed, distinct_cnt, null_cnt, max_value, b_max_value, min_value, b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size, sample_size, density, bucket_cnt, histogram_type, global_stats, user_stats, spare1, spare2, spare3, spare4, spare5, spare6, cg_macro_blk_cnt, cg_micro_blk_cnt, cg_skip_rate"; 
+    ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, object_type, last_analyzed, distinct_cnt, null_cnt, max_value, b_max_value, min_value, b_min_value, avg_len, distinct_cnt_synopsis, distinct_cnt_synopsis_size, sample_size, density, bucket_cnt, histogram_type, global_stats, user_stats, spare1, spare2, spare3, spare4, spare5, spare6, cg_macro_blk_cnt, cg_micro_blk_cnt, cg_skip_rate";
   } else if (OB_ALL_HISTOGRAM_STAT_TNAME == table_name) {
-    ret_table_schema = "gmt_create, gmt_modified, tenant_id, table_id, column_id, endpoint_num, object_type, endpoint_normalized_value, endpoint_value, b_endpoint_value, endpoint_repeat_cnt"; 
+    ret_table_schema = "gmt_create, gmt_modified, table_id, column_id, endpoint_num, object_type, endpoint_normalized_value, endpoint_value, b_endpoint_value, endpoint_repeat_cnt";
   }
   return ret_table_schema;
 }
@@ -1642,10 +1642,10 @@ int ObPartitionSplitTask::copy_stat_info(common::ObMySQLTransaction &trans,
     LOG_WARN("parameter invalid", K(ret), KP(table_name), K(table_id), K(src_part_id), K(dest_part_id));
   } else if (OB_FAIL(sql_string.assign_fmt("REPLACE INTO %s (partition_id, %s)"
                                            "SELECT %ld, %s FROM %s "
-                                           " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld;",
+                                           " WHERE table_id = %ld and partition_id = %ld;",
                                            table_name,get_table_schema(table_name),
                                            dest_part_id, get_table_schema(table_name), table_name,
-                                           0l /*tenant_id*/, table_id, src_part_id))) {
+                                           table_id, src_part_id))) {
     LOG_WARN("failed to assign sql string", K(ret), K(table_name), K(table_id), K(dest_part_id));
   } else if (OB_FAIL(trans.write(tenant_id_, sql_string.ptr(), affected_rows))) {
     LOG_WARN("failed to delete source_partition information from ", K(ret), K(sql_string));

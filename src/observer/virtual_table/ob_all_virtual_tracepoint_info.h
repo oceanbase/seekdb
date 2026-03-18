@@ -38,9 +38,7 @@ private:
   common::ObAddr *addr_;
   enum INSPECT_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TP_NO,
+        TP_NO = common::OB_APP_MIN_COLUMN_ID,
     TP_NAME,
     TP_DESCRIBE,
     TP_FREQUENCY,

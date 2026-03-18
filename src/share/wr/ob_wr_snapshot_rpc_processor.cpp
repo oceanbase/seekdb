@@ -413,9 +413,8 @@ int ObWrSyncUserModifySettingsTaskP::process()
         if (OB_ISNULL(GCTX.sql_proxy_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("GCTX.sql_proxy_ is null", K(ret));
-        } else if (OB_FAIL(sql.assign_fmt("update /*+ WORKLOAD_REPOSITORY */ %s set %s=%ld  "
-                                          "where tenant_id=%ld",
-                      OB_WR_CONTROL_TNAME, TOPN_SQL_COLUMN_NAME, arg.get_topnsql(), arg.get_tenant_id()))) {
+        } else if (OB_FAIL(sql.assign_fmt("update /*+ WORKLOAD_REPOSITORY */ %s set %s=%ld",
+                      OB_WR_CONTROL_TNAME, TOPN_SQL_COLUMN_NAME, arg.get_topnsql()))) {
           LOG_WARN("failed to format update snapshot info sql", KR(ret));
         } else if (OB_FAIL(
                       ObWrCollector::exec_write_sql_with_retry(gen_meta_tenant_id(arg.get_tenant_id()), sql.ptr(), affected_rows))) {

@@ -18,7 +18,6 @@
 #define OB_TABLE_DROP_H
 
 #include "ob_rs_async_rpc_proxy.h" //async rpc
-#include "share/ls/ob_ls_table_operator.h"
 
 namespace oceanbase
 {

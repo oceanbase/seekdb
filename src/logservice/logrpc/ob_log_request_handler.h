@@ -18,7 +18,6 @@
 #define OCEANBASE_LOGSERVICE_OB_LOG_REQUEST_HANDLER_
 
 #include "lib/ob_errno.h"                           // OB_SUCCESS...
-#include "logservice/ob_reporter_adapter.h"         // ObLogReporterAdapter
 #include "logservice/palf_handle_guard.h"           // palf::PalfHandleGuard
 #include "ob_log_rpc_req.h"                         // Req...
 
@@ -37,9 +36,6 @@ class ObLogServiceRpcProxy;
 
 namespace logservice
 {
-#ifdef OB_BUILD_ARBITRATION
-class ObArbitrationService;
-#endif
 class ObLogFlashbackService;
 class ObLogHandler;
 class ObLogReplayService;
@@ -55,9 +51,6 @@ public:
   int handle_request(const ReqType &req);
 private:
   int get_palf_handle_guard_(const int64_t palf_id, palf::PalfHandleGuard &palf_handle_guard) const;
-#ifdef OB_BUILD_ARBITRATION
-  int get_arb_service_(ObArbitrationService *&arb_service) const;
-#endif
   int get_self_addr_(common::ObAddr &self) const;
   int get_rpc_proxy_(obrpc::ObLogServiceRpcProxy *&rpc_proxy) const;
   int get_flashback_service_(ObLogFlashbackService *&flashback_srv) const;
@@ -85,8 +78,6 @@ public:
   }
   int handle_config_change_cmd(const LogConfigChangeCmd &req,
                                LogConfigChangeCmdResp &resp) const;
-private:
-  int get_reporter_(ObLogReporterAdapter *&reporter) const;
 private:
   palf::PalfHandle *palf_handle_;
 };

@@ -22,7 +22,6 @@
 #include "rootserver/ob_ddl_service.h"
 #include "share/ob_global_stat_proxy.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "rootserver/ob_tenant_balance_service.h"
 namespace oceanbase
 {
 using namespace common;
@@ -109,19 +108,6 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
     // In 'ddl_sql_transaction.start()', it implements the semantics of 'lock_all_ddl_operation'.
     if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id_, fake_schema_version))) {
       LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id), K(fake_schema_version));
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (GCTX.is_shared_storage_mode()
-            && OB_FAIL(ObTenantBalanceService::lock_and_check_balance_job(trans, tenant_id_))) {
-      if (OB_ENTRY_EXIST == ret) {
-        LOG_WARN("exist balance job, can't update broadcast version now", KR(ret), K_(tenant_id));
-        ROOTSERVICE_EVENT_ADD("ss_major_merge", "root_major_freeze",
-                              K_(tenant_id),
-                              "disabled_reason", "exist balance job",
-                              "freeze_reason", major_freeze_reason_to_str(freeze_reason));
-      } else {
-        LOG_WARN("fail to check balance job", KR(ret), K_(tenant_id));
-      }
-#endif
     // 1. lock snapshot_gc_ts in __all_global_stat
     } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(
               trans, tenant_id_, remote_snapshot_gc_scn))) {
@@ -378,15 +364,13 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
   return ret;
 }
 
-int ObMajorMergeInfoManager::try_update_zone_info(const int64_t expected_epoch)
+int ObMajorMergeInfoManager::try_update_zone_info()
 {
   int ret = OB_SUCCESS;
   ObRecursiveMutexGuard guard(lock_);
 
   if (OB_FAIL(try_reload())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(zone_merge_mgr_.try_update_zone_merge_info(expected_epoch))) {
-    LOG_WARN("fail to try update zone_merge_info", KR(ret), K_(tenant_id), K(expected_epoch));
   }
   return ret;
 }
@@ -423,10 +407,7 @@ int ObMajorMergeInfoManager::check_snapshot_gc_scn()
           // Then it will be updated to the time when observer starts through heartbeat, which is
           // scheduled every 2 seconds.
           // 2. total_service_time > SNAPSHOT_GC_TS_ERROR.
-          ObServerTableOperator st_operator;
-          if (OB_FAIL(st_operator.init(GCTX.sql_proxy_))) {
-            LOG_WARN("fail to init server table operator", K(ret), K_(tenant_id));
-          } else if (FALSE_IT(start_service_time = GCTX.start_service_time_)) {
+          if (FALSE_IT(start_service_time = GCTX.start_service_time_)) {
           } else if (FALSE_IT(total_service_time = ObTimeUtility::current_time() - start_service_time)) {
           } else if ((start_service_time > 0) && (total_service_time > SNAPSHOT_GC_TS_ERROR)) {
             LOG_ERROR("rs_monitor_check : snapshot_gc_ts delay for a long time",
@@ -477,7 +458,7 @@ int ObMajorMergeInfoManager::check_need_broadcast(bool &need_broadcast)
   return ret;
 }
 
-int ObMajorMergeInfoManager::broadcast_freeze_info(const int64_t expected_epoch)
+int ObMajorMergeInfoManager::broadcast_freeze_info()
 {
   int ret = OB_SUCCESS;
   ObRecursiveMutexGuard guard(lock_);
@@ -486,20 +467,20 @@ int ObMajorMergeInfoManager::broadcast_freeze_info(const int64_t expected_epoch)
   if (OB_FAIL(inner_get_min_freeze_info(freeze_info))) {
     LOG_WARN("fail to get min freeze info", KR(ret), K_(tenant_id));
   } else if (freeze_info.is_valid()) {
-    if (OB_FAIL(zone_merge_mgr_.set_global_freeze_info(freeze_info.frozen_scn_, expected_epoch))) {
-      LOG_WARN("fail to set global freeze info", KR(ret), K_(tenant_id), K(freeze_info), K(expected_epoch));
+    if (OB_FAIL(zone_merge_mgr_.set_global_freeze_info(freeze_info.frozen_scn_))) {
+      LOG_WARN("fail to set global freeze info", KR(ret), K_(tenant_id), K(freeze_info));
     }
   }
   return ret;
 }
 
-int ObMajorMergeInfoManager::adjust_global_merge_info(const int64_t expected_epoch)
+int ObMajorMergeInfoManager::adjust_global_merge_info()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("merge info mgr not inited", KR(ret));
-  } else if (OB_FAIL(zone_merge_mgr_.adjust_global_merge_info(expected_epoch))) {
+  } else if (OB_FAIL(zone_merge_mgr_.adjust_global_merge_info())) {
     LOG_WARN("fail to adjust global merge info", KR(ret), K_(tenant_id));
   }
   return ret;

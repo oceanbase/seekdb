@@ -1,0 +1,106 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ARCHIVE_OB_ARCHIVE_ROUND_MGR_H_
+#define OCEANBASE_ARCHIVE_OB_ARCHIVE_ROUND_MGR_H_
+
+#include "lib/utility/ob_print_utils.h"
+#include "share/backup/ob_backup_struct.h"
+#include "share/backup/ob_archive_struct.h"   // ObArchiveRoundState
+#include "ob_archive_define.h"                // ObArchiveInterruptReason
+#include <cstdint>
+
+namespace oceanbase
+{
+namespace share
+{
+class ObLSID;
+};
+namespace archive
+{
+using oceanbase::share::ObArchiveRoundState;
+class ObArchiveRoundMgr
+{
+public:
+  ObArchiveRoundMgr();
+  ~ObArchiveRoundMgr();
+
+public:
+  int init();
+  void destroy();
+   void get_round(ArchiveKey &key) const { key = key_; }
+  bool is_compatible() const {return compatible_;}
+  int set_archive_start(const ArchiveKey &key,
+      const share::SCN &round_start_scn,
+      const int64_t piece_switch_interval,
+      const share::SCN &genesis_scn,
+      const int64_t base_piece_id,
+      const share::ObTenantLogArchiveStatus::COMPATIBLE compatible,
+      const share::ObBackupDest &dest,
+      const int64_t dest_id);
+  void set_archive_force_stop(const ArchiveKey &key);
+  void set_archive_interrupt(const ArchiveKey &key);
+  void set_archive_suspend(const ArchiveKey &key);
+  int reset_backup_dest(const ArchiveKey &key);
+  int get_backup_dest_and_id(const ArchiveKey &key,
+      share::ObBackupDest &dest,
+      int64_t &dest_id);
+  int get_piece_info(const ArchiveKey &key,
+      int64_t &piece_switch_interval,
+      share::SCN &genesis_scn,
+      int64_t &base_piece_id);
+  void get_archive_round_info(ArchiveKey &key, ObArchiveRoundState &state) const;
+  int get_archive_start_scn(const ArchiveKey &key, share::SCN &scn);
+  void get_archive_round_compatible(ArchiveKey &key, bool &compatible);
+  bool is_in_archive_status(const ArchiveKey &key) const;
+  bool is_in_suspend_status(const ArchiveKey &key) const;
+  bool is_in_archive_stopping_status(const ArchiveKey &key) const;
+  bool is_in_archive_stop_status(const ArchiveKey &key) const;
+  void update_log_archive_status(const ObArchiveRoundState::Status status);
+  int mark_fatal_error(const share::ObLSID &id, const ArchiveKey &key, const ObArchiveInterruptReason &reason);
+
+  void set_has_handle_error(bool has_handle);
+  TO_STRING_KV(K_(key),
+               K_(round_start_scn),
+               K_(compatible),
+               K_(log_archive_state),
+               K_(backup_dest));
+
+private:
+  typedef common::SpinRWLock RWLock;
+  typedef common::SpinRLockGuard  RLockGuard;
+  typedef common::SpinWLockGuard  WLockGuard;
+
+private:
+  ArchiveKey            key_;
+  share::SCN            round_start_scn_;
+  int64_t               piece_switch_interval_;
+  int64_t               base_piece_id_;
+  share::SCN            genesis_scn_;
+  bool                  compatible_;            // Compatibility processing for this round
+  ObArchiveRoundState   log_archive_state_;
+  share::ObBackupDest   backup_dest_;
+  int64_t               backup_dest_id_;
+  RWLock                rwlock_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObArchiveRoundMgr);
+};
+} // namespace archive
+} // namespace oceanbase
+
+
+#endif /* OCEANBASE_ARCHIVE_OB_ARCHIVE_MGR_H_ */

@@ -133,7 +133,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
     "request_model_name": "text-embedding-v2",
     "provider": "openai"
   }');
-select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.CDB_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4') ORDER BY TENANT_ID;
+select ENDPOINT_NAME, AI_MODEL_NAME, SCOPE, URL, ACCESS_KEY = 'sk-xxxxxxxxxxxx', PROVIDER, REQUEST_MODEL_NAME, PARAMETERS, REQUEST_TRANSFORM_FN, RESPONSE_TRANSFORM_FN from oceanbase.CDB_OB_AI_MODEL_ENDPOINTS where ENDPOINT_NAME in('my_model_endpoint2', 'my_model_endpoint4');
 call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT('my_model_endpoint4');
 
 connection default;

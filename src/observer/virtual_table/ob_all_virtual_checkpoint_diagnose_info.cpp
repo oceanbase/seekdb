@@ -39,48 +39,25 @@ bool ObAllVirtualCheckpointDiagnoseInfo::is_need_process(uint64_t tenant_id)
 int GenerateTraceRow::operator()(const storage::checkpoint::ObTraceInfo &trace_info) const
 {
   int ret = OB_SUCCESS;
-  char ip_buf[common::OB_IP_STR_BUFF];
   for (int64_t i = 0; OB_SUCC(ret) && i < virtual_table_.output_column_ids_.count(); ++i) {
     uint64_t col_id = virtual_table_.output_column_ids_.at(i);
     switch (col_id) {
-      // tenant_id
-      case OB_APP_MIN_COLUMN_ID:
-        virtual_table_.cur_row_.cells_[i].set_int(MTL_ID());
-        break;
-      // svr_ip
-      case OB_APP_MIN_COLUMN_ID + 1:
-        MEMSET(ip_buf, 0, common::OB_IP_STR_BUFF);
-        if (virtual_table_.addr_.ip_to_string(ip_buf, sizeof(ip_buf))) {
-          virtual_table_.cur_row_.cells_[i].set_varchar(ip_buf);
-          virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "fail to execute ip_to_string", KR(ret));
-        }
-        break;
-      // svr_port
-      case OB_APP_MIN_COLUMN_ID + 2:
-        virtual_table_.cur_row_.cells_[i].set_int(virtual_table_.addr_.get_port());
-        break;
-      // ls_id
-      case OB_APP_MIN_COLUMN_ID + 3:
-        virtual_table_.cur_row_.cells_[i].set_int(trace_info.ls_id_.id());
-        break;
+
       // trace_id
-      case OB_APP_MIN_COLUMN_ID + 4:
+      case OB_APP_MIN_COLUMN_ID + 0:
         virtual_table_.cur_row_.cells_[i].set_int(trace_info.trace_id_);
         break;
       // freeze_clock
-      case OB_APP_MIN_COLUMN_ID + 5:
+      case OB_APP_MIN_COLUMN_ID + 1:
         virtual_table_.cur_row_.cells_[i].set_uint32(trace_info.freeze_clock_);
         break;
       // checkpoint_thread_name
-      case OB_APP_MIN_COLUMN_ID + 6:
+      case OB_APP_MIN_COLUMN_ID + 2:
         virtual_table_.cur_row_.cells_[i].set_varchar(trace_info.thread_name_);
         virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       // checkpoint_start_time
-      case OB_APP_MIN_COLUMN_ID + 7:
+      case OB_APP_MIN_COLUMN_ID + 3:
         virtual_table_.cur_row_.cells_[i].set_timestamp(trace_info.checkpoint_start_time_);
         break;
       default:

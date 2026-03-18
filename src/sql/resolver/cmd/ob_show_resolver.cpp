@@ -1324,14 +1324,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             }
           } // if
           if (params_.show_seed_) {
-            char local_ip[OB_MAX_SERVER_ADDR_SIZE] = "";
-            if (OB_UNLIKELY(true != GCONF.self_addr_.ip_to_string(local_ip, sizeof(local_ip)))) {
-              ret = OB_CONVERT_ERROR;
-            } else {
-              GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_SEED);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_SEED, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME,
-                             local_ip, GCONF.self_addr_.get_port());
-            }
+            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_SEED);
+            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_SEED, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME);
           } else {
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE);
             GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
@@ -1727,35 +1721,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         break;
       }
       case T_XA_RECOVER: {
-          if (OB_UNLIKELY(parse_tree.num_child_ != 1)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("parse tree is wrong",
-                K(ret),
-                K(parse_tree.num_child_),
-                K(parse_tree.children_));
-          } else {
-            if(parse_tree.children_[0] == NULL) {
-                  GEN_SQL_STEP_1(ObShowSqlSet::XA_RECOVER);
-                  GEN_SQL_STEP_2(ObShowSqlSet::XA_RECOVER,
-                                 OB_SYS_DATABASE_NAME,
-                                 OB_ALL_VIRTUAL_GLOBAL_TRANSACTION_TNAME,
-                                 transaction::ObXATransState::PREPARED);
-            } else {
-              if(parse_tree.children_[0]->value_ != 0) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("parse tree is wrong",
-                  K(ret),
-                  K(parse_tree.num_child_),
-                  K(parse_tree.children_));
-              } else {
-                  GEN_SQL_STEP_1(ObShowSqlSet::XA_RECOVER_CONVERT_XID);
-                  GEN_SQL_STEP_2(ObShowSqlSet::XA_RECOVER_CONVERT_XID,
-                                 OB_SYS_DATABASE_NAME,
-                                 OB_ALL_VIRTUAL_GLOBAL_TRANSACTION_TNAME,
-                                 transaction::ObXATransState::PREPARED);
-              }
-            }
-          }
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("xa recover is not supported in lite version", KR(ret));
         break;
       }
       case T_SHOW_CATALOGS: {
@@ -3436,27 +3403,27 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CHARSET,
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLEGROUPS,
                        NULL,
                        "SELECT t1.Tablegroup_name AS Tablegroup_name, t2.Table_name AS Table_name, t3.Database_name AS Database_name \
-                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and t2.tenant_id = %lu) \
-                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and t3.tenant_id = %lu) \
-                        WHERE t1.tenant_id = %lu \
+                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and 0 = %lu % 1) \
+                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and 0 = %lu % 1) \
+                        WHERE 0  = %lu % 1 \
                         ORDER BY t1.tablegroup_name, t2.table_name",
                         "SELECT T1.TABLEGROUP_NAME AS \"TABLEGROUP_NAME\", T2.TABLE_NAME AS \"TABLE_NAME\", T3.DATABASE_NAME AS \"DATABASE_NAME\" \
-                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND T2.TENANT_ID = %lu) \
-                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND T3.TENANT_ID = %lu) \
-                        WHERE T1.TENANT_ID = %lu \
+                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND 0 = %lu % 1) \
+                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND 0 = %lu % 1) \
+                        WHERE 0 = %lu % 1 \
                         ORDER BY T1.TABLEGROUP_NAME, T2.TABLE_NAME",
                        "Tablegroup_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLEGROUPS_V2,
                        NULL,
                        "SELECT t1.Tablegroup_name AS Tablegroup_name, t2.Table_name AS Table_name, t3.Database_name AS Database_name, t1.Sharding AS Sharding \
-                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and t2.tenant_id = %lu AND t2.table_type in (0, 3, 6)) \
-                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and t3.tenant_id = %lu) \
-                        WHERE t1.tenant_id = %lu \
+                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and 0 = %lu % 1 AND t2.table_type in (0, 3, 6)) \
+                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and 0 = %lu % 1) \
+                        WHERE 0 = %lu % 1 \
                         ORDER BY t1.tablegroup_name, t2.table_name",
                         "SELECT T1.TABLEGROUP_NAME AS \"TABLEGROUP_NAME\", T2.TABLE_NAME AS \"TABLE_NAME\", T3.DATABASE_NAME AS \"DATABASE_NAME\", t1.SHARDING AS \"SHARDING\" \
-                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND T2.TENANT_ID = %lu AND T2.TABLE_TYPE in (0, 3, 6)) \
-                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND T3.TENANT_ID = %lu) \
-                        WHERE T1.TENANT_ID = %lu \
+                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND 0 = %lu % 1 AND T2.TABLE_TYPE in (0, 3, 6)) \
+                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND 0 = %lu % 1) \
+                        WHERE 0 = %lu % 1 \
                         ORDER BY T1.TABLEGROUP_NAME, T2.TABLE_NAME",
                        "Tablegroup_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_VARIABLES,
@@ -3533,8 +3500,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_TRACE,
 
 DEFINE_SHOW_CLAUSE_SET(SHOW_TRACE_JSON,
                        NULL,
-                       "select json_arrayagg(json_object('tenant_id', tenant_id, 'trace_id', trace_id, 'rec_svr_ip', rec_svr_ip, 'rec_svr_port', rec_svr_port, 'parent', parent_span_id, 'span_id', span_id, 'span_name', span_name, 'start_ts', start_ts, 'end_ts', end_ts, 'elapse', elapse, 'tags', cast(case when tags='' then NULL else tags end as json), 'logs', cast(case when logs='' then NULL else logs end as json))) as ShowTraceJSON from %s.%s",
-                       R"(select json_arrayagg(json_object('tenant_id' : tenant_id, 'trace_id' : trace_id, 'rec_svr_ip' : rec_svr_ip, 'rec_svr_port' : rec_svr_port, 'parent' : parent_span_id, 'span_id' : span_id, 'span_name' : span_name, 'start_ts' : cast(start_ts as varchar(100)), 'end_ts' : cast(end_ts as varchar(100)), 'elapse' : elapse, 'tags' : cast(tags as json), 'logs' : cast(logs as json) returning json) returning json)  as SHOW_TRACE_JSON from %s.%s)",
+                       "select json_arrayagg(json_object('trace_id', trace_id, 'rec_svr_ip', rec_svr_ip, 'rec_svr_port', rec_svr_port, 'parent', parent_span_id, 'span_id', span_id, 'span_name', span_name, 'start_ts', start_ts, 'end_ts', end_ts, 'elapse', elapse, 'tags', cast(case when tags='' then NULL else tags end as json), 'logs', cast(case when logs='' then NULL else logs end as json))) as ShowTraceJSON from %s.%s",
+                       R"(select json_arrayagg(json_object('trace_id' : trace_id, 'rec_svr_ip' : rec_svr_ip, 'rec_svr_port' : rec_svr_port, 'parent' : parent_span_id, 'span_id' : span_id, 'span_name' : span_name, 'start_ts' : cast(start_ts as varchar(100)), 'end_ts' : cast(end_ts as varchar(100)), 'elapse' : elapse, 'tags' : cast(tags as json), 'logs' : cast(logs as json) returning json) returning json)  as SHOW_TRACE_JSON from %s.%s)",
                        NULL);
 
 DEFINE_SHOW_CLAUSE_SET(SHOW_ENGINES,
@@ -3570,7 +3537,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_PRIVILEGES,
         
 DEFINE_SHOW_CLAUSE_SET(SHOW_QUERY_RESPONSE_TIME, 
                        NULL, 
-                       "SELECT response_time as RESPONSE_TIME, sum(count) as COUNT, sum(total) as TOTAL FROM %s.%s where tenant_id = %lu group by response_time", 
+                       "SELECT response_time as RESPONSE_TIME, sum(count) as COUNT, sum(total) as TOTAL FROM %s.%s where 0 = %lu % 1 group by response_time",
                        NULL, 
                        NULL);
 
@@ -3591,13 +3558,13 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_GRANTS_USING_ROLES,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_PROCESSLIST,
                        NULL,
-                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE is_serving_tenant(svr_ip, svr_port, %ld)=1",
-                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE IS_SERVING_TENANT(SVR_IP, SVR_PORT, %ld)=1)",
+                       "SELECT id AS `Id`, user AS `User`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE is_serving_tenant(host_ip(), rpc_port(), %ld)=1",
+                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE IS_SERVING_TENANT(HOST_IP(), RPC_PORT(), %ld)=1)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_FULL_PROCESSLIST,
                        NULL,
-                       "SELECT id AS `Id`, user as `User`, tenant as `Tenant`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` , svr_ip AS `Ip`, sql_port AS `Port` FROM %s.%s WHERE is_serving_tenant(svr_ip, svr_port, %ld)=1",
-                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "TENANT" AS "TENANT", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" , "SVR_IP" AS "IP", "SQL_PORT" AS "PORT" FROM %s.%s WHERE IS_SERVING_TENANT(SVR_IP, SVR_PORT, %ld)=1)",
+                       "SELECT id AS `Id`, user as `User`, tenant as `Tenant`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` FROM %s.%s WHERE is_serving_tenant(host_ip(), rpc_port(), %ld)=1",
+                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "TENANT" AS "TENANT", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" FROM %s.%s WHERE IS_SERVING_TENANT(HOST_IP(), RPC_PORT(), %ld)=1)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_PROCESSLIST,
                        NULL,
@@ -3606,8 +3573,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_PROCESSLIST,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_SYS_FULL_PROCESSLIST,
                        NULL,
-                       "SELECT id AS `Id`, user as `User`, tenant as `Tenant`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info` , svr_ip AS `Ip`, sql_port AS `Port`, proxy_sessid AS `Proxy_sessid` FROM %s.%s",
-                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "TENANT" AS "TENANT", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO" , "SVR_IP" AS "IP", "SQL_PORT" AS "PORT", "PROXY_SESSID" AS "PROXY_SESSID" FROM %s.%s)",
+                       "SELECT id AS `Id`, user as `User`, tenant as `Tenant`, host AS `Host`, db AS `db`, command AS `Command`, cast(time as SIGNED) AS `Time`, state AS `State`, info AS `Info`, sql_port AS `Port`, proxy_sessid AS `Proxy_sessid` FROM oceanbase.__all_virtual_server_stat, %s.%s",
+                       R"(SELECT "ID" AS "ID", "USER" AS "USER", "TENANT" AS "TENANT", "HOST" AS "HOST", "DB" AS "DB", "COMMAND" AS "COMMAND", CAST("TIME" AS INT) AS "TIME", "STATE" AS "STATE", "INFO" AS "INFO", "SQL_PORT" AS "PORT", "PROXY_SESSID" AS "PROXY_SESSID" FROM %s.%s)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLE_STATUS,
                        NULL,
@@ -3616,7 +3583,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_TABLE_STATUS,
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PROCEDURE_STATUS,
                        NULL,
-                       "select database_name AS `Db`, routine_name AS `Name`, c.type AS `Type`, c.definer AS `Definer`, p.gmt_modified AS `Modified`, p.gmt_create AS `Created`, c.security_type AS `Security_type`, p.comment AS `Comment`, character_set_client, collation_connection, db_collation AS `Database Collation`from %s.%s p, %s.%s d, %s.%s c where p.tenant_id = d.tenant_id and p.database_id = d.database_id and d.database_name = c.db and p.routine_name = c.name and (case c.type when 'PROCEDURE' then 1 when 'FUNCTION' then 2 else 0 end) = p.routine_type and d.database_id = %ld and p.routine_type = %ld and (0 = sys_privilege_check('routine_acc', effective_tenant_id()) or 0 = sys_privilege_check('routine_acc', effective_tenant_id(), d.database_name, p.routine_name, p.routine_type)) ORDER BY name COLLATE utf8mb4_bin ASC",
+                       "select database_name AS `Db`, routine_name AS `Name`, c.type AS `Type`, c.definer AS `Definer`, p.gmt_modified AS `Modified`, p.gmt_create AS `Created`, c.security_type AS `Security_type`, p.comment AS `Comment`, character_set_client, collation_connection, db_collation AS `Database Collation`from %s.%s p, %s.%s d, %s.%s c where p.database_id = d.database_id and d.database_name = c.db and p.routine_name = c.name and (case c.type when 'PROCEDURE' then 1 when 'FUNCTION' then 2 else 0 end) = p.routine_type and d.database_id = %ld and p.routine_type = %ld and (0 = sys_privilege_check('routine_acc', effective_tenant_id()) or 0 = sys_privilege_check('routine_acc', effective_tenant_id(), d.database_name, p.routine_name, p.routine_type)) ORDER BY name COLLATE utf8mb4_bin ASC",
                        NULL,
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TRIGGERS,
@@ -3651,28 +3618,28 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COUNT_ERRORS,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS,
                        NULL,
-                       "SELECT zone, svr_type, svr_ip, svr_port, name, data_type, value, info, section, scope, source, edit_level from %s.%s where name not like '\\_%%' and (tenant_id = %ld or tenant_id is null)",
-                       R"(SELECT "ZONE", "SVR_TYPE", "SVR_IP", "SVR_PORT", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\' and  (tenant_id = %ld or tenant_id is null))",
+                       "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level from %s.%s where name not like '\\_%%' and (0 = %ld % 1)",
+                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\' and  (0 = %ld % 1))",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
                        NULL,
-                      "SELECT zone, svr_type, svr_ip, svr_port, name, data_type, value, info, section,scope, source, edit_level, default_value, isdefault from %s.%s where (name not like '\\_%%' or isdefault=0) and (tenant_id = %ld or tenant_id is null)",
-                      R"(SELECT "ZONE", "SVR_TYPE", "SVR_IP", "SVR_PORT", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0) and  (tenant_id = %ld or tenant_id is null))",
+                      "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level, default_value, isdefault from %s.%s where (name not like '\\_%%' or isdefault=0) and (0 = %ld % 1)",
+                      R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0) and  (0 = %ld % 1))",
                       "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_UNSYS,
                        NULL,
-                       "SELECT 1 `gmt_create`, 1 `gmt_modified`, 1 `zone`, 1 `svr_type`, 1 `svr_ip`, 1 `svr_port`, 1 `name`, 1 `data_type`, 1 `value`, 1 `info`, 1 `section`, 1 `scope`, 1 `source`, 1 `edit_level` FROM (SELECT 1 FROM DUAL) tmp_table WHERE 1 != 1",
-                       R"(SELECT 1 "GMT_CREATE", 1 "GMT_MODIFIED", 1 "ZONE", 1 "SVR_TYPE", 1 "SVR_IP", 1 "SVR_PORT", 1 "NAME", 1 "DATA_TYPE", 1 "VALUE", 1 "INFO", 1 "SECTION", 1 "SCOPE" , 1 "SOURCE", 1 "EDIT_LEVEL" FROM (SELECT 1 FROM DUAL) TMP_TABLE WHERE 1 != 1)",
+                       "SELECT 1 `gmt_create`, 1 `gmt_modified`, 1 `zone`, 1 `svr_type`, 1 `name`, 1 `data_type`, 1 `value`, 1 `info`, 1 `section`, 1 `scope`, 1 `source`, 1 `edit_level` FROM (SELECT 1 FROM DUAL) tmp_table WHERE 1 != 1",
+                       R"(SELECT 1 "GMT_CREATE", 1 "GMT_MODIFIED", 1 "ZONE", 1 "SVR_TYPE", 1 "NAME", 1 "DATA_TYPE", 1 "VALUE", 1 "INFO", 1 "SECTION", 1 "SCOPE" , 1 "SOURCE", 1 "EDIT_LEVEL" FROM (SELECT 1 FROM DUAL) TMP_TABLE WHERE 1 != 1)",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_COMPAT,
                        NULL,
-                       "SELECT zone, svr_type, svr_ip, svr_port, name, data_type, value, info, section from %s.%s where name not like '\\_%%'",
-                       R"(SELECT "ZONE", "SVR_TYPE", "SVR_IP", "SVR_PORT", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION" FROM %s.%s WHERE NAME NOE LIKE '\\_%%')",
+                       "SELECT zone, svr_type, name, data_type, value, info, section from %s.%s where name not like '\\_%%'",
+                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION" FROM %s.%s WHERE NAME NOT LIKE '\\_%%')",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_SEED,
                        NULL,
-                       "SELECT zone, svr_type, svr_ip, svr_port, name, data_type, value, info, section from %s.%s where svr_ip = '%s' and svr_port = %ld ",
-                       R"(SELECT "ZONE", "SVR_TYPE", "SVR_IP", "SVR_PORT", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION" FROM %s.%s WHERE "SVR_IP" = '%s' and "SVR_PORT" = %ld )",
+                       "SELECT zone, svr_type, name, data_type, value, info, section from %s.%s",
+                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION" FROM %s.%s)",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_SESSION_STATUS,
                        NULL,
@@ -3686,7 +3653,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_GLOBAL_STATUS,
                        "Variable_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TENANT,
                        NULL,
-                       "select  `tenant_name` as `Current_tenant_name` from %s.%s  where tenant_id = %ld",
+                       "select  `tenant_name` as `Current_tenant_name` from %s.%s where `id` = %ld",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_TENANT_STATUS,
@@ -3696,12 +3663,12 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_TENANT_STATUS,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TENANT,
                        NULL,
-                       "select  `tenant_name` as `Tenant`, `create_stmt` as `Create Tenant` from %s.%s  where tenant_id = %ld",
+                       "select  `tenant_name` as `Tenant`, `create_stmt` as `Create Tenant` from %s.%s where `id` = %ld",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES,
                        NULL,
-                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE tenant_id = %ld and in_recyclebin = 0 and database_name not in('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', `tenant_id`, `database_name`, \'\') order by database_name asc",
+                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE 0 = %ld % 1 and in_recyclebin = 0 and database_name not in('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', effective_tenant_id(), `database_name`, \'\') order by database_name asc",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES,
@@ -3711,7 +3678,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES_LIKE,
                        "SELECT `Database` AS `Database (%.*s)` ",
-                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE tenant_id = %ld and in_recyclebin = 0 and database_name not in ('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', `tenant_id`, `database_name`, \'\') order by database_name asc",
+                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE 0 = %ld % 1 and in_recyclebin = 0 and database_name not in ('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', effective_tenant_id(), `database_name`, \'\') order by database_name asc",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES_LIKE,
@@ -3788,7 +3755,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_OLAP_ASYNC_JOB_STATUS,
                        NULL,
                        "(SELECT R.job_name AS 'job_id', R.database_name AS 'schema_name', CASE WHEN R.status = 'COMPLETED' AND R.message = 'SUCCESS' THEN 'FINISH' WHEN R.status = 'COMPLETED' AND R.message <> 'SUCCESS' THEN 'FAILED' WHEN R.status = 'KILLED' THEN 'CANCELLED' ELSE R.status END as 'status', R.message as 'fail_msg', R.req_start_date as 'create_time', R.time as 'update_time', R.operation AS 'definition' FROM %s.%s R WHERE R.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' %s %s\
                         UNION ALL\
-                        SELECT T.job_name AS 'job_id', T.cowner AS 'schema_name', CASE WHEN T.state IS NULL THEN 'SUBMITTED' WHEN T.state = 'SCHEDULED' THEN 'RUNNING' WHEN T.state = 'KILLED' THEN 'CANCELLED' ELSE T.state END as 'status', NULL as fail_msg, T.start_date as 'create_time', T.gmt_modified as 'update_time', T.job_action as 'definition'  FROM %s.%s T WHERE T.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' AND T.TENANT_ID = %d AND T.JOB > 0 %s %s) %s",
+                        SELECT T.job_name AS 'job_id', T.cowner AS 'schema_name', CASE WHEN T.state IS NULL THEN 'SUBMITTED' WHEN T.state = 'SCHEDULED' THEN 'RUNNING' WHEN T.state = 'KILLED' THEN 'CANCELLED' ELSE T.state END as 'status', NULL as fail_msg, T.start_date as 'create_time', T.gmt_modified as 'update_time', T.job_action as 'definition'  FROM %s.%s T WHERE T.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' AND 0 = %d % 1 AND T.JOB > 0 %s %s) %s",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(XA_RECOVER,
@@ -3808,8 +3775,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_USER,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOGS,
                        NULL,
-                       "(SELECT \"internal\" AS `Catalog`) UNION (SELECT `catalog_name` AS `Catalog` FROM %s.%s WHERE tenant_id = %ld and check_catalog_access(`catalog_name`)) order by `Catalog` asc",
-                       R"((SELECT 'INTERNAL' AS "Catalog" FROM DUAL) UNION (SELECT catalog_name AS "Catalog" FROM %s.%s WHERE tenant_id = %ld and check_catalog_access(catalog_name) = 1) order by "Catalog" asc)",
+                       "(SELECT \"internal\" AS `Catalog`) UNION (SELECT `catalog_name` AS `Catalog` FROM %s.%s WHERE 0 = %ld % 1 and check_catalog_access(`catalog_name`)) order by `Catalog` asc",
+                       R"((SELECT 'INTERNAL' AS "Catalog" FROM DUAL) UNION (SELECT catalog_name AS "Catalog" FROM %s.%s WHERE 0 = %ld % 1 and check_catalog_access(catalog_name) = 1) order by "Catalog" asc)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_CATALOG,
                        NULL,
@@ -3818,7 +3785,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_CATALOG,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_LOCATIONS,
                        NULL,
-                       "SELECT `location_name` AS `Location` FROM %s.%s WHERE tenant_id = %ld and check_location_access(`location_name`) order by `Location` asc",
+                       "SELECT `location_name` AS `Location` FROM %s.%s WHERE 0 = %ld % 1 and check_location_access(`location_name`) order by `Location` asc",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_LOCATION,

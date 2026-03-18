@@ -75,10 +75,7 @@ protected:
 private:
   enum
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    SQL_NUM,
+        SQL_NUM = common::OB_APP_MIN_COLUMN_ID,
     MEM_USED,
     MEM_HOLD,
     ACCESS_COUNT,

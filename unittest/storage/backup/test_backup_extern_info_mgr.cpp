@@ -130,7 +130,7 @@ void TestBackupExternInfoMgr::make_ls_meta_package_(ObBackupLSMetaInfo &ls_meta_
   ls_meta_info.ls_meta_package_.ls_meta_.tenant_id_ = tenant_id_;
   ls_meta_info.ls_meta_package_.ls_meta_.ls_id_ = ls_id_;
   ls_meta_info.ls_meta_package_.ls_meta_.migration_status_ = ObMigrationStatus::OB_MIGRATION_STATUS_NONE;
-  ls_meta_info.ls_meta_package_.ls_meta_.restore_status_ = ObLSRestoreStatus(ObLSRestoreStatus::Status::NONE);
+  ls_meta_info.ls_meta_package_.ls_meta_.restore_status_ = ObRestoreStatus::Status::NONE;
   ls_meta_info.ls_meta_package_.palf_meta_.prev_log_info_.lsn_.val_ = 1;
   ls_meta_info.ls_meta_package_.palf_meta_.curr_lsn_.val_ = 2;
 }

@@ -628,10 +628,9 @@ int ObAutoincrementService::lock_autoinc_row(const uint64_t &tenant_id,
     ObMySQLResult *result = NULL;
     ObISQLClient *sql_client = &trans;
     if (OB_FAIL(lock_sql.assign_fmt("SELECT sequence_key, sequence_value, sync_value "
-                                    "FROM %s WHERE tenant_id = %lu AND sequence_key = %lu "
+                                    "FROM %s WHERE sequence_key = %lu "
                                     "AND column_id = %lu FOR UPDATE",
                                     OB_ALL_AUTO_INCREMENT_TNAME,
-                                    ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                     ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                     column_id))) {
       LOG_WARN("failed to assign sql", KR(ret));
@@ -666,9 +665,8 @@ int ObAutoincrementService::reset_autoinc_row(const uint64_t &tenant_id,
                                     OB_ALL_AUTO_INCREMENT_TNAME,
                                     autoinc_version))) {
     LOG_WARN("failed to assign sql", KR(ret));
-  } else if (OB_FAIL(update_sql.append_fmt(" WHERE sequence_key = %lu AND tenant_id = %lu AND column_id = %lu",
+  } else if (OB_FAIL(update_sql.append_fmt(" WHERE sequence_key = %lu AND column_id = %lu",
                                             ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
-                                            ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                             column_id))) {
     LOG_WARN("failed to append sql", KR(ret));
   } else if (OB_FAIL(trans.write(tenant_id, update_sql.ptr(), affected_rows))) {
@@ -716,10 +714,9 @@ int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &tenant_id,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("arg is not invalid", KR(ret), K(tenant_id), K(table_id), K(column_id));
     } else if (OB_FAIL(lock_sql.assign_fmt("SELECT truncate_version "
-                                    "FROM %s WHERE tenant_id = %lu AND sequence_key = %lu "
+                                    "FROM %s WHERE sequence_key = %lu "
                                     "AND column_id = %lu FOR UPDATE",
                                     OB_ALL_AUTO_INCREMENT_TNAME,
-                                    ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                     ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                                     column_id))) {
       LOG_WARN("failed to assign sql", KR(ret));
@@ -1928,9 +1925,8 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
       const uint64_t exec_tenant_id = tenant_id;
       const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
       sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
-                         " SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE tenant_id = %lu AND sequence_key = %lu AND column_id = %lu FOR UPDATE",
+                         " SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu AND column_id = %lu FOR UPDATE",
                          table_name,
-                         ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                          ObSchemaUtils::get_extract_schema_id(tenant_id, table_id),
                          column_id);
       if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
@@ -2022,10 +2018,9 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
 
             sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
                               "UPDATE %s SET sequence_value = %lu, gmt_modified = now(6)"
-                              " WHERE tenant_id = %lu AND sequence_key = %lu AND column_id = %lu AND truncate_version = %ld",
+                              " WHERE sequence_key = %lu AND column_id = %lu AND truncate_version = %ld",
                               table_name,
                               next_sequence_value,
-                              OB_INVALID_TENANT_ID,
                               table_id,
                               column_id,
                               inner_autoinc_version);
@@ -2077,9 +2072,8 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
                         " SELECT sequence_value, sync_value, truncate_version FROM %s"
-                        " WHERE tenant_id = %lu AND sequence_key = %lu AND column_id = %lu",
+                        " WHERE sequence_key = %lu AND column_id = %lu",
                         table_name,
-                        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                         ObSchemaUtils::get_extract_schema_id(exec_tenant_id, key.table_id_),
                         key.column_id_);
     ObISQLClient *sql_client = mysql_proxy_;
@@ -2254,10 +2248,9 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
     const uint64_t exec_tenant_id = tenant_id;
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
-    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE tenant_id = %lu AND sequence_key = %lu"
+    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_key, sequence_value, sync_value, truncate_version FROM %s WHERE sequence_key = %lu"
                                " AND column_id = %lu FOR UPDATE",
                                table_name,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
                                column_id))) {
       LOG_WARN("failed to assign sql", K(ret));
@@ -2329,9 +2322,9 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
         ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::SEQUENCE_SAVE);
         if (OB_FAIL(sql.assign_fmt(
                     "UPDATE %s SET sync_value = %lu, sequence_value = %lu, gmt_modified = now(6) "
-                    "WHERE tenant_id=%lu AND sequence_key=%lu AND column_id=%lu AND truncate_version=%ld",
+                    "WHERE sequence_key=%lu AND column_id=%lu AND truncate_version=%ld",
                     table_name, sync_value, new_seq_value,
-                    OB_INVALID_TENANT_ID, table_id, column_id, inner_autoinc_version))) {
+                    table_id, column_id, inner_autoinc_version))) {
           LOG_WARN("failed to assign sql", K(ret));
         } else if (OB_FAIL((trans.write(exec_tenant_id, sql.ptr(), affected_rows)))) {
           LOG_WARN("failed to execute", K(sql), K(ret));
@@ -2402,10 +2395,9 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
     const uint64_t exec_tenant_id = tenant_id;
     const char *table_name = OB_ALL_AUTO_INCREMENT_TNAME;
     int64_t fetch_table_id = OB_INVALID_ID;
-    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_value, truncate_version FROM %s WHERE tenant_id = %lu AND sequence_key = %lu"
+    if (OB_FAIL(sql.assign_fmt(" SELECT sequence_value, truncate_version FROM %s WHERE sequence_key = %lu"
                                " AND column_id = %lu FOR UPDATE",
                                table_name,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
                                column_id))) {
       LOG_WARN("failed to assign sql", K(ret));
@@ -2469,9 +2461,9 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
           int64_t affected_rows = 0;
           if (OB_FAIL(sql.assign_fmt(
                       "UPDATE %s SET sequence_value = %lu, gmt_modified = now(6) "
-                      "WHERE tenant_id=%lu AND sequence_key=%lu AND column_id=%lu AND truncate_version=%ld",
+                      "WHERE sequence_key=%lu AND column_id=%lu AND truncate_version=%ld",
                       table_name, new_seq_value,
-                      OB_INVALID_TENANT_ID, table_id, column_id, inner_autoinc_version))) {
+                      table_id, column_id, inner_autoinc_version))) {
             LOG_WARN("failed to assign sql", K(ret));
           } else if (OB_FAIL((trans.write(exec_tenant_id, sql.ptr(), affected_rows)))) {
             LOG_WARN("failed to execute", K(sql), K(ret));

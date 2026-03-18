@@ -340,7 +340,7 @@ int ObDropIndexExecutor::wait_drop_index_finish(
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
       bool is_tenant_dropped = false;
-      bool is_tenant_standby = false;
+      bool is_primary_cluster = true;
       if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(
           tenant_id, task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
         ret = error_message.ret_code_;
@@ -358,9 +358,9 @@ int ObDropIndexExecutor::wait_drop_index_finish(
           LOG_WARN("tenant has been dropped", K(ret), K(tenant_id));
         }
         if (OB_FAIL(ret)) {
-        } else if (OB_TMP_FAIL(ObAllTenantInfoProxy::is_standby_tenant(GCTX.sql_proxy_, tenant_id, is_tenant_standby))) {
-          LOG_WARN("check is standby tenant failed", K(tmp_ret), K(tenant_id));
-        } else if (is_tenant_standby) {
+        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+          LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+        } else if (!is_primary_cluster) {
           ret = OB_STANDBY_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL not finish, need check");
           LOG_WARN("tenant is standby now, stop wait", K(ret), K(tenant_id));

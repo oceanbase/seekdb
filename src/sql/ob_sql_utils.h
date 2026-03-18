@@ -346,7 +346,6 @@ public:
   static bool cause_implicit_commit(ParseResult &result);
   static bool is_end_trans_stmt(const ParseResult &result);
   static bool is_commit_stmt(const ParseResult &result);
-  static bool is_modify_tenant_stmt(ParseResult &result);
   static bool is_mysql_ps_not_support_stmt(const ParseResult &result);
   static bool is_readonly_stmt(ParseResult &result);
   static int make_field_name(const char *src, int64_t len, const common::ObCollationType cs_type,

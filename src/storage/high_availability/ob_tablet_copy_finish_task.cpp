@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/high_availability/ob_tablet_copy_finish_task.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/high_availability/ob_storage_ha_tablet_builder.h"
 #include "storage/high_availability/ob_storage_ha_utils.h"
@@ -34,7 +35,6 @@ namespace storage
 ObTabletCopyFinishTaskParam::ObTabletCopyFinishTaskParam()
   : ls_(nullptr),
     tablet_id_(),
-    reporter_(nullptr),
     restore_action_(ObTabletRestoreAction::MAX),
     is_leader_restore_(false),
     src_tablet_meta_(nullptr),
@@ -46,7 +46,7 @@ ObTabletCopyFinishTaskParam::ObTabletCopyFinishTaskParam()
 
 bool ObTabletCopyFinishTaskParam::is_valid() const
 {
-  return OB_NOT_NULL(ls_) && tablet_id_.is_valid() && OB_NOT_NULL(reporter_) && OB_NOT_NULL(copy_tablet_ctx_)
+  return OB_NOT_NULL(ls_) && tablet_id_.is_valid() && OB_NOT_NULL(copy_tablet_ctx_)
       && ObTabletRestoreAction::is_valid(restore_action_);
 }
 

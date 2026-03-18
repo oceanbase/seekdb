@@ -25,7 +25,6 @@
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "share/rc/ob_tenant_base.h"
 #include "observer/omt/ob_tenant.h"
-#include "share/ob_alive_server_tracer.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/ls/ob_ls_tx_service.h"
 #include "storage/ls/ob_freezer.h"
@@ -292,7 +291,6 @@ public:
   ObFakeTsMgr fake_ts_mgr_;
   obrpc::ObSrvRpcProxy rpc_proxy_;
   share::schema::ObMultiVersionSchemaService schema_service_;
-  share::ObAliveServerTracer server_tracer_;
   tablelock::ObLockMemtable lock_memtable_;
   ObLockTable fake_lock_table_;
   ObFakeTxTable fake_tx_table_;

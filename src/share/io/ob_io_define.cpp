@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_io_define.h"
+#include "share/io/ob_io_manager.h"
 #include "storage/backup/ob_backup_factory.h"
 #include "src/storage/ob_file_system_router.h"
 #include "src/observer/ob_server.h"
@@ -1236,8 +1237,7 @@ bool ObIORequest::is_local_clog_not_isolated()
   const int64_t clog_io_isolation_mode = GCONF.clog_io_isolation_mode;
   const ObIOGroupKey group_key = get_group_key();
   const oceanbase::share::ObFunctionType func_type = get_func_type();
-  if (OB_UNLIKELY(OBSERVER.is_arbitration_mode())) {
-  } else if (group_key.mode_ != ObIOMode::MAX_MODE) {
+  if (group_key.mode_ != ObIOMode::MAX_MODE) {
   } else if (clog_io_isolation_mode == 0 || clog_io_isolation_mode > 2) {
     if ((func_type == ObFunctionType::PRIO_CLOG_HIGH ||
          func_type == ObFunctionType::PRIO_CLOG_MID ||
@@ -1904,6 +1904,9 @@ void ObIOHandle::estimate()
     static const int64_t LONG_IO_PRINT_TRIGGER_US = 1000L * 1000L * 3L; // 3s
     if (result_delay > LONG_IO_PRINT_TRIGGER_US) {
       LOG_WARN_RET(OB_ERR_TOO_MUCH_TIME, "io result wait too long", KPC(result_), K(result_delay));
+      if (REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {
+        OB_IO_MANAGER.print_status();
+      }
     }
   }
 }

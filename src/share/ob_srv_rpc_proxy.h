@@ -26,7 +26,6 @@
 #include "share/ob_lonely_table_clean_rpc_struct.h"
 #include "observer/net/ob_net_endpoint_ingress_rpc_struct.h"
 #include "observer/net/ob_shared_storage_net_throt_rpc_struct.h"
-#include "share/ob_heartbeat_struct.h"
 #include "share/resource_limit_calculator/ob_resource_commmon.h"
 #include "observer/table_load/control/ob_table_load_control_rpc_struct.h"
 #include "observer/table_load/resource/ob_table_load_resource_rpc_struct.h"

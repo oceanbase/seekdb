@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_all_virtual_ddl_sim_point_stat.h"
 
@@ -24,7 +23,6 @@ using namespace common;
 using namespace share;
 namespace observer
 {
-
 
 int ObAllVirtualDDLSimPoint::inner_get_next_row(common::ObNewRow *&row)
 {
@@ -127,19 +125,6 @@ int ObAllVirtualDDLSimPointStat::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
-        case TENANT_ID: {
-          cells[i].set_int(task_sim_point.tenant_id_);
-          break;
-        }
         case DDL_TASK_ID: {
           cells[i].set_int(task_sim_point.task_id_);
           break;

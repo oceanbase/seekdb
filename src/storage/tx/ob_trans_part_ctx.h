@@ -796,7 +796,6 @@ private:
   int submit_rollback_to_log_(const ObTxSEQ from_scn,
                               const ObTxSEQ to_scn);
   int check_ls_state_(const SCN &snapshot, const ObLSID &ls_id, const ObStandbyCheckInfo &check_info);
-  int get_ls_replica_readable_scn_(const ObLSID &ls_id, SCN &snapshot_version);
   int submit_redo_log_for_freeze_(bool &try_submit, const uint32_t freeze_clock);
   void print_first_mvcc_callback_();
 

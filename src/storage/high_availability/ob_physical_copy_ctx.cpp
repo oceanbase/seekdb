@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/high_availability/ob_physical_copy_ctx.h"
+#include "storage/high_availability/ob_restore_helper.h"
 
 namespace oceanbase
 {
@@ -76,30 +77,30 @@ ObPhysicalCopyCtx::ObPhysicalCopyCtx()
     tenant_id_(OB_INVALID_ID),
     ls_id_(),
     tablet_id_(),
-    src_info_(),
-    bandwidth_throttle_(nullptr),
-    svr_rpc_proxy_(nullptr),
-    is_leader_restore_(false),
-    restore_action_(ObTabletRestoreAction::RESTORE_NONE),
-    restore_base_info_(nullptr),
-    meta_index_store_(nullptr),
-    second_meta_index_store_(nullptr),
+    helper_(nullptr),
     ha_dag_(nullptr),
     sstable_index_builder_(nullptr),
-    restore_macro_block_id_mgr_(nullptr),
-    need_sort_macro_meta_(true),
-    need_check_seq_(false),
-    ls_rebuild_seq_(-1),
     table_key_(),
     macro_block_reuse_mgr_(nullptr),
     total_macro_count_(0),
     reuse_macro_count_(0),
-    extra_info_(nullptr)
+    extra_info_(nullptr),
+    allocator_("PhyCopyCtx")
 {
 }
 
 ObPhysicalCopyCtx::~ObPhysicalCopyCtx()
 {
+  destroy();
+}
+
+void ObPhysicalCopyCtx::destroy()
+{
+  if (OB_NOT_NULL(helper_)) {
+    helper_->destroy();
+    helper_ = nullptr;
+  }
+  allocator_.reset();
 }
 
 bool ObPhysicalCopyCtx::is_valid() const
@@ -108,27 +109,14 @@ bool ObPhysicalCopyCtx::is_valid() const
   bool_ret = tenant_id_ != OB_INVALID_ID 
              && ls_id_.is_valid() 
              && tablet_id_.is_valid()
-             && OB_NOT_NULL(bandwidth_throttle_) 
-             && OB_NOT_NULL(svr_rpc_proxy_) 
+             && OB_NOT_NULL(helper_)
+             && helper_->is_valid()
              && OB_NOT_NULL(ha_dag_)
              && OB_NOT_NULL(sstable_index_builder_) 
-             && ((need_check_seq_ && ls_rebuild_seq_ >= 0) || !need_check_seq_)
              && table_key_.is_valid() 
              && total_macro_count_ >= 0 
              && reuse_macro_count_ >= 0 
              && OB_NOT_NULL(extra_info_);
-  if (bool_ret) {
-    if (!is_leader_restore_) {
-      bool_ret = src_info_.is_valid();
-    } else if (OB_ISNULL(restore_base_info_) || OB_ISNULL(second_meta_index_store_)) {
-      bool_ret = false;
-    } else if (!ObTabletRestoreAction::is_restore_remote_sstable(restore_action_)
-               && !ObTabletRestoreAction::is_restore_replace_remote_sstable(restore_action_) 
-               && OB_ISNULL(restore_macro_block_id_mgr_)) {
-      bool_ret = false;
-      LOG_WARN_RET(OB_INVALID_ARGUMENT, "restore_macro_block_id_mgr_ is null", K_(restore_action), KP_(restore_macro_block_id_mgr));
-    }
-  }
   return bool_ret;
 }
 

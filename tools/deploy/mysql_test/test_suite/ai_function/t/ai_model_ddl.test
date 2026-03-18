@@ -108,7 +108,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
     "model_name": "hunyuan-t1-20250711"
   }');
 
-select NAME, TYPE, MODEL_NAME from oceanbase.CDB_OB_AI_MODELS WHERE NAME in ('my_ai_model_3', 'my_ai_model_4') ORDER BY TENANT_ID;
+select NAME, TYPE, MODEL_NAME from oceanbase.CDB_OB_AI_MODELS WHERE NAME in ('my_ai_model_3', 'my_ai_model_4');
 
 call DBMS_AI_SERVICE.DROP_AI_MODEL('my_ai_model_3');
 select user_id, database_id, database_name, tablegroup_id, table_name, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation where operation_type >= 2154 and operation_type <= 2157 order by gmt_create desc limit 2;

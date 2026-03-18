@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_compaction_diagnose.h"
 #include "ob_tenant_compaction_progress.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "storage/tx_storage/ob_ls_service.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "storage/column_store/ob_co_merge_dag.h"

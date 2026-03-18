@@ -81,6 +81,10 @@ bool ObLogBaseHeader::is_compressed() const
 {
   return flag_ & PAYLOAD_IS_COMPRESSED;
 }
+bool ObLogBaseHeader::is_valid() const
+{
+  return version_ > 0 && log_type_ > 0;
+}
 
 bool ObLogBaseHeader::need_pre_replay_barrier() const
 {

@@ -24,7 +24,6 @@ using namespace oceanbase::sql::dtl;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
-
 void ObAllVirtualDtlMemoryPoolInfo::set_mem_pool_info(ObTenantDfc *&tenant_dfc, ObDtlChannelMemManager *mgr)
 {
   tenant_id_ = tenant_dfc->get_tenant_id();
@@ -243,19 +242,6 @@ int ObAllVirtualDtlMemory::get_row(ObAllVirtualDtlMemoryPoolInfo &mem_pool_info,
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
-      case SVR_IP: {
-        cells[cell_idx].set_varchar(ipstr_);
-        cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-        break;
-      }
-      case TENANT_ID: {
-        cells[cell_idx].set_int(mem_pool_info.tenant_id_);
-        break;
-      }
       case CHANNEL_TOTAL_CNT: {
         cells[cell_idx].set_int(mem_pool_info.channel_total_cnt_);
         break;

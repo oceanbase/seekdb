@@ -88,9 +88,7 @@ private:
 private:
   enum STORAGE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
+        TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
     CHANNEL_ID,
     CALCED_VAL,
     BUFFER_POOL_ID,         // OB_APP_MIN_COLUMN_ID + 5

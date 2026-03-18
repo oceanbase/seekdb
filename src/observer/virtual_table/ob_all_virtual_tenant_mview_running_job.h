@@ -38,10 +38,7 @@ public:
   virtual void reset();
 private:
   enum TENANT_MVIEW_RUNNING_JOB_COLUMN {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TABLE_ID,
+        TABLE_ID = common::OB_APP_MIN_COLUMN_ID,
     JOB_TYPE,
     SESSION_ID,
     READ_SNAPSHOT,

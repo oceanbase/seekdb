@@ -21,9 +21,6 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "logservice/palf/lsn.h"
 #include "share/ob_ls_id.h"
-#include "share/ls/ob_ls_operator.h"
-#include "share/ls/ob_ls_recovery_stat_operator.h"
-#include "share/ls/ob_ls_status_operator.h"
 #include "lib/ob_define.h"
 #include "lib/function/ob_function.h"
 #include "share/ob_unit_getter.h"
@@ -31,10 +28,10 @@
 #include "storage/high_availability/ob_storage_ha_struct.h"
 #include "logservice/ob_log_handler.h"
 #include "share/restore/ob_ls_restore_status.h"
+#include "storage/high_availability/ob_restore_status.h"
 #include "storage/tx/ob_id_service.h"
 #include "storage/ls/ob_ls_saved_info.h"
 #include "share/scn.h"
-#include "storage/high_availability/ob_ls_transfer_info.h"
 #include "storage/mview/ob_major_mv_merge_info.h"
 #include "common/ob_store_format.h"       // ObLSStoreFormat
 
@@ -48,7 +45,6 @@ public:
   static const int64_t NORMAL = 0;
   static const int64_t RESTORE = 1;
   static const int64_t MIGRATE = 2;
-  static const int64_t CLONE = 3;
 };
 
 class ObLSMeta
@@ -63,7 +59,7 @@ public:
   int init(const uint64_t tenant_id,
            const share::ObLSID &ls_id,
            const ObMigrationStatus &migration_status,
-           const share::ObLSRestoreStatus &restore_status,
+           const ObRestoreStatus &restore_status,
            const int64_t create_scn,
            const ObLSStoreFormat &store_format);
   void reset();
@@ -87,8 +83,8 @@ public:
   int get_migration_status (ObMigrationStatus &migration_status) const;
   int get_offline_scn(share::SCN &offline_scn);
 
-  int set_restore_status(const int64_t ls_epoch, const share::ObLSRestoreStatus &restore_status);
-  int get_restore_status(share::ObLSRestoreStatus &restore_status) const;
+  int set_restore_status(const int64_t ls_epoch, const ObRestoreStatus &restore_status);
+  int get_restore_status(ObRestoreStatus &restore_status) const;
   int update_ls_replayable_point(const int64_t ls_epoch, const share::SCN &replayable_point);
   int get_ls_replayable_point(share::SCN &replayable_point);
 
@@ -115,21 +111,11 @@ public:
   int clear_saved_info(const int64_t ls_epoch);
   int get_migration_and_restore_status(
       ObMigrationStatus &migration_status,
-      share::ObLSRestoreStatus &ls_restore_status);
+      ObRestoreStatus &ls_restore_status);
   int set_rebuild_info(const int64_t ls_epoch, const ObLSRebuildInfo &rebuild_info);
   int get_rebuild_info(ObLSRebuildInfo &rebuild_info) const;
   int get_create_type(int64_t &create_type) const;
   int check_ls_need_online(bool &need_online) const;
-  int set_transfer_meta_info(
-      const int64_t ls_epoch,
-      const share::SCN &replay_scn,
-      const share::ObLSID &src_ls,
-      const share::SCN &src_scn,
-      const ObTransferInTransStatus::STATUS &trans_status,
-      const common::ObIArray<common::ObTabletID> &tablet_id_array,
-      const uint64_t data_version);
-  int get_transfer_meta_info(ObLSTransferMetaInfo &trasfer_meta_info) const;
-  int cleanup_transfer_meta_info(const int64_t ls_epoch, const share::SCN &replay_scn);
   ObMajorMVMergeInfo get_major_mv_merge_info() const;
   int set_major_mv_merge_scn(const int64_t ls_epoch, const SCN &major_mv_merge_scn);
   int set_major_mv_merge_scn_safe_calc(const int64_t ls_epoch, const SCN &major_mv_merge_scn_safe_calc);
@@ -140,7 +126,7 @@ public:
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const ObMigrationStatus &migration_status,
-      const share::ObLSRestoreStatus &restore_status,
+      const ObRestoreStatus &restore_status,
       const share::SCN &create_scn,
       const ObMajorMVMergeInfo &major_mv_merge_info,
       const ObLSStoreFormat &store_format);
@@ -187,7 +173,7 @@ public:
                K_(clog_checkpoint_scn), K_(clog_base_lsn),
                K_(rebuild_seq), K_(migration_status), K(offline_scn_),
                K_(restore_status), K_(replayable_point), K_(tablet_change_checkpoint_scn),
-               K_(all_id_meta), K_(transfer_scn), K_(rebuild_info), K_(transfer_meta_info),
+               K_(all_id_meta), K_(transfer_scn), K_(rebuild_info),
                K_(store_format));
 private:
   int check_can_update_();
@@ -219,7 +205,7 @@ private:
   int64_t rebuild_seq_;
   ObMigrationStatus migration_status_;
   share::SCN offline_scn_;
-  share::ObLSRestoreStatus restore_status_;
+  ObRestoreStatus restore_status_;
   share::SCN replayable_point_;
   //TODO(yaoying.yyy):modify this
   share::SCN tablet_change_checkpoint_scn_;
@@ -227,7 +213,6 @@ private:
   ObLSSavedInfo saved_info_;
   share::SCN transfer_scn_;
   ObLSRebuildInfo rebuild_info_;
-  ObLSTransferMetaInfo transfer_meta_info_; //transfer_dml_ctrl_42x # placeholder
   ObMajorMVMergeInfo major_mv_merge_info_;
   common::ObLSStoreFormat store_format_;    // set on initialization and then remain unchanged
 };

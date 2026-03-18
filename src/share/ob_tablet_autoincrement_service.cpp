@@ -215,7 +215,6 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
         finish = true;
       }
       if (OB_FAIL(ret)) {
-        (void)location_service->renew_tablet_location(param.tenant_id_, tablet_id, ret, !is_block_renew_location(ret)/*is_nonblock*/);
         if (is_retryable(ret)) {
           // overwrite ret
           if (OB_UNLIKELY(rpc_timeout <= 0)) {

@@ -27,9 +27,7 @@ class ObAllVirtualCgroupConfig : public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    CFS_QUOTA_US,
+        CFS_QUOTA_US = common::OB_APP_MIN_COLUMN_ID,
     CFS_PERIOD_US,
     SHARES,
     CGROUP_PATH

@@ -40,8 +40,6 @@ public:
   int64_t get_database_id() const { return create_table_arg_.schema_.get_database_id(); };
   void set_database_id(const uint64_t database_id);
   void set_database_name(const common::ObString &database_name);
-  void set_locality(const common::ObString &locality);
-  void set_primary_zone(const common::ObString &zone);
   const common::ObString &get_database_name() const;
   common::ObString &get_non_const_db_name() { return create_table_arg_.db_name_; }
   bool is_view_stmt() const { return is_view_stmt_; }
@@ -131,16 +129,6 @@ inline void ObCreateTableStmt::set_database_id(const uint64_t database_id)
 inline void ObCreateTableStmt::set_database_name(const common::ObString &database_name)
 {
   create_table_arg_.db_name_ = database_name;
-}
-
-inline void ObCreateTableStmt::set_locality(const common::ObString &locality)
-{
-  // not support
-}
-
-inline void ObCreateTableStmt::set_primary_zone(const common::ObString &zone)
-{
-  // not support
 }
 
 inline const common::ObString &ObCreateTableStmt::get_database_name() const

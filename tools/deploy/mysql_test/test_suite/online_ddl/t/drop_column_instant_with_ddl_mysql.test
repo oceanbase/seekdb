@@ -6,7 +6,6 @@
 connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 connect (mysql,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection sys;
-let $tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name = 'sys', tenant_id, 1);
 
 --echo #drop column and add column offline
 connection mysql;
@@ -19,12 +18,12 @@ sleep 5;
 drop table xingrui_add_offline;
 create table xingrui_add_offline(col1 int, col2 int, col3 int as(col1 + col2) stored);
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_add_offline', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_offline', table_id, 1);
 
 connection mysql;
 alter table xingrui_add_offline add column col4 int auto_increment;
 connection sys;
-let $after_add_column_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_add_offline', table_id, 1);
+let $after_add_column_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_offline', table_id, 1);
 if ($after_add_column_table_id == $before_table_id)
 {
   --echo '!!!ERROR, table id changed after add column offline';
@@ -41,7 +40,7 @@ insert into xingrui_add_offline (col1, col2) values(1, 2);
 insert into xingrui_add_offline (col1, col2) values(1, 2);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_add_offline', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_offline', table_id, 1);
 
 connection mysql;
 alter table xingrui_add_offline drop column col3;
@@ -53,10 +52,10 @@ insert into xingrui_create_table_like (col1, col2) values(1, 2);
 connection sys;
 #生成列，加上隐藏主键，应该是4列
 #create table like应该为3列
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_add_offline', table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_offline', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 if ($after_table_id != $before_table_id)
@@ -68,7 +67,7 @@ connection mysql;
 alter table xingrui_add_offline add column col4 int auto_increment;
 
 connection sys;
-let $after_add_column_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_add_offline', table_id, 1);
+let $after_add_column_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_offline', table_id, 1);
 if ($after_add_column_table_id == $before_table_id)
 {
   --echo '!!!ERROR, table id changed after add column offline';
@@ -84,18 +83,18 @@ create table xingrui_create_table_like like xingrui_add_offline;
 insert into xingrui_create_table_like values(1, 2, 3);
 
 connection sys;
-let $before_add_drop_compund_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_add_offline', table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $before_add_drop_compund_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_offline', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 #加上隐藏主键，应该是5列,create table like 为4列
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
 alter table xingrui_add_offline add column col5 int, drop column col4;
 
 connection sys;
-let $after_add_drop_compund_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_add_offline', table_id, 1);
+let $after_add_drop_compund_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_offline', table_id, 1);
 if ($after_add_drop_compund_table_id == $before_add_drop_compund_table_id)
 {
   --echo '!!!ERROR, table id should not changed after add and drop column compound';
@@ -122,27 +121,27 @@ create table xingrui_create_table_like like xingrui_truncate_table;
 insert into xingrui_create_table_like select random()SEED from table(generator(10));
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = "xingrui_truncate_table", table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_truncate_table", table_id, 1);
 
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
 #加上隐藏主键，应该是3列,create table like为2列
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
 truncate table xingrui_truncate_table;
 truncate table xingrui_create_table_like;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
 --enable_query_log
 
 connection mysql;
@@ -151,13 +150,13 @@ alter table xingrui_create_table_like add column COL1 char(34);
 insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
 insert into xingrui_create_table_like select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
@@ -198,25 +197,25 @@ create table xingrui_create_table_like like xingrui_truncate_table;
 insert into xingrui_truncate_table select random()SEED from  table(generator(10));
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
 #加上隐藏主键，应该是3列,create table like为2列
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
 truncate table xingrui_truncate_table;
 truncate table xingrui_create_table_like;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
@@ -224,7 +223,7 @@ truncate table xingrui_truncate_table;
 
 connection sys;
 --disable_query_log
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
 --enable_query_log
 
 connection mysql;
@@ -234,13 +233,13 @@ insert into xingrui_truncate_table select random()SEED ,randstr(10, random())COL
 insert into xingrui_create_table_like select random()SEED ,randstr(10, random())COL1 from  table(generator(10));
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $like_table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $like_table_id;
 --enable_query_log
 
 --echo to test with truncate table compound
@@ -261,24 +260,24 @@ create table xingrui_create_table_like like xingrui_truncate_table;
 insert into xingrui_create_table_like select random()SEED from table(generator(10));
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = "xingrui_truncate_table", table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_truncate_table", table_id, 1);
 
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
 #加上隐藏主键，应该是3列,create table like为2列
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
 truncate table xingrui_truncate_table;
 truncate table xingrui_create_table_like;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
 --enable_query_log
 
 connection mysql;
@@ -289,11 +288,11 @@ insert into xingrui_create_table_like select random()SEED ,randstr(10, random())
 alter table xingrui_truncate_table drop column group(each column, all columns);
 alter table xingrui_create_table_like drop column group(each column, all columns);
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
@@ -334,22 +333,22 @@ create table xingrui_create_table_like like xingrui_truncate_table;
 insert into xingrui_truncate_table select random()SEED from  table(generator(10));
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
 truncate table xingrui_truncate_table;
 truncate table xingrui_create_table_like;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
@@ -357,7 +356,7 @@ truncate table xingrui_truncate_table;
 
 connection sys;
 --disable_query_log
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_truncate_table' AND USER_GENERATED = 'NO';
 --enable_query_log
 
 connection mysql;
@@ -370,11 +369,11 @@ connection mysql;
 alter table xingrui_truncate_table drop column group(each column, all columns);
 alter table xingrui_create_table_like drop column group(each column, all columns);
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_truncate_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $table_id and tenant_id = $tenant_id;
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $table_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
@@ -409,17 +408,17 @@ create table xingrui_create_table_like like xingrui_modify_table;
 INSERT INTO xingrui_create_table_like select random()SEED ,randstr(10, random())COL1, random()col2 from  table(generator(10));
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_modify_table' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_modify_table', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
 ALTER TABLE xingrui_modify_table MODIFY COL1 VARCHAR(34), drop column col2;
 ALTER TABLE xingrui_create_table_like MODIFY COL1 VARCHAR(34), drop column col2;
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_modify_table' and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_modify_table', table_id, 1);
 if ($before_table_id == $after_table_id)
 {
   --echo $before_table_id
@@ -431,8 +430,8 @@ alter table xingrui_modify_table add column group(each column, all columns);
 alter table xingrui_create_table_like add column group(each column, all columns);
 connection sys;
 --disable_query_log
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_modify_table' AND USER_GENERATED = 'NO';
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_create_table_like' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_modify_table' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_create_table_like' AND USER_GENERATED = 'NO';
 --enable_query_log
 
 connection mysql;
@@ -451,17 +450,17 @@ create table xingrui_create_table_like like xingrui_add_column;
 INSERT INTO xingrui_create_table_like select randstr(10, random())COL0 ,randstr(10, random())COL1 from  table(generator(10));
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_column' and tenant_id = $tenant_id, table_id, 1);
-let $like_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_create_table_like', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_column', table_id, 1);
+let $like_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
 --disable_query_log
-eval select count(*) from __all_virtual_column where table_id = $like_table_id and tenant_id = $tenant_id;
+eval select count(*) from __all_virtual_column where table_id = $like_table_id;
 --enable_query_log
 
 connection mysql;
 ALTER TABLE xingrui_add_column ADD COL2 VARCHAR(34), DROP COLUMN COL0;
 ALTER TABLE xingrui_create_table_like ADD COL2 VARCHAR(34), DROP COLUMN COL0;
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_column' and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_add_column', table_id, 1);
 if ($before_table_id == $after_table_id)
 {
   --echo "error drop column compound with other ddl should be offline"
@@ -472,8 +471,8 @@ alter table xingrui_add_column add column group(each column, all columns);
 alter table xingrui_create_table_like add column group(each column, all columns);
 connection sys;
 --disable_query_log
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_add_column' AND USER_GENERATED = 'NO';
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_create_table_like' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_add_column' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_create_table_like' AND USER_GENERATED = 'NO';
 --enable_query_log
 connection mysql;
 
@@ -498,8 +497,8 @@ alter table xingrui_create_table_like add column group(each column, all columns)
 
 connection sys;
 --disable_query_log
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_repartition' AND USER_GENERATED = 'NO';
-eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = $tenant_id AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_create_table_like' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_repartition' AND USER_GENERATED = 'NO';
+eval SELECT count(*) FROM `CDB_TAB_COLS_V\$` WHERE con_id = 1 AND OWNER = 'TEST' AND TABLE_NAME = 'xingrui_create_table_like' AND USER_GENERATED = 'NO';
 --enable_query_log
 
 --echo #分区交换
@@ -664,7 +663,7 @@ PARTITION P2 VALUES LESS THAN(150)
 );
 insert into xingrui_split_table values(1, '2', 3);
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_split_table' and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_split_table', table_id, 1);
 connection mysql;
 alter table xingrui_split_table drop column c2;
 insert into xingrui_split_table values(3, 3);
@@ -678,7 +677,7 @@ alter table xingrui_split_table REORGANIZE PARTITION p0 into
 insert into xingrui_split_table values(27, '2');
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_split_table' and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_split_table', table_id, 1);
 if ($before_table_id != $after_table_id)
 {
   --echo "error table id should not change after split"
@@ -702,7 +701,7 @@ PARTITION P2 VALUES LESS THAN(150)
 );
 insert into xingrui_split_table values(1, '2', 3);
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_split_table' and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_split_table', table_id, 1);
 connection mysql;
 insert into xingrui_split_table values(3, '2', 3);
 insert into xingrui_split_table values(26,'2', 3);
@@ -717,7 +716,7 @@ alter table xingrui_split_table REORGANIZE PARTITION p0 into
 insert into xingrui_split_table values(27, '2', 3);
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 if ($before_table_id == $after_table_id)
 {
   --echo "!!!ERROR table id should change after split with drop column"
@@ -759,10 +758,10 @@ alter table xingrui_column_group_table add col4 int generated always as (col1 * 
 alter table xingrui_column_group_table drop column col4;
 create table xingrui_create_table_like like xingrui_column_group_table;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -774,10 +773,10 @@ alter table xingrui_column_group_table drop column col3;
 insert into xingrui_column_group_table (col1) values(3);
 select * from xingrui_column_group_table;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -796,10 +795,10 @@ alter table xingrui_column_group_table add col4 int generated always as (col1 * 
 alter table xingrui_column_group_table drop column col4;
 create table xingrui_create_table_like like xingrui_column_group_table;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -815,10 +814,10 @@ insert into xingrui_create_table_like (col1) values(3);
 select * from xingrui_column_group_table;
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -840,10 +839,10 @@ alter table xingrui_column_group_table drop column col4;
 create table xingrui_create_table_like like xingrui_column_group_table;
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -856,10 +855,10 @@ insert into xingrui_column_group_table (col1) values(3);
 select * from xingrui_column_group_table;
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -880,10 +879,10 @@ insert into xingrui_column_group_table (col1, col3) values(2, 3);
 alter table xingrui_column_group_table drop column col2;
 create table xingrui_create_table_like like xingrui_column_group_table;
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -899,10 +898,10 @@ insert into xingrui_column_group_table (col1) values(3);
 select * from xingrui_column_group_table;
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -927,10 +926,10 @@ alter table xingrui_column_group_table drop column col2;
 create table xingrui_create_table_like like xingrui_column_group_table;
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -947,10 +946,10 @@ select * from xingrui_column_group_table;
 select * from xingrui_create_table_like;
 
 connection sys;
-let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table' and tenant_id = $tenant_id, table_id, 1);
+let $table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_column_group_table', table_id, 1);
 --disable_query_log
-eval select column_group_id from __all_virtual_column_group where table_id = $table_id and tenant_id = $tenant_id;
-eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id and tenant_id = $tenant_id;
+eval select column_group_id from __all_virtual_column_group where table_id = $table_id;
+eval select column_group_id,column_id from __all_virtual_column_group_mapping where table_id = $table_id;
 --enable_query_log
 
 connection mysql;
@@ -977,9 +976,9 @@ alter table xingrui_create_like_orig drop column col1;
 create table xingrui_create_table_like like xingrui_create_like_orig;
 insert into xingrui_create_like_orig values(1, 2);
 connection sys;
-let $data_table_col = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like' and tenant_id = $tenant_id) and column_name = "col2" and tenant_id = $tenant_id, column_id, 1);
-let $data_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like' and tenant_id = $tenant_id, table_id, 1);
-let $index_table_col = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where data_table_id = $data_table_id and tenant_id = $tenant_id) and column_name = "col2" and tenant_id = $tenant_id, column_id, 1);
+let $data_table_col = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like') and column_name = "col2", column_id, 1);
+let $data_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_create_table_like', table_id, 1);
+let $index_table_col = query_get_value(select column_id from __all_virtual_column where table_id in (select table_id from __all_virtual_table where data_table_id = $data_table_id) and column_name = "col2", column_id, 1);
 if ($data_table_col != $index_table_col)
 {
   --echo "error column id should not change after create table like"

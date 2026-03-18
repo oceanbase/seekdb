@@ -1798,14 +1798,8 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
   }
   if (OB_SUCCESS == ret && !strict_compat_ && !is_index_tbl && !is_no_table_options(sql_mode)
       && !table_schema.is_external_table()) {
-    int64_t paxos_replica_num = OB_INVALID_COUNT;
-    if (OB_FAIL(table_schema.get_paxos_replica_num(schema_guard_, paxos_replica_num))) {
-      LOG_WARN("fail to get paxos replica num", K(ret));
-    } else if (OB_UNLIKELY(paxos_replica_num < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("paxos replica num error", K(ret), K(paxos_replica_num),
-               "table_id", table_schema.get_table_id());
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "REPLICA_NUM = %ld ", paxos_replica_num))) {
+    int64_t paxos_replica_num = 1;
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "REPLICA_NUM = %ld ", paxos_replica_num))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print replica num", K(ret), K(table_schema));
     } else {
       SHARE_SCHEMA_LOG(INFO, "XXX", K(paxos_replica_num));
@@ -2313,14 +2307,8 @@ int ObSchemaPrinter::print_table_definition_table_options(
     }
   }
   if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl) {
-    int64_t paxos_replica_num = OB_INVALID_COUNT;
-    if (OB_FAIL(table_schema.get_paxos_replica_num(schema_guard_, paxos_replica_num))) {
-      OB_LOG(WARN, "fail to get paxos replica num", K(ret));
-    } else if (OB_UNLIKELY(paxos_replica_num < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "paxos_replica_num error", K(ret), K(paxos_replica_num),
-          "table_id", table_schema.get_table_id());
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "REPLICA_NUM = %ld ",
+    int64_t paxos_replica_num = 1;
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "REPLICA_NUM = %ld ",
         paxos_replica_num))) {
       OB_LOG(WARN, "fail to print replica num", K(ret), K(table_schema));
     }
@@ -3647,14 +3635,8 @@ int ObSchemaPrinter::print_database_definiton(
     }
   }
   if (OB_SUCC(ret) && !strict_compat_) {
-    int64_t paxos_replica_num = OB_INVALID_COUNT;
-    if (OB_FAIL(database_schema->get_paxos_replica_num(schema_guard_, paxos_replica_num))) {
-      LOG_WARN("fail to get paxos replica num", K(ret));
-    } else if (OB_UNLIKELY(paxos_replica_num < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("paxos replica num error", K(ret), K(paxos_replica_num),
-               "database_id", database_schema->get_database_id());
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, " REPLICA_NUM = %ld", paxos_replica_num))) {
+    int64_t paxos_replica_num = 1;
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, " REPLICA_NUM = %ld", paxos_replica_num))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print replica num", K(ret), K(*database_schema));
     } else {} // no more to do
   }
@@ -3750,14 +3732,8 @@ int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
   }
 
   if (OB_SUCC(ret)) {// replica_num
-    int64_t paxos_replica_num = OB_INVALID_COUNT;
-    if (OB_FAIL(tenant_schema->get_paxos_replica_num(schema_guard_, paxos_replica_num))) {
-      LOG_WARN("fail to get paxos replica num", K(ret));
-    } else if (OB_UNLIKELY(paxos_replica_num < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("paxos replica num error", K(ret), K(paxos_replica_num),
-               "tenant_id", tenant_schema->get_tenant_id());
-    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "replica_num=%ld, ", paxos_replica_num))) {
+    int64_t paxos_replica_num = 1;
+    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "replica_num=%ld, ", paxos_replica_num))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print default charset", K(ret));
     } else {} // no more to do
   }
@@ -3783,22 +3759,6 @@ int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
           SHARE_SCHEMA_LOG(WARN, "fail to print zon_list", K(ret), K(zone_list.at(i)));
         }
       }
-    }
-  }
-  if (OB_SUCCESS == ret && 0 < tenant_schema->get_primary_zone().length()) { //primary_zone
-    bool is_random = (0 == tenant_schema->get_primary_zone().compare(common::OB_RANDOM_PRIMARY_ZONE));
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                is_random ? "primary_zone=%.*s, " : "primary_zone=\'%.*s\', ",
-                                tenant_schema->get_primary_zone().length(),
-                                tenant_schema->get_primary_zone().ptr()))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print primary_zone", K(ret), K(tenant_schema->get_primary_zone()));
-    }
-  }
-  if (OB_SUCCESS == ret && tenant_schema->get_locality_str().length() > 0) { // locality
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "locality=\'%.*s\', ",
-                                             tenant_schema->get_locality_str().length(),
-                                             tenant_schema->get_locality_str().ptr()))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print locality", K(ret), K(tenant_schema->get_locality_str()));
     }
   }
   if (OB_SUCC(ret)) { //resource_pool_list
@@ -3864,8 +3824,7 @@ int ObSchemaPrinter::add_create_tenant_variables(
     if (OB_ISNULL(buf) || OB_ISNULL(sql_proxy)) {
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "argument is invalid", K(ret));
-    } else if (OB_FAIL(sql.assign_fmt("select flags, data_type, name, value from __all_virtual_sys_variable"
-        " where tenant_id= %lu;", tenant_id))) {
+    } else if (OB_FAIL(sql.assign_fmt("select flags, data_type, name, value from __all_virtual_sys_variable;"))) {
       OB_LOG(WARN, "fail to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
       OB_LOG(WARN, "fail to execute sql", K(ret));

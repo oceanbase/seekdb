@@ -244,7 +244,6 @@ int ObDagParamFunc::fill_param(
     param.tablet_id_ = tablet.get_tablet_meta().tablet_id_;
     param.merge_type_ = merge_type;
     param.merge_version_ = merge_snapshot_version;
-    param.schedule_transfer_seq_ = tablet.get_tablet_meta().transfer_info_.transfer_seq_;
     param.exec_mode_ = exec_mode;
   }
   return ret;
@@ -273,7 +272,6 @@ int ObDagParamFunc::fill_param(
     param.merge_type_ = merge_type;
     param.merge_version_ = merge_snapshot_version;
     param.compat_mode_ = tablet.get_tablet_meta().compat_mode_;
-    param.schedule_transfer_seq_ = tablet.get_tablet_meta().transfer_info_.transfer_seq_;
     param.exec_mode_ = exec_mode;
     if (OB_UNLIKELY(nullptr != dag_net_id)) {
       param.dag_net_id_ = *dag_net_id;

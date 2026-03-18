@@ -236,45 +236,6 @@ private:
   std::shared_ptr<parquet::schema::GroupNode> parquet_writer_schema_;
 };
 
-class ObOrcFileWriter : public ObBatchFileWriter
-{
-public:
-  ObOrcFileWriter(const share::ObBackupStorageInfo &access_info,
-                  const IntoFileLocation &file_location):
-    ObBatchFileWriter(access_info, file_location),
-    orc_output_stream_(nullptr),
-    orc_file_writer_(nullptr),
-    orc_row_batch_(nullptr)
-  {}
-
-  virtual ~ObOrcFileWriter()
-  {
-    orc_output_stream_.reset();
-    orc_file_writer_.reset();
-    orc_row_batch_.reset();
-  }
-
-  int open_orc_file_writer(const orc::Type &orc_schema,
-                           const orc::WriterOptions &options,
-                           const int64_t &row_batch_size);
-  bool is_file_writer_null() {return !orc_file_writer_; }
-  bool is_valid_to_write(orc::StructVectorBatch* &root)
-  {
-    root = static_cast<orc::StructVectorBatch *>(orc_row_batch_.get());
-    return orc_file_writer_ && orc_row_batch_ && OB_NOT_NULL(root);
-  }
-  int64_t get_file_size() override
-  {
-    return orc_output_stream_->getLength();
-  }
-  virtual int write_file() override;
-  virtual int close_file() override;
-private:
-  std::unique_ptr<orc::OutputStream> orc_output_stream_;
-  std::unique_ptr<orc::Writer> orc_file_writer_;
-  std::unique_ptr<orc::ColumnVectorBatch> orc_row_batch_;
-};
-
 }
 }
 #endif /* SRC_SQL_ENGINE_BASIC_OB_EXTERNAL_FILE_WRITER_H_ */

@@ -36,10 +36,7 @@ class ObAllVirtualActivityMetric : public common::ObVirtualTableScannerIterator,
                                    public omt::ObMultiTenantOperator
 {
   enum ACTIVITY_METRIC_COLUMN {
-    SERVER_IP = common::OB_APP_MIN_COLUMN_ID,
-    SERVER_PORT,
-    TENANT_ID,
-    ACTIVITY_TIMESTAMP,
+        ACTIVITY_TIMESTAMP = common::OB_APP_MIN_COLUMN_ID,
     MODIFICATION_SIZE,
     FREEZE_TIMES,
     MINI_MERGE_COST,

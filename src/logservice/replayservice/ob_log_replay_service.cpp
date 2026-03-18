@@ -19,7 +19,6 @@
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
 #include "logservice/ob_log_compression.h"
 #endif
-#include "rootserver/ob_tenant_info_loader.h" // ObTenantInfoLoader
 #include "storage/tx_storage/ob_tenant_freezer.h"
 
 namespace oceanbase
@@ -127,7 +126,7 @@ void ReplayProcessStat::runTimerTask()
   } else if (OB_FAIL(rp_sv_->stat_all_ls_replay_process(submitted_log_size, unsubmitted_log_size,
                                                         replayed_log_size, unreplayed_log_size))) {
     CLOG_LOG(WARN, "stat_all_ls_replay_process failed", K(ret));
-  } else if (0 > submitted_log_size || 0 > unsubmitted_log_size 
+  } else if (0 > submitted_log_size || 0 > unsubmitted_log_size
             || 0 > replayed_log_size || 0 > unreplayed_log_size) {
     CLOG_LOG(WARN, "stat_all_ls_replay_process failed", K(ret));
   } else if (-1 == last_replayed_log_size_) {
@@ -457,6 +456,8 @@ int ObLogReplayService::enable(const share::ObLSID &id,
     CLOG_LOG(WARN, "replay status is not exist", K(ret), K(id));
   } else if (OB_FAIL(replay_status->enable(base_lsn, base_scn))) {
     CLOG_LOG(WARN, "replay status enable failed", K(ret), K(id), K(base_lsn), K(base_scn));
+  } else {
+    (void)update_replayable_point(SCN::max_scn());
   }
   return ret;
 }
@@ -784,28 +785,10 @@ int ObLogReplayService::get_replayable_point(SCN &replayable_scn)
 share::SCN ObLogReplayService::inner_get_replayable_point_() const
 {
   int ret = OB_SUCCESS;
-  const int64_t ADVANCED_NS_VAL = 3 * 1000 * 1000 * 1000L;
   share::SCN replayable_scn;
   const share::SCN replayable_point = replayable_point_.atomic_load();
 
   replayable_scn = replayable_point;
-  if (MTL_TENANT_ROLE_CACHE_IS_RESTORE()) {
-    rootserver::ObTenantInfoLoader *tenant_info_loader = MTL(rootserver::ObTenantInfoLoader*);
-    share::SCN recovery_until_scn;
-    if (OB_ISNULL(tenant_info_loader)) {
-      ret = OB_ERR_UNEXPECTED;
-      CLOG_LOG(WARN, "ObTenantInfoLoader is NULL", K(ret));
-    } else if (OB_FAIL(tenant_info_loader->get_recovery_until_scn(recovery_until_scn))) {
-      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        CLOG_LOG(WARN, "get_recovery_until_scn failed", K(ret));
-      }
-    } else {
-      replayable_scn = SCN::min(SCN::plus(replayable_point, ADVANCED_NS_VAL), recovery_until_scn);
-    }
-    if (OB_UNLIKELY(false == replayable_scn.is_valid())) {
-      replayable_scn = replayable_point;
-    }
-  } else { }
   return replayable_scn;
 }
 

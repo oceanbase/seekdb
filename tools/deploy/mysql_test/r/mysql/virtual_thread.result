@@ -1,8 +1,5 @@
 desc oceanbase.__all_virtual_thread;
 Field	Type	Null	Key	Default	Extra
-svr_ip	varchar(46)	NO		NULL	
-svr_port	bigint(20)	NO		NULL	
-tenant_id	bigint(20)	NO		NULL	
 tid	bigint(20)	NO		NULL	
 tname	varchar(16)	NO		NULL	
 status	varchar(32)	NO		NULL	
@@ -15,9 +12,6 @@ cgroup_path	varchar(256)	NO		NULL
 numa_node	bigint(20)	NO		NULL	
 desc oceanbase.GV$OB_THREAD;
 Field	Type	Null	Key	Default	Extra
-SVR_IP	varchar(46)	NO		NULL	
-SVR_PORT	bigint(20)	NO		NULL	
-TENANT_ID	bigint(20)	NO		NULL	
 TID	bigint(20)	NO		NULL	
 TNAME	varchar(16)	NO		NULL	
 STATUS	varchar(32)	NO		NULL	

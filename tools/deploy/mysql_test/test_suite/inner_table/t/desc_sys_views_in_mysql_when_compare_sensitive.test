@@ -19,8 +19,7 @@ connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 
 connect (mysql,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection sys;
-let $tenant_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name = 'sys', tenant_id, 1);
-let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 1, cnt, 1);
+let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table where table_type = 1, cnt, 1);
 
 ##gather some necessary sys table stat.
 connection mysql;
@@ -30,8 +29,8 @@ let $idx = 1;
 while ($idx <= $cnt)
 {
 connection sys;
-let $database_name = query_get_value(select d.database_name from oceanbase.__all_virtual_table as t join oceanbase.__all_virtual_database as d on t.tenant_id = d.tenant_id and t.database_id = d.database_id where t.tenant_id = $tenant_id and table_type = 1 order by t.table_id, database_name, $idx);
-let $table_name = query_get_value(select table_name from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 1 order by table_id, table_name, $idx);
+let $database_name = query_get_value(select d.database_name from oceanbase.__all_virtual_table as t join oceanbase.__all_virtual_database as d on t.database_id = d.database_id where table_type = 1 order by t.table_id, database_name, $idx);
+let $table_name = query_get_value(select table_name from oceanbase.__all_virtual_table where table_type = 1 order by table_id, table_name, $idx);
 connection mysql;
 eval desc $database_name.$table_name;
 
@@ -57,6 +56,5 @@ inc $idx;
 
 connection sys;
 --disable_query_log
-drop tenant if exists yanmu_tenant force;
-drop resource pool if exists yanmu_resource_pool;
+#drop tenant if exists yanmu_tenant force;
 --enable_query_log

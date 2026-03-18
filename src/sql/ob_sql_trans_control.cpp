@@ -1018,10 +1018,6 @@ bool ObSqlTransControl::has_same_lsid(const ObDASCtx &das_ctx,
             bret = false;
           } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
             bret = false;
-          } else if (!tablet->get_tablet_meta().transfer_info_.is_valid()) {
-            bret = false;
-          } else if (tablet->get_tablet_meta().transfer_info_.transfer_start_scn_ >= snapshot_version) {
-            bret = false;
           } else {
             // do nothing
           }

@@ -24,7 +24,6 @@
 #include "sql/privilege_check/ob_privilege_check.h"
 #include "rpc/obmysql/packet/ompk_auth_switch.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
-#include "share/ob_license_utils.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -277,7 +276,6 @@ int ObMPConnect::process()
   ObSQLSessionInfo *session = NULL;
   bool autocommit = false;
   ObString service_name;
-  bool failover_mode = false;
   MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
   THIS_WORKER.set_timeout_ts(INT64_MAX); // avoid see a former timeout value
   if (THE_TRACE != nullptr) {
@@ -309,8 +307,6 @@ int ObMPConnect::process()
     } else if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
-    } else if (OB_FAIL(extract_service_name(*conn, service_name, failover_mode))) {
-      LOG_WARN("fail to extraxt service name", KR(ret));
     } else if (OB_FAIL(check_update_tenant_id(*conn, tenant_id))) {
       LOG_WARN("fail to check update tenant id", KR(ret), K(tenant_name_));
       if (OB_ERR_INVALID_TENANT_NAME == ret && !service_name.empty()) {
@@ -328,8 +324,6 @@ int ObMPConnect::process()
     } else if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("null session", K(ret), K(session));
-    } else if (OB_FAIL(set_service_name(tenant_id, *session, service_name, failover_mode))) {
-      LOG_WARN("fail to set service_name", KR(ret), KPC(session), K(service_name), K(failover_mode));
     } else if (OB_FAIL(verify_identify(*conn, *session, tenant_id))) {
       LOG_WARN("fail to verify_identify", K(ret));
     } else if (OB_FAIL(process_kill_client_session(*session, true))) {
@@ -398,13 +392,8 @@ int ObMPConnect::process()
       const int login_warning_buf_len = 50;
       char login_warning[login_warning_buf_len];
       int tmp_ret = OB_SUCCESS;
-    
-      if (OB_TMP_FAIL(ObLicenseUtils::get_login_message(login_warning, login_warning_buf_len))) {
-        LOG_WARN("fail to get login warning message", KR(ret));
-        login_warning[0] = '\0';
-      } else {
-        ok_param.message_ = login_warning;
-      }
+      login_warning[0] = '\0';
+      ok_param.message_ = login_warning;
       if (OB_FAIL(send_ok_packet(*session, ok_param))) {
         LOG_WARN("fail to send ok packet", K(ok_param), K(ret));
       }
@@ -1062,9 +1051,8 @@ int ObMPConnect::get_last_failed_login_info(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid id", K(tenant_id), K(user_id), K(ret));
     } else if (OB_FAIL(select_sql.append_fmt("SELECT failed_login_attempts, gmt_modified FROM `%s`"
-                                             " WHERE tenant_id = %lu and user_id = %lu FOR UPDATE",
+                                             " WHERE user_id = %lu FOR UPDATE",
                                              OB_ALL_TENANT_USER_FAILED_LOGIN_STAT_TNAME,
-                                             tenant_id,
                                              user_id))) {
       LOG_WARN("append string failed", K(ret));
     } else if (OB_FAIL(sql_client.read(res, exec_tenant_id, select_sql.ptr()))) {
@@ -1117,9 +1105,9 @@ int ObMPConnect::clear_current_user_failed_login_num(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid id", K(user_id), K(tenant_id), K_(user_name), K(ret));
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM `%s` "
-                                    " WHERE tenant_id = %lu and user_id = %lu",
+                                    " WHERE user_id = %lu",
                                     OB_ALL_TENANT_USER_FAILED_LOGIN_STAT_TNAME,
-                                    tenant_id, user_id))) {
+                                    user_id))) {
     LOG_WARN("append table name failed", K(ret));
   } else if (OB_FAIL(sql_client.write(exec_tenant_id,
                                      sql.ptr(),
@@ -1152,7 +1140,6 @@ int ObMPConnect::update_current_user_failed_login_num(
   } else if (OB_FAIL(sql.assign_fmt("INSERT INTO `%s` (", OB_ALL_TENANT_USER_FAILED_LOGIN_STAT_TNAME))) {
     LOG_WARN("append table name failed", K(ret));
   } else {
-    SQL_COL_APPEND_VALUE(sql, values, tenant_id, "tenant_id", "%lu");
     SQL_COL_APPEND_VALUE(sql, values, user_id, "user_id", "%lu");
     SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, user_name_.ptr(), user_name_.length(), "user_name");
     SQL_COL_APPEND_VALUE(sql, values, new_failed_login_num, "failed_login_attempts", "%ld");
@@ -2149,77 +2136,6 @@ int ObMPConnect::set_client_version(ObSMConnection &conn)
     if (OB_FAIL(ObClusterVersion::get_version(buff, conn.client_version_))) {
       LOG_WARN("failed to get version", K(ret));
     } else {/*do nothing*/}
-  }
-  return ret;
-}
-ERRSIM_POINT_DEF(ERRSIM_MOCK_SERVICE_NAME);
-int ObMPConnect::extract_service_name(ObSMConnection &conn, ObString &service_name, bool &failover_mode)
-{
-  int ret = OB_SUCCESS;
-  ObString failover_mode_key(OB_MYSQL_FAILOVER_MODE);
-  ObString failover_mode_off(OB_MYSQL_FAILOVER_MODE_OFF);
-  ObString failover_mode_on(OB_MYSQL_FAILOVER_MODE_ON);
-  ObString service_name_key(OB_MYSQL_SERVICE_NAME);
-  bool is_found_failover_mode = false;
-  bool is_found_service_name = false;
-  conn.has_service_name_ = false;
-  // extract failover_mode and service_name
-  for (int64_t i = 0; OB_SUCC(ret) && !is_found_failover_mode && i < hsr_.get_connect_attrs().count(); ++i) {
-    const ObStringKV &kv =  hsr_.get_connect_attrs().at(i);
-    if (failover_mode_key == kv.key_) {
-      if (failover_mode_off == kv.value_) {
-        failover_mode = false;
-      } else if (failover_mode_on == kv.value_) {
-        failover_mode = true;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failover_mode should be on or off", KR(ret), K(kv));
-      }
-      is_found_failover_mode = true;
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && !is_found_service_name && i < hsr_.get_connect_attrs().count(); ++i) {
-    const ObStringKV &kv =  hsr_.get_connect_attrs().at(i);
-    if (service_name_key == kv.key_) {
-      if (kv.value_.empty()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("service_name should not be empty", KR(ret), K(kv));
-      } else {
-        conn.has_service_name_ = true;
-        (void) service_name.assign_ptr(kv.value_.ptr(), kv.value_.length());
-      }
-      is_found_service_name = true;
-    }
-  }
-  if (OB_SUCC(ret) && is_found_failover_mode != is_found_service_name) {
-    // The 'failover_mode' and 'service_name' must both be specified at the same time.
-    // The 'failover_mode' only matters if 'service_name' is not empty.
-    // If 'failover_mode' is 'on', it allows connection only to the main tenant.
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failover_mode or service_name is missing", KR(ret), K(is_found_failover_mode), K(is_found_service_name));
-  }
-  if (OB_SUCC(ret) && ERRSIM_MOCK_SERVICE_NAME && !tenant_name_.empty() && 0 != tenant_name_.compare(OB_SYS_TENANT_NAME)) {
-    service_name = ObString::make_string("test_service");
-    conn.has_service_name_ = true;
-    failover_mode = true;
-    LOG_INFO("ERRSIM_MOCK_SERVICE_NAME opened", KR(ret), K(service_name), K(tenant_name_));
-  }
-  return ret;
-}
-int ObMPConnect::set_service_name(const uint64_t tenant_id, ObSQLSessionInfo &session,
-    const ObString &service_name, const bool failover_mode)
-{
-  int ret = OB_SUCCESS;
-  (void) session.set_failover_mode(failover_mode);
-  if (OB_FAIL(ret) || service_name.empty()) {
-    // If the connection is not established via 'service_name', the 'connection_attr'
-    // will not contain 'failover_mode' and 'service_name'. Consequently, 'service_name'
-    // in 'session_info' will be empty, indicating that any 'service_name' related logic
-    // will not be triggered.
-  } else if (OB_FAIL(session.set_service_name(service_name))) {
-    LOG_WARN("fail to set service_name", KR(ret), K(service_name), K(tenant_id));
-  } else if (OB_FAIL(session.check_service_name_and_failover_mode(tenant_id))) {
-    LOG_WARN("fail to execute check_service_name_and_failover_mode", KR(ret), K(service_name), K(tenant_id));
   }
   return ret;
 }

@@ -88,16 +88,6 @@ int ObAllVirtualNicInfo::inner_get_next_row(common::ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); i++) {
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
-          case SVR_IP: {
-            cells[i].set_varchar(svr_ip_);
-            cells[i].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-          case SVR_PORT: {
-            cells[i].set_int(svr_port_);
-            break;
-          }
           case DEVNAME: {
             cells[i].set_varchar(devname_);
             cells[i].set_collation_type(

@@ -34,11 +34,6 @@
 namespace oceanbase
 {
 
-namespace obrpc
-{
-class ObAdminStorageArg;
-}
-
 namespace share
 {
 const int64_t OB_MAX_STORAGE_STATE_INFO_LENGTH = 1024;
@@ -150,33 +145,6 @@ struct ObScopeType final
   {
     return type >= 0 && type < TYPE::MAX;
   }
-};
-
-class ObStorageDestCheck final
-{
-public:
-  ObStorageDestCheck() = default;
-  ~ObStorageDestCheck() = default;
-  static int check_change_storage_accessinfo_exist(common::ObISQLClient &proxy,
-                                                   const ObString &storage_path,
-                                                   const ObString &access_info);
-  static int check_change_storage_attribute_exist(common::ObISQLClient &proxy,
-                                                   const ObString &storage_path,
-                                                   const ObString &attribute);
-#ifdef OB_BUILD_SHARED_STORAGE
-  static int parse_shared_storage_info(const char *shared_storage_info,
-                                       share::ObStorageUsedType::TYPE &used_for_type,
-                                       int64_t &max_iops, int64_t &max_bandwidth,
-                                       ObScopeType::TYPE &scope_type);
-  static int parse_shared_storage_info(const ObString &shared_storage_info,
-      obrpc::ObAdminStorageArg &result);
-  static int parse_shared_storage_info(const ObString &shared_storage_info,
-      obrpc::ObAdminStorageArg &result,
-      ObBackupDest &storage_dest);
-#endif
-  static int set_storage_info_field(const char *info, char *field, const int64_t length);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObStorageDestCheck);
 };
 
 struct ObStorageDestAttr final

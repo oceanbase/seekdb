@@ -31,11 +31,7 @@ class ObAllVirtualTabletStat : public common::ObVirtualTableScannerIterator,
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    LS_ID,
-    TABLET_ID,
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
     QUERY_CNT,
     MINI_MERGE_CNT,
     SCAN_OUTPUT_ROW_CNT,

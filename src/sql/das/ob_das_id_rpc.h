@@ -20,6 +20,7 @@
 #include "rpc/obrpc/ob_rpc_proxy.h"
 #include "rpc/obrpc/ob_rpc_processor.h"
 #include "ob_das_id_cache.h"
+#include "lib/atomic/ob_atomic.h"
 namespace oceanbase
 {
 namespace sql
@@ -103,6 +104,7 @@ private:
   bool is_running_;
   obrpc::ObDASIDRpcProxy *rpc_proxy_;
   common::ObAddr self_;
+  int64_t local_id_counter_ CACHE_ALIGNED; // Local auto-increment counter for DAS ID, resets to 0 on restart
 };
 } // namespace sql
 } // namespace oceanbase

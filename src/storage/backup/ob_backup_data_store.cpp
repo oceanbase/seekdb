@@ -23,11 +23,11 @@ using namespace share;
 /*
  *--------------------------------ObBackupLSInfo-----------------------------
  */
-OB_SERIALIZE_MEMBER(ObBackupDataLSAttrDesc, backup_scn_, ls_attr_array_);
+OB_SERIALIZE_MEMBER(ObBackupDataLSAttrDesc, backup_scn_);
 
 bool ObBackupDataLSAttrDesc::is_valid() const
 {
-  return backup_scn_.is_valid() && !ls_attr_array_.empty();
+  return backup_scn_.is_valid();
 }
 
 /*

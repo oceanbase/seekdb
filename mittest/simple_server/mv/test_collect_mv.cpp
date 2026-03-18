@@ -23,8 +23,6 @@
 #define private public
 
 #include "simple_server/env/ob_simple_cluster_test_base.h"
-#include "rootserver/ob_tenant_balance_service.h"
-#include "share/balance/ob_balance_job_table_operator.h"
 #include "mittest/env/ob_simple_server_helper.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
@@ -151,37 +149,6 @@ void ObCollectMV::process()
 int ObCollectMV::do_balance_inner_(uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  static std::mutex mutex;
-  mutex.lock();
-  MTL_SWITCH(tenant_id) {
-    LOG_INFO("worker to do partition_balance");
-    auto b_svr = MTL(rootserver::ObTenantBalanceService*);
-    b_svr->reset();
-    b_svr->stop();
-    int64_t job_cnt = 0;
-    int64_t start_time = OB_INVALID_TIMESTAMP, finish_time = OB_INVALID_TIMESTAMP;
-    ObBalanceJob job;
-    if (OB_FAIL(b_svr->gather_stat_())) {
-      LOG_WARN("failed to gather stat", KR(ret));
-    } else if (OB_FAIL(b_svr->gather_ls_status_stat(tenant_id, b_svr->ls_array_))) {
-      LOG_WARN("failed to gather stat", KR(ret));
-    } else if (OB_FAIL(ObBalanceJobTableOperator::get_balance_job(
-                   tenant_id, false, *GCTX.sql_proxy_, job, start_time, finish_time))) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-        //NO JOB, need check current ls status
-        ret = OB_SUCCESS;
-        job_cnt = 0;
-      } else {
-        LOG_WARN("failed to get balance job", KR(ret), K(tenant_id));
-      }
-    } else if (OB_FAIL(b_svr->try_finish_current_job_(job, job_cnt))) {
-      LOG_WARN("failed to finish current job", KR(ret), K(job));
-    }
-    if (OB_SUCC(ret) && job_cnt == 0 && OB_FAIL(b_svr->partition_balance_(true))) {
-      LOG_WARN("failed to do partition balance", KR(ret));
-    }
-  }
-  mutex.unlock();
   return ret;
 
 }

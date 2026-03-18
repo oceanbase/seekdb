@@ -79,21 +79,6 @@ int ObAllVirtualDagWarningHistory::process_curr_tenant(ObNewRow *&row)
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
-    case SVR_IP:
-      //svr_ip
-      if (ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-        cells[i].set_varchar(ip_buf_);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      }
-      break;
-    case SVR_PORT:
-      //svr_port
-      cells[i].set_int(ObServerConfig::get_instance().self_addr_.get_port());
-      break;
-    case TENANT_ID:
-      //tenant_id
-      cells[i].set_int(MTL_ID());
-      break;
     case TASK_ID:
       //table_id
       n = dag_warning_info_.task_id_.to_string(task_id_buf_, sizeof(task_id_buf_));
@@ -172,7 +157,6 @@ void ObAllVirtualDagWarningHistory::reset()
   memset(warning_info_buf_, 0, sizeof(warning_info_buf_));
   memset(comment_, 0, sizeof(comment_));
 }
-
 
 } /* namespace observer */
 } /* namespace oceanbase */

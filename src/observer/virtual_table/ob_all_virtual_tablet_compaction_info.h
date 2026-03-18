@@ -26,11 +26,7 @@ class ObAllVirtualTabletCompactionInfo : public ObVirtualTableTabletIter
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    LS_ID,
-    TABLET_ID,
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
     FINISH_SCN,
     WAIT_CHECK_SCN,
     MAX_RECEIVED_SCN,

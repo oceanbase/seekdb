@@ -118,7 +118,7 @@ int ObSelectResolver::do_check_basic_table_in_cte_recursive_union(const ParseNod
 
 
 // recursive test node to find a cte table
-int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* current_node, bool &recursive_union) 
+int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* current_node, bool &recursive_union)
 {
   int ret = OB_SUCCESS;
   while (OB_NOT_NULL(current_node)
@@ -134,7 +134,7 @@ int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* curr
     // find relation factor, check it
     if (OB_FAIL(do_check_basic_table_in_cte_recursive_union(*current_node, recursive_union))) {
       LOG_WARN("failed to do check basic table is in cte recursive union", K(ret));
-    } 
+    }
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < current_node->num_child_ && !recursive_union; i += 1) {
       if (OB_FAIL(SMART_CALL(do_check_node_in_cte_recursive_union(current_node->children_[i], recursive_union)))) {
@@ -282,7 +282,7 @@ int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &par
       }
     }
   }
-  
+
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObOptimizerUtil::gen_set_target_list(allocator_, session_info_,
                                                      params_.expr_factory_, select_stmt))) {
@@ -716,7 +716,7 @@ int ObSelectResolver::check_and_mark_aggr_in_having_scope(ObSelectStmt *select_s
 
 // block :
 // 1 id and aggr(aggr(col)) in diff level
-// select id from test group by id order by max(max(id)); 
+// select id from test group by id order by max(max(id));
 // select id from test group by id order by max(max(data));
 // select id, max(max(data)) from test group by id;
 // select item must be outer
@@ -915,7 +915,7 @@ int ObSelectResolver::mark_aggr_in_order_by_scope(ObSelectStmt *select_stmt) {
             if(!aggr_expr->in_inner_stmt()) {
               // there are two types of aggr in order by
               // 1 derive from the select -- outer
-              // 2 derive from the having -- inner 
+              // 2 derive from the having -- inner
               // 3 new appear in order by -- inner
               // select max(id) from test group by id order by 1,max(max(data));
               // select max(id) from test group by id order by max(id),max(max(data));
@@ -927,7 +927,7 @@ int ObSelectResolver::mark_aggr_in_order_by_scope(ObSelectStmt *select_stmt) {
                 aggr_expr->set_nested_aggr_inner_stmt(true);
               }
             }
-            // this branch means aggr_expr in_inner_stmt 
+            // this branch means aggr_expr in_inner_stmt
             // select sub(c) from test group by b having sum(b) > 1 order by sum(b)
           }
         }
@@ -994,7 +994,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
 
   /* resolve group by clause */
   OZ( resolve_group_clause(group_by) );
-  
+
   /* resolve having clause */
   OZ( resolve_having_clause(having) );
 
@@ -1417,7 +1417,7 @@ int ObSelectResolver::resolve_order_item(const ParseNode &sort_node, OrderItem &
     if (OB_FAIL(resolve_order_item_by_pos(pos, order_item, select_stmt))) {
       LOG_WARN("fail to get order item", K(ret));
     }
-  } else if (params_.is_prepare_protocol_ 
+  } else if (params_.is_prepare_protocol_
              && !params_.is_prepare_stage_
              && sort_node.children_[0]->type_ == T_QUESTIONMARK) {
     ObRawExpr *null_expr = NULL;
@@ -1485,7 +1485,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(session_info_),
         K(select_stmt), K(ret));
-  } else if (OB_FAIL(session_info_->check_feature_enable(ObCompatFeatureType::PROJECT_NULL, 
+  } else if (OB_FAIL(session_info_->check_feature_enable(ObCompatFeatureType::PROJECT_NULL,
                                                          enable_modify_null_name))) {
     LOG_WARN("failed to check feature enable", K(ret));
   } else {
@@ -1509,10 +1509,10 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     if (is_mysql_mode()
         && OB_FAIL(prepare_get_child_at(node.children_[i], 0))) {
       LOG_WARN("unexpected parse tree", K(ret));
-    } else if (is_mysql_mode() 
-               && node.children_[i]->children_[0]->type_ == T_NULL 
+    } else if (is_mysql_mode()
+               && node.children_[i]->children_[0]->type_ == T_NULL
                && enable_modify_null_name) {
-      // MySQL sets the alias of standalone null value("\N","null"...) to "NULL" during projection. 
+      // MySQL sets the alias of standalone null value("\N","null"...) to "NULL" during projection.
       // Note: when null value is in a composite expression, its alias is not modified.
       ObString alias_name = ObString::make_string("NULL");
       if (OB_FAIL(ob_write_string(*allocator_, alias_name, select_item.alias_name_))) {
@@ -1523,11 +1523,11 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
                                       static_cast<int32_t>(node.children_[i]->str_len_));
     }
     project_node = node.children_[i]->children_[0];
-    if (project_node->type_ == T_COLUMN_REF 
+    if (project_node->type_ == T_COLUMN_REF
         && OB_FAIL(prepare_get_child_at(project_node, 2))) {
       LOG_WARN("unexpected column ref parse node", K(ret));
     } else if (project_node->type_ == T_STAR
-               || (project_node->type_ == T_COLUMN_REF 
+               || (project_node->type_ == T_COLUMN_REF
                    && project_node->children_[2]->type_ == T_STAR)) {
       if (project_node->type_ == T_STAR) {
         if (is_bald_star) {
@@ -1621,7 +1621,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
             select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
                                                static_cast<int32_t>(alias_node->str_len_));
           } else if (T_OBJ_ACCESS_REF == project_node->type_) {
-            while (OB_SUCC(prepare_get_child_at(project_node, 1)) 
+            while (OB_SUCC(prepare_get_child_at(project_node, 1))
                    && NULL != project_node->children_[1]) {
               project_node = project_node->children_[1];
             }
@@ -1928,7 +1928,7 @@ int ObSelectResolver::add_alias_from_dot_notation(ObRawExpr *sel_expr, SelectIte
       && JSN_QUERY_MISMATCH_DOT == static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_MISMATCH))->get_value().get_int()) {
     if (!select_item.alias_name_.empty()) {
       select_item.is_real_alias_ = true;
-    } else if (OB_NOT_NULL(sel_expr->get_param_expr(JSN_QUE_PATH))  
+    } else if (OB_NOT_NULL(sel_expr->get_param_expr(JSN_QUE_PATH))
                && T_CHAR == sel_expr->get_param_expr(JSN_QUE_PATH)->get_expr_type()) {
       path_expr = static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_PATH));
       path_str = path_expr->get_value().get_string();
@@ -1963,7 +1963,7 @@ int ObSelectResolver::expand_target_list(
     if (OB_FAIL(resolve_all_basic_table_columns(table_item, false, &column_items))) {
       LOG_WARN("resolve all basic table columns failed", K(ret), K(table_item));
     }
-  } else if (table_item.is_generated_table() || 
+  } else if (table_item.is_generated_table() ||
              table_item.is_temp_table() ||
              table_item.is_lateral_table()) {
     if (OB_FAIL(resolve_all_generated_table_columns(table_item, &column_items))) {
@@ -2208,7 +2208,7 @@ int ObSelectResolver::resolve_star_for_table_groups(ObStarExpansionInfo &star_ex
       for (int64_t i = 0; OB_SUCC(ret) && i < target_list.count(); ++i) {
         if (OB_FAIL(star_expansion_info.column_name_list_.push_back(target_list.at(i).expr_name_))) {
           LOG_WARN("failed to push back select item expr name", K(ret));
-        } 
+        }
       }
     }
   }
@@ -2450,7 +2450,7 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
           } else if (OB_ISNULL(table_schema)) {
             ret = OB_TABLE_NOT_EXIST;
             LOG_WARN("get table schema failed", K_(tab_item->table_name), K(tab_item->ref_id_), K(ret));
-          } else if (OB_NOT_NULL(table_schema->get_column_schema(column_ref.tbl_name_)) 
+          } else if (OB_NOT_NULL(table_schema->get_column_schema(column_ref.tbl_name_))
                       && !table_schema->get_column_schema(column_ref.tbl_name_)->is_json()) {
             ret = OB_ERR_TABLE_NAME_NOT_IN_LIST;
             LOG_WARN("table name not in from list", K(ret), K(column_ref.tbl_name_));
@@ -2567,7 +2567,7 @@ int ObSelectResolver::coalesce_select_columns_for_joined_table(
         }
         for(dup_col_index = 0; dup_col_index < left_column_num; dup_col_index++ ) {
           if (ObCharset::case_insensitive_equal(item->alias_name_, coalesced_columns->at(dup_col_index).alias_name_)) {
-            duplicated=true; 
+            duplicated=true;
             break;
           }
         }
@@ -2576,7 +2576,7 @@ int ObSelectResolver::coalesce_select_columns_for_joined_table(
             LOG_WARN("coalesced_columns->push_back failed", K(ret));
           }
           // if found duplicated and the duplicated column is not the using column.
-          // set the is_joined_dup_column flag; the i-th column in items (the last column in coalesced_columns) is 
+          // set the is_joined_dup_column flag; the i-th column in items (the last column in coalesced_columns) is
           // duplicated with the left_column_index-th column in coalesced_columns.
           if (OB_SUCC(ret) && duplicated) {
             static_cast<ObColumnRefRawExpr*>(coalesced_columns->at(dup_col_index).expr_)->set_joined_dup_column(true);
@@ -2794,13 +2794,13 @@ int ObSelectResolver::resolve_group_clause(const ParseNode *node)
   return ret;
 }
 
-int ObSelectResolver::check_rollup_clause(const ParseNode *node, bool &has_rollup) 
+int ObSelectResolver::check_rollup_clause(const ParseNode *node, bool &has_rollup)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node) || OB_ISNULL(node->children_) ||
       OB_UNLIKELY(T_GROUPBY_CLAUSE != node->type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid resolver arguments", K(ret), K(node)); 
+    LOG_WARN("invalid resolver arguments", K(ret), K(node));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !has_rollup && i < node->num_child_; ++i) {
       const ParseNode *child_node = node->children_[i];
@@ -2892,9 +2892,9 @@ int ObSelectResolver::resolve_group_by_list(const ParseNode *node,
           }
           default: {
             if (OB_FAIL(resolve_group_by_element(child_node,
-                                                 groupby_exprs, 
-                                                 rollup_exprs, 
-                                                 order_items, 
+                                                 groupby_exprs,
+                                                 rollup_exprs,
+                                                 order_items,
                                                  has_explicit_dir))) {
               LOG_WARN("failed to resolve group by element", K(ret));
             } else {/*do nothing*/}
@@ -3152,9 +3152,9 @@ int ObSelectResolver::check_grouping_columns(ObSelectStmt &stmt, ObRawExpr *&exp
   int ret = OB_SUCCESS;
   bool find = false;
   /*
-   * bugfix: 
+   * bugfix:
    * for grouping/grouping_id:
-   * select grouping(1+1) from t1 group by rollup(1+1). 
+   * select grouping(1+1) from t1 group by rollup(1+1).
    */
   ObStmtCompareContext questionmark_checker;
   questionmark_checker.reset();
@@ -3632,8 +3632,7 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
       LOG_WARN("should set file format type", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "format without type");
     } else if (ObExternalFileFormat::PARQUET_FORMAT != external_format.format_type_
-               && ObExternalFileFormat::CSV_FORMAT != external_format.format_type_
-               && ObExternalFileFormat::ORC_FORMAT != external_format.format_type_) {
+               && ObExternalFileFormat::CSV_FORMAT != external_format.format_type_) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("select into only support parquet/orc/csv format type now", K(ret),
                K(external_format.format_type_));
@@ -5063,9 +5062,9 @@ int ObSelectResolver::resolve_check_option_clause(const ParseNode *node)
 }
 
 /* ObSelectResolver::check_auto_gen_column_names()
- * 
+ *
  * For a long expr with no alias
- * MySQL will rename the overlong auto generated alias to "Name_exp_x", 
+ * MySQL will rename the overlong auto generated alias to "Name_exp_x",
  * but Oracle will throw "identifier is too long" error.
  */
 int ObSelectResolver::check_auto_gen_column_names() {
@@ -5119,7 +5118,7 @@ int ObSelectResolver::recursive_check_auto_gen_column_names(ObSelectStmt *select
           LOG_WARN("Can not malloc space for constraint name", K(ret));
         } else {
           select_item->alias_name_.assign_ptr(col_name.ptr(), col_name.length());
-        } 
+        }
       }
     }
   }
@@ -5188,7 +5187,7 @@ int ObSelectResolver::recursive_check_grouping_columns(ObSelectStmt *stmt, ObRaw
     } else if (1 != c_expr->get_real_param_exprs().count() ||
                OB_ISNULL(c_expr->get_real_param_exprs().at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("check grouping has unexpected err", K(ret));      
+      LOG_WARN("check grouping has unexpected err", K(ret));
     } else if (OB_FAIL(check_grouping_columns(*stmt,
                                   c_expr->get_real_param_exprs_for_update().at(0)))) {
       LOG_WARN("failed to check grouping columns", K(ret));
@@ -5474,7 +5473,7 @@ int ObSelectResolver::resolve_values_table_from_union(const ObIArray<int64_t> &l
   ObInsertTableInfo *insert_table_info = NULL;
   if (OB_FAIL(ret)) {
   } else if (NULL == upper_insert_resolver_) {
-  } else if (OB_ISNULL(insert_stmt = upper_insert_resolver_->get_insert_stmt())) { 
+  } else if (OB_ISNULL(insert_stmt = upper_insert_resolver_->get_insert_stmt())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null insert stmt", K(ret));
   } else if (OB_ISNULL(insert_table_info = &insert_stmt->get_insert_table_info())) {
@@ -5497,7 +5496,7 @@ int ObSelectResolver::resolve_values_table_from_union(const ObIArray<int64_t> &l
       table_def->column_cnt_ = column_cnt;
       if (insert_table_info != NULL && insert_table_info->values_desc_.count() != column_cnt) {
         ret = OB_ERR_COULUMN_VALUE_NOT_MATCH;
-        LOG_WARN("column count mismatch", K(insert_table_info->values_desc_.count()), 
+        LOG_WARN("column count mismatch", K(insert_table_info->values_desc_.count()),
                                           K(select_stmt->get_select_item_size()));
         LOG_USER_ERROR(OB_ERR_COULUMN_VALUE_NOT_MATCH, 1l);
       }

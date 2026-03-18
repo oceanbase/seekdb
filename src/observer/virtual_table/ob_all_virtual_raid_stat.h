@@ -57,9 +57,7 @@ class ObAllVirtualRaidStat: public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    DISK_INDEX,
+        DISK_INDEX = common::OB_APP_MIN_COLUMN_ID,
     INSTALL_SEQ,
     DATA_NUM,
     PARITY_NUM,

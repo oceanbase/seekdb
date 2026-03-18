@@ -396,8 +396,8 @@ ObSchemaCache::~ObSchemaCache()
 
 void ObSchemaCache::destroy()
 {
-  tablet_cache_.destroy(); 
-  cache_.destroy(); 
+  tablet_cache_.destroy();
+  cache_.destroy();
 
   NoSwapCache::iterator iter;
   for (iter = sys_cache_.begin(); iter != sys_cache_.end(); ++iter) {
@@ -405,7 +405,7 @@ void ObSchemaCache::destroy()
       mem_context_->free((void *)iter->second);
     }
   }
-  sys_cache_.destroy(); 
+  sys_cache_.destroy();
   bootstrap_cache_.destroy();
   if (mem_context_ != nullptr) {
     DESTROY_CONTEXT(mem_context_);
@@ -575,25 +575,12 @@ bool ObSchemaCache::is_necessary_table(const uint64_t table_id) const
          || OB_ALL_TENANT_TRIGGER_IDX_TRIGGER_BASE_OBJ_ID_TID == table_id
          || OB_ALL_TENANT_TRIGGER_IDX_DB_TRIGGER_NAME_TID == table_id
          || OB_ALL_TENANT_TRIGGER_IDX_TRIGGER_NAME_TID == table_id
-         || OB_ALL_TENANT_TID == table_id
-         || OB_ALL_TENANT_HISTORY_TID == table_id
-         || OB_ALL_TENANT_HISTORY_IDX_TENANT_DELETED_TID == table_id
-         || OB_ALL_ROOTSERVICE_JOB_TID == table_id
-         || OB_ALL_ROOTSERVICE_JOB_IDX_RS_JOB_TYPE_TID == table_id
-         || OB_ALL_ROOTSERVICE_JOB_AUX_LOB_META_TID == table_id
-         || OB_ALL_ROOTSERVICE_JOB_AUX_LOB_PIECE_TID == table_id
          || OB_ALL_AUX_STAT_TID == table_id
          || OB_ALL_TABLE_STAT_TID == table_id
          || OB_ALL_COLUMN_STAT_TID == table_id
          || OB_ALL_HISTOGRAM_STAT_TID == table_id
          || OB_ALL_COLUMN_STAT_HISTORY_TID == table_id
-         || OB_ALL_HISTOGRAM_STAT_HISTORY_TID == table_id
-         || OB_ALL_SERVICE_EPOCH_TID == table_id
-         || OB_ALL_SERVER_EVENT_HISTORY_TID == table_id
-         || OB_ALL_SERVER_EVENT_HISTORY_AUX_LOB_META_TID == table_id
-         || OB_ALL_SERVER_EVENT_HISTORY_AUX_LOB_PIECE_TID == table_id
-         || OB_ALL_SERVER_EVENT_HISTORY_IDX_SERVER_MODULE_TID == table_id
-         || OB_ALL_SERVER_EVENT_HISTORY_IDX_SERVER_EVENT_TID == table_id;
+         || OB_ALL_HISTOGRAM_STAT_HISTORY_TID == table_id;
 }
 
 bool ObSchemaCache::is_necessary_schema(const ObSchemaCacheKey &cache_key) const

@@ -121,19 +121,6 @@ int ObAllVirtualTabletBufferInfo::gen_row(
   for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); i++) {
     uint64_t col_id = output_column_ids_.at(i);
     switch(col_id) {
-    case SVR_IP:
-      //svr_ip
-      cur_row_.cells_[i].set_varchar(ip_buf_);
-      cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      break;
-    case SVR_PORT:
-      //svr_port
-      cur_row_.cells_[i].set_int(addr_.get_port());
-      break;
-    case TENANT_ID:
-      //tenant_id
-      cur_row_.cells_[i].set_int(MTL_ID());
-      break;
     case TABLET_BUFFER_PTR:
       //tablet_buffer_ptr
       MEMSET(tablet_buffer_pointer_, 0, STR_LEN);
@@ -155,10 +142,6 @@ int ObAllVirtualTabletBufferInfo::gen_row(
       cur_row_.cells_[i].set_varchar(buffer_info.pool_type_ == ObTabletPoolType::TP_LARGE 
         ? "TP_LARGE" : "TP_NORMAL");
       cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      break;
-    case LS_ID:
-      //ls_id
-      cur_row_.cells_[i].set_int(buffer_info.ls_id_.id());
       break;
     case TABLET_ID:
       //tablet_id

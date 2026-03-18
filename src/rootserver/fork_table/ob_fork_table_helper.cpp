@@ -556,9 +556,9 @@ int ObForkTableHelper::copy_stat_info_(const char *table_name,
       OB_FAIL(sql_string.assign_fmt(
           "REPLACE INTO %s (table_id, partition_id, %s) "
           "SELECT %lu, %ld, %s FROM %s "
-          "WHERE tenant_id = %ld AND table_id = %lu AND partition_id = %ld",
+          "WHERE table_id = %lu AND partition_id = %ld",
           table_name, table_schema, dst_table_id, dst_part_id, table_schema,
-          table_name, tenant_id_, src_table_id, src_part_id))) {
+          table_name, src_table_id, src_part_id))) {
     LOG_WARN("failed to assign sql string", K(ret), K(table_name),
              K(src_table_id), K(src_part_id), K(dst_table_id), K(dst_part_id));
   } else if (OB_FAIL(

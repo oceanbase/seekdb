@@ -115,7 +115,8 @@ int ObDDLReplayExecutor::check_need_replay_ddl_inc_log_(
   } else if (tablet->get_tablet_meta().ha_status_.is_restore_status_empty()) {
     ret = OB_EAGAIN;
     need_replay = false;
-    (void) ls->get_ls_restore_handler()->try_record_one_tablet_to_restore(tablet->get_tablet_meta().tablet_id_);
+    // TODO(xingzhi): add this fuction where supporting restore
+    //(void) ls->get_ls_restore_handler()->try_record_one_tablet_to_restore(tablet->get_tablet_meta().tablet_id_);
     if (REACH_COUNT_INTERVAL(1000L)) {
       LOG_INFO("can not replay ddl log, need wait tablet restore status change to remote, prevent sstable array explosion",
           K(tablet_handle), "tablet_meta", tablet->get_tablet_meta());
@@ -1275,9 +1276,10 @@ int ObSplitFinishReplayExecutor::modify_tablet_restore_status_if_need(
       } else if (OB_FAIL(ls->get_tablet_svr()->update_tablet_restore_status(t_id, 
           ObTabletRestoreStatus::STATUS::EMPTY, false/* need reset transfer flag */, true/*need_to_set_split_data_complete*/))) {
         LOG_WARN("failed to update tablet restore status", K(ret), KPC(tablet));
-      } else {
-        (void) ls->get_ls_restore_handler()->try_record_one_tablet_to_restore(t_id);
-        LOG_INFO("modify tablet restore status", K(tablet->get_tablet_id()), "old status", des_restore_status, "new status", ObTabletRestoreStatus::STATUS::EMPTY);
+      // TODO(xingzhi): add this fuction where supporting restore
+      // } else {
+      //  (void) ls->get_ls_restore_handler()->try_record_one_tablet_to_restore(t_id);
+      //  LOG_INFO("modify tablet restore status", K(tablet->get_tablet_id()), "old status", des_restore_status, "new status", ObTabletRestoreStatus::STATUS::EMPTY);
       }
     }
   }
@@ -1627,18 +1629,9 @@ int ObDDLFinishReplayExecutor::replay_ddl_finish(ObTabletHandle &tablet_handle)
     }
   } else if (!need_replay) {
     // do nothing
-  } else if (OB_FALSE_IT(restore_handler = ls_->get_ls_restore_handler())) {
-  } else if (OB_ISNULL(restore_handler)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("restore handler should not be null", K(ret));
-  } else if (OB_FAIL(restore_handler->get_consistent_scn(consistent_scn))) {
-    LOG_WARN("failed to get consistent_scn", K(ret), KPC(ls_));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("need replay but tablet handle is invalid", K(ret), K(tablet_handle), K_(log), K_(scn));
-  } else if (FALSE_IT(ha_restore_full = tablet_handle.get_obj()->get_tablet_meta().ha_status_.is_restore_status_full())) {
-  } else if (scn_ <= consistent_scn && !ha_restore_full) {
-    need_replay = false;
   } else if (OB_FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_id())) {
   } else if (OB_FAIL(ObDDLUtil::is_major_exist(log_->get_ls_id(), 
                                                log_->get_table_key().get_tablet_id(), 

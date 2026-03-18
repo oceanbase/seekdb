@@ -67,9 +67,6 @@ protected:
 TEST_F(TestObrpcPacket, NameIndex)
 {
   ObRpcPacketSet &set = ObRpcPacketSet::instance();
-  EXPECT_EQ(OB_RENEW_LEASE, set.pcode_of_idx(set.idx_of_pcode(OB_RENEW_LEASE)));
-  EXPECT_EQ(OB_BOOTSTRAP, set.pcode_of_idx(set.idx_of_pcode(OB_BOOTSTRAP)));
-  EXPECT_STREQ("OB_BOOTSTRAP", set.name_of_idx(set.idx_of_pcode(OB_BOOTSTRAP)));
 }
 
 int main(int argc, char *argv[])

@@ -267,11 +267,11 @@ private:
   //add part high bound val column to dml
   int add_part_high_bound_val_column(const ObPartitionSchema *table,
                                      const ObBasePartition &part,
-                                     share::ObDMLSqlSplicer &dml);
+                                     ObDMLSqlSplicer &dml);
   //add subpart high bound val column to dml
   int add_subpart_high_bound_val_column(const ObPartitionSchema *table,
                                      const ObBasePartition &part,
-                                     share::ObDMLSqlSplicer &dml);
+                                     ObDMLSqlSplicer &dml);
   template<class P>  //ObPartition or ObSubPartition
   int add_high_bound_val_column(const P &partition,
                                 ObDMLSqlSplicer &dml);
@@ -279,11 +279,11 @@ private:
   //add part high bound val column to dml
   int add_part_list_val_column(const ObPartitionSchema *table,
                                      const ObBasePartition &part,
-                                     share::ObDMLSqlSplicer &dml);
+                                     ObDMLSqlSplicer &dml);
   //add subpart high bound val column to dml
   int add_subpart_list_val_column(const ObPartitionSchema *table,
                                      const ObBasePartition &part,
-                                     share::ObDMLSqlSplicer &dml);
+                                     ObDMLSqlSplicer &dml);
 
   template<class P>  //ObPartition or ObSubPartition
   int add_list_val_column(const P &partition,

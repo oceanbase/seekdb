@@ -28,13 +28,7 @@ namespace pl
 class ObDBMSSession
 {
 public:
-  static int clear_all_context(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
-  static int clear_context(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
   static int clear_identifier(
-    sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
-  static int set_context(
     sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
   static int set_identifier(
     sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);

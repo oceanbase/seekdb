@@ -1547,7 +1547,7 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   handle.reset();
   ObIORequest *req = nullptr;
   RequestHolder req_holder;
-  logservice::coordinator::ObFailureDetector *detector = MTL(logservice::coordinator::ObFailureDetector *);
+  bool is_data_disk_healthy = true;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
@@ -1557,11 +1557,13 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   } else if (OB_ISNULL(info.fd_.device_handle_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("device handle is null", K(ret), K(info));
+  } else if (OB_FAIL(ObShareUtil::check_data_disk_health_status(is_data_disk_healthy))) {
+    LOG_WARN("fail to check data disk status", KR(ret));
   } else if ((SLOG_IO != info.flag_.get_sys_module_id() &&
               CLOG_READ_IO != info.flag_.get_sys_module_id() &&
               CLOG_WRITE_IO != info.flag_.get_sys_module_id()) &&
               !info.fd_.device_handle_->is_object_device() &&
-              NULL != detector && detector->is_data_disk_has_fatal_error()) {
+              !is_data_disk_healthy) {
     ret = OB_DISK_HUNG;
     // for temporary positioning issue, get lbt of log replay
     LOG_DBA_ERROR(OB_DISK_HUNG, "msg", "disk has fatal error");

@@ -73,9 +73,7 @@ int ObTablegroupSqlService::update_tablegroup(ObTablegroupSchema &new_schema,
   const uint64_t tenant_id = new_schema.get_tenant_id();
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                          exec_tenant_id, new_schema.get_tenant_id())))
-      || OB_FAIL(dml.add_pk_column("tablegroup_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("tablegroup_id", ObSchemaUtils::get_extract_schema_id(
                                           exec_tenant_id, new_schema.get_tablegroup_id())))
       || OB_FAIL(dml.add_column("comment", new_schema.get_comment()))
       || OB_FAIL(dml.add_column("schema_version", new_schema.get_schema_version()))
@@ -137,9 +135,8 @@ int ObTablegroupSqlService::delete_tablegroup(
   } else if (OB_FAIL(new_tablegroup_schema.assign(tablegroup_schema))) {
     LOG_WARN("fail to assign schema", K(ret));
   } else if (FALSE_IT(new_tablegroup_schema.set_schema_version(new_schema_version))) {
-  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %lu AND tablegroup_id = %lu",
+  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tablegroup_id = %lu",
                                      OB_ALL_TABLEGROUP_TNAME,
-                                     ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                      ObSchemaUtils::get_extract_schema_id(exec_tenant_id, tablegroup_id)))) {
     LOG_WARN("assign_fmt failed", K(ret));
   } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -152,10 +149,9 @@ int ObTablegroupSqlService::delete_tablegroup(
     const int64_t is_deleted = 1;
     if (OB_SUCC(ret)) {
       if (FAILEDx(sql.assign_fmt(
-                      "INSERT INTO %s(tenant_id,tablegroup_id,schema_version, is_deleted) "
-                      "VALUES(%lu,%lu,%ld, %ld)",
+                      "INSERT INTO %s(tablegroup_id,schema_version, is_deleted) "
+                      "VALUES(%lu,%ld, %ld)",
                       OB_ALL_TABLEGROUP_HISTORY_TNAME,
-                      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                       ObSchemaUtils::get_extract_schema_id(exec_tenant_id, tablegroup_id),
                       new_tablegroup_schema.get_schema_version(), is_deleted))) {
         LOG_WARN("assign_fmt failed", K(ret));
@@ -182,9 +178,8 @@ int ObTablegroupSqlService::delete_tablegroup(
       if (!is_two_level && (0 == STRCMP(tname[i], OB_ALL_SUB_PART_TNAME) ||
           0 == STRCMP(tname[i], OB_ALL_DEF_SUB_PART_TNAME))) {
         continue;
-      } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %ld AND table_id=%lu",
+      } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE table_id=%lu",
                                         tname[i],
-                                        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                         ObSchemaUtils::get_extract_schema_id(exec_tenant_id, tablegroup_id)))) {
         LOG_WARN("append_fmt failed", K(ret));
       } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -274,9 +269,7 @@ int ObTablegroupSqlService::gen_tablegroup_dml(
       const ObPartitionOption &part_option = tablegroup_schema.get_part_option();
       const ObSubPartitionOption &sub_part_option = tablegroup_schema.get_sub_part_option();
 
-      if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                exec_tenant_id, tablegroup_schema.get_tenant_id())))
-          || OB_FAIL(dml.add_pk_column("tablegroup_id", ObSchemaUtils::get_extract_schema_id(
+      if (OB_FAIL(dml.add_pk_column("tablegroup_id", ObSchemaUtils::get_extract_schema_id(
                                                         exec_tenant_id, tablegroup_schema.get_tablegroup_id())))
           || OB_FAIL(dml.add_column("tablegroup_name", ObHexEscapeSqlStr(tablegroup_schema.get_tablegroup_name_str())))
           || OB_FAIL(dml.add_column("comment", tablegroup_schema.get_comment()))

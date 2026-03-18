@@ -53,7 +53,6 @@ public:
   virtual ~ObTenantWeakReadClusterService();
 public:
   TO_STRING_KV(K_(current_version), K_(min_version), K_(max_version));
-  const ObTabletID &get_cluster_service_tablet_id() const { return cluster_service_tablet_id_; }
 
   int init(const uint64_t tenant_id,
       common::ObMySQLProxy &mysql_proxy);
@@ -127,20 +126,6 @@ public:
 private:
   int check_leader_info_(int64_t &leader_epoch) const;
   void update_valid_server_count_();
-  int query_cluster_version_range_(share::SCN &cur_min_version, share::SCN &cur_max_version,
-      bool &record_exist);
-  int persist_version_if_need_(const share::SCN last_min_version,
-      const share::SCN last_max_version,
-      const share::SCN new_min_version,
-      const share::SCN new_max_version,
-      const bool record_exist,
-      int64_t &affected_rows);
-  int build_update_version_sql_(const share::SCN last_min_version,
-      const share::SCN last_max_version,
-      const share::SCN new_min_version,
-      const share::SCN new_max_version,
-      const bool record_exist,
-      common::ObSqlString &sql);
   bool check_can_update_version_();
   share::SCN generate_max_version_(const share::SCN min_version) const
   {
@@ -160,7 +145,6 @@ private:
   typedef ObTenantWeakReadClusterVersionMgr ClusterVersionMgr;
 private:
   bool                          inited_;
-  ObTabletID                    cluster_service_tablet_id_;
   common::ObMySQLProxy          *mysql_proxy_;
 
   // if in wrs service

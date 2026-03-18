@@ -30,34 +30,6 @@ class ObTTLServerInfo;
 typedef common::ObArray<ObTTLServerInfo> TTLServerInfos;
 typedef common::hash::ObHashSet<common::ObAddr> ServerSet;
 
-/**
- * the task for clear ttl history task in __all_ttl_task_status_history
-*/
-class ObClearTTLHistoryTask : public common::ObTimerTask
-{
-public:
-  ObClearTTLHistoryTask()
-  : sql_proxy_(nullptr),
-    is_inited_(false),
-    tenant_id_(OB_INVALID_TENANT_ID),
-    is_paused_(false)
-  {}
-  ~ObClearTTLHistoryTask() {}
-  int init(const uint64_t tenant_id, common::ObMySQLProxy &sql_proxy);
-  virtual void runTimerTask() override;
-  void destroy() {}
-  void pause();
-  void resume();
-
-  static const int64_t OB_KV_TTL_GC_INTERVAL =  30 * 1000L * 1000L; // 30s 
-  static const int64_t OB_KV_TTL_GC_COUNT_PER_TASK = 4096L;
-private:
-  common::ObMySQLProxy *sql_proxy_;
-  bool is_inited_;
-  uint64_t tenant_id_;
-  bool is_paused_;
-};
-
 struct ObTTLServerInfo
 {
 public:
@@ -224,7 +196,6 @@ public:
   static const int64_t SCHEDULE_PERIOD = 15 * 1000L * 1000L; // 15s 
   explicit ObTenantTTLManager() 
     : is_inited_(false),
-      clear_ttl_history_task_(),
       tenant_id_(OB_INVALID_TENANT_ID),
       task_schedulers_(),
       tg_id_(-1)
@@ -241,7 +212,6 @@ public:
   void pause();
 private:
   bool is_inited_;
-  ObClearTTLHistoryTask clear_ttl_history_task_;
   uint64_t tenant_id_;
   ObTTLAllTaskScheduler task_schedulers_;
   int tg_id_;

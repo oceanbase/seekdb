@@ -460,7 +460,7 @@ if(NOT APPLE)
 endif()
 
 target_link_libraries(oblib_lib
-  PUBLIC ob_malloc compress restore
+  PUBLIC ob_malloc compress restore oblib_grpc
   ${DEP_DIR}/lib/libxml2.a
   ${DEP_DIR}/lib/liblzma.a
 )

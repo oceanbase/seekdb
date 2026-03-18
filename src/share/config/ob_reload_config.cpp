@@ -30,9 +30,9 @@ int ObReloadConfig::reload_ob_logger_set()
   } else {
     if (OB_FAIL(OB_LOGGER.parse_set(conf_->syslog_level,
                                     static_cast<int32_t>(STRLEN(conf_->syslog_level)),
-                                    (conf_->syslog_level).version()))) {
+                                    0))) {
       OB_LOG(ERROR, "fail to parse_set syslog_level",
-             K(conf_->syslog_level.str()), K((conf_->syslog_level).version()), K(ret));
+             K(conf_->syslog_level.str()), K(ret));
     } else if (OB_FAIL(OB_LOGGER.set_max_file_index(
         static_cast<int32_t>(conf_->max_syslog_file_count)))) {
       OB_LOG(ERROR, "fail to set_max_file_index", K(conf_->max_syslog_file_count.get()), K(ret));

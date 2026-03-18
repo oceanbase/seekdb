@@ -1658,14 +1658,14 @@ int ObLSBackupCtx::prepare_mview_dep_tablet_set_(const ObLSBackupParam &param,
 int ObLSBackupCtx::check_mview_tablet_set_(const uint64_t tenant_id, common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  ObAllTenantInfo tenant_info;
-  if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(tenant_id, &sql_proxy, false/*for update*/, tenant_info))) {
-    LOG_WARN("failed to get tenant info", K(ret), K(tenant_id));
-  } else if (tenant_info.is_primary()) {
-    LOG_INFO("tenant is primary", K(tenant_id), K(tenant_info));
+  bool is_primary_cluster = true;
+  if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+    LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+  } else if (is_primary_cluster) {
+    LOG_INFO("tenant is primary", K(tenant_id));
   } else if (!mview_dep_tablet_map_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant not primary but mview dep tablet is not empty", K(tenant_id), K(tenant_info));
+    LOG_WARN("tenant not primary but mview dep tablet is not empty", K(tenant_id));
   }
   return ret;
 }

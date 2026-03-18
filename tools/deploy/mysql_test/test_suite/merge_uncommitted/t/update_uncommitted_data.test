@@ -25,9 +25,8 @@ drop table if exists test_update_uncommitted_data;
 create table test_update_uncommitted_data(num int, str varchar(50), tag int);
 
 connection conn0;
-let $__tenant_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tenant_id from oceanbase.__all_virtual_table where table_name= 'test_update_uncommitted_data', tenant_id, 1);
 let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= 'test_update_uncommitted_data', table_id, 1);
-let $__svr_cnt__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ count(*) as c from oceanbase.__all_server, c, 1);
+let $__svr_cnt__=1;
 
 connection conn1;
 #事务开始 插入数据

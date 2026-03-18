@@ -50,12 +50,6 @@ void ObCreateDatabaseStmt::set_if_not_exists(bool if_not_exists)
   create_database_arg_.if_not_exist_ = if_not_exists;
 }
 
-
-int ObCreateDatabaseStmt::set_primary_zone(const common::ObString &zone)
-{
-  return OB_SUCCESS; // not supported
-}
-
 void ObCreateDatabaseStmt::set_read_only(const bool read_only)
 {
   create_database_arg_.database_schema_.set_read_only(read_only);

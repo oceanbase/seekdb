@@ -53,16 +53,6 @@ int ObAllTracepointInfo::get_rows_from_tracepoint_info_list()
                     cell_idx < output_column_ids_.count(); ++cell_idx) {
         const uint64_t column_id = output_column_ids_.at(cell_idx);
         switch (column_id) {
-          case ObAllTracepointInfo::INSPECT_COLUMN::SVR_IP: {
-            cells[cell_idx].set_varchar(addr_ip);
-            cells[cell_idx].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-          case ObAllTracepointInfo::INSPECT_COLUMN::SVR_PORT: {
-            cells[cell_idx].set_int(addr_->get_port());
-            break;
-          }
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_NO: {
             cells[cell_idx].set_int(cur_tp_event->item_.no_);
             break;

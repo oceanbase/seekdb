@@ -28,7 +28,6 @@ namespace observer
 ObAllVirtualObjLock::ObAllVirtualObjLock()
     : ObVirtualTableScannerIterator(),
       addr_(),
-      ls_id_(share::ObLSID::INVALID_LS_ID),
       ls_(nullptr),
       tx_ctx_(nullptr),
       ls_iter_guard_(),
@@ -55,7 +54,6 @@ void ObAllVirtualObjLock::reset()
 
 void ObAllVirtualObjLock::release_last_tenant()
 {
-  ls_id_ = share::ObLSID::INVALID_LS_ID;
   ls_ = nullptr;
   if (OB_NOT_NULL(tx_ctx_)) {
     ls_tx_ctx_iter_.revert_tx_ctx(tx_ctx_);
@@ -99,12 +97,11 @@ int ObAllVirtualObjLock::get_next_ls()
     }
     // switch to next tenant
     ret = OB_ITER_END;
-    SERVER_LOG(DEBUG, "finish iterate this tenant, switch to next tenant then", K(ret), K(ls_id_));
+    SERVER_LOG(DEBUG, "finish iterate this tenant, switch to next tenant then", K(ret));
   } else if (OB_ISNULL(ls_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "ls is null", K(ret));
   } else {
-    ls_id_ = ls_->get_ls_id().id();
     is_iter_tx_ = true;  // iterate tx firstly, then iterate lock_memtable
     ls_tx_ctx_iter_.reset();
     obj_lock_iter_.reset();
@@ -128,9 +125,9 @@ int ObAllVirtualObjLock::get_next_tx_ctx(transaction::ObPartTransCtx *&tx_ctx)
     if (!ls_tx_ctx_iter_.is_ready()) {
       if (OB_ISNULL(ls_)) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "ls is null", K(ret), K(ls_id_));
+        SERVER_LOG(WARN, "ls is null", K(ret));
       } else if (OB_FAIL(ls_->iterate_tx_ctx(ls_tx_ctx_iter_))) {
-        SERVER_LOG(WARN, "fail to get ls_tx_ctx_iter", K(ret), K(ls_id_));
+        SERVER_LOG(WARN, "fail to get ls_tx_ctx_iter", K(ret));
       }
     } else if (OB_FAIL(ls_tx_ctx_iter_.get_next_tx_ctx(tx_ctx))) {
       if (OB_ITER_END != ret) {
@@ -152,13 +149,13 @@ int ObAllVirtualObjLock::get_next_lock_id(ObLockID &lock_id)
     if (!obj_lock_iter_.is_ready()) {
       if (OB_ISNULL(ls_)) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "ls is null", K(ret), K(ls_id_));
+        SERVER_LOG(WARN, "ls is null", K(ret));
       } else if (OB_FAIL(ls_->get_lock_id_iter(obj_lock_iter_))) {
-        SERVER_LOG(WARN, "fail to get obj_lock_iter", K(ret), K(ls_id_));
+        SERVER_LOG(WARN, "fail to get obj_lock_iter", K(ret));
       }
     } else if (OB_FAIL(obj_lock_iter_.get_next(lock_id))) {
       if (OB_ITER_END != ret) {
-        SERVER_LOG(WARN, "fail to get next lock_id", K(ret), K(ls_id_));
+        SERVER_LOG(WARN, "fail to get next lock_id", K(ret));
       }
     } else {
       break;
@@ -179,7 +176,7 @@ int ObAllVirtualObjLock::get_next_lock_op(
     if (!is_iter_priority_list_) {
       if (OB_FAIL(lock_op_iter_.get_next(lock_op))) {
         if (OB_ITER_END != ret) {
-          SERVER_LOG(WARN, "fail to get next lock op", K(ret), K(is_iter_tx_), K(ls_id_));
+          SERVER_LOG(WARN, "fail to get next lock op", K(ret), K(is_iter_tx_));
         }
         lock_op_iter_.reset();  // clean lock_op_iter to save memory
       } else {
@@ -189,7 +186,7 @@ int ObAllVirtualObjLock::get_next_lock_op(
       transaction::tablelock::ObTableLockPrioOp prio_op;
       if (OB_FAIL(prio_op_iter_.get_next(prio_op))) {
         if (OB_ITER_END != ret) {
-          SERVER_LOG(WARN, "fail to get next lock op", K(ret), K(is_iter_tx_), K(ls_id_));
+          SERVER_LOG(WARN, "fail to get next lock op", K(ret), K(is_iter_tx_));
         }
         prio_op_iter_.reset();  // clean lock_op_iter to save memory
       } else {
@@ -200,7 +197,7 @@ int ObAllVirtualObjLock::get_next_lock_op(
     if (OB_FAIL(ret)) {
       if (OB_FAIL(get_next_lock_op_iter())) {
         if (OB_ITER_END != ret) {
-          SERVER_LOG(WARN, "fail to get next lock_op_iter", K(ret), K(is_iter_tx_), K(ls_id_));
+          SERVER_LOG(WARN, "fail to get next lock_op_iter", K(ret), K(is_iter_tx_));
         }
       }
     } else {
@@ -223,19 +220,19 @@ int ObAllVirtualObjLock::get_next_lock_op_iter()
       if (OB_TMP_FAIL(get_next_lock_op_iter_from_tx_ctx())) {
         if (OB_ITER_END != tmp_ret) {
           retry_times++;
-          SERVER_LOG(WARN, "get next lock_op_iter from tx_ctx failed", K(tmp_ret), K(retry_times), K(ls_id_));
+          SERVER_LOG(WARN, "get next lock_op_iter from tx_ctx failed", K(tmp_ret), K(retry_times));
         }
         if (OB_ITER_END == tmp_ret || retry_times >= MAX_RETRY_TIMES) {
           is_iter_tx_ = false;
           ls_tx_ctx_iter_.reset();  // clean lx_tx_ctx_iter to save memory
-          SERVER_LOG(DEBUG, "iterate tx finish, iterate lock_memtable then", K(tmp_ret), K(ls_id_));
+          SERVER_LOG(DEBUG, "iterate tx finish, iterate lock_memtable then", K(tmp_ret));
         }
       }
     } else {
       if (OB_TMP_FAIL(get_next_lock_op_iter_from_lock_memtable())) {
         if (OB_ITER_END != tmp_ret) {
           retry_times++;
-          SERVER_LOG(WARN, "get next lock_op_iter from lock_memtable failed", K(tmp_ret), K(retry_times), K(ls_id_));
+          SERVER_LOG(WARN, "get next lock_op_iter from lock_memtable failed", K(tmp_ret), K(retry_times));
         }
         if (OB_ITER_END == tmp_ret || retry_times >= MAX_RETRY_TIMES) {
           if (OB_FAIL(get_next_ls())) {
@@ -279,18 +276,18 @@ int ObAllVirtualObjLock::get_next_lock_op_iter_from_tx_ctx()
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(tx_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "tx_ctx is null", K(ret), K(ls_id_));
+    SERVER_LOG(ERROR, "tx_ctx is null", K(ret));
   } else if (!is_iter_priority_list_) {
     if (OB_FAIL(tx_ctx_->iterate_tx_obj_lock_op(lock_op_iter_))) {
-      SERVER_LOG(WARN, "fail to get common lock op iter", K(ret), K(ls_id_));
+      SERVER_LOG(WARN, "fail to get common lock op iter", K(ret));
     } else if (OB_FAIL(lock_op_iter_.set_ready())) {
-      SERVER_LOG(WARN, "set lock_op_iter ready failed", K(ret), K(ls_id_));
+      SERVER_LOG(WARN, "set lock_op_iter ready failed", K(ret));
     }
   } else {
     if (OB_FAIL(tx_ctx_->iterate_tx_lock_priority_list(prio_op_iter_))) {
-      SERVER_LOG(WARN, "fail to get priority_list lock op iter", K(ret), K(ls_id_));
+      SERVER_LOG(WARN, "fail to get priority_list lock op iter", K(ret));
     } else if (OB_FAIL(prio_op_iter_.set_ready())) {
-      SERVER_LOG(WARN, "set prio_op_iter ready failed", K(ret), K(ls_id_));
+      SERVER_LOG(WARN, "set prio_op_iter ready failed", K(ret));
     }
   }
 
@@ -309,7 +306,7 @@ int ObAllVirtualObjLock::get_next_lock_op_iter_from_lock_memtable()
 
   if (OB_FAIL(get_next_lock_id(lock_id))) {
     if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "fail to get next lock_id", K(ret), K(ls_id_));
+      SERVER_LOG(WARN, "fail to get next lock_id", K(ret));
     }
   } else {
     lock_op_iter_.reset();
@@ -336,7 +333,7 @@ int ObAllVirtualObjLock::prepare_start_to_read()
   } else if (OB_FAIL(get_next_ls())) {
     SERVER_LOG(WARN, "init ls_ failed", K(ret));
   } else if (OB_FAIL(get_next_lock_op_iter())) {
-    SERVER_LOG(WARN, "init lock_op_iter_ failed", K(ret), K(ls_id_));
+    SERVER_LOG(WARN, "init lock_op_iter_ failed", K(ret));
   } else {
     start_to_read_ = true;
   }
@@ -361,29 +358,6 @@ int ObAllVirtualObjLock::process_curr_tenant(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case SVR_IP: {
-          // svr_ip
-          if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cur_row_.cells_[i].set_varchar(ip_buf_);
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-          }
-          break;
-        }
-        case SVR_PORT:
-          // svr_port
-          cur_row_.cells_[i].set_int(addr_.get_port());
-          break;
-        case TENANT_ID:
-          // tenant_id
-          cur_row_.cells_[i].set_int(MTL_ID());
-          break;
-        case LS_ID:
-          // ls_id
-          cur_row_.cells_[i].set_int(ls_id_);
-          break;
         case LOCK_ID: {
           lock_op.lock_id_.to_string(lock_id_buf_, sizeof(lock_id_buf_));
           lock_id_buf_[MAX_LOCK_ID_BUF_LENGTH - 1] = '\0';

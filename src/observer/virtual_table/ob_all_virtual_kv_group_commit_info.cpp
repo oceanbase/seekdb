@@ -75,27 +75,9 @@ int ObAllVirtualKvGroupCommitInfo::process_curr_tenant(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
-        case GROUP_COLUMN::SVR_IP:
-          if (!group_info.client_addr_.ip_to_string(ipbuf_, common::OB_IP_STR_BUFF)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to get ip string", K(ret), K(group_info.client_addr_));
-          } else {
-            cells[i].set_varchar(ObString::make_string(ipbuf_));
-            cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          }
-          break;
-        case GROUP_COLUMN::SVR_PORT:
-          cells[i].set_int(group_info.client_addr_.get_port());
-          break;
-        case GROUP_COLUMN::TENANT_ID:
-          cells[i].set_int(group_info.tenant_id_);
-          break;
         case GROUP_COLUMN::GROUP_TYPE:
           cells[i].set_varchar(group_info.get_group_type_str());
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case GROUP_COLUMN::LS_ID:
-          cells[i].set_int(group_info.ls_id_.id());
           break;
         case GROUP_COLUMN::TABLE_ID:
           cells[i].set_int(group_info.table_id_);

@@ -1,0 +1,134 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_ARCHIVE_OB_LOG_STREAM_MGR_H_
+#define OCEANBASE_ARCHIVE_OB_LOG_STREAM_MGR_H_
+
+#include "lib/hash/ob_link_hashmap.h"   // ObLinkHashMap
+#include "ob_archive_define.h"
+#include "share/ob_ls_id.h"             // ObLSID
+#include "share/ob_thread_pool.h"       // ObThreadPool
+#include "common/ob_role.h"             // ObRole
+#include "common/ob_queue_thread.h"     // ObCond
+#include "ob_ls_task.h"                 // ObLSArchiveTask
+#include "ob_start_archive_helper.h"    // StartArchiveHelper
+#include "share/scn.h"        // SCn
+#include <cstdint>
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObLS;
+class ObLSService;
+}
+
+namespace logservice
+{
+class ObLogService;
+}
+namespace archive
+{
+class ObArchiveAllocator;
+class ObArchiveSequencer;
+class ObArchivePersistMgr;
+class ObArchiveRoundMgr;
+using oceanbase::share::ObLSID;
+using oceanbase::storage::ObLS;
+using oceanbase::logservice::ObLogService;
+using oceanbase::storage::ObLSService;
+typedef common::ObLinkHashMap<ObLSID, ObLSArchiveTask> LSArchiveMap;
+/*
+ * Log stream archive management module
+ *
+ * archive provides log backup service for log streams, not bound to the lifecycle of log stream replicas, therefore independent log stream management is required
+ * When backup zone is not set, it defaults to the server where the log stream leader resides to provide archive services
+ * When backup zone is set, the leader designates a log stream replica to provide archive services
+ *
+ * NB: Due to the limitations of log streams themselves, archive service without replicas is not currently provided
+ *
+ * */
+class ObArchiveLSMgr : public share::ObThreadPool
+{
+  static const int64_t THREAD_RUN_INTERVAL = 1 * 1000 * 1000L;
+  static const int64_t DEFAULT_PRINT_INTERVAL = 30 * 1000 * 1000L;
+public:
+  ObArchiveLSMgr();
+  virtual ~ObArchiveLSMgr();
+
+public:
+  int iterate_ls(const std::function<int (const ObLSArchiveTask &)> &func);
+  template <typename Fn> int foreach_ls(Fn &fn) { return ls_map_.for_each(fn);  }
+  void flush_all();
+public:
+  int init(const uint64_t tenant_id,
+      ObLogService *log_service,
+      ObLSService *ls_svr,
+      ObArchiveAllocator *allocator,
+      ObArchiveSequencer *sequencer,
+      ObArchiveRoundMgr *round_mgr,
+      ObArchivePersistMgr *persist_mgr);
+  int start();
+  void stop();
+  void wait();
+  void destroy();
+  int set_archive_info(const share::SCN &round_start_scn,
+      const int64_t piece_interval, const share::SCN &genesis_scn, const int64_t base_piece_id);
+  void clear_archive_info();
+  void notify_start();
+  void notify_stop();
+  int revert_ls_task(ObLSArchiveTask *task);
+  int get_ls_guard(const ObLSID &id, ObArchiveLSGuard &guard);
+  int authorize_ls_archive_task(const ObLSID &id, const int64_t epoch, const share::SCN &start_scn);
+  void reset_task();
+  int64_t get_ls_task_count() const { return ls_map_.count(); }
+  int mark_fatal_error(const ObLSID &id, const ArchiveKey &key, const ObArchiveInterruptReason &reason);
+  int print_tasks();
+
+private:
+  void run1();
+  void do_thread_task_();
+  void gc_stale_ls_task_(const ArchiveKey &key, const bool is_in_doing);
+  void add_ls_task_();
+  int check_ls_archive_task_valid_(const ArchiveKey &key, ObLS *ls, bool &exist);
+  int add_task_(const ObLSID &id, const ArchiveKey &key, const int64_t epoch);
+  int insert_or_update_ls_(const StartArchiveHelper &helper);
+
+private:
+  class CheckDeleteFunctor;
+  class ClearArchiveTaskFunctor;
+  class FlushAllFunctor;
+private:
+  bool                  inited_;
+  uint64_t              tenant_id_;
+  share::SCN             round_start_scn_;
+  int64_t               piece_interval_;
+  share::SCN             genesis_scn_;
+  int64_t               base_piece_id_;
+  LSArchiveMap          ls_map_;
+
+  int64_t               last_print_ts_;
+  ObArchiveAllocator    *allocator_;
+  ObArchiveSequencer    *sequencer_;
+  ObArchiveRoundMgr     *round_mgr_;
+  ObLogService          *log_service_;
+  ObLSService           *ls_svr_;
+  ObArchivePersistMgr   *persist_mgr_;
+  common::ObCond        cond_;
+};
+} // namespace archive
+} // namespace oceanbase
+#endif /* OCEANBASE_ARCHIVE_OB_LOG_STREAM_MGR_H_ */

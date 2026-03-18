@@ -330,7 +330,6 @@ int ObInnerTableSchemaDumper::get_all_ddl_operation_info_(const ObIArray<schema:
       OZ (dml.add_gmt_create());
       OZ (dml.add_gmt_modified());
       OZ (dml.add_column("schema_version", table->get_schema_version()));
-      OZ (dml.add_column("tenant_id", OB_INVALID_TENANT_ID));
       OZ (dml.add_column("user_id", 0));
       OZ (dml.add_column("database_id", table->get_database_id()));
       OZ (dml.add_column("database_name", ""));

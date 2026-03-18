@@ -68,10 +68,6 @@ int ObTenantVirtualEventName::inner_get_next_row(ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch(col_id) {
-           case TENANT_ID: {
-            cells_[cell_idx].set_int(tenant_id_);
-            break;
-          }
           case EVENT_ID: {
             cells_[cell_idx].set_int(OB_WAIT_EVENTS[event_iter_].event_id_);
             break;

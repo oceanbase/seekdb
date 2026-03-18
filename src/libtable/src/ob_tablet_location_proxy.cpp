@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX CLIENT
 #include "ob_tablet_location_proxy.h"
-#include "share/location_cache/ob_tablet_ls_service.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::table;
@@ -55,12 +54,10 @@ int ObTabletLocationProxy::get_tablet_location(const ObString &tenant,
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
     if (OB_FAIL(query_text.assign_fmt(
-                "SELECT A.svr_ip, A.sql_port, A.table_id, A.role, A.replica_type, B.svr_port "
-                "FROM oceanbase.%s A inner join oceanbase.%s B "
-                "on A.svr_ip = B.svr_ip and A.sql_port = B.inner_port "
+                "SELECT A.sql_port, A.table_id, A.role, A.replica_type"
+                "FROM oceanbase.%s A"
                 "WHERE tenant_name = '%.*s' and database_name='%.*s' and table_name = '%.*s' and tablet_id=%ld",
                 OB_ALL_VIRTUAL_PROXY_SCHEMA_TNAME,
-                OB_ALL_SERVER_TNAME,
                 tenant.length(), tenant.ptr(),
                 db.length(), db.ptr(),
                 table.length(), table.ptr(), tablet_id.id()))) {
@@ -100,13 +97,8 @@ int ObTabletLocationProxy::get_tablet_location(const ObString &tenant,
 int ObTabletLocationProxy::cons_replica_location(const sqlclient::ObMySQLResult &res, ObTabletReplicaLocation &replica_location)
 {
   int ret = OB_SUCCESS;
-  ObAddr server;
+  ObAddr server = GCTX.self_addr();
   int64_t tmp_real_str_len = 0; // only used to fill output parameter，guarantee there is not any '\0' in the string
-  char svr_ip[OB_IP_STR_BUFF] = "";
-  int64_t svr_port = 0;
-  EXTRACT_STRBUF_FIELD_MYSQL(res, "svr_ip", svr_ip, OB_IP_STR_BUFF, tmp_real_str_len);
-  EXTRACT_INT_FIELD_MYSQL(res, "svr_port", svr_port, int64_t);
-  (void)server.set_ip_addr(svr_ip, static_cast<int32_t>(svr_port));
   int64_t sql_port;
   EXTRACT_INT_FIELD_MYSQL(res, "sql_port", sql_port, int64_t);
   int64_t role_value = 0;

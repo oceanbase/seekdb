@@ -88,6 +88,7 @@ enum ObCommandOption {
   COMMAND_OPTION_REDO_DIR,
   COMMAND_OPTION_LOG_LEVEL,
   COMMAND_OPTION_PARAMETER,
+  COMMAND_OPTION_ROLE,
 };
 
 // Define long options
@@ -103,6 +104,7 @@ static struct option long_options[] = {
   {"redo-dir",   required_argument, 0, COMMAND_OPTION_REDO_DIR},
   {"log-level",  required_argument, 0, COMMAND_OPTION_LOG_LEVEL},
   {"parameter",  required_argument, 0, COMMAND_OPTION_PARAMETER},
+  {"role", required_argument, 0, COMMAND_OPTION_ROLE},
   {"version",    no_argument,       0, 'V'},
   {"help",       no_argument,       0, 'h'},
   {0, 0, 0, 0}
@@ -252,6 +254,15 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
       ret = append_key_value(value, opts.parameters_);
       break;
     }
+    case COMMAND_OPTION_ROLE: { // role
+      if (nullptr == value) {
+        ret = OB_INVALID_ARGUMENT;
+        MPRINT("Invalid argument, the value should not be empty of 'role'");
+      } else {
+        opts.role_.assign(value);
+      }
+      break;
+    }
     case 'V': { // version
       version_requested_ = true;
       break;
@@ -383,6 +394,7 @@ void ObCommandLineParser::print_help() const
   MPRINT("  --log-level <level>             The server log level. Can be one of [ERROR, WARN, INFO, EDIAG, WDIAG, TRACE, DEBUG]");
   MPRINT("  --variable <key=value>          system variables, format: key=value. Note: This takes effect only during the initial startup. Can be specified multiple times.");
   MPRINT("  --parameter <key=value>         system parameters, format: key=value. Can be specified multiple times.");
+  MPRINT("  --role <role>                   server role: PRIMARY (default) or STANDBY");
   MPRINT("  --version, -V                   show version message and exit");
   MPRINT("  --help, -h                      show this message and exit");
   MPRINT();

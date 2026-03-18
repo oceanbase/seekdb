@@ -49,18 +49,18 @@ public:
   int signal();
 
 private:
-  int check_need_broadcast(bool &need_broadcast, const int64_t expected_epoch);
-  int try_broadcast_freeze_info(const int64_t expected_epoch);
+  int check_need_broadcast(bool &need_broadcast);
+  int try_broadcast_freeze_info();
   int try_renew_snapshot_gc_scn();
   int try_minor_freeze();
-  int try_update_zone_info(const int64_t expected_epoch);
+  int try_update_zone_info();
 
   int can_start_work(bool &can_work);
   bool is_primary_service() { return is_primary_service_; }
   int check_tenant_is_restore(const uint64_t tenant_id, bool &is_restore);
-  int try_reload_freeze_info(const int64_t expected_epoch);
+  int try_reload_freeze_info();
   // adjust global_merge_info in memory to avoid useless major freezes on restore major_freeze_service
-  int try_adjust_global_merge_info(const int64_t expected_epoch);
+  int try_adjust_global_merge_info();
   int check_global_merge_info(bool &is_initial) const;
   // For backup-restore tenant that switchover to primary tenant, FreezeInfoDetector is not able to
   // has write access immediately when it starts. Thus, FreezeInfoDetector can not renew

@@ -24,7 +24,6 @@ target_include_directories(
   ${DEP_DIR}/include/icu
   ${DEP_DIR}/include/icu/common
   ${DEP_DIR}/include/apache-arrow
-  ${DEP_DIR}/include/apache-orc
   ${DEP_DIR}/include/fast_float
   ${USSL_INCLUDE_DIRS}
 )
@@ -208,6 +207,7 @@ target_link_libraries(oblib_base_without_pass
   ${DEP_DIR}/lib/libroaring.a
   ${LGPL_DEPS}
   $<$<STREQUAL:"${ARCHITECTURE}","x86_64">:${DEP_DIR}/lib/libunwind.a>
+  ${DEP_DIR}/lib/sqlite/libsqlite3.a
   ${DEP_DIR}/lib/libz.a
   ${DEP_DIR}/lib/libicui18n.a
   ${DEP_DIR}/lib/libicustubdata.a
@@ -251,6 +251,7 @@ set(oblib_extra_objects "" CACHE INTERNAL oblib_extra_objects)
 add_subdirectory(lib)
 add_subdirectory(common)
 add_subdirectory(rpc)
+add_subdirectory(grpc)
 
 # Define static library which contains previous object libraries.
 message(STATUS "oblib_extra_objects ${oblib_extra_objects}")

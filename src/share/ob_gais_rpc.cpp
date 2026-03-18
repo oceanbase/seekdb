@@ -359,24 +359,17 @@ int ObGAISRequestRpc::broadcast_global_autoinc_cache(const ObGAISBroadcastAutoIn
     LOG_WARN("invalid argument", KR(ret), K(msg));
   } else {
     ObZone null_zone;
-    ObSEArray<ObAddr, 8> server_list;
-    if (OB_FAIL(SVR_TRACER.get_alive_servers(null_zone, server_list))) {
-      LOG_WARN("fail to get alive server", K(ret));
+    const uint64_t tenant_id = msg.tenant_id_;
+    const static int64_t BROADCAST_OP_TIMEOUT = 1000 * 1000; // 1s
+    ObAddr dest = GCTX.self_addr();
+    if (dest == self_) {
+      // ignore broadcast to self
+    } else if (OB_FAIL(rpc_proxy_->to(dest).by(tenant_id).timeout(BROADCAST_OP_TIMEOUT)
+                                             .broadcast_autoinc_cache(msg, NULL))) {
+      LOG_WARN("fail to broadcast autoinc cache to server", K(ret), K(msg), K(dest));
+      ret = OB_SUCCESS;
     } else {
-      const uint64_t tenant_id = msg.tenant_id_;
-      const static int64_t BROADCAST_OP_TIMEOUT = 1000 * 1000; // 1s
-      for (int64_t i = 0; OB_SUCC(ret) && i < server_list.count(); i++) {
-        ObAddr &dest = server_list.at(i);
-        if (dest == self_) {
-          // ignore broadcast to self
-        } else if (OB_FAIL(rpc_proxy_->to(dest).by(tenant_id).timeout(BROADCAST_OP_TIMEOUT)
-                                               .broadcast_autoinc_cache(msg, NULL))) {
-          LOG_WARN("fail to broadcast autoinc cache to server", K(ret), K(msg), K(dest));
-          ret = OB_SUCCESS;
-        } else {
-          LOG_DEBUG("broadcast autoinc cache success", K(dest), K(msg));
-        }
-      }
+      LOG_DEBUG("broadcast autoinc cache success", K(dest), K(msg));
     }
   }
   return ret;

@@ -58,11 +58,7 @@ private:
   static const int64_t MAX_RETRY_TIMES = 10;
   enum
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    LS_ID,
-    LOCK_ID,
+    LOCK_ID = OB_APP_MIN_COLUMN_ID,
     LOCK_MODE,
     OWNER_ID,
     CREATE_TRANS_ID,
@@ -81,7 +77,6 @@ private:
   };
 private:
   common::ObAddr addr_;
-  int64_t ls_id_;
   ObLS *ls_;
   transaction::ObPartTransCtx *tx_ctx_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
@@ -96,7 +91,6 @@ private:
   // whether iterate tx or not now.
   bool is_iter_tx_;
   bool is_iter_priority_list_;
-  char ip_buf_[common::OB_IP_STR_BUFF];
   char lock_id_buf_[common::MAX_LOCK_ID_BUF_LENGTH];
   char lock_mode_buf_[common::MAX_LOCK_MODE_BUF_LENGTH];
   char lock_obj_type_buf_[common::MAX_LOCK_OBJ_TYPE_BUF_LENGTH];

@@ -24,6 +24,7 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
 #include "storage/high_availability/ob_storage_ha_struct.h"
+
 namespace oceanbase
 {
 namespace storage
@@ -53,7 +54,6 @@ protected:
   int get_next_tablet(storage::ObTabletHandle &tablet_handle);
 protected:
   common::ObAddr addr_;
-  int64_t ls_id_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
   storage::ObLSTabletIterator ls_tablet_iter_;
   char ip_buf_[common::OB_IP_STR_BUFF];
@@ -65,11 +65,7 @@ class ObAllVirtualCSReplicaTabletStats : public ObAllVirtualTableLSTabletIter
 {
   enum COLUMN_ID_LIST
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    LS_ID,
-    TABLET_ID,
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
     MACRO_BLOCK_CNT,
     IS_CS,
     IS_CS_REPLICA,

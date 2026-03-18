@@ -194,8 +194,6 @@ int ObDDLServiceLauncher::switch_to_follower_gracefully()
       // try reset cache for schema refresh
       GCTX.root_service_->get_ddl_service().get_index_name_checker().reset_all_cache();
       FLOG_INFO("reset index name checker success");
-      GCTX.root_service_->get_ddl_service().get_non_partitioned_tablet_allocator().reset_all_cache();
-      FLOG_INFO("reset non partitioned tablet allocator success");
     }
     ATOMIC_SET(&is_ddl_service_started_, false);
   }
@@ -295,7 +293,8 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_(
   //         by double checking proposal id not changed
   } else if (OB_FAIL(get_sys_palf_role_and_epoch(role, proposal_id))) {
     LOG_WARN("fail to get role and proposal id", KR(ret));
-  } else if (!is_strong_leader(role)) {
+  } else if (!is_leader_like(role)) {
+    // DO NOT use is_strong_leader(), because standby cluster's role is STANDBY_LEADER
     ret = OB_LS_NOT_LEADER;
     LOG_WARN("local is not sys leader", KR(ret), K(role));
   } else if (!with_new_mode && proposal_id != proposal_id_to_check) {

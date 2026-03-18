@@ -87,9 +87,6 @@ TEST_F(TestDeliver, Norm)
   req.set_packet(&pkt);
   int ret = deliver(req);
   EXPECT_EQ(OB_TENANT_NOT_IN_SERVER, ret);
-  pkt.set_pcode(OB_RENEW_LEASE);
-  ret = deliver(req);
-  EXPECT_EQ(OB_SUCCESS, ret);
   pkt.set_priority(10);
   ret = deliver(req);
   EXPECT_EQ(OB_SUCCESS, ret);

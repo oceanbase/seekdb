@@ -172,7 +172,6 @@ private:
   int dump_backup_tablet_meta_(const backup::ObBackupTabletMeta &tablet_meta);
   int dump_backup_sstable_meta_(const backup::ObBackupSSTableMeta &sstable_meta);
   int dump_backup_macro_block_id_mapping_meta_(const backup::ObBackupMacroBlockIDMappingsMeta &mapping_meta);
-  int dump_ls_attr_info_(const share::ObLSAttr &ls_attr);
   int dump_tablet_to_ls_info_(const storage::ObBackupDataTabletToLSInfo &tablet_to_ls_info);
   int dump_tenant_locality_info_(const storage::ObExternTenantLocalityInfoDesc &locality_info);
   int dump_parameters_info_(const storage::ObExternParamInfoDesc &param_info);

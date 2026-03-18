@@ -28,78 +28,6 @@ namespace oceanbase
 namespace table
 {
 
-void ObClearTTLHistoryTask::runTimerTask()
-{
-  ObCurTraceId::init(GCONF.self_addr_);
-  int ret = OB_SUCCESS;
-  if (!ObTTLUtil::is_enable_ttl(tenant_id_)) {
-    // do nothing
-    LOG_DEBUG("ttl is disable");
-  } else if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ob clear ttl history task is not init", KR(ret));
-  } else if (is_paused_) {
-    // timer paused, do nothing 
-  } else if (ObTTLUtil::check_can_do_work()) {
-    int ret = OB_SUCCESS;
-    const int64_t now = ObTimeUtility::current_time();
-    ObSqlString sql;
-    if (tenant_id_ == OB_SYS_TENANT_ID) {
-    } else if (!ObTTLUtil::check_can_process_tenant_tasks(tenant_id_)) {
-      // do nothinig
-    } else {
-      sql.reuse();
-      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
-      if (!tenant_config.is_valid()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail get tenant_config", KR(ret), K(tenant_id_));
-      } else {
-        int64_t delete_timestamp = now - tenant_config->kv_ttl_history_recycle_interval;
-        int64_t affect_rows = 0;
-        
-        if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE task_update_time < %ld LIMIT %ld ",
-                                          share::OB_ALL_KV_TTL_TASK_HISTORY_TNAME,
-                                          delete_timestamp,
-                                          OB_KV_TTL_GC_COUNT_PER_TASK))) {
-          LOG_WARN("fail to assign fmt sql string", KR(ret));
-        } else if (OB_FAIL(sql_proxy_->write(gen_meta_tenant_id(tenant_id_), sql.ptr(), affect_rows))) {
-          LOG_WARN("fail to execute sql", KR(ret), K(sql));
-        } else {
-          LOG_DEBUG("success to execute sql", KR(ret), K(sql));
-        }
-      }
-    }
-  }
-}
-
-int ObClearTTLHistoryTask::init(const uint64_t tenant_id, common::ObMySQLProxy &sql_proxy)
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("ttl history task init twice", KR(ret));
-  } else if (tenant_id == OB_INVALID_TENANT_ID) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
-  } else {
-    sql_proxy_ = &sql_proxy;
-    tenant_id_ = tenant_id;
-    disable_timeout_check();
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-void ObClearTTLHistoryTask::resume()
-{
-  is_paused_ = false;
-}
-
-void ObClearTTLHistoryTask::pause()
-{
-  is_paused_ = true;
-}
-
 int ObTTLTaskScheduler::init(const uint64_t tenant_id, common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
@@ -118,57 +46,6 @@ int ObTTLTaskScheduler::init(const uint64_t tenant_id, common::ObMySQLProxy &sql
 int ObTTLTaskScheduler::reload_tenant_task()
 {
   int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ttl tenant task mgr not init", KR(ret));
-  } else if (ATOMIC_BCAS(&need_reload_, true, false)) {
-    lib::ObMutexGuard guard(mutex_);
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObTTLStatusField table_id_field;
-      table_id_field.field_name_ = ObString("table_id");
-      table_id_field.type_ = ObTTLStatusField::UINT_TYPE;
-      table_id_field.data_.uint_ = get_tenant_task_table_id();
-
-      ObTTLStatusField partition_id_field;
-      partition_id_field.field_name_ = ObString("tablet_id");
-      partition_id_field.type_ = ObTTLStatusField::UINT_TYPE;
-      partition_id_field.data_.uint_ = get_tenant_task_tablet_id();
-
-      ObTTLStatusField tenant_id_field;
-      tenant_id_field.field_name_ = ObString("tenant_id");
-      tenant_id_field.type_ = ObTTLStatusField::UINT_TYPE;
-      tenant_id_field.data_.uint_ = tenant_id_;
-      
-      ObTTLStatusFieldArray filters;
-      ObTTLStatusArray ttl_task_arr;
-      if (OB_FAIL(filters.push_back(table_id_field)) ||
-          OB_FAIL(filters.push_back(partition_id_field)) ||
-          OB_FAIL(filters.push_back(tenant_id_field))) {
-        LOG_WARN("fail to push back field into array", KR(ret));
-      } else if (OB_FAIL(ObTTLUtil::read_ttl_tasks(tenant_id_,
-                                                   share::OB_ALL_KV_TTL_TASK_TNAME,
-                                                   *sql_proxy_, filters, ttl_task_arr))) {
-        LOG_WARN("fail to read ttl tasks status", KR(ret));
-      } else if (ttl_task_arr.empty()) {
-        tenant_task_.reset();
-      } else if (ttl_task_arr.size() == 1) {
-        ObTTLStatus &task = ttl_task_arr.at(0);
-        tenant_task_.ttl_status_ = task;
-        tenant_task_.is_finished_ = false;
-      } else {
-        ret = OB_ERR_UNEXPECTED; 
-        LOG_ERROR("unexpected tenant ttl task count", KR(ret));
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      FLOG_INFO("reload tenant task", K_(tenant_task));
-    } else {
-      ret = OB_EAGAIN;
-      ATOMIC_STORE(&need_reload_, true);
-      LOG_WARN("fail to reload tenant task", KR(ret), K_(tenant_task));
-    }
-  }
   return ret;
 }
 
@@ -288,14 +165,6 @@ int ObTTLTaskScheduler::add_ttl_task_internal(TRIGGER_TYPE trigger_type)
 int ObTTLTaskScheduler::insert_tenant_task(ObTTLStatus& ttl_task)
 {
   int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ttl tenant task mgr not init", KR(ret));
-  } else if (OB_FAIL(ObTTLUtil::insert_ttl_task(ttl_task.tenant_id_,
-    share::OB_ALL_KV_TTL_TASK_TNAME, *sql_proxy_, ttl_task))) {
-    LOG_WARN("fail to insert tenant status.", KR(ret));
-  }
-  LOG_INFO("finish insert tenant ttl task", KR(ret), K(ttl_task));
   return ret;
 }
 
@@ -304,56 +173,12 @@ int ObTTLTaskScheduler::update_task_status(uint64_t task_id,
                                            common::ObISQLClient& proxy)
 {
   int ret = OB_SUCCESS;
-  ObTTLStatusKey key(tenant_id_, get_tenant_task_table_id(), get_tenant_task_tablet_id(), task_id);
-  ObTTLStatusFieldArray update_fields;
-
-  ObTTLStatusField status_field;
-  status_field.field_name_ = ObString("status");
-  status_field.type_ = ObTTLStatusField::INT_TYPE;
-  status_field.data_.int_ = status;
-
-  ObTTLStatusField update_time_field;
-  update_time_field.field_name_ = ObString("task_update_time");
-  update_time_field.type_ = ObTTLStatusField::INT_TYPE;
-  update_time_field.data_.int_ = static_cast<int64_t>(ObTimeUtility::current_time());
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ttl tenant task mgr not init", KR(ret));
-  } else if (OB_FAIL(update_fields.push_back(status_field)) ||
-      OB_FAIL(update_fields.push_back(update_time_field))) {
-    LOG_WARN("fail to push back update fields.", KR(ret));
-  } else {
-    if (OB_FAIL(ObTTLUtil::update_ttl_task(tenant_id_,
-                                           share::OB_ALL_KV_TTL_TASK_TNAME,
-                                           proxy,
-                                           key,
-                                           update_fields))) {
-      LOG_WARN("fail to update ttl task status.", KR(ret), K(tenant_id_), K(task_id), K(status));
-    } else {
-      LOG_DEBUG("success to update ttl tasks status", KR(ret), K(tenant_id_), K(task_id), K(status));
-    }
-  }
-
   return ret;
 }
 
 int ObTTLTaskScheduler::delete_task(const uint64_t tenant_id, const uint64_t task_id)
 {
   int ret = OB_SUCCESS;
-  ObTTLStatusKey key(tenant_id_, OB_INVALID_ID, OB_INVALID_ID, task_id);
-  int64_t affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ttl tenant task mgr not init", KR(ret));
-  } else if (OB_FAIL(ObTTLUtil::delete_ttl_task(tenant_id,
-                                        share::OB_ALL_KV_TTL_TASK_TNAME,
-                                        *sql_proxy_, key, affected_rows))) {
-    LOG_WARN("fail to delete ttl tasks status", KR(ret), K_(tenant_id), K(task_id));
-  } else {
-    LOG_DEBUG("success to delete ttl tasks status", KR(ret), K_(tenant_id), K(task_id), K(affected_rows));
-  }
-
   return ret;
 }
 
@@ -469,37 +294,6 @@ int ObTTLTaskScheduler::check_one_tablet_task(common::ObISQLClient &sql_client,
                                               bool &is_finished)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
-  is_finished = false;
-  SMART_VAR(ObISQLClient::ReadResult, res) {
-    sqlclient::ObMySQLResult* result = nullptr;
-    if (OB_FAIL(sql.append_fmt(
-        "SELECT count(*) as cnt FROM %s WHERE tenant_id = %ld and task_id = %ld and "
-        " table_id = %ld and tablet_id = %ld and (status = %ld or status = %ld) ",
-        OB_ALL_KV_TTL_TASK_TNAME,
-        tenant_id_,
-        tenant_task_.ttl_status_.task_id_,
-        table_id,
-        tablet_id.id(),
-        static_cast<int64_t>(ObTTLTaskStatus::OB_TTL_TASK_FINISH),
-        static_cast<int64_t>(ObTTLTaskStatus::OB_TTL_TASK_CANCEL)))) {
-      LOG_WARN("fail to assign sql", KR(ret));
-    } else if (OB_FAIL(sql_client.read(res, gen_meta_tenant_id(tenant_id_), sql.ptr()))) {
-      LOG_WARN("fail to execute sql", KR(ret), K_(tenant_id), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get mysql result failed", KR(ret), K(sql));
-    } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next result", KR(ret), K(sql));
-    } else {
-      int64_t cnt = 0;
-      EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(*result, "cnt", cnt, int64_t,
-          true/*skip_null_error*/, false/*skip_column_error*/, 0/*default value*/);
-      if (OB_SUCC(ret) and (1 == cnt)) {
-        is_finished = true;
-      }
-    }
-  }
   return ret;
 }
 
@@ -546,8 +340,6 @@ int ObTenantTTLManager::init(const uint64_t tenant_id, ObMySQLProxy &sql_proxy)
     LOG_WARN("fail to init timer", KR(ret));
   } else if (OB_FAIL(task_schedulers_.init(tenant_id, sql_proxy))) {
     LOG_WARN("fail to init task scheduler", K(tenant_id));
-  } else if (OB_FAIL(clear_ttl_history_task_.init(tenant_id, sql_proxy))) {
-    LOG_WARN("fail to init clear history task", K(tenant_id));
   } else {
     is_inited_ = true;
     tenant_id_ = tenant_id;
@@ -568,9 +360,6 @@ int ObTenantTTLManager::start()
     LOG_WARN("init ttl scheduler fail", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(tg_id_, task_schedulers_, SCHEDULE_PERIOD, true))) {
     LOG_WARN("fail to schedule ttl task scheduler", KR(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id_, clear_ttl_history_task_, 
-              ObClearTTLHistoryTask::OB_KV_TTL_GC_INTERVAL, true))) {
-    LOG_WARN("fail to start ttl clear history task", KR(ret));
   }
   FLOG_INFO("tenant ttl manager finish to start", KR(ret), K_(tenant_id));
 
@@ -724,14 +513,12 @@ int ObTTLTaskScheduler::handle_user_ttl(const obrpc::ObTTLRequestArg& arg)
 
 void ObTenantTTLManager::resume()
 {
-  clear_ttl_history_task_.resume();
   task_schedulers_.resume();
   task_schedulers_.set_need_reload(true);
 }
 
 void ObTenantTTLManager::pause()
 {
-  clear_ttl_history_task_.pause();
   task_schedulers_.pause();
 }
 

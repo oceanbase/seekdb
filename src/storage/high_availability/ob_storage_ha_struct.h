@@ -26,9 +26,7 @@
 #include "storage/blocksstable/ob_macro_block_meta_mgr.h"
 #include "storage/blocksstable/ob_datum_rowkey.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
-#include "share/ls/ob_ls_i_life_manager.h"
 #include "share/scheduler/ob_dag_scheduler_config.h"
-#include "ob_ls_transfer_info.h"
 #include "common/ob_learner_list.h"
 #include "storage/high_availability/ob_tablet_ha_status.h"
 
@@ -92,10 +90,6 @@ public:
   static bool check_can_report_readable_scn(
       const ObMigrationStatus &cur_status);
 private:
-  static int check_ls_transfer_tablet_(
-      const share::ObLSID &ls_id,
-      const ObMigrationStatus &migration_status,
-      bool &allow_gc);
   static int check_transfer_dest_tablet_for_ls_gc(
       ObLS *ls,
       const ObTabletID &tablet_id,
@@ -104,40 +98,6 @@ private:
   static int set_ls_migrate_gc_status_(
       ObLS &ls,
       bool &allow_gc);
-  static int check_transfer_dest_ls_(
-      const share::ObLSID &ls_id,
-      bool &allow_gc);
-  static int check_transfer_dest_tablets_(
-      const ObLSTransferMetaInfo &transfer_meta_info,
-      ObLS &dest_ls,
-      bool &allow_gc);
-  static int allow_transfer_src_ls_gc_(
-      const ObMigrationStatus &migration_status,
-      bool &allow_gc);
-
-  //compatible ls gc function
-  static int check_ls_transfer_tablet_v1_(
-      const share::ObLSID &ls_id,
-      const ObMigrationStatus &migration_status,
-      bool &allow_gc);
-  static int check_ls_with_transfer_task_v1_(
-      ObLS &ls,
-      bool &need_check_allow_gc,
-      bool &need_wait_dest_ls_replay);
-  static int check_transfer_dest_ls_status_for_ls_gc_v1_(
-      const share::ObLSID &transfer_ls_id,
-      const ObTabletID &tablet_id,
-      const share::SCN &transfer_scn,
-      const bool need_wait_dest_ls_replay,
-      bool &allow_gc);
-  static int check_transfer_dest_tablet_for_ls_gc_v1_(
-      ObLS *ls,
-      const ObTabletID &tablet_id,
-      const share::SCN &transfer_scn,
-      const bool need_wait_dest_ls_replay,
-      bool &allow_gc);
-  static int check_transfer_meta_info_compatible_(
-      bool &for_compatible);
 };
 
 enum ObMigrationOpPriority
@@ -146,34 +106,6 @@ enum ObMigrationOpPriority
   PRIO_LOW = 1,
   PRIO_MID = 2,
   PRIO_INVALID
-};
-
-struct ObMigrationOpArg
-{
-  ObMigrationOpArg();
-  virtual ~ObMigrationOpArg() = default;
-  bool is_valid() const;
-  VIRTUAL_TO_STRING_KV(
-      K_(ls_id),
-      "type",
-      ObMigrationOpType::get_str(type_),
-      K_(cluster_id),
-      K_(priority),
-      K_(src),
-      K_(dst),
-      K_(data_src),
-      K_(paxos_replica_number),
-      K_(tablet_id_array));
-  share::ObLSID ls_id_;
-  ObMigrationOpType::TYPE type_;
-  int64_t cluster_id_;
-  ObMigrationOpPriority priority_;
-  common::ObReplicaMember src_;
-  common::ObReplicaMember dst_;
-  common::ObReplicaMember data_src_;
-  int64_t paxos_replica_number_;
-  bool prioritize_same_zone_src_;
-  common::ObArray<ObTabletID> tablet_id_array_;
 };
 
 struct ObTabletsTransferArg
@@ -240,6 +172,7 @@ struct ObCopyTabletSimpleInfo
 {
   ObCopyTabletSimpleInfo();
   virtual ~ObCopyTabletSimpleInfo() {}
+  bool is_valid() const;
   void reset();
   TO_STRING_KV(K_(tablet_id), K_(status));
   common::ObTabletID tablet_id_;

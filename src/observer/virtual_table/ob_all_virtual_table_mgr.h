@@ -41,11 +41,7 @@ class ObAllVirtualTableMgr : public common::ObVirtualTableScannerIterator,
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    LS_ID,
-    TABLE_TYPE,
+        TABLE_TYPE = common::OB_APP_MIN_COLUMN_ID,
     TABLET_ID,
     START_LOG_SCN,
     END_LOG_SCN,
@@ -87,7 +83,6 @@ private:
   storage::ObTenantTabletIterator *tablet_iter_;
   common::ObArenaAllocator tablet_allocator_;
   ObTabletHandle tablet_handle_;
-  int64_t ls_id_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   storage::ObTableStoreIterator table_store_iter_;
   void *iter_buf_;

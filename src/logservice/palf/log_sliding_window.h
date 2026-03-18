@@ -312,8 +312,6 @@ public:
   virtual int inc_update_scn_base(const share::SCN &scn);
   virtual int get_server_ack_info(const common::ObAddr &server, LsnTsInfo &ack_info) const;
   virtual int get_ack_info_array(LogMemberAckInfoList &ack_info_array) const;
-  virtual int pre_check_before_degrade_upgrade(const LogMemberAckInfoList &servers,
-                                               bool is_degrade);
   virtual int advance_reuse_lsn(const LSN &flush_log_end_lsn);
   virtual int try_send_committed_info(const common::ObAddr &server,
                                       const LSN &log_lsn,

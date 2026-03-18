@@ -32,32 +32,28 @@ class ObConfigItem;
 class ObSystemConfig
 {
 public:
-  static const int64_t INIT_VERSION = 2;
   typedef hash::ObHashMap<ObSystemConfigKey, ObSystemConfigValue*> hashmap;
 public:
   ObSystemConfig() : allocator_("SystemConfig", common::OB_MALLOC_MIDDLE_BLOCK_SIZE),
-                     map_(), version_(0) {};
+                     map_() {};
   virtual ~ObSystemConfig() {};
 
   int clear();
   int init();
   int update(ObMySQLProxy::MySQLResult &result);
 
-  int find_newest(const ObSystemConfigKey &key,
-                  const ObSystemConfigValue *&pvalue,
-                  int64_t &max_version) const;
+  int find(const ObSystemConfigKey &key,
+           const ObSystemConfigValue *&pvalue) const;
   int read_int64(const ObSystemConfigKey &key, int64_t &value, const int64_t &def) const;
   int read_int(const ObSystemConfigKey &key, int64_t &value, const int64_t &def) const;
   int read_config(const uint64_t tenant_id, const ObSystemConfigKey &key, ObConfigItem &item) const;
-  int64_t get_version() const { return version_; }
 
-private:
   int update_value(const ObSystemConfigKey &key, const ObSystemConfigValue &value);
+
 private:
   static const int64_t MAP_SIZE = 512;
   ObArenaAllocator allocator_;
   hashmap map_;
-  int64_t version_;
   DISALLOW_COPY_AND_ASSIGN(ObSystemConfig);
 };
 

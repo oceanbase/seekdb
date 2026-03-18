@@ -69,7 +69,6 @@ int ObInfoSchemaQueryResponseTimeTable::set_ip(common::ObAddr* addr)
   return ret;
 }
 
-
 int ObInfoSchemaQueryResponseTimeTable::inner_open()
 {
   int ret = OB_SUCCESS;
@@ -160,19 +159,6 @@ int ObInfoSchemaQueryResponseTimeTable::process_row_data(ObNewRow *&row, ObObj* 
     for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
       uint64_t col_id = output_column_ids_.at(j);
       switch (col_id){
-        case TENANT_ID:{
-          cells[cell_idx].set_int(MTL_ID());
-          break;
-        }
-        case SVR_IP: {
-          cells[cell_idx].set_varchar(ipstr_);
-          cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[cell_idx].set_int(port_);
-          break;
-        }
         case QUERY_RESPPONSE_TIME:{
           cells[cell_idx].set_int(time_collector_.utility().bound(utility_iter_));
           break;

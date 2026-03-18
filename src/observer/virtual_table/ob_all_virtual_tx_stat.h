@@ -61,15 +61,11 @@ private:
 private:
   enum
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    TX_TYPE,
+    TX_TYPE = OB_APP_MIN_COLUMN_ID,
     TX_ID,
     SESSION_ID,
     SCHEDULER_ADDR,
     IS_DECIDED,
-    LS_ID,
     PARTICIPANTS,
     TX_CTX_CREATE_TIME,
     TX_EXPIRED_TIME,
@@ -96,13 +92,12 @@ private:
     BUSY_CBS_CNT,
     REPLAY_COMPLETE,
     SERIAL_LOG_FINAL_SCN,
-    CALLBACK_LIST_STATS,
+    CALLBACK_LIST_STATS
   };
 
   static const int64_t OB_MAX_BUFFER_SIZE = 1024;
   static const int64_t OB_MIN_BUFFER_SIZE = 128;
   static const int64_t CTX_ADDR_BUFFER_SIZE = 20;
-  char ip_buffer_[common::OB_IP_STR_BUFF];
   char participants_buffer_[OB_MAX_BUFFER_SIZE];
   char scheduler_buffer_[common::MAX_IP_PORT_LENGTH + 8];
   char ctx_addr_buffer_[20];

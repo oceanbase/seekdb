@@ -33,7 +33,6 @@ class ObSnapshotInfo;
 }
 namespace rootserver
 {
-class ObZoneManager;
 class ObSnapshotInfoManager
 {
 public:

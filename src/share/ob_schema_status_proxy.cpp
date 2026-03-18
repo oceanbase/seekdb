@@ -140,12 +140,12 @@ int ObSchemaStatusProxy::load_refresh_schema_status(
           } else {
             LOG_WARN("fail to next", KR(ret));
           }
-        } else if (OB_FAIL(core_table.get_uint(TENANT_ID_CNAME, tenant_id))) {
-          LOG_WARN("fail to get int", KR(ret));
         } else if (OB_FAIL(core_table.get_int(SNAPSHOT_TIMESTAMP_CNAME, snapshot_timestamp))) {
           LOG_WARN("fail to get int", KR(ret));
         } else if (OB_FAIL(core_table.get_int(READABLE_SCHEMA_VERSION_CNAME, readable_schema_version))) {
           LOG_WARN("fail to get int", KR(ret));
+        } else {
+          tenant_id = OB_SYS_TENANT_ID;
         }
         if (OB_FAIL(ret)) {
         } else if (refresh_tenant_id == tenant_id) {
@@ -350,8 +350,6 @@ int ObSchemaStatusProxy::del_tenant_schema_status(
     if (OB_INVALID_TENANT_ID == tenant_id) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-    } else if (OB_FAIL(dml.add_pk_column(TENANT_ID_CNAME, tenant_id))) {
-      LOG_WARN("fail to del column", K(ret));
     } else if (OB_FAIL(kv.load_for_update())) {
       LOG_WARN("fail to load for update", K(ret));
     } else if (OB_FAIL(dml.splice_core_cells(kv, cells))) {

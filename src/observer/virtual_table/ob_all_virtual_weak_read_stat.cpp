@@ -16,7 +16,6 @@
 
 #include "observer/virtual_table/ob_all_virtual_weak_read_stat.h"
 
-
 using namespace oceanbase::common;
 using namespace oceanbase::transaction;
 using namespace oceanbase::share;
@@ -79,14 +78,6 @@ int ObAllVirtualWeakReadStat::inner_get_next_row(ObNewRow *&row)
 		  switch(col_id) {
 		    case OB_APP_MIN_COLUMN_ID + TENANT_ID:
 		      cells[i].set_int(tenant_id);
-		      break;
-		    case OB_APP_MIN_COLUMN_ID + SERVER_IP:
-		      (void)wrs_stat.self_.ip_to_string(self_ip_buf, sizeof(self_ip_buf));
-		      cells[i].set_varchar(self_ip_buf);
-		      cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-		      break;
-		    case OB_APP_MIN_COLUMN_ID + SERVER_PORT:
-		      cells[i].set_int(wrs_stat.self_.get_port());
 		      break;
 		    case OB_APP_MIN_COLUMN_ID + SERVER_VERSION: {
 					uint64_t v = wrs_stat.server_version_.is_valid() ? wrs_stat.server_version_.get_val_for_inner_table_field() : 0;

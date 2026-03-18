@@ -5,7 +5,6 @@ ob_set_subtarget(ob_server ALONE
 
 ob_set_subtarget(ob_server common
   ob_dump_task_generator.cpp
-  ob_heartbeat.cpp
   ob_inner_sql_rpc_proxy.cpp
   ob_inner_sql_rpc_processor.cpp
   ob_inner_sql_connection.cpp
@@ -13,7 +12,6 @@ ob_set_subtarget(ob_server common
   ob_resource_inner_sql_connection_pool.cpp
   ob_inner_sql_read_context.cpp
   ob_inner_sql_result.cpp
-  ob_lease_state_mgr.cpp
   ob_req_time_service.cpp
   ob_root_service_monitor.cpp
   ob_rpc_extra_payload.cpp
@@ -32,15 +30,15 @@ ob_set_subtarget(ob_server common
   ob_srv_xlator_rootserver.cpp
   ob_srv_xlator_storage.cpp
   ob_tenant_duty_task.cpp
+  ob_sys_tenant_load_sys_package_service.cpp
+  ob_sys_tenant_load_sys_package_task.cpp
   ob_uniq_task_queue.cpp
   ob_startup_accel_task_handler.cpp
 )
 
 ob_set_subtarget(ob_server common_mixed
-  report/ob_ls_table_updater.cpp
   report/ob_tablet_table_updater.cpp
   report/ob_tenant_meta_checker.cpp
-  report/ob_server_meta_table_checker.cpp
 )
 
 ob_set_subtarget(ob_server dbms_job
@@ -109,8 +107,6 @@ ob_set_subtarget(ob_server net
   net/ob_ingress_bw_alloc_service.cpp
   net/ob_net_endpoint_ingress_rpc_proccessor.cpp
   net/ob_net_endpoint_ingress_rpc_struct.cpp
-  net/ob_shared_storage_net_throt_service.cpp
-  net/ob_shared_storage_net_throt_rpc_proccessor.cpp
   net/ob_shared_storage_net_throt_rpc_struct.cpp
   net/ob_rpc_reverse_keepalive.cpp
   net/ob_net_queue_traver.cpp
@@ -414,10 +410,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_load_data_stat.cpp
   virtual_table/ob_all_virtual_lock_wait_stat.cpp
   virtual_table/ob_all_virtual_long_ops_status.cpp
-  virtual_table/ob_all_virtual_tenant_snapshot_ls_replica.cpp
-  virtual_table/ob_all_virtual_tenant_snapshot_ls_replica_history.cpp
   virtual_table/ob_all_virtual_ls_info.cpp
-  virtual_table/ob_all_virtual_ls_snapshot.cpp
   virtual_table/ob_all_virtual_timestamp_service.cpp
   virtual_table/ob_all_virtual_tracepoint_info.cpp
   virtual_table/ob_all_virtual_transaction_freeze_checkpoint.cpp
@@ -485,7 +478,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tenant_ctx_memory_info.cpp
   virtual_table/ob_all_virtual_tenant_memory_info.cpp
   virtual_table/ob_all_virtual_tenant_memstore_allocator_info.cpp
-  virtual_table/ob_all_virtual_tenant_parameter_stat.cpp
   virtual_table/ob_all_virtual_tx_stat.cpp
   virtual_table/ob_all_virtual_tx_lock_stat.cpp
   virtual_table/ob_all_virtual_tx_scheduler_stat.cpp
@@ -494,8 +486,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tx_data.cpp
   virtual_table/ob_all_virtual_weak_read_stat.cpp
   virtual_table/ob_all_virtual_log_stat.cpp
-  virtual_table/ob_all_virtual_arbitration_member_info.cpp
-  virtual_table/ob_all_virtual_arbitration_service_status.cpp
   virtual_table/ob_all_virtual_apply_stat.cpp
   virtual_table/ob_all_virtual_replay_stat.cpp
   virtual_table/ob_all_virtual_ha_diagnose.cpp
@@ -556,9 +546,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_tenant_virtual_statname.cpp
   virtual_table/ob_tenant_virtual_warning.cpp
   virtual_table/ob_virtual_data_access_service.cpp
-  virtual_table/ob_virtual_obrpc_send_stat.cpp
   virtual_table/ob_virtual_open_cursor_table.cpp
-  virtual_table/ob_virtual_proxy_server_stat.cpp
   virtual_table/ob_virtual_proxy_sys_variable.cpp
   virtual_table/ob_virtual_sql_monitor.cpp
   virtual_table/ob_virtual_sql_monitor_statname.cpp
@@ -604,6 +592,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_tenant_show_catalog_databases.cpp
   virtual_table/ob_all_virtual_tenant_vector_mem_info.cpp
   virtual_table/ob_all_virtual_ccl_status.cpp
+  virtual_table/ob_all_virtual_sqlite_tables.cpp
 )
 
 ob_server_add_target(ob_server)

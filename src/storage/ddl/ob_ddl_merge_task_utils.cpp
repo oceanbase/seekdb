@@ -27,6 +27,7 @@
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "observer/ob_server_event_history_table_operator.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 using namespace oceanbase::observer;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::share;

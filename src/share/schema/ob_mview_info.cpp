@@ -152,8 +152,7 @@ OB_SERIALIZE_MEMBER(ObMViewInfo,
 int ObMViewInfo::gen_insert_mview_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-      OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
+  if (OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
       OB_FAIL(dml.add_column("build_mode", build_mode_)) ||
       OB_FAIL(dml.add_column("refresh_mode", refresh_mode_)) ||
       OB_FAIL(dml.add_column("refresh_method", refresh_method_)) ||
@@ -221,8 +220,7 @@ int ObMViewInfo::gen_update_mview_attribute_dml(const uint64_t exec_tenant_id,
                                                 ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-             OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
+  if (OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
              OB_FAIL(dml.add_column("build_mode", build_mode_)) ||
              OB_FAIL(dml.add_column("refresh_mode", refresh_mode_)) ||
              OB_FAIL(dml.add_column("refresh_method", refresh_method_)) ||
@@ -283,8 +281,7 @@ int ObMViewInfo::gen_update_mview_last_refresh_info_dml(const uint64_t exec_tena
                          last_refresh_trace_id_.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid mview last refresh info", KR(ret), KPC(this));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-             OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
+  } else if (OB_FAIL(dml.add_pk_column("mview_id", mview_id_)) ||
              OB_FAIL(dml.add_uint64_column("last_refresh_scn", last_refresh_scn_)) ||
              OB_FAIL(dml.add_column("last_refresh_type", last_refresh_type_)) ||
              OB_FAIL(dml.add_time_column("last_refresh_date", last_refresh_date_)) ||
@@ -351,8 +348,7 @@ int ObMViewInfo::drop_mview_info(ObISQLClient &sql_client, const uint64_t tenant
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("mview_id", mview_id))) {
+    if (OB_FAIL(dml.add_pk_column("mview_id", mview_id))) {
       LOG_WARN("add column failed", KR(ret));
     } else {
       ObDMLExecHelper exec(sql_client, exec_tenant_id);
@@ -377,7 +373,7 @@ int ObMViewInfo::fetch_mview_info(ObISQLClient &sql_client, uint64_t tenant_id, 
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE tenant_id = 0 AND mview_id = %ld",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE mview_id = %ld",
                               OB_ALL_MVIEW_TNAME, mview_id))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (for_update && !nowait && OB_FAIL(sql.append(" for update"))) {
@@ -416,7 +412,7 @@ int ObMViewInfo::batch_fetch_mview_ids(ObISQLClient &sql_client, uint64_t tenant
     ObSqlString sql;
     uint64_t mview_id = OB_INVALID_ID;
     if (OB_FAIL(
-          sql.assign_fmt("SELECT mview_id FROM %s WHERE tenant_id = 0", OB_ALL_MVIEW_TNAME))) {
+          sql.assign_fmt("SELECT mview_id FROM %s WHERE 0 = 0", OB_ALL_MVIEW_TNAME))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_INVALID_ID != last_mview_id &&
                OB_FAIL(sql.append_fmt(" and mview_id > %ld", last_mview_id))) {
@@ -665,7 +661,7 @@ int ObMViewInfo::bacth_fetch_mview_infos(ObISQLClient &sql_client,
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(sql.append_fmt(" WHERE tenant_id = 0 AND mview_id IN (%.*s)",
+      } else if (OB_FAIL(sql.append_fmt(" WHERE mview_id IN (%.*s)",
                          (int)mview_id_array.length(), mview_id_array.ptr()))) {
         LOG_WARN("fail to append fmt sql", K(ret));
       } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {

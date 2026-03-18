@@ -10,7 +10,6 @@ alter system set _enable_add_fulltext_index_to_existing_table = false;
 alter system set _enable_defensive_check = '2';
 alter system set _enable_add_fulltext_index_to_existing_table = true;
 sleep 5;
-let $tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name = 'sys', tenant_id, 1);
 connection mysql;
 set @@session.recyclebin = off;
 alter system set default_table_store_format = 'compound';
@@ -47,11 +46,11 @@ create table xingrui_normal_table (
     c2 VARCHAR(10)
 );
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_normal_table', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_normal_table', table_id, 1);
 connection mysql;
 alter table xingrui_normal_table drop column c1;
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_normal_table', table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_normal_table', table_id, 1);
 if ($before_table_id == $after_table_id)
 {
     --echo "!!!ERROR, drop column should do offline ddl when _enable_drop_column_instant = false"
@@ -65,11 +64,11 @@ create table xingrui_normal_table (
     c3 blob
 );
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_normal_table', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_normal_table', table_id, 1);
 connection mysql;
 alter table xingrui_normal_table drop column c1;
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_normal_table', table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_normal_table', table_id, 1);
 if ($before_table_id == $after_table_id)
 {
     --echo "!!!ERROR, drop column should do offline ddl when _enable_drop_column_instant = false"
@@ -90,7 +89,7 @@ insert into xingrui_not_null_table values(1, "abc");
 insert into xingrui_not_null_table values(1, "abc");
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_not_null_table', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_not_null_table', table_id, 1);
 connection mysql;
 alter table xingrui_not_null_table drop column col2;
 insert into xingrui_not_null_table values(1);
@@ -98,7 +97,7 @@ insert into xingrui_not_null_table values(1);
 insert into xingrui_not_null_table values(1);
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_not_null_table', table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_not_null_table', table_id, 1);
 if ($before_table_id != $after_table_id)
 {
     --echo "!!!ERROR, drop not null column should do online ddl in mysql mode"
@@ -121,7 +120,7 @@ insert into xingrui_default_table values(1, "abc");
 insert into xingrui_default_table values(1, "abc");
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_default_table', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_default_table', table_id, 1);
 connection mysql;
 alter table xingrui_default_table drop column col1;
 insert into xingrui_default_table values(1);
@@ -129,7 +128,7 @@ insert into xingrui_default_table values(1);
 insert into xingrui_default_table values(1);
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_default_table', table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_default_table', table_id, 1);
 if ($before_table_id != $after_table_id)
 {
     --echo "!!!ERROR, drop default column should do online ddl in mysql mode"
@@ -152,7 +151,7 @@ insert into xingrui_check_table values(1, "abc");
 insert into xingrui_check_table values(1, "abc");
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_check_table', table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_check_table', table_id, 1);
 connection mysql;
 alter table xingrui_check_table drop column col1;
 insert into xingrui_check_table values(1);
@@ -160,7 +159,7 @@ insert into xingrui_check_table values(1);
 insert into xingrui_check_table values(1);
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where tenant_id = $tenant_id and table_name = 'xingrui_check_table', table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = 'xingrui_check_table', table_id, 1);
 if ($before_table_id != $after_table_id)
 {
     --echo "!!!ERROR, drop check column should do online ddl in mysql mode"
@@ -406,7 +405,7 @@ CALL pro1();
 
 alter table xingrui_dup_name drop column C2;
 connection sys;
-let $UNUSED_COL_NAME = query_get_value(select column_name from `CDB_TAB_COLS_V\\\$` where table_NAME = 'xingrui_dup_name' and USER_GENERATED = 'NO' and con_id = $tenant_id, column_name, 1);
+let $UNUSED_COL_NAME = query_get_value(select column_name from `CDB_TAB_COLS_V\\\$` where table_NAME = 'xingrui_dup_name' and USER_GENERATED = 'NO' and con_id = 1, column_name, 1);
 --replace_regex /'SYS_C.*/'SYS_UNUSED_column_NAME'/g
 connection mysql;
 --error 1166
@@ -435,7 +434,7 @@ create index xingrui_index1 on xingrui_normal_table(col1);
 create index xingrui_index2 on xingrui_normal_table(col1, col2);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table", table_id, 1);
 
 connection mysql;
 alter table xingrui_normal_table drop column col1;
@@ -444,7 +443,7 @@ insert into xingrui_normal_table values(1);
 insert into xingrui_normal_table values('');
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table", table_id, 1);
 if($before_table_id == $after_table_id)
 {
     --echo "!!!ERROR, drop column with index should do offline in mysql mode";
@@ -459,7 +458,7 @@ create unique index xingrui_index1 on xingrui_normal_table(col1);
 create unique index xingrui_index2 on xingrui_normal_table(col1, col2);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table", table_id, 1);
 
 connection mysql;
 alter table xingrui_normal_table drop column col1;
@@ -468,7 +467,7 @@ insert into xingrui_normal_table values(2);
 insert into xingrui_normal_table values('');
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_normal_table", table_id, 1);
 if($before_table_id == $after_table_id)
 {
     --echo "!!!ERROR, drop column with index should do offline in mysql mode";
@@ -495,7 +494,7 @@ create unique index xingrui_index1 on xingrui_primary_table(col1);
 create unique index xingrui_index2 on xingrui_primary_table(col1, col2);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_primary_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_primary_table", table_id, 1);
 
 connection mysql;
 alter table xingrui_primary_table drop column col1;
@@ -504,7 +503,7 @@ insert into xingrui_primary_table values(2);
 insert into xingrui_primary_table values('');
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_primary_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_primary_table", table_id, 1);
 if($before_table_id == $after_table_id)
 {
     --echo "!!!ERROR, drop primary key should do offline in mysql mode";
@@ -518,7 +517,7 @@ insert into xingrui_primary_table (col2, col3) values('b', 2);
 insert into xingrui_primary_table (col2, col3) values('c', 3);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_primary_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_primary_table", table_id, 1);
 
 connection mysql;
 --error 1235
@@ -535,7 +534,7 @@ create table xingrui_fts_table(
   content varchar(20));
 alter table xingrui_fts_table add fulltext index xingrui_index(name);
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_fts_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_fts_table", table_id, 1);
 
 connection mysql;
 --error 3108
@@ -543,7 +542,7 @@ alter table xingrui_fts_table drop column name;
 alter table xingrui_fts_table drop column id;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_fts_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_fts_table", table_id, 1);
 
 if($before_table_id != $after_table_id)
 {
@@ -571,13 +570,13 @@ drop table xingrui_json_multivalue_table;
 drop table xingrui_vector_table;
 create table xingrui_vector_table(col1 int, col2 vector(3));
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_vector_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_vector_table", table_id, 1);
 
 connection mysql;
 alter table xingrui_vector_table drop column col2;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_vector_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_vector_table", table_id, 1);
 
 if($before_table_id == $after_table_id)
 {
@@ -612,13 +611,13 @@ insert into xingrui_json values('{"a":1}', 1, 'abc');
 insert into xingrui_json values('{"a":2}', 2, 'abcd');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json", table_id, 1);
 
 connection mysql;
 alter table xingrui_json drop column c1;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json", table_id, 1);
 if ($before_table_id == $after_table_id)
 {
     --echo "!!!ERROR, drop json column should do offline ddl in mysql mode";
@@ -649,7 +648,7 @@ insert into xingrui_json VALUES
 create index zips1 on xingrui_json( (CAST(custinfo->'$.zipcode' AS char(16) ARRAY)) );
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json", table_id, 1);
 
 connection mysql;
 --error 3837
@@ -666,7 +665,7 @@ insert into xingrui_json (id ,js, c1) values (2,'null','null');
 insert into xingrui_json (id ,js, c1) values (3,null,'{"user":"Jack","user_id":37,"zipcode":["pk10_1", "pk10_2"]}');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json", table_id, 1);
 
 connection mysql;
 --error 3837
@@ -676,7 +675,7 @@ insert into xingrui_json (id) values (4);
 insert into xingrui_json (id) values (5);
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_json", table_id, 1);
 if ($before_table_id != $after_table_id)
 {
     --echo "!!!ERROR, drop json column should do online ddl in mysql mode";
@@ -694,7 +693,7 @@ insert into xingrui_bitmap values(x'0100', x'010100000002'), (null, null);
 insert into xingrui_bitmap values(x'0100', x'010100000002');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_bitmap" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_bitmap", table_id, 1);
 
 connection mysql;
 alter table xingrui_bitmap drop column c1;
@@ -704,7 +703,7 @@ insert into xingrui_bitmap values(x'010100000002');
 select * from xingrui_bitmap;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_bitmap" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_bitmap", table_id, 1);
 if ($before_table_id != $after_table_id)
 {
     --echo "!!!ERROR, drop bitmap column should do online ddl in mysql mode";
@@ -724,7 +723,7 @@ insert into xingrui_array values(array(1, 2, 3, 4, 5),
                           array(52314.234657, 5.123123, 0.0000000234, 10000));
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_array" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_array", table_id, 1);
 
 connection mysql;
 alter table xingrui_array drop column c1;
@@ -733,7 +732,7 @@ insert into xingrui_array values(array(8592031744, 8592033792, 8592164864),
                           array(5.123123, 0.0000000234, 10000));
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_array" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_array", table_id, 1);
 if ($before_table_id != $after_table_id)
 {
     --echo "!!!ERROR, drop array column should do online ddl in mysql mode";
@@ -753,7 +752,7 @@ create table xingrui_vector(c1 int, c2 vector(3), c3 vector(5), primary key(c1),
 insert into xingrui_vector values (1, '[0.990622,0.861702,0.114999]', '[0.558301,0.543172,0.335010,0.844568,0.275233]');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_vector" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_vector", table_id, 1);
 
 connection mysql;
 --error 3108
@@ -788,7 +787,7 @@ insert into xingrui_ivf(c1,c4) values(2,'[2,3,2]');
 insert into xingrui_ivf(c1,c4) values(3,'[3,3,2]');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_ivf" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_ivf", table_id, 1);
 
 connection mysql;
 --error 3108
@@ -810,7 +809,7 @@ create vector index idx1 on xingrui_ivf (wine_data) with (distance=l2, type=ivf_
 insert into xingrui_ivf (id, data) values(1, '[1,2,3]');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_ivf" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_ivf", table_id, 1);
 
 connection mysql;
 alter table xingrui_ivf drop column data;
@@ -834,7 +833,7 @@ create vector index vec_idx1 on xingrui_ivf(c2) with (distance=l2, type=ivf_pq, 
 insert into xingrui_ivf values(1, '[0.748479,0.276979,0.555195,0.145492,0.045639,0.924278,0.696082,0.841479,0.742934,0.953073]');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_ivf" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_ivf", table_id, 1);
 
 connection mysql;
 --error 3108
@@ -900,7 +899,7 @@ INSERT INTO xingrui_virtual_generated_table (name, price, tax_rate) VALUES ('Inv
 
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_virtual_generated_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_virtual_generated_table", table_id, 1);
 
 connection mysql;
 --error 3108
@@ -914,7 +913,7 @@ alter table xingrui_virtual_generated_table drop column total_price;
 alter table xingrui_virtual_generated_table drop column price;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_virtual_generated_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_virtual_generated_table", table_id, 1);
 
 if($before_table_id != $after_table_id)
 {
@@ -940,7 +939,7 @@ INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Inva
 INSERT INTO xingrui_stored_generated_table (name, price, tax_rate) VALUES ('Invalid Product', 100.00, 0.15);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table", table_id, 1);
 
 connection mysql;
 --error 3108
@@ -954,7 +953,7 @@ alter table xingrui_stored_generated_table drop column total_price;
 alter table xingrui_stored_generated_table drop column price;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table", table_id, 1);
 
 if($before_table_id != $after_table_id)
 {
@@ -972,13 +971,13 @@ insert into xingrui_default_table values(1, 10);
 insert into xingrui_default_table values(1, 10);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table", table_id, 1);
 
 connection mysql;
 alter table xingrui_default_table drop column col2;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_stored_generated_table", table_id, 1);
 
 if($before_table_id != $after_table_id)
 {
@@ -1003,7 +1002,7 @@ insert into xingrui_invisible_table values(1);
 insert into xingrui_invisible_table values(1);
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_invisible_table" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_invisible_table", table_id, 1);
 
 connection mysql;
 alter table xingrui_invisible_table drop column col2;
@@ -1012,7 +1011,7 @@ insert into xingrui_invisible_table values(1);
 insert into xingrui_invisible_table values(1);
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_invisible_table" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_invisible_table", table_id, 1);
 
 if($before_table_id != $after_table_id)
 {
@@ -1143,7 +1142,7 @@ insert into xingrui_auto_increment (col2) values('abcd');
 insert into xingrui_auto_increment (col2) values('abcd');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_auto_increment" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_auto_increment", table_id, 1);
 
 connection mysql;
 alter table xingrui_auto_increment drop column col1;
@@ -1151,7 +1150,7 @@ insert into xingrui_auto_increment values('abcd');
 insert into xingrui_auto_increment values('abcd');
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_auto_increment" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_auto_increment", table_id, 1);
 
 if($before_table_id == $after_table_id)
 {
@@ -1208,13 +1207,13 @@ DELIMITER ;//
 INSERT INTO xingrui_trigger (username) VALUES ('alice');
 
 connection sys;
-let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_trigger" and tenant_id = $tenant_id, table_id, 1);
+let $before_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_trigger", table_id, 1);
 
 connection mysql;
 alter table xingrui_trigger drop column created_at;
 
 connection sys;
-let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_trigger" and tenant_id = $tenant_id, table_id, 1);
+let $after_table_id = query_get_value(select table_id from __all_virtual_table where table_name = "xingrui_trigger", table_id, 1);
 if ($before_table_id != $after_table_id)
 {
     --echo "!!!ERROR, drop trigger column should do online ddl in mysql mode";

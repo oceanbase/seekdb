@@ -63,7 +63,6 @@ desc oceanbase.__all_optstat_user_prefs;
 +--------------+---------------+------+-----+----------------------+--------------------------------+
 | gmt_create   | timestamp(6)  | YES  |     | CURRENT_TIMESTAMP(6) |                                |
 | gmt_modified | timestamp(6)  | YES  |     | CURRENT_TIMESTAMP(6) | ON UPDATE CURRENT_TIMESTAMP(6) |
-| tenant_id    | bigint(20)    | NO   | PRI | NULL                 |                                |
 | table_id     | bigint(20)    | NO   | PRI | NULL                 |                                |
 | pname        | varchar(30)   | NO   | PRI | NULL                 |                                |
 | valnum       | bigint(20)    | YES  |     | NULL                 |                                |

@@ -1,0 +1,97 @@
+syntax = "proto3";
+package storageservice;
+
+service StorageService {
+  // Server streaming RPC: fetch ls view stream (ls meta first, then tablet infos)
+  rpc fetch_ls_view(FetchLSViewReq) returns (stream FetchLSViewRes);
+  // Server streaming RPC: fetch tablet info stream
+  rpc fetch_tablet_info(FetchTabletInfoReq) returns (stream FetchTabletInfoRes);
+  // Server streaming RPC: fetch tablet sstable info stream (header + N sstable metas)
+  rpc fetch_tablet_sstable_info(FetchTabletSSTableInfoReq) returns (stream FetchTabletSSTableInfoRes);
+  // Server streaming RPC: fetch sstable macro range info stream (header + N macro range infos)
+  rpc fetch_sstable_macro_info(FetchSSTableMacroInfoReq) returns (stream FetchSSTableMacroInfoRes);
+  // Server streaming RPC: fetch macro block stream (header + payload data)
+  rpc fetch_macro_block(FetchMacroBlockReq) returns (stream FetchMacroBlockRes);
+  // Get source LS tablet count for sizing ls view stream timeout
+  rpc get_ls_view_tablet_count(GetLSViewTabletCountReq) returns (GetLSViewTabletCountRes);
+  // Check restore precondition (disk size and cluster version)
+  rpc check_restore_precondition(CheckRestorePreconditionReq) returns (CheckRestorePreconditionRes);
+}
+
+enum FetchLSViewEntryType {
+  // First message in stream: serialized ObLSMetaPackage
+  LS_META_PACKAGE = 0;
+  // Following messages: serialized ObCopyTabletInfo
+  TABLET_INFO = 1;
+}
+
+message FetchLSViewReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchLSViewRes {
+  FetchLSViewEntryType entry_type = 1;
+  bytes buf = 2;
+  uint64 size = 3;
+}
+
+message FetchTabletInfoReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchTabletInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchTabletSSTableInfoReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchTabletSSTableInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchSSTableMacroInfoReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchSSTableMacroInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchMacroBlockReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchMacroBlockRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+// 1 and 2 are protobuf field numbers (tags) used in binary encoding and should remain stable.
+message GetLSViewTabletCountReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message GetLSViewTabletCountRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message CheckRestorePreconditionReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message CheckRestorePreconditionRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SHARE_OB_BACKUP_DATA_STORE_H_
 #define OCEANBASE_SHARE_OB_BACKUP_DATA_STORE_H_
 
-#include "share/ls/ob_ls_operator.h"
 #include "share/backup/ob_backup_path.h"
 #include "storage/backup/ob_backup_extern_info_mgr.h"
 #include "storage/ls/ob_ls_meta_package.h"
@@ -40,15 +39,13 @@ public:
 public:
   ObBackupDataLSAttrDesc() 
     : ObExternBackupDataDesc(share::ObBackupFileType::BACKUP_LS_INFO, FILE_VERSION),
-      backup_scn_(),
-      ls_attr_array_() {}
+      backup_scn_() {}
   virtual ~ObBackupDataLSAttrDesc() {}
 
   bool is_valid() const override;
-  INHERIT_TO_STRING_KV("ObExternBackupDataDesc", ObExternBackupDataDesc, K(backup_scn_), K_(ls_attr_array));
+  INHERIT_TO_STRING_KV("ObExternBackupDataDesc", ObExternBackupDataDesc, K(backup_scn_));
 public:
   share::SCN backup_scn_;
-  ObSArray<share::ObLSAttr> ls_attr_array_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBackupDataLSAttrDesc);
 };

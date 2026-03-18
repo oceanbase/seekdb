@@ -110,13 +110,6 @@ int ObAllVirtualRaidStat::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case SVR_IP:
-          cur_row_.cells_[i].set_varchar(ip_buf_);
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case SVR_PORT:
-          cur_row_.cells_[i].set_int(addr_.get_port());
-          break;
         case DISK_INDEX:
           cur_row_.cells_[i].set_int(stat.disk_idx_);
           break;

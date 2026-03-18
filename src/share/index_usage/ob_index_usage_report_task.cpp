@@ -28,7 +28,7 @@ namespace share
 const char *OB_INDEX_USAGE_REPORT_TASK = "IndexUsageReportTask";
 #define INSERT_INDEX_USAGE_HEAD_SQL                                                                               \
   "INSERT INTO %s"                                                                                                \
-  " (tenant_id, object_id, name, owner,"                                                                          \
+  " (object_id, name, owner,"                                                                          \
   " total_access_count, total_exec_count, total_rows_returned,"                                                  \
   " bucket_0_access_count, bucket_1_access_count,"                                                               \
   " bucket_2_10_access_count, bucket_2_10_rows_returned,"                                                        \
@@ -151,8 +151,7 @@ int ObIndexUsageReportTask::storage_index_usage(const ObIndexUsagePairList &info
     // append sql string
     for (ObIndexUsagePairList::const_iterator it = info_list.begin(); OB_SUCC(ret) && it != info_list.end(); it++) {
       if (OB_FAIL(insert_update_sql.append_fmt(
-            "(%lu,%lu,'','', %lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,usec_to_time(%lu),now(6)),",
-          extract_tenant_id,
+            "(%lu,'','', %lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu,usec_to_time(%lu),now(6)),",
           it->first.index_table_id_,
           it->second.total_exec_count_, // total_access_count_
           it->second.total_exec_count_,
@@ -199,8 +198,7 @@ int ObIndexUsageReportTask::del_index_usage(const ObIndexUsageKey &key)
   if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy is null", K(ret));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", extract_tenant_id)) ||
-             OB_FAIL(dml.add_pk_column("object_id", key.index_table_id_))) {
+  } else if (OB_FAIL(dml.add_pk_column("object_id", key.index_table_id_))) {
     LOG_WARN("dml add column failed", K(ret), K(tenant_id), K(extract_tenant_id));
   } else if (OB_FAIL(exec.exec_delete(OB_ALL_INDEX_USAGE_INFO_TNAME, dml, affected_rows))) {
     LOG_WARN("del sql exec error", K(ret), K(tenant_id), K(extract_tenant_id), K(key));

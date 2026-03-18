@@ -22,62 +22,16 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
-#include <orc/OrcFile.hh>
 
 #include "share/ob_device_manager.h"
 #include "sql/engine/table/ob_external_table_access_service.h"
 #include "sql/engine/basic/ob_select_into_basic.h"
 #include "sql/engine/table/ob_file_prefetch_buffer.h"
 
-namespace oceanbase 
+namespace oceanbase
 {
-namespace sql 
+namespace sql
 {
-
-class ObOrcMemPool : public orc::MemoryPool {
-public:
-  void init(uint64_t tenant_id);
-
-  virtual char* malloc(uint64_t size) override;
-
-  virtual void free(char* p) override;
-  
-private:
-  common::ObMemAttr mem_attr_;
-};
-
-class ObOrcOutputStream : public orc::OutputStream {
-  public:
-    ObOrcOutputStream(ObFileAppender *file_appender,
-                      ObStorageAppender *storage_appender,
-                      IntoFileLocation file_location,
-                      const ObString &url)
-    : file_appender_(file_appender),
-      storage_appender_(storage_appender),
-      file_location_(file_location),
-      url_(url.ptr()),
-      pos_(0)
-    {}
-
-    ~ObOrcOutputStream() {}
-
-    virtual void write(const void *buf, size_t length) override;
-    virtual uint64_t getLength() const { return pos_; }
-    virtual uint64_t getNaturalWriteSize() const { return 1024; }
-    
-    virtual const std::string& getName() const override {
-      return url_;
-    }
-
-    virtual void close() {
-    }
-  private:
-    ObFileAppender *file_appender_;
-    ObStorageAppender *storage_appender_;
-    IntoFileLocation file_location_;
-    std::string url_;
-    int64_t pos_;
-};
 
 class ObArrowMemPool : public ::arrow::MemoryPool
 {

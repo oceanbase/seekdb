@@ -127,7 +127,7 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
     LOG_WARN("ObDDLHeartBeatTaskContainer not inited", K(ret));
   } else {
     int64_t cnt = 0;
-    ObAddr rs_leader_addr;
+    ObAddr rs_leader_addr = GCTX.self_addr();
     ObArray<ObDDLHeartBeatTaskInfo> heart_beart_task_infos;
     while (OB_SUCC(ret) && cnt < RETRY_COUNT) {
       ObBucketTryRLockAllGuard all_reg_task_guard(bucket_lock_);
@@ -149,8 +149,7 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
         break;
       }
     }
-    if (FAILEDx(GCTX.rs_mgr_->get_master_root_server(rs_leader_addr))) {
-      LOG_WARN("get rs addr failed", K(ret));
+    if (OB_FAIL(ret)) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < heart_beart_task_infos.count(); i++) {
         ObDDLHeartBeatTaskInfo heart_beart_task_info;

@@ -39,11 +39,7 @@ public:
   virtual void reset();
 private:
   enum GROUP_COLUMN {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    GROUP_TYPE,
-    LS_ID,
+        GROUP_TYPE = common::OB_APP_MIN_COLUMN_ID,
     TABLE_ID,
     SCHEMA_VERSION,
     QUEUE_SIZE,

@@ -96,7 +96,7 @@ public:
                                                 const share::ObLSID &ls_id,
                                                 common::ObMySQLTransaction &trans);
 
-  TO_STRING_KV(K_(status), K_(in_sched), K_(is_stop), K_(is_inited), K_(merge_scn), K_(max_transfer_task_id), K_(ls_cache));
+  TO_STRING_KV(K_(status), K_(in_sched), K_(is_stop), K_(is_inited), K_(merge_scn), K_(ls_cache));
 private:
   static const int64_t CHECK_INTERVAL = 30LL * 1000 * 1000;
   static const int64_t ERROR_RETRY_INTERVAL = CHECK_INTERVAL;
@@ -124,8 +124,6 @@ private:
   int check_row_empty(
       const ObSqlString &sql_str,
       bool &is_empty);
-  static int get_transfer_task_id(
-    share::ObTransferTaskID &max_transfer_task_id);
   
   static int register_mds_in_trans(
       const transaction::ObTxDataSourceType type,
@@ -138,7 +136,6 @@ private:
   bool is_stop_;
   bool is_inited_;
   share::SCN merge_scn_;
-  share::ObTransferTaskID max_transfer_task_id_;
   ObMVMergeSCNInfoCache ls_cache_;
 };
 

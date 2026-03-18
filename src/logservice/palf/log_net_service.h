@@ -231,13 +231,6 @@ public:
       const int64_t timeout_us,
       LogGetMCStResp &resp);
 
-#ifdef OB_BUILD_ARBITRATION
-  int submit_get_arb_member_info_req(
-      const common::ObAddr &server,
-      const int64_t timeout_us,
-      LogGetArbMemberInfoResp &resp);
-#endif
-
   int submit_register_parent_req(
       const common::ObAddr &server,
       const LogLearner &child_itself,

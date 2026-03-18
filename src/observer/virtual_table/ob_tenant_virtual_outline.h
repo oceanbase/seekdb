@@ -82,20 +82,23 @@ class ObTenantVirtualOutline : public ObTenantVirtualOutlineBase
 {
   enum TENANT_VIRTUAL_OUTLINE_COLUMN
   {
-    TENANT_ID = OB_APP_MIN_COLUMN_ID,
-    DATABASE_ID = OB_APP_MIN_COLUMN_ID + 1,
-    OUTLINE_ID = OB_APP_MIN_COLUMN_ID + 2,
-    DATABASE_NAME = OB_APP_MIN_COLUMN_ID + 3,
-    OUTLINE_NAME = OB_APP_MIN_COLUMN_ID + 4,
-    VISIBLE_SIGNATURE = OB_APP_MIN_COLUMN_ID + 5,
-    SQL_TEXT = OB_APP_MIN_COLUMN_ID + 6,
-    OUTLINE_TARGET = OB_APP_MIN_COLUMN_ID + 7,
-    OUTLINE_SQL = OB_APP_MIN_COLUMN_ID + 8,
-    SQL_ID = OB_APP_MIN_COLUMN_ID + 9,
-    OUTLINE_CONTENT = OB_APP_MIN_COLUMN_ID + 10,
-    FORMAT_SQL_TEXT = OB_APP_MIN_COLUMN_ID + 11,
-    FORMAT_SQL_ID = OB_APP_MIN_COLUMN_ID + 12,
-    FORMAT_OUTLINE = OB_APP_MIN_COLUMN_ID + 13,
+    // Column ids must match inner-table schema definition generated in
+    // `src/share/inner_table/ob_inner_table_schema*.cpp` where `column_id`
+    // starts from `OB_APP_MIN_COLUMN_ID - 1` and pre-increments for the first column.
+    // For `__tenant_virtual_outline`, the first column is `database_id`.
+    DATABASE_ID = OB_APP_MIN_COLUMN_ID,
+    OUTLINE_ID = OB_APP_MIN_COLUMN_ID + 1,
+    DATABASE_NAME = OB_APP_MIN_COLUMN_ID + 2,
+    OUTLINE_NAME = OB_APP_MIN_COLUMN_ID + 3,
+    VISIBLE_SIGNATURE = OB_APP_MIN_COLUMN_ID + 4,
+    SQL_TEXT = OB_APP_MIN_COLUMN_ID + 5,
+    OUTLINE_TARGET = OB_APP_MIN_COLUMN_ID + 6,
+    OUTLINE_SQL = OB_APP_MIN_COLUMN_ID + 7,
+    SQL_ID = OB_APP_MIN_COLUMN_ID + 8,
+    OUTLINE_CONTENT = OB_APP_MIN_COLUMN_ID + 9,
+    FORMAT_SQL_TEXT = OB_APP_MIN_COLUMN_ID + 10,
+    FORMAT_SQL_ID = OB_APP_MIN_COLUMN_ID + 11,
+    FORMAT_OUTLINE = OB_APP_MIN_COLUMN_ID + 12,
   };
 public:
   ObTenantVirtualOutline() : ObTenantVirtualOutlineBase() {}

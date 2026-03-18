@@ -220,7 +220,7 @@ int ObIterateVirtualTable::add_extra_condition(common::ObSqlString &sql)
      ret = OB_ERR_UNEXPECTED;
      LOG_WARN("base table is NULL", K(ret));
   } else if (NULL != base_table_->get_column_schema("tenant_id")) {
-    if (OB_FAIL(sql.append_fmt(" AND tenant_id = 0"))) {
+    if (OB_FAIL(sql.append_fmt(" AND 0 = 0"))) {
       LOG_WARN("append sql failed", K(ret));
     }
   }

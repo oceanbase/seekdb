@@ -54,7 +54,6 @@ private:
   void append_memtable_info_string(const char *name, const char *str, int64_t &size);
 private:
   common::ObAddr addr_;
-  int64_t ls_id_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   ObStringHolder diagnose_info_;

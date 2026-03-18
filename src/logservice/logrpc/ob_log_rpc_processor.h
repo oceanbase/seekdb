@@ -26,7 +26,6 @@ namespace oceanbase
 {
 namespace logservice
 {
-class ObArbitrationService;
 
 #define DEFINE_LOGSERVICE_SYNC_RPC_PROCESSOR(CLASS, PROXY, REQTYPE, RESPTYPE, PCODE)                              \
 class CLASS: public                                                                                               \
@@ -108,13 +107,6 @@ DEFINE_LOGSERVICE_SYNC_RPC_PROCESSOR(LogGetPalfStatReqP,
                                      LogGetPalfStatResp,
                                      obrpc::OB_LOG_GET_PALF_STAT);
 
-#ifdef OB_BUILD_ARBITRATION
-DEFINE_LOGSERVICE_RPC_PROCESSOR(LogServerProbeP,
-                                obrpc::ObLogServiceRpcProxy,
-                                LogServerProbeMsg,
-                                obrpc::OB_LOG_ARB_PROBE_MSG);
-#endif
-
 DEFINE_LOGSERVICE_RPC_PROCESSOR(LogChangeAccessModeP,
                                 obrpc::ObLogServiceRpcProxy,
                                 LogChangeAccessModeCmd,
@@ -125,13 +117,6 @@ DEFINE_LOGSERVICE_RPC_PROCESSOR(LogFlashbackMsgP,
                                 LogFlashbackMsg,
                                 obrpc::OB_LOG_FLASHBACK_CMD);
 
-#ifdef OB_BUILD_ARBITRATION
-DEFINE_LOGSERVICE_SYNC_RPC_PROCESSOR(LogProbeRsP,
-                                     obrpc::ObLogServiceRpcProxy,
-                                     LogProbeRsReq,
-                                     LogProbeRsResp,
-                                     obrpc::OB_LOG_PROBE_RS);
-#endif
 DEFINE_LOGSERVICE_SYNC_RPC_PROCESSOR(LogGetCkptReqP,
                                      obrpc::ObLogServiceRpcProxy,
                                      LogGetCkptReq,

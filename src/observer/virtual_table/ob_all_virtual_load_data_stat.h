@@ -49,10 +49,7 @@ private:
 private:
   enum TABLE_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    JOB_ID,
+        JOB_ID = common::OB_APP_MIN_COLUMN_ID,
     JOB_TYPE,
     TABLE_NAME,
     FILE_PATH,

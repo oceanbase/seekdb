@@ -6,7 +6,7 @@
 connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 connect (mysql,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
 connection sys;
-let $tenant_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name = 'sys', tenant_id, 1);
+let $tenant_id = 1;
 let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 1, cnt, 1);
 
 ##gather some necessary sys table stat.

@@ -38,13 +38,9 @@ class ObAllVirtualTabletBufferInfo : public common::ObVirtualTableScannerIterato
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TABLET_BUFFER_PTR,
+        TABLET_BUFFER_PTR = common::OB_APP_MIN_COLUMN_ID,
     TABLET_OBJ_PTR,
     POOL_TYPE,
-    LS_ID,
     TABLET_ID,
     IN_MAP,
     LAST_ACCESS_TIME

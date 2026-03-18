@@ -37,38 +37,12 @@ ObTxLogTypeChecker::need_replay_barrier(const ObTxLogType log_type,
     if (data_source_type == ObTxDataSourceType::CREATE_TABLET_NEW_MDS
         || data_source_type == ObTxDataSourceType::DELETE_TABLET_NEW_MDS
         || data_source_type == ObTxDataSourceType::UNBIND_TABLET_NEW_MDS
-        || data_source_type == ObTxDataSourceType::START_TRANSFER_OUT
-        || data_source_type == ObTxDataSourceType::START_TRANSFER_OUT_PREPARE
-        || data_source_type == ObTxDataSourceType::FINISH_TRANSFER_OUT
         || data_source_type == ObTxDataSourceType::TABLET_SPLIT
         || data_source_type == ObTxDataSourceType::TABLET_BINDING
         || data_source_type == ObTxDataSourceType::MV_NOTICE_SAFE
         || data_source_type == ObTxDataSourceType::UNBIND_LOB_TABLET
         || data_source_type == ObTxDataSourceType::DDL_COMPLETE_MDS) {
       barrier_flag = logservice::ObReplayBarrierType::PRE_BARRIER;
-
-    } else if (data_source_type == ObTxDataSourceType::FINISH_TRANSFER_IN
-               || data_source_type == ObTxDataSourceType::START_TRANSFER_OUT_V2
-               || data_source_type == ObTxDataSourceType::TRANSFER_MOVE_TX_CTX
-               || data_source_type == ObTxDataSourceType::START_TRANSFER_IN) {
-
-      barrier_flag = logservice::ObReplayBarrierType::STRICT_BARRIER;
-    }
-  } else if (ObTxLogType::TX_COMMIT_INFO_LOG == log_type) {
-    if (data_source_type == ObTxDataSourceType::START_TRANSFER_IN) {
-      barrier_flag = logservice::ObReplayBarrierType::STRICT_BARRIER;
-    }
-  } else if (ObTxLogType::TX_COMMIT_LOG == log_type) {
-    if (data_source_type == ObTxDataSourceType::START_TRANSFER_IN
-        || data_source_type == ObTxDataSourceType::START_TRANSFER_OUT_V2
-        || data_source_type == ObTxDataSourceType::TRANSFER_MOVE_TX_CTX) {
-      barrier_flag = logservice::ObReplayBarrierType::STRICT_BARRIER;
-    }
-  } else if (ObTxLogType::TX_ABORT_LOG == log_type) {
-    if (data_source_type == ObTxDataSourceType::START_TRANSFER_IN
-        || data_source_type == ObTxDataSourceType::START_TRANSFER_OUT_V2
-        || data_source_type == ObTxDataSourceType::TRANSFER_MOVE_TX_CTX) {
-      barrier_flag = logservice::ObReplayBarrierType::STRICT_BARRIER;
     }
   }
 

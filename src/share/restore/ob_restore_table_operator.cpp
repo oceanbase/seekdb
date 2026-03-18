@@ -36,9 +36,9 @@ int ObTenantRestoreTableOperator::init(const uint64_t user_tenant_id, ObISQLClie
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("restore table operator init twice", K(ret));
-  } else if (! is_user_tenant(user_tenant_id) || OB_ISNULL(proxy)) {
+  } else if (OB_ISNULL(proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(user_tenant_id), K(proxy));
+    LOG_WARN("invalid argument", K(ret), K(proxy));
   } else {
     user_tenant_id_ = user_tenant_id;
     proxy_ = proxy;
@@ -49,65 +49,19 @@ int ObTenantRestoreTableOperator::init(const uint64_t user_tenant_id, ObISQLClie
 
 int ObTenantRestoreTableOperator::insert_source(const ObLogRestoreSourceItem &item)
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObDMLSqlSplicer dml;
-  ObSqlString sql;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("tenant restore table operator not init", K(ret));
-  } else if (OB_UNLIKELY(! item.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(item));
-  } else if (OB_FAIL(fill_log_restore_source_(item, dml))) {
-    LOG_WARN("fill log restore source failed", K(ret), K(item));
-  } else if (OB_FAIL(dml.splice_insert_update_sql(OB_ALL_LOG_RESTORE_SOURCE_TNAME, sql))) {
-    LOG_WARN("splice insert update sql failed", K(ret), K(item));
-  } else if (OB_FAIL(proxy_->write(get_exec_tenant_id_(), sql.ptr(), affected_rows))) {
-    LOG_WARN("exec sql failed", K(ret), K(item), K(sql), K_(user_tenant_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObTenantRestoreTableOperator::update_source_until_scn(const ObLogRestoreSourceItem &item)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml;
-  int64_t affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("tenant restore table operator not init", K(ret));
-  } else if (OB_UNLIKELY(!item.until_scn_.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(item.until_scn_));
-  } else if (OB_FAIL(dml.add_pk_column(OB_STR_TENANT_ID, item.tenant_id_))) {
-    LOG_WARN("failed to add column", K(ret), K(item.tenant_id_));
-  } else if (OB_FAIL(dml.add_pk_column(OB_STR_LOG_RESTORE_SOURCE_ID, item.id_))) {
-    LOG_WARN("failed to add column", K(ret), K(item.id_));
-  } else if (OB_FAIL(dml.add_uint64_column(OB_STR_LOG_RESTORE_SOURCE_UNTIL_SCN, item.until_scn_.get_val_for_inner_table_field()))) {
-    LOG_WARN("failed to add column", K(ret), K(item.until_scn_));
-  } else if (OB_FAIL(dml.splice_update_sql(OB_ALL_LOG_RESTORE_SOURCE_TNAME, sql))) {
-    LOG_WARN("fill source until_scn failed", K(ret), K(item.id_), K(item.until_scn_));
-  } else if (OB_FAIL(proxy_->write(get_exec_tenant_id_(), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql), K_(user_tenant_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObTenantRestoreTableOperator::delete_source()
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("tenant restore table operator not init", K(ret));
-  } else if (OB_FAIL(sql.append_fmt("delete from %s", OB_ALL_LOG_RESTORE_SOURCE_TNAME))) {
-    LOG_WARN("sql append failed", K(ret));
-  } else if (OB_FAIL(proxy_->write(get_exec_tenant_id_(), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql), K_(user_tenant_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -207,20 +161,7 @@ int ObTenantRestoreTableOperator::fill_log_restore_source_(const ObLogRestoreSou
 
 int ObTenantRestoreTableOperator::fill_select_source_(common::ObSqlString &sql)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(sql.append_fmt("select %s", OB_STR_TENANT_ID))) {
-    LOG_WARN("sql append failed", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_LOG_RESTORE_SOURCE_ID))) {
-    LOG_WARN("sql append failed", K(ret));
-  } else if  (OB_FAIL(sql.append_fmt(", %s", OB_STR_LOG_RESTORE_SOURCE_TYPE))) {
-    LOG_WARN("sql append failed", K(ret));
-  } else if  (OB_FAIL(sql.append_fmt(", %s", OB_STR_LOG_RESTORE_SOURCE_VALUE))) {
-    LOG_WARN("sql append failed", K(ret));
-  } else if  (OB_FAIL(sql.append_fmt(", %s", OB_STR_LOG_RESTORE_SOURCE_UNTIL_SCN))) {
-    LOG_WARN("sql append failed", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" from %s", OB_ALL_LOG_RESTORE_SOURCE_TNAME))) {
-    LOG_WARN("sql append failed", K(ret));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

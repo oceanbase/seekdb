@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
- 
+
 #define USING_LOG_PREFIX SQL
 
 #include "ob_external_table_access_service.h"
@@ -241,8 +241,8 @@ private:
 int ObExternalDataAccessDriver::get_file_list(const ObString &path,
                                               const ObString &pattern,
                                               const ObExprRegexpSessionVariables &regexp_vars,
-                                              ObIArray<ObString> &file_urls, 
-                                              ObIArray<int64_t> &file_sizes, 
+                                              ObIArray<ObString> &file_urls,
+                                              ObIArray<int64_t> &file_sizes,
                                               ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -586,10 +586,7 @@ int ObExternalTableAccessService::table_scan(
       }
       break;
     case ObExternalFileFormat::ORC_FORMAT:
-      if (OB_ISNULL(row_iter = OB_NEWx(ObOrcTableRowIterator, (scan_param.allocator_)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret));
-      }
+      ret = OB_NOT_SUPPORTED;
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
@@ -625,8 +622,10 @@ int ObExternalTableAccessService::table_rescan(ObVTableScanParam &param, ObNewRo
     switch (param.external_file_format_.format_type_) {
       case ObExternalFileFormat::CSV_FORMAT:
       case ObExternalFileFormat::PARQUET_FORMAT:
-      case ObExternalFileFormat::ORC_FORMAT:
         result->reset();
+        break;
+      case ObExternalFileFormat::ORC_FORMAT:
+        ret = OB_NOT_SUPPORTED;
         break;
       case ObExternalFileFormat::ODPS_FORMAT:
         ret = OB_NOT_SUPPORTED;
@@ -862,5 +861,3 @@ DEF_TO_STRING(ObExternalIteratorState)
 
 }
 }
-
-

@@ -1,0 +1,25 @@
+syntax = "proto3";
+package serverservice;
+
+service ServerService {
+  rpc get_tenant_info(GetTenantInfoReq) returns (GetTenantInfoRes);
+  rpc get_max_log_info(GetMaxLogInfoReq) returns (GetMaxLogInfoRes);
+}
+
+message GetTenantInfoReq {
+  // Empty message, no parameters needed
+}
+
+message GetTenantInfoRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message GetMaxLogInfoReq {
+  // Empty message, always query sys_ls
+}
+
+message GetMaxLogInfoRes {
+  int32 access_mode = 1;  // palf::AccessMode enum value
+  uint64 scn_val = 2;     // SCN val_ value
+}

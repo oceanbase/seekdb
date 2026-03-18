@@ -2642,8 +2642,6 @@ int ObLSTxCtxMgr::move_tx_op(const ObTransferMoveTxParam &move_tx_param,
     weak_read_ts = ls_handle.get_ls()->get_ls_wrs_handler()->get_ls_weak_read_ts();
     if (is_replay) {
       const SCN checkpoint_scn = ls_handle.get_ls()->get_clog_checkpoint_scn();
-      const bool transfer_prepare = ls_handle.get_ls()->get_transfer_status().get_transfer_prepare_enable();
-      if (!transfer_prepare) {
         // recover no this MDS operation so checkpoint is complete
         // replay from middle and incomplete when migrate happen
         if (!move_tx_param.is_incomplete_replay_) {
@@ -2653,7 +2651,6 @@ int ObLSTxCtxMgr::move_tx_op(const ObTransferMoveTxParam &move_tx_param,
           need_check_wrs = false;
           TRANS_LOG(WARN, "move_tx_op replay incomplete", K(ls_id_), K(move_tx_param), K(checkpoint_scn));
         }
-      }
     }
   }
 

@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_pl_recompile_task_helper.h"
-#include "share/ob_tenant_info_proxy.h"
 #include "share/ob_define.h"
 #include "share/ob_errno.h"
 #include "pl/ob_pl.h"
@@ -41,9 +40,8 @@ int ObPLRecompileTaskHelper::check_job_exists(ObMySQLTransaction &trans,
   is_job_exists = false;
   ObSqlString select_sql;
   int64_t row_count = 0;
-  if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE tenant_id = %ld and job_name = '%.*s';",
+  if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%.*s';",
                                     share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-                                    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                     job_name.length(), job_name.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
@@ -167,12 +165,11 @@ int ObPLRecompileTaskHelper::construct_select_dep_table_sql(ObSqlString& query_i
 {
   int ret = OB_SUCCESS;
   static constexpr char get_dep_objs_info[] =
-    "SELECT * FROM %s where tenant_id = %ld and dep_obj_id > 300000 "
+    "SELECT * FROM %s where dep_obj_id > 300000 "
     " and ref_obj_id in ( " ;
   
   OZ (query_inner_sql.assign_fmt(get_dep_objs_info, 
-                                       OB_ALL_VIRTUAL_DEPENDENCY_TNAME,
-                                       tenant_id));
+                                       OB_ALL_VIRTUAL_DEPENDENCY_TNAME));
   if (OB_SUCC(ret)) {
     common::hash::ObHashMap<int64_t, std::pair<ObString, int64_t>>::iterator iter = ddl_drop_obj_map.begin();
     int64_t map_size = ddl_drop_obj_map.size();
@@ -209,9 +206,9 @@ int ObPLRecompileTaskHelper::collect_delta_error_data(common::ObMySQLProxy* sql_
   common::sqlclient::ObMySQLResult *result = NULL;
   SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
     OZ (query_inner_sql.assign_fmt(
-            "SELECT * FROM %s WHERE tenant_id = %ld and OBJ_ID > 300000 and schema_version > %ld "
+            "SELECT * FROM %s WHERE OBJ_ID > 300000 and schema_version > %ld "
             " and ERROR_NUMBER in (-5055, -5019, -5543, -5544, -5201, -5733, -5559) ", 
-             OB_ALL_VIRTUAL_ERROR_TNAME, tenant_id, last_max_schema_version));
+             OB_ALL_VIRTUAL_ERROR_TNAME, last_max_schema_version));
     OZ (sql_proxy->read(res, OB_SYS_TENANT_ID, query_inner_sql.ptr()));
     CK (OB_NOT_NULL(result = res.get_result()));
     if (OB_SUCC(ret)) {
@@ -318,7 +315,7 @@ int ObPLRecompileTaskHelper::collect_delta_recompile_obj_data(common::ObMySQLPro
     " where ref_obj_name = UPPER('%.*s') and recompile_obj_id = 0 ";
   
   static constexpr char get_delta_ddl_operation[] =
-    "SELECT * FROM %s where tenant_id = %ld and ddl_stmt_str != '' "
+    "SELECT * FROM %s where ddl_stmt_str != '' "
     " and  schema_version > %ld  and operation_type in ( 2, 3, 4, 16, 19, "
     " 21, 25, 26, 902, 903, 904, 1202, 1203, 1204, 1205, 1252, 1253, 1254, 1312, 1313, "
     " 1314, 1322, 1323, 1324, 1325, 1952, 1953, 1954) " ;
@@ -347,7 +344,7 @@ int ObPLRecompileTaskHelper::collect_delta_recompile_obj_data(common::ObMySQLPro
 
       // step2 : get delta ddl operation 
       OZ (query_inner_sql.assign_fmt(get_delta_ddl_operation,
-          OB_ALL_VIRTUAL_DDL_OPERATION_TNAME, tenant_id, last_max_schema_version));
+          OB_ALL_VIRTUAL_DDL_OPERATION_TNAME, last_max_schema_version));
       // user tenant can not get real table data  
       OZ (sql_proxy->read(res, OB_SYS_TENANT_ID, query_inner_sql.ptr()));
       CK (OB_NOT_NULL(result = res.get_result()));
@@ -451,10 +448,10 @@ int ObPLRecompileTaskHelper::update_dropped_obj(common::hash::ObHashMap<ObString
     for (; OB_SUCC(ret) && iter != dropped_ref_objs.end(); ++iter) {
       ObString dropped_obj_name = iter->first;
       int64_t dropped_obj_schema_version = iter->second;
-      OZ (query_inner_sql.assign_fmt("SELECT * FROM %s where tenant_id = %ld and ddl_stmt_str != '' "
+      OZ (query_inner_sql.assign_fmt("SELECT * FROM %s where ddl_stmt_str != '' "
                                     " and  table_name = UPPER('%.*s') and schema_version > %ld "
                                     " and operation_type in (4, 21, 902, 1202, 1252, 1312, 1322, 1952 ) ;", 
-                                    OB_ALL_VIRTUAL_DDL_OPERATION_TNAME, tenant_id,
+                                    OB_ALL_VIRTUAL_DDL_OPERATION_TNAME,
                                     dropped_obj_name.length(), dropped_obj_name.ptr(),
                                     dropped_obj_schema_version));
       OZ (sql_proxy->read(res, OB_SYS_TENANT_ID, query_inner_sql.ptr()));

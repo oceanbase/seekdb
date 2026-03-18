@@ -128,16 +128,6 @@ int ObAllVirtualCgroupConfig::add_cgroup_config_info_(const char *cgroup_path)
     const uint64_t col_id = output_column_ids_.at(i);
     ObObj *cells = cur_row_.cells_;
     switch (col_id) {
-      case SVR_IP: {
-        cells[i].set_varchar(ip_buf_);
-        cells[i].set_collation_type(
-            ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case SVR_PORT: {
-        cells[i].set_int(GCONF.self_addr_.get_port());
-        break;
-      }
       case CFS_QUOTA_US: {
         char path[PATH_BUFSIZE];
         snprintf(path, PATH_BUFSIZE, "%s/%s", cgroup_path, "cpu.cfs_quota_us");

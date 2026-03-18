@@ -153,7 +153,6 @@ int ObSimpleLogServer::simple_init(
     tenant_base_->init();
     tenant_base_->set(&log_service_);
     tenant_base_->set(ls_service_);
-    tenant_base_->set(&detector_);
     tenant_base_->set(&shared_timer_);
     tenant_base_->set(tio_manager);
     tenant_base_->set(timer_service_);
@@ -993,10 +992,6 @@ int ObLogDeliver::handle_req_(rpc::ObRequest &req)
       //modify_pkt.set_tenant_id(node_id_);
       PROCESS(LogGetMCStP)
     }
-    case obrpc::OB_LOG_ARB_PROBE_MSG: {
-      //modify_pkt.set_tenant_id(node_id_);
-      PROCESS(logservice::LogServerProbeP)
-    }
     case obrpc::OB_LOG_CONFIG_CHANGE_CMD: {
       //modify_pkt.set_tenant_id(node_id_);
       PROCESS(LogMembershipChangeP)
@@ -1044,10 +1039,6 @@ int ObLogDeliver::handle_req_(rpc::ObRequest &req)
     case obrpc::OB_BATCH: {
       // modify_pkt.set_tenant_id(node_id_);
       BATCH_RPC_PROCESS()
-    }
-    case obrpc::OB_LOG_PROBE_RS: {
-      //modify_pkt.set_tenant_id(node_id_);
-      PROCESS(LogProbeRsP);
     }
     case obrpc::OB_LOG_SYNC_BASE_LSN_REQ: {
       PROCESS(logservice::LogSyncBaseLSNReqP)

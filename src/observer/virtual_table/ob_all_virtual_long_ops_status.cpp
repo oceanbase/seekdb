@@ -56,67 +56,49 @@ int ObAllVirtualLongOpsStatus::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
-          // tenant id
-          cur_row_.cells_[i].set_int(longops_value_.tenant_id_);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 1:
           // sid
           cur_row_.cells_[i].set_int(longops_value_.sid_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 2:
+        case OB_APP_MIN_COLUMN_ID + 1:
           // op_name
           cur_row_.cells_[i].set_varchar(longops_value_.op_name_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 3:
+        case OB_APP_MIN_COLUMN_ID + 2:
           // target
           cur_row_.cells_[i].set_varchar(longops_value_.target_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 4:
-          // svr_ip
-          if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cur_row_.cells_[i].set_varchar(ip_buf_);
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to execute ip_to_string", K(ret));
-          }
-          break;
-        case OB_APP_MIN_COLUMN_ID + 5:
-          // svr_port
-          cur_row_.cells_[i].set_int(addr_.get_port());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 6:
+        case OB_APP_MIN_COLUMN_ID + 3:
           // start_time
           cur_row_.cells_[i].set_int(longops_value_.start_time_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 7:
+        case OB_APP_MIN_COLUMN_ID + 4:
           // finish_time
           cur_row_.cells_[i].set_int(longops_value_.finish_time_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 8:
+        case OB_APP_MIN_COLUMN_ID + 5:
           // elapsed_seconds
           cur_row_.cells_[i].set_int(longops_value_.elapsed_seconds_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 9:
+        case OB_APP_MIN_COLUMN_ID + 6:
           // time_remaining
           cur_row_.cells_[i].set_int(longops_value_.time_remaining_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 10:
+        case OB_APP_MIN_COLUMN_ID + 7:
           // last_update_time
           cur_row_.cells_[i].set_int(longops_value_.last_update_time_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 11:
+        case OB_APP_MIN_COLUMN_ID + 8:
           // percentage
           cur_row_.cells_[i].set_int(longops_value_.percentage_);
           break;
-        case OB_APP_MIN_COLUMN_ID + 12:
+        case OB_APP_MIN_COLUMN_ID + 9:
           // message
           cur_row_.cells_[i].set_varchar(longops_value_.message_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 13: {
+        case OB_APP_MIN_COLUMN_ID + 10: {
           // trace id
           int len = longops_value_.trace_id_.to_string(trace_id_, OB_MAX_TRACE_ID_BUFFER_SIZE);
           cur_row_.cells_[i].set_varchar(trace_id_, len);
