@@ -303,6 +303,7 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_catalog_executor.cpp
   engine/cmd/ob_trigger_storage_cache_executor.cpp
   engine/cmd/ob_sys_dispatch_call_executor.cpp
+  engine/cmd/ob_merge_table_executor.cpp
   engine/cmd/ob_ccl_rule_executor.cpp
 )
 
@@ -1195,6 +1196,8 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_set_names_resolver.cpp
   resolver/cmd/ob_set_transaction_resolver.cpp
   resolver/cmd/ob_show_resolver.cpp
+  resolver/cmd/ob_diff_table_resolver.cpp
+  resolver/cmd/ob_merge_table_resolver.cpp
   resolver/cmd/ob_variable_set_resolver.cpp
   resolver/cmd/ob_variable_set_stmt.cpp
   resolver/cmd/ob_alter_system_resolver.cpp

@@ -290,14 +290,14 @@ END_P SET_VAR DELIMITER
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT DECRYPTION
         DEFAULT_AUTH DEFAULT_LOB_INROW_THRESHOLD DEFINER DELAY DELAY_KEY_WRITE DEPTH DES_KEY_FILE DENSE_RANK DESCRIPTION DESTINATION DIAGNOSTICS DICT_TABLE
-        DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
+        DIFF DIRECTORY DISABLE DISALLOW DISCARD DISK DISKGROUP DO DOT DUMP DUMPFILE DUPLICATE DUPLICATE_SCOPE DUPLICATE_READ_CONSISTENCY DYNAMIC
         DATABASE_ID DEFAULT_TABLEGROUP DISCONNECT DEMAND DELETE_INSERT DYNAMIC_PARTITION_POLICY
 
         EFFECTIVE EMPTY ENABLE ENABLE_ARBITRATION_SERVICE ENABLE_EXTENDED_ROWID ENABLE_MACRO_BLOCK_BLOOM_FILTER ENCRYPT ENCRYPTED ENCRYPTION END ENDPOINT ENDS ENFORCED ENGINE_ ENGINES ENUM ENTITY ERROR_CODE ERROR_P ERRORS ESTIMATE
         ESCAPE EVENT EVENTS EVERY EXCHANGE EXCLUDING EXECUTE EXPANSION EXPIRE EXPIRE_INFO EXPORT OUTLINE EXTENDED
         EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN EXTERNAL EXTERNAL_STORAGE_DEST EXPIRE_TIME
 
-        FAILOVER FAST FAULTS FILE_BLOCK_SIZE FIELDS FILEX FINAL_COUNT FIRST FIRST_VALUE FIXED FLUSH FOLLOWER FORMAT
+        FAIL FAILOVER FAST FAULTS FILE_BLOCK_SIZE FIELDS FILEX FINAL_COUNT FIRST FIRST_VALUE FIXED FLUSH FOLLOWER FORMAT
         FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
@@ -332,7 +332,7 @@ END_P SET_VAR DELIMITER
         NOMINVALUE NOMAXVALUE NOORDER NOCYCLE NOCACHE NO_WAIT NULLS NUMBER NVARCHAR NTILE NTH_VALUE NOARCHIVELOG NETWORK NET_BANDWIDTH_WEIGHT NOPARALLEL
         NULL_IF_EXETERNAL
 
-        OBSOLETE OBJECT OCCUR OF OFF OFFSET OLD OLD_PASSWORD ONE ONE_SHOT ONLY OPEN OPTIONS ORDINALITY ORIG_DEFAULT OWNER OLD_KEY OVER
+        OBSOLETE OBJECT OCCUR OF OFF OFFSET OLD OLD_PASSWORD ONE ONE_SHOT ONLY OPEN OPTIONS ORDINALITY ORIG_DEFAULT OURS OWNER OLD_KEY OVER
         OBCONFIG_URL OJ
         OBJECT_ID
 
@@ -359,14 +359,14 @@ END_P SET_VAR DELIMITER
         SQL_CACHE SQL_NO_CACHE SQL_ID SCHEMA_ID SQL_THREAD SQL_TSI_DAY SQL_TSI_HOUR SQL_TSI_MINUTE SQL_TSI_MONTH
         SQL_TSI_QUARTER SQL_TSI_SECOND SQL_TSI_WEEK SQL_TSI_YEAR SRID STANDBY _ST_ASMVT STAT START STARTS STATS_AUTO_RECALC
         STATS_PERSISTENT STATS_SAMPLE_PAGES STATUS STATEMENTS STATISTICS STD STDDEV STDDEV_POP STDDEV_SAMP STOPWORD_TABLE STORAGE_CACHE_POLICY STORAGE_CACHE_POLICY_EXECUTOR STRONG STSTOKEN
-        SYNCHRONIZATION SYNCHRONOUS STOP STORAGE STORAGE_FORMAT_VERSION STORE STORING STRING STRIPE_SIZE
+        STRATEGY SYNCHRONIZATION SYNCHRONOUS STOP STORAGE STORAGE_FORMAT_VERSION STORE STORING STRING STRIPE_SIZE
         SUBCLASS_ORIGIN SUBDATE SUBJECT SUBPARTITION SUBPARTITIONS SUBSTR SUBSTRING SUCCESSFUL SUM
         SUPER SUSPEND SWAPS SWITCH SWITCHES SWITCHOVER SYSTEM SYSTEM_USER SYSDATE SESSION_ALIAS
         SIZE SKEWONLY SEQUENCE SLOG STATEMENT_ID SKIP_HEADER PARSE_HEADER IGNORE_LAST_EMPTY_COLUMN SKIP_BLANK_LINES STATEMENT SUM_OPNSIZE SS_MICRO_CACHE SPARSEVECTOR
 
         TABLE_CHECKSUM TABLE_MODE TABLE_ID TABLE_NAME TABLEGROUPS TABLES TABLET TABLET_ID TABLET_MAX_SIZE TASK_ID
         TEMPLATE TEMPORARY TEMPTABLE TENANT TEXT THAN TIME TIMESTAMP TIMESTAMPADD TIMESTAMPDIFF TP_NO
-        TP_NAME TRACE TRADITIONAL TRANSACTION TRIGGERS TRIM TRUNCATE TYPE TYPES TASK TABLET_SIZE
+        THEIRS TP_NAME TRACE TRADITIONAL TRANSACTION TRIGGERS TRIM TRUNCATE TYPE TYPES TASK TABLET_SIZE
         TABLEGROUP_ID TENANT_ID THROTTLE TIME_ZONE_INFO TOP_K_FRE_HIST TIMES TRIM_SPACE TTL
         TRANSFER TUNNEL_ENDPOINT TENANT_STS_CREDENTIAL TABLETS TIME_UNIT TIME_ZONE
 
@@ -389,7 +389,7 @@ END_P SET_VAR DELIMITER
 %type <node> sql_stmt stmt_list stmt opt_end_p
 %type <node> select_stmt update_stmt delete_stmt
 %type <node> insert_stmt single_table_insert values_clause dml_table_name
-%type <node> create_table_stmt create_table_like_stmt fork_table_stmt fork_database_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated create_function_stmt drop_function_stmt parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
+%type <node> create_table_stmt create_table_like_stmt fork_table_stmt fork_database_stmt diff_table_stmt merge_table_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated create_function_stmt drop_function_stmt parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
 %type <node> opt_force
 %type <node> index_or_heap
 %type <node> create_sequence_stmt alter_sequence_stmt drop_sequence_stmt opt_sequence_option_list sequence_option_list sequence_option simple_num
@@ -640,6 +640,8 @@ stmt:
   | create_table_like_stmt  { $$ = $1; check_question_mark($$, result); }
   | fork_table_stmt         { $$ = $1; check_question_mark($$, result); }
   | fork_database_stmt      { $$ = $1; check_question_mark($$, result); }
+  | diff_table_stmt         { $$ = $1; check_question_mark($$, result); }
+  | merge_table_stmt        { $$ = $1; check_question_mark($$, result); }
   | create_database_stmt    { $$ = $1; check_question_mark($$, result); }
   | drop_database_stmt      { $$ = $1; check_question_mark($$, result); }
   | alter_database_stmt     { $$ = $1; check_question_mark($$, result); }
@@ -5575,6 +5577,57 @@ fork_database_stmt:
 FORK DATABASE database_factor TO database_factor
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, $5, $3);
+}
+;
+
+/*****************************************************************************
+ *
+ *	DIFF TABLE grammar
+ *
+ *****************************************************************************/
+
+diff_table_stmt:
+DIFF TABLE relation_factor AGAINST relation_factor
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_DIFF_TABLE, 2, $3, $5);
+}
+;
+
+/*****************************************************************************
+ *
+ *	MERGE TABLE grammar
+ *
+ *****************************************************************************/
+
+merge_table_stmt:
+MERGE TABLE relation_factor INTO relation_factor
+{
+  /* MERGE TABLE incoming INTO current — default STRATEGY FAIL (0) */
+  ParseNode *strategy_node = NULL;
+  malloc_terminal_node(strategy_node, result->malloc_pool_, T_INT);
+  strategy_node->value_ = 0;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_MERGE_TABLE, 3, $3, $5, strategy_node);
+}
+| MERGE TABLE relation_factor INTO relation_factor STRATEGY FAIL
+{
+  ParseNode *strategy_node = NULL;
+  malloc_terminal_node(strategy_node, result->malloc_pool_, T_INT);
+  strategy_node->value_ = 0;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_MERGE_TABLE, 3, $3, $5, strategy_node);
+}
+| MERGE TABLE relation_factor INTO relation_factor STRATEGY THEIRS
+{
+  ParseNode *strategy_node = NULL;
+  malloc_terminal_node(strategy_node, result->malloc_pool_, T_INT);
+  strategy_node->value_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_MERGE_TABLE, 3, $3, $5, strategy_node);
+}
+| MERGE TABLE relation_factor INTO relation_factor STRATEGY OURS
+{
+  ParseNode *strategy_node = NULL;
+  malloc_terminal_node(strategy_node, result->malloc_pool_, T_INT);
+  strategy_node->value_ = 2;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_MERGE_TABLE, 3, $3, $5, strategy_node);
 }
 ;
 
@@ -25263,6 +25316,7 @@ ACCESS_INFO
 |       DEMAND
 |       DIAGNOSTICS
 |       DICT_TABLE
+|       DIFF
 |       DIRECTORY
 |       DISABLE
 |       DISALLOW
@@ -25322,6 +25376,7 @@ ACCESS_INFO
 |       EXTERNAL
 |       EXTERNAL_STORAGE_DEST
 |       EXTRACT
+|       FAIL
 |       FAILOVER
 |       FAST
 |       FAULTS
@@ -25577,6 +25632,7 @@ ACCESS_INFO
 |       OPTIONS
 |       ORDINALITY
 |       ORIG_DEFAULT
+|       OURS
 |       REMOTE_OSS
 |       OUTLINE
 |       OWNER
@@ -25797,6 +25853,7 @@ ACCESS_INFO
 |       STORAGE_FORMAT_VERSION
 |       STORE
 |       STORING
+|       STRATEGY
 |       STRONG
 |       STRING
 |       STRIPE_SIZE
@@ -25842,6 +25899,7 @@ ACCESS_INFO
 |       SLOT_IDX
 |       TEXT
 |       THAN
+|       THEIRS
 |       TIME
 |       TIMESTAMP
 |       TIMESTAMPADD

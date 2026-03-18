@@ -20,6 +20,7 @@
 #include <orc/Writer.hh>
 
 #include "sql/resolver/ob_resolver_utils.h"
+#include "lib/utility/utility.h"
 #include "sql/parser/parse_malloc.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
@@ -9324,6 +9325,231 @@ int ObResolverUtils::calc_unistr(const common::ObString &src,
   Functor temp_handler(buf, buf_len, pos, src.length(), dst_cs_type);
   ObCharsetType src_charset_type = ObCharset::charset_type_by_coll(src_cs_type);
   OZ(ObFastStringScanner::foreach_char(src, src_charset_type, temp_handler));
+  return ret;
+}
+
+int ObResolverUtils::append_escaped_identifier(ObSqlString &sql, const ObString &name)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("`"))) {
+  } else if (NULL == memchr(name.ptr(), '`', name.length())) {
+    ret = sql.append(name.ptr(), name.length());
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < name.length(); i++) {
+      if (name.ptr()[i] == '`') {
+        ret = sql.append("``");
+      } else {
+        ret = sql.append(name.ptr() + i, 1);
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ret = sql.append("`");
+  }
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to append escaped identifier", K(ret), K(name));
+  }
+  return ret;
+}
+
+int ObResolverUtils::append_qualified_identifier(ObSqlString &sql,
+                                                 const ObString &db_name,
+                                                 const ObString &object_name)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(append_escaped_identifier(sql, db_name))) {
+    LOG_WARN("failed to append database identifier", K(ret), K(db_name));
+  } else if (OB_FAIL(sql.append("."))) {
+    LOG_WARN("failed to append identifier separator", K(ret));
+  } else if (OB_FAIL(append_escaped_identifier(sql, object_name))) {
+    LOG_WARN("failed to append object identifier", K(ret), K(object_name));
+  }
+  return ret;
+}
+
+int ObResolverUtils::append_qualified_name_literal(ObSqlString &sql,
+                                                   const ObString &db_name,
+                                                   const ObString &object_name)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(sql.append("CONCAT("))) {
+    LOG_WARN("failed to append concat prefix", K(ret));
+  } else if (OB_FAIL(sql_append_hex_escape_str(db_name, sql))) {
+    LOG_WARN("failed to append database literal", K(ret), K(db_name));
+  } else if (OB_FAIL(sql.append(", '.', "))) {
+    LOG_WARN("failed to append literal separator", K(ret));
+  } else if (OB_FAIL(sql_append_hex_escape_str(object_name, sql))) {
+    LOG_WARN("failed to append object literal", K(ret), K(object_name));
+  } else if (OB_FAIL(sql.append(")"))) {
+    LOG_WARN("failed to append concat suffix", K(ret));
+  }
+  return ret;
+}
+
+int ObResolverUtils::append_col_list(ObSqlString &sql,
+                                     const ObIArray<ObString> &cols,
+                                     const char *prefix,
+                                     bool start_with_comma)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t idx = 0; OB_SUCC(ret) && idx < cols.count(); idx++) {
+    const ObString &col = cols.at(idx);
+    const char *sep = (idx > 0 || start_with_comma) ? ", " : "";
+    if (OB_FAIL(sql.append(sep))) {
+    } else if (OB_FAIL(sql.append(prefix))) {
+    } else if (OB_FAIL(append_escaped_identifier(sql, col))) {
+    }
+  }
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to append column list", K(ret));
+  }
+  return ret;
+}
+
+int ObResolverUtils::append_binary_cond(ObSqlString &sql,
+                                        const ObIArray<ObString> &cols,
+                                        const char *op)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t idx = 0; OB_SUCC(ret) && idx < cols.count(); idx++) {
+    const ObString &col = cols.at(idx);
+    const char *sep = (idx > 0) ? " AND " : "";
+    if (OB_FAIL(sql.append(sep))) {
+    } else if (OB_FAIL(sql.append("c."))) {
+    } else if (OB_FAIL(append_escaped_identifier(sql, col))) {
+    } else if (OB_FAIL(sql.append_fmt(" %s i.", op))) {
+    } else if (OB_FAIL(append_escaped_identifier(sql, col))) {
+    }
+  }
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to append binary condition", K(ret));
+  }
+  return ret;
+}
+
+int ObResolverUtils::check_same_column_definition(const ObColumnSchemaV2 &lhs,
+                                                  const ObColumnSchemaV2 &rhs,
+                                                  bool &is_same)
+{
+  int ret = OB_SUCCESS;
+  bool is_same_type = false;
+  is_same = false;
+  if (lhs.get_column_name_str() != rhs.get_column_name_str()) {
+  } else if (lhs.get_rowkey_position() != rhs.get_rowkey_position()) {
+  } else if (lhs.is_nullable() != rhs.is_nullable()
+             || lhs.is_zero_fill() != rhs.is_zero_fill()
+             || lhs.is_autoincrement() != rhs.is_autoincrement()
+             || lhs.is_identity_column() != rhs.is_identity_column()
+             || lhs.is_generated_column() != rhs.is_generated_column()
+             || lhs.is_default_expr_v2_column() != rhs.is_default_expr_v2_column()
+             || lhs.is_on_update_current_timestamp() != rhs.is_on_update_current_timestamp()) {
+  } else if (OB_FAIL(ObTableSchema::check_is_exactly_same_type(lhs, rhs, is_same_type))) {
+    LOG_WARN("failed to compare exact column type", K(ret), K(lhs), K(rhs));
+  } else if (!is_same_type) {
+  } else if (!lhs.get_orig_default_value().strict_equal(rhs.get_orig_default_value())
+             || !lhs.get_cur_default_value().strict_equal(rhs.get_cur_default_value())) {
+  } else {
+    is_same = true;
+  }
+  return ret;
+}
+
+int ObResolverUtils::advance_to_visible_column(
+    ObTableSchema::const_column_iterator &it,
+    ObTableSchema::const_column_iterator end)
+{
+  int ret = OB_SUCCESS;
+  while (it != end) {
+    if (OB_ISNULL(*it)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("column schema is NULL", K(ret));
+      break;
+    }
+    if ((*it)->is_user_visible_column()) break;
+    ++it;
+  }
+  return ret;
+}
+
+int ObResolverUtils::collect_and_validate_columns(const ObTableSchema *cur_schema,
+                                                   const ObTableSchema *inc_schema,
+                                                   ObIArray<ObString> &pk_cols,
+                                                   ObIArray<ObString> &val_cols,
+                                                   const char *stmt_name)
+{
+  int ret = OB_SUCCESS;
+  const int64_t MSG_BUF_LEN = 256;
+  char col_def_msg[MSG_BUF_LEN];
+  char no_pk_msg[MSG_BUF_LEN];
+  if (OB_ISNULL(cur_schema) || OB_ISNULL(inc_schema) || OB_ISNULL(stmt_name)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table schema is null", K(ret), KP(cur_schema), KP(inc_schema), KP(stmt_name));
+  } else {
+    snprintf(col_def_msg, MSG_BUF_LEN,
+             "%s requires both tables to have identical column definitions", stmt_name);
+    snprintf(no_pk_msg, MSG_BUF_LEN,
+             "%s on table without primary key", stmt_name);
+  }
+
+  if (OB_SUCC(ret)) {
+    ObTableSchema::const_column_iterator cur_it = cur_schema->column_begin();
+    ObTableSchema::const_column_iterator inc_it = inc_schema->column_begin();
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(ObResolverUtils::advance_to_visible_column(cur_it, cur_schema->column_end()))) {
+        LOG_WARN("failed to advance cur column iterator", K(ret));
+        break;
+      } else if (OB_FAIL(ObResolverUtils::advance_to_visible_column(inc_it, inc_schema->column_end()))) {
+        LOG_WARN("failed to advance inc column iterator", K(ret));
+        break;
+      }
+
+      const bool cur_end = (cur_it == cur_schema->column_end());
+      const bool inc_end = (inc_it == inc_schema->column_end());
+      if (cur_end && inc_end) {
+        break;
+      } else if (cur_end != inc_end) {
+        ret = OB_SCHEMA_ERROR;
+        LOG_WARN("column count mismatch between current and incoming table", K(ret));
+        LOG_USER_ERROR(OB_SCHEMA_ERROR, col_def_msg);
+        break;
+      }
+
+      const ObColumnSchemaV2 *cur_col = *cur_it;
+      const ObColumnSchemaV2 *inc_col = *inc_it;
+      bool is_same_definition = false;
+      if (OB_FAIL(ObResolverUtils::check_same_column_definition(*cur_col, *inc_col, is_same_definition))) {
+        LOG_WARN("failed to compare column definitions", K(ret), KPC(cur_col), KPC(inc_col));
+      } else if (!is_same_definition) {
+        ret = OB_SCHEMA_ERROR;
+        LOG_WARN("column definition mismatch", K(ret),
+                 "column", cur_col->get_column_name_str(),
+                 KPC(cur_col), KPC(inc_col));
+        LOG_USER_ERROR(OB_SCHEMA_ERROR, col_def_msg);
+      }
+
+      if (OB_SUCC(ret)) {
+        if (cur_col->is_rowkey_column()) {
+          if (OB_FAIL(pk_cols.push_back(cur_col->get_column_name_str()))) {
+            LOG_WARN("failed to push pk column", K(ret));
+          }
+        } else {
+          if (OB_FAIL(val_cols.push_back(cur_col->get_column_name_str()))) {
+            LOG_WARN("failed to push val column", K(ret));
+          }
+        }
+      }
+
+      ++cur_it;
+      ++inc_it;
+    }
+  }
+
+  if (OB_SUCC(ret) && pk_cols.empty()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("table requires a primary key", K(ret), "stmt_name", stmt_name);
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, no_pk_msg);
+  }
+
   return ret;
 }
 

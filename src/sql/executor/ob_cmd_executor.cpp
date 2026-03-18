@@ -148,6 +148,8 @@
 #endif
 #include "sql/resolver/cmd/ob_sys_dispatch_call_stmt.h"
 #include "sql/engine/cmd/ob_sys_dispatch_call_executor.h"
+#include "sql/resolver/cmd/ob_merge_table_stmt.h"
+#include "sql/engine/cmd/ob_merge_table_executor.h"
 
 namespace oceanbase
 {
@@ -423,6 +425,10 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_FORK_DATABASE: {
         DEFINE_EXECUTE_CMD(ObForkDatabaseStmt, ObForkDatabaseExecutor);
+        break;
+      }
+      case stmt::T_MERGE_TABLE: {
+        DEFINE_EXECUTE_CMD(ObMergeTableStmt, ObMergeTableExecutor);
         break;
       }
       case stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN: {

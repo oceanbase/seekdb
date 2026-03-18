@@ -55,6 +55,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/cmd/ob_event_stmt.h"
 #include "sql/resolver/cmd/ob_location_utils_stmt.h"
+#include "sql/resolver/cmd/ob_merge_table_stmt.h"
 
 namespace oceanbase {
 using namespace share;
@@ -2644,6 +2645,38 @@ int get_drop_ccl_priv(
     need_priv.priv_set_ = OB_PRIV_DROP;
     need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
     ADD_NEED_PRIV(need_priv);
+  }
+  return ret;
+}
+
+int get_merge_table_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv,
+    const ObStmt *basic_stmt,
+    ObIArray<ObNeedPriv> &need_privs)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(session_priv);
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("basic_stmt should not be NULL", K(ret));
+  } else if (stmt::T_MERGE_TABLE != basic_stmt->get_stmt_type()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected stmt type", K(ret), K(basic_stmt->get_stmt_type()));
+  } else {
+    const ObMergeTableStmt *merge_stmt = static_cast<const ObMergeTableStmt *>(basic_stmt);
+    ObNeedPriv need_priv;
+    need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+    need_priv.is_sys_table_ = false;
+    need_priv.db_ = merge_stmt->get_inc_db_name();
+    need_priv.table_ = merge_stmt->get_inc_table_name();
+    need_priv.priv_set_ = OB_PRIV_SELECT;
+    ADD_NEED_PRIV(need_priv);
+    if (OB_SUCC(ret)) {
+      need_priv.db_ = merge_stmt->get_cur_db_name();
+      need_priv.table_ = merge_stmt->get_cur_table_name();
+      need_priv.priv_set_ = OB_PRIV_SELECT | OB_PRIV_INSERT | OB_PRIV_UPDATE;
+      ADD_NEED_PRIV(need_priv);
+    }
   }
   return ret;
 }

@@ -22,6 +22,8 @@
 #include "common/object/ob_object.h"
 #include "common/ob_accuracy.h"
 #include "sql/resolver/ob_resolver_define.h"
+#include "lib/string/ob_sql_string.h"
+#include "share/schema/ob_table_schema.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "sql/parser/parse_node.h"
@@ -898,6 +900,32 @@ public:
   static bool is_external_pseudo_column(const ObRawExpr &expr);
   static int cnt_external_pseudo_column(const ObRawExpr &expr, bool &contain);
   static bool is_pseudo_partition_column_name(const ObString name);
+
+  static int append_escaped_identifier(common::ObSqlString &sql, const common::ObString &name);
+  static int append_qualified_identifier(common::ObSqlString &sql,
+                                         const common::ObString &db_name,
+                                         const common::ObString &object_name);
+  static int append_qualified_name_literal(common::ObSqlString &sql,
+                                           const common::ObString &db_name,
+                                           const common::ObString &object_name);
+  static int append_col_list(common::ObSqlString &sql,
+                             const common::ObIArray<common::ObString> &cols,
+                             const char *prefix,
+                             bool start_with_comma = false);
+  static int append_binary_cond(common::ObSqlString &sql,
+                                const common::ObIArray<common::ObString> &cols,
+                                const char *op);
+  static int check_same_column_definition(const share::schema::ObColumnSchemaV2 &lhs,
+                                          const share::schema::ObColumnSchemaV2 &rhs,
+                                          bool &is_same);
+  static int advance_to_visible_column(
+      share::schema::ObTableSchema::const_column_iterator &it,
+      share::schema::ObTableSchema::const_column_iterator end);
+  static int collect_and_validate_columns(const share::schema::ObTableSchema *cur_schema,
+                                          const share::schema::ObTableSchema *inc_schema,
+                                          common::ObIArray<common::ObString> &pk_cols,
+                                          common::ObIArray<common::ObString> &val_cols,
+                                          const char *stmt_name);
 private:
 
   static double strntod(const char *str, size_t str_len, ObItemType type,

@@ -93,6 +93,8 @@
 #include "sql/resolver/cmd/ob_resource_resolver.h"
 #include "sql/resolver/cmd/ob_variable_set_resolver.h"
 #include "sql/resolver/cmd/ob_show_resolver.h"
+#include "sql/resolver/cmd/ob_diff_table_resolver.h"
+#include "sql/resolver/cmd/ob_merge_table_resolver.h"
 #include "sql/resolver/cmd/ob_help_resolver.h"
 #include "sql/resolver/cmd/ob_kill_resolver.h"
 #include "sql/resolver/cmd/ob_set_names_resolver.h"
@@ -345,6 +347,14 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_FORK_DATABASE: {
         REGISTER_STMT_RESOLVER(ForkDatabase);
+        break;
+      }
+      case T_DIFF_TABLE: {
+        REGISTER_STMT_RESOLVER(DiffTable);
+        break;
+      }
+      case T_MERGE_TABLE: {
+        REGISTER_STMT_RESOLVER(MergeTable);
         break;
       }
       case T_SELECT: {
