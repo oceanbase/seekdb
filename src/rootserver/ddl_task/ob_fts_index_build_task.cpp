@@ -65,7 +65,8 @@ ObFtsIndexBuildTask::ObFtsIndexBuildTask()
     dependent_task_result_map_(),
     is_retryable_ddl_(true),
     use_doc_id_(true),
-    rowkey_doc_schema_version_(0)
+    rowkey_doc_schema_version_(0),
+    charset_type_(CHARSET_INVALID)
 {
 }
 
@@ -639,7 +640,13 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
   } else if (is_fts_task() && OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(tenant_id_, parser_name, need_to_load_dic))) {
     LOG_WARN("fail to check need to load dic", K(ret), K(tenant_id_), K(parser_name), K(need_to_load_dic));
   } else if (need_to_load_dic) {
-    if (OB_FAIL(get_charset_type(charset_type))) {
+    ObMySQLTransaction trans;
+    if (OB_ISNULL(GCTX.sql_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("sql proxy is null", K(ret));
+    } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id_))) {
+      LOG_WARN("failed to start trans", K(ret), K(tenant_id_));
+    } else if (OB_FAIL(get_charset_type(charset_type))) {
       LOG_WARN("fail to get charset type", K(ret), K(tenant_id_), K(charset_type));
     } else if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(tenant_id_,
                                                                      parser_name,
@@ -655,9 +662,20 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
     } else if (OB_FAIL(ObDicLock::lock_dic_tables_out_trans(tenant_id_,
                                                             *dic_loader_handle.get_loader(),
                                                             transaction::tablelock::SHARE,
-                                                            owner_id))) {
+                                                            owner_id,
+                                                            trans))) {
       LOG_WARN("failed to lock all dictionary table",
           K(ret), K(tenant_id_), K(dic_loader_handle), K(owner_id));
+    } else if (OB_FAIL(update_task_message(trans))) {
+      LOG_WARN("fail to update fulltext index build task message",
+          K(ret), K(tenant_id_), K(task_id_));
+    }
+    if (trans.is_started()) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
+        LOG_WARN("failed to commit trans", K(ret), K(tmp_ret));
+        ret = OB_SUCC(ret) ? tmp_ret : ret;
+      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -911,7 +929,9 @@ int ObFtsIndexBuildTask::get_charset_type(ObCharsetType &charset_type)
   const ObTableSchema *data_schema = nullptr;
   const ObColumnSchemaV2 *col_schema = nullptr;
   charset_type = CHARSET_INVALID;
-  if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id_, schema_guard))) {
+  if (CHARSET_INVALID != charset_type_) {
+    charset_type = charset_type_;
+  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id_, schema_guard))) {
     LOG_WARN("get tenant schema guard failed", K(ret), K(tenant_id_));
   } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id_, object_id_, data_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(tenant_id_), K(object_id_));
@@ -931,6 +951,7 @@ int ObFtsIndexBuildTask::get_charset_type(ObCharsetType &charset_type)
     LOG_WARN("the column is not exist", K(ret), K(tenant_id_), K(column_name));
   } else {
     charset_type = static_cast<ObCharsetType>(col_schema->get_charset_type());
+    charset_type_ = charset_type;
   }
   return ret;
 }
@@ -1086,6 +1107,7 @@ int ObFtsIndexBuildTask::serialize_params_to_message(
   int8_t is_fts_doc_word_succ = static_cast<int8_t>(is_fts_doc_word_succ_);
   int8_t is_retryable_ddl = static_cast<int8_t>(is_retryable_ddl_);
   int8_t use_doc_id = static_cast<int8_t>(use_doc_id_);
+  int64_t charset_type = static_cast<int64_t>(charset_type_);
 
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1199,6 +1221,11 @@ int ObFtsIndexBuildTask::serialize_params_to_message(
                                                pos,
                                                rowkey_doc_schema_version_))) {
     LOG_WARN("serialize rowkey doc schema version failed", K(ret));
+  } else if (OB_FAIL(serialization::encode_i64(buf,
+                                               buf_len,
+                                               pos,
+                                               charset_type))) {
+    LOG_WARN("serialize charset type failed", K(ret));
   }
   return ret;
 }
@@ -1223,6 +1250,7 @@ int ObFtsIndexBuildTask::deserialize_params_from_message(
   int8_t is_fts_doc_word_succ = false;
   int8_t is_retryable_ddl = true;
   int8_t use_doc_id = true;
+  int64_t charset_type = 0;
   SMART_VAR(obrpc::ObCreateIndexArg, tmp_arg) {
     if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) ||
                     nullptr == buf ||
@@ -1344,6 +1372,11 @@ int ObFtsIndexBuildTask::deserialize_params_from_message(
                                                  pos,
                                                  &rowkey_doc_schema_version_))) {
       LOG_WARN("fail to deserialize rowkey doc table schema version", K(ret));
+    } else if (OB_FAIL(serialization::decode_i64(buf,
+                                                 data_len,
+                                                 pos,
+                                                 &charset_type))) {
+      LOG_WARN("fail to deserialize charset type", K(ret));
     }
 
     if (OB_SUCC(ret) && !dependent_task_result_map_.created()
@@ -1401,6 +1434,7 @@ int ObFtsIndexBuildTask::deserialize_params_from_message(
     is_fts_doc_word_succ_ = is_fts_doc_word_succ;
     is_retryable_ddl_ = is_retryable_ddl;
     use_doc_id_ = use_doc_id;
+    charset_type_ = static_cast<ObCharsetType>(charset_type);
   }
   return ret;
 }
@@ -1419,6 +1453,7 @@ int64_t ObFtsIndexBuildTask::get_serialize_param_size() const
   int8_t is_fts_doc_word_succ = static_cast<int8_t>(is_fts_doc_word_succ_);
   int8_t is_retryable_ddl = static_cast<int8_t>(is_retryable_ddl_);
   int8_t use_doc_id = static_cast<int8_t>(use_doc_id_);
+  int64_t charset_type = static_cast<int64_t>(charset_type_);
 
   return create_index_arg_.get_serialize_size() + ObDDLTask::get_serialize_param_size()
       + serialization::encoded_length(rowkey_doc_aux_table_id_)
@@ -1441,7 +1476,8 @@ int64_t ObFtsIndexBuildTask::get_serialize_param_size() const
       + serialization::encoded_length_i8(is_fts_doc_word_succ)
       + serialization::encoded_length_i8(is_retryable_ddl)
       + serialization::encoded_length_i8(use_doc_id)
-      + serialization::encoded_length_i64(rowkey_doc_schema_version_);
+      + serialization::encoded_length_i64(rowkey_doc_schema_version_)
+      + serialization::encoded_length_i64(charset_type);
 }
 
 int ObFtsIndexBuildTask::get_task_status(int64_t task_id, uint64_t aux_table_id, bool& is_succ)
@@ -1984,7 +2020,11 @@ int ObFtsIndexBuildTask::cleanup_impl()
     } else if (is_fts_task() && OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(tenant_id_, parser_name, need_to_load_dic))) {
       LOG_WARN("fail to check need to load dic", K(ret), K(tenant_id_), K(parser_name), K(need_to_load_dic));
     } else if (need_to_load_dic) {
-      if (OB_FAIL(get_charset_type(charset_type))) {
+      const bool try_unlock_dictionaries = charset_type_ != CHARSET_INVALID;
+      if (!try_unlock_dictionaries) {
+        LOG_INFO("The dictionaries table is not locked, skip unlock dictionaries",
+            K(ret), K(tenant_id_), K(charset_type_), K(parser_name));
+      } else if (OB_FAIL(get_charset_type(charset_type))) {
         LOG_WARN("fail to get charset type", K(ret), K(tenant_id_), K(charset_type));
       } else if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(tenant_id_,
                                                                        parser_name,

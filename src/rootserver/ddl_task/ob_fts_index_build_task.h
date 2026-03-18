@@ -94,7 +94,8 @@ public:
       K(create_index_arg_),
       K(is_retryable_ddl_),
       K(use_doc_id_),
-      K(rowkey_doc_schema_version_));
+      K(rowkey_doc_schema_version_),
+      K(charset_type_));
 
 public:
   void set_rowkey_doc_aux_table_id(const uint64_t id) { rowkey_doc_aux_table_id_ = id; }
@@ -229,6 +230,7 @@ private:
   bool is_retryable_ddl_;
   bool use_doc_id_;
   int64_t rowkey_doc_schema_version_;
+  ObCharsetType charset_type_;
 };
 
 } // end namespace rootserver
