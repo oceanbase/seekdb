@@ -4166,7 +4166,7 @@ int ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(
   } else if (OB_FAIL(hold_local_tablet_(tablet_id_array, ls, tablet_handle_array))) {
     LOG_WARN("failed to hold local tablet", K(ret));
   } else if (tablet_handle_array.empty()) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = OB_EAGAIN;
     LOG_WARN("all tablets has been gc", K(ret));
   } else if (OB_FAIL(helper->init_for_build_tablets_sstable_info(tablet_handle_array))) {
     LOG_WARN("failed to init for build tablets sstable info", K(ret));
