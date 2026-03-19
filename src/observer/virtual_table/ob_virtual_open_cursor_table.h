@@ -80,7 +80,7 @@ public:
 private:
   // https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/V-OPEN_CURSOR.html
   enum {
-        SADDR,                      // session point addr
+        SADDR = common::OB_APP_MIN_COLUMN_ID, // session point addr
     SID,                        // session id
     USER_NAME,                  // cur user name
     ADDRESS,                    // now is null

@@ -46,7 +46,7 @@ private:
   int make_this_ready_to_read();
 private:
   enum {
-        TABLET_ID,
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
     ROWKEY,
     ADDR,
     NEED_WAIT,

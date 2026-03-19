@@ -6,4 +6,3 @@ tpch_for_standalone
 vostest
 obtest
 objdbctest
-!static

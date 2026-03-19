@@ -35,7 +35,7 @@ public:
 private:
   enum SYS_COLUMN
   {
-    REQUEST_ID,
+    REQUEST_ID = common::OB_APP_MIN_COLUMN_ID,
     TRACE_ID,
     SPAN_ID,
     PARENT_SPAN_ID,
