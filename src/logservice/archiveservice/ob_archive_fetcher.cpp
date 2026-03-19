@@ -1037,8 +1037,8 @@ void ObArchiveFetcher::statistic(const int64_t log_size, const int64_t ts)
   READ_COST_TS += ts;
   READ_TASK_COUNT += 1;
   if (TC_REACH_TIME_INTERVAL(10 * 1000 * 1000L)) {
-    int64_t avg_task_lsn_size = READ_LOG_SIZE / std::max(READ_TASK_COUNT, 1L);
-    int64_t avg_task_cost_ts = READ_COST_TS / std::max(READ_TASK_COUNT, 1L);
+    int64_t avg_task_lsn_size = READ_LOG_SIZE / std::max(READ_TASK_COUNT, static_cast<int64_t>(1));
+    int64_t avg_task_cost_ts = READ_COST_TS / std::max(READ_TASK_COUNT, static_cast<int64_t>(1));
     ARCHIVE_LOG(INFO, "archive_fetcher statistic in 10s", "total_read_log_size", READ_LOG_SIZE,
         "total_read_cost_ts", READ_COST_TS, "total_read_task_count", READ_TASK_COUNT,
         K(avg_task_lsn_size), K(avg_task_cost_ts));

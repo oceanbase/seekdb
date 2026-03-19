@@ -3403,27 +3403,27 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CHARSET,
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLEGROUPS,
                        NULL,
                        "SELECT t1.Tablegroup_name AS Tablegroup_name, t2.Table_name AS Table_name, t3.Database_name AS Database_name \
-                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and 0 = %lu % 1) \
-                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and 0 = %lu % 1) \
-                        WHERE 0  = %lu % 1 \
+                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and 0 = %lu %% 1) \
+                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and 0 = %lu %% 1) \
+                        WHERE 0  = %lu %% 1 \
                         ORDER BY t1.tablegroup_name, t2.table_name",
                         "SELECT T1.TABLEGROUP_NAME AS \"TABLEGROUP_NAME\", T2.TABLE_NAME AS \"TABLE_NAME\", T3.DATABASE_NAME AS \"DATABASE_NAME\" \
-                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND 0 = %lu % 1) \
-                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND 0 = %lu % 1) \
-                        WHERE 0 = %lu % 1 \
+                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND 0 = %lu %% 1) \
+                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND 0 = %lu %% 1) \
+                        WHERE 0 = %lu %% 1 \
                         ORDER BY T1.TABLEGROUP_NAME, T2.TABLE_NAME",
                        "Tablegroup_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_TABLEGROUPS_V2,
                        NULL,
                        "SELECT t1.Tablegroup_name AS Tablegroup_name, t2.Table_name AS Table_name, t3.Database_name AS Database_name, t1.Sharding AS Sharding \
-                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and 0 = %lu % 1 AND t2.table_type in (0, 3, 6)) \
-                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and 0 = %lu % 1) \
-                        WHERE 0 = %lu % 1 \
+                        FROM %s.%s t1 LEFT JOIN %s.%s  t2 ON (t1.tablegroup_id = t2.tablegroup_id and 0 = %lu %% 1 AND t2.table_type in (0, 3, 6)) \
+                        LEFT JOIN %s.%s  t3 ON (t2.database_id = t3.database_id and 0 = %lu %% 1) \
+                        WHERE 0 = %lu %% 1 \
                         ORDER BY t1.tablegroup_name, t2.table_name",
                         "SELECT T1.TABLEGROUP_NAME AS \"TABLEGROUP_NAME\", T2.TABLE_NAME AS \"TABLE_NAME\", T3.DATABASE_NAME AS \"DATABASE_NAME\", t1.SHARDING AS \"SHARDING\" \
-                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND 0 = %lu % 1 AND T2.TABLE_TYPE in (0, 3, 6)) \
-                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND 0 = %lu % 1) \
-                        WHERE 0 = %lu % 1 \
+                        FROM %s.%s T1 LEFT JOIN %s.%s  T2 ON (T1.TABLEGROUP_ID = T2.TABLEGROUP_ID AND 0 = %lu %% 1 AND T2.TABLE_TYPE in (0, 3, 6)) \
+                        LEFT JOIN %s.%s  T3 ON (T2.DATABASE_ID = T3.DATABASE_ID AND 0 = %lu %% 1) \
+                        WHERE 0 = %lu %% 1 \
                         ORDER BY T1.TABLEGROUP_NAME, T2.TABLE_NAME",
                        "Tablegroup_name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_VARIABLES,
@@ -3537,7 +3537,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_PRIVILEGES,
         
 DEFINE_SHOW_CLAUSE_SET(SHOW_QUERY_RESPONSE_TIME, 
                        NULL, 
-                       "SELECT response_time as RESPONSE_TIME, sum(count) as COUNT, sum(total) as TOTAL FROM %s.%s where 0 = %lu % 1 group by response_time",
+                       "SELECT response_time as RESPONSE_TIME, sum(count) as COUNT, sum(total) as TOTAL FROM %s.%s where 0 = %lu %% 1 group by response_time",
                        NULL, 
                        NULL);
 
@@ -3618,13 +3618,13 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_COUNT_ERRORS,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS,
                        NULL,
-                       "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level from %s.%s where name not like '\\_%%' and (0 = %ld % 1)",
-                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\' and  (0 = %ld % 1))",
+                       "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level from %s.%s where name not like '\\_%%' and (0 = %ld %% 1)",
+                       R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL" FROM %s.%s WHERE NAME NOT LIKE '\_%%' ESCAPE '\' and  (0 = %ld %% 1))",
                        "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
                        NULL,
-                      "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level, default_value, isdefault from %s.%s where (name not like '\\_%%' or isdefault=0) and (0 = %ld % 1)",
-                      R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0) and  (0 = %ld % 1))",
+                      "SELECT zone, svr_type, name, data_type, value, info, section, scope, source, edit_level, default_value, isdefault from %s.%s where (name not like '\\_%%' or isdefault=0) and (0 = %ld %% 1)",
+                      R"(SELECT "ZONE", "SVR_TYPE", "NAME", "DATA_TYPE", "VALUE", "INFO", "SECTION", "SCOPE", "SOURCE", "EDIT_LEVEL", "DEFAULT_VALUE", "ISDEFAULT" FROM %s.%s WHERE (NAME NOT LIKE '\_%%' ESCAPE '\' or ISDEFAULT=0) and  (0 = %ld %% 1))",
                       "name");
 DEFINE_SHOW_CLAUSE_SET(SHOW_PARAMETERS_UNSYS,
                        NULL,
@@ -3668,7 +3668,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_TENANT,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES,
                        NULL,
-                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE 0 = %ld % 1 and in_recyclebin = 0 and database_name not in('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', effective_tenant_id(), `database_name`, \'\') order by database_name asc",
+                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE 0 = %ld %% 1 and in_recyclebin = 0 and database_name not in('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', effective_tenant_id(), `database_name`, \'\') order by database_name asc",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES,
@@ -3678,7 +3678,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_DATABASES_LIKE,
                        "SELECT `Database` AS `Database (%.*s)` ",
-                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE 0 = %ld % 1 and in_recyclebin = 0 and database_name not in ('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', effective_tenant_id(), `database_name`, \'\') order by database_name asc",
+                       "SELECT `database_name` AS `Database` FROM %s.%s  WHERE 0 = %ld %% 1 and in_recyclebin = 0 and database_name not in ('%s', '%s', '%s') and 0 = sys_privilege_check(\'db_acc\', effective_tenant_id(), `database_name`, \'\') order by database_name asc",
                        NULL,
                        "Database");
 DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOG_DATABASES_LIKE,
@@ -3755,7 +3755,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_OLAP_ASYNC_JOB_STATUS,
                        NULL,
                        "(SELECT R.job_name AS 'job_id', R.database_name AS 'schema_name', CASE WHEN R.status = 'COMPLETED' AND R.message = 'SUCCESS' THEN 'FINISH' WHEN R.status = 'COMPLETED' AND R.message <> 'SUCCESS' THEN 'FAILED' WHEN R.status = 'KILLED' THEN 'CANCELLED' ELSE R.status END as 'status', R.message as 'fail_msg', R.req_start_date as 'create_time', R.time as 'update_time', R.operation AS 'definition' FROM %s.%s R WHERE R.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' %s %s\
                         UNION ALL\
-                        SELECT T.job_name AS 'job_id', T.cowner AS 'schema_name', CASE WHEN T.state IS NULL THEN 'SUBMITTED' WHEN T.state = 'SCHEDULED' THEN 'RUNNING' WHEN T.state = 'KILLED' THEN 'CANCELLED' ELSE T.state END as 'status', NULL as fail_msg, T.start_date as 'create_time', T.gmt_modified as 'update_time', T.job_action as 'definition'  FROM %s.%s T WHERE T.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' AND 0 = %d % 1 AND T.JOB > 0 %s %s) %s",
+                        SELECT T.job_name AS 'job_id', T.cowner AS 'schema_name', CASE WHEN T.state IS NULL THEN 'SUBMITTED' WHEN T.state = 'SCHEDULED' THEN 'RUNNING' WHEN T.state = 'KILLED' THEN 'CANCELLED' ELSE T.state END as 'status', NULL as fail_msg, T.start_date as 'create_time', T.gmt_modified as 'update_time', T.job_action as 'definition'  FROM %s.%s T WHERE T.JOB_CLASS = 'OLAP_ASYNC_JOB_CLASS' AND 0 = %d %% 1 AND T.JOB > 0 %s %s) %s",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(XA_RECOVER,
@@ -3775,8 +3775,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_USER,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CATALOGS,
                        NULL,
-                       "(SELECT \"internal\" AS `Catalog`) UNION (SELECT `catalog_name` AS `Catalog` FROM %s.%s WHERE 0 = %ld % 1 and check_catalog_access(`catalog_name`)) order by `Catalog` asc",
-                       R"((SELECT 'INTERNAL' AS "Catalog" FROM DUAL) UNION (SELECT catalog_name AS "Catalog" FROM %s.%s WHERE 0 = %ld % 1 and check_catalog_access(catalog_name) = 1) order by "Catalog" asc)",
+                       "(SELECT \"internal\" AS `Catalog`) UNION (SELECT `catalog_name` AS `Catalog` FROM %s.%s WHERE 0 = %ld %% 1 and check_catalog_access(`catalog_name`)) order by `Catalog` asc",
+                       R"((SELECT 'INTERNAL' AS "Catalog" FROM DUAL) UNION (SELECT catalog_name AS "Catalog" FROM %s.%s WHERE 0 = %ld %% 1 and check_catalog_access(catalog_name) = 1) order by "Catalog" asc)",
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_CATALOG,
                        NULL,
@@ -3785,7 +3785,7 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_CATALOG,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_LOCATIONS,
                        NULL,
-                       "SELECT `location_name` AS `Location` FROM %s.%s WHERE 0 = %ld % 1 and check_location_access(`location_name`) order by `Location` asc",
+                       "SELECT `location_name` AS `Location` FROM %s.%s WHERE 0 = %ld %% 1 and check_location_access(`location_name`) order by `Location` asc",
                        NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_CREATE_LOCATION,

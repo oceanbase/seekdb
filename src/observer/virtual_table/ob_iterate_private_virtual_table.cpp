@@ -220,7 +220,7 @@ int ObIteratePrivateVirtualTable::setup_inital_rowkey_condition(
 int ObIteratePrivateVirtualTable::add_extra_condition(common::ObSqlString &sql)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql.append_fmt(" AND 0 = %lu % 1", cur_tenant_id_))) {
+  if (OB_FAIL(sql.append_fmt(" AND 0 = %lu %% 1", cur_tenant_id_))) {
     LOG_WARN("append sql failed", KR(ret), K_(cur_tenant_id));
   }
   return ret;

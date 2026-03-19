@@ -1803,6 +1803,10 @@ public:
   ObDLIBatchSet dli_batch_set_;
 };
 
+// Undefine macOS system macro to avoid conflict
+#ifdef USEC_PER_SEC
+#undef USEC_PER_SEC
+#endif
 static const int64_t USEC_PER_SEC = 1000 * 1000;
 
 struct ObMulSourceDataNotifyArg

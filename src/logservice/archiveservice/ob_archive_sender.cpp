@@ -245,7 +245,7 @@ void ObArchiveSender::do_thread_task_()
 int ObArchiveSender::try_consume_send_task_()
 {
   int ret = OB_SUCCESS;
-  const int64_t counts = std::max(1L, task_queue_.size());
+  const int64_t counts = std::max(static_cast<int64_t>(1), task_queue_.size());
   for (int64_t i = 0; OB_SUCC(ret) && i < counts; i++) {
     ret = do_consume_send_task_();
   }
@@ -340,7 +340,7 @@ int ObArchiveSender::get_send_task_(ObArchiveSendTask *&task, bool &exist)
 int ObArchiveSender::try_free_send_task_()
 {
   int ret = OB_SUCCESS;
-  const int64_t counts = std::max(1L, task_queue_.size());
+  const int64_t counts = std::max(static_cast<int64_t>(1), task_queue_.size());
   for (int64_t i = 0; OB_SUCC(ret) && i < counts; i++) {
     ret = do_free_send_task_();
   }
@@ -944,9 +944,9 @@ void ObArchiveSender::statistic(const int64_t log_size, const int64_t buf_size, 
     const int64_t total_send_buf_size = SEND_BUF_SIZE;
     const int64_t total_send_task_count = SEND_TASK_COUNT;
     const int64_t total_send_cost_ts = SEND_COST_TS;
-    const int64_t avg_task_lsn_size = total_send_log_size / std::max(total_send_task_count, 1L);
-    const int64_t avg_task_buf_size = total_send_buf_size / std::max(total_send_task_count, 1L);
-    const int64_t avg_task_cost_ts = total_send_cost_ts / std::max(total_send_task_count, 1L);
+    const int64_t avg_task_lsn_size = total_send_log_size / std::max(total_send_task_count, static_cast<int64_t>(1));
+    const int64_t avg_task_buf_size = total_send_buf_size / std::max(total_send_task_count, static_cast<int64_t>(1));
+    const int64_t avg_task_cost_ts = total_send_cost_ts / std::max(total_send_task_count, static_cast<int64_t>(1));
     ARCHIVE_LOG(INFO, "archive_sender statistic in 10s",
                 K(total_send_log_size),
                 K(total_send_buf_size),

@@ -777,7 +777,7 @@ int ObArchivePersistValue::set(const bool is_madatory, const ObLSArchivePersistI
     const int64_t cur_time = ObTimeUtility::current_time();
     if (OB_INVALID_TIMESTAMP == last_update_ts_) {
     } else {
-      speed_ = static_cast<int64_t>(info.lsn_ - info_.lsn_) / std::max(1L, cur_time - last_update_ts_);
+      speed_ = static_cast<int64_t>(info.lsn_ - info_.lsn_) / std::max(static_cast<int64_t>(1), cur_time - last_update_ts_);
     }
     is_madatory_ = is_madatory;
     info_ = info;

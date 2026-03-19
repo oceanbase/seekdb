@@ -160,6 +160,14 @@ template <>
 int64_t to_string<int64_t>(const int64_t &obj, char *buffer, const int64_t buffer_size);
 template <>
 int64_t to_string<uint64_t>(const uint64_t &obj, char *buffer, const int64_t buffer_size);
+// On macOS, long and unsigned long are distinct from int64_t and uint64_t
+// On Linux x86_64, they are the same types, so we need to guard these
+#ifdef __APPLE__
+template <>
+int64_t to_string<long>(const long &obj, char *buffer, const int64_t buffer_size);
+template <>
+int64_t to_string<unsigned long>(const unsigned long &obj, char *buffer, const int64_t buffer_size);
+#endif
 template <>
 int64_t to_string<double>(const double &obj, char *buffer, const int64_t buffer_size);
 template <>

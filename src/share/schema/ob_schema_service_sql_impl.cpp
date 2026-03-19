@@ -25,12 +25,12 @@
 #include "sql/engine/expr/ob_expr_like.h"
 
 #define COMMON_SQL              "SELECT * FROM %s"
-#define COMMON_SQL_WITH_TENANT  "SELECT * FROM %s WHERE %lu % 1 = 0"
+#define COMMON_SQL_WITH_TENANT  "SELECT * FROM %s WHERE %lu %% 1 = 0"
 
 #define FETCH_ALL_DDL_OPERATION_SQL         "SELECT * FROM %s"
 #define FETCH_ALL_DDL_OPERATION_SQL_WITH_VERSION_RANGE                  \
     FETCH_ALL_DDL_OPERATION_SQL" WHERE schema_version > %lu AND schema_version <= %lu"
-#define FETCH_ALL_SYS_VARIABLE_HISTORY_SQL  "SELECT * FROM %s WHERE 0 = %lu % 1 and schema_version <= %ld"
+#define FETCH_ALL_SYS_VARIABLE_HISTORY_SQL  "SELECT * FROM %s WHERE 0 = %lu %% 1 and schema_version <= %ld"
 
 #define FETCH_ALL_TABLE_SQL                     COMMON_SQL_WITH_TENANT
 #define FETCH_ALL_TABLE_HISTORY_SQL             COMMON_SQL_WITH_TENANT
@@ -62,13 +62,13 @@
 #define FETCH_ALL_ROLE_GRANTEE_MAP_HISTORY_SQL  COMMON_SQL_WITH_TENANT
 
 #define FETCH_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE 0 = %lu % 1 and object_name = '%.*s' and type = %d "
+    "WHERE 0 = %lu %% 1 and object_name = '%.*s' and type = %d "
 
 #define FETCH_EXPIRE_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE 0 = %lu % 1 and time_to_usec(gmt_create) < %ld order by gmt_create"
+    "WHERE 0 = %lu %% 1 and time_to_usec(gmt_create) < %ld order by gmt_create"
 
 #define FETCH_EXPIRE_SYS_ALL_RECYCLEBIN_SQL "SELECT * FROM %s " \
-    "WHERE (0 = %lu % 1 or TYPE = 7) and time_to_usec(gmt_create) < %ld order by gmt_create"
+    "WHERE (0 = %lu %% 1 or TYPE = 7) and time_to_usec(gmt_create) < %ld order by gmt_create"
 
 #define FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION COMMON_SQL_WITH_TENANT
 
@@ -86,7 +86,7 @@
 #define FETCH_ALL_ROUTINE_HISTORY_SQL                     COMMON_SQL_WITH_TENANT
 #define FETCH_ALL_ROUTINE_PARAM_HISTORY_SQL               COMMON_SQL_WITH_TENANT
 #define FETCH_ALL_TRIGGER_HISTORY_SQL                     COMMON_SQL_WITH_TENANT
-#define FETCH_ALL_TRIGGER_ID_HISTORY_SQL                  "SELECT trigger_id, is_deleted FROM %s WHERE 0 = %lu % 1 "
+#define FETCH_ALL_TRIGGER_ID_HISTORY_SQL                  "SELECT trigger_id, is_deleted FROM %s WHERE 0 = %lu %% 1 "
 #define FETCH_ALL_SEQUENCE_OBJECT_HISTORY_SQL             COMMON_SQL_WITH_TENANT
 
 #define FETCH_ALL_TYPE_HISTORY_SQL                        COMMON_SQL_WITH_TENANT
@@ -103,41 +103,41 @@
 #define FETCH_ALL_CATALOG_HISTORY_SQL                     COMMON_SQL_WITH_TENANT
 #define FETCH_ALL_CCL_RULE_HISTORY_SQL                    COMMON_SQL_WITH_TENANT
 #define FETCH_ALL_CASCADE_OBJECT_ID_HISTORY_SQL "SELECT %s object_id, is_deleted FROM %s " \
-    "WHERE 0 = %lu % 1 AND %s = %lu AND schema_version <= %lu " \
+    "WHERE 0 = %lu %% 1 AND %s = %lu AND schema_version <= %lu " \
     "ORDER BY object_id desc, schema_version desc"
 
 // foreign key begin
 #define FETCH_ALL_FOREIGN_KEY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu % 1"
+  "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu % 1"
+  "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_COLUMN_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu % 1"
+  "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_ALL_FOREIGN_KEY_COLUMN_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu % 1"
+  "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_ALL_TENANT_CONSTRAINT_COLUMN_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu % 1"
+  "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_TABLE_ID_AND_NAME_FROM_ALL_FOREIGN_KEY_SQL \
-  "SELECT is_deleted, foreign_key_id, child_table_id, foreign_key_name FROM %s WHERE 0 = %lu % 1"
+  "SELECT is_deleted, foreign_key_id, child_table_id, foreign_key_name FROM %s WHERE 0 = %lu %% 1"
 // foreign key end
 
 #define FETCH_TABLE_ID_AND_CST_NAME_FROM_ALL_CONSTRAINT_HISTORY_SQL \
-  "SELECT * FROM %s WHERE 0 = %lu % 1"
+  "SELECT * FROM %s WHERE 0 = %lu %% 1"
 
 #define FETCH_RECYCLE_TABLE_OBJECT \
     "SELECT table_name, database_id, tablegroup_id FROM %s \
-     WHERE 0 = %lu % 1 and table_id = %lu and schema_version <= %ld and \
+     WHERE 0 = %lu %% 1 and table_id = %lu and schema_version <= %ld and \
            table_name is not null and table_name != "" and table_name != %s \
      ORDER BY SCHEMA_VERSION DESC LIMIT 1"
 
 #define FETCH_RECYCLE_DATABASE_OBJECT \
     "SELECT database_name, default_tablegroup_id FROM %s \
-     WHERE 0 = %lu % 1 and database_id = %lu and schema_version <= %ld and \
+     WHERE 0 = %lu %% 1 and database_id = %lu and schema_version <= %ld and \
            database_name is not null and database_name != "" and database_name != %s \
      ORDER BY SCHEMA_VERSION DESC LIMIT 1"
 
@@ -1444,7 +1444,7 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
       // While cluster is in upgradation, __all_sys_variable_history may not be modified yet,
       // so we try to use __all_sys_variable to fetch system variable schema.
       LOG_INFO("__all_sys_variable_history is empty, get system variable from __all_sys_variable");
-      if (OB_FAIL(sql.append_fmt("select *, 0 as is_deleted, 0 as schema_version from %s where 0=%lu % 1",
+      if (OB_FAIL(sql.append_fmt("select *, 0 as is_deleted, 0 as schema_version from %s where 0=%lu %% 1",
                                  OB_ALL_SYS_VARIABLE_TNAME,
                                  fill_extract_tenant_id(schema_status, tenant_id)))) {
         LOG_WARN("append sql failed", K(ret));
@@ -3023,7 +3023,7 @@ int ObSchemaServiceSQLImpl::fetch_temp_table_schema(
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
     const uint64_t exec_tenant_id = fill_exec_tenant_id(schema_status);
     if (table_schema.is_tmp_table() || table_schema.is_ctas_tmp_table()) {
-      if (OB_FAIL(sql.assign_fmt("SELECT create_host FROM %s where 0 = %lu % 1 and table_id = %lu",
+      if (OB_FAIL(sql.assign_fmt("SELECT create_host FROM %s where 0 = %lu %% 1 and table_id = %lu",
                               OB_ALL_TEMP_TABLE_TNAME,
                               fill_extract_tenant_id(schema_status, tenant_id),
                               fill_extract_schema_id(schema_status, table_schema.get_table_id())))) {
@@ -6010,7 +6010,7 @@ int ObSchemaServiceSQLImpl::delete_recycle_object(
   } else {
     ObSqlString sql;
     int64_t affected_rows = 0;
-    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE 0 = %lu % 1 and object_name = '%.*s' AND type = %d",
+    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE 0 = %lu %% 1 and object_name = '%.*s' AND type = %d",
                                OB_ALL_RECYCLEBIN_TNAME,
                                ObSchemaUtils::get_extract_tenant_id(exec_tenant_id,
                                                                     recycle_object.get_tenant_id()),
@@ -6656,7 +6656,7 @@ int ObSchemaServiceSQLImpl::check_ddl_id_exist(
     } else {
       ddl_id_str_hex = ddl_id_str_sql.string();
       if (OB_SUCCESS !=
-          (ret = sql.append_fmt("SELECT 1 FROM %s WHERE 0 = %lu % 1 and ddl_id_str = %.*s LIMIT 1",
+          (ret = sql.append_fmt("SELECT 1 FROM %s WHERE 0 = %lu %% 1 and ddl_id_str = %.*s LIMIT 1",
               OB_ALL_DDL_ID_TNAME, tenant_id, ddl_id_str_hex.length(), ddl_id_str_hex.ptr()))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
@@ -7020,11 +7020,11 @@ int ObSchemaServiceSQLImpl::fetch_all_ccl_rule_info(
 
 #define CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL1(SCHEMA_ID) \
   "select schema_version, is_deleted, min(schema_version) over () as min_version from %s "\
-  "where 0 = %lu % 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld order by schema_version desc limit %d"
+  "where 0 = %lu %% 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld order by schema_version desc limit %d"
 
 #define CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL2(SCHEMA_ID) \
-  "select * from (select schema_version, is_deleted from %s where 0 = %lu % 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld order by schema_version desc limit %d) as a, "\
-  "(select min(schema_version) as min_version from %s where 0 = %lu % 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld) as b"
+  "select * from (select schema_version, is_deleted from %s where 0 = %lu %% 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld order by schema_version desc limit %d) as a, "\
+  "(select min(schema_version) as min_version from %s where 0 = %lu %% 1 and "#SCHEMA_ID" = %lu and schema_version <= %ld) as b"
 
 #define CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL1 CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL1(table_id)
 #define CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL2 CONSTRUCT_SCHEMA_VERSION_HISTORY_SQL2(table_id)
@@ -7982,7 +7982,7 @@ int ObSchemaServiceSQLImpl::get_table_id(
         if (OB_FAIL(sql.assign_fmt(
             "SELECT * FROM "
             "((SELECT table_id, table_name, session_id, table_type, table_mode, schema_version FROM %s "
-            " WHERE 0 = %lu % 1 AND database_id = %lu) "
+            " WHERE 0 = %lu %% 1 AND database_id = %lu) "
             "UNION ALL "
             "(SELECT table_id, table_name, session_id, table_type, table_mode, schema_version FROM %s "
             " WHERE table_name = '%s' "
@@ -8107,7 +8107,7 @@ int ObSchemaServiceSQLImpl::get_index_id(
   const bool compare_with_collation = true;
   index_id = OB_INVALID_ID;
   #define GET_INDEX_ID_SQL "SELECT table_id, table_name FROM %s " \
-                           "WHERE 0 = %lu % 1 AND database_id = %lu AND table_name = '%s' " \
+                           "WHERE 0 = %lu %% 1 AND database_id = %lu AND table_name = '%s' " \
                            "AND table_type = %d "
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;
@@ -8806,7 +8806,7 @@ int ObSchemaServiceSQLImpl::get_table_index_infos(
   ObSqlString sql;
   index_infos.reset();
   #define GET_INDEX_INFO_SQL "SELECT table_name, table_id, schema_version, index_type FROM %s " \
-                             "WHERE 0 = %lu % 1 AND database_id = %lu AND data_table_id = %lu " \
+                             "WHERE 0 = %lu %% 1 AND database_id = %lu AND data_table_id = %lu " \
                              "AND table_type = %d "
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_NOT_INIT;

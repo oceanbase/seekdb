@@ -315,6 +315,26 @@ int64_t to_string<uint64_t>(const uint64_t &v, char *buffer, const int64_t buffe
   } else {}
   return pos;
 }
+#ifdef __APPLE__
+template <>
+int64_t to_string<long>(const long &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%ld", v))) {
+  } else {}
+  return pos;
+}
+template <>
+int64_t to_string<unsigned long>(const unsigned long &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%lu", v))) {
+  } else {}
+  return pos;
+}
+#endif
 
 template <>
 int64_t to_string<float>(const float &v, char *buffer, const int64_t buffer_size)

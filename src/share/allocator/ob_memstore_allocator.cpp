@@ -17,6 +17,11 @@
 #include "ob_memstore_allocator.h"
 #include "ob_shared_memory_allocator_mgr.h"
 
+// Undefine macOS system macro to avoid conflict with ObFifoArena::PAGE_SIZE
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+
 namespace oceanbase
 {
 using namespace share;

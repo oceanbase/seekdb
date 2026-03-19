@@ -98,11 +98,11 @@ int ObArchiveScheduler::modify_thread_count_()
   if (0 == log_archive_concurrency) {
     const int64_t max_cpu = MTL_CPU_COUNT();
     if (max_cpu <= 8) {
-      archive_concurrency = std::min(max_cpu * 2, 8L);
+      archive_concurrency = std::min(max_cpu * 2, static_cast<int64_t>(8));
     } else if (max_cpu <= 32) {
-      archive_concurrency = std::max(max_cpu / 2, 8L);
+      archive_concurrency = std::max(max_cpu / 2, static_cast<int64_t>(8));
     } else {
-      archive_concurrency = std::max(max_cpu / 4, 16L);
+      archive_concurrency = std::max(max_cpu / 4, static_cast<int64_t>(16));
     }
   } else {
     archive_concurrency = log_archive_concurrency;

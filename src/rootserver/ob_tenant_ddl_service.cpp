@@ -615,7 +615,7 @@ int ObTenantDDLService::init_system_variables(
 
       if (OB_SUCC(ret) && use_default_parallel_servers_target && default_px_thread_count > 0) {
         // target cannot be less than 3, otherwise any px query will not come in
-        int64_t default_px_servers_target = std::max(3L, static_cast<int64_t>(default_px_thread_count));
+        int64_t default_px_servers_target = std::max(static_cast<int64_t>(3), static_cast<int64_t>(default_px_thread_count));
         VAR_INT_TO_STRING(val_buf, default_px_servers_target);
         SET_TENANT_VARIABLE(SYS_VAR_PARALLEL_SERVERS_TARGET, val_buf);
       }

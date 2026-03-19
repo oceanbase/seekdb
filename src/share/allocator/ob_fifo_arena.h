@@ -25,6 +25,11 @@
 #include "lib/lock/ob_spin_rwlock.h"           // SpinRWLock
 #include "lib/task/ob_timer.h"
 
+// Undefine macOS system macro to avoid conflict with enum member PAGE_SIZE
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+
 namespace oceanbase
 {
 namespace common

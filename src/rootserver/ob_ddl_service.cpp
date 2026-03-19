@@ -24267,7 +24267,7 @@ int ObDDLService::check_db_and_table_is_exist(const obrpc::ObTruncateTableArg &a
       LOG_WARN("database name is NULL", KR(ret), K(tenant_id));
     } else if (OB_FAIL(sql.assign_fmt("SELECT session_id, a.database_id, table_id, database_name, table_name "
                               "FROM %s a JOIN (SELECT session_id, database_id, table_id, table_name FROM %s "
-                              "UNION ALL SELECT session_id, database_id, table_id, table_name FROM %s WHERE 0 = %ld % 1) c "
+                              "UNION ALL SELECT session_id, database_id, table_id, table_name FROM %s WHERE 0 = %ld %% 1) c "
                               "ON a.database_id = c.database_id WHERE a.database_name = '%s' AND table_name = '%s' "
                               "AND (session_id = 0 or session_id = %lu) order by session_id desc",
                               OB_ALL_DATABASE_TNAME, OB_ALL_TABLE_TNAME,
