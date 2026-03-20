@@ -7551,22 +7551,20 @@ id	field	type	length	precision	nullable
 23	state	22	256	-1	0
 24	diagnose_info	22	256	-1	0
 25	memtables_info	22	256	-1	0
-table oceanbase.__all_virtual_show_trace column_count 13 table_id 12339
+table oceanbase.__all_virtual_show_trace column_count 11 table_id 12339
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12339 order by column_id;
 id	field	type	length	precision	nullable
 16	trace_id	22	1024	-1	0
 17	request_id	5	0	20	0
-18	rec_svr_ip	22	46	-1	0
-19	rec_svr_port	5	0	20	0
-20	span_id	22	1024	-1	0
-21	parent_span_id	22	1024	-1	0
-22	span_name	22	1024	-1	0
-23	ref_type	22	10	-1	0
-24	start_ts	18	0	25	0
-25	end_ts	18	0	25	0
-26	elapse	5	0	20	0
-27	tags	30	536870911	-1	0
-28	logs	30	536870911	-1	0
+18	span_id	22	1024	-1	0
+19	parent_span_id	22	1024	-1	0
+20	span_name	22	1024	-1	0
+21	ref_type	22	10	-1	0
+22	start_ts	18	0	25	0
+23	end_ts	18	0	25	0
+24	elapse	5	0	20	0
+25	tags	30	536870911	-1	0
+26	logs	30	536870911	-1	0
 table oceanbase.__all_virtual_ha_diagnose column_count 28 table_id 12340
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12340 order by column_id;
 id	field	type	length	precision	nullable

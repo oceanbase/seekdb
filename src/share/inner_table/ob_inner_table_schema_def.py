@@ -9160,8 +9160,6 @@ def_table_schema(
   normal_columns = [
     ('trace_id', 'varchar:OB_MAX_SPAN_LENGTH'),
     ('request_id', 'int'),
-    ('rec_svr_ip', 'varchar:MAX_IP_ADDR_LENGTH'),
-    ('rec_svr_port', 'int'),
     ('span_id', 'varchar:OB_MAX_SPAN_LENGTH'),
     ('parent_span_id', 'varchar:OB_MAX_SPAN_LENGTH'),
     ('span_name', 'varchar:OB_MAX_SPAN_LENGTH'),

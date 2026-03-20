@@ -54,8 +54,6 @@ private:
   {
         TRACE_ID = common::OB_APP_MIN_COLUMN_ID,
     REQUEST_ID,
-    REC_SVR_IP,
-    REC_SVR_PORT,
     SPAN_ID,
     PARENT_SPAN_ID,
     SPAN_NAME,

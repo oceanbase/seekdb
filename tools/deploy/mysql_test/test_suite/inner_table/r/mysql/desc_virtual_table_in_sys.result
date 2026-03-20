@@ -5309,8 +5309,6 @@ desc oceanbase.__all_virtual_show_trace;
 Field	Type	Null	Key	Default	Extra
 trace_id	varchar(1024)	NO		NULL	
 request_id	bigint(20)	NO		NULL	
-rec_svr_ip	varchar(46)	NO		NULL	
-rec_svr_port	bigint(20)	NO		NULL	
 span_id	varchar(1024)	NO		NULL	
 parent_span_id	varchar(1024)	NO		NULL	
 span_name	varchar(1024)	NO		NULL	
