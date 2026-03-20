@@ -9465,7 +9465,7 @@ int ObResolverUtils::collect_and_validate_columns(const ObTableSchema *cur_schem
       }
 
       if (OB_SUCC(ret)) {
-        if (cur_col->is_rowkey_column()) {
+        if (cur_col->is_rowkey_column() || cur_col->is_heap_table_primary_key_column()) {
           if (OB_FAIL(pk_cols.push_back(cur_col->get_column_name_str()))) {
             LOG_WARN("failed to push pk column", K(ret));
           }
