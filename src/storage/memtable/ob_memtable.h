@@ -366,8 +366,6 @@ public:
   int row_compact(ObMvccRow *value,
                   const share::SCN snapshot_version,
                   const int64_t flag);
-  int64_t get_hash_item_count() const;
-  int64_t get_hash_alloc_memory() const;
   int64_t get_btree_item_count() const;
   int64_t get_btree_alloc_memory() const;
 
