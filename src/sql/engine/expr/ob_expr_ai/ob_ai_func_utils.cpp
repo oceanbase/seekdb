@@ -903,6 +903,102 @@ int ObSiliconflowUtils::ObSiliconflowRerank::parse_output(common::ObIAllocator &
   return ret;
 }
 
+// MiniMax provider implementation
+int ObMiniMaxUtils::get_header(common::ObIAllocator &allocator,
+                               common::ObString &api_key,
+                               common::ObArray<ObString> &headers)
+{
+  // MiniMax uses the same Bearer token authentication as OpenAI
+  return ObOpenAIUtils::get_header(allocator, api_key, headers);
+}
+
+int ObMiniMaxUtils::ObMiniMaxEmbed::get_header(common::ObIAllocator &allocator,
+                                               ObString &api_key,
+                                               common::ObArray<ObString> &headers)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObMiniMaxUtils::get_header(allocator, api_key, headers))) {
+    LOG_WARN("Failed to get header", K(ret));
+  }
+  return ret;
+}
+
+int ObMiniMaxUtils::ObMiniMaxEmbed::get_body(common::ObIAllocator &allocator,
+                                             common::ObString &model,
+                                             common::ObArray<ObString> &contents,
+                                             common::ObJsonObject *config,
+                                             common::ObJsonObject *&body)
+{
+  int ret = OB_SUCCESS;
+  if (model.empty() || contents.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Model name or contents is empty", K(ret));
+  } else {
+    ObJsonObject *body_obj = nullptr;
+    ObJsonString *model_str = nullptr;
+    ObJsonArray *texts_array = nullptr;
+    ObJsonString *type_str = nullptr;
+    ObString type_val = ObString::make_string("db");
+    if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
+      LOG_WARN("Failed to get json object", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
+      LOG_WARN("Failed to get json string", K(ret));
+    } else if (OB_FAIL(body_obj->add("model", model_str))) {
+      LOG_WARN("Failed to add model", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::transform_array_to_json_array(allocator, contents, texts_array))) {
+      LOG_WARN("Failed to get json array", K(ret));
+    } else if (OB_FAIL(body_obj->add("texts", texts_array))) {
+      LOG_WARN("Failed to add texts", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, type_val, type_str))) {
+      LOG_WARN("Failed to get type string", K(ret));
+    } else if (OB_FAIL(body_obj->add("type", type_str))) {
+      LOG_WARN("Failed to add type", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
+      LOG_WARN("Failed to compact json object", K(ret));
+    } else {
+      body = body_obj;
+    }
+  }
+  return ret;
+}
+
+int ObMiniMaxUtils::ObMiniMaxEmbed::parse_output(common::ObIAllocator &allocator,
+                                                 common::ObJsonObject *http_response,
+                                                 common::ObIJsonBase *&result)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(http_response)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("http_response is null", K(ret));
+  } else {
+    ObJsonArray *result_array = nullptr;
+    ObJsonNode *vectors_node = nullptr;
+    if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, result_array))) {
+      LOG_WARN("Failed to get json array", K(ret));
+    } else if (OB_ISNULL(vectors_node = http_response->get_value("vectors"))) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("Failed to get vectors from MiniMax response", K(ret));
+    } else {
+      // MiniMax returns {"vectors": [[0.1, 0.2, ...], [0.3, 0.4, ...]], ...}
+      // Each element in vectors is already an embedding array
+      ObJsonArray *vectors_array = static_cast<ObJsonArray *>(vectors_node);
+      for (int64_t i = 0; OB_SUCC(ret) && i < vectors_array->element_count(); i++) {
+        ObJsonNode *embedding = vectors_array->get_value(i);
+        if (OB_ISNULL(embedding)) {
+          ret = OB_INVALID_DATA;
+          LOG_WARN("Failed to get embedding vector", K(ret), K(i));
+        } else if (OB_FAIL(result_array->append(embedding))) {
+          LOG_WARN("Failed to append embedding", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        result = result_array;
+      }
+    }
+  }
+  return ret;
+}
+
 
 int ObAIFuncUtils::get_header(ObIAllocator &allocator,
                               const ObAIFuncExprInfo &info,
@@ -1241,7 +1337,8 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
       || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
       || ob_provider_check(provider, ObAIFuncProviderUtils::DEEPSEEK)
       || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)) {
+      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::MINIMAX)) {
     complete_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIComplete, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     complete_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeComplete, &allocator);
@@ -1271,6 +1368,8 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
     embed_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIEmbed, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     embed_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeEmbed, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::MINIMAX)) {
+    embed_provider = OB_NEWx(ObMiniMaxUtils::ObMiniMaxEmbed, &allocator);
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this provider current not support", K(ret));

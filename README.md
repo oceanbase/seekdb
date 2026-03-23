@@ -81,7 +81,7 @@
 
 
 ### AI inside + SQL inside
-1. **AI Inside:** Run embedding, reranking, LLM inference and prompt management inside the database, supporting a complete document-in/data-out RAG workflow.
+1. **AI Inside:** Run embedding, reranking, LLM inference and prompt management inside the database, supporting a complete document-in/data-out RAG workflow. Supported AI providers include OpenAI, DeepSeek, Aliyun (DashScope/OpenAI-compatible), SiliconFlow, Hunyuan, and [MiniMax](https://www.minimaxi.com).
 2. **SQL Inside:** 	Powered by the proven OceanBase engine, delivering real-time writes and queries with full ACID compliance, and seamless MySQL ecosystem compatibility.
 
 

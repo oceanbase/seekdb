@@ -38,7 +38,8 @@ const char *VALID_PROVIDERS[] = {
   "DEEPSEEK",
   "SILICONFLOW",
   "HUNYUAN-OPENAI",
-  "OPENAI"
+  "OPENAI",
+  "MINIMAX"
 };
 
 #define EXTRACT_JSON_ELEM_STR(json_key, member) \
