@@ -917,7 +917,6 @@ int ObRootService::execute_bootstrap()
     LOG_WARN("sql_proxy not inited or not active", "sql_proxy inited",
              sql_proxy_.is_inited(), "sql_proxy active", sql_proxy_.is_active(), K(ret));
   } else {
-    update_cpu_quota_concurrency_in_memory_();
     // avoid bootstrap and do_restart run concurrently
     FLOG_INFO("[ROOTSERVICE_NOTICE] try to get lock for bootstrap in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
@@ -6448,14 +6447,6 @@ int ObRootService::cancel_ddl_task(const ObCancelDDLTaskArg &arg)
   return ret;
 }
 
-void ObRootService::update_cpu_quota_concurrency_in_memory_()
-{
-  {
-    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(OB_SYS_TENANT_ID));
-    tenant_config->cpu_quota_concurrency = MAX(10, tenant_config->cpu_quota_concurrency);
-  }
-}
-
 int ObRootService::set_config_after_bootstrap_()
 {
   // configs will be sent to other servers when set in rs, so there is no need to wait config set
@@ -6464,7 +6455,6 @@ int ObRootService::set_config_after_bootstrap_()
   ObSqlString sql;
 
   const char* configs[][2] = {
-    {"cpu_quota_concurrency", "10"},
     {"_use_odps_jni_connector", "true"},
     {"enable_record_trace_log", "false"},
     {"_enable_dbms_job_package", "false"},

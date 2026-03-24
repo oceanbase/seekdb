@@ -378,7 +378,7 @@ DEF_PARAM(_ob_max_thread_num, INT, OB_CLUSTER_PARAMETER, "0", "[0,10000)",
          "ob max thread number "
          "upper limit of observer thread count. Range: [0, 10000), 0 means no limit.",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(cpu_quota_concurrency, DBL, OB_CLUSTER_PARAMETER, "4", "[1,20]",
+DEF_PARAM(cpu_quota_concurrency, DBL, OB_CLUSTER_PARAMETER, "10", "[1,20]",
         "max allowed concurrency for 1 CPU quota. Range: [1,20]",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(px_workers_per_cpu_quota, INT, OB_CLUSTER_PARAMETER, "10", "[0,20]",

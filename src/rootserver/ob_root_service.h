@@ -596,7 +596,6 @@ private:
                        const share::schema::ObTableSchema *&table_schema);
   int update_baseline_schema_version();
   int finish_bootstrap();
-  void update_cpu_quota_concurrency_in_memory_();
   int set_config_after_bootstrap_();
 
   int precheck_interval_part(const obrpc::ObAlterTableArg &arg);
