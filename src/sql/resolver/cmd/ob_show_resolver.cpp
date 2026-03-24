@@ -3500,8 +3500,8 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_TRACE,
 
 DEFINE_SHOW_CLAUSE_SET(SHOW_TRACE_JSON,
                        NULL,
-                       "select json_arrayagg(json_object('trace_id', trace_id, 'rec_svr_ip', rec_svr_ip, 'rec_svr_port', rec_svr_port, 'parent', parent_span_id, 'span_id', span_id, 'span_name', span_name, 'start_ts', start_ts, 'end_ts', end_ts, 'elapse', elapse, 'tags', cast(case when tags='' then NULL else tags end as json), 'logs', cast(case when logs='' then NULL else logs end as json))) as ShowTraceJSON from %s.%s",
-                       R"(select json_arrayagg(json_object('trace_id' : trace_id, 'rec_svr_ip' : rec_svr_ip, 'rec_svr_port' : rec_svr_port, 'parent' : parent_span_id, 'span_id' : span_id, 'span_name' : span_name, 'start_ts' : cast(start_ts as varchar(100)), 'end_ts' : cast(end_ts as varchar(100)), 'elapse' : elapse, 'tags' : cast(tags as json), 'logs' : cast(logs as json) returning json) returning json)  as SHOW_TRACE_JSON from %s.%s)",
+                       "select json_arrayagg(json_object('trace_id', trace_id, 'parent', parent_span_id, 'span_id', span_id, 'span_name', span_name, 'start_ts', start_ts, 'end_ts', end_ts, 'elapse', elapse, 'tags', cast(case when tags='' then NULL else tags end as json), 'logs', cast(case when logs='' then NULL else logs end as json))) as ShowTraceJSON from %s.%s",
+                       R"(select json_arrayagg(json_object('trace_id' : trace_id, 'parent' : parent_span_id, 'span_id' : span_id, 'span_name' : span_name, 'start_ts' : cast(start_ts as varchar(100)), 'end_ts' : cast(end_ts as varchar(100)), 'elapse' : elapse, 'tags' : cast(tags as json), 'logs' : cast(logs as json) returning json) returning json)  as SHOW_TRACE_JSON from %s.%s)",
                        NULL);
 
 DEFINE_SHOW_CLAUSE_SET(SHOW_ENGINES,
