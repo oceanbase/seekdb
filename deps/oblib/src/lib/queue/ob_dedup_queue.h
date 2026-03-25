@@ -161,7 +161,7 @@ class ObDedupQueue : public lib::ThreadPool
 public:
   static const int64_t TOTAL_LIMIT = 1024L * 1024L * 1024L;
   static const int64_t HOLD_LIMIT = 512L * 1024L * 1024L;
-  static const int64_t PAGE_SIZE = common::OB_MALLOC_MIDDLE_BLOCK_SIZE;
+  static const int64_t ALLOC_PAGE_SIZE = common::OB_MALLOC_MIDDLE_BLOCK_SIZE;
   static const int64_t TASK_MAP_SIZE = 20L * 1000;
   static const int64_t TASK_QUEUE_SIZE = 20L * 1000;
 public:
@@ -174,7 +174,7 @@ public:
            const int64_t task_map_size = TASK_MAP_SIZE,
            const int64_t total_mem_limit = TOTAL_LIMIT,
            const int64_t hold_mem_limit = HOLD_LIMIT,
-           const int64_t page_size = PAGE_SIZE,
+           const int64_t page_size = ALLOC_PAGE_SIZE,
            const uint64_t tenant_id = OB_SERVER_TENANT_ID,
            const lib::ObLabel &label = "DedupQueue");
   void destroy();

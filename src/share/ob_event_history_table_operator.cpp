@@ -223,10 +223,10 @@ int ObEventHistoryTableOperator::init(common::ObMySQLProxy &proxy)
     const int64_t thread_count = 1;
     const int64_t queue_size_square_of_2 = 10;
     if (OB_FAIL(event_queue_.init(thread_count, "EvtHisUpdTask", TASK_QUEUE_SIZE, TASK_MAP_SIZE,
-        TOTAL_LIMIT, HOLD_LIMIT, PAGE_SIZE))) {
+        TOTAL_LIMIT, HOLD_LIMIT, ALLOC_PAGE_SIZE))) {
       LOG_WARN("task_queue_ init failed", K(thread_count), LITERAL_K(TASK_QUEUE_SIZE),
           LITERAL_K(TASK_MAP_SIZE), LITERAL_K(TOTAL_LIMIT), LITERAL_K(HOLD_LIMIT),
-          LITERAL_K(PAGE_SIZE), K(ret));
+          LITERAL_K(ALLOC_PAGE_SIZE), K(ret));
     } else if (is_server_event_history_ &&
           OB_FAIL(timer_.init_and_start(thread_count, 5_s, "EventTimer", queue_size_square_of_2))) {
       LOG_WARN("int global event report timer failed", KR(ret));

@@ -26,7 +26,7 @@ namespace storage
 {
 class ObDirectLoadContinuousVector final : public ObDirectLoadVector
 {
-  static const int64_t PAGE_SIZE = 8LL << 10; // 8K
+  static const int64_t ALLOC_PAGE_SIZE = 8LL << 10; // 8K
 public:
   ObDirectLoadContinuousVector(ObContinuousBase *continuous_vector);
   ~ObDirectLoadContinuousVector() override;

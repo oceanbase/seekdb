@@ -348,7 +348,7 @@ int ObTmpWriteBufferPool::truncate_page(const int64_t fd, const uint32_t page_id
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(truncate_size), K(fat_.size()));
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_TMP_FILE_FD == fd || !page_key.is_valid() ||
-                  truncate_size > ObTmpFileGlobal::PAGE_SIZE || truncate_size <= 0 ||
+                  truncate_size > ObTmpFileGlobal::ALLOC_PAGE_SIZE || truncate_size <= 0 ||
                   OB_ISNULL(fat_[page_id].buf_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(truncate_size),
@@ -521,7 +521,7 @@ int ObTmpWriteBufferPool::expand_()
         for (uint32_t count = 0; OB_SUCC(ret) && count < BLOCK_PAGE_NUMS; ++new_page_id, ++count) {
           if (OB_FAIL(fat_.push_back(ObPageEntry(ObTmpFileGlobal::INVALID_TMP_FILE_FD,
                                                  ObTmpFileGlobal::INVALID_PAGE_ID,
-                                                 new_expand_buf + count * ObTmpFileGlobal::PAGE_SIZE)))) {
+                                                 new_expand_buf + count * ObTmpFileGlobal::ALLOC_PAGE_SIZE)))) {
             LOG_WARN("wbp fail to push back page into fat", KR(ret), K(count), K(new_page_id));
           } else {
             if (count > 0) {
@@ -530,7 +530,7 @@ int ObTmpWriteBufferPool::expand_()
               fat_[new_page_id].next_page_id_ = first_free_page_id_;
               fat_[new_page_id].is_block_beginning_ = true;
             }
-            cur_expand_capacity += ObTmpFileGlobal::PAGE_SIZE;
+            cur_expand_capacity += ObTmpFileGlobal::ALLOC_PAGE_SIZE;
           }
         }
         current_capacity += WBP_BLOCK_SIZE;
@@ -583,7 +583,7 @@ int ObTmpWriteBufferPool::cal_target_shrink_range_(const bool is_auto, int64_t &
   int64_t capacity = ATOMIC_LOAD(&capacity_);
   int64_t memory_limit = get_memory_limit();
   int64_t exceed_page_num =
-      ((capacity - memory_limit) / ObTmpFileGlobal::PAGE_SIZE + BLOCK_PAGE_NUMS - 1) / BLOCK_PAGE_NUMS * BLOCK_PAGE_NUMS; // upper_align
+      ((capacity - memory_limit) / ObTmpFileGlobal::ALLOC_PAGE_SIZE + BLOCK_PAGE_NUMS - 1) / BLOCK_PAGE_NUMS * BLOCK_PAGE_NUMS; // upper_align
   const int64_t max_used_page_watermark = ATOMIC_LOAD(&max_used_watermark_after_shrinking_);
   exceed_page_num = max(0, exceed_page_num);
 
@@ -1074,14 +1074,14 @@ int64_t ObTmpWriteBufferPool::get_swap_size()
 
   int64_t high_watermark_bytes = (double)HIGH_WATERMARK_PERCENTAGE / 100 * memory_limit;
   int64_t low_watermark_bytes = (double)LOW_WATERMARK_PERCENTAGE / 100 * memory_limit;
-  int64_t used_bytes = used_page_num * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t used_bytes = used_page_num * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   const int64_t MACRO_BLOCK_SIZE = OB_STORAGE_OBJECT_MGR.get_macro_object_size();
 
   int64_t swap_size = 0;
   if (used_bytes > high_watermark_bytes) {
     int64_t expected_swap_size = used_bytes - low_watermark_bytes;
-    int64_t dirty_data_bytes = ATOMIC_LOAD(&dirty_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+    int64_t dirty_data_bytes = ATOMIC_LOAD(&dirty_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     swap_size = min(used_bytes - dirty_data_bytes, expected_swap_size);
   }
 
@@ -1401,7 +1401,7 @@ int ObTmpWriteBufferPool::notify_write_back_fail(int64_t fd, uint32_t page_id,
 int64_t ObTmpWriteBufferPool::get_max_page_num()
 {
   int64_t mem_limit = get_memory_limit();
-  return mem_limit / ObTmpFileGlobal::PAGE_SIZE;
+  return mem_limit / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 }
 
 // return dirty page percentage

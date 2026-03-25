@@ -167,7 +167,7 @@ protected:
   static constexpr const char * values[6] = {"value1", "value2", "value3", "value4", "value5", "value6"}; // only valid in compile time
   static const int64_t TOTAL_LIMIT = 320L * 1024L * 1024L; // 320MB
   static const int64_t HOLD_LIMIT = 160L * 1024L * 1024L;   // 160MB
-  static const int64_t PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
+  static const int64_t ALLOC_PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
   static const int64_t TASK_MAP_SIZE = 20 * 1024;
   static const int64_t TASK_QUEUE_SIZE = 20 *1024;
   static const int64_t MAX_RETRY_COUNT = 12;

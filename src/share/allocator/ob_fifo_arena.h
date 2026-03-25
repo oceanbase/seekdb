@@ -158,7 +158,7 @@ public:
   enum {
     MAX_CACHED_GROUP_COUNT = 16,
     MAX_CACHED_PAGE_COUNT = MAX_CACHED_GROUP_COUNT * Handle::MAX_NWAY,
-    PAGE_SIZE = OB_MALLOC_BIG_BLOCK_SIZE + sizeof(Page) + sizeof(Ref)
+    ALLOC_PAGE_SIZE = OB_MALLOC_BIG_BLOCK_SIZE + sizeof(Page) + sizeof(Ref)
   };
   ObFifoArena()
       : allocator_(NULL),
@@ -190,7 +190,7 @@ public:
   uint64_t get_tenant_id() const { return attr_.tenant_id_; }
   int64_t get_max_cached_memstore_size() const
   {
-    return MAX_CACHED_GROUP_COUNT * ATOMIC_LOAD(&nway_) * (PAGE_SIZE + ACHUNK_PRESERVE_SIZE);
+    return MAX_CACHED_GROUP_COUNT * ATOMIC_LOAD(&nway_) * (ALLOC_PAGE_SIZE + ACHUNK_PRESERVE_SIZE);
   }
 
 private:

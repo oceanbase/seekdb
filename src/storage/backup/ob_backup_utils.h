@@ -426,7 +426,7 @@ private:
   static const int64_t FILE_BUF_SIZE = MACRO_BLOCK_SIZE;
   static const int64_t EXPIRE_TIMESTAMP = 0;
   static const int64_t QUEUE_SIZE = 8 * 1024 * 1024;
-  static const int64_t PAGE_SIZE = 1 << 20;
+  static const int64_t ALLOC_PAGE_SIZE = 1 << 20;
   typedef storage::ObExternalSort<ObBackupProviderItem, ObBackupProviderItemCompare> ExternalSort;
 
 private:

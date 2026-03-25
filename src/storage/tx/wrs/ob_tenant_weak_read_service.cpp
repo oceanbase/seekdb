@@ -540,7 +540,7 @@ void ObTenantWeakReadService::generate_tenant_weak_read_timestamp_(bool need_pri
   } else if (OB_FAIL(scan_all_ls_(ls_svr))) {
     LOG_WARN("scan all partition fail", KR(ret));
   } else if (OB_FAIL(generate_server_version(server_version_epoch_tstamp_, need_print))) {
-    LOG_WARN("generate server version for tenant fail", KR(ret), K_(tenant_id), K(index),
+    LOG_WARN("generate server version for tenant fail", KR(ret), K_(tenant_id),
                                                         K(server_version_epoch_tstamp_));
   } else {
     // do nothing

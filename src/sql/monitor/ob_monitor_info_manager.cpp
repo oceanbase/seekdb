@@ -41,7 +41,7 @@ int ObMonitorInfoManager::init()
 {
   int ret = OB_SUCCESS;
   int64_t delay = 5 * 1000 * 1000;
-  if (OB_FAIL(allocator_.init(memory_limit_, memory_limit_, PAGE_SIZE))) {
+  if (OB_FAIL(allocator_.init(memory_limit_, memory_limit_, ALLOC_PAGE_SIZE))) {
     LOG_WARN("fail to init allocator", K(ret));
   } else if (OB_FAIL(slow_query_queue_.init(ObModIds::OB_SQL_PLAN_MONITOR, OB_MAX_QUEUE_SIZE))) {
     LOG_WARN("fail to init history info", K(ret));

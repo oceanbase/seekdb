@@ -146,12 +146,12 @@ OB_INLINE static int compare_node(const ObHashNode *n1, const ObHashNode *n2, in
 }
 
 // ---------------- array implementation ----------------
-template<int64_t PAGE_SIZE>
+template<int64_t ALLOC_PAGE_SIZE>
 class ObMtArrayBase
 {
 private:
-  static const int64_t DIR_SIZE = PAGE_SIZE / sizeof(ObHashNode*);
-  static const int64_t SEG_SIZE = PAGE_SIZE / sizeof(ObHashNode);
+  static const int64_t DIR_SIZE = ALLOC_PAGE_SIZE / sizeof(ObHashNode*);
+  static const int64_t SEG_SIZE = ALLOC_PAGE_SIZE / sizeof(ObHashNode);
   static ObHashNode * const PLACE_HOLDER;
 public:
   static const int64_t ARRAY_CAPABILITY = DIR_SIZE * SEG_SIZE;
@@ -200,9 +200,9 @@ private:
       // good, do nothing
     } else if (NULL == ret_dir) {
       if (ATOMIC_BCAS(&dir_, NULL, reinterpret_cast<ObHashNode**>(PLACE_HOLDER))) {
-        if (OB_NOT_NULL(ret_dir = reinterpret_cast<ObHashNode**>(allocator_.alloc(PAGE_SIZE)))) {
-          ATOMIC_FAA(&alloc_memory_, PAGE_SIZE);
-          memset(ret_dir, 0, PAGE_SIZE);
+        if (OB_NOT_NULL(ret_dir = reinterpret_cast<ObHashNode**>(allocator_.alloc(ALLOC_PAGE_SIZE)))) {
+          ATOMIC_FAA(&alloc_memory_, ALLOC_PAGE_SIZE);
+          memset(ret_dir, 0, ALLOC_PAGE_SIZE);
           if (OB_LIKELY(ATOMIC_BCAS(&dir_, reinterpret_cast<ObHashNode**>(PLACE_HOLDER), ret_dir))) {
           } else {
             // place_holder is a lock
@@ -232,9 +232,9 @@ private:
       // good, do nothing
     } else if (NULL == ret_seg) {
       if (ATOMIC_BCAS(dir + seg_idx, NULL, PLACE_HOLDER)) {
-        if (OB_NOT_NULL(ret_seg = reinterpret_cast<ObHashNode*>(allocator_.alloc(PAGE_SIZE)))) {
-          ATOMIC_FAA(&alloc_memory_, PAGE_SIZE);
-          memset(ret_seg, 0, PAGE_SIZE); // make sure all nodes are invalid
+        if (OB_NOT_NULL(ret_seg = reinterpret_cast<ObHashNode*>(allocator_.alloc(ALLOC_PAGE_SIZE)))) {
+          ATOMIC_FAA(&alloc_memory_, ALLOC_PAGE_SIZE);
+          memset(ret_seg, 0, ALLOC_PAGE_SIZE); // make sure all nodes are invalid
           if (OB_LIKELY(ATOMIC_BCAS(dir + seg_idx, PLACE_HOLDER, ret_seg))) {
           } else {
             ret = common::OB_ERR_UNEXPECTED;
@@ -256,8 +256,8 @@ private:
   int64_t alloc_memory_;
 };
 
-template<int64_t PAGE_SIZE>
-ObHashNode * const ObMtArrayBase<PAGE_SIZE>::PLACE_HOLDER = (ObHashNode *)0x1;
+template<int64_t ALLOC_PAGE_SIZE>
+ObHashNode * const ObMtArrayBase<ALLOC_PAGE_SIZE>::PLACE_HOLDER = (ObHashNode *)0x1;
 
 class ObMtArray
 {

@@ -190,7 +190,7 @@ TEST_F(TestTmpFile, test_unaligned_data_read_write)
       io_info.io_desc_.set_wait_event(2);
       io_info.io_timeout_ms_ = IO_WAIT_TIME_MS;
       io_info.buf_ = write_buffer + already_write;
-      if (this_turn_write_size % ObTmpFileGlobal::PAGE_SIZE == 0 && i == 0) {
+      if (this_turn_write_size % ObTmpFileGlobal::ALLOC_PAGE_SIZE == 0 && i == 0) {
         io_info.size_ = this_turn_write_size - 2 * 1024;
         ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->write(MTL_ID(), io_info));
 
@@ -400,9 +400,9 @@ TEST_F(TestTmpFile, test_read)
 
   /************** test read **************/
   // 1. read aligned data
-  read_buf = new char [3 * ObTmpFileGlobal::PAGE_SIZE];
+  read_buf = new char [3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE];
   io_info.buf_ = read_buf;
-  io_info.size_ = 3 * ObTmpFileGlobal::PAGE_SIZE;
+  io_info.size_ = 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ret = MTL(ObTenantTmpFileManager *)->read(MTL_ID(), io_info, handle);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(io_info.size_, handle.get_done_size());
@@ -411,22 +411,22 @@ TEST_F(TestTmpFile, test_read)
   handle.reset();
   delete[] read_buf;
   // 2. read unaligned data
-  read_buf = new char [ObTmpFileGlobal::PAGE_SIZE];
+  read_buf = new char [ObTmpFileGlobal::ALLOC_PAGE_SIZE];
   io_info.buf_ = read_buf;
   io_info.size_ = 100;
   ret = MTL(ObTenantTmpFileManager *)->read(MTL_ID(), io_info, handle);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(io_info.size_, handle.get_done_size());
-  cmp = memcmp(handle.get_buffer(), write_buf + 3 * ObTmpFileGlobal::PAGE_SIZE, io_info.size_);
+  cmp = memcmp(handle.get_buffer(), write_buf + 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, io_info.size_);
   ASSERT_EQ(0, cmp);
   handle.reset();
 
   io_info.buf_ = read_buf + 100;
-  io_info.size_ = ObTmpFileGlobal::PAGE_SIZE - 100;
+  io_info.size_ = ObTmpFileGlobal::ALLOC_PAGE_SIZE - 100;
   ret = MTL(ObTenantTmpFileManager *)->read(MTL_ID(), io_info, handle);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(io_info.size_, handle.get_done_size());
-  cmp = memcmp(handle.get_buffer(), write_buf + 3 * ObTmpFileGlobal::PAGE_SIZE + 100, io_info.size_);
+  cmp = memcmp(handle.get_buffer(), write_buf + 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + 100, io_info.size_);
   ASSERT_EQ(0, cmp);
   handle.reset();
   delete[] read_buf;
@@ -488,7 +488,7 @@ TEST_F(TestTmpFile, test_cached_read)
 
   int64_t wbp_begin_offset = file_handle.get()->cal_wbp_begin_offset();
   ASSERT_GT(wbp_begin_offset, 0);
-  ASSERT_EQ(wbp_begin_offset % ObTmpFileGlobal::PAGE_SIZE, 0);
+  ASSERT_EQ(wbp_begin_offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE, 0);
 
   // 2. check rightness of reading
   int64_t read_size = write_size;
@@ -508,8 +508,8 @@ TEST_F(TestTmpFile, test_cached_read)
 
   // 3. read disk data and puts them into kv_cache
   int64_t read_time = ObTimeUtility::current_time();
-  read_size = wbp_begin_offset - ObTmpFileGlobal::PAGE_SIZE;
-  read_offset = ObTmpFileGlobal::PAGE_SIZE / 2;
+  read_size = wbp_begin_offset - ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+  read_offset = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   read_buf = new char [read_size];
   io_info.buf_ = read_buf;
   io_info.size_ = read_size;
@@ -545,7 +545,7 @@ TEST_F(TestTmpFile, test_cached_read)
   int64_t end_block_id = common::upper_align(wbp_begin_offset, ObTmpFileGlobal::SS_BLOCK_SIZE) / ObTmpFileGlobal::SS_BLOCK_SIZE - 1 ;
   for (int64_t seg_id = begin_block_id; seg_id <= end_block_id && OB_SUCC(ret); ++seg_id) {
     const int64_t end_page_id = MIN((seg_id + 1) * ObTmpFileGlobal::SS_BLOCK_SIZE,
-                                    common::upper_align(wbp_begin_offset, ObTmpFileGlobal::PAGE_SIZE)) / ObTmpFileGlobal::PAGE_SIZE
+                                    common::upper_align(wbp_begin_offset, ObTmpFileGlobal::ALLOC_PAGE_SIZE)) / ObTmpFileGlobal::ALLOC_PAGE_SIZE
                                 - seg_id * ObTmpFileGlobal::SS_BLOCK_PAGE_NUMS;
     for (int64_t page_id = 0; page_id < end_page_id && OB_SUCC(ret); page_id++) {
       const int64_t virtual_page_id = seg_id * ObTmpFileGlobal::SS_BLOCK_PAGE_NUMS + page_id;
@@ -564,7 +564,7 @@ TEST_F(TestTmpFile, test_cached_read)
         ob_abort();
       }
       ASSERT_EQ(OB_SUCCESS, ret);
-      cmp = memcmp(handle.value_->get_buffer(), write_buf + virtual_page_id * ObTmpFileGlobal::PAGE_SIZE, ObTmpFileGlobal::PAGE_SIZE);
+      cmp = memcmp(handle.value_->get_buffer(), write_buf + virtual_page_id * ObTmpFileGlobal::ALLOC_PAGE_SIZE, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
       ASSERT_EQ(0, cmp);
     }
   }
@@ -646,7 +646,7 @@ TEST_F(TestTmpFile, test_prefetch_read)
   const int64_t BLOCK_NUM = upper_align(write_size, ObTmpFileGlobal::SN_BLOCK_SIZE) / ObTmpFileGlobal::SN_BLOCK_SIZE;
   for (int i = 0; i < BLOCK_NUM + 1; ++i) {
     if (i != BLOCK_NUM) {
-      read_size = ObTmpFileGlobal::PAGE_SIZE / 2;
+      read_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
       read_offset = i * ObTmpFileGlobal::SN_BLOCK_SIZE;
     } else {
       read_size = 10;
@@ -674,13 +674,13 @@ TEST_F(TestTmpFile, test_prefetch_read)
   int64_t end_block_id = common::upper_align(wbp_begin_offset, ObTmpFileGlobal::SS_BLOCK_SIZE) / ObTmpFileGlobal::SS_BLOCK_SIZE - 1 ;
   for (int64_t seg_id = begin_block_id; seg_id <= end_block_id && OB_SUCC(ret); ++seg_id) {
     const int64_t end_page_id = MIN((seg_id + 1) * ObTmpFileGlobal::SS_BLOCK_SIZE,
-                                    common::upper_align(wbp_begin_offset, ObTmpFileGlobal::PAGE_SIZE)) / ObTmpFileGlobal::PAGE_SIZE
+                                    common::upper_align(wbp_begin_offset, ObTmpFileGlobal::ALLOC_PAGE_SIZE)) / ObTmpFileGlobal::ALLOC_PAGE_SIZE
                                 - seg_id * ObTmpFileGlobal::SS_BLOCK_PAGE_NUMS;
     for (int64_t page_id = 0; page_id < end_page_id && OB_SUCC(ret); page_id++) {
       const int64_t virtual_page_id = seg_id * ObTmpFileGlobal::SS_BLOCK_PAGE_NUMS + page_id;
       tmp_file::ObTmpPageCacheKey key(fd, 0, virtual_page_id, MTL_ID());
-      if (virtual_page_id == write_size / ObTmpFileGlobal::PAGE_SIZE) {
-        key.unfilled_page_length_ = write_size % ObTmpFileGlobal::PAGE_SIZE;
+      if (virtual_page_id == write_size / ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
+        key.unfilled_page_length_ = write_size % ObTmpFileGlobal::ALLOC_PAGE_SIZE;
       }
       tmp_file::ObTmpPageValueHandle handle;
       ret = tmp_file::ObTmpPageCache::get_instance().get_page(key, handle);
@@ -696,8 +696,8 @@ TEST_F(TestTmpFile, test_prefetch_read)
         ob_abort();
       }
       ASSERT_EQ(OB_SUCCESS, ret);
-      int64_t cmp_size = MIN(ObTmpFileGlobal::PAGE_SIZE, ObTmpFileGlobal::PAGE_SIZE - key.unfilled_page_length_);
-      int cmp = memcmp(handle.value_->get_buffer(), write_buf + virtual_page_id * ObTmpFileGlobal::PAGE_SIZE, cmp_size);
+      int64_t cmp_size = MIN(ObTmpFileGlobal::ALLOC_PAGE_SIZE, ObTmpFileGlobal::ALLOC_PAGE_SIZE - key.unfilled_page_length_);
+      int cmp = memcmp(handle.value_->get_buffer(), write_buf + virtual_page_id * ObTmpFileGlobal::ALLOC_PAGE_SIZE, cmp_size);
       ASSERT_EQ(0, cmp);
     }
   }
@@ -905,7 +905,7 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
   io_info.io_desc_.set_wait_event(2);
   io_info.io_timeout_ms_ = DEFAULT_IO_WAIT_TIME_MS;
   io_info.buf_ = write_buf;
-  io_info.size_ = 2 * ObTmpFileGlobal::PAGE_SIZE;
+  io_info.size_ = 2 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ret = MTL(ObTenantTmpFileManager *)->write(MTL_ID(), io_info);
   ASSERT_EQ(OB_SUCCESS, ret);
   already_write_size += io_info.size_;
@@ -927,7 +927,7 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
   ASSERT_EQ(file_handle.get()->cached_page_nums_, 2);
   uint32_t begin_page_id = file_handle.get()->begin_page_id_;
   uint32_t end_page_id = file_handle.get()->end_page_id_;
-  int64_t truncate_offset = ObTmpFileGlobal::PAGE_SIZE / 2;
+  int64_t truncate_offset = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   ret = MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(file_handle.get()->begin_page_id_, begin_page_id);
@@ -946,7 +946,7 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
   MEMSET(read_buf, 0, read_size);
 
   // 1.1.3 truncate the first page
-  truncate_offset = ObTmpFileGlobal::PAGE_SIZE;
+  truncate_offset = ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ret = MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(file_handle.get()->begin_page_id_, end_page_id);
@@ -989,7 +989,7 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
   // 1.2.1 write three pages and check rightness of writing
   read_offset = already_write_size;
   io_info.buf_ = write_buf + already_write_size;
-  io_info.size_ = 3 * ObTmpFileGlobal::PAGE_SIZE;
+  io_info.size_ = 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ret = MTL(ObTenantTmpFileManager *)->write(MTL_ID(), io_info);
   ASSERT_EQ(OB_SUCCESS, ret);
   already_write_size += io_info.size_;
@@ -1022,7 +1022,7 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
 
   // 1.2.3 truncate the first page
   ASSERT_EQ(file_handle.get()->cached_page_nums_, 3);
-  truncate_offset = read_offset + ObTmpFileGlobal::PAGE_SIZE;
+  truncate_offset = read_offset + ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ret = MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(file_handle.get()->cached_page_nums_, 2);
@@ -1068,7 +1068,7 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
   // 3. truncate memory data (truncate_offset < file_size_)
   // 3.1 truncate_offset is unaligned
   read_offset = truncate_offset;
-  truncate_offset = (wbp_begin_offset + data_size) / 2 - ObTmpFileGlobal::PAGE_SIZE / 2;
+  truncate_offset = (wbp_begin_offset + data_size) / 2 - ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   read_size = data_size - read_offset;
   ret = MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1085,7 +1085,7 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
   delete[] read_buf;
 
   read_offset = truncate_offset;
-  truncate_offset = upper_align(truncate_offset, ObTmpFileGlobal::PAGE_SIZE) + ObTmpFileGlobal::PAGE_SIZE;
+  truncate_offset = upper_align(truncate_offset, ObTmpFileGlobal::ALLOC_PAGE_SIZE) + ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   read_size = data_size - read_offset;
   ret = MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1102,9 +1102,9 @@ TEST_F(TestTmpFile, test_tmp_file_truncate)
   delete[] read_buf;
 
   // 3.2 truncate_offset is aligned
-  ASSERT_EQ(truncate_offset % ObTmpFileGlobal::PAGE_SIZE, 0);
+  ASSERT_EQ(truncate_offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE, 0);
   read_offset = truncate_offset;
-  truncate_offset = truncate_offset + 5 * ObTmpFileGlobal::PAGE_SIZE;
+  truncate_offset = truncate_offset + 5 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   read_size = data_size - read_offset;
   ret = MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1733,7 +1733,7 @@ int mock_flush_file(const int64_t flush_page_num, ObSharedStorageTmpFile &file, 
       task.expected_flushed_page_num_ = flush_page_num;
       task.fd_ = fd;
       task.flush_mgr_ = file.flush_mgr_;
-      task.flushed_offset_ = MIN((file.begin_page_virtual_id_ + flush_page_num) * ObTmpFileGlobal::PAGE_SIZE, file.file_size_);
+      task.flushed_offset_ = MIN((file.begin_page_virtual_id_ + flush_page_num) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, file.file_size_);
     }
   }
   return ret;
@@ -1745,7 +1745,7 @@ int mock_flush_wait(const int64_t succ_page_num, ObSSTmpFileAsyncFlushWaitTask& 
   int ret = OB_SUCCESS;
   task.succeed_wait_page_nums_ = succ_page_num;
   const bool has_flushed_unfinished_tail_page = task.flushed_offset_ == task.current_length_ &&
-                                                task.current_length_ % ObTmpFileGlobal::PAGE_SIZE != 0;
+                                                task.current_length_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE != 0;
   bool flush_breakdown = has_flushed_unfinished_tail_page && succ_page_num != task.expected_flushed_page_num_ &&
                          is_tail_page_failed;
   if (flush_breakdown) {
@@ -1814,7 +1814,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   ObSSTmpFileAsyncFlushWaitTask wait_task;
   int64_t truncate_offset = 0;
   // 1. write and flush full pages, then wait
-  write_size = 10 * ObTmpFileGlobal::PAGE_SIZE;
+  write_size = 10 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1832,7 +1832,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   ASSERT_EQ(ss_tmp_file.cached_page_nums_, 0);
 
   // 2. write and flush 4.5 pages; then write 0.5 page and exec wait logic
-  write_size = 4 * ObTmpFileGlobal::PAGE_SIZE + ObTmpFileGlobal::PAGE_SIZE / 2;
+  write_size = 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1842,7 +1842,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
 
   ASSERT_EQ(OB_SUCCESS, mock_flush_file(5, ss_tmp_file, wait_task));
 
-  write_size = ObTmpFileGlobal::PAGE_SIZE / 2;
+  write_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1855,7 +1855,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   ASSERT_EQ(ss_tmp_file.cached_page_nums_, 1);
 
   // 3. write 4 pages(totally 5 pages in file) and flush 5 pages; then truncate 4.5 pages and exec wait logic
-  write_size = 4 * ObTmpFileGlobal::PAGE_SIZE;
+  write_size = 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1865,8 +1865,8 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
 
   ASSERT_EQ(OB_SUCCESS, mock_flush_file(5, ss_tmp_file, wait_task));
 
-  truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 4) * ObTmpFileGlobal::PAGE_SIZE +
-                    ObTmpFileGlobal::PAGE_SIZE / 2;
+  truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 4) * ObTmpFileGlobal::ALLOC_PAGE_SIZE +
+                    ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
 
   ASSERT_EQ(OB_SUCCESS, mock_flush_wait(5, wait_task));
@@ -1874,7 +1874,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   ASSERT_EQ(ss_tmp_file.cached_page_nums_, 0);
 
   // 4. write 4.5 pages and flush 4.5 pages; then write 3.5 pages and truncate 6.5 pages; finally exec wait logic
-  write_size = 4 * ObTmpFileGlobal::PAGE_SIZE + ObTmpFileGlobal::PAGE_SIZE / 2;
+  write_size = 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1884,7 +1884,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
 
   ASSERT_EQ(OB_SUCCESS, mock_flush_file(5, ss_tmp_file, wait_task));
 
-  write_size = 3 * ObTmpFileGlobal::PAGE_SIZE + ObTmpFileGlobal::PAGE_SIZE / 2;
+  write_size = 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1892,8 +1892,8 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   delete [] write_buff;
   io_handle.reset();
 
-  truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 6) * ObTmpFileGlobal::PAGE_SIZE +
-                    ObTmpFileGlobal::PAGE_SIZE / 2;
+  truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 6) * ObTmpFileGlobal::ALLOC_PAGE_SIZE +
+                    ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
 
   ASSERT_EQ(OB_SUCCESS, mock_flush_wait(5, wait_task));
@@ -1901,7 +1901,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   ASSERT_EQ(ss_tmp_file.cached_page_nums_, 2);
 
   // 5. append write file to 4.5 pages and flush 4.5 pages; then write 3.5 pages and truncate 2.5 pages; finally exec wait logic
-  write_size = 2 * ObTmpFileGlobal::PAGE_SIZE + ObTmpFileGlobal::PAGE_SIZE / 2;
+  write_size = 2 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1911,7 +1911,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
 
   ASSERT_EQ(OB_SUCCESS, mock_flush_file(5, ss_tmp_file, wait_task));
 
-  write_size = 3 * ObTmpFileGlobal::PAGE_SIZE + ObTmpFileGlobal::PAGE_SIZE / 2;
+  write_size = 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1919,8 +1919,8 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   delete [] write_buff;
   io_handle.reset();
 
-  truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 2) * ObTmpFileGlobal::PAGE_SIZE +
-                    ObTmpFileGlobal::PAGE_SIZE / 2;
+  truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 2) * ObTmpFileGlobal::ALLOC_PAGE_SIZE +
+                    ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
   ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
 
   ASSERT_EQ(OB_SUCCESS, mock_flush_wait(5, wait_task));
@@ -1928,7 +1928,7 @@ TEST_F(TestTmpFile, test_flush_with_write_tail_page_and_truncate)
   ASSERT_EQ(ss_tmp_file.cached_page_nums_, 4);
 
   // 6. write 6 pages(totally 10 pages in file) and flush 5 pages and exec wait; then flush and wait 5 pages again.
-  write_size = 6 * ObTmpFileGlobal::PAGE_SIZE;
+  write_size = 6 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   write_buff = new char [write_size];
   io_info.size_ = write_size;
   io_info.buf_ = write_buff;
@@ -1980,7 +1980,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
     ObTmpFileIOHandle io_handle;
     ObSSTmpFileAsyncFlushWaitTask wait_task;
 
-    write_size = 4 * ObTmpFileGlobal::PAGE_SIZE + ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -1990,7 +1990,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(5, ss_tmp_file, wait_task));
 
-    write_size = ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2000,7 +2000,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_wait(4, wait_task, true));
     ASSERT_EQ(ss_tmp_file.is_deleting_, true);
-    write_size = ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2036,7 +2036,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
     ObSSTmpFileAsyncFlushWaitTask wait_task;
 
     // 2.1. write and flush 5 full pages; then, all of them are failed
-    write_size = 5 * ObTmpFileGlobal::PAGE_SIZE;
+    write_size = 5 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2060,7 +2060,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
     //     then exec wait and the first page is failed
     //     (we assume the tail page has been waited successful, thus we don't need to discard the file;
     //      this case is used to test whether the tail page is changed state to dirty twice)
-    write_size = ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2069,7 +2069,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
     io_handle.reset();
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(3, ss_tmp_file, wait_task));
-    write_size = ObTmpFileGlobal::PAGE_SIZE + ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE + ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2084,7 +2084,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     // 2.4 write 0.5 pages(totally 4.5 pages in file) and flush 4.5 pages;
     //     then exec wait and the tail page is failed (discarding the file)
-    write_size = ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2095,7 +2095,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(5, ss_tmp_file, wait_task));
     ASSERT_EQ(OB_SUCCESS, mock_flush_wait(4, wait_task, true));
     ASSERT_EQ(ss_tmp_file.is_deleting_, true);
-    write_size = ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2133,7 +2133,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     // 3.1. write and flush 10 pages; then, truncate 5 pages;
     //      exec wait and five pages are successful
-    write_size = 10 * ObTmpFileGlobal::PAGE_SIZE;
+    write_size = 10 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2143,7 +2143,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(10, ss_tmp_file, wait_task));
 
-    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 5) * ObTmpFileGlobal::PAGE_SIZE;
+    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
     ASSERT_EQ(ss_tmp_file.write_back_data_page_num_, 5);
     ASSERT_EQ(ss_tmp_file.cached_page_nums_, 5);
@@ -2154,7 +2154,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     // 3.2. append write file to 10 pages and flush 10 pages; then, truncate 4 pages;
     //      exec wait and 3 pages are successful
-    write_size = 5 * ObTmpFileGlobal::PAGE_SIZE;
+    write_size = 5 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2164,7 +2164,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(10, ss_tmp_file, wait_task));
 
-    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 4) * ObTmpFileGlobal::PAGE_SIZE;
+    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 4) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
     ASSERT_EQ(ss_tmp_file.write_back_data_page_num_, 6);
     ASSERT_EQ(ss_tmp_file.cached_page_nums_, 6);
@@ -2175,7 +2175,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     // 3.3. append write file to 10 pages and flush 10 pages; then, truncate 4 pages;
     //      exec wait and 5 pages are successful
-    write_size = 4 * ObTmpFileGlobal::PAGE_SIZE;
+    write_size = 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2185,7 +2185,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(10, ss_tmp_file, wait_task));
 
-    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 4) * ObTmpFileGlobal::PAGE_SIZE;
+    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 4) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
     ASSERT_EQ(ss_tmp_file.write_back_data_page_num_, 6);
     ASSERT_EQ(ss_tmp_file.cached_page_nums_, 6);
@@ -2196,7 +2196,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     // 3.4. append write file to 10 pages and flush 10 pages; then, truncate 10 pages;
     //      exec wait and 0 pages are successful
-    write_size = 5 * ObTmpFileGlobal::PAGE_SIZE;
+    write_size = 5 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2206,7 +2206,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(10, ss_tmp_file, wait_task));
 
-    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 10) * ObTmpFileGlobal::PAGE_SIZE;
+    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 10) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
     ASSERT_EQ(ss_tmp_file.write_back_data_page_num_, 0);
     ASSERT_EQ(ss_tmp_file.cached_page_nums_, 0);
@@ -2217,7 +2217,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     // 3.5. append write file to 10 pages and flush 10 pages; then, truncate 5 pages;
     //      exec wait and 0 pages are successful
-    write_size = 10 * ObTmpFileGlobal::PAGE_SIZE;
+    write_size = 10 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2227,7 +2227,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(10, ss_tmp_file, wait_task));
 
-    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 5) * ObTmpFileGlobal::PAGE_SIZE;
+    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
     ASSERT_EQ(ss_tmp_file.write_back_data_page_num_, 5);
     ASSERT_EQ(ss_tmp_file.cached_page_nums_, 5);
@@ -2238,7 +2238,7 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     // 3.6. append write file to 10 pages and flush 10 pages; then, truncate 5.5 pages;
     //      exec wait and 0 pages are successful
-    write_size = 5 * ObTmpFileGlobal::PAGE_SIZE;
+    write_size = 5 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2248,8 +2248,8 @@ TEST_F(TestTmpFile, test_flush_with_io_error)
 
     ASSERT_EQ(OB_SUCCESS, mock_flush_file(10, ss_tmp_file, wait_task));
 
-    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 5) * ObTmpFileGlobal::PAGE_SIZE +
-                      ObTmpFileGlobal::PAGE_SIZE / 2;
+    truncate_offset = (ss_tmp_file.begin_page_virtual_id_ + 5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE +
+                      ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->truncate(fd, truncate_offset));
     ASSERT_EQ(ss_tmp_file.write_back_data_page_num_, 5);
     ASSERT_EQ(ss_tmp_file.cached_page_nums_, 5);
@@ -2331,8 +2331,8 @@ TEST_F(TestTmpFile, test_seal)
 
     // 4MB + 3.5 pages
     int64_t write_page_num = 2 * ObTmpFileGlobal::SS_BLOCK_PAGE_NUMS + 4;
-    write_size = write_page_num * ObTmpFileGlobal::PAGE_SIZE
-                 - ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = write_page_num * ObTmpFileGlobal::ALLOC_PAGE_SIZE
+                 - ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2380,8 +2380,8 @@ TEST_F(TestTmpFile, test_seal)
 
     // 4MB + 3.5 pages
     int64_t write_page_num = 2 * ObTmpFileGlobal::SS_BLOCK_PAGE_NUMS + 4;
-    write_size = write_page_num * ObTmpFileGlobal::PAGE_SIZE
-                 - ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = write_page_num * ObTmpFileGlobal::ALLOC_PAGE_SIZE
+                 - ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;
@@ -2430,8 +2430,8 @@ TEST_F(TestTmpFile, test_seal)
 
     // 4MB + 3.5 pages
     int64_t write_page_num = 2 * ObTmpFileGlobal::SS_BLOCK_PAGE_NUMS + 4;
-    write_size = write_page_num * ObTmpFileGlobal::PAGE_SIZE
-                 - ObTmpFileGlobal::PAGE_SIZE / 2;
+    write_size = write_page_num * ObTmpFileGlobal::ALLOC_PAGE_SIZE
+                 - ObTmpFileGlobal::ALLOC_PAGE_SIZE / 2;
     write_buff = new char [write_size];
     io_info.size_ = write_size;
     io_info.buf_ = write_buff;

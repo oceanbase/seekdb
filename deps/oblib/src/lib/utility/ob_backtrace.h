@@ -18,6 +18,18 @@
 #define OCEANBASE_COMMON_OB_BACKTRACE_H_
 
 #include<inttypes.h>
+
+#ifdef __ANDROID__
+// Android Bionic doesn't provide execinfo.h / backtrace().
+// Provide an inline stub that returns 0 frames.
+#include <string.h>
+static inline int backtrace(void **buffer, int size)
+{
+  if (size > 0) memset(buffer, 0, sizeof(void*) * size);
+  return 0;
+}
+#endif
+
 namespace oceanbase
 {
 namespace common

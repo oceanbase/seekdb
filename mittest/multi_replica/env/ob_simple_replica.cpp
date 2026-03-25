@@ -152,7 +152,7 @@ int ObSimpleServerReplica::simple_init()
   // opts.devname_ = "eth0";
   opts.use_ipv6_ = false;
 
-  char *curr_dir = get_current_dir_name();
+  char *curr_dir = getcwd(NULL, 0);
 
   if (OB_FAIL(chdir(run_dir_.c_str()))) {
     SERVER_LOG(WARN, "change dir failed.", KR(ret), K(curr_dir), K(run_dir_.c_str()), K(errno));

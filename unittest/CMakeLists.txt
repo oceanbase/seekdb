@@ -1,14 +1,35 @@
+define_property(GLOBAL PROPERTY ANDROID_TEST_SOURCES
+  BRIEF_DOCS "Sources for combined Android all_tests binary"
+  FULL_DOCS "Accumulated by ob_unittest and friends")
+
+# Register a test source for the combined Android binary
+function(_android_register_test_source src)
+  if(ANDROID)
+    set_property(GLOBAL APPEND PROPERTY ANDROID_TEST_SOURCES "${src}")
+  endif()
+endfunction()
+
 function(ob_unittest case)
   if(ARGC EQUAL 1)
     add_executable(${case} ${case}.cpp)
+    _android_register_test_source("${CMAKE_CURRENT_SOURCE_DIR}/${case}.cpp")
   else()
     add_executable(${ARGV})
+    # First arg is target name, rest are sources
+    list(GET ARGV 0 _target)
+    list(REMOVE_AT ARGV 0)
+    foreach(_src ${ARGV})
+      get_filename_component(_abs "${_src}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+      _android_register_test_source("${_abs}")
+    endforeach()
   endif()
   if (case MATCHES "^test_.*")
     add_test(${case} ${case})
     set_tests_properties(${case} PROPERTIES TIMEOUT 300)
   endif()
-  if(NOT APPLE)
+  if(ANDROID)
+    target_link_libraries(${case} PRIVATE -Wl,--whole-archive mock_di -Wl,--no-whole-archive oceanbase_static gtest gmock)
+  elseif(NOT APPLE)
     target_link_libraries(${case} PRIVATE -Wl,--whole-archive mock_di -Wl,--no-whole-archive oceanbase gtest gmock)
   else()
     target_link_libraries(${case} PRIVATE mock_di oceanbase gtest gmock)
@@ -46,3 +67,44 @@ add_subdirectory(tools)
 # add_subdirectory(data_dictionary)
 # add_subdirectory(logminer)
 add_subdirectory(plugin)
+
+# Android: single combined test binary (all TEST() macros in one executable)
+# Uses sources registered by ob_unittest() and friends via ANDROID_TEST_SOURCES property.
+if(ANDROID)
+  get_property(ANDROID_ALL_TEST_SOURCES GLOBAL PROPERTY ANDROID_TEST_SOURCES)
+  # Exclude tests that need libraries not in oceanbase_static
+  list(FILTER ANDROID_ALL_TEST_SOURCES EXCLUDE REGEX "/tools/")
+  list(FILTER ANDROID_ALL_TEST_SOURCES EXCLUDE REGEX "/tx/it/")
+  list(LENGTH ANDROID_ALL_TEST_SOURCES _n)
+  message(STATUS "all_tests: ${_n} test sources collected")
+
+  add_executable(all_tests EXCLUDE_FROM_ALL
+    ${CMAKE_CURRENT_SOURCE_DIR}/all_tests_main.cpp
+    ${ANDROID_ALL_TEST_SOURCES})
+  # Extra sources required by specific test macros (rs_unittest, aggr_unittest2)
+  target_sources(all_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/ob_rs_test_utils.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_freeze_info_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rootserver/fake_zone_merge_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/test_op_engine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/sql/engine/ob_fake_table_scan_vec_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/storage/ob_truncate_info_helper.cpp)
+  # Rename each file's main() so only all_tests_main.cpp provides the real one
+  target_compile_definitions(all_tests PRIVATE main=disabled_main)
+  target_link_options(all_tests PRIVATE -Wl,--allow-multiple-definition)
+  target_link_libraries(all_tests PRIVATE
+    -Wl,--whole-archive mock_di -Wl,--no-whole-archive
+    oceanbase_static gtest gmock
+    mockcontainer sql_ut_base mock_tx_log_adapter
+    mock_ls_tablet_service mock_access_service)
+  target_include_directories(all_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/unittest
+    ${CMAKE_SOURCE_DIR}/mittest
+    ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
+  # Add test subdirectories so relative includes (e.g. ../share/...) resolve
+  set(_android_test_inc_dirs backup lib logservice observer plugin rootserver share sql storage)
+  foreach(_dir ${_android_test_inc_dirs})
+    target_include_directories(all_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${_dir})
+  endforeach()
+endif()

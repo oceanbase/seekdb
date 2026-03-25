@@ -39,6 +39,17 @@ if(OB_BUILD_OBSERVER_LITE)
   )
 endif()
 
+# -Wno-vla-cxx-extension is Clang 18+ only; GCC and older Clang use -Wno-vla-extension
+include(CheckCXXCompilerFlag)
+set(CMAKE_REQUIRED_FLAGS "-Werror")
+check_cxx_compiler_flag("-Wno-vla-cxx-extension" COMPILER_SUPPORTS_VLA_CXX_EXTENSION)
+unset(CMAKE_REQUIRED_FLAGS)
+if(COMPILER_SUPPORTS_VLA_CXX_EXTENSION)
+  set(VLA_WARN_FLAG "-Wno-vla-cxx-extension")
+else()
+  set(VLA_WARN_FLAG "-Wno-vla-extension")
+endif()
+
 if (OB_USE_CLANG)
   # The following clang warnings should be fixed later: -Wno-unused-variable -Wno-invalid-offsetof
   set(OBLIB_COMPILE_DEFINITIONS -fno-strict-aliasing -fno-omit-frame-pointer ${MARCH_CFLAGS} ${MTUNE_CFLAGS}
@@ -62,7 +73,8 @@ if (OB_USE_CLANG)
     -Wno-unused-value -Wno-macro-redefined -Wno-reinterpret-base-class -Wno-register
     -Wno-implicit-fallthrough -Wno-deprecated-non-prototype
     -Wno-ambiguous-reversed-operator -Wno-invalid-partial-specialization
-    -Wno-string-concatenation)
+    -Wno-string-concatenation
+    -Wno-vla ${VLA_WARN_FLAG})
     
   target_compile_options(oblib_base_without_pass INTERFACE ${OBLIB_COMPILE_DEFINITIONS})
   if (ENABLE_SANITY)
@@ -134,10 +146,18 @@ target_compile_features(oblib_base INTERFACE cxx_std_11)
 
 set(_LIB_PATH "${DEP_DIR}/lib64/")
 set(LIBAIO_LINK_OPTION "-laio")
-if(APPLE)
+if(APPLE OR ANDROID)
   set(_LIB_PATH "${DEP_DIR}/lib/")
-  # macOS doesn't have libaio
+  # macOS and Android don't have libaio
   set(LIBAIO_LINK_OPTION "")
+  # On macOS, arrow/parquet are in lib/, but s2/orc/snappy/protoc/protobuf/lz4/zstd are in lib64/
+  if(APPLE)
+    set(_LIB_PATH_EXTRA "${DEP_DIR}/lib64/")
+  else()
+    set(_LIB_PATH_EXTRA "${_LIB_PATH}")
+  endif()
+else()
+  set(_LIB_PATH_EXTRA "${_LIB_PATH}")
 endif()
 set(OBLIB_ABSEIL_LIST   
     ${_LIB_PATH}/libabsl_base.a
@@ -202,7 +222,7 @@ target_link_libraries(oblib_base_without_pass
   ${DEP_DIR}/lib/libcurl.a
   ${DEP_DIR}/lib/libssl.a
   ${DEP_DIR}/lib/libcrypto.a
-  ${DEP_DIR}/lib64/libs2.a
+  ${_LIB_PATH_EXTRA}/libs2.a
   ${OBLIB_ABSEIL_LIST}
   ${DEP_DIR}/lib/libroaring.a
   ${LGPL_DEPS}
@@ -215,20 +235,21 @@ target_link_libraries(oblib_base_without_pass
   ${DEP_DIR}/lib/libprotobuf-c.a
   ${_LIB_PATH}/libarrow.a
   ${_LIB_PATH}/libparquet.a
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:${DEP_DIR}/lib64/libarrow_bundled_dependencies.a>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
   $<$<PLATFORM_ID:Darwin>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2>
-  ${DEP_DIR}/lib64/liborc.a
-  ${DEP_DIR}/lib64/libsnappy.a
-  ${DEP_DIR}/lib64/libprotoc.a
-  ${DEP_DIR}/lib64/libprotobuf.a
-  ${DEP_DIR}/lib64/liblz4.a
-  ${DEP_DIR}/lib64/libzstd.a
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
-  ${LIBAIO_LINK_OPTION} -lpthread -ldl
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-lrt>
+  ${_LIB_PATH_EXTRA}/liborc.a
+  ${_LIB_PATH_EXTRA}/libsnappy.a
+  $<$<NOT:$<BOOL:${ANDROID}>>:${_LIB_PATH_EXTRA}/libprotoc.a>
+  ${_LIB_PATH_EXTRA}/libprotobuf.a
+  ${_LIB_PATH_EXTRA}/liblz4.a
+  ${_LIB_PATH_EXTRA}/libzstd.a
+  $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
+  ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
+  $<$<BOOL:${ANDROID}>:-llog>
+  $<$<PLATFORM_ID:Linux>:-lrt>
   $<$<PLATFORM_ID:Darwin>:-Wl,-framework,Security -Wl,-framework,CoreFoundation -Wl,-framework,SystemConfiguration -liconv>
   ${ARCH_LDFLAGS}
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:${DEP_DIR}/lib/libisal.a>
+  $<$<PLATFORM_ID:Linux>:${DEP_DIR}/lib/libisal.a>
  )
 target_link_libraries(oblib_base INTERFACE oblib_base_without_pass oblib_pass)
 

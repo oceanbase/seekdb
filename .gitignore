@@ -393,3 +393,5 @@ deps/3rd
 test/tmp
 test/var
 .worktrees/
+.claude/
+CLAUDE.md

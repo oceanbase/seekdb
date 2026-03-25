@@ -381,7 +381,7 @@ int ObTmpFileFlushManager::fast_fill_block_buf_with_meta_(ObTmpFileFlushTask &fl
     LOG_WARN("fail to fast generate flush meta task in flush policy f4", KR(ret), K(flush_task));
   }
 
-  if (flush_task.get_data_length() < FAST_FLUSH_TREE_PAGE_NUM * ObTmpFileGlobal::PAGE_SIZE) { // ignore error code and try F5
+  if (flush_task.get_data_length() < FAST_FLUSH_TREE_PAGE_NUM * ObTmpFileGlobal::ALLOC_PAGE_SIZE) { // ignore error code and try F5
     if (OB_FAIL(inner_fill_block_buf_(flush_task, FlushCtxState::FSM_F5, true/*is_meta*/, true/*flush_tail*/))) {
       LOG_WARN("fail to fast generate flush meta task in flush policy f5", KR(ret), K(flush_task));
     }

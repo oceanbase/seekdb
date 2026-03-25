@@ -353,7 +353,7 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
 
   if (OB_UNLIKELY(flush_page_id_arr_.count() <= 0 ||
         flush_page_id_arr_.count() > ObTmpFileGlobal::BLOCK_PAGE_NUMS ||
-        flush_page_id_arr_.count() != upper_align(data_length_, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE)){
+        flush_page_id_arr_.count() != upper_align(data_length_, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE)){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid flush page id array size", KR(ret), K(flush_page_id_arr_.count()), KPC(this));
   } else if (flush_infos_.size() == 0) {
@@ -383,15 +383,15 @@ int ObTmpFileFlushTask::lazy_alloc_and_fill_block_buf_for_data_page_()
         uint32_t next_page_id = ObTmpFileGlobal::INVALID_PAGE_ID; // UNUSED
         if (OB_FAIL(wbp_->read_page(cur_info_fd, page_id, ObTmpFilePageUniqKey(cur_info_virtual_page_id), page_buf, next_page_id))) {
           LOG_WARN("fail to read page", KR(ret), K(page_id), KPC(this));
-        } else if (OB_UNLIKELY(!check_buf_range_valid(get_data_buf(), ObTmpFileGlobal::PAGE_SIZE))) {
+        } else if (OB_UNLIKELY(!check_buf_range_valid(get_data_buf(), ObTmpFileGlobal::ALLOC_PAGE_SIZE))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid buffer range", KR(ret), KP(get_data_buf()), KPC(this));
         } else {
           // only copy the size we recorded if we need to flush the last page
           // since we do not hold last_page_lock and the last page may be appended
           int64_t copy_size = flush_info.file_size_ != 0 && cur_info_disk_begin_id + cur_info_page_num - 1 == copy_index ?
-          flush_info.file_size_ % ObTmpFileGlobal::PAGE_SIZE : ObTmpFileGlobal::PAGE_SIZE;
-          MEMCPY(get_data_buf() + copy_index * ObTmpFileGlobal::PAGE_SIZE, page_buf, copy_size);
+          flush_info.file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE : ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+          MEMCPY(get_data_buf() + copy_index * ObTmpFileGlobal::ALLOC_PAGE_SIZE, page_buf, copy_size);
         }
         copy_index += 1;
         cur_info_virtual_page_id += 1;
@@ -446,7 +446,7 @@ int ObTmpFileFlushTask::write_one_block()
     write_info.io_desc_.set_wait_event(ObWaitEventIds::TMP_FILE_WRITE);
     write_info.io_desc_.set_sys_module_id(ObIOModule::TMP_TENANT_MEM_BLOCK_IO);
     write_info.buffer_ = get_data_buf();
-    write_info.size_ = upper_align(get_data_length(), ObTmpFileGlobal::PAGE_SIZE);
+    write_info.size_ = upper_align(get_data_length(), ObTmpFileGlobal::ALLOC_PAGE_SIZE);
     write_info.offset_ = 0;
     if (OB_FAIL(blocksstable::ObBlockManager::async_write_block(write_info, handle_))) {
       LOG_ERROR("fail to async write block", KR(ret), K(write_info));
@@ -482,8 +482,8 @@ int ObTmpFileFlushTask::wait_macro_block_handle()
 
 int64_t ObTmpFileFlushTask::get_total_page_num() const
 {
-  const int64_t PAGE_SIZE = ObTmpFileGlobal::PAGE_SIZE;
-  return upper_align(data_length_, PAGE_SIZE) / PAGE_SIZE;
+  const int64_t ALLOC_PAGE_SIZE = ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+  return upper_align(data_length_, ALLOC_PAGE_SIZE) / ALLOC_PAGE_SIZE;
 }
 
 }  // end namespace tmp_file

@@ -313,7 +313,7 @@ int64_t ObTmpPageCacheKey::to_string(char* buf, const int64_t buf_len) const
 }
 /* -------------------------- ObTmpPageCacheValue --------------------------- */
 ObTmpPageCacheValue::ObTmpPageCacheValue(char *buf)
-  : buf_(buf), size_(ObTmpFileGlobal::PAGE_SIZE)
+  : buf_(buf), size_(ObTmpFileGlobal::ALLOC_PAGE_SIZE)
 {
 }
 
@@ -522,7 +522,7 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
     ret = OB_NOT_SUPPORTED;
     STORAGE_LOG(WARN, "shared storage mode not support this function", KR(ret), K(key));
   } else if (OB_FAIL(alloc(key.get_tenant_id(), key.size(),
-      sizeof(ObTmpPageCacheValue) + ObTmpFileGlobal::PAGE_SIZE,
+      sizeof(ObTmpPageCacheValue) + ObTmpFileGlobal::ALLOC_PAGE_SIZE,
       kvpair, p_handle.handle_, inst_handle))) {
     STORAGE_LOG(WARN, "failed to alloc kvcache buf", KR(ret), K(key));
   } else if (OB_FAIL(key.deep_copy(reinterpret_cast<char *>(kvpair->key_),
@@ -544,8 +544,8 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
 
     if (OB_FAIL(block_manager.get_macro_block_id(key.get_block_id(), macro_block_id))) {
       STORAGE_LOG(WARN, "failed to get macro block id", KR(ret), K(key));
-    } else if (OB_FAIL(read_info.init_read(macro_block_id, ObTmpFileGlobal::PAGE_SIZE,
-                                           key.get_page_id() * ObTmpFileGlobal::PAGE_SIZE,
+    } else if (OB_FAIL(read_info.init_read(macro_block_id, ObTmpFileGlobal::ALLOC_PAGE_SIZE,
+                                           key.get_page_id() * ObTmpFileGlobal::ALLOC_PAGE_SIZE,
                                            io_desc, io_timeout_ms,
                                            &obj_handle))) {
       STORAGE_LOG(WARN, "failed to get macro block id", KR(ret), K(macro_block_id), K(key),
@@ -555,7 +555,7 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
     } else if (OB_FAIL(obj_handle.wait())) {
       STORAGE_LOG(WARN, "fail to do handle read wait", KR(ret), K(read_info));
     } else {
-      MEMCPY(p_handle.value_->get_buffer(), obj_handle.get_buffer(), ObTmpFileGlobal::PAGE_SIZE);
+      MEMCPY(p_handle.value_->get_buffer(), obj_handle.get_buffer(), ObTmpFileGlobal::ALLOC_PAGE_SIZE);
     }
   }
   if (FAILEDx(put_kvpair(inst_handle, kvpair, p_handle.handle_, false/*overwrite*/))) {
@@ -615,7 +615,7 @@ int ObTmpPageCache::cached_read(const common::ObIArray<ObTmpPageCacheKey> &page_
   } else if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid read info", KR(ret), K(read_info));
-  } else if (OB_UNLIKELY(read_info.get_begin_offset() % ObTmpFileGlobal::PAGE_SIZE != 0)) {
+  } else if (OB_UNLIKELY(read_info.get_begin_offset() % ObTmpFileGlobal::ALLOC_PAGE_SIZE != 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "cached_read should read completed pages", KR(ret), K(read_info));
   } else if (OB_ISNULL(buf = callback_allocator.alloc(sizeof(ObTmpCachedReadPageIOCallback)))) {
@@ -654,7 +654,7 @@ int ObTmpPageCache::aggregate_read(const common::ObIArray<std::pair<ObTmpPageCac
   } else if (OB_UNLIKELY(!read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid read info", KR(ret), K(read_info));
-  } else if (OB_UNLIKELY(read_info.get_begin_offset() % ObTmpFileGlobal::PAGE_SIZE != 0)) {
+  } else if (OB_UNLIKELY(read_info.get_begin_offset() % ObTmpFileGlobal::ALLOC_PAGE_SIZE != 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "aggregate_read should read completed pages", KR(ret), K(read_info));
   } else if (OB_ISNULL(buf = callback_allocator.alloc(sizeof(ObTmpAggregatePageIOCallback)))) {
@@ -765,7 +765,7 @@ int ObTmpPageCache::ObTmpCachedReadPageIOCallback::inner_process(const char *dat
   } else if (OB_UNLIKELY(size <= 0 || data_buffer == nullptr)) {
     ret = OB_INVALID_DATA;
     STORAGE_LOG(WARN, "invalid data buffer size", KR(ret), K(size), KP(data_buffer));
-  } else if (OB_UNLIKELY(page_keys_.count() * ObTmpFileGlobal::PAGE_SIZE != size)) {
+  } else if (OB_UNLIKELY(page_keys_.count() * ObTmpFileGlobal::ALLOC_PAGE_SIZE != size)) {
     ret = OB_INVALID_DATA;
     STORAGE_LOG(WARN, "invalid data buffer size", KR(ret), K(size), K(page_keys_.count()));
   } else if (OB_FAIL(alloc_data_buf(data_buffer, size))) {
@@ -774,7 +774,7 @@ int ObTmpPageCache::ObTmpCachedReadPageIOCallback::inner_process(const char *dat
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < page_keys_.count(); i++) {
       ObTmpPageCacheValue value(nullptr);
-      value.set_buffer(data_buf_ + i * ObTmpFileGlobal::PAGE_SIZE);
+      value.set_buffer(data_buf_ + i * ObTmpFileGlobal::ALLOC_PAGE_SIZE);
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(process_page(page_keys_.at(i), value))) {
         STORAGE_LOG(WARN, "fail to process tmp page cache in callback", KR(tmp_ret));

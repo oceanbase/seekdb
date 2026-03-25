@@ -25,7 +25,7 @@
 using namespace oceanbase;
 using namespace oceanbase::common;
 
-static const int64_t PAGE_SIZE = 64 * 1024;
+static const int64_t ALLOC_PAGE_SIZE = 64 * 1024;
 
 class TestC
 {
@@ -49,7 +49,7 @@ TEST(TestLfFIFOAllocator, single_thread)
   static const int64_t loop = 4096;
   TestC *ptr_buffer[loop];
   ObLfFIFOAllocator allocator;
-  ASSERT_EQ(OB_SUCCESS, allocator.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   for (int64_t i = 0; i < loop; ++i) {
     ptr_buffer[i] = NULL;
   }
@@ -75,7 +75,7 @@ TEST(TestLfFIFOAllocator, single_thread2)
   static const int64_t LOOP = 32 * 512;
   void *ptr_buffer[MALLOC_PER_LOOP];
   ObLfFIFOAllocator allocator;
-  ASSERT_EQ(OB_SUCCESS, allocator.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   for (int64_t i = 0; i < MALLOC_PER_LOOP; ++i) {
     ptr_buffer[i] = NULL;
   }
@@ -124,7 +124,7 @@ TEST(TestLfFIFOAllocator, multipe_threads_direct_alloc)
   LIB_LOG(INFO, "start multiple threads direct alloc test");
   static const int64_t THREAD_NUM = 16;
   pthread_t work_thread[THREAD_NUM];
-  ASSERT_EQ(OB_SUCCESS, allocator1.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
   for (int64_t i = 0; i < THREAD_NUM; ++i) {
     int ret = pthread_create(&work_thread[i], NULL, &th_direct_alloc_func, NULL);
@@ -266,7 +266,7 @@ TEST(TestLfFIFOAllocator, multiple_threads_normal_alloc_32B)
   static const int64_t THREAD_NUM = 8;
   static int64_t ALLOC_SIZE = 32;
   pthread_t work_thread[THREAD_NUM];
-  ASSERT_EQ(OB_SUCCESS, allocator1.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
   for (int64_t i = 0; i < THREAD_NUM; ++i) {
     int ret = pthread_create(&work_thread[i], NULL, &th_normal_alloc_func, &ALLOC_SIZE);
@@ -285,7 +285,7 @@ TEST(TestLfFIFOAllocator, multiple_threads_normal_alloc_128B)
   static const int64_t THREAD_NUM = 8;
   static int64_t ALLOC_SIZE = 128;
   pthread_t work_thread[THREAD_NUM];
-  ASSERT_EQ(OB_SUCCESS, allocator1.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
   for (int64_t i = 0; i < THREAD_NUM; ++i) {
     int ret = pthread_create(&work_thread[i], NULL, &th_normal_alloc_func, &ALLOC_SIZE);
@@ -304,7 +304,7 @@ TEST(TestLfFIFOAllocator, multiple_threads_normal_alloc_1K)
   static const int64_t THREAD_NUM = 8;
   static int64_t ALLOC_SIZE = 1024;
   pthread_t work_thread[THREAD_NUM];
-  ASSERT_EQ(OB_SUCCESS, allocator1.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
   for (int64_t i = 0; i < THREAD_NUM; ++i) {
     int ret = pthread_create(&work_thread[i], NULL, &th_normal_alloc_func, &ALLOC_SIZE);
@@ -323,7 +323,7 @@ TEST(TestLfFIFOAllocator, multiple_threads_normal_alloc_4K)
   static const int64_t THREAD_NUM = 8;
   static int64_t ALLOC_SIZE = 4 * 1024;
   pthread_t work_thread[THREAD_NUM];
-  ASSERT_EQ(OB_SUCCESS, allocator1.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
   for (int64_t i = 0; i < THREAD_NUM; ++i) {
     int ret = pthread_create(&work_thread[i], NULL, &th_normal_alloc_func, &ALLOC_SIZE);
@@ -342,7 +342,7 @@ TEST(TestLfFIFOAllocator, multiple_threads_normal_alloc_16K)
   static const int64_t THREAD_NUM = 8;
   static int64_t ALLOC_SIZE = 16 * 1024;
   pthread_t work_thread[THREAD_NUM];
-  ASSERT_EQ(OB_SUCCESS, allocator1.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
   for (int64_t i = 0; i < THREAD_NUM; ++i) {
     int ret = pthread_create(&work_thread[i], NULL, &th_normal_alloc_func, &ALLOC_SIZE);
@@ -361,7 +361,7 @@ TEST(TestLfFIFOAllocator, multiple_threads_normal_alloc_free_32B)
   static const int64_t THREAD_NUM = 128;
   static int64_t ALLOC_SIZE = 32;
   ASSERT_EQ(OB_SUCCESS, pc.create(10240, ObModIds::OB_CS_COMMON, ObModIds::OB_CS_COMMON));
-  ASSERT_EQ(OB_SUCCESS, allocator1.init(PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
+  ASSERT_EQ(OB_SUCCESS, allocator1.init(ALLOC_PAGE_SIZE, ObModIds::OB_PARTITION_STORAGE));
   ASSERT_EQ(0, pthread_barrier_init(&barrier1, NULL, THREAD_NUM));
 
   cotesting::FlexPool([&]{

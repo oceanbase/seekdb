@@ -210,7 +210,7 @@ int ObSNTenantTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, i
   } else if (OB_FAIL(tmp_file_block_manager_.get_block_usage_stat(used_page_num, macro_block_count))) {
     LOG_WARN("fail to get block usage stat", KR(ret));
   } else {
-    disk_data_size = used_page_num * ObTmpFileGlobal::PAGE_SIZE;
+    disk_data_size = used_page_num * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     occupied_disk_size = macro_block_count * ObTmpFileGlobal::SN_BLOCK_SIZE;
   }
 

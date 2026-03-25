@@ -81,7 +81,7 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
   char buf[PATH_MAX];
   std::string curr_dir(getcwd(buf, sizeof(buf)));
 #else
-  std::string curr_dir(get_current_dir_name());
+  std::string curr_dir(getcwd(NULL, 0));
 #endif
   std::string test_file = "file://" + curr_dir + "/runlin_test";
   ObString uri = test_file.c_str();

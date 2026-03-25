@@ -79,11 +79,10 @@
 #include <alloca.h>
 
 #include <errno.h>
-#ifdef __linux__
+#if defined(__APPLE__) || defined(__ANDROID__)
+// On macOS/Android, crypt() is declared in unistd.h (already included above)
+#elif defined(__linux__)
 #include <crypt.h>
-#elif defined(__APPLE__)
-// On macOS, crypt() is declared in unistd.h (already included above)
-// No need for separate crypt.h header
 #endif
 
 #include <assert.h>

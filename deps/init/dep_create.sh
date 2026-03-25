@@ -73,6 +73,11 @@ function echo_err() {
 }
 
 function get_os_release() {
+  if [[ "${ANDROID_BUILD}" == "true" ]]; then
+    OS_RELEASE="android"
+    echo_log "[NOTICE] Android cross-compile mode, use android dependencies list"
+    return 0
+  fi
   if [[ "${OS_TYPE}" == "Darwin" ]]; then
     if [[ "${OS_ARCH}x" == "x86_64x" || "${OS_ARCH}x" == "arm64x" ]]; then
       OS_RELEASE="macos"
@@ -207,7 +212,9 @@ function get_os_release() {
 
 get_os_release || exit 1
 
-if [[ "${OS_RELEASE}x" == "macosx" ]]; then
+if [[ "${OS_RELEASE}x" == "androidx" ]]; then
+    OS_TAG="android.arm64"
+elif [[ "${OS_RELEASE}x" == "macosx" ]]; then
     MACOS_VERSION=$(sw_vers -productVersion | awk -F. '{print $1}')
     if [ $MACOS_VERSION -lt 13 ]; then
       not_supported && exit 1
@@ -223,6 +230,13 @@ else
 fi
 
 DEP_FILE="oceanbase.${OS_TAG}.deps"
+
+# macOS native and Android cross-compile both use curl for download and tar for extraction
+IS_TAR_PLATFORM=false
+if [[ "${OS_RELEASE}" == "macos" || "${OS_RELEASE}" == "android" ]]; then
+    IS_TAR_PLATFORM=true
+fi
+
 # Compatible with MD5 checksum for macOS and Linux
 if command -v md5sum >/dev/null 2>&1; then
     MD5=`md5sum ${DEP_FILE} | cut -d" " -f1`
@@ -232,6 +246,11 @@ fi
 
 # Whether to use shared dependency cache, default is ON, will be OFF under certain conditions
 NEED_SHARE_CACHE=ON
+
+# Android cross-compile does not use shared dependency cache
+if [[ "${OS_RELEASE}" == "android" ]]; then
+    NEED_SHARE_CACHE=OFF
+fi
 
 WORKSACPE_DEPS_DIR="$(cd $(dirname $0); cd ..; pwd)"
 WORKSPACE_DEPS_3RD=${WORKSACPE_DEPS_DIR}/3rd
@@ -407,8 +426,7 @@ do
             echo_log "find package <${pkg}> in cache"
         else
             echo_log "downloading package <${pkg}>"
-            # macOS uses different temp file creation method and download command
-            if [[ "${OS_RELEASE}x" == "macosx" ]]; then
+            if [[ "${IS_TAR_PLATFORM}" == "true" ]]; then
               TEMP=$(mktemp "${TARGET_DIR_3RD}/pkg/.${pkg}.XXXX")
               if command -v curl >/dev/null 2>&1; then
                 curl -L -f -s "$repo/${pkg_path}" -o "${TEMP}" > ${TARGET_DIR_3RD}/pkg/error.log 2>&1
@@ -421,7 +439,7 @@ do
               wget "$repo/${pkg_path}" -O "${TARGET_DIR_3RD}/pkg/${TEMP}" &> ${TARGET_DIR_3RD}/pkg/error.log
             fi
             if (( $? == 0 )); then
-                if [[ "${OS_RELEASE}x" == "macosx" ]]; then
+                if [[ "${IS_TAR_PLATFORM}" == "true" ]]; then
                   mv -f "${TEMP}" "${TARGET_DIR_3RD}/pkg/${pkg}"
                 else
                   mv -f "${TARGET_DIR_3RD}/pkg/$TEMP" "${TARGET_DIR_3RD}/pkg/${pkg}"
@@ -429,10 +447,10 @@ do
                 rm -rf ${TARGET_DIR_3RD}/pkg/error.log
             else
                 cat ${TARGET_DIR_3RD}/pkg/error.log
-                if [[ "${OS_RELEASE}x" == "macosx" ]]; then
+                if [[ "${IS_TAR_PLATFORM}" == "true" ]]; then
                   rm -rf "${TEMP}"
                   echo_err "curl $repo/${pkg_path}"
-                  echo_err "Failed to init macos deps"
+                  echo_err "Failed to init deps"
                 else
                   rm -rf "${TARGET_DIR_3RD}/pkg/$TEMP"
                   echo_err "wget $repo/${pkg_path}"
@@ -442,8 +460,7 @@ do
             fi
         fi
         echo_log "unpack package <${pkg}>... \c"
-        # macOS uses tar.gz extraction
-        if [[ "${OS_RELEASE}x" == "macosx" ]]; then
+        if [[ "${IS_TAR_PLATFORM}" == "true" ]]; then
           (cd ${TARGET_DIR_3RD} && tar -xzf "${TARGET_DIR_3RD}/pkg/${pkg}" --strip-components=1)
         elif [[ "$ID" = "arch" || "$ID" = "garuda" ]]; then
           (cd ${TARGET_DIR_3RD} && rpmextract.sh "${TARGET_DIR_3RD}/pkg/${pkg}")
@@ -454,8 +471,8 @@ do
           echo "SUCCESS"
         else
           echo "FAILED" 1>&2
-          if [[ "${OS_RELEASE}x" == "macosx" ]]; then
-            echo_log "[ERROR] Failed to init macos deps"
+          if [[ "${IS_TAR_PLATFORM}" == "true" ]]; then
+            echo_log "[ERROR] Failed to init deps"
           else
             echo_log "[ERROR] Failed to init rpm deps"
           fi

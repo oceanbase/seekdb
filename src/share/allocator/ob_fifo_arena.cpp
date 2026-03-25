@@ -117,7 +117,7 @@ void* ObFifoArena::alloc(int64_t adv_idx, Handle& handle, int64_t size)
   if (adv_idx < 0 || size < 0) {
     COMMON_LOG(INFO, "invalid argument", K(adv_idx), K(size));
     ret = OB_INVALID_ARGUMENT;
-  } else if (rsize > PAGE_SIZE) {
+  } else if (rsize > ALLOC_PAGE_SIZE) {
     Page* page = NULL;
     if (NULL == (page = alloc_page(rsize))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -145,7 +145,7 @@ void* ObFifoArena::alloc(int64_t adv_idx, Handle& handle, int64_t size)
       }
       if (NULL == page || need_switch) {
         Page* new_page = NULL;
-        int64_t alloc_size = PAGE_SIZE;
+        int64_t alloc_size = ALLOC_PAGE_SIZE;
         if (NULL != page) {
           retire_page(way_id, handle, page);
         }

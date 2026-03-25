@@ -74,7 +74,7 @@ int prepare_backup_dest(ObBackupDest &backup_dest)
       "%s/test_backup_linked_item_write_and_read_dir", getcwd(buf, sizeof(buf))))) {
 #else
   if (OB_FAIL(databuff_printf(test_dir_, sizeof(test_dir_),
-      "%s/test_backup_linked_item_write_and_read_dir", get_current_dir_name()))) {
+      "%s/test_backup_linked_item_write_and_read_dir", getcwd(NULL, 0)))) {
 #endif
     LOG_WARN("failed to databuff_printf", K(ret));
   } else if (OB_FAIL(databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_))) {
@@ -347,7 +347,7 @@ void TestBackupLinkedReaderWriter::clean_env_()
   char buf[PATH_MAX];
   databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_linked_item_write_and_read_dir", getcwd(buf, sizeof(buf)));
 #else
-  databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_linked_item_write_and_read_dir", get_current_dir_name());
+  databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_linked_item_write_and_read_dir", getcwd(NULL, 0));
 #endif
   system((std::string("rm -rf ") + test_dir_ + std::string("*")).c_str());
 }

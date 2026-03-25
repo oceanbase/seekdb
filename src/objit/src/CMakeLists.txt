@@ -6,6 +6,8 @@ target_include_directories(objit_base INTERFACE
 
 # GLOB all source files according to its suffix.
 file(GLOB_RECURSE objit_SRC "*.h" "*.cpp" "${CMAKE_CURRENT_SROUCE_DIR}/../include/*.h")
+# Exclude the Android stub -- real LLVM implementations are used instead
+list(FILTER objit_SRC EXCLUDE REGEX ".*stub\\.cpp$")
 
 add_library(objit_objects OBJECT ${objit_SRC})
 target_link_libraries(objit_objects PRIVATE oblib_base objit_base)
@@ -17,5 +19,6 @@ target_link_libraries(objit
   PUBLIC
   objit_objects objit_base oblib "${llvm_libs}"
   INTERFACE
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-lrt -ldl -lpthread -lm>
+  $<$<PLATFORM_ID:Linux>:-lrt -ldl -lpthread -lm>
+  $<$<PLATFORM_ID:Android>:-ldl -lm>
 )

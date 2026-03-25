@@ -93,9 +93,9 @@ class ObTmpWriteBufferPool final
 public:
   // block size: 2MB - 24KB (header), use block size smaller than 2MB to avoid redundant AObject header
   static const int64_t WBP_BLOCK_SIZE = 2 * 1024 * 1024 - 24 * 1024;
-  static const int64_t BLOCK_PAGE_NUMS = WBP_BLOCK_SIZE / ObTmpFileGlobal::PAGE_SIZE;    // 253 pages per block (24KB for header)
+  static const int64_t BLOCK_PAGE_NUMS = WBP_BLOCK_SIZE / ObTmpFileGlobal::ALLOC_PAGE_SIZE;    // 253 pages per block (24KB for header)
   static const int64_t INITIAL_POOL_SIZE = WBP_BLOCK_SIZE;
-  static const int64_t INITIAL_PAGE_NUMS = INITIAL_POOL_SIZE / ObTmpFileGlobal::PAGE_SIZE;
+  static const int64_t INITIAL_PAGE_NUMS = INITIAL_POOL_SIZE / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   static const int64_t SHRINKING_PERIOD = 5 * 60 * 1000 * 1000; // 5min
   static const int32_t AUTO_SHRINKING_WATERMARK_L1 = 10;
   static const int32_t AUTO_SHRINKING_WATERMARK_L2 = 5;

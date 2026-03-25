@@ -425,8 +425,8 @@ int ObITmpFile::aio_pread(ObTmpFileIOCtx &io_ctx)
     if (io_ctx.get_read_offset_in_file() < 0) {
       io_ctx.set_read_offset_in_file(read_offset_);
     }
-    if (0 != io_ctx.get_read_offset_in_file() % ObTmpFileGlobal::PAGE_SIZE
-        || 0 != io_ctx.get_todo_size() % ObTmpFileGlobal::PAGE_SIZE) {
+    if (0 != io_ctx.get_read_offset_in_file() % ObTmpFileGlobal::ALLOC_PAGE_SIZE
+        || 0 != io_ctx.get_todo_size() % ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
       io_ctx.set_is_unaligned_read(true);
     }
 
@@ -478,7 +478,7 @@ int ObITmpFile::aio_pread(ObTmpFileIOCtx &io_ctx)
           LOG_WARN("fail to read tmp file from wbp", KR(ret), K(fd_), K(io_ctx), KPC(this));
         } else {
           const int64_t aligned_end_offset = get_page_end_offset_(io_ctx.get_read_offset_in_file());
-          const int64_t total_wbp_page_read_cnt = (aligned_end_offset - aligned_begin_offset) / ObTmpFileGlobal::PAGE_SIZE;
+          const int64_t total_wbp_page_read_cnt = (aligned_end_offset - aligned_begin_offset) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
           io_ctx.update_read_wbp_page_stat(total_wbp_page_read_cnt);
           LOG_DEBUG("finish wbp read", K(fd_), K(io_ctx.get_read_offset_in_file()),
                                        K(io_ctx.get_todo_size()),
@@ -516,7 +516,7 @@ int ObITmpFile::inner_read_truncated_part_(ObTmpFileIOCtx &io_ctx)
       LOG_WARN("fail to update data size", KR(ret), K(fd_), K(read_size));
     } else if (FALSE_IT(total_truncated_page_read_cnt = (get_page_end_offset_(io_ctx.get_read_offset_in_file()) -
                                                          get_page_begin_offset_(origin_read_offset)) /
-                                                        ObTmpFileGlobal::PAGE_SIZE)) {
+                                                        ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     } else if (FALSE_IT(io_ctx.update_read_truncated_stat(total_truncated_page_read_cnt))) {
     } else if (OB_UNLIKELY(io_ctx.get_todo_size() > 0 &&
                            truncated_offset_ == file_size_)) {
@@ -542,7 +542,7 @@ int ObITmpFile::inner_read_from_wbp_(ObTmpFileIOCtx &io_ctx)
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == begin_read_page_virtual_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected begin read page virtual id", KR(ret), K(fd_), K(begin_read_page_virtual_id), K(io_ctx));
-  } else if (io_ctx.get_read_offset_in_file() < wbp_begin_offset + ObTmpFileGlobal::PAGE_SIZE) {
+  } else if (io_ctx.get_read_offset_in_file() < wbp_begin_offset + ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
     begin_read_page_id = begin_page_id_;
   } else if (OB_FAIL(page_idx_cache_.binary_search(begin_read_page_virtual_id, begin_read_page_id))) {
     LOG_WARN("fail to find page index in array", KR(ret), K(fd_), K(io_ctx), K(begin_read_page_virtual_id), K(page_idx_cache_));
@@ -566,7 +566,7 @@ int ObITmpFile::inner_read_from_wbp_(ObTmpFileIOCtx &io_ctx)
       LOG_WARN("data page is null", KR(ret), K(fd_), K(curr_page_id), K(curr_page_virtual_id));
     } else {
       const int64_t read_offset_in_page = get_offset_in_page_(io_ctx.get_read_offset_in_file());
-      const int64_t read_size = MIN3(ObTmpFileGlobal::PAGE_SIZE - read_offset_in_page,
+      const int64_t read_size = MIN3(ObTmpFileGlobal::ALLOC_PAGE_SIZE - read_offset_in_page,
                                      io_ctx.get_todo_size(),
                                      file_size_ - io_ctx.get_read_offset_in_file());
       char *read_buf = io_ctx.get_todo_buffer();
@@ -618,8 +618,8 @@ int ObITmpFile::aio_write(ObTmpFileIOCtx &io_ctx)
     ret = OB_ERR_TMP_FILE_ALREADY_SEALED;
     LOG_WARN("attempt to write a sealed file", KR(ret), K(fd_));
   } else {
-    bool is_unaligned_write = 0 != file_size_ % ObTmpFileGlobal::PAGE_SIZE ||
-                              0 != io_ctx.get_todo_size() % ObTmpFileGlobal::PAGE_SIZE;
+    bool is_unaligned_write = 0 != file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE ||
+                              0 != io_ctx.get_todo_size() % ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     io_ctx.set_is_unaligned_write(is_unaligned_write);
     while (OB_SUCC(ret) && io_ctx.get_todo_size() > 0) {
       if (OB_FAIL(inner_write_(io_ctx))) {
@@ -864,7 +864,7 @@ int ObITmpFile::alloc_and_write_pages_(const ObTmpFileIOCtx &io_ctx,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid page id", KR(ret), K(fd_), K(new_page_id));
       } else {
-        int64_t write_size = common::min(ObTmpFileGlobal::PAGE_SIZE,
+        int64_t write_size = common::min(ObTmpFileGlobal::ALLOC_PAGE_SIZE,
                                          expected_write_size - actual_write_size);
         const char *write_buf = io_ctx.get_todo_buffer() + actual_write_size;
 
@@ -1068,13 +1068,13 @@ int64_t ObITmpFile::cal_wbp_begin_offset_() const
   if (0 == cached_page_nums_) {
     res = file_size_;
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == begin_page_virtual_id_ ||
-                         begin_page_virtual_id_ * ObTmpFileGlobal::PAGE_SIZE !=
+                         begin_page_virtual_id_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE !=
                          get_page_end_offset_(file_size_) -
-                         cached_page_nums_ * ObTmpFileGlobal::PAGE_SIZE)) {
+                         cached_page_nums_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("begin_page_offset_in_file_ is unexpected", KR(ret), KPC(this));
   } else {
-    res = begin_page_virtual_id_ * ObTmpFileGlobal::PAGE_SIZE;
+    res = begin_page_virtual_id_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   }
 
   return res;

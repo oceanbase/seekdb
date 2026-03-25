@@ -187,7 +187,7 @@ int ObLogDataWriter::reuse(const char *pool_file, const char *fname)
   } else if (0 != rename(pool_file, tmp_pool_file)) {
     ret = OB_IO_ERROR;
     SHARE_LOG(WARN, "rename error", KCSTRING(pool_file), KCSTRING(tmp_pool_file), KERRMSG);
-  } else if ((fd = open(tmp_pool_file, OPEN_FLAG, OPEN_MODE)) < 0) {
+  } else if ((fd = open(tmp_pool_file, OPEN_FLAG)) < 0) {
     ret = OB_IO_ERROR;
     SHARE_LOG(ERROR, "open file failed", KCSTRING(tmp_pool_file), KERRMSG);
   } else if (unintr_pwrite(fd, ObLogGenerator::eof_flag_buf_,

@@ -462,7 +462,7 @@ int ObTmpFileFlushListIterator::get_flushing_file_dirty_page_num_(const ObITmpFi
   } else if (cur_stage <= FlushCtxState::FSM_F3) {
     ObITmpFile &mutable_file_ref = const_cast<ObITmpFile &>(file);
     int64_t dirty_page_size = mutable_file_ref.get_dirty_data_page_size_with_lock();
-    page_num = upper_align(dirty_page_size, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE;
+    page_num = upper_align(dirty_page_size, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   } else if (OB_UNLIKELY(file.get_mode() != ObITmpFile::ObTmpFileMode::SHARED_NOTHING)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected file mode", KR(ret), K(file));

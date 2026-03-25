@@ -10,6 +10,13 @@ project("OceanBase"
   LANGUAGES CXX C ASM)
 
 
+if(ANDROID)
+  # Boost headers use std::unary_function removed in C++17; NDK libc++ supports this compat macro
+  add_definitions(-D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION)
+  # Force-include Android compat header for test code portability fixes
+  add_compile_options(-include ${CMAKE_SOURCE_DIR}/include/android_compat.h)
+endif()
+
 if(ENABLE_COMPILE_DLL_MODE)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCOMPILE_DLL_MODE")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCOMPILE_DLL_MODE")
@@ -179,7 +186,9 @@ elseif (OB_INCLUDE_TOOLS)
   add_subdirectory(tools EXCLUDE_FROM_ALL)
 endif()
 
-if(NOT APPLE)
+if(ANDROID)
+  # Android: no packaging needed
+elseif(NOT APPLE)
   if (CMAKE_BUILD_RPM)
     include(cmake/RPM.cmake)
   elseif(CMAKE_BUILD_DEB)

@@ -100,7 +100,7 @@ TEST_F(TestSSTmpFileSubModule, test_async_remove_task)
     ObSharedStorageTmpFile * ss_tmp_file = tmp_file_handle.get();
     ASSERT_EQ(fd, tmp_file_handle.get()->get_fd());
 
-    ASSERT_EQ(write_buffer_size / ObTmpFileGlobal::PAGE_SIZE,
+    ASSERT_EQ(write_buffer_size / ObTmpFileGlobal::ALLOC_PAGE_SIZE,
               ss_tmp_file->get_data_page_nums(false /* all pages */));
     tmp_file_handle.reset();
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->remove(fd));
@@ -201,7 +201,7 @@ TEST_F(TestSSTmpFileSubModule, test_async_remove_task)
     io_info.buf_ = write_buffer;
     ASSERT_EQ(OB_SUCCESS, MTL(ObTenantTmpFileManager *)->aio_write(MTL_ID(), io_info, handle));
     sleep(1);
-    ASSERT_EQ(write_buffer_size / ObTmpFileGlobal::PAGE_SIZE,
+    ASSERT_EQ(write_buffer_size / ObTmpFileGlobal::ALLOC_PAGE_SIZE,
               ss_tmp_file->get_data_page_nums(false /* all pages */));
 
     // remove file, half in memory, half in disk

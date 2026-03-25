@@ -576,11 +576,11 @@ public:
   static constexpr int64_t MIN_PART_COUNT = 8;
   static constexpr int64_t MAX_PART_LEVEL = 4;
   static constexpr int64_t PRICE_PER_ROW = 48;
-  static constexpr int64_t PAGE_SIZE = ObChunkDatumStore::BLOCK_SIZE;
+  static constexpr int64_t ALLOC_PAGE_SIZE = ObChunkDatumStore::BLOCK_SIZE;
 private:
   static const int64_t RATIO_OF_BUCKETS = 2;
   // min row count for estimated row count
-  static const int64_t MIN_MEM_SIZE = (MIN_PART_COUNT + 1) * PAGE_SIZE;
+  static const int64_t MIN_MEM_SIZE = (MIN_PART_COUNT + 1) * ALLOC_PAGE_SIZE;
   static const int8_t ENABLE_HJ_NEST_LOOP = 0x01;
   static const int8_t ENABLE_HJ_RECURSIVE = 0x02;
   static const int8_t ENABLE_HJ_IN_MEMORY = 0x04;

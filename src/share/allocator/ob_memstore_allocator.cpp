@@ -163,7 +163,7 @@ void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 
 static int64_t calc_nway(int64_t cpu, int64_t mem)
 {
-  return std::min(cpu, mem/20/ObFifoArena::PAGE_SIZE);
+  return std::min(cpu, mem/20/ObFifoArena::ALLOC_PAGE_SIZE);
 }
 
 int64_t ObMemstoreAllocator::nway_per_group()

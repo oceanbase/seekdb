@@ -293,28 +293,28 @@ protected:
   int insert_or_update_data_flush_node_();
   virtual int64_t get_dirty_data_page_size_() const = 0;
 
-  OB_INLINE bool has_unfinished_page_() const { return file_size_ % ObTmpFileGlobal::PAGE_SIZE != 0; }
+  OB_INLINE bool has_unfinished_page_() const { return file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE != 0; }
   OB_INLINE int64_t get_page_begin_offset_(const int64_t offset) const
   {
-    return common::lower_align(offset, ObTmpFileGlobal::PAGE_SIZE);
+    return common::lower_align(offset, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
   }
   OB_INLINE int64_t get_page_end_offset_(const int64_t offset) const
   {
-    return common::upper_align(offset, ObTmpFileGlobal::PAGE_SIZE);
+    return common::upper_align(offset, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
   }
   OB_INLINE int64_t get_page_begin_offset_by_virtual_id_(const int64_t virtual_page_id) const
   {
-    return virtual_page_id * ObTmpFileGlobal::PAGE_SIZE;
+    return virtual_page_id * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   }
   OB_INLINE int64_t get_page_end_offset_by_virtual_id_(const int64_t virtual_page_id) const
   {
-    return (virtual_page_id + 1) * ObTmpFileGlobal::PAGE_SIZE;
+    return (virtual_page_id + 1) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   }
   OB_INLINE int64_t get_page_virtual_id_(const int64_t offset, const bool is_open_interval) const
   {
     return is_open_interval ?
-           common::upper_align(offset, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE - 1 :
-           offset / ObTmpFileGlobal::PAGE_SIZE;
+           common::upper_align(offset, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE - 1 :
+           offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   }
   OB_INLINE int64_t get_end_page_virtual_id_() const
   {
@@ -324,7 +324,7 @@ protected:
   }
   OB_INLINE int64_t get_offset_in_page_(const int64_t offset) const
   {
-    return offset % ObTmpFileGlobal::PAGE_SIZE;
+    return offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   }
 
   OB_INLINE int64_t get_offset_in_block_(int64_t file_offset) const

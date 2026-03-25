@@ -640,8 +640,8 @@ else()
     ob_share_static
     ob_plugin
     $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--no-whole-archive>
-    $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
-    $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
+    $<$<PLATFORM_ID:Linux>:-static-libgcc>
+    $<$<PLATFORM_ID:Linux>:-static-libstdc++>
     objit)
 endif()
 
@@ -654,10 +654,10 @@ if (NOT OB_USE_ASAN)
   # On macOS, malloc_hook conflicts with linked LLVM
   # LLVM's global constructors run before main() and use hooked malloc,
   # but free with system free, causing crashes
-  if (NOT APPLE)
+  if (NOT APPLE AND NOT ANDROID)
     set(link_malloc_hook malloc_hook)
   else()
-    message(STATUS "Disabling malloc_hook on macOS (conflicts with dynamic LLVM)")
+    message(STATUS "Disabling malloc_hook on macOS/Android")
     set(link_malloc_hook "")
   endif()
 endif()
@@ -680,8 +680,8 @@ target_link_libraries(observer_without_bolt
   ob_plugin_export_static
   $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--no-whole-archive>
   $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--export-dynamic-symbol=obp_*>
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
+  $<$<PLATFORM_ID:Linux>:-static-libgcc>
+  $<$<PLATFORM_ID:Linux>:-static-libstdc++>
   ${link_malloc_hook}
   ${BOLT_OPT}
 )

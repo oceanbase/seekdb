@@ -499,14 +499,14 @@ public:
       SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else if (OB_UNLIKELY (mask_bits < 0)) {
       ret = OB_INVALID_ARGUMENT;
-      SQL_RESV_LOG(WARN, "negative bitmap member not allowed", K(ret), K(index));
+      SQL_RESV_LOG(WARN, "negative bitmap member not allowed", K(ret), K(mask_bits));
     } else if (0 == mask_bits) {
       // do nothing
     } else {
       int64_t pos = mask_bits >> PER_BITSETWORD_MOD_BITS;
       if (OB_UNLIKELY(pos + 1 > INT16_MAX)) {
         ret = OB_SIZE_OVERFLOW;
-        SQL_RESV_LOG(WARN, "ObSqlBitSet pos overflow", K(ret), K(index), K(pos));
+        SQL_RESV_LOG(WARN, "ObSqlBitSet pos overflow", K(ret), K(mask_bits), K(pos));
       } else if (OB_UNLIKELY(pos >= desc_.cap_)) {
         int64_t new_word_cnt = pos + 1;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {

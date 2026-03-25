@@ -693,7 +693,7 @@ public:
      const int64_t task_map_size = ObDedupQueue::TASK_MAP_SIZE,
      const int64_t total_mem_limit = ObDedupQueue::TOTAL_LIMIT,
      const int64_t hold_mem_limit = ObDedupQueue::HOLD_LIMIT,
-     const int64_t page_size = ObDedupQueue::PAGE_SIZE,
+     const int64_t page_size = ObDedupQueue::ALLOC_PAGE_SIZE,
      const char *label = nullptr)
     :  thread_num_(pair.get_thread_cnt()),
        queue_size_(queue_size),
@@ -708,7 +708,7 @@ public:
      const int64_t task_map_size = ObDedupQueue::TASK_MAP_SIZE,
      const int64_t total_mem_limit = ObDedupQueue::TOTAL_LIMIT,
      const int64_t hold_mem_limit = ObDedupQueue::HOLD_LIMIT,
-     const int64_t page_size = ObDedupQueue::PAGE_SIZE,
+     const int64_t page_size = ObDedupQueue::ALLOC_PAGE_SIZE,
      const char *label = nullptr)
     :  thread_num_(thread_num),
        queue_size_(queue_size),

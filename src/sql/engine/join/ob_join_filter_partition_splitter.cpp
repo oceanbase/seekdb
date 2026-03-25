@@ -156,7 +156,7 @@ int64_t ObJoinFilterPartitionSplitter::calc_partition_count_by_cache_aware(
   int64_t partition_cnt = next_pow2(row_count / row_count_cache_aware);
   partition_cnt = min(partition_cnt, ObHashJoinVecOp::MAX_PART_COUNT_PER_LEVEL);
   global_mem_bound_size = max(0, global_mem_bound_size);
-  while (partition_cnt * ObHashJoinVecOp::PAGE_SIZE > global_mem_bound_size) {
+  while (partition_cnt * ObHashJoinVecOp::ALLOC_PAGE_SIZE > global_mem_bound_size) {
     partition_cnt >>= 1;
   }
   partition_cnt = partition_cnt < ObHashJoinVecOp::MIN_PART_COUNT ?
