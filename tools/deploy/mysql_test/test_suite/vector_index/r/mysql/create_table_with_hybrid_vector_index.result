@@ -164,7 +164,7 @@ ERROR HY000: Invalid argument
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10g));
 ERROR HY000: Invalid argument
 CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed));
-ERROR 0A000: hnsw vector index setting model or sync_mode or sync_interval is not supported
+ERROR 0A000: hnsw vector index setting model or sync_interval is not supported
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
 ERROR 0A000: setting vector index storing column is not supported
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column));
@@ -383,7 +383,7 @@ t_vec	CREATE TABLE `t_vec` (
   PRIMARY KEY (`c1`),
   VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, SYNC_MODE=IMMEDIATE, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384,
   FULLTEXT KEY `vec_idx2` (`c3`) WITH PARSER space PARSER_PROPERTIES=(min_token_size=3,max_token_size=84) BLOCK_SIZE 16384,
-  VECTOR KEY `vec_idx3` (`c4`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  VECTOR KEY `vec_idx3` (`c4`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_MODE=ASYNC) BLOCK_SIZE 16384,
   KEY `vec_idx4` (`c1`) BLOCK_SIZE 16384 LOCAL
 ) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
 show index from t_vec;
@@ -504,7 +504,7 @@ ERROR HY000: Invalid argument
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with(distance=l2, lib=vsag, type=hnsw, model=ob_embed, dim=1024, sync_mode=async, sync_interval=10g)) ORGANIZATION HEAP;
 ERROR HY000: Invalid argument
 CREATE TABLE t_vec(id int NOT NULL PRIMARY KEY, c1 int, c2 vector(100),  vector index vec_idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200, model=ob_embed)) ORGANIZATION HEAP;
-ERROR 0A000: hnsw vector index setting model or sync_mode or sync_interval is not supported
+ERROR 0A000: hnsw vector index setting model or sync_interval is not supported
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
 ERROR 0A000: setting vector index storing column is not supported
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024) WITH COLUMN GROUP(all column, each column)) ORGANIZATION HEAP;
@@ -567,7 +567,7 @@ t_vec	CREATE TABLE `t_vec` (
   `c3` VECTOR(100) DEFAULT NULL,
   PRIMARY KEY (`c1`),
   VECTOR KEY `vec_idx1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, MODEL=OB_EMBED, DIM=1024, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_INTERVAL=10s) BLOCK_SIZE 16384,
-  VECTOR KEY `vec_idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+  VECTOR KEY `vec_idx2` (`c3`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64, SYNC_MODE=ASYNC) BLOCK_SIZE 16384
 ) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
 show index from t_vec;
 Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression

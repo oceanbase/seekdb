@@ -8203,6 +8203,17 @@ RESULT_CODE	bigint(20)	YES		NULL
 select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_ROOTSERVICE_JOBS limit 1);
 cnt
 1
+desc oceanbase.DBA_OB_CHANGE_STREAM_REFRESH_STAT;
+Field	Type	Null	Key	Default	Extra
+REFRESH_SCN	bigint(20)	NO		NULL
+MIN_DEP_LSN	bigint(20)	NO		NULL
+PENDING_TX_COUNT	bigint(20)	NO		NULL
+FETCH_TX	bigint(20)	NO		NULL
+FETCH_LSN	bigint(20)	NO		NULL
+FETCH_SCN	bigint(20)	NO		NULL
+select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from oceanbase.DBA_OB_CHANGE_STREAM_REFRESH_STAT limit 1);
+cnt
+1
 select case cnt when 0 then NULL else 'UNEXPECTED ERROR: It is expected to be an empty set, which means that all GV$ and V$ view column names are defined consistently' end ERROR_INFO from (select /*+no_rewrite*/ count(*) cnt from
 (SELECT t.table_name,
 group_concat(c.column_name) as column_name_list

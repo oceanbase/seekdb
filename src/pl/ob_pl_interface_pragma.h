@@ -38,6 +38,7 @@
 #include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
 #include "pl/sys_package/ob_dbms_partition.h"
 #include "pl/sys_package/ob_dbms_ai_service.h"
+#include "pl/sys_package/ob_dbms_index_manager.h"
 
 #ifdef INTERFACE_DEF
   INTERFACE_DEF(INTERFACE_START, "TEST", (ObPLInterfaceImpl::call))
@@ -242,6 +243,10 @@ DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(DBMS_HYBRID_VECTOR_MYSQL_GET_SQL, ObDB
 
 #undef DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE
   // end of dbms_hybrid_search
+
+  // start of dbms_index_manager
+  INTERFACE_DEF(INTERFACE_DBMS_INDEX_MANAGER_REFRESH, "REFRESH", (ObDBMSIndexManager::refresh))
+  // end of dbms_index_manager
 
   INTERFACE_DEF(INTERFACE_END, "INVALID", (nullptr))
 #endif

@@ -10887,6 +10887,26 @@ def_table_schema(**gen_sqlite_virtual_table_def(
     keywords = all_def_keywords['__all_rootservice_job']
   ))
 
+# 12564: __all_virtual_change_stream_refresh_stat
+def_table_schema(
+  owner = 'xiebaoma.xbm',
+  table_name    = '__all_virtual_change_stream_refresh_stat',
+  table_id      = '12564',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [],
+  in_tenant_space=True,
+  normal_columns = [
+    ('tenant_id', 'int'),
+    ('refresh_scn', 'int'),
+    ('min_dep_lsn', 'int'),
+    ('pending_tx_count', 'int'),
+    ('fetch_tx', 'int'),
+    ('fetch_lsn', 'int'),
+    ('fetch_scn', 'int'),
+  ],
+)
+
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
 ################################################################################
@@ -29208,6 +29228,29 @@ def_table_schema(
     FROM oceanbase.__all_virtual_rootservice_job
   """.replace("\n", " ")
   )
+
+def_table_schema(
+  owner = 'xiebaoma.xbm',
+  table_name      = 'DBA_OB_CHANGE_STREAM_REFRESH_STAT',
+  table_id        = '21668',
+  table_type      = 'SYSTEM_VIEW',
+  gm_columns      = [],
+  rowkey_columns  = [],
+  normal_columns  = [],
+  in_tenant_space = True,
+  view_definition =
+  """
+    SELECT
+      REFRESH_SCN,
+      MIN_DEP_LSN,
+      PENDING_TX_COUNT,
+      FETCH_TX,
+      FETCH_LSN,
+      FETCH_SCN
+    FROM oceanbase.__all_virtual_change_stream_refresh_stat
+    WHERE TENANT_ID = EFFECTIVE_TENANT_ID()
+  """.replace("\n", " ")
+)
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use the actual view name for placeholder

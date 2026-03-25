@@ -18,6 +18,8 @@
 
 
 #include "ob_table_scan_op.h"
+#include "sql/das/ob_das_attach_define.h"
+#include "sql/das/ob_das_vec_define.h"
 #include "sql/executor/ob_task_spliter.h"
 #include "lib/geo/ob_geo_utils.h"
 #include "share/ob_ddl_checksum.h"
@@ -37,6 +39,27 @@ using namespace share::schema;
 namespace sql
 {
 #define MY_CTDEF (MY_SPEC.tsc_ctdef_)
+
+namespace
+{
+// Recursively find ObDASVecAuxScanCtDef with skip_delta_buffer_ in the attach hierarchy.
+// Used for HNSW+async: when index lookup finds deleted row, skip it instead of 4377.
+bool find_skip_delta_buffer_in_ctdef(const ObDASBaseCtDef *ctdef)
+{
+  bool found = false;
+  if (!OB_ISNULL(ctdef)) {
+    if (DAS_OP_VEC_SCAN == ctdef->op_type_) {
+      const ObDASVecAuxScanCtDef *vec_ctdef = static_cast<const ObDASVecAuxScanCtDef *>(ctdef);
+      found = vec_ctdef->skip_delta_buffer_;
+    } else {
+      for (int i = 0; !found && i < ctdef->children_cnt_; ++i) {
+        found = find_skip_delta_buffer_in_ctdef(ctdef->children_[i]);
+      }
+    }
+  }
+  return found;
+}
+}  // anonymous namespace
 
 int FlashBackItem::set_flashback_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef &scan_rtdef) const
 {
@@ -1070,6 +1093,27 @@ int ObTableScanOp::init_attach_scan_rtdef(const ObDASBaseCtDef *attach_ctdef,
       for (int i = 0; OB_SUCC(ret) && i < attach_ctdef->children_cnt_; ++i) {
         if (OB_FAIL(init_attach_scan_rtdef(attach_ctdef->children_[i], attach_rtdef->children_[i]))) {
           LOG_WARN("init attach scan rtdef failed", K(ret));
+        }
+      }
+      // HNSW+async: when index lookup finds deleted row, skip it instead of 4377
+      if (OB_SUCC(ret) && find_skip_delta_buffer_in_ctdef(attach_ctdef)) {
+        ObDASScanRtDef *target_scan_rtdef = nullptr;
+        if (DAS_OP_VEC_SCAN == attach_ctdef->op_type_) {
+          const ObDASVecAuxScanCtDef *vec_aux_ctdef = static_cast<const ObDASVecAuxScanCtDef *>(attach_ctdef);
+          if (attach_rtdef->children_cnt_ > vec_aux_ctdef->get_com_aux_tbl_idx()) {
+            ObDASBaseRtDef *com_aux_rtdef = attach_rtdef->children_[vec_aux_ctdef->get_com_aux_tbl_idx()];
+            if (OB_NOT_NULL(com_aux_rtdef) && DAS_OP_TABLE_SCAN == com_aux_rtdef->op_type_) {
+              target_scan_rtdef = static_cast<ObDASScanRtDef *>(com_aux_rtdef);
+            }
+          }
+        } else if ((DAS_OP_TABLE_LOOKUP == attach_ctdef->op_type_
+                    || DAS_OP_INDEX_PROJ_LOOKUP == attach_ctdef->op_type_)
+                   && attach_ctdef->children_cnt_ >= 2
+                   && OB_NOT_NULL(attach_ctdef->children_[0])) {
+          target_scan_rtdef = static_cast<ObDASTableLookupRtDef *>(attach_rtdef)->get_lookup_scan_rtdef();
+        }
+        if (OB_NOT_NULL(target_scan_rtdef)) {
+          target_scan_rtdef->scan_flag_.set_skip_4377_for_async_index_lookup(true);
         }
       }
     }

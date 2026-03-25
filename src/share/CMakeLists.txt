@@ -660,6 +660,15 @@ ob_set_subtarget(ob_share vector_index
   vector_index/ob_hybrid_vector_refresh_task.cpp
 )
 
+ob_set_subtarget(ob_share change_stream
+  change_stream/ob_change_stream_fetcher.cpp
+  change_stream/ob_change_stream_dispatcher.cpp
+  change_stream/ob_change_stream_worker.cpp
+  change_stream/ob_change_stream_plugin.cpp
+  change_stream/ob_change_stream_mgr.cpp
+  change_stream/ob_cs_plugin_async_index.cpp
+)
+
 ob_set_subtarget(ob_share vector_type
   vector_type/ob_vector_add.cpp
   vector_type/ob_vector_div.cpp

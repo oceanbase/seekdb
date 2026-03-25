@@ -20,6 +20,7 @@
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_service.h"
 #include "share/ob_fork_table_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
 #include "share/ob_fts_index_builder_util.h"
 #include "storage/ddl/ob_ddl_lock.h"
 

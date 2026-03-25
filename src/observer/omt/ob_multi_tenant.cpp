@@ -75,6 +75,7 @@
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 #include "storage/restore/ob_tenant_restore_info_mgr.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/restore/ob_tenant_restore_info_mgr.h"
 #include "share/scheduler/ob_partition_auto_split_helper.h"
@@ -419,6 +420,7 @@ int ObMultiTenant::init(ObAddr myaddr,
     MTL_BIND2(mtl_new_default, table::ObTableClientInfoMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, observer::ObTableQueryASyncMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, ObPluginVectorIndexService::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
+    MTL_BIND2(mtl_new_default, ObChangeStreamMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, ObAutoSplitTaskCache::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, rootserver::ObDDLServiceLauncher::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, rootserver::ObSysTenantLoadSysPackageService::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);

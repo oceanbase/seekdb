@@ -1164,6 +1164,65 @@ int ObMultiVersionSchemaService::get_tenant_full_schema_guard(
   return ret;
 }
 
+int ObMultiVersionSchemaService::get_tenant_schema_guard_with_version_in_inner_table(
+    const uint64_t tenant_id,
+    ObSchemaGetterGuard &schema_guard)
+{
+  int ret = OB_SUCCESS;
+  bool is_restore = false;
+  bool use_local = false;
+  int64_t version_in_inner_table = OB_INVALID_VERSION;
+  ObRefreshSchemaStatus schema_status;
+  if (OB_INVALID_TENANT_ID == tenant_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
+  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql_proxy is null", K(ret));
+  } else if (OB_FAIL(check_tenant_is_restore(NULL, tenant_id, is_restore))) {
+    LOG_WARN("fail to check tenant is restore", KR(ret), K(tenant_id));
+  } else if (is_restore && OB_SYS_TENANT_ID != tenant_id) {
+    ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+    if (OB_ISNULL(schema_status_proxy)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema_status_proxy is null", KR(ret));
+    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(tenant_id, schema_status))) {
+      LOG_WARN("failed to get tenant refresh schema status", KR(ret), K(tenant_id));
+    } else if (OB_INVALID_VERSION == schema_status.readable_schema_version_) {
+      use_local = false;
+    } else {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("tenant is still restoring, not supported", KR(ret), K(tenant_id), K(schema_status));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (use_local) {
+    if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard))) {
+      LOG_WARN("fail to get schema guard", K(ret), K(tenant_id));
+    }
+  } else {
+    schema_status.tenant_id_ = tenant_id;
+    if (OB_FAIL(get_schema_version_in_inner_table(*GCTX.sql_proxy_, schema_status, version_in_inner_table))) {
+      LOG_WARN("fail to get latest schema version in inner table", K(ret));
+    } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard, version_in_inner_table))) {
+      if (OB_SCHEMA_EAGAIN == ret) {
+        int t_ret = OB_SUCCESS;
+        ObArray<uint64_t> tenant_ids;
+        if (OB_SUCCESS != (t_ret = tenant_ids.push_back(tenant_id))) {
+          LOG_WARN("fail to push back tenant_id", K(t_ret), K(tenant_id));
+        } else if (OB_SUCCESS != (t_ret = refresh_and_add_schema(tenant_ids))) {
+          LOG_WARN("fail to refresh and add schema", K(t_ret), K(tenant_id));
+        } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, schema_guard, version_in_inner_table))) {
+          LOG_WARN("fail to retry get schema guard", K(ret), K(tenant_id), K(version_in_inner_table));
+        }
+      } else {
+        LOG_WARN("get schema manager failed", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObMultiVersionSchemaService::add_schema_mgr_info(
     ObSchemaGetterGuard &schema_guard,
     ObSchemaStore* schema_store,

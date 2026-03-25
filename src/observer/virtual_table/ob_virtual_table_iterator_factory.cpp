@@ -214,6 +214,7 @@
 #include "observer/virtual_table/ob_all_virtual_plugin_info.h"
 #include "observer/virtual_table/ob_all_virtual_ddl_diagnose_info.h"
 #include "observer/virtual_table/ob_all_virtual_cs_replica_tablet_stats.h"
+#include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
 #include "observer/virtual_table/ob_all_virtual_dynamic_partition_table.h"
 #include "observer/virtual_table/ob_all_virtual_storage_cache_task.h"
 #include "observer/virtual_table/ob_all_virtual_tablet_local_cache.h"
@@ -2699,6 +2700,16 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(WARN, "failed to init ObAllVirtualCSReplicaTabletStats", K(ret));
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_cs_replica_tablet_stats);
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_CHANGE_STREAM_REFRESH_STAT_TID:
+          {
+            ObAllVirtualChangeStreamRefreshStat *change_stream_refresh_stat = NULL;
+            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualChangeStreamRefreshStat, change_stream_refresh_stat))) {
+              SERVER_LOG(ERROR, "ObAllVirtualChangeStreamRefreshStat construct failed", K(ret));
+            } else {
+              vt_iter = static_cast<ObVirtualTableIterator *>(change_stream_refresh_stat);
             }
             break;
           }

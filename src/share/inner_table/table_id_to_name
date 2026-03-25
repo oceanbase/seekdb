@@ -812,6 +812,7 @@
 # 12562: __all_tenant_event_history  # BASE_TABLE_NAME
 # 12563: __all_virtual_rootservice_job
 # 12563: __all_rootservice_job  # BASE_TABLE_NAME
+# 12564: __all_virtual_change_stream_refresh_stat
 # 20001: GV$OB_PLAN_CACHE_STAT
 # 20002: GV$OB_PLAN_CACHE_PLAN_STAT
 # 20003: SCHEMATA
@@ -1229,6 +1230,7 @@
 # 21665: CDB_OB_AI_MODELS
 # 21666: CDB_OB_AI_MODEL_ENDPOINTS
 # 21667: DBA_OB_ROOTSERVICE_JOBS
+# 21668: DBA_OB_CHANGE_STREAM_REFRESH_STAT
 # 14999: __idx_11013_all_virtual_session_event_i1
 # 14999: all_virtual_session_event_i1  # INDEX_NAME
 # 14999: __all_virtual_session_event  # DATA_BASE_TABLE_NAME

@@ -149,7 +149,8 @@ public:
                                common::ObNewRowIterator *&scan_iter,
                                ObIArray<uint64_t> *out_column_ids = nullptr,
                                const bool need_all_columns = false,
-                               const bool need_ora_scn = false);
+                               const bool need_ora_scn = false,
+                               const SCN *min_scn = nullptr);
 
   static int erase_ivf_build_helper(ObLSID ls_id, const ObIvfHelperKey &key);
   static int get_mem_context_detail_info(ObPluginVectorIndexService *service,

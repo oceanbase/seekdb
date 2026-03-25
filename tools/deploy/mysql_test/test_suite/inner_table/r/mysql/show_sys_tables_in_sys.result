@@ -9355,3 +9355,13 @@ id	field	type	length	precision	nullable
 19	job_type	22	256	-1	0
 20	job_status	22	256	-1	0
 21	result_code	5	0	20	1
+table oceanbase.__all_virtual_change_stream_refresh_stat column_count 7 table_id 12564
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12564 order by column_id;
+id	field	type	length	precision	nullable
+16	tenant_id	5	0	20	0
+17	refresh_scn	5	0	20	0
+18	min_dep_lsn	5	0	20	0
+19	pending_tx_count	5	0	20	0
+20	fetch_tx	5	0	20	0
+21	fetch_lsn	5	0	20	0
+22	fetch_scn	5	0	20	0

@@ -132,64 +132,11 @@ int ObDDLService::init(obrpc::ObSrvRpcProxy &rpc_proxy,
 int ObDDLService::get_tenant_schema_guard_with_version_in_inner_table(const uint64_t tenant_id, ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  bool is_restore = false;
-  bool use_local = false;
-  int64_t version_in_inner_table = OB_INVALID_VERSION;
-  ObRefreshSchemaStatus schema_status;
-  if (OB_INVALID_TENANT_ID == tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret), KP(GCTX.schema_service_), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(GCTX.schema_service_->check_tenant_is_restore(NULL, tenant_id, is_restore))) {
-    LOG_WARN("fail to check tenant is restore", KR(ret), K(tenant_id));
-  } else if (is_restore && OB_SYS_TENANT_ID != tenant_id) {
-    ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
-    if (OB_ISNULL(schema_status_proxy)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_status_proxy is null", KR(ret));
-    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(tenant_id, schema_status))) {
-      LOG_WARN("failed to get tenant refresh schema status", KR(ret), K(tenant_id));
-    } else if (OB_INVALID_VERSION == schema_status.readable_schema_version_) {
-      // The second of physical recovery, after reset schema status, modify_schema can be modified
-      use_local = false;
-    } else if (is_restore) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("tenant is still restoring, ddl not supported", KR(ret), K(tenant_id), K(schema_status));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (use_local) {
-    // Only for the failover/switchover stage of the standalone cluster
-    if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret), K(tenant_id));
-    } else {
-      LOG_INFO("use local tenant schema guard", K(ret), K(tenant_id));
-    }
+    LOG_WARN("pointer is null", K(ret), KP(GCTX.schema_service_));
   } else {
-    // 1. the normal tenants do DDL in primary cluster.
-    // 2. restore tenant is in modify_schema stage in primary cluster.
-    schema_status.tenant_id_ = tenant_id;
-    // Ensure that the user tenant schema is updated to the latest
-    if (OB_FAIL(GCTX.schema_service_->get_schema_version_in_inner_table(*GCTX.sql_proxy_,
-            schema_status, version_in_inner_table))) {
-      LOG_WARN("fail to get latest schema version in inner table", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard, version_in_inner_table))) {
-      if (OB_SCHEMA_EAGAIN == ret) {
-        int t_ret = OB_SUCCESS;
-        ObArray<uint64_t> tenant_ids;
-        if (OB_SUCCESS != (t_ret = tenant_ids.push_back(tenant_id))) {
-          LOG_WARN("fail to push back tenant_id", K(t_ret), K(tenant_id));
-        } else if (OB_SUCCESS != (t_ret = GCTX.schema_service_->refresh_and_add_schema(tenant_ids))) {
-          LOG_WARN("fail to refresh and add schema", K(t_ret), K(tenant_id));
-        } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard, version_in_inner_table))) {
-          LOG_WARN("fail to retry get schema guard", K(ret), K(tenant_id), K(version_in_inner_table));
-        }
-      } else {
-        LOG_WARN("get schema manager failed!", K(ret));
-      }
-    }
+    ret = GCTX.schema_service_->get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard);
   }
   return ret;
 }
@@ -33729,6 +33676,18 @@ int ObDDLSQLTransaction::serialize_inc_schemas_(
   UNUSED(tenant_schemas);
   UNUSED(database_schemas);
   UNUSED(table_schemas);
+  // Register DDL_TRANS MDS so that Change Stream Fetcher can detect DDL transactions.
+  // Upstream serializes full incremental schema dict here (via ObDataDictStorage),
+  // but SeekDB only needs the MDS type signal, not the data content.
+  char dummy = '\0';
+  if (OB_FAIL(register_tx_data(
+      tenant_id_,
+      SYS_LS,
+      transaction::ObTxDataSourceType::DDL_TRANS,
+      &dummy,
+      sizeof(dummy)))) {
+    LOG_WARN("register DDL_TRANS MDS failed", KR(ret), K_(tenant_id));
+  }
   return ret;
 }
 

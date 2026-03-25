@@ -106,6 +106,24 @@ public:
   int update_major_refresh_mv_merge_scn(const share::SCN &scn, bool is_incremental = true);
   int get_major_refresh_mv_merge_scn(const bool for_update, share::SCN &scn);
 
+  // for change stream async index
+  static int advance_change_stream_refresh_scn(common::ObISQLClient &sql_client,
+                                               const uint64_t tenant_id,
+                                               const SCN &refresh_scn,
+                                               int64_t &affected_rows);
+  static int get_change_stream_refresh_scn(common::ObISQLClient &sql_client,
+                                           const uint64_t tenant_id,
+                                           const bool for_update,
+                                           SCN &refresh_scn);
+  // Change Stream: min LSN that change stream still depends on, for log recycling and restart.
+  static int advance_change_stream_min_dep_lsn(common::ObISQLClient &sql_client,
+                                               const uint64_t tenant_id,
+                                               const int64_t min_dep_lsn,
+                                               int64_t &affected_rows);
+  static int get_change_stream_min_dep_lsn(common::ObISQLClient &sql_client,
+                                           const uint64_t tenant_id,
+                                           const bool for_update,
+                                           int64_t &min_dep_lsn);
 private:
   static int inner_get_snapshot_gc_scn_(common::ObISQLClient &sql_client,
                                         const uint64_t tenant_id,

@@ -83,21 +83,25 @@ public:
       func_lookup_rtdef_(nullptr),
       can_extract_range_(false),
       is_primary_index_(false),
-      use_vid_(false) {}
+      use_vid_(false),
+      skip_delta_buffer_(false) {}
 
   virtual bool is_valid() const override
   {
+    // skip_delta_buffer_: HNSW+heap+async has no delta_buffer table, delta_buf_iter_ is not created.
+    // When skip_delta_buffer_=false, delta_buf_iter_ must be initialized.
+    bool delta_buf_ready = skip_delta_buffer_ ? true : (nullptr != delta_buf_iter_);
     bool valid = ls_id_.is_valid() &&
            nullptr != tx_desc_ &&
-           nullptr != snapshot_ && 
-           nullptr != delta_buf_iter_ && 
-           nullptr != index_id_iter_ && 
+           nullptr != snapshot_ &&
+           delta_buf_ready &&
+           nullptr != index_id_iter_ &&
            nullptr != snapshot_iter_ &&
            nullptr != com_aux_vec_iter_ &&
            nullptr != pre_scan_param_ &&
-           nullptr != vec_aux_ctdef_ && 
+           nullptr != vec_aux_ctdef_ &&
            nullptr != vec_aux_rtdef_ &&
-           (!((is_adaptive_plan() || is_iter_plan()) && 
+           (!((is_adaptive_plan() || is_iter_plan()) &&
            nullptr == data_filter_iter_));
     if (use_vid_) {
       valid = valid && nullptr != vid_rowkey_iter_ && nullptr != vid_rowkey_ctdef_ && nullptr != vid_rowkey_rtdef_;
@@ -151,6 +155,7 @@ public:
   bool can_extract_range_;
   bool is_primary_index_;
   bool use_vid_;
+  bool skip_delta_buffer_;
 };
 class ObSimpleMaxHeap;
 
@@ -307,7 +312,8 @@ public:
       rel_map_(),
       use_vid_(false),
       is_hybrid_(false),
-      distance_threshold_(FLT_MAX) {
+      distance_threshold_(FLT_MAX),
+      skip_delta_buffer_(false) {
         extra_in_rowkey_idxs_.set_attr(ObMemAttr(MTL_ID(), "ExtraIdx"));
       }
   
@@ -595,6 +601,7 @@ private:
   bool use_vid_;
   bool is_hybrid_;
   float distance_threshold_;
+  bool skip_delta_buffer_;
 
 private:
 

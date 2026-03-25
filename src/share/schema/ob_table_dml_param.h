@@ -134,6 +134,8 @@ public:
   inline const common::ObIArray<storage::ObTableReadInfo *> *get_cg_read_infos() const
   { return cg_read_infos_.empty() ? nullptr : &cg_read_infos_; }
   int has_udf_column(bool &has_udf) const;
+  OB_INLINE bool has_async_index() const { return has_async_index_; }
+  OB_INLINE void set_has_async_index(bool v) { has_async_index_ = v; }
 
   DECLARE_TO_STRING;
 private:
@@ -178,6 +180,7 @@ private:
   uint64_t inc_pk_doc_id_col_id_;
   uint64_t vec_chunk_col_id_;
   uint64_t vec_embedded_col_id_;
+  bool has_async_index_;  // data table has vector/FTS async index → set HAS_ASYNC_INDEX in redo
 };
 
 class ObTableDMLParam

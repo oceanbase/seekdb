@@ -7447,3 +7447,16 @@ select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all
 IF(count(*) >= 0, 1, 0)
 1
 select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_rootservice_job limit 1;
+desc oceanbase.__all_virtual_change_stream_refresh_stat;
+Field	Type	Null	Key	Default	Extra
+tenant_id	bigint(20)	NO		NULL
+refresh_scn	bigint(20)	NO		NULL
+min_dep_lsn	bigint(20)	NO		NULL
+pending_tx_count	bigint(20)	NO		NULL
+fetch_tx	bigint(20)	NO		NULL
+fetch_lsn	bigint(20)	NO		NULL
+fetch_scn	bigint(20)	NO		NULL
+select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_change_stream_refresh_stat;
+IF(count(*) >= 0, 1, 0)
+1
+select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_change_stream_refresh_stat limit 1;

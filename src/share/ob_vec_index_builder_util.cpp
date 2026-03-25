@@ -142,15 +142,20 @@ int ObVecIndexBuilderUtil::append_vec_hnsw_args(
 {
   int ret = OB_SUCCESS;
   ObDocIDType vid_type = ObDocIDType::INVALID;
+  // Always create delta_buffer_table (3rd table) even for async indexes.
+  // The optimizer requires it to recognize the vector index scan path.
+  // For async indexes, DML writes skip maintaining it (see ob_del_upd_log_plan.cpp),
+  // and the retrieval path skips reading it (skip_delta_buffer_ flag).
+  bool skip_delta_buffer = false;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is null", K(ret));
   } else if (OB_FAIL(ObVectorIndexUtil::determine_vid_type(data_schema, vid_type))) {
     LOG_WARN("failed to check vid type", K(ret));
   } else if (vid_type == ObDocIDType::TABLET_SEQUENCE && !vec_common_aux_table_exist) {
-    const int64_t num_vec_args = 5;
+    const int64_t num_vec_args = skip_delta_buffer ? 4 : 5;
     // append domain table first
-    if (OB_FAIL(append_vec_delta_buffer_arg(index_arg, allocator, session_info, index_arg_list))) {
+    if (!skip_delta_buffer && OB_FAIL(append_vec_delta_buffer_arg(index_arg, allocator, session_info, index_arg_list))) {
       LOG_WARN("failed to append vec delta_buffer_table arg", K(ret));
     } else if (OB_FAIL(append_vec_rowkey_vid_arg(index_arg, allocator, index_arg_list))) {
       LOG_WARN("failed to append vec rowkey_vid_table arg", K(ret));
@@ -170,8 +175,8 @@ int ObVecIndexBuilderUtil::append_vec_hnsw_args(
       vec_common_aux_table_exist = true;
     }
   } else {
-    const int64_t num_vec_args = 3; // If a main table has already created a vector index, then only 3 new non-shared index auxiliary tables need to be added
-    if (OB_FAIL(append_vec_delta_buffer_arg(index_arg, allocator, session_info, index_arg_list))) {
+    const int64_t num_vec_args = skip_delta_buffer ? 2 : 3; // If a main table has already created a vector index, then only 3 new non-shared index auxiliary tables need to be added
+    if (!skip_delta_buffer && OB_FAIL(append_vec_delta_buffer_arg(index_arg, allocator, session_info, index_arg_list))) {
       LOG_WARN("failed to append vec delta_buffer_table arg", K(ret));
     } else if (OB_FAIL(append_vec_index_id_arg(index_arg, allocator, index_arg_list))) {
       LOG_WARN("failed to append vec index_id_table arg", K(ret));
@@ -184,7 +189,7 @@ int ObVecIndexBuilderUtil::append_vec_hnsw_args(
       }
     }
   }
-  LOG_DEBUG("finish append vec index args", K(index_arg), K(index_arg_list));
+  LOG_DEBUG("finish append vec index args", K(index_arg), K(index_arg_list), K(skip_delta_buffer));
   return ret;
 }
 
@@ -989,6 +994,8 @@ int ObVecIndexBuilderUtil::set_vec_aux_table_columns(const ObCreateIndexArg &arg
         if (OB_FAIL(
                 ObVecIndexBuilderUtil::set_vec_index_id_table_columns(arg, data_schema, index_param, index_schema))) {
           LOG_WARN("fail to set vec index id table column", K(ret));
+        } else if (OB_FAIL(index_schema.set_index_params(index_param_str))) {
+          LOG_WARN("failed to set index param", K(ret), K(index_param_str));
         }
       } else if (is_vec_index_snapshot_data_type(arg.index_type_)) {
         if (OB_FAIL(ObVecIndexBuilderUtil::set_vec_index_snapshot_data_table_columns(arg, data_schema, index_param,
@@ -1891,7 +1898,7 @@ int ObVecIndexBuilderUtil::get_vec_rowkey_col(const ObTableSchema &data_schema,
   return ret;
 }
 
-/* 
+/*
  * 1. Generate the columns of the auxiliary table
  * 2. Put the corresponding columns of the auxiliary table into index_arg (primary key into index_column, non-primary key into store_column)
  * 3. Generate the virtual generated column gen_columns for the corresponding table based on the index_id in index_arg
@@ -2815,7 +2822,7 @@ int ObVecIndexBuilderUtil::get_ivf_column_cnt(
              share::schema::is_vec_ivfsq8_cid_vector_index(index_type)) {
     total_column_cnt = main_table_rowkey_size + 2;  /* Except for the primary key of the main table, the number of columns indexed in the auxiliary table is 2 */
     index_column_cnt = total_column_cnt - 1;        /* The number of non-primary key columns in the index auxiliary table is 1 */
-  } else if (share::schema::is_vec_ivfflat_rowkey_cid_index(index_type) || 
+  } else if (share::schema::is_vec_ivfflat_rowkey_cid_index(index_type) ||
              share::schema::is_vec_ivfsq8_rowkey_cid_index(index_type)) {
     total_column_cnt = main_table_rowkey_size + 1;  /* Except for the primary key of the main table, the number of columns indexed in the auxiliary table is 1 */
     index_column_cnt = total_column_cnt - 1;        /* The number of non-primary key columns in the index auxiliary table is 1 */

@@ -358,6 +358,8 @@ int ObPluginVectorIndexLoadScheduler::acquire_adapter_in_maintenance(
           LOG_WARN("fail to set table id", K(ret), K(ls_id), K(tablet_ids.at(i)));
         } else if (OB_FAIL(adapter_guard.get_adatper()->set_tablet_id(VIRT_DATA, data_tablet_id))) {
           LOG_WARN("fail to fill partial index adapter info", K(ret), K(ls_id), K(tablet_ids.at(i)), K(data_tablet_id));
+        } else if (OB_FAIL(adapter_guard.get_adatper()->set_table_id(VIRT_DATA, table_schema->get_data_table_id()))) {
+          LOG_WARN("fail to fill data table id into partial adapter", K(ret), K(ls_id), K(table_id), K(data_tablet_id));
         } else if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*table_schema,
                                                                              index_identity))) {
           LOG_WARN("fail to get index identity", KR(ret));

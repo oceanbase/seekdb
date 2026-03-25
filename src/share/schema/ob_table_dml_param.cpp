@@ -65,7 +65,8 @@ ObTableSchemaParam::ObTableSchemaParam(ObIAllocator &allocator)
     merge_engine_type_(ObMergeEngineType::OB_MERGE_ENGINE_MAX),
     inc_pk_doc_id_col_id_(OB_INVALID_ID),
     vec_chunk_col_id_(OB_INVALID_ID),
-    vec_embedded_col_id_(OB_INVALID_ID)
+    vec_embedded_col_id_(OB_INVALID_ID),
+    has_async_index_(false)
 {
 }
 
@@ -110,6 +111,7 @@ void ObTableSchemaParam::reset()
   is_delete_insert_ = false;
   merge_engine_type_ = ObMergeEngineType::OB_MERGE_ENGINE_MAX;
   inc_pk_doc_id_col_id_ = OB_INVALID_ID;
+  has_async_index_ = false;
 }
 
 int ObTableSchemaParam::convert(const ObTableSchema *schema)
@@ -253,6 +255,10 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
         } else if (column_schema->is_doc_id_column()) {
           doc_id_col_id_ = column_schema->get_column_id();
         }
+      }
+    } else if (schema->is_vec_index_id_type()) {
+      if (OB_FAIL(ob_write_string(allocator_, schema->get_index_params(), vec_index_param_))) {
+        LOG_WARN("fail to copy vec index param", K(ret), K(schema->get_index_params()));
       }
     }
 

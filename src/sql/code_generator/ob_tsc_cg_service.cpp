@@ -2173,6 +2173,14 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
       }
       vec_scan_ctdef->is_hybrid_ = vc_info.is_hybrid_index;
       vec_scan_ctdef->use_rowkey_vid_tbl_ = !op.need_skip_rowkey_vid();
+      // HNSW + heap table + sync_mode=async: delta_buffer not have data, skip in scan
+      if (vc_info.is_hnsw_vec_scan() && OB_NOT_NULL(data_table_schema)) {
+        bool is_heap_table = data_table_schema->is_heap_organized_table();
+        bool is_sync_mode_async = vc_info.get_vector_index_param().sync_mode_async_;
+        vec_scan_ctdef->skip_delta_buffer_ = is_heap_table && is_sync_mode_async;
+      } else {
+        vec_scan_ctdef->skip_delta_buffer_ = false;
+      }
 
       if (OB_ISNULL(vec_scan_ctdef->children_ = OB_NEW_ARRAY(ObDASBaseCtDef*, &ctdef_alloc, vec_child_task_cnt))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;

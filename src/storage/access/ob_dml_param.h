@@ -261,7 +261,8 @@ struct ObDMLBaseParam
         ddl_task_id_(0),
         lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
         data_row_for_lob_(nullptr),
-        is_main_table_in_fts_ddl_(false)
+        is_main_table_in_fts_ddl_(false),
+        has_async_index_(false)
   {
   }
 
@@ -296,6 +297,10 @@ struct ObDMLBaseParam
   mutable ObArenaAllocator lob_allocator_;
   const blocksstable::ObDatumRow *data_row_for_lob_; // for tablet split
   bool is_main_table_in_fts_ddl_; // whether the main table is in fts ddl when dml is executed
+  // Set by DAS layer when the table has async-mode indexes (e.g. sync_mode=async HNSW).
+  // Propagated to ObPartTransCtx::has_async_index_redo_ -> ObTxLogBlockHeader::HAS_ASYNC_INDEX
+  // for Change Stream fast filtering in the Fetcher.
+  bool has_async_index_;
   bool is_valid() const { return (timeout_ > 0 && schema_version_ >= 0) && nullptr != store_ctx_guard_; }
   DECLARE_TO_STRING;
 };

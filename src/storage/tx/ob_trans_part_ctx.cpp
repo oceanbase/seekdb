@@ -327,6 +327,7 @@ void ObPartTransCtx::default_init_()
   reserve_allocator_.reset();
   elr_handler_.reset();
   trace_log_.reset();
+  has_async_index_redo_ = false;
 }
 
 // thread-unsafe
@@ -2826,6 +2827,7 @@ int ObPartTransCtx::init_log_block_(ObTxLogBlock &log_block,
   // the log_entry_no will be backfill before log-block to be submitted
   header.init(cluster_id_, cluster_version_, -1 /*log_entry_no*/, trans_id_, exec_info_.scheduler_);
   if (OB_UNLIKELY(serial_final)) { header.set_serial_final(); }
+  if (OB_UNLIKELY(has_async_index_redo_)) { header.set_has_async_index(); }
   return log_block.init_for_fill(suggested_buf_size);
 }
 
@@ -2833,6 +2835,7 @@ inline int ObPartTransCtx::reuse_log_block_(ObTxLogBlock &log_block)
 {
   ObTxLogBlockHeader &header = log_block.get_header();
   header.init(cluster_id_, cluster_version_, exec_info_.next_log_entry_no_, trans_id_, exec_info_.scheduler_);
+  if (OB_UNLIKELY(has_async_index_redo_)) { header.set_has_async_index(); }
   return log_block.reuse_for_fill();
 }
 

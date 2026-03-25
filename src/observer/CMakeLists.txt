@@ -586,6 +586,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_kv_group_commit_info.cpp
   virtual_table/ob_all_virtual_plugin_info.cpp
   virtual_table/ob_all_virtual_cs_replica_tablet_stats.cpp
+  virtual_table/ob_all_virtual_change_stream_refresh_stat.cpp
   virtual_table/ob_all_virtual_dynamic_partition_table.cpp
   virtual_table/ob_all_virtual_storage_cache_task.cpp
   virtual_table/ob_all_virtual_tablet_local_cache.cpp

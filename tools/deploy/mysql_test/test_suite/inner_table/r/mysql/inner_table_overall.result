@@ -555,6 +555,7 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 12561	__all_virtual_server_event_history	2	201001	1
 12562	__all_virtual_tenant_event_history	2	201001	1
 12563	__all_virtual_rootservice_job	2	201001	1
+12564	__all_virtual_change_stream_refresh_stat	2	201001	1
 20001	GV$OB_PLAN_CACHE_STAT	1	201001	1
 20002	GV$OB_PLAN_CACHE_PLAN_STAT	1	201001	1
 20003	SCHEMATA	1	201002	1
@@ -972,6 +973,7 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 21665	CDB_OB_AI_MODELS	1	201001	1
 21666	CDB_OB_AI_MODEL_ENDPOINTS	1	201001	1
 21667	DBA_OB_ROOTSERVICE_JOBS	1	201001	1
+21668	DBA_OB_CHANGE_STREAM_REFRESH_STAT	1	201001	1
 check sys table count and table_id range success
 check count and table_id range for virtual table success
 select * from  information_schema.CHARACTER_SETS limit 1;

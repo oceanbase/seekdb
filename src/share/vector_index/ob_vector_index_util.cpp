@@ -352,6 +352,7 @@ int ObVectorIndexUtil::parser_params_from_string(
             param.sync_interval_value_ = 0;
           } else if (new_param_value == "ASYNC") {
             param.sync_interval_type_ = ObVectorIndexSyncIntervalType::VSIT_NUMERIC;
+            param.sync_mode_async_ = true;
           } else {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("sync_mode value is invalid", K(ret), K(new_param_value));
@@ -431,6 +432,42 @@ int ObVectorIndexUtil::parser_params_from_string(
     LOG_DEBUG("parser vector index param", K(ret), K(index_param_str), K(param));
   }
   return ret;
+}
+
+bool ObVectorIndexUtil::is_sync_mode_async(const ObString &index_params)
+{
+  return is_sync_mode_async(index_params, false /* is_hnsw_heap_table */);
+}
+
+bool ObVectorIndexUtil::is_sync_mode_async(const ObString &index_params, bool is_hnsw_heap_table)
+{
+  bool is_async = false;
+  // SYNC_MODE is only valid for HNSW+heap_table: ASYNC or IMMEDIATE.
+  // For hybrid/IVF: SYNC_INTERVAL/MANUAL are used, not SYNC_MODE.
+  ObCollationType calc_cs_type = CS_TYPE_UTF8MB4_GENERAL_CI;
+  uint32_t immediate_pos = ObCharset::locate(calc_cs_type,
+      index_params.ptr(),
+      index_params.length(),
+      "SYNC_MODE=IMMEDIATE",
+      18,
+      1);
+  if (immediate_pos > 0) {
+    is_async = false;  // explicitly sync
+  } else {
+    uint32_t async_pos = ObCharset::locate(calc_cs_type,
+        index_params.ptr(),
+        index_params.length(),
+        "SYNC_MODE=ASYNC",
+        14,
+        1);
+    if (async_pos > 0) {
+      is_async = true;  // explicitly async
+    } else if (is_hnsw_heap_table) {
+      // SYNC_MODE not specified: for HNSW+heap default is ASYNC (index_id table may have empty params)
+      is_async = true;
+    }
+  }
+  return is_async;
 }
 
 int ObVectorIndexUtil::parse_time_string_to_seconds(const ObString &time_str, int64_t &seconds)
@@ -3490,11 +3527,22 @@ int ObVectorIndexUtil::check_index_param(
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting nlist or sample_per_nlist or nbits is");
         }
         if (OB_FAIL(ret)) {
-        } else if (!type_hybrid_vec_is_set && (endpoint_is_set || sync_mode_is_set || sync_interval_is_set)) {
+        } else if (!type_hybrid_vec_is_set && (endpoint_is_set || sync_interval_is_set)) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("hnsw vector index no need to set model or sync_mode or sync_interval",
-            K(ret), K(endpoint_is_set), K(sync_mode_is_set), K(sync_interval_is_set));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting model or sync_mode or sync_interval is");
+          LOG_WARN("hnsw vector index no need to set model or sync_interval",
+            K(ret), K(endpoint_is_set), K(sync_interval_is_set));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting model or sync_interval is");
+        } else if (!type_hybrid_vec_is_set && sync_mode_is_set
+                   && sync_interval_type == ObVectorIndexSyncIntervalType::VSIT_MANUAL) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index sync_mode does not support MANUAL",
+            K(ret), K(sync_interval_type));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index sync_mode MANUAL is");
+        } else if (!type_hybrid_vec_is_set && !tbl_schema.is_heap_organized_table() && sync_mode_is_set) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index on non-heap table does not support sync_mode parameter",
+            K(ret), K(tbl_schema.get_table_id()));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index on non-heap table setting sync_mode is");
         }
       }
       if (OB_FAIL(ret)) {
@@ -3545,6 +3593,11 @@ int ObVectorIndexUtil::check_index_param(
         } else if (!sync_interval_is_set && type_hybrid_vec_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
                                            ", SYNC_INTERVAL=%lds", sync_interval_value))) {
+          LOG_WARN("fail to printf databuff", K(ret));
+        } else if (!sync_mode_is_set && hnsw_is_set && !type_hybrid_vec_is_set
+                   && tbl_schema.is_heap_organized_table()
+                   && OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
+                                           ", SYNC_MODE=ASYNC"))) {
           LOG_WARN("fail to printf databuff", K(ret));
         } else if (type_hnsw_bq_is_set &&! refine_type_is_set &&
             OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", REFINE_TYPE=SQ8"))) {

@@ -5083,17 +5083,20 @@ int ObLSTabletService::insert_vector_index_rows(
   } else if (OB_UNLIKELY(run_ctx.dml_param_.table_param_->get_data_table().is_vector_index_id())) {
     ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
     ObPluginVectorIndexAdapterGuard adaptor_guard;
-    share::SCN current_scn;
     ObString vec_idx_param = run_ctx.dml_param_.table_param_->get_data_table().get_vec_index_param();
-    if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.store_ctx_.ls_id_,
-                                                        run_ctx.relative_table_.get_tablet_id(),
-                                                        ObIndexType::INDEX_TYPE_VEC_INDEX_ID_LOCAL,
-                                                        adaptor_guard,
-                                                        &vec_idx_param))) {
-      LOG_WARN("fail to get ObPluginVectorIndexAdapter", K(ret), K(run_ctx.store_ctx_), K(run_ctx.relative_table_));
-    } else {
+    const int64_t vec_dim = run_ctx.dml_param_.table_param_->get_data_table().get_vec_dim();
+    int tmp_ret = vec_index_service->acquire_adapter_guard(run_ctx.store_ctx_.ls_id_,
+                                                           run_ctx.relative_table_.get_tablet_id(),
+                                                           ObIndexType::INDEX_TYPE_VEC_INDEX_ID_LOCAL,
+                                                           adaptor_guard,
+                                                           &vec_idx_param,
+                                                           vec_dim);
+    if (OB_SUCCESS == tmp_ret) {
       adaptor_guard.get_adatper()->update_index_id_dml_scn(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_.version_);
       adaptor_guard.get_adatper()->update_can_skip(NOT_SKIP);
+    } else {
+      LOG_WARN("acquire_adapter_guard for index_id table failed, skip adapter update",
+               K(tmp_ret), K(run_ctx.relative_table_.get_tablet_id()));
     }
   }
   return ret;

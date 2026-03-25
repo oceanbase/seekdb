@@ -20,6 +20,7 @@
 #include "share/schema/ob_table_dml_param.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/memtable/ob_memtable_context.h"
+#include "storage/tx/ob_trans_part_ctx.h"
 
 namespace oceanbase
 {
@@ -106,6 +107,14 @@ int ObDMLRunningCtx::init(
     store_ctx_.mvcc_acc_ctx_.mem_ctx_->set_table_version(dml_param_.schema_version_);
     store_ctx_.table_version_ = dml_param_.schema_version_;
     column_ids_ = column_ids;
+    // Propagate async-index flag to the transaction context so that the log block header
+    // carries HAS_ASYNC_INDEX, enabling Change Stream Fetcher fast filtering.
+    if (OB_UNLIKELY(dml_param_.has_async_index_)) {
+      transaction::ObPartTransCtx *tx_ctx = store_ctx_.mvcc_acc_ctx_.mem_ctx_->get_trans_ctx();
+      if (OB_NOT_NULL(tx_ctx)) {
+        tx_ctx->set_has_async_index_redo();
+      }
+    }
     is_inited_ = true;
   }
 

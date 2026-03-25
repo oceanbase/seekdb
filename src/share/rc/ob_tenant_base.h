@@ -224,6 +224,7 @@ class ObResourceLimitCalculator;
 class ObWorkloadRepositoryContext;
 class ObPluginVectorIndexService;
 class ObAutoSplitTaskCache;
+class ObChangeStreamMgr;
 namespace schema
 {
   class ObTenantSchemaService;
@@ -390,7 +391,8 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       rootserver::ObSysTenantLoadSysPackageService*, \
       rootserver::ObDDLScheduler*,                   \
       sql::ObSQLCCLRuleManager*              ,       \
-      omt::ObTenantAiService*                        \
+      omt::ObTenantAiService*,                       \
+      share::ObChangeStreamMgr*                        \
   )
 // Get tenant ID
 #define MTL_ID() share::ObTenantEnv::get_tenant_local()->id()

@@ -1315,6 +1315,8 @@ public:
   bool is_valid() const { return org_cluster_id_ >= 0; }
   void set_serial_final() { flags_ |= SERIAL_FINAL; }
   bool is_serial_final() const { return (flags_ & SERIAL_FINAL) == SERIAL_FINAL; }
+  void set_has_async_index() { flags_ |= HAS_ASYNC_INDEX; }
+  bool has_async_index() const { return (flags_ & HAS_ASYNC_INDEX) == HAS_ASYNC_INDEX; }
   uint8_t flags() const { return flags_; }
   TO_STRING_KV(K_(compat_bytes), K_(org_cluster_id), K_(cluster_version), K_(log_entry_no), K_(tx_id), K_(scheduler), K_(flags));
 
@@ -1322,6 +1324,8 @@ public:
   int before_serialize();
   // the last serial log
   static const uint8_t SERIAL_FINAL = ((uint8_t)1) << 0;
+  // tx contains redo that involves tables with async indexes (for Change Stream fast filtering)
+  static const uint8_t HAS_ASYNC_INDEX = ((uint8_t)1) << 1;
 private:
   int64_t serialize_size_;
   ObTxSerCompatByte compat_bytes_;

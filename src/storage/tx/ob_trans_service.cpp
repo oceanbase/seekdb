@@ -689,6 +689,10 @@ int ObTransService::register_mds_into_ctx_(ObTxDesc &tx_desc,
                                                        seq_no,
                                                        register_flag))) {
       TRANS_LOG(WARN, "register multi source data failed", KR(ret), K(tx_desc), K(ls_id), K(type), K(register_flag));
+    } else if (ObTxDataSourceType::DDL_TRANS == type) {
+      // Change Stream Fetcher filters by has_async_index; DDL logs must carry it.
+      // MDS is registered before commit, and commit block writes MDS before redo.
+      ctx->set_has_async_index_redo();
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = revert_store_ctx(store_ctx))) {

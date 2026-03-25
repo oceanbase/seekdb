@@ -4079,8 +4079,9 @@ int ObDASIterUtils::create_vec_hnsw_lookup_tree(ObTableScanParam &scan_param,
 
     // create common aux iters
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(create_das_scan_iter(alloc, vec_aux_ctdef->get_vec_aux_tbl_ctdef(vec_aux_ctdef->get_delta_tbl_idx(), ObTSCIRScanType::OB_VEC_DELTA_BUF_SCAN),
-                                     vec_aux_rtdef->get_vec_aux_tbl_rtdef(vec_aux_ctdef->get_delta_tbl_idx()), delta_buf_table_iter))) {
+    } else if (!vec_aux_ctdef->skip_delta_buffer_
+               && OB_FAIL(create_das_scan_iter(alloc, vec_aux_ctdef->get_vec_aux_tbl_ctdef(vec_aux_ctdef->get_delta_tbl_idx(), ObTSCIRScanType::OB_VEC_DELTA_BUF_SCAN),
+                                               vec_aux_rtdef->get_vec_aux_tbl_rtdef(vec_aux_ctdef->get_delta_tbl_idx()), delta_buf_table_iter))) {
       LOG_WARN("failed to create delta buf table iter", K(ret));
     } else if (OB_FAIL(create_das_scan_iter(alloc, index_id_tbl_ctdef, index_id_tbl_rtdef, index_id_table_iter))) {
       LOG_WARN("failed to create index id table iter", K(ret));
@@ -4151,6 +4152,7 @@ int ObDASIterUtils::create_vec_hnsw_lookup_tree(ObTableScanParam &scan_param,
       hnsw_scan_param.vec_idx_try_path_ = vec_aux_ctdef->adaptive_try_path_;
       hnsw_scan_param.can_extract_range_ = vec_aux_ctdef->can_extract_range_;
       hnsw_scan_param.is_primary_index_ = !need_index_back && !scan_param.table_param_->is_multivalue_index() && !scan_param.table_param_->is_spatial_index();
+      hnsw_scan_param.skip_delta_buffer_ = vec_aux_ctdef->skip_delta_buffer_;
       hnsw_scan_param.pre_filter_iter_ = inv_idx_iter;
       batch_count = hnsw_scan_param.max_size_;
 

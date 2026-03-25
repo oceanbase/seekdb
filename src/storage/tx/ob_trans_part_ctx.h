@@ -169,6 +169,7 @@ public:
         exec_info_(reserve_allocator_),
         mds_cache_(reserve_allocator_),
         has_extra_log_cb_group_(false),
+        has_async_index_redo_(false),
         reserve_log_cb_group_(true/*is_reserve*/),
         extra_cb_group_list_(),
         role_state_(TxCtxRoleState::FOLLOWER),
@@ -249,6 +250,9 @@ public:
   int64_t get_flushed_log_size() { return mt_ctx_.get_flushed_log_size(); }
   virtual int64_t get_part_trans_action() const override;
   inline bool has_pending_write() const { return pending_write_; }
+
+  // Change Stream: mark this tx participant as containing redo for async-indexed tables.
+  void set_has_async_index_redo() { has_async_index_redo_ = true; }
 
   // table lock
   void set_table_lock_killed()
@@ -875,6 +879,9 @@ private:
   ObTxSubState sub_state_;
 
   bool has_extra_log_cb_group_;
+  // Set when DML writes to a table that has async indexes.
+  // Propagated to ObTxLogBlockHeader::HAS_ASYNC_INDEX for Change Stream fast filtering.
+  bool has_async_index_redo_;
   ObTxLogCbGroup reserve_log_cb_group_;
   TxLogCbGroupList extra_cb_group_list_;
   common::ObDList<ObTxLogCb> free_cbs_;
