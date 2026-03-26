@@ -3411,7 +3411,7 @@ bool ObTabletGroupRestoreDag::operator == (const share::ObIDag &other) const
           is_same = false;
         } else {
           for (int64_t i = 0; is_same && i < tablet_id_array_.count(); ++i) {
-            if (tablet_id_array_.at(i) != tablet_group_dag.tablet_id_array_.at(i)) {
+            if (!(tablet_id_array_.at(i) == tablet_group_dag.tablet_id_array_.at(i))) {
               is_same = false;
             }
           }

@@ -2,7 +2,7 @@ set(DEVEL_PATH "${DEP_3RD_DIR}/usr/local/oceanbase/deps/devel")
 
 # On Linux: grpc libs are in lib/grpc/, abseil/protobuf libs are in lib64/grpc/
 # On macOS: all libs are in lib/grpc/
-if(APPLE)
+if(APPLE OR OB_ANDROID)
   set(GRPC_LIB_DIR "lib")
   set(ABSL_LIB_DIR "lib")
 else()
