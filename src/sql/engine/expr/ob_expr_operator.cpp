@@ -45,6 +45,28 @@ static const int8_t DAYS_PER_MON[2][12 + 1] = {
   {0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 };
 
+#if defined(__ANDROID__)
+static const ObRawExpr *get_real_cmp_operand_expr(const ObRawExpr *expr)
+{
+  const ObRawExpr *real_expr = expr;
+  while (OB_NOT_NULL(real_expr)
+         && T_FUN_SYS_CAST == real_expr->get_expr_type()
+         && real_expr->has_flag(IS_OP_OPERAND_IMPLICIT_CAST)
+         && real_expr->get_param_count() > 0) {
+    real_expr = real_expr->get_param_expr(0);
+  }
+  return real_expr;
+}
+
+static bool is_string_literal_cmp_operand(const ObRawExpr *expr)
+{
+  const ObRawExpr *real_expr = get_real_cmp_operand_expr(expr);
+  return OB_NOT_NULL(real_expr)
+         && real_expr->is_const_raw_expr()
+         && ob_is_string_type(real_expr->get_data_type());
+}
+#endif
+
 const char *ObExprTRDateFormat::FORMATS_TEXT[FORMAT_MAX_TYPE] =
 {
       "SYYYY", "YYYY", "YEAR", "SYEAR", "YYY", "YY", "Y",
@@ -2207,6 +2229,16 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
              && !(type_ == T_FUN_SYS_NULLIF)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("Incorrect cmp type with roaringbitmap arguments", K(type1), K(type2), K(type_), K(ret));
+#if defined(__ANDROID__)
+  } else if (lib::is_mysql_mode()
+             && (type_ == T_OP_EQ || type_ == T_OP_NE
+                 || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE)
+             && (type1.is_collection_sql_type() != type2.is_collection_sql_type())
+             && !ob_is_null(type1.get_type())
+             && !ob_is_null(type2.get_type())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Incorrect cmp type with scalar and collection arguments", K(type1), K(type2), K(type_), K(ret));
+#endif
   } else if ((type1.is_collection_sql_type() || type2.is_collection_sql_type())
              && !(type_ == T_OP_EQ
                   || type_ == T_OP_NE)) {
@@ -2259,7 +2291,21 @@ int ObExprOperator::calc_cmp_type3(ObExprResType &type,
   if (type1.is_roaringbitmap() || type2.is_roaringbitmap() || type3.is_roaringbitmap()) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("Incorrect cmp type with roaringbitmap arguments", K(type1), K(type2), K(type3), K(type_),K(ret));
-  } else if (OB_SUCC(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, type2.get_type(), cmp_type))) {
+  }
+#if defined(__ANDROID__)
+  else if (type1.is_collection_sql_type() || type2.is_collection_sql_type() || type3.is_collection_sql_type()) {
+    if (lib::is_mysql_mode()
+        && !type1.is_collection_sql_type()
+        && type2.is_collection_sql_type()
+        && type3.is_collection_sql_type()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    }
+    LOG_WARN("Incorrect cmp type with collection arguments", K(type1), K(type2), K(type3), K(type_), K(ret));
+  }
+#endif
+  else if (OB_SUCC(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, type2.get_type(), cmp_type))) {
     if (OB_UNLIKELY(ObMaxType == cmp_type)) {
       ret = OB_INVALID_ARGUMENT; // not compatible input
     } else if (OB_SUCC(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, cmp_type, type3.get_type()))) {
@@ -2434,9 +2480,25 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
     right_param = op_expr->get_param_expr(1);
   }
   if (OB_FAIL(ret)) {
+#if defined(__ANDROID__)
+  } else if (OB_FAIL(expr.calc_cmp_type2(cmp_type, type1, type2, type_ctx,
+                                         left_param->is_static_const_expr(),
+                                         right_param->is_static_const_expr()))) {
+    if (lib::is_mysql_mode()
+        && ret == OB_INVALID_ARGUMENT
+        && (expr.get_type() == T_OP_EQ || expr.get_type() == T_OP_NE
+            || expr.get_type() == T_OP_SQ_EQ || expr.get_type() == T_OP_SQ_NE)
+        && ((type1.is_collection_sql_type() && is_string_literal_cmp_operand(right_param))
+            || (type2.is_collection_sql_type() && is_string_literal_cmp_operand(left_param)))) {
+      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
+      ret = OB_ERR_INVALID_JSON_TEXT;
+    }
+  } else {
+#else
   } else if (OB_SUCC(expr.calc_cmp_type2(cmp_type, type1, type2, type_ctx,
                                          left_param->is_static_const_expr(),
                                          right_param->is_static_const_expr()))) {
+#endif
     type.set_int32(); // not tinyint, compatible with MySQL
     type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
     type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
