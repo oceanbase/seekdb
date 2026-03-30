@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include <unistd.h>
 #include "observer/ob_server.h"
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"
@@ -1757,10 +1758,22 @@ int ObServer::init_config(const ObServerOptions &opts)
   // Create directory before opening database (handles both normal dir and symlink)
   const char *meta_db_dir = "./store/sstable";
   const char *meta_db_path = "./store/sstable/meta.db";
-  if (OB_FAIL(FileDirectoryUtils::create_full_path(meta_db_dir))) {
+
+  // Convert relative path to absolute path to ensure stability when working directory changes
+  char cwd[OB_MAX_FILE_NAME_LENGTH] = {0};
+  char abs_meta_db_path[OB_MAX_FILE_NAME_LENGTH] = {0};
+  if (nullptr == getcwd(cwd, sizeof(cwd))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("failed to get current working directory", K(ret));
+  } else {
+    snprintf(abs_meta_db_path, sizeof(abs_meta_db_path), "%s/%s", cwd, meta_db_path);
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(meta_db_dir))) {
     LOG_ERROR("failed to create meta db directory", K(ret), K(meta_db_dir));
-  } else if (OB_FAIL(meta_db_pool_.init(meta_db_path))) {
-    LOG_ERROR("meta_db_pool_ init failed", K_(self_addr), KR(ret), K(meta_db_path));
+  } else if (OB_FAIL(meta_db_pool_.init(abs_meta_db_path))) {
+    LOG_ERROR("meta_db_pool_ init failed", K_(self_addr), KR(ret), K(abs_meta_db_path));
   } else if (OB_FAIL(config_mgr_.init(&meta_db_pool_))) {
     LOG_ERROR("config_mgr_ init failed", K_(self_addr), KR(ret));
   } else if (OB_FAIL(config_mgr_.got_version())) {
