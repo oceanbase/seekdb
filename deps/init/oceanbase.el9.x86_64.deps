@@ -54,7 +54,7 @@ obdevtools-ccache-3.7.12-12022100417.el8.x86_64.rpm
 obdevtools-cmake-3.30.3-52024111819.el8.x86_64.rpm
 obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm
 obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm
-obdevtools-llvm-17.0.6-122026020920.el8.x86_64.rpm
+obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm
 
 [tools-deps]
 devdeps-oblogmsg-1.1-52024052811.el8.x86_64.rpm

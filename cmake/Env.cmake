@@ -120,6 +120,13 @@ if(ENABLE_HOTFUNC)
 endif()
 
 set(BOLT_OPT "")
+if((NOT APPLE) AND (ENABLE_BOLT OR (NOT DEFINED ENABLE_BOLT AND ENABLE_BOLT_AUTO)) AND NOT OB_BUILD_OPENSOURCE)
+  if( ${ARCHITECTURE} STREQUAL "x86_64" )
+    message(STATUS "build with bolt opt (x86_64)")
+    set(BOLT_OPT "-Wl,--emit-relocs")
+    ob_define(OB_ENABLE_BOLT ON)
+  endif()
+endif()
 
 message(STATUS "Using C++20 standard")
 set(CMAKE_CXX_FLAGS "-std=gnu++20")
