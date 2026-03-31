@@ -122,11 +122,7 @@ jobs:
           if [[ -f "$OBSERVER_ZST" ]]; then
             zstd -d -f -q -o observer "$OBSERVER_ZST" && chmod +x observer
           else
-            echo "observer not found on NFS, falling back to wget"
-            URL="${{ vars.SEEKDB_OBSERVER_URL }}"
-            [[ -z "$URL" ]] && URL="http://6.12.233.4:5000/observer"
-            wget -O observer "$URL" || exit 1
-            chmod +x observer
+            echo "observer not found on NFS"
           fi
           ls -la observer
       - name: Run mysqltest slice
