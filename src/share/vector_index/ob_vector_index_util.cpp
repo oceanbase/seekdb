@@ -3538,11 +3538,12 @@ int ObVectorIndexUtil::check_index_param(
           LOG_WARN("hnsw vector index sync_mode does not support MANUAL",
             K(ret), K(sync_interval_type));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index sync_mode MANUAL is");
-        } else if (!type_hybrid_vec_is_set && !tbl_schema.is_heap_organized_table() && sync_mode_is_set) {
+        } else if (!type_hybrid_vec_is_set && !tbl_schema.is_heap_organized_table() && sync_mode_is_set
+                   && sync_interval_type == ObVectorIndexSyncIntervalType::VSIT_NUMERIC) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("hnsw vector index on non-heap table does not support sync_mode parameter",
-            K(ret), K(tbl_schema.get_table_id()));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index on non-heap table setting sync_mode is");
+          LOG_WARN("hnsw vector index on non-heap table does not support sync_mode=ASYNC",
+            K(ret), K(tbl_schema.get_table_id()), K(sync_interval_type));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index on non-heap table setting sync_mode=ASYNC is");
         }
       }
       if (OB_FAIL(ret)) {
