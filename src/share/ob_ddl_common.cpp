@@ -3057,6 +3057,13 @@ int ObDDLUtil::construct_domain_index_arg(const ObTableSchema *table_schema,
     create_index_arg.table_name_ = ObString(table_schema->get_table_name_str());
     create_index_arg.database_name_ = ObString(database_schema->get_database_name_str());
     create_index_arg.tenant_id_ = task.get_tenant_id();
+    if (ObDDLType::DDL_REBUILD_INDEX == task.get_task_type()) {
+      // Only rebuild-index tasks reuse existing table ids. Offline domain-index
+      // rebuild during table/column redefinition still goes through normal
+      // create-index schema generation and must leave these ids invalid.
+      create_index_arg.data_table_id_ = table_schema->get_table_id();
+      create_index_arg.index_table_id_ = index_schema->get_table_id();
+    }
     if (index_schema->is_fts_index()) {
       create_index_arg.index_option_.parser_name_ = index_schema->get_parser_name_str();
       create_index_arg.index_key_ = ObDDLResolver::INDEX_KEYNAME::FTS_KEY;
