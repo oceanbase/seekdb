@@ -334,7 +334,8 @@ public:
                K_(ddl_replay_status),
                K_(is_storage_schema_cs_replica),
                K_(split_info),
-               K_(has_truncate_info));
+               K_(has_truncate_info),
+               K_(fork_info));
 private:
   int deserialize_v2_v3(const char *buf, const int64_t len, int64_t &pos);
   int deserialize_v1(const char *buf, const int64_t len, int64_t &pos);
@@ -391,6 +392,7 @@ public:
   // [since 4.3.5 bp2] be True after first major with truncate info
   // will never be false even after truncate info recycled
   bool has_truncate_info_;
+  share::ObForkTabletInfo fork_info_;
 
   // Add new serialization member before this line, below members won't serialize
   common::ObArenaAllocator allocator_; // for storage schema
