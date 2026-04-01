@@ -884,16 +884,11 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
       ret = common::OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid vbitmap_tablet_id from schema", K(ret), K(vec_info.index_id_table_id_));
     } else {
-      // Aux table tablets (e.g. 1152921504606846978) are in user LS (1001), not SYS_LS.
-      // Using wrong ls_id causes OB_INVALID_ARGUMENT in DAS insert.
-      if (OB_NOT_NULL(GCTX.sql_proxy_) &&
-          OB_SUCC(ObTabletToLSTableOperator::get_ls_by_tablet(*GCTX.sql_proxy_, tenant_id, vbitmap_tablet_id, ls_id))) {
-            insert_op->set_tablet_id(vbitmap_tablet_id);
-            insert_op->set_ls_id(ls_id);
-      }
+      insert_op->set_tablet_id(vbitmap_tablet_id);
+      insert_op->set_ls_id(ls_id);
     }
 
-    if (OB_SUCC(ret) && ls_id.is_valid()) {
+    if (OB_SUCC(ret)) {
       void *snapshot_buf = allocator.alloc(sizeof(transaction::ObTxReadSnapshot));
       if (OB_ISNULL(snapshot_buf)) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
