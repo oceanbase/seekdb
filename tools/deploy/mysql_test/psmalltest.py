@@ -540,6 +540,7 @@ psmall_test=[
 'vector_async.async_vec_ddl_drop_rebuild',
 'vector_async.async_vec_ddl_alter_table',
 'vector_async.async_vec_dml_extended',
+'vector_async.async_vec_pdml_append',
 'vector_async.async_vec_manual_refresh',
 'vector_async.async_vec_query',
 'vector_async.async_vec_system_tables',

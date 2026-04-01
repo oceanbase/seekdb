@@ -661,6 +661,7 @@ OB_DEF_SERIALIZE(ObTableSchemaParam)
   OB_UNIS_ENCODE(inc_pk_doc_id_col_id_);
   OB_UNIS_ENCODE(vec_chunk_col_id_);
   OB_UNIS_ENCODE(vec_embedded_col_id_);
+  OB_UNIS_ENCODE(has_async_index_);
   return ret;
 }
 
@@ -805,6 +806,9 @@ OB_DEF_DESERIALIZE(ObTableSchemaParam)
   OB_UNIS_DECODE(inc_pk_doc_id_col_id_);
   OB_UNIS_DECODE(vec_chunk_col_id_);
   OB_UNIS_DECODE(vec_embedded_col_id_);
+  if (OB_SUCC(ret) && pos < data_len) {
+    OB_UNIS_DECODE(has_async_index_);
+  }
   return ret;
 }
 
@@ -862,6 +866,7 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchemaParam)
   OB_UNIS_ADD_LEN(inc_pk_doc_id_col_id_);
   OB_UNIS_ADD_LEN(vec_chunk_col_id_);
   OB_UNIS_ADD_LEN(vec_embedded_col_id_);
+  OB_UNIS_ADD_LEN(has_async_index_);
   return len;
 }
 
