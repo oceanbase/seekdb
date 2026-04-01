@@ -217,7 +217,7 @@ ObTablet::ObTablet(const bool is_external_tablet)
     is_inited_(false),
     is_external_tablet_(is_external_tablet)
 {
-#if defined(__x86_64__) && !defined(ENABLE_OBJ_LEAK_CHECK)
+#if defined(__x86_64__) && !defined(ENABLE_OBJ_LEAK_CHECK) && !defined(_WIN32)
   check_size<ObTablet, ObRowkeyReadInfo, 1504>();
 #endif
   MEMSET(memtables_, 0x0, sizeof(memtables_));

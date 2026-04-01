@@ -140,7 +140,7 @@ private:
 class ObHTableRegionMetricsHandler : public ObITableMetaHandler
 {
 private:
-  static const uint64_t MOCK_SS_TABLET_SIZE = 8L * 1073741824; // 8 GB
+  static const uint64_t MOCK_SS_TABLET_SIZE = 8ULL * 1024ULL * 1024ULL * 1024ULL; // 8 GB
 public:
   ObHTableRegionMetricsHandler(ObIAllocator &allocator)
     : htable_name_(),

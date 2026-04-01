@@ -34500,7 +34500,12 @@ int ObDDLService::drop_column_online(
     struct timeval t;
     gettimeofday(&t, nullptr);
     struct tm tm;
+#ifdef _WIN32
+    time_t tv_sec = static_cast<time_t>(t.tv_sec);
+    ::localtime_s(&tm, &tv_sec);
+#else
     ::localtime_r(&t.tv_sec, &tm);
+#endif
     new_column_schema->set_unused();
     new_column_schema->set_prev_column_id(new_column_schema->get_column_id());
     new_column_schema->set_next_column_id(new_column_schema->get_column_id());

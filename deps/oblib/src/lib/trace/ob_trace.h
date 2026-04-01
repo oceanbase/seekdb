@@ -135,8 +135,8 @@ public:
     uint8_t policy_;
     struct {
       uint8_t level_ : 6;
-      bool enable_show_trace_ : 1;
-      bool auto_flush_ : 1;
+      uint8_t enable_show_trace_ : 1;
+      uint8_t auto_flush_ : 1;
     };
   };
 };
@@ -365,8 +365,8 @@ private:
     uint8_t policy_;
     struct {
       uint8_t level_ : 6;
-      bool enable_show_trace_ : 1;
-      bool auto_flush_ : 1;
+      uint8_t enable_show_trace_ : 1;
+      uint8_t auto_flush_ : 1;
     };
   };
   uint64_t seq_;
@@ -405,6 +405,8 @@ private:
 
 template<>
 int ObTagCtx<char*>::tostring(char* buf, const int64_t buf_len, int64_t& pos);
+template<>
+int ObTagCtx<void*>::tostring(char* buf, const int64_t buf_len, int64_t& pos);
 
 } // trace
 } // oceanbase

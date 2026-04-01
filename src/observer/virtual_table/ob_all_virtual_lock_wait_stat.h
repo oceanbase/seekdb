@@ -45,6 +45,10 @@ private:
   int get_rowkey_holder(int64_t hash, transaction::ObTransID &holder);
   int make_this_ready_to_read();
 private:
+#ifdef _WIN32
+#pragma push_macro("WAIT_TIMEOUT")
+#undef WAIT_TIMEOUT
+#endif
   enum {
         TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
     ROWKEY,
@@ -72,6 +76,9 @@ private:
     REMTOE_ADDR,
     IS_PLACEHOLDER,
   };
+#ifdef _WIN32
+#pragma pop_macro("WAIT_TIMEOUT")
+#endif
   rpc::ObLockWaitNode *node_iter_;
   rpc::ObLockWaitNode cur_node_;
   char rowkey_[common::MAX_LOCK_ROWKEY_BUF_LENGTH];

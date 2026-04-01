@@ -996,7 +996,11 @@ ob_hash_sort_utf16(const ObCharsetInfo *cs, const unsigned char *str, size_t s_l
 bool
 ob_like_range_generic(const ObCharsetInfo *cs,
                       const char *ptr, size_t ptr_length,
+#ifdef _WIN32
+                      pchar escape_char, pchar w_one, pchar w_many,
+#else
                       char escape_char, char w_one, char w_many,
+#endif
                       size_t res_length,
                       char *min_str,char *max_str,
                       size_t *min_length,size_t *max_length,

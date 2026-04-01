@@ -381,7 +381,7 @@ int ObRARowStore::switch_block(const int64_t min_size)
     BlockIndex bi;
     bi.is_idx_block_ = false;
     bi.on_disk_ = false;
-    bi.row_id_ = ~(0b11UL << 62) & save_row_cnt_;
+    bi.row_id_ = ~(0b11ULL << 62) & save_row_cnt_;
     bi.blk_ = blkbuf_.blk_;
     bi.length_ = static_cast<int32_t>(blkbuf_.buf_.head_size());
     bool dump = need_dump();

@@ -18,6 +18,11 @@
 
 #include "ob_construct_queue.h"
 #include "ob_mysql_request_manager.h"
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace oceanbase::obmysql;
 
@@ -54,7 +59,11 @@ void ObConstructQueueTask::runTimerTask()
   int64_t code = 0;
   code = OB_E(EventTable::EN_SQL_AUDIT_CONSTRUCT_BACK_THREAD_STUCK) OB_SUCCESS;
   if (OB_UNLIKELY(OB_SUCCESS != code && is_tp_trigger_)) {
+#ifdef _WIN32
+    Sleep(static_cast<DWORD>(abs(code) * 1000));
+#else
     sleep(abs(code));
+#endif
     LOG_INFO("Construct sleep", K(abs(code)));
     is_tp_trigger_ = false;
   } else if (OB_SUCCESS == code) {

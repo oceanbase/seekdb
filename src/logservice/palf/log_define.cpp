@@ -39,7 +39,9 @@ int convert_sys_errno()
   case EAGAIN:
     ret = OB_EAGAIN;
     break;
+#ifndef _WIN32
   case EDQUOT:
+#endif
   case ENOSPC:
     ret = OB_ALLOCATE_DISK_SPACE_FAILED;
     break;

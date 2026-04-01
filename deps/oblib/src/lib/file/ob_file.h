@@ -28,6 +28,13 @@
 #ifndef O_DIRECT
 #define O_DIRECT 0 // macOS does not support O_DIRECT
 #endif
+#elif defined(_WIN32)
+#include <stdlib.h>
+#include <fcntl.h>
+#include <io.h>
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
 #else
 #include <malloc.h>
 #endif
@@ -408,8 +415,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// libaio is Linux-specific, not available on macOS
-#ifndef __APPLE__
+// libaio is Linux-specific, not available on macOS or Windows
+#if !defined(__APPLE__) && !defined(_WIN32)
 #define __USE_AIO_FILE
 #endif
 #ifdef __USE_AIO_FILE

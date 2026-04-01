@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "ob_range.h"
 #include "common/ob_store_range.h"
 

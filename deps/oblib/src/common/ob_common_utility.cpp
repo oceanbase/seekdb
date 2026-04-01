@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_common_utility.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "lib/alloc/malloc_hook.h"
 #include "lib/utility/ob_sort.h"
 using namespace oceanbase::lib;
@@ -134,6 +137,13 @@ int get_stackattr(void *&stackaddr, size_t &stacksize)
     // pthread_get_stackaddr_np returns the TOP of the stack.
     // OceanBase's check_stack_overflow expects stackaddr to be the BOTTOM (lowest address).
     stackaddr = (void*)((char*)stacktop - stacksize);
+    g_stackaddr = (char*)stackaddr;
+    g_stacksize = stacksize;
+#elif defined(_WIN32)
+    ULONG_PTR low_limit = 0, high_limit = 0;
+    GetCurrentThreadStackLimits(&low_limit, &high_limit);
+    stackaddr = (void*)low_limit;
+    stacksize = (size_t)(high_limit - low_limit);
     g_stackaddr = (char*)stackaddr;
     g_stacksize = stacksize;
 #endif

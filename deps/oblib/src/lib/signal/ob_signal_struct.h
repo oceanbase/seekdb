@@ -21,6 +21,17 @@
 #include <stdint.h>
 #include <time.h>
 #include <signal.h>
+#ifndef _WIN32
+#include <sys/types.h>
+#else
+// Windows: define siginfo_t as a dummy structure
+typedef struct {
+  int si_signo;
+  int si_code;
+  int si_errno;
+  void* si_addr;
+} siginfo_t;
+#endif
 #include "lib/string/ob_string.h"
 
 namespace oceanbase

@@ -17,9 +17,11 @@
 #ifndef OCEANBASE_COMMON_OB_TSI_UTILS_
 #define OCEANBASE_COMMON_OB_TSI_UTILS_
 #include <errno.h>
+#ifndef _WIN32
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#endif
 #ifdef __linux__
 #include <linux/futex.h>
 #endif

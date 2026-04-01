@@ -5,6 +5,8 @@
 #include "lib/oblog/ob_log.h"
 #ifdef __APPLE__
 #include <mach/mach_time.h>
+#elif defined(_WIN32)
+#include "lib/hash/ob_hashutils.h"
 #endif
 
 namespace obutil
@@ -73,6 +75,13 @@ ObSysTime ObSysTime::now(Clock clock)
         uint64_t current_mach = mach_absolute_time();
         uint64_t elapsed_ns = (current_mach - base.base_mach_time) * base.numer / base.denom;
         return ObSysTime(base.base_wall_time_us + static_cast<int64_t>(elapsed_ns / 1000));
+#elif defined(_WIN32)
+        LARGE_INTEGER freq, counter;
+        QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&counter);
+        int64_t sec = counter.QuadPart / freq.QuadPart;
+        int64_t frac = counter.QuadPart % freq.QuadPart;
+        return ObSysTime(sec * INT64_C(1000000) + frac * INT64_C(1000000) / freq.QuadPart);
 #else
         struct timespec ts;
         if(clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
@@ -148,7 +157,11 @@ std::string ObSysTime::toDateTime() const
 
     struct tm* t;
     struct tm tr;
+#ifdef _WIN32
+    localtime_s(&tr, &time);
+#else
     localtime_r(&time, &tr);
+#endif
     t = &tr;
 
     char buf[32];

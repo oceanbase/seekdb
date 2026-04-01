@@ -222,8 +222,8 @@ int TestDataFilePrepareUtil::open()
   const int64_t bucket_num = 1024L;
   const int64_t max_cache_size = 1024L * 1024L * 512;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
-  const int64_t mem_limit = 10 * 1024L * 1024L * 1024L;
-  const int64_t data_disk_size = 4 * 1024L * 1024L * 1024L;
+  const int64_t mem_limit = 10LL * 1024 * 1024 * 1024;
+  const int64_t data_disk_size = 4LL * 1024 * 1024 * 1024;
   lib::set_memory_limit(mem_limit);
 
   const int64_t default_partition_cnt = 1000;

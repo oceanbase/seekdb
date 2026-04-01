@@ -18,6 +18,9 @@
 #include "lib/utility/ob_print_utils.h"
 #ifdef __APPLE__
 #include <mach/mach_time.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include "lib/hash/ob_hashutils.h"
 #endif
 
 using namespace oceanbase;
@@ -80,6 +83,61 @@ struct MachTimeBaseLocal {
 };
 
 static thread_local MachTimeBaseLocal tl_time_base;
+#elif defined(_WIN32)
+// Windows: QPC-based high-precision time with periodic calibration
+// Same design as macOS mach_absolute_time approach:
+// - QPC provides monotonic, high-precision counter (~100ns or better)
+// - Calibrate against GetSystemTimePreciseAsFileTime every 1 second
+// - Thread-local to avoid cross-thread synchronization
+
+struct QPCTimeBaseLocal {
+  int64_t base_wall_time_us_;
+  int64_t base_qpc_;
+  int64_t next_calibrate_qpc_;
+  int64_t calibration_interval_qpc_;
+  int64_t qpc_freq_;
+
+  QPCTimeBaseLocal() {
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    qpc_freq_ = freq.QuadPart;
+    calibration_interval_qpc_ = qpc_freq_;  // ~1 second
+    calibrate();
+  }
+
+  void calibrate() {
+    FILETIME ft;
+    GetSystemTimePreciseAsFileTime(&ft);
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+
+    uint64_t t = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    t /= 10;
+    t -= 11644473600ULL * 1000000ULL;
+
+    base_wall_time_us_ = static_cast<int64_t>(t);
+    base_qpc_ = now.QuadPart;
+    next_calibrate_qpc_ = now.QuadPart + calibration_interval_qpc_;
+  }
+
+  void calibrate_if_needed(int64_t current_qpc) {
+    if (OB_UNLIKELY(current_qpc >= next_calibrate_qpc_)) {
+      calibrate();
+    }
+  }
+};
+
+static __declspec(thread) bool win_tl_time_inited = false;
+static __declspec(thread) QPCTimeBaseLocal *win_tl_time_base = nullptr;
+
+static QPCTimeBaseLocal &get_win_tl_time_base() {
+  if (OB_UNLIKELY(!win_tl_time_inited)) {
+    static __declspec(thread) char buf[sizeof(QPCTimeBaseLocal)];
+    win_tl_time_base = new (buf) QPCTimeBaseLocal();
+    win_tl_time_inited = true;
+  }
+  return *win_tl_time_base;
+}
 #endif
 
 int64_t ObTimeUtility::current_time()
@@ -93,6 +151,13 @@ int64_t ObTimeUtility::current_time()
   // Hot path: pure local memory access, zero cross-thread contention
   uint64_t elapsed_ns = (current_mach - tl_time_base.base_mach_time_) * tl_time_base.numer_ / tl_time_base.denom_;
   return tl_time_base.base_wall_time_us_ + static_cast<int64_t>(elapsed_ns / 1000);
+#elif defined(_WIN32)
+  QPCTimeBaseLocal &base = get_win_tl_time_base();
+  LARGE_INTEGER now;
+  QueryPerformanceCounter(&now);
+  base.calibrate_if_needed(now.QuadPart);
+  int64_t elapsed_us = (now.QuadPart - base.base_qpc_) * 1000000LL / base.qpc_freq_;
+  return base.base_wall_time_us_ + elapsed_us;
 #else
   int err_ret = 0;
   struct timeval t;
@@ -123,7 +188,14 @@ int64_t ObTimeUtility::current_time_us()
 
 int64_t ObTimeUtility::current_time_ns()
 {
-	int err_ret = 0;
+#ifdef _WIN32
+  FILETIME ft;
+  GetSystemTimePreciseAsFileTime(&ft);
+  uint64_t t = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+  t -= UINT64_C(116444736000000000);
+  return static_cast<int64_t>(t) * 100;
+#else
+  int err_ret = 0;
   struct timespec ts;
   if (OB_UNLIKELY((err_ret = clock_gettime(CLOCK_REALTIME, &ts)) != 0)) {
       LIB_LOG_RET(WARN, err_ret, "current system not support CLOCK_REALTIME", K(err_ret), K(errno));
@@ -132,10 +204,19 @@ int64_t ObTimeUtility::current_time_ns()
   }
   return static_cast<int64_t>(ts.tv_sec) * 1000000000L +
     static_cast<int64_t>(ts.tv_nsec);
+#endif
 }
 
 int64_t ObTimeUtility::current_monotonic_raw_time()
 {
+#ifdef _WIN32
+  LARGE_INTEGER freq, counter;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&counter);
+  int64_t sec = counter.QuadPart / freq.QuadPart;
+  int64_t frac = counter.QuadPart % freq.QuadPart;
+  return sec * 1000000L + frac * 1000000L / freq.QuadPart;
+#else
   int64_t ret_val = 0;
   int err_ret = 0;
   struct timespec ts;
@@ -156,11 +237,12 @@ int64_t ObTimeUtility::current_monotonic_raw_time()
   }
 
   return ret_val;
+#endif
 }
 
 int64_t ObTimeUtility::current_time_coarse()
 {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
   // On macOS, use the same time source as current_time() to avoid clock skew.
   // This is because current_time() uses mach_absolute_time() with a fixed base,
   // while clock_gettime(CLOCK_REALTIME) returns the actual system clock which

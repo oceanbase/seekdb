@@ -212,14 +212,18 @@ void ObMapQueueThread<MAX_THREAD_NUM>::stop()
     for (int64_t index = 0; index < thread_num_; index++) {
       ThreadConf &tc = tc_[index];
 
+#ifdef _WIN32
+      if (tc.tid_.p != nullptr) {
+#else
       if (0 != tc.tid_) {
+#endif
         int pthread_ret = pthread_join(tc.tid_, NULL);
 
         if (0 != pthread_ret) {
-          LIB_LOG_RET(ERROR, OB_ERR_SYS, "pthread_join fail", "thread_id", tc.tid_, K(pthread_ret));
+          LIB_LOG_RET(ERROR, OB_ERR_SYS, "pthread_join fail", K(pthread_ret));
         }
 
-        tc.tid_ = 0;
+        tc.tid_ = {};
       }
     }
   }
@@ -363,7 +367,7 @@ int ObMapQueueThread<MAX_THREAD_NUM>::push(void *data, const uint64_t hash_val)
 
 template <int MAX_THREAD_NUM>
 ObMapQueueThread<MAX_THREAD_NUM>::ThreadConf::ThreadConf() :
-    tid_(0),
+    tid_{},
     host_(NULL),
     thread_index_(0),
     queue_(),
@@ -388,7 +392,7 @@ int ObMapQueueThread<MAX_THREAD_NUM>::ThreadConf::init(const char *label,
   } else if (OB_FAIL(queue_.init(label))) {
     LIB_LOG(ERROR, "init queue fail", KR(ret), K(label));
   } else {
-    tid_ = 0;
+    tid_ = {};
     host_ = host;
     thread_index_ = thread_index;
   }
@@ -399,7 +403,7 @@ template <int MAX_THREAD_NUM>
 void ObMapQueueThread<MAX_THREAD_NUM>::ThreadConf::destroy()
 {
   queue_.destroy();
-  tid_ = 0;
+  tid_ = {};
   host_ = NULL;
   thread_index_ = 0;
 }

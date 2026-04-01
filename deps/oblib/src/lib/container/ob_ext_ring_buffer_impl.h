@@ -42,7 +42,11 @@ static inline void on_fatal_error()
 {
   while(true) {
     LIB_LOG_RET(ERROR, common::OB_ERROR, "on_fatal_error");
+#ifdef _WIN32
+    Sleep(1000);
+#else
     sleep(1);
+#endif
   }
 }
 

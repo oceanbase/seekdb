@@ -24,6 +24,11 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
+#ifdef _WIN32
+#ifdef CHECKSUM_TYPE_CRC32
+#undef CHECKSUM_TYPE_CRC32
+#endif
+#endif
 
 namespace oceanbase
 {
@@ -99,7 +104,7 @@ const char *const STS_ACTION = "GetResourceSTSCredential";
 const char *const STS_RESOURCE_SOURCE = "OBSERVER";
 
 const char *const OB_DEVICE_CREDENTIAL_ALLOCATOR = "ObjDeviceCredentialAlloc";
-static constexpr int64_t MAX_CREDENTIAL_IDLE_DURATION_US = 24 * 3600 * 1000 * 1000L;  // 24h
+static constexpr int64_t MAX_CREDENTIAL_IDLE_DURATION_US = 24 * 3600 * 1000 * 1000LL;  // 24h
 
 enum ObStorageAddressingModel
 {

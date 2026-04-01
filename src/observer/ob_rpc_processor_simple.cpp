@@ -603,7 +603,11 @@ int ObDumpMemtableP::process()
         LOG_WARN("failed to get all memtable", K(ret), KPC(tablet_handle.get_obj()));
       } else {
         ObITabletMemtable *tablet_memtable = nullptr;
+#ifdef _WIN32
+        mkdir("/tmp/dump_memtable/");
+#else
         mkdir("/tmp/dump_memtable/", S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+#endif
         for (int64_t i = 0; OB_SUCC(ret) && i < tables_handle.count(); i++) {
           if (OB_FAIL(tables_handle.at(i).get_tablet_memtable(tablet_memtable))) {
             SERVER_LOG(WARN, "fail to get tablet memtables", K(ret));
@@ -663,7 +667,11 @@ int ObDumpTxDataMemtableP::process()
         SERVER_LOG(WARN, "fail to get all memtables for log stream", K(ret));
       } else {
         ObTxDataMemtable *tx_data_mt;
+#ifdef _WIN32
+        mkdir("/tmp/dump_tx_data_memtable/");
+#else
         mkdir("/tmp/dump_tx_data_memtable/", S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+#endif
         for (int64_t i = 0; OB_SUCC(ret) && i < tables_handle.count(); i++) {
           if (OB_FAIL(tables_handle.at(i).get_tx_data_memtable(tx_data_mt))) {
             SERVER_LOG(WARN, "fail to get tx data memtables", K(ret));
@@ -710,7 +718,11 @@ int ObDumpSingleTxDataP::process()
         }
       } else if (FALSE_IT(ls = ls_handle.get_ls())) {
       } else {
+#ifdef _WIN32
+        mkdir("/tmp/dump_single_tx_data/");
+#else
         mkdir("/tmp/dump_single_tx_data/", S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+#endif
         ret = ls->dump_single_tx_data_2_text(arg_.tx_id_, "/tmp/dump_single_tx_data/single_tx_data.txt");
         if (OB_FAIL(ret)) {
           TRANS_LOG(WARN, "dump single tx data to text failed", KR(ret));

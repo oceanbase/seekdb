@@ -203,7 +203,7 @@ public:
   private:
     void runTimerTask() override;
   private:
-    static constexpr int64_t SCHEDULE_PERIOD = 3600 * 1000L * 1000L; // 1h
+    static constexpr int64_t SCHEDULE_PERIOD = 3600LL * 1000 * 1000; // 1h
     ObRootService &root_service_;
   };
 

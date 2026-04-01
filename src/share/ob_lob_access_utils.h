@@ -33,7 +33,7 @@ namespace storage
 {
   class ObLobQueryIter;
   class ObLobDiffHeader;
-  class ObLobAccessCtx;
+  struct ObLobAccessCtx;
 } // namespace storage
 namespace common
 {

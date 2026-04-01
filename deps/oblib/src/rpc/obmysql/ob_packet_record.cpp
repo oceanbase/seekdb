@@ -24,7 +24,7 @@ using namespace oceanbase::obmysql;
 namespace oceanbase
 {
 namespace observer{
-bool __attribute__((weak)) enable_proto_dia()
+bool OB_WEAK_SYMBOL enable_proto_dia()
 {
   return false;
 }

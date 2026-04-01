@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define USING_LOG_PREFIX DDL
+#define USING_LOG_PREFIX PL
 #include "ob_dbms_space.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/ddl/ob_create_index_resolver.h"

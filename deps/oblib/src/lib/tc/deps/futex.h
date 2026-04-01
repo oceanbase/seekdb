@@ -122,4 +122,88 @@ static int tc_futex_wait(int *p, int val, const int64_t timeout_us) {
   }
   return 0;
 }
+#elif defined(_WIN32)
+// Windows futex emulation using WaitOnAddress/WakeByAddress* APIs (Windows 8+)
+#include <windows.h>
+#include <errno.h>
+#include <stdint.h>
+#include <time.h>
+
+// Helper function to convert microseconds to milliseconds for Windows timeout
+static DWORD tc_us_to_ms(int64_t timeout_us) {
+  if (timeout_us <= 0) {
+    return INFINITE;  // No timeout
+  }
+  // Convert microseconds to milliseconds, round up
+  int64_t ms = (timeout_us + 999) / 1000;
+  // Cap at maximum DWORD value minus 1 to avoid overflow
+  if (ms >= (int64_t)INFINITE) {
+    return INFINITE - 1;
+  }
+  return (DWORD)ms;
+}
+
+static int tc_futex(int *uaddr, int op, int val, const struct timespec *timeout, int *uaddr2, int val3) {
+  // Not directly used on Windows, kept for API compatibility
+  (void)uaddr;
+  (void)op;
+  (void)val;
+  (void)timeout;
+  (void)uaddr2;
+  (void)val3;
+  return 0;
+}
+
+static int tc_futex_wake(int *p, int val) {
+  // Wake up waiting threads
+  if (val >= INT32_MAX || val <= 0) {
+    // Wake all threads
+    WakeByAddressAll((PVOID)p);
+    return 0;  // Windows API doesn't return count of woken threads
+  } else if (val == 1) {
+    // Wake single thread (most common case)
+    WakeByAddressSingle((PVOID)p);
+    return 0;
+  } else {
+    // Wake multiple threads (less efficient, wake one at a time)
+    for (int i = 0; i < val; i++) {
+      WakeByAddressSingle((PVOID)p);
+    }
+    return 0;
+  }
+}
+
+static struct timespec *tc_make_timespec(struct timespec *ts, int64_t us)
+{
+  ts->tv_sec = us / 1000000;
+  ts->tv_nsec = 1000 * (us % 1000000);
+  return ts;
+}
+
+static int tc_futex_wait(int *p, int val, const int64_t timeout_us) {
+  // Convert timeout to milliseconds
+  DWORD timeout_ms = tc_us_to_ms(timeout_us);
+
+  // WaitOnAddress atomically checks if *p == val and waits if true
+  BOOL result = WaitOnAddress(
+    (volatile VOID*)p,    // Address to wait on
+    (PVOID)&val,          // Comparison value
+    sizeof(int),          // Size of value
+    timeout_ms            // Timeout in milliseconds
+  );
+
+  if (!result) {
+    DWORD err = GetLastError();
+    if (err == ERROR_TIMEOUT) {
+      return ETIMEDOUT;
+    }
+    // Other errors (like ERROR_INVALID_PARAMETER)
+    return EINVAL;
+  }
+
+  // Successfully woken up (value changed or spurious wakeup)
+  return 0;
+}
+#else
+#error "Unsupported platform for futex implementation"
 #endif

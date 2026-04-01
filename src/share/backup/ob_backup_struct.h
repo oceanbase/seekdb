@@ -1385,6 +1385,10 @@ struct ObHAResultInfo
 {
 public:
   using Comment = common::ObFixedLengthString<OB_COMMENT_LENGTH>;
+#ifdef _WIN32
+#pragma push_macro("BACKUP_DATA")
+#undef BACKUP_DATA
+#endif
   enum FailedType {
     ROOT_SERVICE = 0,
     RESTORE_DATA,
@@ -1393,6 +1397,9 @@ public:
     BACKUP_CLEAN,
     MAX_FAILED_TYPE 
   };
+#ifdef _WIN32
+#pragma pop_macro("BACKUP_DATA")
+#endif
   ObHAResultInfo(const FailedType &type, const ObLSID &ls_id, const ObAddr &addr, const ObTaskId &trace_id,
       const int result);
   ObHAResultInfo(const FailedType &type, const ObAddr &addr, const ObTaskId &trace_id, const int result);
@@ -1764,6 +1771,10 @@ public:
 class BackupConfigItemPair;
 struct ObLogArchiveDestAtrr final
 {
+#ifdef _WIN32
+#pragma push_macro("OPTIONAL")
+#undef OPTIONAL
+#endif
   enum Binding {
     OPTIONAL = 0,
     MANDATORY = 1
@@ -1797,6 +1808,9 @@ struct ObLogArchiveDestAtrr final
   int64_t piece_switch_interval_;
   ObLogArchiveDestState state_;
 };
+#ifdef _WIN32
+#pragma pop_macro("OPTIONAL")
+#endif
 
 // trim '/' from right until encouter a non backslash charactor.
 int trim_right_backslash(ObBackupPathString &path);

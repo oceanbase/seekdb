@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "ob_object.h"
 #include <string.h>
-#define USING_LOG_PREFIX COMMON
 #include "common/object/ob_obj_compare.h"
 #include "lib/string/ob_sql_string.h"
 #include "common/object/ob_obj_funcs.h"
@@ -29,7 +30,7 @@ namespace oceanbase
 {
 namespace common
 {
-int __attribute__((weak)) ob_obj_read_lob_data(ObIAllocator &allocator, const common::ObObj &obj, ObString &data)
+int OB_WEAK_SYMBOL ob_obj_read_lob_data(ObIAllocator &allocator, const common::ObObj &obj, ObString &data)
 {
   int ret = OB_NOT_SUPPORTED;
   LOG_WARN("not support outrow lob read", K(ret), K(obj));

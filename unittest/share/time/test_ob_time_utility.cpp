@@ -105,7 +105,7 @@ TEST(ObTimeUtilityTest, str_dateunit_to_timestamp_test)
   str = "1";
   ASSERT_EQ(OB_SUCCESS, ObTimeUtility::str_dateunit_to_timestamp(ObString::make_string(str),
     DATE_UNIT_DAY, t, usec));
-  ASSERT_EQ(1 * 1000L * 1000L * 60L * 60L * 24L, usec);
+  ASSERT_EQ(1LL * 1000 * 1000 * 60 * 60 * 24, usec);
 
   str = "21-25";
   ASSERT_EQ(OB_SUCCESS, ObTimeUtility::str_dateunit_to_timestamp(ObString::make_string(str),

@@ -362,8 +362,19 @@ for RHEL4 support (GCC 3 doesn't support this instruction) */
 #include "arm_acle.h"
 #define crc32_sse42_quadword crc = __crc32cd(crc, *(int64_t*)buf); len -= 8, buf += 8
 #define crc32_sse42_byte crc = __crc32cb(crc, (uint8_t)*buf); len--, buf++
+#elif defined(_WIN32) && defined(_M_X64)
+#include <nmmintrin.h>
+#define crc32_sse42_byte \
+  crc = _mm_crc32_u8((uint32_t)crc, (uint8_t)*buf); \
+  len--, buf++
+#define crc32_sse42_quadword \
+  crc = _mm_crc32_u64(crc, *(uint64_t*)buf); \
+  len -= 8, buf += 8
 #endif /* defined(__GNUC__) && defined(__x86_64__) */
 
+#if defined(_WIN32) && defined(_M_X64)
+__attribute__((target("sse4.2")))
+#endif
 uint64_t crc64_sse42(uint64_t uCRC64, const char* buf, int64_t len)
 {
   uint64_t crc = uCRC64;
@@ -1051,7 +1062,7 @@ uint64_t ob_crc64_isal(uint64_t uCRC64, const char* buf, int64_t cb)
   if (buf == NULL || cb <= 0) {
     return uCRC64;
   }
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
   return crc64_sse42(uCRC64, buf, cb);
 #elif defined(__linux__)
   return crc32_iscsi((unsigned char*)(buf), cb, uCRC64);
@@ -1072,7 +1083,7 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
   vendor_info[3]='\0';
 
   if (strcmp((char*)vendor_info, "GenuineIntel") == 0) {
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
     asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "0"(1));
     if ((c & (1 << 20)) != 0) {
       ob_crc64_sse42_func = &crc64_sse42;

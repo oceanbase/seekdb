@@ -17,6 +17,9 @@
 #ifndef _OCEABASE_LIB_UTILITY_OB_UNIFY_SERIALIZE_H_
 #define _OCEABASE_LIB_UTILITY_OB_UNIFY_SERIALIZE_H_
 
+#ifdef _WIN32
+#include <type_traits>
+#endif
 #include "lib/utility/serialization.h"
 
 namespace oceanbase
@@ -349,6 +352,26 @@ const static int64_t UNIS_VERSION = VER
 
 // ATTENTION!!! macro OB_UNIS_DECODE_ARRAY and OB_UNIS_DECODE_ARRAY_AND_FUNC is not same 
 // OB_UNIS_DECODE_ARRAY_AND_FUNC will decode objs_count, while OB_UNIS_DECODE_ARRAY will not
+#ifdef _WIN32
+#define OB_UNIS_DECODE_ARRAY_AND_FUNC(objs, objs_count, FUNC)                                           \
+  if (OB_SUCC(ret)) {                                                                                   \
+    typeof(objs_count) tmp_count = 0;                                                                   \
+    OB_UNIS_DECODE(tmp_count);                                                                          \
+    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_count; ++i) {                                           \
+      typename std::remove_reference<decltype(objs[0])>::type tmp;                                       \
+      OB_UNIS_DECODE(tmp);                                                                              \
+      if (FAILEDx(FUNC(tmp))) {                                                                         \
+        RPC_WARN("failed to handle deserialized objects",                                               \
+                 "name", MSTR(obj), K(data_len), K(pos), K(ret));                                       \
+      }                                                                                                 \
+    }                                                                                                   \
+    if (OB_SUCC(ret) && tmp_count != objs_count) {                                                      \
+      ret = OB_ERR_UNEXPECTED;                                                                          \
+      RPC_WARN("the deserialized count is not equal to objs count",                                     \
+               "name", MSTR(obj), K(tmp_count), "objs_count", objs_count, K(data_len), K(pos), K(ret)); \
+    }                                                                                                   \
+  }
+#else
 #define OB_UNIS_DECODE_ARRAY_AND_FUNC(objs, objs_count, FUNC)                                           \
   if (OB_SUCC(ret)) {                                                                                   \
     typeof(objs_count) tmp_count = 0;                                                                   \
@@ -367,6 +390,7 @@ const static int64_t UNIS_VERSION = VER
                "name", MSTR(obj), K(tmp_count), "objs_count", objs_count, K(data_len), K(pos), K(ret)); \
     }                                                                                                   \
   }
+#endif
 
 #define OB_UNIS_ENCODE_ARRAY_POINTER_IF(objs, objs_count, PRED)                                         \
   if (OB_SUCC(ret) && (PRED)) {                                                                         \
@@ -396,6 +420,26 @@ const static int64_t UNIS_VERSION = VER
 // objs: the array of pointer
 // objs_count: the size of objs
 // FUNC: int FUNC(ObjType &obj), this function should add the object to array and update objs_count
+#ifdef _WIN32
+#define OB_UNIS_DECODE_ARRAY_POINTER_IF(objs, objs_count, FUNC, PRED)                                   \
+  if (OB_SUCC(ret) && (PRED)) {                                                                         \
+    typeof(objs_count) tmp_count = 0;                                                                   \
+    OB_UNIS_DECODE(tmp_count);                                                                          \
+    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_count; ++i) {                                           \
+      typename std::remove_reference<decltype(*(objs[0]))>::type tmp;                                      \
+      OB_UNIS_DECODE(tmp);                                                                              \
+      if (FAILEDx(FUNC(tmp))) {                                                                         \
+        RPC_WARN("failed to handle deserialized objects",                                               \
+                 "name", MSTR(obj), K(data_len), K(pos), K(ret), K(tmp), K(i));                         \
+      }                                                                                                 \
+    }                                                                                                   \
+    if (OB_SUCC(ret) && tmp_count != objs_count) {                                                      \
+      ret = OB_ERR_UNEXPECTED;                                                                          \
+      RPC_WARN("the deserialized count is not equal to objs count",                                     \
+               "name", MSTR(obj), K(tmp_count), "objs_count", objs_count, K(data_len), K(pos), K(ret)); \
+    }                                                                                                   \
+  }
+#else
 #define OB_UNIS_DECODE_ARRAY_POINTER_IF(objs, objs_count, FUNC, PRED)                                   \
   if (OB_SUCC(ret) && (PRED)) {                                                                         \
     typeof(objs_count) tmp_count = 0;                                                                   \
@@ -414,6 +458,7 @@ const static int64_t UNIS_VERSION = VER
                "name", MSTR(obj), K(tmp_count), "objs_count", objs_count, K(data_len), K(pos), K(ret)); \
     }                                                                                                   \
   }
+#endif
 
 #define OB_UNIS_ADD_LEN_ARRAY_POINTER_IF(objs, objs_count, PRED)  \
   if ((PRED)) {                                                   \

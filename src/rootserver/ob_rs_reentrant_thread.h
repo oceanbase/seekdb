@@ -44,6 +44,8 @@ public:
     uint64_t thread_id = 0;
     pthread_threadid_np(NULL, &thread_id);
     thread_id_ = (pid_t)thread_id;
+#elif defined(_WIN32)
+    thread_id_ = (pid_t)GetCurrentThreadId();
 #else
     thread_id_ = (pid_t)syscall(__NR_gettid); // only called by thread self
 #endif

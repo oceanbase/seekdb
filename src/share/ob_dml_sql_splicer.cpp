@@ -39,7 +39,7 @@ void ObDMLSqlSplicer::reset()
 int ObDMLSqlSplicer::append_uint64_value(const uint64_t value, bool &is_null)
 {
   is_null = false;
-  return values_.append_fmt("%lu", value);
+  return values_.append_fmt("%llu", (unsigned long long)value);
 }
 
 int ObDMLSqlSplicer::append_value(const uint64_t value, bool &is_null)
@@ -52,7 +52,7 @@ int ObDMLSqlSplicer::append_value(const uint64_t value, bool &is_null)
 int ObDMLSqlSplicer::append_value(const int64_t value, bool &is_null)
 {
   is_null = false;
-  return values_.append_fmt("%ld", value);
+  return values_.append_fmt("%lld", (long long)value);
 }
 
 #ifdef __APPLE__
@@ -60,6 +60,12 @@ int ObDMLSqlSplicer::append_value(const int64_t value, bool &is_null)
 int ObDMLSqlSplicer::append_value(const long value, bool &is_null)
 {
   // Convert long to int64_t and use the int64_t implementation
+  return append_value(static_cast<int64_t>(value), is_null);
+}
+#elif defined(_WIN32)
+// Windows: long is 32-bit and distinct from int64_t, need explicit overload for long
+int ObDMLSqlSplicer::append_value(const long value, bool &is_null)
+{
   return append_value(static_cast<int64_t>(value), is_null);
 }
 #endif
@@ -187,7 +193,7 @@ int ObDMLSqlSplicer::append_value(const ObHexEscapeSqlStr &escape_str, bool &is_
 int ObDMLSqlSplicer::append_value(const ObRealUInt64 &value, bool &is_null)
 {
   is_null = false;
-  return values_.append_fmt("%lu", value.value());
+  return values_.append_fmt("%llu", (unsigned long long)value.value());
 }
 
 int ObDMLSqlSplicer::append_value(const ObObj &obj, bool &is_null)
@@ -369,7 +375,7 @@ int ObDMLSqlSplicer::add_time_column(const char *col_name,
     LOG_WARN("invalid column name", K(ret), KP(col_name));
   } else {
     if (now > 0) {
-      if (OB_FAIL(values_.append_fmt("usec_to_time(%ld)", now))) {
+      if (OB_FAIL(values_.append_fmt("usec_to_time(%lld)", (long long)now))) {
         LOG_WARN("append value failed", K(ret));
       }
     } else {
@@ -398,7 +404,7 @@ int ObDMLSqlSplicer::add_raw_time_column(const char *col_name, const int64_t now
   if (OB_ISNULL(col_name)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid column name", K(ret), KP(col_name));
-  } else if (OB_FAIL(values_.append_fmt("usec_to_time(%ld)", now))) {
+  } else if (OB_FAIL(values_.append_fmt("usec_to_time(%lld)", (long long)now))) {
     LOG_WARN("append value failed", K(ret));
   } else if (OB_FAIL(add_column(is_primary_key, is_null, col_name))) {
     LOG_WARN("add column failed", K(ret), K(is_primary_key), K(is_null), K(col_name));

@@ -37,8 +37,13 @@ bool ObTTLTime::is_same_day(int64_t ttl_time1, int64_t ttl_time2)
   time_t param2 = static_cast<time_t>(ttl_time2 / 1000000l);
   
   struct tm tm1, tm2;
+#ifdef _WIN32
+  localtime_s(&tm1, &param1);
+  localtime_s(&tm2, &param2);
+#else
   ::localtime_r(&param1, &tm1);
   ::localtime_r(&param2, &tm2);
+#endif
 
   return (tm1.tm_yday == tm2.tm_yday);
 }

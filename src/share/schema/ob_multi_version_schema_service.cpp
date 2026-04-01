@@ -2231,7 +2231,7 @@ int ObMultiVersionSchemaService::async_refresh_schema(
     // do nothing
   } else {
     int64_t retry_cnt = 0;
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
     const useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms
 #else
     const __useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms

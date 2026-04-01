@@ -35,7 +35,12 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
 {
   int ret = OB_SUCCESS;
   STATIC_ASSERT(sizeof(ObTxData) <= TX_DATA_SLICE_SIZE, "Size of ObTxData Overflow.");
+#ifdef _WIN32
+  STATIC_ASSERT(sizeof(ObUndoAction) * TX_DATA_UNDO_ACT_MAX_NUM_PER_NODE <= TX_DATA_UNDO_ACT_SPACE,
+                "ObUndoAction array overflow in ObUndoStatusNode.");
+#else
   STATIC_ASSERT(sizeof(ObUndoAction) == UNDO_ACTION_SZIE, "Size of ObUndoAction Overflow.");
+#endif
   STATIC_ASSERT(sizeof(ObUndoStatusNode) <= TX_DATA_SLICE_SIZE, "Size of ObUndoStatusNode Overflow");
 
   ObMemtableMgrHandle memtable_mgr_handle;

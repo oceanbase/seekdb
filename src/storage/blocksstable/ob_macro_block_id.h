@@ -656,8 +656,13 @@ public:
   static const uint64_t SF_BIT_TRANSFER_SEQ = 20;
   static const uint64_t SF_BIT_TENANT_SEQ = 44;
   static constexpr uint64_t SF_BIT_META_VERSION_ID = 44;
+#ifndef _WIN32
   static const uint64_t MAX_TRANSFER_SEQ = (0x1UL << MacroBlockId::SF_BIT_TRANSFER_SEQ) - 1;
   static const uint64_t MAX_WRITE_SEQ = (0x1UL << MacroBlockId::SF_BIT_WRITE_SEQ) - 1;
+#else
+  static const uint64_t MAX_TRANSFER_SEQ = (UINT64_C(0x1) << MacroBlockId::SF_BIT_TRANSFER_SEQ) - 1;
+  static const uint64_t MAX_WRITE_SEQ = (UINT64_C(0x1) << MacroBlockId::SF_BIT_WRITE_SEQ) - 1;
+#endif
 
 private:
   static const uint64_t HASH_MAGIC_NUM = 2654435761;
@@ -697,12 +702,12 @@ private:
     // for PRIVATE_DATA_MACRO and PRIVATE_META_MACRO
     struct {
       int64_t macro_transfer_seq_  : SF_BIT_TRANSFER_SEQ;
-      uint64_t tenant_seq_          : SF_BIT_TENANT_SEQ;
+      int64_t tenant_seq_          : SF_BIT_TENANT_SEQ;
     };
     // for PRIVATE_TABLET_META and PRIVATE_TABLET_CURRENT_VERSION
     struct {
       int64_t meta_transfer_seq_   : SF_BIT_TRANSFER_SEQ;
-      uint64_t meta_version_id_     : SF_BIT_META_VERSION_ID;
+      uint64_t meta_version_id_    : SF_BIT_META_VERSION_ID;
     };
   };
 };

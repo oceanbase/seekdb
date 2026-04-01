@@ -82,7 +82,7 @@ private:
 #ifdef __ANDROID__
   static constexpr int64_t RESERVED_DISK_SIZE = 256 * 1024 * 1024L; // 256MB
 #else
-  static constexpr int64_t RESERVED_DISK_SIZE = 4 * 1024 * 1024 * 1024L; // 4G
+  static constexpr int64_t RESERVED_DISK_SIZE = 4LL * 1024 * 1024 * 1024; // 4G
 #endif
 
   common::ObArenaAllocator allocator_;

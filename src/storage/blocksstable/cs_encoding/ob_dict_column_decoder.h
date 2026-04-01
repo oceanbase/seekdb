@@ -469,13 +469,13 @@ public:
     is_padding_mode_ = is_padding_mode;
     build_decode_by_ref_func_();
   }
-  OB_INLINE value_type &operator*()
+  OB_INLINE const value_type &operator*() const
   {
     cell_.pack_ = (uint32_t)index_;
     decode_by_ref_func_(*ctx_, cell_);
     return cell_;
   }
-  OB_INLINE value_type *operator->()
+  OB_INLINE const value_type *operator->() const
   {
     cell_.pack_ = (uint32_t)index_;
     decode_by_ref_func_(*ctx_, cell_);
@@ -499,38 +499,36 @@ public:
     index_++;
     return *this;
   }
-  OB_INLINE ObDictValueIterator &operator+(int64_t offset)
+  OB_INLINE ObDictValueIterator operator+(int64_t offset) const
   {
-    index_ += offset;
-    return *this;
+    return ObDictValueIterator(ctx_, index_ + offset, cell_, is_padding_mode_);
   }
   OB_INLINE ObDictValueIterator &operator+=(int64_t offset)
   {
     index_ += offset;
     return *this;
   }
-  OB_INLINE difference_type operator-(const ObDictValueIterator &rhs)
+  OB_INLINE difference_type operator-(const ObDictValueIterator &rhs) const
   {
     return index_ - rhs.index_;
   }
-  OB_INLINE ObDictValueIterator &operator-(int64_t offset)
+  OB_INLINE ObDictValueIterator operator-(int64_t offset) const
   {
-    index_ -= offset;
-    return *this;
+    return ObDictValueIterator(ctx_, index_ - offset, cell_, is_padding_mode_);
   }
   OB_INLINE bool operator==(const ObDictValueIterator &rhs) const
   {
     return (this->index_ == rhs.index_);
   }
-  OB_INLINE bool operator!=(const ObDictValueIterator &rhs)
+  OB_INLINE bool operator!=(const ObDictValueIterator &rhs) const
   {
     return (this->index_ != rhs.index_);
   }
-  OB_INLINE bool operator<(const ObDictValueIterator &rhs)
+  OB_INLINE bool operator<(const ObDictValueIterator &rhs) const
   {
     return (this->index_ < rhs.index_);
   }
-  OB_INLINE bool operator<=(const ObDictValueIterator &rhs)
+  OB_INLINE bool operator<=(const ObDictValueIterator &rhs) const
   {
     return (this->index_ <= rhs.index_);
   }
@@ -544,7 +542,7 @@ private:
 private:
   const ObDictColumnDecoderCtx *ctx_;
   int64_t index_;
-  value_type cell_;
+  mutable value_type cell_;
   bool is_padding_mode_;
   DecodeByRefsFunc decode_by_ref_func_;
 };

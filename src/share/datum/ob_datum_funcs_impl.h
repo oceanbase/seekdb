@@ -37,6 +37,17 @@ struct ObNullSafeDatumTypeCmp
       cmp_ret = NULL_FIRST ? -1 : 1;
     } else if (OB_UNLIKELY(r.is_null())) {
       cmp_ret = NULL_FIRST ? 1 : -1;
+#ifdef _WIN32
+    } else if (OB_UNLIKELY(reinterpret_cast<uintptr_t>(l.ptr_) < 0x10000 ||
+                            reinterpret_cast<uintptr_t>(r.ptr_) < 0x10000)) {
+      static int64_t warn_cnt = 0;
+      if (warn_cnt++ < 10) {
+        fprintf(stderr, "[WIN32-DATUM] invalid ptr in cmp: l.ptr_=%p l.pack_=0x%x r.ptr_=%p r.pack_=0x%x L_T=%d R_T=%d\n",
+                l.ptr_, l.pack_, r.ptr_, r.pack_, (int)L_T, (int)R_T);
+      }
+      cmp_ret = 0;
+      ret = OB_ERR_UNEXPECTED;
+#endif
     } else {
       ret = datum_cmp::ObDatumTypeCmp<L_T, R_T>::cmp(l, r, cmp_ret);
     }
@@ -55,6 +66,17 @@ struct ObNullSafeDatumTCCmp
       cmp_ret = NULL_FIRST ? -1 : 1;
     } else if (OB_UNLIKELY(r.is_null())) {
       cmp_ret = NULL_FIRST ? 1 : -1;
+#ifdef _WIN32
+    } else if (OB_UNLIKELY(reinterpret_cast<uintptr_t>(l.ptr_) < 0x10000 ||
+                            reinterpret_cast<uintptr_t>(r.ptr_) < 0x10000)) {
+      static int64_t warn_cnt = 0;
+      if (warn_cnt++ < 10) {
+        fprintf(stderr, "[WIN32-DATUM] invalid ptr in TC cmp: l.ptr_=%p l.pack_=0x%x r.ptr_=%p r.pack_=0x%x L_TC=%d R_TC=%d\n",
+                l.ptr_, l.pack_, r.ptr_, r.pack_, (int)L_TC, (int)R_TC);
+      }
+      cmp_ret = 0;
+      ret = OB_ERR_UNEXPECTED;
+#endif
     } else {
       ret = datum_cmp::ObDatumTCCmp<L_TC, R_TC>::cmp(l, r, cmp_ret);
     }

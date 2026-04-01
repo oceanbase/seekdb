@@ -17,10 +17,27 @@
 #ifndef OCEANBASE_LIB_UTILITY_OB_PLATFORM_UTILS_H_
 #define OCEANBASE_LIB_UTILITY_OB_PLATFORM_UTILS_H_
 
+#ifndef _WIN32
 #include <unistd.h>
+#include <sys/socket.h>
+#else
+// Windows socket headers
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <io.h>
+#include <process.h>  // For _getpid
+// Windows doesn't have ssize_t, define it
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
+typedef intptr_t ssize_t;
+#endif
+// Undefine Windows ERROR macro to avoid conflicts with log levels
+#ifdef ERROR
+#undef ERROR
+#endif
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <cstddef>
@@ -66,6 +83,20 @@ inline void *memrchr(const void *s, int c, size_t n)
     }
   }
   return nullptr;
+}
+#endif
+
+#ifdef _WIN32
+#include <intrin.h>
+// POSIX ffsl(3): 1-based index of least significant set bit; 0 if value==0. MSVC has no ffsl.
+inline int ffsl(long long value)
+{
+  if (value == 0) {
+    return 0;
+  }
+  unsigned long index = 0;
+  (void)_BitScanForward64(&index, static_cast<unsigned long long>(value));
+  return static_cast<int>(index + 1);
 }
 #endif
 
@@ -131,6 +162,11 @@ typedef pthread_spinlock_t ob_pthread_spinlock_t;
 #define ob_fstat64 fstat
 #define ob_lstat64 lstat
 typedef struct stat ob_stat64_t;
+#elif defined(_WIN32)
+#define ob_stat64 _stat64
+#define ob_fstat64 _fstat64
+#define ob_lstat64 _stat64  // Windows: use _stat64 instead of lstat
+typedef struct _stat64 ob_stat64_t;
 #else
 #define ob_stat64 stat64
 #define ob_fstat64 fstat64
@@ -147,7 +183,10 @@ typedef struct stat64 ob_stat64_t;
 
 inline const char* ob_strerror_r(int errnum, char* buf, size_t buflen)
 {
-#ifdef __APPLE__
+#ifdef _WIN32
+  // Windows: strerror_s returns errno_t (0 on success)
+  return (strerror_s(buf, buflen, errnum) == 0) ? buf : "Unknown error";
+#elif defined(__APPLE__)
   // macOS: strerror_r returns int (0 on success, -1 on error)
   return (::strerror_r(errnum, buf, buflen) == 0) ? buf : "Unknown error";
 #else
@@ -164,8 +203,8 @@ inline const char* ob_strerror_r(int errnum, char* buf, size_t buflen)
 // macOS doesn't support SOCK_CLOEXEC and SOCK_NONBLOCK in socket()
 // ============================================================================
 
-#ifdef __APPLE__
-// Define placeholder values (they won't be used in socket() on macOS)
+#if defined(__APPLE__) || defined(_WIN32)
+// Define placeholder values (they won't be used in socket() on macOS/Windows)
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 0
 #endif
@@ -182,11 +221,18 @@ namespace lib
 // Create socket with CLOEXEC and NONBLOCK flags (platform-independent)
 inline int ob_socket_cloexec_nonblock(int domain, int type, int protocol)
 {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
   int fd = socket(domain, type, protocol);
   if (fd >= 0) {
+#ifndef _WIN32
     fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+#else
+    // Windows: set non-blocking mode
+    u_long mode = 1;
+    ioctlsocket(fd, FIONBIO, &mode);
+    // Windows doesn't have FD_CLOEXEC concept for sockets
+#endif
   }
   return fd;
 #else
@@ -197,10 +243,13 @@ inline int ob_socket_cloexec_nonblock(int domain, int type, int protocol)
 // Create socket with only CLOEXEC flag (platform-independent)
 inline int ob_socket_cloexec(int domain, int type, int protocol)
 {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
   int fd = socket(domain, type, protocol);
   if (fd >= 0) {
+#ifndef _WIN32
     fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+#endif
+    // Windows doesn't have FD_CLOEXEC concept for sockets
   }
   return fd;
 #else
@@ -218,7 +267,11 @@ inline int ob_get_thread_name(char *name, size_t len)
   if (name == nullptr || len == 0) {
     return -1;
   }
-#ifdef __APPLE__
+#ifdef _WIN32
+  // Windows doesn't have a direct equivalent, return empty string
+  name[0] = '\0';
+  return 0;
+#elif defined(__APPLE__)
   return pthread_getname_np(pthread_self(), name, len);
 #else
   return prctl(PR_GET_NAME, name);
@@ -231,7 +284,11 @@ inline int ob_set_thread_name(const char *name)
   if (name == nullptr) {
     return -1;
   }
-#ifdef __APPLE__
+#ifdef _WIN32
+  // Windows: use SetThreadDescription (Windows 10+ only)
+  // For compatibility, we just return success without doing anything
+  return 0;
+#elif defined(__APPLE__)
   return pthread_setname_np(name);
 #else
   return prctl(PR_SET_NAME, name);
@@ -245,18 +302,31 @@ inline int ob_set_thread_name(const char *name)
 // Get system page size
 inline ssize_t ob_get_page_size()
 {
-#ifdef __APPLE__
+#ifdef _WIN32
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  static ssize_t ps = si.dwPageSize;
+  return ps;
+#elif defined(__APPLE__)
   static ssize_t ps = sysconf(_SC_PAGESIZE);
+  return ps;
 #else
   static ssize_t ps = getpagesize();
-#endif
   return ps;
+#endif
 }
 
 // Get total physical memory (in bytes)
 inline int64_t ob_get_total_memory()
 {
+#ifdef _WIN32
+  MEMORYSTATUSEX memStatus;
+  memStatus.dwLength = sizeof(memStatus);
+  GlobalMemoryStatusEx(&memStatus);
+  return static_cast<int64_t>(memStatus.ullTotalPhys);
+#else
   return sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE);
+#endif
 }
 
 // Get available physical memory (in bytes)
@@ -356,6 +426,15 @@ inline int ob_get_process_id()
 inline int ob_get_thread_id()
 {
   return static_cast<int>(syscall(__NR_gettid));
+}
+#elif defined(_WIN32)
+inline int ob_get_process_id()
+{
+  return static_cast<int>(GetCurrentProcessId());
+}
+inline int ob_get_thread_id()
+{
+  return static_cast<int>(GetCurrentThreadId());
 }
 #else
 inline int ob_get_process_id()

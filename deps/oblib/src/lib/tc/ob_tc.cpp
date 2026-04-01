@@ -660,7 +660,11 @@ public:
       int64_t cur_ns = tc_get_ns();
       int64_t next_active_ns = cur_ns + 100 * 1000 * 1000;
       TCRequest* req = pop_fallback_queue()?: refresh_and_pop(cur_ns, next_active_ns);
+#ifndef _WIN32
       QDescRoot* desc = (typeof(desc))desc_;
+#else
+      QDescRoot* desc = static_cast<QDescRoot*>(desc_);
+#endif
       if (req) {
         desc->get_handler()->handle(req);
       } else {
@@ -694,7 +698,11 @@ private:
       handle_cnt++;
       TCLink* n = h->next_;
       TCRequest* req = link2req(h);
+#ifndef _WIN32
       BufferQueue* qdisc = (typeof(qdisc))create_path_and_fetch_leaf(req->qid_, chan_id_);
+#else
+      BufferQueue* qdisc = static_cast<BufferQueue*>(create_path_and_fetch_leaf(req->qid_, chan_id_));
+#endif
       if (qdisc) {
         qdisc->push(req);
         wake_overquota_req(h);
@@ -781,7 +789,11 @@ int QDescRoot::qsched_submit(TCRequest* req, uint32_t chan_id)
 }
 
 QStat& QDesc::get_stat(QStat& stat) {
+#ifndef _WIN32
   QDescRoot* root = (typeof(root))imap_fetch(root_);
+#else
+  QDescRoot* root = static_cast<QDescRoot*>(imap_fetch(root_));
+#endif
   int n_chan = root->get_n_chan();
   for(int i = 0; i < n_chan; i++) {
     IQDisc* q = fetch_qdisc(id_, i);

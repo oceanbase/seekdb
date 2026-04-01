@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(_WIN32)
 #include "lib/signal/ob_libunwind.h"
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
@@ -102,4 +102,8 @@ int8_t get_frame_info(unw_cursor_t *cursor, uintptr_t *ip)
   return 1;
 }
 
+#endif
+
+#ifdef _WIN32
+typedef int ob_libunwind_c_make_iso_compilers_happy;
 #endif

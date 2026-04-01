@@ -34,8 +34,8 @@ public:
     : allocator_(allocator) {}
   virtual ~ObZstdStreamCompressor_1_3_8() {}
 
-  inline const char *get_compressor_name() const;
-  inline ObCompressorType get_compressor_type() const;
+  const char *get_compressor_name() const;
+  ObCompressorType get_compressor_type() const;
 
   int create_compress_ctx(void *&ctx);
   int reset_compress_ctx(void *&ctx);

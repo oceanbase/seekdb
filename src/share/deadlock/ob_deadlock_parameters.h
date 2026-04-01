@@ -47,7 +47,7 @@ constexpr const int64_t STR_LEN_LIMIT = 65536;
 constexpr const int64_t COLLECT_INFO_INTERVAL = 1000 * 1000;
 // used within ObDeadLockInnerTableServic::ObDeadLockEventHistoryTableOperator::async_delete
 // remain last 7 days event records
-constexpr const int64_t REMAIN_RECORD_DURATION = 7L * 24L * 60L * 60L * 1000L * 1000L;
+constexpr const int64_t REMAIN_RECORD_DURATION = 7LL * 24LL * 60LL * 60LL * 1000LL * 1000LL;
 // used when report deadlock inner info
 struct ROLE
 {

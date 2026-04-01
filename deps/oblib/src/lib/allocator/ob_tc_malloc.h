@@ -17,7 +17,9 @@
 #ifndef __OB_COMMON_OB_BLOCK_ALLOCATOR_H__
 #define __OB_COMMON_OB_BLOCK_ALLOCATOR_H__
 #include <stdint.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 
 namespace oceanbase
 {

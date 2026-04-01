@@ -13,10 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+#define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-
-#define USING_LOG_PREFIX SQL_DAS
 
 namespace oceanbase
 {

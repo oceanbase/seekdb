@@ -197,10 +197,10 @@ protected:
     int64_t &schema_version);
   int get_adaptive_reason(const int64_t schedule_major_snapshot);
   int fill_mds_filter_info(ObMediumCompactionInfo &medium_info);
-  static const int64_t DEFAULT_SCHEDULE_MEDIUM_INTERVAL = 60L * 1000L * 1000L; // 60s
+  static const int64_t DEFAULT_SCHEDULE_MEDIUM_INTERVAL = 60LL * 1000LL * 1000LL; // 60s
   static constexpr double SCHEDULE_RANGE_INC_ROW_COUNT_PERCENRAGE_THRESHOLD = 0.2;
-  static const int64_t SCHEDULE_RANGE_ROW_COUNT_THRESHOLD = 1000 * 1000L; // 100w
-  static const int64_t RECYCLE_TRUNCATE_INFO_INTERVAL = 2 * 60 * 1000L * 1000L * 1000L;
+  static const int64_t SCHEDULE_RANGE_ROW_COUNT_THRESHOLD = 1000 * 1000LL; // 100w
+  static const int64_t RECYCLE_TRUNCATE_INFO_INTERVAL = 2LL * 60 * 1000 * 1000 * 1000;
 #ifdef ERRSIM
   int errsim_choose_medium_snapshot(
     const int64_t max_sync_medium_scn,

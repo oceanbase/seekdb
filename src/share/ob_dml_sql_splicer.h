@@ -186,8 +186,9 @@ private:
   int append_uint64_value(const uint64_t value, bool &is_null);
   int append_value(const uint64_t value, bool &is_null);
   int append_value(const int64_t value, bool &is_null);
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
   // macOS: long and long long are different types, need explicit overload for long
+  // Windows: long is 32-bit and distinct from int64_t, need explicit overload for long
   int append_value(const long value, bool &is_null);
 #endif
   int append_value(const uint32_t value, bool &is_null);

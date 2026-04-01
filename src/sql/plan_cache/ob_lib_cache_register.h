@@ -48,7 +48,7 @@ class MemoryContext;
 namespace sql
 {
 class ObILibCacheObject;
-class ObILibCacheKey;
+struct ObILibCacheKey;
 class ObILibCacheNode;
 class ObPlanCache;
 

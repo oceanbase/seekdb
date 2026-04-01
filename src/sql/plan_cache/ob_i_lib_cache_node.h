@@ -34,7 +34,7 @@ class ObIAllocator;
 namespace sql
 {
 class ObPlanCache;
-class ObILibCacheKey;
+struct ObILibCacheKey;
 class ObILibCacheCtx;
 class ObILibCacheObject;
 

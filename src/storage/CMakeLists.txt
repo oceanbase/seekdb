@@ -1058,6 +1058,8 @@ ob_add_new_object_target(ob_storage_extra ob_storage_extra)
 target_link_libraries(ob_storage PUBLIC ob_base)
 target_link_libraries(ob_storage_extra PUBLIC ob_base)
 
+add_dependencies(ob_storage oblib_grpc)
+
 add_library(ob_storage_static
   STATIC
   EXCLUDE_FROM_ALL)
@@ -1073,7 +1075,7 @@ ob_set_subtarget(ob_storage_simd common
 
 ob_server_add_target(ob_storage_simd)
 
-if (${ARCHITECTURE} STREQUAL "x86_64")
+if (${ARCHITECTURE} STREQUAL "x86_64" OR ${ARCHITECTURE} STREQUAL "amd64")
   target_compile_options(ob_storage_simd
     PRIVATE
       -mtune=core-avx2 -mavx2 -mfma -mbmi2 -mavx512vl -mavx512bw

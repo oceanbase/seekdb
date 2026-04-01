@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObILibCacheKey;
+struct ObILibCacheKey;
 
 class OBLCKeyCreator
 {

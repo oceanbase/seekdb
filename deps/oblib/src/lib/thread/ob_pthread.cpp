@@ -71,7 +71,11 @@ int ob_pthread_tryjoin_np(void *ptr)
 
 pthread_t ob_pthread_get_pth(void *ptr)
 {
+#ifdef _WIN32
+  pthread_t pth = pthread_null();
+#else
   pthread_t pth = 0;
+#endif
   if (OB_NOT_NULL(ptr)) {
     ObPThread *thread = (ObPThread*) ptr;
     pth = thread->get_pthread(0);

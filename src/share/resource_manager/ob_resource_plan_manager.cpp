@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_resource_plan_manager.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/ob_server_struct.h"
 
@@ -55,7 +58,13 @@ int ObResourcePlanManager::refresh_global_background_cpu()
         LOG_WARN("fail to set background cpu cfs quota", K(ret));
       } else {
         if (compare_ret < 0) {
+#ifdef _WIN32
+          SYSTEM_INFO si;
+          GetSystemInfo(&si);
+          const int64_t phy_cpu_cnt = static_cast<int64_t>(si.dwNumberOfProcessors);
+#else
           const int64_t phy_cpu_cnt = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
           int tmp_ret = OB_SUCCESS;
           omt::TenantIdList ids;
           GCTX.omt_->get_tenant_ids(ids);

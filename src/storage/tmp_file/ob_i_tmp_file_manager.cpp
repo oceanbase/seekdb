@@ -18,6 +18,12 @@
 
 #include "storage/tmp_file/ob_i_tmp_file_manager.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#define sleep(sec) Sleep((sec) * 1000)
+#define usleep(us) Sleep((DWORD)((us) / 1000))
+#endif
+
 namespace oceanbase
 {
 namespace tmp_file

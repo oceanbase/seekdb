@@ -29,8 +29,18 @@ typedef uint16_t __u16;
 // we use regular types and rely on network byte order conversion functions
 typedef uint32_t __be32;
 typedef uint16_t __be16;
+#elif defined(_WIN32)
+#include <stdint.h>
+typedef uint32_t __u32;
+typedef uint16_t __u16;
+typedef uint32_t __be32;
+typedef uint16_t __be16;
 #endif
+#ifndef _WIN32
 #include <netinet/in.h>
+#else
+#include <winsock2.h>
+#endif
 #include "lib/hash/ob_hashmap.h"
 #include <lib/net/ob_addr.h>
 

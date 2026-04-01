@@ -18,6 +18,10 @@
 
 #include "ob_inter_column_substring_encoder.h"
 
+#ifdef _WIN32
+#define memmem ob_memmem
+#endif
+
 namespace oceanbase
 {
 namespace blocksstable

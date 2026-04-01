@@ -203,6 +203,10 @@ struct ObBloomFilterMicroBlockHeader
   int32_t reserved_;
 };
 
+#ifdef _WIN32
+#pragma push_macro("CONST")
+#undef CONST
+#endif
 struct ObColumnHeader
 {
   enum Type
@@ -275,7 +279,6 @@ struct ObColumnHeader
   TO_STRING_KV(K_(version), K_(type), K_(attr), K_(obj_type),
       K_(extend_value_offset), K_(offset), K_(length));
 } __attribute__((packed));
-
 
 struct ObMicroBlockEncoderOpt
 {
@@ -353,6 +356,8 @@ struct ObMicroBlockEncoderOpt
       KF(enable_hex_pack), KF(enable_rle),KF(enable_const));
 #undef KF
 };
+// CONST macro from minwindef.h (#define CONST const) is permanently suppressed.
+// C++ code uses 'const' directly; the CONST macro alias is not needed.
 
 struct ObPreviousEncoding
 {

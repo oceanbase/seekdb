@@ -88,14 +88,14 @@ private:
     virtual ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) override
     {
       ABlock *block = NULL;
-      if (OB_NOT_NULL(ta_)) {
+      if (ta_.ref_allocator() != nullptr) {
         block = ta_->get_block_mgr().alloc_block(size, attr);
       }
       return block;
     }
     virtual void free_block(ABlock *block) override
     {
-      if (OB_NOT_NULL(ta_)) {
+      if (ta_.ref_allocator() != nullptr) {
         ta_->get_block_mgr().free_block(block);
       } else {
         OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "tenant ctx allocator is null", K(tenant_id_), K(ctx_id_));
@@ -104,7 +104,7 @@ private:
     virtual int64_t sync_wash(int64_t wash_size) override
     {
       int64_t washed_size = 0;
-      if (OB_NOT_NULL(ta_)) {
+      if (ta_.ref_allocator() != nullptr) {
         washed_size = ta_->sync_wash(wash_size);
       }
       return washed_size;

@@ -82,7 +82,7 @@ private:
   static const int32_t LOG_ID_DELTA_BIT_CNT = 28;  // number of bits for log_id_delta, can generate 250,000 log_ids
   static const int32_t LOG_TS_DELTA_BIT_CNT = 35;  // number of bits for scn_delta part, ns level, approximately available for 32 seconds
   static const int64_t LOG_ID_DELTA_UPPER_BOUND = (1ul << LOG_ID_DELTA_BIT_CNT) - 1000;
-  static const int64_t LOG_TS_DELTA_UPPER_BOUND = (1ul << LOG_TS_DELTA_BIT_CNT) - 1000;
+  static const int64_t LOG_TS_DELTA_UPPER_BOUND = (UINT64_C(1) << LOG_TS_DELTA_BIT_CNT) - 1000;
   static const uint64_t LOG_CUT_TRIGGER = 1 << 21;          // Split log when it crosses the 2MB boundary
   static const uint64_t LOG_CUT_TRIGGER_MASK = (1 << 21) - 1;
   static const uint64_t MAX_SUPPORTED_BLOCK_ID = 0xfffffffff - 1000;  // block_id alarm threshold
@@ -93,7 +93,7 @@ private:
     struct types::uint128_t v128_;
     struct
     {
-      uint8_t is_need_cut_ : 1;  // whether next log need cut
+      uint64_t is_need_cut_ : 1;  // whether next log need cut
       uint64_t log_id_delta_ : LOG_ID_DELTA_BIT_CNT;
       uint64_t scn_delta_ : LOG_TS_DELTA_BIT_CNT;
       uint64_t lsn_val_ : 64;

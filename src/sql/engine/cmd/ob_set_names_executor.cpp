@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_set_names_executor.h"
 #include "sql/engine/ob_exec_context.h"
 using namespace oceanbase::sql;

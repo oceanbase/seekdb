@@ -18,6 +18,13 @@
 #define OCEANBASE_LIB_GEO_OB_GEO_TO_S2_VISITOR_
 #include "lib/container/ob_vector.h"
 #include "lib/geo/ob_geo_visitor.h"
+#ifdef _WIN32
+#ifdef DIFFERENCE
+#pragma push_macro("DIFFERENCE")
+#undef DIFFERENCE
+#define OB_S2_VISITOR_PUSHED_DIFFERENCE_
+#endif
+#endif
 #include "s2/s2earth.h"
 #include "s2/s2cell.h"
 #include "s2/s2cap.h"
@@ -28,6 +35,12 @@
 #include "s2/s2region_coverer.h"
 #include "s2/s2latlng_rect.h"
 #include "s2/s2latlng_rect_bounder.h"
+#ifdef _WIN32
+#ifdef OB_S2_VISITOR_PUSHED_DIFFERENCE_
+#pragma pop_macro("DIFFERENCE")
+#undef OB_S2_VISITOR_PUSHED_DIFFERENCE_
+#endif
+#endif
 
 #include <memory>
 

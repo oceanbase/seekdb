@@ -33,12 +33,19 @@ typedef common::ObSEArray<share::ObPartitionLocation, 1> ObPartitionLocationSEAr
 typedef common::ObIArray<share::ObPartitionReplicaLocation> ObPartitionReplicaLocationIArray;
 typedef common::ObSEArray<share::ObPartitionReplicaLocation, 1> ObPartitionReplicaLocationSEArray;
 
+#ifdef _WIN32
+// nb30.h defines DUPLICATE=0x06 (NetBIOS constant). Permanently undef to avoid conflicts.
+// OceanBase does not use NetBIOS APIs.
+#pragma push_macro("DUPLICATE")
+#undef DUPLICATE
+#endif
 enum class ObDuplicateType : int64_t
 {
   NOT_DUPLICATE = 0, // non-duplicate table
   DUPLICATE,         //copy table, can choose any replica
   DUPLICATE_IN_DML,  // replicated table changed by DML, can only select leader replica
 };
+// Do NOT restore DUPLICATE macro - it stays undefined for all subsequent includes
 
 class ObPhyTableLocation final
 {

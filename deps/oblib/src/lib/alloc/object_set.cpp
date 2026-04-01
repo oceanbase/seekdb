@@ -32,7 +32,7 @@ const double ObjectSet::BLOCK_CACHE_RATIO = 0.0;
 
 const static int BT_BUF_LEN = 256;
 
-void __attribute__((weak)) has_unfree_callback(char *info)
+void OB_WEAK_SYMBOL has_unfree_callback(char *info)
 {
   _OB_LOG_RET(ERROR, OB_ERROR, "HAS UNFREE PTR!!! %s", info);
 }

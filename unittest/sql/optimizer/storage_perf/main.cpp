@@ -413,12 +413,12 @@ int run_test() {
         config.get_tenant_cache_size() * 1024L * 1024L/2,
         config.get_tenant_cache_size() * 1024L * 1024L))) {
       STORAGE_LOG(WARN, "fail to set tenant memory", K(ret));
-    } else  if(OB_FAIL(ObIOManager::get_instance().init(1L * 1024L * 1024L * 1024L))) {
+    } else  if(OB_FAIL(ObIOManager::get_instance().init(1LL * 1024 * 1024 * 1024))) {
       STORAGE_LOG(WARN, "fail to init ObIOMananger", K(ret));
     } else if(OB_SUCCESS != (ret = ObKVGlobalCache::get_instance().init())){
       STORAGE_LOG(WARN, "fail to init global kv cache", K(ret));
     } else {
-      lib::set_memory_limit(10L * 1024L * 1024L * 1024L);//40GB
+      lib::set_memory_limit(10LL * 1024 * 1024 * 1024);//40GB
       lib::ob_set_reserved_memory(1024L * 1024L * 1024L);//1GB
     }
   }

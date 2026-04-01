@@ -19,11 +19,100 @@
 // common system headers
 #include <stdint.h>  // for int64_t etc.
 #include <stdio.h>
+#ifndef _WIN32
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <netinet/in.h>
-// Platform-specific headers
-#ifdef __APPLE__
+#else
+// Windows headers
+// Prevent ERROR macro conflict - Windows defines ERROR as 0, which conflicts with log levels
+#ifdef ERROR
+#undef ERROR
+#endif
+// Prevent IGNORE macro conflict - Windows winbase.h defines IGNORE as 0,
+// which conflicts with template parameter names in OceanBase code
+#ifdef IGNORE
+#undef IGNORE
+#endif
+// Prevent S_NORMAL macro conflict - Windows winbase.h defines S_NORMAL as 0,
+// which conflicts with enum values in OceanBase parser code
+#ifdef S_NORMAL
+#undef S_NORMAL
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <processthreadsapi.h>
+#include <io.h>       // for _commit (fsync equivalent)
+#include <direct.h>   // for _mkdir
+// Windows doesn't have POSIX fsync(); _commit() is the equivalent for file descriptors
+#ifndef fsync
+#define fsync(fd) _commit(fd)
+#endif
+// Windows setsockopt() expects 'const char*' for optval; POSIX uses 'const void*'
+// Provide a wrapper so callers can use void*/const void* naturally
+static inline int ob_win_setsockopt(SOCKET s, int level, int optname,
+                                    const void *optval, int optlen) {
+  return setsockopt(s, level, optname, (const char *)optval, optlen);
+}
+// Redefine setsockopt only if not already wrapped (e.g. in ob_sql_nio.cpp)
+#ifdef setsockopt
+#undef setsockopt
+#endif
+#define setsockopt(fd, level, opt, val, len) \
+  ob_win_setsockopt((SOCKET)(fd), (level), (opt), (val), (int)(len))
+
+// typeof is a GCC extension; map it to decltype for MSVC/Clang-cl
+#ifndef typeof
+#define typeof(x) decltype(x)
+#endif
+// Windows doesn't have strtok_r(); strtok_s() has the same signature
+#ifndef strtok_r
+#define strtok_r(str, delim, saveptr) strtok_s(str, delim, saveptr)
+#endif
+// Windows doesn't support O_DIRECT (direct/unbuffered I/O via open flags)
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+// POSIX file permission bits - map to Windows equivalents or 0
+#ifndef S_IRUSR
+#define S_IRUSR _S_IREAD   // owner read
+#endif
+#ifndef S_IWUSR
+#define S_IWUSR _S_IWRITE  // owner write
+#endif
+#ifndef S_IRGRP
+#define S_IRGRP 0          // group read (no concept on Windows)
+#endif
+#ifndef S_IROTH
+#define S_IROTH 0          // other read (no concept on Windows)
+#endif
+#ifndef S_IWGRP
+#define S_IWGRP 0
+#endif
+#ifndef S_IWOTH
+#define S_IWOTH 0
+#endif
+#ifndef S_IXUSR
+#define S_IXUSR 0
+#endif
+#ifndef S_IXGRP
+#define S_IXGRP 0
+#endif
+#ifndef S_IXOTH
+#define S_IXOTH 0
+#endif
+#ifndef S_IRWXU
+#define S_IRWXU (S_IRUSR | S_IWUSR | S_IXUSR)
+#endif
+#ifndef S_IRWXG
+#define S_IRWXG (S_IRGRP | S_IWGRP | S_IXGRP)
+#endif
+#ifndef S_IRWXO
+#define S_IRWXO (S_IROTH | S_IWOTH | S_IXOTH)
+#endif
+#endif
+// Platform-specific headers - pthread
+#if defined(__APPLE__) || defined(_WIN32)
 #include <pthread.h>
 #endif
 // Define __INT64_C if not available (e.g., on macOS)
@@ -279,7 +368,7 @@ const int64_t OB_MAX_SET_STMT_SIZE = 256;
 const int64_t OB_MAX_NAMED_WINDOW_FUNCTION_NUM = 127;
 const uint64_t OB_DEFAULT_GROUP_CONCAT_MAX_LEN = 1024;
 const uint64_t OB_DEFAULT_GROUP_CONCAT_MAX_LEN_FOR_ORACLE = 32767; //Same as OB_MAX_ORACLE_VARCHAR_LENGTH, expanded to 32767
-const int64_t OB_DEFAULT_OB_INTERM_RESULT_MEM_LIMIT = 2L * 1024L * 1024L * 1024L;
+const int64_t OB_DEFAULT_OB_INTERM_RESULT_MEM_LIMIT = 2LL * 1024LL * 1024LL * 1024LL;
 // The maximum table name length that the user can specify
 const int64_t OB_MAX_USER_TABLE_NAME_LENGTH_MYSQL = 64;  // Compatible with mysql, the OB code logic is greater than the time error
 const int64_t OB_MAX_USER_TABLE_NAME_LENGTH_ORACLE = 128; // Compatible with Oracle, error is reported when the logic is greater than
@@ -376,7 +465,7 @@ const int64_t OB_MAX_TABLET_LIST_NUMBER = 64;
 const int64_t OB_MAX_DISK_NUMBER = 32;
 const int64_t OB_MAX_TIME_STR_LENGTH = 64;
 const int64_t OB_IP_STR_BUFF = MAX_IP_ADDR_LENGTH; //TODO: xiyu  uniform IP/PORR length
-const int64_t OB_IP_PORT_STR_BUFF = 64;
+const int64_t OB_IP_PORT_STR_BUFF = MAX_IP_PORT_LENGTH + 1;
 const int64_t OB_RANGE_STR_BUFSIZ = 512;
 const int64_t OB_MAX_FETCH_CMD_LENGTH = 2048;
 const int64_t OB_MAX_EXPIRE_INFO_STRING_LENGTH = 4096;
@@ -490,7 +579,7 @@ const uint32_t INVALID_SESSID = UINT32_MAX;
 const int64_t OB_MAX_VAR_NUM_PER_SESSION = 1024;
 // The maximum time set by the user through hint/set session.ob_query_timeout/set session.ob_tx_timeout is 102 years
 // The purpose of this is to avoid that when the user enters a value that is too large, adding the current timestamp causes the MAX_INT64 to overflow
-const int64_t OB_MAX_USER_SPECIFIED_TIMEOUT =  102L * 365L * 24L * 60L * 60L * 1000L * 1000L;
+const int64_t OB_MAX_USER_SPECIFIED_TIMEOUT =  102LL * 365LL * 24LL * 60LL * 60LL * 1000LL * 1000LL;
 const int64_t OB_MAX_PROCESS_TIMEOUT = 5L * 60L * 1000L * 1000L; // 5m
 const int64_t OB_DEFAULT_SESSION_TIMEOUT = 100L * 1000L * 1000L; // 10s
 const int64_t OB_DEFAULT_STMT_TIMEOUT = 30L * 1000L * 1000L; // 30s
@@ -503,7 +592,7 @@ const int64_t OB_ONLY_SYS_TENANT_COUNT = 2;
 const int64_t OB_MAX_SERVER_SESSION_CNT = 32767;
 const int64_t OB_MAX_SERVER_TENANT_CNT = 5; // for sys,500,508,509
 const int64_t OB_RECYCLE_MACRO_BLOCK_DURATION = 10 * 60 * 1000 * 1000LL; // 10 minutes
-const int64_t OB_MINOR_FREEZE_TEAM_UP_INTERVAL = 2 * 60 * 60 * 1000 * 1000L; // 2 hours
+const int64_t OB_MINOR_FREEZE_TEAM_UP_INTERVAL = 2LL * 60 * 60 * 1000 * 1000; // 2 hours
 // for define
 const int64_t OB_MAX_SPECIAL_LS_NUM = 1 + 1; // 1 for broadcast ls and 1 for sys ls
 const int64_t OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET = 1024; // the maximum of _max_ls_cnt_per_server
@@ -687,7 +776,7 @@ const uint64_t OB_MAX_TMP_COLUMN_ID = OB_ALL_MAX_COLUMN_ID
 const uint64_t OB_COUNT_AGG_PD_COLUMN_ID = INT32_MAX - 1;
 const uint64_t OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID = INT32_MAX - 2;
 
-const int64_t OB_MAX_AUTOINC_SEQ_VALUE = (1L << 40) - 1; // max value for 40bit
+const int64_t OB_MAX_AUTOINC_SEQ_VALUE = (1LL << 40) - 1; // max value for 40bit
 
 const char *const OB_UPDATE_MSG_FMT = "Rows matched: %ld  Changed: %ld  Warnings: %ld";
 const char *const OB_INSERT_MSG_FMT = "Records: %ld  Duplicates: %ld  Warnings: %ld";
@@ -978,7 +1067,7 @@ const int64_t OB_MAX_DDL_ID_STR_LENGTH = 64;
 #ifdef ERRSIM
 const int64_t OB_MAX_DDL_SINGLE_REPLICA_BUILD_TIMEOUT = 30L * 60L * 1000L * 1000L; // 30 minutes
 #else
-const int64_t OB_MAX_DDL_SINGLE_REPLICA_BUILD_TIMEOUT = 7L * 24L * 60L * 60L * 1000L * 1000L; // 7days
+const int64_t OB_MAX_DDL_SINGLE_REPLICA_BUILD_TIMEOUT = 7LL * 24LL * 60LL * 60LL * 1000LL * 1000LL; // 7days
 #endif
 
 const int64_t OB_MAX_PARTITION_SHARDING_LENGTH = 10;
@@ -987,8 +1076,8 @@ const int64_t OB_MAX_PARTITION_SHARDING_LENGTH = 10;
 const char *const OB_STANDBY_USER_NAME = "__oceanbase_inner_standby_user";
 
 const double TENANT_RESERVE_MEM_RATIO = 0.1;
-const int64_t LEAST_MEMORY_SIZE = 1L << 30;
-const int64_t SYS_MAX_ALLOCATE_MEMORY = 1L << 34;
+const int64_t LEAST_MEMORY_SIZE = 1LL << 30;
+const int64_t SYS_MAX_ALLOCATE_MEMORY = 1LL << 34;
 const int64_t MAX_PHY_MEM_PERCENTAGE = 90;
 
 // mem factor
@@ -2668,12 +2757,16 @@ OB_INLINE void reset_tid_cache()
 // Platform-specific thread ID getter
 OB_INLINE int64_t ob_syscall_gettid()
 {
-#ifdef __APPLE__
+#ifdef _WIN32
+  // Windows: use GetCurrentThreadId
+  return static_cast<int64_t>(GetCurrentThreadId());
+#elif defined(__APPLE__)
   // macOS doesn't have gettid, use pthread_threadid_np instead
   uint64_t thread_id = 0;
   pthread_threadid_np(NULL, &thread_id);
   return static_cast<int64_t>(thread_id);
 #else
+  // Linux: use syscall to get thread ID
   return static_cast<int64_t>(syscall(__NR_gettid));
 #endif
 }

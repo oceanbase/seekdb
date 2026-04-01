@@ -152,7 +152,11 @@ private:
   const static int DEFAULT_ZONE_SIZE = 4;
   const static int FILTER_ZONE_SIZE = 1;
   const static int DEFALUT_SERVER_SIZE = 16;
-  const static uint64_t PURGE_RUN_DETAIL_INTERVAL = 60 * 60 * 1000 * 1000L;//1h
+#ifdef _WIN32
+  static constexpr uint64_t PURGE_RUN_DETAIL_INTERVAL = 3600000000ULL; // 1h
+#else
+  const static uint64_t PURGE_RUN_DETAIL_INTERVAL = 60 * 60 * 1000 * 1000L; // 1h
+#endif
   const static int CHECK_JOB_LOST_THRESHOLD = 60 * 1000 * 1000;
 
   bool inited_;

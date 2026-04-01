@@ -36,7 +36,7 @@ typedef common::ObSEArray<common::ObNewRange, 4, common::ModulePageAllocator, tr
 typedef common::ObSEArray<ColumnItem, 16, common::ModulePageAllocator, true> ColumnArray;
 static const int64_t MAX_NOT_IN_SIZE = 10; //do not extract range for not in row over this size
 static const int64_t NEW_MAX_NOT_IN_SIZE = 1000; // mysql support 1000 not in range node
-class ObFastFinalNLJRangeCtx;
+struct ObFastFinalNLJRangeCtx;
 
 
 class ObQueryRangeProvider

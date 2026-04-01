@@ -114,7 +114,7 @@ public:
 
   virtual void do_fill_loop() override{
 
-    int64_t next_burst_time = tc_get_ns() + 3 * 1000L * 1000L * 1000L;
+    int64_t next_burst_time = tc_get_ns() + 3LL * 1000 * 1000 * 1000;
 
     while (true) {
       int64_t now = tc_get_ns();
@@ -137,7 +137,7 @@ public:
             usleep(sleep_us);
           }
         }
-        next_burst_time = now + 3 * 1000L * 1000L * 1000L;
+        next_burst_time = now + 3LL * 1000 * 1000 * 1000;
       } else {
         int64_t sleep_us = sleep_interval_;
         if (sleep_us > 0) {

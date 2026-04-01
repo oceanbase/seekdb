@@ -33,7 +33,7 @@ class ObDirectLoadVector;
 namespace observer
 {
 class ObTableLoadStoreCtx;
-class ObTableLoadStoreTrans;
+struct ObTableLoadStoreTrans;
 class ObTableLoadTransStoreWriter;
 class ObTableLoadPreSortWriter;
 

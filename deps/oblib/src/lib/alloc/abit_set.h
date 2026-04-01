@@ -24,6 +24,23 @@
 #include "lib/utility/ob_template_utils.h"
 #include "lib/alloc/alloc_assist.h"
 
+// Windows compatibility for GCC builtins
+#ifdef _WIN32
+#include <intrin.h>
+#ifndef __clang__
+inline int __builtin_ctzll(unsigned long long value) {
+  unsigned long index;
+  _BitScanForward64(&index, value);
+  return static_cast<int>(index);
+}
+inline int __builtin_clzll(unsigned long long value) {
+  unsigned long index;
+  _BitScanReverse64(&index, value);
+  return 63 - static_cast<int>(index);
+}
+#endif
+#endif
+
 namespace oceanbase
 {
 namespace lib
@@ -72,13 +89,13 @@ public:
     } else {
       int seg = idx >> 6;
       int pos = idx & ((1 << 6) - 1);
-      second_level_[seg] |= 1UL << pos;
+      second_level_[seg] |= 1ULL << pos;
 
       pos = seg & ((1 << 6) - 1);
       seg = seg >> 6;
-      first_level_[seg] |= 1UL << pos;
+      first_level_[seg] |= 1ULL << pos;
 
-      zero_level_ |= 1UL << seg;
+      zero_level_ |= 1ULL << seg;
     }
   }
 
@@ -89,13 +106,13 @@ public:
     } else {
       int seg = idx >> 6;
       int pos = idx & ((1 << 6) - 1);
-      second_level_[seg] &= ~(1UL << pos);
+      second_level_[seg] &= ~(1ULL << pos);
       if (0 == second_level_[seg]) {
         pos = seg & ((1 << 6) - 1);
         seg = seg >> 6;
-        first_level_[seg] &= ~(1UL << (pos));
+        first_level_[seg] &= ~(1ULL << (pos));
         if (use_zero_level_ && 0 == first_level_[seg]) {
-         zero_level_ &= ~(1UL << seg);
+         zero_level_ &= ~(1ULL << seg);
         }
       }
     }
@@ -112,7 +129,7 @@ public:
       const int seg = idx >> 6;
       const int pos = idx & ((1 << 6) - 1);
 
-      ret = second_level_[seg] & (1UL << pos);
+      ret = second_level_[seg] & (1ULL << pos);
     }
     return ret;
   }
@@ -120,17 +137,14 @@ public:
 private:
   static int myffsl(uint64_t v, int pos)
   {
-    uint64_t tmp = v & ~((1UL << pos) - 1);
+    uint64_t tmp = v & ~((1ULL << pos) - 1);
     int ret = __builtin_ctzll(tmp);
-    int x = tmp ? ret + 1 : 0;
-    int y = ffsl(v & ~((1UL << pos) - 1));
-    assert(x == y);
-    return x;
+    return tmp ? ret + 1 : 0;
   }
 
   static int myrffsl(uint64_t v, int pos)
   {
-    uint64_t tmp = v & ((2UL << pos) - 1);
+    uint64_t tmp = v & ((2ULL << pos) - 1);
     int ret = __builtin_clzll(tmp);
     return tmp ? 64 - ret : 0;
   }
@@ -160,13 +174,13 @@ public:
   {
     int seg = idx >> SHIFT_PER_SEG;
     int pos = idx & (NBITS_PER_SEG - 1);
-    bs_[seg] |= (1UL << pos);
+    bs_[seg] |= (1ULL << pos);
   }
   void unset(int idx)
   {
     int seg = idx >> SHIFT_PER_SEG;
     int pos = idx & (NBITS_PER_SEG - 1);
-    bs_[seg] &= ~(1UL << pos);
+    bs_[seg] &= ~(1ULL << pos);
   }
   int max_bit_le(int from) const
   {
@@ -207,13 +221,13 @@ public:
 private:
   static int max_bit_le(uint64_t v, int pos)
   {
-    uint64_t tmp = v & ((2UL << pos) - 1);
+    uint64_t tmp = v & ((2ULL << pos) - 1);
     int ret = __builtin_clzll(tmp);
     return tmp ? NBITS_PER_SEG - ret - 1 : -1;
   }
   static int min_bit_ge(uint64_t v, int pos)
   {
-    uint64_t tmp = v & ~((1UL << pos) - 1);
+    uint64_t tmp = v & ~((1ULL << pos) - 1);
     int ret = __builtin_ctzll(tmp);
     return tmp ? ret : -1;
   }

@@ -20,6 +20,9 @@
 %locations
 %verbose
 %error-verbose
+%code requires {
+#include "parse_node.h"
+}
 %{
 #include <stdint.h>
 #define YYDEBUG 1
@@ -8934,7 +8937,7 @@ TYPE COMP_EQ STRING_VALUE
 }
 | COLUMN_BLOOM_FILTER COMP_EQ '(' intnum_list ')'
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_BLOOM_FILTER, 1, $4)
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_BLOOM_FILTER, 1, $4);
 }
 | FILE_EXTENSION COMP_EQ STRING_VALUE
 {
@@ -10687,7 +10690,7 @@ INSERT
 
 /*TODO: support no_param_column_ref case*/
 column_list_with_boost:
-with_param_column_ref { $$ = $1}
+with_param_column_ref { $$ = $1; }
 | column_list_with_boost ',' with_param_column_ref
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
@@ -14628,7 +14631,7 @@ table_factor %prec LOWER_COMMA
 natural_join_type:
 NATURAL except_full_outer_join_type
 {
-  $$ = $2
+  $$ = $2;
 }
 | NATURAL FULL opt_outer JOIN
 {
@@ -15947,7 +15950,7 @@ calibration_info_list:
 }
 | STRING_VALUE
 {
-  $$ = $1
+  $$ = $1;
 }
 | calibration_info_list ',' STRING_VALUE
 {
@@ -20942,7 +20945,7 @@ FILE_ID opt_equal_mark INTNUM
 opt_file_id:
 file_id
 {
-  $$ = $1
+  $$ = $1;
 }
 |
 {
@@ -23710,7 +23713,7 @@ MIN_MAX
 }
 | SUM
 {
-  malloc_terminal_node($$, result->malloc_pool_, T_COL_SKIP_INDEX_SUM)
+  malloc_terminal_node($$, result->malloc_pool_, T_COL_SKIP_INDEX_SUM);
 }
 ;
 

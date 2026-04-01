@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "common/ob_tenant_data_version_mgr.h"
 #include "common/ob_record_header.h"
 
@@ -168,7 +170,11 @@ int ObTenantDataVersionMgr::load_from_file()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObTenantDataVersionMgr doesn't init", K(ret));
+#ifdef _WIN32
+  } else if ((fd = ::open(file_path, O_RDONLY | _O_BINARY)) < 0) {
+#else
   } else if ((fd = ::open(file_path, O_RDONLY)) < 0) {
+#endif
     if (ENOENT != errno) {
       ret = OB_IO_ERROR;
       COMMON_LOG(WARN, "fail to open data_version file", K(ret), K(errno), K(file_path));
@@ -524,8 +530,13 @@ int ObTenantDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_
         COMMON_LOG(WARN, "fail to printf", K(ret));
       } else if (OB_FAIL(databuff_printf(hist_path, MAX_PATH_SIZE, "%s.history", file_path))) {
         COMMON_LOG(WARN, "fail to printf", K(ret));
-      } else if ((fd = ::open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC,
-                              S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
+#ifdef _WIN32
+    } else if ((fd = ::open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC | _O_BINARY,
+                            S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
+#else
+    } else if ((fd = ::open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC,
+                            S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
+#endif
         ret = OB_IO_ERROR;
         COMMON_LOG(WARN, "fail to open data_version file", K(ret), K(errno),
                   K(fd), K(total_length), K(tmp_path));

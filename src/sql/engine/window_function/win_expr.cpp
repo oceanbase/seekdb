@@ -2427,6 +2427,9 @@ int AggrExpr::set_payload(WinExprEvalCtx &ctx, ColumnFmt *columns, const int64_t
   return ret;
 }
 
+template class WinExprWrapper<AggrExpr>;
+template class WinExprWrapper<NonAggrWinExpr>;
+
 } // end winfunc
 } // end sql
 } // end oceanbase

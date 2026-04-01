@@ -39,6 +39,17 @@ extern bool g_enable_backtrace;
 const int64_t LBT_BUFFER_LENGTH = 1024;
 int light_backtrace(void **buffer, int size);
 int light_backtrace(void **buffer, int size, int64_t rbp);
+#ifdef _WIN32
+int _ob_backtrace(void** buffer, int size);
+#define ob_backtrace(buffer, size)                                \
+  ({                                                              \
+    int rv = 0;                                                   \
+    if (OB_LIKELY(::oceanbase::common::g_enable_backtrace)) {     \
+      rv = _ob_backtrace(buffer, size);                           \
+    }                                                             \
+    rv;                                                           \
+  })
+#else
 // save one layer of call stack
 #define ob_backtrace(buffer, size)                                \
   ({                                                              \
@@ -48,6 +59,7 @@ int light_backtrace(void **buffer, int size, int64_t rbp);
     }                                                             \
     rv;                                                           \
   })
+#endif
 char *lbt();
 char *lbt(char *buf, int32_t len);
 char *parray(int64_t *array, int size);

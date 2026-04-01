@@ -27,7 +27,7 @@ namespace common
 using namespace obutil;
 using namespace lib;
 
-uint64_t __attribute__((weak)) mtl_get_id()
+uint64_t OB_WEAK_SYMBOL mtl_get_id()
 {
   int ret = OB_SUCCESS;
   OB_LOG(WARN, "call weak mtl_get_id");

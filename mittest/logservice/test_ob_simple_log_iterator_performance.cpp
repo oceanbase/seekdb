@@ -103,7 +103,7 @@ bool ObSimpleLogClusterTestBase::need_shared_storage_ = true;
 int init_log_shared_storage(const uint64_t dst_tenant_id)
 {
   int ret = OB_SUCCESS;
-  const uint64_t mittest_memory = 6L * 1024L * 1024L * 1024L;
+  const uint64_t mittest_memory = 6LL * 1024 * 1024 * 1024;
   ObDeviceConfig *device_config = OB_NEW(ObDeviceConfig, "test");
   const char *base_dir_c = getenv("BUCKET");
   if (NULL == base_dir_c) {
@@ -142,7 +142,7 @@ int init_log_shared_storage(const uint64_t dst_tenant_id)
   device_config->max_iops_ = 0;
   device_config->max_bandwidth_ = 0;
 
-  const uint64_t test_memory = 6L * 1024L * 1024L * 1024L;
+  const uint64_t test_memory = 6LL * 1024 * 1024 * 1024;
   char tenant_uri[OB_MAX_URI_LENGTH] = {'\0'};
   ObBackupDest dest;
   ObBackupIoAdapter io_adapter;

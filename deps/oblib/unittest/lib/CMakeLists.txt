@@ -11,7 +11,7 @@ oblib_addtest(alloc/test_alloc_struct.cpp)
 oblib_addtest(alloc/test_block_set.cpp)
 oblib_addtest(alloc/test_chunk_mgr.cpp)
 # malloc_hook is only available on Linux
-if(NOT APPLE)
+if(NOT APPLE AND NOT WIN32)
   oblib_addtest(alloc/test_malloc_hook.cpp malloc_hook)
 endif()
 oblib_addtest(alloc/test_malloc_allocator.cpp)

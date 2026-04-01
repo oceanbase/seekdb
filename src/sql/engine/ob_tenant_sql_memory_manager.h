@@ -747,11 +747,11 @@ private:
   static const int64_t LESS_THAN_5G_CNT = 800;
   static const int64_t LESS_THAN_10G_INTERVAL_SIZE = 50 * 1024 * 1024;
   static const int64_t LESS_THAN_10G_CNT = 900;
-  static const int64_t LESS_THAN_100G_INTERVAL_SIZE = 900 * 1024 * 1024L;
+  static const int64_t LESS_THAN_100G_INTERVAL_SIZE = 900 * 1024 * 1024LL;
   static const int64_t LESS_THAN_100G_CNT = 1000;
-  static const int64_t LESS_THAN_1T_INTERVAL_SIZE = 9000 * 1024 * 1024L;
+  static const int64_t LESS_THAN_1T_INTERVAL_SIZE = 9000 * 1024 * 1024LL;
   static const int64_t LESS_THAN_1T_CNT = 1100;
-  static const int64_t MAX_INTERVAL_SIZE = 1000 * 1000 * 1024L * 1024L;
+  static const int64_t MAX_INTERVAL_SIZE = 1000 * 1000 * 1024LL * 1024LL;
 
   static const int64_t MIN_GLOBAL_BOUND_SIZE = 1 * 1024 * 1024;
 

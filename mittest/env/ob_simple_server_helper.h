@@ -84,7 +84,7 @@ public:
   static int write(sqlclient::ObISQLConnection *conn, const char *sql, int64_t &affected_rows);
   static int wait_weak_read_ts_advance(uint64_t tenant_id, ObLSID ls_id1, ObLSID ls_id2);
   static int enable_wrs(uint64_t tenant_id, ObLSID ls_id, bool enable);
-  static int modify_wrs(uint64_t tenant_id, ObLSID ls_id, int64_t add_ns = 10 * 1000 * 1000 * 1000L);
+  static int modify_wrs(uint64_t tenant_id, ObLSID ls_id, int64_t add_ns = 10LL * 1000 * 1000 * 1000);
   static int get_tx_desc(uint64_t tenant_id, ObTransID tx_id, ObTxDesc *&tx_desc);
   static int revert_tx_desc(uint64_t tenant_id, ObTxDesc *tx_desc);
 };

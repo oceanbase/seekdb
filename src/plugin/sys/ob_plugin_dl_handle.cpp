@@ -20,8 +20,19 @@
 #include "plugin/sys/ob_plugin_dl_handle.h"
 #include "plugin/sys/ob_plugin_utils.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#include <direct.h>
+#else
 #include <dlfcn.h>
+#endif
 #include <limits.h>
+
+#ifdef _WIN32
+#ifndef PATH_MAX
+#define PATH_MAX MAX_PATH
+#endif
+#endif
 
 namespace oceanbase {
 using namespace common;
@@ -40,9 +51,14 @@ int ObPluginDlHandle::init(const ObString &dl_dir, const ObString &dl_name)
 
   void *dl_handle = nullptr;
 
-  // we should use absolute path to stay safe
   char cwd[PATH_MAX + 1] = {0};
+#ifdef _WIN32
+  if (!dl_dir.prefix_match("/") && !dl_dir.prefix_match("\\")
+      && !(dl_dir.length() >= 2 && dl_dir.ptr()[1] == ':')
+      && OB_ISNULL(_getcwd(cwd, PATH_MAX + 1))) {
+#else
   if (!dl_dir.prefix_match("/") && OB_ISNULL(getcwd(cwd, PATH_MAX + 1))) {
+#endif
     ret = OB_IO_ERROR;
     LOG_WARN("failed to get current work directory", KCSTRING(strerror(errno)), K(ret));
   }
@@ -57,9 +73,15 @@ int ObPluginDlHandle::init(const ObString &dl_dir, const ObString &dl_name)
     LOG_WARN("failed to allocate string", K(dl_dir), K(dl_name), K(ret));
   } else if (OB_FAIL(dl_name_.assign(dl_name))) {
     LOG_WARN("failed to assign dl_name", K(dl_name), K(ret));
+#ifdef _WIN32
+  } else if (OB_ISNULL(dl_handle_ = (void *)LoadLibraryA(path_string.ptr()))) {
+    ret = OB_PLUGIN_DLOPEN_FAILED;
+    LOG_WARN("failed to open dl", K(path_string), K(ret), K(GetLastError()));
+#else
   } else if (OB_ISNULL(dl_handle_ = dlopen(path_string.ptr(), RTLD_GLOBAL | RTLD_NOW))) {
     ret = OB_PLUGIN_DLOPEN_FAILED;
     LOG_WARN("failed to open dl", K(path_string), K(ret), KCSTRING(dlerror()));
+#endif
   }
   return ret;
 }
@@ -90,6 +112,12 @@ int ObPluginDlHandle::read_symbol(const char *symbol_name, void *&value)
   int ret = OB_SUCCESS;
   if (OB_ISNULL((dl_handle_))) {
     ret = OB_NOT_INIT;
+#ifdef _WIN32
+  } else if (OB_ISNULL(value = (void *)GetProcAddress((HMODULE)dl_handle_, symbol_name))) {
+    ret = OB_ENTRY_NOT_EXIST;
+    LOG_WARN("failed to find symbol", K_(dl_name), KCSTRING(symbol_name), K(GetLastError()));
+  }
+#else
   } else if (FALSE_IT(dlerror())) { // clear last error
   } else if (OB_ISNULL(value = dlsym(dl_handle_, symbol_name))) {
     const char *error = dlerror();
@@ -98,6 +126,7 @@ int ObPluginDlHandle::read_symbol(const char *symbol_name, void *&value)
       LOG_WARN("failed to find symbol", K_(dl_name), KCSTRING(symbol_name), KCSTRING(error));
     }
   }
+#endif
   return ret;
 }
 

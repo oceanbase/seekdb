@@ -21,6 +21,10 @@
 #include <malloc.h>
 #elif defined(__APPLE__)
 #include <stdlib.h> // malloc is in stdlib.h on macOS
+#elif defined(_WIN32)
+#define _WINSOCKAPI_
+#include <windows.h>
+#include <psapi.h>
 #endif
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_tracepoint.h"
@@ -122,6 +126,15 @@ void  __attribute__((constructor(MALLOC_INIT_PRIORITY))) init_global_memory_pool
 
 int64_t get_virtual_memory_used(int64_t *resident_size)
 {
+#ifdef _WIN32
+  PROCESS_MEMORY_COUNTERS pmc;
+  if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+    if (resident_size) *resident_size = static_cast<int64_t>(pmc.WorkingSetSize);
+    return static_cast<int64_t>(pmc.PagefileUsage);
+  }
+  if (resident_size) *resident_size = 0;
+  return 0;
+#else
   static const ssize_t ps = lib::ob_get_page_size();
   int64_t page_cnt = 0;
   int64_t res_page_cnt = 0;
@@ -132,6 +145,7 @@ int64_t get_virtual_memory_used(int64_t *resident_size)
     if (resident_size) *resident_size = res_page_cnt * ps;
   }
   return page_cnt * ps;
+#endif
 }
 
 } // end namespace common

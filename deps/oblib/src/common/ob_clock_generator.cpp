@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "ob_clock_generator.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/utility.h"

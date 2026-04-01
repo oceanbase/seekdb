@@ -285,6 +285,21 @@ private:
 } /* namespace common */
 } /* namespace oceanbase */
 
+#ifdef _WIN32
+#define SLEEP(time)                                                                        \
+  do {                                                                                     \
+    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
+        wait_guard(((int64_t)time) * 1000 * 1000);                                         \
+    ::Sleep((DWORD)(time) * 1000);                                                         \
+  } while (0)
+
+#define USLEEP(time)                                                                       \
+  do {                                                                                     \
+    oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
+        wait_guard((int64_t)time);                                                         \
+    ::Sleep((DWORD)(((time) + 999) / 1000));                                               \
+  } while (0)
+#else
 #define SLEEP(time)                                                                        \
   do {                                                                                     \
     oceanbase::common::ObSleepEventGuard<oceanbase::common::ObWaitEventIds::DEFAULT_SLEEP> \
@@ -298,6 +313,7 @@ private:
         wait_guard((int64_t)time);                                                         \
     ::usleep(time);                                                                        \
   } while (0)
+#endif
 
 #define GLOBAL_EVENT_GET(stat_no)             \
   ({                                                \

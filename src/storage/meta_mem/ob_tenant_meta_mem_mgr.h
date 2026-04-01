@@ -483,15 +483,15 @@ private:
   friend class TableGCTask;
   friend class ObTabletPointer;
   static const int64_t DEFAULT_BUCKET_NUM = 10243L;
-  static const int64_t TOTAL_LIMIT = 15 * 1024L * 1024L * 1024L;
-  static const int64_t HOLD_LIMIT = 8 * 1024L * 1024L;
-  static const int64_t TABLE_GC_INTERVAL_US = 20 * 1000L; // 20ms
-  static const int64_t REFRESH_CONFIG_INTERVAL_US = 10 * 1000 * 1000L; // 10s
-  static const int64_t ONE_ROUND_RECYCLE_COUNT_THRESHOLD = 20000L;
-  static const int64_t ONE_ROUND_TABLET_GC_COUNT_THRESHOLD = 200L;
-  static const int64_t BATCH_MEMTABLE_GC_THRESHOLD = 100L;
+  static const int64_t TOTAL_LIMIT = 15LL * 1024LL * 1024LL * 1024LL;
+  static const int64_t HOLD_LIMIT = 8LL * 1024LL * 1024LL;
+  static const int64_t TABLE_GC_INTERVAL_US = 20LL * 1000LL; // 20ms
+  static const int64_t REFRESH_CONFIG_INTERVAL_US = 10LL * 1000LL * 1000LL; // 10s
+  static const int64_t ONE_ROUND_RECYCLE_COUNT_THRESHOLD = 20000LL;
+  static const int64_t ONE_ROUND_TABLET_GC_COUNT_THRESHOLD = 200LL;
+  static const int64_t BATCH_MEMTABLE_GC_THRESHOLD = 100LL;
   static const int64_t DEFAULT_TABLET_WASH_HEAP_COUNT = 16;
-  static const int64_t DEFAULT_MINOR_SSTABLE_SET_COUNT = 49999;
+  static const int64_t DEFAULT_MINOR_SSTABLE_SET_COUNT = 49999LL;
   static const int64_t SSTABLE_GC_MAX_TIME = 500; // 500us
   static const int64_t LEAK_CHECKER_CONFIG_REFRESH_TIMEOUT = 10000000 * 10; // 10s
   static const int64_t FLYING_TABLET_THRESHOLD = 100000;

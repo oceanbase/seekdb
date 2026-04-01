@@ -34,9 +34,9 @@ public:
   }
 };
 
-enum class ObColumnVectorType: int8_t
+enum class ObColumnVectorType: int64_t
 {
-  UNKNOW_TYPE = -1,
+  UNKNOW_TYPE = 255,  // Use 255 to fit in 8-bit bit-field (avoid -1 truncation warning)
   DATUM_TYPE = 0,
   SIGNED_INTEGER_TYPE = 1,
   UNSIGNED_INTEGER_TYPE = 2,
@@ -45,7 +45,7 @@ enum class ObColumnVectorType: int8_t
 
 OB_INLINE bool is_valid_vector_type(const ObColumnVectorType type)
 {
-  return type > ObColumnVectorType::UNKNOW_TYPE && type < ObColumnVectorType::MAX_TYPE;
+  return type != ObColumnVectorType::UNKNOW_TYPE && type < ObColumnVectorType::MAX_TYPE;
 }
 
 template<typename T>
@@ -300,7 +300,7 @@ struct ObRVIntegerIterator
   ObRVIntegerIterator(const int64_t pos, T *data, const bool *nulls)
     : pos_(pos), data_(data), nulls_(nulls) {}
   ~ObRVIntegerIterator() = default;
-  OB_INLINE value_type &operator*()
+  OB_INLINE value_type &operator*() const
   {
     cell_.d_ = data_[pos_];
     cell_.null_ = nulls_[pos_];
@@ -366,7 +366,7 @@ struct ObRVIntegerIterator
   int64_t pos_;
   T *data_;
   const bool *nulls_;
-  value_type cell_;
+  mutable value_type cell_;
 };
 
 // null first

@@ -36,7 +36,9 @@
 #include "share/ob_tenant_mgr.h"
 #include "share/ob_version.h"
 #include <curl/curl.h>
+#ifndef _WIN32
 #include <getopt.h>
+#endif
 #include <locale.h>
 #ifdef __APPLE__
 #include <stdlib.h> // malloc.h is not available on macOS, use stdlib.h instead
@@ -44,8 +46,171 @@
 #else
 #include <malloc.h>
 #endif
+#ifndef _WIN32
 #include <sys/time.h>
 #include <sys/resource.h>
+#endif
+#ifdef _WIN32
+#include <windows.h>
+#include "observer/ob_win_service.h"
+extern "C" void win32_trace(const char *msg) {
+  HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
+  DWORD written;
+  WriteFile(h, msg, (DWORD)strlen(msg), &written, NULL);
+}
+#include <signal.h>
+#pragma init_seg(compiler)
+
+typedef struct {
+  DWORD ThreadId;
+  EXCEPTION_POINTERS *ExceptionPointers;
+  BOOL ClientPointers;
+} MY_MINIDUMP_EXCEPTION_INFORMATION;
+
+typedef BOOL (WINAPI *MiniDumpWriteDumpFn)(
+    HANDLE, DWORD, HANDLE, ULONG,
+    MY_MINIDUMP_EXCEPTION_INFORMATION*, void*, void*);
+
+static void write_minidump(EXCEPTION_POINTERS *ep) {
+  char path[MAX_PATH];
+  SYSTEMTIME st;
+  GetLocalTime(&st);
+  snprintf(path, sizeof(path), "observer_crash_%04d%02d%02d_%02d%02d%02d_%lu.dmp",
+           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
+           (unsigned long)GetCurrentProcessId());
+  HMODULE hDbgHelp = LoadLibraryA("dbghelp.dll");
+  if (!hDbgHelp) {
+    win32_trace("[WIN32-TRACE] Failed to load dbghelp.dll\r\n");
+    return;
+  }
+  auto pMiniDumpWriteDump = (MiniDumpWriteDumpFn)GetProcAddress(hDbgHelp, "MiniDumpWriteDump");
+  if (!pMiniDumpWriteDump) {
+    win32_trace("[WIN32-TRACE] MiniDumpWriteDump not found in dbghelp.dll\r\n");
+    return;
+  }
+  HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (hFile != INVALID_HANDLE_VALUE) {
+    MY_MINIDUMP_EXCEPTION_INFORMATION mei;
+    mei.ThreadId = GetCurrentThreadId();
+    mei.ExceptionPointers = ep;
+    mei.ClientPointers = FALSE;
+    BOOL ok = pMiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile,
+                                 2 /*MiniDumpWithFullMemory*/,
+                                 &mei, NULL, NULL);
+    CloseHandle(hFile);
+    char msg[512];
+    snprintf(msg, sizeof(msg), "[WIN32-TRACE] Minidump %s: %s\r\n",
+             ok ? "written" : "FAILED", path);
+    win32_trace(msg);
+  } else {
+    win32_trace("[WIN32-TRACE] Failed to create minidump file\r\n");
+  }
+}
+
+static volatile LONG g_dumping = 0;
+static volatile LONG g_crash_count = 0;
+static volatile LONG g_bg_crash_count = 0;
+static DWORD g_main_thread_id = 0;
+
+static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
+  DWORD code = ep->ExceptionRecord->ExceptionCode;
+  if (code != 0xC0000005 && code != 0xC0000096 && code != 0xC000001D &&
+      code != 0xC0000028 && code != 0x80000003) {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  LONG crash_seq = InterlockedIncrement(&g_crash_count);
+  char buf[4096];
+  DWORD tid = GetCurrentThreadId();
+  BOOL is_main = (tid == g_main_thread_id);
+  int n = snprintf(buf, sizeof(buf),
+    "[WIN32-TRACE] Vectored exception #%ld: code=0x%08lX addr=0x%p tid=%lu%s\r\n",
+    crash_seq, code, (void*)ep->ExceptionRecord->ExceptionAddress, tid,
+    is_main ? " (MAIN)" : " (bg-thread)");
+  if (code == 0xC0000005 && ep->ExceptionRecord->NumberParameters >= 2) {
+    const char *op = (ep->ExceptionRecord->ExceptionInformation[0] == 0) ? "READ" :
+                     (ep->ExceptionRecord->ExceptionInformation[0] == 1) ? "WRITE" : "DEP";
+    n += snprintf(buf + n, sizeof(buf) - n,
+      "  AccessViolation: %s at 0x%p\r\n", op,
+      (void*)ep->ExceptionRecord->ExceptionInformation[1]);
+  }
+  CONTEXT *ctx = ep->ContextRecord;
+  uintptr_t exe_base = (uintptr_t)GetModuleHandleA(NULL);
+  uintptr_t rva = (uintptr_t)ctx->Rip - exe_base;
+  n += snprintf(buf + n, sizeof(buf) - n,
+    "  Rip=0x%p RVA=0x%llX Rsp=0x%p Rbp=0x%p\r\n",
+    (void*)ctx->Rip, (unsigned long long)rva, (void*)ctx->Rsp, (void*)ctx->Rbp);
+
+  HMODULE hMod = NULL;
+  char modname[MAX_PATH] = {0};
+  if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                         GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         (LPCSTR)ctx->Rip, &hMod) && hMod) {
+    GetModuleFileNameA(hMod, modname, sizeof(modname));
+    uintptr_t mod_rva = (uintptr_t)ctx->Rip - (uintptr_t)hMod;
+    n += snprintf(buf + n, sizeof(buf) - n,
+      "  Module: %s + 0x%llX\r\n", modname, (unsigned long long)mod_rva);
+  }
+  {
+    n += snprintf(buf + n, sizeof(buf) - n, "  Stack (RIP-based, RVAs):");
+    uintptr_t rsp_val = (uintptr_t)ctx->Rsp;
+    for (int fi = 0; fi < 64 && n < (int)sizeof(buf) - 64; fi++) {
+      uintptr_t *slot = (uintptr_t *)(rsp_val + fi * 8);
+      __try {
+        uintptr_t val = *slot;
+        if (val >= exe_base && val < exe_base + 0x20000000ULL) {
+          n += snprintf(buf + n, sizeof(buf) - n, " [sp+%d]=0x%llX",
+            fi * 8, (unsigned long long)(val - exe_base));
+        }
+      } __except(EXCEPTION_EXECUTE_HANDLER) { break; }
+    }
+    n += snprintf(buf + n, sizeof(buf) - n, "\r\n");
+  }
+  win32_trace(buf);
+
+  if (IsDebuggerPresent()) {
+    win32_trace("[WIN32-TRACE] Debugger attached, passing exception to debugger.\r\n");
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+
+  if (is_main) {
+    if (InterlockedCompareExchange(&g_dumping, 1, 0) == 0) {
+      write_minidump(ep);
+    }
+    win32_trace("[WIN32-TRACE] Main thread crash, terminating.\r\n");
+    TerminateProcess(GetCurrentProcess(), 3);
+  }
+
+  LONG bg_seq = InterlockedIncrement(&g_bg_crash_count);
+  if (bg_seq <= 3) {
+    if (InterlockedCompareExchange(&g_dumping, 1, 0) == 0) {
+      write_minidump(ep);
+    }
+  }
+  if (bg_seq > 200) {
+    win32_trace("[WIN32-TRACE] Too many bg-thread crashes (>200), terminating.\r\n");
+    TerminateProcess(GetCurrentProcess(), 3);
+  }
+  win32_trace("[WIN32-TRACE] Background thread crash, killing thread only.\r\n");
+  ExitThread(1);
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+static struct Win32EarlyInit {
+  Win32EarlyInit() {
+    g_main_thread_id = GetCurrentThreadId();
+    AddVectoredExceptionHandler(1, win32_vectored_handler);
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+  }
+} g_win32_early_init;
+
+void ob_abort(void) {
+  char buf[512];
+  int n = snprintf(buf, sizeof(buf),
+    "[WIN32] ob_abort() called. lbt: %s\r\n",
+    oceanbase::common::lbt());
+  win32_trace(buf);
+  abort();
+}
+#endif
 // easy complains in compiling if put the right position.
 #ifdef __APPLE__
 // macOS doesn't have link.h, provide stub definitions
@@ -65,6 +230,20 @@ static int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *info, size_t siz
   // macOS doesn't support dl_iterate_phdr, return 0 (no error but no iterations)
   return 0;
 }
+#elif defined(_WIN32)
+// Windows doesn't have link.h, provide stub definitions
+#include <stdint.h>
+struct dl_phdr_info {
+  uintptr_t dlpi_addr;
+  const char *dlpi_name;
+  const void *dlpi_phdr;
+  uint16_t dlpi_phnum;
+};
+static int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *info, size_t size, void *data), void *data) {
+  (void)callback;
+  (void)data;
+  return 0;
+}
 #else
 #include <link.h>
 #include <dlfcn.h>
@@ -79,6 +258,8 @@ using namespace oceanbase::observer;
 using namespace oceanbase::share;
 using namespace oceanbase::omt;
 
+namespace oceanbase { namespace share { void ob_init_create_func(); } }
+
 #define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 #define MPRINTx(format, ...)                                                   \
   MPRINT(format, ##__VA_ARGS__);                                               \
@@ -91,17 +272,31 @@ const char  CONF_DIR[] = "etc";
 static int create_observer_softlink()
 {
   int ret = OB_SUCCESS;
-  char softlink_path[PATH_MAX] = {0};
-  snprintf(softlink_path, PATH_MAX, "%s/seekdb", PID_DIR);
-  char target_path[PATH_MAX] = {0};
-#ifdef __APPLE__
-  // On macOS, use _NSGetExecutablePath to get the executable path
+  char softlink_path[4096] = {0};
+  snprintf(softlink_path, sizeof(softlink_path), "%s/seekdb", PID_DIR);
+  char target_path[4096] = {0};
+#ifdef _WIN32
+  if (0 == GetModuleFileNameA(nullptr, target_path, sizeof(target_path))) {
+    ret = OB_IO_ERROR;
+    MPRINT("failed to get executable path on Windows");
+  }
+  if (OB_SUCC(ret)) {
+    char link_path_exe[4096] = {0};
+    snprintf(link_path_exe, sizeof(link_path_exe), "%s.exe", softlink_path);
+    DeleteFileA(link_path_exe);
+    if (!CopyFileA(target_path, link_path_exe, FALSE)) {
+      if (!CreateHardLinkA(link_path_exe, target_path, NULL)) {
+        ret = OB_IO_ERROR;
+        MPRINT("create seekdb copy/hardlink failed, err=%lu", GetLastError());
+      }
+    }
+  }
+#elif defined(__APPLE__)
   uint32_t size = PATH_MAX;
   if (0 != _NSGetExecutablePath(target_path, &size)) {
     ret = OB_IO_ERROR;
     MPRINT("failed to get executable path on macOS");
   }
-  // Resolve symlinks to get the real path
   if (OB_SUCC(ret)) {
     char resolved_path[PATH_MAX] = {0};
     if (nullptr == realpath(target_path, resolved_path)) {
@@ -112,21 +307,27 @@ static int create_observer_softlink()
       target_path[PATH_MAX - 1] = '\0';
     }
   }
-#else
-  ssize_t read_len = readlink("/proc/self/exe", target_path, PATH_MAX - 1);
-  if (read_len < 0) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to readlink /proc/self/exe, errno=%s", strerror(errno));
-  } else {
-    target_path[read_len] = '\0';
-  }
-#endif
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
   } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
     ret = OB_IO_ERROR;
     MPRINT("create seekdb softlink failed, errno=%s", strerror(errno));
   }
+#else
+  ssize_t read_len = readlink("/proc/self/exe", target_path, sizeof(target_path) - 1);
+  if (read_len < 0) {
+    ret = OB_IO_ERROR;
+    MPRINT("failed to readlink /proc/self/exe, errno=%s", strerror(errno));
+  } else {
+    target_path[read_len] = '\0';
+  }
+  if (OB_FAIL(ret)) {
+  } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
+  } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
+    ret = OB_IO_ERROR;
+    MPRINT("create seekdb softlink failed, errno=%s", strerror(errno));
+  }
+#endif
   return ret;
 }
 static void print_args(int argc, char *argv[])
@@ -170,9 +371,8 @@ static int callback(struct dl_phdr_info *info, size_t size, void *data)
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "invalid argument", K(info));
   } else {
     _LOG_INFO("name=%s (%d segments)", info->dlpi_name, info->dlpi_phnum);
-#ifdef __APPLE__
-    // macOS stub: dlpi_phdr is const void* and cannot be accessed
-    // Skip the loop that accesses program headers
+#if defined(__APPLE__) || defined(_WIN32)
+    // macOS/Windows stub: dlpi_phdr is const void* and cannot be accessed
 #else
     for (int j = 0; j < info->dlpi_phnum; j++) {
       if (NULL != info->dlpi_phdr) {
@@ -187,6 +387,7 @@ static int callback(struct dl_phdr_info *info, size_t size, void *data)
   return 0;
 }
 
+#ifndef _WIN32
 static void print_limit(const char *name, const int resource)
 {
   struct rlimit limit;
@@ -220,9 +421,19 @@ static void print_all_limits()
   print_limit("RLIMIT_STACK",RLIMIT_STACK);
   OB_LOG(INFO, "============= *stop server limit report* ===============");
 }
+#else
+static void print_all_limits()
+{
+  (void)0;  // rlimit/getrlimit not available on Windows
+}
+#endif
 
 static int check_uid_before_start(const char *dir_path)
 {
+#ifdef _WIN32
+  (void)dir_path;
+  return OB_SUCCESS;  // skip uid check on Windows
+#else
   int ret = OB_SUCCESS;
   uid_t current_uid = UINT_MAX;
 #ifdef __APPLE__
@@ -247,11 +458,17 @@ static int check_uid_before_start(const char *dir_path)
   }
 
   return ret;
+#endif
 }
 
 // systemd dynamic loading
 static int safe_sd_notify(int unset_environment, const char *state)
 {
+#ifdef _WIN32
+  (void)unset_environment;
+  (void)state;
+  return 0;  // systemd not on Windows
+#else
   typedef int (*sd_notify_func_t)(int unset_environment, const char *state);
   sd_notify_func_t sd_notify_func = nullptr;
   void *systemd_handle = nullptr;
@@ -279,6 +496,7 @@ static int safe_sd_notify(int unset_environment, const char *state)
     systemd_handle = nullptr;
   }
   return ret;
+#endif
 }
 
 int inner_main(int argc, char *argv[])
@@ -289,16 +507,16 @@ int inner_main(int argc, char *argv[])
 #ifdef ENABLE_SANITY
   backtrace_symbolize_func = oceanbase::common::backtrace_symbolize;
 #endif
-#ifndef __ANDROID__
+#if defined(_WIN32) || defined(__ANDROID__)
+  snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
+#else
   if (0 != pthread_getname_np(pthread_self(), ob_get_tname(), OB_THREAD_NAME_BUF_LEN)) {
     snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
   }
-#else
-  snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
 #endif
   ObStackHeaderGuard stack_header_guard;
   int64_t memory_used = get_virtual_memory_used();
-#ifndef OB_USE_ASAN
+#if !defined(OB_USE_ASAN) && !defined(_WIN32)
   /**
     signal handler stack
    */
@@ -343,10 +561,12 @@ int inner_main(int argc, char *argv[])
   MPRINT("Starting seekdb (%s %s %s) source revision %s.",
     OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION, build_version());
 
-  // change signal mask first.
+#ifndef _WIN32
+  // change signal mask first (POSIX only).
   if (OB_FAIL(ObSignalHandle::change_signal_mask())) {
     MPRINT("change signal mask failed, ret=%d", ret);
   }
+#endif
 
   lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "ObserverAlloc");
   ObServerOptions *opts = nullptr;
@@ -429,7 +649,11 @@ int inner_main(int argc, char *argv[])
     if (0 == memory_used) {
       _LOG_INFO("Get virtual memory info failed");
     } else {
+#ifdef _WIN32
+      _LOG_INFO("Virtual memory : %15ld byte", memory_used);
+#else
       _LOG_INFO("Virtual memory : %'15ld byte", memory_used);
+#endif
     }
     // print in log file.
     LOG_INFO("Build basic information for each syslog file", "info", syslog_file_info);
@@ -450,22 +674,24 @@ int inner_main(int argc, char *argv[])
     if (OB_SUCC(ret)) {
       const bool embed_mode = opts->embed_mode_;
       const bool initialize = opts->initialize_;
-      // Create worker to make this thread having a binding
-      // worker. When ObThWorker is creating, it'd be aware of this
-      // thread has already had a worker, which can prevent binding
-      // new worker with it.
       lib::Worker worker;
       lib::Worker::set_worker_to_thread_local(&worker);
-      // Initialize thread group manager before using TGMgr
-      // This ensures that all TGDefIDs (like ServerGTimer) have their create functions registered
-      // Explicitly call init_create_func() to register all TG creation functions including ServerGTimer
-      // before accessing TGMgr::instance(), which will create all thread groups in its constructor
       lib::init_create_func();
+      oceanbase::share::ob_init_create_func();
+      lib::create_func_inited_ = true;
       lib::TGMgr::instance();
+      {
+        auto &tg_mgr = lib::TGMgr::instance();
+        int fixed = 0;
+        for (int i = 0; i < lib::TGDefIDs::END; i++) {
+          if (lib::create_funcs_[i] && !tg_mgr.tgs_[i]) {
+            tg_mgr.tgs_[i] = lib::create_funcs_[i]();
+            if (tg_mgr.tgs_[i]) fixed++;
+          }
+        }
+      }
       ObServer &observer = ObServer::get_instance();
       LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING);
-      // to speed up bootstrap phase, need set election INIT TS
-      // to count election keep silence time as soon as possible after seekdb process started
       ATOMIC_STORE(&palf::election::INIT_TS, palf::election::get_monotonic_ts());
       if (OB_FAIL(observer.init(*opts, log_cfg))) {
         LOG_ERROR("seekdb init fail", K(ret));
@@ -507,9 +733,45 @@ const char* __asan_default_options()
 }
 #endif
 
+#ifdef _WIN32
+static bool has_arg(int argc, char *argv[], const char *name)
+{
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], name) == 0) return true;
+  }
+  return false;
+}
+
+static const char *get_arg_value(int argc, char *argv[], const char *name)
+{
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], name) == 0 && i + 1 < argc && argv[i + 1][0] != '-') {
+      return argv[i + 1];
+    }
+  }
+  return nullptr;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+  ::oceanbase::common::g_ob_log_main_entered = true;
+#endif
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  if (has_arg(argc, argv, "--install-service")) {
+    return oceanbase::observer::ob_install_win_service(
+        get_arg_value(argc, argv, "--install-service"), argc, argv);
+  } else if (has_arg(argc, argv, "--remove-service")) {
+    return oceanbase::observer::ob_remove_win_service(
+        get_arg_value(argc, argv, "--remove-service"));
+  } else if (has_arg(argc, argv, "--service")) {
+    return oceanbase::observer::ob_start_as_win_service(
+        oceanbase::observer::OB_DEFAULT_SERVICE_NAME, inner_main, argc, argv);
+  }
+  ret = inner_main(argc, argv);
+#else
   size_t stack_size = 1LL<<20;
   void *stack_addr = ::mmap(nullptr, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (MAP_FAILED == stack_addr) {
@@ -520,5 +782,6 @@ int main(int argc, char *argv[])
       ret = OB_ERR_UNEXPECTED;
     }
   }
+#endif
   return ret;
 }

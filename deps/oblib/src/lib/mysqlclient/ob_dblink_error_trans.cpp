@@ -17,19 +17,19 @@
 #define USING_LOG_PREFIX LIB_MYSQLC
 #include "lib/mysqlclient/ob_dblink_error_trans.h"
 
-int __attribute__((weak)) get_oracle_errno(int index)
+int OB_WEAK_SYMBOL get_oracle_errno(int index)
 {
   return oceanbase::OB_SUCCESS;
 }
 
-int __attribute__((weak)) get_mysql_errno(int index)
+int OB_WEAK_SYMBOL get_mysql_errno(int index)
 {
   return oceanbase::OB_SUCCESS;
 }
 
 
 
-bool __attribute__((weak)) get_dblink_reuse_connection_cfg()
+bool OB_WEAK_SYMBOL get_dblink_reuse_connection_cfg()
 {
   return true;
 }

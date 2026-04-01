@@ -32,7 +32,7 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObDirectLoadTableDataDesc;
+struct ObDirectLoadTableDataDesc;
 class ObDirectLoadITable;
 class ObIDirectLoadPartitionTableBuilder;
 class ObDirectLoadInsertTableBatchRowDirectWriter;
@@ -44,7 +44,7 @@ namespace observer
 class ObTableLoadParam;
 class ObTableLoadTransCtx;
 class ObTableLoadStoreCtx;
-class ObTableLoadStoreTrans;
+struct ObTableLoadStoreTrans;
 class ObTableLoadDagWriter;
 
 class ObTableLoadTransStore

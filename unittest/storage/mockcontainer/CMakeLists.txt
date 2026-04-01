@@ -7,3 +7,4 @@ add_library(mockcontainer SHARED
   mock_ob_end_trans_callback.h
   )
 target_link_libraries(mockcontainer PUBLIC oceanbase)
+add_dependencies(mockcontainer oblib_grpc)

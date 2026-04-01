@@ -15,7 +15,14 @@
  */
 
 #include "lib/utility/ob_platform_utils.h"
+#ifdef _WIN32
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+#else
 #include <unistd.h>
+#endif
 
 #ifdef __APPLE__
 // Include mach headers here (not in the header file) to avoid macro conflicts
@@ -40,6 +47,13 @@ int64_t ob_get_available_memory()
   if (host_page_size(mach_port, &page_size) == KERN_SUCCESS &&
       host_statistics64(mach_port, HOST_VM_INFO, (host_info64_t)&vm_stat, &count) == KERN_SUCCESS) {
     return (int64_t)vm_stat.free_count * page_size;
+  }
+  return -1;
+#elif defined(_WIN32)
+  MEMORYSTATUSEX mem_info;
+  mem_info.dwLength = sizeof(mem_info);
+  if (GlobalMemoryStatusEx(&mem_info)) {
+    return (int64_t)mem_info.ullAvailPhys;
   }
   return -1;
 #else

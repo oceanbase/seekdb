@@ -392,8 +392,8 @@ private:
   
   int create_ddl_memtable(ObTablet &tablet, const ObITable::TableKey &table_key, ObDDLMemtable *&ddl_memtable);
 private:
-  static const int64_t TOTAL_LIMIT = 10 * 1024 * 1024 * 1024L;
-  static const int64_t HOLD_LIMIT = 10 * 1024 * 1024 * 1024L;
+  static const int64_t TOTAL_LIMIT = 10LL * 1024 * 1024 * 1024;
+  static const int64_t HOLD_LIMIT = 10LL * 1024 * 1024 * 1024;
   bool is_inited_;
   bool is_closed_;
   bool is_independent_freezed_;

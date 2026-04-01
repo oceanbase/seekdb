@@ -5,7 +5,9 @@
  * general functions for inet
  */
 #include "easy_define.h"
+#ifndef _WIN32
 #include <sys/un.h>
+#endif
 #ifndef UNIX_PATH_MAX
 #define UNIX_PATH_MAX 16
 #endif

@@ -68,7 +68,7 @@ TEST(TestBackupDeviceWrapper, test_alloc_block) {
 
   io_d_opts_write.opts_[0].set("storage_info", "");
 
-  const uint64_t test_memory = 6L * 1024L * 1024L * 1024L;
+  const uint64_t test_memory = 6LL * 1024 * 1024 * 1024;
   OK(ObDeviceManager::get_instance().init_devices_env());
   OK(ObIOManager::get_instance().init(test_memory));
 

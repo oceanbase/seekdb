@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_directory_executor.h"
 #include "sql/resolver/ddl/ob_create_directory_stmt.h"
 #include "sql/resolver/ddl/ob_drop_directory_stmt.h"

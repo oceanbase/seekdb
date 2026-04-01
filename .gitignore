@@ -387,6 +387,9 @@ tools/ob-configserver/tests/*.out
 
 ############# deps #############
 deps/oblib/src/common/storage/ob_io_selector.h
+deps/oblib/src/grpc/*.pb.h
+deps/oblib/src/grpc/*.pb.cc
+deps/oblib/src/grpc/*.pb.cpp
 deps/3rd
 
 ############# test #############

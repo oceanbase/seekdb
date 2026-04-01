@@ -22,11 +22,23 @@
 #include "lib/allocator/ob_tc_malloc.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/alloc/ob_malloc_allocator.h"
+#ifdef _WIN32
+#include <cstdlib>  // for ::malloc, ::free, ::realloc
+namespace oceanbase { namespace common { extern bool g_ob_log_main_entered; } }
+#endif
 
 namespace oceanbase
 {
 namespace common
 {
+
+#ifdef _WIN32
+// Magic tag placed before every system-malloc'd block during static init.
+// ob_free/ob_realloc check for this tag to distinguish system-allocated
+// memory from OB-allocator-managed memory, avoiding use-after-free if
+// the block is freed after main() enters (when the OB allocator is active).
+static constexpr uint64_t OB_SYS_ALLOC_MAGIC = 0xDEAD5741C0DE5741ULL;
+#endif
 inline void ob_print_mod_memory_usage(bool print_to_std = false,
                                       bool print_glibc_malloc_stats = false)
 {
@@ -39,10 +51,17 @@ inline void *ob_malloc(const int64_t nbyte, const ObMemAttr &attr)
   auto allocator = lib::ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
     ptr = allocator->alloc(nbyte, attr);
+#ifndef _WIN32
     if (OB_ISNULL(ptr)) {
       LIB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
     }
+#endif
   }
+#ifdef _WIN32
+  else {
+    ptr = ::malloc(nbyte);
+  }
+#endif
   return ptr;
 }
 
@@ -54,6 +73,11 @@ inline void ob_free(void *ptr)
     allocator->free(ptr);
     ptr = NULL;
   }
+#ifdef _WIN32
+  else if (ptr != nullptr) {
+    ::free(ptr);
+  }
+#endif
 }
 
 inline void *ob_realloc(void *ptr, const int64_t nbyte, const ObMemAttr &attr)
@@ -63,11 +87,18 @@ inline void *ob_realloc(void *ptr, const int64_t nbyte, const ObMemAttr &attr)
     auto *allocator = lib::ObMallocAllocator::get_instance();
     if (!OB_ISNULL(allocator)) {
       nptr = allocator->realloc(ptr, nbyte, attr);
+#ifndef _WIN32
       if (OB_ISNULL(nptr)) {
         LIB_LOG_RET(ERROR, OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(attr), K(nbyte));
       }
+#endif
     }
   }
+#ifdef _WIN32
+  else {
+    nptr = ::realloc(ptr, nbyte);
+  }
+#endif
   return nptr;
 }
 

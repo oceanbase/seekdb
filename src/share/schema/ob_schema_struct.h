@@ -72,7 +72,7 @@ class ObLocalSessionVar;
 namespace rootserver
 {
 class ObRandomZoneSelector;
-class ObReplicaAddr;
+struct ObReplicaAddr;
 }
 namespace share
 {

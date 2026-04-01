@@ -1037,7 +1037,7 @@ private:
   static const int64_t DEFAULT_MAX_DAG_NET_CNT = 500000;
   static const int64_t STOP_ADD_DAG_PERCENT = 70;
   static const int64_t PRINT_SLOW_DAG_NET_THREASHOLD = 30 * 60 * 1000 * 1000L; // 30m
-  static const int64_t SLOW_COMPACTION_DAG_NET_THREASHOLD = 6 * 60 * 60 * 1000 * 1000L; // 6hours
+  static const int64_t SLOW_COMPACTION_DAG_NET_THREASHOLD = INT64_C(6) * 60 * 60 * 1000 * 1000; // 6hours
   static const int64_t LOOP_PRINT_LOG_INTERVAL = 30 * 1000 * 1000L; // 30s
 
 private:
@@ -1259,7 +1259,7 @@ private:
                           common::hash::equal_to<const ObIDag *> > DagMap;
   static const int32_t COMPACTION_DAG_RERANK_FACTOR = 10;
   static const int64_t DUMP_STATUS_INTERVAL = 10 * 1000LL * 1000LL;
-  static const int64_t TASK_MAY_HANG_INTERVAL = 90 * 60 * 1000L * 1000L; // 90 min
+  static const int64_t TASK_MAY_HANG_INTERVAL = INT64_C(90) * 60 * 1000 * 1000; // 90 min
 private:
   DagMap dag_map_;
   DagList dag_list_[DAG_LIST_MAX];

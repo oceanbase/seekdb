@@ -17,7 +17,12 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "lib/alloc/memory_dump.h"
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
+#ifndef _WIN32
 #include <setjmp.h>
+#endif
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/thread/thread_mgr.h"
 #include "lib/container/ob_vector.h"
@@ -36,6 +41,7 @@ void get_tenant_ids(uint64_t *ids, int cap, int &cnt)
   ids[cnt++] = OB_SYS_TENANT_ID;
 }
 
+#ifndef _WIN32
 RLOCAL(sigjmp_buf, jmp);
 
 static void dump_handler(int sig, siginfo_t *s, void *p)
@@ -46,12 +52,13 @@ static void dump_handler(int sig, siginfo_t *s, void *p)
     ob_signal_handler(sig, s, p);
   }
 }
+#endif
 
 template<typename Function>
 void do_with_segv_catch(Function &&func, bool &has_segv, decltype(func()) &ret)
 {
   has_segv = false;
-
+#ifndef _WIN32
   signal_handler_t handler_bak = get_signal_handler();
   int js = sigsetjmp(jmp, 1);
   if (0 == js) {
@@ -64,6 +71,9 @@ void do_with_segv_catch(Function &&func, bool &has_segv, decltype(func()) &ret)
     ob_abort();
   }
   get_signal_handler() = handler_bak;
+#else
+  ret = func();
+#endif
 }
 
 
@@ -631,7 +641,11 @@ void ObMemoryDump::handle(void *task)
   } else {
     int fd = -1;
     if (-1 == (fd = ::open(LOG_FILE,
-                           O_CREAT | O_WRONLY | O_APPEND, S_IRUSR | S_IWUSR))) {
+                           O_CREAT | O_WRONLY | O_APPEND
+#ifdef _WIN32
+                           | _O_BINARY
+#endif
+                           , S_IRUSR | S_IWUSR))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("create new file failed", KCSTRING(strerror(errno)));
     }
@@ -640,7 +654,20 @@ void ObMemoryDump::handle(void *task)
       struct timeval tv;
       gettimeofday(&tv, NULL);
       struct tm tm;
+#ifndef _WIN32
       ::localtime_r((const time_t *) &tv.tv_sec, &tm);
+#else
+      {
+        time_t sec = tv.tv_sec;
+        if (sec < 0) sec = 0;
+        errno_t err = ::localtime_s(&tm, &sec);
+        if (err != 0) {
+          memset(&tm, 0, sizeof(tm));
+          tm.tm_year = 70;
+          tm.tm_mday = 1;
+        }
+      }
+#endif
       ret = databuff_printf(print_buf_, PRINT_BUF_LEN, print_pos,
           "\n###################%04d-%02d-%02d %02d:%02d:%02d.%06ld###################\n",
           tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,

@@ -1424,12 +1424,20 @@ int ObPxTransmitOp::link_ch_sets(ObPxTaskChSet &ch_set,
         seed[0] = static_cast<uint16_t>(GETTID());
         seed[1] = static_cast<uint16_t>(time & 0x0000FFFF);
         seed[2] = static_cast<uint16_t>((time & 0xFFFF0000) >> 16);
+#ifdef _WIN32
+        srand(static_cast<unsigned int>(seed[0] | (seed[1] << 16)));
+#else
         seed48(seed);
+#endif
       }
       bool failed_in_push_back_to_channels = false;
       for (int64_t idx = 0; OB_SUCC(ret) && idx < ch_set.count(); ++idx) {
         dtl::ObDtlChannel *ch = NULL;
+#ifdef _WIN32
+        hash_val = rand();
+#else
         hash_val = jrand48(seed);
+#endif
         if (OB_FAIL(ch_set.get_channel_info(idx, ci))) {
           LOG_WARN("fail get channel info", K(idx), K(ret));
         } else if (nullptr != dfc && ci.type_ == DTL_CT_LOCAL) {

@@ -17,6 +17,12 @@
 
 #include "block_set.h"
 #include "lib/alloc/ob_tenant_ctx_allocator.h"
+#ifdef _WIN32
+#include <windows.h>
+#ifndef MADV_DONTNEED
+#define MADV_DONTNEED 4
+#endif
+#endif
 
 // macOS sys/param.h defines isset macro which conflicts with method calls
 #ifdef isset
@@ -321,6 +327,19 @@ void BlockSet::free_chunk(AChunk *const chunk)
   }
 }
 
+#ifdef _WIN32
+inline int ob_madvise(void* addr, size_t length, int advice) {
+  // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
+  // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages committed
+  // but tells the OS their contents are no longer needed — matching Linux
+  // madvise(MADV_DONTNEED) semantics where pages remain accessible.
+  if (advice == MADV_DONTNEED) {
+      return ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE) != NULL ? 0 : -1;
+  }
+  return 0;
+}
+#endif
+
 int64_t BlockSet::sync_wash(int64_t wash_size)
 {
 #if !defined(MADV_DONTNEED)
@@ -359,7 +378,11 @@ int64_t BlockSet::sync_wash(int64_t wash_size)
           } else {
             int result = 0;
             do {
+#ifndef _WIN32
               result = ::madvise(data, len, MADV_DONTNEED);
+#else
+              result = ob_madvise(data, len, MADV_DONTNEED);
+#endif
             } while (result == -1 && errno == EAGAIN);
             if (-1 == result) {
               _OB_LOG_RET(WARN, OB_ERR_SYS, "madvise failed, errno: %d", errno);

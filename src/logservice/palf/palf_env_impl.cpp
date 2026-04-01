@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX PALF
 #include "palf_env_impl.h"
+#ifdef _WIN32
+#include <direct.h>
+#endif
 #include "palf_handle.h"
 #include "share/ob_local_device.h"                            // ObLocalDevice
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
@@ -549,13 +552,25 @@ int PalfEnvImpl::create_directory(const char *base_dir)
   } else if (0 > (pret = snprintf(meta_dir, MAX_PATH_SIZE, "%s/meta", tmp_base_dir))) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "snprinf failed", K(pret), K(base_dir));
+#ifdef _WIN32
+  } else if (-1 == (::_mkdir(tmp_base_dir))) {
+#else
   } else if (-1 == (::mkdir(tmp_base_dir, mode))) {
+#endif
     ret = convert_sys_errno();
     PALF_LOG(WARN, "mkdir failed", K(ret), K(errno), K(tmp_base_dir), K(base_dir));
+#ifdef _WIN32
+  } else if (-1 == (::_mkdir(log_dir))) {
+#else
   } else if (-1 == (::mkdir(log_dir, mode))) {
+#endif
     ret = convert_sys_errno();
     PALF_LOG(WARN, "mkdir failed", K(ret), K(errno), K(tmp_base_dir), K(base_dir));
+#ifdef _WIN32
+  } else if (-1 == (::_mkdir(meta_dir))) {
+#else
   } else if (-1 == (::mkdir(meta_dir, mode))) {
+#endif
     ret = convert_sys_errno();
     PALF_LOG(WARN, "mkdir failed", K(ret), K(errno), K(tmp_base_dir), K(base_dir));
   } else if (OB_FAIL(rename_with_retry(tmp_base_dir, base_dir))) {
@@ -1232,7 +1247,11 @@ int PalfEnvImpl::move_incomplete_palf_into_tmp_dir_(const int64_t palf_id)
         K(palf_id), KPC(this));;
   } else if (OB_FAIL(check_tmp_log_dir_exist_(tmp_dir_exist))) {
     PALF_LOG(WARN, "check_tmp_log_dir_exist_ failed", K(ret), KPC(this), K(tmp_log_dir_));
+#ifdef _WIN32
+  } else if (false == tmp_dir_exist && (-1 == ::_mkdir(tmp_log_dir_))) {
+#else
   } else if (false == tmp_dir_exist && (-1 == ::mkdir(tmp_log_dir_, mode))) {
+#endif
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "mkdir tmp log dir failed", K(ret), KPC(this), K(tmp_log_dir_));
   } else if (0 > (pret = snprintf(src_log_dir, MAX_PATH_SIZE, "%s/%ld", log_dir_, palf_id))) {

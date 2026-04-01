@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define USING_LOG_PREFIX TRANSACTION 
+#define USING_LOG_PREFIX TRANS
 
 #include "ob_ts_response_handler.h"
 #include "ob_ts_mgr.h"

@@ -17,8 +17,34 @@
 #ifndef OCEANBASE_STORAGE_UTL_FILE_OB_UTL_CONSTANTS_H_
 #define OCEANBASE_STORAGE_UTL_FILE_OB_UTL_CONSTANTS_H_
 
+#ifdef _WIN32
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <io.h>
+#include <fcntl.h>
+#ifndef S_IRUSR
+#define S_IRUSR _S_IREAD
+#endif
+#ifndef S_IWUSR
+#define S_IWUSR _S_IWRITE
+#endif
+#ifndef S_IRGRP
+#define S_IRGRP 0
+#endif
+#ifndef S_IWGRP
+#define S_IWGRP 0
+#endif
+#ifndef S_IROTH
+#define S_IROTH 0
+#endif
+#ifndef S_IWOTH
+#define S_IWOTH 0
+#endif
+typedef int mode_t;
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 #include "lib/alloc/alloc_assist.h"
 
 namespace oceanbase

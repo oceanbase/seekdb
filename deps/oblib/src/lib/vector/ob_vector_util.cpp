@@ -16,6 +16,12 @@
 
 #define USING_LOG_PREFIX LIB
 
+#ifdef _WIN32
+#ifndef OB_BUILD_CDC_DISABLE_VSAG
+#define OB_BUILD_CDC_DISABLE_VSAG
+#endif
+#endif
+
 #include "ob_vector_util.h"
 #include "lib/string/ob_string.h"
 

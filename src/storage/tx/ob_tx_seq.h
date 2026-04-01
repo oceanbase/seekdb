@@ -127,10 +127,10 @@ private:
         uint64_t seq_v0_     :62;
       };
       struct { // new_version
-        uint16_t branch_     :15;
+        uint64_t branch_     :15;
         uint64_t seq_        :47;
-        bool     n_format_   :1;
-        int     _sign_       :1;
+        uint64_t n_format_   :1;
+        uint64_t _sign_      :1;
       };
     };
   };

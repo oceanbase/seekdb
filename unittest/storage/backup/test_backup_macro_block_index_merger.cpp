@@ -131,7 +131,7 @@ public:
   {
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
     // ASSERT_EQ(OB_SUCCESS, ObDeviceManager::get_instance().init_devices_env());
-    // EXPECT_EQ(0, ObIOManager::get_instance().init(1024L * 1024L * 1024L, 10));
+    // EXPECT_EQ(0, ObIOManager::get_instance().init(1LL * 1024 * 1024 * 1024, 10));
   }
   static void TearDownTestCase()
   {
@@ -193,7 +193,7 @@ void TestBackupMacroIndexMerger::SetUp()
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
   TestDataFilePrepare::SetUp();
 
-  ret = getter.add_tenant(1, 8L * 1024L * 1024L, 2L * 1024L * 1024L * 1024L);
+  ret = getter.add_tenant(1, 8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024);
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
@@ -202,7 +202,7 @@ void TestBackupMacroIndexMerger::SetUp()
     EXPECT_EQ(OB_SUCCESS, ret);
   }
   // set observer memory limit
-  CHUNK_MGR.set_limit(8L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(8LL * 1024 * 1024 * 1024);
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache", 1));
 
   static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);

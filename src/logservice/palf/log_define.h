@@ -26,6 +26,15 @@
 #define O_DIRECT 0
 #endif
 #endif
+#ifdef _WIN32
+// Windows doesn't support O_DIRECT and O_SYNC
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#ifndef O_SYNC
+#define O_SYNC 0
+#endif
+#endif
 #include "lib/ob_errno.h"                                // errno
 #include "lib/utility/ob_print_utils.h"                  // databuff_printf
 #include "lib/container/ob_fixed_array.h"                // ObFixedArray

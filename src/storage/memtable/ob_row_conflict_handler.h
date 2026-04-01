@@ -43,8 +43,8 @@ class ObDatumRowkey;
 }
 namespace storage
 {
-class ObTableIterParam;
-class ObTableAccessContext;
+struct ObTableIterParam;
+struct ObTableAccessContext;
 class ObStoreRowLockState;
 class ObTxTableGuards;
 

@@ -3841,7 +3841,7 @@ void ObTabletDirectLoadSliceGroup::reset()
 int ObTabletDirectLoadSliceGroup::init(const int64_t task_cnt)
 {
   int ret = OB_SUCCESS;
-  const int64_t memory_limit = 1024L * 1024L * 1024L * 10L; // 10GB
+  const int64_t memory_limit = 1024LL * 1024LL * 1024LL * 10LL; // 10GB
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(lbt()));

@@ -16,6 +16,10 @@
 
 #include "ob_tsc_timestamp.h"
 #include "lib/oblog/ob_log.h"
+#ifdef _WIN32
+#include "lib/hash/ob_hashutils.h"
+#include <windows.h>
+#endif
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -82,6 +86,25 @@ int64_t ObTscTimestamp::fast_current_time()
 
 
 #if defined(__x86_64__)
+#ifdef _WIN32
+uint64_t ObTscTimestamp::get_cpufreq_khz_()
+{
+  uint64_t freq_khz = 0;
+  HKEY hKey;
+  DWORD mhz = 0;
+  DWORD size = sizeof(mhz);
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+                    "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                    0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+    if (RegQueryValueExA(hKey, "~MHz", NULL, NULL, (LPBYTE)&mhz, &size) == ERROR_SUCCESS) {
+      freq_khz = (uint64_t)mhz * 1000ULL;
+    }
+    RegCloseKey(hKey);
+  }
+  LIB_LOG(INFO, "TSC freq : ", K(freq_khz));
+  return freq_khz;
+}
+#else
 uint64_t ObTscTimestamp::get_cpufreq_khz_()
 {
   int ret = OB_SUCCESS;
@@ -109,6 +132,7 @@ uint64_t ObTscTimestamp::get_cpufreq_khz_()
   LIB_LOG(INFO, "TSC freq : ", K(freq_khz));
   return freq_khz;
 }
+#endif
 
 // judge if it support tsc, entry is CPUID.80000007H:EDX[8].
 bool ObTscTimestamp::is_support_invariant_tsc_()

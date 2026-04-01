@@ -20,11 +20,15 @@
 
 #ifdef __linux__
 #include <byteswap.h>
-#else
+#elif defined(__APPLE__)
 #include <libkern/OSByteOrder.h>
 #define bswap_16(x) OSSwapInt16(x)
 #define bswap_32(x) OSSwapInt32(x)
 #define bswap_64(x) OSSwapInt64(x)
+#elif defined(_WIN32)
+#define bswap_16(x) _byteswap_ushort(x)
+#define bswap_32(x) _byteswap_ulong(x)
+#define bswap_64(x) _byteswap_uint64(x)
 #endif
 #include "lib/utility/ob_tracepoint.h"
 #include "rpc/obrpc/ob_rpc_proxy.h"

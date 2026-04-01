@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "common/ob_target_specific.h"
+#include <cstdio>
 
 namespace oceanbase
 {

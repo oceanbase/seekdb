@@ -227,14 +227,17 @@ struct AllocSpecHelper
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(type), LITERAL_K(TYPE), K(child_cnt));
     } else {
-      const int64_t alloc_size = child_cnt * sizeof(SpecType *) + sizeof(SpecType);
+      const int64_t child_ptrs_bytes = child_cnt * sizeof(SpecType *);
+      const int64_t aligned_child_ptrs_bytes = (child_ptrs_bytes + 15) & ~15;
+      const int64_t alloc_size = aligned_child_ptrs_bytes + sizeof(SpecType);
       ObOpSpec **mem = static_cast<ObOpSpec **>(alloc.alloc(alloc_size));
       if (OB_ISNULL(mem)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc memory failed", K(ret), K(alloc_size));
       } else {
         memset(mem, 0, sizeof(SpecType *) * child_cnt);
-        spec = new (&mem[child_cnt]) SpecType(alloc, type);
+        void *spec_addr = reinterpret_cast<char *>(mem) + aligned_child_ptrs_bytes;
+        spec = new (spec_addr) SpecType(alloc, type);
         if (OB_FAIL(spec->set_children_pointer(mem, child_cnt))) {
           LOG_WARN("set children pointer failed", K(ret));
           spec->~ObOpSpec();
@@ -266,7 +269,9 @@ struct AllocOpHelper
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), LITERAL_K(TYPE), K(child_cnt));
     } else {
-      const int64_t alloc_size = child_cnt * sizeof(OpType *) + sizeof(OpType);
+      const int64_t child_ptrs_bytes = child_cnt * sizeof(OpType *);
+      const int64_t aligned_child_ptrs_bytes = (child_ptrs_bytes + 15) & ~15;
+      const int64_t alloc_size = aligned_child_ptrs_bytes + sizeof(OpType);
       ObOperator **mem = static_cast<ObOperator **>(alloc.alloc(alloc_size));
       if (OB_ISNULL(mem)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -275,7 +280,8 @@ struct AllocOpHelper
         if (child_cnt > 0) {
           memset(mem, 0, sizeof(OpType *) * child_cnt);
         }
-        op = new (&mem[child_cnt]) OpType(exec_ctx, spec, input);
+        void *op_addr = reinterpret_cast<char *>(mem) + aligned_child_ptrs_bytes;
+        op = new (op_addr) OpType(exec_ctx, spec, input);
         if (OB_FAIL(op->set_children_pointer(mem, child_cnt))
             || OB_FAIL(op->init())) {
           LOG_WARN("set children pointer or init failed", K(ret));

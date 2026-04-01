@@ -232,7 +232,7 @@ friend class observer::ObGVSql;
 
 public:
   static const int64_t MAX_PLAN_SIZE = 20*1024*1024; //20M
-  static const int64_t MAX_PLAN_CACHE_SIZE = 5*1024L*1024L*1024L; // 5G
+  static const int64_t MAX_PLAN_CACHE_SIZE = 5*1024LL*1024LL*1024LL; // 5G
   static const int64_t EVICT_KEY_NUM = 8;
   static const int64_t MAX_TENANT_MEM = ((int64_t)(1) << 40); // 1T
   typedef common::hash::ObHashMap<ObILibCacheKey*, ObILibCacheNode*> CacheKeyNodeMap;

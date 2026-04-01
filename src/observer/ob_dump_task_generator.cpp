@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_dump_task_generator.h"
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 #include "lib/alloc/memory_dump.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 #include "sql/parser/ob_parser.h"
@@ -147,7 +150,11 @@ void ObDumpTaskGenerator::dump_memory_leak()
   int ret = OB_SUCCESS;
   int fd = -1;
   if (-1 == (fd = ::open(ObMemoryDump::LOG_FILE,
-                         O_CREAT | O_WRONLY | O_APPEND, S_IRUSR | S_IWUSR))) {
+                         O_CREAT | O_WRONLY | O_APPEND
+#ifdef _WIN32
+                         | _O_BINARY
+#endif
+                         , S_IRUSR | S_IWUSR))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("create new file failed", K(strerror(errno)));
   } else {

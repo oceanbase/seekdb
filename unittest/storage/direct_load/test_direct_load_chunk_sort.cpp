@@ -417,13 +417,13 @@ void TestChunkSort::SetUp()
   const int64_t bucket_num = 1024;
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
-  ASSERT_EQ(OB_SUCCESS, getter.add_tenant(1, 8L * 1024L * 1024L, 2L * 1024L * 1024L * 1024L));
+  ASSERT_EQ(OB_SUCCESS, getter.add_tenant(1, 8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024));
   if (OB_FAIL(ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size))) {
     ASSERT_EQ(OB_INIT_TWICE, ret);
     ret = OB_SUCCESS;
   }
   // set observer memory limit
-  CHUNK_MGR.set_limit(8L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(8LL * 1024 * 1024 * 1024);
   EXPECT_EQ(OB_SUCCESS, init_tenant_mgr());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
 

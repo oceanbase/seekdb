@@ -46,7 +46,7 @@ class ObSequenceCache;
 namespace observer
 {
 class ObTableLoadTableCtx;
-class ObTableLoadStoreTrans;
+struct ObTableLoadStoreTrans;
 class ObTableLoadTransCtx;
 class ObTableLoadTransStore;
 class ObITableLoadTaskScheduler;

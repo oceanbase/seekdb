@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX PL
 
 #include "core/jit_context.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/Support/TargetSelect.h"
 #include "objit/ob_llvm_helper.h"
 
@@ -60,6 +62,13 @@ namespace jit
 
 typedef ObIRType* (*ObGetIRType)(ObIRContext&, ...);
 typedef ObIRValue* (*ObGetIRConst)(ObIRContext&, const common::ObObj&);
+
+#if LLVM_VERSION_MAJOR >= 18
+static ObIRType* ob_getPtrTy(ObIRContext &C, ...) {
+  return llvm::PointerType::getUnqual(C);
+}
+#endif
+
 static ObGetIRType OB_IR_TYPE[common::ObMaxType + 1] =
 {
   NULL,                                                   //0.ObNullType
@@ -77,16 +86,27 @@ static ObGetIRType OB_IR_TYPE[common::ObMaxType + 1] =
   reinterpret_cast<ObGetIRType>(ObIRType::getDoubleTy),   //12.ObDoubleType
   reinterpret_cast<ObGetIRType>(ObIRType::getFloatTy),    //13.ObUFloatType
   reinterpret_cast<ObGetIRType>(ObIRType::getDoubleTy),   //14.ObUDoubleType
+#if LLVM_VERSION_MAJOR >= 18
+  reinterpret_cast<ObGetIRType>(ob_getPtrTy), //15.ObNumberType
+  reinterpret_cast<ObGetIRType>(ob_getPtrTy), //16.ObUNumberType
+#else
   reinterpret_cast<ObGetIRType>(ObIRType::getInt32PtrTy), //15.ObNumberType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt32PtrTy), //16.ObUNumberType
+#endif
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //17.ObDateTimeType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //18.ObTimestampType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //19.ObDateType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //20.ObTimeType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //21.ObYearType
+#if LLVM_VERSION_MAJOR >= 18
+  reinterpret_cast<ObGetIRType>(ob_getPtrTy),  //22.ObVarcharType
+  reinterpret_cast<ObGetIRType>(ob_getPtrTy),  //23.ObCharType
+  reinterpret_cast<ObGetIRType>(ob_getPtrTy),  //24.ObHexStringType
+#else
   reinterpret_cast<ObGetIRType>(ObIRType::getInt8PtrTy),  //22.ObVarcharType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt8PtrTy),  //23.ObCharType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt8PtrTy),  //24.ObHexStringType
+#endif
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //25.ObExtendType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //26.ObUnknownType
   NULL,                                                   //27.ObTinyTextType
@@ -96,8 +116,13 @@ static ObGetIRType OB_IR_TYPE[common::ObMaxType + 1] =
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //31.ObBitType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //32.ObEnumType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt64Ty),    //33.ObSetType
+#if LLVM_VERSION_MAJOR >= 18
+  reinterpret_cast<ObGetIRType>(ob_getPtrTy),  //34.ObEnumInnerType
+  reinterpret_cast<ObGetIRType>(ob_getPtrTy),  //35.ObSetInnerType
+#else
   reinterpret_cast<ObGetIRType>(ObIRType::getInt8PtrTy),  //34.ObEnumInnerType
   reinterpret_cast<ObGetIRType>(ObIRType::getInt8PtrTy),  //35.ObSetInnerType
+#endif
   NULL,                                                    //47.ObJsonType
   NULL,                                                    //48.ObGeometryType
   NULL,                                                    //49.ObUserDefinedSQLType
@@ -545,7 +570,7 @@ int ObLLVMHelper::initialize()
 
 /*Do not juse use !defined(__aarch64__) here*/
 //#if !defined(__aarch64__)
-#if defined(__x86_64__)
+#if defined(__x86_64__) && !defined(_WIN32)
   // initialize LLVM X86 unfold table
   llvm::lookupUnfoldTable(0);
 #endif
@@ -2001,13 +2026,19 @@ int ObLLVMHelper::get_llvm_type(common::ObObjType obj_type, ObLLVMType &type)
       case common::ObHexStringType:  // 24
       case common::ObEnumInnerType:  // 34
       case common::ObSetInnerType:   // 35
-        // These are string/char pointer types - use getInt8PtrTy with explicit address space 0
+#if LLVM_VERSION_MAJOR >= 18
+        llvm_type = llvm::PointerType::getUnqual(ctx);
+#else
         llvm_type = llvm::Type::getInt8PtrTy(ctx, 0);
+#endif
         break;
       case common::ObNumberType:     // 15
       case common::ObUNumberType:    // 16
-        // Number types use int32 pointer
+#if LLVM_VERSION_MAJOR >= 18
+        llvm_type = llvm::PointerType::getUnqual(ctx);
+#else
         llvm_type = llvm::Type::getInt32PtrTy(ctx, 0);
+#endif
         break;
       default:
         // For non-pointer types, use the original array approach

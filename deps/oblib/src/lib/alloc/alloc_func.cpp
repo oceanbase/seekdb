@@ -226,7 +226,8 @@ int set_rpc_limit(uint64_t tenant_id, int64_t rpc_pct_lmt)
 
 bool errsim_alloc(const ObMemAttr &attr)
 {
-  bool bret = OB_SUCCESS != EventTable::EN_4;
+  int en4_val = (int)EventTable::EN_4;
+  bool bret = OB_SUCCESS != en4_val;
 #ifdef ERRSIM
   const ObErrsimModuleType type = THIS_WORKER.get_module_type();
   if (is_errsim_module(attr.tenant_id_, type.type_)) {

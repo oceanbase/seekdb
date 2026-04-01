@@ -27,6 +27,9 @@
 
 namespace oceanbase
 {
+#ifdef _WIN32
+namespace lib { class Thread; }
+#endif
 namespace common
 {
 using lib::BlockSet;
@@ -38,7 +41,11 @@ using lib::ObTenantCtxAllocator;
 
 class ObPageManager : public lib::IBlockMgr
 {
+#ifdef _WIN32
+  friend class ::oceanbase::lib::Thread;
+#else
   friend class Thread;
+#endif
 public:
   ObPageManager();
   ~ObPageManager() {}

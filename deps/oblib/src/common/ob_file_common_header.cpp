@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "common/ob_file_common_header.h"
 #include "common/ob_record_header.h" // format_i32 and format_i64
 

@@ -46,7 +46,7 @@ ObStorageSchemaRecorder::ObStorageSchemaRecorder()
     table_id_(0),
     max_column_cnt_(0)
 {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && !defined(_WIN32)
   STATIC_ASSERT(sizeof(ObStorageSchemaRecorder) <= 128, "size of schema recorder is oversize");
 #endif
 }

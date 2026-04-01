@@ -91,7 +91,7 @@ target_link_libraries(ob_admin
   $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--end-group>
   $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
   $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:malloc_hook>)
+  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:malloc_hook>)
 
 if(ENABLE_THIN_LTO AND USE_LTO_CACHE)
   add_dependencies(ob_admin observer)

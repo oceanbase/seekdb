@@ -26,6 +26,10 @@ namespace oceanbase
 namespace common
 {
 
+#ifdef _WIN32
+extern bool g_ob_log_main_entered;
+#endif
+
 int64_t calc_slot_num(int64_t cpu_count)
 {
   constexpr int64_t DEFAULT_MAX_SLOT_NUM = 32;
@@ -33,12 +37,17 @@ int64_t calc_slot_num(int64_t cpu_count)
   // slot num is power of 2
   int64_t slot_num =
       min(DEFAULT_MAX_SLOT_NUM, max(DEFAULT_MIN_SLOT_NUM /*lower bound*/, cpu_count));
-  slot_num = slot_num <= 2 ?  slot_num : (1UL << 63) >> (__builtin_clzll(slot_num - 1) - 1);
+  slot_num = slot_num <= 2 ?  slot_num : (1ULL << 63) >> (__builtin_clzll(slot_num - 1) - 1);
   return slot_num;
 }
 
 __attribute__((constructor)) void init_global_di_container()
 {
+#ifdef _WIN32
+  // On Windows, skip if called during static init (constructor attribute).
+  // When called explicitly from main(), g_ob_log_main_entered will be true.
+  if (!g_ob_log_main_entered) return;
+#endif
   int ret = OB_SUCCESS;
   // make static variable ObFixedClassAllocator construct before get_global_di_container
   // so that it deconstruct after.

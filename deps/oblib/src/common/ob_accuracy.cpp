@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
 #include "ob_accuracy.h"
 #include "lib/number/ob_number_v2.h"
 

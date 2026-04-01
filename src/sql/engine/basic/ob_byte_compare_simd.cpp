@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <cstdlib>
 
-#if defined(__x86_64__)
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
 #include <immintrin.h>
 #endif
 
@@ -34,7 +34,7 @@ int fast_compare_simd(const unsigned char *s,
                       int64_t &differ_at,
                       int64_t cache_ends)
 {
-#if defined(__x86_64__)
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
   __m128i vs = _mm_loadu_si128((__m128i *)&s[0]);
   __m128i vt = _mm_loadu_si128((__m128i *)&t[0]);
   __mmask16 x = _mm_cmpeq_epi8_mask(vs, vt);

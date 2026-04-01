@@ -19,7 +19,9 @@
 #include "dump/ob_admin_dump_block.h"
 #include "cmd_args_parser.h"
 #include <fstream>
-
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 
 namespace oceanbase
 {
@@ -164,7 +166,11 @@ int ObAdminLogExecutor::dump_all_blocks_(int argc, char **argv, LogFormatFlag fl
     } else {
       char tmp_file[MAX_PATH_SIZE]={0};
       snprintf(tmp_file, MAX_PATH_SIZE, "%s.tmp", argv[0]);
-      int fd = ::open(tmp_file, O_CREAT | O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+      int fd = ::open(tmp_file, O_CREAT | O_RDWR | O_TRUNC
+#ifdef _WIN32
+          | _O_BINARY
+#endif
+          , S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
       if (-1 == fd) {
         ret = OB_IO_ERROR;
         LOG_INFO("failed to create tmp_file", K(tmp_file));

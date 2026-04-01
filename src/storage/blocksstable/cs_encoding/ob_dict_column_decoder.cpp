@@ -1604,7 +1604,7 @@ int ObDictColumnDecoder::do_const_only_operator(
 {
   int ret = OB_SUCCESS;
   ObDictValueIterator dict_iter = ObDictValueIterator(&ctx, 0, filter.is_padding_mode());
-  ObStorageDatum &const_datum = *dict_iter;
+  ObStorageDatum const_datum = *dict_iter;
   const common::ObIArray<common::ObDatum> &ref_datums = filter.get_datums();
   ObDatumCmpFuncType cmp_func = filter.cmp_func_;
 
@@ -1768,7 +1768,7 @@ int ObDictColumnDecoder::comparison_const_operator(
     // skip null
   } else {
     ObDictValueIterator dict_iter = ObDictValueIterator(&ctx, 0, filter.is_padding_mode());
-    ObStorageDatum &const_datum = *(dict_iter + const_ref_desc.const_ref_);
+    ObStorageDatum const_datum = *(dict_iter + const_ref_desc.const_ref_);
     if (OB_FAIL(compare_datum(const_datum, filter_datum, cmp_func,
                sql::ObPushdownWhiteFilterNode::WHITE_OP_TO_CMP_OP[op_type], cmp_ret))) {
       LOG_WARN("Failed to compare datum", K(ret), K(const_datum), K(filter_datum),
@@ -1843,7 +1843,7 @@ int ObDictColumnDecoder::bt_const_operator(
     // skip null
   } else {
     ObDictValueIterator dict_iter = ObDictValueIterator(&ctx, 0, filter.is_padding_mode());
-    ObStorageDatum &const_datum = *(dict_iter + const_ref_desc.const_ref_);
+    ObStorageDatum const_datum = *(dict_iter + const_ref_desc.const_ref_);
     int left_cmp_ret = 0;
     int right_cmp_ret = 0;
     if (OB_FAIL(cmp_func(const_datum, left_ref_datum, left_cmp_ret))) {
@@ -1870,7 +1870,7 @@ int ObDictColumnDecoder::bt_const_operator(
     ObDictValueIterator end_iter = ObDictValueIterator(&ctx, dict_val_cnt, filter.is_padding_mode());
     int64_t tmp_idx = 0;
     while (OB_SUCC(ret) && (mv_iter != end_iter)) {
-      ObStorageDatum &mv_datum = *mv_iter;
+      ObStorageDatum mv_datum = *mv_iter;
       int left_cmp_ret = 0;
       int right_cmp_ret = 0;
       if (OB_FAIL(cmp_func(mv_datum, left_ref_datum, left_cmp_ret))) {
@@ -1917,7 +1917,7 @@ int ObDictColumnDecoder::in_const_operator(
     // skip null
   } else {
     ObDictValueIterator dict_iter = ObDictValueIterator(&ctx, 0, filter.is_padding_mode());
-    ObStorageDatum &const_datum = *(dict_iter + const_ref_desc.const_ref_);
+    ObStorageDatum const_datum = *(dict_iter + const_ref_desc.const_ref_);
     if (OB_FAIL(filter.exist_in_set(const_datum, is_const_result_set))) {
       LOG_WARN("fail to check whether const value is in set", KR(ret), K(const_datum));
     } else if (is_const_result_set) {
@@ -2287,8 +2287,9 @@ int ObDictColumnDecoder::get_aggregate_result(
     } else if (row_cap == dict_ctx.micro_block_header_->row_count_) { // cover whole microblock
       if (dict_ctx.dict_meta_->is_sorted() && (agg_cell.is_min_agg() || agg_cell.is_max_agg())) { // int dict must be sorted
         ObDictValueIterator res_iter = ObDictValueIterator(&dict_ctx, agg_cell.is_min_agg() ? 0 : dict_val_cnt - 1, col_ctx.is_padding_mode_);
-        if (OB_FAIL(agg_cell.eval(*res_iter))) {
-          LOG_WARN("Failed to eval agg cell", KR(ret), K(*res_iter), K(agg_cell));
+        ObStorageDatum res_datum = *res_iter;
+        if (OB_FAIL(agg_cell.eval(res_datum))) {
+          LOG_WARN("Failed to eval agg cell", KR(ret), K(res_datum), K(agg_cell));
         }
       } else if (OB_FAIL(traverse_datum_dict_agg(dict_ctx, col_ctx.is_padding_mode_, agg_cell))) {
         LOG_WARN("Failed to traverse datum dict to aggregate", KR(ret), K(dict_ctx));
@@ -2321,8 +2322,9 @@ int ObDictColumnDecoder::traverse_datum_dict_agg(
   ObDictValueIterator mv_iter = ObDictValueIterator(&ctx, 0, is_padding_mode);
   ObDictValueIterator end_iter = ObDictValueIterator(&ctx, dict_val_cnt, is_padding_mode);
   while (OB_SUCC(ret) && mv_iter != end_iter) {
-    if (OB_FAIL(agg_cell.eval(*mv_iter))) {
-      LOG_WARN("Failed to eval agg cell", KR(ret), K(*mv_iter), K(agg_cell));
+    ObStorageDatum mv_datum = *mv_iter;
+    if (OB_FAIL(agg_cell.eval(mv_datum))) {
+      LOG_WARN("Failed to eval agg cell", KR(ret), K(mv_datum), K(agg_cell));
     }
     ++mv_iter;
   }

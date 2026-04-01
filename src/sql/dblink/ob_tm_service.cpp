@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-#include "sql/dblink/ob_tm_service.h"
-
 #define USING_LOG_PREFIX SQL
+#include "sql/dblink/ob_tm_service.h"
 
 namespace oceanbase
 {

@@ -813,7 +813,7 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
 void ObSQLSessionInfo::refresh_temp_tables_sess_active_time()
 {
   int ret = OB_SUCCESS;
-  const int64_t REFRESH_INTERVAL = 60L * 60L * 1000L * 1000L; // 1hr
+  const int64_t REFRESH_INTERVAL = 60LL * 60 * 1000 * 1000; // 1hr
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   if (get_has_temp_table_flag() && is_obproxy_mode()) {
     int64_t now = ObTimeUtility::current_time();

@@ -103,8 +103,14 @@ class ObTxDataOp;
 //
 
 static const int TX_DATA_SLICE_SIZE = 128;
+#ifdef _WIN32
+// Windows: ObUndoAction has different size due to ABI/padding, use sizeof to fit in slice
+static const int TX_DATA_UNDO_ACT_SPACE = TX_DATA_SLICE_SIZE - sizeof(int64_t) - sizeof(void *);
+static const int TX_DATA_UNDO_ACT_MAX_NUM_PER_NODE = TX_DATA_UNDO_ACT_SPACE / sizeof(transaction::ObUndoAction);
+#else
 static const int UNDO_ACTION_SZIE = 16;
 static const int TX_DATA_UNDO_ACT_MAX_NUM_PER_NODE = (TX_DATA_SLICE_SIZE / UNDO_ACTION_SZIE) - 1;
+#endif
 static const int MAX_TX_DATA_MEMTABLE_CNT = 2;
 
 using TxDataMap = ObTxDataHashMap;

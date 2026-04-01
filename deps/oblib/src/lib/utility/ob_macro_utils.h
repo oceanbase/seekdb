@@ -17,6 +17,12 @@
 #ifndef _OB_MACRO_UTILS_H_
 #define _OB_MACRO_UTILS_H_
 
+#ifdef _WIN32
+#define OB_WEAK_SYMBOL
+#else
+#define OB_WEAK_SYMBOL __attribute__((weak))
+#endif
+
 #define SELECT150_(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9,           \
                    _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, \
                    _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, \

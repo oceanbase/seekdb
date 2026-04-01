@@ -24,6 +24,9 @@
 #undef protected
 #ifdef OB_BUILD_SHARED_STORAGE
 #endif
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 
 #define ASSERT_SUCC(ret) ASSERT_EQ((ret), ::oceanbase::common::OB_SUCCESS)
 #define ASSERT_FAIL(ret) ASSERT_NE((ret), ::oceanbase::common::OB_SUCCESS)
@@ -38,15 +41,15 @@ using namespace oceanbase::tmp_file;
 #define TEST_DATA_DIR TEST_ROOT_DIR "/data_dir"
 #define TEST_SSTABLE_DIR TEST_DATA_DIR "/sstable"
 
-static const int64_t IO_MEMORY_LIMIT = 10L * 1024L * 1024L * 1024L;
+static const int64_t IO_MEMORY_LIMIT = 10LL * 1024 * 1024 * 1024;
 static const uint64_t TEST_TENANT_ID = 1;
 
 int init_device(const int64_t media_id, ObLocalDevice &device)
 {
   int ret = OB_SUCCESS;
   const int64_t IO_OPT_COUNT = 6;
-  const int64_t block_size = 1024L * 1024L * 2L; // 2MB
-  const int64_t data_disk_size = 1024L * 1024L * 1024L; // 1GB
+  const int64_t block_size = 2LL * 1024 * 1024; // 2MB
+  const int64_t data_disk_size = 1LL * 1024 * 1024 * 1024; // 1GB
   const int64_t data_disk_percentage = 50L;
   ObIODOpt io_opts[IO_OPT_COUNT];
   io_opts[0].key_ = "data_dir";                   io_opts[0].value_.value_str = oceanbase::MockTenantModuleEnv::get_instance().storage_env_.data_dir_;
@@ -114,7 +117,7 @@ static ObTenantIOConfig default_tenant_io_config()
 {
   ObTenantIOConfig tenant_config;
   tenant_config.param_config_.callback_thread_count_ = 2;
-  tenant_config.param_config_.memory_limit_ = 1024L * 1024L * 1024L;
+  tenant_config.param_config_.memory_limit_ = 1LL * 1024 * 1024 * 1024;
   tenant_config.unit_config_.min_iops_ = 1000;
   tenant_config.unit_config_.max_iops_ = 1000;
   tenant_config.unit_config_.weight_ = 1000;
@@ -264,7 +267,7 @@ TEST_F(TestIOStruct, IOAllocator)
   ASSERT_FALSE(allocator.is_inited_);
 
   // init
-  const int64_t memory_limit = 1024L * 1024L * 1024L; // 1GB
+  const int64_t memory_limit = 1LL * 1024 * 1024 * 1024; // 1GB
   ASSERT_SUCC(allocator.init(TEST_TENANT_ID, memory_limit));
   ASSERT_TRUE(allocator.is_inited_);
 
@@ -772,7 +775,7 @@ TEST_F(TestIOStruct, IOFaultDetector)
 //   virtual void SetUp()
 //   {
 //     //OB_IO_MANAGER.destroy();
-//     const int64_t memory_limit = 10L * 1024L * 1024L * 1024L; // 10GB
+//     const int64_t memory_limit = 10LL * 1024 * 1024 * 1024; // 10GB
 //     //ASSERT_SUCC(OB_IO_MANAGER.init(memory_limit));
 //     //ASSERT_SUCC(OB_IO_MANAGER.start());
 //     // add io device
@@ -838,7 +841,7 @@ TEST_F(TestIOStruct, IOFaultDetector)
 
 TEST_F(TestIOStruct, simple)
 {
-  const int64_t memory_limit = 10L * 1024L * 1024L * 1024L; // 10GB
+  const int64_t memory_limit = 10LL * 1024 * 1024 * 1024; // 10GB
   ASSERT_SUCC(OB_IO_MANAGER.remove_device_channel(&LOCAL_DEVICE_INSTANCE));
   ASSERT_SUCC(OB_IO_MANAGER.add_device_channel(&LOCAL_DEVICE_INSTANCE, 16, 2, 1024));
   ObIOFd fd;
@@ -1162,7 +1165,11 @@ int prepare_file(const char *file_path, const int64_t file_size, int32_t &fd)
     if (OB_FAIL(FileDirectoryUtils::get_file_size(file_path, exist_file_size))) {
       LOG_WARN("get file size failed", K(ret));
     } else if (exist_file_size == file_size) {
-      if ((fd = ::open(file_path, O_DIRECT | O_RDWR)) < 0) {
+      if ((fd = ::open(file_path, O_DIRECT | O_RDWR
+#ifdef _WIN32
+          | _O_BINARY
+#endif
+          )) < 0) {
         ret = OB_IO_ERROR;
         LOG_WARN("fail to open file", K(ret));
       } else {
@@ -1174,7 +1181,11 @@ int prepare_file(const char *file_path, const int64_t file_size, int32_t &fd)
     char cmd[1024] = { 0 };
     sprintf(cmd, "rm -rf %s", file_path);
     system(cmd);
-    if ((fd = ::open(file_path, O_CREAT | O_TRUNC | O_DIRECT | O_RDWR, 0644)) < 0) {
+    if ((fd = ::open(file_path, O_CREAT | O_TRUNC | O_DIRECT | O_RDWR
+#ifdef _WIN32
+        | _O_BINARY
+#endif
+        , 0644)) < 0) {
       ret = OB_IO_ERROR;
       LOG_WARN("fail to create file", K(ret));
     } else {
@@ -1186,7 +1197,7 @@ int prepare_file(const char *file_path, const int64_t file_size, int32_t &fd)
         ret = OB_IO_ERROR;
         LOG_WARN("fail to allocate file", K(ret), K(fd), K(file_size));
       } else {
-        const int64_t buf_size = 1024L * 1024L; // 1MB
+        const int64_t buf_size = 1LL * 1024 * 1024; // 1MB
         const int64_t write_count = file_size / buf_size;
         sprintf(cmd, "dd if=/dev/zero of=%s bs=1M count=%ld", file_path, write_count);
         system(cmd);
@@ -1209,7 +1220,7 @@ TEST_F(TestIOStruct, tenant)
   IOPerfDevice device;
   device.device_id_ = 1;
   strcpy(device.file_path_, "./perf_test");
-  device.file_size_ = 1024L * 1024L * 1024L;
+  device.file_size_ = 1LL * 1024 * 1024 * 1024;
   device.device_handle_ = static_cast<ObLocalDevice *>(&LOCAL_DEVICE_INSTANCE);
   prepare_file(device.file_path_, device.file_size_, device.fd_);
   load.device_ = &device;
@@ -1250,7 +1261,7 @@ TEST_F(TestIOStruct, perf)
   ASSERT_TRUE(perf_loads.count() > 0);
 
   //ObIOManager::get_instance().destroy();
-  const int64_t memory_limit = 30L * 1024L * 1024L * 1024L; // 30GB
+  const int64_t memory_limit = 30LL * 1024 * 1024 * 1024; // 30GB
   const int64_t queue_depth = 100L;
   //ASSERT_SUCC(ObIOManager::get_instance().init(memory_limit, queue_depth, scheduler_config.sender_count_));
   //ASSERT_SUCC(ObIOManager::get_instance().start());
@@ -1322,7 +1333,7 @@ TEST_F(TestIOStruct, alloc_memory)
   ASSERT_TRUE(perf_tenants.count() > 0);
   ASSERT_TRUE(perf_loads.count() > 0);
 
-  const int64_t memory_limit = 30L * 1024L * 1024L * 1024L; // 30GB
+  const int64_t memory_limit = 30LL * 1024 * 1024 * 1024; // 30GB
   const int64_t queue_depth = 100L;
 
   // prepare devices and files
@@ -1338,7 +1349,7 @@ TEST_F(TestIOStruct, alloc_memory)
   // prepare tenant io manager
   for (int64_t i = 0; i < perf_tenants.count(); ++i) {
     IOPerfTenant &curr_config = perf_tenants.at(i);
-    curr_config.config_.param_config_.memory_limit_ = 16L* 1024L * 1024L; //16MB
+    curr_config.config_.param_config_.memory_limit_ = 16LL * 1024 * 1024; //16MB
     ObRefHolder<ObTenantIOManager> tenant_holder;
     ASSERT_SUCC(OB_IO_MANAGER.get_tenant_io_manager(curr_config.tenant_id_, tenant_holder));
     ASSERT_SUCC(tenant_holder.get_ptr()->refresh_group_io_config());
@@ -1381,7 +1392,7 @@ TEST_F(TestIOStruct, IOTracer)
   ASSERT_TRUE(perf_tenants.count() > 0);
   ASSERT_TRUE(perf_loads.count() > 0);
 
-  const int64_t memory_limit = 30L * 1024L * 1024L * 1024L; // 30GB
+  const int64_t memory_limit = 30LL * 1024 * 1024 * 1024; // 30GB
   const int64_t queue_depth = 100L;
 
   // prepare devices and files
@@ -1456,7 +1467,7 @@ TEST_F(TestIOStruct, ModifyIOPS)
   ASSERT_TRUE(perf_tenants.count() > 0);
   ASSERT_TRUE(perf_loads.count() > 0);
 
-  const int64_t memory_limit = 30L * 1024L * 1024L * 1024L; // 30GB
+  const int64_t memory_limit = 30LL * 1024 * 1024 * 1024; // 30GB
   const int64_t queue_depth = 100L;
 
   // prepare devices and files
@@ -1530,7 +1541,7 @@ TEST_F(TestIOStruct, ModifyCallbackThread)
   ASSERT_TRUE(perf_tenants.count() > 0);
   ASSERT_TRUE(perf_loads.count() > 0);
 
-  const int64_t memory_limit = 30L * 1024L * 1024L * 1024L; // 30GB
+  const int64_t memory_limit = 30LL * 1024 * 1024 * 1024; // 30GB
   const int64_t queue_depth = 100L;
 
   // prepare devices and files
@@ -1602,7 +1613,7 @@ TEST_F(TestIOStruct, ModifyGroupIO)
   ASSERT_TRUE(perf_devices.count() > 0);
   ASSERT_TRUE(perf_tenants.count() > 0);
   ASSERT_TRUE(perf_loads.count() > 0);
-  const int64_t memory_limit = 30L * 1024L * 1024L * 1024L; // 30GB
+  const int64_t memory_limit = 30LL * 1024 * 1024 * 1024; // 30GB
   const int64_t queue_depth = 100L;
   // prepare devices and files
   char *device_buf = (char *)malloc(sizeof(ObLocalDevice) * perf_devices.count());
@@ -1676,7 +1687,7 @@ int main(int argc, char **argv)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("io scheduler V2 test begin");
-  set_memory_limit(20L * 1024L * 1024L * 1024L);
+  set_memory_limit(20LL * 1024 * 1024 * 1024);
   GCONF._enable_tree_based_io_scheduler = true;
   oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
   oceanbase::common::ObLogger::get_logger().set_file_name(LOG_FILE_PATH, true);
@@ -1741,7 +1752,11 @@ void write_group_perf_config()
 {
   int fd = -1;
   const char *file_name = GROUP_PERF_CONFIG_FILE;
-  if (0 > (fd = ::open(file_name, O_RDWR | O_CREAT | O_TRUNC, 0644))) {
+  if (0 > (fd = ::open(file_name, O_RDWR | O_CREAT | O_TRUNC
+#ifdef _WIN32
+      | _O_BINARY
+#endif
+      , 0644))) {
     LOG_WARN_RET(OB_ERR_SYS, "open perf config file failed", K(fd), K(file_name));
   } else {
     const char *file_buf =
@@ -1827,7 +1842,7 @@ int parse_group_perf_config(const char *config_file_path,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("scan config file failed", K(ret), K(scan_ret));
         } else {
-          item.file_size_ *= 1024L * 1024L * 1024L;
+          item.file_size_ *= 1LL * 1024 * 1024 * 1024;
           if (OB_UNLIKELY(!item.is_valid())) {
             ret = OB_INVALID_DATA;
             LOG_WARN("invalid data", K(ret), K(item));
@@ -1927,7 +1942,7 @@ int IOPerfRunner::init(const int64_t absolute_ts, const IOPerfLoad &load)
   if (OB_UNLIKELY(!load.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(load));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "perf runner", OB_SERVER_TENANT_ID, 1024L * 1024L * 1024L * 10L))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "perf runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else if (OB_FAIL(handle_queue_.init(1000L * 10000L, &allocator_))) {
     LOG_WARN("init handle queue failed", K(ret));
@@ -2256,7 +2271,7 @@ int IOConfModify::init(int64_t modify_init_ts, int64_t modify_delay_ts, const IO
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", OB_SERVER_TENANT_ID, 1024L * 1024L * 1024L * 10L))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;
@@ -2322,7 +2337,7 @@ int IOGroupModify::init(int64_t modify_init_ts, int64_t modify_delay_ts, const I
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "group modifier", OB_SERVER_TENANT_ID, 1024L * 1024L * 1024L * 10L))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "group modifier", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;
@@ -2381,7 +2396,7 @@ int IOTracerSwitch::init(int64_t switch_init_ts, int64_t switch_delay_ts, const 
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Switch runner", OB_SERVER_TENANT_ID, 1024L * 1024L * 1024L * 10L))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Switch runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;
@@ -2438,7 +2453,7 @@ int IOCallbackModifier::init(int64_t modify_init_ts, int64_t modify_delay_ts, co
   if (OB_UNLIKELY(!curr_tenant.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(curr_tenant));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", OB_SERVER_TENANT_ID, 1024L * 1024L * 1024L * 10L))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, "Modifier runner", OB_SERVER_TENANT_ID, 1024LL * 1024 * 1024 * 1024 * 10))) {
     LOG_WARN("init allocator failed", K(ret));
   } else {
     curr_tenant_ = curr_tenant;

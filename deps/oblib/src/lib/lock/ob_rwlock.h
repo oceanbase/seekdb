@@ -19,6 +19,13 @@
 
 #include <pthread.h>
 
+// Windows winspool.h defines NO_PRIORITY macro, undefine it
+#ifdef _WIN32
+#ifdef NO_PRIORITY
+#undef NO_PRIORITY
+#endif
+#endif
+
 namespace oceanbase
 {
 namespace obsys

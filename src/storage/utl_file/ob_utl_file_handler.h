@@ -18,6 +18,13 @@
 #define OCEANBASE_STORAGE_UTL_FILE_OB_UTL_FILE_HANDLER_H_
 
 #include <stdint.h>
+#include <fcntl.h>
+#ifdef _WIN32
+#include <io.h>
+#ifndef O_SYNC
+#define O_SYNC 0
+#endif
+#endif
 #include "storage/utl_file/ob_utl_file_constants.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"

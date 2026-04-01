@@ -1,0 +1,7 @@
+<CPackWiXPatch>
+  <!-- Add bin/ directory to system PATH -->
+  <CPackWiXFragment Id="CM_CP_bin.seekdb.exe">
+    <Environment Id="PATH" Name="PATH" Value="[INSTALL_ROOT]bin"
+                 Permanent="no" Part="last" Action="set" System="yes" />
+  </CPackWiXFragment>
+</CPackWiXPatch>

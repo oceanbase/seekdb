@@ -18,6 +18,23 @@
 #include "log_writer_utils.h"                           // LogWriteBuf
 #include "log_io_utils.h"                               // openat_with_retry
 #include "log_io_adapter.h"                             // LogIOAdapter
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0
+#endif
+#ifndef O_RDONLY
+#define O_RDONLY _O_RDONLY
+#endif
+static int ob_win_truncate(const char *path, int64_t length) {
+  int fd = ::_open(path, _O_RDWR | _O_BINARY);
+  if (fd == -1) return -1;
+  int rc = ::_chsize_s(fd, length);
+  ::_close(fd);
+  return rc == 0 ? 0 : -1;
+}
+#endif
 
 namespace oceanbase
 {
@@ -58,9 +75,9 @@ int LogBlockMgr::init(const char *log_dir,
     ret = OB_INIT_TWICE;
   } else if (NULL == log_dir || LOG_INVALID_LSN_VAL == log_block_size || OB_ISNULL(io_adapter)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (-1 == (dir_fd_ = ::open(log_dir, O_DIRECTORY | O_RDONLY))) {
+  } else if (-1 == (dir_fd_ = open_directory(log_dir))) {
     ret = convert_sys_errno();
-    PALF_LOG(ERROR, "::open failed", K(ret), K(log_dir));
+    PALF_LOG(ERROR, "open_directory failed", K(ret), K(log_dir));
   } else if (OB_FAIL(curr_writable_handler_.init(log_block_size, align_size, align_buf_size, io_adapter))) {
     PALF_LOG(ERROR, "init curr_writable_handler_ failed", K(ret), K(log_dir));
   } else if (OB_FAIL(do_scan_dir_(log_dir, initial_block_id, log_block_pool))) {
@@ -538,7 +555,11 @@ int LogBlockMgr::try_recovery_last_block_(const char *log_dir,
     PALF_LOG(WARN, "get_file_size failed", K(ret), K(block_path));
   } else if (file_size == log_block_size) {
     PALF_LOG(INFO, "last block no need to recovery", K(block_id));
+#ifdef _WIN32
+  } else if (-1 == ob_win_truncate(block_path, log_block_size)) {
+#else
   } else if (-1 == ::truncate(block_path, log_block_size)) {
+#endif
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "ftruncate failed", K(ret), KPC(this), K(file_size));
   } else {

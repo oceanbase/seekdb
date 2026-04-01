@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_REDO
+#ifndef _WIN32
 #include <sys/statvfs.h>
+#endif
 #include "ob_storage_logger_manager.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 
@@ -337,25 +339,34 @@ int ObStorageLoggerManager::check_log_disk(
     const char *log_dir)
 {
   int ret = OB_SUCCESS;
-  struct statvfs data_svfs;
-  struct statvfs log_svfs;
   need_reserved_ = false;
   if (OB_ISNULL(data_dir) || OB_ISNULL(log_dir)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(data_dir), KP(log_dir));
-  } else if (OB_UNLIKELY(0 != statvfs(data_dir, &data_svfs))) {
-    ret = OB_IO_ERROR;
-    LOG_WARN("fail to get sstable directory vfs", K(ret), K(data_dir));
-  } else if (OB_UNLIKELY(0 != statvfs(log_dir, &log_svfs))) {
-    ret = OB_IO_ERROR;
-    LOG_WARN("fail to get slog directory vfs", K(ret), K(log_dir));
-  } else if (OB_UNLIKELY(0 >= log_svfs.f_bavail)) {
-    ret = OB_DISK_ERROR;
-    LOG_ERROR("slog disk is full, please check", K(ret), K(log_dir), K(log_svfs.f_bavail));
+#ifdef _WIN32
   } else {
-    // if slog and data are on the same disk, need reserved space when resize file
-    need_reserved_ = (data_svfs.f_fsid == log_svfs.f_fsid);
+    // On Windows, skip statvfs check; assume disk space is sufficient
+    UNUSEDx(data_dir, log_dir);
   }
+#else
+  } else {
+    struct statvfs data_svfs;
+    struct statvfs log_svfs;
+    if (OB_UNLIKELY(0 != statvfs(data_dir, &data_svfs))) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("fail to get sstable directory vfs", K(ret), K(data_dir));
+    } else if (OB_UNLIKELY(0 != statvfs(log_dir, &log_svfs))) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("fail to get slog directory vfs", K(ret), K(log_dir));
+    } else if (OB_UNLIKELY(0 >= log_svfs.f_bavail)) {
+      ret = OB_DISK_ERROR;
+      LOG_ERROR("slog disk is full, please check", K(ret), K(log_dir), K(log_svfs.f_bavail));
+    } else {
+      // if slog and data are on the same disk, need reserved space when resize file
+      need_reserved_ = (data_svfs.f_fsid == log_svfs.f_fsid);
+    }
+  }
+#endif
   return ret;
 }
 

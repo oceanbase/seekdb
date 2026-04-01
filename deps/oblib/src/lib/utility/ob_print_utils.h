@@ -682,22 +682,38 @@ inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, co
 }
 inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const volatile int64_t &obj)
 {
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, "%lld", obj);
+#else
   return databuff_printf(buf, buf_len, pos, "%ld", obj);
+#endif
 }
 template<>
 inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const uint64_t &obj)
 {
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, "%llu", obj);
+#else
   return databuff_printf(buf, buf_len, pos, "%lu", obj);
+#endif
 }
 template<>
 inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const volatile uint64_t &obj)
 {
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, "%llu", obj);
+#else
   return databuff_printf(buf, buf_len, pos, "%lu", obj);
+#endif
 }
 template<>
 inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const int64_t &obj)
 {
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, "%lld", obj);
+#else
   return databuff_printf(buf, buf_len, pos, "%ld", obj);
+#endif
 }
 template<>
 inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const uint32_t &obj)
@@ -914,72 +930,88 @@ inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
                                   const bool with_comma, const volatile int64_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%ld"), key, obj);;
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%lld"), key, obj);
+#else
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%ld"), key, obj);
+#endif
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const uint64_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%lu"), key, obj);;
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%llu"), key, obj);
+#else
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%lu"), key, obj);
+#endif
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const volatile uint64_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%lu"), key, obj);;
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%llu"), key, obj);
+#else
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%lu"), key, obj);
+#endif
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const int64_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%ld"), key, obj);;
+#ifdef _WIN32
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%lld"), key, obj);
+#else
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%ld"), key, obj);
+#endif
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const uint32_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%u"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%u"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const volatile int32_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%d"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%d"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const int32_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%d"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%d"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const uint16_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%u"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%u"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const int16_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%d"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%d"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const uint8_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%hhu"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%hhu"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const int8_t &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%hhd"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%hhd"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const char &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%c"), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:%c"), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const float &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:\"%.9e\""), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:\"%.9e\""), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const double &obj)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:\"%.18le\""), key, obj);;
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:\"%.18le\""), key, obj);
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key, const bool with_comma, const volatile bool &obj)

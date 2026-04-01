@@ -989,7 +989,11 @@ int ObPxDistTransmitOp::setup_sampled_rows_output()
     sampled_rows2transmit_.reuse();
     for (int64_t i = 0; OB_SUCC(ret) && i < rows; i+= range_rows) {
       // set second to random number for sort, will be updated to end position later.
+#ifdef _WIN32
+      OZ(sampled_rows2transmit_.push_back(std::make_pair(i, (int64_t)rand())));
+#else
       OZ(sampled_rows2transmit_.push_back(std::make_pair(i, nrand48(rand48_buf_))));
+#endif
     }
     if (OB_SUCC(ret)) {
       lib::ob_sort(sampled_rows2transmit_.begin(), sampled_rows2transmit_.end(),

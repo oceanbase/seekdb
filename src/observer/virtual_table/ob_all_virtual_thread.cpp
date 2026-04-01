@@ -88,6 +88,12 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_NOT_SUPPORTED;
     return ret;
     #endif
+    #ifdef _WIN32
+    // GET_OTHER_TSI_ADDR, /proc, process_vm_readv, and iovec are Linux-specific.
+    ret = OB_NOT_SUPPORTED;
+    return ret;
+    #endif
+    #ifndef _WIN32
     const int64_t col_count = output_column_ids_.count();
     pid_t pid = getpid();
     StackMgr::Guard guard(g_stack_mgr);
@@ -284,6 +290,7 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
       scanner_it_ = scanner_.begin();
       is_inited_ = true;
     }
+    #endif /* !_WIN32 */
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scanner_it_.get_next_row(cur_row_))) {

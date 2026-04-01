@@ -16,8 +16,15 @@
 
 #define USING_LOG_PREFIX LIB
 
+#ifdef _WIN32
+#ifndef OB_BUILD_CDC_DISABLE_VSAG
+#define OB_BUILD_CDC_DISABLE_VSAG
+#endif
+#endif
+
 #include "ob_vsag_adaptor.h"
 #include <map>
+#ifndef OB_BUILD_CDC_DISABLE_VSAG
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
 #include "vsag/dataset.h"
@@ -25,6 +32,7 @@
 #include "vsag/index.h"
 #include "vsag/options.h"
 #include "vsag/factory.h"
+#endif
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"

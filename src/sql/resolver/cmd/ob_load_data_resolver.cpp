@@ -20,7 +20,49 @@
 #include "lib/json/ob_json_print_utils.h"
 #include "share/backup/ob_backup_io_adapter.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
+#ifdef _WIN32
+#include <windows.h>
+#include <shlwapi.h>
+struct glob_t {
+  size_t gl_pathc;
+  char **gl_pathv;
+};
+#define GLOB_NOMATCH 3
+static int glob(const char *pattern, int, void *, glob_t *result) {
+  result->gl_pathc = 0;
+  result->gl_pathv = nullptr;
+  WIN32_FIND_DATAA fd;
+  HANDLE hFind = FindFirstFileA(pattern, &fd);
+  if (hFind == INVALID_HANDLE_VALUE) return GLOB_NOMATCH;
+  size_t cap = 16;
+  result->gl_pathv = (char **)malloc(cap * sizeof(char *));
+  char dir[MAX_PATH];
+  strncpy(dir, pattern, MAX_PATH);
+  char *last_sep = strrchr(dir, '/');
+  if (!last_sep) last_sep = strrchr(dir, '\\');
+  if (last_sep) *(last_sep + 1) = '\0'; else dir[0] = '\0';
+  do {
+    if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+    char full[MAX_PATH];
+    snprintf(full, MAX_PATH, "%s%s", dir, fd.cFileName);
+    if (result->gl_pathc >= cap) {
+      cap *= 2;
+      result->gl_pathv = (char **)realloc(result->gl_pathv, cap * sizeof(char *));
+    }
+    result->gl_pathv[result->gl_pathc++] = _strdup(full);
+  } while (FindNextFileA(hFind, &fd));
+  FindClose(hFind);
+  return result->gl_pathc == 0 ? GLOB_NOMATCH : 0;
+}
+static void globfree(glob_t *result) {
+  for (size_t i = 0; i < result->gl_pathc; i++) free(result->gl_pathv[i]);
+  free(result->gl_pathv);
+  result->gl_pathv = nullptr;
+  result->gl_pathc = 0;
+}
+#else
 #include <glob.h>
+#endif
 #include "share/schema/ob_part_mgr_util.h"
 #include "share/catalog/ob_catalog_utils.h"
 
@@ -722,7 +764,11 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
             for (int32_t i = 0; OB_SUCC(ret) && i < match_array.size(); i++) {
               //security check for mysql mode
               ObString secure_file_priv;
+#ifdef _WIN32
+              if (OB_ISNULL(actual_path = _fullpath(full_path_buf, match_array[i].ptr(), PATH_MAX))) {
+#else
               if (OB_ISNULL(actual_path = realpath(match_array[i].ptr(), full_path_buf))) {
+#endif
                 ret = OB_FILE_NOT_EXIST;
                 LOG_WARN("file not exist", K(ret), K(i), K(match_array[i]));
               } else if (OB_FAIL(session_info_->get_secure_file_priv(secure_file_priv))) {

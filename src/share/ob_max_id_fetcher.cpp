@@ -606,7 +606,6 @@ const char *ObMaxIdFetcher::get_max_id_info(const ObMaxIdType max_id_type)
 int ObMaxIdFetcher::str_to_uint(const ObString &str, uint64_t &value)
 {
   int ret = OB_SUCCESS;
-  int64_t int_value = 0;
   char buf[2L<<10] = {'\0'};
   if (str.empty()) {
     ret = OB_INVALID_ARGUMENT;
@@ -620,12 +619,14 @@ int ObMaxIdFetcher::str_to_uint(const ObString &str, uint64_t &value)
   }
   if (OB_SUCC(ret)) {
     const int64_t base = 10;
-    int_value = strtol(buf, NULL, base);
-    if (LONG_MAX == int_value || LONG_MIN == int_value) {
+    char *endptr = NULL;
+    errno = 0;
+    unsigned long long ull_value = strtoull(buf, &endptr, base);
+    if (errno == ERANGE || (endptr != NULL && *endptr != '\0')) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("convert str to int failed", K(buf), K(ret));
     } else {
-      value = static_cast<uint64_t>(int_value);
+      value = static_cast<uint64_t>(ull_value);
     }
   }
   return ret;

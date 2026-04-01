@@ -20,7 +20,9 @@
 #include "lib/ob_define.h"
 #include "lib/allocator/ob_malloc.h"
 
+#ifndef _WIN32
 #include <cxxabi.h>
+#endif
 
 namespace oceanbase
 {
@@ -59,6 +61,7 @@ const char* ObDITls<T, tag>::get_label() {
   if (nullptr == cxxname || strlen(cxxname) > MAX_TNAME_LENGTH - 5) {
     // do nothing, avoid realloc in __cxa_demangle
   } else {
+#ifndef _WIN32
     int status = 0;
     int length = MAX_TNAME_LENGTH - 3;
     ret = abi::__cxa_demangle(cxxname, buf + 3, (size_t*)&length, &status);
@@ -76,6 +79,10 @@ const char* ObDITls<T, tag>::get_label() {
       buf[length + 2] = ']';
       ret = buf + length;
     }
+#else
+    // Windows: no cxxabi demangle, use raw type name
+    ret = cxxname;
+#endif
   }
   return ret;
 }
@@ -132,6 +139,7 @@ const char* ObDITls<T[N], tag>::get_label() {
   if (nullptr == cxxname || strlen(cxxname) > MAX_TNAME_LENGTH - 5) {
     // do nothing, avoid realloc in __cxa_demangle
   } else {
+#ifndef _WIN32
     int status = 0;
     int length = MAX_TNAME_LENGTH - 3;
     ret = abi::__cxa_demangle(cxxname, buf + 3, (size_t*)&length, &status);
@@ -149,6 +157,10 @@ const char* ObDITls<T[N], tag>::get_label() {
       buf[length + 2] = ']';
       ret = buf + length;
     }
+#else
+    // Windows: no cxxabi demangle, use raw type name
+    ret = cxxname;
+#endif
   }
   return ret;
 }

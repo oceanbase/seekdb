@@ -60,7 +60,7 @@ public:
 
 private:
   static const int64_t MAX_FLUSH_WAIT_TIME_MS = 60 * 1000; // 60s
-  static const int64_t MAX_APPEND_WAIT_TIME_MS = 365 * 24 * 3600 * 1000000L; // 1h
+  static const int64_t MAX_APPEND_WAIT_TIME_MS = 365LL * 24 * 3600 * 1000000; // 1h
 
 private:
   int get_start_file_id(int64_t &start_file_id, const uint64_t tenant_id);

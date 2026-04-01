@@ -65,7 +65,7 @@ void TestDataBuffer::TearDown()
 TEST_F(TestDataBuffer, test_ObSelfBufferWriter)
 {
   int ret = OB_SUCCESS;
-  int64_t big_size = 256L * 1024L * 1024L * 1024L * 1024L * 1024L;//256TB
+  int64_t big_size = 256LL * 1024 * 1024 * 1024 * 1024 * 1024;//256TB
   ObSelfBufferWriter buf_align(ObModIds::TEST, 4096, true);
   ObSelfBufferWriter buf_not_align(ObModIds::TEST, 0, false);
   ret = buf_align.ensure_space(ALIGNED_SIZE);

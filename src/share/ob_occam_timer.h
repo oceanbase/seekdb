@@ -31,7 +31,13 @@
 
 #include <type_traits>
 #include <typeinfo>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+// Windows alternatives if needed
+#include <windows.h>
+#include <process.h>
+#endif
 #include <utility>
 #include "lib/guard/ob_weak_guard.h"
 #include "lib/guard/ob_shared_guard.h"
@@ -317,15 +323,23 @@ public:
       return ret;
     };
     int64_t pos = 0;
-    common::databuff_printf(buf, buf_len, pos, "{this:0x%lx, ", (unsigned long)this);
+
     common::databuff_printf(buf, buf_len, pos, "caller:%s:%s:%ld, ", find_last_path(file_), function_name_, line_);
     common::databuff_printf(buf, buf_len, pos, "function_type:%s, ", function_class_);
     common::databuff_printf(buf, buf_len, pos, "timer_running_flag:%d, ", ATOMIC_LOAD(timer_running_flag_));
     common::databuff_printf(buf, buf_len, pos, "total_running_count:%ld, ", ATOMIC_LOAD(total_running_count_));
+    common::databuff_printf(buf, buf_len, pos, "is_running:%d, ", is_running_);
+#ifndef _WIN32
+    common::databuff_printf(buf, buf_len, pos, "{this:0x%lx, ", (unsigned long)this);
     common::databuff_printf(buf, buf_len, pos, "func_shared_ptr_.ptr:0x%lx, ", (unsigned long)func_shared_ptr_.get_ptr());
     common::databuff_printf(buf, buf_len, pos, "time_wheel:0x%lx, ", (unsigned long)time_wheel_);
     common::databuff_printf(buf, buf_len, pos, "thread_pool:0x%lx, ", (unsigned long)thread_pool_);
-    common::databuff_printf(buf, buf_len, pos, "is_running:%d, ", is_running_);
+#else
+    common::databuff_printf(buf, buf_len, pos, "{this:0x%llx, ", (unsigned long long)(uintptr_t)this);
+    common::databuff_printf(buf, buf_len, pos, "func_shared_ptr_.ptr:0x%llx, ", (unsigned long long)(uintptr_t)func_shared_ptr_.get_ptr());
+    common::databuff_printf(buf, buf_len, pos, "time_wheel:0x%llx, ", (unsigned long long)(uintptr_t)time_wheel_);
+    common::databuff_printf(buf, buf_len, pos, "thread_pool:0x%llx, ", (unsigned long long)(uintptr_t)thread_pool_);
+#endif
     if (time_interval_us_ < 1_s) {
       common::databuff_printf(buf, buf_len, pos, "time_interval:%.2lfms, ", time_interval_us_ * 1.0 / 1_ms);
     } else {

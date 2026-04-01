@@ -4504,7 +4504,11 @@ int ObSQLUtils::check_location_access_priv(const ObString &location, ObSQLSessio
           ret = OB_ERR_NULL_VALUE;
           LOG_WARN("convert real_location failed", K(ret), K(real_location));
         } else {
+#ifdef _WIN32
+          real_location = ObString(_fullpath(buffer.get_data(), real_location_str, PATH_MAX));
+#else
           real_location = ObString(realpath(real_location_str, buffer.get_data()));
+#endif
         }
       }
     }

@@ -641,7 +641,7 @@ int ObTempBlockStore::switch_block(const int64_t min_size, const bool strict_mem
     BlockIndex bi;
     bi.is_idx_block_ = false;
     bi.on_disk_ = false;
-    bi.block_id_ = ~(0b11UL << 62) & saved_block_id_cnt_;
+    bi.block_id_ = ~(0b11ULL << 62) & saved_block_id_cnt_;
     bi.blk_ = blk_;
     bi.length_ = static_cast<int32_t>(blk_buf_.head_size());
     bi.capacity_ = static_cast<int32_t>(blk_buf_.capacity());

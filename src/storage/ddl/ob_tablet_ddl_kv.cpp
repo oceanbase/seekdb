@@ -1040,7 +1040,7 @@ int ObDDLKV::set_macro_block(
     const bool can_freeze)
 {
   int ret = OB_SUCCESS;
-  const int64_t MAX_DDL_BLOCK_COUNT = 10 * 10L * 1024L * 1024L * 1024L / OB_STORAGE_OBJECT_MGR.get_macro_block_size();
+  const int64_t MAX_DDL_BLOCK_COUNT = 10LL * 10LL * 1024LL * 1024LL * 1024LL / OB_STORAGE_OBJECT_MGR.get_macro_block_size();
   const int64_t MEMORY_LIMIT = 50 * 1024 * 1024; // 50M
   int64_t freeze_block_count = MAX_DDL_BLOCK_COUNT;
 #ifdef ERRSIM

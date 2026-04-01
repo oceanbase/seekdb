@@ -47,8 +47,8 @@ struct ObStorageDatum;
 }
 namespace storage
 {
-class ObTableIterParam;
-class ObTableAccessContext;
+struct ObTableIterParam;
+struct ObTableAccessContext;
 
 int pad_column(const ObObjMeta &obj_meta,
                const ObAccuracy accuracy,

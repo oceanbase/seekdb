@@ -9,7 +9,12 @@
 #define OB_LIB_HRTIEM_H_
 
 #include <time.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+#include <winsock2.h>
+#include <windows.h>
+#endif
 #include <stdlib.h>
 #include "lib/ob_define.h"
 #ifdef __APPLE__
@@ -216,6 +221,15 @@ static inline ObHRTime get_hrtime_internal()
   uint64_t current_mach = mach_absolute_time();
   int64_t elapsed_ns = (current_mach - hrtime_base.base_mach_time) * hrtime_base.numer / hrtime_base.denom;
   return hrtime_base.base_wall_time_ns + elapsed_ns;
+#elif defined(_WIN32)
+  FILETIME ft;
+  GetSystemTimePreciseAsFileTime(&ft);
+  ULARGE_INTEGER uli;
+  uli.LowPart = ft.dwLowDateTime;
+  uli.HighPart = ft.dwHighDateTime;
+  const uint64_t EPOCH_OFFSET_100NS = 116444736000000000ULL;
+  uint64_t ns = (uli.QuadPart - EPOCH_OFFSET_100NS) * 100;
+  return static_cast<ObHRTime>(ns);
 #elif HAVE_CLOCK_GETTIME
   timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
@@ -244,8 +258,12 @@ static inline ObHRTime hrtime_add(ObHRTime t1, ObHRTime t2)
 
 static inline void hrtime_sleep(ObHRTime delay)
 {
+#ifdef _WIN32
+  Sleep(static_cast<DWORD>(hrtime_to_msec(delay)));
+#else
   struct timespec ts = hrtime_to_timespec(delay);
   nanosleep(&ts, NULL);
+#endif
 }
 
 } // end of namespace common

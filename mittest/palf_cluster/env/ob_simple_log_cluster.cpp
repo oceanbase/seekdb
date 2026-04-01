@@ -64,7 +64,7 @@ int ObSimpleLogCluster::start()
   // set easy allocator for watching easy memory holding
   easy_pool_set_allocator(ob_easy_realloc);
   ev_set_allocator(ob_easy_realloc);
-  lib::set_memory_limit(100L * 1000L * 1000L * 1000L);
+  lib::set_memory_limit(100LL * 1000 * 1000 * 1000);
   if (sig_worker_ != nullptr && OB_FAIL(sig_worker_->start())) {
     SERVER_LOG(ERROR, "Start signal worker error", K(ret));
   } else if (signal_handle_ != nullptr && OB_FAIL(signal_handle_->start())) {

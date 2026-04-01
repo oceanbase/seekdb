@@ -197,7 +197,11 @@ int ObDeviceCheckFile::storage_time_to_strftime_(
   int64_t strftime_len = 0;
   time_t t = static_cast<time_t>(ts_s);
 
+#ifdef _WIN32
+  (void) localtime_s(&lt, &t);
+#else
   (void) localtime_r(&t, &lt);
+#endif
   if (OB_FAIL(format.assign("%Y%m%d"))) {
     LOG_WARN("failed to build format string", KR(ret), K(concat));
   } else if (OB_FAIL(format.append_fmt("%c", concat))) {

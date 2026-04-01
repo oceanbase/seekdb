@@ -18,6 +18,22 @@
 #define LOGSERVICE_PALF_ELECTION_INTERFACE_OB_I_ELECTION_H
 
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC 1
+#endif
+static inline int ob_clock_gettime_win32(struct timespec *ts)
+{
+  LARGE_INTEGER freq, cnt;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&cnt);
+  ts->tv_sec  = (time_t)(cnt.QuadPart / freq.QuadPart);
+  ts->tv_nsec = (long)((cnt.QuadPart % freq.QuadPart) * 1000000000LL / freq.QuadPart);
+  return 0;
+}
+#define clock_gettime(clkid, ts) ob_clock_gettime_win32(ts)
+#endif
 #include "lib/net/ob_addr.h"
 #include "lib/container/ob_array.h"
 #include "lib/function/ob_function.h"

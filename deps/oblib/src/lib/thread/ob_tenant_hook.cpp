@@ -21,12 +21,37 @@
 #include "lib/thread/ob_thread_name.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "lib/ash/ob_active_session_guard.h"
+#ifdef _WIN32
+#include <sys/timeb.h>
+#else
 #include <dlfcn.h>
 #include <poll.h>
+#endif
 #ifdef __linux__
 #include <sys/epoll.h>
 #endif
 
+namespace oceanbase {
+namespace omt {
+thread_local int in_sys_hook = 0;
+}
+}
+
+#ifdef _WIN32
+template<typename Func, typename... Args>
+static inline int sys_hook_impl(Func real_func, Args... args) {
+  int ret = 0;
+  if (!oceanbase::omt::in_sys_hook++) {
+    oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT);
+    ret = real_func(args...);
+  } else {
+    ret = real_func(args...);
+  }
+  oceanbase::omt::in_sys_hook--;
+  return ret;
+}
+#define SYS_HOOK(func_name, ...) sys_hook_impl(real_##func_name, __VA_ARGS__)
+#else
 #define SYS_HOOK(func_name, ...)                                             \
   ({                                                                         \
     int ret = 0;                                                             \
@@ -39,12 +64,7 @@
     in_sys_hook--;                                                           \
     ret;                                                                     \
   })
-
-namespace oceanbase {
-namespace omt {
-thread_local int in_sys_hook = 0;
-}
-}
+#endif
 
 using namespace oceanbase;
 using namespace omt;
@@ -74,6 +94,28 @@ int ob_epoll_wait(int __epfd, struct epoll_event *__events,
   oceanbase::common::ObBKGDSessInActiveGuard inactive_guard;
   ret = SYS_HOOK(epoll_wait, __epfd, __events, __maxevents, __timeout);
   return ret;
+}
+#elif defined(_WIN32)
+struct epoll_event {
+  uint32_t events;
+  union {
+    void *ptr;
+    int fd;
+    uint32_t u32;
+    uint64_t u64;
+  } data;
+};
+#define EPOLLIN 0x001
+#define EPOLLOUT 0x004
+#define EPOLLERR 0x008
+#define EPOLLHUP 0x010
+
+extern "C" int ob_win32_epoll_wait_impl(int epfd, struct epoll_event *events, int maxevents, int timeout);
+
+int ob_epoll_wait(int __epfd, struct epoll_event *__events,
+                  int __maxevents, int __timeout)
+{
+  return ob_win32_epoll_wait_impl(__epfd, __events, __maxevents, __timeout);
 }
 #elif defined(__APPLE__)
 #include <sys/event.h>
@@ -174,6 +216,20 @@ int ob_pthread_cond_timedwait_us(pthread_cond_t *__restrict __cond,
   reltime.tv_sec = static_cast<time_t>(timeout_us / 1000000);
   reltime.tv_nsec = static_cast<long>((timeout_us % 1000000) * 1000);
   ret = pthread_cond_timedwait_relative_np(__cond, __mutex, &reltime);
+#elif defined(_WIN32)
+  (void)use_monotonic;
+  struct timespec abstime;
+  struct _timeb tb;
+  _ftime_s(&tb);
+  abstime.tv_sec = (time_t)tb.time;
+  abstime.tv_nsec = tb.millitm * 1000000L;
+  abstime.tv_sec += static_cast<time_t>(timeout_us / 1000000);
+  abstime.tv_nsec += static_cast<long>((timeout_us % 1000000) * 1000);
+  if (abstime.tv_nsec >= 1000000000L) {
+    abstime.tv_sec += 1;
+    abstime.tv_nsec -= 1000000000L;
+  }
+  ret = ob_pthread_cond_timedwait(__cond, __mutex, &abstime);
 #else
   // On Linux, compute absolute time using the specified clock source.
   // use_monotonic=true: for pthread_cond configured with pthread_condattr_setclock(CLOCK_MONOTONIC)
@@ -205,6 +261,44 @@ int futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespe
     ret = (int)real_syscall(SYS_futex, uaddr, futex_op, val, timeout, nullptr, 0u);
   }
   return ret;
+}
+#elif defined(_WIN32)
+#define FUTEX_WAIT          0
+#define FUTEX_WAKE          1
+#define FUTEX_WAIT_PRIVATE  128
+#define FUTEX_WAKE_PRIVATE  129
+
+int futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
+{
+  int ret = 0;
+  int base_op = futex_op & 0x7F;
+
+  if (base_op == FUTEX_WAIT) {
+    DWORD timeout_ms = INFINITE;
+    if (timeout != nullptr) {
+      timeout_ms = (DWORD)(timeout->tv_sec * 1000 + timeout->tv_nsec / 1000000);
+    }
+    oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT);
+    if (!WaitOnAddress(uaddr, &val, sizeof(uint32_t), timeout_ms)) {
+      DWORD err = GetLastError();
+      if (err == ERROR_TIMEOUT) {
+        errno = ETIMEDOUT;
+        return -1;
+      }
+      return -1;
+    }
+    return 0;
+  } else if (base_op == FUTEX_WAKE) {
+    if (val >= INT32_MAX) {
+      WakeByAddressAll(uaddr);
+    } else {
+      for (uint32_t i = 0; i < val; i++) {
+        WakeByAddressSingle(uaddr);
+      }
+    }
+    return 0;
+  }
+  return 0;
 }
 #elif defined(__APPLE__)
 // macOS futex emulation using Darwin's ulock syscalls

@@ -23,6 +23,12 @@
 #include "lib/container/ob_vector.h"
 #include "src/share/datum/ob_datum.h"
 #include "lib/json_type/ob_json_path.h"
+
+#ifdef _WIN32
+#ifdef ERROR_SEEK
+#undef ERROR_SEEK
+#endif
+#endif
 #include "lib/xml/ob_mul_mode_reader.h"
 #include "lib/xml/ob_multi_mode_interface.h"
 #include "lib/allocator/ob_pooled_allocator.h"

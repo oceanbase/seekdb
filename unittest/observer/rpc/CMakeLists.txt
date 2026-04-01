@@ -15,6 +15,7 @@ function(rpc_server_test case)
     ob_storage_static
     $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--end-group>
     $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc -static-libstdc++>)
+  add_dependencies(${case} oblib_grpc)
 endfunction()
 
 rpc_server_test(easy_server_basic)

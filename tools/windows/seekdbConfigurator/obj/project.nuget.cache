@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "zL6sk7HSjJk=",
+  "success": true,
+  "projectFilePath": "C:\\wangzelin.wzl\\gitlab\\oceanbase-lite\\tools\\windows\\seekdbConfigurator\\seekdbConfigurator.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\admin\\.nuget\\packages\\system.diagnostics.eventlog\\8.0.1\\system.diagnostics.eventlog.8.0.1.nupkg.sha512",
+    "C:\\Users\\admin\\.nuget\\packages\\system.serviceprocess.servicecontroller\\8.0.1\\system.serviceprocess.servicecontroller.8.0.1.nupkg.sha512"
+  ],
+  "logs": []
+}

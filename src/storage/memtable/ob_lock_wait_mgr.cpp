@@ -44,8 +44,8 @@ using namespace memtable::tablelock;
 namespace memtable
 {
 
-static const uint64_t TRANS_FLAG = 1L << 63L;       // 10
-static const uint64_t TABLE_LOCK_FLAG = 1L << 62L;  // 01
+static const uint64_t TRANS_FLAG = 1ULL << 63;       // 10
+static const uint64_t TABLE_LOCK_FLAG = 1ULL << 62;  // 01
 static const uint64_t ROW_FLAG = 0L;                // 00
 static const uint64_t HASH_MASK = ~(TRANS_FLAG | TABLE_LOCK_FLAG);
 

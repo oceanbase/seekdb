@@ -168,7 +168,11 @@ private:
     ObIArray<int64_t> &finish_table_ids);
   int finish_verify_fts_ckm(const int64_t table_id);
   static const int64_t PRINT_CROSS_CLUSTER_LOG_INVERVAL = 10 * 60 * 1000 * 1000; // 10 mins
+#ifdef _WIN32
+  static constexpr int64_t MAX_TABLET_CHECKSUM_WAIT_TIME_US = 129600000000LL;  // 36 hours
+#else
   static const int64_t MAX_TABLET_CHECKSUM_WAIT_TIME_US = 36 * 3600 * 1000 * 1000L;  // 36 hours
+#endif
   static const int64_t MAX_BATCH_INSERT_COUNT = 1500;
   static const int64_t DEFAULT_TABLET_CNT = 32;
   bool is_inited_;

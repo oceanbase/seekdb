@@ -334,7 +334,7 @@ public:
 
 private:
   friend class ObTenantIOManager;
-  static const int64_t DEFAULT_MEMORY_LIMIT = 10L * 1024L * 1024L * 1024L;  // 10GB
+  static const int64_t DEFAULT_MEMORY_LIMIT = 10L * 1024LL * 1024LL * 1024LL;  // 10GB
   static const int32_t DEFAULT_QUEUE_DEPTH = 10000;
   ObIOManager();
   ~ObIOManager();

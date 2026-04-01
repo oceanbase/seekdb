@@ -137,7 +137,11 @@ int ObCommonConfig::add_extra_config_unsafe(const char *config_str,
                                             bool check_config)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  const int64_t MAX_OPTS_LENGTH = 256 * 1024; // Windows has no sysconf(_SC_ARG_MAX)
+#else
   const int64_t MAX_OPTS_LENGTH = sysconf(_SC_ARG_MAX);
+#endif
   int64_t config_str_length = 0;
   char *buf = NULL;
   char *saveptr = NULL;

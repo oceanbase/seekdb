@@ -24,11 +24,11 @@ namespace oceanbase
 
 namespace sql
 {
-ObFLTSpanMgr* __attribute__((weak)) get_flt_span_manager()
+ObFLTSpanMgr* OB_WEAK_SYMBOL get_flt_span_manager()
 {
   return nullptr;
 }
-int __attribute__((weak))handle_span_record(ObFLTSpanMgr *flt_span_manager, char* tag_buf, int64_t tag_len, ::oceanbase::trace::ObSpanCtx* span)
+int OB_WEAK_SYMBOL handle_span_record(ObFLTSpanMgr *flt_span_manager, char* tag_buf, int64_t tag_len, ::oceanbase::trace::ObSpanCtx* span)
 {
   UNUSED(flt_span_manager);
   return 0;

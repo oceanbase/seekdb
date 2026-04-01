@@ -19,7 +19,11 @@
 
 namespace
 {
+#ifdef _WIN32
+const pthread_key_t INVALID_THREAD_KEY = nullptr;
+#else
 const pthread_key_t INVALID_THREAD_KEY = UINT32_MAX;
+#endif
 }
 
 namespace oceanbase

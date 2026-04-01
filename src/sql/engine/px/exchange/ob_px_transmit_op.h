@@ -423,7 +423,11 @@ private:
                             bool is_broad_cast_calc_type);
   int64_t get_random_seq()
   {
+#ifdef _WIN32
+    return rand() % INT16_MAX;
+#else
     return nrand48(rand48_buf_) % INT16_MAX;
+#endif
   }
   /*should wait sync msg before send rows. but 3 exceptions:
       1. already received the channel ready msg

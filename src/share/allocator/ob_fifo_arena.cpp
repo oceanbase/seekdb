@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
-#ifdef OB_USE_ASAN
+#if defined(OB_USE_ASAN) || defined(_WIN32)
 #include "ob_fifo_arena.h"
 #include <malloc.h>
 #endif
@@ -36,7 +36,6 @@ int64_t ObFifoArena::Page::get_actual_hold_size()
 #ifdef OB_USE_ASAN
   return malloc_usable_size(this);
 #else
-  //every time of alloc_page, ruturn a chunk actually
   return ObTenantCtxAllocator::get_obj_hold(this);
 #endif
 }

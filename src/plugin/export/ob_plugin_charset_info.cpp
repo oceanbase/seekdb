@@ -17,6 +17,12 @@
 #include "oceanbase/ob_plugin_charset_info.h"
 #include "oceanbase/ob_plugin_errno.h"
 #include "lib/charset/ob_ctype.h"
+#ifdef _WIN32
+#include <string.h>
+#define strcasecmp _stricmp
+#else
+#include <strings.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {

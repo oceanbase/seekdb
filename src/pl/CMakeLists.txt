@@ -1,9 +1,19 @@
-execute_process(
-  COMMAND env NEED_PARSER_CACHE=${NEED_PARSER_CACHE} bash gen_parser.sh
-  RESULT_VARIABLE RET
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/pl/parser
-  OUTPUT_FILE _gen_pl_parser.output
-  ERROR_FILE _gen_parser.error)
+if(WIN32)
+  find_program(PWSH_EXE NAMES pwsh pwsh.exe powershell powershell.exe REQUIRED)
+  execute_process(
+    COMMAND ${PWSH_EXE} -NoProfile -ExecutionPolicy Bypass -File gen_parser_win.ps1
+    RESULT_VARIABLE RET
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/pl/parser
+    OUTPUT_FILE _gen_pl_parser.output
+    ERROR_FILE _gen_parser.error)
+else()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E env NEED_PARSER_CACHE=${NEED_PARSER_CACHE} bash gen_parser.sh
+    RESULT_VARIABLE RET
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/pl/parser
+    OUTPUT_FILE _gen_pl_parser.output
+    ERROR_FILE _gen_parser.error)
+endif()
 if(RET AND NOT RET EQUAL 0)
   message(FATAL_ERROR "Generate pl parser failed and check error in ${PROJECT_SOURCE_DIR}/src/pl/parser/_gen_parser.error")
 endif()

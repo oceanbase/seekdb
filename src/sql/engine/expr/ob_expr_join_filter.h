@@ -26,6 +26,11 @@ namespace sql
 
 class ObP2PDatahubMsgBase;
 struct ObRowWithHash;
+#ifdef _WIN32
+// IN is defined as empty SAL annotation macro in Windows SDK. Permanently undef to avoid conflict.
+#pragma push_macro("IN")
+#undef IN
+#endif
 enum RuntimeFilterType
 {
   NOT_INIT_RUNTIME_FILTER_TYPE = 0,
@@ -33,6 +38,7 @@ enum RuntimeFilterType
   RANGE = 2,
   IN = 3
 };
+// Do NOT restore IN - keep it undefined for all uses of RuntimeFilterType::IN
 
 using ObRuntimeFilterParams = common::ObSEArray<common::ObDatum, 4>;
 

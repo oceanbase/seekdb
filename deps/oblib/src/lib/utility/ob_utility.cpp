@@ -15,7 +15,39 @@
  */
 
 #include "ob_utility.h"
+#ifdef _WIN32
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+#include <io.h>
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+static inline ssize_t ob_pwrite(int fd, const void *buf, size_t count, int64_t offset) {
+  HANDLE h = (HANDLE)_get_osfhandle(fd);
+  if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
+  OVERLAPPED ov = {};
+  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
+  ov.OffsetHigh = (DWORD)(offset >> 32);
+  DWORD written = 0;
+  if (!WriteFile(h, buf, (DWORD)count, &written, &ov)) { return -1; }
+  return (ssize_t)written;
+}
+static inline ssize_t ob_pread(int fd, void *buf, size_t count, int64_t offset) {
+  HANDLE h = (HANDLE)_get_osfhandle(fd);
+  if (h == INVALID_HANDLE_VALUE) { errno = EBADF; return -1; }
+  OVERLAPPED ov = {};
+  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
+  ov.OffsetHigh = (DWORD)(offset >> 32);
+  DWORD nread = 0;
+  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) { return -1; }
+  return (ssize_t)nread;
+}
+#define pwrite ob_pwrite
+#define pread ob_pread
+#else
 #include <sys/mman.h>
+#endif
 #include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
@@ -102,11 +134,25 @@ int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_n
   int ret = OB_SUCCESS;
   int64_t mem_start = reinterpret_cast<int64_t>(mem_ptr);
   int64_t mem_end = mem_start + len;
+#ifdef _WIN32
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  int64_t pagesize = si.dwPageSize;
+  const char *action = "protect";
+  DWORD win_prot = PAGE_NOACCESS;
+  if ((prot & 0x3) == 0x3) { // PROT_READ | PROT_WRITE
+    action = "release";
+    win_prot = PAGE_READWRITE;
+  } else if (prot & 0x1) { // PROT_READ
+    win_prot = PAGE_READONLY;
+  }
+#else
   int64_t pagesize = sysconf(_SC_PAGE_SIZE);
   const char *action = "protect";
   if ((prot & PROT_WRITE) && (prot & PROT_READ)) {
     action = "release";
   }
+#endif
   if (mem_start != 0) {
     int64_t page_start = mem_start - (mem_start % pagesize);
     int64_t page_end = mem_end - (mem_end % pagesize) + pagesize;
@@ -118,6 +164,21 @@ int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_n
     if (page_cnt <= 0) {
       //The page to mprotect exceeds the protected address, mprotect cannot be added
       LIB_LOG(INFO, "can not mprotect mem_ptr", K(mem_start), K(pagesize), K(len), KCSTRING(addr_name), KCSTRING(action));
+#ifdef _WIN32
+    } else {
+      DWORD old_prot;
+      if (!VirtualProtect(page_start_addr, pagesize * page_cnt, win_prot, &old_prot)) {
+        ret = OB_ERR_UNEXPECTED;
+        LIB_LOG(WARN, "VirtualProtect mem_ptr failed",
+                K(ret), K(GetLastError()), K(mem_start_addr), K(page_start_addr), K(pagesize),
+                K(page_cnt), K(prot), KCSTRING(addr_name), KCSTRING(action));
+      } else {
+        LIB_LOG(INFO, "VirtualProtect success", K(mem_start_addr), K(mem_end_addr),
+                K(page_start_addr), K(page_end_addr),
+                K(pagesize), K(page_cnt), KCSTRING(addr_name), KCSTRING(action));
+      }
+    }
+#else
     } else if (0 != mprotect(page_start_addr, pagesize * page_cnt, prot)) {
       ret = OB_ERR_UNEXPECTED;
       const char *errmsg = strerror(errno);
@@ -129,6 +190,7 @@ int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_n
               K(page_start_addr), K(page_end_addr),
               K(pagesize), K(page_cnt), KCSTRING(addr_name), KCSTRING(action));
     }
+#endif
   }
   return ret;
 }

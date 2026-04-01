@@ -60,6 +60,11 @@ class ObLSHandle;
 class ObTabletHandle;
 class ObLSTabletService;
 
+#ifdef _WIN32
+// minwindef.h defines STRICT=1. Permanently undef to avoid conflict.
+#pragma push_macro("STRICT")
+#undef STRICT
+#endif
 enum class ObTabletCreateThrottlingLevel : uint8_t
 {
     STRICT = 0, // throttling by config like 1G2W, used in leader creation
@@ -67,6 +72,7 @@ enum class ObTabletCreateThrottlingLevel : uint8_t
     FREE = 2,   // most free, 1G4W is the max creation speed without influcing stability
     MAX
 };
+// Do NOT restore STRICT macro
 
 class ObTabletCreateMdsHelper
 {

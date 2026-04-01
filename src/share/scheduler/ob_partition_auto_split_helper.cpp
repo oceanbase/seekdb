@@ -932,7 +932,7 @@ int ObAutoSplitTaskPollingMgr::gc_deleted_tenant_caches()
 {
   int ret = OB_SUCCESS;
   ObLockGuard<ObSpinLock> guard(lock_);
-  if (is_root_server_ && REACH_TIME_INTERVAL(60L * 60L * 1000L * 1000L)) {
+  if (is_root_server_ && REACH_TIME_INTERVAL(60LL * 60 * 1000 * 1000)) {
     ObSchemaGetterGuard schema_guard;
     ObSEArray<uint64_t, 10> tenant_ids;
     common::hash::ObHashSet<uint64_t> existed_tenants_set;
@@ -1069,7 +1069,7 @@ int ObAutoSplitTaskPollingMgr::pop_tasks(const int64_t num_tasks_can_pop, ObArra
     int64_t tasks_pop_this_round = (total_tasks_pop_budge / get_total_tenants() == 0) ? 0 : total_tasks_pop_budge % get_total_tenants();
     total_tasks_pop_budge -= tasks_pop_this_round;
     if (tasks_budget_per_tenant == 1) {
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
       std::random_device rd;
       std::mt19937 g(rd());
       std::shuffle(tenants_id.begin(), tenants_id.end(), g);

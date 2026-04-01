@@ -58,7 +58,12 @@ int ObExprIp2int::ip2int(T &result, const ObString &text)
       result.set_null();
     } else {
       struct in_addr addr;
+#ifdef _WIN32
+      addr.s_addr = inet_addr(buf);
+      int err = (addr.s_addr != INADDR_NONE) ? 1 : 0;
+#else
       int err = inet_aton(buf, &addr);
+#endif
       if (0 != err) {
         result.set_int(ntohl(addr.s_addr));
       } else {

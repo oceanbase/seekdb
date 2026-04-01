@@ -22,7 +22,35 @@
 #include <stdio.h>
 #include <errno.h>
 #include <pthread.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+// Windows: sys/time.h not needed, use winsock2 for timeval and windows.h for time functions
+#include <winsock2.h>
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+
+// Windows: implement gettimeofday
+inline int gettimeofday(struct timeval* tp, void* tzp) {
+  (void)tzp;  // timezone parameter not used
+  // Windows epoch: 1601-01-01, Unix epoch: 1970-01-01
+  // Difference: 11644473600 seconds
+  const uint64_t EPOCH_DIFFERENCE = 11644473600ULL;
+  FILETIME file_time;
+  GetSystemTimePreciseAsFileTime(&file_time);
+
+  // Convert FILETIME (100-nanosecond intervals) to timeval
+  uint64_t time = ((uint64_t)file_time.dwHighDateTime << 32) | file_time.dwLowDateTime;
+  time /= 10;  // Convert to microseconds
+  time -= EPOCH_DIFFERENCE * 1000000ULL;  // Adjust epoch
+
+  tp->tv_sec = (long)(time / 1000000ULL);
+  tp->tv_usec = (long)(time % 1000000ULL);
+  return 0;
+}
+#endif
 #include <algorithm>
 #include <typeinfo>
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer (includes spinlock compat)
@@ -258,7 +286,12 @@ public:
   explicit RWLockIniter(pthread_rwlock_t &rwlock) : succ_(false)
   {
     if (0 != pthread_rwlock_init(&rwlock, NULL)) {
+#ifdef _WIN32
+      // Windows PThreads4W: pthread_rwlock_t is a struct pointer, cast to void* for %p
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "init rwlock fail errno=%u rwlock=%p", errno, (void*)&rwlock);
+#else
       HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "init rwlock fail errno=%u rwlock=%p", errno, &rwlock);
+#endif
     } else {
       succ_ = true;
     }
@@ -401,7 +434,12 @@ public:
   explicit SpinIniter(pthread_spinlock_t &spin) : succ_(false)
   {
     if (0 != pthread_spin_init(&spin, PTHREAD_PROCESS_PRIVATE)) {
+#ifdef _WIN32
+      // Windows PThreads4W: pthread_spinlock_t is a struct pointer, cast to void* for %p
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "init mutex fail errno=%u spin=%p", errno, (void*)&spin);
+#else
       HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "init mutex fail errno=%u spin=%p", errno, &spin);
+#endif
     } else {
       succ_ = true;
     }
@@ -422,7 +460,12 @@ public:
   explicit MutexIniter(pthread_mutex_t &mutex) : succ_(false)
   {
     if (0 != pthread_mutex_init(&mutex, NULL)) {
+#ifdef _WIN32
+      // Windows PThreads4W: pthread_mutex_t is a struct pointer, cast to void* for %p
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "init mutex fail errno=%u mutex=%p", errno, (void*)&mutex);
+#else
       HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "init mutex fail errno=%u mutex=%p", errno, &mutex);
+#endif
     } else {
       succ_ = true;
     }
@@ -538,9 +581,9 @@ struct LatchReadWriteDefendMode
   typedef NBroadCaster cond_broadcaster;
 };
 
-// On macOS, pthread_rwlock has known issues that can cause deadlocks in certain scenarios.
+// On macOS and Windows, pthread_rwlock has known issues that can cause deadlocks or EINVAL.
 // Use mutex-based locking as a safer alternative (sacrifices some read concurrency for stability).
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
 struct ReadWriteDefendMode
 {
   typedef MutexLocker readlocker;   // Use mutex for read (safe, but no concurrent reads)

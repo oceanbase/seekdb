@@ -138,6 +138,43 @@ void ObS3Logger::Log(Logging::LogLevel logLevel, const char* tag, const char* fo
   }
 }
 
+void ObS3Logger::vaLog(Logging::LogLevel logLevel, const char* tag, const char* formatStr, va_list args)
+{
+  int ret = OB_SUCCESS;
+
+  const int64_t buf_len = 4096;
+  char arg_buf[buf_len] = {0};
+  int psize = vsnprintf(arg_buf, buf_len - 1, formatStr, args);
+
+  if (psize > 0) {
+    const char *new_format = "[S3] module=%s, %s";
+    switch (logLevel) {
+      case Logging::LogLevel::Fatal:
+      case Logging::LogLevel::Error:
+      case Logging::LogLevel::Warn: {
+        if (OB_NOT_NULL(STRSTR(arg_buf, "HTTP response code: 404"))) {
+        } else {
+          ret = OB_OBJECT_STORAGE_IO_ERROR;
+          _OB_LOG(WARN, new_format, tag, arg_buf);
+        }
+        break;
+      }
+      case Logging::LogLevel::Info:
+        _OB_LOG(INFO, new_format, tag, arg_buf);
+        break;
+      case Logging::LogLevel::Trace:
+        _OB_LOG(DEBUG, new_format, tag, arg_buf);
+        break;
+      case Logging::LogLevel::Debug:
+        _OB_LOG(TRACE, new_format, tag, arg_buf);
+        break;
+      default:
+        _OB_LOG(WARN, new_format, tag, arg_buf);
+        break;
+    }
+  }
+}
+
 void ObS3Logger::LogStream(Logging::LogLevel logLevel, const char* tag, const Aws::OStringStream &messageStream)
 {
   Log(logLevel, tag, "msg=%s", messageStream.str().c_str());
@@ -1044,7 +1081,11 @@ int ObS3Account::parse_from(const char *storage_info_str, const int64_t size)
     tmp[size] = '\0';
     token = tmp;
     for (char *str = token; OB_SUCC(ret); str = NULL) {
+#ifdef _WIN32
+      token = ::strtok_s(str, "&", &saved_ptr);
+#else
       token = ::strtok_r(str, "&", &saved_ptr);
+#endif
       if (OB_ISNULL(token)) {
         break;
       } else if (0 == strncmp(REGION, token, strlen(REGION))) {

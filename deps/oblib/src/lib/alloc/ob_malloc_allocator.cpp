@@ -24,6 +24,8 @@
 #include "lib/alloc/ob_malloc_time_monitor.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
+// ob_backtrace is implemented in ob_backtrace.cpp for Windows
+
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
@@ -71,7 +73,7 @@ void *ObMallocAllocator::alloc(const int64_t size, const oceanbase::lib::ObMemAt
 void *ObMallocAllocator::realloc(
   const void *ptr, const int64_t size, const oceanbase::lib::ObMemAttr &attr)
 {
-#ifdef OB_USE_ASAN
+#if defined(OB_USE_ASAN)
   UNUSED(attr);
   return ::realloc(const_cast<void *>(ptr), size);
 #else
@@ -93,13 +95,13 @@ void *ObMallocAllocator::realloc(
 
 void ObMallocAllocator::free(void *ptr)
 {
-#ifdef OB_USE_ASAN
+#if defined(OB_USE_ASAN)
   ::free(ptr);
 #else
   SANITY_DISABLE_CHECK_RANGE(); // prevent sanity_check_range
   // directly free object instead of using tenant allocator.
   ObTenantCtxAllocator::common_free(ptr);
-#endif // OB_USE_ASAN
+#endif
 }
 
 ObTenantCtxAllocatorGuard ObMallocAllocator::get_tenant_ctx_allocator(uint64_t tenant_id,
@@ -295,14 +297,24 @@ void ObMallocAllocator::print_tenant_memory_usage(uint64_t tenant_id) const
           int64_t limit = 0;
           IGNORE_RETURN mgr->get_ctx_limit(i, limit);
           ret = databuff_printf(buf, BUFLEN, ctx_pos,
+#ifdef _WIN32
+              "[MEMORY] ctx_id=%25s hold_bytes=%15ld limit=%26ld\n",
+#else
               "[MEMORY] ctx_id=%25s hold_bytes=%'15ld limit=%'26ld\n",
+#endif
               get_global_ctx_info().get_ctx_name(i), ctx_hold_bytes[i], limit);
         }
       }
       buf[std::min(ctx_pos, BUFLEN - 1)] = '\0';
       allow_next_syslog();
-      _LOG_INFO("[MEMORY] tenant: %lu, limit: %'lu hold: %'lu cache_hold: %'lu "
+      _LOG_INFO(
+#ifdef _WIN32
+                "[MEMORY] tenant: %lu, limit: %lu hold: %lu cache_hold: %lu "
+                "cache_used: %lu cache_item_count: %lu \n%s",
+#else
+                "[MEMORY] tenant: %lu, limit: %'lu hold: %'lu cache_hold: %'lu "
                 "cache_used: %'lu cache_item_count: %'lu \n%s",
+#endif
           tenant_id,
           mgr->get_limit(),
           mgr->get_sum_hold(),
@@ -468,7 +480,11 @@ void *ObMallocHook::alloc(const int64_t size)
     if (OB_LIKELY(NULL != obj)) {
       if (OB_UNLIKELY(sample_allowed)) {
         void *addrs[100] = {nullptr};
+#ifndef _WIN32
         backtrace(addrs, ARRAYSIZEOF(addrs));
+#else
+        _ob_backtrace(addrs, ARRAYSIZEOF(addrs));
+#endif
         MEMCPY(obj->bt(), (char*)addrs, AOBJECT_BACKTRACE_SIZE);
         obj->on_malloc_sample_ = true;
       }

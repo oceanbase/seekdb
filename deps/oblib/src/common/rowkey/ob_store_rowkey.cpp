@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "common/rowkey/ob_store_rowkey.h"
 
 namespace oceanbase

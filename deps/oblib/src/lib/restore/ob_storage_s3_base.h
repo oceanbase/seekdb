@@ -195,6 +195,7 @@ public:
   virtual Aws::Utils::Logging::LogLevel GetLogLevel(void) const override;
   // Does a printf style output to the output stream. Don't use this, it's unsafe. See LogStream
   virtual void Log(Aws::Utils::Logging::LogLevel logLevel, const char* tag, const char* formatStr, ...) override;
+  virtual void vaLog(Aws::Utils::Logging::LogLevel logLevel, const char* tag, const char* formatStr, va_list args);
   // Writes the stream to the output stream.
   virtual void LogStream(Aws::Utils::Logging::LogLevel logLevel, const char* tag, const Aws::OStringStream &messageStream) override;
   // Writes any buffered messages to the underlying device if the logger supports buffering.
@@ -349,6 +350,7 @@ public:
   int do_safely(Function f, Obj obj, Args && ... args)
   {
     int ret = OB_SUCCESS;
+#ifndef _WIN32
     try {
       ret = std::mem_fn(f)(obj, std::forward<Args>(args)...);
     } catch (const std::exception &e) {
@@ -358,6 +360,9 @@ public:
       ret = OB_OBJECT_STORAGE_IO_ERROR;
       OB_LOG(WARN, "caught unknown exception when doing s3 operation", K(ret), KP(this));
     }
+#else
+    ret = std::mem_fn(f)(obj, std::forward<Args>(args)...);
+#endif
     return ret;
   }
 };

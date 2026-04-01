@@ -174,8 +174,10 @@ int ObStorageLogger::write_log(ObStorageLogParam &param)
       lib::ObMutexGuard guard(build_log_mutex_);
       if (OB_FAIL(build_log_item(param, log_item))) {
         STORAGE_REDO_LOG(WARN, "fail to build log item", K(ret));
-      } else if (OB_FAIL(log_writer_->append_log(*log_item, MAX_APPEND_WAIT_TIME_MS))) {
-        STORAGE_REDO_LOG(WARN, "fail to append log", K(ret));
+      } else {
+        if (OB_FAIL(log_writer_->append_log(*log_item, MAX_APPEND_WAIT_TIME_MS))) {
+          STORAGE_REDO_LOG(WARN, "fail to append log", K(ret));
+        }
       }
     }
   }
@@ -184,9 +186,12 @@ int ObStorageLogger::write_log(ObStorageLogParam &param)
     if (OB_ISNULL(log_item)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_REDO_LOG(WARN, "log_item shouldn't be null", K(ret));
-    } else if (OB_FAIL(log_item->wait_flush_log(MAX_FLUSH_WAIT_TIME_MS))) {
-      STORAGE_REDO_LOG(WARN, "fail to wait_flush_log", K(ret));
     } else {
+      if (OB_FAIL(log_item->wait_flush_log(MAX_FLUSH_WAIT_TIME_MS))) {
+        STORAGE_REDO_LOG(WARN, "fail to wait_flush_log", K(ret));
+      }
+    }
+    if (OB_SUCC(ret)) {
       const int64_t file_id = log_item->start_cursor_.file_id_;
       const int64_t offset = log_item->start_cursor_.offset_ + log_item->get_offset(0);
       const int64_t size = log_item->end_cursor_.offset_ - offset;

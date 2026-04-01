@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "ob_smart_call.h"
 #include "deps/oblib/src/common/ob_common_utility.h"
 

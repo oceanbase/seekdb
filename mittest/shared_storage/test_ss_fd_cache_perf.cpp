@@ -166,7 +166,7 @@ TEST_F(TestSSFdCache, cost_time)
 {
   // adjust tenant disk space to ensure private data macro write local. incremental space: 20GB * 0.4 = 8GB
   ObTenantDiskSpaceManager* tenant_disk_space_mgr = MTL(ObTenantDiskSpaceManager*);
-  int64_t total_disk_size = 20L * 1024L * 1024L * 1024L; // 20GB
+  int64_t total_disk_size = 20LL * 1024 * 1024 * 1024; // 20GB
   ASSERT_EQ(OB_SUCCESS, tenant_disk_space_mgr->resize_total_disk_size(total_disk_size));
   ASSERT_EQ(total_disk_size, tenant_disk_space_mgr->get_total_disk_size());
 

@@ -501,7 +501,7 @@ int ObSchemaUtils::str_to_int(const ObString &str, int64_t &value)
       LOG_WARN("id_buf is not long enough", K(ret), K(n), LITERAL_K(OB_MAX_BIT_LENGTH));
     } else {
       const int64_t base = 10;
-      value = strtol(buf, NULL, base);
+      value = strtoll(buf, NULL, base);
     }
   }
   return ret;

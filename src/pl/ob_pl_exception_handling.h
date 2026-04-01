@@ -19,10 +19,9 @@
 
 #include "ob_pl_stmt.h"
 
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
 #include <unwind.h>
 #else
-// On Linux, use the clang-specific path
 #include <lib/clang/17/include/unwind.h>
 #endif
 

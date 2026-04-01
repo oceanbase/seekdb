@@ -18,6 +18,13 @@
 #include "ob_tenant_seq_generator.h"
 #include "storage/meta_store/ob_tenant_storage_meta_persister.h"
 #include "observer/omt/ob_tenant.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#define sleep(sec) Sleep((sec) * 1000)
+#define usleep(us) Sleep((DWORD)((us) / 1000))
+#endif
+
 namespace oceanbase
 {
 namespace storage

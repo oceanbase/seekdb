@@ -58,11 +58,11 @@ TEST_F(TestObSimpleLogClusterAccessMode, basic_change_access_mode)
 	const int64_t id = ATOMIC_AAF(&palf_id_, 1);
   PALF_LOG(INFO, "begin test basic_change_access_mode", K(id));
 	int64_t leader_idx = 0;
-  int64_t ref_ts_ns = common::ObTimeUtility::current_time_ns() + 1800 * 1000L * 1000L * 1000L;
+  int64_t ref_ts_ns = common::ObTimeUtility::current_time_ns() + 1800LL * 1000 * 1000 * 1000;
   share::SCN ref_scn;
   ref_scn.convert_for_logservice(ref_ts_ns);
   PalfHandleImplGuard leader;
-  const int64_t CONFIG_CHANGE_TIMEOUT = 10 * 1000 * 1000 * 1000L; // 10s
+  const int64_t CONFIG_CHANGE_TIMEOUT = 10LL * 1000 * 1000 * 1000; // 10s
   EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, leader_idx, leader));
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 200, id));
   AccessMode curr_access_mode;
@@ -110,7 +110,7 @@ TEST_F(TestObSimpleLogClusterAccessMode, basic_change_access_mode)
     EXPECT_GT(scn, ref_scn);
   }
   // 40 minutes later
-  ref_ts_ns = common::ObTimeUtility::current_time_ns() + 2400L * 1000L * 1000L * 1000L;
+  ref_ts_ns = common::ObTimeUtility::current_time_ns() + 2400LL * 1000 * 1000 * 1000;
   ref_scn.convert_for_logservice(ref_ts_ns);
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->get_access_mode(mode_version, curr_access_mode));
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->get_role(unused_role, curr_proposal_id, state));
@@ -197,7 +197,7 @@ TEST_F(TestObSimpleLogClusterAccessMode, add_member)
 	  int64_t leader_idx = 0;
     PalfHandleImplGuard leader;
     std::vector<PalfHandleImplGuard*> palf_list;
-    const int64_t CONFIG_CHANGE_TIMEOUT = 10 * 1000 * 1000 * 1000L; // 10s
+    const int64_t CONFIG_CHANGE_TIMEOUT = 10LL * 1000 * 1000 * 1000; // 10s
     EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, leader_idx, leader));
     EXPECT_EQ(OB_SUCCESS, get_cluster_palf_handle_guard(id, palf_list));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 200, id));
@@ -254,7 +254,7 @@ TEST_F(TestObSimpleLogClusterAccessMode, prev_log_slide)
   PALF_LOG(INFO, "begin test prev_log_slide", K(id));
 	int64_t leader_idx = 0;
   PalfHandleImplGuard leader;
-  const int64_t CONFIG_CHANGE_TIMEOUT = 10 * 1000 * 1000 * 1000L; // 10s
+  const int64_t CONFIG_CHANGE_TIMEOUT = 10LL * 1000 * 1000 * 1000; // 10s
   EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, leader_idx, leader));
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 200, id));
 
@@ -321,11 +321,11 @@ TEST_F(TestObSimpleLogClusterAccessMode, single_replica_change_access_mode)
 	const int64_t id = ATOMIC_AAF(&palf_id_, 1);
   PALF_LOG(INFO, "begin test single_replica_change_access_mode", K(id));
 	int64_t leader_idx = 0;
-  int64_t ref_ts_ns = common::ObTimeUtility::current_time_ns() + 1800 * 1000L * 1000L * 1000L;
+  int64_t ref_ts_ns = common::ObTimeUtility::current_time_ns() + 1800LL * 1000 * 1000 * 1000;
   share::SCN ref_scn;
   ref_scn.convert_for_logservice(ref_ts_ns);
   PalfHandleImplGuard leader;
-  const int64_t CONFIG_CHANGE_TIMEOUT = 10 * 1000 * 1000 * 1000L; // 10s
+  const int64_t CONFIG_CHANGE_TIMEOUT = 10LL * 1000 * 1000 * 1000; // 10s
   EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, leader_idx, leader));
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 200, id));
   const int64_t b_idx = (leader_idx + 1) % 3;

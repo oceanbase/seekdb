@@ -197,7 +197,7 @@ int ObStorageHAService::scheduler_ls_ha_handler_()
     ret = OB_NOT_INIT;
     LOG_WARN("storage ha service do not init", K(ret));
   } else {
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
     std::random_device rd;
     std::mt19937 g(rd());
     std::shuffle(ls_id_array_.begin(), ls_id_array_.end(), g);

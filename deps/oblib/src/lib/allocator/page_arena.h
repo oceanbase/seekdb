@@ -20,7 +20,9 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 #include "lib/ob_define.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/allocator/ob_mod_define.h"
@@ -36,8 +38,15 @@ namespace common
 
 inline int64_t sys_page_size()
 {
+#ifdef _WIN32
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  static int64_t sz = si.dwPageSize;
+  return sz;
+#else
   static int64_t sz = sysconf(_SC_PAGE_SIZE);
   return sz;
+#endif
 }
 
 // convenient function for memory alignment
@@ -826,7 +835,12 @@ public: // API
       --pages_;
 
       if (sleep_pages > 0 && current_sleep_pages >= sleep_pages) {
+#ifdef _WIN32
+        // Windows: Sleep takes milliseconds
+        ::Sleep(static_cast<DWORD>(sleep_interval_us / 1000));
+#else
         ::usleep(static_cast<useconds_t>(sleep_interval_us));
+#endif
         current_sleep_pages = 0;
       }
     }
@@ -844,6 +858,9 @@ public: // API
   {
     UNUSED(ptr);
   }
+
+  // Alias for free() - used by some code
+  void reset() { free(); }
 
   // Tracer is used to free memory in a arena allocator.  When call
   // set_tracer function, arena would record a snapshot which is used

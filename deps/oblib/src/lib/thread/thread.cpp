@@ -17,6 +17,14 @@
 #define USING_LOG_PREFIX LIB
 
 #include "thread.h"
+#ifdef _WIN32
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+#include <io.h>
+#include <process.h>
+#endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/rc/context.h"
 #include "lib/thread/protected_stack_allocator.h"
@@ -30,7 +38,11 @@ using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 thread_local int64_t Thread::loop_ts_ = 0;
+#ifdef _WIN32
+thread_local pthread_t Thread::thread_joined_ = pthread_null();
+#else
 thread_local pthread_t Thread::thread_joined_ = 0;
+#endif
 thread_local int64_t Thread::sleep_us_ = 0;
 thread_local int64_t Thread::blocking_ts_ = 0;
 thread_local bool Thread::is_doing_ddl_ = false;
@@ -47,7 +59,11 @@ Thread &Thread::current()
 }
 
 Thread::Thread(Threads *threads, int64_t idx, int64_t stack_size, int32_t numa_node)
+#ifdef _WIN32
+    : pth_(pthread_null()),
+#else
     : pth_(0),
+#endif
       threads_(threads),
       idx_(idx),
 #ifndef OB_USE_ASAN
@@ -81,7 +97,7 @@ int Thread::start()
   } else if (stack_size_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
-#ifndef OB_USE_ASAN
+#if !defined(OB_USE_ASAN) && !defined(_WIN32)
   } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), stack_size_ + SIG_STACK_SIZE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
@@ -114,10 +130,9 @@ int Thread::start()
         pthread_attr_getstacksize(&attr, &actual_stack_size);
         LOG_INFO("successfully set stack size", K_(stack_size), K(actual_stack_size));
       }
+#elif defined(_WIN32)
+      pret = pthread_attr_setstacksize(&attr, stack_size_);
 #else
-      // ProtectedStackAllocator::alloc returns the top of the stack (high address)
-      // but pthread_attr_setstack needs the bottom of the stack (low address)
-      // Calculate the bottom address: stack_addr_ points to the top, so bottom = stack_addr_ - stack_size_
       pret = pthread_attr_setstack(&attr, stack_addr_, stack_size_);
 #endif
 #endif
@@ -127,7 +142,11 @@ int Thread::start()
       pret = pthread_create(&pth_, &attr, __th_start, this);
       if (pret != 0) {
         LOG_ERROR("pthread create failed", K(pret), K(errno));
+#ifdef _WIN32
+        pth_ = pthread_null();
+#else
         pth_ = 0;
+#endif
       } else {
         while (ATOMIC_LOAD(&create_ret_) == OB_NOT_RUNNING) {
           sched_yield();
@@ -161,7 +180,7 @@ void Thread::stop()
 #ifndef OB_USE_ASAN
   stack_addr_flag = (stack_addr_ != NULL);
 #endif
-#ifdef ERRSIM
+#if defined(ERRSIM) && !defined(_WIN32)
   if (!stop_
       && stack_addr_flag
       && 0 != (OB_E(EventTable::EN_THREAD_HANG) 0)) {
@@ -171,7 +190,7 @@ void Thread::stop()
     return;
   }
 #endif
-#ifndef OB_USE_ASAN
+#if !defined(OB_USE_ASAN) && !defined(_WIN32)
   if (!stop_ && stack_addr_ != NULL) {
     int tid_offset = 720;
     int pid_offset = 724;
@@ -218,7 +237,7 @@ void Thread::run()
 
 void Thread::dump_pth() // for debug pthread join faileds
 {
-#ifndef OB_USE_ASAN
+#if !defined(OB_USE_ASAN) && !defined(_WIN32)
   int ret = OB_SUCCESS;
   int fd = 0;
   int64_t len = 0;
@@ -263,7 +282,11 @@ void Thread::dump_pth() // for debug pthread join faileds
 void Thread::wait()
 {
   int ret = 0;
+#ifdef _WIN32
+  if (!pthread_is_null(pth_)) {
+#else
   if (pth_ != 0) {
+#endif
     if (0 != (ret = pthread_join(pth_, nullptr))) {
       LOG_ERROR("pthread_join failed", K(ret), K(errno));
 #ifndef OB_USE_ASAN
@@ -278,7 +301,11 @@ void Thread::wait()
 int Thread::try_wait()
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  if (!pthread_is_null(pth_)) {
+#else
   if (pth_ != 0) {
+#endif
     int pret = 0;
 #if defined(__APPLE__) || defined(__ANDROID__)
     if (pthread_kill(pth_, 0) == 0) {
@@ -289,6 +316,21 @@ int Thread::try_wait()
         LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
       } else {
         destroy_stack();
+      }
+    }
+#elif defined(_WIN32)
+    {
+      HANDLE hThread = pth_.p;
+      DWORD wait_ret = WaitForSingleObject(hThread, 0);
+      if (wait_ret == WAIT_OBJECT_0) {
+        if (0 != (pret = pthread_join(pth_, nullptr))) {
+          ret = OB_EAGAIN;
+          LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
+        } else {
+          destroy_stack();
+        }
+      } else {
+        ret = OB_EAGAIN;
       }
     }
 #elif defined(__linux__)
@@ -305,7 +347,11 @@ int Thread::try_wait()
 
 void Thread::destroy()
 {
+#ifdef _WIN32
+  if (!pthread_is_null(pth_)) {
+#else
   if (pth_ != 0) {
+#endif
     /* NOTE: must wait pthread quit before release user_stack
        because the pthread's tcb was allocated from it */
     wait();
@@ -316,7 +362,9 @@ void Thread::destroy()
 
 void Thread::destroy_stack()
 {
-#ifndef OB_USE_ASAN
+#ifdef _WIN32
+  pth_ = pthread_null();
+#elif !defined(OB_USE_ASAN)
   if (stack_addr_ != nullptr) {
     g_stack_allocer.dealloc(stack_addr_);
     stack_addr_ = nullptr;
@@ -343,7 +391,7 @@ void* Thread::__th_start(void *arg)
   current_thread_ = th;
   th->tid_ = gettid();
 
-#ifndef OB_USE_ASAN
+#if !defined(OB_USE_ASAN) && !defined(_WIN32)
   ObStackHeader *stack_header = ProtectedStackAllocator::stack_header(th->stack_addr_);
   abort_unless(stack_header->check_magic());
 
@@ -351,9 +399,7 @@ void* Thread::__th_start(void *arg)
   /**
     signal handler stack
    */
-  #ifndef __APPLE__
-  // On macOS, sigaltstack may fail with ENOMEM (errno=12) due to system limitations
-  // Skip sigaltstack setup on macOS to avoid warnings
+  #if !defined(__APPLE__)
   stack_t nss;
   stack_t oss;
   bzero(&nss, sizeof(nss));
@@ -367,7 +413,7 @@ void* Thread::__th_start(void *arg)
     restore_sigstack = true;
   }
   DEFER(if (restore_sigstack) { sigaltstack(&oss, nullptr); });
-  #endif // __APPLE__
+  #endif // !__APPLE__
   #endif
 
   stack_header->pth_ = (uint64_t)pthread_self();
@@ -378,9 +424,6 @@ void* Thread::__th_start(void *arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(th), K(ret));
   } else {
-    // pm destructor logically accesses objects bound to other pthread_key, to avoid the impact of destruction order
-    // pm does not use TSI but instead does thread-local (__thread)
-    // create page manager
     ObPageManager pm;
     ret = pm.set_tenant_ctx(common::OB_SERVER_TENANT_ID, common::ObCtxIds::GLIBC);
     if (OB_FAIL(ret)) {
@@ -399,9 +442,7 @@ void* Thread::__th_start(void *arg)
         WITH_CONTEXT(*mem_context) {
           try {
             in_try_stmt = true;
-#ifndef __APPLE__
-            // On Linux, signal thread started here. On macOS, this was already done
-            // earlier (right after QoS setup) to prevent spin-wait delays.
+#if !defined(__APPLE__)
             ATOMIC_STORE(&th->create_ret_, OB_SUCCESS);
 #endif
             th->run();
@@ -454,6 +495,26 @@ int Thread::get_cpu_time_inc(int64_t &cpu_time_inc)
   } else {
     cpu_time = (int64_t)basic_info.user_time.seconds * 1000000 + basic_info.user_time.microseconds
              + (int64_t)basic_info.system_time.seconds * 1000000 + basic_info.system_time.microseconds;
+  }
+#elif defined(_WIN32)
+  HANDLE hThread = OpenThread(THREAD_QUERY_INFORMATION, FALSE, (DWORD)tid);
+  if (hThread != NULL) {
+    FILETIME creation_time, exit_time, kernel_time, user_time;
+    if (GetThreadTimes(hThread, &creation_time, &exit_time, &kernel_time, &user_time)) {
+      ULARGE_INTEGER utime, ktime;
+      utime.LowPart = user_time.dwLowDateTime;
+      utime.HighPart = user_time.dwHighDateTime;
+      ktime.LowPart = kernel_time.dwLowDateTime;
+      ktime.HighPart = kernel_time.dwHighDateTime;
+      cpu_time = (int64_t)((utime.QuadPart + ktime.QuadPart) / 10);
+    } else {
+      ret = OB_ERR_SYS;
+      LOG_WARN("GetThreadTimes failed", K(ret), K(tid));
+    }
+    CloseHandle(hThread);
+  } else {
+    ret = OB_ERR_SYS;
+    LOG_WARN("OpenThread failed", K(ret), K(tid));
   }
 #else
   int fd = -1;
@@ -519,7 +580,7 @@ namespace oceanbase
 {
 namespace lib
 {
-int __attribute__((weak)) get_max_thread_num()
+int OB_WEAK_SYMBOL get_max_thread_num()
 {
   return 4096;
 }

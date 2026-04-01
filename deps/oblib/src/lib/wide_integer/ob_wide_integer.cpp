@@ -15,6 +15,9 @@
  */
 
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX LIB
+#endif
 #include "ob_wide_integer.h"
 #include "common/object/ob_object.h"
 

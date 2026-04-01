@@ -320,7 +320,7 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
   ObRecursiveMutexGuard guard(lock_);
   int ret = OB_SUCCESS;
 
-  const int64_t MAX_KEEP_INTERVAL_NS =  30 * 24 * 60 * 60 * 1000L * 1000L * 1000L; // 30 day
+  const int64_t MAX_KEEP_INTERVAL_NS =  30LL * 24 * 60 * 60 * 1000 * 1000 * 1000; // 30 day
   const int64_t MIN_REMAINED_VERSION_COUNT = 32;
   SCN cur_gts_scn;
   SCN min_frozen_scn;

@@ -448,7 +448,7 @@ int ObSimpleLogServer::init_log_service_(const bool is_bootstrap)
     opts.disk_options_.log_disk_utilization_threshold_ = 80;
     opts.disk_options_.log_disk_utilization_limit_threshold_ = 95;
     opts.disk_options_.log_disk_throttling_percentage_ = 100;
-    opts.disk_options_.log_disk_throttling_maximum_duration_ = 2 * 3600 * 1000 * 1000L;
+    opts.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 3600 * 1000 * 1000;
     opts.disk_options_.log_writer_parallelism_ = 2;
     disk_opts_ = opts.disk_options_;
     inner_table_disk_opts_ = disk_opts_;

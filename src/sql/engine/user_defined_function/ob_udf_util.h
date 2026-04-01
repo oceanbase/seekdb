@@ -17,7 +17,11 @@
 #ifndef OB_UDF_UTIL_H_
 #define OB_UDF_UTIL_H_
 
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #include "share/schema/ob_udf.h"
 #include "sql/engine/user_defined_function/ob_user_defined_function.h"
 #include "sql/engine/user_defined_function/ob_udf_registration_types.h"
@@ -159,7 +163,11 @@ int ObUdfUtil::load_function(const common::ObString &name,
   MEMCPY(func_name, name.ptr(), name.length());
   char *postfix_start_pos = func_name + name.length();
   MEMCPY(postfix_start_pos, postfix.ptr(), postfix.length());
+#ifdef _WIN32
+  if (OB_ISNULL(((func_tmp = (T)(void*)GetProcAddress((HMODULE)handler, func_name))))) {
+#else
   if (OB_ISNULL(((func_tmp = (T)dlsym(handler, func_name))))) {
+#endif
     ret = ignore_error ? common::OB_SUCCESS : common::OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "Can't find symbol", K(ret), K(name), K(func_name));
   } else {

@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX RPC_OBMYSQL
+#endif
 #include "ob_mysql_request_utils.h"
 #include "lib/compress/zlib/ob_zlib_compressor.h"
 #include "rpc/ob_request.h"
@@ -22,7 +25,7 @@
 
 using namespace oceanbase::common;
 
-void __attribute__((weak)) request_finish_callback() {}
+void OB_WEAK_SYMBOL request_finish_callback() {}
 
 namespace oceanbase
 {

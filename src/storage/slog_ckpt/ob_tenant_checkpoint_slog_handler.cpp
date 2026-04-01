@@ -26,6 +26,11 @@
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/slog_ckpt/ob_tenant_meta_snapshot_handler.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#define sleep(sec) Sleep((sec) * 1000)
+#endif
+
 namespace oceanbase
 {
 using namespace share;

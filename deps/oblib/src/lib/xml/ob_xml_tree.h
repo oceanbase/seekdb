@@ -21,6 +21,12 @@
 #include "ob_tree_base.h"
 #include "lib/container/ob_array_iterator.h"
 
+#ifdef _WIN32
+#ifdef DELETE
+#undef DELETE
+#endif
+#endif
+
 namespace oceanbase {
 namespace common {
 

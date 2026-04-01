@@ -204,7 +204,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
-  // server parameters be inited here.
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
   }
@@ -226,7 +225,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   // set large page param
   ObLargePageHelper::set_param(config_.use_large_pages);
 
-  // start ObTimerService first, because some timers depend on it
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().init())) {
       LOG_ERROR("init queue_thread dynamic mgr failed", KR(ret));
@@ -249,7 +247,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else if (OB_FAIL(ObTabletHandleIndexMap::get_instance()->init())) {
       LOG_ERROR("init leak checker hash map and qsync lock failed", K(ret));
     }
-
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql::init_sql_factories())) {
         LOG_ERROR("init sql factories !", KR(ret));
@@ -263,7 +260,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
         LOG_ERROR("init session base values failed", KR(ret));
       }
     }
-
     if (FAILEDx(ObQueryRetryCtrl::init())) {
       LOG_ERROR("init retry ctrl failed", KR(ret));
     } else if (OB_FAIL(ObMdsEventBuffer::init())) {
@@ -284,50 +280,89 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init version failed", KR(ret));
     } else if (OB_FAIL(init_sql_proxy())) {
       LOG_ERROR("init sql connection pool failed", KR(ret));
-    } else if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
+    }
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
       LOG_ERROR("init device manager failed", KR(ret));
-    } else if (OB_FAIL(init_io())) {
+    }
+    }
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(init_io())) {
       LOG_ERROR("init io failed", KR(ret));
+    }
+    }
+    if (OB_SUCC(ret)) {
+    if (FALSE_IT(cgroup_ctrl_.init())) {
+      LOG_ERROR("should never reach here!", KR(ret));
     } else if (FALSE_IT(cgroup_ctrl_.init())) {
       LOG_ERROR("should never reach here!", KR(ret));
     } else if (OB_FAIL(init_restore_ctx())) {
       LOG_ERROR("init restore context failed", KR(ret));
+    }
     #ifndef OB_USE_ASAN
-    } else if (OB_FAIL(ObMemoryDump::get_instance().init())) {
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObMemoryDump::get_instance().init())) {
       LOG_ERROR("init memory dumper failed", KR(ret));
+    }
+    }
     #endif
-    } else if (OB_FAIL(init_global_kvcache())) {
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(init_global_kvcache())) {
       LOG_ERROR("init global kvcache failed", KR(ret));
+    }
+    }
 #ifdef OB_BUILD_SHARED_STORAGE
-    } else if (GCTX.is_shared_storage_mode() &&
-               OB_FAIL(OB_LS_PREWARM_MGR.init())) {
+    if (OB_SUCC(ret) && GCTX.is_shared_storage_mode()) {
+    if (OB_FAIL(OB_LS_PREWARM_MGR.init())) {
       LOG_ERROR("init ls prewarm manager failed", KR(ret));
+    }
+    }
 #endif
-    } else if (OB_FAIL(schema_status_proxy_.init())) {
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(schema_status_proxy_.init())) {
       LOG_ERROR("fail to init schema status proxy", KR(ret));
-    } else if (OB_FAIL(device_credential_task_.init(CREDENTIAL_TASK_SCHEDULE_INTERVAL_US))) {
+    }
+    }
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(device_credential_task_.init(CREDENTIAL_TASK_SCHEDULE_INTERVAL_US))) {
       LOG_ERROR("fail to init device_credential_task", KR(ret), K(CREDENTIAL_TASK_SCHEDULE_INTERVAL_US));
-    } else if (OB_FAIL(init_schema())) {
+    }
+    }
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(init_schema())) {
       LOG_ERROR("init schema failed", KR(ret));
-    } else if (OB_FAIL(init_network())) {
+    }
+    }
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(init_network())) {
       LOG_ERROR("init network failed", KR(ret));
-    } else if (OB_FAIL(init_interrupt())) {
+    }
+    }
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(init_interrupt())) {
       LOG_ERROR("init interrupt failed", KR(ret));
-    } else if (OB_FAIL(init_plugin())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_plugin())) {
       LOG_ERROR("init plugin failed", KR(ret));
     } else if (OB_FAIL(init_ob_service(need_initialize))) {
       LOG_ERROR("init ob service failed", KR(ret));
-    } else if (OB_FAIL(init_root_service())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_root_service())) {
       LOG_ERROR("init root service failed", KR(ret));
-    } else if (OB_FAIL(root_service_monitor_.init())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(root_service_monitor_.init())) {
       LOG_ERROR("init root service monitor failed", KR(ret));
-    } else if (OB_FAIL(init_sql())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_sql())) {
       LOG_ERROR("init sql failed", KR(ret));
-    } else if (OB_FAIL(init_sql_runner())) {
-      LOG_ERROR("init sql failed", KR(ret));
-    } else if (OB_FAIL(init_sequence())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_sql_runner())) {
+      LOG_ERROR("init sql runner failed", KR(ret));
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_sequence())) {
       LOG_ERROR("init sequence failed", KR(ret));
-    } else if (OB_FAIL(init_pl())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_pl())) {
       LOG_ERROR("init pl failed", K(ret));
     } else if (OB_FAIL(tablet_operator_.init(&meta_db_pool_))) {
       LOG_ERROR("tablet table operator init failed", KR(ret));
@@ -336,21 +371,29 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
                                               sql_proxy_,
                                               srv_rpc_proxy_))) {
       LOG_ERROR("init location service failed", KR(ret));
-    } else if (OB_FAIL(init_autoincrement_service())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_autoincrement_service())) {
       LOG_ERROR("init auto-increment service failed", KR(ret));
-    } else if (OB_FAIL(init_table_lock_rpc_client())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_table_lock_rpc_client())) {
       LOG_ERROR("init table_lock_rpc_client failed", KR(ret));
-    } else if (OB_FAIL(init_tablet_autoincrement_service())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_tablet_autoincrement_service())) {
       LOG_ERROR("init auto-increment service failed", KR(ret));
-    } else if (OB_FAIL(init_bandwidth_throttle())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_bandwidth_throttle())) {
       LOG_ERROR("init bandwidth_throttle failed", KR(ret));
-    } else if (OB_FAIL(ObClockGenerator::init())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ObClockGenerator::init())) {
       LOG_ERROR("init create clock generator failed", KR(ret));
       //} else if (OB_FAIL(ObTenantFTPluginMgr::register_plugins())) {
       //     LOG_ERROR("init fulltext plugins failed", K(ret));
-    } else if (OB_FAIL(init_storage())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(init_storage())) {
       LOG_ERROR("init storage failed", KR(ret));
-    } else if (OB_FAIL(init_tx_data_cache())) {
+    }
+    if (OB_SUCC(ret)) {
+    if (OB_FAIL(init_tx_data_cache())) {
       LOG_ERROR("init tx data cache failed", KR(ret));
     } else if (!GCTX.is_shared_storage_mode() &&
                OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1))) {
@@ -455,6 +498,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else {
       GDS.set_rpc_proxy(&rs_rpc_proxy_);
     }
+  }
+    }
+    }
 
   if (OB_FAIL(ret)) {
     LOG_ERROR("[OBSERVER_NOTICE] fail to init observer", KR(ret));
@@ -462,6 +508,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
                         DBA_STEP_INC_INFO(server_start),
                         "observer init fail. "
                         "you may find solutions in previous error logs or seek help from official technicians.");
+#ifdef _WIN32
+    Sleep(3000);
+#endif
     set_stop();
     destroy();
   } else {
@@ -801,19 +850,16 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to start signal handler");
     }
-
     if (FAILEDx(startup_accel_handler_.start())) {
       LOG_ERROR("fail to start server startup task handler", KR(ret));
     } else {
       FLOG_INFO("success to start server startup task handler");
     }
-
     if (FAILEDx(OB_TS_MGR.start())) {
       LOG_ERROR("fail to start ts mgr", KR(ret));
     } else {
       FLOG_INFO("success to start ts mgr");
     }
-
     if (embed_mode) {
     } else if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
@@ -832,13 +878,11 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to init mds schema helper");
     }
-
     if (FAILEDx(ObIOManager::get_instance().start())) {
       LOG_ERROR("fail to start io manager", KR(ret));
     } else {
       FLOG_INFO("success to start io manager");
     }
-
     int64_t slog_reserved_size = 0;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(slog_reserved_size))) {
@@ -848,63 +892,53 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to start storage object manager");
     }
-
     if (FAILEDx(multi_tenant_.start())) {
       LOG_ERROR("fail to start multi tenant", KR(ret));
     } else {
       FLOG_INFO("success to start multi tenant");
     }
-
     if (FAILEDx(wr_service_.start())) {
       LOG_ERROR("failed to start wr service", K(ret));
     } else {
       LOG_INFO("success to start wr service");
     }
-
     if (FAILEDx(SERVER_STORAGE_META_SERVICE.start())) {
       LOG_ERROR("fail to start server storage meta service", KR(ret));
     } else {
       FLOG_INFO("success to start server storage meta service");
     }
-
     // shared-storage mode need check disk space available after creating tenant
     if (FAILEDx(OB_STORAGE_OBJECT_MGR.check_disk_space_available())) {
       LOG_ERROR("failed to check disk space available", K(ret));
     } else {
       LOG_INFO("success to check disk space available");
     }
-
     if (FAILEDx(log_block_mgr_.start(storage_env_.log_disk_size_))) {
       LOG_ERROR("fail to start log pool", KR(ret));
     } else {
       FLOG_INFO("success to start log pool");
     }
-
     if (FAILEDx(try_update_hidden_sys())) {
       LOG_ERROR("fail to update hidden sys tenant", KR(ret));
     } else {
       FLOG_INFO("success to update hidden sys tenant");
     }
-
     if (FAILEDx(weak_read_service_.start())) {
       LOG_ERROR("fail to start weak read service", KR(ret));
     } else {
       FLOG_INFO("success to start weak read service");
     }
-
     if (FAILEDx(bl_service_.start())) {
       LOG_ERROR("fail to start blacklist service", KR(ret));
     } else {
       FLOG_INFO("success to start blacklist service");
     }
-
     // do not wait clog replay over, avoid blocking other module
     if (FAILEDx(root_service_monitor_.start())) {
       LOG_ERROR("fail to start root service monitor", KR(ret));
     } else {
       FLOG_INFO("success to start root service monitor");
     }
-
     if (FAILEDx(ob_service_.start(embed_mode))) {
       LOG_ERROR("fail to start oceanbase service", KR(ret));
     } else {
@@ -2809,7 +2843,7 @@ static int64_t nic_rate_parse(const char *str, bool &valid)
     valid = false;
   } else {
     valid = true;
-    value = strtol(str, &p_unit, 0);
+    value = strtoll(str, &p_unit, 0);
     p_unit = strtrim(p_unit);
 
     if (OB_ISNULL(p_unit)) {
@@ -3428,7 +3462,7 @@ int ObServer::clean_up_invalid_tables_by_tenant(
   int tmp_ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObDatabaseSchema *database_schema = NULL;
-  const int64_t CONNECT_TIMEOUT_VALUE = 50L * 60L * 60L * 1000L * 1000L; //default value is 50hrs
+  const int64_t CONNECT_TIMEOUT_VALUE = 50LL * 60 * 60 * 1000 * 1000; //default value is 50hrs
   ObArray<uint64_t> table_ids;
   obrpc::ObDropTableArg drop_table_arg;
   obrpc::ObTableItem table_item;

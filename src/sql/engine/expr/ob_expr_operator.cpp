@@ -253,6 +253,49 @@ int ObExprOperator::cg_expr(ObExprCGCtx &,
 // check function pointer in vtable to detect cg_expr() is overwrite or not.
 bool ObExprOperator::is_default_expr_cg() const
 {
+#ifdef _WIN32
+  // MSVC stores a thunk address in pointer-to-member-function for virtual
+  // functions, not a vtable offset like GCC/Clang. The GCC vtable-index trick
+  // below does not work on MSVC and causes access violation.
+  // Return false (assume cg_expr is overridden) so the SQL engine proceeds
+  // normally; any truly unsupported operator will fail at cg_expr call time.
+  static ObArenaAllocator alloc;
+  static ObExprOperator base(alloc, T_NULL, "fake_null_operator", 0, VALID_FOR_GENERATED_COL);
+  typedef int (ObExprOperator::*CGFunc)(
+      ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const;
+  static_assert(sizeof(int64_t) == sizeof(CGFunc), "size mismatch");
+  union {
+    CGFunc func_;
+    int64_t val_;
+  } base_fv;
+  base_fv.func_ = &ObExprOperator::cg_expr;
+  // On MSVC the thunk address is the same for all classes sharing the same
+  // virtual slot, so we resolve through actual vtable pointers instead.
+  // Parse the MSVC thunk to extract the vtable offset:
+  //   48 8B 01        mov rax, [rcx]
+  //   FF 60 NN        jmp [rax+NN]       (1-byte displacement)
+  //   FF A0 NNNNNNNN  jmp [rax+NNNNNNNN] (4-byte displacement)
+  //   FF 20           jmp [rax]          (zero displacement)
+  const unsigned char *thunk = reinterpret_cast<const unsigned char *>(
+      reinterpret_cast<void *>(base_fv.val_));
+  int64_t vtable_offset = -1;
+  if (thunk[0] == 0x48 && thunk[1] == 0x8B && thunk[2] == 0x01 && thunk[3] == 0xFF) {
+    if (thunk[4] == 0x20) {
+      vtable_offset = 0;
+    } else if (thunk[4] == 0x60) {
+      vtable_offset = static_cast<int64_t>(static_cast<int8_t>(thunk[5]));
+    } else if (thunk[4] == 0xA0) {
+      int32_t disp;
+      memcpy(&disp, &thunk[5], sizeof(disp));
+      vtable_offset = static_cast<int64_t>(disp);
+    }
+  }
+  if (vtable_offset < 0) {
+    return false;
+  }
+  const int64_t func_idx = vtable_offset / sizeof(void *);
+  return (*(void ***)(&base))[func_idx] == (*(void ***)(this))[func_idx];
+#else
   static ObArenaAllocator alloc;
   static ObExprOperator base(alloc, T_NULL, "fake_null_operator", 0, VALID_FOR_GENERATED_COL);
   typedef int (ObExprOperator::*CGFunc)(
@@ -266,6 +309,7 @@ bool ObExprOperator::is_default_expr_cg() const
   func_val.func_ = &ObExprOperator::cg_expr;
   const int64_t func_idx = func_val.val_ / sizeof(void *);
   return (*(void ***)(&base))[func_idx] == (*(void ***)(this))[func_idx];
+#endif
 }
 
 ObObjType ObExprOperator::get_calc_cast_type(ObObjType param_type, ObObjType calc_type)

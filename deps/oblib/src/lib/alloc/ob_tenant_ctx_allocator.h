@@ -84,6 +84,7 @@ public:
       resource_handle_.get_memory_mgr()->free_chunk(chunk, attr);
     }
   }
+  bool resource_handle_valid() const { return resource_handle_.is_valid(); }
   void dec_hold(const int64_t size);
   // statistic related
   int set_tenant_memory_mgr()

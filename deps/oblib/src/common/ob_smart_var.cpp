@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "ob_smart_var.h"
 #include "lib/rc/context.h"
 #include "lib/utility/ob_tracepoint.h"
@@ -25,7 +27,7 @@ namespace common
 
 ERRSIM_POINT_DEF(ERRSIM_SMART_VAR);
 
-void *__attribute__((weak)) smart_alloc(const int64_t nbyte, const char *label)
+void *OB_WEAK_SYMBOL smart_alloc(const int64_t nbyte, const char *label)
 {
   int ret = ERRSIM_SMART_VAR ? : OB_SUCCESS;
   ObMemAttr attr;
@@ -33,7 +35,7 @@ void *__attribute__((weak)) smart_alloc(const int64_t nbyte, const char *label)
   return OB_SUCCESS == ret ? lib::ctxalf(nbyte, attr) : nullptr;
 }
 
-void __attribute__((weak)) smart_free(void *ptr)
+void OB_WEAK_SYMBOL smart_free(void *ptr)
 {
   lib::ctxfree(ptr);
 }

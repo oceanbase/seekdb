@@ -19,11 +19,12 @@
 #include "lib/cpu/ob_cpu_topology.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/container/ob_bit_set.h"
+#include <cstdio>
 
 namespace oceanbase {
 namespace common {
 
-int64_t __attribute__((weak)) get_cpu_count()
+int64_t OB_WEAK_SYMBOL get_cpu_count()
 {
   return get_cpu_num();
 }
@@ -44,34 +45,15 @@ bool CpuFlagSet::have_flag(const CpuFlag flag) const
 CpuFlagSet::CpuFlagSet() : flags_(0)
 {
   int ret = OB_SUCCESS;
-  uint64_t flags_from_cpu, flags_from_os;
+  uint64_t flags_from_cpu = 0, flags_from_os = 0;
   init_from_cpu(flags_from_cpu);
   if (OB_FAIL(init_from_os(flags_from_os))) {
-    COMMON_LOG(WARN, "failed to init cpu flags from os", K(ret));
-    // fork failed or grep failed
-    // use flags from cpu
     flags_ = flags_from_cpu;
   } else if (flags_from_cpu != flags_from_os) {
-    COMMON_LOG_RET(ERROR,
-        OB_ERR_SYS,
-        "There is a mismatch between the cpu flags from cpu and those from os, "
-        "ISA extension like avx512bw may be not supported by the virtualization setup", K(flags_from_cpu), K(flags_from_os));
     flags_ = flags_from_cpu & flags_from_os;
   } else {
     flags_ = flags_from_cpu;
   }
-#define LOG_CPUFLAG(flag) \
-  if (have_flag(CpuFlag::flag)) { \
-    _LOG_INFO("#flag is supported"); \
-  } else { \
-    _LOG_WARN("#flag is not supported"); \
-  }
-  LOG_CPUFLAG(SSE4_2)
-  LOG_CPUFLAG(AVX)
-  LOG_CPUFLAG(AVX2)
-  LOG_CPUFLAG(AVX512BW)
-  LOG_CPUFLAG(NEON)
-#undef LOG_CPUFLAG
 }
 
 void CpuFlagSet::init_from_cpu(uint64_t& flags)

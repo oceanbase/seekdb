@@ -49,7 +49,7 @@ struct ObLSMeta;
 class ObLSService : public ObIResourceLimitCalculatorHandler
 {
   static const int64_t DEFAULT_LOCK_TIMEOUT = 60_s;
-  static const int64_t SMALL_TENANT_MEMORY_LIMIT = 4 * 1024 * 1024 * 1024L; // 4G
+  static const int64_t SMALL_TENANT_MEMORY_LIMIT = 4LL * 1024 * 1024 * 1024; // 4G
   static const int64_t TENANT_MEMORY_PER_LS_NEED = 200 * 1024 * 1024L; // 200MB
 public:
   int64_t break_point = -1; // just for test

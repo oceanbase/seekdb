@@ -38,7 +38,7 @@ using namespace share::schema;
 class TestCGBlockTmpFile : public ::testing::Test
 {
 public:
-  static const int64_t TENANT_MEMORY = 16L * 1024L * 1024L * 1024L /* 16 GB */;
+  static const int64_t TENANT_MEMORY = 16LL * 1024 * 1024 * 1024 /* 16 GB */;
 
 public:
   TestCGBlockTmpFile() = default;

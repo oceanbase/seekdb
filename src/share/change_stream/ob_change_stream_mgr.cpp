@@ -66,7 +66,7 @@ int ObChangeStreamMgr::init()
     LOG_WARN("ObChangeStreamMgr: worker init failed", K(ret));
   } else {
     is_inited_ = true;
-    FLOG_INFO("ObChangeStreamMgr init success (Fetcher/Dispatcher/Worker)", K(sysconf(_SC_NPROCESSORS_ONLN)));
+    FLOG_INFO("ObChangeStreamMgr init success (Fetcher/Dispatcher/Worker)", K(GET_THREAD_NUM_BY_NPROCESSORS(1)));
   }
   return ret;
 }

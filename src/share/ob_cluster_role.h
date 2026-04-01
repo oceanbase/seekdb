@@ -29,7 +29,11 @@ enum ObClusterRole
   STANDBY_CLUSTER = 2,
 };
 
-enum ObClusterStatus
+#ifdef _WIN32
+#pragma push_macro("REGISTERED")
+#undef REGISTERED
+#endif
+enum ObClusterStatus  // nb30.h defines REGISTERED=0x04; permanently undef'd below on Windows
 {
   INVALID_CLUSTER_STATUS = 0,
   CLUSTER_VALID = 1,
@@ -38,6 +42,8 @@ enum ObClusterStatus
   CLUSTER_DISABLED_WITH_READONLY,
   MAX_CLUSTER_STATUS,
 };
+// On Windows, REGISTERED from nb30.h is permanently suppressed to avoid macro conflicts.
+// OceanBase does not use NetBIOS APIs, so it's safe to leave it undefined.
 
 enum ObProtectionMode
 {

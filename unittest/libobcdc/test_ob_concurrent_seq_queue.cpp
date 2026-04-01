@@ -27,7 +27,7 @@ namespace common
 class TestConSeqQueue : public ::testing::Test
 {
 public:
-  static const int64_t RUN_TIME = 1L * 60L * 60L * 1000L * 1000L;
+  static const int64_t RUN_TIME = 1LL * 60 * 60 * 1000 * 1000;
   static const int64_t THREAD_NUM = 20;
   static const int64_t STAT_INTERVAL = 5 * 1000 * 1000;
 public:

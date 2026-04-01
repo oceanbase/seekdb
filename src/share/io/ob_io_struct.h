@@ -17,7 +17,9 @@
 #ifndef OCEANBASE_LIB_STORAGE_OB_IO_STRUCT_H
 #define OCEANBASE_LIB_STORAGE_OB_IO_STRUCT_H
 
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_drw_lock.h"
@@ -30,6 +32,38 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_qsync_lock.h"
 #include "share/io/ob_io_define.h"
+
+#ifdef _WIN32
+// Windows: define rusage structure and getrusage function
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
+
+struct rusage {
+  struct timeval ru_utime; // user CPU time used
+  struct timeval ru_stime; // system CPU time used
+  long   ru_maxrss;        // maximum resident set size
+  long   ru_ixrss;         // integral shared memory size
+  long   ru_idrss;         // integral unshared data size
+  long   ru_isrss;         // integral unshared stack size
+  long   ru_minflt;        // page reclaims (soft page faults)
+  long   ru_majflt;        // page faults (hard page faults)
+  long   ru_nswap;         // swaps
+  long   ru_inblock;       // block input operations
+  long   ru_oublock;       // block output operations
+  long   ru_msgsnd;        // IPC messages sent
+  long   ru_msgrcv;        // IPC messages received
+  long   ru_nsignals;      // signals received
+  long   ru_nvcsw;         // voluntary context switches
+  long   ru_nivcsw;        // involuntary context switches
+};
+
+#define RUSAGE_SELF 0
+#define RUSAGE_THREAD 1
+
+// Forward declaration or inline implementation
+int getrusage(int who, struct rusage *usage);
+#endif
 
 namespace oceanbase
 {

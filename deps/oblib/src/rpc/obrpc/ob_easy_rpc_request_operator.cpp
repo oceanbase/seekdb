@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX RPC_OBRPC
+#endif
 #include "rpc/obrpc/ob_easy_rpc_request_operator.h"
 #include "lib/utility/utility.h"
 
-void __attribute__((weak)) request_finish_callback() {}
+void OB_WEAK_SYMBOL request_finish_callback() {}
 

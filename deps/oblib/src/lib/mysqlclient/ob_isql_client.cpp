@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX LIB_MYSQLC
+#endif
 #include "lib/mysqlclient/ob_isql_client.h"
 #include "lib/mysqlclient/ob_isql_result_handler.h"
 #include "lib/mysqlclient/ob_mysql_result.h"

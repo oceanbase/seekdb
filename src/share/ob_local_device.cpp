@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
 // Define AIO types before including ob_local_device.h, which uses them in class members.
 // Also suppress dummy stubs from the header via OB_LIBAIO_STUB_DEFINED --
 // this translation unit provides working AIO emulation below.
 #define OB_LIBAIO_STUB_DEFINED
 #include <stddef.h>
-typedef unsigned long io_context_t;
+#include <stdint.h>
+typedef uintptr_t io_context_t;
 struct iocb {
   void *data;
   short aio_lio_opcode;
@@ -32,11 +33,19 @@ struct iocb {
 struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
+#ifndef _WIN32
 #include <sys/statvfs.h>
 #include <unistd.h>
+#endif
 #if defined(__APPLE__)
 #include <sys/mount.h>
 #include <fcntl.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+#include <stdint.h>
+#include <chrono>
 #elif defined(__ANDROID__)
 #include <sys/vfs.h>
 #include <linux/falloc.h>
@@ -46,15 +55,22 @@ struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #include <libaio.h>
 #endif
 
-#if defined(__APPLE__) || defined(__ANDROID__)
-// Synchronous AIO emulation for macOS and Android (no libaio available).
-// Uses STL only in this .cpp -- safe since it's a single translation unit.
+#if defined(__APPLE__) || defined(__ANDROID__) || defined(_WIN32)
 #include <stdlib.h>
 #include <functional>
 #include <mutex>
 #include <vector>
 #include <condition_variable>
-#include <chrono>
+
+#ifdef _WIN32
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0
+#endif
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#include "share/ob_statvfs_win32.h"
+#endif
 
 struct io_event_queue {
   std::mutex mtx;
@@ -62,8 +78,7 @@ struct io_event_queue {
   std::vector<struct io_event> events;
 };
 
-#ifdef __APPLE__
-// macOS doesn't have linux/falloc.h
+#if defined(__APPLE__)
 #ifndef FALLOC_FL_KEEP_SIZE
 #define FALLOC_FL_KEEP_SIZE 0x01
 #endif
@@ -109,11 +124,39 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
   for (long i = 0; i < nr; ++i) {
     struct iocb *iocb = iocbpp[i];
     ssize_t res = 0;
+#ifdef _WIN32
+    HANDLE h = (HANDLE)_get_osfhandle(iocb->aio_fildes);
+    if (h == INVALID_HANDLE_VALUE) {
+      res = -EIO;
+    } else {
+      OVERLAPPED ov = {};
+      ov.Offset = (DWORD)((uint64_t)iocb->aio_offset & 0xFFFFFFFF);
+      ov.OffsetHigh = (DWORD)((uint64_t)iocb->aio_offset >> 32);
+      DWORD bytes = 0;
+      BOOL ok;
+      if (iocb->aio_lio_opcode == 1) {
+        ok = WriteFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
+      } else {
+        ok = ReadFile(h, iocb->aio_buf, (DWORD)iocb->aio_nbytes, &bytes, &ov);
+      }
+      if (ok) {
+        res = (ssize_t)bytes;
+      } else {
+        DWORD err = GetLastError();
+        if (err == ERROR_HANDLE_EOF) {
+          res = (ssize_t)bytes;
+        } else {
+          res = -EIO;
+        }
+      }
+    }
+#else
     if (iocb->aio_lio_opcode == 1) { // PWRITE
       res = pwrite(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
     } else if (iocb->aio_lio_opcode == 0) { // PREAD
       res = pread(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
     }
+#endif
 
     struct io_event ev;
     ev.data = iocb->data;
@@ -1537,6 +1580,22 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
       ret = ObIODeviceLocalFileOp::convert_sys_errno();
       SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
           K(delta_size), K(new_size), K(errno), KERRMSG);
+    }
+#elif defined(_WIN32)
+    HANDLE h = (HANDLE)_get_osfhandle(block_fd_);
+    if (h != INVALID_HANDLE_VALUE) {
+      LARGE_INTEGER li;
+      li.QuadPart = block_file_size_ + delta_size;
+      if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
+        sys_ret = -1;
+      }
+    } else {
+      sys_ret = -1;
+    }
+    if (0 != sys_ret) {
+      ret = ObIODeviceLocalFileOp::convert_sys_errno();
+      SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
+          K(delta_size), K(errno), KERRMSG);
     }
 #else
     if (0 != (sys_ret = ::fallocate(block_fd_, 0, block_file_size_, delta_size))) {

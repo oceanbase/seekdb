@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "common/log/ob_single_log_reader.h"
 #include "common/log/ob_log_dir_scanner.h"
 #include "common/log/ob_log_generator.h"

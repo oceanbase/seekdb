@@ -62,7 +62,7 @@ int EventRecorder::report_event_(ElectionEventType type, const common::ObString 
     ELECT_TIME_GUARD(500_ms);
     int ret = OB_SUCCESS;
     bool stop_flag = false;
-    char ip[64] = {0};
+    char ip[MAX_IP_ADDR_LENGTH] = {0};
     static const char *columns[12] = {"svr_ip", "svr_port", "module", "event", "name1", "value1", "name2", "value2", "name3", "value3", "name4", "value4"};
     if (!self_addr.ip_to_string(ip, sizeof(ip))) {
       ret = OB_ERR_UNEXPECTED;

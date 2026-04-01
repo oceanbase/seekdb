@@ -38,7 +38,7 @@ namespace observer
 
 class ObAllVirtualMdsEventHistory : public common::ObVirtualTableScannerIterator
 {
-  static constexpr int64_t IP_BUFFER_SIZE = 64;
+  static constexpr int64_t IP_BUFFER_SIZE = 65;  // >= MAX_IP_ADDR_LENGTH (e.g. INET6 on Windows)
 public:
   explicit ObAllVirtualMdsEventHistory(omt::ObMultiTenant *omt) : omt_(omt) {}
   virtual int inner_get_next_row(common::ObNewRow *&row) override;

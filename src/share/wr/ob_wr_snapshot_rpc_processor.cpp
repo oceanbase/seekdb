@@ -430,5 +430,13 @@ int ObWrSyncUserModifySettingsTaskP::process()
   }
   return ret;
 }
+
+// Explicit template instantiations for Windows/clang - prevents undefined symbols
+// when template methods are only referenced from other TUs (e.g. ob_srv_xlator_partition.cpp)
+template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_ASYNC_SNAPSHOT_TASK>;
+template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_ASYNC_PURGE_SNAPSHOT_TASK>;
+template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_SYNC_USER_SUBMIT_SNAPSHOT_TASK>;
+template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_SYNC_USER_MODIFY_SETTINGS_TASK>;
+
 }  // end of namespace share
 }  // end of namespace oceanbase

@@ -17,6 +17,12 @@
 #ifndef OCEANBASE_RPC_OBRPC_OB_RPC_PACKET_
 #define OCEANBASE_RPC_OBRPC_OB_RPC_PACKET_
 
+#ifdef _WIN32
+#ifdef OPTIONAL
+#undef OPTIONAL
+#endif
+#endif
+
 #include "io/easy_io_struct.h"
 #include "lib/profile/ob_trace_id.h"
 #include "lib/utility/ob_print_utils.h"
@@ -865,6 +871,9 @@ inline void set_current_pcode(const ObRpcPacketCode pcode)
   g_pcode = pcode;
 }
 
+#if defined(_WIN32) && defined(OPTIONAL)
+#undef OPTIONAL
+#endif
 enum class ObRpcCheckSumCheckLevel
 {
   INVALID,

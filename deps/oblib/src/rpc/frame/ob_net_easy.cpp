@@ -25,11 +25,13 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#ifndef _WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 #include <unistd.h>
+#endif
+#include <pthread.h>
 
 #ifndef EASY_NUM_LEN
 #define EASY_NUM_LEN 32

@@ -452,8 +452,8 @@ private:
     int64_t flags_;
     struct
     {
-      bool mysql_obrequest_ref_ : 1;
-      bool di_rpc_cache_ : 1;
+      int64_t mysql_obrequest_ref_ : 1;
+      int64_t di_rpc_cache_ : 1;
     };
   };
 };

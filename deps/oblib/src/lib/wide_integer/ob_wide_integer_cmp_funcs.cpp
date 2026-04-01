@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX LIB
+#endif
 #include "common/object/ob_object.h"
 
 namespace oceanbase

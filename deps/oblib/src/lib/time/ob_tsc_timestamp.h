@@ -17,7 +17,11 @@
 #ifndef OB_TSC_TIMESTAMP_H_
 #define OB_TSC_TIMESTAMP_H_
 #if defined(__x86_64__)
-#include<cpuid.h>
+#ifdef _WIN32
+#include <intrin.h>
+#else
+#include <cpuid.h>
+#endif
 #endif
 #include "lib/ob_define.h"
 
@@ -42,6 +46,24 @@ static inline uint64_t rdtscp_id(uint64_t &cpuid)
   return ((uint64_t) rax) | (((uint64_t) rdx) << 32);
 }
 #elif defined(__x86_64__)
+#ifdef _WIN32
+static inline uint64_t rdtsc()
+{
+  return __rdtsc();
+}
+static inline uint64_t rdtscp()
+{
+  unsigned int aux;
+  return __rdtscp(&aux);
+}
+static inline uint64_t rdtscp_id(uint64_t &cpuid)
+{
+  unsigned int aux;
+  uint64_t val = __rdtscp(&aux);
+  cpuid = aux;
+  return val;
+}
+#else
 static inline uint64_t rdtsc()
 {
   uint64_t rax,rdx;
@@ -62,6 +84,7 @@ static inline uint64_t rdtscp_id(uint64_t &cpuid)
   cpuid = rcx;
   return ((uint64_t) rax) | (((uint64_t) rdx) << 32);
 }
+#endif
 
 #elif defined(__aarch64__)
 static __inline__ uint64_t rdtscp()
@@ -99,9 +122,15 @@ static inline uint64_t rdtscp_id(uint64_t &cpuid)
 
 // get cpu id with cpuid instruction
 #if defined(__x86_64__)
+#ifdef _WIN32
+static __inline__ void getcpuid(unsigned int cpu_info[4], unsigned int info_type) {
+  __cpuid((int *)cpu_info, (int)info_type);
+}
+#else
 static __inline__ void getcpuid(unsigned int cpu_info[4], unsigned int info_type) {
   __cpuid(info_type, cpu_info[0], cpu_info[1], cpu_info[2], cpu_info[3]);
 }
+#endif
 #endif
 
 namespace oceanbase

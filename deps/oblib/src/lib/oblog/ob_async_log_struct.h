@@ -19,7 +19,19 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+// Windows definitions for POSIX types and constants
+#include <io.h>  // For _isatty
+#ifndef _MODE_T_DEFINED
+typedef int mode_t;
+#define _MODE_T_DEFINED
+#endif
+#define STDIN_FILENO  0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <deque>

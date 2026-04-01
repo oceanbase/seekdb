@@ -147,7 +147,6 @@ struct ObCheckpointDiagnoseParam
 struct ObCheckpointUnitDiagnoseInfo
 {
   const static int64_t MAX_TIME = 253402271999999999;
-  friend class ObTraceInfo;
   ObCheckpointUnitDiagnoseInfo()
     : start_scn_(),
       end_scn_(),
@@ -164,8 +163,7 @@ struct ObCheckpointUnitDiagnoseInfo
   int64_t start_gc_time_;
   TO_STRING_KV(K_(start_scn), K_(end_scn), K_(rec_scn), K_(create_flush_dag_time),
     K_(merge_finish_time), K_(start_gc_time));
-private:
-  // lock/unlock in ObTraceInfo
+  // lock/unlock in ObTraceInfo (public for template friend access across TUs)
   common::SpinRWLock lock_;
 };
 

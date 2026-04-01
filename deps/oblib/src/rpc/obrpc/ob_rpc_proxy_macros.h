@@ -19,6 +19,12 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmacro-redefined"
 
+#ifdef _WIN32
+#ifdef IGNORE
+#undef IGNORE
+#endif
+#endif
+
 #include "lib/utility/ob_macro_utils.h"
 
 #define OROP_ const ObRpcOpts &opts = ObRpcOpts()

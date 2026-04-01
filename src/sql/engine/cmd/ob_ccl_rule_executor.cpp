@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_ccl_rule_executor.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/resolver/ddl/ob_create_ccl_rule_stmt.h"

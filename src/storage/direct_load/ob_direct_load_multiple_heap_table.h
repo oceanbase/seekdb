@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObDirectLoadTableDataDesc;
+struct ObDirectLoadTableDataDesc;
 class ObDirectLoadMultipleHeapTableTabletIndex;
 
 struct ObDirectLoadMultipleHeapTableDataFragment

@@ -36,6 +36,10 @@ enum PartitionRelation
   COMPATIBLE_COMMON
 };
 
+#ifdef _WIN32
+#pragma push_macro("CONST")
+#undef CONST
+#endif
 enum Monotonicity
 {
   NONE_MONO,

@@ -847,7 +847,7 @@ private:
 protected:
   virtual void clear_old_status_context();
 protected:
-  static const int64_t TASK_EXECUTE_TIME_THRESHOLD = 3 * 24 * 60 * 60 * 1000000L; // 3 days
+  static const int64_t TASK_EXECUTE_TIME_THRESHOLD = 3LL * 24 * 60 * 60 * 1000000; // 3 days
   common::TCRWLock lock_;
   ObDDLTracing ddl_tracing_;
   bool is_inited_;

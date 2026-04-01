@@ -35,7 +35,7 @@ public:
     : ObThreadIdling(stop) {}
   virtual int64_t get_idle_interval_us();
 public:
-  const static int64_t DEFAULT_SCHEMA_HISTORY_RECYCLE_INTERVAL = 60 * 60 * 1000 * 1000L; //1h
+  const static int64_t DEFAULT_SCHEMA_HISTORY_RECYCLE_INTERVAL = 60LL * 60 * 1000 * 1000; //1h
 };
 
 struct ObFirstSchemaKey

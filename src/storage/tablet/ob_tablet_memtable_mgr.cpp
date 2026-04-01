@@ -43,7 +43,7 @@ ObTabletMemtableMgr::ObTabletMemtableMgr()
   lock_.lock_type_ = LockType::OB_SPIN_RWLOCK;
   lock_.lock_ = &lock_def_;
 
-#if defined(__x86_64__)
+#if defined(__x86_64__) && !defined(_WIN32)
   static_assert(sizeof(ObTabletMemtableMgr) <= 480, "The size of ObTabletMemtableMgr will affect the meta memory manager, and the necessity of adding new fields needs to be considered.");
 #endif
 }

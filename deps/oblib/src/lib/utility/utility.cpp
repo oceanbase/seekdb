@@ -25,6 +25,15 @@
 #elif defined(__linux__)
 #include <gnu/libc-version.h>
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#undef ERROR
+#undef DELETE
+#undef ERROR_SEEK
+#include <io.h>
+#include <sys/locking.h>
+#include <process.h>
+#endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/file/file_directory_utils.h"
 #include "deps/oblib/src/common/ob_string_buf.h"
@@ -38,7 +47,7 @@ namespace common
 {
 extern "C"
 {
-  void do_breakpad_init() __attribute__((weak));
+  void do_breakpad_init() OB_WEAK_SYMBOL;
   void do_breakpad_init()
   {}
 }
@@ -65,7 +74,11 @@ void hex_dump(const void *data, const int32_t size,
     if (n % 16 == 1) {
       /* store address for this line */
       IGNORE_RETURN snprintf(addrstr, sizeof(addrstr), "%.4x",
+#ifdef _WIN32
+                             (int)((uintptr_t)p - (uintptr_t)data));
+#else
                              (int)((unsigned long)p - (unsigned long)data));
+#endif
     }
 
     c = *p;
@@ -376,7 +389,11 @@ const char *time2str(const int64_t time_us, char *buf, const int64_t buf_len, co
     int64_t time_s = time_us / 1000000;
     int64_t cur_second_time_us = time_us % 1000000;
     time_t time_t_val = static_cast<time_t>(time_s);
+#ifdef _WIN32
+    if (0 == localtime_s(&time_struct, &time_t_val)) {
+#else
     if (nullptr != localtime_r(&time_t_val, &time_struct)) {
+#endif
       int64_t pos = strftime(buf, buf_len, format, &time_struct);
       // since libc 4.4.4, strftime returns 0 if failed
       if (pos > 0) {
@@ -1147,9 +1164,16 @@ static int pidfile_test(const char *pidfile)
     LOG_INFO("fid file doesn't exist", KCSTRING(pidfile));
     ret = OB_FILE_NOT_EXIST;
   } else {
+#ifdef _WIN32
+    if (_locking(fd, _LK_NBLCK, 1) != 0) {
+      _locking(fd, _LK_UNLCK, 1);
+      ret = OB_ERROR;
+    }
+#else
     if (lockf(fd, F_TEST, 0) != 0) {
       ret = OB_ERROR;
     }
+#endif
     close(fd);
   }
 
@@ -1183,12 +1207,41 @@ static int read_pid(const char *pidfile, long &pid)
 static int use_daemon()
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  // Windows has no fork(). Emulate daemon() by re-launching ourselves as a
+  // detached process with --nodaemon, then the parent exits so the shell
+  // gets control back immediately (same semantics as Unix daemon()).
+  char exe_path[MAX_PATH] = {};
+  if (0 == GetModuleFileNameA(nullptr, exe_path, sizeof(exe_path))) {
+    LOG_ERROR("GetModuleFileNameA failed", "err", GetLastError());
+    ret = OB_ERR_SYS;
+  } else {
+    char new_cmd[32768] = {};
+    snprintf(new_cmd, sizeof(new_cmd), "%s --nodaemon", GetCommandLineA());
+
+    STARTUPINFOA si = {};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+
+    if (!CreateProcessA(exe_path, new_cmd, nullptr, nullptr, FALSE,
+                        DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+                        nullptr, nullptr, &si, &pi)) {
+      LOG_ERROR("CreateProcessA failed", "err", GetLastError());
+      ret = OB_ERR_SYS;
+    } else {
+      CloseHandle(pi.hProcess);
+      CloseHandle(pi.hThread);
+      _exit(0);
+    }
+  }
+#else
   const int nochdir = 1;
   const int noclose = 0;
   if (daemon(nochdir, noclose) < 0) {
     LOG_ERROR("create daemon process fail", K(errno));
     ret = OB_ERR_SYS;
   }
+#endif
   reset_tid_cache();
 #ifdef __APPLE__
   // On macOS, after daemon() the process becomes a background process with low QoS priority.
@@ -1238,7 +1291,11 @@ int start_daemon(const char *pidfile, bool skip_daemon)
     if (fd < 0) {  // open pidfile fail
       LOG_ERROR("can't open pid file", KCSTRING(pidfile), K(fd), K(errno));
       ret = OB_IO_ERROR;
+#ifdef _WIN32
+    } else if (_locking(fd, _LK_NBLCK, 1) != 0) {
+#else
     } else if (lockf(fd, F_TLOCK, 0) < 0) {  // other process has locked it
+#endif
       long pid = 0;
       if (OB_FAIL(read_pid(pidfile, pid))) {
         LOG_ERROR("read pid fail", KCSTRING(pidfile), K(ret));
@@ -1247,7 +1304,11 @@ int start_daemon(const char *pidfile, bool skip_daemon)
       }
       close(fd);
     } else {  // I hold the lock, won't close this fd.
+#ifdef _WIN32
+      if (_chsize(fd, 0) < 0) {
+#else
       if (ftruncate(fd, 0) < 0) {
+#endif
         LOG_ERROR("ftruncate pid file fail", KCSTRING(pidfile), K(errno));
         ret = OB_IO_ERROR;
       } else {
@@ -1806,6 +1867,8 @@ struct tm *ob_localtime(const time_t *unix_sec, struct tm *result)
   //use __timezone from glibc/time/tzset.c, default value is -480 for china
 #if defined(__APPLE__) || defined(__ANDROID__)
   const int32_t tz_minutes = static_cast<int32_t>(timezone / 60);
+#elif defined(_WIN32)
+  const int32_t tz_minutes = static_cast<int32_t>(_timezone / 60);
 #elif defined(__linux__)
   const int32_t tz_minutes = static_cast<int32_t>(__timezone / 60);
 #endif
@@ -1840,7 +1903,11 @@ void ob_fast_localtime(time_t &cached_unix_sec, struct tm &cached_localtime,
       *output_localtime = cached_localtime;
     } else if (OB_UNLIKELY(0 == cached_unix_sec)) {//init
       cached_unix_sec = input_unix_sec;
+#ifdef _WIN32
+      localtime_s(output_localtime, &input_unix_sec);
+#else
       localtime_r(&input_unix_sec, output_localtime);
+#endif
       cached_localtime = *output_localtime;;
     } else {
       cached_unix_sec = input_unix_sec;
@@ -1906,6 +1973,8 @@ static int64_t get_cpu_cache_size(int sysconf_name, const char *sysfs_path, int6
 #elif defined(__APPLE__)
   // macOS doesn't support these sysconf constants, skip sysconf call
   cache_size = -1;
+#elif defined(_WIN32)
+  cache_size = -1;
 #endif
   if (OB_UNLIKELY(cache_size <= 0)) {
     FILE *file = nullptr;
@@ -1931,6 +2000,8 @@ int64_t get_level1_dcache_size()
   static int64_t l1_dcache_size = get_cpu_cache_size(_SC_LEVEL1_DCACHE_SIZE, path, 32768/*default L1 dcache size : 32K*/);
 #elif defined(__APPLE__)
   static int64_t l1_dcache_size = get_cpu_cache_size(-1, path, 32768/*default L1 dcache size : 32K*/);
+#elif defined(_WIN32)
+  static int64_t l1_dcache_size = get_cpu_cache_size(-1, path, 32768);
 #endif
   return l1_dcache_size;
 }
@@ -1942,6 +2013,8 @@ int64_t get_level1_icache_size()
   static int64_t l1_icache_size = get_cpu_cache_size(_SC_LEVEL1_ICACHE_SIZE, path, 32768/*default L1 icache size : 32K*/);
 #elif defined(__APPLE__)
   static int64_t l1_icache_size = get_cpu_cache_size(-1, path, 32768/*default L1 icache size : 32K*/);
+#elif defined(_WIN32)
+  static int64_t l1_icache_size = get_cpu_cache_size(-1, path, 32768);
 #endif
   return l1_icache_size;
 }
@@ -1953,6 +2026,8 @@ int64_t get_level2_cache_size()
   static int64_t l2_cache_size = get_cpu_cache_size(_SC_LEVEL2_CACHE_SIZE, path, 524288/*default L2 cache size : 512K*/);
 #elif defined(__APPLE__)
   static int64_t l2_cache_size = get_cpu_cache_size(-1, path, 524288/*default L2 cache size : 512K*/);
+#elif defined(_WIN32)
+  static int64_t l2_cache_size = get_cpu_cache_size(-1, path, 524288);
 #endif
   return l2_cache_size;
 }
@@ -1964,6 +2039,8 @@ int64_t get_level3_cache_size()
   static int64_t l3_cache_size = get_cpu_cache_size(_SC_LEVEL3_CACHE_SIZE, path, 8388608/*default L3 cache size : 8192K*/);
 #elif defined(__APPLE__)
   static int64_t l3_cache_size = get_cpu_cache_size(-1, path, 8388608/*default L3 cache size : 8192K*/);
+#elif defined(_WIN32)
+  static int64_t l3_cache_size = get_cpu_cache_size(-1, path, 8388608);
 #endif
   return l3_cache_size;
 }
@@ -2034,7 +2111,7 @@ int64_t parse_config_capacity(const char *str, bool &valid, bool check_unit /* =
     valid = false;
   } else {
     valid = true;
-    value = strtol(str, &p_unit, 0);
+    value = strtoll(str, &p_unit, 0);
 
     if (OB_ISNULL(p_unit)) {
       valid = false;
@@ -2091,9 +2168,13 @@ bool glibc_prereq(int major, int minor)
 
 const char *extract_demangled_class_name(const char *full_class_name, const char *prefix, char *buffer, int64_t &len)
 {
+#ifdef _WIN32
+  const char *demangled_name = full_class_name;
+#else
   int ti_status = 0;
   char *tmp_name = abi::__cxa_demangle(full_class_name, nullptr, nullptr, &ti_status);
   const char *demangled_name = ti_status != 0 ? full_class_name : tmp_name;
+#endif
   const char *sub_name = nullptr;
   if (prefix != nullptr) {
     sub_name = strstr(demangled_name, prefix);
@@ -2109,11 +2190,11 @@ const char *extract_demangled_class_name(const char *full_class_name, const char
     sub_name = nullptr;
     len = 0;
   }
+#ifndef _WIN32
   if (tmp_name != nullptr) {
-    //tmp_name malloc by abi::__cxa_demangle,
-    //truncate class name to buffer len and free the tmp name
     free(tmp_name);
   }
+#endif
   return sub_name;
 }
 

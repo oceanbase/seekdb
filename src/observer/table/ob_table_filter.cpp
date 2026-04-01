@@ -101,7 +101,7 @@ int ObTableComparator::compare_to(const ObIArray<ObString> &select_columns,
           // so `< comparator_value` will filter the UINT64_MAX
           // also when comparator_value = UINT64_MIN
           char *endptr = nullptr;
-          uint64_t src_v = strtoul(comparator_value_.ptr(), &endptr, 10);
+          uint64_t src_v = strtoull(comparator_value_.ptr(), &endptr, 10);
           if (OB_ISNULL(endptr) || *endptr != '\0') {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("comparator value is not a valid number", K(ret), K_(comparator_value));

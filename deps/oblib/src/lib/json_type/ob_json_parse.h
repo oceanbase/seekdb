@@ -23,6 +23,14 @@
 #include <rapidjson/memorystream.h>
 #include <rapidjson/reader.h>
 
+#ifdef _WIN32
+namespace rapidjson {
+static const unsigned kParseObjectKeyNoQuotesFlag = 1024;
+static const unsigned kParseIgnoreCaseForKeyword  = 2048;
+static const unsigned kParseRelaxNumberFlag        = 4096;
+}
+#endif
+
 namespace oceanbase {
 namespace common {
 
@@ -107,7 +115,12 @@ public:
       ptr = allocator_->realloc(originalPtr, originalSize, newSize);
     }
     if (OB_ISNULL(ptr)) {
+#ifndef _WIN32
       throw std::bad_alloc();
+#else
+      OB_ASSERT(false && "Out of memory");
+      std::abort();
+#endif
     }
     return ptr;
   }

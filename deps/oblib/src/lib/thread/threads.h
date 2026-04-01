@@ -120,7 +120,7 @@ public:
   }
   pthread_t get_pthread(int64_t idx)
   {
-    pthread_t pth = 0;
+    pthread_t pth = pthread_null();
     if (idx < n_threads_) {
       pth = threads_[idx]->get_pthread();
     }

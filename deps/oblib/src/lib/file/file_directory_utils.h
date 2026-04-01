@@ -20,6 +20,13 @@
 #include <string>
 #include <vector>
 #include <stdint.h>
+#ifdef _WIN32
+#include <sys/types.h>
+#ifndef _MODE_T_DEFINED
+typedef int mode_t;
+#define _MODE_T_DEFINED
+#endif
+#endif
 
 namespace oceanbase
 {
@@ -31,10 +38,17 @@ class ObSqlString;
 # define S_IRWXUGO (S_IRWXU | S_IRWXG | S_IRWXO)
 #endif
 
+#ifdef _WIN32
+#pragma push_macro("MAX_PATH")
+#undef MAX_PATH
+#endif
 class FileDirectoryUtils
 {
 public:
   static const int MAX_PATH = 512;
+#ifdef _WIN32
+#pragma pop_macro("MAX_PATH")
+#endif
   static int is_exists(const char *file_path, bool &result);
   static int is_writable(const char *file_path, bool &result);
   static int is_accessible(const char *file_path, bool &result);

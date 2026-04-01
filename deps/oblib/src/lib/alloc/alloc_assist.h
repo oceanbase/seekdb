@@ -23,13 +23,49 @@
 #include <string.h>
 #include "lib/utility/ob_macro_utils.h"
 
+// Windows compatibility for case-insensitive string functions
+#ifdef _WIN32
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#ifndef strcasestr
+// Windows doesn't have strcasestr, provide a simple implementation
+static inline char* strcasestr(const char* haystack, const char* needle) {
+  if (!haystack || !needle) return NULL;
+  size_t needle_len = strlen(needle);
+  while (*haystack) {
+    if (_strnicmp(haystack, needle, needle_len) == 0) {
+      return (char*)haystack;
+    }
+    haystack++;
+  }
+  return NULL;
+}
+#endif
+#endif
+
 #define MEMSET(s, c, n) memset(s, c, n)
 #define MEMCPY(dest, src, n) memcpy(dest, src, n)
 #define MEMCCPY(dest, src, c, n) memccpy(dest, src, c, n)
 #define MEMMOVE(dest, src, n) memmove(dest, src, n)
 #define BCOPY(src, dest, n) bcopy(src, dest, n)
 #define MEMCMP(s1, s2, n) memcmp(s1, s2, n)
+#ifdef _WIN32
+static inline void *ob_memmem(const void *haystack, size_t haystacklen,
+                              const void *needle, size_t needlelen)
+{
+  if (needlelen == 0) return (void *)haystack;
+  if (haystacklen < needlelen) return NULL;
+  const char *h = (const char *)haystack;
+  const char *n = (const char *)needle;
+  for (size_t i = 0; i <= haystacklen - needlelen; ++i) {
+    if (memcmp(h + i, n, needlelen) == 0) return (void *)(h + i);
+  }
+  return NULL;
+}
+#define MEMMEM(s1, n1, s2, n2) ob_memmem(s1, n1, s2, n2)
+#else
 #define MEMMEM(s1, n1, s2, n2) memmem(s1, n1, s2, n2)
+#endif
 #define STRCPY(dest, src) strcpy(dest, src)
 #define STRNCPY(dest, src, n) strncpy(dest, src, n)
 #define STRCMP(s1, s2) strcmp(s1, s2)

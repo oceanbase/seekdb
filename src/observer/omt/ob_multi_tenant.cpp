@@ -677,7 +677,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
     ret = OB_SUCCESS;
   }
 
-
   bool tenant_allocator_created = false;
   int64_t memory_size = GMEMCONF.get_server_memory_limit();
   int64_t hard_memory_size = GMEMCONF.get_server_hard_memory_limit();

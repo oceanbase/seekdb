@@ -17,9 +17,37 @@
 #ifndef OB_VECTOR_UTIL_H
 #define OB_VECTOR_UTIL_H
 #include <stdint.h>
+#ifdef _WIN32
+#include <string>
+#include <fstream>
+#include <iostream>
+namespace vsag {
+    class Logger {
+    public:
+        enum Level { TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL, OFF };
+        virtual void SetLevel(Level level) = 0;
+        virtual void Trace(const std::string& msg) = 0;
+        virtual void Debug(const std::string& msg) = 0;
+        virtual void Info(const std::string& msg) = 0;
+        virtual void Warn(const std::string& msg) = 0;
+        virtual void Error(const std::string& msg) = 0;
+        virtual void Critical(const std::string& msg) = 0;
+        virtual ~Logger() = default;
+    };
+    class Allocator {
+    public:
+        virtual std::string Name() = 0;
+        virtual void* Allocate(uint64_t size) = 0;
+        virtual void Deallocate(void* p) = 0;
+        virtual void* Reallocate(void* p, uint64_t size) = 0;
+        virtual ~Allocator() = default;
+    };
+}
+#else
 #include <vsag/allocator.h>
 #include <vsag/logger.h>
 #include <vsag/iterator_context.h>
+#endif
 #include <fstream>
 #include "lib/allocator/page_arena.h"
 #include "lib/vector/ob_vsag_adaptor.h"

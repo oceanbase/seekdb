@@ -22,7 +22,9 @@
 #include "share/wr/ob_wr_stat_guard.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_version.h"
+#ifndef _WIN32
 #include <sys/utsname.h>
+#endif
 #include "src/pl/ob_pl.h"
 #include "lib/file/ob_string_util.h"
 
@@ -2101,11 +2103,20 @@ int ObDbmsWorkloadRepository::print_ash_summary_info(
     }
 
     // OS info
+#ifdef _WIN32
+    const char *uts_sysname = "Windows";
+    const char *uts_release = "10";
+    const char *uts_machine = "x86_64";
+#else
     struct utsname uts;
     if (0 != ::uname(&uts)) {
       ret = OB_ERR_SYS;
       LOG_WARN("call uname failed");
     }
+    const char *uts_sysname = uts.sysname;
+    const char *uts_release = uts.release;
+    const char *uts_machine = uts.machine;
+#endif
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(
@@ -2114,8 +2125,8 @@ int ObDbmsWorkloadRepository::print_ash_summary_info(
     } else if (OB_FAIL(temp_string.append_fmt(
                    "       Observer Version: %s (%s) \n", PACKAGE_STRING, build_version()))) {
       LOG_WARN("failed to assign Observer Version string", K(ret));
-    } else if (OB_FAIL(temp_string.append_fmt("  Operation System Info: %s(%s)_%s \n", uts.sysname,
-                   uts.release, uts.machine))) {
+    } else if (OB_FAIL(temp_string.append_fmt("  Operation System Info: %s(%s)_%s \n", uts_sysname,
+                   uts_release, uts_machine))) {
       LOG_WARN("failed to assign Operation System Info string", K(ret));
     } else if (OB_FAIL(temp_string.append_fmt("  User Input Begin Time: %.*s \n",
                    static_cast<int>(l_btime_buf_pos), l_btime_buf))) {

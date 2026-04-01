@@ -33,7 +33,7 @@ using namespace share;
 
 static const int64_t KV_CACHE_WASH_TIMER_INTERVAL_US = 60 * _SEC_;
 static const int64_t DEFAULT_BUCKET_NUM = 10000000L;
-static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024L * 1024L * 1024L * 1024L;
+static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024 * 1024 * 1024;
 
 class TestLogCache : public ::testing::Test
 {

@@ -33,7 +33,11 @@
 #include <boost/geometry/geometries/concepts/linestring_concept.hpp>
 #include <boost/geometry/geometries/concepts/point_concept.hpp>
 #include <boost/geometry/geometries/concepts/polygon_concept.hpp>
+#ifndef _WIN32
 #include <boost/geometry/multi/core/tags.hpp>
+#else
+#include <boost/geometry/core/tags.hpp>
+#endif
 
 #include "ob_geo_tree.h"
 

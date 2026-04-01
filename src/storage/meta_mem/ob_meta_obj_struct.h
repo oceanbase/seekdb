@@ -182,7 +182,11 @@ public:
   VIRTUAL_TO_STRING_KV(KP_(obj), KP_(obj_pool), KP_(allocator), KP_(t3m));
 
 protected:
+#ifndef _WIN32
   static const int64_t HOLD_OBJ_MAX_TIME = 2 * 60 * 60 * 1000 * 1000L; // 2h
+#else
+  static const int64_t HOLD_OBJ_MAX_TIME = INT64_C(2) * 60 * 60 * 1000 * 1000; // 2h
+#endif
   virtual void reset_obj();
 
 protected:

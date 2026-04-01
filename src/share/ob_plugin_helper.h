@@ -17,7 +17,9 @@
 #ifndef OB_PLUGIN_HELPER_H_
 #define OB_PLUGIN_HELPER_H_
 
+#ifndef _WIN32
 #include <dlfcn.h>
+#endif
 
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"

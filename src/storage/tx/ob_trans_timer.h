@@ -128,7 +128,14 @@ public:
   virtual int register_timeout_task(ObITimeoutTask &task, const int64_t delay);
   virtual int unregister_timeout_task(ObITimeoutTask &task);
 private:
+#ifdef _WIN32
+  int64_t get_thread_num_() {
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    return common::max(static_cast<int64_t>(sysinfo.dwNumberOfProcessors / 24), static_cast<int64_t>(1));}
+#else
   int64_t get_thread_num_() { return common::max(static_cast<int64_t>(sysconf(_SC_NPROCESSORS_ONLN) / 24), static_cast<int64_t>(1)); }
+#endif
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTransTimer);
 protected:

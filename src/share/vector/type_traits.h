@@ -65,7 +65,7 @@ class ObString;
 class ObOTimestampData;
 class ObOTimestampTinyData;
 template<VecValueTypeClass value_tc>
-class VectorBasicOp;
+struct VectorBasicOp;
 class ObVectorBase;
 class ObObj;
 

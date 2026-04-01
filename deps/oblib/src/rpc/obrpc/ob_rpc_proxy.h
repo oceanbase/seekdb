@@ -17,6 +17,11 @@
 #ifndef OCEANBASE_RPC_OBRPC_OB_RPC_PROXY_
 #define OCEANBASE_RPC_OBRPC_OB_RPC_PROXY_
 
+#ifdef _WIN32
+#pragma push_macro("IGNORE")
+#undef IGNORE
+#endif
+
 #include <stdint.h>
 #include "lib/string/ob_string.h"
 #include "lib/allocator/page_arena.h"

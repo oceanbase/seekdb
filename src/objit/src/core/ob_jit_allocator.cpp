@@ -24,6 +24,50 @@
 #include <libkern/OSCacheControl.h>
 #endif
 
+#ifdef _WIN32
+#define MAP_PRIVATE     0x02
+#define MAP_ANONYMOUS   0x20
+#define MAP_FAILED      ((void*)-1)
+
+static DWORD ob_prot_to_win_protect(int64_t prot) {
+  bool r = (prot & PROT_READ) != 0;
+  bool w = (prot & PROT_WRITE) != 0;
+  bool x = (prot & PROT_EXEC) != 0;
+  if (x && w) return PAGE_EXECUTE_READWRITE;
+  if (x && r) return PAGE_EXECUTE_READ;
+  if (x)      return PAGE_EXECUTE;
+  if (w)      return PAGE_READWRITE;
+  if (r)      return PAGE_READONLY;
+  return PAGE_NOACCESS;
+}
+
+static int getpagesize() {
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  return static_cast<int>(si.dwPageSize);
+}
+
+static void usleep(unsigned int usec) {
+  Sleep(usec / 1000);
+}
+
+static void *mmap(void * /*addr*/, size_t length, int prot, int /*flags*/, int /*fd*/, int /*offset*/) {
+  DWORD protect = ob_prot_to_win_protect(prot);
+  void *p = VirtualAlloc(NULL, length, MEM_RESERVE | MEM_COMMIT, protect);
+  return p ? p : MAP_FAILED;
+}
+
+static int munmap(void *addr, size_t /*length*/) {
+  return VirtualFree(addr, 0, MEM_RELEASE) ? 0 : -1;
+}
+
+static int mprotect(void *addr, size_t length, int prot) {
+  DWORD protect = ob_prot_to_win_protect(prot);
+  DWORD old_protect;
+  return VirtualProtect(addr, length, protect, &old_protect) ? 0 : -1;
+}
+#endif
+
 using namespace oceanbase::common;
 
 namespace oceanbase {

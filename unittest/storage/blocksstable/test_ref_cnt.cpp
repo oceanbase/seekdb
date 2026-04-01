@@ -301,7 +301,7 @@ TEST_F(TestRefCnt, test_1_0_1)
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ObConcurrentFIFOAllocator allocator;
-  ret = allocator.init(1L * 1024L * 1024L, ObModIds::TEST, tenant_id, 1024L * 1024L * 1024L * 1024L);
+  ret = allocator.init(1LL * 1024 * 1024, ObModIds::TEST, tenant_id, 1024LL * 1024 * 1024 * 1024);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ret = OB_SERVER_FILE_MGR.alloc_storage_file(pg_file_);

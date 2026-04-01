@@ -17,7 +17,23 @@
 #ifndef OCEANBASE_COMMON_UTILITY_H_
 #define OCEANBASE_COMMON_UTILITY_H_
 
+#ifndef _WIN32
 #include <arpa/inet.h>
+#else
+// Windows: use winsock2 instead of arpa/inet
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+// Windows: define useconds_t and usleep
+typedef unsigned int useconds_t;
+inline int usleep(useconds_t usec) {
+  Sleep(usec / 1000);  // Sleep takes milliseconds
+  return 0;
+}
+#endif
 
 #include "easy_define.h"
 #include "lib/allocator/ob_allocator.h"
@@ -536,13 +552,26 @@ struct CountReporter
 
 inline int64_t get_cpu_num()
 {
+#ifdef _WIN32
+  // Windows: use GetSystemInfo
+  SYSTEM_INFO sysinfo;
+  GetSystemInfo(&sysinfo);
+  static int64_t cpu_num = static_cast<int64_t>(sysinfo.dwNumberOfProcessors);
+  return cpu_num;
+#else
   static int64_t cpu_num = sysconf(_SC_NPROCESSORS_ONLN);
   return cpu_num;
+#endif
 }
 
 inline int64_t get_cpu_id()
 {
+#ifdef _WIN32
+  // Windows: use GetCurrentProcessorNumber
+  return static_cast<int64_t>(GetCurrentProcessorNumber());
+#else
   return sched_getcpu();
+#endif
 }
 
 // ethernet speed: byte / second.
@@ -561,10 +590,19 @@ inline int64_t get_cgroup_memory_limit()
 
 inline int64_t get_phy_mem_size()
 {
+#ifdef _WIN32
+  // Windows: use GlobalMemoryStatusEx
+  MEMORYSTATUSEX memInfo;
+  memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+  GlobalMemoryStatusEx(&memInfo);
+  static int64_t total_physical = static_cast<int64_t>(memInfo.ullTotalPhys);
+  return total_physical;
+#else
   static int64_t page_size = sysconf(_SC_PAGE_SIZE);
   static int64_t phys_pages = sysconf(_SC_PHYS_PAGES);
   static int64_t cgroup_memory_limit = get_cgroup_memory_limit();
   return MIN(page_size * phys_pages, cgroup_memory_limit);
+#endif
 }
 
 int64_t get_level1_dcache_size();

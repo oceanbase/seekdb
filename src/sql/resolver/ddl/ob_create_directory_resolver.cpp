@@ -108,7 +108,11 @@ int ObCreateDirectoryResolver::resolve(const ParseNode &parse_tree)
             ret = OB_ERR_NULL_VALUE;
             LOG_WARN("fail to convert directory_path", K(ret), K(directory_path));
           } else {
+#ifdef _WIN32
+            real_directory_path = ObString(_fullpath(buffer.get_data(), directory_path_str, PATH_MAX));
+#else
             real_directory_path = ObString(realpath(directory_path_str, buffer.get_data()));
+#endif
             if (real_directory_path.empty()) {
               real_directory_path = directory_path;
             }

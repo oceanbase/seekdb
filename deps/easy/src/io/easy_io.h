@@ -3,7 +3,9 @@
 
 #include "easy_define.h"
 
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <pthread.h>
 #include "io/easy_io_struct.h"
 #include "io/easy_log.h"

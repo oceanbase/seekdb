@@ -50,19 +50,19 @@ OB_DEF_SERIALIZE_SIZE(ObExtraRpcHeader)
 namespace oceanbase {
 namespace lib {
 
-void * __attribute__((weak)) alloc_worker()
+void * OB_WEAK_SYMBOL alloc_worker()
 {
   static TLOCAL(Worker, worker);
   return (&worker);
 }
 
-int __attribute__((weak)) common_yield()
+int OB_WEAK_SYMBOL common_yield()
 {
   // do nothing;
   return OB_SUCCESS;
 }
 
-int __attribute__((weak)) SET_GROUP_ID(bool is_background)
+int OB_WEAK_SYMBOL SET_GROUP_ID(bool is_background)
 {
   int ret = OB_SUCCESS;
   UNUSED(is_background);

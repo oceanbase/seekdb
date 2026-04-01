@@ -1278,8 +1278,8 @@ protected:
   {
     int64_t flag_;
     struct {
-      bool hot_only_ : 1;
-      bool reserved_ : 63;
+      int64_t hot_only_ : 1;
+      int64_t reserved_ : 63;
     };
   };
 };

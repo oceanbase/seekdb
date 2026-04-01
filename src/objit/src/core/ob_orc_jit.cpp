@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 #include "core/ob_orc_jit.h"
 
+#include "llvm/Config/llvm-config.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "core/ob_pl_ir_compiler.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
@@ -346,7 +347,11 @@ int ObOrcJit::set_optimize_level(ObPLOptLevel level)
       LOG_WARN("unexpected NULL JITTargetMachineBuilder", K(ret), K(lbt()));
     } else {
       auto &builder = *tm_builder;
+#if LLVM_VERSION_MAJOR >= 18
+      builder.setCodeGenOptLevel(CodeGenOptLevel::None);
+#else
       builder.setCodeGenOptLevel(CodeGenOpt::Level::None);
+#endif
       builder.getOptions().EnableFastISel = true;
     }
   }

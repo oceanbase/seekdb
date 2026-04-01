@@ -15,6 +15,31 @@
  */
 
 #include "log_block_pool_interface.h"
+#include "log_io_utils.h"
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <windows.h>
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0
+#endif
+static bool ob_resolve_path_at3(int dir_fd, const char *rel_path, char *out, size_t out_size) {
+  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
+      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
+    return false;
+  }
+  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
+  if (h == INVALID_HANDLE_VALUE) return false;
+  char dir_path[1024];
+  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
+  if (len == 0 || len >= sizeof(dir_path)) return false;
+  const char *clean = dir_path;
+  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
+  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
+  return written > 0 && (size_t)written < out_size;
+}
+#endif
 
 namespace oceanbase
 {
@@ -26,7 +51,14 @@ int is_block_used_for_palf(const int fd, const char *path, bool &result)
   int ret = OB_SUCCESS;
   result = false;
   struct stat st;
+#ifdef _WIN32
+  char abs[1024];
+  const char *p = path;
+  if (ob_resolve_path_at3(fd, path, abs, sizeof(abs))) p = abs;
+  if (-1 == ::stat(p, &st)) {
+#else
   if (-1 == ::fstatat(fd, path, &st, 0)) {
+#endif
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "::fstat failed", K(ret), K(path), K(errno));
   } else if (st.st_size == PALF_PHY_BLOCK_SIZE) {
@@ -40,11 +72,11 @@ int is_block_used_for_palf(const int fd, const char *path, bool &result)
 int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_pool)
 {
   int ret = OB_SUCCESS;
-  int fd = ::open(dir, O_DIRECTORY | O_RDONLY);
+  int fd = open_directory(dir);
   bool result = false;
   if (-1 == fd) {
     ret = convert_sys_errno();
-    PALF_LOG(ERROR, "::open directory failed", K(ret), K(dir));
+    PALF_LOG(ERROR, "open_directory failed", K(ret), K(dir));
   } else if (OB_FAIL(log_block_pool->remove_block_at(fd, path))) {
     PALF_LOG(ERROR, "remove_block_at failed", K(ret));
     // otherwise, unlink it.
@@ -53,8 +85,18 @@ int remove_file_at(const char *dir, const char *path, ILogBlockPool *log_block_p
   }
 
   if (-1 != fd) {
+#ifdef _WIN32
+    if (0 != _commit(fd)) {
+      HANDLE h = (HANDLE)_get_osfhandle(fd);
+      if (h != INVALID_HANDLE_VALUE) {
+        FlushFileBuffers(h);
+      }
+    }
+    _close(fd);
+#else
     ::fsync(fd);
     ::close(fd);
+#endif
   }
   return ret;
 }

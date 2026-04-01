@@ -18,6 +18,12 @@
 
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/allocator/ob_malloc.h"
+#ifdef _WIN32
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+#endif
 
 namespace oceanbase
 {
@@ -117,9 +123,16 @@ void *ProtectedStackAllocator::__alloc(const uint64_t tenant_id,
     header->has_guarded_page_ = guard_page;
     g_stack_mgr.insert(header);
 
+#ifdef _WIN32
+    DWORD old_prot;
+    if (guard_page && !VirtualProtect((char*)base, ps, PAGE_NOACCESS, &old_prot)) {
+      LOG_WARN_RET(OB_ERR_SYS, "VirtualProtect failed", K(GetLastError()), K(base), K(ps));
+    }
+#else
     if (guard_page && 0 != mprotect((char*)base, ps, PROT_NONE)) {
       LOG_WARN_RET(OB_ERR_SYS, "mprotect failed", K(errno), K(base), K(ps));
     }
+#endif
     ptr = (char*)header + sizeof(ObStackHeader) + ps;
   }
   return ptr;
@@ -134,10 +147,18 @@ void ProtectedStackAllocator::dealloc(void *ptr)
     abort_unless(header->check_magic());
     char *base = (char *)header->base_;
     const ssize_t ps = page_size();
+#ifdef _WIN32
+    DWORD old_prot;
+    if (header->has_guarded_page_
+        && !VirtualProtect((char *)header + sizeof(ObStackHeader), ps, PAGE_READWRITE, &old_prot)) {
+      LOG_WARN_RET(OB_ERR_SYS, "VirtualProtect failed", K(GetLastError()), K(header), K(ps));
+    } else {
+#else
     if (header->has_guarded_page_
         && 0 != mprotect((char *)header + sizeof(ObStackHeader), ps, PROT_READ | PROT_WRITE)) {
       LOG_WARN_RET(OB_ERR_SYS, "mprotect failed", K(errno), K(header), K(ps));
     } else {
+#endif
       const uint64_t tenant_id = header->tenant_id_;
       const ssize_t size = header->size_;
       g_stack_mgr.erase(header);
@@ -178,7 +199,11 @@ void StackMgr::erase(ObStackHeader *header)
 
 ObStackHeaderGuard::ObStackHeaderGuard()
 {
+#ifdef _WIN32
+  header_.pth_ = (uint64_t)GetCurrentThreadId();
+#else
   header_.pth_ = (uint64_t)pthread_self();
+#endif
   g_stack_mgr.insert(&header_);
 }
 

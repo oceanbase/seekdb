@@ -23,6 +23,11 @@
 // macOS doesn't have be64toh/htobe64, use OSSwapBigToHostInt64/OSSwapHostToBigInt64
 #define be64toh(x) OSSwapBigToHostInt64(x)
 #define htobe64(x) OSSwapHostToBigInt64(x)
+#elif defined(_WIN32)
+#include <cstdlib>
+// Windows (little-endian): big-endian <-> host is byte swap
+#define be64toh(x) static_cast<uint64_t>(_byteswap_uint64(static_cast<uint64_t>(x)))
+#define htobe64(x) static_cast<uint64_t>(_byteswap_uint64(static_cast<uint64_t>(x)))
 #elif defined(__linux__)
 #include <endian.h>
 #endif

@@ -56,11 +56,11 @@ private:
   int do_replay_inc_start(const common::ObTabletID &tablet_id, const SCN &scn, Args&&... args);
   int do_replay_inc_minor_commit(const common::ObTabletID &tablet_id, const SCN &scn);
 private:
-  static const int64_t TOTAL_LIMIT = 10 * 1024 * 1024 * 1024L;
-  static const int64_t HOLD_LIMIT = 10 * 1024 * 1024 * 1024L;
+  static const int64_t TOTAL_LIMIT = 10 * 1024 * 1024 * 1024LL;
+  static const int64_t HOLD_LIMIT = 10 * 1024 * 1024 * 1024LL;
   static const int64_t DEFAULT_HASH_BUCKET_COUNT = 100;
   static const int64_t DEFAULT_ID_MAP_HASH_BUCKET_COUNT = 1543;
-  static const int64_t RETRY_INTERVAL = 100 * 1000L; // 100ms
+  static const int64_t RETRY_INTERVAL = 100 * 1000LL; // 100ms
   bool is_inited_;
   ObLS *ls_;
   common::ObConcurrentFIFOAllocator allocator_;

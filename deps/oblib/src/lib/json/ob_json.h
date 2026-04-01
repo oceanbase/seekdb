@@ -17,7 +17,23 @@
 #ifndef LIB_JSON_OB_JSON_
 #define LIB_JSON_OB_JSON_
 #include <sys/types.h>
+#ifndef _WIN32
 #include <regex.h>
+#else
+#include <rapidjson/internal/regex.h>
+typedef struct { void *__impl; size_t __data[32]; } regex_t;
+static inline int regcomp(regex_t *, const char *, int) { return -1; }
+static inline int regexec(const regex_t *, const char *, size_t, void *, int) { return -1; }
+static inline void regfree(regex_t *) {}
+#define REG_EXTENDED 1
+#define REG_ICASE    2
+#define REG_NOSUB    4
+#define REG_NOMATCH  1
+static inline size_t regerror(int, const regex_t *, char *buf, size_t len) {
+  if (buf && len > 0) buf[0] = '\0';
+  return 0;
+}
+#endif
 #include "lib/list/ob_dlist.h"
 #include "lib/string/ob_string.h"
 #include "lib/allocator/page_arena.h"
