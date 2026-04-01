@@ -320,7 +320,38 @@ create index idx_c1 on t15_gidx(c1) global partition by hash(c1) partitions 4;
 fork table t15_gidx to t15_gidx_fork;
 ERROR 0A000: fork table on partitioned table with global index is not supported
 ============================================
-16. 清理
+16. Fork列存表（不支持）
+============================================
+# 16.1 纯列存（each column）
+drop table if exists t16_cs;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t16_cs'
+drop table if exists t16_cs_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t16_cs_fork'
+create table t16_cs (
+id int primary key,
+c1 int,
+c2 varchar(50)
+) with column group(each column);
+fork table t16_cs to t16_cs_fork;
+ERROR 0A000: fork table on column store table is not supported
+# 16.2 行列混存（all columns + each column）
+drop table if exists t16_cs2;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t16_cs2'
+drop table if exists t16_cs2_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_error.t16_cs2_fork'
+create table t16_cs2 (
+id int primary key,
+c1 int,
+c2 varchar(50)
+) with column group(all columns, each column);
+fork table t16_cs2 to t16_cs2_fork;
+ERROR 0A000: fork table on column store table is not supported
+============================================
+17. 清理
 ============================================
 drop table if exists t1;
 drop table if exists t2;
@@ -340,4 +371,6 @@ drop table if exists t12_trig_fork;
 drop table if exists t13_semantic;
 drop table if exists t14_spatial;
 drop table if exists t15_gidx;
+drop table if exists t16_cs;
+drop table if exists t16_cs2;
 drop database if exists db_fork_error;

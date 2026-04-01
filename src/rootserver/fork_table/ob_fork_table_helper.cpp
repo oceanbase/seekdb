@@ -105,6 +105,7 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
   bool has_spatial_index = false;
   bool has_global_index = false;
   bool has_async_vec_index = false;
+  int64_t column_group_cnt = 0;
   if (src_table_schema.is_tmp_table() || src_table_schema.is_ctas_tmp_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("fork table on temporary table is not supported", KR(ret),
@@ -137,6 +138,16 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
         KR(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED,
                    "fork table on table required by materialized view is");
+  } else if (OB_FAIL(src_table_schema.get_store_column_group_count(column_group_cnt))) {
+    LOG_WARN("failed to get store column group count", KR(ret), K(src_table_schema));
+  } else if (column_group_cnt > 1) {
+    // column_group_cnt > 1 means the table has actual column store groups
+    // (SINGLE_COLUMN_GROUP or ALL_COLUMN_GROUP) beyond the default row store group
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on column store table is not supported", KR(ret),
+             K(src_table_schema), K(column_group_cnt));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                   "fork table on column store table is");
   } else if (OB_FAIL(check_table_index_features(
                  src_table_schema, schema_guard, has_semantic_index,
                  has_ivf_index, has_spatial_index, has_global_index,
