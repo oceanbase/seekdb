@@ -76,14 +76,11 @@ private:
 
   int check_log_disk(const char *data_dir, const char *log_dir);
 
+public:
+  static constexpr int64_t RESERVED_DISK_SIZE = 128 * 1024 * 1024L; // 128M
 private:
   static constexpr int64_t NORMAL_LOG_ITEM_SIZE = 8 * 1024; //8KB
   static constexpr int64_t MAX_CONCURRENT_ITEM_CNT = 128;
-#ifdef __ANDROID__
-  static constexpr int64_t RESERVED_DISK_SIZE = 256 * 1024 * 1024L; // 256MB
-#else
-  static constexpr int64_t RESERVED_DISK_SIZE = 4LL * 1024 * 1024 * 1024; // 4G
-#endif
 
   common::ObArenaAllocator allocator_;
   const char *log_dir_;

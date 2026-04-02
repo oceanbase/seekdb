@@ -678,7 +678,8 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
     LOG_WARN("cur_cursor is invalid", K(ret));
   } else if (((start_time > last_write_time_ + min_interval) && cur_cursor.newer_than(last_slog_cursor_)
       && (cur_cursor.log_id_ - last_slog_cursor_.log_id_ >= ObWriteCheckpointTask::MIN_WRITE_CHECKPOINT_LOG_CNT))
-      || is_force) {
+      || is_force
+      || (cur_cursor.file_id_ > last_slog_cursor_.file_id_)) {
     ObServerCheckpointWriter server_ckpt_writer;
     if (OB_FAIL(server_ckpt_writer.init(server_slogger_))) {
       LOG_WARN("fail to init ObServerCheckpointWriter", K(ret));

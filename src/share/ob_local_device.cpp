@@ -1518,7 +1518,7 @@ int ObLocalDevice::get_data_disk_used_percentage_(
     int64_t &percent) const
 {
   int ret = OB_SUCCESS;
-  int64_t reserved_size = 4 * 1024 * 1024 * 1024L; // default RESERVED_DISK_SIZE -> 4G
+  int64_t reserved_size = ObStorageLoggerManager::RESERVED_DISK_SIZE;
 
   if (OB_UNLIKELY(!is_marked_)) {
     ret = OB_NOT_INIT;
