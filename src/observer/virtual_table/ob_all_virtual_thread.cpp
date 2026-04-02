@@ -82,9 +82,11 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_NOT_SUPPORTED;
     return ret;
     #endif
-    #ifdef __APPLE__
-    // GET_OTHER_TSI_ADDR macro relies on Linux-specific pthread/TLS memory layout.
-    // On macOS, pthread_t offset calculation cannot access other threads' TLS variables.
+    #if defined(__APPLE__) || defined(__ANDROID__)
+    // GET_OTHER_TSI_ADDR macro relies on Linux/glibc-specific pthread/TLS memory layout
+    // where pthread_self() equals the TLS segment base (TCB).
+    // On macOS and Android/Bionic, pthread_self() returns a heap struct pointer,
+    // so the offset calculation produces an invalid address.
     ret = OB_NOT_SUPPORTED;
     return ret;
     #endif
