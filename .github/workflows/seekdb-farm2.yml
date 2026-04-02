@@ -1,0 +1,30 @@
+name: seekdb Farm2
+
+on:
+  pull_request:
+    branches: [ master,develop ]
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths-ignore:
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/pull_request_template.md'
+      - 'README.md'
+      - 'README_CN.md'
+      - 'CONTRIBUTING.md'
+  schedule:
+    - cron: '30 9 * * *'
+
+jobs:
+  seekdb:
+    if: ${{ github.repository_owner == 'oceanbase' && !github.event.pull_request.draft }}
+    name: seekdb
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout workspace
+        uses: actions/checkout@v3
+      - name: action by seekdb
+        uses: ./.github/script/
+        id: seekdb
+        with:
+          pipeline_id: ${{ github.run_id }}
+          project: ${{ github.repository }}
