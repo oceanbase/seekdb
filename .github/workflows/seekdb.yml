@@ -29,7 +29,7 @@ jobs:
     if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: arc-runner-k8s-ci-org
     container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
+      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.3
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -107,7 +107,7 @@ jobs:
     needs: seekdb-setup
     runs-on: arc-runner-k8s-ci-org
     container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
+      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.3
     strategy:
       fail-fast: false
       matrix:
@@ -192,7 +192,7 @@ jobs:
     needs: seekdb-mysqltest
     runs-on: arc-runner-k8s-ci-org
     container:
-      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
+      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.3
     steps:
       - name: Checkout
         uses: actions/checkout@v4
