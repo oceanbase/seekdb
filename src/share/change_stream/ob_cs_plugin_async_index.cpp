@@ -1259,6 +1259,28 @@ int ObCSPluginAsyncIndex::commit()
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSPluginAsyncIndex not inited", K(ret));
+  } else {
+    // Periodically trigger GC of fallback schema cache to prevent
+    // TenaSchMgrForLi arena memory leak.
+    // At commit() time all process() calls have completed and all
+    // schema_guard handles are released (ref_cnt == 0), so GC can
+    // evict every fallback cache entry and reset the arena.
+    static int64_t last_gc_time = 0;
+    const int64_t GC_INTERVAL_US = 30L * 1000L * 1000L; // 30 seconds
+    const int64_t now = common::ObTimeUtility::current_time();
+    if (now - ATOMIC_LOAD(&last_gc_time) > GC_INTERVAL_US) {
+      ATOMIC_STORE(&last_gc_time, now);
+      schema::ObMultiVersionSchemaService *schema_service =
+          MTL(schema::ObTenantSchemaService *) != nullptr
+              ? MTL(schema::ObTenantSchemaService *)->get_schema_service()
+              : nullptr;
+      if (OB_NOT_NULL(schema_service)) {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_TMP_FAIL(schema_service->try_eliminate_schema_mgr())) {
+          LOG_WARN("try_eliminate_schema_mgr for fallback gc failed", K(tmp_ret));
+        }
+      }
+    }
   }
   return ret;
 }
