@@ -717,6 +717,7 @@ public:
                               ObArray<uint64_t> &i_vids);
   int complete_index_mem_data_incremental(ObVectorQueryAdaptorResultContext *ctx,
                                          ObLSID ls_id,
+                                         SCN query_scn,
                                          ObArray<uint64_t> &i_vids);
   // Background bitmap refresh: constructs a minimal synthetic context and calls
   // complete_index_mem_data_incremental with SYS_LS (consistent with write_to_vsag_).

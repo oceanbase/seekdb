@@ -2556,7 +2556,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status_async(
         OB_FAIL(ctx->init_bitmaps())) {
       LOG_WARN("failed to init ctx bitmaps.", K(ret));
     } else {
-      ret = complete_index_mem_data_incremental(ctx, ls_id, i_vids);
+      ret = complete_index_mem_data_incremental(ctx, ls_id, query_scn, i_vids);
       if (OB_FAIL(ret)) {
         LOG_WARN("failed to complete index mem data incrementally", K(ret), K(vbitmap_data_->scn_));
       } else {
@@ -2887,6 +2887,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data(SCN read_scn,
 
 int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQueryAdaptorResultContext *ctx,
                                                                    ObLSID ls_id,
+                                                                   SCN query_scn,
                                                                    ObArray<uint64_t> &i_vids)
 {
   INIT_SUCC(ret);
@@ -3002,19 +3003,18 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
               LOG_WARN("get next row failed.", K(ret));
             }
           } else {
-            if (OB_FAIL(add_datum_row_into_array(datum_row, i_vids, d_vids))) {
+            // Only process rows up to query snapshot (index_id_table PK SCN).
+            uint64_t row_scn_val = datum_row->storage_datums_[0].get_uint64();
+            SCN row_scn;
+            if (OB_FAIL(row_scn.convert_for_inner_table_field(row_scn_val))) {
+              LOG_WARN("failed to convert row scn", K(ret), K(row_scn_val));
+            } else if (row_scn > query_scn) {
+              // Skip rows newer than query snapshot.
+            } else if (OB_FAIL(add_datum_row_into_array(datum_row, i_vids, d_vids))) {
               LOG_WARN("failed to add vid into array.", K(ret), KP(datum_row));
-            } else {
-              // Track max SCN from rows (storage_datums_[0] is scn column); use it for update
-              // Reverse scan yields rows high-to-low, so "last row" = min SCN; we use max SCN
-              // to correctly record "read up to" for next incremental
-              uint64_t row_scn_val = datum_row->storage_datums_[0].get_uint64();
-              SCN row_scn;
-              if (OB_FAIL(row_scn.convert_for_inner_table_field(row_scn_val))) {
-                LOG_WARN("failed to convert row scn", K(ret), K(row_scn_val));
-              } else if (row_scn > last_row_scn) {
-                last_row_scn = row_scn;
-              }
+            } else if (row_scn > last_row_scn) {
+              // Track max SCN from merged rows for next incremental progress.
+              last_row_scn = row_scn;
             }
           }
         }
@@ -3093,7 +3093,7 @@ int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
   ObArray<uint64_t> i_vids;
   if (OB_FAIL(ctx.init_bitmaps())) {
     LOG_WARN("failed to init bitmaps for background bitmap refresh", K(ret));
-  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, i_vids))) {
+  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, SCN::max_scn(), i_vids))) {
     LOG_WARN("background bitmap refresh failed", K(ret), K(vbitmap_tablet_id_));
   }
   return ret;
