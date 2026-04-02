@@ -198,6 +198,8 @@ int ObVectorQueryAdaptorResultContext::init_bitmaps()
   if (OB_ISNULL(tmp_allocator_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ctx allocator invalid.", K(ret));
+  } else if (OB_NOT_NULL(bitmaps_)) {
+    // bitmap has already been initialized
   } else {
     ObVectorIndexRoaringBitMap *bitmaps = nullptr;
     if (OB_ISNULL(bitmaps = static_cast<ObVectorIndexRoaringBitMap*>
@@ -205,6 +207,8 @@ int ObVectorQueryAdaptorResultContext::init_bitmaps()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to create vbitmap msg", K(ret));
     } else {
+      bitmaps->insert_bitmap_ = nullptr;
+      bitmaps->delete_bitmap_ = nullptr;
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPC"));
       ROARING_TRY_CATCH(bitmaps->insert_bitmap_ = roaring::api::roaring64_bitmap_create());
       if (OB_SUCC(ret) && OB_ISNULL(bitmaps->insert_bitmap_)) {
@@ -221,7 +225,25 @@ int ObVectorQueryAdaptorResultContext::init_bitmaps()
         bitmaps->delete_bitmap_ = nullptr;
       }
     }
-    bitmaps_ = bitmaps;
+    if (OB_FAIL(ret)) {
+      if (OB_NOT_NULL(bitmaps)) {
+        if (OB_NOT_NULL(bitmaps->insert_bitmap_)) {
+          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPA"));
+          roaring::api::roaring64_bitmap_free(bitmaps->insert_bitmap_);
+          bitmaps->insert_bitmap_ = nullptr;
+        }
+        if (OB_NOT_NULL(bitmaps->delete_bitmap_)) {
+          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPB"));
+          roaring::api::roaring64_bitmap_free(bitmaps->delete_bitmap_);
+          bitmaps->delete_bitmap_ = nullptr;
+        }
+        tmp_allocator_->free(bitmaps);
+        bitmaps = nullptr;
+      }
+      bitmaps_ = nullptr;
+    } else {
+      bitmaps_ = bitmaps;
+    }
   }
   return ret;
 }
@@ -4166,7 +4188,17 @@ int ObPluginVectorIndexAdaptor::query_result(ObLSID &ls_id,
           LOG_INFO("query result need refresh adapter, ls leader",
               K(ret), K(ls_id), K(ctx->get_ls_leader()), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()), K(row->storage_datums_[0].get_string()));
         } else if (OB_FAIL(deserialize_snap_data(query_cond, row))) {
-          LOG_WARN("failed to deserialize snap data", K(ret));
+          if (ret == OB_ERR_VSAG_RETURN_ERROR) {
+            // snapshot data may be transiently incomplete under concurrent DDL/DML;
+            // trigger refresh path and let upper layer retry with refreshed memdata.
+            ctx->status_ = PVQ_REFRESH;
+            ret = OB_SUCCESS;
+            LOG_INFO("deserialize snap data got vsag transient error, mark refresh",
+                K(ls_id), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()),
+                K(row->storage_datums_[0].get_string()));
+          } else {
+            LOG_WARN("failed to deserialize snap data", K(ret));
+          }
         }
       }
     }
