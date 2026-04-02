@@ -2275,8 +2275,8 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
     LOG_WARN("Incorrect cmp type with roaringbitmap arguments", K(type1), K(type2), K(type_), K(ret));
 #if defined(__ANDROID__)
   } else if (lib::is_mysql_mode()
-             && (type_ == T_OP_EQ || type_ == T_OP_NE
-                 || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE)
+             && (type_ == T_OP_EQ || type_ == T_OP_NE || type_ == T_OP_NSEQ
+                 || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE || type_ == T_OP_SQ_NSEQ)
              && (type1.is_collection_sql_type() != type2.is_collection_sql_type())
              && !ob_is_null(type1.get_type())
              && !ob_is_null(type2.get_type())) {
@@ -2285,7 +2285,8 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
 #endif
   } else if ((type1.is_collection_sql_type() || type2.is_collection_sql_type())
              && !(type_ == T_OP_EQ
-                  || type_ == T_OP_NE)) {
+                  || type_ == T_OP_NE
+                  || type_ == T_OP_NSEQ)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("Incorrect cmp type with collection arguments", K(type1), K(type2), K(type_), K(ret));
   } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
