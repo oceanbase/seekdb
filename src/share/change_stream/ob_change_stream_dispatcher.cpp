@@ -26,6 +26,7 @@
 #include "share/change_stream/ob_change_stream_mgr.h"
 #include "share/schema/ob_tenant_schema_service.h"
 #include "share/ob_server_struct.h"
+#include "share/ob_debug_sync.h"
 #include "share/ob_global_stat_proxy.h"
 #include "common/ob_tablet_id.h"
 
@@ -515,6 +516,7 @@ int ObCSDispatcher::do_dispatch_()
   // active_batch_count_ MUST be incremented before any push, so that even
   // if the last-worker fires immediately, the count is already > 0.
   if (OB_SUCC(ret)) {
+    DEBUG_SYNC(CS_ASYNC_VECTOR_INDEX_BEFORE_APPLY);
     const int64_t total_subtask_cnt = exec_ctx->sub_tasks_.count();
     exec_ctx->task_count_ = total_subtask_cnt;
     ATOMIC_INC(&active_batch_count_);

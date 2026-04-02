@@ -50,7 +50,6 @@
 #include "share/schema/ob_table_param.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_server_struct.h"
-#include "share/ob_debug_sync.h"
 
 namespace oceanbase
 {
@@ -215,9 +214,6 @@ int ObCSAsyncIndexProcessor::process(common::ObIArray<ObCSRow> &rows)
     }
 
     // Step 2 — for each tablet group: batch insert into index_id_table, then write into vsag
-    if (groups.count() > 0) {
-      DEBUG_SYNC(CS_ASYNC_VECTOR_INDEX_BEFORE_APPLY);
-    }
     for (int64_t gi = 0; OB_SUCC(ret) && gi < groups.count(); ++gi) {
       TabletEventGroup &g = groups.at(gi);
       if (g.events_.count() <= 0) {
