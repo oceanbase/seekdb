@@ -26,6 +26,7 @@ env:
 jobs:
   seekdb-setup:
     name: setup
+    if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     runs-on: arc-runner-k8s-ci-org
     container:
       image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
@@ -115,7 +116,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Place observer (from NFS or fallback wget)
+      - name: Place observer (from NFS)
         shell: bash
         run: |
           OBSERVER_ZST="${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/setup/observer.zst"
