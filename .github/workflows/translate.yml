@@ -49,17 +49,3 @@ jobs:
         with:
           IS_MODIFY_TITLE: true
           APPEND_TRANSLATION: true
-      - name: Add comment to issue or pull request
-        if: github.event_name == 'issues' && steps.check-chinese.outputs.hasChinese == 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const issueNumber = context.issue.number;
-
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: 'Please ask your question at https://ask.oceanbase.com/'
-            });
