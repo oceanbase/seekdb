@@ -33,8 +33,7 @@ public:
 private:
   enum COLUMN_ID_LIST
   {
-    TENAND_ID = common::OB_APP_MIN_COLUMN_ID,
-    NAME,
+    NAME = common::OB_APP_MIN_COLUMN_ID,
     DESCRIPTION,
     IS_ENABLE,
     ENABLE_VERSIONS

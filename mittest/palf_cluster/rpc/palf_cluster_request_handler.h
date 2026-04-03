@@ -18,7 +18,6 @@
 #define OCEANBASE_PALF_CLUSTER_LOG_REQUEST_HANDLER_
 
 #include "lib/ob_errno.h"                           // OB_SUCCESS...
-#include "logservice/ob_reporter_adapter.h"         // ObLogReporterAdapter
 #include "logservice/palf_handle_guard.h"           // palf::PalfHandleGuard
 #include "palf_cluster_rpc_req.h"                         // Req...
 #include "mittest/palf_cluster/logservice/log_service.h"

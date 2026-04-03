@@ -39,10 +39,7 @@ private:
 private:
   enum CACHE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    CACHE_ID,
+        CACHE_ID = common::OB_APP_MIN_COLUMN_ID,
     CACHE_NAME,
     MEMBLOCK_PTR,
     REF_COUNT,

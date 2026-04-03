@@ -23,6 +23,7 @@
 #include "sql/optimizer/ob_log_update.h"
 #include "share/domain_id/ob_domain_id.h"
 #include "share/external_table/ob_external_table_utils.h"
+#include "share/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -1645,7 +1646,7 @@ int ObDmlCgService::append_upd_old_row_cid(ObLogicalOperator &op,
     LOG_WARN("fail to append all pk to column_id", K(ret), K(table_schema->get_table_name_str()));
   } else if (!is_primary_index) {
     // append update column and shadow_pk dependent column
-    // 
+    //
     // When defensive_check verifies shadow_pk,
     // it will use the shadow_pk column and the columns that shadow_pk depends on for comparison. However,
     // in minimal mode, the columns that shadow_pk depends on will be cut out,
@@ -1812,7 +1813,7 @@ int ObDmlCgService::generate_minimal_delete_old_row_cid(ObLogDelUpd &op,
     LOG_WARN("fail to append all lob_storage column_id", K(ret), K(index_tid));
   } else if (!is_primary_index) {
     // index_table record PK and the dependent columns of shadow_pk
-    // 
+    //
     // When defensive_check verifies shadow_pk,
     // it will use the shadow_pk column and the columns that shadow_pk depends on for comparison. However,
     // in minimal mode, the columns that shadow_pk depends on will be cut out,
@@ -2428,6 +2429,26 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
   } else if (table_schema->is_multivalue_index_aux() &&
             OB_FAIL(fill_multivalue_extra_info_on_table_param(guard, table_schema, tenant_id, das_dml_ctdef))) {
     LOG_WARN("fail to set multivalue index extra info on table param", K(ret), K(das_dml_ctdef));
+  } else if (table_schema->is_user_table() && !table_schema->is_index_table()) {
+    const common::ObIArray<ObAuxTableMetaInfo> &index_infos = table_schema->get_simple_index_infos();
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
+      const ObTableSchema *index_schema = nullptr;
+      if (OB_FAIL(guard->get_table_schema(tenant_id, index_infos.at(i).table_id_, index_schema))) {
+        LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_infos.at(i).table_id_));
+      } else if (OB_NOT_NULL(index_schema) && !index_schema->get_index_params().empty()
+                 && (index_schema->is_vec_delta_buffer_type())) {
+        share::ObVectorIndexParam vec_param;
+        if (OB_SUCC(share::ObVectorIndexUtil::parser_params_from_string(
+                index_schema->get_index_params(),
+                share::ObVectorIndexType::VIT_HNSW_INDEX,
+                vec_param,
+                true))
+            && vec_param.sync_mode_async_) {
+          das_dml_ctdef.table_param_.get_data_table_ref().set_has_async_index(true);
+          break;
+        }
+      }
+    }
   }
   return ret;
 }
@@ -2791,7 +2812,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
       int64_t total_count = is_instead_of ? expectd_col_cnt : table_schema->get_column_count();
       for (i = 0; OB_SUCC(ret) && i < total_count; i++) {
         // how to calc cell_idx and proj_idx ?
-        // see 
+        // see
         ObExpr *new_expr = nullptr;
         ObExpr *old_expr = nullptr;
         bool need_add = false;
@@ -3339,7 +3360,7 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
   const ObIArray<uint64_t> &value_column_ids = check_parent_table ? fk_info.child_column_ids_ : fk_info.parent_column_ids_;
   const ObIArray<uint64_t> &name_column_ids = check_parent_table ? fk_info.parent_column_ids_ : fk_info.child_column_ids_;
   uint64_t name_table_id = check_parent_table ? fk_info.parent_table_id_ : fk_info.child_table_id_;
-  
+
   if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, column_ids))) {
     LOG_WARN("add column ids failed", K(ret));
   } else if (OB_FAIL(generate_updated_column_ids(op, index_dml_info.assignments_, column_ids, das_ctdef, updated_column_ids))) {
@@ -3569,7 +3590,7 @@ int ObDmlCgService::generate_fk_table_loc_info(uint64_t index_table_id,
       is_part_table = true;
     }
   }
-  
+
   return ret;
 }
 
@@ -3590,7 +3611,7 @@ int ObDmlCgService::get_fk_check_scan_table_id(const uint64_t parent_table_id,
 }
 
 int ObDmlCgService::generate_fk_scan_ctdef(share::schema::ObSchemaGetterGuard &schema_guard,
-                                          const uint64_t index_tid, 
+                                          const uint64_t index_tid,
                                           ObDASScanCtDef &scan_ctdef)
 {
   int ret = OB_SUCCESS;
@@ -3732,10 +3753,10 @@ int ObDmlCgService::check_need_domain_id_merge_iter(
   const ObDelUpdStmt *dml_stmt = nullptr;
   domain_types.reset();
   domain_tids.reset();
-  
+
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(log_plan) ||
-      OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard()) || 
+      OB_ISNULL(schema_guard = log_plan->get_optimizer_context().get_schema_guard()) ||
       OB_ISNULL(sql_schema_guard = log_plan->get_optimizer_context().get_sql_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status", K(ret), KP(log_plan), KP(schema_guard), KP(sql_schema_guard));

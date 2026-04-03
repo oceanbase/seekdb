@@ -21,7 +21,6 @@
 #include "rootserver/ob_rs_reentrant_thread.h"
 #include "rootserver/ob_thread_idling.h"
 //#include "rootserver/ob_freeze_info_manager.h"
-#include "rootserver/ob_zone_manager.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/config/ob_server_config.h"
 
@@ -164,7 +163,6 @@ public:
 
   int init(share::schema::ObMultiVersionSchemaService &schema_service,
            //ObFreezeInfoManager &freeze_info_manager,
-           ObZoneManager &zone_manager,
            common::ObMySQLProxy &sql_proxy);
   virtual void run3() override;
   void wakeup();
@@ -211,7 +209,6 @@ private:
   mutable ObSchemaHistoryRecyclerIdling idling_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   //ObFreezeInfoManager *freeze_info_mgr_;
-  ObZoneManager *zone_mgr_;
   common::ObMySQLProxy *sql_proxy_;
   common::hash::ObHashMap<uint64_t, int64_t, common::hash::ReadWriteDefendMode> recycle_schema_versions_;
   DISALLOW_COPY_AND_ASSIGN(ObSchemaHistoryRecycler);
@@ -431,9 +428,8 @@ public:
   bool is_valid() const;
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
-  TO_STRING_KV(K_(zone), K_(name));
+  TO_STRING_KV(K_(name));
 public:
-  common::ObString zone_;
   common::ObString name_;
 };
 

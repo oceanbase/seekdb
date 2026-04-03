@@ -111,15 +111,6 @@ int ObAllVirtualKvConnection::FillScanner::operator()(hash::HashMapPair<ObAddr, 
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
-        case SVR_IP : {
-          cur_row_->cells_[cell_idx].set_varchar(ObString::make_string(svr_ip_));
-          cur_row_->cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cur_row_->cells_[cell_idx].set_int(svr_port_);
-          break;
-        }
         case CLIENT_IP: {
           if (!conn->get_addr().ip_to_string(client_ip_, OB_IP_STR_BUFF)) {
             ret = OB_ERR_UNEXPECTED;
@@ -132,10 +123,6 @@ int ObAllVirtualKvConnection::FillScanner::operator()(hash::HashMapPair<ObAddr, 
         }
         case CLIENT_PORT: {
           cur_row_->cells_[cell_idx].set_int(conn->get_addr().get_port());
-          break;
-        }
-        case TENANT_ID: {
-          cur_row_->cells_[cell_idx].set_int(conn->get_tenant_id());
           break;
         }
         case USER_ID: {
@@ -209,7 +196,6 @@ int ObAllVirtualKvConnection::FillScanner::init(ObIAllocator *allocator,
   }
   return ret;
 }
-
 
 } //namespace observer
 } //namespace oceanbase

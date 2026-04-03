@@ -140,10 +140,7 @@ int ObAdminExecutor::prepare_decoder()
 int ObAdminExecutor::load_config()
 {
   int ret = OB_SUCCESS;
-  // set dump path
-  const char *dump_path = "etc/observer.config.bin";
-  config_mgr_.set_dump_path(dump_path);
-  if (OB_FAIL(config_mgr_.load_config())) {
+  if (OB_FAIL(config_mgr_.update_local())) {
     STORAGE_LOG(WARN, "fail to load config", K(ret));
   } else {
     ObServerConfig &config = config_mgr_.get_config();

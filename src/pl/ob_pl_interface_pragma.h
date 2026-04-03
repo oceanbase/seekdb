@@ -31,7 +31,6 @@
 #include "pl/sys_package/ob_dbms_workload_repository.h"
 #include "pl/sys_package/ob_dbms_mview_mysql.h"
 #include "pl/sys_package/ob_dbms_mview_stats_mysql.h"
-#include "pl/sys_package/ob_pl_dbms_trusted_certificate_manager.h"
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
 #include "pl/sys_package/ob_dbms_external_table.h"
 #include "pl/sys_package/ob_dbms_vector_mysql.h"
@@ -39,6 +38,7 @@
 #include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
 #include "pl/sys_package/ob_dbms_partition.h"
 #include "pl/sys_package/ob_dbms_ai_service.h"
+#include "pl/sys_package/ob_dbms_index_manager.h"
 
 #ifdef INTERFACE_DEF
   INTERFACE_DEF(INTERFACE_START, "TEST", (ObPLInterfaceImpl::call))
@@ -146,10 +146,7 @@
 
 
   // start of dbms_session
-  INTERFACE_DEF(INTERFACE_DBMS_SESSION_CLEAR_ALL_CONTEXT, "CLEAR_ALL_CONTEXT", (ObDBMSSession::clear_all_context))
-  INTERFACE_DEF(INTERFACE_DBMS_SESSION_CLEAR_CONTEXT, "CLEAR_CONTEXT", (ObDBMSSession::clear_context))
   INTERFACE_DEF(INTERFACE_DBMS_SESSION_CLEAR_IDENTIFIER, "CLEAR_IDENTIFIER", (ObDBMSSession::clear_identifier))
-  INTERFACE_DEF(INTERFACE_DBMS_SESSION_SET_CONTEXT, "SET_CONTEXT", (ObDBMSSession::set_context))
   INTERFACE_DEF(INTERFACE_DBMS_SESSION_SET_IDENTIFIER, "SET_IDENTIFIER", (ObDBMSSession::set_identifier))
   INTERFACE_DEF(INTERFACE_DBMS_SESSION_RESET_PACKAGE, "RESET_PACKAGE", (ObDBMSSession::reset_package))
   // end of dbms_session
@@ -212,12 +209,6 @@
 
   /****************************************************************************/
 
-  // start of dbms_trusted_certificate_manager
-  INTERFACE_DEF(INTERFACE_DBMS_ADD_TRUSTED_CERTIFICATE, "ADD_TRUSTED_CERTIFICATE", (ObPlDBMSTrustedCertificateManager::add_trusted_certificate))
-  INTERFACE_DEF(INTERFACE_DBMS_DELETE_TRUSTED_CERTIFICATE, "DELETE_TRUSTED_CERTIFICATE", (ObPlDBMSTrustedCertificateManager::delete_trusted_certificate))
-  INTERFACE_DEF(INTERFACE_DBMS_UPDATE_TRUSTED_CERTIFICATE, "UPDATE_TRUSTED_CERTIFICATE", (ObPlDBMSTrustedCertificateManager::update_trusted_certificate))
-  // end of end of dbms_workload_repository
-
   // start of dbms_ob_limit_calculator
   INTERFACE_DEF(INTERFACE_DBMS_OB_LIMIT_CALCULATOR_PHY_RES_CALCULATE_BY_LOGIC_RES, "PHY_RES_CALCULATE_BY_LOGIC_RES", (ObDBMSLimitCalculator::phy_res_calculate_by_logic_res))
   INTERFACE_DEF(INTERFACE_DBMS_OB_LIMIT_CALCULATOR_PHY_RES_CALCULATE_BY_UNIT, "PHY_RES_CALCULATE_BY_UNIT", (ObDBMSLimitCalculator::phy_res_calculate_by_unit))
@@ -252,6 +243,10 @@ DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(DBMS_HYBRID_VECTOR_MYSQL_GET_SQL, ObDB
 
 #undef DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE
   // end of dbms_hybrid_search
+
+  // start of dbms_index_manager
+  INTERFACE_DEF(INTERFACE_DBMS_INDEX_MANAGER_REFRESH, "REFRESH", (ObDBMSIndexManager::refresh))
+  // end of dbms_index_manager
 
   INTERFACE_DEF(INTERFACE_END, "INVALID", (nullptr))
 #endif

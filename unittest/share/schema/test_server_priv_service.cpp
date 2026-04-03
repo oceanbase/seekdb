@@ -132,11 +132,9 @@ TEST_F(TestServerSchemaService, refresh_priv)
   ObArray<ObString> zone_list;
   zone_list.push_back("127.0.0.1");
   FILL_TENANT_INFO(tenant, 1, "sys", 3, zone_list, "127.0.0.1", 0, "");
-  tenant.set_locality("");
   CREATE_TENANT(ret, tenant);
   tenant.reset();
   FILL_TENANT_INFO(tenant, 2, "ob", 3, zone_list, "127.0.0.1", 0, "");
-  tenant.set_locality("");
   CREATE_TENANT(ret, tenant);
 
   ObUserInfo user;

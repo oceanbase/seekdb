@@ -159,6 +159,11 @@ public:
   virtual int get_tenant_full_schema_guard(const uint64_t tenant_id,
                                            ObSchemaGetterGuard &guard,
                                            bool check_formal = true);
+  // Get schema guard with version from __all_ddl_operation; on OB_SCHEMA_EAGAIN
+  // refreshes schema and retries once. Used by DDL and Change Stream Fetcher.
+  int get_tenant_schema_guard_with_version_in_inner_table(
+      const uint64_t tenant_id,
+      ObSchemaGetterGuard &schema_guard);
   //retry get schema guard will retry 10 times, it's interval is 100ms
   int retry_get_schema_guard(
       const uint64_t tenant_id,

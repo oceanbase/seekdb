@@ -92,10 +92,6 @@ int ObVirtualCompatibilityConflictControl::fill_scanner()
     for (int64_t j = 0; OB_SUCC(ret) && j < output_column_ids_.count(); ++j) {
       int64_t col_id = output_column_ids_.at(j);
       switch(col_id) {
-        case TENAND_ID: {
-          cells[cell_idx].set_int(MTL_ID());
-          break;
-        }
         case NAME: {
           cells[cell_idx].set_varchar(info->name_);
           cells[cell_idx].set_collation_type(coll_type);

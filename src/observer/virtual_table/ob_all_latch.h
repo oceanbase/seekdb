@@ -45,10 +45,7 @@ private:
 private:
   enum SYS_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    LATCH_ID,
+        LATCH_ID = common::OB_APP_MIN_COLUMN_ID,
     NAME,
     ADDR,
     LEVEL,

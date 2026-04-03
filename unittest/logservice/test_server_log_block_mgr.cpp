@@ -319,7 +319,7 @@ public:
                               const char *block_path,
                               const int64_t block_size)
   {
-    if (-1 == ::openat(dir_fd, block_path, palf::LOG_WRITE_FLAG | O_CREAT)) {
+    if (-1 == ::openat(dir_fd, block_path, palf::LOG_WRITE_FLAG | O_CREAT, 0644)) {
       return OB_IO_ERROR;
     }
     return OB_SUCCESS;

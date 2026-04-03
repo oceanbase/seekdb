@@ -192,48 +192,6 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
   return ret;
 }
 
-
-/**
- * Purge tenant
- */
-int ObPurgeTenantResolver::resolve(const ParseNode &parser_tree)
-{
-  int ret = OB_SUCCESS;
-  ObPurgeTenantStmt *purge_tenant_stmt = NULL;
-  if (OB_ISNULL(session_info_) || T_PURGE_TENANT != parser_tree.type_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
-  }
-  //create Purge table stmt
-  if (OB_SUCC(ret)) {
-    if (NULL == (purge_tenant_stmt = create_stmt<ObPurgeTenantStmt>())) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("failed to create Purge tenant stmt", K(ret));
-    } else {
-      stmt_ = purge_tenant_stmt;
-    }
-  }
-  if (OB_SUCC(ret)) {
-    purge_tenant_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
-    ObString tenant_name;
-    ParseNode *tenant_node = parser_tree.children_[TENANT_NODE];
-    int32_t max_database_name_length = OB_MAX_DATABASE_NAME_LENGTH;
-    if (OB_ISNULL(tenant_node) || OB_UNLIKELY(T_IDENT != tenant_node->type_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid parse tree", K(ret));
-    } else if (OB_UNLIKELY(
-            static_cast<int32_t>(tenant_node->str_len_) > max_database_name_length)) {
-      ret = OB_ERR_TOO_LONG_IDENT;
-      LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, (int)tenant_node->str_len_, tenant_node->str_value_);
-    } else {
-      tenant_name.assign_ptr(tenant_node->str_value_,
-                             static_cast<int32_t>(tenant_node->str_len_));
-      purge_tenant_stmt->set_tenant_name(tenant_name);
-    }
-  }
-  return ret;
-}
-
 /**
  * Purge Recyclebin
  */

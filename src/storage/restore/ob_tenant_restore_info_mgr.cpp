@@ -18,7 +18,6 @@
 #include "storage/restore/ob_tenant_restore_info_mgr.h"
 #include "share/restore/ob_physical_restore_table_operator.h"
 #include "share/backup/ob_backup_connectivity.h"
-#include "rootserver/ob_tenant_info_loader.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -116,8 +115,6 @@ int ObTenantRestoreInfoMgr::refresh_restore_info()
     LOG_WARN("sql can't null", K(ret), KP(sql_proxy));
   } else if (MTL_TENANT_ROLE_CACHE_IS_INVALID()) {
     // wait tenant role refresh
-  } else if (MTL_TENANT_ROLE_CACHE_IS_CLONE()) {
-    stop();
   } else if (MTL_TENANT_ROLE_CACHE_IS_RESTORE()) {
     // tenant in restore, get backup set list from table __all_restore_job
     share::ObPhysicalRestoreTableOperator restore_table_operator;
@@ -149,13 +146,13 @@ int ObTenantRestoreInfoMgr::refresh_restore_info()
       }
     }
   } else {
-    ObAllTenantInfo tenant_info;
+    bool is_primary_cluster = true;
     ObRestorePersistHelper persist_helper;
     ObPhysicalRestoreBackupDestList backup_dest_list;
     int64_t job_id = 0;
-    if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(tenant_id_, sql_proxy, false/*for_update*/, tenant_info))) {
-      LOG_WARN("failed to load tenant info", K(ret), K_(tenant_id));
-    } else if (!tenant_info.get_restore_data_mode().is_remote_mode()) {
+    if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+      LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+    } else if (!is_primary_cluster) {
       stop();
     } else if (OB_FAIL(persist_helper.init(tenant_id_, share::OBCG_STORAGE /*group_id*/))) {
       LOG_WARN("failed to init persist helper", K(ret), K_(tenant_id));
@@ -186,42 +183,7 @@ int ObTenantRestoreInfoMgr::refresh_restore_info()
 
 int ObTenantRestoreInfoMgr::get_backup_dest(const int64_t backup_set_id, share::ObBackupDest &backup_dest)
 {
-  int ret = OB_SUCCESS;
-
-#ifdef ERRSIM
-  const bool enable_error_test = GCONF.enable_quick_restore_remove_backup_dest_test;
-  if (enable_error_test) {
-    ret = OB_EAGAIN;
-    LOG_WARN("enable error test, fake backup dest is removed", K(ret));
-  }
-#endif
-
-  lib::ObMutexGuard guard(mutex_);
-  int64_t idx = -1;
-  rootserver::ObTenantInfoLoader *tenant_info_loader = MTL(rootserver::ObTenantInfoLoader *);
-  share::ObRestoreDataMode restore_data_mode;
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(tenant_info_loader)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant info loader is null", K(ret), K_(tenant_id));
-  } else if (OB_FAIL(tenant_info_loader->get_restore_data_mode(restore_data_mode))) {
-    LOG_WARN("fail to get restore data mode", K(ret), K_(tenant_id));
-  } else if (!restore_data_mode.is_remote_mode()) {
-    ret = OB_BACKUP_IO_PROHIBITED;
-    LOG_WARN("restore data mode is not REMOTE, tenant should not have any backup IO", K(ret), K_(tenant_id));
-  } else  if (!is_refreshed_) {
-    ret = OB_EAGAIN;
-    LOG_WARN("restore info has not been refreshed", K(ret), K(backup_set_id));
-  } else if (OB_FAIL(get_restore_backup_set_brief_info_(backup_set_id, idx))) {
-    LOG_WARN("failed to get restore backup set brief info", K(ret), K(backup_set_id));
-  } else {
-    const ObBackupPathString &path = backup_set_list_.at(idx).backup_set_path_;
-    if (OB_FAIL(backup_dest.set(path))) {
-      LOG_WARN("failed to set backup dest", K(ret));
-    } else {
-      LOG_INFO("get backup dest", K(backup_set_id), K(backup_dest));
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

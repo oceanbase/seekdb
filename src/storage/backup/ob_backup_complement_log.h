@@ -22,7 +22,6 @@
 #include "observer/ob_server_event_history_table_operator.h"
 #include "share/backup/ob_archive_struct.h"
 #include "share/ob_common_rpc_proxy.h"
-#include "share/ob_rs_mgr.h"
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "share/scheduler/ob_dag_scheduler_config.h"
 #include "storage/backup/ob_backup_factory.h"
@@ -42,7 +41,6 @@
 #ifndef OB_BUILD_OBSERVER_LITE
 #include "close_modules/observer_lite/logservice/archiveservice/ob_archive_file_utils.h"
 #endif
-#include "share/ls/ob_ls_table_operator.h"
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ob_storage_rpc.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"

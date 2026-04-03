@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_access_service.h"
+#include "share/ob_io_device_helper.h" // LOCAL_DEVICE_INSTANCE
 #include "storage/ob_query_iterator_factory.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/retrieval/ob_block_stat_iter.h"
@@ -133,14 +134,16 @@ int ObAccessService::check_data_disk_full_(
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = MTL_ID();
-  ObFailureDetector* detector = MTL(ObFailureDetector*);
+  is_full = false;
   if (!is_user_tenant(tenant_id) || ls_id.is_sys_ls()) {
     is_full = false;
-  } else if (OB_ISNULL(detector)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mtl module detector is null", K(ret), KP(detector));
-  } else {
-    is_full = detector->is_data_disk_full();
+  } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.check_write_limited())) {
+    if (OB_SERVER_OUTOF_DISK_SPACE != ret) {
+      LOG_WARN("check space full failed", KR(ret));
+    } else {
+      ret = OB_SUCCESS;
+      is_full = true;
+    }
   }
   return ret;
 }

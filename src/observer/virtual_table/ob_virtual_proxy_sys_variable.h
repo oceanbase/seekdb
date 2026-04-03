@@ -53,7 +53,6 @@ private:
   enum PROXY_SYSVAR_COLUMN
   {
     NAME = common::OB_APP_MIN_COLUMN_ID,
-    TENANT_ID,
     DATA_TYPE,
     VALUE,
     FLAGS,

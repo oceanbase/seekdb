@@ -19,7 +19,6 @@
 
 #include "lib/ob_define.h"
 #include "lib/string/ob_string.h"
-#include "share/ob_service_name_proxy.h"
 #include "lib/json_type/ob_json_base.h"
 #include "share/schema/ob_schema_struct.h"
 

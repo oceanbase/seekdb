@@ -103,27 +103,6 @@ int ObMemLeakCheckerInfo::fill_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
       case 16: {
-        //svr_ip
-        char ipbuf[common::OB_IP_STR_BUFF];
-        if (!addr_->ip_to_string(ipbuf, sizeof(ipbuf))) {
-          SERVER_LOG(WARN, "ip to string failed");
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          ObString ipstr = ObString::make_string(ipbuf);
-          if (OB_FAIL(ob_write_string(*allocator_, ipstr, ipstr))) {
-            SERVER_LOG(WARN, "write string failed", K(ret));
-          } else {
-            cells[i].set_varchar(ipstr);
-            cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          }
-        }
-      } break;
-      case 17: {
-        // svr_port
-        const int32_t port = addr_->get_port();
-        cells[i].set_int(port);
-      } break;
-      case 18: {
         //mod_name
         cells[i].set_varchar(label_);
         cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

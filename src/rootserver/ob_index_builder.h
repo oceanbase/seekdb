@@ -48,7 +48,6 @@ class ObSrvRpcProxy;
 
 namespace rootserver
 {
-class ObZoneManager;
 class ObDDLService;
 class ObDDLTaskRecord;
 struct ObCreateDDLTaskParam;

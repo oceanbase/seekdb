@@ -343,20 +343,6 @@ int ObAllVirtualSqlStat::fill_row(
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
-      case SVR_IP: {
-        cells[cell_idx].set_varchar(ipstr_);
-        cells[cell_idx].set_collation_type(
-          ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-        break;
-      }
-      case TENANT_ID: {
-        cells[cell_idx].set_int(tenant_id);
-        break;
-      }
       case SQL_ID: {
         cells[cell_idx].set_varchar(ObString::make_string(sql_stat_record->get_key().sql_id_));
         cells[cell_idx].set_collation_type(
@@ -699,7 +685,6 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
           }
         }
       } // end while
-      
 
       if (OB_SUCC(ret)) {
         if (sql_stat_record->get_key().is_valid() && OB_INVALID_TENANT_ID != tenant_id) {

@@ -32,11 +32,7 @@ class ObAllVirtualTabletCompactionHistory : public common::ObVirtualTableScanner
 {
 public:
   enum COLUMN_ID_LIST { // FARM COMPAT WHITELIST
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    LS_ID,
-    TABLET_ID,
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
     MERGE_TYPE,
     MERGE_VERSION,
     MERGE_START_TIME,

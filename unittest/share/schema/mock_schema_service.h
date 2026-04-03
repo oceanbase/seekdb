@@ -79,7 +79,6 @@ public:
       ObTenantSchema sys_tenant;
       sys_tenant.set_tenant_id(OB_SYS_TENANT_ID);
       sys_tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);
-      sys_tenant.set_locality("auto_locality_strategy");
       sys_tenant.add_zone("zone");
       ObSysVariableSchema sys_variable;
       sys_variable.set_tenant_id(OB_SYS_TENANT_ID);
@@ -353,7 +352,6 @@ private:
     simple_schema.set_tenant_id(schema.get_tenant_id());
     simple_schema.set_tenant_name(schema.get_tenant_name_str());
     simple_schema.set_schema_version(schema.get_schema_version());
-    simple_schema.set_locality(schema.get_locality_str());
 
     return ret;
   }

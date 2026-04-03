@@ -115,26 +115,12 @@ int ObVirtualASH::convert_node_to_row(const ObActiveSessionStatItem &node, ObNew
        ++cell_idx) {
     const uint64_t column_id = output_column_ids_.at(cell_idx);
     switch(column_id) {
-      case SVR_IP: {
-        cells[cell_idx].set_varchar(ipstr_);
-        cells[cell_idx].set_collation_type(
-            ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-        break;
-      }
       case SAMPLE_ID: {
         cells[cell_idx].set_int(node.id_);
         break;
       }
       case SAMPLE_TIME: {
         cells[cell_idx].set_timestamp(node.sample_time_);
-        break;
-      }
-      case TENANT_ID: {
-        cells[cell_idx].set_int(node.tenant_id_);
         break;
       }
       case USER_ID: {

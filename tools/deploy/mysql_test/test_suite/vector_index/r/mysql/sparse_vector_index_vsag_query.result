@@ -280,8 +280,10 @@ c1	c2
 select * from t1 order by negative_inner_product(c2, '{11:1, 12:1}') approx limit 2;
 c1	c2
 10	{10:1,11:1.1,12:1.2}
+9	{9:0.9,10:1,11:1.1}
 select * from t1 order by negative_inner_product(c2, '{12:1, 13:1}') approx limit 2;
 c1	c2
+10	{10:1,11:1.1,12:1.2}
 select /*+ opt_param('rowsets_enabled', 'false')*/ * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 3	{3:0.3,4:0.4,5:0.5}
@@ -832,6 +834,7 @@ c1	c2
 10	{10:1,11:1.1,12:1.2}
 select * from t1 order by negative_inner_product(c2, '{12:1, 13:1}') approx limit 2;
 c1	c2
+10	{10:1,11:1.1,12:1.2}
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
@@ -1830,6 +1833,7 @@ c1	c2
 10	{10:1,11:1.1,12:1.2}
 select * from t1 order by negative_inner_product(c2, '{12:1, 13:1}') approx limit 2;
 c1	c2
+10	{10:1,11:1.1,12:1.2}
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}

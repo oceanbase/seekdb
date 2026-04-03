@@ -22,7 +22,9 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdarg.h>
+#ifndef __ANDROID__
 #include <execinfo.h>
+#endif
 
 #ifdef __ENABLE_PRELOAD__
 inline int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))

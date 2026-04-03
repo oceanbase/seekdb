@@ -1,0 +1,133 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_LOG_FETCHER_DLIST_H__
+#define OCEANBASE_LOG_FETCHER_DLIST_H__
+
+#include "lib/utility/ob_print_utils.h"   // TO_STRING_KV
+
+namespace oceanbase
+{
+namespace logfetcher
+{
+template <class T>
+class ObLogDList;
+
+////////////////////////////////// ObLogDListNode //////////////////////////////////
+// Bidirectional linked list
+// Requires the T type to be a derived class of ObLogDListNode<T>
+template <class T>
+class ObLogDListNode
+{
+  friend class ObLogDList<T>;
+public:
+  ObLogDListNode() { reset(); }
+  virtual ~ObLogDListNode() { reset(); }
+
+public:
+  void reset()
+  {
+    next_ = NULL;
+    prev_ = NULL;
+  }
+
+  void reset_list_node()
+  {
+    reset();
+  }
+
+  T *get_next() { return next_; }
+  T *get_prev() { return prev_; }
+
+protected:
+  T *next_;
+  T *prev_;
+};
+
+////////////////////////////////// ObLogDList //////////////////////////////////
+// Bidirectional linked list
+// Requires the T type to be a derived class of ObLogDListNode<T>
+template <class T>
+class ObLogDList
+{
+public:
+  ObLogDList() { reset(); }
+  virtual ~ObLogDList() { reset(); }
+
+public:
+  void reset()
+  {
+    count_ = 0;
+    head_ = NULL;
+  }
+
+  T *head() { return head_; }
+  int64_t count() const { return count_; }
+
+  // Add to header node
+  void add_head(T &node)
+  {
+    node.prev_ = NULL;
+    node.next_ = head_;
+
+    if (NULL != head_) {
+      head_->prev_ = &node;
+    }
+
+    head_ = &node;
+    count_++;
+  }
+
+  // delete node
+  void erase(T &node)
+  {
+    if (head_ == &node) {
+      head_ = node.next_;
+    }
+
+    if (NULL != node.prev_) {
+      node.prev_->next_ = node.next_;
+    }
+
+    if (NULL != node.next_) {
+      node.next_->prev_ = node.prev_;
+    }
+
+    // reset node info
+    node.reset_list_node();
+    count_--;
+  }
+
+  bool operator == (const ObLogDList<T> &other)
+  {
+    return other.head_ == head_ && other.count_ == count_;
+  }
+
+  bool operator != (const ObLogDList<T> &other)
+  {
+    return ! (*this == other);
+  }
+
+  TO_STRING_KV(K_(count), KP_(head));
+
+private:
+  T       *head_;
+  int64_t count_;
+};
+
+}
+}
+
+#endif

@@ -332,28 +332,17 @@ void UpdateUpperTransParam::reset()
 }
 
 
-ObHATableStoreParam::ObHATableStoreParam()
-  : transfer_seq_(-1),
-    need_check_transfer_seq_(false),
-    need_replace_remote_sstable_(false),
-    is_only_replace_major_(false)
-{}
-
 ObHATableStoreParam::ObHATableStoreParam(
-    const int64_t transfer_seq,
-    const bool need_check_transfer_seq,
     const bool need_replace_remote_sstable,
     const bool is_only_replace_major)
-  : transfer_seq_(transfer_seq),
-    need_check_transfer_seq_(need_check_transfer_seq),
-    need_replace_remote_sstable_(need_replace_remote_sstable),
+  : need_replace_remote_sstable_(need_replace_remote_sstable),
     is_only_replace_major_(is_only_replace_major)
    
 {}
 
 bool ObHATableStoreParam::is_valid() const
 {
-  return (need_check_transfer_seq_ && transfer_seq_ >= 0) || !need_check_transfer_seq_;
+  return true;
 }
 
 ObCompactionTableStoreParam::ObCompactionTableStoreParam()

@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_struct.h"
-#include "share/ob_primary_zone_util.h"
 #include "observer/ob_server.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
@@ -867,22 +866,8 @@ int ObSysParam::init(const uint64_t tenant_id,
                      const ObString &info,
                      int64_t flags)
 {
-  return init(tenant_id, "", name, data_type, value, min_val, max_val, info, flags);
-}
-
-int ObSysParam::init(const uint64_t tenant_id,
-                     const common::ObZone &zone,
-                     const ObString &name,
-                     int64_t data_type,
-                     const ObString &value,
-                     const ObString &min_val,
-                     const ObString &max_val,
-                     const ObString &info,
-                     int64_t flags)
-{
   int ret = OB_SUCCESS;
   tenant_id_ = tenant_id;
-  zone_ = zone;
   data_type_ = data_type;
   flags_ = flags;
   int64_t pos = 0;
@@ -915,7 +900,6 @@ int ObSysParam::init(const uint64_t tenant_id,
 void ObSysParam::reset()
 {
   tenant_id_ = common::OB_INVALID_ID;
-  zone_.reset();
   MEMSET(name_, 0, sizeof(name_));
   data_type_ = 0;
   MEMSET(value_, 0, sizeof(value_));
@@ -929,7 +913,6 @@ int64_t ObSysParam::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
   J_KV(K_(tenant_id),
-       K_(zone),
        K_(name),
        K_(data_type),
        K_(value),
@@ -1315,33 +1298,6 @@ int ObSchema::zone_array2str(const common::ObIArray<common::ObZone> &zone_list,
   } else if (OB_FAIL(string_array2str(zone_ptr_array, str, buf_size))) {
     LOG_WARN("fail to convert Obstring array to C style string", K(ret));
   } else {} // good
-  return ret;
-}
-
-int ObSchema::set_primary_zone_array(
-    const common::ObIArray<ObZoneScore> &src,
-    common::ObIArray<ObZoneScore> &dst)
-{
-  int ret = OB_SUCCESS;
-  dst.reset();
-  int64_t count = src.count();
-  if (OB_FAIL(dst.reserve(count))) {
-    LOG_WARN("fail to reserve array", KR(ret), K(count));
-  }
-  for (int64_t i = 0; i < count && OB_SUCC(ret); ++i) {
-    const ObZoneScore &zone_score = src.at(i);
-    ObString str;
-    if (OB_FAIL(deep_copy_str(zone_score.zone_, str))) {
-      LOG_WARN("deep copy str failed", K(ret));
-    } else if (OB_FAIL(dst.push_back(
-            ObZoneScore(str, zone_score.score_)))) {
-      LOG_WARN("fail to push back", K(ret));
-      for (int64_t j = 0; j < dst.count(); ++j) {
-        free(dst.at(j).zone_.ptr());
-      }
-      free(str.ptr());
-    } else {} // ok
-  }
   return ret;
 }
 
@@ -1799,9 +1755,7 @@ ObTenantSchema::ObTenantSchema()
 
 ObTenantSchema::ObTenantSchema(ObIAllocator *allocator)
   : ObSchema(allocator),
-    zone_list_(),
-    zone_replica_attr_array_(),
-    primary_zone_array_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(*allocator))
+    zone_list_()
 {
   reset();
 }
@@ -1832,26 +1786,14 @@ ObTenantSchema& ObTenantSchema::operator =(const ObTenantSchema &src_schema)
     set_name_case_mode(src_schema.name_case_mode_);
     set_default_tablegroup_id(src_schema.default_tablegroup_id_);
     set_compatibility_mode(src_schema.compatibility_mode_);
-    set_drop_tenant_time(src_schema.drop_tenant_time_);
     set_status(src_schema.status_);
     set_in_recyclebin(src_schema.in_recyclebin_);
-    set_arbitration_service_status(src_schema.arbitration_service_status_);
     if (OB_FAIL(set_tenant_name(src_schema.tenant_name_))) {
       LOG_WARN("set_tenant_name failed", K(ret));
     } else if (OB_FAIL(set_zone_list(src_schema.zone_list_))) {
       LOG_WARN("set_zone_list failed", K(ret));
-    } else if (OB_FAIL(set_primary_zone(src_schema.primary_zone_))) {
-      LOG_WARN("set_primary_zone failed", K(ret));
     } else if (OB_FAIL(set_comment(src_schema.comment_))) {
       LOG_WARN("set_comment failed", K(ret));
-    } else if (OB_FAIL(set_locality(src_schema.locality_str_))) {
-      LOG_WARN("set locality failed", K(ret));
-    } else if (OB_FAIL(set_zone_replica_attr_array(src_schema.zone_replica_attr_array_))) {
-      LOG_WARN("set zone replica attr array failed", K(ret));
-    } else if (OB_FAIL(set_primary_zone_array(src_schema.primary_zone_array_))) {
-      LOG_WARN("fail to set primary zone array", K(ret));
-    } else if (OB_FAIL(set_previous_locality(src_schema.previous_locality_str_))) {
-      LOG_WARN("fail to set previous locality", K(ret));
     } else if (OB_FAIL(set_default_tablegroup_name(src_schema.default_tablegroup_name_))) {
       LOG_WARN("set default tablegroup name failed", K(ret));
     }
@@ -1889,10 +1831,8 @@ void ObTenantSchema::reset()
   default_tablegroup_id_ = OB_INVALID_ID;
   reset_string(default_tablegroup_name_);
   compatibility_mode_ = ObCompatibilityMode::OCEANBASE_MODE;
-  drop_tenant_time_ = OB_INVALID_TIMESTAMP;
   status_ = TENANT_STATUS_NORMAL;
   in_recyclebin_ = false;
-  arbitration_service_status_ = ObArbitrationServiceStatus::DISABLED;
   reset_physical_location_info();
   ObSchema::reset();
 }
@@ -1900,15 +1840,6 @@ void ObTenantSchema::reset()
 void ObTenantSchema::reset_physical_location_info()
 {
   reset_string_array(zone_list_);
-  reset_string(primary_zone_);
-  reset_string(locality_str_);
-  reset_string(previous_locality_str_);
-  reset_zone_replica_attr_array();
-  for (int64_t i = 0; i < primary_zone_array_.count(); ++i) {
-    free(primary_zone_array_.at(i).zone_.ptr());
-  }
-  primary_zone_array_.reset();
-
 }
 
 
@@ -1921,264 +1852,9 @@ int64_t ObTenantSchema::get_convert_size() const
   for (int64_t i = 0; i < zone_list_.count(); ++i) {
     convert_size += zone_list_.at(i).length() + 1;
   }
-  convert_size += zone_replica_attr_array_.count() * static_cast<int64_t>(sizeof(SchemaZoneReplicaAttrSet));
-  for (int64_t i = 0; i < zone_replica_attr_array_.count(); ++i) {
-    convert_size += zone_replica_attr_array_.at(i).get_convert_size();
-  }
-  convert_size += primary_zone_.length() + 1;
   convert_size += comment_.length() + 1;
-  convert_size += locality_str_.length() + 1;
-  convert_size += primary_zone_array_.get_data_size();
-  for (int64_t i = 0; i < primary_zone_array_.count(); ++i) {
-    convert_size += primary_zone_array_.at(i).zone_.length() + 1;
-  }
-  convert_size += previous_locality_str_.length() + 1;
   convert_size += default_tablegroup_name_.length() + 1;
   return convert_size;
-}
-
-void ObTenantSchema::reset_zone_replica_attr_array()
-{
-  if (NULL != zone_replica_attr_array_.get_base_address()) {
-    for (int64_t i = 0; i < zone_replica_attr_array_.count(); ++i) {
-      SchemaZoneReplicaAttrSet &zone_locality = zone_replica_attr_array_.at(i);
-      reset_string_array(zone_locality.zone_set_);
-      SchemaReplicaAttrArray &full_attr_set
-        = static_cast<SchemaReplicaAttrArray &>(zone_locality.replica_attr_set_.get_full_replica_attr_array());
-      if (nullptr != full_attr_set.get_base_address()) {
-        free(full_attr_set.get_base_address());
-        full_attr_set.reset();
-      }
-      SchemaReplicaAttrArray &logonly_attr_set
-        = static_cast<SchemaReplicaAttrArray &>(zone_locality.replica_attr_set_.get_logonly_replica_attr_array());
-      if (nullptr != logonly_attr_set.get_base_address()) {
-        free(logonly_attr_set.get_base_address());
-        logonly_attr_set.reset();
-      }
-      SchemaReplicaAttrArray &readonly_attr_set
-        = static_cast<SchemaReplicaAttrArray &>(zone_locality.replica_attr_set_.get_readonly_replica_attr_array());
-      if (nullptr != readonly_attr_set.get_base_address()) {
-        free(readonly_attr_set.get_base_address());
-        readonly_attr_set.reset();
-      }
-      SchemaReplicaAttrArray &encryption_logonly_attr_set
-        = static_cast<SchemaReplicaAttrArray &>(zone_locality.replica_attr_set_.get_encryption_logonly_replica_attr_array());
-      if (nullptr != encryption_logonly_attr_set.get_base_address()) {
-        free(encryption_logonly_attr_set.get_base_address());
-        encryption_logonly_attr_set.reset();
-      }
-      SchemaReplicaAttrArray &columnstore_attr_set
-        = static_cast<SchemaReplicaAttrArray &>(zone_locality.replica_attr_set_.get_columnstore_replica_attr_array());
-      if (nullptr != columnstore_attr_set.get_base_address()) {
-        free(columnstore_attr_set.get_base_address());
-        columnstore_attr_set.reset();
-      }
-    }
-    free(zone_replica_attr_array_.get_base_address());
-    zone_replica_attr_array_.reset();
-  }
-}
-
-int ObTenantSchema::set_specific_replica_attr_array(
-    SchemaReplicaAttrArray &this_schema_set,
-    const common::ObIArray<ReplicaAttr> &src)
-{
-  int ret = OB_SUCCESS;
-  const int64_t count = src.count();
-  if (count > 0) {
-    const int64_t size = count * static_cast<int64_t>(sizeof(share::ReplicaAttr));
-    void *ptr = nullptr;
-    if (nullptr == (ptr = alloc(size))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("alloc failed", K(ret), K(size));
-    } else if (FALSE_IT(this_schema_set.init(count, static_cast<ReplicaAttr *>(ptr), count))) {
-      // shall never by here
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < src.count(); ++i) {
-        const share::ReplicaAttr &src_replica_attr = src.at(i);
-        ReplicaAttr *dst_replica_attr = &this_schema_set.at(i);
-        if (nullptr == (dst_replica_attr = new (dst_replica_attr) ReplicaAttr(
-                src_replica_attr.num_, src_replica_attr.memstore_percent_))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("placement new return nullptr", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTenantSchema::set_zone_replica_attr_array(
-    const common::ObIArray<SchemaZoneReplicaAttrSet> &src)
-{
-  int ret = OB_SUCCESS;
-  reset_zone_replica_attr_array();
-  const int64_t alloc_size = src.count() * static_cast<int64_t>(sizeof(SchemaZoneReplicaAttrSet));
-  void *buf = NULL;
-  if (src.count() <= 0) {
-    // do nothing
-  } else if (NULL == (buf = alloc(alloc_size))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc failed", K(ret), K(alloc_size));
-  } else {
-    zone_replica_attr_array_.init(src.count(), static_cast<SchemaZoneReplicaAttrSet *>(buf), src.count());
-    // call construct func in advance to avoid core status
-    // 
-    ARRAY_NEW_CONSTRUCT(SchemaZoneReplicaAttrSet, zone_replica_attr_array_);
-    for (int64_t i = 0; i < src.count() && OB_SUCC(ret); ++i) {
-      const SchemaZoneReplicaAttrSet &src_replica_attr_set = src.at(i);
-      SchemaZoneReplicaAttrSet *this_schema_set = &zone_replica_attr_array_.at(i);
-      if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_full_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_full_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_logonly_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_logonly_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_readonly_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_readonly_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_encryption_logonly_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_encryption_logonly_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_columnstore_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_columnstore_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(deep_copy_string_array(src_replica_attr_set.zone_set_, this_schema_set->zone_set_))) {
-        LOG_WARN("fail to copy schema replica attr set zone set", K(ret));
-      } else {
-        this_schema_set->zone_ = src_replica_attr_set.zone_;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTenantSchema::set_zone_replica_attr_array(
-    const common::ObIArray<share::ObZoneReplicaAttrSet> &src)
-{
-  int ret = OB_SUCCESS;
-  reset_zone_replica_attr_array();
-  const int64_t alloc_size = src.count() * static_cast<int64_t>(sizeof(SchemaZoneReplicaAttrSet));
-  void *buf = NULL;
-  if (src.count() <= 0) {
-    // do nothing
-  } else if (NULL == (buf = alloc(alloc_size))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc failed", K(ret), K(alloc_size));
-  } else {
-    zone_replica_attr_array_.init(src.count(), static_cast<SchemaZoneReplicaAttrSet *>(buf), src.count());
-    // call construct func in advance to avoid core status
-    // 
-    ARRAY_NEW_CONSTRUCT(SchemaZoneReplicaAttrSet, zone_replica_attr_array_);
-    for (int64_t i = 0; i < src.count() && OB_SUCC(ret); ++i) {
-      const share::ObZoneReplicaAttrSet &src_replica_attr_set = src.at(i);
-      SchemaZoneReplicaAttrSet *this_schema_set = &zone_replica_attr_array_.at(i);
-      if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_full_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_full_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_logonly_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_logonly_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_readonly_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_readonly_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_encryption_logonly_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_encryption_logonly_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else if (OB_FAIL(set_specific_replica_attr_array(
-              static_cast<SchemaReplicaAttrArray &>(this_schema_set->replica_attr_set_.get_columnstore_replica_attr_array()),
-              src_replica_attr_set.replica_attr_set_.get_columnstore_replica_attr_array()))) {
-        LOG_WARN("fail to set specific replica attr array", K(ret));
-      } else {
-        common::ObArray<common::ObString> zone_set_ptrs;
-        for (int64_t j = 0; OB_SUCC(ret) && j < src_replica_attr_set.zone_set_.count(); ++j) {
-          const common::ObZone &zone = src_replica_attr_set.zone_set_.at(j);
-          if (OB_FAIL(zone_set_ptrs.push_back(common::ObString(zone.size(), zone.ptr())))) {
-             LOG_WARN("fail to push back", K(ret));
-          } else {} // no more to do
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(deep_copy_string_array(zone_set_ptrs, this_schema_set->zone_set_))) {
-          LOG_WARN("fail to copy schema replica attr set zone set", K(ret));
-        } else {
-          this_schema_set->zone_ = src_replica_attr_set.zone_;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTenantSchema::get_zone_replica_attr_array(
-    ZoneLocalityIArray &locality) const
-{
-  int ret = OB_SUCCESS;
-  locality.reset();
-  for (int64_t i = 0; i < zone_replica_attr_array_.count() && OB_SUCC(ret); ++i) {
-    const SchemaZoneReplicaAttrSet &schema_replica_attr_set = zone_replica_attr_array_.at(i);
-    ObZoneReplicaAttrSet zone_replica_attr_set;
-    for (int64_t j = 0; OB_SUCC(ret) && j < schema_replica_attr_set.zone_set_.count(); ++j) {
-      if (OB_FAIL(zone_replica_attr_set.zone_set_.push_back(schema_replica_attr_set.zone_set_.at(j)))) {
-        LOG_WARN("fail to push back", K(ret));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(zone_replica_attr_set.replica_attr_set_.assign(
-            schema_replica_attr_set.replica_attr_set_))) {
-      LOG_WARN("fail to set replica attr set", K(ret));
-    } else {
-      zone_replica_attr_set.zone_ = schema_replica_attr_set.zone_;
-      if (OB_FAIL(locality.push_back(zone_replica_attr_set))) {
-        LOG_WARN("fail to push back", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTenantSchema::get_zone_replica_attr_array_inherit(
-    ObSchemaGetterGuard &schema_guard,
-    ZoneLocalityIArray &locality) const
-{
-  int ret = OB_SUCCESS;
-  UNUSED(schema_guard);
-  locality.reset();
-  if (OB_FAIL(get_zone_replica_attr_array(locality))) {
-    LOG_WARN("fail to get zone replica attr array inherit", K(ret));
-  }
-  return ret;
-}
-
-int64_t ObTenantSchema::get_full_replica_num() const
-{
-  int64_t num = 0;
-  for (int64_t i = 0; i < zone_replica_attr_array_.count(); ++i) {
-    num += zone_replica_attr_array_.at(i).get_full_replica_num();
-  }
-  return num;
-}
-
-
-int ObTenantSchema::get_paxos_replica_num(
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    int64_t &num) const
-{
-  int ret = OB_SUCCESS;
-  UNUSED(schema_guard);
-  num = 0;
-  for (int64_t i = 0; i < zone_replica_attr_array_.count(); ++i) {
-    num += zone_replica_attr_array_.at(i).get_paxos_replica_num();
-  }
-  return ret;
 }
 
 // The tenant actually does not need to pass in the schema_guard to get the zone_list. In order to be consistent
@@ -2233,9 +1909,8 @@ OB_DEF_SERIALIZE(ObTenantSchema)
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE,
               tenant_id_, schema_version_, tenant_name_,
-              primary_zone_, locked_, comment_, charset_type_,
-              collation_type_, name_case_mode_, read_only_,
-              locality_str_, previous_locality_str_);
+              locked_, comment_, charset_type_,
+              collation_type_, name_case_mode_, read_only_);
   if (OB_FAIL(ret)) {
     LOG_WARN("func_SERIALIZE failed", K(ret));
   } else if (OB_FAIL(serialize_string_array(buf, buf_len, pos, zone_list_))) {
@@ -2245,18 +1920,16 @@ OB_DEF_SERIALIZE(ObTenantSchema)
               default_tablegroup_id_,
               default_tablegroup_name_,
               compatibility_mode_,
-              drop_tenant_time_,
               status_,
-              in_recyclebin_,
-              arbitration_service_status_);
+              in_recyclebin_);
 
   LOG_INFO("serialize schema",
            K_(tenant_id), K_(schema_version), K_(tenant_name),
-           K_(primary_zone), K_(locked), K_(comment),
+           K_(locked), K_(comment),
            K_(charset_type), K_(collation_type), K_(name_case_mode),
-           K_(locality_str), K_(primary_zone_array), K_(default_tablegroup_id),
-           K_(default_tablegroup_name), K_(drop_tenant_time), K_(in_recyclebin),
-           K_(arbitration_service_status), K(ret));
+           K_(default_tablegroup_id),
+           K_(default_tablegroup_name), K_(in_recyclebin),
+           K(ret));
   return ret;
 }
 
@@ -2264,8 +1937,8 @@ OB_DEF_DESERIALIZE(ObTenantSchema)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, tenant_id_, schema_version_, tenant_name_,
-              primary_zone_, locked_, comment_, charset_type_, collation_type_, name_case_mode_,
-              read_only_, locality_str_, previous_locality_str_);
+              locked_, comment_, charset_type_, collation_type_, name_case_mode_,
+              read_only_);
   if (OB_FAIL(ret)) {
     LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deserialize_string_array(buf, data_len, pos, zone_list_, get_allocator()))) {
@@ -2275,52 +1948,17 @@ OB_DEF_DESERIALIZE(ObTenantSchema)
               default_tablegroup_id_,
               default_tablegroup_name_,
               compatibility_mode_,
-              drop_tenant_time_,
               status_,
-              in_recyclebin_,
-              arbitration_service_status_);
+              in_recyclebin_);
 
   if (OB_FAIL(ret)) {
     LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(set_tenant_name(tenant_name_))) {
     LOG_WARN("set_tenant_name failed", K(ret));
-  } else if (OB_FAIL(set_primary_zone(primary_zone_))) {
-    LOG_WARN("set_primary_zone failed", K(ret));
   } else if (OB_FAIL(set_comment(comment_))) {
     LOG_WARN("set_comment failed", K(ret));
-  } else if (OB_FAIL(set_locality(locality_str_))) {
-    LOG_WARN("set_locality failed", K(ret));
   } else if (OB_FAIL(set_default_tablegroup_name(default_tablegroup_name_))) {
     LOG_WARN("set default_tablegroup_name failed", K(ret));
-  } else if (OB_FAIL(set_previous_locality(previous_locality_str_))) {
-    // parse and set zone and region replica num array
-    if (locality_str_.length() > 0 && zone_list_.count() > 0) {
-      rootserver::ObLocalityDistribution locality_dist;
-      ObArray<share::ObZoneReplicaAttrSet> zone_replica_attr_array;
-      if (OB_FAIL(locality_dist.init())) {
-        SHARE_SCHEMA_LOG(WARN, "fail to init locality dist", K(ret));
-      } else if (OB_FAIL(locality_dist.parse_locality(
-              locality_str_, zone_list_))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to parse locality", K(ret));
-      } else if (OB_FAIL(locality_dist.get_zone_replica_attr_array(zone_replica_attr_array))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to get zone region replica num array", K(ret));
-      } else if (OB_FAIL(set_zone_replica_attr_array(zone_replica_attr_array))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to set zone replica num array", K(ret));
-      } else {} // no more to do, good
-    } else {} // no need to parse locality
-    // parse and set primary zone array
-    if (OB_FAIL(ret)) {
-    } else if (primary_zone_.length() > 0 && zone_list_.count() > 0) {
-      SMART_VAR(ObPrimaryZoneUtil, primary_zone_util, primary_zone_) {
-      if (OB_FAIL(primary_zone_util.init())) {
-        SHARE_SCHEMA_LOG(WARN, "fail to init primary zone util", K(ret));
-      } else if (OB_FAIL(primary_zone_util.check_and_parse_primary_zone())) {
-        SHARE_SCHEMA_LOG(WARN, "fail to check and parse primary zone", K(ret));
-      } else if (OB_FAIL(set_primary_zone_array(primary_zone_util.get_zone_array()))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to set primary zone array", K(ret));
-      } else {} // set primary zone array success
-      } // end smart var
-    } else {} // no need to parse primary zone
   }
   return ret;
 }
@@ -2330,42 +1968,13 @@ OB_DEF_SERIALIZE_SIZE(ObTenantSchema)
   int64_t len = 0;
 
   LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_id_, schema_version_, tenant_name_,
-              primary_zone_, locked_, comment_, charset_type_, collation_type_, name_case_mode_,
-              read_only_, locality_str_, previous_locality_str_,
+              locked_, comment_, charset_type_, collation_type_, name_case_mode_,
+              read_only_,
               default_tablegroup_id_, default_tablegroup_name_,
-              compatibility_mode_, drop_tenant_time_, status_, in_recyclebin_, arbitration_service_status_);
+              compatibility_mode_, status_, in_recyclebin_);
   len += get_string_array_serialize_size(zone_list_);
   return len;
 }
-
-
-int ObTenantSchema::set_primary_zone_array(
-    const common::ObIArray<ObZoneScore> &primary_zone_array)
-{
-  return ObSchema::set_primary_zone_array(primary_zone_array, primary_zone_array_);
-}
-
-int ObTenantSchema::get_primary_zone_inherit(
-    ObSchemaGetterGuard &schema_guard,
-    ObPrimaryZone &primary_zone) const
-{
-  int ret = OB_SUCCESS;
-  UNUSED(schema_guard);
-  primary_zone.reset();
-  if (OB_FAIL(primary_zone.set_primary_zone_array(get_primary_zone_array()))) {
-    LOG_WARN("fail to set primary zone array", K(ret));
-  } else if (!get_primary_zone().empty()) {
-    if (OB_FAIL(primary_zone.set_primary_zone(get_primary_zone()))) {
-      LOG_WARN("fail to set primary zone", K(ret));
-    }
-  } else {
-    if (OB_FAIL(primary_zone.set_primary_zone(OB_RANDOM_PRIMARY_ZONE))) {
-      LOG_WARN("fail to set primary zone", K(ret));
-    }
-  }
-  return ret;
-}
-
 
 void ObSysVarSchema::reset()
 {
@@ -2377,7 +1986,6 @@ void ObSysVarSchema::reset()
   max_val_.reset();
   schema_version_ = OB_INVALID_VERSION;
   info_.reset();
-  zone_.reset();
   flags_ = 0;
   ObSchema::reset();
 }
@@ -2390,7 +1998,6 @@ int64_t ObSysVarSchema::get_convert_size() const
   convert_size += min_val_.length() + 1;
   convert_size += max_val_.length() + 1;
   convert_size += info_.length() + 1;
-  convert_size += zone_.size();
   return convert_size;
 }
 
@@ -2418,8 +2025,6 @@ int ObSysVarSchema::assign(const ObSysVarSchema &src_schema)
       LOG_WARN("set sysvar max val failed", K(ret));
     } else if (OB_FAIL(set_info(src_schema.get_info()))) {
       LOG_WARN("set sysvar info failed", K(ret));
-    } else if (OB_FAIL(set_zone(src_schema.get_zone()))) {
-      LOG_WARN("set sysvar zone failed", K(ret));
     } else {
       set_data_type(src_schema.get_data_type());
       set_schema_version(src_schema.get_schema_version());
@@ -2467,7 +2072,6 @@ OB_SERIALIZE_MEMBER(ObSysVarSchema,
                     min_val_,
                     max_val_,
                     info_,
-                    zone_,
                     schema_version_,
                     flags_);
 
@@ -2491,8 +2095,7 @@ bool ObSysVarSchema::is_equal_for_add(const ObSysVarSchema &other) const
 {
   bool bret = false;
   if (is_equal_except_value(other)
-      && 0 == value_.compare(other.value_)
-      && zone_ == other.zone_) {
+      && 0 == value_.compare(other.value_)) {
     bret = true;
   }
   return bret;
@@ -2595,36 +2198,6 @@ void ObDatabaseSchema::reset()
   ObSchema::reset();
 }
 
-
-int ObDatabaseSchema::get_paxos_replica_num(
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    int64_t &num) const
-{
-  int ret = OB_SUCCESS;
-  const ObTenantSchema *tenant_schema = NULL;
-  num = 0;
-  common::ObArray<share::ObZoneReplicaAttrSet> zone_locality;
-  if (OB_FAIL(schema_guard.get_tenant_info(get_tenant_id(), tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(database_id_), K(tenant_id_));
-  } else if (OB_UNLIKELY(NULL == tenant_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema null", K(ret), K(database_id_), K(tenant_id_), KP(tenant_schema));
-  } else if (OB_FAIL(tenant_schema->get_zone_replica_attr_array(zone_locality))) {
-    LOG_WARN("fail to get zone replica attr array", K(ret));
-  } else {
-    FOREACH_CNT_X(locality, zone_locality, OB_SUCCESS == ret) {
-      if (OB_ISNULL(locality)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get valid locality set", K(ret), KP(locality));
-      } else {
-        num += locality->get_paxos_replica_num();
-      }
-    }
-  }
-  return ret;
-}
-
-
 OB_DEF_SERIALIZE(ObDatabaseSchema)
 {
   int ret = OB_SUCCESS;
@@ -2670,116 +2243,6 @@ OB_DEF_SERIALIZE_SIZE(ObDatabaseSchema)
               name_case_mode_, read_only_, default_tablegroup_id_,
               default_tablegroup_name_, in_recyclebin_);
 
-  return len;
-}
-
-
-
-/*-------------------------------------------------------------------------------------------------
- * ------------------------------ObPrimaryZone-------------------------------------------
- ----------------------------------------------------------------------------------------------------*/
-ObPrimaryZone::ObPrimaryZone()
-  : allocator_(NULL),
-    primary_zone_str_(),
-    primary_zone_array_()
-{
-}
-
-ObPrimaryZone::ObPrimaryZone(common::ObIAllocator &alloc)
-  : allocator_(&alloc),
-    primary_zone_str_(),
-    primary_zone_array_(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(*allocator_))
-{
-}
-
-
-int ObPrimaryZone::set_primary_zone_array(
-    const common::ObIArray<ObZoneScore> &primary_zone_array)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP_(allocator));
-  } else {
-    primary_zone_array_.reset();
-    int64_t count = primary_zone_array.count();
-    if (OB_FAIL(primary_zone_array_.reserve(count))) {
-      LOG_WARN("fail to reserve array", KR(ret), K(count));
-    }
-    for (int64_t i = 0; i < count && OB_SUCC(ret); ++i) {
-      const ObZoneScore &zone_score = primary_zone_array.at(i);
-      ObString str;
-      if (OB_FAIL(ob_write_string(*allocator_, zone_score.zone_, str, true))) {
-        LOG_WARN("deep copy str failed", KR(ret));
-      } else if (OB_FAIL(primary_zone_array_.push_back(
-                  ObZoneScore(str, zone_score.score_)))) {
-        LOG_WARN("fail to push back", KR(ret));
-        for (int64_t j = 0; j < primary_zone_array_.count(); ++j) {
-          allocator_->free(primary_zone_array_.at(j).zone_.ptr());
-        }
-        allocator_->free(str.ptr());
-      } else {} // ok
-    }
-  }
-  return ret;
-}
-
-int ObPrimaryZone::set_primary_zone(const ObString &zone)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP_(allocator));
-  } else if (OB_FAIL(ob_write_string(*allocator_, zone, primary_zone_str_, true))) {
-    LOG_WARN("fail to assign primary zone", K(ret));
-  }
-  return ret;
-}
-
-
-
-void ObPrimaryZone::reset()
-{
-  if (OB_NOT_NULL(allocator_)) {
-    if (!OB_ISNULL(primary_zone_str_.ptr())) {
-      allocator_->free(primary_zone_str_.ptr());
-    }
-    for (int64_t i = 0; i < primary_zone_array_.count(); ++i) {
-      if (!OB_ISNULL(primary_zone_array_.at(i).zone_.ptr())) {
-        allocator_->free(primary_zone_array_.at(i).zone_.ptr());
-      }
-    }
-  }
-  primary_zone_str_.reset();
-  primary_zone_array_.reset();
-}
-
-
-OB_DEF_SERIALIZE(ObPrimaryZone)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, primary_zone_str_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObPrimaryZone)
-{
-  int ret = OB_SUCCESS;
-  ObString primary_zone;
-  LST_DO_CODE(OB_UNIS_DECODE, primary_zone);
-  if (OB_ISNULL(allocator_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema", K(ret));
-  } else if (OB_FAIL(ob_write_string(*allocator_, primary_zone, primary_zone_str_))) {
-    LOG_WARN("fail to deep copy str", K(ret));
-  }
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObPrimaryZone)
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, primary_zone_str_);
   return len;
 }
 
@@ -4734,15 +4197,6 @@ int64_t ObTablegroupSchema::to_string(char *buf, const int64_t buf_len) const
   return pos;
 }
 
-int ObTablegroupSchema::get_first_primary_zone_inherit(
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    const common::ObIArray<rootserver::ObReplicaAddr> &replica_addrs,
-    common::ObZone &first_primary_zone) const
-{
-  int ret = OB_NOT_SUPPORTED;
-  return ret;
-}
-
 int ObTablegroupSchema::get_zone_list(
     share::schema::ObSchemaGetterGuard &schema_guard,
     common::ObIArray<common::ObZone> &zone_list) const
@@ -4760,99 +4214,6 @@ int ObTablegroupSchema::get_zone_list(
   } else {} // no more to do
   return ret;
 }
-
-//TODO: These functions can be extracted; as an implementation of locality/primary_zone
-int ObTablegroupSchema::get_zone_replica_attr_array_inherit(
-    ObSchemaGetterGuard &schema_guard,
-    ZoneLocalityIArray &locality) const
-{
-  int ret = OB_SUCCESS;
-  locality.reset();
-  const ObTenantSchema *tenant_schema = NULL;
-  if (OB_FAIL(schema_guard.get_tenant_info(get_tenant_id(), tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(tablegroup_id_), K(tenant_id_));
-  } else if (OB_UNLIKELY(NULL == tenant_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema null", K(ret), K(tablegroup_id_), K(tenant_id_), KP(tenant_schema));
-  } else if (OB_FAIL(tenant_schema->get_zone_replica_attr_array_inherit(schema_guard, locality))) {
-    LOG_WARN("fail to get zone replica num array", K(ret), K(tablegroup_id_), K(tenant_id_));
-  }
-  return ret;
-}
-
-int ObTablegroupSchema::get_locality_str_inherit(
-    share::schema::ObSchemaGetterGuard &guard,
-    const common::ObString *&locality_str) const
-{
-  int ret = OB_SUCCESS;
-  locality_str = nullptr;
-  const ObSimpleTenantSchema *tenant_schema = nullptr;
-  if (OB_FAIL(guard.get_tenant_info(get_tenant_id(), tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), "tenant_id", get_tenant_id());
-  } else if (OB_UNLIKELY(nullptr == tenant_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get tenant schema", K(ret), "tenant_id", get_tenant_id());
-  } else {
-    locality_str = &tenant_schema->get_locality_str();
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_UNLIKELY(nullptr == locality_str || locality_str->empty())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("locality str should not be null or empty", K(ret), K(*this));
-    }
-  }
-  return ret;
-}
-
-int ObTablegroupSchema::get_primary_zone_inherit(
-    ObSchemaGetterGuard &schema_guard,
-    ObPrimaryZone &primary_zone) const
-{
-  int ret = OB_SUCCESS;
-  primary_zone.reset();
-  const ObTenantSchema *tenant_schema = NULL;
-  if (OB_FAIL(schema_guard.get_tenant_info(get_tenant_id(), tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(tablegroup_id_), K(tenant_id_));
-  } else if (OB_UNLIKELY(NULL == tenant_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema null", K(ret), K(tablegroup_id_), K(tenant_id_), KP(tenant_schema));
-  } else if (OB_FAIL(tenant_schema->get_primary_zone_inherit(schema_guard, primary_zone))) {
-    LOG_WARN("fail to get primary zone array", K(ret), K(tablegroup_id_), K(tenant_id_));
-  }
-  return ret;
-}
-
-
-
-int ObTablegroupSchema::get_paxos_replica_num(
-    share::schema::ObSchemaGetterGuard &schema_guard,
-    int64_t &num) const
-{
-  int ret = OB_SUCCESS;
-  num = 0;
-  const ObTenantSchema *tenant_schema = NULL;
-  common::ObArray<share::ObZoneReplicaAttrSet> zone_locality;
-  if (OB_FAIL(schema_guard.get_tenant_info(get_tenant_id(), tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", K(ret), K(tablegroup_id_), K(tenant_id_));
-  } else if (OB_UNLIKELY(NULL == tenant_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant schema null", K(ret), K(tablegroup_id_), K(tenant_id_), KP(tenant_schema));
-  } else if (OB_FAIL(tenant_schema->get_zone_replica_attr_array(zone_locality))) {
-    LOG_WARN("fail to get zone replica attr array", K(ret));
-  } else {
-    FOREACH_CNT_X(locality, zone_locality, OB_SUCCESS == ret) {
-      if (OB_ISNULL(locality)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get valid locality set", K(ret), KP(locality));
-      } else {
-        num += locality->get_paxos_replica_num();
-      }
-    }
-  }
-  return ret;
-}
-
 
 int ObTablegroupSchema::calc_part_func_expr_num(int64_t &part_func_expr_num) const
 {

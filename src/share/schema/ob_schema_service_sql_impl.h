@@ -568,10 +568,6 @@ public:
       int64_t schema_version,
       common::ObIArray<ObDropTenantInfo> &drop_tenant_infos);
 
-  virtual int query_tenant_status(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
-      TenantStatus &tenant_status);
   virtual int get_schema_version_by_timestamp(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,
@@ -1121,6 +1117,13 @@ private:
 
   bool in_parallel_ddl_thread_();
   bool need_column_group(const ObTableSchema &table_schema);
+
+  int construct_tenant_schema_(
+      ObIArray<ObTenantSchema> &tenant_schema_array);
+  int construct_tenant_schema_(
+      ObIArray<ObSimpleTenantSchema> &tenant_schema_array);
+  int construct_schema_version_his_val_(
+      VersionHisVal &version_his_val);
 private:
   common::ObMySQLProxy *mysql_proxy_;
   // record last schema version of log operation while execute ddl

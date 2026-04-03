@@ -53,10 +53,7 @@ private:
   enum SESSION_COLUMN
   {
     SESSION_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
     STATISTIC,
-    TENANT_ID,
     VALUE,
     CAN_VISIBLE
   };

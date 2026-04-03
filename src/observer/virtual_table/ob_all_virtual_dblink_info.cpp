@@ -100,19 +100,6 @@ int ObAllVirtualDblinkInfo::fill_cells(ObNewRow *&row, common::Dblink_status &dl
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case TENANT_ID: {
-          cells[i].set_int(tenant_id_);
-          break;
-        }
-        case SVR_IP: {
-          cells[i].set_varchar(ipstr_);
-          cells[i].set_collation_type(default_collation);
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(port_);
-          break;
-        }
         case LINK_ID: {
           cells[i].set_int(dlink_status.link_id);
           break;

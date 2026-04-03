@@ -48,16 +48,17 @@ class ObTenantVirtualConcurrentLimitSql : public ObTenantVirtualOutlineBase
 {
   enum TENANT_VIRTUAL_OUTLINE_COLUMN
   {
-    TENANT_ID = OB_APP_MIN_COLUMN_ID,
-    DATABASE_ID = OB_APP_MIN_COLUMN_ID + 1,
-    OUTLINE_ID = OB_APP_MIN_COLUMN_ID + 2,
-    DATABASE_NAME = OB_APP_MIN_COLUMN_ID + 3,
-    OUTLINE_NAME = OB_APP_MIN_COLUMN_ID + 4,
-    OUTLINE_CONTENT = OB_APP_MIN_COLUMN_ID + 5,
-    VISIBLE_SIGNATURE = OB_APP_MIN_COLUMN_ID + 6,
-    SQL_TEXT = OB_APP_MIN_COLUMN_ID + 7,
-    CONCURRENT_NUM = OB_APP_MIN_COLUMN_ID + 8,
-    LIMIT_TARGET = OB_APP_MIN_COLUMN_ID + 9,
+    // Keep column ids aligned with `tenant_virtual_concurrent_limit_sql_schema`
+    // in generated inner-table schema.
+    DATABASE_ID = OB_APP_MIN_COLUMN_ID,
+    OUTLINE_ID = OB_APP_MIN_COLUMN_ID + 1,
+    DATABASE_NAME = OB_APP_MIN_COLUMN_ID + 2,
+    OUTLINE_NAME = OB_APP_MIN_COLUMN_ID + 3,
+    OUTLINE_CONTENT = OB_APP_MIN_COLUMN_ID + 4,
+    VISIBLE_SIGNATURE = OB_APP_MIN_COLUMN_ID + 5,
+    SQL_TEXT = OB_APP_MIN_COLUMN_ID + 6,
+    CONCURRENT_NUM = OB_APP_MIN_COLUMN_ID + 7,
+    LIMIT_TARGET = OB_APP_MIN_COLUMN_ID + 8,
   };
 public:
   ObTenantVirtualConcurrentLimitSql()

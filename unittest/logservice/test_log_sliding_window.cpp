@@ -67,19 +67,9 @@ public:
       UNUSED(leader);
       return OB_SUCCESS;
     }
-    virtual int nonblock_renew_leader(const int64_t id)
-    {
-      UNUSED(id);
-      return OB_SUCCESS;
-    }
     virtual int nonblock_get_leader(const uint64_t tenant_id, int64_t id, common::ObAddr &leader)
     {
       UNUSEDx(tenant_id, id, leader);
-      return OB_SUCCESS;
-    }
-    virtual int nonblock_renew_leader(const uint64_t tenant_id, int64_t id)
-    {
-      UNUSEDx(tenant_id, id);
       return OB_SUCCESS;
     }
   };

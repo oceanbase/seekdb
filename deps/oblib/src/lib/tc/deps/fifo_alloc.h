@@ -18,7 +18,7 @@
 class FifoAlloc
 {
 private:
-  enum { PAGE_SIZE = 1<<16 };
+  enum { ALLOC_PAGE_SIZE = 1<<16 };
   struct Page {
     Page(int sz): MAGIC_(MAGIC), limit_(sz - sizeof(Page)), pos_(0), alloc_cnt_(0), ref_(0) {}
     int ref(int x) {
@@ -105,16 +105,16 @@ private:
   Page* alloc_page() {
     Page* p = NULL;
     if (ATOMIC_LOAD(&hold_) > limit_) {
-    } else if (ATOMIC_AAF(&hold_, PAGE_SIZE) > limit_) {
-      ATOMIC_FAA(&hold_, -PAGE_SIZE);
+    } else if (ATOMIC_AAF(&hold_, ALLOC_PAGE_SIZE) > limit_) {
+      ATOMIC_FAA(&hold_, -ALLOC_PAGE_SIZE);
     } else {
-      p = (typeof(p))::malloc(PAGE_SIZE);
-      new(p)Page(PAGE_SIZE);
+      p = (typeof(p))::malloc(ALLOC_PAGE_SIZE);
+      new(p)Page(ALLOC_PAGE_SIZE);
     }
     return p;
   }
   void free_page(Page* p) {
-    ATOMIC_FAA(&hold_, -PAGE_SIZE);
+    ATOMIC_FAA(&hold_, -ALLOC_PAGE_SIZE);
     ::free(p);
   }
   void retire_page(Page* p) {

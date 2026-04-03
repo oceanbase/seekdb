@@ -17,6 +17,7 @@
 #include "ob_schedule_status_cache.h"
 #include "src/storage/compaction/ob_basic_schedule_tablet_func.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 namespace oceanbase
 {
 using namespace storage;

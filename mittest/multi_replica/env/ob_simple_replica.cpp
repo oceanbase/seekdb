@@ -152,7 +152,7 @@ int ObSimpleServerReplica::simple_init()
   // opts.devname_ = "eth0";
   opts.use_ipv6_ = false;
 
-  char *curr_dir = get_current_dir_name();
+  char *curr_dir = getcwd(NULL, 0);
 
   if (OB_FAIL(chdir(run_dir_.c_str()))) {
     SERVER_LOG(WARN, "change dir failed.", KR(ret), K(curr_dir), K(run_dir_.c_str()), K(errno));
@@ -359,11 +359,8 @@ int ObSimpleServerReplica::bootstrap()
     // server_info.zone_ = "";
     // server_info.server_ = common::ObAddr(common::ObAddr::IPV4, local_ip_.c_str(), rpc_port_);
     // server_info.region_ = "sys_region";
-    obrpc::ObBootstrapArg arg;
-    arg.cluster_role_ = common::PRIMARY_CLUSTER;
-    arg.server_list_.assign(server_info_list_);
-    if (OB_FAIL(bootstrap_srv_proxy_.bootstrap(arg))) {
-      SERVER_LOG(WARN, "bootstrap failed", K(arg), K(ret));
+    if (OB_FAIL(bootstrap_srv_proxy_.bootstrap())) {
+      SERVER_LOG(WARN, "bootstrap failed", K(ret));
     }
   // }
   SERVER_LOG(INFO, "ObSimpleServerReplica::bootstrap end", K(ret), K(zone_id_), K(rpc_port_), K(mysql_port_));

@@ -28,6 +28,8 @@
 #include "observer/ob_inner_sql_rpc_processor.h"
 #include "logservice/palf/log_rpc_processor.h"
 #include "logservice/logrpc/ob_log_rpc_processor.h"
+// CDC RPC processors for log fetcher (standby log sync)
+#include "logservice/cdcservice/ob_cdc_rpc_processor.h"
 
 #include "observer/net/ob_rpc_reverse_keepalive.h"
 
@@ -48,20 +50,13 @@ using namespace oceanbase::obrpc;
 using namespace oceanbase::obmysql;
 
 void oceanbase::observer::init_srv_xlator_for_sys(ObSrvRpcXlator *xlator) {
-  RPC_PROCESSOR(ObRpcGetRoleP, gctx_);
-  RPC_PROCESSOR(ObRpcDetectMasterRsLSP, gctx_);
   RPC_PROCESSOR(ObRpcSetConfigP, gctx_);
   RPC_PROCESSOR(ObRpcGetConfigP, gctx_);
   RPC_PROCESSOR(ObRpcSetTenantConfigP, gctx_);
-  RPC_PROCESSOR(ObRpcNotifyTenantServerUnitResourceP, gctx_);
   RPC_PROCESSOR(ObCheckFrozenVersionP, gctx_);
   RPC_PROCESSOR(ObGetDiagnoseArgsP);
   RPC_PROCESSOR(ObGetMinSSTableSchemaVersionP, gctx_);
   RPC_PROCESSOR(ObInitTenantConfigP, gctx_);
-  RPC_PROCESSOR(ObGetLeaderLocationsP, gctx_);
-  RPC_PROCESSOR(ObBatchBroadcastSchemaP, gctx_);
-  RPC_PROCESSOR(ObRpcSendHeartbeatP, gctx_);
-  RPC_PROCESSOR(ObRpcNotifySwitchLeaderP, gctx_);
 
   // interrupt
   RPC_PROCESSOR(obrpc::ObInterruptProcessor);
@@ -83,7 +78,6 @@ void oceanbase::observer::init_srv_xlator_for_sys(ObSrvRpcXlator *xlator) {
 
   // election provided
 //  RPC_PROCESSOR(ObElectionP);
-  RPC_PROCESSOR(ObRequestHeartbeatP, gctx_);
   RPC_PROCESSOR(ObFlushCacheP, gctx_);
 
   //backup
@@ -100,7 +94,6 @@ void oceanbase::observer::init_srv_xlator_for_sys(ObSrvRpcXlator *xlator) {
   RPC_PROCESSOR(ObRpcStopDBMSSchedJobP, gctx_);
   RPC_PROCESSOR(ObRpcDBMSSchedPurgeP, gctx_);
 
-  RPC_PROCESSOR(ObRpcGetServerResourceInfoP, gctx_);
   RPC_PROCESSOR(ObRpcReverseKeepaliveP, gctx_);
 }
 
@@ -164,19 +157,19 @@ void oceanbase::observer::init_srv_xlator_for_logservice(ObSrvRpcXlator *xlator)
 {
   RPC_PROCESSOR(logservice::LogMembershipChangeP);
   RPC_PROCESSOR(logservice::LogGetPalfStatReqP);
-#ifdef OB_BUILD_ARBITRATION
-  RPC_PROCESSOR(logservice::LogServerProbeP);
-#endif
   RPC_PROCESSOR(logservice::LogChangeAccessModeP);
   RPC_PROCESSOR(logservice::LogFlashbackMsgP);
-#ifdef OB_BUILD_ARBITRATION
-  RPC_PROCESSOR(logservice::LogProbeRsP);
-#endif 
   RPC_PROCESSOR(logservice::LogGetCkptReqP);
 #ifdef OB_BUILD_SHARED_STORAGE
   RPC_PROCESSOR(logservice::LogSyncBaseLSNReqP);
   RPC_PROCESSOR(logservice::LogAcquireRebuildInfoP);
 #endif
+  // Register CDC RPC processors for log fetcher (standby log sync)
+  // Note: These processors are from close_modules, will be moved to src/ later
+  RPC_PROCESSOR(obrpc::ObCdcLSReqStartLSNByTsP);
+  RPC_PROCESSOR(obrpc::ObCdcLSFetchLogP);
+  RPC_PROCESSOR(obrpc::ObCdcLSFetchMissingLogP);
+  RPC_PROCESSOR(obrpc::ObCdcFetchRawLogP);
 }
 
 void oceanbase::observer::init_srv_xlator_for_palfenv(ObSrvRpcXlator *xlator)

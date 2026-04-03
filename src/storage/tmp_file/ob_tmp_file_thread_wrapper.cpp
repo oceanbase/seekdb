@@ -1033,7 +1033,7 @@ int ObTmpFileSwapTG::swap_normal_()
   int64_t swap_size = wbp_.get_swap_size();
   int64_t actual_swap_page_cnt = 0;
   if (swap_size > 0) { // do swap
-    int64_t swap_page_cnt = swap_size / PAGE_SIZE;
+    int64_t swap_page_cnt = swap_size / ALLOC_PAGE_SIZE;
     if (OB_FAIL(evict_mgr_.evict(swap_page_cnt, actual_swap_page_cnt))) {
       STORAGE_LOG(WARN, "fail to swap out pages", KR(ret), K(swap_size));
     }
@@ -1099,7 +1099,7 @@ int ObTmpFileSwapTG::calculate_swap_page_num_(const int64_t batch_size, int64_t 
     if (OB_FAIL(pop_working_job_(swap_job))) {
       STORAGE_LOG(WARN, "fail to pop working job or ptr is null", KR(ret), KP(swap_job));
     } else {
-      expect_swap_cnt += upper_align(swap_job->get_expect_swap_size(), PAGE_SIZE) / PAGE_SIZE;
+      expect_swap_cnt += upper_align(swap_job->get_expect_swap_size(), ALLOC_PAGE_SIZE) / ALLOC_PAGE_SIZE;
       cur_working_list.push_front(swap_job);
     }
   }
@@ -1128,7 +1128,7 @@ int ObTmpFileSwapTG::wakeup_satisfied_jobs_(int64_t& wakeup_job_cnt)
       STORAGE_LOG(WARN, "fail to pop working job or ptr is null", KR(ret), KP(swap_job));
     } else {
       // wake up threads even if free page number < swap job's expect swap size
-      int64_t single_job_swap_page_cnt = upper_align(swap_job->get_expect_swap_size(), PAGE_SIZE) / PAGE_SIZE;
+      int64_t single_job_swap_page_cnt = upper_align(swap_job->get_expect_swap_size(), ALLOC_PAGE_SIZE) / ALLOC_PAGE_SIZE;
       wbp_free_page_cnt -= min(wbp_free_page_cnt, single_job_swap_page_cnt);
       int64_t response_time = ObTimeUtility::current_time() - swap_job->get_create_ts();
       swap_monitor_.record_swap_response_time(response_time);

@@ -30,13 +30,14 @@ namespace observer
 int ObAllVirtualCheckpointDiagnoseMemtableInfo::get_primary_key_()
 {
   int ret = OB_SUCCESS;
+  // In single-node mode, rowkey only has trace_id (index 0)
   if (key_ranges_.count() != 1) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "only support select a single trace, multiple range select is ");
     SERVER_LOG(WARN, "invalid key ranges", KR(ret));
   } else {
     ObNewRange &key_range = key_ranges_.at(0);
-    if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() != 2 || key_range.get_end_key().get_obj_cnt() != 2)) {
+    if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() < 1 || key_range.get_end_key().get_obj_cnt() < 1)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR,
                  "unexpected key_ranges_ of rowkey columns",
@@ -46,40 +47,22 @@ int ObAllVirtualCheckpointDiagnoseMemtableInfo::get_primary_key_()
                  "size of end key",
                  key_range.get_end_key().get_obj_cnt());
     } else {
-      ObObj tenant_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
-      ObObj tenant_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
-      ObObj trace_obj_low = (key_range.get_start_key().get_obj_ptr()[1]);
-      ObObj trace_obj_high = (key_range.get_end_key().get_obj_ptr()[1]);
+      ObObj trace_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
+      ObObj trace_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
 
-      uint64_t tenant_low = tenant_obj_low.is_min_value() ? 0 : tenant_obj_low.get_uint64();
-      uint64_t tenant_high = tenant_obj_high.is_max_value() ? UINT64_MAX : tenant_obj_high.get_uint64();
       uint64_t trace_id_low = trace_obj_low.is_min_value() ? 0 : trace_obj_low.get_int();
       uint64_t trace_id_high = trace_obj_high.is_max_value() ? 0 : trace_obj_high.get_int();
-      if (tenant_low != tenant_high || trace_id_low != trace_id_high) {
+      if (trace_id_low != trace_id_high) {
         ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant id and trace_id must be specified. range select is ");
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "trace_id must be specified. range select is ");
         SERVER_LOG(WARN,
                    "only support point select.",
                    KR(ret),
-                   K(tenant_low),
-                   K(tenant_high),
                    K(trace_id_low),
                    K(trace_id_high));
       } else {
         trace_id_ = trace_id_low;
-        if (is_sys_tenant(effective_tenant_id_)
-            || effective_tenant_id_ == tenant_low) {
-          tenant_id_ = tenant_low;
-        } else {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant id must not be specified to other tenant in user tenant. this is ");
-          SERVER_LOG(WARN,
-                     "tenant id must not be specified to other tenant in user tenant",
-                     KR(ret),
-                     K(effective_tenant_id_),
-                     K(trace_id_low),
-                     K(tenant_low));
-        }
+        tenant_id_ = OB_SYS_TENANT_ID;  // Use sys tenant in single-node mode
       }
     }
   }
@@ -97,99 +80,77 @@ int GenerateMemtableRow::operator()(const storage::checkpoint::ObTraceInfo &trac
   for (int64_t i = 0; OB_SUCC(ret) && i < virtual_table_.output_column_ids_.count(); ++i) {
     uint64_t col_id = virtual_table_.output_column_ids_.at(i);
     switch (col_id) {
-      // tenant_id
-      case OB_APP_MIN_COLUMN_ID:
-        virtual_table_.cur_row_.cells_[i].set_int(MTL_ID());
-        break;
+
       // trace_id
-      case OB_APP_MIN_COLUMN_ID + 1:
+      case OB_APP_MIN_COLUMN_ID:
         virtual_table_.cur_row_.cells_[i].set_int(trace_info.trace_id_);
         break;
-      // svr_ip
-      case OB_APP_MIN_COLUMN_ID + 2:
-        MEMSET(ip_buf, 0, common::OB_IP_STR_BUFF);
-        if (virtual_table_.addr_.ip_to_string(ip_buf, sizeof(ip_buf))) {
-          virtual_table_.cur_row_.cells_[i].set_varchar(ip_buf);
-          virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "fail to execute ip_to_string", KR(ret));
-        }
-        break;
-      // svr_port
-      case OB_APP_MIN_COLUMN_ID + 3:
-        virtual_table_.cur_row_.cells_[i].set_int(virtual_table_.addr_.get_port());
-        break;
-      // ls_id
-      case OB_APP_MIN_COLUMN_ID + 4:
-        virtual_table_.cur_row_.cells_[i].set_int(trace_info.ls_id_.id());
-        break;
       // checkpoint_thread_name
-      case OB_APP_MIN_COLUMN_ID + 5:
+      case OB_APP_MIN_COLUMN_ID + 3:
           virtual_table_.cur_row_.cells_[i].set_varchar(trace_info.thread_name_);
           virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       // checkpoint_start_time
-      case OB_APP_MIN_COLUMN_ID + 6:
+      case OB_APP_MIN_COLUMN_ID + 4:
         virtual_table_.cur_row_.cells_[i].set_timestamp(trace_info.checkpoint_start_time_);
         break;
       // tablet_id
-      case OB_APP_MIN_COLUMN_ID + 7:
+      case OB_APP_MIN_COLUMN_ID + 5:
         virtual_table_.cur_row_.cells_[i].set_int(key.tablet_id_.id());
         break;
       // ptr
-      case OB_APP_MIN_COLUMN_ID + 8:
+      case OB_APP_MIN_COLUMN_ID + 6:
         MEMSET(ptr_buf, 0, 16);
         databuff_print_obj(ptr_buf, 16, pos, key.checkpoint_unit_ptr_);
         virtual_table_.cur_row_.cells_[i].set_varchar(ptr_buf);
         virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       // start_scn
-      case OB_APP_MIN_COLUMN_ID + 9:
+      case OB_APP_MIN_COLUMN_ID + 7:
         virtual_table_.cur_row_.cells_[i].set_uint64(memtable_diagnose_info.start_scn_.get_val_for_inner_table_field());
         break;
       // end_scn
-      case OB_APP_MIN_COLUMN_ID + 10:
+      case OB_APP_MIN_COLUMN_ID + 8:
         virtual_table_.cur_row_.cells_[i].set_uint64(memtable_diagnose_info.end_scn_.get_val_for_inner_table_field());
         break;
       // rec_scn
-      case OB_APP_MIN_COLUMN_ID + 11:
+      case OB_APP_MIN_COLUMN_ID + 9:
         virtual_table_.cur_row_.cells_[i].set_uint64(memtable_diagnose_info.rec_scn_.get_val_for_inner_table_field());
         break;
       // create_flush_dag_time
-      case OB_APP_MIN_COLUMN_ID + 12:
+      case OB_APP_MIN_COLUMN_ID + 10:
         virtual_table_.cur_row_.cells_[i].set_timestamp(memtable_diagnose_info.create_flush_dag_time_);
         break;
       // merge_finish_time
-      case OB_APP_MIN_COLUMN_ID + 13:
+      case OB_APP_MIN_COLUMN_ID + 11:
         virtual_table_.cur_row_.cells_[i].set_timestamp(memtable_diagnose_info.merge_finish_time_);
         break;
       // start_gc_time
-      case OB_APP_MIN_COLUMN_ID + 14:
+      case OB_APP_MIN_COLUMN_ID + 12:
         virtual_table_.cur_row_.cells_[i].set_timestamp(memtable_diagnose_info.start_gc_time_);
         break;
       // frozen_finish_time
-      case OB_APP_MIN_COLUMN_ID + 15:
+      case OB_APP_MIN_COLUMN_ID + 13:
         virtual_table_.cur_row_.cells_[i].set_timestamp(memtable_diagnose_info.frozen_finish_time_);
         break;
       // merge_start_time
-      case OB_APP_MIN_COLUMN_ID + 16:
+      case OB_APP_MIN_COLUMN_ID + 14:
         virtual_table_.cur_row_.cells_[i].set_timestamp(memtable_diagnose_info.merge_start_time_);
         break;
       // release_time
-      case OB_APP_MIN_COLUMN_ID + 17:
+      case OB_APP_MIN_COLUMN_ID + 15:
         virtual_table_.cur_row_.cells_[i].set_timestamp(memtable_diagnose_info.release_time_);
         break;
       // memtable_occupy_size
-      case OB_APP_MIN_COLUMN_ID + 18:
+      case OB_APP_MIN_COLUMN_ID + 16:
         virtual_table_.cur_row_.cells_[i].set_int(memtable_diagnose_info.memtable_occupy_size_);
         break;
       // occupy_size
-      case OB_APP_MIN_COLUMN_ID + 19:
+      case OB_APP_MIN_COLUMN_ID + 17:
         virtual_table_.cur_row_.cells_[i].set_int(memtable_diagnose_info.occupy_size_);
         break;
       // concurrent_cnt
-      case OB_APP_MIN_COLUMN_ID + 20:
+      case OB_APP_MIN_COLUMN_ID + 18:
         virtual_table_.cur_row_.cells_[i].set_int(memtable_diagnose_info.concurrent_cnt_);
         break;
       default:
@@ -252,75 +213,53 @@ int GenerateCheckpointUnitRow::operator()(const storage::checkpoint::ObTraceInfo
   for (int64_t i = 0; OB_SUCC(ret) && i < virtual_table_.output_column_ids_.count(); ++i) {
     uint64_t col_id = virtual_table_.output_column_ids_.at(i);
     switch (col_id) {
-      // tenant_id
-      case OB_APP_MIN_COLUMN_ID:
-        virtual_table_.cur_row_.cells_[i].set_int(MTL_ID());
-        break;
+
       // trace_id
-      case OB_APP_MIN_COLUMN_ID + 1:
+      case OB_APP_MIN_COLUMN_ID:
         virtual_table_.cur_row_.cells_[i].set_int(trace_info.trace_id_);
         break;
-      // svr_ip
-      case OB_APP_MIN_COLUMN_ID + 2:
-        MEMSET(ip_buf, 0, common::OB_IP_STR_BUFF);
-        if (virtual_table_.addr_.ip_to_string(ip_buf, sizeof(ip_buf))) {
-          virtual_table_.cur_row_.cells_[i].set_varchar(ip_buf);
-          virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "fail to execute ip_to_string", KR(ret));
-        }
-        break;
-      // svr_port
-      case OB_APP_MIN_COLUMN_ID + 3:
-        virtual_table_.cur_row_.cells_[i].set_int(virtual_table_.addr_.get_port());
-        break;
-      // ls_id
-      case OB_APP_MIN_COLUMN_ID + 4:
-        virtual_table_.cur_row_.cells_[i].set_int(trace_info.ls_id_.id());
-        break;
       // checkpoint_thread_name
-      case OB_APP_MIN_COLUMN_ID + 5:
+      case OB_APP_MIN_COLUMN_ID + 3:
           virtual_table_.cur_row_.cells_[i].set_varchar(trace_info.thread_name_);
           virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       // checkpoint_start_time
-      case OB_APP_MIN_COLUMN_ID + 6:
+      case OB_APP_MIN_COLUMN_ID + 4:
         virtual_table_.cur_row_.cells_[i].set_timestamp(trace_info.checkpoint_start_time_);
         break;
       // tablet_id
-      case OB_APP_MIN_COLUMN_ID + 7:
+      case OB_APP_MIN_COLUMN_ID + 5:
         virtual_table_.cur_row_.cells_[i].set_int(key.tablet_id_.id());
         break;
       // ptr
-      case OB_APP_MIN_COLUMN_ID + 8:
+      case OB_APP_MIN_COLUMN_ID + 6:
         MEMSET(ptr_buf, 0, 16);
         databuff_print_obj(ptr_buf, 16, pos, key.checkpoint_unit_ptr_);
         virtual_table_.cur_row_.cells_[i].set_varchar(ptr_buf);
         virtual_table_.cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       // start_scn
-      case OB_APP_MIN_COLUMN_ID + 9:
+      case OB_APP_MIN_COLUMN_ID + 7:
         virtual_table_.cur_row_.cells_[i].set_uint64(checkpoint_unit_diagnose_info.start_scn_.get_val_for_inner_table_field());
         break;
       // end_scn
-      case OB_APP_MIN_COLUMN_ID + 10:
+      case OB_APP_MIN_COLUMN_ID + 8:
         virtual_table_.cur_row_.cells_[i].set_uint64(checkpoint_unit_diagnose_info.end_scn_.get_val_for_inner_table_field());
         break;
       // rec_scn
-      case OB_APP_MIN_COLUMN_ID + 11:
+      case OB_APP_MIN_COLUMN_ID + 9:
         virtual_table_.cur_row_.cells_[i].set_uint64(checkpoint_unit_diagnose_info.rec_scn_.get_val_for_inner_table_field());
         break;
       // create_flush_dag_time
-      case OB_APP_MIN_COLUMN_ID + 12:
+      case OB_APP_MIN_COLUMN_ID + 10:
         virtual_table_.cur_row_.cells_[i].set_timestamp(checkpoint_unit_diagnose_info.create_flush_dag_time_);
         break;
       // merge_finish_time
-      case OB_APP_MIN_COLUMN_ID + 13:
+      case OB_APP_MIN_COLUMN_ID + 11:
         virtual_table_.cur_row_.cells_[i].set_timestamp(checkpoint_unit_diagnose_info.merge_finish_time_);
         break;
       // start_gc_time
-      case OB_APP_MIN_COLUMN_ID + 14:
+      case OB_APP_MIN_COLUMN_ID + 12:
         virtual_table_.cur_row_.cells_[i].set_timestamp(checkpoint_unit_diagnose_info.start_gc_time_);
         break;
       default:

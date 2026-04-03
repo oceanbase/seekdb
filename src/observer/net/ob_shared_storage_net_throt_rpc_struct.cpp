@@ -30,7 +30,5 @@ OB_SERIALIZE_MEMBER(ObSSNTKey, addr_, key_);
 OB_SERIALIZE_MEMBER(ObSSNTValue, predicted_resource_, assigned_resource_, expire_time_);
 OB_SERIALIZE_MEMBER(ObSSNTResource, ops_, ips_, iops_, obw_, ibw_, iobw_, tag_);
 
-OB_SERIALIZE_MEMBER(ObSSNTEndpointArg, addr_, storage_keys_, expire_time_);
-OB_SERIALIZE_MEMBER(ObSSNTSetRes, res_);
 }  // namespace obrpc
 }  // namespace oceanbase

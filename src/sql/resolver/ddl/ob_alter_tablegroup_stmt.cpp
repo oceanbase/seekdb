@@ -44,15 +44,6 @@ int ObAlterTablegroupStmt::add_table_item(const obrpc::ObTableItem &table_item)
   return alter_tablegroup_arg_.table_items_.push_back(table_item);
 }
 
-int ObAlterTablegroupStmt::set_primary_zone(const common::ObString &zone)
-{
-  return OB_SUCCESS; // ignore this (not support in 4.0)
-}
-int ObAlterTablegroupStmt::set_locality(const common::ObString &locality)
-{
-  return OB_SUCCESS; // ignore this (not support in 4.0)
-}
-
 int ObAlterTablegroupStmt::set_tablegroup_sharding(const common::ObString &sharding)
 {
   return alter_tablegroup_arg_.alter_tablegroup_schema_.set_sharding(sharding);

@@ -172,6 +172,7 @@ public:
                              ObIndexType type,
                              ObIAllocator &allocator,
                              int64_t index_table_id,
+                             int64_t data_table_id = OB_INVALID_ID,
                              ObString *vec_index_param = nullptr,
                              int64_t dim = 0);
   int create_ivf_build_helper(const ObIvfHelperKey &key, ObIndexType type, ObString &vec_index_param, ObIAllocator &allocator);
@@ -395,6 +396,7 @@ public:
                              ObTabletID data_tablet_id,
                              ObIndexType type,
                              int64_t index_table_id,
+                             int64_t data_table_id = OB_INVALID_ID,
                              ObString *vec_index_param = nullptr,
                              int64_t dim = 0);
   int create_ivf_build_helper(ObLSID ls_id,

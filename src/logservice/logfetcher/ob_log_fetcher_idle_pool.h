@@ -1,0 +1,106 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_LOG_FETCHER_FETCHER_IDLE_POOL_H__
+#define OCEANBASE_LOG_FETCHER_FETCHER_IDLE_POOL_H__
+
+#include "lib/utility/ob_macro_utils.h"   // DISALLOW_COPY_AND_ASSIGN
+#include "lib/thread/thread_mgr_interface.h" // TGTaskHandler
+
+#include "ob_log_fetcher_user.h"          // LogFetcherUser
+#include "ob_log_config.h"                // ObLogFetcherConfig
+#include "ob_log_ls_fetch_ctx.h"          // FetchTaskList, LSFetchCtx
+
+namespace oceanbase
+{
+namespace logfetcher
+{
+
+class IObLogFetcherIdlePool
+{
+public:
+  static const int64_t MAX_THREAD_NUM = ObLogFetcherConfig::max_idle_pool_thread_num;
+
+public:
+  virtual ~IObLogFetcherIdlePool() {}
+
+public:
+  virtual int push(LSFetchCtx *task) = 0;
+  virtual int start() = 0;
+  virtual void stop() = 0;
+  virtual void mark_stop_flag() = 0;
+};
+
+/////////////////////////////////////////////////////////////////
+
+class IObLogErrHandler;
+class IObLSWorker;
+class IObLogStartLSNLocator;
+
+class ObLogFetcherIdlePool : public IObLogFetcherIdlePool, public lib::TGTaskHandler
+{
+public:
+  ObLogFetcherIdlePool();
+  virtual ~ObLogFetcherIdlePool();
+
+public:
+  int init(
+      const LogFetcherUser &log_fetcher_user,
+      const int64_t thread_num,
+      const ObLogFetcherConfig &cfg,
+      void *fetcher_host,
+      IObLogErrHandler &err_handler,
+      IObLSWorker &stream_worker,
+      IObLogStartLSNLocator &start_lsn_locator);
+  void destroy();
+
+public:
+  // Implement the IObLogFetcherIdlePool virtual function
+  virtual int push(LSFetchCtx *task);
+  virtual int start();
+  virtual void stop();
+  virtual void mark_stop_flag();
+
+public:
+  // Overloading thread handling functions
+  virtual void handle(void *data) {}
+  // Overloading thread handling functions
+  virtual void handle(void *data, volatile bool &stop_flag) override;
+
+private:
+  static const int64_t IDLE_WAIT_TIME = 100 * 1000;
+  static const int64_t IDLE_HANDLE_COUNT = 10;
+  int do_request_(const int64_t thread_index, LSFetchCtx &ls_fetch_ctx);
+  int handle_task_(LSFetchCtx *task, bool &need_dispatch);
+
+private:
+  bool                      inited_;
+  int                       tg_id_;
+  void                      *fetcher_host_;
+  LogFetcherUser            log_fetcher_user_;
+  const ObLogFetcherConfig  *cfg_;
+  IObLogErrHandler          *err_handler_;
+  IObLSWorker               *stream_worker_;
+  IObLogStartLSNLocator     *start_lsn_locator_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObLogFetcherIdlePool);
+};
+
+
+}
+}
+
+#endif

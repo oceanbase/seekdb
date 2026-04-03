@@ -81,7 +81,6 @@ int ObDBMSJobUtils::update_for_start(
 
   OX (job_info.this_date_ = now);
   OZ (dml.add_gmt_modified(now));
-  OZ (dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_time_column("this_date", job_info.this_date_));
   OZ (dml.splice_update_sql(OB_ALL_JOB_TNAME, sql));
@@ -105,7 +104,6 @@ int ObDBMSJobUtils::update_nextdate(
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OZ (dml.add_gmt_modified(now));
-  OZ (dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_time_column("next_date", job_info.next_date_));
   OZ (dml.splice_update_sql(OB_ALL_JOB_TNAME, sql));
@@ -145,8 +143,6 @@ int ObDBMSJobUtils::update_for_end(
   CK (job_info.this_date_ > 0);
   OX (job_info.total_ += (now - job_info.this_date_));
   OZ (dml1.add_gmt_modified(now));
-  OZ (dml1.add_pk_column("tenant_id",
-        ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml1.add_pk_column("job", job_info.job_));
   OZ (dml1.add_column(true, "this_date"));
   OZ (dml1.add_time_column("last_date", job_info.this_date_));
@@ -163,7 +159,6 @@ int ObDBMSJobUtils::update_for_end(
   CK (offset < MAX_IP_PORT_LENGTH);
   OZ (dml2.add_gmt_create(now));
   OZ (dml2.add_gmt_modified(now));
-  OZ (dml2.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml2.add_pk_column("job", job_info.job_));
   OZ (dml2.add_time_column("time", now));
   OZ (dml2.add_pk_column("exec_addr", ObHexEscapeSqlStr(ObString(exec_addr))), ObString(exec_addr));
@@ -238,7 +233,7 @@ int ObDBMSJobUtils::extract_info(
   int ret = OB_SUCCESS;
   ObDBMSJobInfo job_info_local;
 
-  EXTRACT_INT_FIELD_MYSQL(result, "tenant_id", job_info_local.tenant_id_, uint64_t);
+  job_info_local.tenant_id_ = OB_SYS_TENANT_ID;
   EXTRACT_INT_FIELD_MYSQL(result, "job", job_info_local.job_, uint64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "lowner", job_info_local.lowner_);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "powner", job_info_local.powner_);

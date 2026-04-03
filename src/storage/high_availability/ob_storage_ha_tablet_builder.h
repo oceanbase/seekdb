@@ -26,6 +26,10 @@
 
 namespace oceanbase
 {
+namespace restore
+{
+class ObIRestoreHelper;
+}
 
 namespace share
 {
@@ -235,28 +239,10 @@ struct ObStorageHACopySSTableParam final
   bool is_valid() const;
   int assign(const ObStorageHACopySSTableParam &param);
 
-  TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id), K_(copy_table_key_array),
-      K_(src_info), K_(src_ls_rebuild_seq), K_(need_check_seq), K_(is_leader_restore),
-      K_(restore_action), KP_(bandwidth_throttle), KP_(svr_rpc_proxy), KP_(storage_rpc));
+  TO_STRING_KV(K_(copy_table_key_array), KP_(helper));
 
-  uint64_t tenant_id_;
-  share::ObLSID ls_id_;
-  common::ObTabletID tablet_id_;
   common::ObArray<ObITable::TableKey> copy_table_key_array_;
-
-  ObStorageHASrcInfo src_info_;
-  int64_t src_ls_rebuild_seq_;
-  bool need_check_seq_;
-  bool is_leader_restore_;
-  ObTabletRestoreAction::ACTION restore_action_;
-
-  common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  obrpc::ObStorageRpcProxy *svr_rpc_proxy_;
-  storage::ObStorageRpc *storage_rpc_;
-  const ObRestoreBaseInfo *restore_base_info_;
-  backup::ObBackupMetaIndexStoreWrapper *meta_index_store_;
-  backup::ObBackupMetaIndexStoreWrapper *second_meta_index_store_;
-
+  restore::ObIRestoreHelper *helper_;
   DISALLOW_COPY_AND_ASSIGN(ObStorageHACopySSTableParam);
 };
 
@@ -273,9 +259,6 @@ public:
   int check_src_tablet_exist(bool &is_exist);
 private:
   int build_sstable_macro_range_info_map_();
-  int get_sstable_macro_range_info_reader_(ObICopySSTableMacroInfoReader *&reader);
-  int get_sstable_macro_range_info_restore_reader_(ObICopySSTableMacroInfoReader *&reader);
-  void free_sstable_macro_range_info_reader_(ObICopySSTableMacroInfoReader *&reader);
 
 private:
   static const int64_t MACRO_RANGE_MAX_MACRO_COUNT = 128;

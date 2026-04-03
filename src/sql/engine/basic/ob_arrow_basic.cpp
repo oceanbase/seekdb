@@ -26,49 +26,6 @@ using namespace common;
 using namespace share;
 namespace sql {
 
-void ObOrcMemPool::init(uint64_t tenant_id)
-{
-  mem_attr_ = ObMemAttr(tenant_id, "OrcMemPool");
-}
-
-char* ObOrcMemPool::malloc(uint64_t size)
-{
-  int ret = OB_SUCCESS;
-  void *buf = ob_malloc_align(64, size, mem_attr_);
-  if (OB_ISNULL(buf)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(size), K(lbt()));
-    throw std::bad_alloc();
-  }
-  return (char*)buf;
-}
-
-void ObOrcMemPool::free(char* p)
-{
-  if (OB_ISNULL(p)) {
-    throw std::bad_exception();
-  }
-  ob_free_align(p);
-}
-
-void ObOrcOutputStream::write(const void *buf, size_t length)
-{
-  int ret = OB_SUCCESS;
-  int64_t write_size = 0;
-  if (IntoFileLocation::SERVER_DISK == file_location_) {
-    if (OB_FAIL(file_appender_->append(buf, length, false))) {
-      LOG_WARN("failed to append file", K(ret), K(length), K(url_.c_str()));
-      throw std::runtime_error("failed to append file");
-    }
-  } else if (OB_FAIL(storage_appender_->append(static_cast<const char*>(buf), length, write_size))) {
-    LOG_WARN("fail to append data", K(ret), KP(buf), K(length), K(url_.c_str()));
-    throw std::runtime_error("fail to append data");
-  }
-  if (OB_SUCC(ret)) {
-    pos_ += length;
-  }
-}
-
 /* ObArrowMemPool */
 void ObArrowMemPool::init(uint64_t tenant_id)
 {

@@ -56,10 +56,7 @@ private:
 private:
   enum
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    FILE_ID,
+        FILE_ID,
     TRACE_ID,
     DIR_ID,
     DATA_BYTES,
@@ -97,7 +94,7 @@ private:
     UNCACHED_PAGE_HITS,
     AGGREGATE_READ_IO_CNT,
     TOTAL_WBP_PAGE_READ_CNT,
-    WBP_PAGE_HITS,
+    WBP_PAGE_HITS
   };
   static const int64_t OB_MAX_FILE_LABEL_SIZE = tmp_file::ObTmpFileGlobal::TMP_FILE_MAX_LABEL_SIZE + 1;
   char ip_buffer_[common::OB_IP_STR_BUFF];

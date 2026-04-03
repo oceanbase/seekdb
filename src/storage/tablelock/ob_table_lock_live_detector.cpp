@@ -44,13 +44,23 @@ int ObTableLockDetectFuncList::detect_session_alive(const uint32_t session_id, b
     if (OB_ENTRY_NOT_EXIST == ret) {
       is_alive = false;
       LOG_INFO("can not find the session, it's not alive", K(session_id));
+      // Important: treat "not exist" as a normal liveness result.
+      // Otherwise caller will stop on error and never clear lock records.
+      ret = OB_SUCCESS;
     } else {
       LOG_WARN("get session info failed", K(ret), K(session_id));
     }
   } else if (OB_ISNULL(session)) {
-    ret = OB_INVALID_ARGUMENT;
     is_alive = false;
     LOG_WARN("session is null, it's not alive", K(session_id));
+    // treat as not alive to allow subsequent cleanup
+    ret = OB_SUCCESS;
+  } else if (sql::SESSION_KILLED == session->get_session_state()) {
+    // The session exists in map but has been killed/disconnected already.
+    // Treat it as not alive so that lock live detector can clean the lock records.
+    is_alive = false;
+    LOG_INFO("session is killed, treat as not alive", K(session_id));
+    ret = OB_SUCCESS;
   }
   if (OB_NOT_NULL(session)) {
     session_mgr->revert_session(session);
@@ -158,7 +168,11 @@ int ObTableLockDetectFuncList::do_session_alive_detect_for_a_server_session_(con
 
   is_alive = true;
 
-  if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
+  // In this branch, we don't persist svr_ip/svr_port in __all_client_to_server_session_info anymore.
+  // For local server sessions, avoid RPC and just check by local session mgr.
+  if (addr == GCTX.self_addr()) {
+    ret = detect_session_alive(static_cast<uint32_t>(server_session_id), is_alive);
+  } else if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("srv_rpc_proxy is null");
   } else {
@@ -195,7 +209,7 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
 {
   int ret = OB_SUCCESS;
   char where_cond[128] = {'\0'};
-  ObArray<ObTuple<ObStringHolder, int64_t, int64_t>> server_session_str_list;
+  ObArray<ObTuple<int64_t>> server_session_id_list;
   char full_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH];
   all_alive = true;
 
@@ -208,36 +222,24 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
   } else if (OB_FAIL(databuff_printf(where_cond, 128, "WHERE client_session_id = %ld", client_session_id))) {
     LOG_WARN("generate where condition failed", K(client_session_id));
   } else if (OB_FAIL(ObTableAccessHelper::read_multi_row(MTL_ID(),
-                                                         {"svr_ip", "svr_port", "server_session_id"},
+                                                         {"server_session_id"},
                                                          full_table_name,
                                                          where_cond,
-                                                         server_session_str_list))) {
+                                                         server_session_id_list))) {
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
     } else {
       LOG_WARN("read from inner table __all_client_to_server_session_info failed", K(ret), K(MTL_ID()));
     }
   } else {
-    ObAddr server_addr;
-    ObString svr_ip;
-    int64_t svr_port;
-    int64_t session_id;
-    bool is_online = false;
-    for (int64_t i = 0; i < server_session_str_list.count() && OB_SUCC(ret); i++) {
-      server_addr.reset();
-      svr_ip = server_session_str_list[i].element<0>().get_ob_string();
-      svr_port = server_session_str_list[i].element<1>();
-      session_id = server_session_str_list[i].element<2>();
-      if (OB_FAIL(check_server_is_online_(svr_ip, svr_port, is_online))) {
-        LOG_WARN("check server is online failed", K(svr_ip), K(svr_port));
-      } else if (!is_online) {
-        all_alive = false;
-        break;
-      } else if (!server_addr.set_ip_addr(svr_ip, svr_port)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("set svr_addr failed", K(svr_ip), K(svr_port));
-      } else if (OB_FAIL(server_session_list.push_back(ObTuple<ObAddr, int64_t>(server_addr, session_id)))) {
-        LOG_WARN("add svr_addr and session_id into list failed", K(server_addr), K(session_id));
+    const ObAddr &self_addr = GCTX.self_addr();
+    for (int64_t i = 0; i < server_session_id_list.count() && OB_SUCC(ret); i++) {
+      const int64_t session_id = server_session_id_list[i].element<0>();
+      // Note: svr_ip/svr_port columns have been removed from __all_client_to_server_session_info.
+      // This branch treats all records as local sessions and checks liveness via local session_mgr.
+      // (In this repo, location service for vtable/ls is simplified to local-only.)
+      if (OB_FAIL(server_session_list.push_back(ObTuple<ObAddr, int64_t>(self_addr, session_id)))) {
+        LOG_WARN("add server_session_id into list failed", K(ret), K(self_addr), K(session_id));
       }
     }
   }
@@ -247,42 +249,7 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
 int ObTableLockDetectFuncList::check_server_is_online_(const ObString &svr_ip, const int64_t svr_port, bool &is_online)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
-  char where_cond[512] = {'\0'};
-  is_online = false;
-  char full_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH];
-
-  if (OB_FAIL(
-        databuff_printf(where_cond,
-                        512,
-                        "WHERE (svr_ip, svr_port) IN (SELECT u.svr_ip, u.svr_port FROM %s.%s AS u JOIN %s.%s AS r on "
-                        "r.resource_pool_id = u.resource_pool_id WHERE tenant_id = %ld) and svr_ip = '%.*s' and svr_port "
-                        "= %ld and status = 'active'",
-                        OB_SYS_DATABASE_NAME,
-                        OB_ALL_UNIT_TNAME,
-                        OB_SYS_DATABASE_NAME,
-                        OB_ALL_RESOURCE_POOL_TNAME,
-                        MTL_ID(),
-                        svr_ip.length(),
-                        svr_ip.ptr(),
-                        svr_port))) {
-    LOG_WARN("generate where condition for select sql failed", K(svr_ip), K(svr_port));
-  } else if (OB_FAIL(databuff_printf(full_table_name,
-                                     OB_MAX_TABLE_NAME_BUF_LENGTH,
-                                     "%s.%s",
-                                     OB_SYS_DATABASE_NAME,
-                                     OB_ALL_SERVER_TNAME))) {
-    LOG_WARN("generate full table_name failed", K(OB_SYS_DATABASE_NAME), K(OB_ALL_SERVER_TNAME));
-  } else if (OB_FAIL(
-               ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID, {"1"}, full_table_name, where_cond, is_online))) {
-    if (OB_EMPTY_RESULT == ret) {
-      ret = OB_SUCCESS;
-      is_online = false;
-      LOG_INFO("can not find the server in the server_list, it has been removed", K(svr_ip), K(svr_port));
-    } else {
-      LOG_WARN("read from __all_server table failed", K(where_cond));
-    }
-  }
+  is_online = true;
   return ret;
 }
 

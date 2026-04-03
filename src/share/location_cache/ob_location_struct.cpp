@@ -167,46 +167,6 @@ int ObLSReplicaLocation::init_without_check(
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObLSLeaderLocation,
-    key_,
-    location_);
-
-int ObLSLeaderLocation::init(
-    const int64_t cluster_id,
-    const uint64_t tenant_id,
-    const ObLSID ls_id,
-    const common::ObAddr &server,
-    const common::ObRole &role,
-    const int64_t &sql_port,
-    const common::ObReplicaType &replica_type,
-    const common::ObReplicaProperty &property,
-    const ObLSRestoreStatus &restore_status,
-    const int64_t proposal_id)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(key_.init(cluster_id, tenant_id, ls_id))) {
-    LOG_WARN("fail to init key", KR(ret), K(cluster_id), K(tenant_id), K(ls_id));
-  } else if (OB_FAIL(location_.init(
-    server, role, sql_port, replica_type, property, restore_status, proposal_id))) {
-    LOG_WARN("fail to init key", KR(ret), K(server), K(role), K(sql_port),
-             K(replica_type), K(property), K(restore_status), K(proposal_id));
-  }
-  return ret;
-}
-
-int ObLSLeaderLocation::assign(const ObLSLeaderLocation &other)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(key_.assign(other.key_))) {
-    LOG_WARN("fail to assign key", KR(ret), K(other));
-  } else if (OB_FAIL(location_.assign(other.location_))) {
-    LOG_WARN("fail to assign location", KR(ret), K(other));
-  }
-  return ret;
-}
-
-
-
 ObLSLocation::ObLSLocation()
     : ObLink(),
       cache_key_(),
@@ -838,28 +798,6 @@ int ObTabletLSCacheKey::deep_copy(
     key = pkey;
   }
   return ret;
-}
-
-bool ObLocationServiceUtility::treat_sql_as_timeout(const int error_code)
-{
-  bool bool_ret = false;
-  switch(error_code) {
-  case OB_CONNECT_ERROR:
-  case OB_TIMEOUT:
-  case OB_WAITQUEUE_TIMEOUT:
-  case OB_SESSION_NOT_FOUND:
-  case OB_TRANS_TIMEOUT:
-  case OB_TRANS_STMT_TIMEOUT:
-  case OB_TRANS_UNKNOWN:
-  case OB_GET_LOCATION_TIME_OUT: {
-      bool_ret = true;
-      break;
-    }
-  default: {
-      bool_ret = false;
-    }
-  }
-  return bool_ret;
 }
 
 ObLocationSem::ObLocationSem() : cur_count_(0), max_count_(0), cond_()

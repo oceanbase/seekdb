@@ -23,7 +23,6 @@ using namespace oceanbase::sql;
 using namespace oceanbase::observer;
 using namespace oceanbase::share;
 
-
 ObSqlWorkareaMemoryInfoIterator::ObSqlWorkareaMemoryInfoIterator() :
   memory_info_(), tenant_ids_(), cur_nth_tenant_(0)
 {}
@@ -140,16 +139,6 @@ int ObSqlWorkareaMemoryInfo::fill_row(
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
-      case SVR_IP: {
-        cells[cell_idx].set_varchar(ipstr_);
-        cells[cell_idx].set_collation_type(
-          ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      case SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-        break;
-      }
       case MAX_WORKAREA_SIZE: {
         cells[cell_idx].set_int(memory_info.get_max_workarea_size());
         break;
@@ -184,10 +173,6 @@ int ObSqlWorkareaMemoryInfo::fill_row(
       }
       case MANUAL_CALC_COUNT: {
         cells[cell_idx].set_int(memory_info.get_manual_calc_cnt());
-        break;
-      }
-      case TENAND_ID: {
-        cells[cell_idx].set_int(tenant_id);
         break;
       }
       default: {

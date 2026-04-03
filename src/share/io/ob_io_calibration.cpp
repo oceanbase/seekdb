@@ -770,65 +770,12 @@ void ObIOCalibration::get_iops_scale(const ObIOMode mode, const int64_t size, do
 int ObIOCalibration::read_from_table()
 {
   int ret = OB_SUCCESS;
-  ObIOAbility tmp_ability;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("io calibration not init", K(ret), K(is_inited_));
-  } else if (OB_FAIL(parse_calibration_table(tmp_ability))) {
-    LOG_WARN("parse calibration data failed", K(ret));
-  } else if (tmp_ability.is_valid()) {
-    if (OB_FAIL(update_io_ability(tmp_ability))) {
-      LOG_WARN("update io ability failed", K(ret), K(tmp_ability));
-    }
-  }
   return ret;
 }
 
 int ObIOCalibration::write_into_table(ObMySQLTransaction &trans, const ObAddr &addr, const ObIOAbility &io_ability)
 {
   int ret = OB_SUCCESS;
-  // if the io_ability is invalid, only delete the calibration data,
-  // otherwise replace the calibration data
-  ObSqlString delete_sql, insert_sql;
-  int64_t affected_rows = 0;
-  char ip_str[MAX_IP_ADDR_LENGTH] = { 0 };
-  if (OB_UNLIKELY(!trans.is_started() || !addr.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(trans.is_started()), K(addr));
-  } else if (OB_UNLIKELY(!addr.ip_to_string(ip_str, sizeof(ip_str)))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get self ip string failed", K(ret));
-  } else if (OB_FAIL(delete_sql.append_fmt(
-          "delete from %s where svr_ip = \"%s\" and svr_port = %d and storage_name = \"DATA\"",
-          share::OB_ALL_DISK_IO_CALIBRATION_TNAME, ip_str, addr.get_port()))) {
-    LOG_WARN("append delete sql failed", K(ret), K(addr));
-  } else if (OB_FAIL(trans.write(delete_sql.ptr(), affected_rows))) {
-    LOG_WARN("execute delete sql failed", K(ret), K(delete_sql));
-  } else if (!io_ability.is_valid()) {
-    // no need to execute insert sql, skip
-  } else if (OB_FAIL(insert_sql.append_fmt("insert into %s (svr_ip, svr_port, storage_name, mode, size, latency, iops) values ", share::OB_ALL_DISK_IO_CALIBRATION_TNAME))) {
-    LOG_WARN("append insert sql failed", K(ret));
-  } else {
-    bool need_comma = false;
-    for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int64_t>(ObIOMode::MAX_MODE); ++i) {
-      const ObIArray<ObIOBenchResult> &bench_items = io_ability.get_measure_items(static_cast<ObIOMode>(i));
-      for (int64_t j = 0; OB_SUCC(ret) && j < bench_items.count(); ++j) {
-        const ObIOBenchResult &item = bench_items.at(j);
-        if (OB_FAIL(insert_sql.append_fmt("%s (\"%s\", %d, \"%s\", \"%s\", %ld, %ld, %ld)",
-                need_comma ? ", ": " ", ip_str, addr.get_port(),
-                "DATA", common::get_io_mode_string(static_cast<ObIOMode>(i)),
-                item.size_, static_cast<int64_t>(item.rt_us_), static_cast<int64_t>(item.iops_)))) {
-          LOG_WARN("append write sql failed", K(ret), K(item));
-        }
-        need_comma = true;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(trans.write(insert_sql.ptr(), affected_rows))) {
-        LOG_WARN("execute insert sql failed", K(ret));
-      }
-    }
-  }
   return ret;
 }
 
@@ -890,52 +837,6 @@ int ObIOCalibration::get_benchmark_status(int64_t &start_ts, int64_t &finish_ts,
   start_ts = benchmark_controller_.get_start_timestamp();
   finish_ts = benchmark_controller_.get_finish_timestamp();
   ret_code = benchmark_controller_.get_ret_code();
-  return ret;
-}
-
-int ObIOCalibration::parse_calibration_table(ObIOAbility &io_ability)
-{
-  int ret = OB_SUCCESS;
-  io_ability.reset();
-  sqlclient::ObMySQLResult *result = nullptr;
-  SMART_VAR(ObISQLClient::ReadResult, res) {
-    ObSqlString sql_string;
-    char ip_str[INET6_ADDRSTRLEN] = { 0 };
-    const ObAddr &self_addr = OBSERVER.get_self();
-    if (OB_UNLIKELY(!self_addr.ip_to_string(ip_str, sizeof(ip_str)))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get self ip string failed", K(ret));
-    } else if (OB_FAIL(sql_string.append_fmt(
-            "select mode, size, latency, iops from %s where svr_ip = \"%s\" and svr_port = %d and storage_name = \"DATA\"",
-            share::OB_ALL_DISK_IO_CALIBRATION_TNAME, ip_str, self_addr.get_port()))) {
-      LOG_WARN("generate sql string failed", K(ret), K(self_addr));
-    } else if (OB_FAIL(OBSERVER.get_mysql_proxy().read(res, sql_string.ptr()))) {
-      LOG_WARN("query failed", K(ret), K(sql_string));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is null", K(ret), KP(result));
-    } else {
-      while (OB_SUCC(result->next())) {
-        ObIOBenchResult item;
-        ObString mode_string;
-        EXTRACT_VARCHAR_FIELD_MYSQL(*result, "mode", mode_string);
-        EXTRACT_INT_FIELD_MYSQL(*result, "size", item.size_, int64_t);
-        EXTRACT_INT_FIELD_MYSQL(*result, "latency", item.rt_us_, double);
-        EXTRACT_INT_FIELD_MYSQL(*result, "iops", item.iops_, double);
-        if (OB_FAIL(ret)) {
-        } else if (FALSE_IT(item.mode_ = get_io_mode_enum(mode_string.ptr()))) {
-        } else if (OB_UNLIKELY(!item.is_valid())) {
-          ret = OB_ERR_SYS;
-          LOG_WARN("calibration data is invalid", K(ret), K(item), K(mode_string));
-        } else if (OB_FAIL(io_ability.add_measure_item(item))) {
-          LOG_WARN("add item failed", K(ret), K(item));
-        }
-      }
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
-      }
-    }
-  }
   return ret;
 }
 

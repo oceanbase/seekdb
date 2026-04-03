@@ -74,7 +74,7 @@ int ObRpcProcessorBase::run()
 {
   int ret = OB_SUCCESS;
   bool deseri_succ = true;
-  if (ObQueryRetryAshGuard::get_info_ptr() != nullptr) {
+  if (!skip_ash_check_ && ObQueryRetryAshGuard::get_info_ptr() != nullptr) {
     LOG_ERROR_RET(OB_ERR_UNEXPECTED, "retry info ptr is not null, maybe crash", K(ObLocalDiagnosticInfo::get()->get_ash_stat()));
     ObQueryRetryAshGuard::reset_info();
   }

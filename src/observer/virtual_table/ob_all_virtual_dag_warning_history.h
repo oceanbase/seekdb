@@ -32,10 +32,7 @@ class ObAllVirtualDagWarningHistory : public common::ObVirtualTableScannerIterat
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TASK_ID,
+        TASK_ID = common::OB_APP_MIN_COLUMN_ID,
     MODULE,
     TYPE,
     RET,

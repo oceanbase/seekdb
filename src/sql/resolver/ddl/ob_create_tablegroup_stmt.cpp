@@ -50,11 +50,3 @@ obrpc::ObCreateTablegroupArg& ObCreateTablegroupStmt::get_create_tablegroup_arg(
 {
   return create_tablegroup_arg_;
 }
-int ObCreateTablegroupStmt::set_primary_zone(const common::ObString &zone)
-{
-  return OB_SUCCESS; // ignore this (not support in 4.0)
-}
-int ObCreateTablegroupStmt::set_locality(const common::ObString &locality)
-{
-  return OB_SUCCESS; // ignore this (not support in 4.0)
-}

@@ -6,7 +6,6 @@
 connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
 connection sys;
 
-let $zone = query_get_value(select zone from oceanbase.DBA_OB_ZONES, zone, 1);
 #let $unit_num = query_get_value(select count(*) as c from oceanbase.DBA_OB_SERVERS group by zone, c, 1);
 
 --disable_query_log

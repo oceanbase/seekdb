@@ -34,6 +34,10 @@
 
 namespace oceanbase
 {
+namespace restore
+{
+class ObIRestoreHelper;
+}
 namespace storage
 {
 class ObCopyTabletRecordExtraInfo final
@@ -97,24 +101,14 @@ struct ObPhysicalCopyCtx final
   ObPhysicalCopyCtx();
   ~ObPhysicalCopyCtx();
   bool is_valid() const;
+  void destroy();
 
   TO_STRING_KV(K_(tenant_id), 
                K_(ls_id), 
                K_(tablet_id), 
-               K_(src_info), 
-               KP_(bandwidth_throttle),
-               KP_(svr_rpc_proxy), 
-               K_(is_leader_restore), 
-               K_(restore_action),
-               KP_(restore_base_info),
-               KP_(meta_index_store), 
-               KP_(second_meta_index_store), 
+               KP_(helper),
                KP_(ha_dag),
                KP_(sstable_index_builder), 
-               KP_(restore_macro_block_id_mgr), 
-               K_(need_sort_macro_meta),
-               K_(need_check_seq), 
-               K_(ls_rebuild_seq), 
                K_(table_key),
                KP_(macro_block_reuse_mgr), 
                K_(total_macro_count), 
@@ -126,25 +120,15 @@ struct ObPhysicalCopyCtx final
   uint64_t tenant_id_;
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
-  ObStorageHASrcInfo src_info_;
-  common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  obrpc::ObStorageRpcProxy *svr_rpc_proxy_;
-  bool is_leader_restore_;
-  ObTabletRestoreAction::ACTION restore_action_;
-  const ObRestoreBaseInfo *restore_base_info_;
-  backup::ObBackupMetaIndexStoreWrapper *meta_index_store_;
-  backup::ObBackupMetaIndexStoreWrapper *second_meta_index_store_;
+  restore::ObIRestoreHelper *helper_;
   ObStorageHADag *ha_dag_;
   ObSSTableIndexBuilder *sstable_index_builder_;
-  ObRestoreMacroBlockIdMgr *restore_macro_block_id_mgr_;
-  bool need_sort_macro_meta_; // not use
-  bool need_check_seq_;
-  int64_t ls_rebuild_seq_;
   ObITable::TableKey table_key_;
   ObMacroBlockReuseMgr *macro_block_reuse_mgr_;
   int total_macro_count_; // total macro block count of single sstable
   int reuse_macro_count_; // reuse macro block count of single sstable
   ObCopyTabletRecordExtraInfo *extra_info_;
+  common::ObArenaAllocator allocator_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPhysicalCopyCtx);

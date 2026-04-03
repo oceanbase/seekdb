@@ -134,10 +134,8 @@ using namespace oceanbase::sql;
   tenant_info.set_tenant_id(tenant_id);                                                \
   tenant_info.set_tenant_name(tenant_name);                                            \
   tenant_info.set_zone_list(zone_list);                                                \
-  tenant_info.set_primary_zone(primary_zone);                                          \
   tenant_info.set_locked(locked);                                                      \
   tenant_info.set_comment(comment);                                                    \
-  tenant_info.set_locality("");\
 }
 
 #define FILL_USER_INFO(user, tenant_id, user_id, user_name, passwd, info, is_locked, priv_set) \
@@ -220,7 +218,6 @@ using namespace oceanbase::sql;
   ObSysVarSchema sysvar_schema; \
   for (int64_t i = 0; OB_SUCC(ret) && i < var_amount; i++) { \
     ret = sys_params[sys_param_num].init(sys_variable_schema.get_tenant_id(), \
-                                         "", \
                                          ObSysVariables::get_name(i).ptr(), \
                                          ObSysVariables::get_type(i), \
                                          ObSysVariables::get_value(i).ptr(), \

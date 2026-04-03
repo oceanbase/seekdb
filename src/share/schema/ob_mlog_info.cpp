@@ -128,8 +128,7 @@ OB_SERIALIZE_MEMBER(ObMLogInfo,
 int ObMLogInfo::gen_insert_mlog_dml(const uint64_t exec_tenant_id, ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-      OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
+  if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
       OB_FAIL(dml.add_column("purge_mode", purge_mode_)) ||
       (OB_INVALID_TIMESTAMP != purge_start_ &&
        OB_FAIL(dml.add_time_column("purge_start", purge_start_))) ||
@@ -181,8 +180,7 @@ int ObMLogInfo::gen_update_mlog_attribute_dml(const uint64_t exec_tenant_id,
                                               ObDMLSqlSplicer &dml) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-      OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
+  if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
       OB_FAIL(dml.add_column("purge_mode", purge_mode_)) ||
       (OB_INVALID_TIMESTAMP != purge_start_
          ? OB_FAIL(dml.add_time_column("purge_start", purge_start_))
@@ -230,8 +228,7 @@ int ObMLogInfo::gen_update_mlog_last_purge_info_dml(const uint64_t exec_tenant_i
                   last_purge_trace_id_.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid mlog last purge info", KR(ret), KPC(this));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-             OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
+  } else if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id_)) ||
              OB_FAIL(dml.add_uint64_column("last_purge_scn", last_purge_scn_)) ||
              OB_FAIL(dml.add_time_column("last_purge_date", last_purge_date_)) ||
              OB_FAIL(dml.add_column("last_purge_time", last_purge_time_)) ||
@@ -291,8 +288,7 @@ int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client, const uint64_t tenant_i
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("mlog_id", mlog_id))) {
+    if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id))) {
       LOG_WARN("add column failed", KR(ret));
     } else {
       ObDMLExecHelper exec(sql_client, exec_tenant_id);
@@ -318,7 +314,7 @@ int ObMLogInfo::fetch_mlog_info(ObISQLClient &sql_client, uint64_t tenant_id, ui
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE tenant_id = 0 AND mlog_id = %ld",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE mlog_id = %ld",
                                OB_ALL_MLOG_TNAME, mlog_id))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (for_update && !nowait && OB_FAIL(sql.append(" for update"))) {
@@ -370,7 +366,7 @@ int ObMLogInfo::batch_fetch_mlog_ids(ObISQLClient &sql_client, uint64_t tenant_i
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
     uint64_t mlog_id = OB_INVALID_ID;
-    if (OB_FAIL(sql.assign_fmt("SELECT mlog_id FROM %s WHERE tenant_id = 0", OB_ALL_MLOG_TNAME))) {
+    if (OB_FAIL(sql.assign_fmt("SELECT mlog_id FROM %s WHERE 0 = 0", OB_ALL_MLOG_TNAME))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_INVALID_ID != last_mlog_id &&
                OB_FAIL(sql.append_fmt(" and mlog_id > %ld", last_mlog_id))) {

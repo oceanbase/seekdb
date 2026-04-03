@@ -18,6 +18,7 @@
 #include "ob_storage_ha_dag.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "observer/ob_server.h"
 
 namespace oceanbase
 {
@@ -169,6 +170,27 @@ int ObIHADagNetCtx::set_result(
 bool ObIHADagNetCtx::is_failed() const
 {
   return result_mgr_.is_failed();
+}
+
+int ObIHADagNetCtx::check_allow_retry_with_stop(bool &allow_retry)
+{
+  int ret = OB_SUCCESS;
+  allow_retry = false;
+  if (!is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("ha dag net ctx is invalid", K(ret), K(*this));
+  } else if (OB_FAIL(check_allow_retry(allow_retry))) {
+    LOG_WARN("failed to check need retry", K(ret), K(*this));
+  } else if (!allow_retry) {
+    int result = OB_SUCCESS;
+    if (OB_FAIL(result_mgr_.get_result(result))) {
+      LOG_WARN("failed to get result", K(ret), K(*this));
+    } else {
+      LOG_ERROR("failed to do retry, abort", K(result));
+    }
+    observer::ObServer::get_instance().set_stop();
+  }
+  return ret;
 }
 
 int ObIHADagNetCtx::check_allow_retry(bool &allow_retry)
@@ -345,6 +367,7 @@ int ObStorageHADagUtils::deal_with_fo(
   return ret;
 }
 
+//TODO(xingzhi): remove input parameter ls_id
 int ObStorageHADagUtils::get_ls(const share::ObLSID &ls_id, ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;

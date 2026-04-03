@@ -83,7 +83,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL(
     "type": "completion",
     "model_name": "hunyuan-t1-20250711"
   }');
-select NAME, TYPE, MODEL_NAME from oceanbase.CDB_OB_AI_MODELS WHERE NAME in ('my_ai_model_3', 'my_ai_model_4') ORDER BY TENANT_ID;
+select NAME, TYPE, MODEL_NAME from oceanbase.CDB_OB_AI_MODELS WHERE NAME in ('my_ai_model_3', 'my_ai_model_4');
 NAME	TYPE	MODEL_NAME
 my_ai_model_4	RERANK	Qwen/Qwen3-Reranker-0.6B
 my_ai_model_3	COMPLETION	hunyuan-t1-20250711

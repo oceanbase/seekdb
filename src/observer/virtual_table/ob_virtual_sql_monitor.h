@@ -50,10 +50,7 @@ public:
 private:
 enum COLUMN_ID
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    REQUEST_ID,
+        REQUEST_ID = common::OB_APP_MIN_COLUMN_ID,
     JOB_ID,
     TASK_ID,
     PLAN_ID,

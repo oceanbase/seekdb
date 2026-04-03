@@ -28,7 +28,6 @@ using namespace observer;
 using namespace rpc::frame;
 static test::TestSQL *test_sql = NULL;
 ObSql sql_engine;
-ObRsMgr rs_mgr;
 ObAddr addr;
 
 std::vector<string> test_sql_array;
@@ -132,8 +131,7 @@ int ObTestPlanCachePerformance::init_engine(const char *schema_file) {
                               &partition_service_,
                               NULL, // no virtual data access
                               &part_cache_,
-                              addr,
-                              rs_mgr))) {
+                              addr))) {
     SQL_PC_LOG(ERROR, "fail to init sql engine");
   }
   return ret;

@@ -31,10 +31,7 @@ class ObAllVirtualTenantVectorMemInfo : public common::ObVirtualTableScannerIter
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    RAW_MALLOC_SIZE,
+        RAW_MALLOC_SIZE = common::OB_APP_MIN_COLUMN_ID,
     INDEX_METADATA_SIZE,
     VECTOR_MEM_HOLD,
     VECTOR_MEM_USED,

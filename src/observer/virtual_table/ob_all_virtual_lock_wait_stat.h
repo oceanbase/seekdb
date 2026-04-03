@@ -46,10 +46,7 @@ private:
   int make_this_ready_to_read();
 private:
   enum {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TABLET_ID,
+        TABLET_ID = common::OB_APP_MIN_COLUMN_ID,
     ROWKEY,
     ADDR,
     NEED_WAIT,
@@ -67,7 +64,6 @@ private:
     TRANS_ID,
     HOLDER_TRANS_ID,
     HOLDER_SESSION_ID,
-    LS_ID,
     ASSOC_SESS_ID,
     WAIT_TIMEOUT,
     TX_ACTIVE_TS,

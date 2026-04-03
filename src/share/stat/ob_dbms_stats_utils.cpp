@@ -315,13 +315,10 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)
 {
-  return table_id == share::OB_ALL_VIRTUAL_PLAN_CACHE_STAT_ALL_VIRTUAL_PLAN_CACHE_STAT_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SESSION_EVENT_ALL_VIRTUAL_SESSION_EVENT_I1_TID ||
+  return table_id == share::OB_ALL_VIRTUAL_SESSION_EVENT_ALL_VIRTUAL_SESSION_EVENT_I1_TID ||
          table_id == share::OB_ALL_VIRTUAL_SESSION_WAIT_ALL_VIRTUAL_SESSION_WAIT_I1_TID ||
          table_id == share::OB_ALL_VIRTUAL_SESSION_WAIT_HISTORY_ALL_VIRTUAL_SESSION_WAIT_HISTORY_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SYSTEM_EVENT_ALL_VIRTUAL_SYSTEM_EVENT_I1_TID ||
          table_id == share::OB_ALL_VIRTUAL_SESSTAT_ALL_VIRTUAL_SESSTAT_I1_TID ||
-         table_id == share::OB_ALL_VIRTUAL_SYSSTAT_ALL_VIRTUAL_SYSSTAT_I1_TID ||
          table_id == share::OB_ALL_VIRTUAL_SQL_AUDIT_ALL_VIRTUAL_SQL_AUDIT_I1_TID ||
          table_id == share::OB_ALL_VIRTUAL_SQL_PLAN_MONITOR_ALL_VIRTUAL_SQL_PLAN_MONITOR_I1_TID ||
          table_id == share::OB_ALL_VIRTUAL_ASH_ALL_VIRTUAL_ASH_I1_TID;
@@ -1514,9 +1511,8 @@ int ObDbmsStatsUtils::check_can_async_gather_stats(sql::ObExecContext &ctx)
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()));
-  } else if (OB_FAIL(raw_sql.append_fmt("SELECT 1 FROM dual WHERE EXISTS(SELECT 1 FROM %s WHERE tenant_id = %lu);",
-                                        share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME,
-                                        ctx.get_my_session()->get_effective_tenant_id()))) {
+  } else if (OB_FAIL(raw_sql.append_fmt("SELECT 1 FROM dual WHERE EXISTS(SELECT 1 FROM %s);",
+                                        share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
     uint64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
@@ -1782,9 +1778,8 @@ int ObDbmsStatsUtils::fetch_need_cancel_async_gather_stats_task(ObIAllocator &al
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()));
-  } else if (OB_FAIL(raw_sql.append_fmt("SELECT task_id FROM %s WHERE tenant_id = %lu and type = %d;",
+  } else if (OB_FAIL(raw_sql.append_fmt("SELECT task_id FROM %s WHERE type = %d;",
                                         share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME,
-                                        ctx.get_my_session()->get_effective_tenant_id(),
                                         ObOptStatGatherType::AYSNC_GATHER))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {

@@ -58,10 +58,7 @@ class ObAllVirtualDag : public common::ObVirtualTableScannerIterator
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    DAG_TYPE,
+        DAG_TYPE = common::OB_APP_MIN_COLUMN_ID,
     DAG_KEY,
     DAG_NET_KEY,
     DAG_ID,
@@ -94,10 +91,7 @@ class ObAllVirtualDagScheduler : public common::ObVirtualTableScannerIterator
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    VALUE_TYPE,
+        VALUE_TYPE = common::OB_APP_MIN_COLUMN_ID,
     KEY,
     VALUE
   };

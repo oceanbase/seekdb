@@ -119,11 +119,39 @@ private:
 ////////////////////////////////////////////////////////////////
 // to_string stuff
 ////////////////////////////////////////////////////////////////
+// Helper function to handle enum types
 template <typename T>
-int64_t to_string(const T &obj, char *buffer, const int64_t buffer_size)
+int64_t to_string(const T &obj, char *buffer, const int64_t buffer_size, TrueType)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%ld", static_cast<int64_t>(obj)))) {
+  } else {}
+  return pos;
+}
+
+// Helper function to handle non-enum types with to_string method
+template <typename T>
+int64_t to_string(const T &obj, char *buffer, const int64_t buffer_size, FalseType)
 {
   return obj.to_string(buffer, buffer_size);
 }
+
+template <typename T>
+int64_t to_string(const T &obj, char *buffer, const int64_t buffer_size)
+{
+  return to_string(obj, buffer, buffer_size, BoolType<std::is_enum<T>::value>());
+}
+template <>
+int64_t to_string<char>(const char &obj, char *buffer, const int64_t buffer_size);
+template <>
+int64_t to_string<int8_t>(const int8_t &obj, char *buffer, const int64_t buffer_size);
+template <>
+int64_t to_string<uint8_t>(const uint8_t &obj, char *buffer, const int64_t buffer_size);
+template <>
+int64_t to_string<int16_t>(const int16_t &obj, char *buffer, const int64_t buffer_size);
+template <>
+int64_t to_string<uint16_t>(const uint16_t &obj, char *buffer, const int64_t buffer_size);
 template <>
 int64_t to_string<int32_t>(const int32_t &obj, char *buffer, const int64_t buffer_size);
 template <>
@@ -132,6 +160,14 @@ template <>
 int64_t to_string<int64_t>(const int64_t &obj, char *buffer, const int64_t buffer_size);
 template <>
 int64_t to_string<uint64_t>(const uint64_t &obj, char *buffer, const int64_t buffer_size);
+// On macOS, long and unsigned long are distinct from int64_t and uint64_t
+// On Linux x86_64, they are the same types, so we need to guard these
+#ifdef __APPLE__
+template <>
+int64_t to_string<long>(const long &obj, char *buffer, const int64_t buffer_size);
+template <>
+int64_t to_string<unsigned long>(const unsigned long &obj, char *buffer, const int64_t buffer_size);
+#endif
 template <>
 int64_t to_string<double>(const double &obj, char *buffer, const int64_t buffer_size);
 template <>

@@ -51,9 +51,8 @@ int ObMVDepUtils::get_mview_dep_infos(
       ObMySQLResult *result = NULL;
       const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
       if (OB_FAIL(sql.assign_fmt("SELECT p_order, p_obj, p_type, qbcid, flags FROM %s.%s"
-                                 " WHERE tenant_id = %lu AND mview_id = %lu ORDER BY p_order",
+                                 " WHERE mview_id = %lu ORDER BY p_order",
                                  OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME,
-                                 ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                  mview_table_id))) {
         LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
@@ -112,9 +111,8 @@ int ObMVDepUtils::get_all_mview_dep_infos(
       ObMySQLResult *result = NULL;
       const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
       if (OB_FAIL(sql.assign_fmt("SELECT mview_id, p_order, p_obj FROM %s.%s"
-                                 " WHERE tenant_id = %lu order by mview_id, p_order",
-                                 OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME,
-                                 ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+                                 " order by mview_id, p_order",
+                                 OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME))) {
         LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_proxy->read(res, tenant_id, sql.ptr()))) {
         LOG_WARN("failed to execute read", KR(ret), K(sql));
@@ -172,9 +170,7 @@ int ObMVDepUtils::insert_mview_dep_infos(
       if (!dep_info.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid dep info", KR(ret), K(dep_info));
-      } else if (OB_FAIL(dml.add_pk_column("tenant_id",
-          ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
-          || OB_FAIL(dml.add_pk_column("mview_id", mview_table_id))
+      } else if (OB_FAIL(dml.add_pk_column("mview_id", mview_table_id))
           || OB_FAIL(dml.add_column("p_order", dep_info.p_order_))
           || OB_FAIL(dml.add_column("p_obj", dep_info.p_obj_))
           || OB_FAIL(dml.add_column("p_type", dep_info.p_type_))
@@ -217,9 +213,8 @@ int ObMVDepUtils::delete_mview_dep_infos(
     ObSqlString sql;
     int64_t affected_rows = 0;
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %ld AND mview_id = %ld",
+    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE mview_id = %ld",
                                OB_ALL_MVIEW_DEP_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                mview_table_id))) {
       LOG_WARN("failed to delete from __all_mview_dep table",
           KR(ret), K(tenant_id), K(mview_table_id));
@@ -271,12 +266,11 @@ int ObMVDepUtils::get_table_ids_only_referenced_by_given_mv(
       const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
       if (OB_FAIL(sql.assign_fmt("select a.p_obj from"
                                  " (select p_obj, count(*) cnt from %s group by p_obj) a,"
-                                 " (select p_obj, count(*) cnt from %s where tenant_id = %lu"
-                                 " and mview_id = %lu group by p_obj) b"
+                                 " (select p_obj, count(*) cnt from %s where "
+                                 " mview_id = %lu group by p_obj) b"
                                  " where a.p_obj = b.p_obj and a.cnt = b.cnt",
                                  OB_ALL_MVIEW_DEP_TNAME,
                                  OB_ALL_MVIEW_DEP_TNAME,
-                                 ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                  mview_table_id))) {
         LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
@@ -331,13 +325,13 @@ int ObMVDepUtils::get_table_ids_only_referenced_by_given_fast_lsm_mv(
               " (select p_obj from %s dep, %s mv where dep.mview_id = mv.mview_id and "
               "mv.refresh_mode in (%ld) group by p_obj having count(*) = 1) a,"
               " (select p_obj from %s dep, %s mv where dep.mview_id = mv.mview_id and "
-              "mv.refresh_mode in (%ld) and dep.tenant_id = %lu and dep.mview_id = %lu) b " 
+              "mv.refresh_mode in (%ld) and dep.mview_id = %lu) b "
               "where a.p_obj = b.p_obj",
               OB_ALL_MVIEW_DEP_TNAME, OB_ALL_MVIEW_TNAME,
               ObMVRefreshMode::MAJOR_COMPACTION,
               OB_ALL_MVIEW_DEP_TNAME, OB_ALL_MVIEW_TNAME,
               ObMVRefreshMode::MAJOR_COMPACTION,
-              ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), mview_table_id))) {
+              mview_table_id))) {
         LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
         LOG_WARN("failed to execute read", KR(ret), K(sql));

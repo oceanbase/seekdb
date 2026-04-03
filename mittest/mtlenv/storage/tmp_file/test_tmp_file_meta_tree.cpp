@@ -152,7 +152,7 @@ int ObTmpFileTestMetaTree::cache_page_for_write_(
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "unexpected read_cache_rightmost_pages_", KR(ret), K(read_cache_rightmost_pages_.count()), K(page_info));
         } else {
-          MEMCPY(new_page_buff, read_cache_rightmost_pages_.at(page_info.page_level_).first, ObTmpFileGlobal::PAGE_SIZE);
+          MEMCPY(new_page_buff, read_cache_rightmost_pages_.at(page_info.page_level_).first, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
           read_cache_rightmost_pages_.at(page_info.page_level_).second++;
         }
         if (FAILEDx(check_page_(new_page_buff))) {
@@ -293,7 +293,7 @@ void TestSNTmpFileMetaTree::generate_data_items(
 {
   int64_t block_index = 0;
   int16_t physical_page_id = 0;
-  int16_t physical_page_num = 128; //(SN_BLOCK_SIZE / ObTmpFileGlobal::PAGE_SIZE) / 2
+  int16_t physical_page_num = 128; //(SN_BLOCK_SIZE / ObTmpFileGlobal::ALLOC_PAGE_SIZE) / 2
   int64_t virtual_page_id = start_virtual_page_id;
   ObSharedNothingTmpFileDataItem data_item;
   for (int64_t i = block_index; i < item_num; i++) {
@@ -315,7 +315,7 @@ void TestSNTmpFileMetaTree::generate_wrong_data_items(
 {
   int64_t block_index = 0;
   int16_t physical_page_id = 0;
-  int16_t physical_page_num = 128; //(SN_BLOCK_SIZE / ObTmpFileGlobal::PAGE_SIZE) / 2
+  int16_t physical_page_num = 128; //(SN_BLOCK_SIZE / ObTmpFileGlobal::ALLOC_PAGE_SIZE) / 2
   int64_t virtual_page_id = start_virtual_page_id;
   ObSharedNothingTmpFileDataItem data_item;
   for (int64_t i = block_index; i < item_num; i++) {
@@ -387,7 +387,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_insert)
   ASSERT_EQ(4, meta_tree_.level_page_range_array_.count());
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 30 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 30 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_tree_insert end=======================");
 }
@@ -436,7 +436,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_insert_fail)
   ASSERT_EQ(2, meta_tree_.level_page_range_array_.at(3).cached_page_num_);
   ASSERT_EQ(1, meta_tree_.level_page_range_array_.at(4).cached_page_num_);
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 90 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 90 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_tree_insert_fail end=======================");
 }
@@ -473,29 +473,29 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_read)
   //  with each data item occupying 128 * 8K.
   STORAGE_LOG(INFO, "=======================first tree read=======================");
   ObArray<ObSharedNothingTmpFileDataItem> get_data_items;
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(1, 2 * 128 * ObTmpFileGlobal::PAGE_SIZE - 2, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(1, 2 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE - 2, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(2, get_data_items.count());
 
   STORAGE_LOG(INFO, "=======================second tree read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(7 * 128 * ObTmpFileGlobal::PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(7 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(5, get_data_items.count());
 
   STORAGE_LOG(INFO, "=======================third tree read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(0, 4 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(0, 4 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(4, get_data_items.count());
 
   STORAGE_LOG(INFO, "=======================forth tree read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(0, 25 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(0, 25 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(25, get_data_items.count());
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 25 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 25 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_tree_read end=======================");
 }
@@ -552,7 +552,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush)
                                                               tree_io_array_1));
   STORAGE_LOG(INFO, "tree_io_array", K(tree_io_array_1));
   ASSERT_EQ(3, tree_io_array_1.count());
-  ASSERT_EQ(0 + 13 * ObTmpFileGlobal::PAGE_SIZE, write_offset_1);
+  ASSERT_EQ(0 + 13 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, write_offset_1);
   total_need_flush_page_num = 0;
   total_need_flush_rightmost_page_num = 0;
   ASSERT_EQ(OB_SUCCESS, meta_tree_.get_need_flush_page_num(total_need_flush_page_num, total_need_flush_rightmost_page_num));
@@ -596,7 +596,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush)
   //During the flushing process,
   //  disk information will be changed to the upper-level pages, so upper-level pages will become dirty pages during this process.
   //  So you shouldn’t be surprised that the number of dirty pages changed from 5 to 7
-  ASSERT_EQ(0 + 7 * ObTmpFileGlobal::PAGE_SIZE, write_offset_2);
+  ASSERT_EQ(0 + 7 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, write_offset_2);
   ASSERT_EQ(OB_SUCCESS, meta_tree_.update_after_flush(tree_io_array_2));
   for (int64_t i = 0; i < 4; i++) {
     ObTmpFileTreeIOInfo& tree_io = tree_io_array_2.at(i);
@@ -608,7 +608,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush)
   ASSERT_EQ(0, total_need_flush_page_num);
   ASSERT_EQ(0, total_need_flush_rightmost_page_num);
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 28 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 28 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   delete[] block_buff_1;
   delete[] block_buff_2;
@@ -654,7 +654,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_multi_io)
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObTmpFileTreeFlushContext flush_context;
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - 3 * ObTmpFileGlobal::PAGE_SIZE; //this block can only accommodate 3 pages
+  int64_t write_offset_1 = SN_BLOCK_SIZE - 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE; //this block can only accommodate 3 pages
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
                                                               block_buff_1,
@@ -677,7 +677,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_multi_io)
                                                               tree_io_array_2));
   STORAGE_LOG(INFO, "tree_io_array", K(tree_io_array_2));
   ASSERT_EQ(3, tree_io_array_2.count());
-  ASSERT_EQ(0 + 10 * ObTmpFileGlobal::PAGE_SIZE, write_offset_2);
+  ASSERT_EQ(0 + 10 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, write_offset_2);
 
   total_need_flush_page_num = 0;
   total_need_flush_rightmost_page_num = 0;
@@ -687,7 +687,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_multi_io)
   ASSERT_EQ(OB_SUCCESS, meta_tree_.update_after_flush(tree_io_array_1));
   ASSERT_EQ(OB_SUCCESS, meta_tree_.update_after_flush(tree_io_array_2));
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 28 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 28 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   delete[] block_buff_1;
   delete[] block_buff_2;
@@ -733,7 +733,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_major_flush)
                                                               tree_io_array));
   STORAGE_LOG(INFO, "tree_io_array", K(tree_io_array));
   ASSERT_EQ(2, tree_io_array.count());
-  ASSERT_EQ(0 + 10 * ObTmpFileGlobal::PAGE_SIZE, write_offset); //flush 10 pages
+  ASSERT_EQ(0 + 10 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, write_offset); //flush 10 pages
   int64_t total_need_flush_page_num = 0;
   int64_t total_need_flush_rightmost_page_num = 0;
   ASSERT_EQ(OB_SUCCESS, meta_tree_.get_need_flush_page_num(total_need_flush_page_num, total_need_flush_rightmost_page_num));
@@ -741,7 +741,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_major_flush)
   ASSERT_EQ(3, total_need_flush_rightmost_page_num);
   ASSERT_EQ(OB_SUCCESS, meta_tree_.update_after_flush(tree_io_array));
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 25 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 25 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   delete[] block_buff;
   STORAGE_LOG(INFO, "=======================test_tree_major_flush end=======================");
@@ -786,7 +786,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_evict)
                                                               tree_io_array_1));
   ASSERT_EQ(2, tree_io_array_1.count());
   ASSERT_EQ(2, tree_io_array_1.at(1).flush_nums_);
-  ASSERT_EQ(0 + 10 * ObTmpFileGlobal::PAGE_SIZE, write_offset_1);
+  ASSERT_EQ(0 + 10 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, write_offset_1);
   ASSERT_EQ(OB_SUCCESS, meta_tree_.update_after_flush(tree_io_array_1));
 
   STORAGE_LOG(INFO, "=======================first tree evict=======================");
@@ -814,7 +814,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_evict)
                                                               tree_io_array_2));
   STORAGE_LOG(INFO, "tree_io_array", K(tree_io_array_2));
   ASSERT_EQ(3, tree_io_array_2.count());
-  ASSERT_EQ(0 + 3 * ObTmpFileGlobal::PAGE_SIZE, write_offset_2);
+  ASSERT_EQ(0 + 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, write_offset_2);
   ASSERT_EQ(OB_SUCCESS, meta_tree_.update_after_flush(tree_io_array_2));
 
   STORAGE_LOG(INFO, "=======================second tree evict=======================");
@@ -865,7 +865,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_clear)
 
   STORAGE_LOG(INFO, "=======================tree clear=======================");
   ObSharedNothingTmpFileMetaItem origin_root_item = meta_tree_.root_item_;
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 25 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 25 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(13, meta_tree_.release_pages_.count());
   ASSERT_EQ(origin_root_item.buffer_page_id_, meta_tree_.release_pages_.at(12));
 
@@ -907,7 +907,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate)
   STORAGE_LOG(INFO, "data_item_array", K(meta_tree_.data_item_array_));
 
   STORAGE_LOG(INFO, "=======================first tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, 3 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, 3 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   STORAGE_LOG(INFO, "data_item_array", K(meta_tree_.data_item_array_));
   ASSERT_EQ(2, meta_tree_.data_item_array_.count());
 
@@ -923,32 +923,32 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate)
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
 
   STORAGE_LOG(INFO, "=======================second tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(3 * 128 * ObTmpFileGlobal::PAGE_SIZE, 26 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(3 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 26 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
   ASSERT_EQ(4, meta_tree_.release_pages_.count());
 
   STORAGE_LOG(INFO, "=======================third tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(26 * 128 * ObTmpFileGlobal::PAGE_SIZE, 28 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(26 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 28 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
   ASSERT_EQ(6, meta_tree_.release_pages_.count());
 
   STORAGE_LOG(INFO, "=======================first tree read=======================");
   ObArray<ObSharedNothingTmpFileDataItem> get_data_items;
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(28 * 128 * ObTmpFileGlobal::PAGE_SIZE, 20 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(28 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 20 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   ASSERT_EQ(20, get_data_items.count());
   ASSERT_EQ(28 * 128, get_data_items.at(0).virtual_page_id_);
 
   STORAGE_LOG(INFO, "=======================forth tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(28 * 128 * ObTmpFileGlobal::PAGE_SIZE, 73 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(28 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 73 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
   ASSERT_EQ(16, meta_tree_.release_pages_.count());
 
   STORAGE_LOG(INFO, "=======================fifth tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(73 * 128 * ObTmpFileGlobal::PAGE_SIZE, 75 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(73 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 75 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
   ASSERT_EQ(19, meta_tree_.release_pages_.count());
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(75 * 128 * ObTmpFileGlobal::PAGE_SIZE, 75 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(75 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 75 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_tree_truncate end=======================");
 }
@@ -988,9 +988,9 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate_with_unfilled_page)
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
 
   STORAGE_LOG(INFO, "=======================first tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, (24 * 128 + 1 * 127.5) * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, (24 * 128 + 1 * 127.5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(2, meta_tree_.level_page_range_array_.count());
-  ASSERT_EQ(24 * 128 * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ(24 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
   ASSERT_EQ(4, meta_tree_.release_pages_.count());
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
 
@@ -1002,16 +1002,16 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate_with_unfilled_page)
   //then, we write some data in write buffer
 
   STORAGE_LOG(INFO, "=======================second tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((24 * 128 + 1 * 127.5) * ObTmpFileGlobal::PAGE_SIZE, (24 * 128 + 1 * 127.8) * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((24 * 128 + 1 * 127.5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, (24 * 128 + 1 * 127.8) * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(0, meta_tree_.level_page_range_array_.count());
-  ASSERT_EQ((24 * 128 + 1 *127) * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ((24 * 128 + 1 *127) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
   ASSERT_EQ(6, meta_tree_.release_pages_.count());
 
   STORAGE_LOG(INFO, "=======================third tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((24 * 128 + 1 * 127.8) * ObTmpFileGlobal::PAGE_SIZE, 28 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((24 * 128 + 1 * 127.8) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 28 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(0, meta_tree_.level_page_range_array_.count());
   ASSERT_EQ(0, meta_tree_.data_item_array_.count());
-  ASSERT_EQ((24 * 128 + 1 *127) * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ((24 * 128 + 1 *127) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
   ASSERT_EQ(6, meta_tree_.release_pages_.count());
 
 
@@ -1028,14 +1028,14 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate_with_unfilled_page)
   ASSERT_EQ(1, meta_tree_.level_page_range_array_[2].evicted_page_num_ + meta_tree_.level_page_range_array_[2].cached_page_num_);
 
   STORAGE_LOG(INFO, "=======================forth tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(28 * 128 * ObTmpFileGlobal::PAGE_SIZE, 75 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(28 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 75 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
   ASSERT_EQ(6 + 13, meta_tree_.release_pages_.count());
   ASSERT_EQ(0, meta_tree_.level_page_range_array_.count());
   ASSERT_EQ(false, meta_tree_.root_item_.is_valid());
-  ASSERT_EQ(75 * 128 * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ(75 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(75 * 128 * ObTmpFileGlobal::PAGE_SIZE, 80 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(75 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 80 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_tree_truncate_with_unfilled_page end=======================");
 }
@@ -1083,9 +1083,9 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate_with_data_item_remove)
   meta_tree_.print_meta_tree_total_info();
 
   STORAGE_LOG(INFO, "=======================first tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, (9 * 128 + 1 * 0.5) * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, (9 * 128 + 1 * 0.5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(2, meta_tree_.level_page_range_array_.count());
-  ASSERT_EQ(9 * 128 * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ(9 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
   ASSERT_EQ(1, meta_tree_.release_pages_.count());
   STORAGE_LOG(INFO, "level_page_range_array", K(meta_tree_.level_page_range_array_));
 
@@ -1097,9 +1097,9 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate_with_data_item_remove)
   //then, we write some data in write buffer
 
   STORAGE_LOG(INFO, "=======================second tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((9 * 128 + 1 * 0.5) * ObTmpFileGlobal::PAGE_SIZE, (9 * 128 + 1 * 0.8) * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((9 * 128 + 1 * 0.5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, (9 * 128 + 1 * 0.8) * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(0, meta_tree_.level_page_range_array_.count());
-  ASSERT_EQ(9 * 128 * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ(9 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
   ASSERT_EQ(3, meta_tree_.release_pages_.count());
   ASSERT_EQ(false, meta_tree_.root_item_.is_valid());
 
@@ -1126,9 +1126,9 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate_with_data_item_remove)
   meta_tree_.print_meta_tree_total_info();
 
   STORAGE_LOG(INFO, "=======================third tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((9 * 128 + 1 * 0.8) * ObTmpFileGlobal::PAGE_SIZE, (9 * 128 + 10 * 128 + 1 * 0.5) * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((9 * 128 + 1 * 0.8) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, (9 * 128 + 10 * 128 + 1 * 0.5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(2, meta_tree_.level_page_range_array_.count());
-  ASSERT_EQ((9 * 128 + 10 * 128) * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ((9 * 128 + 10 * 128) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
   ASSERT_EQ(3 + 2, meta_tree_.release_pages_.count());
   meta_tree_.print_meta_tree_total_info();
 
@@ -1138,13 +1138,13 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_truncate_with_data_item_remove)
   ASSERT_EQ(OB_SUCCESS, meta_tree_.finish_write_tail(last_data_item, true/*release_tail_in_disk*/));
 
   STORAGE_LOG(INFO, "=======================forth tree truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((9 * 128 + 10 * 128 + 1 * 0.5) * ObTmpFileGlobal::PAGE_SIZE, (9 * 128 + 10 * 128 + 1 * 0.6) * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate((9 * 128 + 10 * 128 + 1 * 0.5) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, (9 * 128 + 10 * 128 + 1 * 0.6) * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(0, meta_tree_.level_page_range_array_.count());
-  ASSERT_EQ((9 * 128 + 10 * 128) * ObTmpFileGlobal::PAGE_SIZE, meta_tree_.released_offset_);
+  ASSERT_EQ((9 * 128 + 10 * 128) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, meta_tree_.released_offset_);
   ASSERT_EQ(3 + 2 + 2, meta_tree_.release_pages_.count());
   ASSERT_EQ(false, meta_tree_.root_item_.is_valid());
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear((9 * 128 + 10 * 128 + 1 * 0.6) * ObTmpFileGlobal::PAGE_SIZE, 30 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear((9 * 128 + 10 * 128 + 1 * 0.6) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 30 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_tree_truncate_with_data_item_remove end=======================");
 }
@@ -1198,7 +1198,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
 
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_1 = SN_BLOCK_SIZE - ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
@@ -1211,12 +1211,12 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
   ASSERT_EQ(1, tree_io_array_1.count());
   ASSERT_EQ(SN_BLOCK_SIZE, write_offset_1);
 
-  int64_t truncate_offset = 5 * 128 * ObTmpFileGlobal::PAGE_SIZE; //truncate one meta page
+  int64_t truncate_offset = 5 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE; //truncate one meta page
   ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, truncate_offset));
   ASSERT_EQ(1, meta_tree_.release_pages_.count());
 
   char *block_buff_2 = new char[SN_BLOCK_SIZE];
-  int64_t write_offset_2 = SN_BLOCK_SIZE - 4 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_2 = SN_BLOCK_SIZE - 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_2;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(1/*block_index*/,
@@ -1246,7 +1246,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
   ObTmpFileTreeFlushContext flush_context_second;
 
   char *block_buff_3 = new char[SN_BLOCK_SIZE];
-  int64_t write_offset_3 = SN_BLOCK_SIZE - 4 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_3 = SN_BLOCK_SIZE - 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_3;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(2/*block_index*/,
@@ -1272,7 +1272,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
     ASSERT_EQ(tree_io.flush_end_page_id_, meta_tree_.level_page_range_array_.at(tree_io.page_level_).flushed_end_page_id_);
   }
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(truncate_offset, 30 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(truncate_offset, 30 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   delete[] block_buff_1;
   delete[] block_buff_2;
   delete[] block_buff_3;
@@ -1329,7 +1329,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
 
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - 3 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_1 = SN_BLOCK_SIZE - 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
@@ -1342,11 +1342,11 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
   ASSERT_EQ(1, tree_io_array_1.count());
   ASSERT_EQ(SN_BLOCK_SIZE, write_offset_1);
 
-  int64_t truncate_offset = 5 * 1 * 128 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t truncate_offset = 5 * 1 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, truncate_offset));
 
   char *block_buff_2 = new char[SN_BLOCK_SIZE];
-  int64_t write_offset_2 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_2 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_2;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(1/*block_index*/,
@@ -1429,7 +1429,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
 
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_1 = SN_BLOCK_SIZE - ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
@@ -1442,11 +1442,11 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_occurs_between_buf_g
   ASSERT_EQ(1, tree_io_array_1.count());
   ASSERT_EQ(SN_BLOCK_SIZE, write_offset_1);
 
-  int64_t truncate_offset = 5 * 4 * 128 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t truncate_offset = 5 * 4 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, truncate_offset));
 
   char *block_buff_2 = new char[SN_BLOCK_SIZE];
-  int64_t write_offset_2 = SN_BLOCK_SIZE - 4 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_2 = SN_BLOCK_SIZE - 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_2;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(1/*block_index*/,
@@ -1530,7 +1530,7 @@ void TestSNTmpFileMetaTree::test_tree_flush_with_truncate_occurs_before_update_m
 
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_1 = SN_BLOCK_SIZE - ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
@@ -1544,7 +1544,7 @@ void TestSNTmpFileMetaTree::test_tree_flush_with_truncate_occurs_before_update_m
   ASSERT_EQ(SN_BLOCK_SIZE, write_offset_1);
 
   char *block_buff_2 = new char[SN_BLOCK_SIZE];
-  int64_t write_offset_2 = SN_BLOCK_SIZE - 18 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_2 = SN_BLOCK_SIZE - 18 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_2;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(1/*block_index*/,
@@ -1573,7 +1573,7 @@ void TestSNTmpFileMetaTree::test_tree_flush_with_truncate_occurs_before_update_m
     //even if truncate_offset is not an integer multiple of PAGE_SIZE, this result is reasonable.
     //the start_virtual_page_id we insert into the tree may be smaller than the actual truncate_offset of the tmp file.
     int64_t start_virtual_page_id =
-      MAX(truncate_offset / ObTmpFileGlobal::PAGE_SIZE, last_data_item.virtual_page_id_ + last_data_item.physical_page_num_);
+      MAX(truncate_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, last_data_item.virtual_page_id_ + last_data_item.physical_page_num_);
     generate_data_items(item_num_2, start_virtual_page_id, data_items_1);
     ASSERT_EQ(OB_SUCCESS, meta_tree_.prepare_for_insert_items());
     ASSERT_EQ(OB_SUCCESS, meta_tree_.insert_items(data_items_1));
@@ -1584,7 +1584,7 @@ void TestSNTmpFileMetaTree::test_tree_flush_with_truncate_occurs_before_update_m
 
   if (insert_after_truncate) {
     ASSERT_EQ(true, meta_tree_.root_item_.is_valid());
-    if (truncate_offset >= (last_data_item.virtual_page_id_ + last_data_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE) {
+    if (truncate_offset >= (last_data_item.virtual_page_id_ + last_data_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
       for (int64_t i = 0; i < tree_io_array_2.count(); i++) {
         ASSERT_NE(tree_io_array_2.at(i).tree_epoch_, meta_tree_.tree_epoch_);
       }
@@ -1595,7 +1595,7 @@ void TestSNTmpFileMetaTree::test_tree_flush_with_truncate_occurs_before_update_m
       }
     }
   } else {
-    if (truncate_offset >= (last_data_item.virtual_page_id_ + last_data_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE) {
+    if (truncate_offset >= (last_data_item.virtual_page_id_ + last_data_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
       ASSERT_EQ(false, meta_tree_.root_item_.is_valid());
     } else {
       for (int64_t i = 0; i < tree_io_array_2.count(); i++) {
@@ -1605,7 +1605,7 @@ void TestSNTmpFileMetaTree::test_tree_flush_with_truncate_occurs_before_update_m
     }
   }
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(truncate_offset, 100 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(truncate_offset, 100 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   delete[] block_buff_1;
   delete[] block_buff_2;
   meta_tree_.reset();
@@ -1614,22 +1614,22 @@ void TestSNTmpFileMetaTree::test_tree_flush_with_truncate_occurs_before_update_m
 
 TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_to_somewhere_in_the_middle_before_update_meta)
 {
-  test_tree_flush_with_truncate_occurs_before_update_meta(5 * 128 * ObTmpFileGlobal::PAGE_SIZE, false);
+  test_tree_flush_with_truncate_occurs_before_update_meta(5 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, false);
 }
 
 TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_to_end_before_update_meta)
 {
-  test_tree_flush_with_truncate_occurs_before_update_meta(30 * 128 * ObTmpFileGlobal::PAGE_SIZE, false);
+  test_tree_flush_with_truncate_occurs_before_update_meta(30 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, false);
 }
 
 TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_to_somewhere_in_the_middle_before_update_meta_2)
 {
-  test_tree_flush_with_truncate_occurs_before_update_meta(8 * 128 * ObTmpFileGlobal::PAGE_SIZE, true);
+  test_tree_flush_with_truncate_occurs_before_update_meta(8 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, true);
 }
 
 TEST_F(TestSNTmpFileMetaTree, test_tree_flush_with_truncate_to_end_before_update_meta_2)
 {
-  test_tree_flush_with_truncate_occurs_before_update_meta(10 * 128 * ObTmpFileGlobal::PAGE_SIZE, true);
+  test_tree_flush_with_truncate_occurs_before_update_meta(10 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, true);
 }
 
 //================More detailed tests of meta tree involve more test points==================
@@ -1721,7 +1721,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_prepare_for_insert)
 
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_1 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
@@ -1733,7 +1733,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_prepare_for_insert)
 
   ASSERT_EQ(1, tree_io_array_1.count());
   ASSERT_EQ(SN_BLOCK_SIZE, write_offset_1);
-  char *rightmost_page_buf = block_buff_1 + SN_BLOCK_SIZE - ObTmpFileGlobal::PAGE_SIZE;
+  char *rightmost_page_buf = block_buff_1 + SN_BLOCK_SIZE - ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   meta_tree_.read_cache_rightmost_pages_.reset();
   ASSERT_EQ(OB_SUCCESS, meta_tree_.read_cache_rightmost_pages_.push_back(std::make_pair(rightmost_page_buf, 0)));
   ASSERT_EQ(OB_SUCCESS, meta_tree_.update_after_flush(tree_io_array_1));
@@ -1761,7 +1761,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_prepare_for_insert)
 
   STORAGE_LOG(INFO, "=======================second tree flush and evict=========================");
   char *block_buff_2 = new char[SN_BLOCK_SIZE];
-  int64_t write_offset_2 = SN_BLOCK_SIZE - 3 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_2 = SN_BLOCK_SIZE - 3 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_2;
   ObTmpFileTreeFlushContext flush_context_second;
 
@@ -1775,8 +1775,8 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_prepare_for_insert)
   ASSERT_EQ(2, tree_io_array_2.count());
   ASSERT_EQ(true, flush_context_second.is_meta_reach_end_);
 
-  char *rightmost_page_buf_0 = block_buff_2 + SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::PAGE_SIZE;
-  char *rightmost_page_buf_1 = block_buff_2 + SN_BLOCK_SIZE - 1 * ObTmpFileGlobal::PAGE_SIZE;
+  char *rightmost_page_buf_0 = block_buff_2 + SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+  char *rightmost_page_buf_1 = block_buff_2 + SN_BLOCK_SIZE - 1 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   meta_tree_.read_cache_rightmost_pages_.reset();
   ASSERT_EQ(OB_SUCCESS, meta_tree_.read_cache_rightmost_pages_.push_back(std::make_pair(rightmost_page_buf_0, 0)));
   ASSERT_EQ(OB_SUCCESS, meta_tree_.read_cache_rightmost_pages_.push_back(std::make_pair(rightmost_page_buf_1, 0)));
@@ -1856,10 +1856,10 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_prepare_for_insert_fail)
   ASSERT_EQ(4, tree_io_array_1.count());
   ASSERT_EQ(true, flush_context_first.is_meta_reach_end_);
 
-  char *rightmost_page_buf_0 = block_buff_1 + 4 * ObTmpFileGlobal::PAGE_SIZE;
-  char *rightmost_page_buf_1 = block_buff_1 + 7 * ObTmpFileGlobal::PAGE_SIZE;
-  char *rightmost_page_buf_2 = block_buff_1 + 9 * ObTmpFileGlobal::PAGE_SIZE;
-  char *rightmost_page_buf_3 = block_buff_1 + 10 * ObTmpFileGlobal::PAGE_SIZE;
+  char *rightmost_page_buf_0 = block_buff_1 + 4 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+  char *rightmost_page_buf_1 = block_buff_1 + 7 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+  char *rightmost_page_buf_2 = block_buff_1 + 9 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
+  char *rightmost_page_buf_3 = block_buff_1 + 10 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   meta_tree_.read_cache_rightmost_pages_.reset();
   ASSERT_EQ(OB_SUCCESS, meta_tree_.read_cache_rightmost_pages_.push_back(std::make_pair(rightmost_page_buf_0, 0)));
   ASSERT_EQ(OB_SUCCESS, meta_tree_.read_cache_rightmost_pages_.push_back(std::make_pair(rightmost_page_buf_1, 0)));
@@ -1900,7 +1900,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_prepare_for_insert_fail)
   ASSERT_EQ(ObTmpFileGlobal::INVALID_PAGE_ID, meta_tree_.level_page_range_array_.at(0).end_page_id_);
 
   STORAGE_LOG(INFO, "=======================new meta tree clear=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_1_.clear(0, 252 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_1_.clear(0, 252 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
 
   STORAGE_LOG(INFO, "=======================third insert=======================");
   item_num = 10;
@@ -1917,7 +1917,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_prepare_for_insert_fail)
   ASSERT_EQ(6, meta_tree_.level_page_range_array_.at(0).cached_page_num_);
   ASSERT_EQ(4, meta_tree_.level_page_range_array_.at(0).evicted_page_num_);
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 20 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 20 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   delete[] block_buff_1;
   meta_tree_.reset();
   meta_tree_1_.reset();
@@ -1971,7 +1971,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_insert_fail_after_array_used)
   ASSERT_EQ(2, meta_tree_.data_item_array_.count());
   ASSERT_EQ(0, meta_tree_.level_page_range_array_.count());
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 2 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 2 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "================test_tree_insert_fail_after_array_used begin================");
 }
@@ -2027,7 +2027,7 @@ TEST_F(TestSNTmpFileMetaTree, test_tree_insert_fail_after_tree_build)
   ASSERT_EQ(121, meta_tree_.level_page_range_array_.at(0).cached_page_num_);
   ASSERT_EQ(41, meta_tree_.level_page_range_array_.at(1).cached_page_num_);
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 363 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.clear(0, 363 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   meta_tree_.reset();
   STORAGE_LOG(INFO, "================test_tree_insert_fail_after_tree_build begin================");
 }
@@ -2075,44 +2075,44 @@ TEST_F(TestSNTmpFileMetaTree, test_array_read)
   //  with each data item occupying 128 * 8K.
   STORAGE_LOG(INFO, "=======================first array read=======================");
   ObArray<ObSharedNothingTmpFileDataItem> get_data_items;
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(10, 2 * 128 * ObTmpFileGlobal::PAGE_SIZE - 5, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(10, 2 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE - 5, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(3, get_data_items.count());
 
   STORAGE_LOG(INFO, "=======================second array read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(7 * 128 * ObTmpFileGlobal::PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(7 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   ASSERT_EQ(5, get_data_items.count());
 
   STORAGE_LOG(INFO, "=======================third array read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(0, 100 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(0, 100 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   ASSERT_EQ(100, get_data_items.count());
 
   STORAGE_LOG(INFO, "=======================forth array read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(91 * 128 * ObTmpFileGlobal::PAGE_SIZE + 2, 3 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(91 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE + 2, 3 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(4, get_data_items.count());
   ASSERT_EQ(91 * 128, get_data_items.at(0).virtual_page_id_);
 
   STORAGE_LOG(INFO, "=======================fifth array read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(1, 0.5 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(1, 0.5 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(1, get_data_items.count());
   ASSERT_EQ(0, get_data_items.at(0).virtual_page_id_);
 
   STORAGE_LOG(INFO, "=======================fifth array read=======================");
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(1, 0.5 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(1, 0.5 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
   ASSERT_EQ(1, get_data_items.count());
   ASSERT_EQ(0, get_data_items.at(0).virtual_page_id_);
 
   STORAGE_LOG(INFO, "=======================fifth array read=======================");
   get_data_items.reset();
-  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(1, 100 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(1, 100 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
 
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_array_read end=======================");
@@ -2145,10 +2145,10 @@ TEST_F(TestSNTmpFileMetaTree, test_read_fail)
 
   STORAGE_LOG(INFO, "=======================first read=======================");
   ObArray<ObSharedNothingTmpFileDataItem> get_data_items;
-  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(1 * 128 * ObTmpFileGlobal::PAGE_SIZE, 2 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(1 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 2 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
 
   STORAGE_LOG(INFO, "=======================second insert=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, 3 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, 3 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   item_num = 5;
   ObArray<ObSharedNothingTmpFileDataItem> data_items_1;
   generate_wrong_data_items(item_num, 4 * 128, data_items_1);
@@ -2160,7 +2160,7 @@ TEST_F(TestSNTmpFileMetaTree, test_read_fail)
 
   STORAGE_LOG(INFO, "=======================second read=======================");
   get_data_items.reset();
-  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(4 * 128 * ObTmpFileGlobal::PAGE_SIZE, 2 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(4 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 2 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
 
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_read_fail end=======================");
@@ -2194,21 +2194,21 @@ TEST_F(TestSNTmpFileMetaTree, test_array_read_after_truncate)
   //After simulating the insert, we can see that the tmp file offset is [0, 100 * 128 * 8K], 
   //  with each data item occupying 128 * 8K.
   STORAGE_LOG(INFO, "=======================array truncate=======================");
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, 2 * 128 * ObTmpFileGlobal::PAGE_SIZE - 5));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(0, 2 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE - 5));
   ASSERT_EQ(99, meta_tree_.data_item_array_.count());
 
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(2 * 128 * ObTmpFileGlobal::PAGE_SIZE - 5, 20 * 128 * ObTmpFileGlobal::PAGE_SIZE));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.truncate(2 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE - 5, 20 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE));
   ASSERT_EQ(80, meta_tree_.data_item_array_.count());
 
   STORAGE_LOG(INFO, "=======================array read=======================");
   ObArray<ObSharedNothingTmpFileDataItem> get_data_items;
   get_data_items.reset();
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(20 * 128 * ObTmpFileGlobal::PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items(20 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
   ASSERT_EQ(5, get_data_items.count());
   STORAGE_LOG(INFO, "data_items", K(get_data_items));
 
   get_data_items.reset();
-  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(18 * 128 * ObTmpFileGlobal::PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::PAGE_SIZE, get_data_items));
+  ASSERT_NE(OB_SUCCESS, meta_tree_.search_data_items(18 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 5 * 128 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, get_data_items));
 
   meta_tree_.reset();
   STORAGE_LOG(INFO, "=======================test_array_read_after_truncate end=======================");
@@ -2291,7 +2291,7 @@ TEST_F(TestSNTmpFileMetaTree, test_write_tail)
 
   STORAGE_LOG(INFO, "=======================first read=======================");
   ObArray<ObSharedNothingTmpFileDataItem> data_items_2;
-  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items((3 * 128 + 127) * ObTmpFileGlobal::PAGE_SIZE, 240 * ObTmpFileGlobal::PAGE_SIZE, data_items_2));
+  ASSERT_EQ(OB_SUCCESS, meta_tree_.search_data_items((3 * 128 + 127) * ObTmpFileGlobal::ALLOC_PAGE_SIZE, 240 * ObTmpFileGlobal::ALLOC_PAGE_SIZE, data_items_2));
   ASSERT_EQ(2, data_items_2.count());
   ASSERT_EQ(127, data_items_2.at(1).physical_page_num_);
 
@@ -2329,7 +2329,7 @@ TEST_F(TestSNTmpFileMetaTree, test_page_is_dirty_again_during_flush)
   ObTmpFileTreeFlushContext flush_context_first;
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_1 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
                                                               block_buff_1,
@@ -2427,7 +2427,7 @@ TEST_F(TestSNTmpFileMetaTree, test_insert_items_during_flush)
   ObTmpFileTreeFlushContext flush_context_first;
   char *block_buff_1 = new char[SN_BLOCK_SIZE];
   ObArray<ObTmpFileTreeIOInfo> tree_io_array_1;
-  int64_t write_offset_1 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset_1 = SN_BLOCK_SIZE - 2 * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ASSERT_EQ(OB_SUCCESS, meta_tree_.flush_meta_pages_for_block(0/*block_index*/,
                                                               ObTmpFileTreeEvictType::FULL,
                                                               block_buff_1,

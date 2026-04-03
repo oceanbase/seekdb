@@ -346,13 +346,6 @@ private:
       common::ObIArray<ObITable *> &old_store_sstables,
       common::ObIArray<ObITable *> &need_add_sstables,
       common::ObIArray<ObITable *> &new_sstables);
-  int combine_transfer_minor_sstables_(
-      common::ObArenaAllocator &allocator,
-      const ObTablet &tablet,
-      common::ObIArray<ObITable *> &old_store_minor_sstables,
-      common::ObIArray<ObITable *> &need_add_minor_sstables,
-      const ObBatchUpdateTableStoreParam &param,
-      common::ObIArray<ObITable *> &new_minor_sstables);
   int replace_ha_minor_sstables_(
       common::ObArenaAllocator &allocator,
       const ObTablet &tablet,
@@ -365,11 +358,6 @@ private:
       const ObBatchUpdateTableStoreParam &param,
       const ObTabletTableStore &old_store,
       const int64_t inc_base_snapshot_version);
-  int replace_transfer_minor_sstables_(
-      common::ObArenaAllocator &allocator,
-      const ObTablet &tablet,
-      const ObBatchUpdateTableStoreParam &param,
-      const ObTabletTableStore &old_store);
 
   // ddl
   int pull_ddl_memtables(common::ObArenaAllocator &allocator, const ObTablet &tablet);

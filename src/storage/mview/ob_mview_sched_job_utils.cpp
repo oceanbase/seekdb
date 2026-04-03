@@ -291,9 +291,6 @@ int ObMViewSchedJobUtils::add_mview_info_and_refresh_job(ObISQLClient &sql_clien
   } else if (ObMVRefreshMode::MAJOR_COMPACTION == refresh_info->refresh_mode_) {
     if (OB_FAIL(acquire_major_refresh_mv_merge_scn_(sql_client, tenant_id))) {
       LOG_WARN("failed to acquire major refresh mv merge scn", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(share::ObBackupJobOperator::get_jobs(
-                   *GCTX.sql_proxy_, meta_tenant_id, false /*select for update*/, backup_jobs))) {
-      LOG_WARN("failed to get backup jobs", KR(ret), K(tenant_id));
     } else if (!backup_jobs.empty()) {
       ret = OB_OP_NOT_ALLOW;
       LOG_WARN("[MAJ_REF_MV] backup jobs exist, can not create materialized view", K(ret),

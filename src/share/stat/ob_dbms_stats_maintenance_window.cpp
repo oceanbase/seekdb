@@ -533,13 +533,11 @@ int ObDbmsStatsMaintenanceWindow::get_next_job_id_and_exec_env(common::ObMySQLPr
   ObSqlString select_sql;
   if (OB_FAIL(select_sql.append_fmt("SELECT tt.job, t.exec_env FROM"\
                                     " %s t, (SELECT max(job) + 1 AS job FROM %s"\
-                                             " WHERE tenant_id = %ld and job <= %ld AND job > 0) tt"\
-                                    " WHERE t.tenant_id = %ld and t.job_name = '%s' AND t.job = %ld;",
+                                             " WHERE job <= %ld AND job > 0) tt"\
+                                    " WHERE t.job_name = '%s' AND t.job = %ld;",
                                     share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
                                     share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-                                    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                     dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET,
-                                    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                     opt_stats_history_manager,
                                     OPT_STATS_HISTORY_MANAGER_JOB_ID))) {
     LOG_WARN("failed to append fmt", K(ret));
@@ -601,9 +599,8 @@ int ObDbmsStatsMaintenanceWindow::check_job_exists(common::ObMySQLProxy *sql_pro
   is_join_exists = false;
   ObSqlString select_sql;
   int64_t row_count = 0;
-  if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE tenant_id = %ld and job_name = '%s';",
+  if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%s';",
                                     share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-                                    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                     job_name))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {

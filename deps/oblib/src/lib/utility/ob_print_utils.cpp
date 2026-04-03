@@ -235,6 +235,51 @@ int64_t ObHexStringWrap::to_string(char *buf, const int64_t len) const
 
 ////////////////////////////////////////////////////////////////
 template <>
+int64_t to_string<char>(const char &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%c", v))) {
+  } else {}
+  return pos;
+}
+template <>
+int64_t to_string<int8_t>(const int8_t &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%hhd", v))) {
+  } else {}
+  return pos;
+}
+template <>
+int64_t to_string<uint8_t>(const uint8_t &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%hhu", v))) {
+  } else {}
+  return pos;
+}
+template <>
+int64_t to_string<int16_t>(const int16_t &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%hd", v))) {
+  } else {}
+  return pos;
+}
+template <>
+int64_t to_string<uint16_t>(const uint16_t &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%hu", v))) {
+  } else {}
+  return pos;
+}
+template <>
 int64_t to_string<int32_t>(const int32_t &v, char *buffer, const int64_t buffer_size)
 {
   int ret = OB_SUCCESS;
@@ -270,6 +315,26 @@ int64_t to_string<uint64_t>(const uint64_t &v, char *buffer, const int64_t buffe
   } else {}
   return pos;
 }
+#ifdef __APPLE__
+template <>
+int64_t to_string<long>(const long &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%ld", v))) {
+  } else {}
+  return pos;
+}
+template <>
+int64_t to_string<unsigned long>(const unsigned long &v, char *buffer, const int64_t buffer_size)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  if (OB_FAIL(databuff_printf(buffer, buffer_size, pos, "%lu", v))) {
+  } else {}
+  return pos;
+}
+#endif
 
 template <>
 int64_t to_string<float>(const float &v, char *buffer, const int64_t buffer_size)

@@ -65,11 +65,7 @@ class ObAllVirtualVectorIndexInfo : public common::ObVirtualTableScannerIterator
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    LS_ID,
-    ROWKEY_VID_TABLE_ID,
+        ROWKEY_VID_TABLE_ID = common::OB_APP_MIN_COLUMN_ID,
     VID_ROWKEY_TABLE_ID,
     INC_INDEX_TABLE_ID,
     VBITMAP_TABLE_ID,

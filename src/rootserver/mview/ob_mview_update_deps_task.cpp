@@ -84,9 +84,8 @@ int ObMViewUpdateDepsTask::need_schedule(bool &need_sche)
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id_);
     if (OB_FAIL(sql.assign_fmt("SELECT EXISTS ("
                                "SELECT 1 FROM `%s`.`%s` t1, `%s`.`%s` t2"
-                               " WHERE t1.mview_id = t2.p_obj AND t1.tenant_id = %lu) as exist_nested",
-                               OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME, OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id_)))) {
+                               " WHERE t1.mview_id = t2.p_obj) as exist_nested",
+                               OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME, OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME))) {
       LOG_WARN("failed to assign sql", KR(ret));
     } else if (OB_FAIL(GCTX.sql_proxy_->read(res, tenant_id_, sql.ptr()))) {
       LOG_WARN("fail to execute sql", KR(ret), K(sql), K(tenant_id_));

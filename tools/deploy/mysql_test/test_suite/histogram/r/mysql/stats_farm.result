@@ -35,7 +35,7 @@ select OWNER, TABLE_NAME, NUM_ROWS from OCEANBASE.DBA_TAB_STATISTICS where table
 +-----------+---------------------------------+----------+
 | OWNER     | TABLE_NAME                      | NUM_ROWS |
 +-----------+---------------------------------+----------+
-| oceanbase | __all_virtual_core_column_table |      199 |
+| oceanbase | __all_virtual_core_column_table |      191 |
 +-----------+---------------------------------+----------+
 select count(*) from OCEANBASE.DBA_TAB_STATISTICS where table_name='__all_table' and NUM_ROWS > 0;
 +----------+

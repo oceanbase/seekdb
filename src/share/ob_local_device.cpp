@@ -14,65 +14,92 @@
  * limitations under the License.
  */
 
+#if defined(__APPLE__) || defined(__ANDROID__)
+// Define AIO types before including ob_local_device.h, which uses them in class members.
+// Also suppress dummy stubs from the header via OB_LIBAIO_STUB_DEFINED --
+// this translation unit provides working AIO emulation below.
+#define OB_LIBAIO_STUB_DEFINED
+#include <stddef.h>
+typedef unsigned long io_context_t;
+struct iocb {
+  void *data;
+  short aio_lio_opcode;
+  int aio_fildes;
+  void *aio_buf;
+  size_t aio_nbytes;
+  long long aio_offset;
+};
+struct io_event { void *data; struct iocb *obj; long res; long res2; };
+#endif
 #include "ob_local_device.h"
 #include <sys/statvfs.h>
 #include <unistd.h>
-#ifdef __linux__
+#if defined(__APPLE__)
+#include <sys/mount.h>
+#include <fcntl.h>
+#elif defined(__ANDROID__)
+#include <sys/vfs.h>
+#include <linux/falloc.h>
+#elif defined(__linux__)
 #include <sys/vfs.h>
 #include <linux/falloc.h>
 #include <libaio.h>
-#elif defined(__APPLE__)
-#include <sys/mount.h> // For statfs on macOS, replaces sys/vfs.h
-#include <fcntl.h> // For fcntl on macOS (fallocate replacement)
-#include <stdlib.h> // For malloc/free
+#endif
+
+#if defined(__APPLE__) || defined(__ANDROID__)
+// Synchronous AIO emulation for macOS and Android (no libaio available).
+// Uses STL only in this .cpp -- safe since it's a single translation unit.
+#include <stdlib.h>
+#include <functional>
 #include <mutex>
 #include <vector>
 #include <condition_variable>
 #include <chrono>
 
-// macOS doesn't have libaio, provide a synchronous emulation
 struct io_event_queue {
   std::mutex mtx;
   std::condition_variable cv;
   std::vector<struct io_event> events;
 };
 
-// macOS doesn't have linux/falloc.h, define fallocate constants
+#ifdef __APPLE__
+// macOS doesn't have linux/falloc.h
 #ifndef FALLOC_FL_KEEP_SIZE
 #define FALLOC_FL_KEEP_SIZE 0x01
 #endif
 #ifndef FALLOC_FL_PUNCH_HOLE
 #define FALLOC_FL_PUNCH_HOLE 0x02
 #endif
+#endif
 
-// libaio emulation functions
+// libaio emulation: synchronous pread/pwrite with event queue
 static inline int io_setup(int maxevents, io_context_t *ctxp) {
   (void)maxevents;
   io_event_queue *q = new (std::nothrow) io_event_queue();
   if (q == nullptr) return -ENOMEM;
   *ctxp = (io_context_t)q;
-  return 0; // Success
+  return 0;
 }
 static inline int io_destroy(io_context_t ctx) {
   io_event_queue *q = (io_event_queue *)ctx;
   if (q != nullptr) {
     delete q;
   }
-  return 0; // Success
+  return 0;
 }
-static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, int64_t offset) {
+static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
   iocb->aio_fildes = fd;
   iocb->aio_buf = buf;
   iocb->aio_nbytes = count;
   iocb->aio_offset = offset;
-  iocb->aio_lio_opcode = 1; // Use 1 for PWRITE (IOCB_CMD_PWRITE)
+  iocb->aio_lio_opcode = 1; // IOCB_CMD_PWRITE
 }
-static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, int64_t offset) {
+static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
   iocb->aio_fildes = fd;
   iocb->aio_buf = buf;
   iocb->aio_nbytes = count;
   iocb->aio_offset = offset;
-  iocb->aio_lio_opcode = 0; // Use 0 for PREAD (IOCB_CMD_PREAD)
+  iocb->aio_lio_opcode = 0; // IOCB_CMD_PREAD
 }
 static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
   io_event_queue *q = (io_event_queue *)ctx;
@@ -105,7 +132,7 @@ static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
 }
 static inline int io_cancel(io_context_t ctx, struct iocb *iocb, struct io_event *result) {
   (void)ctx; (void)iocb; (void)result;
-  return 0; // Success (stub)
+  return 0;
 }
 static inline int io_getevents(io_context_t ctx, long min_nr, long nr, struct io_event *events, struct timespec *timeout) {
   io_event_queue *q = (io_event_queue *)ctx;

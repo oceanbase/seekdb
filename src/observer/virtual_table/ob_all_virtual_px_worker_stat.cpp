@@ -42,15 +42,12 @@ int ObAllPxWorkerStatTable::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   ObObj *cells = cur_row_.cells_;
-  ObString ipstr;
-  if (OB_ISNULL(allocator_) || OB_ISNULL(addr_)) {
+    if (OB_ISNULL(allocator_) || OB_ISNULL(addr_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ or addr_ is null", K_(allocator), K_(addr), K(ret));
   } else if (OB_ISNULL(cells)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
-  } else if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-    SERVER_LOG(ERROR, "get server ip failed", K(ret));
   } else {
     if (!start_to_read_) {
       ObPxWorkerStatList::instance().list_to_array(stat_array_, effective_tenant_id_);
@@ -67,21 +64,6 @@ int ObAllPxWorkerStatTable::inner_get_next_row(ObNewRow *&row)
           int64_t session_id = stat_array_.at(index_).get_session_id();
           cells[cell_idx].set_int(session_id);
           break; 
-        }
-        case TENANT_ID: {
-         int64_t tenant_id = stat_array_.at(index_).get_tenant_id();
-         cells[cell_idx].set_int(tenant_id);
-         break;
-        }
-        case SVR_IP: {
-          cells[cell_idx].set_varchar(ipstr);
-          cells[cell_idx].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        } 
-        case SVR_PORT: {
-          cells[cell_idx].set_int(addr_->get_port());
-          break;
         }
         case TRACE_ID: {
           int len = stat_array_.at(index_).get_trace_id().to_string(trace_id_, sizeof(trace_id_));

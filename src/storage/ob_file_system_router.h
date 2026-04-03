@@ -22,7 +22,6 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "share/ob_zone_info.h"
 #include "storage/blocksstable/ob_log_file_spec.h"
 
 namespace oceanbase {

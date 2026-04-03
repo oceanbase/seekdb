@@ -25,7 +25,6 @@
 #include "share/ob_freeze_info_manager.h"
 #include "share/ob_freeze_info_proxy.h"
 #include "share/ob_snapshot_table_proxy.h"
-#include "share/ob_zone_info.h"
 #include "share/scn.h"
 
 namespace oceanbase

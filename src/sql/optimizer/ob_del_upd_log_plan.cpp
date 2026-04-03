@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_del_upd_log_plan.h"
 #include "ob_insert_log_plan.h"
+#include "share/vector_index/ob_vector_index_util.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_delete.h"
 #include "sql/optimizer/ob_log_insert.h"
@@ -1656,37 +1657,75 @@ int ObDelUpdLogPlan::collect_related_local_index_ids(IndexDMLInfo &primary_dml_i
     if (OB_FAIL(schema_guard->get_table_schema(tenant_id, index_tid_array[i], index_schema))) {
       LOG_WARN("get index schema failed", K(ret), K(index_tid_array[i]), K(i));
     } else if (index_schema->is_index_local_storage() || index_schema->is_mlog_table()) {
-      //only need to attach local index and primary index in the same DAS Task
-      if (primary_dml_info.assignments_.empty()) {
-        //is insert or delete, need to add to the related index ids
-        if (OB_FAIL(primary_dml_info.related_index_ids_.push_back(index_schema->get_table_id()))) {
-          LOG_WARN("add related index ids failed", K(ret));
+      // Skip delta_buffer_table DML maintenance only when ALL conditions hold:
+      // 1. HNSW index (delta_buffer is only used by HNSW, hybrid uses hybrid_log)
+      // 2. Heap table
+      // 3. sync_mode=async
+      bool skip_delta_buffer = false;
+      if (index_schema->is_vec_delta_buffer_type()) {
+        bool is_heap_table = false;
+        bool is_sync_mode_async = false;
+        const ObTableSchema *data_table_schema = nullptr;
+        if (OB_FAIL(schema_guard->get_table_schema(tenant_id,
+                                                   primary_dml_info.ref_table_id_,
+                                                   data_table_schema))) {
+          LOG_WARN("get data table schema failed",
+                   K(ret),
+                   K(primary_dml_info.ref_table_id_));
+        } else if (OB_NOT_NULL(data_table_schema)) {
+          is_heap_table = data_table_schema->is_heap_organized_table();
         }
-      } else if (primary_dml_info.is_update_part_key_ && (index_schema->is_fts_index() || index_schema->is_vec_index())) {
-        // If part key is updated and it is fts index, need to be added into the related index ids.
-        if (OB_FAIL(primary_dml_info.related_index_ids_.push_back(index_schema->get_table_id()))) {
-          LOG_WARN("add related index ids failed", K(ret));
-        }
-      } else if (primary_dml_info.is_vec_hnsw_index_vid_opt_) {
-        // need to add all the related index ids
-        if (OB_FAIL(primary_dml_info.related_index_ids_.push_back(index_schema->get_table_id()))) {
-          LOG_WARN("add related index ids failed", K(ret));
-        }
-      } else {
-        bool found_col = false;
-        //in update clause, need to check this local index whether been updated
-        for (int64_t j = 0; OB_SUCC(ret) && !found_col && j < base_column_ids.count(); ++j) {
-          uint64_t base_column_id = base_column_ids.at(j);
-          if (index_schema->is_mlog_table()) {
-            uint64_t mlog_column_id = ObTableSchema::gen_mlog_col_id_from_ref_col_id(base_column_id);
-            base_column_id = mlog_column_id;
+        if (OB_SUCC(ret)) {
+          share::ObVectorIndexParam vec_index_param;
+          if (OB_FAIL(share::ObVectorIndexUtil::parser_params_from_string(
+              index_schema->get_index_params(),
+              share::ObVectorIndexType::VIT_HNSW_INDEX,
+              vec_index_param,
+              true))) {
+            LOG_WARN("fail to parse vector index params",
+                     K(ret),
+                     K(index_schema->get_index_params()));
+          } else if (vec_index_param.sync_mode_async_) {
+            is_sync_mode_async = true;
           }
-          found_col = (index_schema->get_column_schema(base_column_id) != nullptr);
         }
-        if (OB_SUCC(ret) && found_col) {
-          //update clause will modify this local index, need to add it to related_index_ids_
+        if (OB_SUCC(ret) && is_heap_table && is_sync_mode_async) {
+          skip_delta_buffer = true;
+        }
+      }
+      if (OB_SUCC(ret) && !skip_delta_buffer) {
+        //only need to attach local index and primary index in the same DAS Task
+        if (primary_dml_info.assignments_.empty()) {
+          //is insert or delete, need to add to the related index ids
           if (OB_FAIL(primary_dml_info.related_index_ids_.push_back(index_schema->get_table_id()))) {
-            LOG_WARN("store index id to related index ids failed", K(ret));
+            LOG_WARN("add related index ids failed", K(ret));
+          }
+        } else if (primary_dml_info.is_update_part_key_ && (index_schema->is_fts_index() || index_schema->is_vec_index())) {
+          // If part key is updated and it is fts index, need to be added into the related index ids.
+          if (OB_FAIL(primary_dml_info.related_index_ids_.push_back(index_schema->get_table_id()))) {
+            LOG_WARN("add related index ids failed", K(ret));
+          }
+        } else if (primary_dml_info.is_vec_hnsw_index_vid_opt_) {
+          // need to add all the related index ids
+          if (OB_FAIL(primary_dml_info.related_index_ids_.push_back(index_schema->get_table_id()))) {
+            LOG_WARN("add related index ids failed", K(ret));
+          }
+        } else {
+          bool found_col = false;
+          //in update clause, need to check this local index whether been updated
+          for (int64_t j = 0; OB_SUCC(ret) && !found_col && j < base_column_ids.count(); ++j) {
+            uint64_t base_column_id = base_column_ids.at(j);
+            if (index_schema->is_mlog_table()) {
+              uint64_t mlog_column_id = ObTableSchema::gen_mlog_col_id_from_ref_col_id(base_column_id);
+              base_column_id = mlog_column_id;
+            }
+            found_col = (index_schema->get_column_schema(base_column_id) != nullptr);
+          }
+          if (OB_SUCC(ret) && found_col) {
+            //update clause will modify this local index, need to add it to related_index_ids_
+            if (OB_FAIL(primary_dml_info.related_index_ids_.push_back(index_schema->get_table_id()))) {
+              LOG_WARN("store index id to related index ids failed", K(ret));
+            }
           }
         }
       }

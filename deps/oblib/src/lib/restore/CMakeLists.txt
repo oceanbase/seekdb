@@ -16,7 +16,7 @@ oblib_add_library(restore OBJECT
 )
 
 oblib_add_library(s3 ob_storage_s3_base.cpp)
-target_link_directories(s3 PUBLIC ${DEP_3RD_DIR}/usr/local/oceanbase/deps/devel/lib64)
+target_link_directories(s3 PUBLIC ${DEP_3RD_DIR}/usr/local/oceanbase/deps/devel/lib64 ${DEP_3RD_DIR}/usr/local/oceanbase/deps/devel/lib)
 target_link_libraries(s3
   PUBLIC
   libaws-cpp-sdk-s3.a

@@ -123,7 +123,7 @@ void TestLogStreamBackup::SetUp()
   const int64_t bucket_num = 1024;
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = lib::ACHUNK_SIZE;
-  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage", get_current_dir_name());
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage", getcwd(NULL, 0));
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_);
   ASSERT_EQ(OB_SUCCESS, ret);

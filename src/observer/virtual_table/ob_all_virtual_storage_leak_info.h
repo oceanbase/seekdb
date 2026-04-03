@@ -42,10 +42,7 @@ private:
   static const int64_t MAP_BUCKET_NUM = 10000;
   enum CHECKER_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    CHECK_ID,
+        CHECK_ID = common::OB_APP_MIN_COLUMN_ID,
     CHECK_MOD,
     HOLD_COUNT,
     BACKTRACE

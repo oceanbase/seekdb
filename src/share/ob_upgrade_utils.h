@@ -37,43 +37,6 @@ static const rootserver::ObRsJobType upgrade_job_type_array[UPGRADE_JOB_TYPE_COU
   rootserver::JOB_TYPE_INVALID,
 };
 
-class ObUpgradeUtils
-{
-public:
-  ObUpgradeUtils() {}
-  virtual ~ObUpgradeUtils() {}
-  static int check_upgrade_job_passed(rootserver::ObRsJobType job_type);
-  static int check_schema_sync(const uint64_t tenant_id, bool &is_sync);
-  // upgrade_sys_variable()/upgrade_sys_stat() can be called when enable_ddl = false.
-  static int upgrade_sys_variable(
-             obrpc::ObCommonRpcProxy &rpc_proxy,
-             common::ObISQLClient &sql_client,
-             const uint64_t tenant_id);
-  /* ----------------------- */
-private:
-  static int check_rs_job_exist(rootserver::ObRsJobType job_type, bool &exist);
-  static int check_rs_job_success(rootserver::ObRsJobType job_type, bool &success);
-
-  /* upgrade sys variable */
-  static int calc_diff_sys_var_(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
-      common::ObArray<int64_t> &update_list,
-      common::ObArray<int64_t> &add_list);
-  static int update_sys_var_(
-             obrpc::ObCommonRpcProxy &rpc_proxy,
-             const uint64_t tenant_id,
-             const bool is_update,
-             common::ObArray<int64_t> &update_list);
-  /* upgrade sys variable end */
-  static int filter_sys_stat(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
-      rootserver::ObSysStat &sys_stat);
-private:
-  typedef common::ObFixedLengthString<OB_MAX_CONFIG_NAME_LEN> Name;
-};
-
 /* =========== upgrade processor ============= */
 
 // Special upgrade actions for specific data version,

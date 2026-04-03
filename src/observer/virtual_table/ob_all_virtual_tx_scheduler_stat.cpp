@@ -41,7 +41,6 @@ void ObGVTxSchedulerStat::reset()
 {
   // release tenant resources first
   omt::ObMultiTenantOperator::reset();
-  ip_buffer_[0] = '\0';
   parts_buffer_[0] = '\0';
   tx_desc_addr_buffer_[0] = '\0';
   savepoints_buffer_[0] = '\0';
@@ -112,17 +111,6 @@ int ObGVTxSchedulerStat::process_curr_tenant(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case TENANT_ID:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.tenant_id_);
-          break;
-        case SVR_IP:
-          (void)tx_scheduler_stat.addr_.ip_to_string(ip_buffer_, common::OB_IP_STR_BUFF);
-          cur_row_.cells_[i].set_varchar(ip_buffer_);
-          cur_row_.cells_[i].set_default_collation_type();
-          break;
-        case SVR_PORT:
-          cur_row_.cells_[i].set_int(tx_scheduler_stat.addr_.get_port());
-          break;
         case SESSION_ID:
           cur_row_.cells_[i].set_int(tx_scheduler_stat.client_sid_);
           break;

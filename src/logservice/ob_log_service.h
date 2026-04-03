@@ -19,26 +19,25 @@
 
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
-#include "share/ob_tenant_info_proxy.h"                // ObTenantRole
 #include "applyservice/ob_log_apply_service.h"
+#include "cdcservice/ob_cdc_service.h"
 #include "logrpc/ob_log_rpc_req.h"
 #include "logrpc/ob_log_rpc_proxy.h"
 #include "palf/log_block_pool_interface.h"             // ILogBlockPool
 #include "palf/log_define.h"
 #include "rcservice/ob_role_change_service.h"
+#include "restoreservice/ob_log_restore_service.h"     // ObLogRestoreService
 #include "replayservice/ob_log_replay_service.h"
-#ifndef OB_BUILD_ARBITRATION
+#include "restoreservice/ob_log_restore_service.h"
 #include "ob_net_keepalive_adapter.h"
-#else
-#include "logservice/ob_arbitration_service.h"
-#endif
-#include "ob_reporter_adapter.h"
 #include "ob_ls_adapter.h"
 #include "ob_locality_adapter.h"
 #include "ob_location_adapter.h"
 #include "ob_log_flashback_service.h"                    // ObLogFlashbackService
 #include "ob_log_handler.h"
+#include "restoreservice/ob_log_restore_handler.h"      // ObLogRestoreHandler
 #include "ob_log_monitor.h"
+#include "cdcservice/ob_cdc_service.h"
 
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "log/ob_shared_log_service.h"
@@ -46,7 +45,7 @@
 
 namespace oceanbase
 {
-namespace commom
+namespace common
 {
 class ObAddr;
 class ObILogAllocator;
@@ -94,6 +93,7 @@ namespace logservice
 #ifdef OB_BUILD_SHARED_STORAGE
 class ObSharedLogGarbageCollector;
 #endif
+class ObLogRestoreService;  // Forward declaration
 
 class ObLogService
 {
@@ -116,7 +116,6 @@ public:
            obrpc::ObBatchRpc *batch_rpc,
            storage::ObLSService *ls_service,
            share::ObLocationService *location_service,
-           observer::ObIMetaReport *reporter,
            palf::ILogBlockPool *log_block_pool,
            common::ObMySQLProxy *sql_proxy,
            IObNetKeepAliveAdapter *net_keepalive_adapter,
@@ -134,10 +133,12 @@ public:
                 const share::ObTenantRole &tenant_role,
                 const palf::PalfBaseInfo &palf_base_info,
                 const bool allow_log_sync,
-                ObLogHandler &log_handler);
+                ObLogHandler &log_handler,
+                ObLogRestoreHandler &restore_handler);
   //Delete log stream interface: After the outer call to create_ls(), if subsequent processes fail, remove_ls() needs to be called
   int remove_ls(const share::ObLSID &id,
-                ObLogHandler &log_handler);
+                ObLogHandler &log_handler,
+                ObLogRestoreHandler &restore_handler);
 
   int check_palf_exist(const share::ObLSID &id, bool &exist) const;
   //Downtime restart recovery log stream interface, including generating and initializing the corresponding ObReplayStatus structure
@@ -145,7 +146,8 @@ public:
   // @param [out] log_handler, new log stream returned in the form of ObLogHandler, ensuring the lifecycle of the log stream when used by upper layers
   // @param [out] restore_handler, new log stream returned in the form of ObLogRestoreHandler, used for follower synchronization logs
   int add_ls(const share::ObLSID &id,
-             ObLogHandler &log_handler);
+             ObLogHandler &log_handler,
+             ObLogRestoreHandler &restore_handler);
 
   int open_palf(const share::ObLSID &id,
                 palf::PalfHandleGuard &palf_handle);
@@ -217,24 +219,16 @@ public:
   int diagnose_role_change(RCDiagnoseInfo &diagnose_info);
   int diagnose_replay(const share::ObLSID &id, ReplayDiagnoseInfo &diagnose_info);
   int diagnose_apply(const share::ObLSID &id, ApplyDiagnoseInfo &diagnose_info);
-#ifdef OB_BUILD_ARBITRATION
-  int diagnose_arb_srv(const share::ObLSID &id, LogArbSrvDiagnoseInfo &diagnose_info);
-#endif
   int get_io_start_time(int64_t &last_working_time);
   int check_disk_space_enough(bool &is_disk_enough);
 
   palf::PalfEnv *get_palf_env() { return palf_env_; }
-  // TODO by yunlong: temp solution, will by removed after Reporter be added in MTL
-  ObLogReporterAdapter *get_reporter() { return &reporter_; }
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
+  ObLogRestoreService *get_log_restore_service() { return &restore_service_; }
 #ifdef OB_BUILD_SHARED_STORAGE
   ObSharedLogService *get_shared_log_service() {return &shared_log_service_;}
 #endif
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
-#ifdef OB_BUILD_ARBITRATION
-  ObArbitrationService *get_arbitration_service() { return &arb_service_; }
-
-#endif
   obrpc::ObLogServiceRpcProxy *get_rpc_proxy() { return &rpc_proxy_; }
   ObLogFlashbackService *get_flashback_service() { return &flashback_service_; }
 #ifdef OB_BUILD_SHARED_STORAGE
@@ -243,6 +237,12 @@ public:
   ObLogExternalStorageHandler *get_log_ext_handler() {return shared_log_service_.get_log_ext_handler();}
   // ============================= shared log end ====================================
 #endif
+  // Get restore net driver for standby log sync
+  // Returns the net driver from restore service if available
+  class ObLogRestoreNetDriver;
+  ObLogRestoreNetDriver *get_restore_net_driver();
+  // Get CDC service for log fetcher (standby log sync server side)
+  oceanbase::cdc::ObCdcService *get_cdc_service();
   int check_need_do_checkpoint(bool &need_do_checkpoint);
 
 private:
@@ -251,7 +251,8 @@ private:
                  const share::ObTenantRole &tenant_role,
                  const palf::PalfBaseInfo &palf_base_info,
                  const bool allow_log_sync,
-                 ObLogHandler &log_handler);
+                 ObLogHandler &log_handler,
+                 ObLogRestoreHandler &restore_handler);
   struct GetUnrecycableLogDiskSizeFunctor {
     GetUnrecycableLogDiskSizeFunctor() : unrecycable_log_disk_size_(0) {}
     ~GetUnrecycableLogDiskSizeFunctor() { unrecycable_log_disk_size_ = 0; }
@@ -274,19 +275,19 @@ private:
   ObLocationAdapter location_adapter_;
   ObLSAdapter ls_adapter_;
   obrpc::ObLogServiceRpcProxy rpc_proxy_;
-  ObLogReporterAdapter reporter_;
 #ifdef OB_BUILD_SHARED_STORAGE
   // ========================== shared log start =================================
   ObSharedLogService shared_log_service_;
   // ========================== shared log end ===================================
 #endif
-#ifdef OB_BUILD_ARBITRATION
-  ObArbitrationService arb_service_;
-#endif
   ObLogFlashbackService flashback_service_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;
   ObLocalityAdapter locality_adapter_;
+  // Restore service for standby log sync
+  ObLogRestoreService restore_service_;
+  // CDC service for log fetcher (standby log sync server side)
+  oceanbase::cdc::ObCdcService cdc_service_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogService);
 };

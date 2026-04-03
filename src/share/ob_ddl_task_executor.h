@@ -152,7 +152,7 @@ private:
   static const int64_t CHECK_TASK_INTERVAL = 100; // 100ms
   static const int64_t TOTAL_LIMIT = 1024L * 1024L * 1024L;
   static const int64_t HOLD_LIMIT = 8 * 1024L * 1024L;
-  static const int64_t PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
+  static const int64_t ALLOC_PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
   static const int64_t THREAD_NUM = 1;
   typedef ObDDLTaskQueue TaskQueue;
   bool is_inited_;

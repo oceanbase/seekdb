@@ -106,13 +106,6 @@ int ObLSWRSHandler::generate_ls_weak_read_snapshot_version(ObLS &ls,
       STORAGE_LOG(INFO, "fail to generate weak read timestamp", KR(ret), K(max_stale_time));
     }
     ret = OB_SUCCESS;
-  // put check transfer_prepare after generate wrs
-  } else if (ls.get_transfer_status().get_transfer_prepare_enable()) {
-    timestamp.reset();
-    need_skip = true;
-    if (REACH_TIME_INTERVAL(60 * 1000 * 1000)) {
-      STORAGE_LOG(INFO, "ls in transfer status", K(*this));
-    }
   } else if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), NULL, gts_scn))) {
     TRANS_LOG(WARN, "get gts scn error", K(ret), K(max_stale_time), K(*this));
   } else {

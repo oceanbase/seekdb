@@ -17,7 +17,6 @@
 
 #include "ob_flush_ncomp_dll_task.h"
 
-#include "share/ob_all_server_tracer.h"
 #include "share/stat/ob_dbms_stats_maintenance_window.h" // ObDbmsStatsMaintenanceWindow
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h" // ObDBMSSchedTableOperator
 
@@ -38,9 +37,8 @@ int ObFlushNcompDll::check_job_exists(ObMySQLTransaction &trans,
   is_job_exists = false;
   ObSqlString select_sql;
   int64_t row_count = 0;
-  if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE tenant_id = %ld and job_name = '%.*s';",
+  if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%.*s';",
                                     share::OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-                                    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                     job_name.length(), job_name.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {

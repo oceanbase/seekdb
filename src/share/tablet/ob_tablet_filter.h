@@ -20,13 +20,11 @@
 #include "lib/net/ob_addr.h"
 #include "lib/list/ob_dlist.h"
 #include "common/ob_zone.h"
-#include "share/ob_primary_zone_util.h"
 
 namespace oceanbase
 {
 namespace share
 {
-class ObIServerTrace;
 class ObTabletReplica;
 
 class ObITabletReplicaFilter
@@ -42,26 +40,6 @@ class ObTabletReplicaFilter : public ObITabletReplicaFilter, public common::ObDL
 public:
   ObTabletReplicaFilter() {}
   virtual ~ObTabletReplicaFilter() {}
-};
-
-class ObTabletPermanentOfflineFilter : public ObTabletReplicaFilter
-{
-public:
-  explicit ObTabletPermanentOfflineFilter(const ObIServerTrace *tracker) : tracker_(tracker) {}
-  virtual ~ObTabletPermanentOfflineFilter() {}
-  virtual int check(const ObTabletReplica &replica, bool &pass) const;
-private:
-  const ObIServerTrace *tracker_;
-};
-
-class ObTabletNotExistServerFilter : public ObTabletReplicaFilter
-{
-public:
-  explicit ObTabletNotExistServerFilter(const ObIServerTrace *tracker) : tracker_(tracker) {}
-  virtual ~ObTabletNotExistServerFilter() {}
-  virtual int check(const ObTabletReplica &replica, bool &pass) const;
-private:
-  const ObIServerTrace *tracker_;
 };
 
 // Reserve tablet replica by server
@@ -82,9 +60,7 @@ public:
   virtual ~ObTabletReplicaFilterHolder() {}
   virtual int check(const ObTabletReplica &replica, bool &pass) const;
 
-  int set_filter_permanent_offline(const ObIServerTrace &tracker);
   int set_reserved_server(const common::ObAddr &server);
-  int set_filter_not_exist_server(const ObIServerTrace &tracker);
 
 private:
   int add_(ObTabletReplicaFilter &filter);

@@ -37,6 +37,7 @@ const char *VALID_PROVIDERS[] = {
   "ALIYUN-DASHSCOPE",
   "DEEPSEEK",
   "SILICONFLOW",
+  "COHERE",
   "HUNYUAN-OPENAI",
   "OPENAI"
 };

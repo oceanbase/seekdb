@@ -26,6 +26,7 @@
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "share/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
 #include "lib/file/ob_string_util.h"
 #include "sql/engine/expr/ob_array_cast.h"
@@ -351,6 +352,7 @@ int ObVectorIndexUtil::parser_params_from_string(
             param.sync_interval_value_ = 0;
           } else if (new_param_value == "ASYNC") {
             param.sync_interval_type_ = ObVectorIndexSyncIntervalType::VSIT_NUMERIC;
+            param.sync_mode_async_ = true;
           } else {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("sync_mode value is invalid", K(ret), K(new_param_value));
@@ -430,6 +432,42 @@ int ObVectorIndexUtil::parser_params_from_string(
     LOG_DEBUG("parser vector index param", K(ret), K(index_param_str), K(param));
   }
   return ret;
+}
+
+bool ObVectorIndexUtil::is_sync_mode_async(const ObString &index_params)
+{
+  return is_sync_mode_async(index_params, false /* is_hnsw_heap_table */);
+}
+
+bool ObVectorIndexUtil::is_sync_mode_async(const ObString &index_params, bool is_hnsw_heap_table)
+{
+  bool is_async = false;
+  // SYNC_MODE is only valid for HNSW+heap_table: ASYNC or IMMEDIATE.
+  // For hybrid/IVF: SYNC_INTERVAL/MANUAL are used, not SYNC_MODE.
+  ObCollationType calc_cs_type = CS_TYPE_UTF8MB4_GENERAL_CI;
+  uint32_t immediate_pos = ObCharset::locate(calc_cs_type,
+      index_params.ptr(),
+      index_params.length(),
+      "SYNC_MODE=IMMEDIATE",
+      18,
+      1);
+  if (immediate_pos > 0) {
+    is_async = false;  // explicitly sync
+  } else {
+    uint32_t async_pos = ObCharset::locate(calc_cs_type,
+        index_params.ptr(),
+        index_params.length(),
+        "SYNC_MODE=ASYNC",
+        14,
+        1);
+    if (async_pos > 0) {
+      is_async = true;  // explicitly async
+    } else if (is_hnsw_heap_table) {
+      // SYNC_MODE not specified: for HNSW+heap default is ASYNC (index_id table may have empty params)
+      is_async = true;
+    }
+  }
+  return is_async;
 }
 
 int ObVectorIndexUtil::parse_time_string_to_seconds(const ObString &time_str, int64_t &seconds)
@@ -3489,11 +3527,22 @@ int ObVectorIndexUtil::check_index_param(
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting nlist or sample_per_nlist or nbits is");
         }
         if (OB_FAIL(ret)) {
-        } else if (!type_hybrid_vec_is_set && (endpoint_is_set || sync_mode_is_set || sync_interval_is_set)) {
+        } else if (!type_hybrid_vec_is_set && (endpoint_is_set || sync_interval_is_set)) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("hnsw vector index no need to set model or sync_mode or sync_interval",
-            K(ret), K(endpoint_is_set), K(sync_mode_is_set), K(sync_interval_is_set));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting model or sync_mode or sync_interval is");
+          LOG_WARN("hnsw vector index no need to set model or sync_interval",
+            K(ret), K(endpoint_is_set), K(sync_interval_is_set));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index setting model or sync_interval is");
+        } else if (!type_hybrid_vec_is_set && sync_mode_is_set
+                   && sync_interval_type == ObVectorIndexSyncIntervalType::VSIT_MANUAL) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index sync_mode does not support MANUAL",
+            K(ret), K(sync_interval_type));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index sync_mode MANUAL is");
+        } else if (!type_hybrid_vec_is_set && !tbl_schema.is_heap_organized_table() && sync_mode_is_set) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("hnsw vector index on non-heap table does not support sync_mode parameter",
+            K(ret), K(tbl_schema.get_table_id()));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index on non-heap table setting sync_mode is");
         }
       }
       if (OB_FAIL(ret)) {
@@ -3544,6 +3593,11 @@ int ObVectorIndexUtil::check_index_param(
         } else if (!sync_interval_is_set && type_hybrid_vec_is_set &&
                    OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
                                            ", SYNC_INTERVAL=%lds", sync_interval_value))) {
+          LOG_WARN("fail to printf databuff", K(ret));
+        } else if (!sync_mode_is_set && hnsw_is_set && !type_hybrid_vec_is_set
+                   && tbl_schema.is_heap_organized_table()
+                   && OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos,
+                                           ", SYNC_MODE=ASYNC"))) {
           LOG_WARN("fail to printf databuff", K(ret));
         } else if (type_hnsw_bq_is_set &&! refine_type_is_set &&
             OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", REFINE_TYPE=SQ8"))) {
@@ -5790,32 +5844,86 @@ bool ObVectorIndexUtil::check_vector_index_memory(
 {
   int ret = OB_SUCCESS;
   bool is_satisfied = true;
-  ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
-  if (OB_ISNULL(service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("service is nullptr", K(ret));
-  } else {
-    ObRbMemMgr *mem_mgr = nullptr;
-    int64_t bitmap_mem_used = 0;
-    int64_t mem_limited_size = 0;
-    int64_t estimate_memory = 0;
-    int64_t all_vsag_mem_used = *(service->get_all_vsag_use_mem());
-    if (OB_ISNULL(mem_mgr = MTL(ObRbMemMgr *))) {
+  const static double VEC_MEMORY_HOLD_FACTOR = 1.2;
+  MTL_SWITCH(tenant_id) {
+    ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService*);
+    ObSharedMemAllocMgr *shared_mem_mgr = MTL(ObSharedMemAllocMgr*);
+    if (OB_ISNULL(service) || OB_ISNULL(shared_mem_mgr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("service or manager is nullptr", K(ret), K(service), K(shared_mem_mgr));
     } else {
-      bitmap_mem_used = mem_mgr->get_vec_idx_used();
+      ObRbMemMgr *mem_mgr = nullptr;
+      int64_t bitmap_mem_used = 0;
+      int64_t mem_limited_size = 0;
+      int64_t estimate_memory = 0;
+      int64_t all_vsag_mem_used = ATOMIC_LOAD(service->get_all_vsag_use_mem());
+      int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
+      if (OB_ISNULL(mem_mgr = MTL(ObRbMemMgr *))) {
+      } else {
+        bitmap_mem_used = mem_mgr->get_vec_idx_used();
+      }
+      if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id, mem_limited_size))) {
+        LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id));
+      } else if (OB_FAIL(estimate_vector_memory_used(schema_guard, index_schema, tenant_id, row_count, estimate_memory))) {
+        LOG_WARN("failed to estimate vector memory used", K(ret), K(index_schema), K(row_count));
+      } else if (OB_FALSE_IT(estimate_memory = ceil(estimate_memory * VEC_ESTIMATE_MEMORY_FACTOR * VEC_MEMORY_HOLD_FACTOR))) { // multiple 2.0， and need to consider the hold memory.
+      } else if (hold_mem + estimate_memory > mem_limited_size) {
+        is_satisfied = false;
+      }
+      LOG_INFO("finish estimate size", K(ret), K(is_satisfied),
+        K(index_schema.get_table_name_str()), K(row_count), K(mem_limited_size), K(all_vsag_mem_used), K(hold_mem), K(bitmap_mem_used), K(estimate_memory));
     }
-    if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id, mem_limited_size))) {
-      LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id));
-    } else if (OB_FAIL(estimate_vector_memory_used(schema_guard, index_schema, tenant_id, row_count, estimate_memory))) {
-      LOG_WARN("failed to estimate vector memory used", K(ret), K(index_schema), K(row_count));
-    } else if (OB_FALSE_IT(estimate_memory = ceil(estimate_memory * VEC_ESTIMATE_MEMORY_FACTOR))) { // multiple 2.0
-    } else if (all_vsag_mem_used + bitmap_mem_used + estimate_memory > mem_limited_size) {
-      is_satisfied = false;
-    }
-    LOG_INFO("finish estimate size", K(ret), K(is_satisfied),
-      K(index_schema.get_table_name_str()), K(row_count), K(mem_limited_size), K(all_vsag_mem_used), K(bitmap_mem_used), K(estimate_memory));
   }
 
+  return is_satisfied;
+}
+
+bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schema_guard, const uint64_t tenant_id, const ObTableSchema &index_schema, const int64_t row_count)
+{
+  int ret = OB_SUCCESS;
+  bool is_satisfied = true;
+  uint64_t construct_mem = 0;
+  uint64_t buff_mem = 0;
+  int64_t mem_limited_size = 0;
+  ObSharedMemAllocMgr *shared_mem_mgr = MTL(ObSharedMemAllocMgr*);
+  const ObTableSchema *data_table_schema = nullptr;
+  ObVectorIndexParam param;
+  int64_t dim = 0;
+  ObSEArray<uint64_t , 1> col_ids;
+  bool param_filled = false;
+  ObVectorIndexType index_type = ObVectorIndexType::VIT_IVF_INDEX;
+  const uint64_t data_table_id = index_schema.get_data_table_id();
+  if (row_count <= 0) {
+  } else if (!index_schema.is_vec_ivfpq_pq_centroid_index() && !index_schema.is_vec_ivf_centroid_index()) {
+  } else if (OB_NOT_NULL(shared_mem_mgr)) {
+    int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
+    if (tenant_id == OB_INVALID_TENANT_ID || data_table_id == OB_INVALID_ID) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument, skip estimated", K(ret), K(tenant_id), K(data_table_id));
+    } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(index_schema, dim))) {
+      LOG_WARN("failed to get vec_index_col_param", K(ret));
+    } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, data_table_id, data_table_schema))) {
+      LOG_WARN("failed to get table schema", K(ret));
+    } else if (OB_ISNULL(data_table_schema) || data_table_schema->is_in_recyclebin()) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("table not exist", K(ret), K(tenant_id), K(data_table_id), K(data_table_schema));
+    } else if OB_FAIL(get_vector_index_column_id(*data_table_schema, index_schema, col_ids)) {
+      LOG_WARN("failed to get vector index column id", K(ret), K(index_schema));
+    } else if (col_ids.count() != 1) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get invalid col id array", K(ret), K(col_ids));
+    } else if (OB_FAIL(get_vector_index_param(&schema_guard, *data_table_schema, col_ids.at(0), param, param_filled))) {
+      LOG_WARN("failed to get vector index param", K(ret), K(col_ids.at(0)));
+    } else if (!param_filled) {
+      LOG_INFO("skip esitmate memory", K(ret), K(param_filled));
+    } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id, mem_limited_size))) {
+      LOG_WARN("failed to get vector mem limit size.", K(ret), K(tenant_id));
+    } else if (OB_FAIL(estimate_ivf_memory(row_count, param, construct_mem, buff_mem))) {
+      LOG_WARN("failed to estimate ivf memory", K(ret));
+    } else if (construct_mem + hold_mem > mem_limited_size) {
+      is_satisfied = false;
+    }
+  }
   return is_satisfied;
 }
 
@@ -5863,9 +5971,6 @@ int ObVectorIndexUtil::estimate_vector_memory_used(
 
   if (OB_FAIL(ret) || !param_filled) {
     LOG_INFO("skip esitmate memory", K(ret), K(param_filled));
-  } else if (VIAT_HNSW == param.type_) {
-    // vsag not support hnsw estimate now, skip for tmp
-    LOG_INFO("skip esitmate hnsw memory, vsag not support");
   } else if (need_estimate) {
     ObVectorIndexAlgorithmType build_type = param.type_;
     int64_t build_metric = param.m_;

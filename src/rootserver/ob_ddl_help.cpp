@@ -161,8 +161,6 @@ int ObTableGroupHelp::check_table_alter_tablegroup(
 {
   int ret = OB_SUCCESS;
   bool can_alter_tablegroup = !is_sys_tablegroup_id(new_table_schema.get_tablegroup_id());
-  ObString src_previous_locality_str;
-  ObString dst_previous_locality_str;
   if (!can_alter_tablegroup) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("cann't alter table's tablegroup", KR(ret),

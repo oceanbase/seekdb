@@ -30,28 +30,7 @@ int ObLSBackupOperator::insert_ls_backup_task_info(const uint64_t tenant_id, con
     const int64_t retry_id, const share::ObLSID &ls_id, const int64_t backup_set_id,
     const share::ObBackupDataType &backup_data_type, common::ObISQLClient &sql_client)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml_splicer;
-  int64_t affected_rows = 0;
-  ObBackupLSTaskInfo task_info;
-  task_info.task_id_ = task_id;
-  task_info.tenant_id_ = tenant_id;
-  task_info.ls_id_ = ls_id;
-  task_info.turn_id_ = turn_id;
-  task_info.retry_id_ = retry_id;
-  task_info.backup_data_type_ = backup_data_type.type_;
-  task_info.backup_set_id_ = backup_set_id;
-  task_info.max_file_id_ = OB_INITIAL_BACKUP_MAX_FILE_ID;
-  if (OB_FAIL(fill_ls_task_info_(task_info, dml_splicer))) {
-    LOG_WARN("failed to fill ls task info", K(ret), K(task_info));
-  } else if (OB_FAIL(dml_splicer.splice_insert_sql(OB_ALL_BACKUP_LS_TASK_INFO_TNAME, sql))) {
-    LOG_WARN("failed to splice insert update sql", K(ret), K(sql));
-  } else if (OB_FAIL(sql_client.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to execute sql", K(ret), K(sql));
-  } else {
-    LOG_INFO("insert ls task result", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -59,34 +38,7 @@ int ObLSBackupOperator::report_ls_backup_task_info(const uint64_t tenant_id, con
     const int64_t retry_id, const share::ObBackupDataType &backup_data_type, const ObLSBackupStat &stat,
     common::ObISQLClient &sql_client)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml_splicer;
-  int64_t affected_rows = 0;
-  ObBackupLSTaskInfo task_info;
-  task_info.task_id_ = task_id;
-  task_info.tenant_id_ = tenant_id;
-  task_info.ls_id_ = stat.ls_id_;
-  task_info.turn_id_ = turn_id;
-  task_info.retry_id_ = retry_id;
-  task_info.backup_data_type_ = backup_data_type.type_;
-  task_info.backup_set_id_ = stat.backup_set_id_;
-  task_info.input_bytes_ = stat.input_bytes_;
-  task_info.output_bytes_ = stat.output_bytes_;
-  task_info.tablet_count_ = stat.finish_tablet_count_;
-  task_info.finish_tablet_count_ = stat.finish_tablet_count_;
-  task_info.macro_block_count_ = stat.finish_macro_block_count_;
-  task_info.finish_macro_block_count_ = stat.finish_macro_block_count_;
-  task_info.max_file_id_ = stat.file_id_;
-  if (OB_FAIL(fill_ls_task_info_(task_info, dml_splicer))) {
-    LOG_WARN("failed to fill ls task info", K(ret), K(task_info));
-  } else if (OB_FAIL(dml_splicer.splice_insert_update_sql(OB_ALL_BACKUP_LS_TASK_INFO_TNAME, sql))) {
-    LOG_WARN("failed to splice insert update sql", K(ret), K(sql));
-  } else if (OB_FAIL(sql_client.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to execute sql", K(ret), K(sql));
-  } else {
-    LOG_INFO("report ls backup task info", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -95,49 +47,7 @@ int ObLSBackupOperator::get_backup_ls_task_info(const uint64_t tenant_id, const 
     const share::ObBackupDataType &backup_data_type, const bool for_update, ObBackupLSTaskInfo &task_info,
     common::ObISQLClient &sql_client)
 {
-  int ret = OB_SUCCESS;
-  task_info.reset();
-  ObSqlString sql;
-  if (OB_INVALID_ID == tenant_id || task_id < 0 || !ls_id.is_valid() || turn_id < 0 || retry_id < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN(
-        "get invalid args", K(ret), K(tenant_id), K(task_id), K(ls_id), K(turn_id), K(retry_id), K(backup_data_type));
-  } else if (OB_FAIL(sql.assign_fmt("select * from %s where task_id = %ld and tenant_id = %lu and "
-                                    "ls_id = %ld and "
-                                    "turn_id = %ld and retry_id = %ld and data_type = %ld",
-                 OB_ALL_BACKUP_LS_TASK_INFO_TNAME,
-                 task_id,
-                 tenant_id,
-                 ls_id.id(),
-                 turn_id,
-                 retry_id,
-                 static_cast<int64_t>(backup_data_type.type_)))) {
-    LOG_WARN("failed to append sql", K(ret));
-  } else if (for_update && OB_FAIL(sql.append_fmt(" for update"))) {
-    LOG_WARN("failed to append fmt", K(ret), K(sql));
-  } else {
-    ObArray<ObBackupLSTaskInfo> task_infos;
-    HEAP_VAR(ObMySQLProxy::ReadResult, res)
-    {
-      common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_client.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
-      } else if (OB_FAIL(parse_ls_task_info_results_(*result, task_infos))) {
-        LOG_WARN("failed to parse result", K(ret), K(result));
-      } else if (task_infos.empty()) {
-        ret = OB_ENTRY_NOT_EXIST;
-        LOG_WARN("entry not exist", K(ret), K(sql));
-      } else if (1 != task_infos.count()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("task infos should be 1", K(task_infos));
-      } else {
-        task_info = task_infos.at(0);
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -145,49 +55,7 @@ int ObLSBackupOperator::get_all_retries(const int64_t task_id, const uint64_t te
     const share::ObBackupDataType &backup_data_type, const share::ObLSID &ls_id,
     common::ObIArray<ObBackupRetryDesc> &retry_list, common::ObISQLClient &sql_client)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (tenant_id == OB_INVALID_TENANT_ID || !backup_data_type.is_valid() || !ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invlaid argument", K(ret), K(tenant_id), K(backup_data_type), K(ls_id));
-  } else if (OB_FAIL(sql.assign_fmt("select * from %s where task_id = %ld and tenant_id = %lu and "
-                                    "data_type = %ld and final = 'True'",
-                 OB_ALL_BACKUP_LS_TASK_INFO_TNAME,
-                 task_id,
-                 tenant_id,
-                 static_cast<int64_t>(backup_data_type.type_)))) {
-    LOG_WARN("failed to append sql", K(ret), K(task_id), K(tenant_id));
-  } else if (0 != ls_id.id() && OB_FAIL(sql.append_fmt(" and ls_id = %ld", ls_id.id()))) {
-    LOG_WARN("failed to append sql", K(ret), K(ls_id));
-  } else {
-    ObArray<ObBackupLSTaskInfo> task_infos;
-    HEAP_VAR(ObMySQLProxy::ReadResult, res)
-    {
-      common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_client.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
-      } else if (OB_FAIL(parse_ls_task_info_results_(*result, task_infos))) {
-        LOG_WARN("failed to parse result", K(ret), K(retry_list));
-      } else {
-        ObBackupRetryDesc retry_desc;
-        for (int64_t i = 0; OB_SUCC(ret) && i < task_infos.count(); ++i) {
-          const ObBackupLSTaskInfo &task_info = task_infos.at(i);
-          retry_desc.ls_id_ = task_info.ls_id_;
-          retry_desc.turn_id_ = task_info.turn_id_;
-          retry_desc.retry_id_ = task_info.retry_id_;
-          retry_desc.last_file_id_ = task_info.max_file_id_;
-          if (OB_INITIAL_BACKUP_MAX_FILE_ID == task_info.max_file_id_) {
-            // do nothing
-          } else if (OB_FAIL(retry_list.push_back(retry_desc))) {
-            LOG_WARN("failed to push back", K(ret), K(retry_desc));
-          }
-        }
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -195,28 +63,7 @@ int ObLSBackupOperator::mark_ls_task_info_final(const int64_t task_id, const uin
     const share::ObLSID &ls_id, const int64_t turn_id, const int64_t retry_id,
     const share::ObBackupDataType &backup_data_type, common::ObISQLClient &sql_client)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (task_id <= 0 || OB_INVALID_ID == tenant_id || !ls_id.is_valid() || turn_id <= 0 || retry_id < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id), K(tenant_id), K(ls_id), K(turn_id), K(retry_id));
-  } else if (OB_FAIL(sql.assign_fmt("update %s set final = 'True' where task_id = %ld and "
-                                    "tenant_id = %lu and ls_id ="
-                                    "%ld and turn_id = %ld and retry_id = %ld and data_type = %ld",
-                 OB_ALL_BACKUP_LS_TASK_INFO_TNAME,
-                 task_id,
-                 tenant_id,
-                 ls_id.id(),
-                 turn_id,
-                 retry_id,
-                 static_cast<int64_t>(backup_data_type.type_)))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(sql_client.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else {
-    FLOG_INFO("success update ls task info to final", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -248,27 +95,7 @@ int ObLSBackupOperator::report_ls_task_finish(const uint64_t tenant_id, const in
     const share::ObLSID &ls_id, const int64_t turn_id, const int64_t retry_id, const int64_t result, 
     common::ObISQLClient &sql_client)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (task_id < 0 || OB_INVALID_ID == tenant_id || !ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid args", K(task_id), K(tenant_id), K(ls_id));
-  } else if (OB_FAIL(sql.assign_fmt("update %s set status = 'FINISH', result = %ld where tenant_id "
-                                    "= %lu and task_id = %ld and ls_id = %ld and turn_id = %ld and retry_id = %ld",
-                 OB_ALL_BACKUP_LS_TASK_TNAME,
-                 result,
-                 tenant_id,
-                 task_id,
-                 ls_id.id(),
-                 turn_id,
-                 retry_id))) {
-    LOG_WARN("failed to init sql", K(ret), K(task_id), K(tenant_id), K(ls_id), K(turn_id), K(retry_id));
-  } else if (OB_FAIL(sql_client.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else {
-    FLOG_INFO("report ls task result", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -314,122 +141,28 @@ int ObLSBackupOperator::get_all_archive_ls_id(const uint64_t tenant_id, const in
 int ObLSBackupOperator::report_tablet_skipped(
     const uint64_t tenant_id, const ObBackupSkippedTablet &skipped_tablet, common::ObISQLClient &sql_client)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml_splicer;
-  int64_t affected_rows = 0;
-  if (OB_INVALID_ID == tenant_id || !skipped_tablet.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid args", K(ret), K(tenant_id), K(skipped_tablet));
-  } else if (OB_FAIL(fill_backup_skipped_tablet_(skipped_tablet, dml_splicer))) {
-    LOG_WARN("failed to fill backup skipped tablet", K(ret), K(skipped_tablet));
-  } else if (OB_FAIL(dml_splicer.splice_insert_sql(OB_ALL_BACKUP_SKIPPED_TABLET_TNAME, sql))) {
-    LOG_WARN("failed to splice update sql", K(ret), K(sql));
-  } else if (OB_FAIL(sql_client.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to execute sql", K(ret), K(sql));
-  } else {
-    LOG_INFO("report backup tablet skipped", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObLSBackupOperator::check_tablet_skipped_by_reorganize(common::ObISQLClient &sql_proxy,
     const uint64_t tenant_id, const common::ObTabletID &tablet_id, bool &has_skipped)
 {
-  int ret = OB_SUCCESS;
-  has_skipped = false;
-  ObSqlString sql;
-  ObBackupSkippedType skipped_type(ObBackupSkippedType::TYPE::REORGANIZED);
-  if (OB_INVALID_TENANT_ID == tenant_id || !tablet_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(tablet_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt(
-        "select * from %s where tenant_id = %lu and tablet_id = %ld and skipped_type = '%s'", 
-        OB_ALL_BACKUP_SKIPPED_TABLET_TNAME, tenant_id, tablet_id.id(), skipped_type.str()))) {
-        LOG_WARN("failed to assign sql", K(ret), K(sql), K(tenant_id), K(tablet_id));  
-      } else if (OB_FAIL(sql_proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(tenant_id), K(sql)); 
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          has_skipped = false;
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("failed to get next row", K(ret), K(sql));
-        }
-      } else {
-        has_skipped = true;
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObLSBackupOperator::get_tablet_to_ls_info(common::ObISQLClient &sql_proxy,
     const uint64_t tenant_id, const common::ObTabletID &tablet_id, int64_t &tablet_count, int64_t &tmp_ls_id)
 {
-  int ret = OB_SUCCESS;
-  common::ObSqlString sql;
-  tablet_count = 0;
-  tmp_ls_id = 0;
-  HEAP_VAR(ObMySQLProxy::ReadResult, res)
-  {
-    common::sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(sql.assign_fmt(
-            "select count(*) as count, ls_id from %s where tablet_id = %ld",
-            OB_ALL_TABLET_TO_LS_TNAME, tablet_id.id()))) {
-      LOG_WARN("failed to assign sql", K(ret), K(tablet_id));
-    } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
-      LOG_WARN("failed to execute sql", KR(ret), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is NULL", KR(ret), K(sql));
-    } else if (OB_FAIL(result->next())) {
-      LOG_WARN("failed to get next result", KR(ret), K(sql));
-    } else {
-      EXTRACT_INT_FIELD_MYSQL(*result, "count", tablet_count, int64_t);
-      EXTRACT_INT_FIELD_MYSQL_SKIP_RET(*result, "ls_id", tmp_ls_id, int64_t);
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObLSBackupOperator::check_ls_has_sys_data(common::ObISQLClient &sql_proxy,
     const uint64_t tenant_id, const int64_t task_id, const share::ObLSID &ls_id, bool &has_sys_data)
 {
-  int ret = OB_SUCCESS;
-  has_sys_data = false;
-  common::ObSqlString sql;
-  int64_t task_count = 0;
-  ObBackupDataType sys_data_type;
-  sys_data_type.set_sys_data_backup();
-  HEAP_VAR(ObMySQLProxy::ReadResult, res)
-  {
-    common::sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(sql.assign_fmt(
-            "select count(*) as count from %s where tenant_id = %lu and task_id = %ld and"
-            " ls_id = %ld and data_type = %ld",
-            OB_ALL_BACKUP_LS_TASK_INFO_TNAME, tenant_id, task_id, ls_id.id(), static_cast<int64_t>(sys_data_type.type_)))) {
-      LOG_WARN("failed to assign sql", K(ret), K(tenant_id), K(task_id), K(ls_id));
-    } else if (OB_FAIL(sql_proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-      LOG_WARN("failed to execute sql", KR(ret), K(tenant_id), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is NULL", KR(ret), K(sql));
-    } else if (OB_FAIL(result->next())) {
-      LOG_WARN("failed to get next result", KR(ret), K(sql));
-    } else {
-      EXTRACT_INT_FIELD_MYSQL(*result, "count", task_count, int64_t);
-    }
-  }
-  if (OB_SUCC(ret)) {
-    has_sys_data = 0 != task_count;
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -437,10 +170,6 @@ int ObLSBackupOperator::fill_ls_task_info_(const ObBackupLSTaskInfo &task_info, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("task_id", task_info.task_id_))) {
-    LOG_WARN("failed to add pk column", K(task_info));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", task_info.tenant_id_))) {
-    LOG_WARN("failed to add pk column", K(task_info));
-  } else if (OB_FAIL(dml.add_pk_column("ls_id", task_info.ls_id_.id()))) {
     LOG_WARN("failed to add pk column", K(task_info));
   } else if (OB_FAIL(dml.add_pk_column("turn_id", task_info.turn_id_))) {
     LOG_WARN("failed to add pk column", K(task_info));
@@ -525,8 +254,6 @@ int ObLSBackupOperator::fill_backup_skipped_tablet_(const ObBackupSkippedTablet 
   int ret = OB_SUCCESS;
   int turn_id = task_info.data_type_.is_minor_backup() ? task_info.turn_id_ : share::ObBackupSkipTabletAttr::BASE_MAJOR_TURN_ID + task_info.turn_id_;
   if (OB_FAIL(dml.add_pk_column("task_id", task_info.task_id_))) {
-    LOG_WARN("failed to add pk column", K(task_info));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", task_info.tenant_id_))) {
     LOG_WARN("failed to add pk column", K(task_info));
   } else if (OB_FAIL(dml.add_pk_column("turn_id", turn_id))) {
     LOG_WARN("failed to add pk column", K(task_info));
@@ -618,70 +345,27 @@ int ObLSBackupOperator::get_piece_id_(const uint64_t tenant_id, const common::Ob
 int ObLSBackupOperator::get_start_piece_id_(const uint64_t tenant_id, const uint64_t dest_id,
     const share::SCN &start_scn, common::ObISQLClient &sql_client, int64_t &start_piece_id)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const char *sql_str = "SELECT piece_id "
-                        "FROM %s "
-                        "WHERE tenant_id = %lu AND dest_id = %ld "
-                        "AND start_scn <= %ld ORDER BY piece_id DESC LIMIT 1";
-  if (OB_INVALID_ID == tenant_id || dest_id < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid args", K(ret), K(dest_id), K(tenant_id));
-  } else if (OB_FAIL(sql.append_fmt(sql_str, OB_ALL_LS_LOG_ARCHIVE_PROGRESS_TNAME,
-      tenant_id, dest_id, start_scn.get_val_for_inner_table_field()))) {
-    LOG_WARN("failed to append sql", K(ret), K(sql_str), K(tenant_id), K(dest_id));
-  } else if (OB_FAIL(get_piece_id_(tenant_id, sql, start_piece_id, sql_client))) {
-    LOG_WARN("failed to get piece id", K(ret), K(tenant_id), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObLSBackupOperator::get_end_piece_id_(const uint64_t tenant_id, const uint64_t dest_id,
     const share::SCN &checkpoint_scn, common::ObISQLClient &sql_client, int64_t &end_piece_id)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  const char *sql_str = "SELECT piece_id "
-                        "FROM %s "
-                        "WHERE tenant_id = %lu AND dest_id = %ld "
-                        "AND checkpoint_scn >= %ld ORDER BY piece_id ASC LIMIT 1";
-  if (OB_INVALID_ID == tenant_id || dest_id < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid args", K(ret), K(dest_id), K(tenant_id));
-  } else if (OB_FAIL(sql.append_fmt(sql_str, OB_ALL_LS_LOG_ARCHIVE_PROGRESS_TNAME,
-      tenant_id, dest_id, checkpoint_scn.get_val_for_inner_table_field()))) {
-    LOG_WARN("failed to append sql", K(ret), K(sql_str), K(tenant_id), K(dest_id));
-  } else if (OB_FAIL(get_piece_id_(tenant_id, sql, end_piece_id, sql_client))) {
-    LOG_WARN("failed to get piece id", K(ret), K(tenant_id), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObLSBackupOperator::construct_query_backup_sql_(const uint64_t tenant_id, const int64_t task_id, common::ObSqlString &sql)
 {
-  int ret = OB_SUCCESS;
-  const char *sql_str = "SELECT DISTINCT ls_id "
-                        "FROM %s "
-                        "WHERE tenant_id = %lu and task_id = %ld";
-  if (OB_FAIL(sql.append_fmt(sql_str, OB_ALL_BACKUP_LS_TASK_TNAME, tenant_id, task_id))) {
-    LOG_WARN("failed to append sql", K(ret), K(sql_str), K(tenant_id), K(task_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObLSBackupOperator::construct_query_archive_sql_(const uint64_t tenant_id, const int64_t dest_id,
     const int64_t start_piece_id, const int64_t end_piece_id, common::ObSqlString &sql)
 {
-  int ret = OB_SUCCESS;
-  const char *sql_str = "SELECT DISTINCT ls_id "
-                        "FROM %s "
-                        "WHERE tenant_id = %lu AND dest_id = %ld "
-                        "AND piece_id >= %ld AND piece_id <= %ld";
-  if (OB_FAIL(sql.append_fmt(sql_str, OB_ALL_LS_LOG_ARCHIVE_PROGRESS_TNAME,
-        tenant_id, dest_id, start_piece_id, end_piece_id))) {
-    LOG_WARN("failed to append sql", K(ret), K(sql_str), K(tenant_id),
-        K(dest_id), K(start_piece_id), K(end_piece_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

@@ -117,7 +117,6 @@ void fill_table_schema(ObTableSchema &table)
   table.set_table_name("table_xxx");
   table.set_expire_info("expire: modify_time > 3000s");
   table.set_zone_list(zone);
-  table.set_primary_zone(ObString::make_string("zone1"));
   table.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_HASH);
   table.get_part_option().set_part_expr (ObString::make_string("rand() mod 111"));
   table.get_part_option().set_part_num(100);
@@ -173,7 +172,6 @@ void test_ob_table_schema_get_methods(void)
   ASSERT_STREQ("expire: modify_time > 3000s", table.get_expire_info().ptr());
   ASSERT_STREQ("rand() mod 111", table.get_part_option().get_part_func_expr_str().ptr());
   ASSERT_STREQ("rand() mod 111", table.get_sub_part_option().get_part_func_expr_str().ptr());
-  ASSERT_STREQ("zone1", table.get_primary_zone().ptr());
   ASSERT_TRUE(table.is_user_table());
   ASSERT_FALSE(table.is_sys_table());
   ASSERT_FALSE(table.is_view_table());

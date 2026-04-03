@@ -18,6 +18,9 @@
 
 #include "share/ob_column_checksum_error_operator.h"
 #include "share/ob_server_struct.h"
+#include "share/storage/ob_column_checksum_error_info_table_storage.h"
+#include "share/storage/ob_sqlite_connection.h"
+#include "share/storage/ob_sqlite_connection_pool.h"
 
 namespace oceanbase
 {
@@ -25,6 +28,21 @@ namespace share
 {
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
+
+// Static storage instance
+ObColumnChecksumErrorInfoTableStorage ObColumnChecksumErrorOperator::storage_;
+
+int ObColumnChecksumErrorOperator::init()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("meta_db_pool_ not initialized", K(ret));
+  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+    LOG_WARN("failed to init storage", K(ret));
+  }
+  return ret;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -42,42 +60,15 @@ int ObColumnChecksumErrorOperator::insert_column_checksum_err_info(
     const uint64_t tenant_id,
     const ObColumnChecksumErrorInfo &info)
 {
-  return insert_column_checksum_err_info_(sql_client, tenant_id, info);
-}
-
-int ObColumnChecksumErrorOperator::insert_column_checksum_err_info_(
-    ObISQLClient &sql_client,
-    const uint64_t tenant_id,
-    const ObColumnChecksumErrorInfo &info)
-{
-    int ret = OB_SUCCESS;
-  ObDMLSqlSplicer dml;
-  int64_t affected_rows = 0;
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
-  ObDMLExecHelper exec(sql_client, meta_tenant_id);
-  if (!info.is_valid()
-      || (tenant_id != info.tenant_id_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(info));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", tenant_id))
-            || OB_FAIL(dml.add_pk_column("frozen_scn", info.frozen_scn_.get_val_for_inner_table_field()))
-            || OB_FAIL(dml.add_pk_column("index_type", info.is_global_index_))
-            || OB_FAIL(dml.add_pk_column("data_table_id", info.data_table_id_))
-            || OB_FAIL(dml.add_pk_column("index_table_id", info.index_table_id_))
-            || OB_FAIL(dml.add_pk_column("data_tablet_id", info.data_tablet_id_.id()))
-            || OB_FAIL(dml.add_pk_column("index_tablet_id", info.index_tablet_id_.id()))
-            || OB_FAIL(dml.add_column("column_id", info.column_id_))
-            || OB_FAIL(dml.add_column("data_column_ckm", info.data_column_checksum_))
-            || OB_FAIL(dml.add_column("index_column_ckm", info.index_column_checksum_))) {
-    LOG_WARN("fail to add pk column", KR(ret), K(tenant_id), K(info));
-  } else if (OB_FAIL(exec.exec_insert_update(OB_ALL_COLUMN_CHECKSUM_ERROR_INFO_TNAME, dml, affected_rows))) {
-    LOG_WARN("fail to splice exec_insert_update", KR(ret), K(meta_tenant_id), K(info));
-  } else if (affected_rows < 0 || affected_rows > 2) {
-    // one ckm_error info may insert multi-times due to verifying checksum multi-times. if re-insert, cuz we
-    // use 'on duplicate key update', the 'affected_rows' may be 0(not pk_column values unchanged) 
-    // or 2(not pk_column values changed)
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected affected rows", KR(ret), K(affected_rows));
+  int ret = OB_SUCCESS;
+  if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("storage not initialized", K(ret));
+  } else {
+    ret = storage_.insert(info);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to insert column checksum error info", K(ret), K(tenant_id), K(info));
+    }
   }
   return ret;
 }
@@ -88,19 +79,17 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info(
     const SCN &min_frozen_scn)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
-  if (OB_UNLIKELY((!is_valid_tenant_id(tenant_id))) || (!min_frozen_scn.is_valid())) {
+  if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("storage not initialized", K(ret));
+  } else if (OB_UNLIKELY((!is_valid_tenant_id(tenant_id))) || (!min_frozen_scn.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(min_frozen_scn));
-  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = '%lu' AND frozen_scn < %lu",
-             OB_ALL_COLUMN_CHECKSUM_ERROR_INFO_TNAME, tenant_id, min_frozen_scn.get_val_for_inner_table_field()))) {
-    LOG_WARN("fail to assign sql", KR(ret), K(tenant_id), K(min_frozen_scn));
-  } else if (OB_FAIL(sql_client.write(meta_tenant_id, sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to execute sql", KR(ret), K(meta_tenant_id), K(sql));
   } else {
-    LOG_INFO("succ to delete column checksum error info", K(tenant_id), K(min_frozen_scn), K(affected_rows));
+    ret = storage_.delete_expired(tenant_id, min_frozen_scn, INT64_MAX);
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to delete expired column checksum error info", K(ret), K(tenant_id), K(min_frozen_scn));
+    }
   }
   return ret;
 }
@@ -111,19 +100,30 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info_by_scn(
     const int64_t compaction_scn)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
-  if (OB_UNLIKELY((!is_valid_tenant_id(tenant_id))) || compaction_scn <= 0) {
+  if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("storage not initialized", K(ret));
+  } else if (OB_UNLIKELY((!is_valid_tenant_id(tenant_id))) || compaction_scn <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(compaction_scn));
-  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = '%lu' AND frozen_scn = %lu",
-             OB_ALL_COLUMN_CHECKSUM_ERROR_INFO_TNAME, tenant_id, compaction_scn))) {
-    LOG_WARN("fail to assign sql", KR(ret), K(tenant_id), K(compaction_scn));
-  } else if (OB_FAIL(sql_client.write(meta_tenant_id, sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to execute sql", KR(ret), K(meta_tenant_id), K(sql));
   } else {
-    LOG_INFO("succ to delete column checksum error info", K(tenant_id), K(compaction_scn), K(affected_rows));
+    // Use SQLite storage - delete by exact frozen_scn
+    const char *delete_sql =
+      "DELETE FROM __all_column_checksum_error_info "
+      "WHERE frozen_scn = ?;";
+
+    auto binder = [&](ObSQLiteBinder &b) -> int {
+      b.bind_int64(compaction_scn);
+      return OB_SUCCESS;
+    };
+
+    ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
+    if (!guard) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to acquire connection", K(ret));
+    } else if (OB_FAIL(guard->execute(delete_sql, binder))) {
+      LOG_WARN("failed to execute delete", K(ret), K(tenant_id), K(compaction_scn));
+    }
   }
   return ret;
 }
@@ -132,33 +132,37 @@ int ObColumnChecksumErrorOperator::check_exist_ckm_error_table(const uint64_t te
 {
   int ret = OB_SUCCESS;
   exist = false;
-  ObSqlString sql;
   if (OB_UNLIKELY(0 == tenant_id || compaction_scn <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(compaction_scn));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret));
+  } else if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("storage not initialized", K(ret));
   } else {
-    const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
-    int64_t exist_cnt = 0;
-    ObMySQLResult *result = NULL;
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      if (OB_FAIL(sql.append_fmt(
-          "SELECT count(*) > 0 as c FROM %s WHERE tenant_id = '%lu' AND frozen_scn = %ld",
-          OB_ALL_COLUMN_CHECKSUM_ERROR_INFO_TNAME, tenant_id, compaction_scn))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(tenant_id), K(compaction_scn));
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, meta_tenant_id, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(meta_tenant_id), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get result", KR(ret), K(meta_tenant_id), K(sql));
-      } else if (OB_FAIL(result->get_int("c", exist_cnt))) {
-        LOG_WARN("failed to get int", KR(ret), K(compaction_scn));
-      } else if (exist_cnt > 0) {
-        LOG_INFO("exist ckm error info", KR(ret), K(exist_cnt));
-        exist = true;
-      }
+    const char *select_sql =
+      "SELECT COUNT(*) as cnt FROM __all_column_checksum_error_info "
+      "WHERE frozen_scn = ?;";
+
+    auto binder = [&](ObSQLiteBinder &b) -> int {
+      b.bind_int64(compaction_scn);
+      return OB_SUCCESS;
+    };
+
+    int64_t count = 0;
+    auto row_processor = [&](ObSQLiteRowReader &reader) -> int {
+      count = reader.get_int64();
+      return OB_SUCCESS;
+    };
+
+    ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
+    if (!guard) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to acquire connection", K(ret));
+    } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
+      LOG_WARN("failed to query", K(ret), K(tenant_id), K(compaction_scn));
+    } else if (count > 0) {
+      exist = true;
+      LOG_INFO("exist ckm error info", K(count), K(tenant_id), K(compaction_scn));
     }
   }
   return ret;

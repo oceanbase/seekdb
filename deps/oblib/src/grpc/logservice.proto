@@ -1,0 +1,43 @@
+syntax = "proto3";
+package logservice;
+
+service LogService {
+  // Unary RPC: fetch log (GroupLogEntry)
+  rpc fetch_log(FetchLogReq) returns (FetchLogRes);
+
+  // Unary RPC: fetch missing log
+  rpc fetch_missing_log(FetchMissingLogReq) returns (FetchMissingLogRes);
+
+  // Unary RPC: fetch raw log
+  rpc fetch_raw_log(FetchRawLogReq) returns (FetchRawLogRes);
+}
+
+message FetchLogReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchLogRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchMissingLogReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchMissingLogRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchRawLogReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message FetchRawLogRes {
+  bytes buf = 1;
+  uint64 size = 2;
+}

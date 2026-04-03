@@ -21,6 +21,7 @@
 #include "lib/mysqlclient/ob_isql_client.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
+#include "share/storage/ob_column_checksum_error_info_table_storage.h"
 
 namespace oceanbase
 {
@@ -65,6 +66,8 @@ public:
 class ObColumnChecksumErrorOperator
 {
 public:
+  // Initialize SQLite storage (called once at startup)
+  static int init();
   static int insert_column_checksum_err_info(
       common::ObISQLClient &sql_client,
       const uint64_t tenant_id,
@@ -84,10 +87,7 @@ public:
                                           bool &exist);
 
 private:
-  static int insert_column_checksum_err_info_(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
-      const ObColumnChecksumErrorInfo &info);
+  static ObColumnChecksumErrorInfoTableStorage storage_;
 };
 
 } // end namespace share

@@ -40,19 +40,13 @@ namespace obrpc
 {
 class ObSrvRpcProxy;
 class ObCommonRpcProxy;
-struct ObAdminSwitchReplicaRoleArg;
-struct ObAdminDropReplicaArg;
 struct ObAdminChangeReplicaArg;
 struct ObAdminMigrateReplicaArg;
 struct ObServerZoneArg;
-struct ObAdminReportReplicaArg;
-struct ObAdminRecycleReplicaArg;
 struct ObAdminMergeArg;
 struct ObAdminClearRoottableArg;
 struct ObAdminRefreshSchemaArg;
 struct ObAdminSetConfigArg;
-struct ObAdminClearLocationCacheArg;
-struct ObRunJobArg;
 struct ObAdminFlushCacheArg;
 struct ObFlushCacheArg;
 struct Bool;
@@ -70,15 +64,9 @@ class ObSchemaGetterGuard;
 
 namespace rootserver
 {
-class ObZoneManager;
-class ObServerManager;
 class ObDDLService;
-class ObUnitManager;
-class ObRootInspection;
-class ObRootBalancer;
 class ObRootService;
 class ObSchemaSplitExecutor;
-class ObUpgradeStorageFormatVersionExecutor;
 class ObCreateInnerSchemaExecutor;
 class ObRsStatus;
 class ObRsGtsManager;
@@ -95,10 +83,10 @@ const static char * const NOT_ALLOW_ENABLE_ONE_PHASE_COMMIT = "enable_one_phase_
 struct ObSystemAdminCtx
 {
   ObSystemAdminCtx()
-      : rs_status_(NULL), rpc_proxy_(NULL), sql_proxy_(NULL), server_mgr_(NULL),
-      zone_mgr_(NULL), schema_service_(NULL),
-      ddl_service_(NULL), config_mgr_(NULL), unit_mgr_(NULL), root_inspection_(NULL),
-      root_service_(NULL), root_balancer_(NULL), upgrade_storage_format_executor_(nullptr),
+      : rs_status_(NULL), rpc_proxy_(NULL), sql_proxy_(NULL),
+      schema_service_(NULL),
+      ddl_service_(NULL), config_mgr_(NULL),
+      root_service_(NULL),
       create_inner_schema_executor_(nullptr), inited_(false)
   {}
 
@@ -107,16 +95,10 @@ struct ObSystemAdminCtx
   ObRsStatus *rs_status_;
   obrpc::ObSrvRpcProxy *rpc_proxy_;
   common::ObMySQLProxy *sql_proxy_;
-  ObServerManager *server_mgr_;
-  ObZoneManager *zone_mgr_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   ObDDLService *ddl_service_;
   common::ObConfigManager *config_mgr_;
-  ObUnitManager *unit_mgr_;
-  ObRootInspection *root_inspection_;
   ObRootService *root_service_;
-  ObRootBalancer *root_balancer_;
-  ObUpgradeStorageFormatVersionExecutor *upgrade_storage_format_executor_;
   ObCreateInnerSchemaExecutor *create_inner_schema_executor_;
   bool inited_;
 };
@@ -136,27 +118,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSystemAdminUtil);
 };
 
-class ObAdminSwitchReplicaRole : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminSwitchReplicaRole(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminSwitchReplicaRole() {}
-
-  int execute(const obrpc::ObAdminSwitchReplicaRoleArg &arg);
-
-private:
-  static const int64_t TENANT_BUCKET_NUM = 1000;
-
-  static int alloc_tenant_id_set(common::hash::ObHashSet<uint64_t> &tenant_id_set);
-  template<typename T>
-  static int convert_set_to_array(const common::hash::ObHashSet<T> &set,
-      ObArray<T> &array);
-  int get_tenants_of_zone(const common::ObZone &zone,
-      common::hash::ObHashSet<uint64_t> &tenant_id_set);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminSwitchReplicaRole);
-};
-
 class ObAdminCallServer : public ObSystemAdminUtil
 {
 public:
@@ -169,45 +130,6 @@ public:
   virtual int call_server(const common::ObAddr &server) = 0;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminCallServer);
-};
-
-class ObAdminReportReplica : public ObAdminCallServer
-{
-public:
-  explicit ObAdminReportReplica(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminReportReplica() {}
-
-  int execute(const obrpc::ObAdminReportReplicaArg &arg);
-
-  virtual int call_server(const common::ObAddr &server);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminReportReplica);
-};
-
-class ObAdminRecycleReplica : public ObAdminCallServer
-{
-public:
-  explicit ObAdminRecycleReplica(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminRecycleReplica() {}
-
-  int execute(const obrpc::ObAdminRecycleReplicaArg &arg);
-
-  virtual int call_server(const common::ObAddr &server);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRecycleReplica);
-};
-
-class ObAdminClearLocationCache : public ObAdminCallServer
-{
-public:
-  explicit ObAdminClearLocationCache(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminClearLocationCache() {}
-
-  int execute(const obrpc::ObAdminClearLocationCacheArg &arg);
-
-  virtual int call_server(const common::ObAddr &server);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminClearLocationCache);
 };
 
 class ObAdminRefreshMemStat : public ObAdminCallServer
@@ -234,39 +156,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminWashMemFragmentation);
 };
 
-class ObAdminReloadUnit : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminReloadUnit(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminReloadUnit() {}
-
-  int execute();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminReloadUnit);
-};
-
-class ObAdminReloadServer : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminReloadServer(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminReloadServer() {}
-
-  int execute();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminReloadServer);
-};
-
-class ObAdminReloadZone : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminReloadZone(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminReloadZone() {}
-
-  int execute();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminReloadZone);
-};
-
 class ObAdminClearMergeError: public ObSystemAdminUtil
 {
 public:
@@ -276,17 +165,6 @@ public:
   int execute(const obrpc::ObAdminMergeArg &arg);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminClearMergeError);
-};
-
-class ObAdminZoneFastRecovery : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminZoneFastRecovery(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminZoneFastRecovery() {}
-
-  int execute(const obrpc::ObAdminRecoveryArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminZoneFastRecovery);
 };
 
 class ObAdminMerge : public ObSystemAdminUtil
@@ -344,64 +222,11 @@ private:
 
 private:
   int verify_config(obrpc::ObAdminSetConfigArg &arg);
-  int update_config(obrpc::ObAdminSetConfigArg &arg, int64_t new_version);
-  int inner_update_tenant_config_for_compatible_(
-      const uint64_t tenant_id,
-      const obrpc::ObAdminSetConfigItem *item,
-      const char *svr_ip, const int64_t svr_port,
-      const char *table_name,
-      share::ObDMLSqlSplicer &dml,
-      const int64_t new_version);
-  int inner_update_tenant_config_for_others_(
-      const uint64_t tenant_id,
-      const char *svr_ip,
-      const uint64_t svr_port,
-      const obrpc::ObAdminSetConfigItem &item,
-      const char *table_name,
-      share::ObDMLSqlSplicer &dml,
-      const uint64_t new_version);
-  int update_sys_config_(
-      const obrpc::ObAdminSetConfigItem &item,
-      const char *svr_ip,
-      const int64_t svr_port,
-      const int64_t new_version);
-  int build_dml_before_update_(
-      const uint64_t tenant_id,
-      const obrpc::ObAdminSetConfigItem &item,
-      const ObConfigItem &config_item,
-      const char *svr_ip,
-      const int64_t svr_port,
-      const char *table_name,
-      const int64_t new_version,
-      share::ObDMLSqlSplicer &dml);
-  int check_with_lock_before_update_(
-      ObMySQLTransaction &trans,
-      const char *svr_ip,
-      const int64_t svr_port,
-      const uint64_t tenant_id,
-      const uint64_t exec_tenant_id,
-      const obrpc::ObAdminSetConfigItem &item,
-      const char *table_name,
-      const int64_t new_version);
-  static int broadcast_config_version_(const obrpc::ObBroadcastConfigVersionArg &broadcast_arg);
-  int construct_arg_and_broadcast_global_config_version_(const int64_t new_version);
+  int update_config(obrpc::ObAdminSetConfigArg &arg);
+  int update_sys_config_(const obrpc::ObAdminSetConfigItem &item);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminSetConfig);
-};
-
-class ObAdminUpgradeVirtualSchema : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminUpgradeVirtualSchema(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminUpgradeVirtualSchema() {}
-
-  int execute();
-  int execute(const uint64_t tenant_id, int64_t &upgrade_cnt);
-private:
-  int upgrade_(const uint64_t tenant_id, share::schema::ObTableSchema &table);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminUpgradeVirtualSchema);
 };
 
 class ObAdminUpgradeCmd : public ObSystemAdminUtil
@@ -428,7 +253,6 @@ private:
 
 #define OB_INNER_JOB_DEF(JOB)                                \
     JOB(INVALID_INNER_JOB, = 0)                              \
-    JOB(CHECK_PARTITION_TABLE,)                              \
     JOB(ROOT_INSPECTION,)                                    \
     JOB(UPGRADE_STORAGE_FORMAT_VERSION,)                     \
     JOB(STOP_UPGRADE_STORAGE_FORMAT_VERSION,)                \
@@ -437,66 +261,6 @@ private:
     JOB(MAX_INNER_JOB,)
 
 DECLARE_ENUM(ObInnerJob, inner_job, OB_INNER_JOB_DEF);
-
-class ObAdminRunJob : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminRunJob(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminRunJob() {}
-
-  int execute(const obrpc::ObRunJobArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRunJob);
-};
-
-class ObAdminCheckPartitionTable : public ObAdminCallServer
-{
-public:
-  explicit ObAdminCheckPartitionTable(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminCheckPartitionTable() {}
-
-  int execute(const obrpc::ObRunJobArg &arg);
-
-  virtual int call_server(const common::ObAddr &server);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminCheckPartitionTable);
-};
-
-class ObAdminRootInspection : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminRootInspection(const ObSystemAdminCtx &ctx) : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminRootInspection() {}
-
-  int execute(const obrpc::ObRunJobArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminRootInspection);
-};
-
-class ObAdminCreateInnerSchema : public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminCreateInnerSchema(const ObSystemAdminCtx &ctx)
-    : ObSystemAdminUtil(ctx) {}
-  virtual ~ObAdminCreateInnerSchema() {}
-
-  int execute(const obrpc::ObRunJobArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminCreateInnerSchema);
-};
-
-class ObAdminIOCalibration : public ObAdminCallServer
-{
-public:
-  explicit ObAdminIOCalibration(const ObSystemAdminCtx &ctx)
-    : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminIOCalibration() {}
-
-  int execute(const obrpc::ObRunJobArg &arg);
-  virtual int call_server(const common::ObAddr &server) override;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminIOCalibration);
-};
 
 class ObAdminRefreshIOCalibration : public ObAdminCallServer
 {
@@ -524,18 +288,6 @@ public:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTenantServerAdminUtil);
-};
-
-class ObAdminUpgradeStorageFormatVersionExecutor: public ObSystemAdminUtil
-{
-public:
-  explicit ObAdminUpgradeStorageFormatVersionExecutor(const ObSystemAdminCtx &ctx)
-      : ObSystemAdminUtil(ctx)
-  {}
-  virtual ~ObAdminUpgradeStorageFormatVersionExecutor() = default;
-  int execute(const obrpc::ObRunJobArg &arg);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminUpgradeStorageFormatVersionExecutor);
 };
 
 class ObAdminFlushCache : public ObTenantServerAdminUtil

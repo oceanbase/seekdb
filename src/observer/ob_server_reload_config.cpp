@@ -29,7 +29,6 @@
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/compaction/ob_tenant_ls_merge_scheduler.h"
 #include "share/compaction/ob_shared_storage_compaction_util.h"
-#include "storage/shared_storage/ob_disk_space_manager.h"
 #endif
 #include "lib/stat/ob_diagnostic_info_container.h"
 #include "rpc/obrpc/ob_rpc_net_handler.h"
@@ -91,7 +90,6 @@ int ObServerReloadConfig::operator()()
 {
   int tmp_ret = OB_SUCCESS;
   int ret = tmp_ret;
-  const bool is_arbitration_mode = OBSERVER.is_arbitration_mode();
 
   if (!gctx_.is_inited()) {
     ret = tmp_ret = OB_INNER_STAT_ERROR;
@@ -99,12 +97,6 @@ int ObServerReloadConfig::operator()()
   } else {
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
       LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
-    }
-    if (OB_TMP_FAIL(gctx_.root_service_->reload_config())) {
-      LOG_WARN("root_service_ reload_config failed", K(tmp_ret));
-    }
-    if (OB_TMP_FAIL(gctx_.location_service_->reload_config())) {
-      LOG_WARN("location service reload config failed", KR(tmp_ret));
     }
     if (OB_TMP_FAIL(ObClusterVersion::get_instance().reload_config())) {
       LOG_WARN("cluster version reload config failed", K(tmp_ret));
@@ -156,7 +148,6 @@ int ObServerReloadConfig::operator()()
     ObMallocSampleLimiter::set_interval(GCONF._max_malloc_sample_interval,
                                      GCONF._min_malloc_sample_interval);
     enable_memleak_light_backtrace(GCONF._enable_memleak_light_backtrace);
-    if (!is_arbitration_mode) {
       ObIOConfig io_config;
       int64_t cpu_cnt = GCONF.cpu_count;
       if (cpu_cnt <= 0) {
@@ -169,8 +160,7 @@ int ObServerReloadConfig::operator()()
       io_config.data_storage_io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
       io_config.data_storage_warning_tolerance_time_ = GCONF.data_storage_warning_tolerance_time;
       io_config.data_storage_error_tolerance_time_ = GCONF.data_storage_error_tolerance_time;
-      if (!is_arbitration_mode
-          && OB_TMP_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
+      if (OB_TMP_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
         LOG_WARN("reload io manager config fail, ", K(tmp_ret));
       }
 
@@ -179,7 +169,6 @@ int ObServerReloadConfig::operator()()
 
       reload_tenant_freezer_config_();
       reload_tenant_scheduler_config_();
-    }
   }
   {
     ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
@@ -199,13 +188,11 @@ int ObServerReloadConfig::operator()()
   }
   lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
 
-  if (!is_arbitration_mode) {
     // Refresh cluster_name_hash for non arbitration mode
     if (FAILEDx(set_cluster_name_hash(GCONF.cluster.str()))) {
       LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", GCONF.cluster.str(),
                                                 "cluster_name_len", strlen(GCONF.cluster.str()));
     }
-  }
 
   // reset mem leak
   {
@@ -268,14 +255,12 @@ int ObServerReloadConfig::operator()()
     obrpc::set_rpc_checksum_check_level(new_level);
   }
 
-  if (!is_arbitration_mode) {
     auto new_upgrade_stage = obrpc::get_upgrade_stage(GCONF._upgrade_stage.str());
     auto orig_upgrade_stage = GCTX.get_upgrade_stage();
     if (new_upgrade_stage != orig_upgrade_stage) {
       LOG_INFO("_upgrade_stage changed", K(new_upgrade_stage), K(orig_upgrade_stage));
     }
     (void)GCTX.set_upgrade_stage(new_upgrade_stage);
-  }
 
   // syslog bandwidth limitation
   share::ObTaskController::get().set_log_rate_limit(
@@ -285,9 +270,7 @@ int ObServerReloadConfig::operator()()
 
   lib::g_runtime_enabled = true;
 
-  if (!is_arbitration_mode) {
     common::ObKVGlobalCache::get_instance().reload_wash_interval();
-    int tmp_ret = OB_SUCCESS;
     int64_t data_disk_size = 0;
     int64_t data_disk_percentage = 0;
     int64_t reserved_size = 0;
@@ -303,7 +286,6 @@ int ObServerReloadConfig::operator()()
       LOG_WARN("fail to resize file", KR(tmp_ret),
           K(data_disk_size), K(data_disk_percentage), K(reserved_size));
     }
-  }
 
   {
     ObSysVariables::set_value("datadir", GCONF.data_dir);

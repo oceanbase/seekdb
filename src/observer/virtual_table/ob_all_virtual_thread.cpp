@@ -116,20 +116,6 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
           const uint64_t col_id = output_column_ids_.at(i);
           ObObj *cells = cur_row_.cells_;
           switch (col_id) {
-            case SVR_IP: {
-              cells[i].set_varchar(ip_buf_);
-              cells[i].set_collation_type(
-                  ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              break;
-            }
-            case SVR_PORT: {
-              cells[i].set_int(GCONF.self_addr_.get_port());
-              break;
-            }
-            case TENANT_ID: {
-              cells[i].set_int(0 == tenant_id ? OB_SERVER_TENANT_ID : tenant_id);
-              break;
-            }
             case TID: {
               cells[i].set_int(tid);
               break;

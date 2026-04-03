@@ -42,10 +42,7 @@ public:
   virtual void reset();
 private:
   enum TENANT_SCHEDULER_RUNNING_JOB_COLUMN {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    OWNER,
+        OWNER = common::OB_APP_MIN_COLUMN_ID,
     JOB_NAME,
     JOB_SUBNAME,
     JOB_STYLE,

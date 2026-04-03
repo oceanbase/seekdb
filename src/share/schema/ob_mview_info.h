@@ -98,7 +98,7 @@ public:
                                    uint64_t last_mview_id, ObIArray<uint64_t> &mview_ids,
                                    int64_t limit = -1);
   static int update_major_refresh_mview_scn(ObISQLClient &sql_client, const uint64_t tenant_id,
-                                            const share::SCN &scn);
+                                            const SCN &scn);
   static int get_min_major_refresh_mview_scn(ObISQLClient &sql_client, const uint64_t tenant_id,
                                              int64_t snapshot_for_tx, share::SCN &scn);
   static int contains_major_refresh_mview_in_creation(ObISQLClient &sql_client,

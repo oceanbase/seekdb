@@ -2513,55 +2513,6 @@ int ObTabletTableStore::build_ha_major_tables_(
   return ret;
 }
 
-int ObTabletTableStore::replace_transfer_minor_sstables_(
-    common::ObArenaAllocator &allocator,
-    const ObTablet &tablet,
-    const ObBatchUpdateTableStoreParam &param,
-    const ObTabletTableStore &old_store)
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObITable *> new_minor_tables;
-  ObArray<ObITable *> need_add_minor_tables;
-  ObSEArray<ObITable *, common::MAX_SSTABLE_CNT_IN_STORAGE> old_minor_tables;
-  const int64_t inc_pos = 0;
-  ObArray<ObITable *> cut_minor_tables;
-
-  if (OB_FAIL(param.tables_handle_.get_all_minor_sstables(need_add_minor_tables))) {
-    LOG_WARN("failed to add need add minor tables", K(ret), K(param));
-  } else if (OB_FAIL(ObTableStoreUtil::sort_minor_tables(need_add_minor_tables))) {
-    LOG_WARN("failed to sort minor tables", K(ret));
-  } else if (OB_FAIL(old_store.minor_tables_.get_all_tables(old_minor_tables))) {
-    LOG_WARN("failed to get old minor tables", K(ret), K(old_store));
-  } else if (OB_FAIL(check_minor_tables_(old_minor_tables, true/*no remote table*/))) {
-    LOG_WARN("failed to check old store minor sstables", K(ret), K(old_minor_tables));
-  } else if (OB_FAIL(combine_transfer_minor_sstables_(allocator, tablet, old_minor_tables,
-      need_add_minor_tables, param, new_minor_tables))) {
-    LOG_WARN("failed to combine transfer minor sstables", K(ret), K(old_store), K(param));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (new_minor_tables.empty()) {
-    LOG_INFO("minor tables is empty, skip it", K(ret), K(new_minor_tables));
-  } else if (OB_FAIL(ObTableStoreUtil::sort_minor_tables(new_minor_tables))) {
-    LOG_WARN("failed to sort minor tables", K(ret));
-  } else if (OB_FAIL(cut_ha_sstable_scn_range_(allocator, new_minor_tables, cut_minor_tables))) {
-    LOG_WARN("failed to cut ha sstable log ts range", K(ret), K(old_store), K(param));
-  } else if (OB_FAIL(check_minor_tables_(cut_minor_tables))) {
-    LOG_WARN("minor tables is not continue", K(ret), K(param), K(new_minor_tables), K(old_store));
-  } else if (tablet.get_tablet_meta().ha_status_.is_data_status_complete()
-      && cut_minor_tables.at(cut_minor_tables.count() - 1)->get_end_scn() != tablet.get_tablet_meta().clog_checkpoint_scn_) {
-    // When the tablet's is_data_status_complete=false, it means that the data of the tablet has not been copied during the migration process.
-    // In this scenario, no check is allowed.
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet meta is not match with minor sstables", K(ret), K(cut_minor_tables), K(param), K(tablet.get_tablet_meta()));
-  } else if (OB_FAIL(minor_tables_.init(allocator, cut_minor_tables, inc_pos))) {
-    LOG_WARN("failed to init minor_tables", K(ret));
-  } else {
-    LOG_INFO("succeed build transfer minor sstables", K(old_store), K(cut_minor_tables));
-  }
-  return ret;
-}
-
 //migration will add tables with ddl and minor tables. this func will copy old minor
 //tables when add ddl tables with param.update_ddl_sstable_ = true.
 //new_minor_tables is empty
@@ -2596,22 +2547,14 @@ int ObTabletTableStore::replace_ha_minor_sstables_(
       clog_checkpoint_scn, old_minor_tables, need_add_minor_tables, new_minor_tables))) {
     LOG_WARN("failed to combin ha minor sstables", K(ret), K(old_store), K(param));
   } else if (new_minor_tables.empty()) { // no minor tables
-    if (tablet.get_tablet_meta().has_transfer_table()
-        && tablet.get_tablet_meta().transfer_info_.transfer_start_scn_ != clog_checkpoint_scn) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet meta is not match with minor sstables", K(ret), K(new_minor_tables), K(param), K(old_store));
-    } else {
       LOG_INFO("minor tables is empty, skip it", K(ret), K(new_minor_tables));
-    }
   } else if (OB_FAIL(ObTableStoreUtil::sort_minor_tables(new_minor_tables))) {
     LOG_WARN("failed to sort minor tables", K(ret));
   } else if (OB_FAIL(cut_ha_sstable_scn_range_(allocator, new_minor_tables, cut_minor_tables))) {
     LOG_WARN("failed to cut ha sstable log ts range", K(ret), K(old_store), K(param));
   } else if (OB_FAIL(check_minor_tables_(cut_minor_tables))) {
     LOG_WARN("minor tables is not continue", K(ret), K(param), K(cut_minor_tables), K(old_store));
-  } else if (cut_minor_tables.at(cut_minor_tables.count() - 1)->get_end_scn() != clog_checkpoint_scn
-      || (tablet.get_tablet_meta().has_transfer_table()
-          && tablet.get_tablet_meta().transfer_info_.transfer_start_scn_ != cut_minor_tables.at(0)->get_start_scn())) {
+  } else if (cut_minor_tables.at(cut_minor_tables.count() - 1)->get_end_scn() != clog_checkpoint_scn) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet meta is not match with minor sstables", K(ret), K(cut_minor_tables), K(param), K(old_store), "tablet_meta", tablet.get_tablet_meta());
   } else if (OB_FAIL(minor_tables_.init(allocator, cut_minor_tables, inc_pos))) {
@@ -3012,60 +2955,6 @@ int ObTabletTableStore::combine_ha_multi_version_sstables_(
   return ret;
 }
 
-int ObTabletTableStore::combine_transfer_minor_sstables_(
-    common::ObArenaAllocator &allocator,
-    const ObTablet &tablet,
-    common::ObIArray<ObITable *> &old_store_minor_sstables,
-    common::ObIArray<ObITable *> &need_add_minor_sstables,
-    const ObBatchUpdateTableStoreParam &param,
-    common::ObIArray<ObITable *> &new_minor_sstables)
-{
-  int ret = OB_SUCCESS;
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < need_add_minor_sstables.count(); ++i) {
-    ObITable *table = need_add_minor_sstables.at(i);
-    if (OB_ISNULL(table) || !table->is_minor_sstable()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("new table is null or table type is unexpected", K(ret), KPC(table));
-    } else if (table->get_start_scn() >= tablet.get_tablet_meta().transfer_info_.transfer_start_scn_) {
-      //do nothing
-    } else if (table->get_end_scn() <= tablet.get_tablet_meta().transfer_info_.transfer_start_scn_) {
-      if (OB_FAIL(new_minor_sstables.push_back(table))) {
-        LOG_WARN("failed to push table into array", K(ret), KPC(table));
-      }
-    } else {
-      ObSSTable *old_sstable = static_cast<ObSSTable *>(table);
-      ObSSTable *sstable = NULL;
-      if (OB_FAIL(old_sstable->deep_copy(allocator, sstable))) {
-        LOG_WARN("failed to copy sstable", K(ret), KP(old_sstable));
-      } else {
-        ObScnRange new_scn_range;
-        ObScnRange original_scn_range = sstable->get_scn_range();
-        new_scn_range.start_scn_ = original_scn_range.start_scn_;
-        new_scn_range.end_scn_ = tablet.get_tablet_meta().transfer_info_.transfer_start_scn_;
-        sstable->set_scn_range(new_scn_range);
-        FLOG_INFO("cut ha sstable log ts range", KPC(sstable), K(new_scn_range), K(original_scn_range), K(param));
-
-        if (OB_FAIL(new_minor_sstables.push_back(sstable))) {
-          LOG_WARN("failed to push table into array", K(ret), KPC(sstable));
-        }
-      }
-    }
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < old_store_minor_sstables.count(); ++i) {
-    ObITable *table = old_store_minor_sstables.at(i);
-    if (OB_ISNULL(table) || !table->is_minor_sstable()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table is null or table type is unexpected", K(ret), KPC(table));
-    } else if (OB_FAIL(new_minor_sstables.push_back(table))) {
-      LOG_WARN("failed to push minor table into array", K(ret), K(old_store_minor_sstables), KPC(table));
-    }
-  }
-
-  return ret;
-}
-
 // restore replace remote sstables.
 // All remote sstables must be replaced with local sstables at once.
 int ObTabletTableStore::replace_ha_remote_sstables_(
@@ -3156,11 +3045,7 @@ int ObTabletTableStore::build_ha_minor_tables_(
     const int64_t inc_base_snapshot_version)
 {
   int ret = OB_SUCCESS;
-  if (param.is_transfer_replace_) {
-    if (OB_FAIL(replace_transfer_minor_sstables_(allocator, tablet, param, old_store))) {
-      LOG_WARN("failed to replace transfer minor tables", K(ret), K(param), K(old_store));
-    }
-  } else if (param.need_replace_remote_sstable_) {
+  if (param.need_replace_remote_sstable_) {
     if (OB_FAIL(replace_ha_remote_minor_tables_(allocator, tablet, param, old_store, inc_base_snapshot_version))) {
       LOG_WARN("failed to replace ha remote minor tables", K(ret), K(param), K(old_store));
     }

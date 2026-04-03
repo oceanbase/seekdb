@@ -20,6 +20,11 @@
 #ifdef __APPLE__
 #include <ifaddrs.h>
 #include <net/if_dl.h>
+#elif defined(__ANDROID__)
+#include <ifaddrs.h>
+#include <linux/if_packet.h>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/engine/ob_exec_context.h"
@@ -107,6 +112,47 @@ int ObUUIDNode::init()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error. can not get mac address", K(ret), K(errno));
     } else {
+      is_inited_ = true;
+    }
+  }
+#elif defined(__ANDROID__)
+  // Android: Use getifaddrs with AF_PACKET + sockaddr_ll
+  {
+    struct ifaddrs *ifaddr = NULL;
+    bool mac_addr_found = false;
+    if (getifaddrs(&ifaddr) == -1) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("getifaddrs failed", K(ret), K(errno));
+    } else {
+      for (struct ifaddrs *ifa = ifaddr; ifa != NULL && !mac_addr_found; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) continue;
+        if (ifa->ifa_addr->sa_family != AF_PACKET) continue;
+        if (ifa->ifa_flags & IFF_LOOPBACK) continue;
+        struct sockaddr_ll *sll = (struct sockaddr_ll *)ifa->ifa_addr;
+        if (sll->sll_halen == 6) {
+          MEMCPY(mac_addr_, sll->sll_addr, 6);
+          mac_addr_found = true;
+        }
+      }
+      freeifaddrs(ifaddr);
+    }
+    if (OB_SUCC(ret) && !mac_addr_found) {
+      // RFC 4122 section 4.5: when MAC address is unavailable (Android sandbox),
+      // use random bytes with the multicast bit set as the node ID.
+      int fd = open("/dev/urandom", O_RDONLY);
+      if (fd >= 0 && read(fd, mac_addr_, 6) == 6) {
+        mac_addr_[0] |= 0x01;  // set multicast bit
+        mac_addr_found = true;
+        LOG_INFO("using random UUID node ID (no MAC available on Android)");
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to generate random UUID node ID", K(ret), K(errno));
+      }
+      if (fd >= 0) {
+        close(fd);
+      }
+    }
+    if (OB_SUCC(ret) && mac_addr_found) {
       is_inited_ = true;
     }
   }

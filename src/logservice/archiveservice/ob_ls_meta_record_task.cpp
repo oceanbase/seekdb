@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "ob_ls_meta_record_task.h"
+#include "observer/ob_server_struct.h"
+#include "src/logservice/data_dictionary/ob_data_dict_meta_info.h"
+
+namespace oceanbase
+{
+namespace archive
+{
+// ================== ObArchiveLSSchemaMeta ================== //
+int64_t ObArchiveLSSchemaMeta::get_record_interval()
+{
+  // 30 min
+  static const int64_t LS_SCHEMA_RECORD_INTERVAL = 30L * 60 * 1000 * 1000 * 1000;
+  return LS_SCHEMA_RECORD_INTERVAL;
+}
+
+int ObArchiveLSSchemaMeta::get_ls_array(common::ObIArray<share::ObLSID> &array)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(array.push_back(share::ObLSID(share::ObLSID::SYS_LS_ID)))) {
+    ARCHIVE_LOG(WARN, "get ks array failed");
+  }
+  return ret;
+}
+
+int ObArchiveLSSchemaMeta::get_data(const share::ObLSID &id,
+    const share::SCN &base_scn,
+    char *data,
+    const int64_t data_size,
+    int64_t &real_size,
+    share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  // TODO
+  //UNUSED(id);
+  //ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  //const uint64_t tenant_id = MTL_ID();
+  //if (OB_ISNULL(sql_proxy)) {
+  //  ret = OB_ERR_UNEXPECTED;
+  //  ARCHIVE_LOG(WARN, "sql proxy is null, unexpected", KR(ret), K(sql_proxy), K(tenant_id));
+  //} else {
+  //  datadict::MetaInfoQueryHelper helper(*sql_proxy, tenant_id);
+  //  if (OB_FAIL(helper.get_data(base_scn, data, data_size, real_size, scn))) {
+  //    ARCHIVE_LOG(WARN, "MetaInfoQueryHelper get data failed", KR(ret), K(tenant_id), K(base_scn), K(real_size));
+  //  }
+  //}
+  return ret;
+}
+} // namespace archive
+} // namespace oceanbase

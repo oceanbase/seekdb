@@ -19,6 +19,7 @@
 
 #include "lib/utility/ob_print_kv.h"
 #include "lib/profile/ob_trace_id.h"
+#include "rootserver/ob_rs_event_history_table_operator.h"  // ROOTSERVICE_EVENT_ADD
 // __all_rootservice_event_history 'value' column length is only 256 which is not enough to hold
 // cluster event info. So use 'extra_info' column instead whose length is 512.
 #define CLUSTER_EVENT_ADD(level, error_code, event, args...) \

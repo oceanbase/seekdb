@@ -23,11 +23,13 @@
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "rootserver/ob_tenant_info_loader.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "share/ob_io_device_helper.h"
 #include "storage/high_availability/ob_storage_ha_dag.h"
+#include "storage/high_availability/ob_restore_helper.h"
+#include "storage/high_availability/ob_storage_ha_struct.h"
+#include "share/ob_zone_merge_info.h"
 
 using namespace oceanbase::share;
 
@@ -84,7 +86,7 @@ int ObStorageHAUtils::fetch_src_tablet_meta_info_(const uint64_t tenant_id, cons
   int ret = OB_SUCCESS;
   ObTabletTableOperator op;
   ObTabletReplica tablet_replica;
-  if (OB_FAIL(op.init(share::OBCG_STORAGE, sql_client))) {
+  if (OB_FAIL(op.init(GCTX.meta_db_pool_))) {
     LOG_WARN("failed to init operator", K(ret));
   } else if (OB_FAIL(op.get(tenant_id, tablet_id, ls_id, src_addr, tablet_replica))) {
     LOG_WARN("failed to get tablet meta info", K(ret), K(tenant_id), K(tablet_id), K(ls_id), K(src_addr));
@@ -174,44 +176,9 @@ int ObStorageHAUtils::check_transfer_ls_can_rebuild(
     bool &need_rebuild)
 {
   int ret = OB_SUCCESS;
-  SCN readable_scn = SCN::base_scn();
   need_rebuild = false;
-  if (!replay_scn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument invalid", K(ret), K(replay_scn));
-  } else if (MTL_TENANT_ROLE_CACHE_IS_INVALID()) {
-    ret = OB_NEED_RETRY;
-    LOG_WARN("tenant role is invalid, need retry", KR(ret), K(replay_scn));
-  } else if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
-    need_rebuild = true;
-  } else if (OB_FAIL(get_readable_scn_(readable_scn))) {
-    LOG_WARN("failed to get readable scn", K(ret), K(replay_scn));
-  } else if (readable_scn >= replay_scn) {
-    need_rebuild = true;
-  } else {
-    need_rebuild = false;
-  }
   return ret;
 }
-
-
-int ObStorageHAUtils::get_readable_scn_(share::SCN &readable_scn)
-{
-  int ret = OB_SUCCESS;
-  readable_scn.set_base();
-  rootserver::ObTenantInfoLoader *info = MTL(rootserver::ObTenantInfoLoader*);
-  if (OB_ISNULL(info)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant info is null", K(ret), KP(info));
-  } else if (OB_FAIL(info->get_readable_scn(readable_scn))) {
-    LOG_WARN("failed to get readable scn", K(ret), K(readable_scn));
-  } else if (!readable_scn.is_valid()) {
-    ret = OB_EAGAIN;
-    LOG_WARN("readable_scn not valid", K(ret), K(readable_scn));
-  }
-  return ret;
-}
-
 
 int ObStorageHAUtils::check_disk_space()
 {
@@ -491,14 +458,6 @@ void ObTransferUtils::clear_transfer_module()
 #endif
 }
 
-
-void ObTransferUtils::set_transfer_related_info(
-    const share::ObLSID &dest_ls_id,
-    const share::ObTransferTaskID &task_id,
-    const share::SCN &start_scn)
-{
-}
-
 int ObTransferUtils::get_ls_(
     ObLSHandle &ls_handle,
     const share::ObLSID &dest_ls_id,
@@ -708,6 +667,68 @@ void ObStorageHAUtils::sort_table_key_array_by_snapshot_version(common::ObArray<
 {
   TableKeySnapshotVersionComparator cmp;
   lib::ob_sort(table_key_array.begin(), table_key_array.end(), cmp);
+}
+
+int ObStorageHAUtils::build_tablets_sstable_info_with_helper(
+    restore::ObIRestoreHelper *helper,
+    ObStorageHATableInfoMgr *ha_table_info_mgr,
+    share::ObIDagNet *dag_net,
+    const common::ObIArray<ObTabletHandle> &tablet_handle_array)
+{
+  int ret = OB_SUCCESS;
+  obrpc::ObCopyTabletSSTableInfo sstable_info;
+  obrpc::ObCopyTabletSSTableHeader copy_header;
+
+  if (OB_ISNULL(helper) || OB_ISNULL(ha_table_info_mgr) || OB_ISNULL(dag_net)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("build tablets sstable info with helper get invalid argument",
+                K(ret), KP(helper), KP(ha_table_info_mgr), KP(dag_net));
+  } else if (tablet_handle_array.empty()) {
+    ret = OB_EAGAIN;
+    LOG_WARN("all tablets has been gc, try again", K(ret));
+  } else {
+    if (FAILEDx(helper->init_for_build_tablets_sstable_info(tablet_handle_array))) {
+      LOG_WARN("failed to init for build tablets sstable info", K(ret));
+    }
+    while (OB_SUCC(ret)) {
+      sstable_info.reset();
+      copy_header.reset();
+      if (dag_net->is_cancel()) {
+        ret = OB_CANCELED;
+        LOG_WARN("task is cancelled", K(ret));
+      } else if (OB_FAIL(helper->fetch_next_tablet_sstable_header(copy_header))) {
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+          break;
+        } else {
+          LOG_WARN("failed to fetch next tablet sstable header", K(ret));
+        }
+      } else if (ObCopyTabletStatus::TABLET_NOT_EXIST == copy_header.status_
+          && copy_header.tablet_id_.is_ls_inner_tablet()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ls inner tablet should be exist", K(ret), K(copy_header));
+      } else if (OB_FAIL(ha_table_info_mgr->init_tablet_info(copy_header))) {
+        LOG_WARN("failed to init tablet info", K(ret), K(copy_header));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < copy_header.sstable_count_; ++i) {
+          if (OB_FAIL(helper->fetch_next_sstable_meta(sstable_info))) {
+            LOG_WARN("failed to fetch next sstable meta", K(ret), K(copy_header));
+          } else if (!sstable_info.is_valid()) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("build tablets sstable info get invalid argument", K(ret), K(sstable_info));
+          } else if (sstable_info.table_key_.is_memtable()) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("table should not be MEMTABLE", K(ret), K(sstable_info));
+          } else if (OB_FAIL(ha_table_info_mgr->add_table_info(sstable_info.tablet_id_, sstable_info))) {
+            LOG_WARN("failed to add table info", K(ret), K(sstable_info));
+          } else {
+            LOG_DEBUG("add table info", K(sstable_info.tablet_id_), K(sstable_info));
+          }
+        }
+      }
+    }
+  }
+  return ret;
 }
 
 } // end namespace storage

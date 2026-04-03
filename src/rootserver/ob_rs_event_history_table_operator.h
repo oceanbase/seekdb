@@ -27,7 +27,7 @@ class ObRsEventHistoryTableOperator : public share::ObEventHistoryTableOperator
 public:
   virtual ~ObRsEventHistoryTableOperator() {}
 
-  int init(common::ObMySQLProxy &proxy, const common::ObAddr &self_addr);
+  int init(share::ObSQLiteConnectionPool *pool, const common::ObAddr &self_addr);
 
   virtual int async_delete() override;
 

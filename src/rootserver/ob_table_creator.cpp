@@ -278,10 +278,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
       LOG_WARN("fail to reserve array", KR(ret), K(all_part_num));
     } else if (OB_FAIL(ls_id_array_.assign(ls_id_array))) {
       LOG_WARN("fail to assign ls id array", KR(ret));
-    } else if (ls_id_array_.count() != all_part_num) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the ls of tablet is not equal partition num", KR(ret),
-               K(all_part_num), "ls_id_array_cnt", ls_id_array_.count());
     } else {
       for (int64_t i = 1; OB_SUCC(ret) && i < schema_cnt; ++i) {
         if (OB_ISNULL(schemas.at(i))) {
@@ -319,7 +315,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                     schemas,
                     *data_table_schema,
                     compat_mode,
-                    ls_id_array_.at(ls_idx++),
+                    ObLSID(SYS_LS),
                     pairs,
                     OB_INVALID_INDEX,
                     OB_INVALID_INDEX,
@@ -347,7 +343,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                           schemas,
                           *data_table_schema,
                           compat_mode,
-                          ls_id_array_.at(ls_idx++),
+                          ObLSID(SYS_LS),
                           pairs,
                           i,
                           OB_INVALID_INDEX,
@@ -375,7 +371,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                                 schemas,
                                 *data_table_schema,
                                 compat_mode,
-                                ls_id_array_.at(ls_idx++),
+                                ObLSID(SYS_LS),
                                 pairs,
                                 i,
                                 j,

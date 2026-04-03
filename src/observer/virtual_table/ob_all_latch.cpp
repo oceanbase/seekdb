@@ -127,8 +127,7 @@ int ObAllLatch::inner_get_next_row(ObNewRow *&row)
     if (OB_SUCC(ret)) {
       ObObj *cells = cur_row_.cells_;
       std::pair<uint64_t, common::ObDiagnoseTenantInfo*> dipair;
-      ObString ipstr;
-      if (OB_ISNULL(cells)) {
+            if (OB_ISNULL(cells)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
       } else if (OB_FAIL(tenant_dis_.at(iter_, dipair))) {
@@ -136,8 +135,6 @@ int ObAllLatch::inner_get_next_row(ObNewRow *&row)
       } else if (latch_iter_ >= ObLatchIds::LATCH_END) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "The latch iter exceed", K_(latch_iter), K(ret));
-      } else if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-        SERVER_LOG(ERROR, "get server ip failed", K(ret));
       }
 
       for (int64_t cell_idx = 0;
@@ -148,20 +145,6 @@ int ObAllLatch::inner_get_next_row(ObNewRow *&row)
         if (OB_ISNULL(p_latch_stat)) continue;
         const ObLatchStat& latch_stat = *p_latch_stat;
         switch(column_id) {
-        case TENANT_ID: {
-            cells[cell_idx].set_int(dipair.first);
-            break;
-          }
-        case SVR_IP: {
-            cells[cell_idx].set_varchar(ipstr);
-            cells[cell_idx].set_collation_type(
-                ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-        case SVR_PORT: {
-            cells[cell_idx].set_int(addr_->get_port());
-            break;
-          }
         case LATCH_ID: {
             cells[cell_idx].set_int(OB_LATCHES[latch_iter_].latch_id_);
             break;

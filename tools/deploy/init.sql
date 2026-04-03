@@ -72,9 +72,9 @@ source init_create_tenant_routines.sql;
 /***********************************************************************/
 set @@session.ob_query_timeout = 10000000;
 system sleep 5;
-alter tenant sys set variables recyclebin = 'on';
-alter tenant sys set variables ob_enable_truncate_flashback = 'on';
-alter tenant sys set variables _nlj_batching_enabled = true;
+set global recyclebin = 'on';
+set global ob_enable_truncate_flashback = 'on';
+set global _nlj_batching_enabled = true;
 -- alter tenant oracle set variables _nlj_batching_enabled = true;
 -- alter tenant mysql set variables _nlj_batching_enabled = true;
 -- call test.set_specify_create_tenant();

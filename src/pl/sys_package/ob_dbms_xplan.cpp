@@ -227,7 +227,7 @@ int ObDbmsXplan::display_cursor(sql::ObExecContext &ctx,
   ObString svr_ip;
   ObString format;
   int64_t plan_id;
-  int64_t tenant_id = 0;
+  int64_t tenant_id = OB_SYS_TENANT_ID;
   int64_t svr_port = 0;
   number::ObNumber num_val;
   ObString plan_name;
@@ -254,10 +254,7 @@ int ObDbmsXplan::display_cursor(sql::ObExecContext &ctx,
     LOG_WARN("failed to get number value", K(ret));
   } else if (OB_FAIL(num_val.cast_to_int64(svr_port))) {
     LOG_WARN("failed to cast int", K(ret));
-  } else if (OB_FAIL(params.at(idx++).get_number(num_val))) {
-    LOG_WARN("failed to get number value", K(ret));
-  } else if (OB_FAIL(num_val.cast_to_int64(tenant_id))) {
-    LOG_WARN("failed to cast int", K(ret));
+  } else if (FALSE_IT(idx++)) { // ignore tenant_id
   } else if (OB_FAIL(params.at(idx++).get_varchar(sql_handle))) {
     LOG_WARN("failed to get sql string", K(ret));
   } else if (OB_FAIL(params.at(idx++).get_varchar(plan_name))) {
@@ -282,9 +279,6 @@ int ObDbmsXplan::display_cursor(sql::ObExecContext &ctx,
   } else {
     if (0 == plan_id && plan_name.empty() && sql_handle.empty()) {
       plan_id = session->get_last_plan_id();
-    }
-    if (0 == tenant_id) {
-      tenant_id = session->get_effective_tenant_id();
     }
     PlanText plan_text;
     ExplainType type;
@@ -328,7 +322,7 @@ int ObDbmsXplan::display_sql_plan_baseline(sql::ObExecContext &ctx,
   number::ObNumber num_val;
   uint64_t plan_hash = 0;
   ObString format;
-  int64_t tenant_id = 0;
+  int64_t tenant_id = OB_SYS_TENANT_ID;
   ObString svr_ip;
   int64_t svr_port;
   ObSQLSessionInfo *session = ctx.get_my_session();
@@ -363,14 +357,7 @@ int ObDbmsXplan::display_sql_plan_baseline(sql::ObExecContext &ctx,
     LOG_WARN("failed to get number value", K(ret));
   } else if (OB_FAIL(num_val.cast_to_int64(svr_port))) {
     LOG_WARN("failed to cast int", K(ret));
-  } else if (OB_FAIL(params.at(idx++).get_number(num_val))) {
-    LOG_WARN("failed to get number value", K(ret));
-  } else if (OB_FAIL(num_val.cast_to_int64(tenant_id))) {
-    LOG_WARN("failed to cast int", K(ret));
   } else {
-    if (0 == tenant_id) {
-      tenant_id = session->get_effective_tenant_id();
-    }
     PlanText plan_text;
     ExplainType type;
     ObExplainDisplayOpt option;
@@ -725,13 +712,7 @@ int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
                     REMARKS,\
                     OTHER_XML\
                   FROM OCEANBASE.__ALL_VIRTUAL_SQL_PLAN\
-                  WHERE TENANT_ID=%ld\
-                  AND SVR_IP='%.*s'\
-                  AND SVR_PORT=%ld ",
-                  tenant_id,
-                  svr_ip.length(),
-                  svr_ip.ptr(),
-                  svr_port))) {
+                  WHERE 1=1 "))) {
     LOG_WARN("failed to assign string", K(ret));
   } else if (plan_id != 0 && OB_FAIL(sql.append_fmt("AND PLAN_ID=%lu ", plan_id))) {
     LOG_WARN("failed to append string", K(ret));
@@ -756,9 +737,6 @@ int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
         "WITH plan_index AS ( \
             SELECT * FROM \
               (SELECT \
-                tenant_id, \
-                svr_ip, \
-                svr_port, \
                 sql_id,  \
                 plan_hash, \
                 id, \
@@ -767,17 +745,10 @@ int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
                 cluster_id, \
                 DENSE_RANK() OVER(ORDER BY SNAP_ID DESC) AS RANK \
               FROM OCEANBASE.__ALL_VIRTUAL_WR_SQL_PLAN_AUX_KEY2SNAPSHOT \
-              WHERE TENANT_ID=%ld \
-              AND SVR_IP='%.*s' \
-              AND SVR_PORT=%ld \
-              AND PLAN_HASH=%lu \
+              WHERE PLAN_HASH=%lu \
               AND SQL_ID='%.*s' \
               %s )\
             WHERE RANK=1 ) ",
-            tenant_id, 
-            svr_ip.length(), 
-            svr_ip.ptr(), 
-            svr_port,  
             plan_hash, 
             sql_handle.length(), 
             sql_handle.ptr(),
@@ -826,11 +797,8 @@ int ObDbmsXplan::get_plan_info_by_id(sql::ObExecContext &ctx,
                       sp.OTHER_XML \
                     FROM plan_index \
                     JOIN OCEANBASE.__ALL_VIRTUAL_WR_SQL_PLAN sp \
-                    ON sp.TENANT_ID=plan_index.TENANT_ID \
-                    AND sp.CLUSTER_ID = plan_index.CLUSTER_ID \
+                    ON sp.CLUSTER_ID = plan_index.CLUSTER_ID \
                     AND sp.SNAP_ID=plan_index.SNAP_ID \
-                    AND sp.SVR_IP=plan_index.SVR_IP \
-                    AND sp.SVR_PORT=plan_index.SVR_PORT \
                     AND sp.PLAN_HASH=plan_index.PLAN_HASH \
                     AND sp.SQL_ID=plan_index.SQL_ID \
                     ORDER BY ID")) {
@@ -895,16 +863,9 @@ int ObDbmsXplan::get_baseline_plan_info(sql::ObExecContext &ctx,
                     REMARKS,\
                     OTHER_XML\
                   FROM OCEANBASE.__ALL_VIRTUAL_SQL_PLAN\
-                  WHERE TENANT_ID=%ld\
-                  AND SVR_IP='%.*s'\
-                  AND SVR_PORT=%ld\
-                  AND PLAN_HASH=%lu\
+                  WHERE PLAN_HASH=%lu\
                   AND SQL_ID='%.*s'\
                   ORDER BY ID", 
-                  tenant_id,
-                  svr_ip.length(),
-                  svr_ip.ptr(),
-                  svr_port,
                   plan_hash,
                   sql_handle.length(),
                   sql_handle.ptr()))) {
@@ -917,9 +878,6 @@ int ObDbmsXplan::get_baseline_plan_info(sql::ObExecContext &ctx,
       "WITH plan_index AS ( \
           SELECT * FROM \
             (SELECT \
-              tenant_id, \
-              svr_ip, \
-              svr_port, \
               sql_id, \
               plan_hash, \
               id, \
@@ -928,16 +886,9 @@ int ObDbmsXplan::get_baseline_plan_info(sql::ObExecContext &ctx,
               cluster_id, \
               DENSE_RANK() OVER(ORDER BY SNAP_ID DESC) AS RANK \
             FROM OCEANBASE.__ALL_VIRTUAL_WR_SQL_PLAN_AUX_KEY2SNAPSHOT \
-            WHERE TENANT_ID=%ld \
-            AND SVR_IP='%.*s' \
-            AND SVR_PORT=%ld \
-            AND PLAN_HASH=%lu \
+            WHERE PLAN_HASH=%lu \
             AND SQL_ID='%.*s' ) \
           WHERE RANK=1 ) ",
-          tenant_id, 
-          svr_ip.length(), 
-          svr_ip.ptr(), 
-          svr_port,  
           plan_hash, 
           sql_handle.length(), 
           sql_handle.ptr()))) {
@@ -985,11 +936,8 @@ int ObDbmsXplan::get_baseline_plan_info(sql::ObExecContext &ctx,
                       sp.OTHER_XML \
                     FROM plan_index \
                     JOIN OCEANBASE.__ALL_VIRTUAL_WR_SQL_PLAN sp \
-                    ON sp.TENANT_ID=plan_index.TENANT_ID \
-                    AND sp.CLUSTER_ID = plan_index.CLUSTER_ID \
+                    ON sp.CLUSTER_ID = plan_index.CLUSTER_ID \
                     AND sp.SNAP_ID=plan_index.SNAP_ID \
-                    AND sp.SVR_IP=plan_index.SVR_IP \
-                    AND sp.SVR_PORT=plan_index.SVR_PORT \
                     AND sp.PLAN_HASH=plan_index.PLAN_HASH \
                     AND sp.SQL_ID=plan_index.SQL_ID \
                     ORDER BY ID")) {
@@ -1204,10 +1152,6 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
     if (OB_FAIL(tenant_filter.assign_fmt("1 = 1"))) {
       LOG_WARN("failed to assign string", K(ret));
     }
-  } else {
-    if (OB_FAIL(tenant_filter.assign_fmt("A.TENANT_ID = %ld",tenant_id))) {
-      LOG_WARN("failed to assign string", K(ret));
-    }
   }
   if (OB_FAIL(ret)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1256,11 +1200,8 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                                 PLAN_ID \
                         FROM OCEANBASE.__ALL_VIRTUAL_PROCESSLIST \
                         WHERE ID=%ld \
-                        AND SVR_IP='%.*s'\
-                        AND SVR_PORT=%ld \
                         LIMIT 1) E\
-                      ON A.TENANT_ID = E.TENANT_ID\
-                      AND A.PLAN_ID = E.PLAN_ID\
+                      ON A.PLAN_ID = E.PLAN_ID\
                       LEFT JOIN\
                       (SELECT B.PLAN_LINE_ID ID, \
                               SUM(OUTPUT_ROWS) REAL_CARD,\
@@ -1271,27 +1212,14 @@ int ObDbmsXplan::get_plan_info_by_session_id(sql::ObExecContext &ctx,
                                     (SELECT TRACE_ID\
                                     FROM OCEANBASE.__ALL_VIRTUAL_PROCESSLIST \
                                     WHERE ID=%ld \
-                                    AND SVR_IP='%.*s'\
-                                    AND SVR_PORT=%ld \
                                     LIMIT 1) C\
                               WHERE B.TRACE_ID = C.TRACE_ID\
                               GROUP BY B.PLAN_LINE_ID) D\
                         ON A.ID = D.ID\
-                    WHERE SVR_IP='%.*s'\
-                    AND SVR_PORT=%ld\
-                    AND %.*s\
+                    WHERE %.*s\
                     ORDER BY A.ID",
                     session_id,
-                    svr_ip.length(),
-                    svr_ip.ptr(),
-                    svr_port,
                     session_id,
-                    svr_ip.length(),
-                    svr_ip.ptr(),
-                    svr_port,
-                    svr_ip.length(),
-                    svr_ip.ptr(),
-                    svr_port,
                     (int)tenant_filter.length(),
                     tenant_filter.ptr()))) {
     LOG_WARN("failed to assign string", K(ret));

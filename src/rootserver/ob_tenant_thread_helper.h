@@ -105,9 +105,6 @@ public:
 
  static int get_tenant_schema(const uint64_t tenant_id,
                               share::schema::ObTenantSchema &tenant_schema);
- static int get_zone_priority(const ObZone &primary_zone,
-                              const share::schema::ObTenantSchema &tenant_schema,
-                              common::ObSqlString &primary_zone_str);
 protected:
  int wait_tenant_schema_ready_(
      const uint64_t tenant_id);

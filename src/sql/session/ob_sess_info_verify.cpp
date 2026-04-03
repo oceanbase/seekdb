@@ -19,7 +19,6 @@
 
 #include "sql/session/ob_sess_info_verify.h"
 #include "observer/ob_sql_client_decorator.h"
-#include "share/ob_all_server_tracer.h"
 
 namespace oceanbase
 {
@@ -402,89 +401,10 @@ int ObSessInfoVerify::sql_port_to_rpc_port(sql::ObSQLSessionInfo &sess,
                       SessionInfoVerifacation &sess_info_verification)
 {
   int ret = OB_SUCCESS;
-  int64_t rpc_port = 0;
-  bool exist = false;
+  int64_t rpc_port = GCTX.self_addr().get_port();
   LOG_TRACE("sql port", K(sess_info_verification.get_verify_info_addr()));
-  if (OB_FAIL(share::ObAllServerTracer::get_instance().get_server_rpc_port(
-      sess_info_verification.get_verify_info_addr(),
-      sess_info_verification.get_verify_info_addr().get_port(), rpc_port, exist))) {
-    LOG_WARN("fail to get rpc port", K(ret));
-  } else if (!exist) {
-    // not find rpc port by local cache, need send inner sql to find.
-    MTL_SWITCH(OB_SYS_TENANT_ID) {
-      ObMySQLTransaction trans;
-      bool with_snap_shot = true;
-
-      ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
-      uint64_t proxy_sessid = sess.get_proxy_sessid();
-      if (OB_ISNULL(mysql_proxy)) {
-        ret = OB_NOT_INIT;
-        SERVER_LOG(WARN, "mysql proxy is null", K(ret));
-      } else if (OB_FAIL(trans.start(mysql_proxy, OB_SYS_TENANT_ID, with_snap_shot))) {
-        SERVER_LOG(WARN, "failed to start transaction", K(ret));
-      } else {
-        int sql_len = 0;
-        char ip_buf[MAX_IP_ADDR_LENGTH];
-        ip_buf[0] = '\0';
-        if (sess_info_verification.get_verify_info_addr().ip_to_string(ip_buf,
-            MAX_IP_ADDR_LENGTH)) {
-          SMART_VAR(char[OB_MAX_SQL_LENGTH], sql) {
-            const uint64_t exec_tenant_id = OB_SYS_TENANT_ID;
-            const char *table_name = share::OB_ALL_SERVER_TNAME;
-            sql_len = snprintf(sql, OB_MAX_SQL_LENGTH,
-                                "SELECT svr_port "
-                                "FROM %s WHERE inner_port = %d and svr_ip = '%s'",
-                                table_name,
-                                sess_info_verification.get_verify_info_addr().get_port(),
-                                ip_buf);
-            LOG_TRACE("send inner sql to get rpc port", K(sess.get_proxy_sessid()),
-                       K(sess_info_verification.get_verify_info_addr().get_port()));
-            if (sql_len >= OB_MAX_SQL_LENGTH || sql_len <= 0) {
-              ret = OB_SIZE_OVERFLOW;
-              SERVER_LOG(WARN, "failed to format sql. size not enough");
-            } else {
-
-              { // make sure %res destructed before execute other sql in the same transaction
-                SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-                  common::sqlclient::ObMySQLResult *result = NULL;
-                  ObISQLClient *sql_client = &trans;
-                  uint64_t table_id = share::OB_ALL_SERVER_TID;
-                  ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
-                                                        OB_SYS_TENANT_ID,
-                                                          table_id);
-                  // retrive data from client
-                  if (OB_FAIL(sql_client_retry_weak.read(res, OB_SYS_TENANT_ID, sql))) {
-                    SERVER_LOG(WARN, "failed to read data", K(ret));
-                  } else if (NULL == (result = res.get_result())) {
-                    ret = OB_ERR_UNEXPECTED;
-                    SERVER_LOG(WARN, "failed to get result", K(ret));
-                  } else {
-                    while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-                      if (OB_FAIL(result->get_int(static_cast<int64_t>(0l), rpc_port))) {
-                        LOG_WARN("fail to get varchar.", K(ret));
-                      } else {
-                        sess_info_verification.get_verify_info_addr().set_port(rpc_port);
-                      }
-                    }
-                    if (OB_ITER_END == ret) {
-                      ret = OB_SUCCESS;
-                    }
-                  }
-                }
-              }
-            }
-          }
-          LOG_TRACE("get rpc port by inner sql", K(sess_info_verification.get_verify_info_addr()),
-                        K(ret), K(sql), K(rpc_port));
-        }
-      }
-    }
-  } else {
-    sess_info_verification.get_verify_info_addr().set_port(rpc_port);
-    LOG_TRACE("not use inner sql to find rpc port", K(rpc_port));
-  }
-
-
+  sess_info_verification.get_verify_info_addr().set_port(rpc_port);
+  LOG_TRACE("not use inner sql to find rpc port", K(rpc_port));
   return ret;
 }
 // use for display sys var error message.

@@ -306,7 +306,7 @@ int ObTmpFileIOCtx::do_read_wait_()
       } else if (OB_UNLIKELY(!check_buf_range_valid(read_buf, read_size))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid range", KR(ret), K(fd_), KP(read_buf), KP(buf_), K(read_size), K(buf_size_), KPC(this));
-      } else if (OB_UNLIKELY(offset_in_page + read_size > ObTmpFileGlobal::PAGE_SIZE)) {
+      } else if (OB_UNLIKELY(offset_in_page + read_size > ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("read size is over than page range", KR(ret), KPC(this), K(offset_in_page), K(read_size));
       } else {
@@ -520,7 +520,7 @@ bool ObTmpFileIOCtx::ObPageCacheHandle::is_valid()
   bool bret = false;
   if (OB_NOT_NULL(dest_user_read_buf_) && offset_in_src_data_buf_ >= 0 &&
       read_size_ >= 0 &&
-      read_size_ <= ObTmpFileGlobal::PAGE_SIZE &&
+      read_size_ <= ObTmpFileGlobal::ALLOC_PAGE_SIZE &&
       OB_NOT_NULL(page_handle_.value_) &&
       page_handle_.handle_.is_valid()) {
     bret = true;

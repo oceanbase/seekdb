@@ -35,7 +35,7 @@ TEST(TestLogIOUtils, test_rename)
   char buf[PATH_MAX];
   const char *curr_dir_name = getcwd(buf, sizeof(buf));
 #else
-  const char *curr_dir_name  = get_current_dir_name();
+  const char *curr_dir_name  = getcwd(NULL, 0);
 #endif
   int dir_fd = 0;
   system("rm -rf src_file*");

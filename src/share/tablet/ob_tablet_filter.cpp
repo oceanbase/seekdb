@@ -18,7 +18,6 @@
 
 #include "ob_tablet_filter.h"
 #include "share/tablet/ob_tablet_info.h"
-#include "share/ob_iserver_trace.h"
 
 namespace oceanbase
 {
@@ -26,23 +25,6 @@ namespace share
 {
 using namespace schema;
 using namespace common;
-
-int ObTabletPermanentOfflineFilter::check(const ObTabletReplica &replica, bool &pass) const
-{
-  int ret = OB_SUCCESS;
-  bool is_offline = false;
-  if (OB_UNLIKELY(!replica.is_valid()) || OB_ISNULL(tracker_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid replica", KR(ret), K(replica), KP_(tracker));
-  } else {
-    if (OB_FAIL(tracker_->check_server_permanent_offline(replica.get_server(), is_offline))) {
-      LOG_WARN("check_server_alive failed", "server", replica.get_server(), KR(ret));
-    } else {
-      pass = !is_offline;
-    }
-  }
-  return ret;
-}
 
 int ObServerTabletReplicaFilter::check(const ObTabletReplica &replica, bool &pass) const
 {
@@ -56,53 +38,12 @@ int ObServerTabletReplicaFilter::check(const ObTabletReplica &replica, bool &pas
   return ret;
 }
 
-int ObTabletNotExistServerFilter::check(const ObTabletReplica &replica, bool &pass) const
-{
-  int ret = OB_SUCCESS;
-  bool is_exist = true;
-  if (OB_UNLIKELY(!replica.is_valid()) || OB_ISNULL(tracker_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid replica", KR(ret), K(replica), KP_(tracker));
-  } else {
-    if (OB_FAIL(tracker_->is_server_exist(replica.get_server(), is_exist))) {
-      LOG_WARN("is_server_exist failed", "server", replica.get_server(), KR(ret));
-    } else {
-      pass = is_exist;
-    }
-  }
-  return ret;
-}
-
 int ObTabletReplicaFilterHolder::add_(ObTabletReplicaFilter &filter)
 {
   int ret = OB_SUCCESS;
   if (!filter_list_.add_last(&filter)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("add filter to filter list failed", KR(ret));
-  }
-  return ret;
-}
-
-
-int ObTabletReplicaFilterHolder::set_filter_permanent_offline(const ObIServerTrace &tracker)
-{
-  int ret = OB_SUCCESS;
-  ObTabletPermanentOfflineFilter *permanent_offline_filter = nullptr;
-  void *ptr = filter_allocator_.alloc(sizeof(ObTabletPermanentOfflineFilter));
-  if (OB_ISNULL(ptr)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", KR(ret));
-  } else {
-    permanent_offline_filter = new (ptr) ObTabletPermanentOfflineFilter(&tracker);
-    if (OB_ISNULL(permanent_offline_filter)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("permanent offline filter ptr is null", KR(ret));
-    } else if (OB_FAIL(add_(*permanent_offline_filter))) {
-      LOG_WARN("add filter failed", KR(ret));
-    }
-  }
-  if (OB_FAIL(ret)) {
-    try_free_filter_(permanent_offline_filter, ptr);
   }
   return ret;
 }
@@ -160,29 +101,6 @@ int ObTabletReplicaFilterHolder::set_reserved_server(const ObAddr &server)
   }
   if (OB_FAIL(ret)) {
     try_free_filter_(server_filter, ptr);
-  }
-  return ret;
-}
-
-int ObTabletReplicaFilterHolder::set_filter_not_exist_server(const ObIServerTrace &tracker)
-{
-  int ret = OB_SUCCESS;
-  ObTabletNotExistServerFilter *not_exist_server_filter = nullptr;
-  void *ptr = filter_allocator_.alloc(sizeof(ObTabletNotExistServerFilter));
-  if (OB_ISNULL(ptr)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", KR(ret));
-  } else {
-    not_exist_server_filter = new (ptr) ObTabletNotExistServerFilter(&tracker);
-    if (OB_ISNULL(not_exist_server_filter)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("delete server filter ptr is null", KR(ret));
-    } else if (OB_FAIL(add_(*not_exist_server_filter))) {
-      LOG_WARN("add filter failed", KR(ret));
-    }
-  }
-  if (OB_FAIL(ret)) {
-    try_free_filter_(not_exist_server_filter, ptr);
   }
   return ret;
 }

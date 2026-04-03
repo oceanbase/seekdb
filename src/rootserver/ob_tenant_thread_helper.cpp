@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX RS
 #include "ob_tenant_thread_helper.h"
 #include "share/restore/ob_physical_restore_table_operator.h"//restore_job
-#include "share/restore/ob_tenant_clone_table_operator.h" // clone_job
-#include "share/ob_primary_zone_util.h"//get_ls_primary_zone_priority
 #include "src/logservice/applyservice/ob_log_apply_service.h"
 #include "lib/ash/ob_active_session_guard.h"
 
@@ -247,23 +245,6 @@ int ObTenantThreadHelper::get_tenant_schema(const uint64_t tenant_id,
   return ret;
 }
 
-int ObTenantThreadHelper::get_zone_priority(const ObZone &primary_zone,
-                                 const share::schema::ObTenantSchema &tenant_schema,
-                                 ObSqlString &primary_zone_str)
-{
-  int ret = OB_SUCCESS;
-  primary_zone_str.reset();
-  if (OB_UNLIKELY(!tenant_schema.is_valid() || primary_zone.is_empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(primary_zone), K(tenant_schema));
-  } else if (OB_FAIL(ObPrimaryZoneUtil::get_ls_primary_zone_priority(primary_zone,
-          tenant_schema, primary_zone_str))) {
-    LOG_WARN("failed to get ls primary zone priority", KR(ret), K(primary_zone), K(tenant_schema));
-  }
-  LOG_DEBUG("get zone priority", KR(ret), K(primary_zone_str), K(tenant_schema));
-  return ret;
-}
-
 //TODO meta tenant and user tenant maybe not in same observer
 int ObTenantThreadHelper::check_can_do_recovery_(const uint64_t tenant_id)
 {
@@ -292,29 +273,6 @@ int ObTenantThreadHelper::check_can_do_recovery_(const uint64_t tenant_id)
         } else {
           ret = OB_NEED_WAIT;
           LOG_WARN("restore tenant not valid to recovery", KR(ret), K(job_info));
-        }
-      } else if (is_clone_tenant(tenant_role)) {
-        //need to check success to create init ls
-        share::ObTenantCloneTableOperator clone_table_operator;
-        ObArray<share::ObCloneJob> job_arr;
-        if (OB_ISNULL(GCTX.sql_proxy_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sql can't null", KR(ret), K(GCTX.sql_proxy_));
-        } else if (OB_FAIL(clone_table_operator.init(tenant_id, GCTX.sql_proxy_))) {
-          LOG_WARN("fail to init clone table operator", KR(ret), K(tenant_id));
-        } else if (OB_FAIL(clone_table_operator.get_all_clone_jobs(job_arr))) {
-          LOG_WARN("fail to get clone job", KR(ret), K(tenant_id));
-        } else if (job_arr.empty()) {
-          ret = OB_NEED_WAIT;
-          LOG_WARN("clone job is empty", KR(ret), K(tenant_id));
-        } else if (job_arr.count()!=1) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("clone job's count is unexpected", KR(ret), K(job_arr));
-        } else if (job_arr.at(0).is_valid_status_allows_user_tenant_to_do_ls_recovery()) {
-          //can do recovery
-        } else {
-          ret = OB_NEED_WAIT;
-          LOG_WARN("clone tenant not valid to recovery", KR(ret), K(job_arr));
         }
       } else if (is_invalid_tenant(tenant_role)) {
         ret = OB_NEED_WAIT;

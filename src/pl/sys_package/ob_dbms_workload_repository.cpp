@@ -2270,7 +2270,7 @@ int ObDbmsWorkloadRepository::print_ash_top_active_tenants(const AshReportParams
                   "SUM(wait_cnt) AS WAIT_CNT, "
                   "SUM(CASE WHEN (db_cnt < 0.1 * delta_time) THEN db_cnt ELSE delta_time END) AS TOTAL_TIME "
           "FROM ("
-            "SELECT tenant_id, session_type, SUM(count_weight) AS db_cnt, "
+            "SELECT session_type, SUM(count_weight) AS db_cnt, "
                     "SUM(CASE WHEN event_no = 0 THEN count_weight ELSE 0 END) AS cpu_cnt, "
                     "SUM(CASE WHEN event_no = 0 THEN 0 ELSE count_weight END) AS wait_cnt, "
                     "%s AS delta_time "
@@ -2282,9 +2282,9 @@ int ObDbmsWorkloadRepository::print_ash_top_active_tenants(const AshReportParams
         LOG_WARN("failed to append fmt ash view sql", K(ret));
       } else if (OB_FAIL(sql_string.append(
             ") tmp_ash "
-            "GROUP BY tenant_id, proxy_sid, session_type"
+            "GROUP BY proxy_sid, session_type"
           ") session_load "
-          "GROUP BY tenant_id, session_type "
+          "GROUP BY session_type "
           "ORDER BY cnt DESC"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
@@ -2303,10 +2303,9 @@ int ObDbmsWorkloadRepository::print_ash_top_active_tenants(const AshReportParams
             }
           } else {
             int64_t tmp_real_str_len = 0;
-            uint64_t tenant_id = 0;
+            uint64_t tenant_id = OB_SYS_TENANT_ID;
             char tenant_name[64] = "";
             int64_t total_time = 0;
-            EXTRACT_INT_FIELD_FOR_ASH(*result, "TENANT_ID", tenant_id, uint64_t);
             EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "CNT", cnt, int64_t);
             EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "CPU_CNT", cpu_cnt, int64_t);
             EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "WAIT_CNT", wait_cnt, int64_t);
@@ -3192,7 +3191,7 @@ int ObDbmsWorkloadRepository::print_ash_top_group(const AshReportParams &ash_rep
         LOG_WARN("failed to format row", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
         "WITH session_data AS ("
-          "SELECT svr_ip, svr_port, tenant_id, group_id, sample_time, count_weight, "
+          "SELECT svr_ip, svr_port, group_id, sample_time, count_weight, "
                   "CASE WHEN program IS NULL THEN 'UNDEFINED' ELSE program END AS program, "
                   "CASE WHEN module IS NULL THEN 'UNDEFINED' ELSE module END AS module, "
                   "CASE WHEN action IS NULL THEN 'UNDEFINED' ELSE action END AS action "
@@ -3206,23 +3205,23 @@ int ObDbmsWorkloadRepository::print_ash_top_group(const AshReportParams &ash_rep
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
         "top_action AS ("
-          "SELECT svr_ip, svr_port, tenant_id, group_id, program, module, action, "
+          "SELECT svr_ip, svr_port, group_id, program, module, action, "
                   "action_time, module_time, program_time, group_time, node_time "
           "FROM ("
-            "SELECT svr_ip, svr_port, tenant_id, group_id, program, module, action, "
+            "SELECT svr_ip, svr_port, group_id, program, module, action, "
                     "SUM(count_weight) AS action_time, "
                     "SUM(SUM(count_weight)) OVER ("
-                      "PARTITION BY svr_ip, svr_port, tenant_id, group_id, program, module "
+                      "PARTITION BY svr_ip, svr_port, group_id, program, module "
                       "ORDER BY NULL "
                       "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
                     ") AS module_time, "
                     "SUM(SUM(count_weight)) OVER("
-                      "PARTITION BY svr_ip, svr_port, tenant_id, group_id, program "
+                      "PARTITION BY svr_ip, svr_port, group_id, program "
                       "ORDER BY NULL "
                       "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
                     ") AS program_time, "
                     "SUM(SUM(count_weight)) OVER("
-                      "PARTITION BY svr_ip, svr_port, tenant_id, group_id "
+                      "PARTITION BY svr_ip, svr_port, group_id "
                       "ORDER BY NULL "
                       "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
                     ") AS group_time, "
@@ -3232,7 +3231,7 @@ int ObDbmsWorkloadRepository::print_ash_top_group(const AshReportParams &ash_rep
                       "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING"
                     ") AS node_time "
             "FROM session_data "
-            "GROUP BY svr_ip, svr_port, tenant_id, group_id, program, module, action"
+            "GROUP BY svr_ip, svr_port, group_id, program, module, action"
           ") tmp_action "
           "WHERE action_time >= %ld "
           "ORDER BY action_time DESC %s"
@@ -3248,22 +3247,22 @@ int ObDbmsWorkloadRepository::print_ash_top_group(const AshReportParams &ash_rep
                 ") AS GROUP_RANK, "
                 "TENANT_ID, GROUP_ID, GROUP_TIME, "
                 "ROW_NUMBER() OVER ("
-                  "PARTITION BY svr_ip, svr_port, tenant_id, group_id "
+                  "PARTITION BY svr_ip, svr_port, group_id "
                   "ORDER BY row_order"
                 ") AS PROGRAM_RANK, "
                 "PROGRAM, PROGRAM_TIME, "
                 "ROW_NUMBER() OVER ("
-                  "PARTITION BY svr_ip, svr_port, tenant_id, group_id, program "
+                  "PARTITION BY svr_ip, svr_port, group_id, program "
                   "ORDER BY row_order"
                 ") AS MODULE_RANK, "
                 "MODULE, MODULE_TIME, "
                 "ROW_NUMBER() OVER ("
-                  "PARTITION BY svr_ip, svr_port, tenant_id, group_id, program, module "
+                  "PARTITION BY svr_ip, svr_port, group_id, program, module "
                   "ORDER BY row_order"
                 ") AS ACTION_RANK, "
                 "ACTION, ACTION_TIME "
         "FROM ("
-          "SELECT svr_ip, svr_port, node_time, tenant_id, group_id, group_time, "
+          "SELECT svr_ip, svr_port, node_time, group_id, group_time, "
                   "program, program_time, module, module_time, action, action_time, "
                   "ROW_NUMBER() OVER("
                     "ORDER BY node_time DESC, group_time DESC, "
@@ -3298,8 +3297,7 @@ int ObDbmsWorkloadRepository::print_ash_top_group(const AshReportParams &ash_rep
             int64_t svr_port = 0;
             EXTRACT_INT_FIELD_FOR_ASH(*result, "SVR_PORT", svr_port, int64_t);
             snprintf(node_char, 64, "%s:%ld", svr_ip_char, svr_port);
-            uint64_t tenant_id = 0;
-            EXTRACT_INT_FIELD_FOR_ASH(*result, "TENANT_ID", tenant_id, uint64_t);
+            uint64_t tenant_id = OB_SYS_TENANT_ID;
             uint64_t group_id = 0;
             EXTRACT_INT_FIELD_FOR_ASH(*result, "GROUP_ID", group_id, uint64_t);
             EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "GROUP_TIME", group_time, int64_t);
@@ -3462,20 +3460,20 @@ int ObDbmsWorkloadRepository::print_action_activity_over_time(const AshReportPar
         LOG_WARN("get ash bound sql time failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
           "WITH session_data AS ("
-            "SELECT svr_ip, svr_port, tenant_id, group_id, program, module, action, count_weight, "
+            "SELECT svr_ip, svr_port, group_id, program, module, action, count_weight, "
                     "slot_begin_time, slot_end_time, %s AS interval_time "
             "FROM ("
-              "SELECT svr_ip, svr_port, tenant_id, group_id, program, module, action, count_weight, "
+              "SELECT svr_ip, svr_port, group_id, program, module, action, count_weight, "
                       "CASE WHEN slot_begin_time < min_sample_time THEN min_sample_time ELSE slot_begin_time END AS slot_begin_time, "
                       "CASE WHEN slot_end_time > max_sample_time THEN max_sample_time ELSE slot_end_time END AS slot_end_time "
               "FROM ("
-                "SELECT svr_ip, svr_port, tenant_id, group_id, program, module, action, count_weight, "
+                "SELECT svr_ip, svr_port, group_id, program, module, action, count_weight, "
                         "%s AS slot_begin_time, "
                         "%s AS slot_end_time, "
                         "%s AS min_sample_time, %s AS max_sample_time "
                 "FROM ("
                   "SELECT %d AS interval_time, "
-                          "svr_ip, svr_port, tenant_id, group_id, count_weight, "
+                          "svr_ip, svr_port, group_id, count_weight, "
                           "CASE WHEN program IS NULL THEN 'UNDEFINED' ELSE program END AS program, "
                           "CASE WHEN module IS NULL THEN 'UNDEFINED' ELSE module END AS module, "
                           "CASE WHEN action IS NULL THEN 'UNDEFINED' ELSE action END AS action, "
@@ -3505,20 +3503,20 @@ int ObDbmsWorkloadRepository::print_action_activity_over_time(const AshReportPar
       } else if (OB_FAIL(sql_string.append(
           "top_action AS ("
             "SELECT slot_begin_time, interval_time, "
-                    "svr_ip, svr_port, tenant_id, group_id, program, module, action, "
+                    "svr_ip, svr_port, group_id, program, module, action, "
                     "SUM(count_weight) AS action_time, "
                     "ROW_NUMBER() OVER (PARTITION BY slot_begin_time ORDER BY SUM(count_weight) DESC) AS action_rank "
             "FROM session_data sd "
-            "GROUP BY sd.svr_ip, sd.svr_port, sd.tenant_id, sd.group_id, sd.program, sd.module, "
+            "GROUP BY sd.svr_ip, sd.svr_port, sd.group_id, sd.program, sd.module, "
                       "sd.action, sd.slot_begin_time, sd.interval_time "
           "), "))) {
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
           "action_key AS ("
-            "SELECT svr_ip, svr_port, tenant_id, group_id, program, module, action, "
+            "SELECT svr_ip, svr_port, group_id, program, module, action, "
                     "SUM(action_time) AS cnt "
             "FROM top_action "
-            "GROUP BY svr_ip, svr_port, tenant_id, group_id, program, module, action "
+            "GROUP BY svr_ip, svr_port, group_id, program, module, action "
             "HAVING SUM(action_time) >= %ld "
             "ORDER BY cnt DESC %s"
           "), ",
@@ -3538,14 +3536,14 @@ int ObDbmsWorkloadRepository::print_action_activity_over_time(const AshReportPar
             "ts.interval_time AS INTERVAL_TIME, "
             "ts.slot_time AS SLOT_TIME, "
             "ta.svr_ip AS SVR_IP, ta.svr_port AS SVR_PORT, "
-            "ta.tenant_id AS TENANT_ID, ta.group_id AS GROUP_ID, "
+            "ta.group_id AS GROUP_ID, "
             "ta.program AS PROGRAM, ta.module AS MODULE, ta.action AS ACTION, "
             "ta.action_time AS ACTION_TIME, ta.action_rank AS ACTION_RANK "
           "FROM "
             "top_action ta JOIN top_slot ts "
               "ON ta.slot_begin_time = ts.slot_begin_time AND ta.interval_time = ts.interval_time "
-          "WHERE (ta.svr_ip, ta.svr_port, ta.tenant_id, ta.group_id, ta.program, ta.module, ta.action) IN "
-                  "(SELECT svr_ip, svr_port, tenant_id, group_id, program, module, action FROM action_key) "
+          "WHERE (ta.svr_ip, ta.svr_port, ta.group_id, ta.program, ta.module, ta.action) IN "
+                  "(SELECT svr_ip, svr_port, group_id, program, module, action FROM action_key) "
           "ORDER BY ts.slot_begin_time, ts.interval_time, ta.action_rank"))) {
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
@@ -3573,8 +3571,7 @@ int ObDbmsWorkloadRepository::print_action_activity_over_time(const AshReportPar
             EXTRACT_STRBUF_FIELD_MYSQL_SKIP_RET_AND_TRUNCATION(*result, "SVR_IP", svr_ip_char, 64, tmp_real_str_len);
             int64_t svr_port = 0;
             EXTRACT_INT_FIELD_FOR_ASH(*result, "SVR_PORT", svr_port, int64_t);
-            int64_t tenant_id = 0;
-            EXTRACT_INT_FIELD_FOR_ASH(*result, "TENANT_ID", tenant_id, int64_t);
+            int64_t tenant_id = OB_SYS_TENANT_ID;
             int64_t group_id = 0;
             EXTRACT_INT_FIELD_FOR_ASH(*result, "GROUP_ID", group_id, int64_t);
             char program_char[ASH_PROGRAM_STR_LEN + 1] = "";
@@ -6253,7 +6250,6 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                     " SELECT "
                         " svr_ip, "
                         " svr_port, "
-                        " tenant_id, "
                         " tablet_id, "
                         " (CASE WHEN event_no=0 THEN 'ON CPU' ELSE event END) AS event, "
                         " (CASE WHEN sql_id is null or sql_id = '' THEN %s ELSE sql_id END) AS sql_id_or_module, "
@@ -6278,22 +6274,21 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                   " SELECT "
                       " svr_ip, "
                       " svr_port, "
-                      " tenant_id, "
                       " tablet_id, "
                       " event, "
                       " sql_id_or_module, "
                       " SUM(count_weight) AS sql_time, "
                       " ROW_NUMBER() OVER ( "
-                          " PARTITION BY svr_ip, svr_port, tenant_id, tablet_id, event "
+                          " PARTITION BY svr_ip, svr_port, tablet_id, event "
                           " ORDER BY NULL "
                       " ) AS sql_rank, "
                       " SUM(SUM(count_weight)) OVER ( "
-                          " PARTITION BY svr_ip, svr_port, tenant_id, tablet_id, event "
+                          " PARTITION BY svr_ip, svr_port, tablet_id, event "
                           " ORDER BY NULL "
                           " ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING "
                       " ) AS event_time, "
                       " SUM(SUM(count_weight)) OVER ( "
-                          " PARTITION BY svr_ip, svr_port, tenant_id, tablet_id "
+                          " PARTITION BY svr_ip, svr_port, tablet_id "
                           " ORDER BY NULL "
                           " ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING "
                       " ) AS object_time, "
@@ -6303,18 +6298,17 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                           " ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING "
                       " ) AS node_time, "
                       " SUM(COUNT(DISTINCT trace_id)) OVER ( "
-                          " PARTITION BY svr_ip, svr_port, tenant_id, tablet_id "
+                          " PARTITION BY svr_ip, svr_port, tablet_id "
                           " ORDER BY NULL "
                           " ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING "
                       " ) AS exec_cnt "
                   " FROM session_data sd "
-                  " GROUP BY svr_ip, svr_port, tenant_id, tablet_id, event, sql_id_or_module "
+                  " GROUP BY svr_ip, svr_port, tablet_id, event, sql_id_or_module "
                 " ), "
                 " top_object_event AS ( "
                   " SELECT "
                       " svr_ip, "
                       " svr_port, "
-                      " tenant_id, "
                       " tablet_id, "
                       " event, "
                       " sql_id_or_module, "
@@ -6330,7 +6324,6 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                       " SELECT "
                           " svr_ip, "
                           " svr_port, "
-                          " tenant_id, "
                           " tablet_id, "
                           " event, "
                           " sql_id_or_module, "
@@ -6340,7 +6333,7 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                           " node_time, "
                           " exec_cnt, "
                           " DENSE_RANK() OVER ( "
-                              " ORDER BY object_time DESC, node_time DESC, tenant_id, tablet_id, svr_ip, svr_port "
+                              " ORDER BY object_time DESC, node_time DESC, tablet_id, svr_ip, svr_port "
                           " ) AS limit_rank "
                       " FROM all_object_sql "
                       " WHERE sql_rank = 1 "
@@ -6351,7 +6344,6 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                   " SELECT "
                       " svr_ip, "
                       " svr_port, "
-                      " tenant_id, "
                       " tablet_id, "
                       " event, "
                       " sql_id_or_module, "
@@ -6366,7 +6358,7 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                           " ORDER BY display_rank "
                       " ) AS object_rank, "
                       " ROW_NUMBER() OVER ( "
-                          " PARTITION BY svr_ip, svr_port, tenant_id, tablet_id "
+                          " PARTITION BY svr_ip, svr_port, tablet_id "
                           " ORDER BY display_rank "
                       " ) AS event_rank "
                   " FROM top_object_event toe "
@@ -6375,20 +6367,6 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
       } else if (OB_FAIL(sql_string.append_fmt(
             " table_name_info AS ( "
                 " SELECT DISTINCT "
-                  " %s, "
-                  " table_id, "
-                  " tablet_id, "
-                  " data_table_id, "
-                  " database_name, "
-                  " table_name, "
-                  " table_type, "
-                  " partition_name, "
-                  " subpartition_name, "
-                  " index_name "
-                " FROM %s "
-                " UNION "
-                " SELECT DISTINCT "
-                    " A.tenant_id as tenant_id, "
                     " A.table_id as table_id, "
                     " A.table_id as tablet_id, "
                     " CASE "
@@ -6407,11 +6385,7 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                     " 'NULL' as subpartition_name, "
                     " A.table_name as index_name "
                 "  FROM %s A JOIN %s D ON A.DATABASE_ID = D.DATABASE_ID "
-                " WHERE table_id BETWEEN 10000 AND 20000 "
             " ),",
-          is_sys_tenant(request_tenant_id)? " tenant_id " : " EFFECTIVE_TENANT_ID() as tenant_id ",
-          /*dba_ob_table_locations*/
-          lib::is_oracle_mode()? " SYS.DBA_OB_TABLE_LOCATIONS ": is_sys_tenant(request_tenant_id)? " oceanbase.CDB_OB_TABLE_LOCATIONS " : " oceanbase.DBA_OB_TABLE_LOCATIONS ",
           /*all_virtual_table*/
           lib::is_oracle_mode()? " SYS.ALL_VIRTUAL_TABLE_REAL_AGENT ": " oceanbase.__ALL_VIRTUAL_TABLE ",
           /*all_virtual_database*/
@@ -6452,12 +6426,10 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
       } else if (OB_FAIL(sql_string.append_fmt(
             " tablet_info AS ( "
               " SELECT "
-              " tenant_id, "
               " %s AS object_name, "
               " tablet_id "
               " FROM ( "
                 " SELECT DISTINCT  "
-                    " v1.tenant_id AS tenant_id, "
                     " v1.tablet_id AS tablet_id, "
                     " v1.database_name AS database_name, "
                     " v1.table_name AS table_name, "
@@ -6468,7 +6440,6 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                     " v2.table_name AS data_table_name "
                 " FROM ( "
                     " SELECT DISTINCT "
-                        " tenant_id, "
                         " tablet_id, "
                         " data_table_id, "
                         " database_name, "
@@ -6478,9 +6449,9 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                         " subpartition_name, "
                         " index_name "
                     " FROM table_name_info "
-                    " WHERE (tenant_id, tablet_id) IN (SELECT DISTINCT tenant_id, tablet_id FROM top_object_event)"
+                    " WHERE (tablet_id) IN (SELECT DISTINCT tablet_id FROM top_object_event)"
                   " ) v1 "
-                  " LEFT JOIN table_name_info v2 ON v1.tenant_id = v2.tenant_id and v1.data_table_id = v2.table_id "
+                  " LEFT JOIN table_name_info v2 ON v1.data_table_id = v2.table_id "
                 " ) tmp_tablet_info "
             " ) ", tmp_concat_string.ptr()))) { //%s AS object_name
         LOG_WARN("failed to append sql string", K(ret));
@@ -6488,7 +6459,6 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
               " SELECT "
                   " %s AS NODE_ADDR, "
                   " tr.object_rank AS OBJECT_RANK, "
-                  " tr.tenant_id AS TENANT_ID, "
                   " tr.tablet_id AS TABLET_ID, "
                   " tr.object_time AS OBJECT_TIME, "
                   " tr.exec_cnt AS EXEC_CNT, "
@@ -6499,7 +6469,7 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                   " tr.event_time AS EVENT_TIME, "
                   " tr.sql_time AS SQL_TIME"
               " FROM top_time_rank tr "
-              " LEFT JOIN tablet_info ti ON tr.tenant_id = ti.tenant_id and tr.tablet_id = ti.tablet_id "
+              " LEFT JOIN tablet_info ti ON tr.tablet_id = ti.tablet_id "
               " WHERE tr.event_rank <= 5 "
               " ORDER BY display_rank ASC; ",
               lib::is_oracle_mode() ? "tr.svr_ip || ':' || tr.svr_port " : "CONCAT(tr.svr_ip, ':', tr.svr_port)" ))) {
@@ -6523,7 +6493,9 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
             char node_addr[64] = "";
             EXTRACT_STRBUF_FIELD_MYSQL_SKIP_RET_AND_TRUNCATION(*result, "NODE_ADDR", node_addr, 64, tmp_real_str_len);
             EXTRACT_UINT_FIELD_FOR_ASH_STR(*result, "OBJECT_RANK", object_rank, int64_t);
-            EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "TENANT_ID", tenant_id, int64_t);
+            int64_t tenant_id = OB_SYS_TENANT_ID;
+            char tenant_id_char[64] = "";
+            snprintf(tenant_id_char, sizeof(tenant_id_char), "%ld", tenant_id);
             EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "TABLET_ID", tablet_id, int64_t);
             EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "OBJECT_TIME", object_time, int64_t);
             EXTRACT_INT_FIELD_FOR_ASH_STR(*result, "EXEC_CNT", exec_cnt, int64_t);

@@ -17,16 +17,10 @@
 #ifndef OCEANBASE_SHARE_OB_LOCATION_SERVICE
 #define OCEANBASE_SHARE_OB_LOCATION_SERVICE
 
-#include "share/location_cache/ob_ls_location_service.h"
-#include "share/location_cache/ob_tablet_ls_service.h"
-#include "share/location_cache/ob_vtable_location_service.h"
+#include "share/location_cache/ob_location_struct.h"
 
 namespace oceanbase
 {
-namespace common
-{
-class ObMySQLProxy;
-}
 namespace share
 {
 namespace schema
@@ -60,8 +54,6 @@ public:
       const int64_t expire_renew_time,
       bool &is_cache_hit,
       ObLSLocation &location);
-
-  int renew_all_ls_locations_by_rpc();
 
   // Gets leader address of a log stream synchronously.
   //
@@ -118,11 +110,6 @@ public:
       const ObLSID &ls_id,
       common::ObAddr &leader);
 
-  // Nonblock way to renew location cache. It will trigger a location update task.
-  int nonblock_renew(
-      const int64_t cluster_id,
-      const uint64_t tenant_id,
-      const ObLSID &ls_id);
   // ------------------------ End interfaces for log stream location ------------------------
 
   // ------------- Interfaces for tablet to log stream (just for local cluster) -------------
@@ -150,48 +137,6 @@ public:
       const ObTabletID &tablet_id,
       ObLSID &ls_id);
 
-  // Nonblock way to renew the mapping between the tablet and log stream.
-  int nonblock_renew(
-      const uint64_t tenant_id,
-      const ObTabletID &tablet_id);
-  
-  /**
-  Renew the location cache for tablets based on the provided error_code.
-  
-  The default value of `expire_renew_time` is `INT64_MAX`, which triggers a full cache refresh.
-  If `expire_renew_time` is set to a different value, an on-demand refresh will be triggered.
-  
-  Two scenarios that initiate an on-demand synchronous refresh:
-  1. The `location_cache` does not contain the required entry.
-  2. The refresh time in `location_cache` is older than `expire_renew_time`.
-  
-  Note: The module must handle potential errors caused by values exceeding `expire_renew_time`.
-  If error handling is not feasible, use a full refresh by setting `expire_renew_time` to `INT64_MAX`.
-  
-  @param [in] tenant_id          Target tenant that the tablets belong to.
-  @param [in] tablet_list        List of target tablet IDs (may contain duplicates).
-  @param [in] error_code         SQL error code that requires retry.
-  @param [in] is_nonblock        Specifies whether the location refresh is synchronous or asynchronous.
-  @param [in] expire_renew_time  `INT64_MAX` for a full refresh of `tablet_list`; 
-                                  otherwise, triggers on-demand refresh. Default is `INT64_MAX`.
-  @return OB_GET_LOCATION_TIME_OUT          if `inner_sql` times out during a synchronous refresh.
- */
-  int batch_renew_tablet_locations(
-      const uint64_t tenant_id,
-      const ObList<common::ObTabletID, common::ObIAllocator> &tablet_list,
-      const int error_code,
-      const bool is_nonblock,
-      const int64_t expire_renew_time = INT64_MAX);
-
-  // renew tablet ls mapping and ls location according to error_code
-  // implementation is based on batch_renew_tablet_locations
-  int renew_tablet_location(
-      const uint64_t tenant_id,
-      const common::ObTabletID &tablet_id,
-      const int error_code,
-      const bool is_nonblock);
-
-  int submit_tablet_update_task(const ObTabletLocationBroadcastTask &task);
  // ----------------------- End interfaces for tablet to log stream -----------------------
 
   // ----------------------- Interfaces for virtual table location -------------------------
@@ -236,35 +181,17 @@ public:
   static int check_ls_exist(const uint64_t tenant_id, const ObLSID &ls_id, ObLSExistState &state);
 
   int init(
-      ObLSTableOperator &ls_pt,
       schema::ObMultiVersionSchemaService &schema_service,
       common::ObMySQLProxy &sql_proxy,
-      ObRsMgr &rs_mgr,
       obrpc::ObSrvRpcProxy &srv_rpc_proxy);
   int start();
   void stop();
   void wait();
   int destroy();
-  int reload_config();
 
-private:
-  enum RenewType {
-    DEFAULT_RENEW_BOTH = 0,
-    ONLY_RENEW_TABLET_LS_MAPPING = 1,
-    ONLY_RENEW_LS_LOCATION = 2
-  };
-  RenewType gen_renew_type_(const int error) const;
-
-  static int construct_check_ls_exist_sql_(
-      const uint64_t tenant_id,
-      const ObLSID &ls_id,
-      ObSqlString &sql);
 private:
   bool inited_;
   bool stopped_;
-  ObLSLocationService ls_location_service_;
-  ObTabletLSService tablet_ls_service_;
-  ObVTableLocationService vtable_location_service_;
 };
 
 } // end namespace share

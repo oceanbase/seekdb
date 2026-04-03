@@ -81,10 +81,6 @@ void ObAshRefreshTask::runTimerTask()
     int64_t last_snapshot_end_time = 0;
     int64_t snapshot_flag = 0;
     const uint64_t tenant_id = OB_SYS_TENANT_ID;
-    char svr_ip[common::OB_IP_STR_BUFF];
-    int32_t svr_port;
-    GCONF.self_addr_.ip_to_string(svr_ip, sizeof(svr_ip));
-    svr_port = GCONF.self_addr_.get_port();
 
     SMART_VAR(ObISQLClient::ReadResult, res)
     {
@@ -93,8 +89,8 @@ void ObAshRefreshTask::runTimerTask()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("GCTX.sql_proxy_ is null", K(ret));
       } else if (OB_FAIL(sql.assign_fmt("SELECT /*+ WORKLOAD_REPOSITORY */ time_to_usec(END_INTERVAL_TIME), snap_flag FROM %s where "
-                                        "snap_id=%ld and tenant_id=%ld",
-                    OB_ALL_VIRTUAL_WR_SNAPSHOT_TNAME, LAST_SNAPSHOT_RECORD_SNAP_ID, OB_SYS_TENANT_ID))) {
+                                        "snap_id=%ld",
+                    OB_ALL_VIRTUAL_WR_SNAPSHOT_TNAME, LAST_SNAPSHOT_RECORD_SNAP_ID))) {
         LOG_WARN("failed to format sql", KR(ret));
       } else if (OB_FAIL(
                     sql_proxy->read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
@@ -123,8 +119,8 @@ void ObAshRefreshTask::runTimerTask()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("GCTX.sql_proxy_ is null", K(ret));
         } else if (OB_FAIL(sql.assign_fmt("SELECT /*+ WORKLOAD_REPOSITORY */ min(sample_id)+1 from %s where "
-                                        "svr_ip='%s' and svr_port=%d and sample_time>usec_to_time(%ld)",
-                      OB_V_OB_ACTIVE_SESSION_HISTORY_TNAME, svr_ip, svr_port, last_snapshot_end_time))) {
+                                        "sample_time>usec_to_time(%ld)",
+                      OB_V_OB_ACTIVE_SESSION_HISTORY_TNAME, last_snapshot_end_time))) {
           LOG_WARN("failed to format sql", KR(ret));
         } else if (OB_FAIL(
                       GCTX.sql_proxy_->read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {

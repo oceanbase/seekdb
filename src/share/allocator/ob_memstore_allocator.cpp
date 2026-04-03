@@ -17,6 +17,11 @@
 #include "ob_memstore_allocator.h"
 #include "ob_shared_memory_allocator_mgr.h"
 
+// Undefine macOS system macro to avoid conflict with ObFifoArena::PAGE_SIZE
+#ifdef PAGE_SIZE
+#undef PAGE_SIZE
+#endif
+
 namespace oceanbase
 {
 using namespace share;
@@ -158,7 +163,7 @@ void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 
 static int64_t calc_nway(int64_t cpu, int64_t mem)
 {
-  return std::min(cpu, mem/20/ObFifoArena::PAGE_SIZE);
+  return std::min(cpu, mem/20/ObFifoArena::ALLOC_PAGE_SIZE);
 }
 
 int64_t ObMemstoreAllocator::nway_per_group()

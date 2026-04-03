@@ -1379,7 +1379,7 @@ OB_INLINE int ObMicroBlockDecoder::get_row_impl(int64_t index, ObDatumRow &row)
     int64_t row_len = 0;
     const char *row_data = NULL;
     if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
-      LOG_WARN("get row data failed", K(ret), K(index));
+      LOG_WARN("get row data failed", K(ret));
     } else if (row.get_capacity() < request_cnt_) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("obj buf is not enough", K(ret), "expect_obj_count", request_cnt_, K(row));
@@ -1413,7 +1413,7 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRowkey &rowkey, const int64
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(index), K_(row_count), KPC_(datum_utils));
   } else if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
-    LOG_WARN("get row data failed", K(ret), K(index));
+    LOG_WARN("get row data failed", K(ret));
   } else {
     const ObStorageDatumUtils &datum_utils = *datum_utils_;
     ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
@@ -1453,7 +1453,7 @@ int ObMicroBlockDecoder::compare_rowkey(const ObDatumRange &range,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(index), K_(row_count), KPC_(datum_utils));
   } else if (OB_FAIL(row_index_->get(index, row_data, row_len))) {
-    LOG_WARN("get row data failed", K(ret), K(index));
+    LOG_WARN("get row data failed", K(ret));
   } else {
     const ObStorageDatumUtils &datum_utils = *datum_utils_;
     ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
@@ -1822,7 +1822,7 @@ int ObMicroBlockDecoder::filter_pushdown_retro(
       const char *row_data = nullptr;
       int64_t row_len = 0;
       if (OB_FAIL(row_index_->get(row_id, row_data, row_len))) {
-        LOG_WARN("get row data failed", K(ret), K(index));
+        LOG_WARN("get row data failed", K(ret));
       } else {
         ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
         const ObObjMeta &obj_meta = read_info_->get_columns_desc().at(col_offset).col_type_;
@@ -1960,7 +1960,7 @@ int ObMicroBlockDecoder::filter_pushdown_truncate_filter(
         int64_t row_len = 0;
         const char *row_data = nullptr;
         if (OB_FAIL(row_index_->get(row_idx, row_data, row_len))) {
-          LOG_WARN("get row data failed", K(ret), K(index));
+          LOG_WARN("get row data failed", K(ret));
         } else {
           ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
           for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {

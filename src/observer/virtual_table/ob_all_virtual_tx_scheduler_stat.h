@@ -53,10 +53,7 @@ private:
 private:
   enum
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    SESSION_ID,
+    SESSION_ID = common::OB_APP_MIN_COLUMN_ID,
     TX_ID,
     STATE,
     CLUSTER_ID,
@@ -81,7 +78,6 @@ private:
     FORMAT_ID
   };
   static const int64_t OB_MAX_BUFFER_SIZE = 1024;
-  char ip_buffer_[common::OB_IP_STR_BUFF];
   char parts_buffer_[OB_MAX_BUFFER_SIZE];
   char tx_desc_addr_buffer_[20];
   char savepoints_buffer_[OB_MAX_BUFFER_SIZE];

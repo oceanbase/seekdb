@@ -26,7 +26,6 @@ extern bool mtl_is_mini_mode();
 
 struct ObRunningModeConfig
 {
-  static const int64_t MIN_MEM;
   static const int64_t MINI_MEM_LOWER;
   static const int64_t MINI_MEM_UPPER;
   static const int64_t MINI_CPU_UPPER;

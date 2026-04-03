@@ -179,24 +179,6 @@ int ObSchemaGetterGuard::get_schema_version(const uint64_t tenant_id, int64_t &s
   } else {
     schema_version = schema_mgr_info->get_snapshot_version();
   }
-  if (OB_FAIL(ret)
-      && OB_TENANT_HAS_BEEN_DROPPED != ret
-      && ObSchemaService::g_liboblog_mode_) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_ISNULL(schema_service_))  {
-      tmp_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_service is null", KR(ret));
-    } else {
-      TenantStatus tenant_status = TENANT_STATUS_INVALID;
-      tmp_ret = schema_service_->query_tenant_status(tenant_id, tenant_status);
-      if (OB_SUCCESS != tmp_ret){
-        LOG_WARN("query tenant status failed", KR(ret), K(tmp_ret), K(tenant_id));
-      } else if (TENANT_DELETED == tenant_status) {
-        LOG_INFO("tenant has been dropped, no need retry", KR(ret), K(tenant_id));
-        ret = OB_TENANT_HAS_BEEN_DROPPED; //overwrite ret
-      }
-    }
-  }
   return ret;
 }
 
@@ -3474,28 +3456,6 @@ int ObSchemaGetterGuard::get_schema(
     }
   }
 
-  if (OB_FAIL(ret)
-      && OB_TENANT_HAS_BEEN_DROPPED != ret
-      && ObSchemaService::g_liboblog_mode_) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_ISNULL(schema_service_))  {
-      tmp_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_service is null", KR(ret), K(tmp_ret));
-    } else {
-      uint64_t query_tenant_id = (TENANT_SCHEMA == schema_type) ?
-                                 schema_id : tenant_id;
-      TenantStatus tenant_status = TENANT_STATUS_INVALID;
-      tmp_ret = schema_service_->query_tenant_status(query_tenant_id, tenant_status);
-      if (OB_SUCCESS != tmp_ret){
-        LOG_WARN("query tenant status failed", KR(ret), K(tmp_ret),
-                 K(query_tenant_id), K(tenant_id), K_(tenant_id));
-      } else if (TENANT_DELETED == tenant_status) {
-        LOG_INFO("tenant has been dropped, no need retry", KR(ret),
-                 K(query_tenant_id), K(tenant_id), K_(tenant_id));
-        ret = OB_TENANT_HAS_BEEN_DROPPED; //overwrite ret
-      }
-    }
-  }
   return ret;
 }
 

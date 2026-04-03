@@ -42,8 +42,8 @@ insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000
 alter system minor freeze;
 alter table test_mult_sstables reorganize partition p1 into ( partition p1_0 values less than (5000), partition p1_1 values less than (10000));
 check for data table:
-svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
-svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
 check for lob table:
 count(*)
 1
@@ -83,8 +83,8 @@ insert into test_mult_sstables select seq_large.nextval, random(), randstr(10000
 alter system minor freeze;
 alter table test_mult_sstables reorganize partition p1 into ( partition p1_0 values less than (5000), partition p1_1 values less than (10000));
 check for data table:
-svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
-svr_ip	svr_port	tenant_id	ls_id	table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
+table_type	tablet_id	start_log_scn	end_log_scn	upper_trans_version	size	data_block_count	index_block_count	linked_block_count	ref	is_active	contain_uncommitted_row	nested_offset	nested_size	cg_idx	data_checksum	table_flag
 check for lob table:
 count(*)
 1

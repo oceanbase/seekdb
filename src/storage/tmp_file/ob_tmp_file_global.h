@@ -28,10 +28,10 @@ struct ObTmpFileGlobal final
   static const int64_t INVALID_TMP_FILE_FD;
   static const int64_t INVALID_TMP_FILE_DIR_ID;
 
-  static constexpr int64_t PAGE_SIZE = 8 * 1024;  // 8KB
+  static constexpr int64_t ALLOC_PAGE_SIZE = 8 * 1024;  // 8KB
   static constexpr int64_t SN_BLOCK_SIZE = OB_DEFAULT_MACRO_BLOCK_SIZE; // 2MB
   static constexpr int64_t BLOCK_PAGE_NUMS =
-                           SN_BLOCK_SIZE / PAGE_SIZE;   // 256 pages per macro block
+                           SN_BLOCK_SIZE / ALLOC_PAGE_SIZE;   // 256 pages per macro block
 
   static const int64_t TMP_FILE_READ_BATCH_SIZE;
   static const int64_t TMP_FILE_WRITE_BATCH_PAGE_NUM;
@@ -82,7 +82,7 @@ struct ObTmpFileGlobal final
   static constexpr double SS_TMP_FILE_SAFE_WBP_PROP = 0.8;
   static constexpr int64_t SS_BLOCK_SIZE = 2 << 20; // 2MB
   static constexpr int64_t SS_BLOCK_PAGE_NUMS =
-                           SS_BLOCK_SIZE / PAGE_SIZE;   // 256 pages per macro block
+                           SS_BLOCK_SIZE / ALLOC_PAGE_SIZE;   // 256 pages per macro block
 #endif
 };
 

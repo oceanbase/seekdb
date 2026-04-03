@@ -40,8 +40,6 @@ public:
   void set_tablegroup_name(const common::ObString &tablegroup_name);
   obrpc::ObAlterTablegroupArg &get_alter_tablegroup_arg();
   virtual obrpc::ObDDLArg &get_ddl_arg() { return alter_tablegroup_arg_; }
-  virtual int set_primary_zone(const common::ObString &zone) override;
-  virtual int set_locality(const common::ObString &locality) override;
   virtual int set_tablegroup_sharding(const common::ObString &sharding) override;
   inline void set_alter_option_set(const common::ObBitSet<> &alter_option_set);
   bool is_alter_partition() const { return alter_tablegroup_arg_.is_alter_partitions(); }

@@ -583,8 +583,8 @@ class Path
 
   enum OptSkipScanState
   {
-#ifdef __APPLE__
-    // macOS defines SS_DISABLE in sys/signal.h, undefine it first
+#if defined(__APPLE__) || defined(__ANDROID__)
+    // macOS/Android define SS_DISABLE in signal headers, undefine it first
     #ifdef SS_DISABLE
     #undef SS_DISABLE
     #endif

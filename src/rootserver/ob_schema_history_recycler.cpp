@@ -20,7 +20,6 @@
 #include "src/share/ob_freeze_info_proxy.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_zone_merge_info.h"
-#include "share/ob_all_server_tracer.h"
 #include "rootserver/ob_objpriv_mysql_schema_history_recycler.h"
 
 namespace oceanbase
@@ -85,7 +84,7 @@ int64_t ObSchemaHistoryRecyclerIdling::get_idle_interval_us()
 
 ObSchemaHistoryRecycler::ObSchemaHistoryRecycler()
   : inited_(false), idling_(stop_), schema_service_(NULL),
-    /*freeze_info_mgr_(NULL),*/ zone_mgr_(NULL), sql_proxy_(NULL), recycle_schema_versions_()
+    /*freeze_info_mgr_(NULL),*/ sql_proxy_(NULL), recycle_schema_versions_()
 {
 }
 
@@ -100,7 +99,6 @@ ObSchemaHistoryRecycler::~ObSchemaHistoryRecycler()
 int ObSchemaHistoryRecycler::init(
     ObMultiVersionSchemaService &schema_service,
     //ObFreezeInfoManager &freeze_info_manager,
-    ObZoneManager &zone_manager,
     ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
@@ -116,7 +114,6 @@ int ObSchemaHistoryRecycler::init(
   } else {
     schema_service_ = &schema_service;
     //freeze_info_mgr_ = &freeze_info_manager;
-    zone_mgr_ = &zone_manager;
     sql_proxy_ = &sql_proxy;
     inited_ = true;
   }
@@ -359,24 +356,18 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_server(
     common::hash::ObHashMap<uint64_t, int64_t> &recycle_schema_versions)
 {
   int ret = OB_SUCCESS;
-  ObArray<ObAddr> server_list;
   obrpc::ObGetMinSSTableSchemaVersionArg arg;
-  ObZone zone;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(arg.tenant_id_arg_list_.assign(tenant_ids))) {
     LOG_WARN("fail to assign arg", KR(ret));
-  } else if (OB_FAIL(SVR_TRACER.get_servers_of_zone(zone, server_list))) {
-    LOG_WARN("fail to get server_list", KR(ret));
   } else {
     rootserver::ObGetMinSSTableSchemaVersionProxy proxy_batch(
         *(GCTX.srv_rpc_proxy_), &obrpc::ObSrvRpcProxy::get_min_sstable_schema_version);
     const int64_t timeout_ts = GCONF.rpc_timeout;
-    for (int64_t i = 0; OB_SUCC(ret) && i < server_list.count(); i++) {
-      const ObAddr &addr = server_list.at(i);
-      if (OB_FAIL(proxy_batch.call(addr, timeout_ts, arg))) {
-        LOG_WARN("fail to call async batch rpc", KR(ret), K(addr), K(arg));
-      }
+    const ObAddr &addr = GCTX.self_addr();
+    if (OB_FAIL(proxy_batch.call(addr, timeout_ts, arg))) {
+      LOG_WARN("fail to call async batch rpc", KR(ret), K(addr), K(arg));
     }
     ObArray<int> return_code_array;
     int tmp_ret = OB_SUCCESS; // always wait all
@@ -440,9 +431,8 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_for_ddl(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("mysql proxy ptr is null", KR(ret));
       } else if (OB_FAIL(sql.assign_fmt(
-              "SELECT tenant_id, min(schema_version) as min_schema_version"
-              " FROM %s WHERE tenant_id = %ld group by tenant_id",
-              OB_ALL_DDL_TASK_STATUS_TNAME, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+              "SELECT min(schema_version) as min_schema_version FROM %s",
+              OB_ALL_DDL_TASK_STATUS_TNAME))) {
         LOG_WARN("fail to append sql", KR(ret));
       } else if (OB_FAIL(sql_proxy_->read(res, tenant_id, sql.ptr()))) {
         LOG_WARN("fail to execute sql", KR(ret), K(sql));
@@ -451,9 +441,8 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_for_ddl(
         LOG_WARN("fail to get sql result", KR(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          uint64_t tenant_id = OB_INVALID_TENANT_ID;
+          uint64_t tenant_id = OB_SYS_TENANT_ID;
           int64_t schema_version = OB_INVALID_VERSION;
-          EXTRACT_INT_FIELD_MYSQL(*result, "tenant_id", tenant_id, uint64_t);
           EXTRACT_INT_FIELD_MYSQL(*result, "min_schema_version", schema_version, int64_t);
           if (FAILEDx(fill_recycle_schema_versions(
                   tenant_id, schema_version, recycle_schema_versions))) {
@@ -1248,8 +1237,8 @@ int ObRecycleSchemaExecutor::gen_fill_schema_history_sql(
   if (OB_FAIL(check_stop())) {
     LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select %s, schema_version, is_deleted from %s "
-                                    "where tenant_id = 0 and schema_version <= %ld "
-                                    "order by tenant_id, %s, schema_version "
+                                    "where schema_version <= %ld "
+                                    "order by %s, schema_version "
                                     "limit %ld, %ld",
                                     schema_key_name_, table_name_,
                                     schema_version_, schema_key_name_, start_idx,
@@ -1505,7 +1494,7 @@ int ObRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
-    if (OB_FAIL(sql.assign_fmt("delete from %s where (tenant_id, %s) in ( ",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where (%s) in ( ",
                                 table_name_, schema_key_name_))) {
       LOG_WARN("fail to assign sql", K(ret), K_(tenant_id), K_(schema_version));
     }
@@ -1513,7 +1502,7 @@ int ObRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
       const ObFirstSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
         LOG_WARN("schema history recycler is stopped", K(ret));
-      } else if (OB_FAIL(sql.append_fmt("%s (0, %ld)", 0 == i ? "" : ",",
+      } else if (OB_FAIL(sql.append_fmt("%s (%ld)", 0 == i ? "" : ",",
                                         key.first_schema_id_))) {
         LOG_WARN("fail to append fmt", K(ret), K(key));
       }
@@ -1563,7 +1552,7 @@ int ObRecycleSchemaExecutor::gen_batch_compress_schema_history_sql(
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
-    if (OB_FAIL(sql.assign_fmt("delete from %s where tenant_id = 0 and ( ",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where 0 = 0 and ( ",
                                 table_name_))) {
       LOG_WARN("fail to assign sql", K(ret), K_(tenant_id), K_(schema_version));
     }
@@ -1732,8 +1721,8 @@ int ObSecondRecycleSchemaExecutor::gen_fill_schema_history_sql(
   if (OB_FAIL(check_stop())) {
     LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select %s, %s, schema_version, is_deleted from %s "
-                                    "where tenant_id = 0 and schema_version <= %ld "
-                                    "order by tenant_id, %s, %s, schema_version "
+                                    "where schema_version <= %ld "
+                                    "order by %s, %s, schema_version "
                                     "limit %ld, %ld",
                                     schema_key_name_, second_schema_key_name_,
                                     table_name_, schema_version_,
@@ -1772,7 +1761,7 @@ int ObSecondRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
-    if (OB_FAIL(sql.assign_fmt("delete from %s where (tenant_id, %s, %s) in ( ",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where (%s, %s) in ( ",
                                 table_name_, schema_key_name_, second_schema_key_name_))) {
       LOG_WARN("fail to assign sql", K(ret), K_(tenant_id), K_(schema_version));
     }
@@ -1780,7 +1769,7 @@ int ObSecondRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
       const ObSecondSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
         LOG_WARN("schema history recycler is stopped", K(ret));
-      } else if (OB_FAIL(sql.append_fmt("%s (0, %ld, %ld)", 0 == i ? "" : ",",
+      } else if (OB_FAIL(sql.append_fmt("%s (%ld, %ld)", 0 == i ? "" : ",",
                                         key.first_schema_id_,
                                         key.second_schema_id_))) {
         LOG_WARN("fail to append fmt", K(ret), K(key));
@@ -1848,8 +1837,8 @@ int ObThirdRecycleSchemaExecutor::gen_fill_schema_history_sql(
   if (OB_FAIL(check_stop())) {
     LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select %s, %s, %s, schema_version, is_deleted from %s "
-                                    "where tenant_id = 0 and schema_version <= %ld "
-                                    "order by tenant_id, %s, %s, %s, schema_version "
+                                    "where schema_version <= %ld "
+                                    "order by %s, %s, %s, schema_version "
                                     "limit %ld, %ld",
                                     schema_key_name_, second_schema_key_name_,
                                     third_schema_key_name_, table_name_,
@@ -1891,7 +1880,7 @@ int ObThirdRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
-    if (OB_FAIL(sql.assign_fmt("delete from %s where (tenant_id, %s, %s, %s) in ( ",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where (%s, %s, %s) in ( ",
                                 table_name_, schema_key_name_, second_schema_key_name_,
                                 third_schema_key_name_))) {
       LOG_WARN("fail to assign sql", K(ret), K_(tenant_id), K_(schema_version));
@@ -1900,7 +1889,7 @@ int ObThirdRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
       const ObThirdSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
         LOG_WARN("schema history recycler is stopped", K(ret));
-      } else if (OB_FAIL(sql.append_fmt("%s (0, %ld, %ld, %ld)", 0 == i ? "" : ",",
+      } else if (OB_FAIL(sql.append_fmt("%s (%ld, %ld, %ld)", 0 == i ? "" : ",",
                                         key.first_schema_id_,
                                         key.second_schema_id_,
                                         key.third_schema_id_))) {
@@ -1916,7 +1905,7 @@ int ObThirdRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
 }
 
 ObSystemVariableSchemaKey::ObSystemVariableSchemaKey()
-  : zone_(), name_()
+  : name_()
 {
 }
 
@@ -1926,24 +1915,19 @@ ObSystemVariableSchemaKey::~ObSystemVariableSchemaKey()
 
 bool ObSystemVariableSchemaKey::operator==(const ObSystemVariableSchemaKey &other) const
 {
-  return 0 == zone_.compare(other.zone_) && 0 == name_.compare(other.name_);
+  return 0 == name_.compare(other.name_);
 }
 
 bool ObSystemVariableSchemaKey::operator!=(const ObSystemVariableSchemaKey &other) const
 {
-  return 0 != zone_.compare(other.zone_) || 0 != name_.compare(other.name_);
+  return 0 != name_.compare(other.name_);
 }
 
 bool ObSystemVariableSchemaKey::operator<(const ObSystemVariableSchemaKey &other) const
 {
   bool bret = false;
   common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-  int cmp = ObCharset::strcmp(cs_type, zone_, other.zone_);
-  if (cmp < 0) {
-    bret = true;
-  } else if (cmp > 0) {
-    bret = false;
-  } else if (ObCharset::strcmp(cs_type, name_, other.name_) < 0) {
+  if (ObCharset::strcmp(cs_type, name_, other.name_) < 0) {
     bret = true;
   } else {
     bret = false;
@@ -1962,7 +1946,6 @@ int ObSystemVariableSchemaKey::assign(const ObSystemVariableSchemaKey &other)
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    zone_.assign_ptr(other.zone_.ptr(), other.zone_.length());
     name_.assign_ptr(other.name_.ptr(), other.name_.length());
   }
   return ret;
@@ -1977,7 +1960,6 @@ bool ObSystemVariableSchemaKey::is_valid() const
 uint64_t ObSystemVariableSchemaKey::hash() const
 {
   uint64_t hash_val = 0;
-  hash_val = common::ObCharset::hash(common::CS_TYPE_UTF8MB4_GENERAL_CI, zone_, hash_val);
   hash_val = common::ObCharset::hash(common::CS_TYPE_UTF8MB4_GENERAL_CI, name_, hash_val);
   return hash_val;
 }
@@ -2027,9 +2009,9 @@ int ObSystemVariableRecycleSchemaExecutor::gen_fill_schema_history_sql(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
     LOG_WARN("schema history recycler is stopped", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("select zone, name, schema_version, is_deleted from %s "
-                                    "where tenant_id = 0 and schema_version <= %ld "
-                                    "order by tenant_id, zone, name, schema_version "
+  } else if (OB_FAIL(sql.assign_fmt("select name, schema_version, is_deleted from %s "
+                                    "where schema_version <= %ld "
+                                    "order by name, schema_version "
                                     "limit %ld, %ld",
                                     table_name_, schema_version_,
                                     start_idx, SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
@@ -2047,14 +2029,10 @@ int ObSystemVariableRecycleSchemaExecutor::retrieve_schema_history(
   if (OB_FAIL(check_stop())) {
     LOG_WARN("schema history recycler is stopped", K(ret));
   } else {
-    EXTRACT_VARCHAR_FIELD_MYSQL(result, "zone", cur_key.zone_);
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "name", cur_key.name_);
     EXTRACT_INT_FIELD_MYSQL(result, "schema_version", cur_value.max_schema_version_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", cur_value.is_deleted_, bool);
     if (OB_SUCC(ret)) {
-      if (cur_key.zone_.empty()) {
-        cur_key.zone_.reset();
-      }
       if (cur_key.name_.empty()) {
         cur_key.name_.reset();
       }
@@ -2068,9 +2046,7 @@ int ObSystemVariableRecycleSchemaExecutor::fill_schema_history_key(
     ObSystemVariableSchemaKey &key)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ob_write_string(allocator_, cur_key.zone_, key.zone_))) {
-    LOG_WARN("fail to write string", K(ret), K(cur_key));
-  } else if (OB_FAIL(ob_write_string(allocator_, cur_key.name_, key.name_))) {
+  if (OB_FAIL(ob_write_string(allocator_, cur_key.name_, key.name_))) {
     LOG_WARN("fail to write string", K(ret), K(cur_key));
   }
   return ret;
@@ -2086,7 +2062,7 @@ int ObSystemVariableRecycleSchemaExecutor::gen_batch_compress_schema_history_sql
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
-    if (OB_FAIL(sql.assign_fmt("delete from %s where tenant_id = 0 and ( ",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where 0 = 0 and ( ",
                                 table_name_))) {
       LOG_WARN("fail to assign sql", K(ret), K_(tenant_id), K_(schema_version));
     }
@@ -2094,10 +2070,8 @@ int ObSystemVariableRecycleSchemaExecutor::gen_batch_compress_schema_history_sql
       const ObSystemVariableCompressSchemaInfo &info = compress_schema_infos.at(i);
       if (OB_FAIL(check_stop())) {
         LOG_WARN("schema history recycler is stopped", K(ret));
-      } else if (OB_FAIL(sql.append_fmt("%s (zone = '%.*s' and name = '%.*s' and schema_version < %ld)",
+      } else if (OB_FAIL(sql.append_fmt("%s (name = '%.*s' and schema_version < %ld)",
                                         0 == i ? "" : "or",
-                                        info.key_.zone_.length(),
-                                        info.key_.zone_.ptr(),
                                         info.key_.name_.length(),
                                         info.key_.name_.ptr(),
                                         info.max_schema_version_))) {
@@ -2250,7 +2224,7 @@ int ObObjectPrivRecycleSchemaExecutor::gen_fill_schema_history_sql(
     LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (OB_FAIL(sql.assign_fmt(
     "select obj_id, objtype, col_id, grantor_id, grantee_id, priv_id, schema_version, is_deleted "
-    "from %s where tenant_id = 0 and schema_version <= %ld "
+    "from %s where schema_version <= %ld "
     "order by obj_id, objtype, col_id, grantor_id, grantee_id, priv_id, schema_version "
     "limit %ld, %ld",
     table_name_, schema_version_,
@@ -2293,7 +2267,7 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
   } else {
     if (OB_FAIL(sql.assign_fmt(
         " delete from %s where schema_version <= %ld"
-        " and (tenant_id, obj_id, objtype, col_id, grantor_id, grantee_id, priv_id) in ( ",
+        " and (obj_id, objtype, col_id, grantor_id, grantee_id, priv_id) in ( ",
          table_name_, schema_version_))) {
       LOG_WARN("fail to assign sql", KR(ret), K_(tenant_id), K_(schema_version));
     }
@@ -2301,7 +2275,7 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
       const ObObjectPrivSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
         LOG_WARN("schema history recycler is stopped", KR(ret));
-      } else if (OB_FAIL(sql.append_fmt("%s (0, %ld, %ld, %ld, %ld, %ld, %ld)", 0 == i ? "" : ",",
+      } else if (OB_FAIL(sql.append_fmt("%s (%ld, %ld, %ld, %ld, %ld, %ld)", 0 == i ? "" : ",",
                                         key.obj_id_,
                                         key.obj_type_,
                                         key.col_id_,
@@ -2329,7 +2303,7 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_compress_schema_history_sql(
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
-    if (OB_FAIL(sql.assign_fmt("delete from %s where tenant_id = 0 and ( ",
+    if (OB_FAIL(sql.assign_fmt("delete from %s where 0 = 0 and ( ",
                                 table_name_))) {
       LOG_WARN("fail to assign sql", KR(ret), K_(tenant_id), K_(schema_version));
     }

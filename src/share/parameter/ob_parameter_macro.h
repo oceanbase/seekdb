@@ -24,28 +24,29 @@
 #define _OB_CLUSTER_PARAMETER common::Scope::CLUSTER
 #define _OB_TENANT_PARAMETER common::Scope::TENANT
 
-#define _DEF_PARAMETER_SCOPE_EASY(access_specifier, param, name, SCOPE, args...)                        \
-  SCOPE(_DEF_PARAMETER_EASY(access_specifier, param, _ ## SCOPE, name, args))
-#define _DEF_PARAMETER_SCOPE_RANGE_EASY(access_specifier, param, name, SCOPE, args...)                  \
-  SCOPE(_DEF_PARAMETER_RANGE_EASY(access_specifier, param, _ ## SCOPE, name, args))
-#define _DEF_PARAMETER_SCOPE_CHECKER_EASY(access_specifier, param, name, SCOPE, args...)                \
-  SCOPE(_DEF_PARAMETER_CHECKER_EASY(access_specifier, param, _ ## SCOPE, name, args))
-#define _DEF_PARAMETER_SCOPE_PARSER_EASY(access_specifier, param, name, SCOPE, args...)                 \
-  SCOPE(_DEF_PARAMETER_PARSER_EASY(access_specifier, param, _ ## SCOPE, name, args))
-#define _DEF_PARAMETER_SCOPE_IP_EASY(access_specifier, param, name, SCOPE, def, args...)                \
-  SCOPE(_DEF_PARAMETER_CHECKER_EASY(access_specifier, param, _ ## SCOPE, name, def,                     \
-                                    common::ObConfigIpChecker, args))
-#define _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(access_specifier, param, name, SCOPE, def, args...)         \
-  SCOPE(_DEF_PARAMETER_CHECKER_EASY(access_specifier, param, _ ## SCOPE, name, def,                     \
-                                    common::ObConfigLogLevelChecker, args))
+// Updated macros with name as first parameter: name, SCOPE, ...
+#define _DEF_PARAMETER_SCOPE_EASY(param, name, SCOPE, ...)                        \
+  SCOPE(_DEF_PARAMETER_EASY(param, _ ## SCOPE, name, __VA_ARGS__))
+#define _DEF_PARAMETER_SCOPE_RANGE_EASY(param, name, SCOPE, ...)                  \
+  SCOPE(_DEF_PARAMETER_RANGE_EASY(param, _ ## SCOPE, name, __VA_ARGS__))
+#define _DEF_PARAMETER_SCOPE_CHECKER_EASY(param, name, SCOPE, ...)                \
+  SCOPE(_DEF_PARAMETER_CHECKER_EASY(param, _ ## SCOPE, name, __VA_ARGS__))
+#define _DEF_PARAMETER_SCOPE_PARSER_EASY(param, name, SCOPE, ...)                 \
+  SCOPE(_DEF_PARAMETER_PARSER_EASY(param, _ ## SCOPE, name, __VA_ARGS__))
+#define _DEF_PARAMETER_SCOPE_IP_EASY(param, name, SCOPE, def, ...)                \
+  SCOPE(_DEF_PARAMETER_CHECKER_EASY(param, _ ## SCOPE, name, def,                     \
+                                    common::ObConfigIpChecker, __VA_ARGS__))
+#define _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(param, name, SCOPE, def, ...)         \
+  SCOPE(_DEF_PARAMETER_CHECKER_EASY(param, _ ## SCOPE, name, def,                     \
+                                    common::ObConfigLogLevelChecker, __VA_ARGS__))
 
-#define _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(access_specifier, param, name, SCOPE, def, args...)  \
-  SCOPE(_DEF_PARAMETER_CHECKER_EASY(access_specifier, param, _ ## SCOPE, name, def,                     \
-                                    common::ObConfigWorkAreaPolicyChecker, args))
+#define _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(param, name, SCOPE, def, ...)  \
+  SCOPE(_DEF_PARAMETER_CHECKER_EASY(param, _ ## SCOPE, name, def,                     \
+                                    common::ObConfigWorkAreaPolicyChecker, __VA_ARGS__))
 
 // TODO: use parameter instead of config
-#define _DEF_PARAMETER_EASY(access_specifier, param, scope, name, def, args...)                 \
-access_specifier:                                                                          \
+#define _DEF_PARAMETER_EASY(param, scope, name, def, args...)                 \
+public:                                                                          \
   class ObConfig ## param ## Item ## _ ## name                                 \
       : public common::ObConfig ## param ## Item                               \
   {                                                                            \
@@ -68,8 +69,8 @@ access_specifier:                                                               
     static constexpr const char* value_default_str_ = def;                     \
   } name;
 
-#define _DEF_PARAMETER_RANGE_EASY(access_specifier, param, scope, name, def, args...)           \
-access_specifier:                                                                          \
+#define _DEF_PARAMETER_RANGE_EASY(param, scope, name, def, args...)           \
+public:                                                                          \
   class ObConfig ## param ## Item ## _ ## name                                 \
       : public common::ObConfig ## param ## Item                               \
   {                                                                            \
@@ -91,8 +92,8 @@ access_specifier:                                                               
     static constexpr const char* value_default_str_ = def;                     \
   } name;
 
-#define _DEF_PARAMETER_CHECKER_EASY(access_specifier, param, scope, name, def, checker, args...) \
-access_specifier:                                                                          \
+#define _DEF_PARAMETER_CHECKER_EASY(param, scope, name, def, checker, args...) \
+public:                                                                          \
   class ObConfig ## param ## Item ## _ ## name                                 \
       : public common::ObConfig ## param ## Item                               \
   {                                                                            \
@@ -116,8 +117,8 @@ access_specifier:                                                               
     }                                                                          \
     static constexpr const char* value_default_str_ = def;                     \
   } name;
-#define _DEF_PARAMETER_PARSER_EASY(access_specifier, param, scope, name, def, parser, args...)   \
-access_specifier:                                                                          \
+#define _DEF_PARAMETER_PARSER_EASY(param, scope, name, def, parser, args...)   \
+public:                                                                          \
   class ObConfig ## param ## Item ## _ ## name                                 \
       : public common::ObConfig ## param ## Item                               \
   {                                                                            \
@@ -135,138 +136,125 @@ access_specifier:                                                               
   } name;
 
 ////////////////////////////////////////////////////////////////////////////////
-#define DEF_INT(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Int, args)
+// Unified parameter definition macro: DEF_PARAM(name, type, SCOPE, ...)
+// name: parameter name (first parameter)
+// type: parameter type (STR, INT, CAP, TIME, BOOL, etc.)
+// SCOPE: OB_CLUSTER_PARAMETER or OB_TENANT_PARAMETER
+// ...: remaining arguments (def, range/checker, description, attr, optional_values)
+#define DEF_PARAM(name, type, SCOPE, ...)                                      \
+  _DEF_PARAM_IMPL(name, type, SCOPE, __VA_ARGS__)
 
-#define DEF_INT_WITH_CHECKER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Int, args)
+// Internal implementation macro that dispatches based on type
+#define _DEF_PARAM_IMPL(name, type, SCOPE, ...)                               \
+  _DEF_PARAM_DISPATCH(name, type, SCOPE, __VA_ARGS__)
 
-#define DEF_DBL(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Double, args)
+// Dispatch macro based on type
+#define _DEF_PARAM_DISPATCH(name, type, SCOPE, ...)                            \
+  _DEF_PARAM_##type(name, SCOPE, __VA_ARGS__)
 
-#define DEF_CAP(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Capacity, args)
+// Type-specific macros: name, SCOPE, def, range/checker, description, attr, optional_values
+#define _DEF_PARAM_STR(name, SCOPE, ...)                                      \
+  _DEF_PARAMETER_SCOPE_EASY(String, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_INT(name, SCOPE, ...)                                       \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Int, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_DBL(name, SCOPE, ...)                                       \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Double, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_CAP(name, SCOPE, ...)                                       \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Capacity, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_TIME(name, SCOPE, ...)                                      \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Time, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_BOOL(name, SCOPE, ...)                                      \
+  _DEF_PARAMETER_SCOPE_EASY(Bool, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_VERSION(name, SCOPE, ...)                                  \
+  _DEF_PARAMETER_SCOPE_EASY(Version, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_MOMENT(name, SCOPE, ...)                                    \
+  _DEF_PARAMETER_SCOPE_EASY(Moment, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_INT_LIST(name, SCOPE, ...)                                  \
+  _DEF_PARAMETER_SCOPE_EASY(IntList, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_STR_LIST(name, SCOPE, ...)                                   \
+  _DEF_PARAMETER_SCOPE_EASY(StrList, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_STR_WITH_CHECKER(name, SCOPE, ...)                          \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(String, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_INT_WITH_CHECKER(name, SCOPE, ...)                          \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Int, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_CAP_WITH_CHECKER(name, SCOPE, ...)                          \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Capacity, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_TIME_WITH_CHECKER(name, SCOPE, ...)                         \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Time, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_BOOL_WITH_CHECKER(name, SCOPE, ...)                          \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Bool, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_IP(name, SCOPE, def, ...)                                   \
+  _DEF_PARAMETER_SCOPE_IP_EASY(String, name, SCOPE, def, __VA_ARGS__)
+#define _DEF_PARAM_LOG_LEVEL(name, SCOPE, def, ...)                            \
+  _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(String, name, SCOPE, def, __VA_ARGS__)
+#define _DEF_PARAM_WORK_AREA_POLICY(name, SCOPE, def, ...)                      \
+  _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(String, name, SCOPE, def, __VA_ARGS__)
+#define _DEF_PARAM_MODE_WITH_PARSER(name, SCOPE, ...)                          \
+  _DEF_PARAMETER_SCOPE_PARSER_EASY(Mode, name, SCOPE, __VA_ARGS__)
+#define _DEF_PARAM_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(name, SCOPE, ...)          \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(LogArchiveOptions, name, SCOPE, __VA_ARGS__)
 
-#define DEF_CAP_WITH_CHECKER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Capacity, args)
+// Legacy macros for backward compatibility (reorder arguments: name first)
+#define DEF_INT(name, SCOPE, ...)                                               \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Int, name, SCOPE, __VA_ARGS__)
 
-#define DEF_TIME(args...)                                                      \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Time, args)
+#define DEF_INT_WITH_CHECKER(name, SCOPE, ...)                                 \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Int, name, SCOPE, __VA_ARGS__)
 
-#define DEF_TIME_WITH_CHECKER(args...)                                         \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Time, args)
+#define DEF_DBL(name, SCOPE, ...)                                              \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Double, name, SCOPE, __VA_ARGS__)
 
-#define DEF_BOOL(args...)                                                      \
-  _DEF_PARAMETER_SCOPE_EASY(public, Bool, args)
+#define DEF_CAP(name, SCOPE, ...)                                              \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Capacity, name, SCOPE, __VA_ARGS__)
 
-#define DEF_BOOL_WITH_CHECKER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Bool, args)
+#define DEF_CAP_WITH_CHECKER(name, SCOPE, ...)                                \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Capacity, name, SCOPE, __VA_ARGS__)
 
-#define DEF_STR(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_EASY(public, String, args)
+#define DEF_TIME(name, SCOPE, ...)                                             \
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Time, name, SCOPE, __VA_ARGS__)
 
-#define DEF_VERSION(args...)                                                   \
-  _DEF_PARAMETER_SCOPE_EASY(public, Version, args)
+#define DEF_TIME_WITH_CHECKER(name, SCOPE, ...)                                \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Time, name, SCOPE, __VA_ARGS__)
 
-#define DEF_STR_WITH_CHECKER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, String, args)
+#define DEF_BOOL(name, SCOPE, ...)                                             \
+  _DEF_PARAMETER_SCOPE_EASY(Bool, name, SCOPE, __VA_ARGS__)
 
-#define DEF_IP(args...)                                                        \
-  _DEF_PARAMETER_SCOPE_IP_EASY(public, String, args)
+#define DEF_BOOL_WITH_CHECKER(name, SCOPE, ...)                                \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Bool, name, SCOPE, __VA_ARGS__)
 
-#define DEF_MOMENT(args...)                                                    \
-  _DEF_PARAMETER_SCOPE_EASY(public, Moment, args)
+#define DEF_STR(name, SCOPE, ...)                                              \
+  _DEF_PARAMETER_SCOPE_EASY(String, name, SCOPE, __VA_ARGS__)
 
-#define DEF_INT_LIST(args...)                                                  \
-  _DEF_PARAMETER_SCOPE_EASY(public, IntList, args)
+#define DEF_VERSION(name, SCOPE, ...)                                          \
+  _DEF_PARAMETER_SCOPE_EASY(Version, name, SCOPE, __VA_ARGS__)
 
-#define DEF_STR_LIST(args...)                                                  \
-  _DEF_PARAMETER_SCOPE_EASY(public, StrList, args)
+#define DEF_STR_WITH_CHECKER(name, SCOPE, ...)                                \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(String, name, SCOPE, __VA_ARGS__)
 
-#define DEF_MODE_WITH_PARSER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_PARSER_EASY(public, Mode, args)
+#define DEF_IP(name, SCOPE, ...)                                               \
+  _DEF_PARAMETER_SCOPE_IP_EASY(String, name, SCOPE, __VA_ARGS__)
 
-#define DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(args...)                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, LogArchiveOptions, args)
-#define DEF_LOG_LEVEL(args...)                                                 \
-  _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(public, String, args)
+#define DEF_MOMENT(name, SCOPE, ...)                                           \
+  _DEF_PARAMETER_SCOPE_EASY(Moment, name, SCOPE, __VA_ARGS__)
 
-#define DEF_WORK_AREA_POLICY(args...)                                          \
-  _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(public, String, args)
+#define DEF_INT_LIST(name, SCOPE, ...)                                         \
+  _DEF_PARAMETER_SCOPE_EASY(IntList, name, SCOPE, __VA_ARGS__)
+
+#define DEF_STR_LIST(name, SCOPE, ...)                                         \
+  _DEF_PARAMETER_SCOPE_EASY(StrList, name, SCOPE, __VA_ARGS__)
+
+#define DEF_MODE_WITH_PARSER(name, SCOPE, ...)                                 \
+  _DEF_PARAMETER_SCOPE_PARSER_EASY(Mode, name, SCOPE, __VA_ARGS__)
+
+#define DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(name, SCOPE, ...)                 \
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(LogArchiveOptions, name, SCOPE, __VA_ARGS__)
+#define DEF_LOG_LEVEL(name, SCOPE, ...)                                       \
+  _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(String, name, SCOPE, __VA_ARGS__)
+
+#define DEF_WORK_AREA_POLICY(name, SCOPE, ...)                                 \
+  _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(String, name, SCOPE, __VA_ARGS__)
 // For configuration items that only take effect in ERRSIM mode, the following macro must be used to define.
 
-#ifdef ERRSIM
-
-#define ERRSIM_DEF_INT(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Int, args)
-
-#define ERRSIM_DEF_INT_WITH_CHECKER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Int, args)
-
-#define ERRSIM_DEF_DBL(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Double, args)
-
-#define ERRSIM_DEF_CAP(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Capacity, args)
-
-#define ERRSIM_DEF_CAP_WITH_CHECKER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Capacity, args)
-
-#define ERRSIM_DEF_TIME(args...)                                                      \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Time, args)
-
-#define ERRSIM_DEF_TIME_WITH_CHECKER(args...)                                         \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Time, args)
-
-#define ERRSIM_DEF_BOOL(args...)                                                      \
-  _DEF_PARAMETER_SCOPE_EASY(public, Bool, args)
-
-#define ERRSIM_DEF_STR(args...)                                                       \
-  _DEF_PARAMETER_SCOPE_EASY(public, String, args)
-
-#define ERRSIM_DEF_STR_WITH_CHECKER(args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, String, args)
-
-#define ERRSIM_DEF_IP(args...)                                                        \
-  _DEF_PARAMETER_SCOPE_IP_EASY(public, String, args)
-
-#define ERRSIM_DEF_MOMENT(args...)                                                    \
-  _DEF_PARAMETER_SCOPE_EASY(public, Moment, args)
-
-#define ERRSIM_DEF_INT_LIST(args...)                                                  \
-  _DEF_PARAMETER_SCOPE_EASY(public, IntList, args)
-
-#define ERRSIM_DEF_STR_LIST(args...)                                                  \
-  _DEF_PARAMETER_SCOPE_EASY(public, StrList, args)
-
-#define ERRSIM_DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(args...)                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, LogArchiveOptions, args)
-
-#define ERRSIM_DEF_LOG_LEVEL(args...)                                                 \
-  _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(public, String, args)
-
-#define ERRSIM_DEF_WORK_AREA_POLICY(args...)                                          \
-  _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(public, String, args)
-
-#else
-#define ERRSIM_DEF_INT(args...)
-#define ERRSIM_DEF_INT_WITH_CHECKER(args...)
-#define ERRSIM_DEF_DBL(args...)
-#define ERRSIM_DEF_CAP(args...)
-#define ERRSIM_DEF_CAP_WITH_CHECKER(args...)
-#define ERRSIM_DEF_TIME(args...)
-#define ERRSIM_DEF_TIME_WITH_CHECKER(args...)
-#define ERRSIM_DEF_BOOL(args...)
-#define ERRSIM_DEF_STR(args...)
-#define ERRSIM_DEF_STR_WITH_CHECKER(args...)
-#define ERRSIM_DEF_IP(args...)
-#define ERRSIM_DEF_MOMENT(args...)
-#define ERRSIM_DEF_INT_LIST(args...)
-#define ERRSIM_DEF_STR_LIST(args...)
-#define ERRSIM_DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(args...)
-#define ERRSIM_DEF_LOG_LEVEL(args...)
-#define ERRSIM_DEF_WORK_AREA_POLICY(args...)
-#endif
 
 #define DEPRECATED_DEF_INT(args...)
 #define DEPRECATED_DEF_INT_WITH_CHECKER(args...)
@@ -288,56 +276,56 @@ access_specifier:                                                               
 // For configuration items used temporarily (to be deleted before official release), the following macro must be used to define.
 // ver Please write as v4.2, v3.2, etc., do not write as master
 #define TEMP_DEF_INT(ver, args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Int, args)
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Int, args)
 
 #define TEMP_DEF_INT_WITH_CHECKER(ver, args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Int, args)
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Int, args)
 
 #define TEMP_DEF_DBL(ver, args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Double, args)
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Double, args)
 
 #define TEMP_DEF_CAP(ver, args...)                                                       \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Capacity, args)
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Capacity, args)
 
 #define TEMP_DEF_CAP_WITH_CHECKER(ver, args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Capacity, args)
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Capacity, args)
 
 #define TEMP_DEF_TIME(ver, args...)                                                      \
-  _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Time, args)
+  _DEF_PARAMETER_SCOPE_RANGE_EASY(Time, args)
 
 #define TEMP_DEF_TIME_WITH_CHECKER(ver, args...)                                         \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, Time, args)
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(Time, args)
 
 #define TEMP_DEF_BOOL(ver, args...)                                                      \
-  _DEF_PARAMETER_SCOPE_EASY(public, Bool, args)
+  _DEF_PARAMETER_SCOPE_EASY(Bool, args)
 
 #define TEMP_DEF_STR(ver, args...)                                                       \
-  _DEF_PARAMETER_SCOPE_EASY(public, String, args)
+  _DEF_PARAMETER_SCOPE_EASY(String, args)
 
 #define TEMP_DEF_VERSION(ver, args...)                                                   \
-  _DEF_PARAMETER_SCOPE_EASY(public, Version, args)
+  _DEF_PARAMETER_SCOPE_EASY(Version, args)
 
 #define TEMP_DEF_STR_WITH_CHECKER(ver, args...)                                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, String, args)
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(String, args)
 
 #define TEMP_DEF_IP(ver, args...)                                                        \
-  _DEF_PARAMETER_SCOPE_IP_EASY(public, String, args)
+  _DEF_PARAMETER_SCOPE_IP_EASY(String, args)
 
 #define TEMP_DEF_MOMENT(ver, args...)                                                    \
-  _DEF_PARAMETER_SCOPE_EASY(public, Moment, args)
+  _DEF_PARAMETER_SCOPE_EASY(Moment, args)
 
 #define TEMP_DEF_INT_LIST(ver, args...)                                                  \
-  _DEF_PARAMETER_SCOPE_EASY(public, IntList, args)
+  _DEF_PARAMETER_SCOPE_EASY(IntList, args)
 
 #define TEMP_DEF_STR_LIST(ver, args...)                                                  \
-  _DEF_PARAMETER_SCOPE_EASY(public, StrList, args)
+  _DEF_PARAMETER_SCOPE_EASY(StrList, args)
 
 #define TEMP_DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(ver, args...)                          \
-  _DEF_PARAMETER_SCOPE_CHECKER_EASY(public, LogArchiveOptions, args)
+  _DEF_PARAMETER_SCOPE_CHECKER_EASY(LogArchiveOptions, args)
 #define TEMP_DEF_LOG_LEVEL(ver, args...)                                                 \
-  _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(public, String, args)
+  _DEF_PARAMETER_SCOPE_LOG_LEVEL_EASY(String, args)
 
 #define TEMP_DEF_WORK_AREA_POLICY(ver, args...)                                          \
-  _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(public, String, args)
+  _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(String, args)
 
 #endif

@@ -31,8 +31,35 @@
 #else
 #include <malloc.h>
 #endif
-#ifdef __linux__
-#include <libaio.h> // libaio is Linux-specific, not available on macOS
+#if defined(__APPLE__) || defined(__ANDROID__)
+#ifndef OB_LIBAIO_STUB_DEFINED
+#define OB_LIBAIO_STUB_DEFINED
+#include <stddef.h>
+// Stub types for libaio (not available on macOS/Android)
+typedef unsigned long io_context_t;
+struct iocb {
+  void *data;
+  short aio_lio_opcode;
+  int aio_fildes;
+  void *aio_buf;
+  size_t aio_nbytes;
+  long long aio_offset;
+};
+struct io_event { void *data; struct iocb *obj; long res; long res2; };
+static inline int io_submit(io_context_t, long, struct iocb**) { return -1; }
+static inline int io_getevents(io_context_t, long, long, struct io_event*, struct timespec*) { return -1; }
+static inline int io_setup(unsigned, io_context_t*) { return -1; }
+static inline int io_destroy(io_context_t) { return -1; }
+static inline int io_cancel(io_context_t, struct iocb*, struct io_event*) { return -1; }
+static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
+  iocb->aio_fildes = fd; iocb->aio_buf = buf; iocb->aio_nbytes = count; iocb->aio_offset = offset; iocb->aio_lio_opcode = 1;
+}
+static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, long long offset) {
+  iocb->aio_fildes = fd; iocb->aio_buf = buf; iocb->aio_nbytes = count; iocb->aio_offset = offset; iocb->aio_lio_opcode = 0;
+}
+#endif // OB_LIBAIO_STUB_DEFINED
+#elif defined(__linux__)
+#include <libaio.h>
 #endif
 #include "lib/ob_define.h"
 #include "lib/allocator/ob_malloc.h"

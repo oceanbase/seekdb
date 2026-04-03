@@ -23,7 +23,6 @@
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_struct.h"
 #include "sql/resolver/ddl/ob_catalog_stmt.h"
-#include "share/ob_license_utils.h"
 
 namespace oceanbase
 {
@@ -51,10 +50,6 @@ int ObCatalogResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
-  } else if (OB_FAIL(ObLicenseUtils::check_olap_allowed(tenant_id))) {
-    ret = OB_LICENSE_SCOPE_EXCEEDED;
-    LOG_WARN("catalog is not allowed", KR(ret));
-    LOG_USER_ERROR(OB_LICENSE_SCOPE_EXCEEDED, "catalog is not supported due to the absence of the OLAP module");
   } else if (OB_ISNULL(stmt = create_stmt<ObCatalogStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_catalog_stmt", K(ret));

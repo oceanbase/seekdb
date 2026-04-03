@@ -27,10 +27,6 @@
 
 namespace oceanbase
 {
-namespace observer
-{
-class ObIMetaReport;
-}
 namespace share
 {
 class ObLSID;
@@ -62,8 +58,7 @@ public:
   virtual ~ObLSService();
 
   static int mtl_init(ObLSService* &ls_service);
-  int init(const uint64_t tenant_id,
-           observer::ObIMetaReport *reporter);
+  int init(const uint64_t tenant_id);
   int start();
   int stop();
   int wait();
@@ -81,12 +76,9 @@ public:
   virtual int cal_min_phy_resource_needed(const int64_t num, share::ObMinPhyResourceResult &min_phy_res) override;
 public:
   // create a LS
-  // @param [in] arg, all the parameters that is need to create a LS.
-  int create_ls(const obrpc::ObCreateLSArg &arg);
-
-  // create a LS for HighAvaiable
-  // @param [in] meta_package, all the parameters that is needed to create a LS for ha
-  int create_ls_for_ha(const share::ObTaskId task_id, const ObMigrationOpArg &arg);
+  int create_ls(const ObTenantRole &tenant_role = PRIMARY_TENANT_ROLE);
+  // create a LS for HA (standby bootstrap/restore use case)
+  int create_ls_for_ha();
 
   // create a LS for replay or update LS's meta
   // @param [in] ls_epoch, the epoch increases monotonically in tenant scope when an ls is created
@@ -111,10 +103,6 @@ public:
   int get_ls(const share::ObLSID &ls_id,
              ObLSHandle &handle,
              ObLSGetMod mod);
-  int get_ls_replica(
-      const ObLSID &ls_id,
-      ObLSGetMod mod,
-      share::ObLSReplica &replica);
   // @param [in] func, iterate all ls diagnose info
   int iterate_diagnose(const ObFunction<int(const storage::ObLS &ls)> &func);
 
@@ -194,29 +182,20 @@ private:
       CREATE_STATE_INNER_TABLET_CREATED = 5, // have created inner tablet
       CREATE_STATE_FINISH
   };
-  struct ObCreateLSCommonArg {
-    share::ObLSID ls_id_;
-    share::SCN create_scn_;
-    palf::PalfBaseInfo palf_base_info_;
+
+  struct ObCreateLSCommonArg
+  {
     ObTenantRole tenant_role_;
-    ObReplicaType replica_type_;
-    lib::Worker::CompatMode compat_mode_;
-    int64_t create_type_;
-    ObMigrationStatus migration_status_;
-    ObLSRestoreStatus restore_status_;
-    share::ObTaskId task_id_;
+    ObRestoreStatus restore_status_;
+    share::SCN create_scn_;
+    int64_t create_type_; // ObLSCreateType::*
     bool need_create_inner_tablet_;
-    storage::ObMajorMVMergeInfo major_mv_merge_info_;
   };
 
-  int create_ls_(const ObCreateLSCommonArg &arg,
-                 const ObMigrationOpArg &mig_arg);
-  // the tenant smaller than 5G can only create 8 ls.
-  // other tenant can create 100 ls.
-  int check_tenant_ls_num_();
+  int create_ls_(const ObCreateLSCommonArg &arg);
   int inner_create_ls_(const share::ObLSID &lsid,
                        const ObMigrationStatus &migration_status,
-                       const share::ObLSRestoreStatus &restore_status,
+                       const ObRestoreStatus &restore_status,
                        const share::SCN &create_scn,
                        const ObMajorMVMergeInfo &major_mv_merge_info,
                        const ObLSStoreFormat &store_format,
@@ -235,23 +214,15 @@ private:
   void del_ls_after_create_ls_failed_(ObLSCreateState& ls_create_state, ObLS *ls);
 
   int alloc_ls_(ObLS *&ls);
-  bool need_create_inner_tablets_(const obrpc::ObCreateLSArg &arg) const;
   int get_restore_status_(
-      share::ObLSRestoreStatus &restore_status);
-  ObLSRestoreStatus get_restore_status_by_tenant_role_(const ObTenantRole& tenant_role);
+      ObRestoreStatus &restore_status);
+  ObRestoreStatus get_restore_status_by_tenant_role_(const ObTenantRole& tenant_role);
   int64_t get_create_type_by_tenant_role_(const ObTenantRole& tenant_role);
 
   // for resource limit calculator
   int cal_min_phy_resource_needed_(const int64_t ls_cnt,
                                    ObMinPhyResourceResult &min_phy_res);
   int get_resource_constraint_value_(ObResoureConstraintValue &constraint_value);
-  // for get_ls_replica
-  int get_replica_type_(
-      const common::ObAddr &addr,
-      const ObMemberList &ob_member_list,
-      const GlobalLearnerList &learner_list,
-      const common::ObLSStoreFormat &ls_store_format,
-      ObReplicaType &replica_type);
 
 private:
   bool is_inited_;
@@ -265,7 +236,6 @@ private:
   common::ObConcurrentFIFOAllocator iter_allocator_;
   // protect the create and remove process
   lib::ObMutex change_lock_;
-  observer::ObIMetaReport *rs_reporter_;
 
   //TOD(muwei.ym) src rpc framework should be tenant level
   obrpc::ObStorageRpcProxy storage_svr_rpc_proxy_;

@@ -54,7 +54,6 @@ public:
       sql_client_(NULL),
       ob_sql_(NULL),
       vt_iter_creator_(NULL),
-      ls_table_operator_(NULL),
       server_config_(NULL),
       rs_rpc_proxy_(NULL)
   {}
@@ -65,7 +64,6 @@ public:
         && NULL != sql_client_
         && NULL != ob_sql_
         && NULL != vt_iter_creator_
-        && NULL != ls_table_operator_
         && NULL != server_config_
         && NULL != rs_rpc_proxy_;
   }
@@ -73,7 +71,6 @@ public:
   common::ObMySQLProxy *sql_client_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;
-  const share::ObLSTableOperator *ls_table_operator_;
   common::ObServerConfig *server_config_;
   obrpc::ObCommonRpcProxy *rs_rpc_proxy_;
 private:

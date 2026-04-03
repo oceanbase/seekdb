@@ -69,9 +69,7 @@ int ObUDRSqlService::gen_insert_rule_dml(const ObUDRInfo &arg,
                                          oceanbase::share::ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id,
-                                                                                  arg.tenant_id_)))                            
-    || OB_FAIL(dml.add_pk_column("rule_name", ObHexEscapeSqlStr(arg.rule_name_)))
+  if (OB_FAIL(dml.add_pk_column("rule_name", ObHexEscapeSqlStr(arg.rule_name_)))
     || OB_FAIL(dml.add_column("rule_id", arg.rule_id_))   
     || OB_FAIL(dml.add_column("pattern", ObHexEscapeSqlStr(arg.pattern_)))
     || OB_FAIL(dml.add_column("db_name", ObHexEscapeSqlStr(arg.db_name_)))
@@ -96,9 +94,7 @@ int ObUDRSqlService::gen_modify_rule_status_dml(const ObUDRInfo &arg,
                                                 oceanbase::share::ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id,
-                                                                                  arg.tenant_id_)))
-    || OB_FAIL(dml.add_pk_column("rule_name", ObHexEscapeSqlStr(arg.rule_name_)))
+  if (OB_FAIL(dml.add_pk_column("rule_name", ObHexEscapeSqlStr(arg.rule_name_)))
     || OB_FAIL(dml.add_column("version", arg.rule_version_))
     || OB_FAIL(dml.add_column("status", static_cast<int64_t>(arg.rule_status_)))) {
     LOG_WARN("modify column failed", K(ret), K(arg));
@@ -244,12 +240,11 @@ int ObUDRSqlService::remove_rule(ObUDRInfo &arg)
     LOG_WARN("failed to process rule name", K(ret));
   } else if (sql.assign_fmt("update %s set gmt_modified = now(), rule_name = '%.*s' ,\
                             version = %ld, status = %ld \
-                            where tenant_id = %lu and rule_name = %.*s",
+                            where rule_name = %.*s",
             OB_ALL_TENANT_REWRITE_RULES_TNAME,
             LEN_AND_PTR(recyclebin_rule_name),
             rule_version,
             static_cast<int64_t>(ObUDRInfo::DELETE_STATUS),
-            ObSchemaUtils::get_extract_tenant_id(arg.tenant_id_, arg.tenant_id_),
             LEN_AND_PTR(rule_name_sql_str.string()))) {
     LOG_WARN("update from __all_tenant_rewrite_rules table failed.", K(ret));
   } else if (OB_FAIL(trans.write(arg.tenant_id_, sql.ptr(), affected_rows))) {
@@ -299,12 +294,11 @@ int ObUDRSqlService::get_need_sync_rule_infos(ObIAllocator& allocator,
     const char* sql_fmt = "select rule_id, rule_name, pattern, db_name, replacement, normalized_pattern, "
                           "status, version, pattern_digest, fixed_param_infos, "
                           "dynamic_param_infos, def_name_ctx_str "
-                          "from %s where tenant_id = %lu and version > %ld;";
+                          "from %s where version > %ld;";
     if (OB_ISNULL(sql_proxy_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(sql.assign_fmt(sql_fmt, OB_ALL_TENANT_REWRITE_RULES_TNAME,
-                                      ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                       local_rule_version))) {
       LOG_WARN("failed to assign format sql", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {

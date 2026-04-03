@@ -41,12 +41,6 @@ ObAlterDatabaseStmt::~ObAlterDatabaseStmt()
 {
 }
 
-
-int ObAlterDatabaseStmt::set_primary_zone(const common::ObString &zone)
-{
-  return OB_SUCCESS; // not supported
-}
-
 void ObAlterDatabaseStmt::set_read_only(const bool read_only)
 {
   alter_database_arg_.database_schema_.set_read_only(read_only);

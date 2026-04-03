@@ -925,7 +925,6 @@ public:
     const share::schema::ObRefreshSchemaStatus &schema_status,
     int64_t &target_version);
 
-  int query_tenant_status(const uint64_t tenant_id, TenantStatus &tenant_status);
   int construct_schema_version_history(const ObRefreshSchemaStatus &schema_status,
                                        const int64_t snapshot_version,
                                        const VersionHisKey &key,

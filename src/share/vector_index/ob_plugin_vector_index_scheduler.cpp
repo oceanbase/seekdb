@@ -358,6 +358,8 @@ int ObPluginVectorIndexLoadScheduler::acquire_adapter_in_maintenance(
           LOG_WARN("fail to set table id", K(ret), K(ls_id), K(tablet_ids.at(i)));
         } else if (OB_FAIL(adapter_guard.get_adatper()->set_tablet_id(VIRT_DATA, data_tablet_id))) {
           LOG_WARN("fail to fill partial index adapter info", K(ret), K(ls_id), K(tablet_ids.at(i)), K(data_tablet_id));
+        } else if (OB_FAIL(adapter_guard.get_adatper()->set_table_id(VIRT_DATA, table_schema->get_data_table_id()))) {
+          LOG_WARN("fail to fill data table id into partial adapter", K(ret), K(ls_id), K(table_id), K(data_tablet_id));
         } else if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*table_schema,
                                                                              index_identity))) {
           LOG_WARN("fail to get index identity", KR(ret));
@@ -1588,9 +1590,7 @@ int ObVectorIndexDag::fill_dag_key(char *buf, const int64_t buf_len) const
     ret = OB_NOT_INIT;
     LOG_WARN("ObVectorIndexDag has not been initialized", K(is_inited_), K_(param));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, "vector index memdata sync task: "
-                                     "tenant_id = %ld, ls_id = %ld, table_id = %ld, tablet_id = %ld",
-                                     param_.tenant_id_,
-                                     param_.ls_id_.id(),
+                                     "table_id = %ld, tablet_id = %ld",
                                      param_.table_id_,
                                      param_.tablet_id_.id()))) {
     LOG_WARN("fail to fill dag key", KR(ret), K(param_));

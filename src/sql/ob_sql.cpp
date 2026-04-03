@@ -55,8 +55,7 @@ const int64_t ObSql::SQL_MEM_SIZE_LIMIT = 1024 * 1024 * 64;
 int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
                 ObReqTransport *transport,
                 common::ObITabletScan *vt_partition_service,
-                common::ObAddr &addr,
-                share::ObRsMgr &rs_mgr)
+                common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(opt_stat_mgr)
@@ -76,7 +75,6 @@ int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
       transport_ = transport;
       vt_partition_service_ = vt_partition_service;
       self_addr_ = addr;
-      rs_mgr_ = &rs_mgr;
       inited_ = true;
       queue_.start();
     }
@@ -2120,8 +2118,7 @@ int ObSql::check_read_only_privilege(ParseResult &parse_result,
   ObPhysicalPlanCtx *pctx = exec_ctx.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
   sql_traits.is_readonly_stmt_ = ObSQLUtils::is_readonly_stmt(parse_result);
-  sql_traits.is_modify_tenant_stmt_
-      = ObSQLUtils::is_modify_tenant_stmt(parse_result);
+  sql_traits.is_modify_tenant_stmt_ = false;
   sql_traits.is_cause_implicit_commit_
       = ObSQLUtils::cause_implicit_commit(parse_result);
   sql_traits.is_commit_stmt_ = ObSQLUtils::is_commit_stmt(parse_result);

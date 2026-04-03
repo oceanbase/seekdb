@@ -31,7 +31,7 @@ using namespace oceanbase::common;
 static constexpr int64_t DEFAULT_STACK_SIZE = (1 << 20) * 2; // 2M
 static constexpr int64_t MAX_STACK_SIZE = (1 << 20) * 16; // 16M
 using CPSA = ProtectedStackAllocator;
-#define PAGE_SIZE CPSA::page_size()
+#define ALLOC_PAGE_SIZE CPSA::page_size()
 #define ALLOC(size) g_stack_allocer.alloc(1, size)
 #define DEALLOC(ptr) g_stack_allocer.dealloc(ptr)
 
@@ -112,7 +112,7 @@ TEST(TestCPSA, Main)
   test_fixed_size(size);
   size = MAX_STACK_SIZE;
   test_fixed_size(size);
-  size = PAGE_SIZE;
+  size = ALLOC_PAGE_SIZE;
   test_fixed_size(size);
 }
 
@@ -148,7 +148,7 @@ TEST(TestCPSA, DISABLED_HOLD_MOCK)
 
   mhu.reset();
   mhu.limit_ = 1 << 30;
-  mhu.hold_ = (1 << 30) - DEFAULT_STACK_SIZE - PAGE_SIZE;
+  mhu.hold_ = (1 << 30) - DEFAULT_STACK_SIZE - ALLOC_PAGE_SIZE;
   void *buf = NULL;
   ASSERT_NE(nullptr, buf = ALLOC(DEFAULT_STACK_SIZE));
   ASSERT_EQ(nullptr, ALLOC(DEFAULT_STACK_SIZE));
@@ -157,7 +157,7 @@ TEST(TestCPSA, DISABLED_HOLD_MOCK)
   mhu.reset();
   int64_t size = 8 << 20;
   int64_t N = 100;
-  mhu.limit_ = (size + PAGE_SIZE) * 100;
+  mhu.limit_ = (size + ALLOC_PAGE_SIZE) * 100;
   vector<void *> bufs;
   for (int64_t i = 0; i < N; ++i) {
     void *buf = ALLOC(size);
@@ -184,7 +184,7 @@ void test_hold(LimitFunc func)
   const uint64_t tenant_id = 100;
 
   int64_t size = 8 << 20;
-  const uint64_t limit = (size + PAGE_SIZE * 2) * 100;
+  const uint64_t limit = (size + ALLOC_PAGE_SIZE * 2) * 100;
 
   int ret = OB_SUCCESS;
   ObTenantResourceMgrHandle resource_handle;
@@ -261,7 +261,7 @@ TEST(TestCPSA, ACCESS_GUARD)
   ASSERT_NE(nullptr, buf);
   char *p = (char *) buf;
   cout << p[0] << endl;
-  cout << p[-PAGE_SIZE - 1] << endl;
+  cout << p[-ALLOC_PAGE_SIZE - 1] << endl;
   cout << p[-1] << endl;
 }
 #endif

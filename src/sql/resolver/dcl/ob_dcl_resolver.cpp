@@ -225,7 +225,6 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
   bool is_valid = true;
   if (GCONF._enable_reserved_user_dcl_restriction) {
     if (T_ALTER_USER_DEFAULT_ROLE == type ||
-        T_ALTER_USER_PRIMARY_ZONE == type ||
         T_ALTER_USER_PROFILE == type ||
         T_DROP_USER == type ||
         T_GRANT == type ||
@@ -285,7 +284,6 @@ int ObDCLResolver::check_dcl_on_inner_user(const ObItemType &type,
   bool is_valid = true;
   if (GCONF._enable_reserved_user_dcl_restriction) {
     if (T_ALTER_USER_DEFAULT_ROLE == type ||
-        T_ALTER_USER_PRIMARY_ZONE == type ||
         T_ALTER_USER_PROFILE == type ||
         T_DROP_USER == type ||
         T_GRANT == type ||

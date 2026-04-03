@@ -132,40 +132,21 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-      case OB_APP_MIN_COLUMN_ID: { // tenant_id
-        cur_row_.cells_[i].set_int(cur_tenant_id_);
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 1: { // svr_ip
-        if (false == self.ip_to_string(ip_buf_, common::OB_IP_STR_BUFF)) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "ip_to_string failed", K(ret), K(self));
-        } else {
-          cur_row_.cells_[i].set_varchar(ObString::make_string(ip_buf_));
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
-                                                ObCharset::get_default_charset()));
-        }
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 2: { // svr_port
-        cur_row_.cells_[i].set_int(self.get_port());
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 3: { // ts_value
+      case OB_APP_MIN_COLUMN_ID: { // ts_value
         cur_row_.cells_[i].set_int(ts_value_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 4: { // ts_type
+      case OB_APP_MIN_COLUMN_ID + 1: { // ts_type
         cur_row_.cells_[i].set_varchar(ObTimestampAccess::ts_type_to_cstr(is_primary_));
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 5: { // service_role
+      case OB_APP_MIN_COLUMN_ID + 2: { // service_role
         cur_row_.cells_[i].set_varchar((ObTimestampAccess::service_type_to_cstr(service_role_)));
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 6: { // role
+      case OB_APP_MIN_COLUMN_ID + 3: { // role
         if (OB_FAIL(role_to_string(role_, role_str_, sizeof(role_str_)))) {
           SERVER_LOG(WARN, "role_to_string failed", K(ret), K_(role));
         } else {
@@ -175,7 +156,7 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
         }
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 7: { // service_epoch
+      case OB_APP_MIN_COLUMN_ID + 4: { // service_epoch
         cur_row_.cells_[i].set_int(service_epoch_);
         break;
       }

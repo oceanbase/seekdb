@@ -1340,7 +1340,7 @@ int64_t ObHashJoinOp::calc_partition_count_by_cache_aware(
     partition_cnt = max_part_count;
   }
   global_mem_bound_size = max(0, global_mem_bound_size);
-  while (partition_cnt * PAGE_SIZE > global_mem_bound_size) {
+  while (partition_cnt * ALLOC_PAGE_SIZE > global_mem_bound_size) {
     partition_cnt >>= 1;
   }
   partition_cnt = partition_cnt < MIN_PART_COUNT ?
@@ -2709,7 +2709,7 @@ bool ObHashJoinOp::can_use_cache_aware_opt()
     }
   }
   // cache aware use to switch buffer for chunk datum streo, so need 2 buffer
-  total_memory_size += get_cur_mem_used() + 2 * part_count_ * PAGE_SIZE;
+  total_memory_size += get_cur_mem_used() + 2 * part_count_ * ALLOC_PAGE_SIZE;
   enable_cache_aware = total_memory_size < sql_mem_processor_.get_mem_bound();
   if (!enable_cache_aware) {
     bool need_dump = true;

@@ -81,21 +81,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObFlashBackDatabaseResolver);
 };
 
-class ObFlashBackTenantResolver : public ObDDLResolver
-{
-  static const int ORIGIN_TENANT_NODE = 0;
-  static const int NEW_TENANT_NODE = 1;
-public:
-  explicit ObFlashBackTenantResolver(ObResolverParams &params)
-    : ObDDLResolver(params){}
-  virtual ~ObFlashBackTenantResolver() {}
-  virtual int resolve(const ParseNode &parse_tree);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObFlashBackTenantResolver);
-};
-
-
 }
 }
 #endif //OCEANBASE_SQL_OB_FLASHBACK_RESOLVER_

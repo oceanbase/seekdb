@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#include "share/ob_license_utils.h"
 #include "sql/resolver/ddl/ob_create_mlog_resolver.h"
 #include "storage/mview/ob_mview_sched_job_utils.h"
 
@@ -68,11 +67,6 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session info", KR(ret), KP_(session_info));
   } else if (OB_FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
-  } else if (OB_FAIL(ObLicenseUtils::check_olap_allowed(tenant_id))) {
-    ret = OB_LICENSE_SCOPE_EXCEEDED;
-    LOG_WARN("materialized view log is not allowed", KR(ret));
-    LOG_USER_ERROR(OB_LICENSE_SCOPE_EXCEEDED,
-                   "materialized view log is not supported due to the absence of the OLAP module");
   } else if (OB_ISNULL(create_mlog_stmt = create_stmt<ObCreateMLogStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create create_mlog_stmt", KR(ret));

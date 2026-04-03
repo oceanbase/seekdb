@@ -1114,8 +1114,8 @@ private:
   static const int64_t BATCH_RESULT_SIZE = 512;
   static const int64_t INIT_LTB_SIZE = 64;
   static const int64_t MIN_PART_COUNT = 8;
-  static const int64_t PAGE_SIZE = ObChunkDatumStore::BLOCK_SIZE;
-  static const int64_t MIN_MEM_SIZE = (MIN_PART_COUNT + 1) * PAGE_SIZE;
+  static const int64_t ALLOC_PAGE_SIZE = ObChunkDatumStore::BLOCK_SIZE;
+  static const int64_t MIN_MEM_SIZE = (MIN_PART_COUNT + 1) * ALLOC_PAGE_SIZE;
   // Currently the maximum level is 4, using the high 4 bytes for recursive processing, and using nest loop method for levels exceeding partition level
   static const int64_t MAX_PART_LEVEL = 4;
   static const int64_t PART_SPLIT_LEVEL_ONE = 1;

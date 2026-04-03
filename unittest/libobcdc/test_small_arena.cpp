@@ -52,7 +52,7 @@ namespace libobcdc
 
 static const int64_t SMALL_ARENA_PAGE_SIZE = 1024;
 static const int64_t MAX_SMALL_ALLOC_SIZE_WITHOUT_ALIGN = SMALL_ARENA_PAGE_SIZE - ObSmallArena::SMALL_PAGE_HEADER_SIZE;
-static const int64_t PAGE_SIZE = 1024;
+static const int64_t ALLOC_PAGE_SIZE = 1024;
 
 using namespace common;
 
@@ -92,7 +92,7 @@ TEST_F(TestSmallArena, smoke_test)
   int64_t small_alloc_count = 0;
   int64_t large_alloc_count = 0;
 
-  sa.set_allocator(PAGE_SIZE, large_allocator_);
+  sa.set_allocator(ALLOC_PAGE_SIZE, large_allocator_);
 
   ALLOC_AND_CHECK(8);
   ALLOC_AND_CHECK(16);
@@ -161,7 +161,7 @@ TEST_F(TestSmallArena, alloc_small)
   int64_t large_alloc_count = 0;
   ObSmallArena sa;
 
-  sa.set_allocator(PAGE_SIZE, large_allocator_);
+  sa.set_allocator(ALLOC_PAGE_SIZE, large_allocator_);
 
   for (int i = 0; i < TEST_COUNT; i++) {
     ALLOC_AND_CHECK(8);
@@ -221,7 +221,7 @@ TEST_F(TestSmallArena, alloc_large)
   int64_t large_alloc_count = 0;
   ObSmallArena sa;
 
-  sa.set_allocator(PAGE_SIZE, large_allocator_);
+  sa.set_allocator(ALLOC_PAGE_SIZE, large_allocator_);
 
   for (int i = 0; i < TEST_COUNT; i++) {
     ALLOC_AND_CHECK(min_alloc_size + 0);
@@ -298,7 +298,7 @@ TEST_F(TestSmallArena, alloc_align)
   int64_t large_alloc_count = 0;
   ObSmallArena sa;
 
-  sa.set_allocator(PAGE_SIZE, large_allocator_);
+  sa.set_allocator(ALLOC_PAGE_SIZE, large_allocator_);
 
   ALLOC_ALIGN_AND_CHECK(1, 4);
   ALLOC_ALIGN_AND_CHECK(16, 8);
@@ -377,7 +377,7 @@ TEST_F(TestSmallArena, invalid_args)
 {
   void *ptr = NULL;
   ObSmallArena sa;
-  sa.set_allocator(PAGE_SIZE, large_allocator_);
+  sa.set_allocator(ALLOC_PAGE_SIZE, large_allocator_);
   ptr = sa.alloc(-1); EXPECT_TRUE(NULL == ptr);
   ptr = sa.alloc_aligned(1,3); EXPECT_TRUE(NULL == ptr);
   ptr = sa.alloc_aligned(1, 1024); EXPECT_TRUE(NULL == ptr);

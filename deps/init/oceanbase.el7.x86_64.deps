@@ -31,13 +31,15 @@ devdeps-abseil-cpp-20211102.0-82026020911.el7.x86_64.rpm
 devdeps-s2geometry-0.10.0-222026021017.el7.x86_64.rpm
 devdeps-icu-69.1-362026020911.el7.x86_64.rpm
 devdeps-s3-cpp-sdk-1.11.156-262026021209.el7.x86_64.rpm
-devdeps-protobuf-c-1.5.1-100000052025032810.el7.x86_64.rpm
+devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el7.x86_64.rpm
+devdeps-grpc-abiv1-1.46.7-572026031815.el7.x86_64.rpm
 devdeps-roaringbitmap-croaring-3.0.0-42024042816.el7.x86_64.rpm
 devdeps-hyperscan-5.4.2-242024090219.el7.x86_64.rpm
 devdeps-apache-arrow-20.0.0-452026020914.el7.x86_64.rpm
-devdeps-vsag-1.1.0-1512026022617.el7.x86_64.rpm
+devdeps-vsag-abiv1-1.1.0-1682026031620.el7.x86_64.rpm
 devdeps-apache-orc-2.1.1-122026020912.el7.x86_64.rpm
 devdeps-fast-float-6.1.3-42024112122.el7.x86_64.rpm
+devdeps-sqlite-abiv1-3.38.1-72026031815.el7.x86_64.rpm
 
 [tools]
 obdevtools-binutils-2.30-12022100413.el7.x86_64.rpm
@@ -52,8 +54,8 @@ obdevtools-llvm-17.0.6-122026020920.el7.x86_64.rpm
 devdeps-oblogmsg-1.1-52024052811.el7.x86_64.rpm
 devdeps-rocksdb-6.22.1-32024123015.el7.x86_64.rpm
 obstack-2.0.4-172024070513.el7.x86_64.rpm
-obshell-4.3.3.1-12025121911.el7.x86_64.rpm target=community
-#obshell-4.4.0.1-12026012311.el7.x86_64.rpm target=community
+obshell-4.4.0.1-12026012311.el7.x86_64.rpm target=community
+#obshell-4.4.1.1-32026031914.el7.x86_64.rpm target=community
 
 [test-utils]
 ob-deploy-4.1.0-2.el7.x86_64.rpm target=community

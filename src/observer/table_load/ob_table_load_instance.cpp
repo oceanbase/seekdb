@@ -493,7 +493,7 @@ int ObTableLoadInstance::init_ddl_param_for_inc_direct_load()
     LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
   } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc(tenant_id, raw_id))) {
     LOG_WARN("failed to gen unique id by rpc", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(share::ObLSAttrOperator::get_tenant_gts(tenant_id, current_scn))) {
+  } else if (OB_FAIL(share::ObShareUtil::get_tenant_gts(tenant_id, current_scn))) {
     LOG_WARN("failed to get gts", KR(ret), K(tenant_id));
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
     LOG_WARN("failed to get min data version", KR(ret), K(tenant_id));

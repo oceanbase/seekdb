@@ -20,7 +20,6 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/tablet/ob_tablet_info.h"
-#include "share/compaction/ob_compaction_locality_cache.h"
 #include "share/ob_occam_time_guard.h"
 #include "storage/ob_i_store.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
@@ -113,8 +112,6 @@ public:
 
 private:
   int reput_check_info(ObIArray<ObTabletCheckInfo> &tablet_ls_infos);
-  int check_ls_status(const share::ObLSID &ls_id, bool &is_leader, bool need_check);
-  int refresh_ls_status();
 
 public:
   static const int64_t LS_ID_ARRAY_CNT = 10;
@@ -127,13 +124,11 @@ public:
   static const int64_t CLEAR_CKM_ERROR_INTERVAL = 2 * 60 * 1000 * 1000L; // 2m
   typedef common::ObArray<ObTabletCheckInfo> TabletLSArray;
   typedef hash::ObHashSet<ObTabletCheckInfo, hash::NoPthreadDefendMode> TabletLSSet;
-  typedef hash::ObHashMap<share::ObLSID, share::ObLSInfo> LSInfoMap;
 private:
   bool is_inited_;
   int64_t last_check_timestamp_;
   int64_t error_tablet_cnt_; // for diagnose
   TabletLSSet tablet_ls_set_;
-  LSInfoMap ls_info_map_; // ls leader
   lib::ObMutex lock_;
   bool ls_locality_cache_empty_;
 };

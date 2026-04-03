@@ -92,7 +92,6 @@ int ObKillExecutor::kill_query_cs_id(const ObKillSessionArg &arg, ObSQLSessionMg
   uint32_t client_sess_id = arg.sess_id_;
   uint32_t server_sess_id = INVALID_SESSID;
   // Proxy connection scenario kill session
-  ObArray<share::ObServerInfoInTable> servers_info;
   common::ObZone zone;
   obrpc::ObKillQueryClientSessionArg cs_arg;
   bool is_kill_succ = true;
@@ -104,24 +103,19 @@ int ObKillExecutor::kill_query_cs_id(const ObKillSessionArg &arg, ObSQLSessionMg
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("fail to get srv_rpc_proxy", K(ret), K(GCTX.srv_rpc_proxy_),
               K(GCTX.root_service_));
-  } else if (OB_FAIL(share::ObAllServerTracer::get_instance().get_active_servers_info(
-    zone, servers_info))) {
-    LOG_WARN("fail to get servers info", K(ret));
   } else if (FALSE_IT(cs_arg.set_client_sess_id(client_sess_id))) {
   } else {
     ObAddr addr;
     const int64_t rpc_timeout = GCONF.rpc_timeout;
     rootserver::ObKillQueryClientSessionProxy proxy(*GCTX.srv_rpc_proxy_,
                         &obrpc::ObSrvRpcProxy::kill_query_client_session);
-    for (int64_t i = 0; OB_SUCC(ret) && i < servers_info.count(); i++) {
-      addr = servers_info.at(i).get_server();
+      addr = GCTX.self_addr();
       if (OB_FAIL(proxy.call(addr, rpc_timeout,
                         curr_sess_info->get_effective_tenant_id(), cs_arg))) {
         LOG_WARN("send rpc failed", KR(ret),
             K(rpc_timeout), K(arg), "server", addr);
         ret = OB_SUCCESS;
       }
-    }
 
     int tmp_ret = OB_SUCCESS;
     ObArray<int> return_code_array;
@@ -233,7 +227,6 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
       obrpc::ObKillClientSessionArg cs_arg;
       obrpc::ObKillClientSessionRes cs_result;
       common::ObZone zone;
-      ObArray<share::ObServerInfoInTable> servers_info;
       bool is_kill_succ = true;
       // Determine the broadcast range based on whether it is a system tenant
       // bool is_sys_kill = curr_sess_info->get_effective_tenant_id() == OB_SYS_TENANT_ID;
@@ -244,9 +237,6 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("fail to get srv_rpc_proxy", K(ret), K(GCTX.srv_rpc_proxy_),
                   K(GCTX.root_service_));
-      } else if (OB_FAIL(share::ObAllServerTracer::get_instance().get_servers_info(
-        zone, servers_info))) {
-        LOG_WARN("fail to get servers info", K(ret));
       } else if (FALSE_IT(cs_arg.set_create_time(create_time))) {
       } else if (FALSE_IT(cs_arg.set_client_sess_id(client_sess_id))) {
       } else {
@@ -254,14 +244,12 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
         const int64_t rpc_timeout = GCONF.rpc_timeout;
         rootserver::ObKillClientSessionProxy proxy(*GCTX.srv_rpc_proxy_,
                             &obrpc::ObSrvRpcProxy::kill_client_session);
-        for (int64_t i = 0; OB_SUCC(ret) && i < servers_info.count(); i++) {
-          addr = servers_info.at(i).get_server();
-          if (addr != GCTX.self_addr() && OB_FAIL(proxy.call(addr, rpc_timeout,
-                            curr_sess_info->get_effective_tenant_id(), cs_arg))) {
-            LOG_WARN("send rpc failed", KR(ret),
-                K(rpc_timeout), K(arg), "server", addr);
-            ret = OB_SUCCESS;
-          }
+        addr = GCTX.self_addr();
+        if (addr != GCTX.self_addr() && OB_FAIL(proxy.call(addr, rpc_timeout,
+                          curr_sess_info->get_effective_tenant_id(), cs_arg))) {
+          LOG_WARN("send rpc failed", KR(ret),
+              K(rpc_timeout), K(arg), "server", addr);
+          ret = OB_SUCCESS;
         }
 
         int tmp_ret = OB_SUCCESS;
@@ -341,14 +329,10 @@ int ObKillExecutor::get_client_session_create_time_and_auth(const ObKillSessionA
   obrpc::ObClientSessionCreateTimeAndAuthArg cs_arg;
   obrpc::ObClientSessionCreateTimeAndAuthRes cs_result;
   common::ObZone zone;
-  ObArray<share::ObServerInfoInTable> servers_info;
 
   if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("fail to get srv_rpc_proxy", K(ret), K(GCTX.srv_rpc_proxy_));
-  } else if (OB_FAIL(share::ObAllServerTracer::get_instance().get_servers_info(
-    zone, servers_info))) {
-    LOG_WARN("fail to get servers info", K(ret));
   } else if (FALSE_IT(cs_arg.set_client_sess_id(arg.sess_id_))) {
   } else if (FALSE_IT(cs_arg.set_tenant_id(arg.tenant_id_))) {
   } else if (FALSE_IT(cs_arg.set_has_user_super_privilege(arg.has_user_super_privilege_))) {
@@ -477,7 +461,7 @@ int ObKillExecutor::get_remote_session_location(const ObKillSessionArg &arg,
 int ObKillExecutor::generate_read_sql(uint32_t sess_id, ObSqlString &sql)
 {
   int ret = OB_SUCCESS;
-  const char *sql_str = "select svr_ip, svr_port from oceanbase.__all_virtual_processlist \
+  const char *sql_str = "select svr_ip, svr_port from oceanbase.__all_virtual_processlist, oceanbase.__all_virtual_server_stat \
               where id = %u";
   if (OB_FAIL(sql.append_fmt(sql_str, sess_id))) {
     LOG_WARN("fail to append sql", K(ret), K(sess_id));
@@ -488,7 +472,7 @@ int ObKillExecutor::generate_read_sql(uint32_t sess_id, ObSqlString &sql)
 int ObKillExecutor::generate_read_sql_from_session_info(uint32_t sess_id, ObSqlString &sql)
 {
   int ret = OB_SUCCESS;
-  const char *sql_str = "select svr_ip, svr_port from oceanbase.__all_virtual_session_info \
+  const char *sql_str = "select svr_ip, svr_port from oceanbase.__all_virtual_session_info, oceanbase.__all_virtual_server_stat  \
               where id = %u";
   if (OB_FAIL(sql.append_fmt(sql_str, sess_id))) {
     LOG_WARN("fail to append sql", K(ret), K(sess_id));

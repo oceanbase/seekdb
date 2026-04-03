@@ -1049,15 +1049,9 @@ int ObInnerSQLConnection::retry_while_no_tenant_resource(const int64_t cluster_i
       } else if (OB_FAIL(function())) {
         if (is_unit_migrate(ret)) {
           LOG_INFO("failed to get newest location and will force renew", K(ret), K(tenant_id), K(ls_id));
-          int tmp_ret = GCTX.location_service_->nonblock_renew(cluster_id, tenant_id, ls_id);
-          if (OB_SUCCESS != tmp_ret) {
-            need_retry = false; // nonblock_renew failed
-            LOG_WARN("nonblock renew from location cache failed", K(tmp_ret), K(cluster_id), K(tenant_id), K(ls_id));
-          } else {
-            ob_usleep(retry_us);
-            if (retry_us < max_retry_us) {
-              retry_us = retry_us * 2;
-            }
+          ob_usleep(retry_us);
+          if (retry_us < max_retry_us) {
+            retry_us = retry_us * 2;
           }
         } else {
           need_retry = false; // errno is not related to OB_TENANT_NOT_IN_SERVER

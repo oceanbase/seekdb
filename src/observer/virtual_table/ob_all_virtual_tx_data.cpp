@@ -57,26 +57,8 @@ int ObAllVirtualTxData::fill_in_row_(const VirtualTxDataRow &row_data, common::O
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
-      case TENANT_ID_COL:
-        cur_row_.cells_[i].set_int(tenant_id_);
-        break;
-      case LS_ID_COL:
-        cur_row_.cells_[i].set_int(ls_id_.id());
-        break;
       case TX_ID_COL:
         cur_row_.cells_[i].set_int(tx_id_.get_id());
-        break;
-      case SVR_IP_COL:
-        if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-          cur_row_.cells_[i].set_varchar(ip_buf_);
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "fail to execute ip_to_string", KR(ret));
-        }
-        break;
-      case SVR_PORT_COL:
-        cur_row_.cells_[i].set_int(addr_.get_port());
         break;
       case STATE_COL:
         cur_row_.cells_[i].set_varchar(ObTxCommitData::get_state_string(row_data.state_));
@@ -120,13 +102,14 @@ int ObAllVirtualTxData::fill_in_row_(const VirtualTxDataRow &row_data, common::O
 int ObAllVirtualTxData::get_primary_key_()
 {
   int ret = OB_SUCCESS;
+  // In single-node mode, rowkey only has tx_id (index 0)
   if (key_ranges_.count() != 1) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "only support select a single tx data once, multiple range select is ");
     SERVER_LOG(WARN, "invalid key ranges", KR(ret));
   } else {
     ObNewRange &key_range = key_ranges_.at(0);
-    if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() != 3 || key_range.get_end_key().get_obj_cnt() != 3)) {
+    if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() < 1 || key_range.get_end_key().get_obj_cnt() < 1)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR,
                  "unexpected key_ranges_ of rowkey columns",
@@ -145,35 +128,23 @@ int ObAllVirtualTxData::get_primary_key_()
 int ObAllVirtualTxData::handle_key_range_(ObNewRange &key_range)
 {
   int ret = OB_SUCCESS;
-  ObObj tenant_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
-  ObObj tenant_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
-  ObObj ls_obj_low = (key_range.get_start_key().get_obj_ptr()[1]);
-  ObObj ls_obj_high = (key_range.get_end_key().get_obj_ptr()[1]);
-  ObObj tx_id_obj_low = (key_range.get_start_key().get_obj_ptr()[2]);
-  ObObj tx_id_obj_high = (key_range.get_end_key().get_obj_ptr()[2]);
+  // In single-node mode, rowkey only has tx_id (index 0)
+  ObObj tx_id_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
+  ObObj tx_id_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
 
-  uint64_t tenant_low = tenant_obj_low.is_min_value() ? 0 : tenant_obj_low.get_uint64();
-  uint64_t tenant_high = tenant_obj_high.is_max_value() ? UINT64_MAX : tenant_obj_high.get_uint64();
-  ObLSID ls_low = ls_obj_low.is_min_value() ? ObLSID(0) : ObLSID(ls_obj_low.get_int());
-  ObLSID ls_high = ls_obj_high.is_max_value() ? ObLSID(INT64_MAX) : ObLSID(ls_obj_high.get_int());
   ObTransID tx_id_low = tx_id_obj_low.is_min_value() ? ObTransID(0) : ObTransID(tx_id_obj_low.get_int());
   ObTransID tx_id_high = tx_id_obj_high.is_min_value() ? ObTransID(INT64_MAX) : ObTransID(tx_id_obj_high.get_int());
 
-  if (tenant_low != tenant_high || ls_low != ls_high || tx_id_low != tx_id_high) {
+  if (tx_id_low != tx_id_high) {
     ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant name, ls id and trans id must be specified. range select is ");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "trans id must be specified. range select is ");
     SERVER_LOG(WARN,
                "only support point select.",
                KR(ret),
-               K(tenant_low),
-               K(tenant_high),
-               K(ls_low),
-               K(ls_high),
                K(tx_id_low),
                K(tx_id_high));
   } else {
-    tenant_id_ = tenant_low;
-    ls_id_ = ls_low;
+    tenant_id_ = OB_SYS_TENANT_ID;  // Use sys tenant in single-node mode
     tx_id_ = tx_id_low;
   }
 
@@ -188,17 +159,17 @@ int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_
     ObLSHandle ls_handle;
     ObLS *ls = nullptr;
     ObLSService *ls_service = MTL(ObLSService *);
-    if (OB_FAIL(ls_service->get_ls(ls_id_, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
+    if (OB_FAIL(ls_service->get_ls(share::SYS_LS, ls_handle, ObLSGetMod::OBSERVER_MOD))) {
       if (OB_LS_NOT_EXIST == ret) {
         ret = OB_ITER_END;
       } else {
-        SERVER_LOG(WARN, "get ls from ls service failed", KR(ret), K(ls_id_));
+        SERVER_LOG(WARN, "get ls from ls service failed", KR(ret));
       }
     } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "get ls failed from ls handle", KR(ret), K(ls_handle), K(tenant_id_), K(ls_id_));
+      SERVER_LOG(ERROR, "get ls failed from ls handle", KR(ret), K(ls_handle), K(tenant_id_));
     } else if (OB_FAIL(ls->generate_virtual_tx_data_row(tx_id_, tx_data_row))) {
-      SERVER_LOG(WARN, "ls genenrate virtual tx data row failed", KR(ret), K(ls_handle), K(tenant_id_), K(ls_id_));
+      SERVER_LOG(WARN, "ls genenrate virtual tx data row failed", KR(ret), K(ls_handle), K(tenant_id_));
     } else {
       SERVER_LOG(DEBUG, "generate tx data row succeed", KPC(ls), K(tx_data_row));
     }

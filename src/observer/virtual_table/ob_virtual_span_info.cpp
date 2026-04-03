@@ -178,7 +178,6 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
     }
   }
 
-
   return ret;
 }
 
@@ -196,18 +195,7 @@ int ObVirtualSpanInfo::fill_cells(sql::ObFLTSpanRec &record)
       uint64_t col_id = output_column_ids_.at(cell_idx);
       switch(col_id) {
         //server ip
-      case SVR_IP: {
-        cells[cell_idx].set_varchar(ipstr_); //ipstr_ and port_ were set in set_ip func call
-        cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                             ObCharset::get_default_charset()));
-      } break;
         //server port
-      case SVR_PORT: {
-        cells[cell_idx].set_int(port_);
-      } break;
-      case TENANT_ID: {
-        cells[cell_idx].set_int(record.data_.tenant_id_);
-      } break;
       case TRACE_ID: {
         cells[cell_idx].set_varchar(record.data_.trace_id_);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
@@ -274,45 +262,12 @@ int ObVirtualSpanInfo::fill_cells(sql::ObFLTSpanRec &record)
   return ret;
 }
 
-
 int ObVirtualSpanInfo::check_ip_and_port(bool &is_valid)
 {
   int ret = OB_SUCCESS;
   is_valid = true;
-  // is_serving_tenant changed to (svr_ip, svr_port) in (ip1, port1), (ip2, port2), ...
-  // The extracted query range is [(ip1, port1), (ip1, port1)], [(ip2, port2), (ip2, port2)], ...
-  // Need to traverse all query ranges, and determine if the local ip & port falls within any one of the query ranges
-  if (key_ranges_.count() >= 1) {
-    is_valid = false;
-    for (int64_t i = 0; OB_SUCC(ret) && !is_valid && i < key_ranges_.count(); i++) {
-      ObNewRange &req_id_range = key_ranges_.at(i);
-      if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() != 4
-                      || req_id_range.get_end_key().get_obj_cnt() != 4)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unexpected  # of rowkey columns",
-                   K(ret),
-                   "size of start key", req_id_range.get_start_key().get_obj_cnt(),
-                   "size of end key", req_id_range.get_end_key().get_obj_cnt());
-      } else {
-        ObObj ip_obj;
-        ObObj ip_low = (req_id_range.get_start_key().get_obj_ptr()[PRI_KEY_IP_IDX]);
-        ObObj ip_high = (req_id_range.get_end_key().get_obj_ptr()[PRI_KEY_IP_IDX]);
-        ip_obj.set_varchar(ipstr_);
-        ip_obj.set_collation_type(ip_low.get_collation_type());
-        if (ip_obj.compare(ip_low) >= 0 && ip_obj.compare(ip_high) <= 0) {
-          ObObj port_obj;
-          port_obj.set_int32(port_);
-          ObObj port_low = (req_id_range.get_start_key().get_obj_ptr()[PRI_KEY_PORT_IDX]);
-          ObObj port_high = (req_id_range.get_end_key().get_obj_ptr()[PRI_KEY_PORT_IDX]);
-          if (port_obj.compare(port_low) >= 0 && port_obj.compare(port_high) <= 0) {
-            is_valid = true;
-          }
-        } else {
-          // do nothing
-        }
-      }
-    }
-  }
+  // Since svr_ip and svr_port are removed, we always return true
+  // The key_ranges_ check is no longer needed
   SERVER_LOG(DEBUG, "check ip and port", K(key_ranges_), K(is_valid), K(ipstr_), K(port_));
   return ret;
 }

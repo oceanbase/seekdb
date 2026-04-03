@@ -44,12 +44,9 @@ private:
 private:
   enum TABLE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    PATH,
+        PATH = common::OB_APP_MIN_COLUMN_ID,
     ENDPOINT,
     USED_FOR,
-    ZONE,
     STORAGE_ID,
     MAX_IOPS,
     MAX_BANDWIDTH,
@@ -71,7 +68,6 @@ private:
         path_(),
         endpoint_(),
         used_for_(),
-        zone_(),
         storage_id_(OB_INVALID_ID),
         max_iops_(share::OB_INVALID_MAX_IOPS),
         max_bandwidth_(share::OB_INVALID_MAX_BANDWIDTH),
@@ -85,7 +81,7 @@ private:
         last_check_timestamp_(OB_INVALID_TIMESTAMP),
         extension_() {}
     ~ObServerStorageInfo() {}
-    TO_STRING_KV(K(addr_), K(path_), K(endpoint_), K(used_for_), K(zone_), K(storage_id_), K(max_iops_),
+    TO_STRING_KV(K(addr_), K(path_), K(endpoint_), K(used_for_), K(storage_id_), K(max_iops_),
                  K(max_bandwidth_), K(create_time_), K(op_id_), K(sub_op_id_), K(authorization_),
                  K(encrypt_info_), K(state_), K(state_info_), K(last_check_timestamp_), K(extension_));
 
@@ -94,7 +90,6 @@ private:
     char path_[share::OB_MAX_BACKUP_DEST_LENGTH];
     char endpoint_[common::OB_MAX_BACKUP_ENDPOINT_LENGTH];
     char used_for_[share::OB_MAX_STORAGE_USED_FOR_LENGTH];
-    char zone_[common::MAX_ZONE_LENGTH];
     uint64_t storage_id_;
     int64_t max_iops_;
     int64_t max_bandwidth_;

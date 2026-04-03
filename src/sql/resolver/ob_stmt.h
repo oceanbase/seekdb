@@ -248,30 +248,11 @@ public:
     return (stmt_type == stmt::T_START_TRANS || stmt_type == stmt::T_END_TRANS);
   }
 
-  static inline bool is_physical_restore_stmt(stmt::StmtType stmt_type)
-  {
-    return (stmt_type == stmt::T_PHYSICAL_RESTORE_TENANT);
-  }
-
   static inline bool is_ddl_stmt(stmt::StmtType stmt_type, bool has_global_variable)
   {
     return (
-        // tenant resource
-         stmt_type == stmt::T_CREATE_RESOURCE_POOL
-            || stmt_type == stmt::T_DROP_RESOURCE_POOL
-            || stmt_type == stmt::T_ALTER_RESOURCE_POOL
-            || stmt_type == stmt::T_SPLIT_RESOURCE_POOL
-            || stmt_type == stmt::T_MERGE_RESOURCE_POOL
-            || stmt_type == stmt::T_CREATE_RESOURCE_UNIT
-            || stmt_type == stmt::T_ALTER_RESOURCE_UNIT
-            || stmt_type == stmt::T_DROP_RESOURCE_UNIT
-            || stmt_type == stmt::T_CREATE_TENANT
-            || stmt_type == stmt::T_CREATE_STANDBY_TENANT
-            || stmt_type == stmt::T_DROP_TENANT
-            || stmt_type == stmt::T_MODIFY_TENANT
-            || stmt_type == stmt::T_LOCK_TENANT
-            // database
-            || stmt_type == stmt::T_CREATE_DATABASE
+        // database
+        stmt_type == stmt::T_CREATE_DATABASE
             || stmt_type == stmt::T_ALTER_DATABASE
             || stmt_type == stmt::T_DROP_DATABASE
             || stmt_type == stmt::T_FORK_DATABASE
@@ -310,14 +291,12 @@ public:
             || stmt_type == stmt::T_CREATE_MLOG
             || stmt_type == stmt::T_DROP_MLOG
             // flashback
-            || stmt_type == stmt::T_FLASHBACK_TENANT
             || stmt_type == stmt::T_FLASHBACK_DATABASE
             || stmt_type == stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN
             || stmt_type == stmt::T_FLASHBACK_TABLE_TO_SCN
             || stmt_type == stmt::T_FLASHBACK_INDEX
             // purge
             || stmt_type == stmt::T_PURGE_RECYCLEBIN
-            || stmt_type == stmt::T_PURGE_TENANT
             || stmt_type == stmt::T_PURGE_DATABASE
             || stmt_type == stmt::T_PURGE_TABLE
             || stmt_type == stmt::T_PURGE_INDEX
@@ -396,20 +375,6 @@ public:
   static inline bool is_catalog_supported_ddl_stmt(stmt::StmtType stmt_type, bool has_global_variable)
   {
     return (
-        // tenant resource
-        stmt_type == stmt::T_CREATE_RESOURCE_POOL
-        || stmt_type == stmt::T_DROP_RESOURCE_POOL
-        || stmt_type == stmt::T_ALTER_RESOURCE_POOL
-        || stmt_type == stmt::T_SPLIT_RESOURCE_POOL
-        || stmt_type == stmt::T_MERGE_RESOURCE_POOL
-        || stmt_type == stmt::T_CREATE_RESOURCE_UNIT
-        || stmt_type == stmt::T_ALTER_RESOURCE_UNIT
-        || stmt_type == stmt::T_DROP_RESOURCE_UNIT
-        || stmt_type == stmt::T_CREATE_TENANT
-        || stmt_type == stmt::T_CREATE_STANDBY_TENANT
-        || stmt_type == stmt::T_DROP_TENANT
-        || stmt_type == stmt::T_MODIFY_TENANT
-        || stmt_type == stmt::T_LOCK_TENANT
         // database
         // || stmt_type == stmt::T_CREATE_DATABASE
         // || stmt_type == stmt::T_ALTER_DATABASE
@@ -429,7 +394,7 @@ public:
         // column
         // || stmt_type == stmt::T_SET_COLUMN_COMMENT
         // audit and noaudit
-        || stmt_type == stmt::T_AUDIT
+        stmt_type == stmt::T_AUDIT
         // analyze, this in oracle belongs to ddl, but ob determines it as ddl there will be some issues
         // TODO: wait for Xi Feng to finish the analyze issue before releasing
         //|| stmt_type == stmt::T_ANALYZE
@@ -448,14 +413,12 @@ public:
         // || stmt_type == stmt::T_CREATE_MLOG
         // || stmt_type == stmt::T_DROP_MLOG
         // flashback
-        // || stmt_type == stmt::T_FLASHBACK_TENANT
         // || stmt_type == stmt::T_FLASHBACK_DATABASE
         // || stmt_type == stmt::T_FLASHBACK_TABLE_FROM_RECYCLEBIN
         // || stmt_type == stmt::T_FLASHBACK_TABLE_TO_SCN
         // || stmt_type == stmt::T_FLASHBACK_INDEX
         // purge
         // || stmt_type == stmt::T_PURGE_RECYCLEBIN
-        // || stmt_type == stmt::T_PURGE_TENANT
         // || stmt_type == stmt::T_PURGE_DATABASE
         // || stmt_type == stmt::T_PURGE_TABLE
         // || stmt_type == stmt::T_PURGE_INDEX
@@ -565,22 +528,8 @@ public:
 
   static inline bool is_ddl_stmt_allowed_in_dropping_tenant(stmt::StmtType stmt_type, bool has_global_variable)
   {
-    return (// tenant resource
-            stmt_type == stmt::T_CREATE_RESOURCE_POOL
-            || stmt_type == stmt::T_DROP_RESOURCE_POOL
-            || stmt_type == stmt::T_ALTER_RESOURCE_POOL
-            || stmt_type == stmt::T_SPLIT_RESOURCE_POOL
-            || stmt_type == stmt::T_MERGE_RESOURCE_POOL
-            || stmt_type == stmt::T_CREATE_RESOURCE_UNIT
-            || stmt_type == stmt::T_ALTER_RESOURCE_UNIT
-            || stmt_type == stmt::T_DROP_RESOURCE_UNIT
-            || stmt_type == stmt::T_CREATE_TENANT
-            || stmt_type == stmt::T_CREATE_STANDBY_TENANT
-            || stmt_type == stmt::T_DROP_TENANT
-            || stmt_type == stmt::T_MODIFY_TENANT
-            || stmt_type == stmt::T_LOCK_TENANT
-            // database
-            || stmt_type == stmt::T_ALTER_DATABASE
+    return (// database
+            stmt_type == stmt::T_ALTER_DATABASE
             || stmt_type == stmt::T_DROP_DATABASE
             // tablegroup
             || stmt_type == stmt::T_ALTER_TABLEGROUP
@@ -594,7 +543,6 @@ public:
             || stmt_type == stmt::T_DROP_INDEX
             // purge
             || stmt_type == stmt::T_PURGE_RECYCLEBIN
-            || stmt_type == stmt::T_PURGE_TENANT
             || stmt_type == stmt::T_PURGE_DATABASE
             || stmt_type == stmt::T_PURGE_TABLE
             || stmt_type == stmt::T_PURGE_INDEX
@@ -623,23 +571,9 @@ public:
   static inline bool is_ddl_stmt_allowed_in_creating_tenant(stmt::StmtType stmt_type, bool has_global_variable)
   {
     return (
-        // tenant resource
-         stmt_type == stmt::T_CREATE_RESOURCE_POOL
-            || stmt_type == stmt::T_DROP_RESOURCE_POOL
-            || stmt_type == stmt::T_ALTER_RESOURCE_POOL
-            || stmt_type == stmt::T_SPLIT_RESOURCE_POOL
-            || stmt_type == stmt::T_MERGE_RESOURCE_POOL
-            || stmt_type == stmt::T_CREATE_RESOURCE_UNIT
-            || stmt_type == stmt::T_ALTER_RESOURCE_UNIT
-            || stmt_type == stmt::T_DROP_RESOURCE_UNIT
-            || stmt_type == stmt::T_CREATE_TENANT
-            || stmt_type == stmt::T_CREATE_STANDBY_TENANT
-            || stmt_type == stmt::T_DROP_TENANT
-            || stmt_type == stmt::T_MODIFY_TENANT
-            || stmt_type == stmt::T_LOCK_TENANT
             // variable
             // Currently only set global variable is DDL operation, session level variable change is not DDL
-            || (stmt_type == stmt::T_VARIABLE_SET && !has_global_variable));
+            stmt_type == stmt::T_VARIABLE_SET && !has_global_variable);
   }
 
   static bool is_dcl_stmt(stmt::StmtType stmt_type)
@@ -649,7 +583,6 @@ public:
             || stmt_type == stmt::T_ALTER_PROFILE
             || stmt_type == stmt::T_DROP_PROFILE
             || stmt_type == stmt::T_ALTER_USER_PROFILE
-            || stmt_type == stmt::T_ALTER_USER_PRIMARY_ZONE
             || stmt_type == stmt::T_ALTER_USER
             //
             || stmt_type == stmt::T_CREATE_ROLE
@@ -673,14 +606,13 @@ public:
            || stmt_type == stmt::T_EMPTY_QUERY
            // TODO: When T_LOCK_TABLE is actually implemented, needs to be checked for legitimacy
            || stmt_type == stmt::T_LOCK_TABLE
-           || stmt_type == stmt::T_CHANGE_TENANT
            || stmt_type == stmt::T_CHANGE_EXTERNAL_STORAGE_DEST;
   }
 
   // following stmt don't do retry
   static bool force_skip_retry_stmt(stmt::StmtType stmt_type)
   {
-      return stmt_type == stmt::T_CHANGE_TENANT;
+      return false;
   }
 
   virtual int64_t to_string(char *buf, const int64_t buf_len) const

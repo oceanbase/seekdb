@@ -18,6 +18,7 @@
 #include "storage/tx/wrs/ob_weak_read_util.h"               // ObWeakReadUtil
 #include "storage/tx/ob_ts_mgr.h"
 #include "lib/ash/ob_active_session_guard.h"                    // ObASHSetInnerSqlWaitGuard
+#include "share/ob_server_struct.h" // GCTX
 
 namespace oceanbase
 {

@@ -36776,70 +36776,17 @@ int g_all_ob_errnos[2440] = {0, -4000, -4001, -4002, -4003, -4004, -4005, -4006,
     }
     return ret;
   }
-  const char *ob_oracle_strerror(const int err)
+  int ob_errpkt_errno(const int err, const bool /* is_oracle_mode - deprecated */)
   {
-    const char *ret = "Unknown error";
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_error;
-      } else {
-        ret = get_error(-err)->ob_str_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || '\0' == ret[0]))
-      {
-        ret = "Unknown Error";
-      }
-    }
-    return ret;
+    return ob_mysql_errno_with_check(err);
   }
-  const char *ob_oracle_str_user_error(const int err)
+  const char *ob_errpkt_strerror(const int err, const bool /* is_oracle_mode - deprecated */)
   {
-    const char *ret = NULL;
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_user_error;
-      } else {
-        ret = get_error(-err)->ob_str_user_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || '\0' == ret[0])) {
-        ret = NULL;
-      }
-    }
-    return ret;
+    return ob_strerror(err);
   }
-  int ob_oracle_errno(const int err)
+  const char *ob_errpkt_str_user_error(const int err, const bool /* is_oracle_mode - deprecated */)
   {
-    int ret = -1;
-    if (OB_ERR_PROXY_REROUTE == err) {
-      // Oracle Mode and MySQL mode should return same errcode for reroute sql
-      // thus we make the specialization here
-      ret = -1;
-    } else if (err >= OB_MIN_RAISE_APPLICATION_ERROR && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
-      ret = err; // PL/SQL Raise Application Error
-    } else if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      ret = get_error(-err)->oracle_errno;
-    }
-    return ret;
-  }
-  int ob_oracle_errno_with_check(const int err)
-  {
-    int ret = ob_oracle_errno(err);
-    if (ret < 0) {
-      ret = -err;
-    }
-    return ret;
-  }
-  int ob_errpkt_errno(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_errno_with_check(err) : ob_mysql_errno_with_check(err));
-  }
-  const char *ob_errpkt_strerror(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_strerror(err) : ob_strerror(err));
-  }
-  const char *ob_errpkt_str_user_error(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_str_user_error(err) : ob_str_user_error(err));
+    return ob_str_user_error(err);
   }
 
 } // end namespace common

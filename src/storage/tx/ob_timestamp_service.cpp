@@ -245,13 +245,14 @@ int ObTimestampService::resume_leader()
 int ObTimestampService::switch_to_leader()
 {
   int ret = OB_SUCCESS;
+  TRANS_LOG(INFO, "ObTimestampService switch_to_leader called", K(ret), K(MTL_ID()));
 
   if (OB_FAIL(check_and_fill_ls())) {
-    TRANS_LOG(WARN, "ls set fail", K(ret));
+    TRANS_LOG(WARN, "ls set fail", K(ret), K(MTL_ID()));
   } else {
     SCN version;
     if (OB_FAIL(ls_->get_log_handler()->get_max_scn(version))) {
-      TRANS_LOG(WARN, "get max ts fail", K(ret));
+      TRANS_LOG(WARN, "get max ts fail", K(ret), K(MTL_ID()));
     } else {
       int64_t version_val = version.is_valid() ? version.get_val_for_gts() : -1;
       if (version_val >= ATOMIC_LOAD(&limited_id_)) {
@@ -273,6 +274,11 @@ int ObTimestampService::switch_to_leader()
       TRANS_LOG(INFO, "ObTimestampService switch to leader success", K(ret), K(version), K(last_id_), K(limited_id_), 
                       "service_type", MTL(ObTimestampAccess *)->get_service_type());
     }
+  }
+
+  if (OB_FAIL(ret)) {
+    TRANS_LOG(WARN, "ObTimestampService switch_to_leader failed", K(ret), K(MTL_ID()),
+              "service_type", MTL(ObTimestampAccess *)->get_service_type());
   }
 
   return ret;

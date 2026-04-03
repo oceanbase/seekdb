@@ -29,7 +29,6 @@ ObAllVirtualMinorFreezeInfo::ObAllVirtualMinorFreezeInfo()
   : ObVirtualTableScannerIterator(),
     ObMultiTenantOperator(),
     addr_(),
-    ls_id_(share::ObLSID::INVALID_LS_ID),
     ls_iter_guard_(),
     diagnose_info_(),
     memtables_info_()
@@ -45,7 +44,6 @@ void ObAllVirtualMinorFreezeInfo::reset()
 {
   omt::ObMultiTenantOperator::reset();
   addr_.reset();
-  ls_id_ = share::ObLSID::INVALID_LS_ID;
   ls_iter_guard_.reset();
   diagnose_info_.reset();
   memtables_info_.reset();
@@ -56,7 +54,6 @@ void ObAllVirtualMinorFreezeInfo::reset()
 
 void ObAllVirtualMinorFreezeInfo::release_last_tenant()
 {
-  ls_id_ = share::ObLSID::INVALID_LS_ID;
   ls_iter_guard_.reset();
   diagnose_info_.reset();
   memtables_info_.reset();
@@ -97,7 +94,6 @@ int ObAllVirtualMinorFreezeInfo::get_next_ls(ObLS *&ls)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "ls is null", K(ret));
     } else {
-      ls_id_ = ls->get_ls_id().id();
       break;
     }
   }
@@ -125,59 +121,37 @@ int ObAllVirtualMinorFreezeInfo::process_curr_tenant(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case OB_APP_MIN_COLUMN_ID:
-          // svr_ip
-          if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cur_row_.cells_[i].set_varchar(ip_buf_);
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-          }
-          break;
-        case OB_APP_MIN_COLUMN_ID + 1:
-          // svr_port
-          cur_row_.cells_[i].set_int(addr_.get_port());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 2:
-          // tenant_id
-          cur_row_.cells_[i].set_int(MTL_ID());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 3:
-          // ls_id
-          cur_row_.cells_[i].set_int(ls_id_);
-          break;
-        case OB_APP_MIN_COLUMN_ID + 4:
+        case OB_APP_MIN_COLUMN_ID + 0:
           // tablet_id
           cur_row_.cells_[i].set_int(freeze_stat.get_tablet_id().id());
           break;
-        case OB_APP_MIN_COLUMN_ID + 5:
+        case OB_APP_MIN_COLUMN_ID + 1:
           // is_force
           cur_row_.cells_[i].set_varchar(freeze_stat.need_rewrite_meta() ? "YES" : "NO");
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 6:
+        case OB_APP_MIN_COLUMN_ID + 2:
           // freeze_clock
           freeze_clock = freeze_stat.get_freeze_clock();
           cur_row_.cells_[i].set_int(freeze_clock);
           break;
-        case OB_APP_MIN_COLUMN_ID + 7:
+        case OB_APP_MIN_COLUMN_ID + 3:
           // freeze_snapshot_version
           cur_row_.cells_[i].set_int(freeze_stat.get_freeze_snapshot_version().get_val_for_inner_table_field());
           break;
-        case OB_APP_MIN_COLUMN_ID + 8:
+        case OB_APP_MIN_COLUMN_ID + 4:
           // start_time
           cur_row_.cells_[i].set_timestamp(freeze_stat.get_start_time());
           break;
-        case OB_APP_MIN_COLUMN_ID + 9:
+        case OB_APP_MIN_COLUMN_ID + 5:
           // end_time
           cur_row_.cells_[i].set_timestamp(freeze_stat.get_end_time());
           break;
-        case OB_APP_MIN_COLUMN_ID + 10:
+        case OB_APP_MIN_COLUMN_ID + 6:
           // ret_code
           cur_row_.cells_[i].set_int(freeze_stat.get_ret_code());
           break;
-        case OB_APP_MIN_COLUMN_ID + 11:
+        case OB_APP_MIN_COLUMN_ID + 7:
           // state
           switch (freeze_stat.get_state()) {
             case ObFreezeState::INVALID:
@@ -202,14 +176,14 @@ int ObAllVirtualMinorFreezeInfo::process_curr_tenant(ObNewRow *&row)
           }
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
-        case OB_APP_MIN_COLUMN_ID + 12:
+        case OB_APP_MIN_COLUMN_ID + 8:
           // diagnose_info
           if (OB_SUCC(freeze_stat.get_diagnose_info(diagnose_info_))) {
             cur_row_.cells_[i].set_varchar(diagnose_info_.get_ob_string());
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
-        case OB_APP_MIN_COLUMN_ID + 13:
+        case OB_APP_MIN_COLUMN_ID + 9:
           // memtables_info
           if (OB_FAIL(freeze_stat.get_memtables_info(memtables_info_))) {
             TRANS_LOG(WARN, "fail to get_memtables_info", K(ret));

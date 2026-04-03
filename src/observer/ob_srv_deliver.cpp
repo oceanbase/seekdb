@@ -346,7 +346,6 @@ ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler,
       is_inited_(false),
       stop_(true),
       host_(),
-      lease_queue_(NULL),
       ddl_queue_(NULL),
       ddl_parallel_queue_(NULL),
       mysql_queue_(NULL),
@@ -381,10 +380,6 @@ void ObSrvDeliver::stop()
     diagnose_queue_->stop();
     diagnose_queue_->wait();
   }
-  if (NULL != lease_queue_) {
-    lease_queue_->stop();
-    lease_queue_->wait();
-  }
   if (NULL != ddl_queue_) {
     ddl_queue_->stop();
     ddl_queue_->wait();
@@ -418,8 +413,7 @@ int ObSrvDeliver::init_queue_threads()
   int ret = OB_SUCCESS;
 
   // TODO: fufeng, make it configurable
-  if (OB_FAIL(create_queue_thread(lib::TGDefIDs::LeaseQueueTh, "LeaseQueueTh", lease_queue_))) {
-  } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLQueueTh, "DDLQueueTh", ddl_queue_))) {
+  if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLQueueTh, "DDLQueueTh", ddl_queue_))) {
   } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLPQueueTh, PARALLEL_DDL_THREAD_NAME, ddl_parallel_queue_))) {
   } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::MysqlQueueTh,
                                          "MysqlQueueTh", mysql_queue_))) {
@@ -505,8 +499,6 @@ int ObSrvDeliver::deliver_rpc_request(ObRequest &req)
       LOG_WARN("receive stream rpc packet but session not found",
                K(pkt), K(req));
     }
-  } else if (OB_RENEW_LEASE == pkt.get_pcode()) {
-    queue = &lease_queue_->queue_;
   } else if (10 == pkt.get_priority()) {
     if (rootserver::is_parallel_ddl(pkt.get_pcode())) {
       queue = &ddl_parallel_queue_->queue_;

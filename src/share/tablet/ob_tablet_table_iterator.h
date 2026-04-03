@@ -60,8 +60,7 @@ public:
   ~ObCompactionTabletMetaIterator() { reset(); }
   int init(
     const uint64_t tenant_id,
-    const int64_t batch_size,
-    share::ObIServerTrace &server_trace);
+    const int64_t batch_size);
   virtual void reset() override;
   virtual int next(ObTabletInfo &tablet_info) override;
 

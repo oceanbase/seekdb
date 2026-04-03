@@ -32,8 +32,12 @@ int64_t get_cpu_count()
 using namespace share;
 
 ObServerConfig::ObServerConfig()
-    : disk_actual_space_(0), self_addr_(), rwlock_(ObLatchIds::CONFIG_LOCK), system_config_(NULL)
+  : disk_actual_space_(0), self_addr_(), rwlock_(ObLatchIds::CONFIG_LOCK), system_config_(NULL), global_version_(0)
 {
+#undef DEF_PARAM
+#define DEF_PARAM(name, args...) name.update_cb_ = this;
+#include "share/parameter/ob_parameter_seed.ipp"
+#undef DEF_PARAM
 }
 
 ObServerConfig::~ObServerConfig()
@@ -70,31 +74,21 @@ bool ObServerConfig::in_upgrade_mode() const
 }
 
 
-int ObServerConfig::read_config()
+int ObServerConfig::read_config(const bool enable_static_effect)
 {
   int ret = OB_SUCCESS;
   int temp_ret = OB_SUCCESS;
   ObSystemConfigKey key;
-  char local_ip[OB_MAX_SERVER_ADDR_SIZE] = "";
-  if (OB_UNLIKELY(true != self_addr_.ip_to_string(local_ip, sizeof(local_ip)))) {
-    ret = OB_CONVERT_ERROR;
-  } else {
-    key.set_varchar(ObString::make_string("svr_type"), print_server_role(get_server_type()));
-    key.set_int(ObString::make_string("svr_port"), rpc_port);
-    key.set_varchar(ObString::make_string("svr_ip"), local_ip);
-    key.set_varchar(ObString::make_string("zone"), zone);
-    ObConfigContainer::const_iterator it = container_.begin();
-    for (; OB_SUCC(ret) && it != container_.end(); ++it) {
-      key.set_name(it->first.str());
-      if (OB_ISNULL(it->second)) {
-        ret = OB_ERR_UNEXPECTED;
-        OB_LOG(ERROR, "config item is null", "name", it->first.str(), K(ret));
-      } else {
-        key.set_version(it->second->version());
-        temp_ret = system_config_->read_config(get_tenant_id(), key, *(it->second));
-        if (OB_SUCCESS != temp_ret) {
-          OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
-        }
+  ObConfigContainer::const_iterator it = container_.begin();
+  for (; OB_SUCC(ret) && it != container_.end(); ++it) {
+    key.set_name(it->first.str());
+    if (OB_ISNULL(it->second)) {
+      ret = OB_ERR_UNEXPECTED;
+      OB_LOG(ERROR, "config item is null", "name", it->first.str(), K(ret));
+    } else if (!it->second->reboot_effective() || !enable_static_effect) {
+      temp_ret = system_config_->read_config(get_tenant_id(), key, *(it->second));
+      if (OB_SUCCESS != temp_ret) {
+        OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
       }
     }
   }
@@ -115,21 +109,6 @@ int ObServerConfig::check_all() const
              "name", it->first.str(), "value", it->second->str(), K(temp_ret));
     } else {
       // do nothing
-    }
-  }
-  return ret;
-}
-
-int ObServerConfig::strict_check_special() const
-{
-  int ret = OB_SUCCESS;
-  if (OB_SUCC(ret)) {
-    if (!cluster_id.check()) {
-      ret = OB_INVALID_CONFIG;
-      SHARE_LOG(WARN, "invalid cluster id", K(ret), K(cluster_id.str()));
-    } else if (strlen(zone.str()) <= 0) {
-      ret = OB_INVALID_CONFIG;
-      SHARE_LOG(WARN, "config zone cannot be empty", KR(ret), K(zone.str()));
     }
   }
   return ret;
@@ -236,146 +215,12 @@ void ObServerMemoryConfig::check_limit(bool ignore_error)
   }
 }
 
-int ObServerConfig::serialize_(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  ObRecordHeader header;
-  // Here the serialization method for header uses non-variable length serialization, without encoding numbers
-  int64_t header_len = header.get_serialize_size();
-  int64_t expect_data_len = get_serialize_size_() - header_len;
-
-  char *const p_header = buf + pos;
-  char *const p_data   = p_header + header_len;
-  const int64_t data_pos = pos + header_len;
-  int64_t saved_header_pos     = pos;
-  pos += header_len;
-
-  // data first
-  if (OB_FAIL(ObCommonConfig::serialize(buf, buf_len, pos))) {
-  } else {
-    header.magic_ = OB_CONFIG_MAGIC;
-    header.header_length_ = static_cast<int16_t>(header_len);
-    header.version_ = OB_CONFIG_VERSION;
-    header.data_length_ = static_cast<int32_t>(pos - data_pos);
-    header.data_zlength_ = header.data_length_;
-    if (header.data_zlength_ != expect_data_len) {
-      LOG_WARN("unexpected data size", K_(header.data_zlength),
-                                          K(expect_data_len));
-    } else {
-      header.data_checksum_ = ob_crc64(p_data, pos - data_pos);
-      header.set_header_checksum();
-      ret = header.serialize(buf, buf_len, saved_header_pos);
-    }
-  }
-  return ret;
-}
-
-int ObServerConfig::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  OB_UNIS_ENCODE(UNIS_VERSION);
-  if (OB_SUCC(ret)) {
-    int64_t size_nbytes = NS_::OB_SERIALIZE_SIZE_NEED_BYTES;
-    int64_t pos_bak = (pos += size_nbytes);
-    if (OB_FAIL(serialize_(buf, buf_len, pos))) {
-      LOG_WARN("ObServerConfig serialize fail", K(ret));
-    }
-    int64_t serial_size = pos - pos_bak;
-    int64_t tmp_pos = 0;
-    if (OB_SUCC(ret)) {
-      ret = NS_::encode_fixed_bytes_i64(buf + pos_bak - size_nbytes,
-        size_nbytes, tmp_pos, serial_size);
-    }
-  }
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObServerConfig)
-{
-  int ret = OB_SUCCESS;
-  if (data_len == 0 || pos >= data_len) {
-  } else {
-    // header
-    ObRecordHeader header;
-    int64_t header_len = header.get_serialize_size();
-    const char *const p_header = buf + pos;
-    const char *const p_data = p_header + header_len;
-    const int64_t data_pos = pos + header_len;
-    if (OB_FAIL(header.deserialize(buf, data_len, pos))) {
-      LOG_ERROR("deserialize header failed", K(ret));
-    } else if (OB_FAIL(header.check_header_checksum())) {
-      LOG_ERROR("check header checksum failed", K(ret));
-    } else if (OB_CONFIG_MAGIC != header.magic_) {
-      ret = OB_INVALID_DATA;
-      LOG_ERROR("check magic number failed", K_(header.magic), K(ret));
-    } else if (data_len - data_pos != header.data_zlength_) {
-      ret = OB_INVALID_DATA;
-      LOG_ERROR("check data len failed",
-                K(data_len), K(data_pos), K_(header.data_zlength), K(ret));
-    } else if (OB_FAIL(header.check_payload_checksum(p_data,
-                                                     data_len - data_pos))) {
-      LOG_ERROR("check data checksum failed", K(ret));
-    } else if (OB_FAIL(ObCommonConfig::deserialize(buf, data_len, pos))) {
-      LOG_ERROR("deserialize cluster config failed", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObServerConfig::publish_special_config_after_dump()
 {
   int ret = OB_SUCCESS;
-  ObConfigItem *const *pp_item = NULL;
-  if (OB_ISNULL(pp_item = container_.get(ObConfigStringKey(COMPATIBLE)))) {
-    ret = OB_INVALID_CONFIG;
-    LOG_WARN("Invalid config string", K(ret));
-  } else if (!(*pp_item)->dump_value_updated()) {
-    LOG_INFO("config dump value is not set, no need read", K((*pp_item)->spfile_str()));
-  } else {
-    uint64_t new_data_version = 0;
-    uint64_t old_data_version = 0;
-    bool value_updated = (*pp_item)->value_updated();
-    if (OB_FAIL(ObClusterVersion::get_version((*pp_item)->spfile_str(), new_data_version))) {
-      LOG_ERROR("parse data_version failed", KR(ret), K((*pp_item)->spfile_str()));
-    } else if (OB_FAIL(ObClusterVersion::get_version((*pp_item)->str(), old_data_version))) {
-      LOG_ERROR("parse data_version failed", KR(ret), K((*pp_item)->str()));
-    } else if (!value_updated && old_data_version != DATA_CURRENT_VERSION) {
-      ret = OB_ERR_UNEXPECTED;
-      SHARE_LOG(ERROR, "unexpected data_version", KR(ret), K(old_data_version));
-    } else if (value_updated && new_data_version <= old_data_version) {
-      LOG_INFO("[COMPATIBLE] [DATA_VERSION] no need to update",
-               "old_data_version", DVP(old_data_version),
-               "new_data_version", DVP(new_data_version));
-      // do nothing
-    } else {
-      if (!(*pp_item)->set_value_unsafe((*pp_item)->spfile_str())) {
-        ret = OB_INVALID_CONFIG;
-        LOG_WARN("Invalid config value", K((*pp_item)->spfile_str()), K(ret));
-      } else {
-        FLOG_INFO("[COMPATIBLE] [DATA_VERSION] read data_version after dump",
-                  KR(ret), "version", (*pp_item)->version(),
-                  "value", (*pp_item)->str(), "value_updated",
-                  (*pp_item)->value_updated(), "dump_version",
-                  (*pp_item)->dumped_version(), "dump_value",
-                  (*pp_item)->spfile_str(), "dump_value_updated",
-                  (*pp_item)->dump_value_updated());
-      }
-    }
-  }
   return ret;
 }
 
-OB_DEF_SERIALIZE_SIZE(ObServerConfig)
-{
-  int64_t len = 0;
-  ObRecordHeader header;
-  // 1) header size
-  len += header.get_serialize_size();
-  // 2) cluster config size
-  len += ObCommonConfig::get_serialize_size();
-
-  return len;
-}
 
 } // end of namespace common
 namespace obrpc {
@@ -400,6 +245,12 @@ bool stream_rpc_update_timeout()
 }
 
 } // end of namespace obrpc
+namespace obgrpc {
+bool ob_grpc_is_rpc_tls_enabled()
+{
+  return GCONF.enable_rpc_tls;
+}
+} // end of namespace obgrpc
 } // end of namespace oceanbase
 
 namespace easy

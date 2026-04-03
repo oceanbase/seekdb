@@ -18,24 +18,17 @@
 #include "observer/ob_server.h"
 #include "observer/omt/ob_tenant.h"
 #include "logservice/ob_log_service.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_disk_space_manager.h"
-#endif
 
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
 using namespace oceanbase::observer;
 using namespace oceanbase::omt;
-using namespace logservice;
+using namespace oceanbase::logservice;
 
 ObAllVirtualUnit::ObAllVirtualUnit()
     : ObVirtualTableScannerIterator(),
       addr_(),
-      zone_type_(ZONE_TYPE_INVALID),
-      region_(DEFAULT_REGION_NAME),
-      is_zone_type_set_(false),
-      is_region_set_(false),
       tenant_idx_(0),
       tenant_meta_arr_()
 {
@@ -70,9 +63,6 @@ int ObAllVirtualUnit::init(common::ObAddr &addr)
 int ObAllVirtualUnit::inner_open()
 {
   int ret = OB_SUCCESS;
-  is_zone_type_set_ = false;
-  is_region_set_ = false;
-  ObLocalityManager *locality_manager_ = GCTX.locality_manager_;
 
   ObTenant *tenant = nullptr;
   if (OB_ISNULL(GCTX.omt_)) {
@@ -101,39 +91,6 @@ int ObAllVirtualUnit::inner_open()
     SERVER_LOG(WARN, "fail to push back tenant meta", K(ret));
   }
   
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(locality_manager_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "fail to get locality manager from GCTX", KR(ret));
-    } else {
-      // Loacality cache will be loaded shortly after ObServer starts. 
-      // Before that, two columns ZONE_TYPE and REGION of the local unit rows will be set to NULL.
-      if (OB_FAIL(locality_manager_->get_server_zone_type(addr_, zone_type_))) {
-        if (OB_ENTRY_NOT_EXIST != ret) {
-          SERVER_LOG(WARN, "fail to get zone type from locality manager", KR(ret));
-        } else {
-          // OB_ENTRY_NOT_EXIST means locality cache not loaded, no warning would be popped.
-          ret = OB_SUCCESS;
-        }
-      } else {
-        is_zone_type_set_ = true;
-      }
-
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(locality_manager_->get_server_region(addr_, region_))) {
-          if (OB_ENTRY_NOT_EXIST != ret) {
-            SERVER_LOG(WARN, "fail to get region from locality manager", KR(ret));
-          } else {
-            // OB_ENTRY_NOT_EXIST means locality cache not loaded, no warning would be popped.
-            ret = OB_SUCCESS;
-          }
-        } else {
-          is_region_set_ = true;
-        }
-      }
-    }
-  }
-
   tenant_idx_ = 0;
 
   return ret;
@@ -162,46 +119,6 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case SVR_IP:
-          if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cur_row_.cells_[i].set_varchar(ip_buf_);
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-          }
-          break;
-        case SVR_PORT:
-          cur_row_.cells_[i].set_int(addr_.get_port());
-          break;
-        case UNIT_ID:
-          cur_row_.cells_[i].set_int(tenant_meta.unit_.unit_id_);
-          break;
-        case TENANT_ID:
-          cur_row_.cells_[i].set_int(tenant_meta.unit_.tenant_id_);
-          break;
-        case ZONE:
-          cur_row_.cells_[i].set_varchar(GCONF.zone.str());
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case ZONE_TYPE:
-          if (OB_UNLIKELY(!is_zone_type_set_)) {
-            // locality not refreshed yet, set to null
-            cur_row_.cells_[i].set_null();
-          } else {
-            cur_row_.cells_[i].set_varchar(zone_type_to_str(zone_type_));
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          }
-          break;
-        case REGION:
-          if (OB_UNLIKELY(!is_region_set_)) {
-            // locality not refreshed yet, set to null
-            cur_row_.cells_[i].set_null();
-          } else { 
-            cur_row_.cells_[i].set_varchar(region_.str());
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          }
-          break;
         case MIN_CPU: {
           if (is_meta_tnt) {
             cur_row_.cells_[i].set_null();
@@ -356,6 +273,4 @@ int ObAllVirtualUnit::get_clog_disk_used_size_(const uint64_t tenant_id,
   // return OB_SUCCESS whatever.
   return OB_SUCCESS;
 }
-
-
 

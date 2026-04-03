@@ -933,7 +933,7 @@ int64_t ObHashJoinVecOp::calc_partition_count_by_cache_aware(
     partition_cnt = max_part_count;
   }
   global_mem_bound_size = max(0, global_mem_bound_size);
-  while (partition_cnt * PAGE_SIZE > global_mem_bound_size) {
+  while (partition_cnt * ALLOC_PAGE_SIZE > global_mem_bound_size) {
     partition_cnt >>= 1;
   }
   partition_cnt = partition_cnt < MIN_PART_COUNT ?

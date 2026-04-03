@@ -268,7 +268,7 @@ int ObInnerTableSchema::gv_session_longops_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT CAST(sid AS SIGNED) AS SID,            CAST(trace_id AS CHAR(64)) AS TRACE_ID,            CAST(op_name AS CHAR(64)) AS OPNAME,            CAST(TARGET AS CHAR(64)) AS TARGET,            CAST(SVR_IP AS CHAR(46)) AS SVR_IP,            CAST(SVR_PORT AS SIGNED) AS SVR_PORT,            CAST(USEC_TO_TIME(START_TIME) AS DATETIME) AS START_TIME,            CAST(ELAPSED_TIME/1000000 AS SIGNED) AS ELAPSED_SECONDS,            CAST(REMAINING_TIME AS SIGNED) AS TIME_REMAINING,            CAST(USEC_TO_TIME(LAST_UPDATE_TIME) AS DATETIME) AS LAST_UPDATE_TIME,            CAST(MESSAGE AS CHAR(512)) AS MESSAGE     FROM oceanbase.__all_virtual_virtual_long_ops_status_mysql_sys_agent )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT CAST(sid AS SIGNED) AS SID,            CAST(trace_id AS CHAR(64)) AS TRACE_ID,            CAST(op_name AS CHAR(64)) AS OPNAME,            CAST(TARGET AS CHAR(64)) AS TARGET,            CAST(USEC_TO_TIME(START_TIME) AS DATETIME) AS START_TIME,            CAST(ELAPSED_TIME/1000000 AS SIGNED) AS ELAPSED_SECONDS,            CAST(REMAINING_TIME AS SIGNED) AS TIME_REMAINING,            CAST(USEC_TO_TIME(LAST_UPDATE_TIME) AS DATETIME) AS LAST_UPDATE_TIME,            CAST(MESSAGE AS CHAR(512)) AS MESSAGE     FROM oceanbase.__all_virtual_virtual_long_ops_status_mysql_sys_agent )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -319,7 +319,7 @@ int ObInnerTableSchema::v_session_longops_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT SID,     TRACE_ID,     OPNAME,     TARGET,     SVR_IP,     SVR_PORT,     START_TIME,     ELAPSED_SECONDS,     TIME_REMAINING,     LAST_UPDATE_TIME,     MESSAGE FROM OCEANBASE.GV$SESSION_LONGOPS     WHERE SVR_IP = HOST_IP() AND SVR_PORT = RPC_PORT() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT SID,     TRACE_ID,     OPNAME,     TARGET,     START_TIME,     ELAPSED_SECONDS,     TIME_REMAINING,     LAST_UPDATE_TIME,     MESSAGE FROM OCEANBASE.GV$SESSION_LONGOPS  )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -422,7 +422,7 @@ int ObInnerTableSchema::columns_schema(ObTableSchema &table_schema)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(table_schema.set_view_definition(R"__(
-SELECT /*+LEADING((D T) VC) USE_NL(VC) NO_USE_NL_MATERIALIZATION(VC)*/ 
+SELECT /*+LEADING((D T) VC) USE_NL(VC) NO_USE_NL_MATERIALIZATION(VC)*/
        VC.TABLE_CATALOG,
        D.DATABASE_NAME collate utf8mb4_name_case AS TABLE_SCHEMA,
        T.TABLE_NAME collate utf8mb4_name_case AS TABLE_NAME,
@@ -443,8 +443,8 @@ SELECT /*+LEADING((D T) VC) USE_NL(VC) NO_USE_NL_MATERIALIZATION(VC)*/
        VC.EXTRA,
        VC.PRIVILEGES,
        VC.COLUMN_COMMENT,
-       VC.GENERATION_EXPRESSION, 
-       VC.SRS_ID FROM OCEANBASE.__ALL_TABLE T INNER JOIN OCEANBASE.__ALL_DATABASE D INNER JOIN OCEANBASE.__ALL_VIRTUAL_INFORMATION_COLUMNS VC 
+       VC.GENERATION_EXPRESSION,
+       VC.SRS_ID FROM OCEANBASE.__ALL_TABLE T INNER JOIN OCEANBASE.__ALL_DATABASE D INNER JOIN OCEANBASE.__ALL_VIRTUAL_INFORMATION_COLUMNS VC
 WHERE (T.OBJECT_STATUS = 0 OR (T.TABLE_ID > 20000 AND T.TABLE_ID < 30000) OR (T.GMT_CREATE != T.GMT_MODIFIED AND T.TABLE_TYPE = 3))
       AND T.DATABASE_ID = D.DATABASE_ID
       AND D.DATABASE_NAME = VC.TABLE_SCHEMA
@@ -452,7 +452,7 @@ WHERE (T.OBJECT_STATUS = 0 OR (T.TABLE_ID > 20000 AND T.TABLE_ID < 30000) OR (T.
       AND D.IN_RECYCLEBIN = 0
       AND 0 = sys_privilege_check('table_acc', effective_tenant_id(), D.DATABASE_NAME, T.TABLE_NAME)
 UNION ALL
-SELECT /*+LEADING((D T) VC) USE_NL(VC) NO_USE_NL_MATERIALIZATION(VC)*/ 
+SELECT /*+LEADING((D T) VC) USE_NL(VC) NO_USE_NL_MATERIALIZATION(VC)*/
        VC.TABLE_CATALOG,
        D.DATABASE_NAME collate utf8mb4_name_case AS TABLE_SCHEMA,
        T.TABLE_NAME collate utf8mb4_name_case AS TABLE_NAME,
@@ -473,7 +473,7 @@ SELECT /*+LEADING((D T) VC) USE_NL(VC) NO_USE_NL_MATERIALIZATION(VC)*/
        VC.EXTRA,
        VC.PRIVILEGES,
        VC.COLUMN_COMMENT,
-       VC.GENERATION_EXPRESSION, 
+       VC.GENERATION_EXPRESSION,
        VC.SRS_ID FROM (SELECT 1 AS TABLE_ID, 201001 AS DATABASE_ID, '__all_core_table' AS TABLE_NAME FROM DUAL
              UNION ALL SELECT 3 AS TABLE_ID, 201001 AS DATABASE_ID, '__all_table' AS TABLE_NAME FROM DUAL
              UNION ALL SELECT 4 AS TABLE_ID, 201001 AS DATABASE_ID, '__all_column' AS TABLE_NAME FROM DUAL
@@ -504,10 +504,8 @@ UNION ALL
        inner_info_cols_priv_printer(D.DATABASE_NAME, T.TABLE_NAME) AS PRIVILEGES,
        C.COMMENT AS COLUMN_COMMENT,
        CASE WHEN (C.COLUMN_FLAGS & 0x3) THEN CAST(C.ORIG_DEFAULT_VALUE_V2 AS CHAR(4194304)) ELSE "" END AS GENERATION_EXPRESSION,
-       CAST(CASE WHEN (C.SRS_ID >> 32 = ((2 << 31) - 1)) THEN NULL ELSE C.SRS_ID >> 32 END AS UNSIGNED) AS SRS_ID FROM OCEANBASE.__ALL_TABLE T INNER JOIN OCEANBASE.__ALL_DATABASE D INNER JOIN OCEANBASE.__ALL_COLUMN C 
+       CAST(CASE WHEN (C.SRS_ID >> 32 = ((2 << 31) - 1)) THEN NULL ELSE C.SRS_ID >> 32 END AS UNSIGNED) AS SRS_ID FROM OCEANBASE.__ALL_TABLE T INNER JOIN OCEANBASE.__ALL_DATABASE D INNER JOIN OCEANBASE.__ALL_COLUMN C
 WHERE T.TABLE_ID = C.TABLE_ID
-      AND T.TENANT_ID = C.TENANT_ID
-      AND T.TENANT_ID = D.TENANT_ID
       AND T.DATABASE_ID = D.DATABASE_ID
       AND D.DATABASE_ID != 201004
       AND D.IN_RECYCLEBIN = 0
@@ -573,7 +571,7 @@ int ObInnerTableSchema::gv_ob_px_worker_stat_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       SESSION_ID,       TENANT_ID,       SVR_IP,       SVR_PORT,       TRACE_ID,       QC_ID,       SQC_ID,       WORKER_ID,       DFO_ID,       START_TIME     FROM oceanbase.__all_virtual_px_worker_stat     order by session_id, svr_ip, svr_port )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       SESSION_ID,       TRACE_ID,       QC_ID,       SQC_ID,       WORKER_ID,       DFO_ID,       START_TIME     FROM oceanbase.__all_virtual_px_worker_stat     order by session_id )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -624,7 +622,7 @@ int ObInnerTableSchema::v_ob_px_worker_stat_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT SESSION_ID,       TENANT_ID,       SVR_IP,       SVR_PORT,       TRACE_ID,       QC_ID,       SQC_ID,       WORKER_ID,       DFO_ID,       START_TIME     FROM oceanbase.GV$OB_PX_WORKER_STAT     where svr_ip = host_ip() AND svr_port = rpc_port() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT SESSION_ID,       TRACE_ID,       QC_ID,       SQC_ID,       WORKER_ID,       DFO_ID,       START_TIME     FROM oceanbase.GV$OB_PX_WORKER_STAT )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -675,7 +673,7 @@ int ObInnerTableSchema::gv_ob_ps_stat_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT     TENANT_ID,     SVR_IP,     SVR_PORT,     STMT_COUNT,     HIT_COUNT,     ACCESS_COUNT,     MEM_HOLD   FROM oceanbase.__all_virtual_ps_stat )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT     STMT_COUNT,     HIT_COUNT,     ACCESS_COUNT,     MEM_HOLD   FROM oceanbase.__all_virtual_ps_stat )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -726,7 +724,7 @@ int ObInnerTableSchema::v_ob_ps_stat_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT TENANT_ID,     SVR_IP,     SVR_PORT,     STMT_COUNT,     HIT_COUNT,     ACCESS_COUNT,     MEM_HOLD   FROM oceanbase.GV$OB_PS_STAT   WHERE svr_ip=HOST_IP() AND svr_port=RPC_PORT() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT     STMT_COUNT,     HIT_COUNT,     ACCESS_COUNT,     MEM_HOLD   FROM oceanbase.GV$OB_PS_STAT )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -777,7 +775,7 @@ int ObInnerTableSchema::gv_ob_ps_item_info_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT TENANT_ID, SVR_IP, SVR_PORT, STMT_ID,          DB_ID, PS_SQL, PARAM_COUNT, STMT_ITEM_REF_COUNT,          STMT_INFO_REF_COUNT, MEM_HOLD, STMT_TYPE, CHECKSUM, EXPIRED   FROM oceanbase.__all_virtual_ps_item_info )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT STMT_ID,          DB_ID, PS_SQL, PARAM_COUNT, STMT_ITEM_REF_COUNT,          STMT_INFO_REF_COUNT, MEM_HOLD, STMT_TYPE, CHECKSUM, EXPIRED   FROM oceanbase.__all_virtual_ps_item_info )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -828,7 +826,7 @@ int ObInnerTableSchema::v_ob_ps_item_info_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT TENANT_ID, SVR_IP, SVR_PORT, STMT_ID,          DB_ID, PS_SQL, PARAM_COUNT, STMT_ITEM_REF_COUNT,          STMT_INFO_REF_COUNT, MEM_HOLD, STMT_TYPE, CHECKSUM, EXPIRED   FROM oceanbase.GV$OB_PS_ITEM_INFO   WHERE svr_ip=HOST_IP() AND svr_port=RPC_PORT() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(   SELECT STMT_ID,          DB_ID, PS_SQL, PARAM_COUNT, STMT_ITEM_REF_COUNT,          STMT_INFO_REF_COUNT, MEM_HOLD, STMT_TYPE, CHECKSUM, EXPIRED   FROM oceanbase.GV$OB_PS_ITEM_INFO )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -879,7 +877,7 @@ int ObInnerTableSchema::gv_sql_workarea_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       CAST(NULL AS BINARY(8)) AS ADDRESS,       CAST(NULL AS SIGNED) AS HASH_VALUE,       DB_ID,       SQL_ID,       CAST(PLAN_ID AS SIGNED) AS CHILD_NUMBER,       CAST(NULL AS BINARY(8)) AS WORKAREA_ADDRESS,       OPERATION_TYPE,       OPERATION_ID,       POLICY,       ESTIMATED_OPTIMAL_SIZE,       ESTIMATED_ONEPASS_SIZE,       LAST_MEMORY_USED,       LAST_EXECUTION,       LAST_DEGREE,       TOTAL_EXECUTIONS,       OPTIMAL_EXECUTIONS,       ONEPASS_EXECUTIONS,       MULTIPASSES_EXECUTIONS,       ACTIVE_TIME,       MAX_TEMPSEG_SIZE,       LAST_TEMPSEG_SIZE,       TENANT_ID AS CON_ID,       SVR_IP,       SVR_PORT     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_HISTORY_STAT )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       CAST(NULL AS BINARY(8)) AS ADDRESS,       CAST(NULL AS SIGNED) AS HASH_VALUE,       DB_ID,       SQL_ID,       CAST(PLAN_ID AS SIGNED) AS CHILD_NUMBER,       CAST(NULL AS BINARY(8)) AS WORKAREA_ADDRESS,       OPERATION_TYPE,       OPERATION_ID,       POLICY,       ESTIMATED_OPTIMAL_SIZE,       ESTIMATED_ONEPASS_SIZE,       LAST_MEMORY_USED,       LAST_EXECUTION,       LAST_DEGREE,       TOTAL_EXECUTIONS,       OPTIMAL_EXECUTIONS,       ONEPASS_EXECUTIONS,       MULTIPASSES_EXECUTIONS,       ACTIVE_TIME,       MAX_TEMPSEG_SIZE,       LAST_TEMPSEG_SIZE,       1 AS CON_ID     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_HISTORY_STAT )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -930,7 +928,7 @@ int ObInnerTableSchema::v_sql_workarea_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT ADDRESS,     HASH_VALUE,     DB_ID,     SQL_ID,     CHILD_NUMBER,     WORKAREA_ADDRESS,     OPERATION_TYPE,     OPERATION_ID,     POLICY,     ESTIMATED_OPTIMAL_SIZE,     ESTIMATED_ONEPASS_SIZE,     LAST_MEMORY_USED,     LAST_EXECUTION,     LAST_DEGREE,     TOTAL_EXECUTIONS,     OPTIMAL_EXECUTIONS,     ONEPASS_EXECUTIONS,     MULTIPASSES_EXECUTIONS,     ACTIVE_TIME,     MAX_TEMPSEG_SIZE,     LAST_TEMPSEG_SIZE,     CON_ID,     SVR_IP,     SVR_PORT FROM OCEANBASE.GV$SQL_WORKAREA     WHERE SVR_IP = HOST_IP() AND SVR_PORT = RPC_PORT() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT ADDRESS,     HASH_VALUE,     DB_ID,     SQL_ID,     CHILD_NUMBER,     WORKAREA_ADDRESS,     OPERATION_TYPE,     OPERATION_ID,     POLICY,     ESTIMATED_OPTIMAL_SIZE,     ESTIMATED_ONEPASS_SIZE,     LAST_MEMORY_USED,     LAST_EXECUTION,     LAST_DEGREE,     TOTAL_EXECUTIONS,     OPTIMAL_EXECUTIONS,     ONEPASS_EXECUTIONS,     MULTIPASSES_EXECUTIONS,     ACTIVE_TIME,     MAX_TEMPSEG_SIZE,     LAST_TEMPSEG_SIZE,     CON_ID FROM OCEANBASE.GV$SQL_WORKAREA  )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -981,7 +979,7 @@ int ObInnerTableSchema::gv_sql_workarea_active_schema(ObTableSchema &table_schem
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       CAST(NULL AS SIGNED) AS SQL_HASH_VALUE,       DB_ID,       SQL_ID,       CAST(NULL AS DATE) AS SQL_EXEC_START,       SQL_EXEC_ID,       CAST(NULL AS BINARY(8)) AS WORKAREA_ADDRESS,       OPERATION_TYPE,       OPERATION_ID,       POLICY,       SID,       CAST(NULL AS SIGNED) AS QCINST_ID,       CAST(NULL AS SIGNED) AS QCSID,       ACTIVE_TIME,       WORK_AREA_SIZE,       EXPECT_SIZE,       ACTUAL_MEM_USED,       MAX_MEM_USED,       NUMBER_PASSES,       TEMPSEG_SIZE,       CAST(NULL AS CHAR(20)) AS TABLESPACE,       CAST(NULL AS SIGNED) AS `SEGRFNO#`,       CAST(NULL AS SIGNED) AS `SEGBLK#`,       TENANT_ID AS CON_ID,       SVR_IP,       SVR_PORT     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_ACTIVE )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       CAST(NULL AS SIGNED) AS SQL_HASH_VALUE,       DB_ID,       SQL_ID,       CAST(NULL AS DATE) AS SQL_EXEC_START,       SQL_EXEC_ID,       CAST(NULL AS BINARY(8)) AS WORKAREA_ADDRESS,       OPERATION_TYPE,       OPERATION_ID,       POLICY,       SID,       CAST(NULL AS SIGNED) AS QCINST_ID,       CAST(NULL AS SIGNED) AS QCSID,       ACTIVE_TIME,       WORK_AREA_SIZE,       EXPECT_SIZE,       ACTUAL_MEM_USED,       MAX_MEM_USED,       NUMBER_PASSES,       TEMPSEG_SIZE,       CAST(NULL AS CHAR(20)) AS TABLESPACE,       CAST(NULL AS SIGNED) AS `SEGRFNO#`,       CAST(NULL AS SIGNED) AS `SEGBLK#`,       1 AS CON_ID     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_ACTIVE )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -1032,7 +1030,7 @@ int ObInnerTableSchema::v_sql_workarea_active_schema(ObTableSchema &table_schema
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT SQL_HASH_VALUE,     DB_ID,     SQL_ID,     SQL_EXEC_START,     SQL_EXEC_ID,     WORKAREA_ADDRESS,     OPERATION_TYPE,     OPERATION_ID,     POLICY,     SID,     QCINST_ID,     QCSID,     ACTIVE_TIME,     WORK_AREA_SIZE,     EXPECT_SIZE,     ACTUAL_MEM_USED,     MAX_MEM_USED,     NUMBER_PASSES,     TEMPSEG_SIZE,     TABLESPACE,     `SEGRFNO#`,     `SEGBLK#`,     CON_ID,     SVR_IP,     SVR_PORT FROM OCEANBASE.GV$SQL_WORKAREA_ACTIVE     WHERE SVR_IP = HOST_IP() AND SVR_PORT = RPC_PORT() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT SQL_HASH_VALUE,     DB_ID,     SQL_ID,     SQL_EXEC_START,     SQL_EXEC_ID,     WORKAREA_ADDRESS,     OPERATION_TYPE,     OPERATION_ID,     POLICY,     SID,     QCINST_ID,     QCSID,     ACTIVE_TIME,     WORK_AREA_SIZE,     EXPECT_SIZE,     ACTUAL_MEM_USED,     MAX_MEM_USED,     NUMBER_PASSES,     TEMPSEG_SIZE,     TABLESPACE,     `SEGRFNO#`,     `SEGBLK#`,     CON_ID FROM OCEANBASE.GV$SQL_WORKAREA_ACTIVE  )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -1083,7 +1081,7 @@ int ObInnerTableSchema::gv_sql_workarea_histogram_schema(ObTableSchema &table_sc
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       LOW_OPTIMAL_SIZE,       HIGH_OPTIMAL_SIZE,       OPTIMAL_EXECUTIONS,       ONEPASS_EXECUTIONS,       MULTIPASSES_EXECUTIONS,       TOTAL_EXECUTIONS,       TENANT_ID AS CON_ID,       SVR_IP,       SVR_PORT     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_HISTOGRAM )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       LOW_OPTIMAL_SIZE,       HIGH_OPTIMAL_SIZE,       OPTIMAL_EXECUTIONS,       ONEPASS_EXECUTIONS,       MULTIPASSES_EXECUTIONS,       TOTAL_EXECUTIONS,       1 AS CON_ID     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_HISTOGRAM )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -1134,7 +1132,7 @@ int ObInnerTableSchema::v_sql_workarea_histogram_schema(ObTableSchema &table_sch
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT LOW_OPTIMAL_SIZE,       HIGH_OPTIMAL_SIZE,       OPTIMAL_EXECUTIONS,       ONEPASS_EXECUTIONS,       MULTIPASSES_EXECUTIONS,       TOTAL_EXECUTIONS,       CON_ID,       SVR_IP,       SVR_PORT FROM OCEANBASE.GV$SQL_WORKAREA_HISTOGRAM     WHERE SVR_IP = HOST_IP() AND SVR_PORT = RPC_PORT() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT LOW_OPTIMAL_SIZE,       HIGH_OPTIMAL_SIZE,       OPTIMAL_EXECUTIONS,       ONEPASS_EXECUTIONS,       MULTIPASSES_EXECUTIONS,       TOTAL_EXECUTIONS,       CON_ID FROM OCEANBASE.GV$SQL_WORKAREA_HISTOGRAM  )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -1185,7 +1183,7 @@ int ObInnerTableSchema::gv_ob_sql_workarea_memory_info_schema(ObTableSchema &tab
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       MAX_WORKAREA_SIZE,       WORKAREA_HOLD_SIZE,       MAX_AUTO_WORKAREA_SIZE,       MEM_TARGET,       TOTAL_MEM_USED,       GLOBAL_MEM_BOUND,       DRIFT_SIZE,       WORKAREA_COUNT,       MANUAL_CALC_COUNT,       TENANT_ID,       SVR_IP,       SVR_PORT     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_MEMORY_INFO )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT       MAX_WORKAREA_SIZE,       WORKAREA_HOLD_SIZE,       MAX_AUTO_WORKAREA_SIZE,       MEM_TARGET,       TOTAL_MEM_USED,       GLOBAL_MEM_BOUND,       DRIFT_SIZE,       WORKAREA_COUNT,       MANUAL_CALC_COUNT     FROM OCEANBASE.__ALL_VIRTUAL_SQL_WORKAREA_MEMORY_INFO )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -1236,7 +1234,7 @@ int ObInnerTableSchema::v_ob_sql_workarea_memory_info_schema(ObTableSchema &tabl
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT MAX_WORKAREA_SIZE,       WORKAREA_HOLD_SIZE,       MAX_AUTO_WORKAREA_SIZE,       MEM_TARGET,       TOTAL_MEM_USED,       GLOBAL_MEM_BOUND,       DRIFT_SIZE,       WORKAREA_COUNT,       MANUAL_CALC_COUNT,       TENANT_ID,       SVR_IP,       SVR_PORT     FROM OCEANBASE.GV$OB_SQL_WORKAREA_MEMORY_INFO     WHERE SVR_IP = HOST_IP() AND SVR_PORT = RPC_PORT() )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__(     SELECT MAX_WORKAREA_SIZE,       WORKAREA_HOLD_SIZE,       MAX_AUTO_WORKAREA_SIZE,       MEM_TARGET,       TOTAL_MEM_USED,       GLOBAL_MEM_BOUND,       DRIFT_SIZE,       WORKAREA_COUNT,       MANUAL_CALC_COUNT     FROM OCEANBASE.GV$OB_SQL_WORKAREA_MEMORY_INFO  )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -1287,7 +1285,7 @@ int ObInnerTableSchema::gv_ob_plan_cache_reference_info_schema(ObTableSchema &ta
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__( SELECT SVR_IP, SVR_PORT, TENANT_ID, PC_REF_PLAN_LOCAL, PC_REF_PLAN_REMOTE, PC_REF_PLAN_DIST, PC_REF_PLAN_ARR, PC_REF_PL, PC_REF_PL_STAT, PLAN_GEN, CLI_QUERY, OUTLINE_EXEC, PLAN_EXPLAIN, ASYN_BASELINE, LOAD_BASELINE, PS_EXEC, GV_SQL, PL_ANON, PL_ROUTINE, PACKAGE_VAR, PACKAGE_TYPE, PACKAGE_SPEC, PACKAGE_BODY, PACKAGE_RESV, GET_PKG, INDEX_BUILDER, PCV_SET, PCV_RD, PCV_WR, PCV_GET_PLAN_KEY, PCV_GET_PL_KEY, PCV_EXPIRE_BY_USED, PCV_EXPIRE_BY_MEM, LC_REF_CACHE_NODE, LC_NODE, LC_NODE_RD, LC_NODE_WR, LC_REF_CACHE_OBJ_STAT FROM oceanbase.__all_virtual_plan_cache_stat )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__( SELECT PC_REF_PLAN_LOCAL, PC_REF_PLAN_REMOTE, PC_REF_PLAN_DIST, PC_REF_PLAN_ARR, PC_REF_PL, PC_REF_PL_STAT, PLAN_GEN, CLI_QUERY, OUTLINE_EXEC, PLAN_EXPLAIN, ASYN_BASELINE, LOAD_BASELINE, PS_EXEC, GV_SQL, PL_ANON, PL_ROUTINE, PACKAGE_VAR, PACKAGE_TYPE, PACKAGE_SPEC, PACKAGE_BODY, PACKAGE_RESV, GET_PKG, INDEX_BUILDER, PCV_SET, PCV_RD, PCV_WR, PCV_GET_PLAN_KEY, PCV_GET_PL_KEY, PCV_EXPIRE_BY_USED, PCV_EXPIRE_BY_MEM, LC_REF_CACHE_NODE, LC_NODE, LC_NODE_RD, LC_NODE_WR, LC_REF_CACHE_OBJ_STAT FROM oceanbase.__all_virtual_plan_cache_stat )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }
@@ -1339,9 +1337,7 @@ int ObInnerTableSchema::v_ob_plan_cache_reference_info_schema(ObTableSchema &tab
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(table_schema.set_view_definition(R"__(
-SELECT SVR_IP,
-SVR_PORT,
-TENANT_ID,
+SELECT
 PC_REF_PLAN_LOCAL,
 PC_REF_PLAN_REMOTE,
 PC_REF_PLAN_DIST,
@@ -1378,7 +1374,6 @@ LC_NODE_RD,
 LC_NODE_WR,
 LC_REF_CACHE_OBJ_STAT
 FROM oceanbase.GV$OB_PLAN_CACHE_REFERENCE_INFO
-WHERE SVR_IP=HOST_IP() AND SVR_PORT=RPC_PORT()
 )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }

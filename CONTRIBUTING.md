@@ -14,11 +14,11 @@ The following are a set of guidelines for contributing to OceanBase seekdb. Foll
     - [Step 3: Setup & Coding](#step-3-setup--coding)
     - [Step 4: Build & Test](#step-4-build--test)
     - [Step 5: Submit Pull Request](#step-5-submit-pull-request)
-    - [Step 6: Review & Merge](#step-6-review--merge)
+    - [Step 6: Review & Merge](#step-6-review--merge) 
   - [General Guidelines](#general-guidelines)
-    - [Best Practices](#best-practices)
-    - [CI Checks](#ci-checks)
-    - [PR Style Guides](#pr-style-guides)
+    - [Best Practices](#best-practices) 
+    - [CI Checks](#ci-checks) 
+    - [PR Style Guides](#pr-style-guides) 
 
 ## Code of Conduct
 

@@ -16,12 +16,10 @@
 
 #include "observer/virtual_table/ob_gv_sql.h"
 
-
 #include "src/sql/plan_cache/ob_pcv_set.h"
 
 #include "observer/ob_server_utils.h"
 #include "src/pl/ob_pl_allocator.h"
-
 
 using namespace oceanbase;
 using namespace sql;
@@ -169,29 +167,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
   for (int64_t i =  0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch(col_id) {
-      //tenant id
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::TENANT_ID: {
-      cells[i].set_int(plan_cache.get_tenant_id());
-      break;
-    }
-      //ip
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::SVR_IP: {
-      // ip
-      ipstr.reset();
-      if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-        SERVER_LOG(ERROR, "get server ip failed", K(ret));
-      } else {
-        cells[i].set_varchar(ipstr);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      }
-      break;
-    }
-      //port
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::SVR_PORT: {
-      // svr_port
-      cells[i].set_int(GCTX.self_addr().get_port());
-      break;
-    }
     //plan id
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::PLAN_ID: {
       cells[i].set_int(cache_obj->get_object_id());

@@ -43,10 +43,7 @@ public:
   int set_addr(common::ObAddr &addr);
   enum COLUMN_NAME
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    RESOURCE_NAME,
+        RESOURCE_NAME = common::OB_APP_MIN_COLUMN_ID,
     LIMIT_TYPE,
     LIMIT_VALUE,
   };

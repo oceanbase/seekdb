@@ -82,6 +82,9 @@ enum ElementFlag : int64_t
   DD,
   DDD,
   DY,
+#ifdef __ANDROID__
+  #undef FF1
+#endif
   FF1,
   FF2,
   FF3,

@@ -23,7 +23,6 @@
 #include "common/ob_zone_type.h"
 #include "common/ob_idc.h"
 #include "common/ob_zone_status.h"
-#include "share/ob_zone_info.h"
 #include "share/ob_zone_merge_info.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_spin_rwlock.h"

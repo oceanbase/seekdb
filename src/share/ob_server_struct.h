@@ -96,13 +96,6 @@ namespace logservice
 class ObServerLogBlockMgr;
 }
 
-#ifdef OB_BUILD_ARBITRATION
-namespace arbserver
-{
-class ObArbGarbageCollectService;
-}
-#endif
-
 namespace observer
 {
 class ObService;
@@ -114,6 +107,11 @@ class ObResourceInnerSQLConnectionPool;
 class ObStartupAccelTaskHandler;
 } // end of namespace observer
 
+namespace obgrpc
+{
+class ObGrpcServer;
+} // end of namespace obgrpc
+
 namespace plugin
 {
 class ObPluginMgr;
@@ -122,13 +120,13 @@ class ObPluginMgr;
 namespace share
 {
 class ObResourcePlanManager;
-class ObLSTableOperator;
 class ObTabletTableOperator;
+class ObSQLiteConnectionPool;
 class ObRsMgr;
 class ObLocationService;
 class ObSchemaStatusProxy;
+class ObKVStorage;
 
-class ObAliveServerTracer;
 class ObCgroupCtrl;
 class ObWorkloadRepositoryService;
 
@@ -146,8 +144,8 @@ struct ObGlobalContext
   share::schema::ObMultiVersionSchemaService *schema_service_;
   common::ObServerConfig *config_;
   common::ObConfigManager *config_mgr_;
-  share::ObLSTableOperator *lst_operator_;
   share::ObTabletTableOperator *tablet_operator_;
+  share::ObSQLiteConnectionPool *meta_db_pool_;
   obrpc::ObSrvRpcProxy *srv_rpc_proxy_;
   obrpc::ObStorageRpcProxy *storage_rpc_proxy_;
   obrpc::ObDBMSJobRpcProxy *dbms_job_rpc_proxy_;
@@ -160,7 +158,6 @@ struct ObGlobalContext
   common::ObMySQLProxy *ddl_sql_proxy_;
   common::ObOracleSqlProxy *ddl_oracle_sql_proxy_;
   observer::ObResourceInnerSQLConnectionPool *res_inner_conn_pool_;
-  share::ObRsMgr *rs_mgr_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
   common::ObITabletScan *vt_par_ser_;
   common::ObITabletScan *et_access_service_;
@@ -181,14 +178,11 @@ struct ObGlobalContext
   observer::ObTableService *table_service_;
   share::ObCgroupCtrl *cgroup_ctrl_;
   observer::ObSrvNetworkFrame *net_frame_;
+  obgrpc::ObGrpcServer *grpc_server_;
 
   obrpc::ObBatchRpc *batch_rpc_;
-  share::ObAliveServerTracer *server_tracer_;
   observer::ObIDiskReport *disk_reporter_;
   logservice::ObServerLogBlockMgr *log_block_mgr_;
-#ifdef OB_BUILD_ARBITRATION
-  arbserver::ObArbGarbageCollectService *arb_gcs_;
-#endif
 
   bool inited_;
   transaction::ObIWeakReadService *weak_read_service_;
@@ -204,9 +198,16 @@ struct ObGlobalContext
   bool sys_package_ready_;
   plugin::ObPluginMgr *plugin_mgr_ = nullptr;
 
+  // Primary-Standby configuration
+  common::ObClusterRole server_role_;
+
+  // KV storage for simple information (cluster role, switchover status, etc.)
+  share::ObKVStorage *kv_storage_;
+
   static ObGlobalContext& get_instance();
   void init();
   bool is_inited() const { return inited_; }
+  bool is_standby_cluster() const { return common::STANDBY_CLUSTER == server_role_; }
   // Refer to the high availability zone design document
   // 
   /*

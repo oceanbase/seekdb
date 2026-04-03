@@ -37,11 +37,8 @@ private:
 private:
   enum CACHE_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    HOLD,
-    LIMIT,
+        HOLD = common::OB_APP_MIN_COLUMN_ID,
+    LIMIT
   };
   uint64_t tenant_ids_[OB_MAX_SERVER_TENANT_CNT];
   char ip_buf_[common::OB_IP_STR_BUFF];

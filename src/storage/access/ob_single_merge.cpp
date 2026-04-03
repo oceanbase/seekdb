@@ -326,8 +326,10 @@ int ObSingleMerge::inner_get_next_row(ObDatumRow &row)
     }
     // When the index lookups the rowkeys from the main table, it should exists
     // and if we find that it does not exist, there must be an anomaly
+    // Async vector index: skip 4377 when row not found (index may have stale entries)
     if (GCONF.enable_defensive_check()
         && access_ctx_->query_flag_.is_lookup_for_4377()
+        && !access_ctx_->query_flag_.skip_4377_for_async_index_lookup()
         && OB_ITER_END == ret) {
       ret = handle_4377("[index lookup]ObSingleMerge::inner_get_next_row");
       STORAGE_LOG(WARN, "[index lookup] row not found", K(ret),

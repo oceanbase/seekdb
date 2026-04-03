@@ -31,9 +31,7 @@ namespace common
 {
 class ObISQLClient;
 const char* const MIN_OBSERVER_VERSION = "min_observer_version";
-const char* const __BALANCE_CONTROLLER = "__balance_controller";
 const char* const __MIN_FULL_RESOURCE_POOL_MEMORY = "__min_full_resource_pool_memory";
-const char* const SERVER_BALANCE_CRITICAL_DISK_WATERLEVEL = "server_balance_critical_disk_waterlevel";
 const char* const ENABLE_REBALANCE = "enable_rebalance";
 const char* const ENABLE_REREPLICATION = "enable_rereplication";
 const char* const MERGER_CHECK_INTERVAL = "merger_check_interval";
@@ -78,7 +76,7 @@ const char* const DEFAULT_TABLE_STORE_FORMAT = "default_table_store_format";
 
 class ObServerMemoryConfig;
 
-class ObServerConfig : public ObCommonConfig
+class ObServerConfig : public ObCommonConfig, ObConfigUpdateCb
 {
 public:
   friend class ObServerMemoryConfig;
@@ -86,15 +84,14 @@ public:
   static ObServerConfig &get_instance();
 
   // read all config from system_config_
-  virtual int read_config();
+  virtual int read_config(const bool enable_static_effect);
 
   // check if all config is validated
   virtual int check_all() const;
-  // check some special settings strictly
-  int strict_check_special() const;
   // print all config to log file
   void print() const;
-  
+
+  int64_t get_current_version() const { return global_version_; }
   int add_extra_config(const char *config_str,
                        const int64_t version = 0,
                        const bool check_config = true);
@@ -102,6 +99,7 @@ public:
   double get_sys_tenant_default_min_cpu();
   double get_sys_tenant_default_max_cpu();
 
+  virtual int64_t update_version() { return ATOMIC_AAF(&global_version_, 1); }
   virtual ObServerRole get_server_type() const { return common::OB_SERVER; }
   virtual bool is_debug_sync_enabled() const { return static_cast<int64_t>(debug_sync_timeout) > 0; }
   virtual bool is_rereplication_enabled() { return !in_major_version_upgrade_mode() && enable_rereplication; }
@@ -134,9 +132,7 @@ public:
   bool enable_new_major() const {  return true; }
   bool in_upgrade_mode() const;
   bool is_valid() const { return  system_config_!= NULL; };
-  int64_t get_current_version() { return system_config_->get_version(); }
   int publish_special_config_after_dump();
-  OB_UNIS_VERSION(1);
 
 public:
   int64_t disk_actual_space_;
@@ -161,6 +157,7 @@ protected:
   static const int16_t OB_CONFIG_VERSION = 1;
 
 private:
+  int64_t global_version_;
   DISALLOW_COPY_AND_ASSIGN(ObServerConfig);
 };
 

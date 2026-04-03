@@ -302,26 +302,6 @@ namespace unittest
                K(timeout_us), K(ObTimeUtility::fast_current_time() - start_time));          \
   }
 
-#define WAIT_START_SERVICE_SUCCC(timeout_us, retry_interval_us)                                  \
-  {                                                                                              \
-    int64_t start_time = ObTimeUtility::fast_current_time();                                     \
-    bool svr_started = false;                                                                    \
-    ASSERT_EQ(OB_SUCCESS, SVR_TRACER.check_in_service(replica_->get_addr(), svr_started));       \
-    while (OB_SUCC(ret) && !(svr_started)) {                                                     \
-      if (ObTimeUtility::fast_current_time() - start_time > timeout_us) {                        \
-        ret = OB_TIMEOUT;                                                                        \
-        break;                                                                                   \
-      }                                                                                          \
-      SERVER_LOG(INFO, "retry to check service started until timeout", K(svr_started),           \
-                 K(start_time), K(timeout_us));                                                  \
-      ob_usleep(retry_interval_us);                                                              \
-      ASSERT_EQ(OB_SUCCESS, SVR_TRACER.refresh());                                               \
-      ASSERT_EQ(OB_SUCCESS, SVR_TRACER.check_in_service(replica_->get_addr(), svr_started));     \
-    }                                                                                            \
-    SERVER_LOG(INFO, "start service successfully", K(svr_started), K(start_time), K(timeout_us), \
-               K(ObTimeUtility::fast_current_time() - start_time));                              \
-  }
-
 #define MINOR_FREEZE_LS(ls)                                             \
   {                                                                     \
     TRANS_LOG(INFO, "minor freeze ls begin");                           \

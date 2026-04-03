@@ -74,7 +74,7 @@ namespace common {
                            null ch1, null cl1, null bl1, stat.distinct_cnt_synopsis_size ob_spec1,\
                            null ob_spec2, stat.distinct_cnt_synopsis ob_spec3 from\
                            %s stat left join %s hist on \
-                           stat.TENANT_ID = hist.TENANT_ID and stat.TABLE_ID = hist.TABLE_ID and\
+                           stat.TABLE_ID = hist.TABLE_ID and\
                            hist.PARTITION_ID = stat.PARTITION_ID and stat.COLUMN_ID=hist.COLUMN_ID\
                            where stat.TABLE_ID = %lu "
 

@@ -98,34 +98,13 @@ int ObAllVirtualSysTaskStatus::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 3: {
-          // svr_ip
-          if (!status.svr_ip_.ip_to_string(svr_ip_, sizeof(svr_ip_))) {
-            ret = OB_BUF_NOT_ENOUGH;
-            SERVER_LOG(WARN, "buffer not enough", K(ret));
-          } else {
-            cur_row_.cells_[i].set_varchar(svr_ip_);
-            cur_row_.cells_[i].set_collation_type(collcation_type);
-          }
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 4: {
-          // svr_port
-          cur_row_.cells_[i].set_int(status.svr_ip_.get_port());
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 5: {
-          // tenant_id
-          cur_row_.cells_[i].set_int(status.tenant_id_);
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 6: {
           // comment, ignore ret
           snprintf(comment_, sizeof(comment_), "%s", status.comment_);
           cur_row_.cells_[i].set_varchar(comment_);
           cur_row_.cells_[i].set_collation_type(collcation_type);
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 7: {
+        case OB_APP_MIN_COLUMN_ID + 4: {
           // is_cancel
           cur_row_.cells_[i].set_int(status.is_cancel_);
           break;

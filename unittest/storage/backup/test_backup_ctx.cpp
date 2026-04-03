@@ -145,7 +145,7 @@ void TestBackupCtx::inner_init_()
 {
   int ret = OB_SUCCESS;
   ObBackupIoAdapter util;
-  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_ctx", get_current_dir_name());
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_ctx", getcwd(NULL, 0));
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_);
   EXPECT_EQ(OB_SUCCESS, ret);

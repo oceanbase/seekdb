@@ -863,58 +863,6 @@ int ObTabletTTLScheduler::sync_sys_table_op(ObTTLTaskCtx* ctx,
                                             bool &tenant_state_changed)
 {
   int ret = OB_SUCCESS;
-  ObMySQLTransaction trans;
-  common::ObTTLStatus ttl_record;
-  bool commit = false;
-  int tmp_ret = OB_SUCCESS;
-  bool is_exists = false;
-  bool is_end_state = false;
-  if (OB_FAIL(trans.start(get_sql_proxy(), gen_meta_tenant_id(tenant_id_)))) {
-    LOG_WARN("fail to start transation", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(ObTTLUtil::check_task_status_from_sys_table(tenant_id_, trans, ctx->task_info_.task_id_,
-              ctx->task_info_.table_id_, ctx->task_info_.tablet_id_, is_exists, is_end_state))) {
-    LOG_WARN("fail to check ttl task exist");      
-  } else if (is_end_state) {
-    // record in system table is end state, do nothing
-    FLOG_INFO("Finished / Canceled in sys table, could not sync sys table", K(local_tenant_task_));
-  } else if (!is_exists) {
-    if (OB_FAIL(construct_sys_table_record(ctx, ttl_record))) {
-      LOG_WARN("fail to construct sys table record", KR(ret));
-    } else if (OB_FAIL(ObTTLUtil::insert_ttl_task(tenant_id_, share::OB_ALL_KV_TTL_TASK_TNAME,
-                                                  trans, ttl_record))) {
-      LOG_WARN("fail to insert ttl task", KR(ret));
-    }
-  } else if (force_update) {
-    if (OB_FAIL(construct_sys_table_record(ctx, ttl_record))) {
-      LOG_WARN("fail to construct sys table record", KR(ret));
-      } else if (OB_FAIL(ObTTLUtil::update_ttl_task_all_fields(tenant_id_, 
-                                                               share::OB_ALL_KV_TTL_TASK_TNAME,
-                                                               trans, ttl_record))) {
-      LOG_WARN("fail to update ttl task in sys table", KR(ret), K(ttl_record));
-    }
-  }
-
-  // check and ensure the tenant status not change in this transaction
-  // when tablet task is adready in terminal status, do not need check tenant state
-  // beause we won't change tablet status in such case 
-  if (OB_SUCC(ret) && !is_end_state && OB_FAIL(ObTTLUtil::check_tenant_state(tenant_id_,
-                                                                             get_tenant_task_table_id(),
-                                                                             trans,
-                                                                             local_tenant_task_.state_,
-                                                                             local_tenant_task_.task_id_,
-                                                                             tenant_state_changed))) {
-    FLOG_INFO("local tenant task state is different from sys table", KR(ret),
-      K_(tenant_id), K(local_tenant_task_.state_));
-  }
-  
-  if (trans.is_started()) {
-    bool commit = (OB_SUCCESS == ret);
-    int tmp_ret = ret;
-    if (OB_FAIL(trans.end(commit))) {
-      LOG_WARN("faile to end trans", "commit", commit, KR(ret));
-    }
-    ret = tmp_ret == OB_SUCCESS ? ret : tmp_ret;
-  }
   return ret;
 }
 
@@ -1205,45 +1153,6 @@ void ObTabletTTLScheduler::mark_ttl_ctx_dirty(ObTTLTenantInfo& tenant_info, ObTT
 int ObTabletTTLScheduler::refresh_tablet_task(ObTTLTaskCtx &ttl_task, bool refresh_status, bool refresh_retcode /*false*/)
 {
   int ret = OB_SUCCESS;
-  ObMySQLTransaction trans;
-  ObTTLStatusFieldArray filters;
-  common::ObTTLStatusArray ttl_records;
-  ObTTLStatusFieldArray filter;
-  ObTabletID tablet_id = ttl_task.task_info_.tablet_id_;
-  if (!ttl_task.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(ttl_task));
-  } else if (OB_FAIL(construct_task_record_filter(ttl_task.task_info_.task_id_,
-                                                  ttl_task.task_info_.table_id_,
-                                                  ttl_task.task_info_.tablet_id_,
-                                                  filters))) {
-    LOG_WARN("fail to construct task record filter", KR(ret), K(ttl_task));
-  } else if (OB_FAIL(trans.start(get_sql_proxy(), gen_meta_tenant_id(tenant_id_)))) {
-    LOG_WARN("fail to start transation", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(ObTTLUtil::read_ttl_tasks(tenant_id_, share::OB_ALL_KV_TTL_TASK_TNAME,
-                                               trans, filters, ttl_records, true, &local_tenant_task_.allocator_))) {
-    LOG_WARN("fail to get ttl tasks", KR(ret), K_(tenant_id), K(filters));
-  } else {
-    if (ttl_records.empty()) {
-      // do nothing
-    } else {
-      if (ttl_records.count() != 1) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect ttl records count", KR(ret), K(ttl_records.count()));
-      } else if (OB_FAIL(from_ttl_record(ttl_task.task_info_.tablet_id_, ttl_records.at(0), refresh_status, refresh_retcode))) {
-        LOG_WARN("fail to convert from ttl record", KR(ret), K(refresh_status));
-      }
-    }
-  }
-  if (trans.is_started()) {
-    bool commit = (OB_SUCCESS == ret);
-    int tmp_ret = ret;
-    if (OB_FAIL(trans.end(commit))) {
-      LOG_WARN("faile to end trans", "commit", commit, KR(ret));
-    }
-    ret = tmp_ret == OB_SUCCESS ? ret : tmp_ret;
-  }
-
   return ret;
 }
 

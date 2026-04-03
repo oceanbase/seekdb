@@ -29,11 +29,7 @@ class ObAllVirtualCompactionDiagnoseInfo : public common::ObVirtualTableScannerI
 public:
   enum COLUMN_ID_LIST
   {
-    SVR_IP  = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    MERGE_TYPE,
-    LS_ID,
+        MERGE_TYPE = common::OB_APP_MIN_COLUMN_ID,
     TABLET_ID,
     STATUS,
     CREATE_TIME,

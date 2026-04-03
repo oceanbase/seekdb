@@ -23,6 +23,7 @@
 #include "share/ob_occam_timer.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/session/ob_sql_session_mgr.h"
+#include "share/storage/ob_reserved_snapshot_table_storage.h"
 
 namespace oceanbase
 {
@@ -394,6 +395,8 @@ private:
   // globally reserved snapshot for active txn
   share::SCN global_reserved_snapshot_;
   bool is_inited_;
+  // SQLite storage for __all_reserved_snapshot table
+  share::ObReservedSnapshotTableStorage snapshot_storage_;
 };
 
 } // namespace concurrency_control

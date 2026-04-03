@@ -71,7 +71,7 @@ int ObAllVirtualDDLDiagnoseInfo::process()
     LOG_WARN("empty tenant ids", KR(ret));
   } else {
     ObSqlString scan_sql;
-    if (OB_FAIL(scan_sql.assign_fmt("SELECT task_id, tenant_id, object_id, ddl_type, execution_id, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED FROM %s "
+    if (OB_FAIL(scan_sql.assign_fmt("SELECT task_id, object_id, ddl_type, execution_id, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED FROM %s "
                                     "WHERE ddl_type IN (5, 10, 1001, 1002, 1004, 1005, 1010) ",
                                     OB_ALL_VIRTUAL_DDL_TASK_STATUS_TNAME))) {
       LOG_WARN("failed to assign sql", K(ret));
@@ -79,21 +79,19 @@ int ObAllVirtualDDLDiagnoseInfo::process()
       for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); ++i) {
         const uint64_t tenant_id = tenant_ids.at(i);
         if (OB_FAIL(scan_sql.append_fmt("UNION ALL "
-                                      "SELECT task_id, tenant_id, object_id, ddl_type, NULL as execution_id, GMT_CREATE, GMT_MODIFIED FROM "
-                                      "(SELECT task_id, tenant_id, object_id, ddl_type, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED "
+                                      "SELECT task_id, object_id, ddl_type, NULL as execution_id, GMT_CREATE, GMT_MODIFIED FROM "
+                                      "(SELECT task_id, object_id, ddl_type, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED "
                                       "FROM %s "
                                       "WHERE user_message = 'Successful ddl' "
-                                      "AND TENANT_ID = %ld "
                                       "AND target_object_id = -1 "
                                       "AND ddl_type IN (5, 10, 1001, 1002, 1004, 1005, 1010) "
                                       "ORDER BY task_id DESC "
                                       "LIMIT 100) AS subquery ",
-                                      OB_ALL_VIRTUAL_DDL_ERROR_MESSAGE_TNAME,
-                                      tenant_id))) {
+                                      OB_ALL_VIRTUAL_DDL_ERROR_MESSAGE_TNAME))) {
           LOG_WARN("failed to assign sql", K(ret));
         }
       }
-      if (OB_SUCC(ret) && OB_FAIL(scan_sql.append_fmt("ORDER BY task_id DESC, tenant_id DESC"))) {
+      if (OB_SUCC(ret) && OB_FAIL(scan_sql.append_fmt("ORDER BY task_id DESC"))) {
         LOG_WARN("failed to assign sql", K(ret));
       } else if (OB_FAIL(collect_ddl_info(scan_sql))) {
         LOG_WARN("failed to collect ddl info", K(ret));
@@ -135,12 +133,12 @@ int ObAllVirtualDDLDiagnoseInfoI1::process()
     } else if (index_count <= 0) {
     } else if (OB_FAIL(task_id.append_fmt(") "))) {
       LOG_WARN("failed to assign sql", K(ret));
-    } else if (OB_FAIL(scan_sql.assign_fmt("SELECT task_id, tenant_id, object_id, ddl_type, execution_id, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED "
+    } else if (OB_FAIL(scan_sql.assign_fmt("SELECT task_id, object_id, ddl_type, execution_id, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED "
                                           "FROM %s WHERE task_id in %s " 
                                           "UNION "
-                                          "SELECT task_id, tenant_id, object_id, ddl_type, NULL AS execution_id, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED "
+                                          "SELECT task_id, object_id, ddl_type, NULL AS execution_id, time_to_usec(gmt_create) as GMT_CREATE, time_to_usec(gmt_modified) as GMT_MODIFIED "
                                           "FROM %s WHERE user_message = 'Successful ddl' AND task_id in %s "
-                                          "ORDER BY task_id DESC, tenant_id DESC ",
+                                          "ORDER BY task_id DESC ",
                                           OB_ALL_VIRTUAL_DDL_TASK_STATUS_TNAME,
                                           task_id.ptr(),
                                           OB_ALL_VIRTUAL_DDL_ERROR_MESSAGE_TNAME,
@@ -185,31 +183,27 @@ int ObAllVirtualDDLDiagnoseInfo::fill_cells()
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case OB_APP_MIN_COLUMN_ID:
-        // tenant_id
-        cur_row_.cells_[i].set_int(value_.tenant_id_);
-        break;
-      case OB_APP_MIN_COLUMN_ID + 1:
         // ddl_task_id
         cur_row_.cells_[i].set_int(value_.ddl_task_id_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 2:
+      case OB_APP_MIN_COLUMN_ID + 1:
         // object_id
         cur_row_.cells_[i].set_int(value_.object_id_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 3:
+      case OB_APP_MIN_COLUMN_ID + 2:
         // op_type
         cur_row_.cells_[i].set_varchar(value_.op_name_);
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
-      case OB_APP_MIN_COLUMN_ID + 4:
+      case OB_APP_MIN_COLUMN_ID + 3:
         // create_time
         cur_row_.cells_[i].set_timestamp(value_.start_time_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 5:
+      case OB_APP_MIN_COLUMN_ID + 4:
         // finish_time
         cur_row_.cells_[i].set_timestamp(value_.finish_time_);
         break;
-      case OB_APP_MIN_COLUMN_ID + 6:
+      case OB_APP_MIN_COLUMN_ID + 5:
         // diagnose_info
         cur_row_.cells_[i].set_varchar(message_);
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -298,7 +292,7 @@ int ObAllVirtualDDLDiagnoseInfo::collect_ddl_info(const ObSqlString &scan_sql)
             value_.reset();
             int32_t optype = 0;
             EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(*scan_result, "execution_id", value_.execution_id_, int64_t, true/*skip_null_error*/, true/*skip_column_error*/, -2/*default_value*/);
-            EXTRACT_INT_FIELD_MYSQL(*scan_result, "tenant_id", value_.tenant_id_, uint64_t);
+            value_.tenant_id_ = OB_SYS_TENANT_ID;
             EXTRACT_INT_FIELD_MYSQL(*scan_result, "task_id", value_.ddl_task_id_, int64_t);
             EXTRACT_INT_FIELD_MYSQL(*scan_result, "object_id", value_.object_id_, int64_t);
             EXTRACT_INT_FIELD_MYSQL(*scan_result, "GMT_CREATE", value_.start_time_, int64_t);
@@ -365,19 +359,19 @@ int ObAllVirtualDDLDiagnoseInfo::collect_task_gmt_create_time()
     ObSqlString scan_sql;
     ObSqlString cond_sql;
     for (int64 i = 0; OB_SUCC(ret) && i < diagnose_values_.count(); i++) {
-      if (i == 0 && OB_FAIL(cond_sql.assign_fmt("(tenant_id = %ld AND table_id = %ld)", diagnose_values_.at(i).tenant_id_, diagnose_values_.at(i).object_id_))) {
+      if (i == 0 && OB_FAIL(cond_sql.assign_fmt("(table_id = %ld)", diagnose_values_.at(i).object_id_))) {
         LOG_WARN("failed to assign sql", K(ret));
-      } else if (i > 0 && OB_FAIL(cond_sql.append_fmt(" OR (tenant_id = %ld AND table_id = %ld)", diagnose_values_.at(i).tenant_id_, diagnose_values_.at(i).object_id_))) {
+      } else if (i > 0 && OB_FAIL(cond_sql.append_fmt(" OR (table_id = %ld)", diagnose_values_.at(i).object_id_))) {
         LOG_WARN("failed to append sql", K(ret));
       }
     }
     sqlclient::ObMySQLResult *scan_result = nullptr;
     uint64_t index = 0;
     SMART_VAR(ObMySQLProxy::MySQLResult, scan_res) {
-      if (OB_FAIL(scan_sql.assign_fmt("SELECT table_id, tenant_id, TIME_TO_USEC(gmt_create) as GMT_CREATE "
+      if (OB_FAIL(scan_sql.assign_fmt("SELECT table_id, TIME_TO_USEC(gmt_create) as GMT_CREATE "
                                       "FROM ( "
-                                        "SELECT table_id, tenant_id, gmt_create, "
-                                        "ROW_NUMBER() OVER (PARTITION BY tenant_id, table_id ORDER BY gmt_create) AS rn "
+                                        "SELECT table_id, gmt_create, "
+                                        "ROW_NUMBER() OVER (PARTITION BY table_id ORDER BY gmt_create) AS rn "
                                         "FROM %s WHERE %s"
                                       ") sub "
                                       "WHERE rn = 1",
@@ -407,8 +401,7 @@ int ObAllVirtualDDLDiagnoseInfo::collect_task_gmt_create_time()
             int64_t table_id_tmp = 0;
             EXTRACT_INT_FIELD_MYSQL(*scan_result, "table_id", table_id_tmp, int64_t);
 
-            int64_t tenant_id_tmp;
-            EXTRACT_INT_FIELD_MYSQL(*scan_result, "tenant_id", tenant_id_tmp, int64_t);
+            int64_t tenant_id_tmp = OB_SYS_TENANT_ID;
 
             if (OB_FAIL(ret)) {
               LOG_WARN("failed to get mysql field result", K(ret));

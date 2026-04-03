@@ -30,25 +30,7 @@ int ObBackupCleanJobOperator::insert_job(
     common::ObISQLClient &proxy, 
     const ObBackupCleanJobAttr &job_attr)
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml;
-  if (!job_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(job_attr));
-  } else if (OB_FAIL(fill_dml_with_job_(job_attr, dml))) {
-    LOG_WARN("failed to fill backup job", K(ret), K(job_attr));
-  } else if (OB_FAIL(dml.splice_insert_sql(OB_ALL_BACKUP_DELETE_JOB_TNAME, sql))) {
-    LOG_WARN("failed to splice insert update sql", K(ret), K(job_attr));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(job_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, invalid affected rows", K(ret), K(affected_rows), K(sql), K(job_attr));
-  } else {
-    LOG_INFO("[BACKUP_CLEAN]success insert one backup clean job", K(job_attr), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -209,40 +191,7 @@ int ObBackupCleanJobOperator::cnt_jobs(
 
 int ObBackupCleanJobOperator::fill_select_job_sql_(ObSqlString &sql)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(sql.assign_fmt("select %s", OB_STR_JOB_ID))) {
-    LOG_WARN("failed to assign fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_TENANT_ID))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_INCARNATION))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_INITIATOR_TENANT_ID))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_INITIATOR_JOB_ID))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_EXECUTOR_TENANT_ID))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_CLEAN_TYPE))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_CLEAN_PARAMETER))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_START_TS))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_END_TS))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_STATUS))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_RESULT))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_RETRY_COUNT))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_STR_COMMENT))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(", %s", OB_BACKUP_STR_JOB_LEVEL))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" from %s", OB_ALL_BACKUP_DELETE_JOB_TNAME))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } 
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -351,30 +300,7 @@ int ObBackupCleanJobOperator::advance_job_status(
     const int result,
     const int64_t end_ts)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  const char *comment = OB_SUCCESS == result ? "" : common::ob_strerror(result);
-  if (!next_status.is_valid() || !job_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid status", K(ret), K(job_attr));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s='%s',%s=%ld,%s=%d,%s='%s' where %s=%lu and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_JOB_TNAME, OB_STR_STATUS, next_status.get_str(),
-      OB_STR_END_TS, end_ts, OB_STR_RESULT, result, OB_STR_COMMENT, comment,
-      OB_STR_JOB_ID, job_attr.job_id_, OB_STR_TENANT_ID, job_attr.tenant_id_))) {
-    LOG_WARN("failed to assign sql", K(ret), K(next_status));
-  } else if (ObBackupCleanStatus::Status::CANCELING != next_status.status_ 
-    && OB_FAIL(sql.append_fmt(" and %s='%s'", OB_STR_STATUS, job_attr.status_.get_str()))) {
-    LOG_WARN("failed to append sql", K(ret), K(sql));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(job_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid affected_rows", K(ret), K(affected_rows), K(sql), K(next_status));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]success advance job status", K(job_attr), K(next_status));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -383,30 +309,7 @@ int ObBackupCleanJobOperator::update_task_count(
     const ObBackupCleanJobAttr &job_attr,
     const bool is_total)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (!job_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid task attr", K(ret), K(job_attr));
-  } else if (is_total && OB_FAIL(sql.assign_fmt(
-      "update %s set %s=%ld where %s=%ld and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_JOB_TNAME, OB_STR_TASK_COUNT, job_attr.task_count_,
-      OB_STR_JOB_ID, job_attr.job_id_, OB_STR_TENANT_ID, job_attr.tenant_id_))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (!is_total && OB_FAIL(sql.assign_fmt(
-      "update %s set %s=%ld where %s=%ld and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_JOB_TNAME, OB_STR_SUCCESS_TASK_COUNT, job_attr.success_task_count_,
-      OB_STR_JOB_ID, job_attr.job_id_, OB_STR_TENANT_ID, job_attr.tenant_id_))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(job_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows && 0 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid affected_rows", K(ret), K(affected_rows), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]success update task count", K(job_attr), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -415,29 +318,7 @@ int ObBackupCleanJobOperator::move_job_to_his(
     const uint64_t tenant_id,
     const int64_t job_id)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (job_id <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret),  K(job_id));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "insert into %s select * from %s where %s=%lu ", 
-      OB_ALL_BACKUP_DELETE_JOB_HISTORY_TNAME, OB_ALL_BACKUP_DELETE_JOB_TNAME,
-      OB_STR_JOB_ID, job_id))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (OB_FALSE_IT(sql.reset())) {
-  } else if (OB_FAIL(sql.assign_fmt(
-      "delete from %s where %s=%lu", 
-      OB_ALL_BACKUP_DELETE_JOB_TNAME, OB_STR_JOB_ID, job_id))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]succeed move backup job to history table", K(job_id), K(tenant_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -446,40 +327,7 @@ int ObBackupCleanJobOperator::check_same_tenant_and_clean_type_job_exist(
     const ObBackupCleanJobAttr &job_attr,
     bool &is_exist)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  is_exist = true;
-  int64_t parameter = 0;
-  int64_t affected_rows = -1;
-
-  if (!job_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(job_attr));
-  } else if (OB_FAIL(job_attr.get_clean_parameter(parameter))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt(
-        "select * from %s where %s=%lu and type='%s' and parameter=%lu", 
-        OB_ALL_BACKUP_DELETE_JOB_TNAME, OB_STR_TENANT_ID, job_attr.tenant_id_,
-        ObNewBackupCleanType::get_str(job_attr.clean_type_), parameter))) {
-        LOG_WARN("failed to assign sql", K(ret), K(sql), K(ObNewBackupCleanType::get_str(job_attr.clean_type_)));  
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(job_attr.tenant_id_), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql)); 
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          is_exist = false;
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("failed to get next row", K(ret), K(sql));
-        }
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -487,27 +335,7 @@ int ObBackupCleanJobOperator::report_failed_to_sys_tenant(
   common::ObISQLClient &proxy,
   const ObBackupCleanJobAttr &job_attr)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  share::ObDMLSqlSplicer dml;
-  int64_t affected_rows = -1;
-  if (OB_SUCCESS == job_attr.result_) {
-  } else if (OB_FAIL(dml.add_pk_column(OB_STR_TENANT_ID, OB_SYS_TENANT_ID))) {
-    LOG_WARN("failed to add pk column", K(ret));
-  } else if (OB_FAIL(dml.add_pk_column(OB_STR_JOB_ID, job_attr.initiator_job_id_))) {
-    LOG_WARN("failed to add pk column", K(ret));
-  } else if (OB_FAIL(dml.add_column(OB_STR_RESULT, job_attr.result_))) {
-    LOG_WARN("failed to add pk column", K(ret));
-  } else if (OB_FAIL(dml.splice_update_sql(OB_ALL_BACKUP_DELETE_JOB_TNAME, sql))) {
-    LOG_WARN("failed to splice_update_sql", K(ret));
-  } else if (OB_FAIL(proxy.write(OB_SYS_TENANT_ID, sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 < affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid affected_rows, more than one job be updated is invalid", K(ret), K(affected_rows), K(sql));
-  } else {
-    FLOG_INFO("succeed to report report_backup_result_to_initiator");
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -515,23 +343,7 @@ int ObBackupCleanJobOperator::update_retry_count(
     common::ObISQLClient &proxy, 
     const ObBackupCleanJobAttr &job_attr)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (!job_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(job_attr));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s=%ld where %s=%lu and %s=%ld", 
-      OB_ALL_BACKUP_DELETE_JOB_TNAME, OB_STR_RETRY_COUNT, job_attr.retry_count_,
-      OB_STR_TENANT_ID, job_attr.tenant_id_, OB_STR_JOB_ID, job_attr.job_id_))) {
-    LOG_WARN("failed to init sql", K(ret), K(job_attr));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(job_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid affected_rows", K(ret), K(affected_rows), K(sql), K(job_attr));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 //----------------------------__all_backup_task----------------------------
@@ -539,25 +351,7 @@ int ObBackupCleanTaskOperator::insert_backup_clean_task(
     common::ObISQLClient &proxy, 
     const ObBackupCleanTaskAttr &task_attr)
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml;
-  if (!task_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_attr));
-  } else if (OB_FAIL(fill_dml_with_backup_clean_task_(task_attr, dml))) {
-    LOG_WARN("failed to fill backup set task", K(ret), K(task_attr));
-  } else if (OB_FAIL(dml.splice_insert_sql(OB_ALL_BACKUP_DELETE_TASK_TNAME, sql))) {
-    LOG_WARN("failed to splice insert update sql", K(ret), K(task_attr));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(task_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, invalid affected rows", K(ret), K(affected_rows), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]insert one backup clean task", K(task_attr), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -606,31 +400,7 @@ int ObBackupCleanTaskOperator::get_backup_clean_tasks(
     bool need_lock,  
     ObArray<ObBackupCleanTaskAttr> &task_attrs)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (job_id <= 0 || !is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(job_id), K(tenant_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = nullptr;
-      if (OB_FAIL(sql.assign_fmt("select * from %s where %s=%ld and %s=%lu order by end_ts",
-          OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_TENANT_ID, tenant_id, OB_STR_JOB_ID, job_id))) {
-        LOG_WARN("failed to append fmt", K(ret));
-      } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-        LOG_WARN("failed to append sql", K(ret), K(job_id));
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql), K(tenant_id));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get result", K(ret));
-      } else if (OB_FAIL(parse_task_result_(*result, task_attrs))) {
-        LOG_WARN("failed to parse result", K(ret), K(job_id));
-      } else {
-        FLOG_INFO("[BACKUP_CLEAN]success get backup clean tasks", K(sql), K(task_attrs));
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -641,38 +411,7 @@ int ObBackupCleanTaskOperator::get_backup_clean_task(
     bool need_lock,  
     ObBackupCleanTaskAttr &task_attr)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (task_id <= 0 || !is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id), K(tenant_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = nullptr;
-      if (OB_FAIL(sql.assign_fmt("select * from %s where %s=%ld and %s=%lu",
-          OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_TENANT_ID, tenant_id, OB_STR_TASK_ID, task_id))) {
-        LOG_WARN("failed to append fmt", K(ret));
-      } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-        LOG_WARN("failed to append sql", K(ret), K(task_id));
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get result", K(ret));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("entry not exit", K(ret), K(sql));
-        } else {
-          LOG_WARN("failed to get next", K(ret), K(sql));
-        }
-      } else if (OB_FAIL(do_parse_task_result_(*result, task_attr))) {
-        LOG_WARN("failed to parse result", K(ret), K(task_id));
-      } else {
-        FLOG_INFO("[BACKUP_CLEAN]success get backup clean task", K(sql), K(task_attr));
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -685,38 +424,7 @@ int ObBackupCleanTaskOperator::check_backup_clean_task_exist(
     bool need_lock,  
     bool &is_exist)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  is_exist = true;
-  if (!is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = nullptr;
-      if (OB_FAIL(sql.assign_fmt("select * from %s where %s=%ld and %s='%s' and %s=%ld and %s=%ld",
-          OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_TENANT_ID, tenant_id, OB_STR_TASK_TYPE, ObBackupCleanTaskType::get_str(task_type),
-          OB_STR_ID, id, OB_STR_DEST_ID, dest_id))) {
-        LOG_WARN("failed to append fmt", K(ret));
-      } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-        LOG_WARN("failed to append sql", K(ret));
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get result", K(ret));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          is_exist = false;
-          ret = OB_SUCCESS;
-          LOG_INFO("[BACKUP_CLEAN]task is not exist", K(ret), K(sql));
-        } else {
-          LOG_WARN("failed to iterate result", K(ret));
-        }
-      }
-    }
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -785,30 +493,7 @@ int ObBackupCleanTaskOperator::update_ls_count(
     const ObBackupCleanTaskAttr &task_attr,
     const bool is_total)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (!task_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid task attr", K(ret), K(task_attr));
-  } else if (is_total && OB_FAIL(sql.assign_fmt(
-      "update %s set %s=%ld where %s=%lu and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_TOTAL_LS_COUNT, task_attr.total_ls_count_,
-      OB_STR_TASK_ID, task_attr.task_id_, OB_STR_TENANT_ID, task_attr.tenant_id_))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (!is_total && OB_FAIL(sql.assign_fmt(
-      "update %s set %s=%ld where %s=%lu and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_FINISH_LS_COUNT, task_attr.finish_ls_count_,
-      OB_STR_TASK_ID, task_attr.task_id_, OB_STR_TENANT_ID, task_attr.tenant_id_))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(task_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows && 0 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid affected_rows", K(ret), K(affected_rows), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]success update ls task count", K(task_attr), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -819,27 +504,7 @@ int ObBackupCleanTaskOperator::advance_task_status(
     const int result,
     const int64_t end_ts)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  const char *comment = OB_SUCCESS == result ? "" : common::ob_strerror(result);
-  if (!next_status.is_valid() || !task_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid next_status or invalid task", K(ret), K(task_attr));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s='%s',%s=%d,%s='%s',%s=%ld where %s=%lu and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_STATUS, next_status.get_str(),
-      OB_STR_RESULT, result, OB_STR_COMMENT, comment, OB_STR_END_TS, end_ts,
-      OB_STR_TASK_ID, task_attr.task_id_, OB_STR_TENANT_ID, task_attr.tenant_id_))) {
-    LOG_WARN("failed to init sql", K(ret), K(next_status));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(task_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid affected_rows", K(ret), K(affected_rows), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]success advance task status", K(task_attr),  K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -848,28 +513,7 @@ int ObBackupCleanTaskOperator::move_task_to_history(
     const uint64_t tenant_id, 
     const int64_t task_id)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (!is_valid_tenant_id(tenant_id) || task_id <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "insert into %s select * from %s where %s=%lu and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_TASK_HISTORY_TNAME, OB_ALL_BACKUP_DELETE_TASK_TNAME,
-      OB_STR_TASK_ID, task_id, OB_STR_TENANT_ID, tenant_id))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (OB_FALSE_IT(sql.reset())) {
-  } else if (OB_FAIL(sql.assign_fmt("delete from %s where %s=%lu and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_TASK_ID, task_id, OB_STR_TENANT_ID, tenant_id))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]succeed move backup task to history table", K(tenant_id), K(task_id));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
  
@@ -879,60 +523,14 @@ int ObBackupCleanTaskOperator::update_stats(
     const uint64_t tenant_id, 
     const ObBackupCleanStats &stats)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (task_id <= 0 || !is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id), K(tenant_id), K(stats));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s=%ld, %s=%ld, %s=%ld, %s=%ld where %s=%ld and %s=%lu", 
-      OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_TOTAL_BYTES, stats.total_bytes_, OB_STR_DELETE_BYTES, stats.delete_bytes_,
-      OB_STR_TOTAL_FILES_COUNT, stats.total_files_count_, OB_STR_DELETE_FILES_COUNT, stats.delete_files_count_,
-      OB_STR_TASK_ID, task_id, OB_STR_TENANT_ID, tenant_id))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (affected_rows > 1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid affected_rows", K(ret), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]success update stats", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObBackupCleanTaskOperator::check_current_task_exist(common::ObISQLClient &proxy, const uint64_t tenant_id, bool &is_exist)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  is_exist = true;
-  if (!is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = nullptr;
-      if (OB_FAIL(sql.assign_fmt("select * from %s where %s=%ld",
-          OB_ALL_BACKUP_DELETE_TASK_TNAME, OB_STR_TENANT_ID, tenant_id))) {
-        LOG_WARN("failed to append fmt", K(ret));
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get result", K(ret));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          is_exist = false;
-          ret = OB_SUCCESS;
-          LOG_INFO("[BACKUP_CLEAN]current task is not exist", K(ret), K(sql));
-        } else {
-          LOG_WARN("failed to iterate result", K(ret));
-        }
-      }
-    }
-  }
-  return ret; 
+  int ret = OB_NOT_SUPPORTED;
+  return ret;
 }
 
 /*
@@ -945,26 +543,7 @@ int ObBackupCleanLSTaskOperator::update_stats_(
     const ObLSID &ls_id,
     const ObBackupCleanStats &stats) 
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (task_id <= 0 || !is_valid_tenant_id(tenant_id) || !ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id), K(tenant_id), K(ls_id), K(stats));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s=%ld, %s=%ld, %s=%ld, %s=%ld where %s=%ld and %s=%lu and %s=%ld", 
-      OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, OB_STR_TOTAL_BYTES, stats.total_bytes_, OB_STR_DELETE_BYTES, stats.delete_bytes_,
-      OB_STR_TOTAL_FILES_COUNT, stats.total_files_count_, OB_STR_DELETE_FILES_COUNT, stats.delete_files_count_,
-      OB_STR_TASK_ID, task_id, OB_STR_TENANT_ID, tenant_id, OB_STR_LS_ID, ls_id.id()))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (affected_rows != 1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid affected_rows", K(ret), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]success update stats", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -972,25 +551,7 @@ int ObBackupCleanLSTaskOperator::insert_ls_task(
     common::ObISQLClient &proxy,
     const ObBackupCleanLSTaskAttr &ls_attr)
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml;
-  if (!ls_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ls_attr));
-  } else if (OB_FAIL(fill_dml_with_ls_task_(ls_attr, dml))) {
-    LOG_WARN("failed to fill backup job", K(ret), K(ls_attr));
-  } else if (OB_FAIL(dml.splice_insert_sql(OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, sql))) {
-    LOG_WARN("failed to splice insert update sql", K(ret), K(ls_attr));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(ls_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, invalid affected rows", K(ret), K(affected_rows), K(sql));
-  } else {
-    LOG_INFO("[BACKUP_CLEAN]insert one ls task", K(ls_attr), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1046,31 +607,7 @@ int ObBackupCleanLSTaskOperator::get_ls_tasks_from_task_id(
     bool need_lock, 
     ObIArray<ObBackupCleanLSTaskAttr> &ls_attrs)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (task_id <= 0 || !is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(tenant_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("select * from %s where %s=%ld order by end_ts",
-          OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, OB_STR_TASK_ID, task_id))) {
-        LOG_WARN("failed to append fmt", K(ret));
-      } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-        LOG_WARN("failed to append sql", K(ret));
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
-      } else if (OB_FAIL(parse_ls_result_(*result, ls_attrs))) {
-        LOG_WARN("failed to parse result", K(ret));
-      } else {
-        LOG_INFO("[BACKUP_CLEAN]success get ls tasks from task id", K(ret), K(ls_attrs)); 
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1082,36 +619,7 @@ int ObBackupCleanLSTaskOperator::get_ls_task(
     const ObLSID &ls_id, 
     ObBackupCleanLSTaskAttr &ls_attr)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (task_id <= 0 || !is_valid_tenant_id(tenant_id) || !ls_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id), K(tenant_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("select * from %s where %s=%ld and %s=%ld and %s=%ld",
-          OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, OB_STR_TASK_ID, task_id, OB_STR_LS_ID, ls_id.id(), OB_STR_TENANT_ID, tenant_id))) {
-        LOG_WARN("failed append sql", K(ret),K(sql));
-      } else if (need_lock && OB_FAIL(sql.append_fmt(" for update"))) {
-        LOG_WARN("failed to append sql", K(ret));
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("entry not exit", K(ret), K(sql));
-        } else {
-          LOG_WARN("failed to get next", K(ret), K(sql));
-        }
-      } else if (OB_FAIL(do_parse_ls_result_(*result, ls_attr))) {
-        LOG_WARN("failed to do parse ls result", K(ret));
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1203,28 +711,7 @@ int ObBackupCleanLSTaskOperator::advance_ls_task_status(
     const int result, 
     const int64_t end_ts)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  const char *comment = (OB_SUCCESS == result) ? "" : common::ob_strerror(result);
-  if (!next_status.is_valid() || !ls_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid status", K(ret), K(ls_attr), K(next_status));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s='%s', %s=%d, %s=%ld, %s='%s' where %s=%lu and %s=%lu and %s=%ld and %s='%s'", 
-      OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, OB_STR_STATUS, next_status.get_str(),
-      OB_STR_RESULT, result, OB_STR_END_TS, end_ts, OB_STR_COMMENT, comment,
-      OB_STR_TASK_ID, ls_attr.task_id_, OB_STR_TENANT_ID, ls_attr.tenant_id_,
-      OB_STR_LS_ID, ls_attr.ls_id_.id(), OB_STR_STATUS, ls_attr.status_.get_str()))) {
-    LOG_WARN("failed to init sql", K(ret), K(ls_attr), K(next_status));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(ls_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid affected_rows", K(ret), K(affected_rows), K(sql), K(next_status));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]advance ls task status", K(ls_attr), K(next_status), K(result), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1233,29 +720,7 @@ int ObBackupCleanLSTaskOperator::redo_ls_task(
     const ObBackupCleanLSTaskAttr &ls_attr,
     const int64_t retry_id)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  const char *empty_str =  "";
-  if (!ls_attr.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_attr));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s='INIT',%s=%d,%s='%s',%s=0,%s='%s',%s='%s', %s=%ld where %s=%lu and %s=%lu and %s=%ld and %s='%s'", 
-      OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, OB_STR_STATUS,
-      OB_STR_RESULT, OB_SUCCESS, OB_STR_SEVER_IP, empty_str, OB_STR_SERVER_PORT,
-      OB_STR_TASK_TRACE_ID, empty_str, OB_STR_COMMENT, empty_str, OB_STR_RETRY_ID, retry_id,
-      OB_STR_TASK_ID, ls_attr.task_id_, OB_STR_TENANT_ID, ls_attr.tenant_id_,
-      OB_STR_LS_ID, ls_attr.ls_id_.id(), OB_STR_STATUS, ls_attr.status_.get_str()))) {
-    LOG_WARN("failed to init sql", K(ret), K(ls_attr));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(ls_attr.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid affected_rows", K(ret), K(affected_rows), K(sql), K(ls_attr));
-  } else {
-    LOG_INFO("[BACKUP_CLEAN]success redo ls status", K(ls_attr), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1267,59 +732,13 @@ int ObBackupCleanLSTaskOperator::update_dst_and_status(
     share::ObTaskId task_trace_id,
     common::ObAddr &dst)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  char server_ip[OB_MAX_SERVER_ADDR_SIZE] = "";
-  char trace_id_str[OB_MAX_TRACE_ID_BUFFER_SIZE] = "";
-  task_trace_id.to_string(trace_id_str, OB_MAX_TRACE_ID_BUFFER_SIZE);
-  if (!ls_id.is_valid() || !dst.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(dst), K(ls_id));
-  } else if (!dst.ip_to_string(server_ip, OB_MAX_SERVER_ADDR_SIZE)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to change ip to string", K(ret), K(dst));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "update %s set %s='DOING', %s='%s', %s=%d, %s='%s' where %s=%ld and %s=%lu and %s=%ld and %s='PENDING'", 
-      OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, OB_STR_STATUS, OB_STR_SEVER_IP, server_ip, 
-      OB_STR_SERVER_PORT, dst.get_port(), OB_STR_TASK_TRACE_ID, trace_id_str, OB_STR_TASK_ID, task_id, OB_STR_TENANT_ID, tenant_id,
-      OB_STR_LS_ID, ls_id.id(), OB_STR_STATUS))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid affected_rows", K(ret), K(affected_rows), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]success update dst and status", K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObBackupCleanLSTaskOperator::move_ls_to_his(common::ObISQLClient &proxy, const uint64_t tenant_id, const int64_t task_id)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = -1;
-  if (!is_valid_tenant_id(tenant_id) || task_id <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id));
-  } else if (OB_FAIL(sql.assign_fmt(
-      "insert into %s select * from %s where %s=%lu and %s=%ld", 
-      OB_ALL_BACKUP_DELETE_LS_TASK_HISTORY_TNAME, OB_ALL_BACKUP_DELETE_LS_TASK_TNAME,
-      OB_STR_TENANT_ID, tenant_id, OB_STR_TASK_ID, task_id))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else if (OB_FALSE_IT(sql.reset())) {
-  } else if (OB_FAIL(sql.assign_fmt("delete from %s where %s=%lu and %s=%ld", 
-      OB_ALL_BACKUP_DELETE_LS_TASK_TNAME, OB_STR_TENANT_ID, tenant_id, OB_STR_TASK_ID, task_id))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(tenant_id), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  } else {
-    FLOG_INFO("[BACKUP_CLEAN]succeed move backup clean ls task to history table", K(tenant_id), K(task_id), K(affected_rows));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1342,75 +761,19 @@ int ObDeletePolicyOperator::fill_dml_with_delete_policy_(const ObDeletePolicyAtt
 
 int ObDeletePolicyOperator::insert_delete_policy(common::ObISQLClient &proxy, const ObDeletePolicyAttr &delete_policy)
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  ObDMLSqlSplicer dml;
-  if (!delete_policy.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(delete_policy));
-  } else if (OB_FAIL(fill_dml_with_delete_policy_(delete_policy, dml))) {
-    LOG_WARN("failed to fill backup job", K(ret), K(delete_policy));
-  } else if (OB_FAIL(dml.splice_insert_sql(OB_ALL_BACKUP_DELETE_POLICY_TNAME, sql))) {
-    LOG_WARN("failed to splice insert update sql", K(ret), K(delete_policy));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(delete_policy.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  } else if (1 != affected_rows) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, invalid affected rows", K(ret), K(affected_rows), K(sql), K(delete_policy));
-  } else {
-    LOG_INFO("[BACKUP_CLEAN]success insert one backup delete policy", K(delete_policy), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObDeletePolicyOperator::drop_delete_policy(common::ObISQLClient &proxy, const ObDeletePolicyAttr &delete_policy)
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  if (OB_FAIL(sql.assign_fmt("delete from %s where %s=%lu and %s='%s'", 
-      OB_ALL_BACKUP_DELETE_POLICY_TNAME, OB_STR_TENANT_ID, delete_policy.tenant_id_, OB_STR_POLICY_NAME, delete_policy.policy_name_))) {
-    LOG_WARN("failed to init sql", K(ret));
-  } else if (OB_FAIL(proxy.write(gen_meta_tenant_id(delete_policy.tenant_id_), sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to exec sql", K(ret), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObDeletePolicyOperator::get_default_delete_policy(common::ObISQLClient &proxy, const uint64_t tenant_id, ObDeletePolicyAttr &delete_policy)
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (!is_valid_tenant_id(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tenant_id));
-  } else {
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("select * from %s where %s=%lu and %s='default'",
-          OB_ALL_BACKUP_DELETE_POLICY_TNAME, OB_STR_TENANT_ID, tenant_id, OB_STR_POLICY_NAME))) {
-        LOG_WARN("failed append sql", K(ret),K(sql));
-      } else if (OB_FAIL(proxy.read(res, gen_meta_tenant_id(tenant_id), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("entry not exit", K(ret), K(sql));
-        } else {
-          LOG_WARN("failed to get next", K(ret), K(sql));
-        }
-      } else {
-        int64_t real_length = 0;
-        EXTRACT_INT_FIELD_MYSQL(*result, OB_STR_TENANT_ID, delete_policy.tenant_id_, uint64_t);
-        EXTRACT_STRBUF_FIELD_MYSQL(*result, OB_STR_RECOVERY_WINDOW, delete_policy.recovery_window_, sizeof(delete_policy.recovery_window_), real_length);
-        LOG_INFO("get value", K(ret), K(delete_policy));
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

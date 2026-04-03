@@ -27,18 +27,13 @@ namespace rootserver
 {
 class ObRootService;
 }
-namespace share
-{
-class ObRsMgr;
-}
 
 namespace observer
 {
 class ObRootServiceMonitor
 {
 public:
-  ObRootServiceMonitor(rootserver::ObRootService &root_service,
-                       share::ObRsMgr &rs_mgr);
+  ObRootServiceMonitor(rootserver::ObRootService &root_service);
   virtual ~ObRootServiceMonitor();
   int init();
   void run_task();
@@ -70,7 +65,6 @@ private:
   bool inited_;
   rootserver::ObRootService &root_service_;
   int64_t fail_count_;
-  share::ObRsMgr &rs_mgr_;
 
   TimerTask timer_task_;
 private:

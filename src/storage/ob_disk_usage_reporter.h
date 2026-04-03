@@ -20,7 +20,6 @@
 #include "lib/task/ob_timer.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_array.h"
-#include "share/ob_disk_usage_table_operator.h"
 #include "observer/report/ob_i_disk_report.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 
@@ -34,7 +33,19 @@ namespace common
 namespace storage
 {
 class ObTenantTabletIterator;
-
+enum class ObDiskReportFileType : uint8_t
+{
+  TENANT_DATA = 0,
+  TENANT_META_DATA = 1,
+  TENANT_INDEX_DATA = 2,
+  TENANT_TMP_DATA = 3,
+  TENANT_SLOG_DATA = 4,
+  TENANT_CLOG_DATA = 5,
+  TENANT_MAJOR_SSTABLE_DATA = 6, // shared_data in shared_storage_mode
+  TENANT_MAJOR_LOCAL_DATA = 7,
+  TENANT_BACKUP_DATA = 8,
+  TYPE_MAX
+};
 
 struct ObDiskUsageReportKey
 {
@@ -109,21 +120,12 @@ private:
   int count_server_meta();
   int count_tenant_tmp();
 
-  int delete_tenant_all(const uint64_t tenant_id,
-                        const char *svr_ip,
-                        const int32_t svr_port,
-                        const int64_t seq_num);
-  int execute_gc_disk_usage(const char *svr_ip,
-                            const int32_t svr_port,
-                            const int64_t seq_num);
-
   virtual void runTimerTask();
   typedef common::hash::ObHashMap<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ReportResultMap; // pair(occupy_size, required_size)
 private:
   bool is_inited_;
   ReportResultMap result_map_;
   common::ObMySQLProxy *sql_proxy_;
-  share::ObDiskUsageTableOperator disk_usage_table_operator_;
 };
 
 } // namespace storage

@@ -5724,24 +5724,6 @@ int ObServerSchemaService::add_sys_table_lob_aux_ids(
   return ret;
 }
 
-int ObServerSchemaService::query_tenant_status(
-    const uint64_t tenant_id,
-    TenantStatus &tenant_status)
-{
-  int ret = OB_SUCCESS;
-
-  if (!check_inner_stat()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
-  } else if (OB_ISNULL(sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("proxy is null", K(ret));
-  } else if (OB_FAIL(schema_service_->query_tenant_status(*sql_proxy_, tenant_id, tenant_status))) {
-    LOG_WARN("fail to get tenant status", K(ret), K(tenant_id));
-  }
-  return ret;
-}
-
 int ObServerSchemaService::construct_schema_version_history(
     const ObRefreshSchemaStatus &schema_status,
     const int64_t snapshot_version,

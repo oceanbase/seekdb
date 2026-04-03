@@ -62,6 +62,7 @@ int ObServerStorageMetaReplayer::start_replay()
   } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
     LOG_WARN("fail to do post repaly work", K(ret));
   }
+  
 
 
 

@@ -113,8 +113,8 @@ int CpuFlagSet::init_from_os(uint64_t& flags)
       flags |= (1 << i);
     }
   }
-#elif defined(__APPLE__)
-  // On macOS, /proc/cpuinfo doesn't exist.
+#elif defined(__APPLE__) || defined(__ANDROID__)
+  // On macOS/Android, /proc/cpuinfo doesn't exist or SSE/AVX features are irrelevant.
   // We can use sysctl to check for features, but for now we rely on init_from_cpu
   // and just return success here with flags set to a reasonable default or
   // matched with cpu flags to avoid mismatch error in constructor.

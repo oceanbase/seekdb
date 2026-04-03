@@ -185,8 +185,8 @@ int ObTransformMVRewritePrepare::get_mv_list(const ObDMLStmt *root_stmt,
     LOG_WARN("get unexpected null", K(ret), K(ctx_), K(sql_proxy));
   } else if (OB_FAIL(get_base_table_id_string(root_stmt, table_ids))) {
     LOG_WARN("failed to get base table id string", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("SELECT MVIEW_ID ID, COUNT(P_OBJ) CNT FROM `%s`.`%s` WHERE TENANT_ID = 0 AND P_OBJ IN (%.*s) GROUP BY MVIEW_ID"
-                                     " HAVING NOT EXISTS(SELECT 1 FROM `%s`.`%s` WHERE TENANT_ID = 0 AND MVIEW_ID = ID AND P_OBJ NOT IN (%.*s))", // remove mv which contains table not in query
+  } else if (OB_FAIL(sql.assign_fmt("SELECT MVIEW_ID ID, COUNT(P_OBJ) CNT FROM `%s`.`%s` WHERE P_OBJ IN (%.*s) GROUP BY MVIEW_ID"
+                                     " HAVING NOT EXISTS(SELECT 1 FROM `%s`.`%s` WHERE MVIEW_ID = ID AND P_OBJ NOT IN (%.*s))", // remove mv which contains table not in query
                                     OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME,
                                     static_cast<int>(table_ids.length()), table_ids.ptr(),
                                     OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME,

@@ -329,10 +329,10 @@ void ObLibXml2SaxHandler::entity_reference(void *ctx, const xmlChar *name)
     parser->stop_parse(ret);
   }
 }
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__ANDROID__)
 void ObLibXml2SaxHandler::structured_error(void *ctx, xmlError *error)
 #else
-void ObLibXml2SaxHandler::structured_error(void *ctx, const xmlError *error) 
+void ObLibXml2SaxHandler::structured_error(void *ctx, const xmlError *error)
 #endif
 {
   INIT_SUCC(ret);

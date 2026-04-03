@@ -42,8 +42,7 @@ public:
   virtual void SetUp();
   virtual void TearDown() {}
 
-  void gen_zone_merge_info(const common::ObZone &zone,
-                           const int64_t frozen_version,
+  void gen_zone_merge_info(const int64_t frozen_version,
                            const int64_t broadcast_version,
                            ObZoneMergeInfo &zone_merge_info);
   void gen_global_merge_info(const int64_t global_broadcast_version,
@@ -57,13 +56,11 @@ public:
 };
 
 void TestTenantAllZoneMergeStrategy::gen_zone_merge_info(
-    const common::ObZone &zone,
     const int64_t frozen_version,
     const int64_t broadcast_version,
     ObZoneMergeInfo &zone_merge_info)
 {
   zone_merge_info.tenant_id_ = CUR_TENANT_ID;
-  zone_merge_info.zone_ = zone;
   zone_merge_info.frozen_scn_.set_scn(frozen_version);
   zone_merge_info.broadcast_scn_.set_scn(broadcast_version);
 }
@@ -82,16 +79,10 @@ void TestTenantAllZoneMergeStrategy::SetUp()
   zone_merge_mgr_.init(tenant_id, sql_proxy_);
   zone_merge_mgr_.set_is_loaded(true);
 
+  ObServerConfig &config = ObServerConfig::get_instance();
+  GCTX.config_ = &config;
   ObZoneMergeInfo zone_merge_info;
-  gen_zone_merge_info("ZONE1", 1, 1, zone_merge_info);
-  ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.add_zone_merge_info(zone_merge_info));
-  gen_zone_merge_info("ZONE2", 1, 1, zone_merge_info);
-  ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.add_zone_merge_info(zone_merge_info));
-  gen_zone_merge_info("ZONE3", 1, 1, zone_merge_info);
-  ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.add_zone_merge_info(zone_merge_info));
-  gen_zone_merge_info("ZONE4", 1, 1, zone_merge_info);
-  ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.add_zone_merge_info(zone_merge_info));
-  gen_zone_merge_info("ZONE5", 1, 1, zone_merge_info);
+  gen_zone_merge_info(1, 1, zone_merge_info);
   ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.add_zone_merge_info(zone_merge_info));
 
   ObGlobalMergeInfo global_merge_info;
@@ -107,16 +98,16 @@ TEST_F(TestTenantAllZoneMergeStrategy, get_next_zone)
   
   ObArray<ObZone> to_merge;
   ASSERT_EQ(OB_SUCCESS, merge_strategy.get_next_zone(to_merge));
-  ASSERT_EQ(5, to_merge.size());
+  ASSERT_EQ(1, to_merge.size());
 
   // filter ZONE4 cuz its broadcast_version is equal to global_broadcast_version, that means
   // ZONE4 is in merging, no need to start merge again
   ObZoneMergeInfo zone_merge_info;
-  gen_zone_merge_info("ZONE4", 2, 2, zone_merge_info);
+  gen_zone_merge_info(2, 2, zone_merge_info);
   ASSERT_EQ(OB_SUCCESS, zone_merge_mgr_.update_zone_merge_info(zone_merge_info));
   to_merge.reuse();
   ASSERT_EQ(OB_SUCCESS, merge_strategy.get_next_zone(to_merge));
-  ASSERT_EQ(4, to_merge.size());
+  ASSERT_EQ(0, to_merge.size());
 }
 
 } //namespace rootserver

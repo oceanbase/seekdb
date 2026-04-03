@@ -45,6 +45,8 @@
 #endif
 #include "storage/mview/ob_mview_refresh_helper.h"
 #include "sql/resolver/mv/ob_mv_provider.h"
+#include "share/tablet/ob_tablet_table_operator.h"
+#include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -3681,63 +3683,11 @@ int ObDDLUtil::get_split_replicas_addrs(
   int ret = OB_SUCCESS;
   member_addrs_array.reset();
   learner_addrs_array.reset();
-  ObLSInfo ls_info;
   if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id || !ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(tenant_id), K(ls_id));
-  } else if (OB_ISNULL(GCTX.lst_operator_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lst_operator is null", K(ret));
-  } else if (OB_FAIL(GCTX.lst_operator_->get(GCONF.cluster_id, tenant_id, ls_id, share::ObLSTable::COMPOSITE_MODE/*for sys tenant only*/, ls_info))) {
-    LOG_WARN("fail to get ls info", K(ret), K(tenant_id), K(ls_id));
-  } else {
-    int64_t leader_replica_index = OB_INVALID_INDEX;
-    ObArray<ObAddr> filter_replica_addrs; // for split, we should ignore offline replica and arbitration replica.
-    const ObLSInfo::ReplicaArray &all_replicas = ls_info.get_replicas();
-    for (int64_t idx = 0; OB_SUCC(ret) && idx < all_replicas.count(); idx++) {
-      const ObLSReplica &tmp_replica = all_replicas.at(idx);
-      if (REPLICA_TYPE_ARBITRATION == tmp_replica.get_replica_type()
-        || REPLICA_STATUS_OFFLINE == tmp_replica.get_replica_status()) {
-        if (OB_FAIL(filter_replica_addrs.push_back(tmp_replica.get_server()))) {
-          LOG_WARN("push back failed", K(ret));
-        } else {
-          LOG_TRACE("filter offline replica and arbitration replica for split", K(ret), K(tmp_replica));
-        }
-      } else if (ObRole::LEADER == tmp_replica.get_role()) {
-        leader_replica_index = idx;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_INVALID_INDEX == leader_replica_index) {
-        ret = OB_EAGAIN;
-        LOG_WARN("No leader found, try again", K(ret), K(tenant_id), K(ls_id), K(all_replicas));
-      } else {
-        const ObLSReplica &leader_replica = all_replicas.at(leader_replica_index);
-        const ObLSReplica::MemberList &member_list = leader_replica.get_member_list();
-        for (int64_t idx = 0; OB_SUCC(ret) && idx < member_list.count(); ++idx) {
-          const common::ObAddr &addr = member_list.at(idx).get_server();
-          if (common::is_contain(filter_replica_addrs, addr)) {
-            // filter.
-            LOG_TRACE("ignore replica", K(ret), K(addr));
-          } else if (OB_FAIL(member_addrs_array.push_back(addr))) {
-            LOG_WARN("failed to push addr", K(ret));
-          }
-        }
-        const common::GlobalLearnerList &learner_list = leader_replica.get_learner_list();
-        for (int64_t idx = 0; OB_SUCC(ret) && idx < learner_list.get_member_number(); ++idx) {
-          common::ObAddr addr;
-          if (OB_FAIL(learner_list.get_server_by_index(idx, addr))) {
-            LOG_WARN("failed to push addr", KR(ret), K(idx));
-          } else if (OB_FAIL(learner_addrs_array.push_back(addr))) {
-            LOG_WARN("failed to push addr", KR(ret), K(addr));
-          }
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret) && member_addrs_array.empty()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty member list", K(ret), K(tenant_id), K(ls_id));
+  } else if (OB_FAIL(member_addrs_array.push_back(GCTX.self_addr()))) {
+    LOG_WARN("fail to push back addr", KR(ret));
   }
   return ret;
 }
@@ -3883,39 +3833,19 @@ int ObDDLUtil::get_tablet_data_size(
     int64_t &data_size)
 {
   int ret = OB_SUCCESS;
-  const int64_t obj_pos = 0;
-  ObObj result_obj;
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
   data_size = 0;
   if (!tablet_id.is_valid() || !ls_id.is_valid() || OB_INVALID_TENANT_ID == tenant_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(tenant_id));
+  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("meta_db_pool_ is not initialized", K(ret));
   } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObSqlString query_string;
-      sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(query_string.assign_fmt("SELECT max(data_size) as data_size FROM %s WHERE tenant_id = %lu AND tablet_id = %lu AND ls_id = %lu",
-          OB_ALL_TABLET_META_TABLE_TNAME, tenant_id, tablet_id.id(), ls_id.id()))) {
-        LOG_WARN("assign sql string failed", K(ret), K(OB_ALL_TABLET_META_TABLE_TNAME), K(tenant_id), K(tablet_id), K(ls_id));
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, meta_tenant_id, query_string.ptr()))) {
-        LOG_WARN("read record failed", K(ret), K(tenant_id), K(meta_tenant_id), K(query_string));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", K(ret), K(tenant_id), K(meta_tenant_id), K(query_string));
-      } else if (OB_FAIL(result->next())) {
-        LOG_WARN("get next result failed", K(ret), K(tenant_id), K(meta_tenant_id), K(query_string));
-      } else if (OB_FAIL(result->get_obj(obj_pos, result_obj))) {
-        LOG_WARN("failed to get object", K(ret));
-      } else if (result_obj.is_null()) {
-        data_size = 0;
-        LOG_WARN("data size is null", K(ret));
-        ret = OB_SUCCESS;
-      } else if (OB_UNLIKELY(!result_obj.is_integer_type())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected obj type", K(ret), K(result_obj.get_type()));
-      } else {
-        data_size = result_obj.get_int();
-      }
+    ObTabletMetaTableStorage storage;
+    if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
+      LOG_WARN("failed to init storage", K(ret));
+    } else if (OB_FAIL(storage.get_max_data_size(tenant_id, tablet_id, ls_id, data_size))) {
+      LOG_WARN("failed to get max data size", K(ret), K(tenant_id), K(tablet_id), K(ls_id));
     }
   }
   return ret;
@@ -3928,39 +3858,19 @@ int ObDDLUtil::get_tablet_data_row_cnt(
     int64_t &data_row_cnt)
 {
   int ret = OB_SUCCESS;
-  const int64_t obj_pos = 0;
-  ObObj result_obj;
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
   data_row_cnt = 0;
   if (!tablet_id.is_valid() || !ls_id.is_valid() || OB_INVALID_TENANT_ID == tenant_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(tenant_id));
+  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("meta_db_pool_ not initialized", K(ret));
   } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObSqlString query_string;
-      sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(query_string.assign_fmt("SELECT max(row_count) as row_count FROM %s WHERE tenant_id = %lu AND tablet_id = %lu AND ls_id = %lu",
-          OB_ALL_TABLET_REPLICA_CHECKSUM_TNAME, tenant_id, tablet_id.id(), ls_id.id()))) {
-        LOG_WARN("assign sql string failed", K(ret), K(OB_ALL_TABLET_REPLICA_CHECKSUM_TNAME), K(tenant_id), K(tablet_id), K(ls_id));
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, meta_tenant_id, query_string.ptr()))) {
-        LOG_WARN("read record failed", K(ret), K(tenant_id), K(meta_tenant_id), K(query_string));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", K(ret), K(tenant_id), K(meta_tenant_id), K(query_string));
-      } else if (OB_FAIL(result->next())) {
-        LOG_WARN("get next result failed", K(ret), K(tenant_id), K(meta_tenant_id), K(query_string));
-      } else if (OB_FAIL(result->get_obj(obj_pos, result_obj))) {
-        LOG_WARN("failed to get object", K(ret));
-      } else if (result_obj.is_null()) {
-        data_row_cnt = 0;
-        LOG_WARN("data size is null", K(ret));
-        ret = OB_SUCCESS;
-      } else if (OB_UNLIKELY(!result_obj.is_integer_type())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected obj type", K(ret), K(result_obj.get_type()));
-      } else {
-        data_row_cnt = result_obj.get_int();
-      }
+    ObTabletReplicaChecksumTableStorage storage;
+    if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
+      LOG_WARN("failed to init storage", K(ret));
+    } else if (OB_FAIL(storage.get_max_row_count(tenant_id, tablet_id, ls_id, data_row_cnt))) {
+      LOG_WARN("failed to get max row count from storage", K(ret), K(tenant_id), K(tablet_id), K(ls_id));
     }
   }
   return ret;
@@ -3978,17 +3888,14 @@ int ObDDLUtil::get_ls_host_left_disk_space(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(ls_id), K(leader_addr));
   } else {
-    char svr_ip[MAX_IP_ADDR_LENGTH] = "\0";
-    if (!leader_addr.ip_to_string(svr_ip, sizeof(svr_ip))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("format ip str failed", K(ret), K(leader_addr));
-    } else {
+    UNUSED(leader_addr);  // vtable is local, no need to filter by server
+    {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
         sqlclient::ObMySQLResult *result = NULL;
-        if (OB_FAIL(query_string.assign_fmt("SELECT free_size FROM %s WHERE svr_ip = \"%s\" AND svr_port = '%d'",
-            OB_ALL_VIRTUAL_DISK_STAT_TNAME, svr_ip, leader_addr.get_port()))) {
-          LOG_WARN("assign sql string failed", K(ret), K(OB_ALL_VIRTUAL_DISK_STAT_TNAME), K(svr_ip), K(leader_addr.get_port()));
+        if (OB_FAIL(query_string.assign_fmt("SELECT free_size FROM %s LIMIT 1",
+            OB_ALL_VIRTUAL_DISK_STAT_TNAME))) {
+          LOG_WARN("assign sql string failed", K(ret), K(OB_ALL_VIRTUAL_DISK_STAT_TNAME));
         } else if (OB_FAIL(GCTX.sql_proxy_->read(res, OB_SYS_TENANT_ID, query_string.ptr()))) {
           LOG_WARN("read record failed", K(ret), K(tenant_id), K(ls_id), K(leader_addr), K(OB_SYS_TENANT_ID), K(query_string));
         } else if (OB_ISNULL(result = res.get_result())) {
@@ -4560,9 +4467,9 @@ int ObDDLUtil::check_tenant_status_normal(
 {
   int ret = OB_SUCCESS;
   bool is_tenant_dropped = false;
-  bool is_standby_tenant = false;
   const ObSimpleTenantSchema *tenant_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
+  bool is_primary_cluster = true;
   if (OB_ISNULL(proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy is null", K(ret));
@@ -4581,9 +4488,9 @@ int ObDDLUtil::check_tenant_status_normal(
   } else if (tenant_schema->is_dropping() || tenant_schema->is_in_recyclebin()) {
     ret = OB_TENANT_HAS_BEEN_DROPPED;
     LOG_INFO("tenant in dropping or in recyclebin", K(ret), K(check_tenant_id));
-  } else if (OB_FAIL(ObAllTenantInfoProxy::is_standby_tenant(proxy, check_tenant_id, is_standby_tenant))) {
-    LOG_WARN("check is standby tenant failed", K(ret), K(check_tenant_id));
-  } else if (is_standby_tenant) {
+  } else if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+    LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+  } else if (!is_primary_cluster) {
     ret = OB_STANDBY_READ_ONLY;
     LOG_INFO("tenant is standby", K(ret), K(check_tenant_id));
   }
@@ -4709,8 +4616,8 @@ int ObDDLUtil::check_table_column_checksum_error(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if OB_FAIL(ret) {
         LOG_WARN("fail to create object ObMySQLProxy::MySQLResult", KR(ret), K(tenant_id), K(table_id));
-      } else if (OB_FAIL(query_string.append_fmt("SELECT data_table_id FROM %s WHERE tenant_id = %lu AND data_table_id = %lu LIMIT 1",
-          OB_ALL_COLUMN_CHECKSUM_ERROR_INFO_TNAME, tenant_id, table_id))) {
+      } else if (OB_FAIL(query_string.append_fmt("SELECT data_table_id FROM %s WHERE data_table_id = %lu LIMIT 1",
+          OB_ALL_VIRTUAL_COLUMN_CHECKSUM_ERROR_INFO_TNAME, table_id))) {
         LOG_WARN("assign sql string failed", KR(ret), K(query_string));
       } else if (OB_ISNULL(GCTX.sql_proxy_)) {
         ret = OB_INVALID_ARGUMENT;
@@ -4854,54 +4761,19 @@ int ObDDLUtil::batch_check_tablet_checksum(
       || start_idx >= end_idx || tablet_ids.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(start_idx), K(end_idx));
+  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("meta_db_pool_ not initialized", K(ret));
   } else {
-    ObSqlString query_string;
-    sqlclient::ObMySQLResult *result = nullptr;
-    ObTimeoutCtx timeout_ctx;
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      if (OB_FAIL(ret)) {
-        LOG_WARN("fail to create object ObMySQLProxy::MySQLResult", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(query_string.append(" SELECT tenant_id, tablet_id FROM "))) {
-        LOG_WARN("assign sql string failed", K(ret), K(query_string));
-      } else if (OB_FAIL(query_string.append_fmt("( SELECT tenant_id,tablet_id,row_count,data_checksum,b_column_checksums,compaction_scn FROM %s "
-        " WHERE tenant_id = %lu AND tablet_id IN (", OB_ALL_TABLET_REPLICA_CHECKSUM_TNAME, tenant_id))) {
-        LOG_WARN("assign sql string failed", K(ret), K(query_string));
-      } else {
-        for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
-          if (OB_FAIL(query_string.append_fmt(
-            "%lu%s",
-            tablet_ids.at(idx).id(),
-            ((idx == end_idx - 1) ? ")) as J" : ",")))) {
-            LOG_WARN("assign sql string failed", K(ret), K(tenant_id), K(tablet_ids.at(idx).id()));
-          }
-        } // end of for
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(query_string.append(" GROUP BY J.tablet_id, J.compaction_scn"
-              " HAVING MIN(J.data_checksum) != MAX(J.data_checksum)"
-              " OR MIN(J.row_count) != MAX(J.row_count)"
-              " OR MIN(J.b_column_checksums) != MAX(J.b_column_checksums) LIMIT 1"))) {
-            LOG_WARN("assign sql string failed", K(ret), K(tenant_id));
-          } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid arg", K(ret), K(tenant_id), KP(GCTX.sql_proxy_));
-          } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, GCONF.internal_sql_execute_timeout))) {
-            LOG_WARN("failed to set timeout ctx", K(ret), K(timeout_ctx));
-          } else if (OB_FAIL(GCTX.sql_proxy_->read(res, OB_SYS_TENANT_ID, query_string.ptr()))) {
-            LOG_WARN("read record failed", K(ret), K(query_string));
-          } else if ((OB_ISNULL(result = res.get_result()))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to get sql result", K(ret), KP(result));
-          } else if (OB_FAIL(result->next()) && ret != OB_ITER_END) {
-            LOG_WARN("fail to get sql result", K(ret), KP(result));
-          } else if (OB_ITER_END == ret) {
-            ret = OB_SUCCESS;
-          } else {
-            ret = OB_NOT_SUPPORTED; // we expect the sql to return an empty result
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "Redefinition on compaction checksum error table is");
-            LOG_WARN("tablet replicas checksum error", K(ret), K(tenant_id));
-          }
-        }
-      }
+    ObTabletReplicaChecksumTableStorage storage;
+    bool has_error = false;
+    if (OB_FAIL(storage.init(GCTX.meta_db_pool_))) {
+      LOG_WARN("failed to init storage", K(ret));
+    } else if (OB_FAIL(storage.batch_check_checksum(tenant_id, tablet_ids, start_idx, end_idx, has_error))) {
+      LOG_WARN("failed to batch check checksum from storage", K(ret), K(tenant_id), K(start_idx), K(end_idx));
+    } else if (has_error) {
+      ret = OB_CHECKSUM_ERROR;
+      LOG_WARN("tablet checksum error detected", K(ret), K(tenant_id));
     }
   }
   return ret;
@@ -5213,19 +5085,19 @@ int ObSqlMonitorStatsCollector::init(ObMySQLProxy *sql_proxy)
     tenant_id_tmp = scan_tenant_id_.at(i);
     if (task_id_tmp > 0 && tenant_id_tmp != OB_INVALID_ID) {
       if (i == 0) {
-        if (OB_FAIL(cond_sql.assign_fmt("(TENANT_ID=%lu AND OTHERSTAT_5_VALUE='%ld') " ,tenant_id_tmp, task_id_tmp))) {
+        if (OB_FAIL(cond_sql.assign_fmt("(OTHERSTAT_5_VALUE='%ld') " ,task_id_tmp))) {
           LOG_WARN("failed to assign sql", K(ret));
         }
-      } else if (OB_FAIL(cond_sql.append_fmt("OR (TENANT_ID=%lu AND OTHERSTAT_5_VALUE='%ld') " ,tenant_id_tmp, task_id_tmp))) {
+      } else if (OB_FAIL(cond_sql.append_fmt("OR (OTHERSTAT_5_VALUE='%ld') " ,task_id_tmp))) {
           LOG_WARN("failed to assign sql", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(select_sql_monitor_sql.assign_fmt(
-        "SELECT TENANT_ID, TRACE_ID, THREAD_ID, OUTPUT_ROWS, FIRST_CHANGE_TIME, LAST_CHANGE_TIME, LAST_REFRESH_TIME, PLAN_OPERATION, OTHERSTAT_5_VALUE AS TASK_ID,  "
+        "SELECT TRACE_ID, THREAD_ID, OUTPUT_ROWS, FIRST_CHANGE_TIME, LAST_CHANGE_TIME, LAST_REFRESH_TIME, PLAN_OPERATION, OTHERSTAT_5_VALUE AS TASK_ID,  "
         "OTHERSTAT_1_VALUE, OTHERSTAT_2_VALUE, OTHERSTAT_6_VALUE, OTHERSTAT_7_ID, OTHERSTAT_7_VALUE, OTHERSTAT_8_VALUE, OTHERSTAT_9_VALUE, OTHERSTAT_10_VALUE FROM %s "
-        "WHERE PLAN_OPERATION in ('PHY_STAT_COLLECTOR', 'PHY_SORT', 'PHY_VEC_SORT', 'PHY_PX_MULTI_PART_SSTABLE_INSERT', 'PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT') AND OTHERSTAT_5_ID = '%d' AND (%s) ORDER BY OTHERSTAT_5_VALUE DESC, TENANT_ID DESC, THREAD_ID ASC",
+        "WHERE PLAN_OPERATION in ('PHY_STAT_COLLECTOR', 'PHY_SORT', 'PHY_VEC_SORT', 'PHY_PX_MULTI_PART_SSTABLE_INSERT', 'PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT') AND OTHERSTAT_5_ID = '%d' AND (%s) ORDER BY OTHERSTAT_5_VALUE DESC, THREAD_ID ASC",
         OB_ALL_VIRTUAL_SQL_PLAN_MONITOR_TNAME, sql::ObSqlMonitorStatIds::DDL_TASK_ID, cond_sql.ptr()))) {
       LOG_WARN("failed to assign sql", K(ret), K(select_sql_monitor_sql));
     } else {
@@ -5296,7 +5168,7 @@ int ObSqlMonitorStatsCollector::get_scan_monitor_stats_batch(sqlclient::ObMySQLR
     common::ObCurTraceId::TraceId inner_sql_trace_id;
     ScanMonitorNodeInfo scan_node_info;
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "TASK_ID", scan_node_info.task_id_, int64_t);
-    EXTRACT_INT_FIELD_MYSQL(*scan_result, "TENANT_ID", scan_node_info.tenant_id_, uint64_t);
+    scan_node_info.tenant_id_ = OB_SYS_TENANT_ID;
     EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(*scan_result, "FIRST_CHANGE_TIME", scan_node_info.first_change_time_);
     EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(*scan_result, "LAST_CHANGE_TIME", scan_node_info.last_change_time_);
     EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(*scan_result, "LAST_REFRESH_TIME", scan_node_info.last_refresh_time_);
@@ -5326,7 +5198,7 @@ int ObSqlMonitorStatsCollector::get_sort_monitor_stats_batch(sqlclient::ObMySQLR
     common::ObCurTraceId::TraceId inner_sql_trace_id;
     SortMonitorNodeInfo sort_node_info;
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "TASK_ID", sort_node_info.task_id_, int64_t);
-    EXTRACT_INT_FIELD_MYSQL(*scan_result, "TENANT_ID", sort_node_info.tenant_id_, uint64_t);
+    sort_node_info.tenant_id_ = OB_SYS_TENANT_ID;
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "THREAD_ID", sort_node_info.thread_id_, int64_t);
     EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(*scan_result, "FIRST_CHANGE_TIME", sort_node_info.first_change_time_);
     EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(*scan_result, "LAST_CHANGE_TIME", sort_node_info.last_change_time_);
@@ -5363,7 +5235,7 @@ int ObSqlMonitorStatsCollector::get_insert_monitor_stats_batch(sqlclient::ObMySQ
     common::ObCurTraceId::TraceId inner_sql_trace_id;
     InsertMonitorNodeInfo insert_node_info;
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "TASK_ID", insert_node_info.task_id_, int64_t);
-    EXTRACT_INT_FIELD_MYSQL(*scan_result, "TENANT_ID", insert_node_info.tenant_id_, uint64_t);
+    insert_node_info.tenant_id_ = OB_SYS_TENANT_ID;
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "THREAD_ID", insert_node_info.thread_id_, int64_t);
     EXTRACT_TIMESTAMP_FIELD_MYSQL_SKIP_RET(*scan_result, "LAST_REFRESH_TIME", insert_node_info.last_refresh_time_);
     EXTRACT_INT_FIELD_MYSQL(*scan_result, "OTHERSTAT_1_VALUE", insert_node_info.cg_row_inserted_, int64_t);
@@ -6026,7 +5898,6 @@ int ObCheckTabletDataComplementOp::check_task_inner_sql_session_status(
 {
   int ret = OB_SUCCESS;
   is_old_task_session_exist = false;
-  char ip_str[common::OB_IP_STR_BUFF];
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
@@ -6050,12 +5921,10 @@ int ObCheckTabletDataComplementOp::check_task_inner_sql_session_status(
         LOG_WARN("get trace id string failed", K(ret), K(trace_id_str));
       } else if (!inner_sql_exec_addr.is_valid()) {
         if (OB_FAIL(sql_string.assign_fmt(" SELECT id as session_id FROM %s WHERE trace_id like \"%c%s\" "
-              " and tenant = (select tenant_name from __all_tenant where tenant_id = %lu) "
               " and info like \"%cINSERT%c('ddl_task_id', %ld)%cINTO%cSELECT%c%ld%c\" ",
             OB_ALL_VIRTUAL_SESSION_INFO_TNAME,
             charater,
             trace_id_like,
-            tenant_id,
             charater,
             charater,
             task_id,
@@ -6067,18 +5936,12 @@ int ObCheckTabletDataComplementOp::check_task_inner_sql_session_status(
           LOG_WARN("assign sql string failed", K(ret));
         }
       } else {
-        if (!inner_sql_exec_addr.ip_to_string(ip_str, sizeof(ip_str))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ip to string failed", K(ret), K(inner_sql_exec_addr));
-        } else if (OB_FAIL(sql_string.assign_fmt(" SELECT id as session_id FROM %s WHERE trace_id like \"%c%s\" "
-              " and tenant = (select tenant_name from __all_tenant where tenant_id = %lu) "
-              " and svr_ip = \"%s\" and svr_port = %d and info like \"%cINSERT%c('ddl_task_id', %ld)%cINTO%cSELECT%c%ld%c\" ",
+        // vtable is local, query will be routed to inner_sql_exec_addr via proxy.read()
+        if (OB_FAIL(sql_string.assign_fmt(" SELECT id as session_id FROM %s WHERE trace_id like \"%c%s\" "
+              " and info like \"%cINSERT%c('ddl_task_id', %ld)%cINTO%cSELECT%c%ld%c\" ",
             OB_ALL_VIRTUAL_SESSION_INFO_TNAME,
             charater,
             trace_id_like,
-            tenant_id,
-            ip_str,
-            inner_sql_exec_addr.get_port(),
             charater,
             charater,
             task_id,

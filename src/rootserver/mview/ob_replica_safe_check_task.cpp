@@ -88,8 +88,7 @@ ObReplicaSafeCheckTask::ObReplicaSafeCheckTask()
     in_sched_(false),
     is_stop_(true),
     is_inited_(false),
-    merge_scn_(),
-    max_transfer_task_id_()
+    merge_scn_()
 {
 }
 
@@ -278,111 +277,7 @@ int ObReplicaSafeCheckTask::do_multi_trans(
 int ObReplicaSafeCheckTask::publish_scn()
 {
   int ret = OB_SUCCESS;
-  share::ObLSAttrArray ls_attr_array;
-  share::ObLSAttrOperator ls_operator(MTL_ID(), GCTX.sql_proxy_);
-  bool need_publish = true;
-  share::SCN lastest_merge_scn;
-  share::SCN major_mv_merge_scn;
-  uint64_t tenant_id = MTL_ID();
-  if (OB_FAIL(need_push_major_mv_merge_scn(tenant_id, need_publish, lastest_merge_scn, major_mv_merge_scn))) {
-    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret), K(MTL_ID()));
-  } else if (!need_publish) {
-  } else if (FALSE_IT(merge_scn_.atomic_store(lastest_merge_scn))) {
-  } else if (OB_FAIL(ls_operator.get_all_ls_by_order(ls_attr_array))) {
-    LOG_WARN("failed to get all ls status", KR(ret), KPC(this));
-  } else {
-    int64_t publish_cnt = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < ls_attr_array.count(); ++i) {
-      const share::ObLSAttr &ls_attr = ls_attr_array.at(i);
-      const share::ObLSID &ls_id = ls_attr.get_ls_id();
-      if (share::SYS_LS != ls_id && ls_attr.ls_is_normal()) {
-        ObMVMergeSCNInfo *ls_info = NULL;
-        if (OB_FAIL(ls_cache_.get_ls_info(ls_id, ls_info))) {
-          LOG_WARN("failed to get_ls_info", KR(ret), K(ls_id), KPC(this));
-        } else if (OB_ISNULL(ls_info)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ls_info is invalid", KR(ret), K(ls_id), K(ls_info), KPC(this));
-        } else if (ls_info->major_mv_merge_scn_publish_ > merge_scn_) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ls_info.major_mv_merge_scn_publish_ is more than merge_scn", KR(ret), K(ls_id), K(ls_info), KPC(this));
-        } else if (ls_info->major_mv_merge_scn_publish_ < merge_scn_) {
-          ObUpdateMergeScnArg arg;
-          arg.merge_scn_ = merge_scn_;
-          arg.ls_id_ = ls_id;
-          if (OB_FAIL(do_multi_trans(transaction::ObTxDataSourceType::MV_PUBLISH_SCN, arg))) {
-            LOG_WARN("failed to do multi trans", KR(ret), K(ls_attr), K(arg), K(this));
-          } else {
-            publish_cnt++;
-            ls_info->major_mv_merge_scn_publish_ = merge_scn_;
-          }
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (0 == publish_cnt) {
-        LOG_INFO("there no log publish", KR(ret), KPC(this));
-      } else if (OB_FAIL(ls_cache_.clear_deleted_ls_info(merge_scn_))) {
-        LOG_WARN("failed to clear_deleted_ls_info", KR(ret), K(publish_cnt), K(this));
-      }
-    }
-  }
-  LOG_INFO("publish_scn finish", KR(ret), K(need_publish), K(major_mv_merge_scn), K(lastest_merge_scn), KPC(this), K(ls_attr_array));
-
-  if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NOT_MASTER == ret) {
-    switch_status(StatusType::PUBLISH_SCN, LOCATION_RETRY_INTERVAL);
-  } else if (OB_FAIL(ret)) {
-    switch_status(StatusType::PUBLISH_SCN, ERROR_RETRY_INTERVAL);
-  } else if (!need_publish) {
-    switch_status(StatusType::PUBLISH_SCN, CHECK_INTERVAL);
-  } else if (OB_FAIL(get_transfer_task_id(max_transfer_task_id_))) {
-    LOG_WARN("failed to get_transfer_task_id", KR(ret), KPC(this));
-    switch_status(StatusType::PUBLISH_SCN, ERROR_RETRY_INTERVAL);
-  } else {
-    switch_status(StatusType::CHECK_END);
-  }
-  return ret;
-}
-
-int ObReplicaSafeCheckTask::get_transfer_task_id(
-    share::ObTransferTaskID &max_task_id)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql_str;
-  max_task_id = share::ObTransferTaskID::INVALID_ID;
-  const int64_t obj_pos = 0;
-  ObObj result_obj;
-  if (OB_FAIL(sql_str.assign_fmt("SELECT max(task_id) as max_task_id FROM %s", share::OB_ALL_TRANSFER_TASK_TNAME))) {
-    LOG_WARN("failed to assign sql", KR(ret), K(sql_str));
-  } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res)
-    {
-      common::sqlclient::ObMySQLResult *result = nullptr;
-      if (!sql_str.is_valid()) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("sql_str is invalid", KR(ret));
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, MTL_ID(), sql_str.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql_str));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret));
-      } else if (OB_FAIL(result->next())) {
-        if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("fail to get next", KR(ret));
-        } else {
-          ret = OB_SUCCESS;
-        }
-      } else if (OB_FAIL(result->get_obj(obj_pos, result_obj))) {
-        LOG_WARN("failed to get object", K(ret));
-      } else if (result_obj.is_null()) {
-        ret = OB_SUCCESS;
-      } else if (OB_UNLIKELY(!result_obj.is_integer_type())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected obj type", K(ret), K(result_obj.get_type()));
-      } else {
-        max_task_id = result_obj.get_int();
-      }
-    }
-  }
+  switch_status(StatusType::PUBLISH_SCN, CHECK_INTERVAL);
   return ret;
 }
 
@@ -419,26 +314,17 @@ int ObReplicaSafeCheckTask::check_end()
 {
   int ret = OB_SUCCESS;
   bool no_new_create = false;
-  bool no_transfer_in = false;
   ObSqlString check_new_create_sql;
-  ObSqlString check_transfer_in_sql;
   if (OB_FAIL(check_new_create_sql.assign_fmt("SELECT 1 FROM %s WHERE last_refresh_scn = 0 AND refresh_mode = %ld limit 1", share::OB_ALL_MVIEW_TNAME, ObMVRefreshMode::MAJOR_COMPACTION))) {
     LOG_WARN("failed to assign sql", KR(ret), K(check_new_create_sql), KPC(this));
   } else if (OB_FAIL(check_row_empty(check_new_create_sql, no_new_create))) {
     LOG_WARN("failed to check_row_empty", KR(ret), K(check_new_create_sql), KPC(this));
   } else if (!no_new_create) {
-  } else if (!max_transfer_task_id_.is_valid()) {
-    no_transfer_in = true;
-  } else if (OB_FAIL(check_transfer_in_sql.assign_fmt("SELECT 1 FROM %s WHERE task_id <= %ld limit 1", share::OB_ALL_TRANSFER_TASK_TNAME, max_transfer_task_id_.id()))) {
-    LOG_WARN("failed to assign sql", KR(ret), K(check_transfer_in_sql), KPC(this));
-  } else if (OB_FAIL(check_row_empty(check_transfer_in_sql, no_transfer_in))) {
-    LOG_WARN("failed to check_row_empty", KR(ret), K(check_transfer_in_sql), KPC(this));
-  } else if (!no_transfer_in) {
   }
-  LOG_INFO("check_end finish", KR(ret), K(no_new_create), K(no_transfer_in), KPC(this));
+  LOG_INFO("check_end finish", KR(ret), K(no_new_create), KPC(this));
   if (OB_FAIL(ret)) {
     switch_status(StatusType::PUBLISH_SCN, ERROR_RETRY_INTERVAL);
-  } else if (!no_new_create || !no_transfer_in) {
+  } else if (!no_new_create) {
     switch_status(StatusType::CHECK_END, WAIT_END_INTERVAL);
   } else {
     switch_status(StatusType::NOTICE_SAFE);
@@ -543,7 +429,6 @@ void ObReplicaSafeCheckTask::cleanup()
   status_ = StatusType::PUBLISH_SCN;
   merge_scn_.reset();
   ls_cache_.reset();
-  max_transfer_task_id_.reset();
 }
 
 } // namespace rootserver

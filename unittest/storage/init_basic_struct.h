@@ -18,7 +18,6 @@
 #define OCEANBASE_STORAGE_INIT_BASIC_STRUCT_H_
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_table_schema.h"
-#include "share/ob_tenant_info_proxy.h"
 #include "logservice/palf/palf_base_info.h"
 #include "share/scn.h"
 namespace oceanbase
@@ -56,27 +55,6 @@ int __attribute__((weak))  build_test_schema(share::schema::ObTableSchema &table
 int __attribute__((weak))  build_test_schema(share::schema::ObTableSchema &table_schema, uint64_t table_id)
 {
   return build_test_schema(table_schema, table_id, "test_merge");
-}
-
-int __attribute__((weak)) gen_create_ls_arg(const int64_t tenant_id,
-    const share::ObLSID &ls_id,
-    obrpc::ObCreateLSArg &arg)
-{
-  int ret = OB_SUCCESS;
-  ObReplicaType replica_type = REPLICA_TYPE_FULL;
-  ObReplicaProperty property;
-  share::ObAllTenantInfo tenant_info;
-  const share::SCN create_scn = share::SCN::base_scn();
-  arg.reset();
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-  palf::PalfBaseInfo palf_base_info;
-  ObMajorMVMergeInfo major_merge_info;
-  if (OB_FAIL(tenant_info.init(tenant_id, share::PRIMARY_TENANT_ROLE))) {
-    STORAGE_LOG(WARN, "failed to init tenant info", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(arg.init(tenant_id, ls_id, replica_type, property, tenant_info, create_scn, compat_mode, false, palf_base_info, major_merge_info))) {
-   STORAGE_LOG(WARN, "failed to init arg", KR(ret), K(tenant_id), K(ls_id), K(tenant_info), K(create_scn), K(compat_mode), K(palf_base_info), K(major_merge_info));
-  }
-  return ret;
 }
 
 int __attribute__((weak)) gen_create_tablet_arg(const int64_t tenant_id,

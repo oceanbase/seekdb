@@ -462,7 +462,6 @@ int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client, const uint64_t tenan
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  ObZone zone;
   int64_t affected_rows = 0L;
   const char *id_name = NULL;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
@@ -475,11 +474,10 @@ int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client, const uint64_t tenan
     LOG_WARN("NULL name", K(ret));
   } else if (OB_FAIL(sql.append_fmt(
       "UPDATE %s SET VALUE = '%lu', gmt_modified = now(6) "
-      "WHERE ZONE = '%s' AND NAME = '%s' AND TENANT_ID = %lu",
+      "WHERE NAME = '%s'",
       OB_ALL_SYS_STAT_TNAME,
       ObSchemaUtils::get_extract_schema_id(exec_tenant_id, max_id),
-      zone.ptr(), id_name,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+      id_name))) {
     LOG_WARN("sql_string append format string failed", K(ret));
   } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {
     LOG_WARN("sql client write fail", K(sql), K(affected_rows), K(ret));
@@ -495,7 +493,6 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client, const uint64_t tenant
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  ObZone zone;
   const char *id_name = NULL;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
   bool no_max_id = false;
@@ -506,9 +503,8 @@ int ObMaxIdFetcher::fetch_max_id(ObISQLClient &sql_client, const uint64_t tenant
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL name", K(ret));
   } else if (OB_FAIL(sql.append_fmt(
-      "SELECT VALUE FROM %s WHERE ZONE = '%s' AND NAME = '%s' AND TENANT_ID = %lu "
-      "FOR UPDATE", OB_ALL_SYS_STAT_TNAME, zone.ptr(), id_name,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+      "SELECT VALUE FROM %s WHERE NAME = '%s' "
+      "FOR UPDATE", OB_ALL_SYS_STAT_TNAME, id_name))) {
     LOG_WARN("sql append format string failed", K(ret));
   } else {
     ObSQLClientRetryWeak sql_client_retry_weak(&sql_client,
@@ -559,7 +555,6 @@ int ObMaxIdFetcher::insert_initial_value(common::ObISQLClient &sql_client, uint6
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  ObZone zone;
   ObObj obj;
   obj.set_int(static_cast<int64_t>(initial_value));
   int64_t affected_rows = 0;
@@ -574,11 +569,10 @@ int ObMaxIdFetcher::insert_initial_value(common::ObISQLClient &sql_client, uint6
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL name or info", K(ret), KP(name), KP(info));
   } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s "
-      "(tenant_id, zone, name, data_type, value, info) VALUES "
-      "(%lu, '%s', '%s', '%d', '%ld', '%s') ON DUPLICATE KEY UPDATE value = value",
+      "(name, data_type, value, info) VALUES "
+      "('%s', '%d', '%ld', '%s') ON DUPLICATE KEY UPDATE value = value",
       OB_ALL_SYS_STAT_TNAME,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
-      zone.ptr(), name, obj.get_type(),
+      name, obj.get_type(),
       static_cast<int64_t>(value), info))) {
     LOG_WARN("sql string assign failed", K(ret));
   } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), group_id_, affected_rows))) {

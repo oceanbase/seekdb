@@ -23,7 +23,6 @@
 #include "sql/resolver/dcl/ob_lock_user_stmt.h"
 #include "sql/resolver/dcl/ob_rename_user_stmt.h"
 #include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
-#include "sql/resolver/dcl/ob_alter_user_primary_zone_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -745,33 +744,6 @@ int ObRenameUserExecutor::rename_user(obrpc::ObCommonRpcProxy *rpc_proxy,
       //Rename user completely success
     }
   }
-  return ret;
-}
-
-int ObAlterUserPrimaryZoneExecutor::execute(ObExecContext &ctx, ObAlterUserPrimaryZoneStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  ObString first_stmt;
-  ObSQLSessionInfo *session = NULL;
-  if (OB_ISNULL(session = ctx.get_my_session())) {
-    ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "session is NULL");
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed", K(ret));
-  } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
-  } else {
-    stmt.arg_.exec_tenant_id_ = session->get_effective_tenant_id();
-    stmt.arg_.ddl_stmt_str_ = first_stmt;
-    OZ(common_rpc_proxy->alter_database(stmt.arg_));
-  }
-
   return ret;
 }
 

@@ -545,15 +545,6 @@ int ObGtsSource::query_gts_(const ObAddr &leader)
 int ObGtsSource::refresh_gts_location_()
 {
   int ret = OB_SUCCESS;
-  gts_cache_leader_.reset();
-  if (refresh_location_interval_.reach()) {
-    const int64_t cluster_id = GCONF.cluster_id;
-    if (OB_FAIL(location_adapter_->nonblock_renew(cluster_id, tenant_id_, GTS_LS))) {
-      TRANS_LOG(WARN, "gts nonblock renew error", KR(ret), K(GTS_LS));
-    } else {
-      TRANS_LOG(INFO, "gts nonblock renew success", K(ret), K_(tenant_id), K_(gts_local_cache));
-    }
-  }
   return ret;
 }
 

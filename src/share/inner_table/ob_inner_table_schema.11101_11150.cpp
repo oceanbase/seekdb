@@ -169,51 +169,6 @@ int ObInnerTableSchema::all_virtual_dag_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("dag_type", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -364,16 +319,6 @@ int ObInnerTableSchema::all_virtual_dag_schema(ObTableSchema &table_schema)
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -421,51 +366,6 @@ int ObInnerTableSchema::all_virtual_dag_scheduler_schema(ObTableSchema &table_sc
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("value_type", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -508,16 +408,6 @@ int ObInnerTableSchema::all_virtual_dag_scheduler_schema(ObTableSchema &table_sc
       -1, //column_scale
       false, //is_nullable
       false); //is_autoincrement
-  }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
   }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
@@ -564,66 +454,6 @@ int ObInnerTableSchema::all_virtual_server_compaction_progress_schema(ObTableSch
   table_schema.set_part_level(PARTITION_LEVEL_ZERO);
   table_schema.set_charset_type(ObCharset::get_default_charset());
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("zone", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_ZONE_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
 
   if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("type", //column_name
@@ -791,16 +621,6 @@ int ObInnerTableSchema::all_virtual_server_compaction_progress_schema(ObTableSch
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -848,51 +668,6 @@ int ObInnerTableSchema::all_virtual_tablet_compaction_progress_schema(ObTableSch
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("type", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -901,21 +676,6 @@ int ObInnerTableSchema::all_virtual_tablet_compaction_progress_schema(ObTableSch
       ObVarcharType, //column_type
       CS_TYPE_INVALID, //column_collation_type
       OB_MERGE_TYPE_STR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("ls_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
       -1, //column_precision
       -1, //column_scale
       false, //is_nullable
@@ -1104,16 +864,6 @@ int ObInnerTableSchema::all_virtual_tablet_compaction_progress_schema(ObTableSch
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -1161,51 +911,6 @@ int ObInnerTableSchema::all_virtual_compaction_diagnose_info_schema(ObTableSchem
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("type", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -1214,21 +919,6 @@ int ObInnerTableSchema::all_virtual_compaction_diagnose_info_schema(ObTableSchem
       ObVarcharType, //column_type
       CS_TYPE_INVALID, //column_collation_type
       OB_MERGE_TYPE_STR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("ls_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
       -1, //column_precision
       -1, //column_scale
       false, //is_nullable
@@ -1295,16 +985,6 @@ int ObInnerTableSchema::all_virtual_compaction_diagnose_info_schema(ObTableSchem
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -1352,51 +1032,6 @@ int ObInnerTableSchema::all_virtual_compaction_suggestion_schema(ObTableSchema &
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("type", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -1405,21 +1040,6 @@ int ObInnerTableSchema::all_virtual_compaction_suggestion_schema(ObTableSchema &
       ObVarcharType, //column_type
       CS_TYPE_INVALID, //column_collation_type
       OB_MERGE_TYPE_STR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("ls_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
       -1, //column_precision
       -1, //column_scale
       false, //is_nullable
@@ -1486,16 +1106,6 @@ int ObInnerTableSchema::all_virtual_compaction_suggestion_schema(ObTableSchema &
       -1, //column_scale
       false, //is_nullable
       false); //is_autoincrement
-  }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
   }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
@@ -1714,51 +1324,6 @@ int ObInnerTableSchema::all_virtual_session_info_schema(ObTableSchema &table_sch
   }
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("sql_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("proxy_sessid", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -1964,16 +1529,6 @@ int ObInnerTableSchema::all_virtual_session_info_schema(ObTableSchema &table_sch
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -2019,66 +1574,6 @@ int ObInnerTableSchema::all_virtual_tablet_compaction_history_schema(ObTableSche
   table_schema.set_part_level(PARTITION_LEVEL_ZERO);
   table_schema.set_charset_type(ObCharset::get_default_charset());
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("ls_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
 
   if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("tablet_id", //column_name
@@ -2591,16 +2086,6 @@ int ObInnerTableSchema::all_virtual_tablet_compaction_history_schema(ObTableSche
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -2646,36 +2131,6 @@ int ObInnerTableSchema::all_virtual_io_calibration_status_schema(ObTableSchema &
   table_schema.set_part_level(PARTITION_LEVEL_ZERO);
   table_schema.set_charset_type(ObCharset::get_default_charset());
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
 
   if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("storage_name", //column_name
@@ -2738,16 +2193,6 @@ int ObInnerTableSchema::all_virtual_io_calibration_status_schema(ObTableSchema &
       false, //is_autoincrement
       false); //is_on_update_for_timestamp
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -2793,36 +2238,6 @@ int ObInnerTableSchema::all_virtual_io_benchmark_schema(ObTableSchema &table_sch
   table_schema.set_part_level(PARTITION_LEVEL_ZERO);
   table_schema.set_charset_type(ObCharset::get_default_charset());
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
 
   if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("storage_name", //column_name
@@ -2913,16 +2328,6 @@ int ObInnerTableSchema::all_virtual_io_benchmark_schema(ObTableSchema &table_sch
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -2968,51 +2373,6 @@ int ObInnerTableSchema::all_virtual_io_quota_schema(ObTableSchema &table_schema)
   table_schema.set_part_level(PARTITION_LEVEL_ZERO);
   table_schema.set_charset_type(ObCharset::get_default_charset());
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
 
   if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("group_id", //column_name
@@ -3193,16 +2553,6 @@ int ObInnerTableSchema::all_virtual_io_quota_schema(ObTableSchema &table_schema)
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -3248,66 +2598,6 @@ int ObInnerTableSchema::all_virtual_server_compaction_event_history_schema(ObTab
   table_schema.set_part_level(PARTITION_LEVEL_ZERO);
   table_schema.set_charset_type(ObCharset::get_default_charset());
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("zone", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_ZONE_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
 
   if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("type", //column_name
@@ -3384,16 +2674,6 @@ int ObInnerTableSchema::all_virtual_server_compaction_event_history_schema(ObTab
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -3439,66 +2719,6 @@ int ObInnerTableSchema::all_virtual_tablet_stat_schema(ObTableSchema &table_sche
   table_schema.set_part_level(PARTITION_LEVEL_ZERO);
   table_schema.set_charset_type(ObCharset::get_default_charset());
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("ls_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
 
   if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("tablet_id", //column_name
@@ -3679,16 +2899,6 @@ int ObInnerTableSchema::all_virtual_tablet_stat_schema(ObTableSchema &table_sche
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -3841,51 +3051,6 @@ int ObInnerTableSchema::all_virtual_ddl_sim_point_stat_schema(ObTableSchema &tab
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
-      ++column_id, //column_id
-      0, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("ddl_task_id", //column_name
       ++column_id, //column_id
       0, //rowkey_id
@@ -3929,16 +3094,6 @@ int ObInnerTableSchema::all_virtual_ddl_sim_point_stat_schema(ObTableSchema &tab
       false, //is_nullable
       false); //is_autoincrement
   }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
-  }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);
   table_schema.set_store_format(OB_STORE_FORMAT_DYNAMIC_MYSQL);
@@ -3964,7 +3119,7 @@ int ObInnerTableSchema::all_virtual_res_mgr_sysstat_schema(ObTableSchema &table_
   table_schema.set_rowkey_split_pos(0);
   table_schema.set_is_use_bloomfilter(false);
   table_schema.set_progressive_merge_num(0);
-  table_schema.set_rowkey_column_num(5);
+  table_schema.set_rowkey_column_num(2);
   table_schema.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
   table_schema.set_table_type(VIRTUAL_TABLE);
   table_schema.set_index_type(INDEX_TYPE_IS_NOT);
@@ -3986,7 +3141,7 @@ int ObInnerTableSchema::all_virtual_res_mgr_sysstat_schema(ObTableSchema &table_
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("tenant_id", //column_name
+    ADD_COLUMN_SCHEMA("group_id", //column_name
       ++column_id, //column_id
       1, //rowkey_id
       0, //index_id
@@ -4001,54 +3156,9 @@ int ObInnerTableSchema::all_virtual_res_mgr_sysstat_schema(ObTableSchema &table_
   }
 
   if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("group_id", //column_name
-      ++column_id, //column_id
-      2, //rowkey_id
-      0, //index_id
-      0, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_ip", //column_name
-      ++column_id, //column_id
-      3, //rowkey_id
-      0, //index_id
-      1, //part_key_pos
-      ObVarcharType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      MAX_IP_ADDR_LENGTH, //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
-    ADD_COLUMN_SCHEMA("svr_port", //column_name
-      ++column_id, //column_id
-      4, //rowkey_id
-      0, //index_id
-      2, //part_key_pos
-      ObIntType, //column_type
-      CS_TYPE_INVALID, //column_collation_type
-      sizeof(int64_t), //column_length
-      -1, //column_precision
-      -1, //column_scale
-      false, //is_nullable
-      false); //is_autoincrement
-  }
-
-  if (OB_SUCC(ret)) {
     ADD_COLUMN_SCHEMA("statistic#", //column_name
       ++column_id, //column_id
-      5, //rowkey_id
+      2, //rowkey_id
       0, //index_id
       0, //part_key_pos
       ObIntType, //column_type
@@ -4148,16 +3258,6 @@ int ObInnerTableSchema::all_virtual_res_mgr_sysstat_schema(ObTableSchema &table_
       -1, //column_scale
       false, //is_nullable
       false); //is_autoincrement
-  }
-  if (OB_SUCC(ret)) {
-    table_schema.get_part_option().set_part_num(1);
-    table_schema.set_part_level(PARTITION_LEVEL_ONE);
-    table_schema.get_part_option().set_part_func_type(PARTITION_FUNC_TYPE_LIST_COLUMNS);
-    if (OB_FAIL(table_schema.get_part_option().set_part_expr("svr_ip, svr_port"))) {
-      LOG_WARN("set_part_expr failed", K(ret));
-    } else if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("mock list partition array failed", K(ret));
-    }
   }
   table_schema.set_index_using_type(USING_HASH);
   table_schema.set_row_store_type(ENCODING_ROW_STORE);

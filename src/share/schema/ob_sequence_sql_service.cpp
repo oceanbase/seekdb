@@ -353,9 +353,7 @@ int ObSequenceSqlService::replace_sequence(const ObSequenceSchema &sequence_sche
       ObDMLExecHelper exec(*sql_client, exec_tenant_id);
       ObDMLSqlSplicer dml;
       if (!is_rename) {
-        if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                   exec_tenant_id, tenant_id)))
-            || OB_FAIL(dml.add_pk_column("sequence_id", ObSchemaUtils::get_extract_schema_id(
+        if (OB_FAIL(dml.add_pk_column("sequence_id", ObSchemaUtils::get_extract_schema_id(
                                                         exec_tenant_id, sequence_id)))
             || OB_FAIL(dml.add_column("min_value", sequence_schema.get_min_value()))
             || OB_FAIL(dml.add_column("max_value", sequence_schema.get_max_value()))
@@ -373,9 +371,7 @@ int ObSequenceSqlService::replace_sequence(const ObSequenceSchema &sequence_sche
           }
         }
       } else { // rename sequence
-        if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                   exec_tenant_id, tenant_id)))
-            || OB_FAIL(dml.add_pk_column("sequence_id", ObSchemaUtils::get_extract_schema_id(
+        if (OB_FAIL(dml.add_pk_column("sequence_id", ObSchemaUtils::get_extract_schema_id(
                                                         exec_tenant_id, sequence_id)))
             || OB_FAIL(dml.add_column("sequence_name", ObHexEscapeSqlStr(sequence_schema.get_sequence_name())))
             || OB_FAIL(dml.add_column("schema_version", sequence_schema.get_schema_version()))
@@ -464,10 +460,9 @@ int ObSequenceSqlService::delete_sequence(const uint64_t tenant_id,
   } else {
     // insert into __all_sequence_object_history
     if (FAILEDx(sql.assign_fmt(
-                "INSERT INTO %s(tenant_id, sequence_id,schema_version,is_deleted)"
-                " VALUES(%lu,%lu,%ld,%ld)",
+                "INSERT INTO %s(sequence_id,schema_version,is_deleted)"
+                " VALUES(%lu,%ld,%ld)",
                 OB_ALL_SEQUENCE_OBJECT_HISTORY_TNAME,
-                ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                 ObSchemaUtils::get_extract_schema_id(exec_tenant_id, sequence_id),
                 new_schema_version, IS_DELETED))) {
       LOG_WARN("assign insert into all sequence history fail",
@@ -480,9 +475,8 @@ int ObSequenceSqlService::delete_sequence(const uint64_t tenant_id,
     }
 
     // delete from __all_sequence_object
-    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %ld AND sequence_id=%lu",
+    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE sequence_id=%lu",
                                OB_ALL_SEQUENCE_OBJECT_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                ObSchemaUtils::get_extract_schema_id(exec_tenant_id, sequence_id)))) {
       LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client->write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -581,8 +575,6 @@ int ObSequenceSqlService::add_sequence(common::ObISQLClient &sql_client,
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
       STORAGE_LOG(WARN, "append table name failed, ", K(ret));
     } else {
-      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_tenant_id(
-                                        exec_tenant_id, sequence_schema.get_tenant_id()), "tenant_id", "%lu");
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
                                         exec_tenant_id, sequence_schema.get_sequence_id()), "sequence_id", "%lu");
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(

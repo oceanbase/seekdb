@@ -31,7 +31,6 @@
 #include "share/ob_ls_id.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_storage_format.h"
-#include "share/ob_tenant_info_proxy.h"
 #include "share/schema/ob_table_param.h"
 #include "storage/mockcontainer/mock_ob_iterator.h"
 #include "mittest/mtlenv/mock_tenant_module_env.h"
@@ -157,12 +156,9 @@ int TestDmlCommon::create_ls(
   ObLSService *ls_svr = MTL(ObLSService*);
   bool b_exist = false;
   ObLS *ls = nullptr;
-  obrpc::ObCreateLSArg create_ls_arg;
 
-  if (OB_FAIL(gen_create_ls_arg(tenant_id, ls_id, create_ls_arg))) {
-    STORAGE_LOG(WARN, "failed to build create ls arg", K(ret), K(tenant_id), K(ls_id));
-  } else if (OB_FAIL(ls_svr->create_ls(create_ls_arg))) {
-    STORAGE_LOG(WARN, "failed to create ls", K(create_ls_arg));
+  if (OB_FAIL(ls_svr->create_ls())) {
+    STORAGE_LOG(WARN, "failed to create ls");
   } else if (OB_FAIL(ls_svr->check_ls_exist(ls_id, b_exist))) {
     STORAGE_LOG(WARN, "failed to check ls exist", K(ls_id));
   } else if (!b_exist) {
@@ -173,18 +169,6 @@ int TestDmlCommon::create_ls(
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls is null", K(ret), K(ls_handle));
-  }
-
-  // set member list
-  if (OB_SUCC(ret)) {
-    ObMemberList member_list;
-    const int64_t paxos_replica_num = 1;
-    (void) member_list.add_server(MockTenantModuleEnv::get_instance().self_addr_);
-    GlobalLearnerList learner_list;
-    if (OB_FAIL(ls->set_initial_member_list(member_list, paxos_replica_num, learner_list))) {
-      STORAGE_LOG(WARN, "failed to set initial member list", K(ret),
-          K(member_list), K(paxos_replica_num));
-    }
   }
 
   // check leader

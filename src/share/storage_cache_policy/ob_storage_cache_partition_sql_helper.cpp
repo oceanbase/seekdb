@@ -80,8 +80,7 @@ int ObAlterIncPartPolicyHelper::alter_partition_policy()
           } else if (OB_ISNULL(part_storage_cache_policy_str)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("part_storage_cache_policy_str is null", KR(ret));
-          } else if (OB_FAIL(dml.add_pk_column("tenant_id",ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
-              || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
+          } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
               || OB_FAIL(dml.add_pk_column("part_id", inc_part->get_part_id()))
               || OB_FAIL(dml.add_column("schema_version", schema_version_))
               || OB_FAIL(dml.add_column("storage_cache_policy", part_storage_cache_policy_str))) {
@@ -196,8 +195,7 @@ int ObAlterIncSubpartPolicyHelper::alter_subpartition_policy()
                 } else if (OB_ISNULL(subpart_storage_cache_policy_str)) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("subpart_storage_cache_policy_str is null", KR(ret));
-                } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
-                      ||OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
+                } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
                       ||OB_FAIL(dml.add_pk_column("part_id", inc_part->get_part_id()))
                       ||OB_FAIL(dml.add_pk_column("sub_part_id", inc_subpart->get_sub_part_id()))
                       ||OB_FAIL(dml.add_column("schema_version", schema_version_))

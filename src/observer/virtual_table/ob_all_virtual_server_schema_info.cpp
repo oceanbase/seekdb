@@ -59,16 +59,12 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
     LOG_WARN("invalid tenant_id", K(ret));
   } else {
     const uint64_t tenant_id = tenant_ids_[idx_];
-    const ObAddr &addr = GCTX.self_addr();
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
     int64_t received_schema_version = OB_INVALID_VERSION;
     int64_t schema_count = OB_INVALID_ID;
     int64_t schema_size = OB_INVALID_ID;
     share::schema::ObSchemaGetterGuard schema_guard;
-    if (false == addr.ip_to_string(ip_buffer_, sizeof(ip_buffer_))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to convert ip to string", K(ret), K(addr));
-    } else if (OB_FAIL(schema_service_.get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
+    if (OB_FAIL(schema_service_.get_tenant_refreshed_schema_version(tenant_id, refreshed_schema_version))) {
       LOG_WARN("fail to get tenant refreshed schema version", K(ret), K(tenant_id), K(refreshed_schema_version));
     } else if (OB_FAIL(schema_service_.get_tenant_received_broadcast_version(tenant_id, received_schema_version))) {
       LOG_WARN("fail to get tenant receieved schema version", K(ret), K(tenant_id), K(received_schema_version));
@@ -81,47 +77,33 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
       }
     }
 
+    // Column order after removing svr_ip and svr_port:
+    // OB_APP_MIN_COLUMN_ID (16): refreshed_schema_version
+    // OB_APP_MIN_COLUMN_ID + 1 (17): received_schema_version
+    // OB_APP_MIN_COLUMN_ID + 2 (18): schema_count
+    // OB_APP_MIN_COLUMN_ID + 3 (19): schema_size
+    // OB_APP_MIN_COLUMN_ID + 4 (20): min_sstable_schema_version
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case OB_APP_MIN_COLUMN_ID: { // svr_ip
-          cur_row_.cells_[i].set_varchar(ObString::make_string(ip_buffer_));
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
-                                                ObCharset::get_default_charset()));
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 1: { // svr_port
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(addr.get_port()));
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 2: { // tenant_id
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(tenant_id));
-          break;
-        }
-        case OB_APP_MIN_COLUMN_ID + 3: { // refreshed_schema_version
+        case OB_APP_MIN_COLUMN_ID: { // refreshed_schema_version
           cur_row_.cells_[i].set_int(refreshed_schema_version);
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 4: { // received_schema_version
+        case OB_APP_MIN_COLUMN_ID + 1: { // received_schema_version
           cur_row_.cells_[i].set_int(received_schema_version);
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 5: { // schema_count
+        case OB_APP_MIN_COLUMN_ID + 2: { // schema_count
           cur_row_.cells_[i].set_int(schema_count);
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 6: { // schema_size
-          int tmp_ret = OB_SUCCESS;
-          if (OB_SUCCESS != (tmp_ret = schema_guard.get_schema_size(tenant_id, schema_size))) {
-            cur_row_.cells_[i].set_int(OB_INVALID_ID);
-            LOG_WARN("fail to get schema size", K(tmp_ret), K(tenant_id));
-          } else {
-            cur_row_.cells_[i].set_int(schema_size);
-          }
+        case OB_APP_MIN_COLUMN_ID + 3: { // schema_size
+          cur_row_.cells_[i].set_int(schema_size);
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 7: { // min_schema_version
+        case OB_APP_MIN_COLUMN_ID + 4: { // min_sstable_schema_version
           cur_row_.cells_[i].set_int(OB_INVALID_VERSION);
           break;
         }

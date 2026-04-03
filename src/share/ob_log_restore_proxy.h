@@ -28,7 +28,6 @@
 #include "lib/mysqlclient/ob_mysql_connection_pool.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_tenant_role.h"
-#include "share/ob_root_addr_agent.h"//ObRootAddr
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_tenant_switchover_status.h"
 #include "logservice/palf/palf_options.h"
@@ -141,18 +140,23 @@ public:
   // get log restore source tenant_mode, oracle or mysql
   int get_compatibility_mode(const uint64_t tenant_id, ObCompatibilityMode &compat_mode);
   // get log restore source tenant access point
-  int get_server_ip_list(const uint64_t tenant_id, common::ObArray<common::ObAddr> &addrs);
+  int get_server_ip_list(const uint64_t tenant_id, common::ObIArray<common::ObAddr> &addrs);
   //get tenant server ip and prot
   //param[in] tenant_id : primary tenant_id
   int get_server_addr(const uint64_t tenant_id, common::ObIArray<common::ObAddr> &addrs);
   int check_begin_lsn(const uint64_t tenant_id);
-  // get log restore source tenant info, includes tenant role and tennat status
-  int get_tenant_info(ObTenantRole &role, schema::ObTenantStatus &status, ObTenantSwitchoverStatus &switchover_status);
   // get the access_mode and max_scn of the specific LS in log restore source tenant
   // get ls from dba_ob_ls
   // check if the source cluster has the same cluster id as current cluster, but they are actually 
   // two different clusters, if so, out param `res` will be true, otherwise false
   int check_different_cluster_with_same_cluster_id(const int64_t source_cluster_id, bool &res);
+  int get_max_log_info(const ObLSID &id, palf::AccessMode &mode, SCN &scn);
+  int get_sql_proxy(common::ObMySQLProxy *&proxy);
+  int refresh_conn(const common::ObIArray<common::ObAddr> &addr_array,
+  const char *user_name,
+  const char *user_password,
+  const char *db_name);
+  int is_ls_existing(const ObLSID &id) { return OB_SUCCESS; }
 private:
   // check if user or password changed
   bool is_user_changed_(const char *user_name, const char *user_password);

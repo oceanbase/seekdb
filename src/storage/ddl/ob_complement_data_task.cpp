@@ -26,6 +26,7 @@
 #include "storage/ddl/ob_tablet_split_task.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "deps/oblib/src/lib/charset/ob_charset.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "storage/ddl/ob_pipeline.h"
@@ -92,7 +93,7 @@ int ObComplementDataParam::fill_tablet_param()
   } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create]*/))) {
     LOG_WARN("failed to create ddl kv mgr", K(ret));
   } else {
-    tablet_param_.tablet_transfer_seq_ = tablet_handle.get_obj()->get_tablet_meta().transfer_info_.transfer_seq_;
+    tablet_param_.tablet_transfer_seq_ = 0;
     tablet_param_.is_micro_index_clustered_ = tablet_handle.get_obj()->get_tablet_meta().micro_index_clustered_;
     ObTabletBindingMdsUserData mds_data;
     if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(share::SCN::max_scn(), mds_data))) {
@@ -106,7 +107,7 @@ int ObComplementDataParam::fill_tablet_param()
         LOG_WARN("load storage schema failed", K(ret));
       } else {
         lob_meta_tablet_param_.with_cs_replica_ = false;
-        lob_meta_tablet_param_.tablet_transfer_seq_ = lob_meta_tablet_handle.get_obj()->get_tablet_meta().transfer_info_.transfer_seq_;
+        lob_meta_tablet_param_.tablet_transfer_seq_ = 0;
         lob_meta_tablet_param_.is_micro_index_clustered_ = lob_meta_tablet_handle.get_obj()->get_tablet_meta().micro_index_clustered_;
         ObDDLKvMgrHandle lob_ddl_kv_mgr_handle;
         if (OB_FAIL(lob_meta_tablet_handle.get_obj()->get_ddl_kv_mgr(lob_ddl_kv_mgr_handle, true /*try_create]*/))) {
@@ -861,7 +862,7 @@ int ObComplementDataDag::report_replica_build_status()
     }
 #endif
     obrpc::ObDDLBuildSingleReplicaResponseArg arg;
-    ObAddr rs_addr;
+    ObAddr rs_addr = GCTX.self_addr();
     arg.tenant_id_ = param_.orig_tenant_id_;
     arg.dest_tenant_id_ = param_.dest_tenant_id_;
     arg.ls_id_ = param_.orig_ls_id_;
@@ -880,11 +881,9 @@ int ObComplementDataDag::report_replica_build_status()
     arg.server_addr_ = GCTX.self_addr();
     FLOG_INFO("send replica build status response to RS", K(ret), K(context_), K(arg));
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_) || OB_ISNULL(GCTX.rs_mgr_)) {
+    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
       ret = OB_ERR_SYS;
       LOG_WARN("innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
-    } else if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_addr))) {
-      LOG_WARN("fail to get rootservice address", K(ret));
     } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
     }

@@ -228,9 +228,7 @@ int TestSSMetaService::build_update_table_store_param_(ObArenaAllocator &allocat
     param.sstable_ = sstable;
     param.allow_duplicate_sstable_ = true;
 
-    if (FAILEDx(param.init_with_ha_info(ObHATableStoreParam(
-            tablet_handle.get_obj()->get_tablet_meta().transfer_info_.transfer_seq_,
-            true /*need_check_transfer_seq*/)))) {
+    if (FAILEDx(param.init_with_ha_info(ObHATableStoreParam()))) {
       LOG_WARN("failed to init with ha info", KR(ret));
     } else if (OB_FAIL(param.init_with_compaction_info(ObCompactionTableStoreParam(
                       merge_type,

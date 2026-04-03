@@ -103,10 +103,10 @@ int ObITableMetaHandler::get_tablet_boundary_internal(ObIAllocator &allocator,
   } else {
     if (table_schema.is_range_part() && table_schema.get_part_level() == PARTITION_LEVEL_ONE) {
       const char *PARTITION_BOUNDARY_SQL = "SELECT table_id, tablet_id, high_bound_val AS upperbound \
-                                        FROM __all_virtual_part WHERE tenant_id = %d and table_id = %d and tablet_id in (%.*s) \
+                                        FROM __all_virtual_part WHERE table_id = %d and tablet_id in (%.*s) \
                                         ORDER BY tablet_id;";
       const char *PARTITION_BOUNDARY_SUBPART_SQL = "SELECT table_id, tablet_id, high_bound_val AS upperbound \
-                                          FROM __all_virtual_sub_part WHERE tenant_id = %d and table_id = %d and tablet_id in (%.*s) \
+                                          FROM __all_virtual_sub_part WHERE table_id = %d and tablet_id in (%.*s) \
                                           ORDER BY tablet_id;";
       const char* sql_template = table_schema.get_part_level() == PARTITION_LEVEL_ONE ? PARTITION_BOUNDARY_SQL
                                                                                       : PARTITION_BOUNDARY_SUBPART_SQL;
@@ -119,7 +119,6 @@ int ObITableMetaHandler::get_tablet_boundary_internal(ObIAllocator &allocator,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to format tablet ids", K(ret));
         } else if (OB_FAIL(sql.assign_fmt(sql_template,
-                                          MTL_ID(),
                                           table_schema.get_table_id(),
                                           strlen(tablet_ids_str),
                                           tablet_ids_str))) {
@@ -608,35 +607,34 @@ int ObHTableRegionLocatorHandler::get_tablet_location(ObTableExecCtx &ctx)
               LOG_WARN("result is null", K(ret), K(sql.string()));
             } else {
               int64_t tablet_id = 0;
-              ObString svr_ip;
-              int64_t svr_port = 0;
               int64_t role = 0;
               while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-                svr_ip.reset();
-                svr_port = 0;
                 role = 0;
                 EXTRACT_INT_FIELD_MYSQL(*result, "tablet_id", tablet_id, int64_t);
-                EXTRACT_VARCHAR_FIELD_MYSQL(*result, "svr_ip", svr_ip);
-                EXTRACT_INT_FIELD_MYSQL(*result, "svr_port", svr_port, int64_t);
                 EXTRACT_INT_FIELD_MYSQL(*result, "role", role, int64_t);
-                ObString svr_ip_deep_copy;
                 TabletLocation *location = nullptr;
                 if (OB_FAIL(ret)) {
-                } else if (tablet_id == 0 || svr_ip.empty() || svr_port == 0 || role == 0) {
+                } else if (tablet_id == 0 || role == 0) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid tablet info", K(ret), K(tablet_id), K(svr_ip), K(svr_port), K(role));
-                } else if (OB_FAIL(ob_write_string(allocator_, svr_ip, svr_ip_deep_copy))) {
-                  LOG_WARN("failed to write svr ip", K(ret));
+                  LOG_WARN("invalid tablet info", K(ret), K(tablet_id), K(role));
                 } else {
-                  int64_t index = OB_INVALID_ID;
-                  if (OB_FAIL(binary_search_tablet_info_idx(tablet_id, index))) {
-                    LOG_WARN("failed to binary search tablet info", K(ret), K(index), K(tablet_id));
-                  } else if (OB_ISNULL(location = OB_NEWx(TabletLocation, &allocator_, svr_ip_deep_copy, svr_port, role))) {
-                    ret = OB_ALLOCATE_MEMORY_FAILED;
-                    LOG_WARN("failed to allocate memory", K(ret));
-                  } else if (OB_FAIL(tablet_infos_[index]->replicas_.push_back(location))) {
-                    OB_DELETEx(TabletLocation, &allocator_, location);
-                    LOG_WARN("failed to push back tablet location", K(ret));
+                  // Use self address for single-node deployment
+                  ObString svr_ip = ObString::make_string("");
+                  int64_t svr_port = GCTX.self_addr().get_port();
+                  ObString svr_ip_deep_copy;
+                  if (OB_FAIL(ob_write_string(allocator_, svr_ip, svr_ip_deep_copy))) {
+                    LOG_WARN("failed to write svr ip", K(ret));
+                  } else {
+                    int64_t index = OB_INVALID_ID;
+                    if (OB_FAIL(binary_search_tablet_info_idx(tablet_id, index))) {
+                      LOG_WARN("failed to binary search tablet info", K(ret), K(index), K(tablet_id));
+                    } else if (OB_ISNULL(location = OB_NEWx(TabletLocation, &allocator_, svr_ip_deep_copy, svr_port, role))) {
+                      ret = OB_ALLOCATE_MEMORY_FAILED;
+                      LOG_WARN("failed to allocate memory", K(ret));
+                    } else if (OB_FAIL(tablet_infos_[index]->replicas_.push_back(location))) {
+                      OB_DELETEx(TabletLocation, &allocator_, location);
+                      LOG_WARN("failed to push back tablet location", K(ret));
+                    }
                   }
                 }
               }
@@ -645,9 +643,9 @@ int ObHTableRegionLocatorHandler::get_tablet_location(ObTableExecCtx &ctx)
               }
             }
           }
-        }
-        if (OB_NOT_NULL(tablet_ids_str)) {
-          allocator_.free(tablet_ids_str);
+          if (OB_NOT_NULL(tablet_ids_str)) {
+            allocator_.free(tablet_ids_str);
+          }
         }
       }
     }

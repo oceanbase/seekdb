@@ -22,9 +22,6 @@
 #include <parquet/api/writer.h>
 #include <parquet/exception.h>
 #include <cmath>
-#include <orc/Writer.hh>
-#include <orc/OrcFile.hh>
-#include <orc/Type.hh>
 #include <memory>
 
 #include "ob_select_into_op.h"
@@ -106,9 +103,7 @@ int ObSelectIntoOp::inner_open()
       }
       case ObExternalFileFormat::FormatType::ORC_FORMAT:
       {
-        if (OB_FAIL(init_orc_env())) {
-          LOG_WARN("failed to init csv env", K(ret));
-        }
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       default:
@@ -210,27 +205,6 @@ int ObSelectIntoOp::init_parquet_env()
   return ret;
 }
 
-int ObSelectIntoOp::init_orc_env()
-{
-  int ret = OB_SUCCESS;
-  orc_alloc_.init(MTL_ID());
-  if (OB_FAIL(setup_orc_schema())) {
-    LOG_WARN("failed to set up orc schema", K(ret));
-  } else if (OB_FAIL(init_env_common())) {
-    LOG_WARN("failed to init env common", K(ret));
-  } else if (external_properties_.orc_format_.compression_block_size_ < 100) { // parameter guard
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("compress block is too low or too high", K(external_properties_.orc_format_.compression_block_size_));
-  } else {
-    options_.setStripeSize(external_properties_.orc_format_.stripe_size_)
-            .setRowIndexStride(external_properties_.orc_format_.row_index_stride_)
-            .setCompressionBlockSize(external_properties_.orc_format_.compression_block_size_)
-            .setCompression(static_cast<orc::CompressionKind>(external_properties_.orc_format_.compress_type_index_))
-            .setMemoryPool(&orc_alloc_);
-  }
-  return ret;
-}
-
 int ObSelectIntoOp::init_env_common()
 {
   int ret = OB_SUCCESS;
@@ -258,7 +232,7 @@ int ObSelectIntoOp::init_env_common()
     LOG_WARN("failed to create hashmap", K(ret));
   } else if (MY_SPEC.select_exprs_.count() != MY_SPEC.alias_names_.strs_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected column count", K(MY_SPEC.select_exprs_.count()), 
+    LOG_WARN("get unexpected column count", K(MY_SPEC.select_exprs_.count()),
               K(MY_SPEC.alias_names_.strs_.count()), K(ret));
   }
   return ret;
@@ -415,8 +389,7 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
   //when do_partition is false, create the only data_writer here
   if (OB_SUCC(ret) && T_INTO_VARIABLES != into_type && !do_partition_
       && (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_
-          || ObExternalFileFormat::FormatType::PARQUET_FORMAT == format_type_
-          || ObExternalFileFormat::FormatType::ORC_FORMAT == format_type_)) {
+          || ObExternalFileFormat::FormatType::PARQUET_FORMAT == format_type_)) {
     if (OB_FAIL(create_the_only_data_writer(data_writer))) {
       LOG_WARN("failed to create the only data writer", K(ret));
     } else if (OB_ISNULL(data_writer)) {
@@ -460,9 +433,7 @@ int ObSelectIntoOp::inner_get_next_batch(const int64_t max_row_cnt)
               LOG_WARN("parquet into outfile batch failed", K(ret));
             }
           } else if (ObExternalFileFormat::FormatType::ORC_FORMAT == format_type_) {
-            if (OB_FAIL(into_outfile_batch_orc(brs_, data_writer))) {
-              LOG_WARN("orc into outfile batch failed", K(ret));
-            }
+            ret = OB_NOT_SUPPORTED;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support to write into outfile format.", K(ret), K(format_type_));
@@ -552,7 +523,7 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
   char closed_cht = char_enclose_;
   //before 4_1 use output
   //after 4_1 use select exprs
-  const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ? 
+  const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ?
                                            MY_SPEC.output_ : MY_SPEC.select_exprs_;
   if (!is_first_row && line_str_.is_varying_len_char_type()) { // lines terminated by "a"
     ret = databuff_printf(buf, buf_len, pos, "%.*s", line_str_.get_varchar().length(),
@@ -940,7 +911,7 @@ int ObSelectIntoOp::print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWri
       } else {
         print_params_.coll_meta_ = reinterpret_cast<ObSqlCollectionInfo *>(sub_meta.value_);
       }
-    } 
+    }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(print_json_to_json_buf(inrow_obj, buf, buf_len, pos, data_writer))) {
       LOG_WARN("failed to print normal obj without escape", K(ret));
@@ -1527,111 +1498,6 @@ int ObSelectIntoOp::calc_parquet_decimal_length(int precision)
 }
 
 
-int ObSelectIntoOp::orc_type_mapping_of_ob_type(ObDatumMeta& meta, int max_length, std::unique_ptr<orc::Type>& orc_type)
-{
-  int ret = OB_SUCCESS;
-  ObObjType obj_type = meta.get_type();
-  int precision = 0;
-  int scale = 0;
-  int int_bytes = 0;
-  if (ObTinyIntType == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::BYTE);
-  } else if (ObSmallIntType == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::SHORT);
-  } else if (ObMediumIntType == obj_type || ObInt32Type == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::INT);
-  } else if (ObIntType == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::LONG);
-  } else if (ObFloatType == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::FLOAT);
-  } else if (ObDoubleType == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::DOUBLE);
-  } else if (ob_is_number_or_decimal_int_tc(obj_type)) {
-    if (OB_FAIL(check_oracle_number(obj_type, meta.precision_, meta.scale_))) {
-      LOG_WARN("not support number type", K(ret));
-    } else {
-      int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(meta.precision_);
-      if (int_bytes <= sizeof(int128_t)) {
-        orc_type = orc::createDecimalType(meta.precision_, meta.scale_);
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type is not supported in orc");
-        LOG_WARN("unsupport type in orc", K(obj_type), K(int_bytes));
-      }
-    }
-  } else if (ObTimestampType == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::TIMESTAMP_INSTANT);
-  } else if (ob_is_datetime_or_mysql_datetime(obj_type)) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::TIMESTAMP);
-  } else if (ob_is_date_or_mysql_date(obj_type)) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::DATE);
-  } else if (ObVarcharType == obj_type && meta.cs_type_ != CS_TYPE_BINARY) {
-    orc_type = orc::createCharType(orc::TypeKind::VARCHAR, max_length);
-  } else if (ObCharType == obj_type && meta.cs_type_ != CS_TYPE_BINARY) {
-    orc_type = orc::createCharType(orc::TypeKind::CHAR, max_length);
-  } else if (ObYearType == obj_type) {
-    orc_type = orc::createPrimitiveType(orc::TypeKind::INT);
-  } else if (ObNullType == obj_type
-             || (CS_TYPE_BINARY == meta.cs_type_ && ob_is_string_type(obj_type))) {
-    orc_type = orc::createCharType(orc::TypeKind::BINARY, max_length);
-  } else if (CS_TYPE_BINARY != meta.cs_type_ && ob_is_string_type(obj_type)) { // not binary
-    orc_type = orc::createCharType(orc::TypeKind::STRING, max_length);
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupport type in orc", K(obj_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "unsupported column type in orc file");
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::create_orc_schema(std::unique_ptr<orc::Type> &schema)
-{
-  int ret = OB_SUCCESS;
-  const ObIArray<ObExpr *> &select_exprs = MY_SPEC.select_exprs_;
-  if (schema == nullptr) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema is not null", K(ret));
-  }
-  
-  for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); i++) {
-    ObString alias_name = MY_SPEC.alias_names_.strs_.at(i);
-    std::string column_name(alias_name.ptr(), alias_name.length());
-    std::unique_ptr<orc::Type> column_type;
-    if (OB_FAIL(orc_type_mapping_of_ob_type(select_exprs.at(i)->datum_meta_,
-                                            select_exprs.at(i)->max_length_,
-                                            column_type))) {
-      LOG_WARN("unsupported type ob the column", K(ret));
-    } else {
-      try {
-        schema->addStructField(column_name, std::move(column_type));
-      } catch (...) {
-        ret = OB_ERR_FIELD_NOT_FOUND_PART;
-        LOG_WARN("failed to add struct field", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::setup_orc_schema()
-{
-  int ret = OB_SUCCESS;
-  try {
-    ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoOrc"));
-    orc_schema_ = orc::createStructType();
-    if (OB_FAIL(create_orc_schema(orc_schema_))) {
-      LOG_WARN("create orc schema failed", K(ret));
-    }
-  } catch (const std::exception& e) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("catch the exception in setup_orc_schema", K(ret), "execption", e.what());
-  } catch (...) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error in setup_orc_schema", K(ret));
-  }
-  return ret;
-}
-
 int ObSelectIntoOp::setup_parquet_schema()
 {
   int ret = OB_SUCCESS;
@@ -1834,236 +1700,6 @@ int ObSelectIntoOp::get_data_from_expr_vector(const common::ObIVector* expr_vect
       break;
     default:
       ret = OB_OBJ_TYPE_ERROR;
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::into_outfile_batch_orc(const ObBatchRows &brs, ObExternalFileWriter *data_writer)
-{
-  int ret = OB_SUCCESS;
-  const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
-  ObArray<common::ObIVector*> expr_vectors;
-  common::ObIVector* partition_vector;
-  int64_t file_size = 0;
-  orc::StructVectorBatch *root = NULL;
-  ObOrcFileWriter *orc_data_writer = NULL;
-  ObSQLMode sql_mode = eval_ctx_.exec_ctx_.get_my_session()->get_sql_mode();
-  ObDateSqlMode date_sql_mode;
-  date_sql_mode.init(sql_mode);
-  bool is_strict_mode = common::is_strict_mode(sql_mode);
-  for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
-    if (OB_ISNULL(select_exprs.at(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
-    } else if (OB_FAIL(select_exprs.at(i)->eval_vector(eval_ctx_, brs))) {
-      LOG_WARN("failed to eval vector", K(ret));
-    } else if (OB_FAIL(expr_vectors.push_back(select_exprs.at(i)->get_vector(eval_ctx_)))) {
-      LOG_WARN("failed to push back vector", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && do_partition_) {
-    if (OB_FAIL(MY_SPEC.file_partition_expr_->eval_vector(eval_ctx_, brs))) {
-      LOG_WARN("failed to eval batch", K(ret));
-    } else if (OB_ISNULL(partition_vector = MY_SPEC.file_partition_expr_->get_vector(eval_ctx_))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null vector", K(ret));
-    }
-  }
-  for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < brs.size_; ++row_idx) {
-    if (brs.skip_->contain(row_idx)) {
-      // do nothing
-    } else if (do_partition_ && OB_FAIL(get_data_writer_for_partition(partition_vector->get_string(row_idx),
-                                                                      data_writer))) {
-      LOG_WARN("failed to set data writer for partition", K(ret));
-    } else if (OB_ISNULL(orc_data_writer = static_cast<ObOrcFileWriter*>(data_writer))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null data writer", K(ret));
-    } else if (orc_data_writer->is_file_writer_null()
-               && OB_FAIL(orc_data_writer->open_orc_file_writer(*orc_schema_, options_, brs.size_))) {
-      LOG_WARN("failed to init orc file writer", K(ret));
-    } else if (!orc_data_writer->is_valid_to_write(root)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("file writer unexpected null error", K(ret));
-    } else {
-      try {
-        for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < select_exprs.count(); col_idx++) {
-          if (OB_FAIL(build_orc_cell(select_exprs.at(col_idx)->datum_meta_,
-                                     select_exprs.at(col_idx)->obj_meta_,
-                                     expr_vectors.at(col_idx),
-                                     col_idx,
-                                     row_idx,
-                                     orc_data_writer->get_row_batch_offset(),
-                                     root->fields[col_idx],
-                                     orc_data_writer->get_batch_allocator(),
-                                     is_strict_mode,
-                                     date_sql_mode))) {
-            LOG_WARN("failed to build orc cell", K(ret));
-          }
-        }
-        orc_data_writer->set_batch_written(false);
-        orc_data_writer->increase_row_batch_offset();
-        if (OB_FAIL(ret)) {
-          // discard unwritten data if an error occurs
-          orc_data_writer->set_batch_written(true);
-          orc_data_writer->reset_row_batch_offset();
-        } else if (orc_data_writer->reach_batch_end()) {
-          if (OB_FAIL(orc_data_writer->write_file())) {
-            LOG_WARN("failed to write parquet row batch", K(ret));
-          } else if (OB_FAIL(check_orc_file_size(*orc_data_writer))) {
-            LOG_WARN("failed to check parquet file size", K(ret));
-          }
-          orc_data_writer->set_batch_written(true);
-          orc_data_writer->reset_row_batch_offset();
-        }
-      } catch (const std::exception& ex) {
-        if (OB_SUCC(ret)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("caught exception when write orc file", K(ret), "Info", ex.what());
-          LOG_USER_ERROR(OB_ERR_UNEXPECTED, ex.what());
-        }
-      } catch (...) {
-        if (OB_SUCC(ret)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("caught exception when write orc file", K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::build_orc_cell(const ObDatumMeta &datum_meta,
-                                   const ObObjMeta &obj_meta,
-                                   const common::ObIVector* expr_vector,
-                                   int64_t col_idx,
-                                   int64_t row_idx,
-                                   int64_t row_offset,
-                                   orc::ColumnVectorBatch* col_vector_batch,
-                                   ObIAllocator &allocator,
-                                   const bool is_strict_mode,
-                                   const ObDateSqlMode date_sql_mode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(col_vector_batch)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(col_idx), K(row_idx));
-  } else if (ob_is_integer_type(datum_meta.type_)
-             || ObYearType == datum_meta.type_
-             || ob_is_date_or_mysql_date(datum_meta.type_)) {
-    orc::LongVectorBatch *long_batch = static_cast<orc::LongVectorBatch *>(col_vector_batch);
-    if (expr_vector->is_null(row_idx)) {
-      col_vector_batch->hasNulls = true;
-      col_vector_batch->notNull[row_offset] = false;
-    } else {
-      col_vector_batch->notNull[row_offset] = true;
-      if (OB_FAIL(get_data_from_expr_vector(expr_vector, row_idx, datum_meta.type_,
-                            long_batch->data[row_offset], is_strict_mode, date_sql_mode))) {
-        LOG_WARN("faild to get data from expr vector", K(ret), K(col_idx), K(row_idx), K(datum_meta.type_));
-      }
-    }
-  } else if (ob_is_number_or_decimal_int_tc(datum_meta.type_)) {
-    int int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(datum_meta.precision_);
-    const ObDecimalInt* value;
-    ObDecimalIntBuilder tmp_dec_alloc;
-    ObDecimalInt* tmp_decimal;
-    if (expr_vector->is_null(row_idx)) {
-      col_vector_batch->hasNulls = true;
-      col_vector_batch->notNull[row_offset] = false;
-    } else {
-      col_vector_batch->notNull[row_offset] = true;
-      if (ob_is_decimal_int_tc(datum_meta.get_type())) {
-        value = expr_vector->get_decimal_int(row_idx);
-      } else if (ob_is_number_tc(datum_meta.get_type())) {
-        number::ObNumber number(expr_vector->get_number(row_idx));
-        if (OB_FAIL(wide::from_number_to_decimal_fixed_length(number, tmp_dec_alloc, datum_meta.scale_,
-                                                              int_bytes, tmp_decimal))){
-          LOG_WARN("failed to case number to decimal int", K(ret));
-        } else {
-          value = tmp_decimal;
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (int_bytes <= sizeof(int64_t)) {
-        orc::Decimal64VectorBatch *decimal64vectorbatch = static_cast<orc::Decimal64VectorBatch *>(col_vector_batch);
-        decimal64vectorbatch->precision = datum_meta.precision_;
-        decimal64vectorbatch->scale = datum_meta.scale_;
-        if (int_bytes == sizeof(int32_t)) {
-          decimal64vectorbatch->values[row_offset] = value->int32_v_[0];
-        } else {
-          decimal64vectorbatch->values[row_offset] = value->int64_v_[0];
-        }
-      } else if (int_bytes <= sizeof(int128_t)) {
-        orc::Decimal128VectorBatch *decimal128vectorbatch = static_cast<orc::Decimal128VectorBatch *>(col_vector_batch);
-        decimal128vectorbatch->precision = datum_meta.precision_;
-        decimal128vectorbatch->scale = datum_meta.scale_;
-        decimal128vectorbatch->values[row_offset] = orc::Int128(value->int128_v_[0] >> 64, value->int128_v_[0]);
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this decimal type for orc");
-        LOG_WARN("unsupport type for orc", K(datum_meta.type_), K(datum_meta.precision_), K(int_bytes));
-      }
-    }
-  } else if (ObDoubleType == datum_meta.type_ || ObFloatType == datum_meta.type_) {
-    orc::DoubleVectorBatch *double_vector_batch = static_cast<orc::DoubleVectorBatch *>(col_vector_batch);
-    if (expr_vector->is_null(row_idx)) {
-      col_vector_batch->hasNulls = true;
-      col_vector_batch->notNull[row_offset] = false;
-    } else {
-      col_vector_batch->notNull[row_offset] = true;
-      double value = (datum_meta.type_ == ObDoubleType)
-                     ? expr_vector->get_double(row_idx)
-                     : expr_vector->get_float(row_idx);
-      double_vector_batch->data[row_offset] = value;
-    }
-  } else if (ob_is_text_tc(datum_meta.type_) || ob_is_string_tc(datum_meta.type_) || ObNullType == datum_meta.type_) {
-    orc::StringVectorBatch * string_vector_batch = static_cast<orc::StringVectorBatch *>(col_vector_batch);
-    bool has_lob_header = obj_meta.has_lob_header();
-    char *buf = nullptr;
-    uint32_t res_len = 0;
-    if (expr_vector->is_null(row_idx)) {
-      col_vector_batch->hasNulls = true;
-      col_vector_batch->notNull[row_offset] = false;
-    } else {
-      col_vector_batch->notNull[row_offset] = true;
-      if (OB_FAIL(calc_byte_array(expr_vector, row_idx, datum_meta, obj_meta, allocator, buf, res_len))) {
-        LOG_WARN("failed to calc parquet byte array", K(ret), K(col_idx), K(row_idx));
-      } else {
-        string_vector_batch->data[row_offset] = buf;
-        string_vector_batch->length[row_offset] = res_len;
-      }
-    }
-  } else if (ob_is_datetime_or_mysql_datetime_tc(datum_meta.type_)) { // ObDatetimeType | ObTimestampType
-    orc::TimestampVectorBatch *timestamp_vector_batch = static_cast<orc::TimestampVectorBatch *>(col_vector_batch);
-    if (expr_vector->is_null(row_idx)) {
-      col_vector_batch->hasNulls = true;
-      col_vector_batch->notNull[row_offset] = false;
-    } else {
-      col_vector_batch->notNull[row_offset] = true;
-      int64_t out_usec = expr_vector->get_int(row_idx);
-      if (ob_is_mysql_datetime(datum_meta.type_)
-          && CAST_FAIL(ObTimeConverter::mdatetime_to_datetime(
-            expr_vector->get_mysql_datetime(row_idx), out_usec, date_sql_mode))) {
-        LOG_WARN("mdatetime_to_datetime fail", K(ret));
-      } else {
-        timestamp_vector_batch->data[row_offset] = out_usec / USECS_PER_SEC; 
-        timestamp_vector_batch->nanoseconds[row_offset] = (out_usec % USECS_PER_SEC) * NSECS_PER_USEC; //  usec to nanosecond
-      }
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(col_idx), K(row_idx), K(datum_meta.type_));
-  }
-  return ret;
-}
-
-int ObSelectIntoOp::check_orc_file_size(ObOrcFileWriter &data_writer)
-{
-  int ret = OB_SUCCESS;
-  int64_t file_size = data_writer.get_file_size();
-  if (file_need_split(file_size)) {
-    if (OB_FAIL(split_file(data_writer))) {
-      LOG_WARN("failed to split file", K(ret));
-    }
   }
   return ret;
 }
@@ -2431,7 +2067,7 @@ int ObSelectIntoOp::into_varlist()
   int ret = OB_SUCCESS;
   //before 4_1 use output
   //after 4_1 use select exprs
-  const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ? 
+  const ObIArray<ObExpr*> &select_exprs = (MY_SPEC.select_exprs_.empty()) ?
                                            MY_SPEC.output_ : MY_SPEC.select_exprs_;
   const ObIArray<ObString> &user_vars = MY_SPEC.user_vars_;
   ObArenaAllocator lob_tmp_allocator("LobTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
@@ -2515,7 +2151,7 @@ int ObSelectIntoOp::prepare_escape_printer()
     LOG_WARN("failed to allocate buffer", K(ret), K(buf_len));
   }
   if (has_enclose_) {
-    OZ(print_wchar_to_buf(buf, buf_len, pos, wchar_enclose, escape_printer_.enclose_, cs_type_)); 
+    OZ(print_wchar_to_buf(buf, buf_len, pos, wchar_enclose, escape_printer_.enclose_, cs_type_));
   }
   if (has_escape_) {
     OZ(print_wchar_to_buf(buf, buf_len, pos, wchar_escape, escape_printer_.escape_, cs_type_));
@@ -2706,12 +2342,7 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
     }
     case ObExternalFileFormat::FormatType::ORC_FORMAT:
     {
-      if (OB_ISNULL(ptr = ctx_.get_allocator().alloc(sizeof(ObOrcFileWriter)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate data writer", K(ret), K(sizeof(ObOrcFileWriter)));
-      } else {
-        data_writer = new(ptr) ObOrcFileWriter(access_info_, file_location_);
-      }
+      ret = OB_NOT_SUPPORTED;
       break;
     }
     default:
@@ -2740,10 +2371,6 @@ void ObSelectIntoOp::destroy()
   {
     ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoParquet"));
     parquet_writer_schema_.reset();
-  }
-  {
-    ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoOrc"));
-    orc_schema_.reset();
   }
   external_properties_.~ObExternalFileFormat();
   partition_map_.destroy();

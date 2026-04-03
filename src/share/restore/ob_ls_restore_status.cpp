@@ -48,12 +48,7 @@ ObLSRestoreStatus &ObLSRestoreStatus::operator=(const ObLSRestoreStatus &restore
     LRS_CASE_TO_TYPE(QUICK_RESTORE_FINISH); \
     LRS_CASE_TO_TYPE(RESTORE_MAJOR_DATA); \
     LRS_CASE_TO_TYPE(WAIT_RESTORE_MAJOR_DATA); \
-    LRS_CASE_TO_TYPE(RESTORE_FAILED); \
-    LRS_CASE_TO_TYPE(CLONE_START); \
-    LRS_CASE_TO_TYPE(CLONE_COPY_ALL_TABLET_META); \
-    LRS_CASE_TO_TYPE(CLONE_COPY_LS_META); \
-    LRS_CASE_TO_TYPE(CLONE_CLOG_REPLAY); \
-    LRS_CASE_TO_TYPE(CLONE_FAILED);
+    LRS_CASE_TO_TYPE(RESTORE_FAILED);
 
 const char *ObLSRestoreStatus::get_restore_status_str(const ObLSRestoreStatus &status)
 {
@@ -96,8 +91,7 @@ bool ObLSRestoreStatus::need_online() const
 {
   return ((status_ >= WAIT_RESTORE_SYS_TABLETS
            && status_ <= WAIT_RESTORE_MAJOR_DATA)
-          || status_ == NONE
-          || status_ == CLONE_CLOG_REPLAY);
+          || status_ == NONE);
 }
 
 int ObLSRestoreStatus::set_status(int32_t status)

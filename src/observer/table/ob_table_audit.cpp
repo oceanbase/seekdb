@@ -135,7 +135,7 @@ int ObTableAuditMultiOp::generate_stmt(const ObString &table_name, char *buf, in
       const ObITableEntity *entity = get_entity(0);
       if (OB_ISNULL(entity)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("entity is null", K(ret), K(index));
+        LOG_WARN("entity is null", K(ret));
       } else {
         const ObIArray<ObString> *propertiy_names = entity->get_all_properties_names();
         if (OB_NOT_NULL(propertiy_names)) {

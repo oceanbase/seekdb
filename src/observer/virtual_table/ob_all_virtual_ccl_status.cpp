@@ -124,22 +124,6 @@ int ObAllVirtualCCLStatus::process_curr_tenant(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-      // tenant id
-      case TENANT_ID: {
-        cells[i].set_int(MTL_ID());
-        break;
-      }
-      // ip
-      case SVR_IP: {
-        cells[i].set_varchar(ObString::make_string(svr_ip_buf_));
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        break;
-      }
-      // port
-      case SVR_PORT: {
-        cells[i].set_int(svr_addr_.get_port());
-        break;
-      }
       // ccl rule id
       case CCL_RULE_ID: {
         cells[i].set_int(ccl_status.ccl_rule_id_);

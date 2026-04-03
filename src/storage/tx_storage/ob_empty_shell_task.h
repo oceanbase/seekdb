@@ -23,7 +23,6 @@
 #include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/tx_storage/ob_empty_shell_object_checker.h"
-#include "share/ob_tenant_info_proxy.h"
 
 namespace oceanbase
 {

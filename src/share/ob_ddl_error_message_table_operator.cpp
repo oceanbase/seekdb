@@ -86,8 +86,8 @@ int ObDDLErrorMessageTableOperator::get_index_task_info(
   const uint64_t target_object_id = index_schema.get_table_id();
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(sql_string.assign_fmt("SELECT * FROM %s WHERE tenant_id = %lu AND target_object_id = %lu",
-        OB_ALL_DDL_TASK_STATUS_TNAME, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), target_object_id))) {
+    if (OB_FAIL(sql_string.assign_fmt("SELECT * FROM %s WHERE target_object_id = %lu",
+        OB_ALL_DDL_TASK_STATUS_TNAME, target_object_id))) {
       LOG_WARN("assign sql string failed", K(ret), K(exec_tenant_id), K(target_object_id));
     } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql_string.ptr()))) {
       LOG_WARN("update status of ddl task record failed", K(ret), K(sql_string));
@@ -165,9 +165,8 @@ int ObDDLErrorMessageTableOperator::load_ddl_user_error(const uint64_t tenant_id
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(table_id));
     } else if (OB_FAIL(sql.assign_fmt(
-        "SELECT ret_code, ddl_type, affected_rows, user_message, dba_message from %s WHERE tenant_id = %ld AND "
+        "SELECT ret_code, ddl_type, affected_rows, user_message, dba_message from %s WHERE "
         "task_id = %ld AND object_id = %ld", OB_ALL_DDL_ERROR_MESSAGE_TNAME,
-        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
         task_id, ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))) {
       LOG_WARN("fail to assign sql", K(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id, task_id, DDL_ERR_MESSAGE_OPERATOR_LOAD_FAILED))) {
@@ -237,17 +236,14 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(
     } else if (is_ddl_retry_task && OB_FAIL(sql.append(" ,UNHEX(user_message) as user_message "))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql.append_fmt(" from %s "
-                                      " WHERE tenant_id = %ld AND task_id = %ld AND target_object_id = %ld ",
+                                      " WHERE task_id = %ld AND target_object_id = %ld ",
                                       OB_ALL_DDL_ERROR_MESSAGE_TNAME,
-                                      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                       task_id, target_object_id))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (addr.is_valid()) {
       if (!addr.ip_to_string(ip, sizeof(ip))) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("fail to convert ip to string", K(ret), K(addr));
-      } else if (OB_FAIL(sql.append_fmt(" AND svr_ip = '%s' AND svr_port = %d", ip, addr.get_port()))) {
-        LOG_WARN("append sql string failed", K(ret), K(addr));
       }
     }
     if (OB_FAIL(ret)) {
@@ -318,9 +314,9 @@ int ObDDLErrorMessageTableOperator::get_ddl_error_message(
       LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(task_id), K(object_id));
     } else if (OB_FAIL(sql.assign_fmt(
         "SELECT ret_code, ddl_type, affected_rows, dba_message, user_message from %s "
-        "WHERE tenant_id = %ld AND task_id = %ld AND target_object_id = %ld AND object_id = %ld ",
+        "WHERE task_id = %ld AND target_object_id = %ld AND object_id = %ld ",
         OB_ALL_DDL_ERROR_MESSAGE_TNAME,
-        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id), task_id, target_object_id, object_id))) {
+        task_id, target_object_id, object_id))) {
       LOG_WARN("fail to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
       LOG_WARN("fail to execute sql", K(ret), K(sql));
@@ -422,9 +418,7 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
       LOG_WARN("convert ip to string failed", K(ret), K(addr));
     } else {
       ObDMLSqlSplicer dml_splicer;
-      if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
-        LOG_WARN("failed to add tenant_id", KR(ret), K(ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)));
-      } else if (OB_FAIL(dml_splicer.add_pk_column(K(task_id)))) {
+      if (OB_FAIL(dml_splicer.add_pk_column(K(task_id)))) {
         LOG_WARN("failed to add column task_id", KR(ret), K(task_id));
       } else if (OB_FAIL(dml_splicer.add_pk_column("object_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))) {
         LOG_WARN("failed to add column object_id", KR(ret), K(ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)));
@@ -432,10 +426,6 @@ int ObDDLErrorMessageTableOperator::report_ddl_error_message(const ObBuildDDLErr
         LOG_WARN("failed to add column object_id", KR(ret), K(object_id));
       } else if (OB_FAIL(dml_splicer.add_pk_column(K(schema_version)))) {
         LOG_WARN("failed to add column schema_version", KR(ret), K(schema_version));
-      } else if (OB_FAIL(dml_splicer.add_pk_column("svr_ip", ObHexEscapeSqlStr(ip)))) {
-        LOG_WARN("failed to add column svr_ip", KR(ret), K(ip));
-      } else if (OB_FAIL(dml_splicer.add_pk_column("svr_port", addr.get_port()))) {
-        LOG_WARN("failed to add column svr_port", KR(ret), K(addr.get_port()));
       } else if (OB_FAIL(dml_splicer.add_column("ret_code", error_message.ret_code_))) {
         LOG_WARN("failed to add column ret_code", KR(ret), K(error_message.ret_code_));
       } else if (OB_FAIL(dml_splicer.add_column("ddl_type", error_message.ddl_type_))) {

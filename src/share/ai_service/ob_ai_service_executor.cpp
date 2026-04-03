@@ -259,8 +259,8 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
                                                            EXCLUSIVE,
                                                            timeout,
                                                            conn))) {
-  } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE tenant_id = %lu AND endpoint_id = %ld AND scope = '%s'",
-      OB_ALL_AI_MODEL_ENDPOINT_TNAME, user_tenant_id, SPECIAL_ENDPOINT_ID_FOR_VERSION, SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
+  } else if (OB_FAIL(sql.assign_fmt("SELECT VERSION FROM %s WHERE endpoint_id = %ld AND scope = '%s'",
+      OB_ALL_AI_MODEL_ENDPOINT_TNAME, SPECIAL_ENDPOINT_ID_FOR_VERSION, SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
     LOG_WARN("failed to assign sql", KR(ret), K(tenant_id));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
@@ -303,9 +303,7 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
       ObDMLSqlSplicer sql;
       ObSqlString buffer;
       int64_t affected_rows = 0;
-      if (OB_FAIL(sql.add_pk_column("tenant_id", user_tenant_id))) {
-        LOG_WARN("failed to add column", K(ret), K(user_tenant_id));
-      } else if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
+      if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
         LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_ID_FOR_VERSION));
       } else if (OB_FAIL(sql.add_pk_column("scope", SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
         LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_SCOPE_FOR_VERSION));
@@ -337,9 +335,7 @@ int ObAiServiceExecutor::insert_special_endpoint_for_version(ObMySQLTransaction 
 
   ObDMLSqlSplicer sql;
   ObSqlString buffer;
-  if (OB_FAIL(sql.add_pk_column("tenant_id", user_tenant_id))) {
-    LOG_WARN("failed to add column", K(ret), K(user_tenant_id));
-  } else if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
+  if (OB_FAIL(sql.add_pk_column("endpoint_id", SPECIAL_ENDPOINT_ID_FOR_VERSION))) {
     LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_ID_FOR_VERSION));
   } else if (OB_FAIL(sql.add_pk_column("scope", SPECIAL_ENDPOINT_SCOPE_FOR_VERSION))) {
     LOG_WARN("failed to add column", K(ret), K(SPECIAL_ENDPOINT_SCOPE_FOR_VERSION));

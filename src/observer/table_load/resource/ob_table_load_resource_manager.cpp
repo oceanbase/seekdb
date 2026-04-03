@@ -370,50 +370,11 @@ int ObTableLoadResourceManager::update_resource(ObDirectLoadResourceUpdateArg &a
 int ObTableLoadResourceManager::gen_update_arg(ObDirectLoadResourceUpdateArg &update_arg)
 {
   int ret = OB_SUCCESS;
-  ObObj value;
-  int64_t pctg = 0;
-  ObSchemaGetterGuard schema_guard;
-  const ObSysVarSchema *var_schema = NULL;
   ObTenant *tenant = nullptr;
   uint64_t tenant_id = MTL_ID();
-  ObSqlString sql;
-
-  SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
-    common::sqlclient::ObMySQLResult *result = NULL;
-    if (OB_FAIL(sql.assign_fmt("select svr_ip, svr_port from %s where status = 'ACTIVE'", OB_ALL_SERVER_TNAME))) {
-      LOG_WARN("failed to assign sql", KR(ret));
-    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("sql_proxy is null", KR(ret), K(GCTX.sql_proxy_));
-    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is null", KR(ret));
-    } else {
-      while (OB_SUCC(result->next())) {
-        ObString svr_ip;
-        int32_t svr_port = -1;
-        ObAddr addr; 
-        EXTRACT_VARCHAR_FIELD_MYSQL(*result, "svr_ip", svr_ip);
-        EXTRACT_INT_FIELD_MYSQL(*result, "svr_port", svr_port, int32_t);
-        if (OB_SUCC(ret)) {
-          if (false == addr.set_ip_addr(svr_ip, svr_port)) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("failed to set_ip_addr", KR(ret), K(svr_ip), K(svr_port));
-          } else if (OB_FAIL(update_arg.addrs_.push_back(addr))) {
-            LOG_WARN("failed to push back obj", KR(ret));
-          }
-        }
-      }
-      if (OB_FAIL(ret) && OB_ITER_END != ret) {
-        LOG_WARN("read dependency info failed", KR(ret));
-      } else {
-        ret = OB_SUCCESS;
-      }
-    }
+  if (OB_FAIL(update_arg.addrs_.push_back(GCTX.self_addr()))) {
+    LOG_WARN("failed to push back obj", KR(ret));
   }
-
   if (OB_SUCC(ret)) {
     if (OB_FAIL(GCTX.omt_->get_tenant(tenant_id, tenant))) {
       LOG_WARN("fail to get tenant", KR(ret), K(tenant_id));

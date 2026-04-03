@@ -16,6 +16,7 @@
 
 #include "ob_deadlock_inner_table_service.h"
 #include "rootserver/ob_root_service.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -24,6 +25,20 @@ namespace share
 namespace detector
 {
 using namespace common;
+
+share::ObDeadlockEventHistoryTableStorage ObDeadLockInnerTableService::storage_;
+
+int ObDeadLockInnerTableService::init()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    DETECT_LOG(WARN, "meta_db_pool_ is not initialized", K(ret));
+  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+    DETECT_LOG(WARN, "failed to init deadlock event history storage", K(ret));
+  }
+  return ret;
+}
 
 #define INSERT_DEADLOCK_EVENT_SQL "\
   insert into %s \
@@ -48,49 +63,52 @@ int ObDeadLockInnerTableService::insert(const ObDetectorInnerReportInfo &inner_i
   const ObDetectorUserReportInfo &user_info = inner_info.get_user_report_info();
   const ObIArray<ObString> &extra_names = user_info.get_extra_columns_names();
   const ObIArray<ObString> &extra_values = user_info.get_extra_columns_values();
-  const uint64_t tenant_id = inner_info.get_tenant_id();
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
-
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  char ip_buffer[MAX_IP_ADDR_LENGTH + 1];
 
   DETECT_TIME_GUARD(100_ms);
-  if (CLICK() && false == inner_info.get_addr().ip_to_string(ip_buffer, MAX_IP_ADDR_LENGTH)) {
-    DETECT_LOG(WARN, "ip to string failed");
-  } else if (CLICK() && OB_FAIL(sql.assign_fmt(INSERT_DEADLOCK_EVENT_SQL,
-                                      OB_ALL_DEADLOCK_EVENT_HISTORY_TNAME,
-                                      tenant_id,
-                                      inner_info.get_event_id(),
-                                      int(MAX_IP_ADDR_LENGTH), ip_buffer,
-                                      inner_info.get_addr().get_port(),
-                                      inner_info.get_detector_id(),
-                                      ObTime2Str::ob_timestamp_str_range<YEAR, USECOND>(current_ts),
-                                      idx, size,
-                                      LIMIT_VARCHAR_LEN, inner_info.get_role().ptr(),
-                                      LIMIT_VARCHAR_LEN, inner_info.get_priority().get_range_str(),
-                                      inner_info.get_priority().get_value(),
-                                      ObTime2Str::ob_timestamp_str_range<YEAR, USECOND>(inner_info.get_created_time()),
-                                      inner_info.get_start_delay(),
-                                      LIMIT_VARCHAR_LEN, user_info.get_module_name().ptr(),
-                                      LIMIT_VARCHAR_LEN, user_info.get_resource_visitor().ptr(),
-                                      LIMIT_VARCHAR_LEN, user_info.get_required_resource().ptr(),
-                                      LIMIT_VARCHAR_LEN, extra_info_if_exist(extra_names, 0),
-                                      LIMIT_VARCHAR_LEN, extra_info_if_exist(extra_values, 0),
-                                      LIMIT_VARCHAR_LEN, extra_info_if_exist(extra_names, 1),
-                                      LIMIT_VARCHAR_LEN, extra_info_if_exist(extra_values, 1),
-                                      LIMIT_VARCHAR_LEN, extra_info_if_exist(extra_names, 2),
-                                      LIMIT_VARCHAR_LEN, extra_info_if_exist(extra_values, 2)))) {
-    DETECT_LOG(WARN, "format sql fail", KR(ret), K(sql));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(WARN, "sql_proxy_ not init yet, report abort", KR(ret), K(sql));
-  } else if (CLICK() && OB_FAIL(GCTX.sql_proxy_->write(exec_tenant_id,
-                                                             sql.ptr(),
-                                                             affected_rows))) {
-    DETECT_LOG(WARN, "execute sql fail", KR(ret), K(tenant_id), K(exec_tenant_id), K(sql));
+  if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    DETECT_LOG(WARN, "storage not init", KR(ret));
   } else {
-    DETECT_LOG(INFO, "execute sql success", KR(ret), K(sql));
+    ObDeadlockEventHistoryEntry entry;
+    entry.tenant_id_ = inner_info.get_tenant_id();
+    entry.event_id_ = inner_info.get_event_id();
+    entry.svr_addr_ = inner_info.get_addr();
+    entry.detector_id_ = inner_info.get_detector_id();
+    entry.report_time_ = current_ts;
+    entry.cycle_idx_ = idx;
+    entry.cycle_size_ = size;
+    entry.role_ = inner_info.get_role();
+    entry.priority_level_ = ObString(inner_info.get_priority().get_range_str());
+    entry.priority_ = inner_info.get_priority().get_value();
+    entry.create_time_ = inner_info.get_created_time();
+    entry.start_delay_ = inner_info.get_start_delay();
+    entry.module_ = user_info.get_module_name();
+    entry.visitor_ = user_info.get_resource_visitor();
+    entry.object_ = user_info.get_required_resource();
+    if (extra_names.count() > 0) {
+      entry.extra_name1_ = extra_names.at(0);
+    }
+    if (extra_values.count() > 0) {
+      entry.extra_value1_ = extra_values.at(0);
+    }
+    if (extra_names.count() > 1) {
+      entry.extra_name2_ = extra_names.at(1);
+    }
+    if (extra_values.count() > 1) {
+      entry.extra_value2_ = extra_values.at(1);
+    }
+    if (extra_names.count() > 2) {
+      entry.extra_name3_ = extra_names.at(2);
+    }
+    if (extra_values.count() > 2) {
+      entry.extra_value3_ = extra_values.at(2);
+    }
+
+    if (CLICK() && OB_FAIL(storage_.insert(entry))) {
+      DETECT_LOG(WARN, "failed to insert deadlock event", KR(ret));
+    } else {
+      DETECT_LOG(INFO, "insert deadlock event success", KR(ret));
+    }
   }
 
   return ret;
@@ -102,16 +120,66 @@ int ObDeadLockInnerTableService::insert_all(const ObIArray<ObDetectorInnerReport
   int ret = OB_SUCCESS;
 
   DETECT_TIME_GUARD(100_ms);
-  const int64_t current_ts = ObClockGenerator::getRealClock();
-  for (int64_t i = 0; i < infos.count() && OB_SUCC(ret); ++i) {
-    const ObDetectorInnerReportInfo &info = infos.at(i);
-    if (CLICK() && OB_FAIL(insert(info, i + 1, infos.count(), current_ts))) {
-      DETECT_LOG(WARN, "insert item failed", KR(ret), K(info));
-    }
-  }
+  if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    DETECT_LOG(WARN, "storage not init", KR(ret));
+  } else {
+    const int64_t current_ts = ObClockGenerator::getRealClock();
+    ObArray<ObDeadlockEventHistoryEntry> entries;
 
-  if (OB_SUCC(ret)) {
-    DETECT_LOG(INFO, "insert items success", K(infos));
+    for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
+      const ObDetectorInnerReportInfo &info = infos.at(i);
+      const ObDetectorUserReportInfo &user_info = info.get_user_report_info();
+      const ObIArray<ObString> &extra_names = user_info.get_extra_columns_names();
+      const ObIArray<ObString> &extra_values = user_info.get_extra_columns_values();
+
+      ObDeadlockEventHistoryEntry entry;
+      entry.tenant_id_ = info.get_tenant_id();
+      entry.event_id_ = info.get_event_id();
+      entry.svr_addr_ = info.get_addr();
+      entry.detector_id_ = info.get_detector_id();
+      entry.report_time_ = current_ts;
+      entry.cycle_idx_ = i + 1;
+      entry.cycle_size_ = infos.count();
+      entry.role_ = info.get_role();
+      entry.priority_level_ = ObString(info.get_priority().get_range_str());
+      entry.priority_ = info.get_priority().get_value();
+      entry.create_time_ = info.get_created_time();
+      entry.start_delay_ = info.get_start_delay();
+      entry.module_ = user_info.get_module_name();
+      entry.visitor_ = user_info.get_resource_visitor();
+      entry.object_ = user_info.get_required_resource();
+      if (extra_names.count() > 0) {
+        entry.extra_name1_ = extra_names.at(0);
+      }
+      if (extra_values.count() > 0) {
+        entry.extra_value1_ = extra_values.at(0);
+      }
+      if (extra_names.count() > 1) {
+        entry.extra_name2_ = extra_names.at(1);
+      }
+      if (extra_values.count() > 1) {
+        entry.extra_value2_ = extra_values.at(1);
+      }
+      if (extra_names.count() > 2) {
+        entry.extra_name3_ = extra_names.at(2);
+      }
+      if (extra_values.count() > 2) {
+        entry.extra_value3_ = extra_values.at(2);
+      }
+
+      if (CLICK() && OB_FAIL(entries.push_back(entry))) {
+        DETECT_LOG(WARN, "failed to push back entry", KR(ret));
+      }
+    }
+
+    if (OB_SUCC(ret) && !entries.empty()) {
+      if (CLICK() && OB_FAIL(storage_.insert_all(entries))) {
+        DETECT_LOG(WARN, "failed to insert all deadlock events", KR(ret));
+      } else {
+        DETECT_LOG(INFO, "insert all deadlock events success", KR(ret), K(entries.count()));
+      }
+    }
   }
 
   return ret;
@@ -121,46 +189,17 @@ int ObDeadLockInnerTableService::insert_all(const ObIArray<ObDetectorInnerReport
 int ObDeadLockInnerTableService::ObDeadLockEventHistoryTableOperator::async_delete()
 {
   int ret = OB_SUCCESS;
-  schema::ObSchemaGetterGuard schema_guard;
-  ObArray<uint64_t> tenant_ids;
   const int64_t now = ObClockGenerator::getRealClock();
-  ObSqlString sql;
   const int64_t rs_delete_timestap = now - REMAIN_RECORD_DURATION;
 
   DETECT_TIME_GUARD(3_s);
-  rootserver::ObRootService *root_service = GCTX.root_service_;
-  if (OB_ISNULL(root_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(WARN, "ptr is null", KR(ret), KP(root_service));
-  } else if (CLICK() && OB_FAIL(schema::ObMultiVersionSchemaService::
-                         get_instance().get_tenant_schema_guard(OB_SYS_TENANT_ID,
-                                                                schema_guard))) {
-    DETECT_LOG(WARN, "get schema guard failed", KR(ret));
-  } else if (CLICK() && OB_FAIL(schema_guard.get_tenant_ids(tenant_ids))) {
-    DETECT_LOG(WARN, "get tenant ids failed", KR(ret));
-  } else if (CLICK() && OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE report_time < %ld LIMIT 1024",
-                                               OB_ALL_DEADLOCK_EVENT_HISTORY_TNAME,
-                                               rs_delete_timestap))) {
-    DETECT_LOG(WARN, "assign_fmt failed", KR(ret));
+  if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    DETECT_LOG(WARN, "storage not init", KR(ret));
+  } else if (CLICK() && OB_FAIL(storage_.delete_expired(rs_delete_timestap, 1024))) {
+    DETECT_LOG(WARN, "failed to delete expired records", KR(ret));
   } else {
-    CLICK();
-    for (int64_t idx = 0; OB_SUCC(ret) && idx < tenant_ids.count(); ++idx) {
-      int64_t affected_rows = 0;
-      uint64_t tenant_id = tenant_ids.at(idx);
-      int temp_ret = OB_SUCCESS;
-      if (!root_service->is_full_service()) {
-        ret = OB_CANCELED;
-        DETECT_LOG(WARN, "rs exit", KR(ret));
-      } else if (is_user_tenant(tenant_id)) {
-        // skip
-      } else if (OB_SUCCESS !=
-                 (temp_ret = root_service->get_sql_proxy().write(
-                  tenant_id, sql.ptr(), affected_rows))) {
-        DETECT_LOG(WARN, "execute delete sql failed", K(sql), K(tenant_id), KR(temp_ret));
-      } else {
-        DETECT_LOG(INFO, "delete old history record event", K(sql), K(tenant_id), K(affected_rows));
-      }
-    }
+    DETECT_LOG(INFO, "delete expired deadlock event history success", KR(ret));
   }
 
   return ret;

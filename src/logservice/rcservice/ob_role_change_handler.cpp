@@ -15,6 +15,7 @@
  */
 
 #include "ob_role_change_handler.h"
+#include "share/rc/ob_tenant_base.h"
 namespace oceanbase
 {
 using namespace common;
@@ -91,6 +92,7 @@ void ObRoleChangeHandler::switch_to_follower_forcedly()
 int ObRoleChangeHandler::switch_to_leader(RCDiagnoseInfo &diagnose_info)
 {
   int ret = OB_SUCCESS;
+  CLOG_LOG(INFO, "ObRoleChangeHandler::switch_to_leader called", K(MTL_ID()));
   ObSpinLockGuard guard(lock_);
   for (int i = 0; i < ObLogBaseType::MAX_LOG_BASE_TYPE && OB_SUCC(ret); i++) {
     ObIRoleChangeSubHandler *handler = sub_role_change_handler_arr_[i];
@@ -103,6 +105,9 @@ int ObRoleChangeHandler::switch_to_leader(RCDiagnoseInfo &diagnose_info)
       has_defined_to_string = true;
     }
     if (NULL == handler) {
+      if (i == static_cast<int>(ObLogBaseType::TIMESTAMP_LOG_BASE_TYPE)) {
+        CLOG_LOG(WARN, "TIMESTAMP_LOG_BASE_TYPE handler is NULL", K(i), K(MTL_ID()));
+      }
     } else if (OB_FAIL(handler->switch_to_leader())) {
       CLOG_LOG(WARN, "switch_to_leader failed", K(ret), KP(handler), K(i),
           "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
@@ -111,6 +116,7 @@ int ObRoleChangeHandler::switch_to_leader(RCDiagnoseInfo &diagnose_info)
           "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
     }
   }
+  CLOG_LOG(INFO, "ObRoleChangeHandler::switch_to_leader finished", K(ret), K(MTL_ID()));
   return ret;
 }
 

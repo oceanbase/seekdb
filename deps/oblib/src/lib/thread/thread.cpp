@@ -100,8 +100,8 @@ int Thread::start()
         LOG_WARN("ob_pthread_attr_set_qos failed", K(qos_ret));
         // Continue even if QoS setting failed
       }
-#ifdef __APPLE__
-      // On macOS, pthread_attr_setstack often fails with EINVAL if address/size
+#if defined(__APPLE__) || defined(__ANDROID__)
+      // On macOS/Android, pthread_attr_setstack often fails with EINVAL if address/size
       // are not perfectly aligned or if the memory is already managed in a way
       // that pthread doesn't like. Use setstacksize instead and let the system
       // allocate the stack, while keeping our stack_addr_ for stack_header logic.
@@ -280,26 +280,23 @@ int Thread::try_wait()
   int ret = OB_SUCCESS;
   if (pth_ != 0) {
     int pret = 0;
-#ifdef __linux__
-    if (0 != (pret = pthread_tryjoin_np(pth_, nullptr))) {
-      ret = OB_EAGAIN;
-      LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
-    } else {
-      destroy_stack();
-    }
-#elif defined(__APPLE__)
-    // macOS doesn't support pthread_tryjoin_np, use pthread_kill to check if thread is alive
+#if defined(__APPLE__) || defined(__ANDROID__)
     if (pthread_kill(pth_, 0) == 0) {
-      // Thread is still alive
       ret = OB_EAGAIN;
     } else {
-      // Thread has terminated, use pthread_join to clean up
       if (0 != (pret = pthread_join(pth_, nullptr))) {
         ret = OB_EAGAIN;
         LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
       } else {
         destroy_stack();
       }
+    }
+#elif defined(__linux__)
+    if (0 != (pret = pthread_tryjoin_np(pth_, nullptr))) {
+      ret = OB_EAGAIN;
+      LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
+    } else {
+      destroy_stack();
     }
 #endif
   }

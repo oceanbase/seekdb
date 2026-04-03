@@ -18,8 +18,6 @@
 
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
 
-
-
 #include "src/sql/plan_cache/ob_pcv_set.h"
 
 #include "observer/ob_server_utils.h"
@@ -73,32 +71,10 @@ int ObAllPlanCacheStat::fill_cells(ObPlanCache &plan_cache)
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
   const ObPlanCacheStat &pc_stat = plan_cache.get_plan_cache_stat();
-  ObString ipstr;
-  const ObCacheRefHandleMgr &ref_handle_mgr = plan_cache.get_ref_handle_mgr();
+    const ObCacheRefHandleMgr &ref_handle_mgr = plan_cache.get_ref_handle_mgr();
   for (int64_t i =  0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch(col_id) {
-      //tenant id
-    case TENANT_ID: {
-      cells[i].set_int(plan_cache.get_tenant_id());
-      break;
-    }
-      //svr_ip
-    case SVR_IP: {
-      ipstr.reset();
-      if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-        SERVER_LOG(ERROR, "get server ip failed", K(ret));
-      } else {
-        cells[i].set_varchar(ipstr);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      }
-      break;
-    }
-      // svr_port
-    case SVR_PORT: {
-      cells[i].set_int(GCTX.self_addr().get_port());
-      break;
-    }
       //sql_num
     case SQL_NUM: {
       cells[i].set_int(plan_cache.get_cache_obj_size());

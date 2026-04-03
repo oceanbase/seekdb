@@ -52,10 +52,7 @@ private:
 private:
   enum CACHE_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    CACHE_NAME,
+        CACHE_NAME = common::OB_APP_MIN_COLUMN_ID,
     CACHE_ID,
     PRIORITY,
     CACHE_SIZE,

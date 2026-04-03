@@ -40,8 +40,6 @@ private:
   enum SYS_PARAMETER_STAT_COLUMN {
     ZONE = common::OB_APP_MIN_COLUMN_ID,
     SERVER_TYPE,
-    SERVER_IP,
-    SERVER_PORT,
     NAME,
     DATA_TYPE,
     VALUE,
@@ -54,8 +52,8 @@ private:
     SOURCE,
     EDIT_LEVEL,
     DEFAULT_VALUE,
-    ISDEFAULT,
-  };
+    ISDEFAULT
+};
   common::ObConfigContainer::const_iterator sys_iter_;
   omt::ObTenantConfigGuard tenant_config_;
   common::ObConfigContainer::const_iterator tenant_iter_;

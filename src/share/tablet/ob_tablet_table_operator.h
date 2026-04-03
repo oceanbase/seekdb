@@ -21,6 +21,7 @@
 #include "storage/compaction/ob_tenant_medium_checker.h"
 #include "share/tablet/ob_tablet_info.h" // ObTabletReplica, ObTabletInfo
 #include "share/compaction/ob_array_with_map.h"
+#include "share/tablet/ob_tablet_meta_table_storage.h"
 
 namespace oceanbase
 {
@@ -53,8 +54,8 @@ class ObTabletTableOperator
 public:
   ObTabletTableOperator();
   virtual ~ObTabletTableOperator();
-  int init(common::ObISQLClient &sql_proxy_);
-  int init(const int32_t group_id, common::ObISQLClient &sql_proxy);
+  // Initialize with SQLite storage
+  int init(share::ObSQLiteConnectionPool *pool);
   void reset();
   void set_batch_size(int64_t batch_size) {batch_size_ = batch_size;}
   int get(
@@ -108,10 +109,9 @@ public:
   int batch_update(
       const uint64_t tenant_id,
       const ObIArray<ObTabletReplica> &replicas);
-  // batch update replicas into __all_tablet_meta_table
-  // differ from above batch_update(), it will use @sql_client to commit, not inner sql_proxy_.
+  // batch update replicas within an external SQLite transaction
   int batch_update(
-      common::ObISQLClient &sql_client,
+      ObSQLiteConnection *conn,
       const uint64_t tenant_id,
       const ObIArray<ObTabletReplica> &replicas);
   // batch remove replicas from __all_tablet_meta_table
@@ -119,15 +119,18 @@ public:
   // @param [in] tenant_id, target tenant_id
   // @param [in] replicas, ObTabletReplicas for removing(should belong to the same tenant!)
   //             (only tenant_id, tablet_id, ls_id, server are used in this interface)
-  // batch remove replicas from __all_tablet_meta_table
-  // differ from above batch_remove(), it will use @sql_client to commit, not inner sql_proxy_.
+  // Legacy method for backward compatibility (will use SQLite internally)
   int batch_remove(
-      common::ObISQLClient &sql_client,
+      const uint64_t tenant_id,
+      const ObIArray<ObTabletReplica> &replicas);
+  // batch remove replicas within an external SQLite transaction
+  int batch_remove(
+      ObSQLiteConnection *conn,
       const uint64_t tenant_id,
       const ObIArray<ObTabletReplica> &replicas);
   // remove residual tablet in __all_tablet_meta_table for ObServerMetaTableChecker
   //
-  // @param [in] sql_client, client for executing query
+  // @param [in] sql_client, client for executing query (legacy, will use SQLite internally)
   // @param [in] tenant_id, tenant for query
   // @param [in] server, target ObAddr
   // @param [in] limit, limit number for delete sql
@@ -138,10 +141,9 @@ public:
       const ObAddr &server,
       const int64_t limit,
       int64_t &affected_rows);
-  template <typename T>
   static int construct_tablet_infos(
       common::sqlclient::ObMySQLResult &res,
-      T &tablet_infos);
+      std::function<int(ObTabletInfo&)> &&push_tablet);
 public:
   static int batch_get_tablet_info(
       common::ObISQLClient *sql_proxy,
@@ -150,39 +152,12 @@ public:
       const int32_t group_id,
       ObArrayWithMap<ObTabletInfo> &tablet_infos);
 private:
-  template <typename T, typename P>
-  static int inner_batch_get_by_sql_(
-      ObISQLClient &sql_client,
-      const uint64_t tenant_id,
-      const ObIArray<T> &tablet_ls_pairs,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      const int32_t group_id,
-      P &tablet_infos);
-  int inner_batch_update_by_sql_(
-      const uint64_t tenant_id,
-      const ObIArray<ObTabletReplica> &replicas,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      common::ObISQLClient &sql_client);
   static int construct_tablet_replica_(
       common::sqlclient::ObMySQLResult &res,
       ObTabletReplica &replica);
-  int fill_dml_splicer_(
-      const ObTabletReplica &replica,
-      ObDMLSqlSplicer &dml_splicer);
-  int inner_batch_remove_by_sql_(
-      const uint64_t tenant_id,
-      const ObIArray<ObTabletReplica> &replicas,
-      const int64_t start_idx,
-      const int64_t end_idx,
-      common::ObISQLClient &sql_client);
-  int fill_remove_dml_splicer_(
-      const ObTabletReplica &replica,
-      ObDMLSqlSplicer &dml_splicer);
   const static int64_t MAX_BATCH_COUNT = 100;
   bool inited_;
-  common::ObISQLClient *sql_proxy_;
+  ObTabletMetaTableStorage storage_;
   int64_t batch_size_;
   int32_t group_id_;
 };

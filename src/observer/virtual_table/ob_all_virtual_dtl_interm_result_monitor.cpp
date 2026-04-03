@@ -26,7 +26,7 @@ using namespace sql::dtl;
 namespace observer
 {
 
-ObAllDtlIntermResultMonitor::ObAllDtlIntermResultMonitor():addr_(NULL)
+ObAllDtlIntermResultMonitor::ObAllDtlIntermResultMonitor()
 {
 }
 ObAllDtlIntermResultMonitor::~ObAllDtlIntermResultMonitor()
@@ -34,7 +34,6 @@ ObAllDtlIntermResultMonitor::~ObAllDtlIntermResultMonitor()
 }
 void ObAllDtlIntermResultMonitor::reset()
 {
-  addr_ = NULL;
 }
 
 #define GET_CHUNK_STORE_INFO(store)         \
@@ -73,20 +72,6 @@ int ObDTLIntermResultMonitorInfoGetter::operator() (common::hash::HashMapPair<Ob
         ++cell_idx) {
       const uint64_t column_id = output_column_ids_.at(cell_idx);
       switch(column_id) {
-        case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::SVR_IP: {
-          cells[cell_idx].set_varchar(addr_ip_);
-          cells[cell_idx].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::SVR_PORT: {
-          cells[cell_idx].set_int(addr_.get_port());
-          break;
-        }
-        case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::TENANT_ID: {
-          cells[cell_idx].set_int(tenant_id);
-          break;
-        }
         case ObAllDtlIntermResultMonitor::INSPECT_COLUMN::TRACE_ID: {
           char *buf = NULL;
           if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(OB_MAX_TRACE_ID_BUFFER_SIZE)))) {
@@ -223,15 +208,12 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
 {
   int ret = OB_SUCCESS;
   ObObj *cells = NULL;
-  ObString ipstr;
-  if (OB_ISNULL(allocator_) || OB_ISNULL(addr_) || OB_ISNULL(session_)) {
+    if (OB_ISNULL(allocator_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "allocator_ or addr_ is null", K_(allocator), K_(addr), K(ret));
+    SERVER_LOG(WARN, "allocator_ or null", K_(allocator), K(ret));
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
-  } else if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-    SERVER_LOG(ERROR, "get server ip failed", K(ret));
   } else {
     uint64_t cur_tenant_id = MTL_ID();
     if(is_sys_tenant(cur_tenant_id)) {
@@ -241,7 +223,7 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
         uint64_t tmp_tenant_id = all_tenants[i];
         if(!is_virtual_tenant_id(tmp_tenant_id)) {
           ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
-                                  cur_row_, *addr_, ipstr, tmp_tenant_id);
+                                  cur_row_, tmp_tenant_id);
           MTL_SWITCH(tmp_tenant_id) {
             if (OB_FAIL(MTL(ObDTLIntermResultManager*)->generate_monitor_info_rows(monitor_getter))) {
               SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
@@ -255,7 +237,7 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
       }
     } else {
       ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
-                                  cur_row_, *addr_, ipstr, cur_tenant_id);
+                                  cur_row_, cur_tenant_id);
       MTL_SWITCH(cur_tenant_id) {
         if (OB_FAIL(MTL(ObDTLIntermResultManager*)->generate_monitor_info_rows(monitor_getter))) {
           SERVER_LOG(WARN, "generate monitor info array failed", K(ret));

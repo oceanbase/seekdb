@@ -47,8 +47,7 @@ int ObTenantMajorFreeze::init(
     const bool is_primary_service,
     ObMySQLProxy &sql_proxy,
     ObServerConfig &config,
-    share::schema::ObMultiVersionSchemaService &schema_service,
-    ObIServerTrace &server_trace)
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -57,7 +56,7 @@ int ObTenantMajorFreeze::init(
   } else if (OB_FAIL(major_merge_info_mgr_.init(tenant_id_, sql_proxy))) {
     LOG_WARN("fail to init major merge info mgr", KR(ret));
   } else if (OB_FAIL(merge_scheduler_.init(is_primary_service, major_merge_info_mgr_,
-             schema_service, server_trace, config, sql_proxy))) {
+             schema_service, config, sql_proxy))) {
     LOG_WARN("fail to init merge_scheduler", KR(ret), K(is_primary_service));
   }  else if (OB_FAIL(major_merge_info_detector_.init(is_primary_service, sql_proxy,
               major_merge_info_mgr_, merge_scheduler_.get_major_scheduler_idling()))) {
@@ -192,19 +191,17 @@ int ObTenantMajorFreeze::try_schedule_minor_before_major_()
    */
   int ret = OB_SUCCESS;
   bool contains = false;
-  ObAddr rs_addr;
+  ObAddr rs_addr = GCTX.self_addr();
   obrpc::ObRootMinorFreezeArg arg;
-  if (OB_ISNULL(GCTX.rs_rpc_proxy_) || OB_ISNULL(GCTX.rs_mgr_) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.rs_rpc_proxy_) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid gctx", K(GCTX.rs_rpc_proxy_), K(GCTX.rs_mgr_), K(GCTX.sql_proxy_));
+    LOG_WARN("invalid gctx", K(GCTX.rs_rpc_proxy_), K(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObMViewInfo::contains_major_refresh_mview(*GCTX.sql_proxy_, tenant_id_, contains))) {
     LOG_WARN("failed to check contain major mview", KR(ret));
   } else if (!contains) {
     // do nothing
   } else if (OB_FAIL(arg.tenant_ids_.push_back(tenant_id_))) {
     LOG_WARN("faiedl to push back tenant_id", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_addr))) {
-    LOG_WARN("get rootservice address failed", K(ret));
   } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).timeout(GCONF.rpc_timeout)
                                                     .root_minor_freeze(arg))) {
     LOG_WARN("fail to execute root_minor_freeze rpc", KR(ret), K(arg));
@@ -233,8 +230,6 @@ int ObTenantMajorFreeze::launch_major_freeze(const ObMajorFreezeReason freeze_re
   } else if (merge_scheduler_.is_paused()) {
     ret = OB_LEADER_NOT_EXIST;
     LOG_WARN("leader may switch", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(merge_scheduler_.try_update_epoch_and_reload())) {
-    LOG_WARN("fail to try_update_epoch_and_reload", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(check_freeze_info())) {
     LOG_WARN("fail to check freeze info", KR(ret), K_(tenant_id));
     if ((OB_MAJOR_FREEZE_NOT_FINISHED == ret) || (OB_FROZEN_INFO_ALREADY_EXIST == ret)) {
@@ -262,16 +257,8 @@ int ObTenantMajorFreeze::suspend_merge()
     LOG_WARN("leader may switch", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(major_merge_info_mgr_.get_zone_merge_mgr().try_reload())) {
     LOG_WARN("fail to try reload zone_merge_mgr", KR(ret), K_(tenant_id));
-  } else {
-    const int64_t expected_epoch = merge_scheduler_.get_epoch();
-    // in case of observer start or restart, before the MajorMergeScheduler background thread
-    // successfully update freeze_service_epoch, the epoch in memory is equal to -1.
-    if (-1 == expected_epoch) {
-      ret = OB_EAGAIN;
-      LOG_WARN("epoch has not been updated, will retry", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(major_merge_info_mgr_.get_zone_merge_mgr().suspend_merge(expected_epoch))) {
-      LOG_WARN("fail to suspend merge", KR(ret), K_(tenant_id), K(expected_epoch));
-    }
+  } else if (OB_FAIL(major_merge_info_mgr_.get_zone_merge_mgr().suspend_merge())) {
+    LOG_WARN("fail to suspend merge", KR(ret), K_(tenant_id));
   }
   return ret;
 }
@@ -287,16 +274,8 @@ int ObTenantMajorFreeze::resume_merge()
     LOG_WARN("leader may switch", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(major_merge_info_mgr_.get_zone_merge_mgr().try_reload())) {
     LOG_WARN("fail to try reload zone_merge_mgr", KR(ret), K_(tenant_id));
-  } else {
-    const int64_t expected_epoch = merge_scheduler_.get_epoch();
-    // in case of observer start or restart, before the MajorMergeScheduler background thread
-    // successfully update freeze_service_epoch, the epoch in memory is equal to -1.
-    if (-1 == expected_epoch) {
-      ret = OB_EAGAIN;
-      LOG_WARN("epoch has not been updated, will retry", KR(ret), K_(tenant_id));
-    } else if (OB_FAIL(major_merge_info_mgr_.get_zone_merge_mgr().resume_merge(expected_epoch))) {
-      LOG_WARN("fail to resume merge", KR(ret), K_(tenant_id), K(expected_epoch));
-    }
+  } else if (OB_FAIL(major_merge_info_mgr_.get_zone_merge_mgr().resume_merge())) {
+    LOG_WARN("fail to resume merge", KR(ret), K_(tenant_id));
   }
   return ret;
 }
@@ -314,15 +293,9 @@ int ObTenantMajorFreeze::clear_merge_error()
   } else if (OB_FAIL(major_merge_info_mgr_.get_zone_merge_mgr().try_reload())) {
     LOG_WARN("fail to try reload zone_merge_mgr", KR(ret), K_(tenant_id));
   } else {
-    const int64_t expected_epoch = merge_scheduler_.get_epoch();
-    // in case of observer start or restart, before the MajorMergeScheduler background thread
-    // successfully update freeze_service_epoch, the epoch in memory is equal to -1.
-    if (-1 == expected_epoch) {
-      ret = OB_EAGAIN;
-      LOG_WARN("epoch has not been updated, will retry", KR(ret), K_(tenant_id));
-    } else if (!GCTX.is_shared_storage_mode()
-            && OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_status(tenant_id_, expected_epoch))) {
-      LOG_WARN("fail to batch update status", KR(ret), K_(tenant_id), K(expected_epoch));
+    if (!GCTX.is_shared_storage_mode()
+            && OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_status(tenant_id_))) {
+      LOG_WARN("fail to batch update status", KR(ret), K_(tenant_id));
     } else if (GCTX.is_shared_storage_mode()) {
 #ifdef OB_BUILD_SHARED_STORAGE
       MTL_SWITCH(tenant_id_) {
@@ -339,8 +312,8 @@ int ObTenantMajorFreeze::clear_merge_error()
 #endif
     }
 
-    if (FAILEDx(major_merge_info_mgr_.get_zone_merge_mgr().set_merge_status(error_type, expected_epoch))) {
-      LOG_WARN("fail to set merge error", KR(ret), K_(tenant_id), K(error_type), K(expected_epoch));
+    if (FAILEDx(major_merge_info_mgr_.get_zone_merge_mgr().set_merge_status(error_type))) {
+      LOG_WARN("fail to set merge error", KR(ret), K_(tenant_id), K(error_type));
     }
   }
   return ret;

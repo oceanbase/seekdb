@@ -54,6 +54,7 @@ struct ObQueryFlag
 #define OBSF_BIT_IS_SHOW_SEED         1
 #define OBSF_BIT_SKIP_READ_LOB        1
 #define OBSF_BIT_IS_LOOKUP_FOR_4377   1
+#define OBSF_BIT_SKIP_4377_FOR_ASYNC_INDEX_LOOKUP 1
 #define OBSF_BIT_FOREIGN_KEY_CHECK    1
 #define OBSF_BIT_IS_NEW_QUERY_RANGE   1
 #define OBSF_BIT_ENABLE_RICH_FORMAT   1
@@ -64,7 +65,7 @@ struct ObQueryFlag
 #define OBSF_BIT_MR_MV_SCAN           2
 #define OBSF_BIT_IS_PLAIN_INSERT      1
 #define OBSF_BIT_SKIP_RUNNING_TX      1
-#define OBSF_BIT_RESERVED             20
+#define OBSF_BIT_RESERVED             19
 
   static const uint64_t OBSF_MASK_SCAN_ORDER = (0x1UL << OBSF_BIT_SCAN_ORDER) - 1;
   static const uint64_t OBSF_MASK_DAILY_MERGE =  (0x1UL << OBSF_BIT_DAILY_MERGE) - 1;
@@ -164,6 +165,7 @@ struct ObQueryFlag
       uint64_t is_show_seed_   : OBSF_BIT_IS_SHOW_SEED;
       uint64_t skip_read_lob_   : OBSF_BIT_SKIP_READ_LOB;
       uint64_t is_lookup_for_4377_ : OBSF_BIT_IS_LOOKUP_FOR_4377;
+      uint64_t skip_4377_for_async_index_lookup_ : OBSF_BIT_SKIP_4377_FOR_ASYNC_INDEX_LOOKUP;
       uint64_t for_foreign_key_check_ : OBSF_BIT_FOREIGN_KEY_CHECK;
       uint64_t is_new_query_range_ : OBSF_BIT_IS_NEW_QUERY_RANGE;
       uint64_t is_select_follower_ : OBSF_BIT_IS_SELECT_FOLLOWER;
@@ -229,6 +231,8 @@ struct ObQueryFlag
   inline bool is_mysql_mode() const { return sql_mode_ == MysqlMode; }
   inline bool is_read_latest() const { return read_latest_; }
   inline bool is_lookup_for_4377() const { return is_lookup_for_4377_; }
+  inline bool skip_4377_for_async_index_lookup() const { return skip_4377_for_async_index_lookup_; }
+  inline void set_skip_4377_for_async_index_lookup(bool v) { skip_4377_for_async_index_lookup_ = v ? 1 : 0; }
   inline bool is_prewarm() const { return prewarm_; }
   inline bool is_index_invalid() const { return index_invalid_; }
   inline bool is_use_row_cache() const { return !is_whole_macro_scan() && use_row_cache_ == UseCache; }
@@ -309,6 +313,7 @@ struct ObQueryFlag
                "is_sstable_cut", is_sstable_cut_,
                "skip_read_lob", skip_read_lob_,
                "is_lookup_for_4377", is_lookup_for_4377_,
+               "skip_4377_for_async_index_lookup", skip_4377_for_async_index_lookup_,
                "is_bare_row_scan", is_bare_row_scan_,
                "enable_rich_format", enable_rich_format_,
                "is_for_foreign_key_check", for_foreign_key_check_,

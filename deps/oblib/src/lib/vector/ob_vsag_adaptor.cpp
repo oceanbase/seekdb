@@ -212,11 +212,19 @@ private:
 int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
 {
   int ret = OB_SUCCESS;
-  tl::expected<std::vector<int64_t>, Error> result = index_->Build(base);
-  if (result.has_value()) {
-    LOG_DEBUG("build index success");
-  } else {
-    ret = vsag_errcode2ob(result.error().type);
+  try {
+    tl::expected<std::vector<int64_t>, Error> result = index_->Build(base);
+    if (result.has_value()) {
+      LOG_DEBUG("build index success");
+    } else {
+      ret = vsag_errcode2ob(result.error().type);
+    }
+  } catch (const std::exception &e) {
+    ret = OB_ERR_VSAG_RETURN_ERROR;
+    LOG_WARN("[OBVSAG] exception caught in build_index", "what", e.what());
+  } catch (...) {
+    ret = OB_ERR_VSAG_RETURN_ERROR;
+    LOG_WARN("[OBVSAG] unknown exception caught in build_index");
   }
   return ret;
 }

@@ -38,7 +38,6 @@ class ObCreateDatabaseStmt : public ObDDLStmt
     common::ObCharsetType get_charset_type() const;
     common::ObCollationType get_collation_type() const;
     const common::ObString &get_database_name() const;
-    int set_primary_zone(const common::ObString &zone);
     void set_read_only(const bool read_only);
     int set_default_tablegroup_name(const common::ObString &tablegroup_name);
     obrpc::ObCreateDatabaseArg &get_create_database_arg();

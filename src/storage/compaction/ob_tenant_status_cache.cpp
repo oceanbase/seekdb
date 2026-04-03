@@ -15,7 +15,6 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_tenant_status_cache.h"
-#include "rootserver/ob_tenant_info_loader.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
@@ -88,21 +87,7 @@ int ObTenantStatusCache::refresh_tenant_config(
 int ObTenantStatusCache::inner_refresh_remote_tenant()
 {
   int ret = OB_SUCCESS;
-  ObRestoreDataMode restore_data_mode;
-  rootserver::ObTenantInfoLoader *tenant_info_loader = MTL(rootserver::ObTenantInfoLoader*);
-  if (OB_ISNULL(tenant_info_loader)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant info loader is null", K(ret));
-  } else if (OB_FAIL(tenant_info_loader->get_restore_data_mode(restore_data_mode))) {
-    if (REACH_TIME_INTERVAL(30_s)) {
-      LOG_WARN("get restore_data_mode failed", K(ret));
-    }
-  } else if (restore_data_mode.is_remote_mode()) {
-    is_remote_tenant_ = true;
-    LOG_INFO("tenant restore data mode is remote, should not loop tablet to schedule", K(ret), "tenant_id", MTL_ID());
-  } else {
-    is_remote_tenant_ = false;
-  }
+  is_remote_tenant_ = false;
   return ret;
 }
 

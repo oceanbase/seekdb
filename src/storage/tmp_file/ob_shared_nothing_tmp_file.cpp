@@ -275,9 +275,9 @@ int ObSharedNothingTmpFile::inner_read_from_disk_(const int64_t expected_read_di
                                                                     false /*is_open_interval*/);
     const int64_t start_page_id_in_data_item = read_start_virtual_page_id - data_items[i].virtual_page_id_;
     const int64_t begin_offset_in_block =
-        (data_items[i].physical_page_id_ + start_page_id_in_data_item) * ObTmpFileGlobal::PAGE_SIZE;
+        (data_items[i].physical_page_id_ + start_page_id_in_data_item) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     const int64_t end_offset_in_block =
-        (data_items[i].physical_page_id_ + data_items[i].physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+        (data_items[i].physical_page_id_ + data_items[i].physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     const int64_t begin_read_offset_in_block = begin_offset_in_block +
                                                (0 == i?
                                                 get_offset_in_page_(io_ctx.get_read_offset_in_file()) : 0);
@@ -305,7 +305,7 @@ int ObSharedNothingTmpFile::inner_read_from_disk_(const int64_t expected_read_di
         int64_t page_end_offset = get_page_end_offset_(io_ctx.get_read_offset_in_file());
         read_state.kv_cache_page_read_hits_++;
         read_state.total_kv_cache_page_read_cnt_ +=
-            (page_end_offset - page_begin_offset) / ObTmpFileGlobal::PAGE_SIZE;
+            (page_end_offset - page_begin_offset) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
         remain_read_size -= read_size;
         LOG_DEBUG("succ to read data from cached block",
               KR(ret), K(fd_), K(block_index), K(begin_offset_in_block), K(end_offset_in_block),
@@ -333,7 +333,7 @@ int ObSharedNothingTmpFile::inner_read_from_disk_(const int64_t expected_read_di
           int64_t page_end_offset = get_page_end_offset_(io_ctx.get_read_offset_in_file());
           read_state.uncached_page_read_hits_++;
           read_state.total_uncached_page_read_cnt_ +=
-              (page_end_offset - page_begin_offset) / ObTmpFileGlobal::PAGE_SIZE;
+              (page_end_offset - page_begin_offset) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
         }
       } else {
         if (io_ctx.is_prefetch()) {
@@ -499,7 +499,7 @@ int ObSharedNothingTmpFile::inner_cached_read_from_block_(const int64_t block_in
         } else {
           read_state.total_uncached_page_read_cnt_ += (get_page_end_offset_(end_read_offset) -
                                            get_page_begin_offset_(begin_read_offset)) /
-                                           ObTmpFileGlobal::PAGE_SIZE;
+                                           ObTmpFileGlobal::ALLOC_PAGE_SIZE;
           read_state.uncached_page_read_hits_++;
         }
       }
@@ -561,7 +561,7 @@ int ObSharedNothingTmpFile::inner_cached_read_from_block_with_prefetch_(
                                                                  K(block_index), K(begin_read_offset_in_block),
                                                                  K(user_read_size), K(io_ctx));
       } else {
-        read_state.total_uncached_page_read_cnt_ += user_read_size / ObTmpFileGlobal::PAGE_SIZE;
+        read_state.total_uncached_page_read_cnt_ += user_read_size / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
         read_state.uncached_page_read_hits_++;
       }
     }
@@ -644,7 +644,7 @@ int ObSharedNothingTmpFile::inner_read_continuous_uncached_pages_(const int64_t 
     if (OB_FAIL(io_ctx.get_io_handles().push_back(io_read_handle))) {
       LOG_WARN("Fail to push back into io_handles", KR(ret), K(fd_));
     } else if (OB_FAIL(read_info.init_read(block_handle.get()->get_macro_block_id(),
-                                           page_keys.count() * ObTmpFileGlobal::PAGE_SIZE,
+                                           page_keys.count() * ObTmpFileGlobal::ALLOC_PAGE_SIZE,
                                            block_read_begin_offset,
                                            io_ctx.get_io_flag(), io_ctx.get_io_timeout_ms(),
                                            &io_ctx.get_io_handles().at(io_ctx.get_io_handles().count()-1).handle_))) {
@@ -704,7 +704,7 @@ int ObSharedNothingTmpFile::swap_page_to_disk_(const ObTmpFileIOCtx &io_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(page_cache_controller_->invoke_swap_and_wait(
-          MIN(io_ctx.get_todo_size(), ObTmpFileGlobal::TMP_FILE_WRITE_BATCH_PAGE_NUM * ObTmpFileGlobal::PAGE_SIZE),
+          MIN(io_ctx.get_todo_size(), ObTmpFileGlobal::TMP_FILE_WRITE_BATCH_PAGE_NUM * ObTmpFileGlobal::ALLOC_PAGE_SIZE),
           io_ctx.get_io_timeout_ms()))) {
     LOG_WARN("fail to invoke swap and wait", KR(ret), K(io_ctx), K(fd_));
   }
@@ -718,7 +718,7 @@ int ObSharedNothingTmpFile::load_disk_tail_page_and_rewrite_(ObTmpFileIOCtx &io_
   // `file_size_` is already under multi-write lock's protection, no need to fetch meta lock.
   const int64_t has_written_size = get_offset_in_page_(file_size_);
   const int64_t tail_page_virtual_id = get_page_virtual_id_(file_size_, true /*is_open_interval*/);
-  const int64_t write_size = MIN(ObTmpFileGlobal::PAGE_SIZE - has_written_size, io_ctx.get_todo_size());
+  const int64_t write_size = MIN(ObTmpFileGlobal::ALLOC_PAGE_SIZE - has_written_size, io_ctx.get_todo_size());
   char *write_buff = io_ctx.get_todo_buffer();
   uint32_t new_page_id = ObTmpFileGlobal::INVALID_PAGE_ID;
   ObSharedNothingTmpFileDataItem data_item;
@@ -728,7 +728,7 @@ int ObSharedNothingTmpFile::load_disk_tail_page_and_rewrite_(ObTmpFileIOCtx &io_
   if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == tail_page_virtual_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("begin page virtual id is invalid", KR(ret), K(fd_), K(tail_page_virtual_id), K(file_size_));
-  } else if (OB_UNLIKELY(has_written_size + write_size > ObTmpFileGlobal::PAGE_SIZE)) {
+  } else if (OB_UNLIKELY(has_written_size + write_size > ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("need write size is invalid", KR(ret), K(fd_), K(has_written_size), K(write_size));
   } else if (OB_ISNULL(write_buff)) {
@@ -744,7 +744,7 @@ int ObSharedNothingTmpFile::load_disk_tail_page_and_rewrite_(ObTmpFileIOCtx &io_
     blocksstable::MacroBlockId macro_block_id;
     int64_t last_page_begin_offset_in_block =
                       (data_item.physical_page_id_ + data_item.physical_page_num_ - 1)
-                      * ObTmpFileGlobal::PAGE_SIZE;
+                      * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     char *page_buf = nullptr;
     if (OB_FAIL(tmp_file_block_manager_->get_macro_block_id(data_item.block_index_, macro_block_id))) {
       LOG_WARN("fail to get macro block id", KR(ret), K(fd_), K(data_item.block_index_));
@@ -854,14 +854,14 @@ int ObSharedNothingTmpFile::append_write_memory_tail_page_(ObTmpFileIOCtx &io_ct
   int ret = OB_SUCCESS;
   char *page_buff = nullptr;
   const int64_t has_written_size = get_offset_in_page_(file_size_);
-  const int64_t need_write_size = MIN(ObTmpFileGlobal::PAGE_SIZE - has_written_size,
+  const int64_t need_write_size = MIN(ObTmpFileGlobal::ALLOC_PAGE_SIZE - has_written_size,
                                       io_ctx.get_todo_size());
   const int64_t end_page_virtual_id = get_end_page_virtual_id_();
   char *write_buff = io_ctx.get_todo_buffer();
   uint32_t unused_page_id = ObTmpFileGlobal::INVALID_PAGE_ID;
   ObSharedNothingTmpFileDataItem rightest_data_item;
 
-  if (OB_UNLIKELY(has_written_size + need_write_size > ObTmpFileGlobal::PAGE_SIZE)) {
+  if (OB_UNLIKELY(has_written_size + need_write_size > ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("need write size is invalid", KR(ret), K(fd_), K(has_written_size), K(need_write_size));
   } else if (OB_ISNULL(write_buff)) {
@@ -1268,13 +1268,13 @@ int64_t ObSharedNothingTmpFile::get_dirty_data_page_size_() const
     LOG_ERROR("page num is invalid", KR(ret), K(cached_page_nums_), K(flushed_data_page_num_),
               K(write_back_data_page_num_), KPC(this));
     dirty_size = 0;
-  } else if (0 == file_size_ % ObTmpFileGlobal::PAGE_SIZE) {
+  } else if (0 == file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
     dirty_size =
-      (cached_page_nums_ - flushed_data_page_num_ - write_back_data_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+      (cached_page_nums_ - flushed_data_page_num_ - write_back_data_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   } else {
     dirty_size =
-      (cached_page_nums_ - flushed_data_page_num_ - write_back_data_page_num_ - 1) * ObTmpFileGlobal::PAGE_SIZE
-      + file_size_ % ObTmpFileGlobal::PAGE_SIZE;
+      (cached_page_nums_ - flushed_data_page_num_ - write_back_data_page_num_ - 1) * ObTmpFileGlobal::ALLOC_PAGE_SIZE
+      + file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   }
 
   if (dirty_size < 0) {
@@ -1526,7 +1526,7 @@ int ObSharedNothingTmpFile::remove_useless_page_in_data_flush_infos_(const int64
     for (int64_t i = start_pos; OB_SUCC(ret) && i < end_pos; i++) {
       int64_t flushed_start_offset = get_page_begin_offset_by_virtual_id_(flush_infos_[i].flush_virtual_page_id_);
       int64_t flushed_end_offset = flushed_start_offset +
-                                   flush_infos_[i].flush_data_page_num_ * ObTmpFileGlobal::PAGE_SIZE;
+                                   flush_infos_[i].flush_data_page_num_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
       if (truncated_offset_ <= flushed_start_offset) {
         // the following flushing pages are not affected by truncate_offset
         break;
@@ -1534,9 +1534,9 @@ int ObSharedNothingTmpFile::remove_useless_page_in_data_flush_infos_(const int64
         // although a page is truncated partly, it will also be flushed whole page
         int64_t flush_info_flushed_size = flushed_end_offset - truncated_offset_;
         int64_t flush_info_data_page_num =
-                common::upper_align(flush_info_flushed_size, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE;
+                common::upper_align(flush_info_flushed_size, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
         uint32_t flush_info_virtual_page_id =
-                common::lower_align(truncated_offset_, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE;
+                common::lower_align(truncated_offset_, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
         new_flushed_data_page_num -= (flush_infos_[i].flush_data_page_num_ - flush_info_data_page_num);
 
         LOG_INFO("due to truncating, modify flush info", KR(ret), K(fd_),
@@ -1831,7 +1831,7 @@ int ObSharedNothingTmpFile::collect_flush_data_page_id_(
 {
   int ret = OB_SUCCESS;
   char *buf = flush_task.get_data_buf();
-  int64_t write_offset = flush_task.get_total_page_num() * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset = flush_task.get_total_page_num() * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   bool has_last_page_lock = false;
   int64_t next_disk_page_id = flush_task.get_next_free_page_id();
@@ -1850,7 +1850,7 @@ int ObSharedNothingTmpFile::collect_flush_data_page_id_(
     LOG_WARN("fail to push back empty flush info", KR(ret), K(fd_), K(info), K(flush_task), KPC(this));
   }
   while (OB_SUCC(ret) && cur_page_id != copy_end_page_id && write_offset < OB_STORAGE_OBJECT_MGR.get_macro_object_size()) {
-    if (need_flush_tail && cur_page_id == end_page_id_ && file_size_ % ObTmpFileGlobal::PAGE_SIZE != 0) {
+    if (need_flush_tail && cur_page_id == end_page_id_ && file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE != 0) {
       if (OB_SUCC(last_page_lock_.trylock())) {
         has_last_page_lock = true;
       } else {
@@ -1870,11 +1870,11 @@ int ObSharedNothingTmpFile::collect_flush_data_page_id_(
       LOG_ERROR("fail to push back flush page id", KR(ret), K(fd_), K(cur_page_id), KPC(this));
     } else {
       // ObTmpPageCacheKey cache_key(flush_task.get_block_index(),
-      //                             write_offset / ObTmpFileGlobal::PAGE_SIZE, tenant_id_);
+      //                             write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, tenant_id_);
       // ObTmpPageCacheValue cache_value(page_buf);
       // ObTmpPageCache::get_instance().try_put_page_to_cache(cache_key, cache_value);
 
-      write_offset += ObTmpFileGlobal::PAGE_SIZE;
+      write_offset += ObTmpFileGlobal::ALLOC_PAGE_SIZE;
       flushing_page_num += 1;
       cur_flushed_page_id = cur_page_id;
       cur_page_id = next_page_id;
@@ -1968,7 +1968,7 @@ int ObSharedNothingTmpFile::generate_meta_flush_info_(
 
   const int64_t block_index = flush_task.get_block_index();
   char *buf = flush_task.get_data_buf();
-  int64_t write_offset = flush_task.get_total_page_num() * ObTmpFileGlobal::PAGE_SIZE;
+  int64_t write_offset = flush_task.get_total_page_num() * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
 
   ObTmpFileTreeEvictType flush_type = need_flush_tail ?
                                       ObTmpFileTreeEvictType::FULL : ObTmpFileTreeEvictType::MAJOR;
@@ -2270,7 +2270,7 @@ int ObSharedNothingTmpFile::get_flush_end_page_id_(uint32_t& flush_end_page_id, 
   int ret = OB_SUCCESS;
   const int64_t INVALID_PAGE_ID = ObTmpFileGlobal::INVALID_PAGE_ID;
   flush_end_page_id = INVALID_PAGE_ID;
-  if (file_size_ % ObTmpFileGlobal::PAGE_SIZE == 0) {
+  if (file_size_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE == 0) {
     flush_end_page_id = INVALID_PAGE_ID;
   } else { // determined whether to flush last page based on flag if last page is not full
     flush_end_page_id = need_flush_tail ? INVALID_PAGE_ID : end_page_id_;

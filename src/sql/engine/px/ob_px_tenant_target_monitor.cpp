@@ -217,25 +217,6 @@ int ObPxTenantTargetMonitor::get_role(ObRole &role)
 int ObPxTenantTargetMonitor::refresh_dummy_location()
 {
   int ret = OB_SUCCESS;
-  static int refresh_ctrl = 0;
-  dummy_cache_leader_.reset();
-  if ((refresh_ctrl++ % 10) == 0) {
-    MTL_SWITCH(tenant_id_) {
-      transaction::ObILocationAdapter *location_adapter = NULL;
-      if (OB_ISNULL(location_adapter = MTL(ObTransService*)->get_location_adapter())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("location adapter is null", K(ret), K(tenant_id_));
-      } else if (OB_FAIL(location_adapter->nonblock_renew(cluster_id_, tenant_id_, SYS_LS))) {
-        LOG_WARN("nonblock renew failed", K(ret));
-      } else {
-        LOG_INFO("refresh location cache for target_monitor", K(tenant_id_), K(refresh_ctrl));
-      }
-    } else {
-      LOG_WARN("switch to tenant failed", K(tenant_id_));
-    }
-  } else {
-    LOG_INFO("waiting for refresh location cache for target_monitor", K(tenant_id_), K(refresh_ctrl));
-  }
   return ret;
 }
 

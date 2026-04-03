@@ -39,15 +39,11 @@ public:
                                      common::ObIAllocator &allocator,
                                      common::ObIArray<uint64_t> &output_column_ids,
                                      common::ObNewRow &cur_row,
-                                     common::ObAddr &addr,
-                                     common::ObString &addr_ip,
                                      uint64_t effective_tenant_id)
     : scanner_(scanner),
       allocator_(allocator),
       output_column_ids_(output_column_ids),
       cur_row_(cur_row),
-      addr_(addr),
-      addr_ip_(addr_ip),
       effective_tenant_id_(effective_tenant_id)
   {}
   virtual ~ObDTLIntermResultMonitorInfoGetter() = default;
@@ -60,8 +56,6 @@ private:
   common::ObIAllocator &allocator_;
   common::ObIArray<uint64_t> &output_column_ids_;
   common::ObNewRow &cur_row_;
-  common::ObAddr &addr_;
-  common::ObString &addr_ip_;
   uint64_t effective_tenant_id_;
 };
 
@@ -73,15 +67,10 @@ public:
   virtual ~ObAllDtlIntermResultMonitor();
   virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row) override;
-  inline void set_addr(common::ObAddr &addr) { addr_ = &addr; }
 private:
-  common::ObAddr *addr_;
   enum INSPECT_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TRACE_ID,
+        TRACE_ID = common::OB_APP_MIN_COLUMN_ID,
     OWNER,
     START_TIME,
     EXPIRE_TIME,

@@ -19,7 +19,6 @@
 #include "lib/literals/ob_literals.h"    // ObLSIterator
 #include "storage/tx_storage/ob_ls_service.h" // ObLSService
 #include "storage/tablet/ob_tablet_iterator.h"
-#include "rootserver/ob_tenant_info_loader.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 
 namespace oceanbase
@@ -418,15 +417,9 @@ int ObTabletEmptyShellHandler::check_transfer_out_deleted_tablet_(
 int ObTabletEmptyShellHandler::get_readable_scn(share::SCN &readable_scn)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObTenantInfoLoader *info_loader = MTL(rootserver::ObTenantInfoLoader*);
-
-  if (OB_FAIL(info_loader->get_readable_scn(readable_scn))) {
-    STORAGE_LOG(WARN, "failed to get tenant readable scn", K(ret), K(readable_scn));
-  } else if (OB_UNLIKELY(!readable_scn.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "readable scn is invalid", K(ret), K(readable_scn));
+  if (OB_FAIL(ObShareUtil::get_sys_ls_readable_scn(readable_scn))) {
+    LOG_WARN("failed to get_max_decided_scn", KR(ret));
   }
-
   return ret;
 }
 

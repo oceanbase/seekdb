@@ -42,10 +42,6 @@
 
 namespace oceanbase
 {
-namespace observer
-{
-class ObIMetaReport;
-}
 namespace common
 {
 class ObRowStore;
@@ -298,8 +294,7 @@ public:
       const ObMetaDiskAddr &disk_addr,
       const char *buf,
       const int64_t buf_len,
-      const ObTabletID &tablet_id,
-      ObTabletTransferInfo &tablet_transfer_info);
+      const ObTabletID &tablet_id);
 
   int create_memtable(const common::ObTabletID &tablet_id, CreateMemtableArg &arg);
   int get_read_tables(

@@ -24,7 +24,6 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "ob_px_rpc_proxy.h"
-#include "share/ob_alive_server_tracer.h"
 
 namespace oceanbase
 {
@@ -101,8 +100,7 @@ class ObPxTargetMgr
 public:
   ObPxTargetMgr() : timer_task_(*this) { reset(); }
   ~ObPxTargetMgr() { destroy(); }
-  int init(const common::ObAddr &server,
-           share::ObIAliveServerTracer &server_tracer);
+  int init(const common::ObAddr &server);
   void reset();
   int start();
   void stop();
@@ -150,7 +148,6 @@ private:
   bool is_inited_;
   bool is_running_;
   common::ObAddr server_;
-  share::ObIAliveServerTracer *server_tracer_;
   ObPxInfoMap px_info_map_; // If considering deleting tenant, need to add lock
   hash::ObHashSet<ObAddr> alive_server_set_;
   TimerTask timer_task_;
@@ -176,7 +173,7 @@ public:
     // Outside needs to traverse all tenants, here cannot return false
     return true;
   }
-  
+
   void set_need_refresh_all(bool need_refresh_all) { need_refresh_all_ = need_refresh_all; }
 
   bool need_refresh_all_;

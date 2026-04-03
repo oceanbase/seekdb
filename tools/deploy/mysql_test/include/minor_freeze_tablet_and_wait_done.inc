@@ -6,7 +6,7 @@
 connect (obsys_minor,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys_minor;
 
-let $__tablet_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tablet_id from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name = $__freeze_table_name__, tablet_id, 1);
+let $__tablet_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tablet_id from oceanbase.__all_virtual_tablet_to_ls where table_id = (select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name = $__freeze_table_name__), tablet_id, 1);
 
 eval alter system minor freeze tenant sys tablet_id = $__tablet_id__;
 sleep 5;

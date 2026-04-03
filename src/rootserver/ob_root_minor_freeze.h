@@ -35,7 +35,6 @@ class ObSrvRpcProxy;
 
 namespace rootserver
 {
-class ObUnitManager;
 
 class ObRootMinorFreeze
 {
@@ -43,8 +42,7 @@ public:
   ObRootMinorFreeze();
   virtual ~ObRootMinorFreeze();
 
-  int init(obrpc::ObSrvRpcProxy &rpc_proxy,
-           ObUnitManager &unit_manager);
+  int init(obrpc::ObSrvRpcProxy &rpc_proxy);
   void start();
   void stop();
   int destroy();
@@ -106,7 +104,6 @@ private:
   bool inited_;
   bool stopped_;
   obrpc::ObSrvRpcProxy *rpc_proxy_;
-  ObUnitManager *unit_manager_;
 };
 
 }

@@ -35,10 +35,7 @@ public:
 private:
   enum SYS_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    REQUEST_ID,
+    REQUEST_ID = common::OB_APP_MIN_COLUMN_ID,
     TRACE_ID,
     SPAN_ID,
     PARENT_SPAN_ID,
@@ -53,17 +50,7 @@ private:
   //static const char FOLLOW[] = "FOLLOW";
   //static const char CHILD[] = "CHILD";
 
-  const static int64_t PRI_KEY_IP_IDX        = 0;
-  const static int64_t PRI_KEY_PORT_IDX      = 1;
-  const static int64_t PRI_KEY_TENANT_ID_IDX = 2;
-  const static int64_t PRI_KEY_TRACE_ID_IDX    = 3;
-  const static int64_t PRI_KEY_REQ_ID_IDX    = 4;
-
-  const static int64_t IDX_KEY_TENANT_ID_IDX = 0;
-  const static int64_t IDX_KEY_REQ_ID_IDX    = 1;
-  const static int64_t IDX_KEY_IP_IDX        = 2;
-  const static int64_t IDX_KEY_TRACE_ID_IDX    = 3;
-  const static int64_t IDX_KEY_PORT_IDX      = 4;
+  const static int64_t PRI_KEY_REQ_ID_IDX    = 0;
   DISALLOW_COPY_AND_ASSIGN(ObVirtualSpanInfo);
   sql::ObFLTSpanMgr *cur_flt_span_mgr_;
   int64_t start_id_;

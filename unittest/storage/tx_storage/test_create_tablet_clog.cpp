@@ -91,7 +91,6 @@ void TestCreateTabletClog::get_write_clog_buf(
 TEST_F(TestCreateTabletClog, replay_create_tablet_clog_test)
 {
   int ret = OB_SUCCESS;
-  ObCreateLSArg arg;
   ObLS *ls = NULL;
   ObLSID ls_id(100);
 
@@ -105,14 +104,13 @@ TEST_F(TestCreateTabletClog, replay_create_tablet_clog_test)
 
   LOG_INFO("replay_create_tablet_clog_test begin");
   // 1. prepare ls
-  ASSERT_EQ(OB_SUCCESS, gen_create_ls_arg(env.tenant_id, ls_id, arg));
   ASSERT_EQ(OB_SUCCESS, gen_create_tablet_arg(env.tenant_id, ls_id, tablet_id, create_tablet_arg));
 
   ObLSService *ls_service = MTL(ObLSService*);
   ASSERT_NE(nullptr, ls_service);
 
   ASSERT_EQ(OB_SUCCESS, ls_service->start());
-  ASSERT_EQ(OB_SUCCESS, ls_service->create_ls(arg));
+  ASSERT_EQ(OB_SUCCESS, ls_service->create_ls());
 
   // 2. replay clog
   const palf::LSN lsn;

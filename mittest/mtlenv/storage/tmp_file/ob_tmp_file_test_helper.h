@@ -301,7 +301,7 @@ void TestTmpFileStress::write_data_(const int64_t write_size)
     STORAGE_LOG(INFO, "random write size", K(fd_), K(thread_idx_), KP(buf_), K(size_), K(this_turn_write_size));
     // write data
     io_info.buf_ = buf_ + already_write;
-    if (this_turn_write_size % ObTmpFileGlobal::PAGE_SIZE == 0 && i == 0) {
+    if (this_turn_write_size % ObTmpFileGlobal::ALLOC_PAGE_SIZE == 0 && i == 0) {
       io_info.size_ = this_turn_write_size - 2 * 1024;
       ret = MTL(ObTenantTmpFileManager *)->write(MTL_ID(), io_info);
       if (OB_FAIL(ret)) {

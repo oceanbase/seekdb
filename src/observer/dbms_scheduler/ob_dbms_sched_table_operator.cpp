@@ -47,7 +47,6 @@ int ObDBMSSchedTableOperator::update_next_date(
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
 
   OZ (dml.add_gmt_modified(now));
-  OZ (dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.add_time_column("next_date", next_date));
@@ -74,7 +73,6 @@ int ObDBMSSchedTableOperator::update_for_start(
 
   OX (job_info.this_date_ = now);
   OZ (dml.add_gmt_modified(now));
-  OZ (dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.add_time_column("this_date", job_info.this_date_));
@@ -105,7 +103,6 @@ int ObDBMSSchedTableOperator::update_for_start_execute(
   CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
   CK (OB_LIKELY(job_info.job_ != OB_INVALID_ID));
   OZ (dml.add_gmt_modified(now));
-  OZ (dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.add_time_column("this_exec_date", now));
@@ -121,8 +118,6 @@ int ObDBMSSchedTableOperator::_build_job_drop_dml(int64_t now, ObDBMSSchedJobInf
   ObDMLSqlSplicer dml;
   int64_t tenant_id = job_info.tenant_id_;
   OZ (dml.add_gmt_modified(now));
-  OZ (dml.add_pk_column("tenant_id",
-        ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.splice_delete_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
   return ret;
@@ -134,8 +129,6 @@ int ObDBMSSchedTableOperator::_build_job_finished_dml(int64_t now, ObDBMSSchedJo
   ObDMLSqlSplicer dml;
   int64_t tenant_id = job_info.tenant_id_;
   OZ (dml.add_gmt_modified(now));
-  OZ (dml.add_pk_column("tenant_id",
-        ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.add_column("state", job_info.state_));
@@ -161,8 +154,6 @@ int ObDBMSSchedTableOperator::_build_job_rollback_start_dml(ObDBMSSchedJobInfo &
   int ret = OB_SUCCESS;
   ObDMLSqlSplicer dml;
   int64_t tenant_id = job_info.tenant_id_;
-  OZ (dml.add_pk_column("tenant_id",
-        ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job", job_info.job_));
   OZ (dml.add_pk_column("job_name", job_info.job_name_));
   OZ (dml.add_column(true, "this_date"));
@@ -670,16 +661,14 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
   CK (OB_LIKELY(job_id != OB_INVALID_ID));
 
   if (!job_name.empty()) {
-    OZ (sql.append_fmt("select * from %s where tenant_id = %lu and job_name = \'%.*s\' and job = %ld",
+    OZ (sql.append_fmt("select * from %s where job_name = \'%.*s\' and job = %ld",
         OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-        ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
         job_name.length(),
         job_name.ptr(),
         job_id));
   } else {
-    OZ (sql.append_fmt("select * from %s where tenant_id = %lu and job = %ld",
+    OZ (sql.append_fmt("select * from %s where job = %ld",
         OB_ALL_TENANT_SCHEDULER_JOB_TNAME,
-        ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
         job_id));
   }
 
@@ -788,8 +777,8 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
   CK (OB_NOT_NULL(sql_proxy_));
   CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
   CK (OB_LIKELY(!job_class_name.empty()));
-  OZ (sql.append_fmt("select * from %s where tenant_id = %lu and job_class_name = \'%.*s\'",
-      OB_ALL_TENANT_SCHEDULER_JOB_CLASS_TNAME, ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id), job_class_name.length(), job_class_name.ptr()));
+  OZ (sql.append_fmt("select * from %s where job_class_name = \'%.*s\'",
+      OB_ALL_TENANT_SCHEDULER_JOB_CLASS_TNAME, job_class_name.length(), job_class_name.ptr()));
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, tenant_id, sql.ptr()))) {
@@ -831,8 +820,8 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_tenant(
   CK (OB_NOT_NULL(sql_proxy_));
   CK (OB_LIKELY(tenant_id != OB_INVALID_ID));
 
-  OZ (sql.append_fmt("select * from %s where tenant_id = %lu order by log_history desc",
-      OB_ALL_TENANT_SCHEDULER_JOB_CLASS_TNAME, ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
+  OZ (sql.append_fmt("select * from %s order by log_history desc",
+      OB_ALL_TENANT_SCHEDULER_JOB_CLASS_TNAME));
 
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
@@ -908,9 +897,8 @@ int ObDBMSSchedTableOperator::_purge_old(uint64_t tenant_id)
   ObSqlString sql;
   int64_t affected_rows = 0;
   int64_t purge_rows = 0;
-  OZ (sql.assign_fmt("delete from %s where tenant_id = %lu and time<DATE_SUB(NOW(), INTERVAL %ld DAY) order by time asc limit %ld",
+  OZ (sql.assign_fmt("delete from %s where time<DATE_SUB(NOW(), INTERVAL %ld DAY) order by time asc limit %ld",
       OB_ALL_TENANT_SCHEDULER_JOB_RUN_DETAIL_TNAME,
-      ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
       DEFAULT_LOG_HISTORY,
       PURGE_LOG_BATCH_COUNT));
   while (OB_SUCC(ret) && !THIS_WORKER.is_timeout()) {

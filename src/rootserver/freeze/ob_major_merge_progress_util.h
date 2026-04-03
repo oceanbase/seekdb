@@ -18,7 +18,6 @@
 #include "share/compaction/ob_compaction_time_guard.h"
 #include "share/ob_delegate.h"
 #include "share/ob_ls_id.h"
-#include "share/ob_balance_define.h"
 #include "share/tablet/ob_tablet_info.h"
 namespace oceanbase
 {
@@ -310,18 +309,16 @@ public:
     const uint64_t table_id,
     const ObTabletID tablet_id,
     share::ObLSID &ls_id) const;
-  TO_STRING_KV(K_(tenant_id), K_(last_refresh_ts), K_(max_task_id), "map_cnt", map_.size());
+  TO_STRING_KV(K_(tenant_id), K_(last_refresh_ts), "map_cnt", map_.size());
 private:
   int refresh();
   int rebuild_map_by_tablet_cnt();
-  int check_exist_new_transfer_task(bool &exist, share::ObTransferTaskID &max_task_id);
   const static int64_t RANGE_SIZE = 1000;
   const static int64_t REFRESH_CACHE_TIME_INTERVAL = 60 * 1000 * 1000; // 1m
   const static int64_t TABLET_LS_MAP_BUCKET_CNT = 3000;
   const static int64_t TABLET_LS_MAP_BUCKET_MAX_CNT = 300000;
   uint64_t tenant_id_;
   int64_t last_refresh_ts_;
-  share::ObTransferTaskID max_task_id_;
   hash::ObHashMap<common::ObTabletID, share::ObLSID> map_;
 };
 

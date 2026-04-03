@@ -109,7 +109,6 @@ void TestDDLOperator::SetUp()
   ObTenantSchema tenant_schema;
   tenant_schema.set_tenant_id(OB_SYS_TENANT_ID);
   tenant_schema.set_tenant_name(OB_SYS_TENANT_NAME);
-  tenant_schema.set_locality("F@test");
   tenant_schema.add_zone("test");
   CREATE_TENANT(ret, tenant_schema);
 
@@ -191,9 +190,7 @@ int TestDDLOperator::create_tenant(const char *tenant_name, uint64_t &tenant_id)
     tenant_schema.set_tenant_id(tenant_id);
     tenant_schema.set_tenant_name(tenant_name);
     tenant_schema.set_comment("this is a test tenant");
-    tenant_schema.set_primary_zone(ObString::make_string("test"));
     tenant_schema.add_zone("test");
-    tenant_schema.set_locality("");
     tenant_schema.set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
   }
 
@@ -243,7 +240,6 @@ int TestDDLOperator::create_database(const uint64_t tenant_id, const char *datab
   database_schema.set_database_id(OB_INVALID_ID);
   database_schema.set_database_name(database_name);
   database_schema.set_comment("this is a test db");
-  database_schema.set_primary_zone("test");
   database_schema.add_zone("test");
   ObArray<ObString> zone_list;
   ObMySQLTransaction trans;
@@ -319,7 +315,6 @@ int TestDDLOperator::create_table(const uint64_t tenant_id, const uint64_t datab
     table_schema.set_part_level(PARTITION_LEVEL_ONE);
     table_schema.get_part_option().set_part_num(3);
     table_schema.get_part_option().set_max_used_part_id(2);
-    table_schema.set_primary_zone("test");
     table_schema.add_zone("test");
   }
 

@@ -33,9 +33,7 @@ namespace oceanbase {
 namespace observer {
 
 enum class ObPluginInfoColumn : int64_t {
-  SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-  SVR_PORT,
-  NAME,
+  NAME = common::OB_APP_MIN_COLUMN_ID,
   STATUS,
   TYPE,
   LIBRARY,
@@ -107,20 +105,6 @@ int ObAllVirtualPluginInfo::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       const ObPluginInfoColumn col_id = static_cast<ObPluginInfoColumn>(output_column_ids_.at(i));
       switch (col_id) {
-        case ObPluginInfoColumn::SVR_IP: {
-          if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cells[i].set_varchar(ip_buf_);
-            cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-          }
-        } break;
-
-        case ObPluginInfoColumn::SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-        } break;
-
         case ObPluginInfoColumn::NAME: {
           cells[i].set_varchar(plugin_entry.name);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

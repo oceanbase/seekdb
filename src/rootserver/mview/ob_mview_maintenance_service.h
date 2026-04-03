@@ -22,7 +22,6 @@
 #include "rootserver/mview/ob_mview_refresh_stats_maintenance_task.h"
 #include "rootserver/mview/ob_mview_push_refresh_scn_task.h"
 #include "rootserver/mview/ob_mview_push_snapshot_task.h"
-#include "rootserver/mview/ob_collect_mv_merge_info_task.h"
 #include "rootserver/mview/ob_mview_clean_snapshot_task.h"
 #include "share/scn.h"
 #include "rootserver/mview/ob_replica_safe_check_task.h"
@@ -192,7 +191,6 @@ private:
   ObMViewPushRefreshScnTask mview_push_refresh_scn_task_;
   ObMViewPushSnapshotTask mview_push_snapshot_task_;
   ObReplicaSafeCheckTask replica_safe_check_task_;
-  ObCollectMvMergeInfoTask collect_mv_merge_info_task_;
   ObMViewCleanSnapshotTask mview_clean_snapshot_task_;
   ObMviewUpdateCacheTask mview_update_cache_task_;
   ObMViewMdsOpTask mview_mds_task_;

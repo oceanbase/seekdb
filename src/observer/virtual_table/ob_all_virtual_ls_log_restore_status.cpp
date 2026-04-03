@@ -18,7 +18,6 @@
 
 #include "ob_all_virtual_ls_log_restore_status.h"
 #include "storage/tx_storage/ob_ls_service.h"   // ObLSService
-#include "rootserver/standby/ob_recovery_ls_service.h" //ObLSRecoveryService
 
 using namespace oceanbase::share; 
 

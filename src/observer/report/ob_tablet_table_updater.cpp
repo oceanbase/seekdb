@@ -22,6 +22,9 @@
 #include "observer/ob_service.h"                    // for is_mini_mode
 #include "share/ob_tablet_replica_checksum_operator.h" // for ObTabletReplicaChecksumItem
 #include "storage/compaction/ob_compaction_diagnose.h"
+#include "share/storage/ob_sqlite_connection_pool.h"
+#include "share/storage/ob_sqlite_connection.h"
+#include "share/tablet/ob_tablet_meta_table_storage.h"
 
 namespace oceanbase
 {
@@ -504,61 +507,6 @@ void ObTabletTableUpdater::diagnose_batch_tasks_(
   }
 }
 
-void ObTabletTableUpdater::prepare_locality_cache_(
-    share::ObCompactionLocalityCache &locality_cache,
-    bool &locality_is_valid)
-{
-  int ret = OB_SUCCESS;
-  locality_is_valid = false;
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (!GCTX.is_shared_storage_mode()) {
-    // do nothing
-  } else if (OB_FAIL(locality_cache.init(tenant_id_))) {
-    LOG_WARN("failed to init locality cache for ss report", K(ret), K_(tenant_id));
-  } else if (OB_FAIL(locality_cache.refresh_ls_locality(true/*force_refresh*/))) {
-    LOG_WARN("failed to refresh ls locality cache", K(ret), K_(tenant_id));
-  } else {
-    locality_is_valid = true;
-  }
-#endif
-}
-
-void ObTabletTableUpdater::check_remove_task_(
-    const share::ObLSID &ls_id,
-    const bool is_ls_not_exist,
-    const bool locality_is_valid,
-    share::ObCompactionLocalityCache &locality_cache,
-    bool &is_remove_task)
-{
-  int ret = OB_SUCCESS;
-  is_remove_task = false;
-
-  if (!GCTX.is_shared_storage_mode()) {
-    is_remove_task = true;
-  } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-    share::ObLSInfo ls_info;
-    const ObLSReplica *replica = nullptr;
-
-    if (!locality_is_valid) {
-      // locality cache not valid, ignore to check the remove task temporarily
-    } else if (OB_FAIL(locality_cache.get_ls_info(ls_id, ls_info))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        is_remove_task = true;
-      } else {
-        LOG_WARN("failed to get ls info", K(ret), K(ls_id));
-      }
-    } else if (is_ls_not_exist) {
-      // no need to check whether ls is leader
-    } else if (OB_FAIL(ls_info.find_leader(replica))) {
-      LOG_WARN("failed to find leader", K(ret), K(ls_id), K(ls_info));
-    } else if (replica->get_server() == GCTX.self_addr()) {
-      is_remove_task = true; // ls leader is on cur server
-    }
-#endif
-  }
-}
-
 int ObTabletTableUpdater::push_task_info_(
     const ObTabletTableUpdateTask &task,
     const share::ObTabletReplica &replica,
@@ -590,8 +538,6 @@ int ObTabletTableUpdater::generate_tasks_(
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObCompactionLocalityCache locality_cache;
-  bool locality_is_valid = false;
   int64_t retry_tablet_replica_count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -602,8 +548,6 @@ int ObTabletTableUpdater::generate_tasks_(
   } else if (OB_UNLIKELY(batch_tasks.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("batch_tasks count <= 0", KR(ret), "tasks_count", batch_tasks.count());
-  } else {
-    prepare_locality_cache_(locality_cache, locality_is_valid);
   }
 
   ObTabletReplica replica;
@@ -636,7 +580,7 @@ int ObTabletTableUpdater::generate_tasks_(
         ret = OB_SUCCESS;
       } else {
         bool is_ls_not_exist = OB_LS_NOT_EXIST == ret;
-        check_remove_task_(task->get_ls_id(), is_ls_not_exist, locality_is_valid, locality_cache, is_remove_task);
+        is_remove_task = true;
         ret = OB_SUCCESS;
       }
 
@@ -810,24 +754,37 @@ int ObTabletTableUpdater::do_batch_remove_(
   } else if (OB_UNLIKELY(tasks_count != replicas.count() || OB_ISNULL(GCTX.tablet_operator_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tasks count", KR(ret), K(tasks_count), KP(GCTX.tablet_operator_));
+  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("meta_db_pool_ not initialized", K(ret));
   } else {
-    common::ObMySQLTransaction trans;
-    const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id_);
-    if (OB_FAIL(trans.start(GCTX.sql_proxy_, meta_tenant_id))) {
-      LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id), K(meta_tenant_id));
-    } else if (OB_FAIL(GCTX.tablet_operator_->batch_remove(trans, tenant_id_, replicas))) {
+    // Use SQLite transaction for multi-table operations
+    share::ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
+    if (!guard) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to acquire connection", K(ret));
+    } else if (OB_FAIL(guard->begin_transaction())) {
+      LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id));
+    } else if (OB_FAIL(GCTX.tablet_operator_->batch_remove(guard.get_connection(), tenant_id_, replicas))) {
       LOG_WARN("do tablet table remove failed, try to reput to queue", KR(ret),
                "escape time", ObTimeUtility::current_time() - start_time);
-    } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_remove_with_trans(trans, tenant_id_, replicas))) {
+    } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_remove_with_trans(guard.get_connection(), tenant_id_, replicas))) {
       LOG_WARN("do tablet table checksum remove failed, try to reput to queue", KR(ret),
                "escape time", ObTimeUtility::current_time() - start_time);
     }
 
-    if (trans.is_started()) {
-      int trans_ret = trans.end(OB_SUCCESS == ret);
-      if (OB_SUCCESS != trans_ret) {
-        LOG_WARN("fail to end transaction", KR(trans_ret));
-        ret = ((OB_SUCCESS == ret) ? trans_ret : ret);
+    if (guard->is_in_transaction()) {
+      if (OB_FAIL(ret)) {
+        int rollback_ret = guard->rollback();
+        if (OB_SUCCESS != rollback_ret) {
+          LOG_WARN("fail to rollback transaction", KR(rollback_ret));
+        }
+      } else {
+        int commit_ret = guard->commit();
+        if (OB_SUCCESS != commit_ret) {
+          LOG_WARN("fail to commit transaction", KR(commit_ret));
+          ret = commit_ret;
+        }
       }
     }
     if (OB_FAIL(ret)) {
@@ -879,31 +836,37 @@ int ObTabletTableUpdater::do_batch_update_(
     common::ObMySQLTransaction trans;
     const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id_);
     if (OB_FAIL(ret)) {
-    } else if (GCTX.is_shared_storage_mode()) {
-#ifdef OB_BUILD_SHARED_STORAGE
-      if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_select_and_update_with_trans(tenant_id_, checksums))) {
-        LOG_WARN("do tablet table checksum update failed, try to reput to queue", KR(ret),
-             "escape time", ObTimeUtility::current_time() - start_time);
-      }
-#else
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support shared storage mode", KR(ret));
-#endif
+    } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("meta_db_pool_ not initialized", K(ret));
     } else {
-      if (OB_FAIL(trans.start(GCTX.sql_proxy_, meta_tenant_id))) {
-        LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id), K(meta_tenant_id));
-      } else if (OB_FAIL(GCTX.tablet_operator_->batch_update(trans, tenant_id_, replicas))) {
+      // Use SQLite transaction for multi-table operations
+      share::ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
+      if (!guard) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to acquire connection", K(ret));
+      } else if (OB_FAIL(guard->begin_transaction())) {
+        LOG_WARN("fail to start transaction", KR(ret), K_(tenant_id));
+      } else if (OB_FAIL(GCTX.tablet_operator_->batch_update(guard.get_connection(), tenant_id_, replicas))) {
         LOG_WARN("do tablet table update failed, try to reput to queue", KR(ret),
               "escape time", ObTimeUtility::current_time() - start_time);
-      } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_update_with_trans(trans, tenant_id_, checksums))) {
+      } else if (OB_FAIL(ObTabletReplicaChecksumOperator::batch_update_with_trans(guard.get_connection(), tenant_id_, checksums))) {
         LOG_WARN("do tablet table checksum update failed, try to reput to queue", KR(ret),
              "escape time", ObTimeUtility::current_time() - start_time);
       }
-      if (trans.is_started()) {
-        int trans_ret = trans.end(OB_SUCCESS == ret);
-        if (OB_SUCCESS != trans_ret) {
-          LOG_WARN("fail to end transaction", KR(trans_ret));
-          ret = ((OB_SUCCESS == ret) ? trans_ret : ret);
+
+      if (guard->is_in_transaction()) {
+        if (OB_FAIL(ret)) {
+          int rollback_ret = guard->rollback();
+          if (OB_SUCCESS != rollback_ret) {
+            LOG_WARN("fail to rollback transaction", KR(rollback_ret));
+          }
+        } else {
+          int commit_ret = guard->commit();
+          if (OB_SUCCESS != commit_ret) {
+            LOG_WARN("fail to commit transaction", KR(commit_ret));
+            ret = commit_ret;
+          }
         }
       }
     }

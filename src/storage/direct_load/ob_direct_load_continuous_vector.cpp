@@ -72,9 +72,9 @@ int ObDirectLoadContinuousVector::expand(const int64_t need_size)
     LOG_WARN("unexpected data", KR(ret), KP(data_), KP(buf_));
   } else if (need_capacity < capacity_) {
   } else {
-    int64_t new_capacity = capacity_ > 0 ? capacity_ * 2 : PAGE_SIZE;
+    int64_t new_capacity = capacity_ > 0 ? capacity_ * 2 : ALLOC_PAGE_SIZE;
     if (need_capacity > new_capacity) {
-      new_capacity = ALIGN_UP(need_capacity, PAGE_SIZE);
+      new_capacity = ALIGN_UP(need_capacity, ALLOC_PAGE_SIZE);
     }
     ObMemAttr mem_attr(MTL_ID(), "TLD_Continuous");
     char *new_data = static_cast<char *>(ob_malloc_align(16, new_capacity, mem_attr));

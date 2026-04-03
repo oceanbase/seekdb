@@ -29,8 +29,8 @@ class ObAllVirtualServer : public common::ObVirtualTableScannerIterator
   {
     SVR_IP = common::OB_APP_MIN_COLUMN_ID,
     SVR_PORT,
-    ZONE,
     SQL_PORT,
+    RPC_PORT,
     CPU_CAPACITY,
     CPU_CAPACITY_MAX,
     CPU_ASSIGNED,
@@ -44,24 +44,34 @@ class ObAllVirtualServer : public common::ObVirtualTableScannerIterator
     LOG_DISK_CAPACITY,
     LOG_DISK_ASSIGNED,
     LOG_DISK_IN_USE,
-    SSL_CERT_EXPIRED_TIME,
+    RPC_CERT_EXPIRE_TIME,
+    RPC_TLS_ENABLED,
     MEMORY_LIMIT,
     DATA_DISK_ALLOCATED,
     DATA_DISK_ASSIGNED,
-    SS_DATA_DISK_OPERATION_SUGGESTED, // FARM COMPAT WHITELIST
-    SS_DATA_DISK_SIZE_SUGGESTED // FARM COMPAT WHITELIST
+    START_SERVICE_TIME,
+    CREATE_TIME,
+    ROLE,
+    SWITCHOVER_STATUS,
+    LOG_RESTORE_SOURCE,
+    SYNC_SCN,
+    READABLE_SCN
   };
 
 public:
   ObAllVirtualServer();
   virtual ~ObAllVirtualServer();
-  int init(common::ObAddr &addr);
+  int init(common::ObAddr &addr, common::ObServerConfig *config);
   virtual int inner_open();
   virtual int inner_get_next_row(common::ObNewRow *&row);
 
 private:
   char ip_buf_[common::OB_IP_STR_BUFF];
   common::ObAddr addr_;
+  common::ObServerConfig *config_;
+  char log_restore_source_buf_[1024];
+  char role_buf_[64];
+  char switchover_status_buf_[128];
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualServer);

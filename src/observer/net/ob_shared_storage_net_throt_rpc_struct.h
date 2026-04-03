@@ -249,46 +249,6 @@ typedef common::hash::ObHashMap<ObSSNTKey, ObSSNTValue*> ObQuotaPlanMap;
 typedef common::hash::ObHashMap<ObTrafficControl::ObStorageKey, ObQuotaPlanMap*> ObBucketThrotMap;
 typedef common::hash::ObHashMap<ObTrafficControl::ObStorageKey, ObStorageKeyLimit> ObStorageKeyLimitMap;
 
-struct ObSSNTEndpointArg
-{
-  OB_UNIS_VERSION(1);
-
-public:
-  ObSSNTEndpointArg():addr_(),storage_keys_(), expire_time_(0)
-  {
-  }
-  ObSSNTEndpointArg(ObAddr addr, common::ObSEArray<ObTrafficControl::ObStorageKey, 1> &storage_keys, const int64_t expire_time)
-  {
-    addr_ = addr;
-    storage_keys_ = storage_keys;
-    expire_time_ = expire_time;
-  }
-  ~ObSSNTEndpointArg()
-  {}
-  bool is_valid() const
-  {
-    return true;
-  }
-  TO_STRING_KV(K(addr_), K(storage_keys_), K(expire_time_));
-  ObAddr addr_;
-  common::ObSEArray<ObTrafficControl::ObStorageKey, 1> storage_keys_;
-  int64_t expire_time_;
-};
-
-struct ObSSNTSetRes
-{
-  OB_UNIS_VERSION(1);
-
-public:
-  ObSSNTSetRes() : res_(common::OB_ERROR)
-  {}
-  ~ObSSNTSetRes()
-  {}
-  TO_STRING_KV(K_(res));
-
-  int res_;
-};
-
 }  // namespace obrpc
 }  // namespace oceanbase
 #endif /* OCEANBASE_SHARED_STORAGE_NET_THROT_RPC_STRUCT_H_ */

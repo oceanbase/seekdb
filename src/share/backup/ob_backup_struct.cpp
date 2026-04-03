@@ -1947,29 +1947,6 @@ int ObBackupUtils::check_tenant_data_version_match(const uint64_t tenant_id, con
   return ret;
 }
 
-int ObBackupUtils::get_full_replica_num(const uint64_t tenant_id, int64_t &replica_num)
-{
-  int ret = OB_SUCCESS;
-  replica_num = 0;
-  ObMultiVersionSchemaService *schema_service = nullptr;
-  ObSchemaGetterGuard schema_guard;
-  const ObTenantSchema *tenant_info = nullptr;
-  if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service must not be null", K(ret));
-  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, schema_guard))) {
-    LOG_WARN("[DATA_BACKUP]failed to get_tenant_schema_guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_info))) {
-    LOG_WARN("[DATA_BACKUP]failed to get tenant info", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(tenant_info)) {
-    ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("tenant schema is null, tenant may has been dropped", K(ret), K(tenant_id));
-  } else {
-    replica_num = tenant_info->get_full_replica_num();
-  }
-  return ret;
-}
-
 int ObBackupUtils::get_backup_info_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;

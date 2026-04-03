@@ -1,0 +1,113 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_LOGSERVICE_OB_REMOTE_FETCH_LOG_WORKER_H_
+#define OCEANBASE_LOGSERVICE_OB_REMOTE_FETCH_LOG_WORKER_H_
+
+#include "lib/queue/ob_lighty_queue.h"                      // ObLightyQueue
+#include "common/ob_queue_thread.h"                         // ObCond
+#include "share/ob_thread_pool.h"                           // ObThreadPool
+#include "share/ob_ls_id.h"                                 // ObLSID
+#include "ob_remote_log_iterator.h"                         // ObRemoteLogGroupEntryIterator
+#include "logservice/ob_log_external_storage_handler.h"     // ObLogExternalStorageHandler
+
+namespace oceanbase
+{
+namespace storage
+{
+class ObLSService;
+}
+
+namespace share
+{
+class SCN;
+}
+
+namespace palf
+{
+struct LSN;
+class LogGroupEntry;
+}
+
+namespace logservice
+{
+class ObFetchLogTask;
+class ObRemoteSourceGuard;
+class ObRemoteLogParent;
+class ObLogRestoreService;
+class ObLogRestoreAllocator;
+using oceanbase::share::ObLSID;
+using oceanbase::palf::LSN;
+// Remote fetch log worker
+class ObRemoteFetchWorker : public share::ObThreadPool
+{
+public:
+  ObRemoteFetchWorker();
+  ~ObRemoteFetchWorker();
+
+  int init(const uint64_t tenant_id,
+      ObLogRestoreAllocator *allocator,
+      ObLogRestoreService *restore_service,
+      storage::ObLSService *ls_svr);
+  void destroy();
+  int start();
+  void stop();
+  void wait();
+  void signal();
+public:
+  // submit fetch log task
+  //
+  // @retval OB_SIZE_OVERFLOW    task num more than queue limit
+  // @retval other code          unexpected error
+  int submit_fetch_log_task(ObFetchLogTask *task);
+
+  int modify_thread_count(const int64_t log_restore_concurrency);
+  int get_thread_count(int64_t &thread_count) const;
+
+private:
+  void run1();
+  void do_thread_task_();
+  int handle_single_task_();
+  int handle_fetch_log_task_(ObFetchLogTask *task);
+  bool need_fetch_log_(const share::ObLSID &id);
+  void mark_if_to_end_(ObFetchLogTask &task, const share::SCN &upper_limit_scn, const share::SCN &scn);
+  void try_update_location_info_(const ObFetchLogTask &task, ObRemoteLogGroupEntryIterator &iter);
+
+  int push_submit_array_(ObFetchLogTask &task);
+
+  int try_retire_(ObFetchLogTask *&task);
+  void inner_free_task_(ObFetchLogTask &task);
+  bool is_fatal_error_(const int ret_code) const;
+  void report_error_(const ObLSID &id,
+                     const int ret_code,
+                     const palf::LSN &lsn,
+                     const ObLogRestoreErrorContext::ErrorType &error_type);
+  int64_t calcuate_thread_count_(const int64_t log_restore_concurrency);
+private:
+  bool inited_;
+  uint64_t tenant_id_;
+  ObLogRestoreService *restore_service_;
+  storage::ObLSService *ls_svr_;
+  common::ObLightyQueue task_queue_;
+  ObLogRestoreAllocator *allocator_;
+  ObLogExternalStorageHandler log_ext_handler_;
+
+  common::ObCond cond_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObRemoteFetchWorker);
+};
+} // namespace logservice
+} // namespace oceanbase
+#endif /* OCEANBASE_LOGSERVICE_OB_REMOTE_FETCH_LOG_WORKER_H_ */

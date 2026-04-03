@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX RS_COMPACTION
 
 #include "rootserver/freeze/ob_major_freeze_service.h"
-#include "share/ob_all_server_tracer.h"
 
 namespace oceanbase
 {
@@ -127,7 +126,7 @@ int ObMajorFreezeService::alloc_tenant_major_freeze()
   } else if (FALSE_IT(tenant_major_freeze_ = new(buf) ObTenantMajorFreeze(tenant_id_))) {
     // impossible
   } else if (OB_FAIL(tenant_major_freeze_->init(is_primary_service, *GCTX.sql_proxy_,
-             *GCTX.config_, *GCTX.schema_service_, ObAllServerTracer::get_instance()))) {
+             *GCTX.config_, *GCTX.schema_service_))) {
     LOG_WARN("fail to init tenant_major_freeze", K_(tenant_id), KR(ret), K(is_primary_service));
   } else if (OB_FAIL(tenant_major_freeze_->start())) {
     LOG_WARN("fail to start tenant_major_freeze", K_(tenant_id), KR(ret), K(is_primary_service));

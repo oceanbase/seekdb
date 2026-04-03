@@ -89,48 +89,8 @@ void ObVirtualSqlPlanStatistics::reset()
 int ObVirtualSqlPlanStatistics::inner_open()
 {
   int ret = OB_SUCCESS;
-  uint64_t start_tenant_id = 0;
-  uint64_t end_tenant_id = 0;
-  if (key_ranges_.count() < 1) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "invalid key range", K(ret), K(key_ranges_.count()));
-  } else {
-    ObNewRange &range = key_ranges_.at(0);
-    if (OB_UNLIKELY(range.get_start_key().get_obj_cnt() != 5
-                    || range.get_end_key().get_obj_cnt() != 5)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected  # of rowkey columns",
-                 K(ret),
-                 "size of start key", range.get_start_key().get_obj_cnt(),
-                 "size of end key", range.get_end_key().get_obj_cnt());
-    } else {
-      ObObj tenant_id_low = range.get_start_key().get_obj_ptr()[0];
-      ObObj tenant_id_high = range.get_end_key().get_obj_ptr()[0];
-      if (tenant_id_low.is_min_value()
-          && tenant_id_high.is_max_value()) {
-        start_tenant_id = OB_SYS_TENANT_ID;
-        end_tenant_id = OB_SYS_TENANT_ID;
-      } else if (tenant_id_low.get_type() != ObIntType
-          || tenant_id_high.get_type() != ObIntType) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid tenant id", K(ret), K(tenant_id_low), K(tenant_id_high));
-      } else {
-        start_tenant_id = tenant_id_low.get_int();
-        end_tenant_id = tenant_id_high.get_int();
-        if (start_tenant_id != end_tenant_id) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "invalid tenant id range, can only search one tenant",
-                     K(ret), K(start_tenant_id), K(end_tenant_id));
-        } else if (OB_SYS_TENANT_ID == start_tenant_id) {
-          //Query tenant as system tenant, can query all plan cache
-          if (OB_FAIL(get_all_tenant_id())) {
-            SERVER_LOG(WARN, "fail to get all tenant id", K(ret));
-          }
-        } else if (OB_FAIL(tenant_id_array_.push_back(start_tenant_id))) {
-          SERVER_LOG(WARN, "fail to push back tenent id", K(ret));
-        }
-      }
-    }
+  if (OB_FAIL(get_all_tenant_id())) {
+    SERVER_LOG(WARN, "fail to get all tenant id", K(ret));
   }
   return ret;
 }
@@ -189,34 +149,9 @@ int ObVirtualSqlPlanStatistics::fill_cells(const ObOperatorStat &pstat)
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
-  ObString ipstr;
-  for (int64_t i =  0; OB_SUCC(ret) && i < col_count; ++i) {
+    for (int64_t i =  0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch(col_id) {
-      //tenant id
-      case TENANT_ID: {
-        cells[i].set_int(tenant_id_array_.at(tenant_id_array_idx_));
-        break;
-      }
-      //ip
-      case SVR_IP: {
-        // ip
-        ipstr.reset();
-        if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-          SERVER_LOG(ERROR, "get server ip failed", K(ret));
-        } else {
-          cells[i].set_varchar(ipstr);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        }
-        break;
-      }
-      //port
-      case SVR_PORT: {
-        // svr_port
-        cells[i].set_int(GCTX.self_addr().get_port());
-        break;
-      }
-      //plan id
       case PLAN_ID: {
         cells[i].set_int(pstat.plan_id_);
         break;

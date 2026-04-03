@@ -32,10 +32,7 @@ namespace observer
 class ObAllVirtualTenantMemstoreInfo : public common::ObVirtualTableScannerIterator
 {
   enum MEMORY_INFO_COLUMN {
-    SERVER_IP = common::OB_APP_MIN_COLUMN_ID,
-    SERVER_PORT,
-    TENANT_ID,
-    ACTIVE_SPAN,
+        ACTIVE_SPAN = common::OB_APP_MIN_COLUMN_ID,
     FREEZE_TRIGGER,
     FREEZE_CNT,
     MEMSTORE_USED,

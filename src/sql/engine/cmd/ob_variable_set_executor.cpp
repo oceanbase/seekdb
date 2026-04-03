@@ -181,8 +181,8 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 ObSqlString sql;
                 SMART_VAR(ObMySQLProxy::MySQLResult, res) {
                   sqlclient::ObMySQLResult *result = NULL;
-                  if (OB_FAIL(sql.assign_fmt("select 1 from %s where tenant_id=%lu and name='%.*s';",
-                      OB_ALL_SYS_VARIABLE_TNAME, ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
+                  if (OB_FAIL(sql.assign_fmt("select 1 from %s where name='%.*s';",
+                      OB_ALL_SYS_VARIABLE_TNAME,
                       node.variable_name_.length(), node.variable_name_.ptr()))) {
                     LOG_WARN("assign sql string failed", K(ret));
                   } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
@@ -1145,7 +1145,6 @@ int ObVariableSetExecutor::update_resource_mapping_rule_version(ObMySQLProxy &sq
   } else {
     ObSqlString values;
     SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id), "tenant_id", "%lu");
-    SQL_COL_APPEND_CSTR_VALUE(sql, values, "", "zone");
     SQL_COL_APPEND_CSTR_VALUE(sql, values, "ob_current_resource_mapping_version", "name");
     SQL_COL_APPEND_VALUE(sql, values, 5, "data_type", "%d");
     // need use microsecond in case insert multiple rules in one second concurrently.

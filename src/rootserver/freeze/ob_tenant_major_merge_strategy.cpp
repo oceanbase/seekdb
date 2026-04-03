@@ -57,7 +57,6 @@ int ObTenantMajorMergeStrategy::filter_merging_zones(common::ObIArray<common::Ob
         LOG_WARN("fail to get get_global_broadcast_scn", KR(ret), K_(tenant_id));
       }
       for (int64_t i = 0; (i < to_merge_zones.count()) && OB_SUCC(ret); i++) {
-        merge_info.zone_ = to_merge_zones.at(i);
         merge_info.tenant_id_ = tenant_id_;
         if (OB_FAIL(zone_merge_mgr_->get_zone_merge_info(merge_info))) {
           LOG_WARN("fail to get merge info", KR(ret), K(tenant_id_), "zone", to_merge_zones.at(i));

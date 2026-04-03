@@ -183,23 +183,15 @@ int64_t ObAddr::inner_to_string(char *buffer, const int64_t size) const
     }
 #endif
     if (version_ == IPV4) {
-      if (port_ > 0) {
-        databuff_printf(buffer, size, pos, "\"%d.%d.%d.%d:%d\"",
-                        (ip_.v4_ >> 24) & 0xFF,
-                        (ip_.v4_ >> 16) & 0xFF,
-                        (ip_.v4_ >> 8) & 0xFF,
-                        (ip_.v4_) & 0xFF, port_);
-      } else {
-        databuff_printf(buffer, size, pos, "\"%d.%d.%d.%d:%d\"", 0,0,0,0,0);
-      }
+      databuff_printf(buffer, size, pos, "\"%d.%d.%d.%d:%d\"",
+                      (ip_.v4_ >> 24) & 0xFF,
+                      (ip_.v4_ >> 16) & 0xFF,
+                      (ip_.v4_ >> 8) & 0xFF,
+                      (ip_.v4_) & 0xFF, port_);
     } else if (version_ == IPV6) {
       char ipv6[INET6_ADDRSTRLEN] = { '\0' };
       if (OB_SUCCESS == format_ipv6_addr(ipv6, sizeof(ipv6))) {
-        if (port_ > 0) {
-          databuff_printf(buffer, size, pos, "\"[%s]:%d\"", ipv6, port_);
-        } else {
-          databuff_printf(buffer, size, pos, "\"%s\"", ipv6);
-        }
+        databuff_printf(buffer, size, pos, "\"[%s]:%d\"", ipv6, port_);
       }
     } else if (version_ == UNIX) {
       databuff_printf(buffer, size, pos, "\"unix:%s\"", ip_.unix_path_);

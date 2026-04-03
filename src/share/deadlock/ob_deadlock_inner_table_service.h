@@ -20,6 +20,7 @@
 #include "ob_deadlock_detector_common_define.h"
 #include "lib/container/ob_iarray.h"
 #include "share/ob_event_history_table_operator.h"
+#include "share/storage/ob_deadlock_event_history_table_storage.h"
 
 namespace oceanbase
 {
@@ -31,6 +32,7 @@ namespace detector
 class  ObDeadLockInnerTableService
 {
 public:
+  static int init();
   static int insert(const ObDetectorInnerReportInfo &inner_info,
                     int64_t sequence,
                     int64_t size,
@@ -49,6 +51,7 @@ public:
   };
 private:
   friend class ObDeadLockEventHistoryTableOperator;
+  static share::ObDeadlockEventHistoryTableStorage storage_;
 };
 
 #define DEALOCK_EVENT_INSTANCE (::oceanbase::share::detector::\

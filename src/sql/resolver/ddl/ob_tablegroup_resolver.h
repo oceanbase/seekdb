@@ -102,67 +102,11 @@ int ObTableGroupResolver::resolve_tablegroup_option(T *stmt, ParseNode *node)
       option_node = node->children_[i];
       switch (option_node->type_) {
         case T_LOCALITY: {
-          if (NULL == option_node->children_ || option_node->num_child_ != 2) {
-            ret = common::OB_INVALID_ARGUMENT;
-            SQL_LOG(WARN, "invalid locality argument", K(ret), "num_child", option_node->num_child_);
-          } else if (T_DEFAULT == option_node->children_[0]->type_) {
-            // do nothing
-          } else {
-            int64_t locality_length = option_node->children_[0]->str_len_;
-            const char *locality_str = option_node->children_[0]->str_value_;
-            common::ObString locality;
-            locality.assign_ptr(locality_str, static_cast<int32_t>(locality_length));
-            if (OB_UNLIKELY(locality_length > common::MAX_LOCALITY_LENGTH)) {
-              ret = common::OB_ERR_TOO_LONG_IDENT;
-              LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, locality.length(), locality.ptr());
-            } else if (0 == locality_length) {
-              ret = OB_OP_NOT_ALLOW;
-              SQL_LOG(WARN, "set locality empty is not allowed now", K(ret));
-              LOG_USER_ERROR(OB_OP_NOT_ALLOW, "set locality empty");
-            } else if (OB_FAIL(stmt->set_locality(locality))) {
-              SQL_LOG(WARN, "fail to set locality", K(ret), K(locality));
-            }
-          }
-          if (OB_SUCC(ret) && stmt->get_stmt_type() == stmt::T_ALTER_TABLEGROUP) {
-            if (OB_FAIL(alter_option_bitset_.add_member(obrpc::ObAlterTablegroupArg::LOCALITY))) {
-              SQL_LOG(WARN, "fail to add member", K(ret));
-            } else if (nullptr == option_node->children_[1]) {
-              // not force alter locality
-            } else if (option_node->children_[1]->type_ != T_FORCE) {
-              ret = common::OB_ERR_UNEXPECTED;
-              SQL_LOG(ERROR, "invalid node", K(ret));
-            } else if (OB_FAIL(alter_option_bitset_.add_member(
-                    obrpc::ObAlterTablegroupArg::FORCE_LOCALITY))) {
-              SQL_LOG(WARN, "fail to add member", K(ret));
-            }
-          }
+          // do nothing
           break;
         }
         case T_PRIMARY_ZONE: {
-          if (NULL == option_node->children_ || option_node->num_child_ != 1) {
-            ret = common::OB_INVALID_ARGUMENT;
-            SQL_LOG(WARN, "invalid primary_zone argument", K(ret), "num_child", option_node->num_child_);
-          } else if (option_node->children_[0]->type_ == T_DEFAULT) {
-            // do nothing
-          } else if (T_RANDOM == option_node->children_[0]->type_) {
-            if (OB_FAIL(stmt->set_primary_zone(common::OB_RANDOM_PRIMARY_ZONE))) {
-              SQL_LOG(WARN, "fail to set primary_zone", K(ret));
-            }
-          } else {
-            common::ObString primary_zone;
-            primary_zone.assign_ptr(const_cast<char *>(option_node->children_[0]->str_value_),
-                                    static_cast<int32_t>(option_node->children_[0]->str_len_));
-            if (primary_zone.empty()) {
-              ret = OB_OP_NOT_ALLOW;
-              SQL_RESV_LOG(WARN, "set primary_zone empty is not allowed now", K(ret));
-              LOG_USER_ERROR(OB_OP_NOT_ALLOW, "set primary_zone empty");
-            } else if (OB_FAIL(stmt->set_primary_zone(primary_zone))) {
-              SQL_LOG(WARN, "fail to set primary_zone", K(ret));
-            }
-          }
-          if (OB_SUCC(ret) && OB_FAIL(alter_option_bitset_.add_member(obrpc::ObAlterTablegroupArg::PRIMARY_ZONE))) {
-            SQL_LOG(WARN, "fail to add member", K(ret));
-          }
+          // do nothing
           break;
         }
         case T_TABLEGROUP_ID: {

@@ -3,7 +3,6 @@ ob_set_subtarget(ob_rootserver ALONE
   ob_ddl_service_launcher.cpp
   ob_root_service.cpp
   ddl_task/ob_ddl_redefinition_task.cpp
-  ob_unit_manager.cpp
   ob_lonely_table_cleaner.cpp
 )
 
@@ -17,28 +16,11 @@ ob_set_subtarget(ob_rootserver backup
 
 ob_set_subtarget(ob_rootserver common
   ob_bootstrap.cpp
-  ob_admin_drtask_util.cpp
-  ob_disaster_recovery_task_table_operator.cpp
-  ob_balance_group_ls_stat_operator.cpp
-  ob_disaster_recovery_info.cpp
-  ob_disaster_recovery_worker.cpp
-  ob_disaster_recovery_service.cpp
-  ob_disaster_recovery_task.cpp
-  ob_disaster_recovery_task_mgr.cpp
-  ob_disaster_recovery_task_utils.cpp
-  ob_migrate_unit_finish_checker.cpp
-  ob_rootservice_util_checker.cpp
-  ob_balance_info.cpp
-  ob_create_inner_schema_executor.cpp
   ob_ddl_help.cpp
   ob_ddl_operator.cpp
   ob_ddl_sql_generator.cpp
   ob_index_builder.cpp
   ob_mlog_builder.cpp
-  ob_locality_util.cpp
-  ob_resource_weight_parser.cpp
-  ob_root_balancer.cpp
-  ob_partition_balance.cpp
   ob_partition_creator.cpp
   ob_root_minor_freeze.cpp
   ob_root_utils.cpp
@@ -48,55 +30,24 @@ ob_set_subtarget(ob_rootserver common
   ob_rs_job_table_operator.cpp
   ob_rs_reentrant_thread.cpp
   ob_schema2ddl_sql.cpp
-  ob_lost_replica_checker.cpp
-  ob_server_manager.cpp
-  ob_server_zone_op_service.cpp
   ob_snapshot_info_manager.cpp
   ob_tablet_creator.cpp
   ob_tablet_drop.cpp
   ob_table_creator.cpp
   ob_thread_idling.cpp
-  ob_unit_placement_strategy.cpp
-  ob_unit_stat_manager.cpp
   ob_upgrade_executor.cpp
   ob_vertical_partition_builder.cpp
-  ob_vtable_location_getter.cpp
-  ob_zone_manager.cpp
-  ob_zone_storage_manager.cpp
-  ob_zone_unit_provider.cpp
-  ob_tenant_info_loader.cpp
   ob_tenant_thread_helper.cpp
-  ob_ls_recovery_reportor.cpp
-  ob_standby_schema_refresh_trigger.cpp
-  ob_tenant_info_loader.cpp
-  ob_create_standby_from_net_actor.cpp
-  ob_primary_ls_service.cpp
-  ob_common_ls_service.cpp
-  ob_ls_service_helper.cpp
-  ob_transfer_partition_task.cpp
-  ob_tenant_balance_service.cpp
-  ob_ls_balance_helper.cpp
-  ob_balance_task_execute_service.cpp
-  ob_server_balancer.cpp
   ob_system_admin_util.cpp
-  ob_update_rs_list_task.cpp
-  ob_upgrade_storage_format_version_executor.cpp
   ob_schema_history_recycler.cpp
-  ob_alter_locality_finish_checker.cpp
   ob_lob_piece_builder.cpp
   ob_lob_meta_builder.cpp
-  ob_ls_recovery_stat_handler.cpp
-  ob_shrink_expand_resource_pool_checker.cpp
   ob_split_partition_helper.cpp
-  ob_transfer_partition_command.cpp
   ob_partition_exchange.cpp
-  ob_service_name_command.cpp
   ob_catalog_ddl_operator.cpp
   ob_catalog_ddl_service.cpp
   ob_tenant_ddl_service.cpp
-  ob_tenant_parallel_create_executor.cpp
   ob_load_inner_table_schema_executor.cpp
-  ob_load_sys_package_task.cpp
   ob_alter_table_constraint_checker.cpp
   ob_ccl_ddl_service.cpp
   ob_ccl_ddl_operator.cpp
@@ -107,16 +58,6 @@ ob_set_subtarget(ob_rootserver common
   ob_objpriv_mysql_ddl_operator.cpp
   ob_objpriv_mysql_ddl_service.cpp
   ob_objpriv_mysql_schema_history_recycler.cpp
-)
-
-ob_set_subtarget(ob_rootserver balance
-  balance/ob_all_balance_group_builder.cpp
-  balance/ob_balance_group_define.cpp
-  balance/ob_balance_group_info.cpp
-  balance/ob_ls_balance_group_info.cpp
-  balance/ob_tenant_ls_balance_group_info.cpp
-  balance/ob_ls_all_part_builder.cpp
-  balance/ob_partition_balance_helper.cpp
 )
 
 ob_set_subtarget(ob_rootserver ddl_task
@@ -152,7 +93,6 @@ ob_set_subtarget(ob_rootserver parallel_ddl
   parallel_ddl/ob_create_table_helper.cpp
   parallel_ddl/ob_create_view_helper.cpp
   parallel_ddl/ob_index_name_checker.cpp
-  parallel_ddl/ob_tablet_balance_allocator.cpp
   parallel_ddl/ob_set_comment_helper.cpp
   parallel_ddl/ob_create_index_helper.cpp
   parallel_ddl/ob_update_index_status_helper.cpp
@@ -183,24 +123,8 @@ ob_set_subtarget(ob_rootserver freeze
   freeze/ob_fts_checksum_validate_util.cpp
 )
 
-ob_set_subtarget(ob_rootserver restore
-  restore/ob_restore_service.cpp
-  restore/ob_restore_scheduler.cpp
-  restore/ob_restore_util.cpp
-  restore/ob_tenant_clone_util.cpp
-  restore/ob_clone_scheduler.cpp
-  restore/ob_restore_common_util.cpp
-)
-
 ob_set_subtarget(ob_rootserver virtual_table
-  virtual_table/ob_core_meta_table.cpp
   virtual_table/ob_virtual_core_inner_table.cpp
-  virtual_table/ob_all_virtual_ls_replica_task_plan.cpp
-)
-
-ob_set_subtarget(ob_rootserver tenant_snapshot
-  tenant_snapshot/ob_tenant_snapshot_scheduler.cpp
-  tenant_snapshot/ob_tenant_snapshot_util.cpp
 )
 
 ob_set_subtarget(ob_rootserver mview
@@ -213,7 +137,6 @@ ob_set_subtarget(ob_rootserver mview
   mview/ob_mview_push_refresh_scn_task.cpp
   mview/ob_mview_push_snapshot_task.cpp
   mview/ob_replica_safe_check_task.cpp
-  mview/ob_collect_mv_merge_info_task.cpp
   mview/ob_mview_clean_snapshot_task.cpp
   mview/ob_mview_update_cache_task.cpp
   mview/ob_mview_mds_op_task.cpp
@@ -233,8 +156,8 @@ ob_set_subtarget(ob_rootserver fork_table
 )
 
 ob_set_subtarget(ob_rootserver standby
+  standby/ob_service_grpc.cpp
   standby/ob_standby_service.cpp
-  standby/ob_recovery_ls_service.cpp
   standby/ob_tenant_role_transition_service.cpp
 )
 

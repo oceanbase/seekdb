@@ -54,7 +54,6 @@ private:
   int get_next_tablet(storage::ObTabletHandle &tablet_handle);
 private:
   common::ObAddr addr_;
-  int64_t ls_id_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
   storage::ObLSTabletIterator ls_tablet_iter_;
   char ip_buf_[common::OB_IP_STR_BUFF];

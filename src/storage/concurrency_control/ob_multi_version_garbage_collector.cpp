@@ -19,6 +19,8 @@
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/wrs/ob_weak_read_util.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
+#include "share/ob_server_struct.h"
+#include "lib/container/ob_array.h"
 #include "share/ob_io_device_helper.h"
 
 namespace oceanbase
@@ -58,6 +60,11 @@ int ObMultiVersionGarbageCollector::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     MVCC_LOG(WARN, "ObMultiVersionGarbageCollector init twice", K(ret), KP(this));
+  } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "meta_db_pool_ is not initialized", K(ret));
+  } else if (OB_FAIL(snapshot_storage_.init(GCTX.meta_db_pool_))) {
+    MVCC_LOG(WARN, "failed to init snapshot storage", K(ret));
   } else {
     last_study_timestamp_ = 0;
     last_refresh_timestamp_ = 0;
@@ -664,63 +671,33 @@ bool ObMultiVersionGarbageCollector::is_gc_disabled() const
 int ObMultiVersionGarbageCollector::collect(ObMultiVersionGCSnapshotFunctor& calculator)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
+  const uint64_t tenant_id = MTL_ID();
 
-  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-    common::sqlclient::ObMySQLResult *result = NULL;
-    const uint64_t tenant_id = MTL_ID();
-    const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
-
-    if (OB_ISNULL(GCTX.sql_proxy_)) {
-      ret = OB_NOT_INIT;
-      MVCC_LOG(WARN, "sql_proxy_ not init yet, collect abort", KR(ret));
-    } else if (OB_FAIL(sql.assign_fmt(QUERY_ALL_RESERVED_SNAPSHOT_SQL,
-                                      share::OB_ALL_RESERVED_SNAPSHOT_TNAME,
-                                      tenant_id))) {
-      MVCC_LOG(WARN, "generate QUERY_ALL_SNAPSHOT_SQL fail", KR(ret));
-    } else if (OB_FAIL(GCTX.sql_proxy_->read(res, meta_tenant_id, sql.ptr()))) {
-      MVCC_LOG(WARN, "execute sql read fail", KR(ret), K(meta_tenant_id), K(tenant_id), K(sql));
-    } else if (OB_ISNULL(result = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      MVCC_LOG(ERROR, "execute sql fail", KR(ret), K(tenant_id), K(meta_tenant_id), K(sql));
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
+  } else {
+    ObArray<share::ObReservedSnapshotEntry> entries;
+    if (OB_FAIL(snapshot_storage_.get_all(tenant_id, entries))) {
+      MVCC_LOG(WARN, "failed to get all snapshot entries", KR(ret));
     } else {
-      int64_t snapshot_version = 0;
-      share::SCN snapshot_version_scn;
-      ObMultiVersionSnapshotType snapshot_type = ObMultiVersionSnapshotType::MIN_SNAPSHOT_TYPE;
-      ObMultiVersionGCStatus gc_status = ObMultiVersionGCStatus::INVALID_GC_STATUS;
-      int64_t create_time = 0;
-      char svr_ip_buf[MAX_IP_ADDR_LENGTH + 1] = {0};
-      int64_t svr_ip_len = 0;
-      uint64_t svr_port = 0;
-      ObAddr addr;
+      for (int64_t i = 0; OB_SUCC(ret) && i < entries.count(); ++i) {
+        const share::ObReservedSnapshotEntry &entry = entries.at(i);
+        share::SCN snapshot_version_scn;
 
-      while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-        EXTRACT_UINT_FIELD_MYSQL(*result, "snapshot_version", snapshot_version, int64_t);
-        EXTRACT_UINT_FIELD_MYSQL(*result, "snapshot_type", snapshot_type, concurrency_control::ObMultiVersionSnapshotType);
-        EXTRACT_UINT_FIELD_MYSQL(*result, "create_time", create_time, int64_t);
-        EXTRACT_UINT_FIELD_MYSQL(*result, "status", gc_status, concurrency_control::ObMultiVersionGCStatus);
-        EXTRACT_STRBUF_FIELD_MYSQL(*result, "svr_ip", svr_ip_buf, 128, svr_ip_len);
-        EXTRACT_UINT_FIELD_MYSQL(*result, "svr_port", svr_port, uint64_t);
-
-        if (!addr.set_ip_addr(svr_ip_buf, svr_port)) {
-          ret = OB_ERR_UNEXPECTED;
-          MVCC_LOG(WARN, "set svr addr failed", K(svr_ip_buf), K(svr_port));
-        } else if (OB_FAIL(snapshot_version_scn.convert_for_inner_table_field(snapshot_version))) {
-          MVCC_LOG(WARN, "set min snapshot version scn failed", K(ret), K(snapshot_version));
+        if (OB_FAIL(snapshot_version_scn.convert_for_inner_table_field(entry.snapshot_version_))) {
+          MVCC_LOG(WARN, "set min snapshot version scn failed", K(ret), K(entry.snapshot_version_));
         } else if (OB_FAIL(calculator(snapshot_version_scn,
-                                      snapshot_type,
-                                      gc_status,
-                                      create_time,
-                                      addr))) {
+                                      static_cast<ObMultiVersionSnapshotType>(entry.snapshot_type_),
+                                      static_cast<ObMultiVersionGCStatus>(entry.status_),
+                                      entry.create_time_,
+                                      entry.svr_addr_))) {
           MVCC_LOG(WARN, "calculate snapshot version failed", K(ret));
         } else {
-          MVCC_LOG(INFO, "multi version garbage colloector collects successfully", K(sql),
-                   K(snapshot_version), K(snapshot_type), K(create_time), K(addr), K(gc_status));
+          MVCC_LOG(INFO, "multi version garbage collector collects successfully",
+                   K(entry.snapshot_version_), K(entry.snapshot_type_),
+                   K(entry.create_time_), K(entry.svr_addr_), K(entry.status_));
         }
-      }
-
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS;
       }
     }
   }
@@ -749,63 +726,62 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
                                            const share::SCN min_active_txn_version)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
   const ObAddr &self_addr = GCTX.self_addr();
-  char ip_buffer[MAX_IP_ADDR_LENGTH + 1] = {0};
   const uint64_t tenant_id = MTL_ID();
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
   const int64_t current_ts = ObClockGenerator::getRealClock();
 
-  if (OB_UNLIKELY(!self_addr.ip_to_string(ip_buffer, MAX_IP_ADDR_LENGTH))) {
-    ret = OB_INVALID_ARGUMENT;
-    MVCC_LOG(WARN, "ip to string failed", K(self_addr));
-  } else if (OB_FAIL(sql.assign_fmt(INSERT_ON_UPDATE_ALL_RESERVED_SNAPSHOT_SQL,
-                                    share::OB_ALL_RESERVED_SNAPSHOT_TNAME,
-                                    // entries of the MIN_UNALLOCATED_GTS
-                                    tenant_id,
-                                    (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_GTS),
-                                    int(MAX_IP_ADDR_LENGTH), ip_buffer,
-                                    self_addr.get_port(),
-                                    current_ts,
-                                    (uint64_t)(ObMultiVersionGCStatus::NORMAL_GC_STATUS),
-                                    min_unallocated_GTS.get_val_for_inner_table_field(),
-                                    // entries of the MIN_UNALLOCATED_WRS
-                                    tenant_id,
-                                    (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS),
-                                    int(MAX_IP_ADDR_LENGTH), ip_buffer,
-                                    self_addr.get_port(),
-                                    current_ts,
-                                    (uint64_t)(ObMultiVersionGCStatus::NORMAL_GC_STATUS),
-                                    min_unallocated_WRS.get_val_for_inner_table_field(),
-                                    // entries of the MAX_COMMITTED_TXN_VERSION
-                                    tenant_id,
-                                    (uint64_t)(ObMultiVersionSnapshotType::MAX_COMMITTED_TXN_VERSION),
-                                    int(MAX_IP_ADDR_LENGTH), ip_buffer,
-                                    self_addr.get_port(),
-                                    current_ts,
-                                    (uint64_t)(ObMultiVersionGCStatus::NORMAL_GC_STATUS),
-                                    max_committed_txn_version.get_val_for_inner_table_field(),
-                                    // entries of the ACTIVE_TXN_SNAPSHOT
-                                    tenant_id,
-                                    (uint64_t)(ObMultiVersionSnapshotType::ACTIVE_TXN_SNAPSHOT),
-                                    int(MAX_IP_ADDR_LENGTH), ip_buffer,
-                                    self_addr.get_port(),
-                                    current_ts,
-                                    (uint64_t)(ObMultiVersionGCStatus::NORMAL_GC_STATUS),
-                                    min_active_txn_version.get_val_for_inner_table_field()))) {
-    MVCC_LOG(WARN, "format sql fail", KR(ret), K(sql));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
     ret = OB_NOT_INIT;
-    MVCC_LOG(WARN, "sql_proxy_ not init yet, report abort", KR(ret), K(sql));
-  } else if (OB_FAIL(GCTX.sql_proxy_->write(meta_tenant_id, sql.ptr(), affected_rows))) {
-    MVCC_LOG(WARN, "execute sql fail", KR(ret), K(sql));
-  } else if (8 != affected_rows && // for on duplicate update
-             4 != affected_rows) { // for first insert
-    ret = OB_ERR_UNEXPECTED;
-    MVCC_LOG(ERROR, "report multi version snapshot failed", KR(ret), K(sql), K(affected_rows));
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
   } else {
-    MVCC_LOG(INFO, "report multi version snapshot success", KR(ret), K(sql), K(affected_rows));
+    ObArray<share::ObReservedSnapshotEntry> entries;
+    share::ObReservedSnapshotEntry entry;
+
+    // MIN_UNALLOCATED_GTS
+    entry.tenant_id_ = tenant_id;
+    entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_GTS);
+    entry.svr_addr_ = self_addr;
+    entry.create_time_ = current_ts;
+    entry.snapshot_version_ = min_unallocated_GTS.get_val_for_inner_table_field();
+    entry.status_ = (uint64_t)(ObMultiVersionGCStatus::NORMAL_GC_STATUS);
+    if (OB_FAIL(entries.push_back(entry))) {
+      MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+    }
+
+    // MIN_UNALLOCATED_WRS
+    if (OB_SUCC(ret)) {
+      entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS);
+      entry.snapshot_version_ = min_unallocated_WRS.get_val_for_inner_table_field();
+      if (OB_FAIL(entries.push_back(entry))) {
+        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+      }
+    }
+
+    // MAX_COMMITTED_TXN_VERSION
+    if (OB_SUCC(ret)) {
+      entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MAX_COMMITTED_TXN_VERSION);
+      entry.snapshot_version_ = max_committed_txn_version.get_val_for_inner_table_field();
+      if (OB_FAIL(entries.push_back(entry))) {
+        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+      }
+    }
+
+    // ACTIVE_TXN_SNAPSHOT
+    if (OB_SUCC(ret)) {
+      entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::ACTIVE_TXN_SNAPSHOT);
+      entry.snapshot_version_ = min_active_txn_version.get_val_for_inner_table_field();
+      if (OB_FAIL(entries.push_back(entry))) {
+        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(snapshot_storage_.insert_or_update(tenant_id, entries))) {
+        MVCC_LOG(WARN, "failed to insert or update snapshot entries", KR(ret));
+      } else {
+        MVCC_LOG(INFO, "report multi version snapshot success", KR(ret), K(entries.count()));
+      }
+    }
   }
 
   return ret;
@@ -817,34 +793,16 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
 int ObMultiVersionGarbageCollector::update_status(const ObMultiVersionGCStatus status)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
   const ObAddr &self_addr = GCTX.self_addr();
-  char ip_buffer[MAX_IP_ADDR_LENGTH + 1] = {0};
   const uint64_t tenant_id = MTL_ID();
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
 
-  if (OB_UNLIKELY(!self_addr.ip_to_string(ip_buffer, MAX_IP_ADDR_LENGTH))) {
-    ret = OB_INVALID_ARGUMENT;
-    MVCC_LOG(WARN, "ip to string failed", K(self_addr));
-  } else if (OB_FAIL(sql.assign_fmt(UPDATE_RESERVED_SNAPSHOT_STATUS,
-                                    share::OB_ALL_RESERVED_SNAPSHOT_TNAME,
-                                    (uint64_t)(status),
-                                    tenant_id,
-                                    int(MAX_IP_ADDR_LENGTH), ip_buffer,
-                                    self_addr.get_port()))) {
-    MVCC_LOG(WARN, "format sql fail", KR(ret), K(sql));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
     ret = OB_NOT_INIT;
-    MVCC_LOG(WARN, "sql_proxy_ not init yet, report abort", KR(ret), K(sql));
-  } else if (OB_FAIL(GCTX.sql_proxy_->write(meta_tenant_id, sql.ptr(), affected_rows))) {
-    MVCC_LOG(WARN, "execute sql fail", KR(ret), K(sql));
-  } else if (0 != affected_rows && // update with the same row
-             4 != affected_rows) { // normal update succeed
-    ret = OB_ERR_UNEXPECTED;
-    MVCC_LOG(ERROR, "report multi version snapshot failed", KR(ret), K(sql), K(affected_rows));
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
+  } else if (OB_FAIL(snapshot_storage_.update_status(tenant_id, self_addr, (uint64_t)(status)))) {
+    MVCC_LOG(WARN, "failed to update status", KR(ret), K(status));
   } else {
-    MVCC_LOG(INFO, "update multi version snapshot success", KR(ret), K(sql), K(affected_rows));
+    MVCC_LOG(INFO, "update multi version snapshot status success", KR(ret), K(status));
   }
 
   return ret;
@@ -925,35 +883,7 @@ int ObMultiVersionGarbageCollector::reclaim()
           // TODO(handora.qc): use a better time monitor for the node lost for a long time
           if (current_timestamp > create_time
               && current_timestamp - create_time > GARBAGE_COLLECT_RECLAIM_DURATION) {
-            bool is_exist = true;
-            if (OB_TMP_FAIL(share::ObAllServerTracer::get_instance().is_server_exist(addr, is_exist))) {
-              MVCC_LOG(WARN, "check all server tracer failed", K(tmp_ret));
-            } else if (is_exist) {
-              // Case 1: server exists, while not renew snapshot for a long time
-              bool is_alive = false;
-              if (OB_TMP_FAIL(share::ObAllServerTracer::get_instance().check_server_alive(addr, is_alive))) {
-                MVCC_LOG(WARN, "check all server tracer failed", K(tmp_ret));
-              } else if (is_alive) {
-                // Case 1.1: server is alive, we report the WARN for not
-                //           renewing. because there may be tenant transfer out
-                //           which cause it will not be reclaimed forever
-                MVCC_LOG(WARN, "server alives while not renew for a long time", K(create_time),
-                         K(current_timestamp), K(addr), K(snapshot_type), K(snapshot_version));
-                need_reclaim = true;
-              } else {
-                // Case 1.2: server is not alive, we report the WARN and reclaim
-                //           it immediately
-                MVCC_LOG(WARN, "server not alives while not renew for a long time", K(create_time),
-                         K(current_timestamp), K(addr), K(snapshot_type), K(snapshot_version));
-                need_reclaim = true;
-              }
-            } else {
-              // Case 2: server doesnot exits,  we report the WARN and reclaim
-              //         it immediately
-              MVCC_LOG(WARN, "server doesnot exists so we should remove it", K(create_time),
-                       K(current_timestamp), K(addr), K(snapshot_type), K(snapshot_version));
-              need_reclaim = true;
-            }
+            need_reclaim = true; // server will be always exist and alive in lite version
           }
 
           if (need_reclaim) {
@@ -1028,48 +958,6 @@ int ObMultiVersionGarbageCollector::reclaim()
 int ObMultiVersionGarbageCollector::monitor_(const ObArray<ObAddr> &snapshot_servers)
 {
   int ret = OB_SUCCESS;
-  ObArray<ObAddr> lost_servers;
-
-  if (OB_FAIL(share::ObAllServerTracer::get_instance().for_each_server_info(
-                [&snapshot_servers,
-                 &lost_servers](const share::ObServerInfoInTable &server_info) -> int {
-                  int ret = OB_SUCCESS;
-                  bool found = false;
-
-                  // find servers that recorded in __all_server table while has
-                  // not reported its timestamp.
-                  for (int64_t i = 0; !found && i < snapshot_servers.count(); ++i) {
-                    if (server_info.get_server() == snapshot_servers[i]) {
-                      found = true;
-                    }
-                  }
-
-                  if (!found) {// not found in __all_reserved_snapshot inner table
-                    if (OB_FAIL(lost_servers.push_back(server_info.get_server()))) {
-                      MVCC_LOG(WARN, "lost servers push back failed", K(ret));
-                    } else if (!server_info.is_valid()) {
-                      MVCC_LOG(ERROR, "invalid server info", K(ret), K(server_info));
-                      // if not in service, we ignore it and report the warning
-                    } else if (!server_info.in_service() || server_info.is_stopped()) {
-                      MVCC_LOG(WARN, "server is not alive, we will remove soon", K(ret), K(server_info));
-                      // if not alive, we ignore it and report the warning
-                    } else if (!server_info.is_alive()) {
-                      MVCC_LOG(WARN, "server is not alive, please pay attention", K(ret), K(server_info));
-                    } else {
-                      // may be lost or do not contain the tenant
-                      // TODO(handora.qc): make it better and more clear
-                      MVCC_LOG(INFO, "server is alive when mointor", K(ret), K(server_info));
-                    }
-                  }
-
-                  return ret;
-                }))) {
-    MVCC_LOG(WARN, "for each server status failed", K(ret));
-  } else {
-    MVCC_LOG(INFO, "garbage collector monitor server status monitor",
-             K(snapshot_servers), K(lost_servers));
-  }
-
   return ret;
 }
 
@@ -1123,34 +1011,19 @@ int ObMultiVersionGarbageCollector::disk_monitor_(const bool is_this_server_alom
 int ObMultiVersionGarbageCollector::reclaim_(const ObArray<ObAddr> &reclaimable_servers)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  char ip_buffer[MAX_IP_ADDR_LENGTH + 1] = {0};
   const uint64_t tenant_id = MTL_ID();
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
 
-  for (int64_t i = 0; i < reclaimable_servers.count(); ++i) {
-    ObAddr addr = reclaimable_servers[i];
-    if (OB_UNLIKELY(!addr.ip_to_string(ip_buffer, MAX_IP_ADDR_LENGTH))) {
-      ret = OB_INVALID_ARGUMENT;
-      MVCC_LOG(WARN, "ip to string failed", K(addr));
-    } else if (OB_FAIL(sql.assign_fmt(DELETE_EXPIRED_RESERVED_SNAPSHOT,
-                                      share::OB_ALL_RESERVED_SNAPSHOT_TNAME,
-                                      tenant_id,
-                                      int(MAX_IP_ADDR_LENGTH), ip_buffer,
-                                      addr.get_port()))) {
-      MVCC_LOG(WARN, "format sql fail", KR(ret), K(sql));
-    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-      ret = OB_NOT_INIT;
-      MVCC_LOG(WARN, "sql_proxy_ not init yet, report abort", KR(ret), K(sql));
-    } else if (OB_FAIL(GCTX.sql_proxy_->write(meta_tenant_id, sql.ptr(), affected_rows))) {
-      MVCC_LOG(WARN, "execute sql fail", KR(ret), K(sql));
-    } else if (OB_UNLIKELY(0 != affected_rows && 4 != affected_rows)) {
-      ret = OB_ERR_UNEXPECTED;
-      MVCC_LOG(WARN, "affected rows is wrong", KR(ret), K(sql), K(affected_rows));
-    } else {
-      MVCC_LOG(INFO, "reclaim expired multi version snapshot success",
-               KR(ret), K(sql), K(addr));
+  if (OB_UNLIKELY(!snapshot_storage_.is_inited())) {
+    ret = OB_NOT_INIT;
+    MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < reclaimable_servers.count(); ++i) {
+      const ObAddr &addr = reclaimable_servers[i];
+      if (OB_FAIL(snapshot_storage_.delete_expired(tenant_id, addr))) {
+        MVCC_LOG(WARN, "failed to delete expired snapshot", KR(ret), K(addr));
+      } else {
+        MVCC_LOG(INFO, "reclaim expired multi version snapshot success", KR(ret), K(addr));
+      }
     }
   }
 

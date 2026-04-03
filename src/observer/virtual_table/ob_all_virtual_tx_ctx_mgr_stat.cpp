@@ -26,7 +26,6 @@ namespace observer
 {
 void ObGVTxCtxMgrStat::reset()
 {
-  ip_buffer_[0] = '\0';
   memstore_version_buffer_[0] = '\0';
 
   ObVirtualTableScannerIterator::reset();
@@ -35,12 +34,10 @@ void ObGVTxCtxMgrStat::reset()
 void ObGVTxCtxMgrStat::destroy()
 {
   trans_service_ = NULL;
-  memset(ip_buffer_, 0, common::OB_IP_STR_BUFF);
   memset(memstore_version_buffer_, 0, common::MAX_VERSION_LENGTH);
 
   ObVirtualTableScannerIterator::reset();
 }
-
 
 int ObGVTxCtxMgrStat::prepare_start_to_read_()
 {
@@ -84,37 +81,30 @@ int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
       SERVER_LOG(DEBUG, "tx_ctx_mgr_stat_iter_ end success");
     }
   } else {
+    // Column order after removing svr_ip and svr_port:
+    // OB_APP_MIN_COLUMN_ID (16): is_master
+    // OB_APP_MIN_COLUMN_ID + 1 (17): is_stopped
+    // OB_APP_MIN_COLUMN_ID + 2 (18): state
+    // OB_APP_MIN_COLUMN_ID + 3 (19): state_str
+    // OB_APP_MIN_COLUMN_ID + 4 (20): total_trans_ctx_count
+    // OB_APP_MIN_COLUMN_ID + 5 (21): mgr_addr
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
-          // svr_ip
-          (void)ls_tx_ctx_mgr_stat.get_addr().ip_to_string(ip_buffer_, common::OB_IP_STR_BUFF);
-          cur_row_.cells_[i].set_varchar(ip_buffer_);
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case OB_APP_MIN_COLUMN_ID + 1:
-          // svr_port
-          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_addr().get_port());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 2:
-          // table_id
-          cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_ls_id().id());
-          break;
-        case OB_APP_MIN_COLUMN_ID + 3:
            // is_master_
           cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.is_master()? 1 : 0);
           break;
-        case OB_APP_MIN_COLUMN_ID + 4:
+        case OB_APP_MIN_COLUMN_ID + 1:
           // is_stopped_
           cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.is_stopped()? 1 : 0);
           break;
-        case OB_APP_MIN_COLUMN_ID + 5:
+        case OB_APP_MIN_COLUMN_ID + 2:
           // state_
           cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_state());
           break;
-        case OB_APP_MIN_COLUMN_ID + 6: {
+        case OB_APP_MIN_COLUMN_ID + 3: {
           // state_str
           ObCStringHelper helper;
           int64_t state = ls_tx_ctx_mgr_stat.get_state();
@@ -122,11 +112,11 @@ int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
-        case OB_APP_MIN_COLUMN_ID + 7:
+        case OB_APP_MIN_COLUMN_ID + 4:
           // total_tx_ctx_count
           cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_total_tx_ctx_count());
           break;
-        case OB_APP_MIN_COLUMN_ID + 8:
+        case OB_APP_MIN_COLUMN_ID + 5:
           cur_row_.cells_[i].set_int(ls_tx_ctx_mgr_stat.get_mgr_addr());
           break;
         default:

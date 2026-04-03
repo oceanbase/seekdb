@@ -182,9 +182,6 @@ bool LogConfigChangeCmd::is_valid() const
 bool LogConfigChangeCmd::is_remove_member_list() const
 {
   return REMOVE_MEMBER_CMD == cmd_type_ 
-#ifdef OB_BUILD_ARBITRATION
-         || REMOVE_ARB_MEMBER_CMD == cmd_type_ 
-#endif
          || REPLACE_MEMBER_CMD == cmd_type_ 
          || SWITCH_TO_LEARNER_CMD == cmd_type_
          || REPLACE_MEMBER_WITH_LEARNER_CMD == cmd_type_;
@@ -193,9 +190,6 @@ bool LogConfigChangeCmd::is_remove_member_list() const
 bool LogConfigChangeCmd::is_add_member_list() const
 {
   return ADD_MEMBER_CMD == cmd_type_  
-#ifdef OB_BUILD_ARBITRATION
-        || ADD_ARB_MEMBER_CMD == cmd_type_ 
-#endif
         || REPLACE_MEMBER_CMD == cmd_type_ 
         || SWITCH_TO_ACCEPTOR_CMD == cmd_type_
         || REPLACE_MEMBER_WITH_LEARNER_CMD == cmd_type_;
@@ -302,49 +296,6 @@ void LogGetPalfStatResp::reset()
 OB_SERIALIZE_MEMBER(LogGetPalfStatResp, palf_stat_);
 // ============= LogGetPalfStatResp end =============
 
-// ============= LogServerProbeMsg start =============
-LogServerProbeMsg::LogServerProbeMsg()
-    : src_(),
-      palf_id_(-1),
-      req_id_(-1),
-      msg_type_(PROBE_REQ),
-      server_status_(-1) { }
-
-
-LogServerProbeMsg::LogServerProbeMsg(
-    const common::ObAddr &src, 
-    const int64_t palf_id,
-    const int64_t req_id,
-    const LogServerProbeType msg_type,
-    const int64_t status)
-    : src_(src),
-      palf_id_(palf_id),
-      req_id_(req_id),
-      msg_type_(msg_type),
-      server_status_(status) { }
-
-LogServerProbeMsg::~LogServerProbeMsg()
-{
-  reset();
-}
-
-bool LogServerProbeMsg::is_valid() const
-{
-  return src_.is_valid() && -1 != palf_id_ && req_id_ != -1 && server_status_ != -1;
-}
-
-void LogServerProbeMsg::reset()
-{
-  src_.reset();
-  palf_id_ = -1;
-  req_id_ = -1;
-  msg_type_ = PROBE_REQ;
-  server_status_ = -1;
-}
-
-OB_SERIALIZE_MEMBER(LogServerProbeMsg, src_, palf_id_, req_id_, msg_type_, server_status_);
-// ============= LogServerProbeMsg end =============
-
 // ============= LogChangeAccessModeCmd start =============
 LogChangeAccessModeCmd::LogChangeAccessModeCmd()
     : src_(),
@@ -432,34 +383,6 @@ void LogFlashbackMsg::reset()
 OB_SERIALIZE_MEMBER(LogFlashbackMsg, src_tenant_id_, src_, ls_id_,
     mode_version_, flashback_scn_, is_flashback_req_);
 // ============= LogFlashbackMsg end =============
-// ============= LogProbeRsReq start =============
-LogProbeRsReq::LogProbeRsReq() : src_() {}
-
-LogProbeRsReq::LogProbeRsReq(const common::ObAddr src) : src_(src) {}
-
-bool LogProbeRsReq::is_valid() const
-{
-  return src_.is_valid();
-}
-
-void LogProbeRsReq::reset()
-{
-  src_.reset();
-}
-
-OB_SERIALIZE_MEMBER(LogProbeRsReq, src_);
-// ============= LogProbeRsReq end =============
-// ============= LogProbeRsResp start =============
-LogProbeRsResp::LogProbeRsResp() : ret_(OB_MAX_ERROR_CODE) {}
-
-
-void LogProbeRsResp::reset() 
-{
-  ret_ = OB_MAX_ERROR_CODE;
-}
-
-OB_SERIALIZE_MEMBER(LogProbeRsResp, ret_);
-// ============= LogProbeRsResp end =============
 
 // ============= LogGetCkptReq begin ===========
 LogGetCkptReq::LogGetCkptReq(

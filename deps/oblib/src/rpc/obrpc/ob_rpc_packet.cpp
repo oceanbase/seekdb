@@ -213,9 +213,6 @@ int ObRpcPacketHeader::deserialize(const char* buf, const int64_t data_len, int6
       LOG_TRACE("rpc receive data version", K_(tenant_id), K_(data_version), K_(pcode),
                 K_(src_cluster_id), K(ObRpcNetHandler::CLUSTER_ID));
     }
-    if (OB_ARB_GC_NOTIFY == pcode_ && REACH_TIME_INTERVAL(5000000)) {
-      LOG_TRACE("receive arb rpc", K_(src_cluster_id), K_(pcode));
-    }
   }
 
   return ret;

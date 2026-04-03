@@ -80,10 +80,9 @@ int ObUDFSqlService::delete_udf(const uint64_t tenant_id,
   } else {
     // insert into __all_udf_history
     if (FAILEDx(sql.assign_fmt(
-                   "INSERT INTO %s(tenant_id, name, schema_version, is_deleted)"
-                   " VALUES(%lu,'%s',%ld,%ld)",
+                   "INSERT INTO %s(name, schema_version, is_deleted)"
+                   " VALUES('%s',%ld,%ld)",
                    OB_ALL_FUNC_HISTORY_TNAME,
-                   ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                    name.ptr(),
                    new_schema_version, IS_DELETED))) {
       LOG_WARN("assign insert into all udf history fail", K(tenant_id), K(ret));
@@ -95,9 +94,8 @@ int ObUDFSqlService::delete_udf(const uint64_t tenant_id,
     } else {/*do nothing*/}
 
     // delete from __all_func
-    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %ld AND name='%s'",
+    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE name='%s'",
                                OB_ALL_FUNC_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                name.ptr()))) {
       LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client->write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -168,8 +166,6 @@ int ObUDFSqlService::add_udf(common::ObISQLClient &sql_client,
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
       STORAGE_LOG(WARN, "append table name failed, ", K(ret));
     } else {
-      SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_tenant_id(
-                                        exec_tenant_id, udf_info.get_tenant_id()), "tenant_id", "%lu");
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
                                         exec_tenant_id, udf_info.get_udf_id()), "udf_id", "%lu");
       SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, udf_info.get_name(),

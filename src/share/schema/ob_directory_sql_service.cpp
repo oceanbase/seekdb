@@ -168,9 +168,8 @@ int ObDirectorySqlService::drop_schema(ObISQLClient &sql_client, const ObDirecto
      LOG_WARN("invalid input argument", K(ret), K(schema));
    }
    if (OB_SUCC(ret)) {
-     if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %lu AND directory_id = %lu",
+     if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE directory_id = %lu",
                                 DIRECTORY_TABLES[THE_SYS_TABLE_IDX],
-                                ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                 ObSchemaUtils::get_extract_schema_id(exec_tenant_id, schema.get_directory_id())))) {
        LOG_WARN("fail to assign sql format", K(ret));
      } else if (OB_FAIL(sql_client.write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -213,8 +212,6 @@ int ObDirectorySqlService::gen_sql(common::ObSqlString &sql, common::ObSqlString
   int ret = OB_SUCCESS;
   uint64_t tenant_id = schema.get_tenant_id();
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_tenant_id(
-                       exec_tenant_id, schema.get_tenant_id()), "tenant_id", "%lu");
   SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
                        exec_tenant_id, schema.get_directory_id()), "directory_id", "%lu");
   SQL_COL_APPEND_ESCAPE_STR_VALUE(sql, values, schema.get_directory_name_str().ptr(),

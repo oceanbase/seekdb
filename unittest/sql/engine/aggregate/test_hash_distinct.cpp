@@ -315,7 +315,6 @@ int TestHashDistinctTest::init_tenant_mgr()
   oceanbase::rpc::frame::ObReqTransport req_transport(NULL, NULL);
   oceanbase::obrpc::ObSrvRpcProxy rpc_proxy;
   oceanbase::obrpc::ObCommonRpcProxy rs_rpc_proxy;
-  oceanbase::share::ObRsMgr rs_mgr;
   int64_t tenant_id = OB_SYS_TENANT_ID;
   self.set_ip_addr("127.0.0.1", 8086);
 

@@ -148,6 +148,7 @@ int ObTableLoadBackupTable_V_1_4::parse_path(const ObString &path)
       }
     }
   }
+  
 
 
   return ret;

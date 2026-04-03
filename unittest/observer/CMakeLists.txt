@@ -11,7 +11,6 @@ storage_unittest(test_ttl_util table/test_ttl_util.cpp)
 storage_unittest(test_meta_executor table/test_meta_executor.cpp)
 storage_unittest(test_ingress_bw_alloc_manager net/test_ingress_bw_alloc_manager.cpp)
 ob_unittest(test_obkv_config tableapi/test_obkv_config.cpp)
-storage_unittest(test_share_storage_net_throt_manager net/test_share_storage_net_throt_manager.cpp)
 ob_unittest(test_uniq_task_queue)
 # ob_unittest(test_table_connection tableapi/test_table_connection.cpp)
 

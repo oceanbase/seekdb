@@ -20,7 +20,6 @@
 #include "share/ob_occam_time_guard.h"
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ob_i_table.h"
-#include "observer/report/ob_i_meta_report.h"
 #include "storage/blocksstable/ob_datum_range.h"
 #include "storage/tx_storage/ob_ls_handle.h"
 #include "storage/compaction/ob_i_compaction_filter.h"
@@ -120,12 +119,11 @@ struct ObTabletMergeDagParam : public share::ObIDagInitParam
   ObTabletMergeDagParam(
     const compaction::ObMergeType merge_type,
     const share::ObLSID &ls_id,
-    const ObTabletID &tablet_id,
-    const int64_t schedule_transfer_seq);
+    const ObTabletID &tablet_id);
   virtual bool is_valid() const override;
   VIRTUAL_TO_STRING_KV(K_(skip_get_tablet), "merge_type", merge_type_to_str(merge_type_), K_(merge_version),
      K_(ls_id), K_(tablet_id), "exec_mode", exec_mode_to_str(exec_mode_),
-     K_(need_swap_tablet_flag), K_(is_reserve_mode), K_(schedule_transfer_seq));
+     K_(need_swap_tablet_flag), K_(is_reserve_mode));
 
   bool skip_get_tablet_;
   bool need_swap_tablet_flag_;
@@ -133,7 +131,6 @@ struct ObTabletMergeDagParam : public share::ObIDagInitParam
   ObExecMode exec_mode_;
   compaction::ObMergeType merge_type_;
   int64_t merge_version_;
-  int64_t schedule_transfer_seq_; // only affect minor and major now
   share::ObLSID ls_id_;
   ObTabletID tablet_id_;
   ObCompactionParam compaction_param_; // used for adaptive compaction dag scheduling

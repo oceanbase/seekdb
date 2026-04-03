@@ -324,8 +324,6 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
       LOG_WARN("failed to init with compaction info", K(ret));
     } else {
       table_store_param.compaction_info_.clog_checkpoint_scn_ = sstable->get_end_scn();
-      table_store_param.ha_info_.need_check_transfer_seq_ = true;
-      table_store_param.ha_info_.transfer_seq_ = tablet_handle.get_obj()->get_tablet_meta().transfer_info_.transfer_seq_;
       ObTabletHandle new_tablet_handle;
       if (OB_FAIL(ls_handle.get_ls()->update_tablet_table_store(tablet_id, table_store_param, new_tablet_handle))) {
         LOG_WARN("failed to update tablet table store", K(ret), K(dag_merge_param), K(table_store_param));

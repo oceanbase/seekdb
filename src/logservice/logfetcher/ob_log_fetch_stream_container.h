@@ -1,0 +1,102 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_LOG_FETCHER_FETCH_STREAM_CONTAINER_H__
+#define OCEANBASE_LOG_FETCHER_FETCH_STREAM_CONTAINER_H__
+
+#include "lib/lock/ob_spin_rwlock.h"      // SpinRWLock
+#include "lib/net/ob_addr.h"              // ObAddr
+
+#include "ob_log_fetch_stream_type.h"     // FetchStreamType
+#include "ob_log_ls_fetch_stream.h"       // FSList, FetchStream
+#include "ob_log_handler.h"               // ILogFetcherHandler
+
+namespace oceanbase
+{
+namespace logfetcher
+{
+class IFetchStreamPool;
+class IObLogRpc;
+class IObLSWorker;
+class FetchLogRpcResultPool;
+class PartProgressController;
+class FetchStreamContainer
+{
+public:
+  FetchStreamContainer();
+  virtual ~FetchStreamContainer();
+
+public:
+  void reset();
+  void reset(const FetchStreamType stype,
+      const uint64_t self_tenant_id,
+      IObLogRpc &rpc,
+      IFetchStreamPool &fs_pool,
+      IObLSWorker &stream_worker,
+      LogFileDataBufferPool &log_file_pool,
+      FetchLogRpcResultPool &rpc_result_pool,
+      PartProgressController &progress_controller,
+      ILogFetcherHandler &log_handler);
+
+public:
+  // Assign the fetch log task to a FetchStream
+  // If the target is a "new fetch stream task", assign it to a worker thread for processing
+  int dispatch(LSFetchCtx &task,
+      const common::ObAddr &request_svr);
+
+  // print stat info
+  void do_stat(int64_t &traffic);
+
+  void update_fetch_stream_proto(const obrpc::ObCdcFetchLogProtocolType proto);
+
+public:
+  TO_STRING_KV("stype", print_fetch_stream_type(stype_),
+      K_(fs_list));
+
+private:
+  static const int64_t MAX_FS_COUNT = 1;
+  void free_fs_list_();
+  int try_create_new_fs_and_add_task_(LSFetchCtx &task,
+      const common::ObAddr &request_svr);
+  int alloc_fetch_stream_(
+      const uint64_t tenant_id,
+      LSFetchCtx &ls_fetch_ctx,
+      FetchStream *&fs);
+
+private:
+  FetchStreamType           stype_;
+  obrpc::ObCdcFetchLogProtocolType proto_type_;
+  uint64_t                  self_tenant_id_;
+  IObLogRpc                 *rpc_;                    // RPC Processor
+  IFetchStreamPool          *fs_pool_;                // Fetch log stream task object pool
+  IObLSWorker               *stream_worker_;          // Stream master
+  FetchLogRpcResultPool     *rpc_result_pool_;        // RPC result pool
+  LogFileDataBufferPool     *log_file_pool_;
+  PartProgressController    *progress_controller_;    // Progress controller
+  ILogFetcherHandler        *log_handler_;
+
+  // Fetch log stream task
+  // Use read/write locks to control the reading and writing of tasks
+  FSList                  fs_list_;
+  common::SpinRWLock      lock_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(FetchStreamContainer);
+};
+
+}
+}
+
+#endif

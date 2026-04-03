@@ -39,7 +39,6 @@ public:
   void destroy();
 private:
   const static int64_t DEFAULT_TENANT_NUM = 10;
-  char ip_buffer_[OB_MAX_SERVER_ADDR_SIZE];
   share::schema::ObMultiVersionSchemaService &schema_service_;
   ObSEArray<uint64_t, DEFAULT_TENANT_NUM> tenant_ids_;
   int64_t idx_;

@@ -124,6 +124,12 @@ private:
   int push_event_into_queue_(const RoleChangeEvent &event);
   int handle_role_change_event_(const RoleChangeEvent &event,
                                 RetrySubmitRoleChangeEventCtx &retry_ctx);
+
+  int handle_role_change_cb_event_for_restore_handler_(const palf::AccessMode &curr_access_mode,
+                                                       ObLS *ls);
+  int handle_change_leader_event_for_restore_handler_(const common::ObAddr &dst_addr,
+                                                      ObLS *ls);
+
   int handle_role_change_cb_event_for_log_handler_(const palf::AccessMode &curr_access_mode,
                                                    ObLS *ls,
                                                    RetrySubmitRoleChangeEventCtx &retry_ctx);
@@ -147,6 +153,18 @@ private:
                                const int64_t curr_proposal_id,
                                ObLS *ls,
                                RetrySubmitRoleChangeEventCtx &retry_ctx);
+
+  int switch_follower_to_leader_restore_(const int64_t new_proposal_id,
+                                         ObLS *ls);
+  int switch_leader_to_follower_forcedly_restore_(const int64_t new_proposal_id,
+                                                  ObLS *ls);
+  int switch_leader_to_follower_gracefully_restore_(const common::ObAddr &dst_addr,
+                                                    const int64_t curr_proposal_id,
+                                                    ObLS *ls);
+  int switch_follower_to_follower_restore_();
+  int switch_leader_to_leader_restore_(const int64_t new_proposal_id,
+                                       const int64_t curr_proposal_id,
+                                       ObLS *ls);
   // wait replay finish with timeout.
   int wait_replay_service_replay_done_(const share::ObLSID &ls_id,
                                        const palf::LSN &end_lsn,

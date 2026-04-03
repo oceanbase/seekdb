@@ -26,7 +26,6 @@
 #include "storage/tablet/ob_tablet_meta.h"
 #include "share/backup/ob_backup_struct.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/ob_rs_mgr.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 

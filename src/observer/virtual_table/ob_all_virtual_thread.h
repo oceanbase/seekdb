@@ -28,10 +28,7 @@ class ObAllVirtualThread : public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    TID,
+        TID = common::OB_APP_MIN_COLUMN_ID,
     TNAME,
     STATUS,
     WAIT_EVENT,

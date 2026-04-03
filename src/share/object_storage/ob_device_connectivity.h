@@ -30,16 +30,6 @@ namespace share
 {
 class ObBackupDest;
 
-class ObDeviceConnectivityCheckManager final
-{
-public:
-  ObDeviceConnectivityCheckManager() {}
-  ~ObDeviceConnectivityCheckManager() {}
-  int check_device_connectivity(const share::ObBackupDest &storage_dest);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObDeviceConnectivityCheckManager);
-};
-
 class ObDeviceCheckFile final
 {
 public:

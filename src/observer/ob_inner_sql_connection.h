@@ -49,7 +49,6 @@ class ObISQLResultHandler;
 
 namespace share
 {
-class ObLSTableOperator;
 namespace schema
 {
 class ObMultiVersionSchemaService;

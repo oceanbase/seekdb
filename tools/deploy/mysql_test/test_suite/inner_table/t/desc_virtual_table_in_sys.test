@@ -8,8 +8,6 @@ connection sys;
 use test;
 let $tenant_id = 1;
 let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 2, cnt, 1);
-let $svr_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_unit order by svr_ip limit 1, svr_ip, 1);
-let $svr_port = query_get_value(select svr_port from oceanbase.__all_virtual_unit order by svr_ip limit 1, svr_port, 1);
 
 let $idx = 1;
 while ($idx <= $cnt)
@@ -64,7 +62,7 @@ if ($part_level == 1)
 {
 --disable_query_log
 --echo "$database_name.$table_name runs in single server"
-eval select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from $database_name.$table_name where svr_ip = "$svr_ip" and svr_port = "$svr_port";
+eval select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from $database_name.$table_name;
 --enable_query_log
 }
 let $select_type = `

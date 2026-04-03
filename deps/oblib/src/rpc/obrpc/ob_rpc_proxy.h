@@ -96,11 +96,12 @@ public:
     {
       return cloned_;
     }
+    Response &result() { return result_; }
+    ObRpcResultCode &rcode() { return rcode_; }
 
     virtual void set_args(const Request &arg) = 0;
     virtual void destroy() {}
 
-  protected:
 
   protected:
     /*

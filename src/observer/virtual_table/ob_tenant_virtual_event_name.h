@@ -37,8 +37,7 @@ public:
 private:
   enum SYS_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    EVENT_ID,
+    EVENT_ID = common::OB_APP_MIN_COLUMN_ID,
     EVENT_NO,
     NAME,
     DISPLAY_NAME,

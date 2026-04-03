@@ -23,7 +23,6 @@
 #include "observer/virtual_table/ob_table_columns.h"
 #include "sql/rewrite/ob_transformer_impl.h"
 #include "storage/mview/ob_mview_refresh.h"
-#include "share/ob_license_utils.h" // ObLicenseUtils
 #include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
@@ -136,14 +135,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     uint64_t old_database_id = session_info_->get_database_id();
     bool resolve_succ = true;
     bool can_expand_star = true;
-    if (is_materialized_view) {
-      if (OB_FAIL(ObLicenseUtils::check_olap_allowed(session_info_->get_effective_tenant_id()))) {
-        ret = OB_LICENSE_SCOPE_EXCEEDED;
-        LOG_WARN("materialized view is not allowed", KR(ret));
-        LOG_USER_ERROR(OB_LICENSE_SCOPE_EXCEEDED,
-                       "materialized view is not supported due to the absence of the OLAP module");
-      }
-    }
     bool add_undefined_columns = false;
     ParseNode *select_stmt_node = NULL;
     if (OB_FAIL(ret)) {
@@ -436,7 +427,7 @@ int ObCreateViewResolver::try_add_error_info(const uint64_t error_number,
   if (ERROR_STATUS_HAS_ERROR == error_info.get_error_status()) {
     /* do nothing */
   } else {
-    ObString err_txt(common::ob_oracle_strerror(error_number));
+    ObString err_txt(common::ob_strerror(error_number));
     error_info.set_error_number(error_number);
     error_info.set_error_status(ERROR_STATUS_HAS_ERROR);
     if (err_txt.empty()) {

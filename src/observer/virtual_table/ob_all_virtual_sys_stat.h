@@ -55,10 +55,7 @@ private:
 private:
   enum SYS_COLUMN
   {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    STATISTIC,
+        STATISTIC = common::OB_APP_MIN_COLUMN_ID,
     VALUE,
     VALUE_TYPE,
     STAT_ID,

@@ -48,8 +48,7 @@ int FakeZoneMergeManager::update_zone_merge_info(const ObZoneMergeInfo& zone_mer
   } else {
     bool exist = false;
     for (int64_t i = 0; (i < zone_count_) && OB_SUCC(ret); ++i) {
-      if ((zone_merge_infos_[i].tenant_id_ == zone_merge_info.tenant_id_)
-          && (zone_merge_infos_[i].zone_ == zone_merge_info.zone_)) {
+      if (zone_merge_infos_[i].tenant_id_ == zone_merge_info.tenant_id_) {
         exist = true;
         if (OB_FAIL(zone_merge_infos_[i].assign(zone_merge_info))) {
           LOG_WARN("fail to assign zone merge info", K(ret), K(i), K(zone_merge_info));

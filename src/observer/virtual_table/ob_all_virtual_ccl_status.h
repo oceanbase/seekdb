@@ -75,10 +75,7 @@ private:
 private:
   enum COLUMN_ID
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    CCL_RULE_ID,
+        CCL_RULE_ID = common::OB_APP_MIN_COLUMN_ID,
     FORMAT_SQLID,
     CURRENCT_CONCURRENCY,
     MAX_CONCURRENCY

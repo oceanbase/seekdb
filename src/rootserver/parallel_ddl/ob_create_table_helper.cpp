@@ -20,7 +20,6 @@
 #include "rootserver/ob_lob_meta_builder.h"
 #include "rootserver/ob_lob_piece_builder.h"
 #include "rootserver/ob_table_creator.h"
-#include "rootserver/ob_balance_group_ls_stat_operator.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_index_builder_util.h"
 #include "share/sequence/ob_sequence_option_builder.h" // ObSequenceOptionBuilder
@@ -30,7 +29,6 @@
 #include "share/ob_dynamic_partition_manager.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_fts_index_builder_util.h"
-#include "share/ob_license_utils.h"
 #include "rootserver/ob_location_ddl_service.h"
 
 using namespace oceanbase::lib;
@@ -86,9 +84,7 @@ int ObCreateTableHelper::init_()
   int ret = OB_SUCCESS;
   DEBUG_SYNC(BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX);
   const int64_t BUCKET_NUM = 100;
-  if (OB_FAIL(ObLicenseUtils::check_create_table_allowed(tenant_id_))) {
-    LOG_WARN("check create table allowed failed", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(new_mock_fk_parent_table_map_.create(BUCKET_NUM, "MockFkPMap", "MockFkPMap"))) {
+  if (OB_FAIL(new_mock_fk_parent_table_map_.create(BUCKET_NUM, "MockFkPMap", "MockFkPMap"))) {
     LOG_WARN("fail to init mock fk parent table map", KR(ret));
   }
   return ret;
@@ -2025,18 +2021,11 @@ int ObCreateTableHelper::create_tablets_()
     // TODO:(yanmu.ztl)
     // schema_guard is used to get primary table in tablegroup or data table for local index.
     // - primary table may be incorrect when ddl execute concurrently.
-    ObNewTableTabletAllocator new_table_tablet_allocator(
-                              tenant_id_,
-                              schema_guard,
-                              sql_proxy,
-                              true /*use parallel ddl*/);
     const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
     int64_t last_schema_version = OB_INVALID_VERSION;
     ObSchemaVersionGenerator *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
     if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
       LOG_WARN("fail to init table creator", KR(ret));
-    } else if (OB_FAIL(new_table_tablet_allocator.init())) {
-      LOG_WARN("fail to init new table tablet allocator", KR(ret));
     } else if (OB_ISNULL(tsi_generator)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tsi schema version generator is null", KR(ret));
@@ -2060,6 +2049,9 @@ int ObCreateTableHelper::create_tablets_()
       ObArray<const ObTableSchema*> schemas;
       common::ObArray<share::ObLSID> ls_id_array;
       ObArray<bool> need_create_empty_majors;
+      if (OB_FAIL(ls_id_array.push_back(ObLSID(SYS_LS)))) {
+        LOG_WARN("fail to push back sys ls", KR(ret));
+      }
       for (int64_t i = 0; OB_SUCC(ret) && i < new_tables_.count(); i++) {
         const ObTableSchema &new_table = new_tables_.at(i);
         const uint64_t table_id = new_table.get_table_id();
@@ -2072,11 +2064,7 @@ int ObCreateTableHelper::create_tablets_()
             LOG_WARN("fail to push back need create empty major", KR(ret));
           }
         } else {
-          if (OB_FAIL(new_table_tablet_allocator.prepare(get_trans_(), new_table, data_tablegroup_schema))) {
-            LOG_WARN("fail to prepare ls for global index", KR(ret), K(new_table));
-          } else if (OB_FAIL(new_table_tablet_allocator.get_ls_id_array(ls_id_array))) {
-            LOG_WARN("fail to get ls id array", KR(ret));
-          } else if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
+          if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
                      new_table, ls_id_array, tenant_data_version, true/*need create major sstable*/))) {
             LOG_WARN("create table partitions failed", KR(ret), K(new_table));
           }
@@ -2092,26 +2080,13 @@ int ObCreateTableHelper::create_tablets_()
       if (OB_FAIL(ret)) {
       } else if (schemas.count() > 0) {
         const ObTableSchema &data_table = new_tables_.at(0);
-        if (OB_FAIL(new_table_tablet_allocator.prepare(get_trans_(), 
-                                                       data_table, 
-                                                       data_tablegroup_schema, 
-                                                       false,  /* is_add_partition */
-                                                       get_external_trans_() == NULL ? NULL : &latest_schema_guard_))) {
-          LOG_WARN("fail to prepare ls for data table", KR(ret));
-        } else if (OB_FAIL(new_table_tablet_allocator.get_ls_id_array(ls_id_array))) {
-          LOG_WARN("fail to get ls id array", KR(ret));
-        } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
+        if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
                    schemas, ls_id_array, tenant_data_version, need_create_empty_majors /*need create major sstable*/))) {
           LOG_WARN("create table partitions failed", KR(ret), K(data_table));
         } else if (OB_FAIL(table_creator.execute())) {
           LOG_WARN("execute create partition failed", KR(ret));
         }
       }
-    }
-    // finish() will do nothing here, can be removed
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = new_table_tablet_allocator.finish(OB_SUCCESS == ret))) {
-      LOG_WARN("fail to finish new table tablet allocator", KR(tmp_ret));
     }
   }
   RS_TRACE(create_tablets);

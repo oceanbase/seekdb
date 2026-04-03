@@ -1815,7 +1815,9 @@ int ObDbmsStatsExecutor::fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
-  if (OB_FAIL(raw_sql.append_fmt("SELECT svr_ip, svr_port FROM %s WHERE task_id = \'%.*s\'",
+  // vtable_route_policy = 'local', so the query only returns tasks running on the local server
+  // Just check if the task exists and return local server address
+  if (OB_FAIL(raw_sql.append_fmt("SELECT 1 FROM %s WHERE task_id = \'%.*s\' LIMIT 1",
                                  share::OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TNAME,
                                  task_id.length(),
                                  task_id.ptr()))) {
@@ -1837,30 +1839,22 @@ int ObDbmsStatsExecutor::fetch_gather_task_addr(ObCommonSqlProxy *sql_proxy,
             LOG_WARN("get unexpected error", K(ret), K(task_id), K(task_id), K(svr_port));
           } else {
             got_result = true;
-            int64_t idx1 = 0;
-            int64_t idx2 = 1;
-            ObObj obj;
-            ObString str;
-            int64_t tmp_val;
-            if (OB_FAIL(client_result->get_obj(idx1, obj))) {
-              LOG_WARN("failed to get object", K(ret));
-            } else if (OB_FAIL(obj.get_string(str))) {
-              LOG_WARN("failed to get int", K(ret), K(obj));
-            } else if (OB_FAIL(client_result->get_obj(idx2, obj))) {
-              LOG_WARN("failed to get object", K(ret));
-            } else if (OB_FAIL(obj.get_int(tmp_val))) {
-              LOG_WARN("failed to get int", K(ret), K(obj));
+            // Use local server address since vtable only returns local data
+            const ObAddr &self_addr = GCTX.self_addr();
+            char ip_buf[OB_IP_STR_BUFF] = {0};
+            if (!self_addr.ip_to_string(ip_buf, OB_IP_STR_BUFF)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("failed to convert ip to string", K(ret), K(self_addr));
             } else {
-              svr_port = static_cast<int32_t>(tmp_val);
-            }
-            if (OB_SUCC(ret) && !str.empty()) {
-              if (OB_ISNULL(svr_ip = static_cast<char*>(allcoator.alloc(str.length() + 1)))) {
+              svr_port = self_addr.get_port();
+              int64_t ip_len = strlen(ip_buf);
+              if (OB_ISNULL(svr_ip = static_cast<char*>(allcoator.alloc(ip_len + 1)))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
                 LOG_WARN("failed to alloc memory for saved session value", K(ret), K(svr_ip));
               } else {
-                MEMSET(svr_ip, 0, str.length() + 1);
-                MEMCPY(svr_ip, str.ptr(), str.length());
-                LOG_TRACE("succeed to fetch gather task addr", K(str), K(svr_port));
+                MEMSET(svr_ip, 0, ip_len + 1);
+                MEMCPY(svr_ip, ip_buf, ip_len);
+                LOG_TRACE("succeed to fetch gather task addr", K(svr_ip), K(svr_port));
               }
             }
           }

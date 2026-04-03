@@ -193,7 +193,7 @@ int ObSharedNothingTmpFileMetaTree::insert_items(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", KR(ret), K(data_items));
   } else if (OB_UNLIKELY(!data_items.at(0).is_valid() ||
-                         released_offset_ > data_items.at(0).virtual_page_id_ * ObTmpFileGlobal::PAGE_SIZE)) {
+                         released_offset_ > data_items.at(0).virtual_page_id_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(data_items.at(0)), KPC(this));
   } else {
@@ -366,7 +366,7 @@ int ObSharedNothingTmpFileMetaTree::try_to_fill_rightmost_leaf_page_(
                                       K(level_page_range_array_), K(level_origin_page_write_counts));
   } else {
     const int16_t MAX_PAGE_DATA_ITEM_NUM =
-        MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(data_items.at(0)));
+        MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(data_items.at(0)));
     uint32_t page_id = ObTmpFileGlobal::INVALID_PAGE_ID;
     int32_t level_page_index = -1;
     int16_t count = 0;
@@ -588,7 +588,7 @@ int ObSharedNothingTmpFileMetaTree::try_to_fill_rightmost_internal_page_(
                                                                             K(level_origin_page_write_counts));
   } else {
     const int16_t MAX_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(meta_items.at(0)));
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(meta_items.at(0)));
     uint32_t next_page_id = ObTmpFileGlobal::INVALID_PAGE_ID;
     char *internal_page_buff = NULL;
     ObSharedNothingTmpFileTreePageHeader page_header;
@@ -796,7 +796,7 @@ int ObSharedNothingTmpFileMetaTree::search_data_items(
   int ret = OB_SUCCESS;
   data_items.reset();
   const int16_t FULL_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
   const int64_t end_offset = start_offset + read_size;
   int64_t offset = start_offset;
   SpinRLockGuard guard(lock_);
@@ -810,7 +810,7 @@ int ObSharedNothingTmpFileMetaTree::search_data_items(
       STORAGE_LOG(WARN, "fail to get data items from array", KR(ret), K(end_offset), K(offset), KPC(this));
     }
   } else {
-    const int64_t target_virtual_page_id = start_offset / ObTmpFileGlobal::PAGE_SIZE;
+    const int64_t target_virtual_page_id = start_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     ObSharedNothingTmpFileMetaItem meta_item = root_item_;
     ObSharedNothingTmpFileMetaItem next_level_meta_item;
     //read from meta tree
@@ -873,7 +873,7 @@ int ObSharedNothingTmpFileMetaTree::search_data_items_from_array_(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(fd_), K(cur_offset), K(end_offset), K(data_item_array_));
   } else {
-    const int64_t target_virtual_page_id = cur_offset / ObTmpFileGlobal::PAGE_SIZE;
+    const int64_t target_virtual_page_id = cur_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     int16_t index = -1;
     ARRAY_FOREACH_N(data_item_array_, i, cnt) {
       const ObSharedNothingTmpFileDataItem &data_item = data_item_array_.at(i);
@@ -892,13 +892,13 @@ int ObSharedNothingTmpFileMetaTree::search_data_items_from_array_(
     } else {
       for (int16_t i = index; OB_SUCC(ret) && i < data_item_array_.count() && cur_offset < end_offset; i++) {
         const ObSharedNothingTmpFileDataItem &data_item = data_item_array_.at(i);
-        if (OB_UNLIKELY(i > index && cur_offset != data_item.virtual_page_id_ * ObTmpFileGlobal::PAGE_SIZE)) {
+        if (OB_UNLIKELY(i > index && cur_offset != data_item.virtual_page_id_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(ERROR, "unexpected virtual_page_id", KR(ret), K(fd_), K(cur_offset), K(i), K(index), K(data_item));
         } else if (OB_FAIL(data_items.push_back(data_item))) {
           STORAGE_LOG(WARN, "fail to push back", KR(ret), K(fd_), K(data_item));
         } else {
-          cur_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+          cur_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
         }
       }
     }
@@ -922,7 +922,7 @@ int ObSharedNothingTmpFileMetaTree::get_items_of_leaf_page_(
   char *page_buff = NULL;
   int16_t item_index = -1;
   int64_t tmp_offset = -1;
-  const int64_t target_virtual_page_id = cur_offset / ObTmpFileGlobal::PAGE_SIZE;
+  const int64_t target_virtual_page_id = cur_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   ObSharedNothingTmpFileDataItem data_item;
   ObSharedNothingTmpFileTreePageHeader page_header;
   ObTmpPageValueHandle p_handle;
@@ -932,7 +932,7 @@ int ObSharedNothingTmpFileMetaTree::get_items_of_leaf_page_(
     STORAGE_LOG(WARN, "fail to read page header", KR(ret), K(fd_), KP(page_buff));
   } else {
     if (!need_find_index) {
-      if (OB_UNLIKELY(0 != cur_offset % ObTmpFileGlobal::PAGE_SIZE)) {
+      if (OB_UNLIKELY(0 != cur_offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(ERROR, "unexpected cur_offset", KR(ret), K(fd_), K(cur_offset));
       } else {
@@ -943,7 +943,7 @@ int ObSharedNothingTmpFileMetaTree::get_items_of_leaf_page_(
       //get the specified item_index based on target_virtual_page_id
       if (OB_FAIL(read_item_(page_buff, target_virtual_page_id, item_index, data_item))) {
         STORAGE_LOG(WARN, "fail to read item", KR(ret), K(fd_), KP(page_buff), K(target_virtual_page_id));
-      } else if (FALSE_IT(tmp_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE)) {
+      } else if (FALSE_IT(tmp_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
       } else if (cur_offset >= tmp_offset) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(ERROR, "unexpected offset", KR(ret), K(fd_), K(cur_offset), K(tmp_offset), K(data_item));
@@ -961,7 +961,7 @@ int ObSharedNothingTmpFileMetaTree::get_items_of_leaf_page_(
         data_item.reset();
         if (OB_FAIL(read_item_(page_buff, item_index, data_item))) {
           STORAGE_LOG(WARN, "fail to read item", KR(ret), K(fd_), KP(page_buff), K(item_index), K(page_info), K(level_page_index));
-        } else if (OB_UNLIKELY(cur_offset != data_item.virtual_page_id_ * ObTmpFileGlobal::PAGE_SIZE)) {
+        } else if (OB_UNLIKELY(cur_offset != data_item.virtual_page_id_ * ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
           ret = OB_ERR_UNEXPECTED;
           //print page content
           //NOTE: control print frequence
@@ -973,7 +973,7 @@ int ObSharedNothingTmpFileMetaTree::get_items_of_leaf_page_(
         } else if (OB_FAIL(data_items.push_back(data_item))) {
           STORAGE_LOG(WARN, "fail to push back", KR(ret), K(fd_), K(data_item));
         } else {
-          cur_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+          cur_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
           item_index++;
         }
       }
@@ -1008,7 +1008,7 @@ int ObSharedNothingTmpFileMetaTree::backtrace_search_data_items_(
                                                     K(end_offset), K(offset));
   } else {
     const int16_t FULL_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
     ObSEArray<ObSharedNothingTmpFileMetaItem, 4> meta_items;
     while (OB_SUCC(ret)
            && !search_path.empty()
@@ -1102,7 +1102,7 @@ int ObSharedNothingTmpFileMetaTree::get_items_of_internal_page_(
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "unexpected page_header", KR(ret), K(fd_), K(page_header), K(item_index));
   } else {
-    int64_t end_virtual_page_id = upper_align(end_offset, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE;
+    int64_t end_virtual_page_id = upper_align(end_offset, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     while (OB_SUCC(ret)
            && cur_item_index < page_header.item_num_) {
       meta_item.reset();
@@ -1139,7 +1139,7 @@ int ObSharedNothingTmpFileMetaTree::flush_meta_pages_for_block(
   if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_TMP_FILE_BLOCK_INDEX == block_index
                   || ObTmpFileTreeEvictType::INVALID == flush_type
                   || NULL == block_buff
-                  || 0 != write_offset % ObTmpFileGlobal::PAGE_SIZE
+                  || 0 != write_offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE
                   || level_page_range_array_.count() >= INT16_MAX)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(block_index), K(flush_type),
@@ -1277,20 +1277,20 @@ int ObSharedNothingTmpFileMetaTree::flush_leaf_pages_(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_PAGE_ID == flush_start_page_id
                   || 0 > start_page_index_in_level
-                  || 0 != write_offset % ObTmpFileGlobal::PAGE_SIZE
+                  || 0 != write_offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE
                   || level_page_range_array_.empty())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(fd_), K(flush_start_page_id), K(start_page_index_in_level),
                                                     K(write_offset), K(level_page_range_array_));
   } else {
-    tree_io_info.physical_start_page_id_ = write_offset / ObTmpFileGlobal::PAGE_SIZE;
+    tree_io_info.physical_start_page_id_ = write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     tree_io_info.page_level_ = 0;
     uint32_t cur_page_id = flush_start_page_id;
     const uint32_t end_page_id = level_page_range_array_[0].end_page_id_;
     int32_t page_index_in_level = start_page_index_in_level;
     while (OB_SUCC(ret)
           && ObTmpFileGlobal::INVALID_PAGE_ID != cur_page_id
-          && write_offset + ObTmpFileGlobal::PAGE_SIZE <= ObTmpFileGlobal::SN_BLOCK_SIZE
+          && write_offset + ObTmpFileGlobal::ALLOC_PAGE_SIZE <= ObTmpFileGlobal::SN_BLOCK_SIZE
           && (ObTmpFileTreeEvictType::FULL == flush_type || end_page_id != cur_page_id)) {
       char *page_buff = NULL;
       uint32_t next_page_id = ObTmpFileGlobal::INVALID_PAGE_ID;
@@ -1305,15 +1305,15 @@ int ObSharedNothingTmpFileMetaTree::flush_leaf_pages_(
         STORAGE_LOG(ERROR, "fail to notify write back for meta", KR(ret), K(fd_), K(cur_page_id), K(page_key));
       } else {
         ObTmpPageCacheKey cache_key(tree_io_info.block_index_,
-                                    write_offset / ObTmpFileGlobal::PAGE_SIZE, MTL_ID());
+                                    write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, MTL_ID());
         ObTmpPageCacheValue cache_value(page_buff);
-        MEMCPY(block_buff + write_offset, page_buff, ObTmpFileGlobal::PAGE_SIZE);
+        MEMCPY(block_buff + write_offset, page_buff, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
         if (OB_FAIL(calc_and_set_page_checksum_(block_buff + write_offset))) {
           STORAGE_LOG(WARN, "fail to calc and set page checksum", KR(ret), K(fd_), KP(block_buff + write_offset));
         } else {
           ObTmpPageCacheValue cache_value(block_buff + write_offset);
           ObTmpPageCache::get_instance().try_put_page_to_cache(cache_key, cache_value);
-          write_offset += ObTmpFileGlobal::PAGE_SIZE;
+          write_offset += ObTmpFileGlobal::ALLOC_PAGE_SIZE;
           if (flush_start_page_id == cur_page_id) {
             tree_io_info.flush_start_page_id_ = cur_page_id;
             tree_io_info.flush_start_level_page_index_ = page_index_in_level;
@@ -1337,7 +1337,7 @@ int ObSharedNothingTmpFileMetaTree::calc_and_set_page_checksum_(char* page_buff)
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(fd_), KP(page_buff));
   } else {
     ObSharedNothingTmpFileTreePageHeader page_header = *((ObSharedNothingTmpFileTreePageHeader *)(page_buff));
-    page_header.checksum_ = ob_crc64(page_buff + PAGE_HEADER_SIZE, ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE);
+    page_header.checksum_ = ob_crc64(page_buff + PAGE_HEADER_SIZE, ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE);
     MEMCPY(page_buff, &page_header, PAGE_HEADER_SIZE);
   }
   return ret;
@@ -1359,14 +1359,14 @@ int ObSharedNothingTmpFileMetaTree::flush_internal_pages_(
                   || 0 > start_page_index_in_level
                   || ObTmpFileTreeEvictType::INVALID == flush_type
                   || NULL == block_buff
-                  || 0 != write_offset % ObTmpFileGlobal::PAGE_SIZE)) {
+                  || 0 != write_offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(fd_), K(flush_start_page_id), K(level), K(start_page_index_in_level),
                     K(flush_type), KP(block_buff), K(level_page_range_array_), K(write_offset));
   } else {
     const int16_t FULL_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
-    tree_io_info.physical_start_page_id_ = write_offset / ObTmpFileGlobal::PAGE_SIZE;
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+    tree_io_info.physical_start_page_id_ = write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     tree_io_info.page_level_ = level;
     uint32_t cur_page_id = flush_start_page_id;
     const uint32_t end_page_id = level_page_range_array_[level].end_page_id_;
@@ -1374,7 +1374,7 @@ int ObSharedNothingTmpFileMetaTree::flush_internal_pages_(
     int32_t page_index_in_level = start_page_index_in_level;
     while (OB_SUCC(ret)
           && ObTmpFileGlobal::INVALID_PAGE_ID != cur_page_id
-          && write_offset + ObTmpFileGlobal::PAGE_SIZE <= ObTmpFileGlobal::SN_BLOCK_SIZE
+          && write_offset + ObTmpFileGlobal::ALLOC_PAGE_SIZE <= ObTmpFileGlobal::SN_BLOCK_SIZE
           && (ObTmpFileTreeEvictType::FULL == flush_type || end_page_id != cur_page_id)) {
       char * page_buff = NULL;
       uint32_t next_page_id = ObTmpFileGlobal::INVALID_PAGE_ID;
@@ -1407,8 +1407,8 @@ int ObSharedNothingTmpFileMetaTree::flush_internal_pages_(
           STORAGE_LOG(ERROR, "fail to notify write back for meta", KR(ret), K(fd_), K(cur_page_id), K(page_key));
         } else {
           ObTmpPageCacheKey cache_key(tree_io_info.block_index_,
-                                      write_offset / ObTmpFileGlobal::PAGE_SIZE, MTL_ID());
-          MEMCPY(block_buff + write_offset, page_buff, ObTmpFileGlobal::PAGE_SIZE);
+                                      write_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE, MTL_ID());
+          MEMCPY(block_buff + write_offset, page_buff, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
           if (OB_FAIL(modify_child_pages_location(block_buff + write_offset))) {
             STORAGE_LOG(WARN, "fail to modify child pages location", KR(ret), K(fd_), KP(block_buff + write_offset));
           } else if (OB_FAIL(calc_and_set_page_checksum_(block_buff + write_offset))) {
@@ -1416,7 +1416,7 @@ int ObSharedNothingTmpFileMetaTree::flush_internal_pages_(
           } else {
             ObTmpPageCacheValue cache_value(block_buff + write_offset);
             ObTmpPageCache::get_instance().try_put_page_to_cache(cache_key, cache_value);
-            write_offset += ObTmpFileGlobal::PAGE_SIZE;
+            write_offset += ObTmpFileGlobal::ALLOC_PAGE_SIZE;
             if (flush_start_page_id == cur_page_id) {
               tree_io_info.flush_start_page_id_ = cur_page_id;
               tree_io_info.flush_start_level_page_index_ = page_index_in_level;
@@ -1495,7 +1495,7 @@ int ObSharedNothingTmpFileMetaTree::modify_meta_items_at_parent_level_(
     }
   } else {
     const int16_t FULL_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
     int32_t child_level_page_index = start_page_index_in_level;
     uint32_t physical_page_id = tree_io.physical_start_page_id_;
     ObSharedNothingTmpFileMetaItem meta_item;
@@ -1980,7 +1980,7 @@ int ObSharedNothingTmpFileMetaTree::modify_meta_items_during_evict_(
     bool has_find = false;
     if (level < level_count) {
       const int16_t FULL_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
       uint32_t cur_page_id = level_page_range_array_[level].start_page_id_;
       const uint32_t end_page_id = level_page_range_array_[level].end_page_id_;
       int32_t level_page_index = level_page_range_array_[level].evicted_page_num_;
@@ -2066,7 +2066,7 @@ int ObSharedNothingTmpFileMetaTree::clear(
 {
   int ret = OB_SUCCESS;
   SpinWLockGuard guard(lock_);
-  int64_t end_truncate_offset = upper_align(total_file_size, ObTmpFileGlobal::PAGE_SIZE);
+  int64_t end_truncate_offset = upper_align(total_file_size, ObTmpFileGlobal::ALLOC_PAGE_SIZE);
 
   if (OB_UNLIKELY(last_truncate_offset < released_offset_
                   || last_truncate_offset > total_file_size
@@ -2173,7 +2173,7 @@ int ObSharedNothingTmpFileMetaTree::truncate(
   int ret = OB_SUCCESS;
   SpinWLockGuard guard(lock_);
   if (OB_UNLIKELY(last_truncate_offset < released_offset_
-                  || 0 != released_offset_ % ObTmpFileGlobal::PAGE_SIZE
+                  || 0 != released_offset_ % ObTmpFileGlobal::ALLOC_PAGE_SIZE
                   || last_truncate_offset > end_truncate_offset
                   || is_writing_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -2210,7 +2210,7 @@ int ObSharedNothingTmpFileMetaTree::truncate_(
     }
   } else {
     const int16_t FULL_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
     ObArray<std::pair<int32_t, int16_t>> item_index_arr;
     if (OB_FAIL(calculate_truncate_index_path_(item_index_arr))) {
       STORAGE_LOG(WARN, "fail to calculate truncate index path", KR(ret), K(fd_), K(item_index_arr));
@@ -2299,7 +2299,7 @@ int ObSharedNothingTmpFileMetaTree::truncate_array_(
     if (OB_UNLIKELY(!last_item.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "unexpected last item", KR(ret), K(fd_), K(last_item));
-    } else if (end_offset >= (last_item.virtual_page_id_ + last_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE) {
+    } else if (end_offset >= (last_item.virtual_page_id_ + last_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
       //clear all items
       ARRAY_FOREACH_N(data_item_array_, i, cnt) {
         const ObSharedNothingTmpFileDataItem &item = data_item_array_.at(i);
@@ -2307,7 +2307,7 @@ int ObSharedNothingTmpFileMetaTree::truncate_array_(
                                            item.physical_page_id_, item.physical_page_num_))) {
           STORAGE_LOG(WARN, "fail to release tmp file page", KR(ret), K(fd_), K(item), K(i), K(cnt));
         } else if (i + 1 == cnt) {
-          released_offset_ = (item.virtual_page_id_ + item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+          released_offset_ = (item.virtual_page_id_ + item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
         }
       }
       if (OB_SUCC(ret)) {
@@ -2315,7 +2315,7 @@ int ObSharedNothingTmpFileMetaTree::truncate_array_(
       }
     } else {
       //clear some items
-      const int64_t target_virtual_page_id = end_offset / ObTmpFileGlobal::PAGE_SIZE;
+      const int64_t target_virtual_page_id = end_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
       int16_t index = 0;
       ARRAY_FOREACH_N(data_item_array_, i, cnt) {
         const ObSharedNothingTmpFileDataItem &data_item = data_item_array_.at(i);
@@ -2344,7 +2344,7 @@ int ObSharedNothingTmpFileMetaTree::truncate_array_(
                                                data_item.physical_page_num_))) {
               STORAGE_LOG(WARN, "fail to release tmp file page", KR(ret), K(fd_), K(data_item), K(i), K(index));
             } else if (i + 1 == index) {
-              released_offset_ = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+              released_offset_ = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
             } else {
               data_item.reset();
             }
@@ -2375,7 +2375,7 @@ int ObSharedNothingTmpFileMetaTree::calculate_truncate_index_path_(
     STORAGE_LOG(ERROR, "unexpected root_item_", KR(ret), K(fd_), K(root_item_));
   } else {
     const int16_t FULL_PAGE_META_ITEM_NUM =
-              MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+              MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
     int32_t child_level_page_index = -1;
     ARRAY_FOREACH_N(level_page_range_array_, i, cnt) {
       int16_t item_index = -1;
@@ -2428,9 +2428,9 @@ int ObSharedNothingTmpFileMetaTree::release_items_of_leaf_page_(
   ObSharedNothingTmpFileDataItem data_item;
   ObSharedNothingTmpFileTreePageHeader page_header;
   ObTmpPageValueHandle p_handle;
-  if (OB_UNLIKELY(0 != tmp_release_offset % ObTmpFileGlobal::PAGE_SIZE
+  if (OB_UNLIKELY(0 != tmp_release_offset % ObTmpFileGlobal::ALLOC_PAGE_SIZE
         || 0 > begin_release_index
-        || PAGE_HEADER_SIZE + (begin_release_index + 1) * sizeof(ObSharedNothingTmpFileDataItem) > ObTmpFileGlobal::PAGE_SIZE
+        || PAGE_HEADER_SIZE + (begin_release_index + 1) * sizeof(ObSharedNothingTmpFileDataItem) > ObTmpFileGlobal::ALLOC_PAGE_SIZE
         || begin_release_index >= MAX_PAGE_ITEM_COUNT)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "unexpected release_offset or begin_release_index", KR(ret), K(fd_), K(tmp_release_offset), K(begin_release_index));
@@ -2443,7 +2443,7 @@ int ObSharedNothingTmpFileMetaTree::release_items_of_leaf_page_(
     release_last_item = true;
   } else {
     //get end_release_index
-    int64_t target_virtual_page_id = end_offset / ObTmpFileGlobal::PAGE_SIZE;
+    int64_t target_virtual_page_id = end_offset / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     item_index = -1;
     data_item.reset();
     if (OB_FAIL(read_item_(page_buff, target_virtual_page_id, item_index, data_item))) {
@@ -2483,7 +2483,7 @@ int ObSharedNothingTmpFileMetaTree::release_items_of_leaf_page_(
       }
     }
     if (OB_SUCC(ret) && begin_release_index <= end_release_index) {
-      tmp_release_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::PAGE_SIZE;
+      tmp_release_offset = (data_item.virtual_page_id_ + data_item.physical_page_num_) * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
       if (OB_UNLIKELY(tmp_release_offset > end_offset
                       || tmp_release_offset <= released_offset_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -2517,7 +2517,7 @@ int ObSharedNothingTmpFileMetaTree::backtrace_truncate_tree_(
 {
   int ret = OB_SUCCESS;
   const int16_t FULL_PAGE_META_ITEM_NUM =
-            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
+            MIN(MAX_PAGE_ITEM_COUNT, (ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE) / sizeof(ObSharedNothingTmpFileMetaItem));
   bool need_finish = false;
   while (OB_SUCC(ret)
          && !search_path.empty()
@@ -2806,7 +2806,7 @@ int ObSharedNothingTmpFileMetaTree::check_page_(const char* const page_buff)
     STORAGE_LOG(WARN, "invalid argument", KR(ret), K(fd_), KP(page_buff));
   } else {
     ObSharedNothingTmpFileTreePageHeader page_header = *((ObSharedNothingTmpFileTreePageHeader *)(page_buff));
-    const uint64_t checksum = ob_crc64(page_buff + PAGE_HEADER_SIZE, ObTmpFileGlobal::PAGE_SIZE - PAGE_HEADER_SIZE);
+    const uint64_t checksum = ob_crc64(page_buff + PAGE_HEADER_SIZE, ObTmpFileGlobal::ALLOC_PAGE_SIZE - PAGE_HEADER_SIZE);
     if (OB_UNLIKELY(PAGE_MAGIC_NUM != page_header.magic_number_
                     || checksum != page_header.checksum_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -2855,7 +2855,7 @@ int ObSharedNothingTmpFileMetaTree::cache_page_for_write_(
         ObTmpPageValueHandle p_handle;
         ObTmpPageCacheKey key(page_info.block_index_, page_info.physical_page_id_, MTL_ID());
         if (OB_SUCC(ObTmpPageCache::get_instance().get_page(key, p_handle))) {
-          MEMCPY(new_page_buff, p_handle.value_->get_buffer(), ObTmpFileGlobal::PAGE_SIZE);
+          MEMCPY(new_page_buff, p_handle.value_->get_buffer(), ObTmpFileGlobal::ALLOC_PAGE_SIZE);
         } else if (OB_ENTRY_NOT_EXIST != ret) {
           STORAGE_LOG(ERROR, "fail to read from read_cache", KR(ret), K(fd_), K(key));
         } else {
@@ -2865,7 +2865,7 @@ int ObSharedNothingTmpFileMetaTree::cache_page_for_write_(
           if (OB_FAIL(ObTmpPageCache::get_instance().load_page(key, callback_allocator_, p_handle))) {
             STORAGE_LOG(WARN, "fail to load page from disk", KR(ret), K(fd_), K(key));
           } else {
-            MEMCPY(new_page_buff, p_handle.value_->get_buffer(), ObTmpFileGlobal::PAGE_SIZE);
+            MEMCPY(new_page_buff, p_handle.value_->get_buffer(), ObTmpFileGlobal::ALLOC_PAGE_SIZE);
           }
         }
         if (FAILEDx(check_page_(new_page_buff))) {
@@ -3012,7 +3012,7 @@ int ObSharedNothingTmpFileMetaTree::read_item_(
                   || target_virtual_page_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(fd_), KP(page_buff), K(target_virtual_page_id));
-  } else if (OB_UNLIKELY(PAGE_HEADER_SIZE + item_num * sizeof(item) > ObTmpFileGlobal::PAGE_SIZE
+  } else if (OB_UNLIKELY(PAGE_HEADER_SIZE + item_num * sizeof(item) > ObTmpFileGlobal::ALLOC_PAGE_SIZE
                          || item_num > MAX_PAGE_ITEM_COUNT)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "unexpected item_num", KR(ret), K(fd_), K(page_header));
@@ -3072,8 +3072,8 @@ int ObSharedNothingTmpFileMetaTree::read_item_(
   if (OB_UNLIKELY(NULL == page_buff
                   || item_index < 0
                   || item_index >= page_header.item_num_
-                  || PAGE_HEADER_SIZE + page_header.item_num_ * sizeof(item) > ObTmpFileGlobal::PAGE_SIZE
-                  || PAGE_HEADER_SIZE + (item_index + 1) * sizeof(item) > ObTmpFileGlobal::PAGE_SIZE)) {
+                  || PAGE_HEADER_SIZE + page_header.item_num_ * sizeof(item) > ObTmpFileGlobal::ALLOC_PAGE_SIZE
+                  || PAGE_HEADER_SIZE + (item_index + 1) * sizeof(item) > ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(fd_), KP(page_buff), K(item_index), K(page_header));
   } else {
@@ -3092,7 +3092,7 @@ int ObSharedNothingTmpFileMetaTree::rewrite_item_(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == page_buff
                   || item_index < 0
-                  || PAGE_HEADER_SIZE + (item_index + 1) * sizeof(item) > ObTmpFileGlobal::PAGE_SIZE
+                  || PAGE_HEADER_SIZE + (item_index + 1) * sizeof(item) > ObTmpFileGlobal::ALLOC_PAGE_SIZE
                   || !item.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "invalid argument", KR(ret), K(fd_), KP(page_buff), K(item_index), K(item));
@@ -3123,7 +3123,7 @@ int ObSharedNothingTmpFileMetaTree::write_items_(
     char *items_buff = page_buff + PAGE_HEADER_SIZE;
     int16_t item_index = page_header.item_num_;
     for (int64_t i = begin_index; i < items.count()
-        && PAGE_HEADER_SIZE + (item_index + 1) * sizeof(items.at(i)) <= ObTmpFileGlobal::PAGE_SIZE && item_index < MAX_PAGE_ITEM_COUNT; i++) {
+        && PAGE_HEADER_SIZE + (item_index + 1) * sizeof(items.at(i)) <= ObTmpFileGlobal::ALLOC_PAGE_SIZE && item_index < MAX_PAGE_ITEM_COUNT; i++) {
       MEMCPY(items_buff + item_index * sizeof(items.at(i)), &items.at(i), sizeof(items.at(i)));
       item_index++;
       count++;
@@ -3191,7 +3191,7 @@ void ObSharedNothingTmpFileMetaTree::read_page_content_(
     page_header = *((ObSharedNothingTmpFileTreePageHeader *)(page_buff));
     while (OB_SUCC(ret)
           && index < page_header.item_num_
-          && PAGE_HEADER_SIZE + (index + 1) * sizeof(ItemType) <= ObTmpFileGlobal::PAGE_SIZE) {
+          && PAGE_HEADER_SIZE + (index + 1) * sizeof(ItemType) <= ObTmpFileGlobal::ALLOC_PAGE_SIZE) {
       ItemType item = *((ItemType *)(items_buff + index * sizeof(ItemType)));
       if (OB_FAIL(items.push_back(item))) {
         STORAGE_LOG(WARN, "fail to push back", KR(ret), K(fd_), K(item));
@@ -3219,7 +3219,7 @@ void ObSharedNothingTmpFileMetaTree::read_page_simple_content_(
     const char *items_buff = page_buff + PAGE_HEADER_SIZE;
     page_header = *((ObSharedNothingTmpFileTreePageHeader *)(page_buff));
     if (OB_UNLIKELY(0 > page_header.item_num_
-                    || PAGE_HEADER_SIZE + page_header.item_num_ * sizeof(ItemType) > ObTmpFileGlobal::PAGE_SIZE)) {
+                    || PAGE_HEADER_SIZE + page_header.item_num_ * sizeof(ItemType) > ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "unexpected item_num_", KR(ret), K(fd_), KP(page_buff), K(page_header));
     } else if (0 == page_header.item_num_) {
@@ -3245,7 +3245,7 @@ int ObSharedNothingTmpFileMetaTree::copy_info(ObSNTmpFileInfo &tmp_file_info)
     }
     tmp_file_info.meta_tree_epoch_ = tree_epoch_;
     tmp_file_info.meta_tree_level_cnt_ = level_page_range_array_.count();
-    tmp_file_info.meta_size_ = total_page_num * ObTmpFileGlobal::PAGE_SIZE;
+    tmp_file_info.meta_size_ = total_page_num * ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     tmp_file_info.cached_meta_page_num_ = cached_page_num;
     tmp_file_info.write_back_meta_page_num_ = stat_info_.meta_page_flushing_cnt_;
     tmp_file_info.all_type_page_flush_cnt_ = stat_info_.all_type_page_flush_cnt_;

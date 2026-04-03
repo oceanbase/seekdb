@@ -58,7 +58,6 @@ class ObAllVirtualFreezeCheckpointInfo : public common::ObVirtualTableScannerIte
   char freeze_checkpoint_location_buf_[common::MAX_FREEZE_CHECKPOINT_LOCATION_BUF_LENGTH];
 
   // These resources must be released in their own tenant
-  int64_t ls_id_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
   ObFreezeCheckpointVTIterator ob_freeze_checkpoint_iter_;
   

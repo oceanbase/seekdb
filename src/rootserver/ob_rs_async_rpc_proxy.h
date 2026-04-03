@@ -24,7 +24,6 @@
 #include "rpc/obrpc/ob_rpc_packet.h"
 #include "rpc/obrpc/ob_rpc_result_code.h"
 #include "rpc/obrpc/ob_rpc_proxy.h"
-#include "share/ob_heartbeat_struct.h"
 
 namespace oceanbase
 {
@@ -49,24 +48,13 @@ RPC_F(obrpc::OB_PARTITION_STOP_WRITE, obrpc::Int64,
     obrpc::ObSrvRpcProxy::ObRpc<obrpc::OB_PARTITION_STOP_WRITE>::Response, ObRpcStopWriteProxy);
 RPC_F(obrpc::OB_PARTITION_CHECK_LOG, obrpc::Int64,
     obrpc::ObSrvRpcProxy::ObRpc<obrpc::OB_PARTITION_CHECK_LOG>::Response, ObRpcCheckLogProxy);
-RPC_F(obrpc::OB_NOTIFY_TENANT_SERVER_UNIT_RESOURCE, obrpc::TenantServerUnitConfig,
-    obrpc::ObSrvRpcProxy::ObRpc<obrpc::OB_NOTIFY_TENANT_SERVER_UNIT_RESOURCE>::Response, ObNotifyTenantServerResourceProxy);
 RPC_F(obrpc::OB_CHECK_FROZEN_SCN, obrpc::ObCheckFrozenScnArg,
     obrpc::ObSrvRpcProxy::ObRpc<obrpc::OB_CHECK_FROZEN_SCN>::Response, ObCheckFrozenScnProxy);
 RPC_F(obrpc::OB_GET_MIN_SSTABLE_SCHEMA_VERSION, obrpc::ObGetMinSSTableSchemaVersionArg,
     obrpc::ObGetMinSSTableSchemaVersionRes, ObGetMinSSTableSchemaVersionProxy);
-RPC_F(obrpc::OB_DETECT_MASTER_RS_LS, obrpc::ObDetectMasterRsArg,
-      obrpc::ObDetectMasterRsLSResult, ObDetectMasterRsLSProxy);
-RPC_F(obrpc::OB_GET_ROOT_SERVER_ROLE, obrpc::ObDetectMasterRsArg,
-      obrpc::ObGetRootserverRoleResult, ObGetRootserverRoleProxy);
-RPC_F(obrpc::OB_CREATE_LS, obrpc::ObCreateLSArg, obrpc::ObCreateLSResult, ObLSCreatorProxy);
 RPC_F(obrpc::OB_CREATE_TABLET, obrpc::ObBatchCreateTabletArg, obrpc::ObCreateTabletBatchRes, ObTabletCreatorProxy);
-RPC_F(obrpc::OB_SET_MEMBER_LIST, obrpc::ObSetMemberListArgV2, obrpc::ObSetMemberListResult, ObSetMemberListProxy);
-RPC_F(obrpc::OB_BATCH_BROADCAST_SCHEMA, obrpc::ObBatchBroadcastSchemaArg, obrpc::ObBatchBroadcastSchemaResult, ObBatchBroadcastSchemaProxy);
 RPC_F(obrpc::OB_DROP_TABLET, obrpc::ObBatchRemoveTabletArg, obrpc::ObRemoveTabletRes, ObTabletDropProxy);
 RPC_F(obrpc::OB_SWITCH_SCHEMA, obrpc::ObSwitchSchemaArg, obrpc::ObSwitchSchemaResult, ObSwitchSchemaProxy);
-RPC_F(obrpc::OB_GET_LS_ACCESS_MODE, obrpc::ObGetLSAccessModeInfoArg, obrpc::ObLSAccessModeInfo, ObGetLSAccessModeProxy);
-RPC_F(obrpc::OB_CHANGE_LS_ACCESS_MODE, obrpc::ObLSAccessModeInfo, obrpc::ObChangeLSAccessModeRes, ObChangeLSAccessModeProxy);
 RPC_F(obrpc::OB_BATCH_GET_TABLET_AUTOINC_SEQ, obrpc::ObBatchGetTabletAutoincSeqArg,
     obrpc::ObBatchGetTabletAutoincSeqRes, ObBatchGetTabletAutoincSeqProxy);
 RPC_F(obrpc::OB_BATCH_SET_TABLET_AUTOINC_SEQ, obrpc::ObBatchSetTabletAutoincSeqArg,
@@ -76,30 +64,13 @@ RPC_F(obrpc::OB_CLEAR_TABLET_AUTOINC_SEQ_CACHE, obrpc::ObClearTabletAutoincSeqCa
 RPC_F(obrpc::OB_GET_LS_SYNC_SCN, obrpc::ObGetLSSyncScnArg, obrpc::ObGetLSSyncScnRes, ObGetLSSyncScnProxy);
 RPC_F(obrpc::OB_INIT_TENANT_CONFIG, obrpc::ObInitTenantConfigArg,
     obrpc::ObInitTenantConfigRes, ObInitTenantConfigProxy);
-RPC_F(obrpc::OB_GET_LEADER_LOCATIONS, obrpc::ObGetLeaderLocationsArg,
-      obrpc::ObGetLeaderLocationsResult, ObGetLeaderLocationsProxy);
 RPC_F(obrpc::OB_DDL_CHECK_TABLET_MERGE_STATUS, obrpc::ObDDLCheckTabletMergeStatusArg,
     obrpc::ObDDLCheckTabletMergeStatusResult, ObCheckTabletMergeStatusProxy);
-RPC_F(obrpc::OB_REFRESH_TENANT_INFO, obrpc::ObRefreshTenantInfoArg, obrpc::ObRefreshTenantInfoRes, ObRefreshTenantInfoProxy);
-RPC_F(obrpc::OB_GET_LS_REPLAYED_SCN, obrpc::ObGetLSReplayedScnArg,
-      obrpc::ObGetLSReplayedScnRes, ObGetLSReplayedScnProxy);
-RPC_F(obrpc::OB_SEND_HEARTBEAT, share::ObHBRequest, share::ObHBResponse, ObSendHeartbeatProxy);
-RPC_F(obrpc::OB_GET_SERVER_RESOURCE_INFO, obrpc::ObGetServerResourceInfoArg, obrpc::ObGetServerResourceInfoResult, ObGetServerResourceInfoProxy);
-RPC_F(obrpc::OB_NOTIFY_SWITCH_LEADER, obrpc::ObNotifySwitchLeaderArg,
-    obrpc::ObSrvRpcProxy::ObRpc<obrpc::OB_NOTIFY_SWITCH_LEADER>::Response, ObNotifySwitchLeaderProxy);
-RPC_F(obrpc::OB_UPDATE_TENANT_INFO_CACHE, obrpc::ObUpdateTenantInfoCacheArg, obrpc::ObUpdateTenantInfoCacheRes, ObUpdateTenantInfoCacheProxy);
 RPC_F(obrpc::OB_BROADCAST_CONSENSUS_VERSION, obrpc::ObBroadcastConsensusVersionArg, obrpc::ObBroadcastConsensusVersionRes, ObBroadcstConsensusVersionProxy);
-RPC_F(obrpc::OB_CHECK_STORAGE_OPERATION_STATUS, obrpc::ObCheckStorageOperationStatusArg, obrpc::ObCheckStorageOperationStatusResult, ObCheckStorageOperationStatusProxy);
 RPC_F(obrpc::OB_KILL_CLIENT_SESSION, obrpc::ObKillClientSessionArg, obrpc::ObKillClientSessionRes, ObKillClientSessionProxy);
-RPC_F(obrpc::OB_INNER_CREATE_TENANT_SNAPSHOT, obrpc::ObInnerCreateTenantSnapshotArg, obrpc::ObInnerCreateTenantSnapshotResult, ObTenantSnapshotCreatorProxy);
-RPC_F(obrpc::OB_INNER_DROP_TENANT_SNAPSHOT, obrpc::ObInnerDropTenantSnapshotArg, obrpc::ObInnerDropTenantSnapshotResult, ObTenantSnapshotDropperProxy);
 RPC_F(obrpc::OB_FLUSH_LS_ARCHIVE, obrpc::ObFlushLSArchiveArg, obrpc::Int64, ObFlushLSArchiveProxy);
-RPC_F(obrpc::OB_REFRESH_SERVICE_NAME, obrpc::ObRefreshServiceNameArg, obrpc::ObRefreshServiceNameRes, ObRefreshServiceNameProxy);
-RPC_F(obrpc::OB_CAL_STANDBY_TENANT_PHY_RESOURCE, obrpc::ObGetTenantResArg, obrpc::ObTenantLogicalRes, ObGetTenantResProxy);
 RPC_F(obrpc::OB_KILL_QUERY_CLIENT_SESSION, obrpc::ObKillQueryClientSessionArg, obrpc::Int64, ObKillQueryClientSessionProxy);
-RPC_RS(obrpc::OB_PARALLEL_CREATE_NORMAL_TENANT, obrpc::ObParallelCreateNormalTenantArg, obrpc::ObRpcProxy::NoneT, ObParallelCreateNormalTenantProxy);
 RPC_F(obrpc::OB_LOAD_TENANT_TABLE_SCHEMA, obrpc::ObLoadTenantTableSchemaArg, obrpc::ObRpcProxy::NoneT, ObLoadTenantTableSchemaProxy);
-RPC_F(obrpc::OB_ALL_SERVER_TRACER_BROADCAST, obrpc::ObRefreshTenantInfoArg, obrpc::Int64, ObAllServerTracerProxy);
 
 }//end namespace rootserver
 }//end namespace oceanbase

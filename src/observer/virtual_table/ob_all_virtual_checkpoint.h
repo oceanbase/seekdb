@@ -59,7 +59,6 @@ class ObAllVirtualCheckpointInfo : public common::ObVirtualTableScannerIterator,
   char ip_buf_[common::OB_IP_STR_BUFF];
   char service_type_buf_[common::MAX_SERVICE_TYPE_BUF_LENGTH];
   // These resources must be released in their own tenant
-  int64_t ls_id_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
   ObCheckpointVTIterator ob_checkpoint_iter_;
   

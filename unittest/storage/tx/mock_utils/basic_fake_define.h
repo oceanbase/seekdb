@@ -162,10 +162,6 @@ public:
                           const share::ObLSID &ls_id,
                           common::ObAddr &leader)
   { return get_leader(cluster_id, tenant_id, ls_id, leader); }
-  int nonblock_renew(const int64_t cluster_id,
-                     const int64_t tenant_id,
-                     const share::ObLSID &ls_id)
-  { return OB_SUCCESS; }
   int nonblock_get(const int64_t cluster_id,
                    const int64_t tenant_id,
                    const share::ObLSID &ls_id,

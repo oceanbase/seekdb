@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX OBLOG_FETCHER
+
+#include "ob_log_fetch_stream_pool.h"
+
+#include "share/ob_define.h"                  // OB_SERVER_TENANT_ID
+#include "lib/utility/ob_macro_utils.h"     // OB_FAIL
+#include "lib/oblog/ob_log_module.h"        // LOG_ERROR
+
+using namespace oceanbase::common;
+namespace oceanbase
+{
+namespace logfetcher
+{
+
+FetchStreamPool::FetchStreamPool() : pool_()
+{}
+
+FetchStreamPool::~FetchStreamPool()
+{
+  destroy();
+}
+
+int FetchStreamPool::init(const int64_t cached_fs_count)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(pool_.init(cached_fs_count,
+      ObModIds::OB_LOG_FETCH_STREAM_POOL,
+      OB_SERVER_TENANT_ID,
+      DEFAULT_BLOCK_SIZE))) {
+    LOG_ERROR("init fetch stream obj pool fail", KR(ret), K(cached_fs_count));
+  } else {
+    // succ
+  }
+  return ret;
+}
+
+void FetchStreamPool::destroy()
+{
+  pool_.destroy();
+}
+
+int FetchStreamPool::alloc(FetchStream *&fs)
+{
+  return pool_.alloc(fs);
+}
+
+int FetchStreamPool::free(FetchStream *fs)
+{
+  // explicitly call FetchStream::reset because ObSmallObjPool may not invoke the destructor of the object,
+  // which cause incorrect destruct order of objects.
+  fs->reset();
+  return pool_.free(fs);
+}
+
+void FetchStreamPool::print_stat()
+{
+  int64_t alloc_count = pool_.get_alloc_count();
+  int64_t free_count = pool_.get_free_count();
+  int64_t fixed_count = pool_.get_fixed_count();
+  int64_t used_count = alloc_count - free_count;
+  int64_t dynamic_count = (alloc_count > fixed_count) ? alloc_count - fixed_count : 0;
+
+  _LOG_INFO("[STAT] [FETCH_STREAM_POOL] USED=%ld FREE=%ld FIXED=%ld DYNAMIC=%ld",
+      used_count, free_count, fixed_count, dynamic_count);
+}
+
+}
+}

@@ -908,7 +908,7 @@ int ObBlockManager::get_limited_iter_macro_ids(ObArray<MacroBlockId> &ids_array,
     } else {
       LOG_WARN("fail to for each block map", K(ret), K(getter.get_ret_code()));
     }
-  }    
+  }
   return ret;
 }
 
@@ -1064,9 +1064,9 @@ int ObBlockManager::mark_macro_blocks(
   if (OB_ISNULL(omt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, omt is nullptr", K(ret), KP(omt));
-  } else if (0 == mark_info.count()) {
+  } else if (0 == mark_info.count() && 0 == alloc_num_) {
     tmp_status.mark_finished_ = false;
-    LOG_INFO("no block alloc/free, no need to mark blocks", K(ret), K(mark_info.count()));
+    LOG_INFO("no block alloc/free, no need to mark blocks", K(ret));
   } else if (OB_FAIL(mark_tmp_file_blocks(mark_info, macro_id_set, tmp_status))) {
     LOG_WARN("fail to mark tmp file blocks", K(ret));
   } else if (OB_FAIL(mark_server_meta_blocks(mark_info, macro_id_set, tmp_status))) {

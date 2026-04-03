@@ -18,7 +18,6 @@
 #include "observer/ob_server.h"
 #include "sql/resolver/ob_resolver_utils.h"
 
-
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
 using namespace oceanbase::omt;
@@ -122,44 +121,8 @@ int ObGvSqlAudit::set_ip(common::ObAddr *addr)
 int ObGvSqlAudit::check_ip_and_port(bool &is_valid)
 {
   int ret = OB_SUCCESS;
+  // In single-node mode, rowkey only has request_id, no ip/port filtering needed
   is_valid = true;
-
-  // is_serving_tenant changed to (svr_ip, svr_port) in (ip1, port1), (ip2, port2), ...
-  // The extracted query range is [(ip1, port1), (ip1, port1)], [(ip2, port2), (ip2, port2)], ...
-  // Need to traverse all query ranges, and determine if the local ip & port falls within any one of the query ranges
-  if (key_ranges_.count() >= 1) {
-    is_valid = false;
-    for (int64_t i = 0; OB_SUCC(ret) && !is_valid && i < key_ranges_.count(); i++) {
-      ObNewRange &req_id_range = key_ranges_.at(i);
-      if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() != 4
-                      || req_id_range.get_end_key().get_obj_cnt() != 4)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unexpected  # of rowkey columns",
-                   K(ret),
-                   "size of start key", req_id_range.get_start_key().get_obj_cnt(),
-                   "size of end key", req_id_range.get_end_key().get_obj_cnt());
-      } else {
-        ObObj ip_obj;
-        ObObj ip_low = (req_id_range.get_start_key().get_obj_ptr()[PRI_KEY_IP_IDX]);
-        ObObj ip_high = (req_id_range.get_end_key().get_obj_ptr()[PRI_KEY_IP_IDX]);
-        ip_obj.set_varchar(ipstr_);
-        ip_obj.set_collation_type(ObCharset::get_system_collation());
-        if (ip_obj.compare(ip_low) >= 0 && ip_obj.compare(ip_high) <= 0) {
-          ObObj port_obj;
-          port_obj.set_int32(port_);
-          ObObj port_low = (req_id_range.get_start_key().get_obj_ptr()[PRI_KEY_PORT_IDX]);
-          ObObj port_high = (req_id_range.get_end_key().get_obj_ptr()[PRI_KEY_PORT_IDX]);
-          if (port_obj.compare(port_low) >= 0 && port_obj.compare(port_high) <= 0) {
-            is_valid = true;
-          }
-        } else {
-          // do nothing
-        }
-      }
-    }
-  }
-  SERVER_LOG(DEBUG, "check ip and port", K(key_ranges_), K(is_valid), K(ipstr_), K(port_));
-
   return ret;
 }
 int ObGvSqlAudit::inner_get_next_row(common::ObNewRow *&row)
@@ -342,157 +305,38 @@ int ObGvSqlAudit::extract_tenant_ids()
   tenant_id_array_.reset();
   tenant_id_array_idx_ = -1;
   if (!is_index_scan()) {
-    // get all tenant ids
+    // In single-node mode, rowkey only has request_id, no tenant_id
+    // Get all tenant ids from omt
     TenantIdList id_list(16, NULL, ObNewModIds::OB_COMMON_ARRAY);
-
-    ObRowkey start_key, end_key;
-    bool is_full_scan = false;
-    bool is_always_false = false;
-    for (int64_t i = 0;
-         OB_SUCC(ret) && !is_full_scan && !is_always_false && i < key_ranges_.count();
-         i++) {
-      start_key.reset();
-      end_key.reset();
-      start_key = key_ranges_.at(i).start_key_;
-      end_key = key_ranges_.at(i).end_key_;
-
-      if (!(start_key.get_obj_cnt() > 0)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "assert start_key.get_obj_cnt() > 0", K(ret));
-      } else if (!(start_key.get_obj_cnt() == end_key.get_obj_cnt())
-                 || start_key.get_obj_cnt() != 4) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "assert start_key.get_obj_cnt() == end_key.get_obj_cnt()", K(ret));
-      }
-      const ObObj *start_key_obj_ptr = nullptr;
-      const ObObj *end_key_obj_ptr = nullptr;
-
-      if (OB_SUCC(ret)) {
-        start_key_obj_ptr = start_key.get_obj_ptr();
-        end_key_obj_ptr = end_key.get_obj_ptr();
-        if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
-          ret = OB_INVALID_ARGUMENT;
-          SERVER_LOG(WARN, "invalid arguments", K(start_key_obj_ptr), K(end_key_obj_ptr));
-        } else if (start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].is_min_value()
-                   && end_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].is_max_value()) {
-          is_full_scan = true;
-        } else if (start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].is_max_value() &&
-                   end_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].is_min_value()) {
-          is_always_false = true;
-          SERVER_LOG(DEBUG, "always false for tenant range", K(ret));
-        } else if (!(start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].is_min_value()
-                     && end_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].is_max_value())
-                   && start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX] != end_key_obj_ptr[PRI_KEY_TENANT_ID_IDX]) {
-          ret = OB_NOT_IMPLEMENT;
-          SERVER_LOG(WARN, "tenant id only supports exact value", K(ret));
-        } else if (start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX] == end_key_obj_ptr[PRI_KEY_TENANT_ID_IDX]) {
-          if (ObIntType != start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].get_type()
-              || (start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].get_type()
-                  != end_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].get_type())) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "expect tenant id type to be int",
-                       K(start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].get_type()),
-                       K(end_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].get_type()));
-          } else {
-            int64_t tenant_id = start_key_obj_ptr[PRI_KEY_TENANT_ID_IDX].get_int();
-            if (tenant_id < 0) {
-              ret = OB_ERR_UNEXPECTED;
-              SERVER_LOG(WARN, "assert tenant_id >= 0", K(ret));
-            } else if (OB_FAIL(add_var_to_array_no_dup(tenant_id_array_, static_cast<uint64_t>(tenant_id)))) {
-              SERVER_LOG(WARN, "failed to add tenant_id to array no duplicate", K(ret));
-            } else {
-              // do nothing
-            }
-          }
-        }
-      }
-    } // for end
-    if (!is_full_scan) {
-      // do nothing
-    } else if (OB_ISNULL(GCTX.omt_)) {
+    if (OB_ISNULL(GCTX.omt_)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "unexpected null of omt", K(ret));
     } else {
       GCTX.omt_->get_tenant_ids(id_list);
-      tenant_id_array_.reset();
       for (int64_t i = 0; OB_SUCC(ret) && i < id_list.size(); i++) {
         if (OB_FAIL(tenant_id_array_.push_back(id_list.at(i)))) {
           SERVER_LOG(WARN, "failed to push back tenant id", K(ret), K(i));
         }
       }
-    }
-    if (OB_SUCC(ret)) {
-      if (is_always_false) {
-        tenant_id_array_.reset();
-      } else {
+      if (OB_SUCC(ret)) {
         lib::ob_sort(tenant_id_array_.begin(), tenant_id_array_.end());
         SERVER_LOG(DEBUG, "get tenant ids from req mgr map", K(tenant_id_array_));
       }
     }
   } else {
-    // index scan
-    ObRowkey start_key;
-    ObRowkey end_key;
-    bool is_always_false = false;
-    for (int64_t i = 0; OB_SUCC(ret) && !is_always_false && i < key_ranges_.count(); i++) {
-      int64_t tenant_id = -1;
-      start_key.reset();
-      end_key.reset();
-      start_key = key_ranges_.at(i).start_key_;
-      end_key = key_ranges_.at(i).end_key_;
-
-      if (!(start_key.get_obj_cnt() > 0)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "asserr start_key.get_obj_cnt() > 0", K(ret));
-      } else if (!(start_key.get_obj_cnt() == end_key.get_obj_cnt()) ||
-                 start_key.get_obj_cnt() != 4) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "assert start_key.get_obj_cnt() == end_key.get_obj_cnt()", K(ret));
-      }
-      const ObObj *start_key_obj_ptr = nullptr;
-      const ObObj *end_key_obj_ptr = nullptr;
-      if (OB_SUCC(ret)) {
-        start_key_obj_ptr = start_key.get_obj_ptr();
-        end_key_obj_ptr = end_key.get_obj_ptr();
-        if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
-          ret = OB_INVALID_ARGUMENT;
-          SERVER_LOG(WARN, "invalid arguments", K(start_key_obj_ptr), K(end_key_obj_ptr));
-        } else if (start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].is_max_value() &&
-                   end_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].is_min_value()) {
-          is_always_false = true;
-          SERVER_LOG(DEBUG, "always false for tenant range");
-        } else if (!(start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].is_min_value() &&
-                     end_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].is_max_value()) &&
-                   start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX] != end_key_obj_ptr[IDX_KEY_TENANT_ID_IDX]) {
-          ret = OB_NOT_IMPLEMENT;
-          SERVER_LOG(WARN, "tenant id only supports exact value", K(ret));
-        } else if (start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX] ==
-                   end_key_obj_ptr[IDX_KEY_TENANT_ID_IDX]) {
-          if (ObIntType != start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].get_type() ||
-              start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].get_type() !=
-              end_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].get_type()) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "expect tenant id type to be int",
-                       K(start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX]), K(end_key_obj_ptr[IDX_KEY_TENANT_ID_IDX]));
-          } else {
-            tenant_id = start_key_obj_ptr[IDX_KEY_TENANT_ID_IDX].get_int();
-            if (tenant_id < 0) {
-              ret = OB_ERR_UNEXPECTED;
-              SERVER_LOG(WARN, "assert tenant_id >= 0", K(ret));
-            } else if (OB_FAIL(add_var_to_array_no_dup(tenant_id_array_,
-                                                       static_cast<uint64_t>(tenant_id)))) {
-              SERVER_LOG(WARN, "failed to add tenant_id to array no duplicate", K(ret));
-            } else {
-              // do nothing
-            }
-          }
+    // index scan - same logic as non-index scan for single-node mode
+    TenantIdList id_list(16, NULL, ObNewModIds::OB_COMMON_ARRAY);
+    if (OB_ISNULL(GCTX.omt_)) {
+      ret = OB_ERR_UNEXPECTED;
+      SERVER_LOG(WARN, "unexpected null of omt", K(ret));
+    } else {
+      GCTX.omt_->get_tenant_ids(id_list);
+      for (int64_t i = 0; OB_SUCC(ret) && i < id_list.size(); i++) {
+        if (OB_FAIL(tenant_id_array_.push_back(id_list.at(i)))) {
+          SERVER_LOG(WARN, "failed to push back tenant id", K(ret), K(i));
         }
       }
-    }
-    if (OB_SUCC(ret)) {
-      if (is_always_false) {
-        tenant_id_array_.reset();
-      } else {
+      if (OB_SUCC(ret)) {
         lib::ob_sort(tenant_id_array_.begin(), tenant_id_array_.end());
         SERVER_LOG(DEBUG, "get tenant ids from req mgr map", K(tenant_id_array_));
       }
@@ -553,7 +397,6 @@ bool ObGvSqlAudit::is_perf_event_dep_field(uint64_t col_id) {
   return is_contain;
 }
 
-
 int ObGvSqlAudit::fill_cells(obmysql::ObMySQLRequestRecord &record)
 {
   int ret = OB_SUCCESS;
@@ -571,16 +414,6 @@ int ObGvSqlAudit::fill_cells(obmysql::ObMySQLRequestRecord &record)
         cells[cell_idx].set_null();
       } else {
         switch(col_id) {
-          //server ip
-        case SERVER_IP: {
-          cells[cell_idx].set_varchar(ipstr_); //ipstr_ and port_ were set in set_ip func call
-          cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                              ObCharset::get_default_charset()));
-        } break;
-          //server port
-        case SERVER_PORT: {
-          cells[cell_idx].set_int(port_);
-        } break;
           //request_id
         case REQUEST_ID: {
           cells[cell_idx].set_int(record.data_.request_id_);
@@ -633,9 +466,6 @@ int ObGvSqlAudit::fill_cells(obmysql::ObMySQLRequestRecord &record)
         }
         case USER_CLIENT_PORT: {
           cells[cell_idx].set_int(0);
-        } break;
-        case TENANT_ID: {
-          cells[cell_idx].set_int(record.data_.tenant_id_);
         } break;
         case TENANT_NAME: {
           int64_t len = min(record.data_.tenant_name_len_, OB_MAX_TENANT_NAME_LENGTH);
@@ -1140,17 +970,17 @@ int ObGvSqlAudit::extract_request_ids(const uint64_t tenant_id,
                                       bool &is_valid)
 {
   int ret = OB_SUCCESS;
+  UNUSED(tenant_id);
   is_valid = true;
-  const int64_t req_id_key_idx = is_index_scan() ? IDX_KEY_REQ_ID_IDX : PRI_KEY_REQ_ID_IDX;
-  const int64_t tenant_id_key_idx = is_index_scan() ? IDX_KEY_TENANT_ID_IDX
-                                                      : PRI_KEY_TENANT_ID_IDX;
+  // In single-node mode, rowkey only has request_id (index 0)
+  const int64_t req_id_key_idx = PRI_KEY_REQ_ID_IDX;
   if (key_ranges_.count() >= 1) {
 
     for (int i = 0; OB_SUCC(ret) && is_valid && i < key_ranges_.count(); i++) {
       ObNewRange &req_id_range = key_ranges_.at(i);
       SERVER_LOG(DEBUG, "extracting request id for tenant", K(req_id_range), K(tenant_id));
-      if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() != 4
-                      || req_id_range.get_end_key().get_obj_cnt() != 4)
+      if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() < 1
+                      || req_id_range.get_end_key().get_obj_cnt() < 1)
                       || OB_ISNULL(req_id_range.get_start_key().get_obj_ptr())
                       || OB_ISNULL(req_id_range.get_end_key().get_obj_ptr())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1161,30 +991,8 @@ int ObGvSqlAudit::extract_request_ids(const uint64_t tenant_id,
                    K(req_id_range.get_start_key().get_obj_ptr()),
                    K(req_id_range.get_end_key().get_obj_ptr()));
       } else {
-        const ObObj &tenant_obj_high = req_id_range.get_end_key().get_obj_ptr()[tenant_id_key_idx];
-        const ObObj &tenant_obj_low = req_id_range.get_start_key().get_obj_ptr()[tenant_id_key_idx];
-
-        uint64_t min_tenant_id = 0;
-        uint64_t max_tenant_id = 0;
-        if (tenant_obj_low.is_min_value()) {
-          min_tenant_id = 0;
-        } else if (tenant_obj_low.is_max_value()) {
-          min_tenant_id = UINT64_MAX;
-        } else {
-          min_tenant_id = tenant_obj_low.get_uint64();
-        }
-
-        if (tenant_obj_high.is_min_value()) {
-          max_tenant_id = 0;
-        } else if (tenant_obj_high.is_max_value()) {
-          max_tenant_id = UINT64_MAX;
-        } else {
-          max_tenant_id = tenant_obj_high.get_uint64();
-        }
-
-        if (min_tenant_id <= max_tenant_id
-            && min_tenant_id <= tenant_id
-            && max_tenant_id >= tenant_id) {
+        // In single-node mode, no tenant_id filtering from rowkey
+        {
           const ObObj &cur_start = req_id_range.get_start_key().get_obj_ptr()[req_id_key_idx];
           const ObObj &cur_end = req_id_range.get_end_key().get_obj_ptr()[req_id_key_idx];
           int64_t cur_start_id = -1;

@@ -670,7 +670,7 @@ int ObDirectLoadInsertDataTableContext::init_dag(
     // incremental direct load may generate multiple sstables,
     // the snapshot_version needs be updated each time to avoid duplicated MacroIds
     share::SCN current_scn;
-    if (OB_FAIL(share::ObLSAttrOperator::get_tenant_gts(MTL_ID(), current_scn))) {
+    if (OB_FAIL(share::ObShareUtil::get_tenant_gts(MTL_ID(), current_scn))) {
       LOG_WARN("failed to get gts", KR(ret), K(MTL_ID()));
     } else {
       init_param.ddl_task_param_.snapshot_version_ = current_scn.get_val_for_tx();

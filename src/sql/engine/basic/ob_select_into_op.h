@@ -43,10 +43,10 @@ public:
     sqc_id_(common::OB_INVALID_ID)
   {}
   virtual ~ObSelectIntoOpInput() = default;
-  virtual int init(ObTaskInfo &task_info) override 
-  { 
+  virtual int init(ObTaskInfo &task_info) override
+  {
     UNUSED(task_info);
-    return common::OB_SUCCESS; 
+    return common::OB_SUCCESS;
   }
   virtual void reset() override {}
   virtual void set_task_id(int64_t task_id) { task_id_ = task_id; }
@@ -152,8 +152,7 @@ public:
       block_id_(0),
       need_commit_(true),
       arrow_alloc_(),
-      parquet_writer_schema_(nullptr),
-      orc_schema_(nullptr)
+      parquet_writer_schema_(nullptr)
   {
   }
 
@@ -333,22 +332,6 @@ private:
                                 int64_t row_idx,
                                 const ObDatumMeta &datum_meta,
                                 parquet::Int96 &res);
-  int init_orc_env();
-  int setup_orc_schema();
-  int orc_type_mapping_of_ob_type(ObDatumMeta& meta, int max_length, std::unique_ptr<orc::Type>& orc_type);
-  int create_orc_schema(std::unique_ptr<orc::Type> &schema);
-  int into_outfile_batch_orc(const ObBatchRows &brs, ObExternalFileWriter *data_writer);
-  int build_orc_cell(const ObDatumMeta &datum_meta,
-                     const ObObjMeta &obj_meta,
-                     const common::ObIVector* expr_vector,
-                     int64_t col_idx,
-                     int64_t row_idx,
-                     int64_t row_offset,
-                     orc::ColumnVectorBatch* col_vector_batch,
-                     ObIAllocator &allocator,
-                     const bool is_strict_mode,
-                     const ObDateSqlMode date_sql_mode);
-  int check_orc_file_size(ObOrcFileWriter &data_writer);
   int get_data_from_expr_vector(const common::ObIVector* expr_vector,
                                 int row_idx,
                                 ObObjType type,
@@ -404,9 +387,6 @@ private:
   static const int64_t MAX_OSS_FILE_SIZE = 5LL * 1024 * 1024 * 1024;
   static const int32_t ODPS_DATE_MIN_VAL = -719162; // '0001-1-1'
 
-  orc::WriterOptions options_;
-  ObOrcMemPool orc_alloc_;
-  std::unique_ptr<orc::Type> orc_schema_;
 };
 
 

@@ -20,8 +20,9 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/backup/ob_backup_struct.h"
-#include "ob_restore_table_operator.h"
 #include "ob_log_restore_source.h"
+#include "share/ob_kv_storage.h"
+#include "share/ob_server_struct.h"  // GCTX
 
 namespace oceanbase
 {
@@ -38,9 +39,10 @@ typedef common::ObSEArray<ObBackupPathString, 1> DirArray;
 class ObLogRestoreSourceMgr final
 {
 public:
-  ObLogRestoreSourceMgr() : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID), table_operator_() {}
+  ObLogRestoreSourceMgr() : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID) {}
 public:
-  int init(const uint64_t tenant_id, ObISQLClient *proxy);
+  // Simplified init for single tenant/single LS scenario - no SQL proxy needed
+  int init(const uint64_t tenant_id);
 public:
   // add source with net service
   int add_service_source(const SCN &recovery_until_scn, const ObString &service_source);
@@ -63,15 +65,20 @@ public:
   // get log restore source
   int get_source(ObLogRestoreSourceItem &item);
   
-  int get_source_for_update(ObLogRestoreSourceItem &item, common::ObMySQLTransaction &trans);
+  // Removed get_source_for_update - not needed for KV storage
 
   static int get_backup_dest(const ObLogRestoreSourceItem &item, ObBackupDest& dest);
 private:
   const int64_t OB_DEFAULT_LOG_RESTORE_SOURCE_ID = 1;
+
+  // Helper methods for KV storage
+  static int get_kv_key_(const uint64_t tenant_id, ObString &key);
+  static int serialize_to_kv_(const ObLogRestoreSourceItem &item, ObString &value, common::ObIAllocator &allocator);
+  static int deserialize_from_kv_(const ObString &value, ObLogRestoreSourceItem &item);
+
 private:
   bool is_inited_;
   uint64_t tenant_id_;       // user tenant id
-  ObTenantRestoreTableOperator table_operator_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogRestoreSourceMgr);
 };

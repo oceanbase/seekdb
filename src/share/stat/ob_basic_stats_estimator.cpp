@@ -552,17 +552,15 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) - sum(last_inserts + last_updates + " \
         "last_deletes) as signed) as inc_mod_count " \
-        "from %s where tenant_id = %lu and table_id = %lu;",
+        "from %s where table_id = %lu;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
         share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else if (!need_inc_modified_count &&
              OB_FAIL(select_sql.append_fmt(
         "select cast(sum(inserts + updates + deletes) as signed) as modified_count " \
-        "from %s where tenant_id = %lu and table_id = %lu;",
+        "from %s where table_id = %lu;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
         share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
@@ -625,9 +623,8 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
   } else if (OB_FAIL(select_sql.append_fmt(
           "select tablet_id, (inserts + updates + deletes - last_inserts - " \
           "last_updates - last_deletes) as inc_mod_count "\
-          "from %s where tenant_id = %lu and table_id = %lu order by 1;",
+          "from %s where table_id = %lu order by 1;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
         share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
@@ -815,9 +812,8 @@ int ObBasicStatsEstimator::update_last_modified_count(sqlclient::ObISQLConnectio
     /*do nothing*/
   } else if (OB_FAIL(udpate_sql.append_fmt(
         "update %s set last_inserts = inserts, last_updates = updates, last_deletes = deletes " \
-        "where tenant_id = %lu and table_id = %lu %s %s;",
+        "where table_id = %lu %s %s;",
         share::OB_ALL_MONITOR_MODIFIED_TNAME,
-        share::schema::ObSchemaUtils::get_extract_tenant_id(param.tenant_id_, param.tenant_id_),
         share::schema::ObSchemaUtils::get_extract_schema_id(param.tenant_id_, table_id),
         !tablet_list.empty() ? "and tablet_id in" : " ",
         !tablet_list.empty() ? tablet_list.ptr() : " "))) {
@@ -847,10 +843,9 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
   } else if (!is_valid) {
     // do nothing
   } else if (OB_FAIL(select_sql.append_fmt(
-                 "select partition_id, stattype_locked, row_cnt, spare2 from %s where tenant_id = %lu and "
+                 "select partition_id, stattype_locked, row_cnt, spare2 from %s where "
                  "table_id = %lu and (last_analyzed > 0 or spare2 >= 5) order by 1;",
                  share::OB_ALL_TABLE_STAT_TNAME,
-                 share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                  share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
@@ -1048,7 +1043,7 @@ int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
                                            "  AND  table_type IN %s"\
                                            " AND table_id  not in (select distinct table_id from %s "\
                                            " WHERE table_id > %ld AND spare2 >= 5) "\
-                                           " ORDER  BY tenant_id, table_id "\
+                                           " ORDER  BY table_id "\
                                            " LIMIT  %ld;",
                                            share::OB_ALL_TABLE_TNAME,
                                            last_table_id,
@@ -1334,7 +1329,7 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
           "  AND       up.pname = 'ASYNC_GATHER_STALE_RATIO' "\
           "  JOIN      %s gp "\
           "  ON        gp.sname = 'ASYNC_GATHER_STALE_RATIO' "\
-          "  where m.tenant_id = %lu AND "\
+          "  where "\
           " (CASE WHEN (m.last_inserts-m.last_deletes) = 0 THEN 1 + cast(coalesce(up.valchar, gp.spare4) as "\
           " double) "\
           "    ELSE (m.inserts - m.last_inserts + m.updates - m.last_updates + m.deletes - m.last_deletes) * 1.0 "\
@@ -1345,7 +1340,6 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
           share::OB_ALL_MONITOR_MODIFIED_TNAME,
           share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
           share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
-          share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
           last_table_id,
           last_tablet_id,
           max_table_cnt

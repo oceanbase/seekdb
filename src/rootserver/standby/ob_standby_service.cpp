@@ -20,11 +20,12 @@
 
 #include "rootserver/ob_cluster_event.h"          // CLUSTER_EVENT_ADD_CONTROL
 #include "rootserver/ob_tenant_event_def.h" // TENANT_EVENT
-#include "rootserver/ob_ls_service_helper.h"//ObTenantLSInfo
-#include "share/ob_global_stat_proxy.h"//ObGlobalStatProxy
+// Removed ObLSServiceHelper include - simplified for single LS scenario
 #include "share/backup/ob_backup_config.h" // ObBackupConfigParserMgr
-#include "share/ob_license_utils.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "share/ob_all_tenant_info.h"       // ObAllTenantInfo, ObAllTenantInfoProxy
+
+ERRSIM_POINT_DEF(ERRSIM_AFTER_PERSIST_PREP_SW_TO_STANDBY);
+ERRSIM_POINT_DEF(ERRSIM_AFTER_PERSIST_SWITCHING_TO_STANDBY);
 
 namespace oceanbase
 {
@@ -92,22 +93,22 @@ int ObStandbyService::check_inner_stat_()
     } while(0)
 
 void ObStandbyService::tenant_event_start_(
-    const uint64_t switch_tenant_id, const obrpc::ObSwitchTenantArg &arg, int ret,
+    const obrpc::ObSwitchRoleArg &arg, int ret,
     int64_t begin_ts, const share::ObAllTenantInfo &tenant_info)
 {
   char tenant_info_buf[1024] = "";
   PRINT_TENANT_INFO(tenant_info, tenant_info_buf);
   switch (arg.get_op_type()) {
-      case ObSwitchTenantArg::SWITCH_TO_PRIMARY :
-        TENANT_EVENT(switch_tenant_id, TENANT_ROLE_CHANGE, SWITCHOVER_TO_PRIMARY_START, begin_ts,
+      case ObSwitchRoleArg::SWITCH_TO_PRIMARY :
+        TENANT_EVENT(OB_SYS_TENANT_ID, TENANT_ROLE_CHANGE, SWITCHOVER_TO_PRIMARY_START, begin_ts,
             ret, 0, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf));
         break;
-      case ObSwitchTenantArg::SWITCH_TO_STANDBY :
-        TENANT_EVENT(switch_tenant_id, TENANT_ROLE_CHANGE, SWITCHOVER_TO_STANDBY_START, begin_ts,
+      case ObSwitchRoleArg::SWITCH_TO_STANDBY :
+        TENANT_EVENT(OB_SYS_TENANT_ID, TENANT_ROLE_CHANGE, SWITCHOVER_TO_STANDBY_START, begin_ts,
             ret, 0, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf));
         break;
-      case ObSwitchTenantArg::FAILOVER_TO_PRIMARY :
-        TENANT_EVENT(switch_tenant_id, TENANT_ROLE_CHANGE, FAILOVER_TO_PRIMARY_START, begin_ts,
+      case ObSwitchRoleArg::FAILOVER_TO_PRIMARY :
+        TENANT_EVENT(OB_SYS_TENANT_ID, TENANT_ROLE_CHANGE, FAILOVER_TO_PRIMARY_START, begin_ts,
             ret, 0, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf));
         break;
       default :break;
@@ -115,90 +116,80 @@ void ObStandbyService::tenant_event_start_(
 }
 
 void ObStandbyService::tenant_event_end_(
-    const uint64_t switch_tenant_id, const obrpc::ObSwitchTenantArg &arg,
+    const obrpc::ObSwitchRoleArg &arg,
     int ret, int64_t cost, int64_t end_ts, const share::SCN switch_scn,
-    ObTenantRoleTransCostDetail &cost_detail, ObTenantRoleTransAllLSInfo &all_ls)
+    ObTenantRoleTransCostDetail &cost_detail)
 {
   share::ObAllTenantInfo tenant_info;
   if (!THIS_WORKER.is_timeout()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(ObAllTenantInfoProxy::load_tenant_info(
-      switch_tenant_id,
-      sql_proxy_,
       false,
       tenant_info))) {
-      LOG_WARN("failed to load tenant info", KR(ret), K(switch_tenant_id));
+      LOG_WARN("failed to load tenant info", KR(ret));
     }
   }
   char tenant_info_buf[1024] = "";
   PRINT_TENANT_INFO(tenant_info, tenant_info_buf);
+  // For single LS scenario, only sys_ls exists
+  const char *all_ls_str = "sys_ls";
   switch (arg.get_op_type()) {
-    case ObSwitchTenantArg::SWITCH_TO_PRIMARY :
-      TENANT_EVENT(switch_tenant_id, TENANT_ROLE_CHANGE, SWITCHOVER_TO_PRIMARY_END, end_ts,
-          ret, cost, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf), switch_scn.get_val_for_inner_table_field(), cost_detail, all_ls);
+    case ObSwitchRoleArg::SWITCH_TO_PRIMARY :
+      TENANT_EVENT(OB_SYS_TENANT_ID, TENANT_ROLE_CHANGE, SWITCHOVER_TO_PRIMARY_END, end_ts,
+          ret, cost, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf), switch_scn.get_val_for_inner_table_field(), cost_detail, all_ls_str);
       break;
-    case ObSwitchTenantArg::SWITCH_TO_STANDBY :
-      TENANT_EVENT(switch_tenant_id, TENANT_ROLE_CHANGE, SWITCHOVER_TO_STANDBY_END, end_ts,
-          ret, cost, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf), switch_scn.get_val_for_inner_table_field(), cost_detail, all_ls);
+    case ObSwitchRoleArg::SWITCH_TO_STANDBY :
+      TENANT_EVENT(OB_SYS_TENANT_ID, TENANT_ROLE_CHANGE, SWITCHOVER_TO_STANDBY_END, end_ts,
+          ret, cost, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf), switch_scn.get_val_for_inner_table_field(), cost_detail, all_ls_str);
       break;
-    case ObSwitchTenantArg::FAILOVER_TO_PRIMARY :
-      TENANT_EVENT(switch_tenant_id, TENANT_ROLE_CHANGE, FAILOVER_TO_PRIMARY_END, end_ts,
-          ret, cost, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf), switch_scn.get_val_for_inner_table_field(), cost_detail, all_ls);
+    case ObSwitchRoleArg::FAILOVER_TO_PRIMARY :
+      TENANT_EVENT(OB_SYS_TENANT_ID, TENANT_ROLE_CHANGE, FAILOVER_TO_PRIMARY_END, end_ts,
+          ret, cost, ObHexEscapeSqlStr(arg.get_stmt_str()), ObHexEscapeSqlStr(tenant_info_buf), switch_scn.get_val_for_inner_table_field(), cost_detail, all_ls_str);
       break;
     default :break;
   }
 }
 
-int ObStandbyService::switch_tenant(const obrpc::ObSwitchTenantArg &arg)
+int ObStandbyService::switch_role(const obrpc::ObSwitchRoleArg &arg)
 {
   int ret = OB_SUCCESS;
   int64_t begin_ts = ObTimeUtility::current_time();
-  uint64_t switch_tenant_id = OB_INVALID_ID;
   bool is_verify = arg.get_is_verify();
   ObAllTenantInfo tenant_info;
   share::SCN switch_scn = SCN::min_scn();
   ObTenantRoleTransCostDetail cost_detail;
-  ObTenantRoleTransAllLSInfo all_ls;
   cost_detail.set_start(begin_ts);
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(inited));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
-  } else if (OB_FAIL(get_target_tenant_id(arg.get_tenant_name(), arg.get_exec_tenant_id(), switch_tenant_id))) {
-    LOG_WARN("failed to get_target_tenant_id", KR(ret), K(switch_tenant_id), K(arg));
-  } else if (OB_FAIL(check_if_tenant_status_is_normal_(switch_tenant_id, arg.get_op_type()))) {
-    LOG_WARN("fail to check if tenant status is normal", KR(ret), K(switch_tenant_id), K(arg));
-  } else if (OB_FAIL(all_ls.init())) {
-    LOG_WARN("fail to init all_ls", KR(ret));
   } else if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(
-      switch_tenant_id,
-      sql_proxy_,
       false,
       tenant_info))) {
-    LOG_WARN("failed to load tenant info", KR(ret), K(switch_tenant_id));
+    LOG_WARN("failed to load tenant info", KR(ret));
   } else {
     if (!is_verify) {
-      (void) tenant_event_start_(switch_tenant_id, arg, ret, begin_ts, tenant_info);
+      (void) tenant_event_start_(arg, ret, begin_ts, tenant_info);
     }
 
     switch (arg.get_op_type()) {
-      case ObSwitchTenantArg::SWITCH_TO_PRIMARY :
-        if (OB_FAIL(switch_to_primary(switch_tenant_id, arg.get_op_type(), is_verify,
-            switch_scn, cost_detail, all_ls))) {
-          LOG_WARN("failed to switch_to_primary", KR(ret), K(switch_tenant_id), K(arg));
+      case ObSwitchRoleArg::SWITCH_TO_PRIMARY :
+        if (OB_FAIL(switch_to_primary(arg.get_op_type(), is_verify,
+            switch_scn, cost_detail))) {
+          LOG_WARN("failed to switch_to_primary", KR(ret), K(arg));
         }
         break;
-      case ObSwitchTenantArg::SWITCH_TO_STANDBY :
-        if (OB_FAIL(switch_to_standby(switch_tenant_id, arg.get_op_type(), is_verify,
-            tenant_info, switch_scn, cost_detail, all_ls))) {
-          LOG_WARN("failed to switch_to_standby", KR(ret), K(switch_tenant_id), K(arg));
+      case ObSwitchRoleArg::SWITCH_TO_STANDBY :
+        if (OB_FAIL(switch_to_standby(arg.get_op_type(), is_verify,
+            tenant_info, switch_scn, cost_detail))) {
+          LOG_WARN("failed to switch_to_standby", KR(ret), K(arg));
         }
         break;
-      case ObSwitchTenantArg::FAILOVER_TO_PRIMARY :
-        if (OB_FAIL(failover_to_primary(switch_tenant_id, arg.get_op_type(), is_verify,
-            tenant_info, switch_scn, cost_detail, all_ls))) {
-          LOG_WARN("failed to failover_to_primary", KR(ret), K(switch_tenant_id), K(arg));
+      case ObSwitchRoleArg::FAILOVER_TO_PRIMARY :
+        if (OB_FAIL(failover_to_primary(arg.get_op_type(), is_verify,
+            tenant_info, switch_scn, cost_detail))) {
+          LOG_WARN("failed to failover_to_primary", KR(ret), K(arg));
         }
         break;
       default :
@@ -212,22 +203,20 @@ int ObStandbyService::switch_tenant(const obrpc::ObSwitchTenantArg &arg)
     int64_t end_ts = ObTimeUtility::current_time();
     int64_t cost = end_ts - begin_ts;
     cost_detail.set_end(end_ts);
-    FLOG_INFO("switch tenant end", KR(ret), K(arg), K(cost), K(cost_detail), K(all_ls));
+    FLOG_INFO("switch tenant end", KR(ret), K(arg), K(cost), K(cost_detail));
     if (!is_verify) {
-      (void) tenant_event_end_(switch_tenant_id, arg, ret, cost, end_ts, switch_scn, cost_detail, all_ls);
+      (void) tenant_event_end_(arg, ret, cost, end_ts, switch_scn, cost_detail);
     }
   }
   return ret;
 }
 
 int ObStandbyService::failover_to_primary(
-    const uint64_t tenant_id,
-    const obrpc::ObSwitchTenantArg::OpType &switch_optype,
+    const obrpc::ObSwitchRoleArg::OpType &switch_optype,
     const bool is_verify,
     const share::ObAllTenantInfo &tenant_info,
     share::SCN &switch_scn,
-    ObTenantRoleTransCostDetail &cost_detail,
-    ObTenantRoleTransAllLSInfo &all_ls)
+    ObTenantRoleTransCostDetail &cost_detail)
 {
   int ret = OB_SUCCESS;
   ObTenantRoleTransitionService role_transition_service;
@@ -236,258 +225,37 @@ int ObStandbyService::failover_to_primary(
   } else if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pointer is null", KR(ret), KP(GCTX.srv_rpc_proxy_));
-  } else if (OB_UNLIKELY(obrpc::ObSwitchTenantArg::OpType::INVALID == switch_optype)) {
+  } else if (OB_UNLIKELY(obrpc::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid switch_optype", KR(ret), K(switch_optype));
   } else if (OB_FAIL(role_transition_service.init(
-      tenant_id,
       switch_optype,
       is_verify,
-      sql_proxy_,
-      GCTX.srv_rpc_proxy_,
-      &cost_detail,
-      &all_ls))) {
-    LOG_WARN("fail to init role_transition_service", KR(ret), K(tenant_id), K(switch_optype),
-        KP(sql_proxy_), KP(GCTX.srv_rpc_proxy_), K(cost_detail), K(all_ls));
-  } else if (tenant_info.is_primary() && tenant_info.is_normal_status()) {
-    LOG_INFO("already is primary tenant, no need switch", K(tenant_info));
-  } else if (tenant_info.get_restore_data_mode().is_remote_mode()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("tenant restore data mode is remote, failover is not allowed", KR(ret), K(tenant_id), K(tenant_info));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "Tenant restore data mode is remote. Operation is");
+      &cost_detail))) {
+    LOG_WARN("fail to init role_transition_service", KR(ret), K(switch_optype),
+         K(cost_detail));
   } else {
+    share::ObLSRecoveryStat ls_recovery_stat;
     if (OB_FAIL(role_transition_service.failover_to_primary())) {
-      LOG_WARN("failed to failover to primary", KR(ret), K(tenant_id));
-    }
-    switch_scn = tenant_info.get_sync_scn();
-  }
-
-  return ret;
-}
-
-int ObStandbyService::get_target_tenant_id(
-    const ObString &tenant_name,
-    const uint64_t exec_tenant_id,
-    uint64_t &switch_tenant_id)
-{
-  int ret = OB_SUCCESS;
-  switch_tenant_id = OB_INVALID_ID;
-  if (OB_INVALID_TENANT_ID == exec_tenant_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(exec_tenant_id), KR(ret));
-  } else if (tenant_name.empty()) {
-    if (!is_user_tenant(exec_tenant_id)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("can't operate tenant without tenant name using SYS/meta tenant session", KR(ret), K(tenant_name), K(exec_tenant_id));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "omitting tenant name is ");
+      LOG_WARN("failed to failover to primary", KR(ret));
+    } else if (OB_FAIL(share::get_ls_recovery_stat(ls_recovery_stat))) {
+      LOG_WARN("failed to get ls recovery stat for switch_scn", KR(ret));
     } else {
-      switch_tenant_id = exec_tenant_id;
+      switch_scn = ls_recovery_stat.get_sync_scn();
     }
-  } else {
-    // tenant_name not empty
-    if (OB_SYS_TENANT_ID != exec_tenant_id) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("can't specify tenant name using user tenant session", KR(ret), K(tenant_name), K(exec_tenant_id));
-      LOG_USER_ERROR(OB_INVALID_ARGUMENT, "tenant name, please don't specify tenant name");
-    } else {
-      if (OB_ISNULL(schema_service_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("invalid schema service", KR(ret), KP(schema_service_));
-      } else {
-        share::schema::ObSchemaGetterGuard guard;
-        if (OB_FAIL(schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
-          LOG_WARN("get_schema_guard failed", KR(ret));
-        } else if (OB_FAIL(guard.get_tenant_id(tenant_name, switch_tenant_id))) {
-          LOG_WARN("get_tenant_id failed", KR(ret), K(tenant_name), K(exec_tenant_id));
-        } else if (OB_UNLIKELY(!is_valid_tenant_id(switch_tenant_id) || !is_user_tenant(switch_tenant_id))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("only support switch user tenant", KR(ret), K(tenant_name), K(exec_tenant_id), K(switch_tenant_id));
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "tenant name, only support operating user tenant");
-        }
-      }
-    }
-  }
-  return ret;
-}
 
-int ObStandbyService::recover_tenant(const obrpc::ObRecoverTenantArg &arg)
-{
-  int ret = OB_SUCCESS;
-  int64_t begin_time = ObTimeUtility::current_time();
-  uint64_t tenant_id = OB_INVALID_ID;
-  const char *alter_cluster_event = "recover_tenant";
-  CLUSTER_EVENT_ADD_CONTROL_START(ret, alter_cluster_event, "stmt_str", arg.get_stmt_str());
-
-  if (OB_FAIL(ObLicenseUtils::check_standby_allowed())) {
-    LOG_WARN("check standby allowed failed", KR(ret));
-  } else if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (!arg.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), KR(ret));
-  } else if (OB_FAIL(get_target_tenant_id(arg.get_tenant_name(), arg.get_exec_tenant_id(), tenant_id))) {
-    LOG_WARN("failed to get_target_tenant_id", KR(ret), K(tenant_id), K(arg));
-  } else if (OB_FAIL(do_recover_tenant(tenant_id, share::NORMAL_SWITCHOVER_STATUS, arg.get_type(),
-                                       arg.get_recovery_until_scn()))) {
-    LOG_WARN("failed to do_recover_tenant", KR(ret), K(tenant_id), K(arg));
-  }
-
-  int64_t cost = ObTimeUtility::current_time() - begin_time;
-  CLUSTER_EVENT_ADD_CONTROL_FINISH(ret, alter_cluster_event,
-      K(cost),
-      "stmt_str", arg.get_stmt_str());
-
-  return ret;
-}
-
-int ObStandbyService::get_tenant_status(
-    const uint64_t tenant_id,
-    ObTenantStatus &status)
-{
-  int ret = OB_SUCCESS;
-  status = TENANT_STATUS_MAX;
-  if (!is_user_tenant(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support get user tenant status", KR(ret), K(tenant_id));
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "tenant id, only support operating user tenant");
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(GCTX.sql_proxy_));
-  } else {
-    ObSqlString sql;
-    SMART_VAR(ObISQLClient::ReadResult, result) {
-      if (OB_FAIL(sql.assign_fmt(
-                  "SELECT status FROM %s WHERE tenant_id = %lu",
-                   OB_ALL_TENANT_TNAME, tenant_id))) {
-        LOG_WARN("assign sql string failed", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(result, OB_SYS_TENANT_ID, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(tenant_id), K(sql));
-      } else if (OB_ISNULL(result.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get result failed", KR(ret), K(tenant_id), K(sql));
-      } else if (OB_FAIL(result.get_result()->next())) {
-        LOG_WARN("get next result failed", KR(ret), K(tenant_id), K(sql));
-        if (OB_ITER_END == ret) {
-          ret = OB_TENANT_NOT_EXIST;
-        }
-      } else if (OB_ISNULL(result.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret), K(tenant_id), K(sql));
-      } else {
-        ObString tenant_status_str("");
-        ObString default_tenant_status_str("NORMAL");
-        bool skip_null_error = false;
-
-        EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(*result.get_result(), "status", tenant_status_str,
-            skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_tenant_status_str);
-
-        if (OB_FAIL(ret)) {
-          LOG_WARN("failed to get result", KR(ret), K(tenant_id), K(sql));
-        } else if (OB_FAIL(schema::get_tenant_status(tenant_status_str, status))) {
-          LOG_WARN("fail to get tenant status", KR(ret), K(tenant_status_str), K(tenant_id), K(sql));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObStandbyService::check_if_tenant_status_is_normal_(const uint64_t tenant_id, const RoleTransType op_type)
-{
-  int ret = OB_SUCCESS;
-  ObTenantStatus tenant_status = TENANT_STATUS_MAX;
-  if (OB_FAIL(get_tenant_status(tenant_id, tenant_status))) {
-    LOG_WARN("failed to get tenant status", KR(ret), K(tenant_id));
-  } else if (OB_UNLIKELY(!is_tenant_normal(tenant_status))) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("tenant status is not normal", KR(ret), K(tenant_id), K(tenant_status));
-    TENANT_ROLE_TRANS_USER_ERR_WITH_SUFFIX(OB_OP_NOT_ALLOW, "tenant status is not normal", op_type);
-  }
-  return ret;
-}
-
-int ObStandbyService::do_recover_tenant(
-    const uint64_t tenant_id,
-    const share::ObTenantSwitchoverStatus &working_sw_status,
-    const obrpc::ObRecoverTenantArg::RecoverType &recover_type,
-    const share::SCN &recovery_until_scn)
-{
-  int ret = OB_SUCCESS;
-  ObAllTenantInfo tenant_info;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
-  common::ObMySQLTransaction trans;
-  ObTenantStatus tenant_status = TENANT_STATUS_MAX;
-  ObLSRecoveryStatOperator ls_recovery_operator;
-  ObLSRecoveryStat sys_ls_recovery;
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (!obrpc::ObRecoverTenantArg::is_valid(recover_type, recovery_until_scn)
-             || !working_sw_status.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(recover_type), K(recovery_until_scn), KR(ret));
-  } else if (OB_ISNULL(sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(sql_proxy_));
-  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(get_tenant_status(tenant_id, tenant_status))) {
-    LOG_WARN("failed to get tenant status", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(trans.start(sql_proxy_, exec_tenant_id))) {
-    LOG_WARN("failed to start trans", KR(ret), K(exec_tenant_id), K(tenant_id));
-  } else if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(tenant_id, &trans, true, tenant_info))) {
-    LOG_WARN("failed to load all tenant info", KR(ret), K(tenant_id));
-  } else if (!tenant_info.is_standby()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("tenant role is not STANDBY", K(tenant_info));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "tenant role is not STANDBY, recover is");
-  } else if (tenant_info.get_switchover_status() != working_sw_status) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("unexpected tenant switchover status", KR(ret), K(working_sw_status), K(tenant_info));
-  } else if (obrpc::ObRecoverTenantArg::RecoverType::UNTIL == recover_type
-              && recovery_until_scn < tenant_info.get_sync_scn()) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("recover before tenant sync_scn is not allow", KR(ret), K(tenant_info),
-             K(tenant_id), K(recover_type), K(recovery_until_scn));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "recover before tenant sync_scn sync_scn is");
-  }
-  if (OB_FAIL(ret)) {
-  } else if (is_tenant_normal(tenant_status)) {
-    const SCN &recovery_until_scn_to_set = obrpc::ObRecoverTenantArg::RecoverType::UNTIL == recover_type ?
-      recovery_until_scn : SCN::max(tenant_info.get_sync_scn(), sys_ls_recovery.get_sync_scn());
-    if (tenant_info.get_recovery_until_scn() == recovery_until_scn_to_set) {
-      LOG_WARN("recovery_until_scn is same with original", KR(ret), K(tenant_info), K(tenant_id),
-               K(recover_type), K(recovery_until_scn));
-    } else if (OB_FAIL(ObAllTenantInfoProxy::update_tenant_recovery_until_scn(
-                  tenant_id, trans, tenant_info.get_switchover_epoch(), recovery_until_scn_to_set))) {
-      LOG_WARN("failed to update_tenant_recovery_until_scn", KR(ret), K(tenant_id), K(recover_type),
-               K(recovery_until_scn), K(recovery_until_scn_to_set));
-    }
-  } else {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("tenant status is not normal, recover is not allowed", KR(ret), K(tenant_id),
-             K(recover_type), K(recovery_until_scn), K(tenant_status));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "tenant status is not normal, recover is");
-  }
-
-  if (trans.is_started()) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("failed to commit trans", KR(ret), KR(tmp_ret));
-      ret = OB_SUCC(ret) ? tmp_ret : ret;
-    }
+    // Schema refresh trigger is now managed by MTL framework
+    // It checks tenant role at runtime to decide whether to refresh schema
   }
 
   return ret;
 }
 
 int ObStandbyService::switch_to_primary(
-    const uint64_t tenant_id,
-    const obrpc::ObSwitchTenantArg::OpType &switch_optype,
+    const obrpc::ObSwitchRoleArg::OpType &switch_optype,
     const bool is_verify,
     share::SCN &switch_scn,
-    ObTenantRoleTransCostDetail &cost_detail,
-    ObTenantRoleTransAllLSInfo &all_ls)
+    ObTenantRoleTransCostDetail &cost_detail)
 {
   int ret = OB_SUCCESS;
   int64_t begin_time = ObTimeUtility::current_time();
@@ -498,37 +266,33 @@ int ObStandbyService::switch_to_primary(
   } else if (OB_ISNULL(GCTX.srv_rpc_proxy_) || OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pointer is null", KR(ret), KP(GCTX.srv_rpc_proxy_), KP(sql_proxy_));
-  } else if (OB_UNLIKELY(obrpc::ObSwitchTenantArg::OpType::INVALID == switch_optype)) {
+  } else if (OB_UNLIKELY(obrpc::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid switch_optype", KR(ret), K(switch_optype));
   } else if (OB_FAIL(role_transition_service.init(
-      tenant_id,
       switch_optype,
       is_verify,
-      sql_proxy_,
-      GCTX.srv_rpc_proxy_,
-      &cost_detail,
-      &all_ls))) {
-    LOG_WARN("fail to init role_transition_service", KR(ret), K(tenant_id), K(switch_optype),
-        KP(sql_proxy_), KP(GCTX.srv_rpc_proxy_), K(cost_detail), K(all_ls));
+      &cost_detail))) {
+    LOG_WARN("fail to init role_transition_service", KR(ret),
+             KP(GCTX.srv_rpc_proxy_), K(cost_detail));
   } else {
-    (void)role_transition_service.set_switchover_epoch(tenant_info.get_switchover_epoch());
     if (OB_FAIL(role_transition_service.failover_to_primary())) {
-      LOG_WARN("fail to failover to primary", KR(ret), K(tenant_id));
+      LOG_WARN("fail to failover to primary", KR(ret));
     }
     switch_scn = role_transition_service.get_so_scn();
+
+    // Schema refresh trigger is now managed by MTL framework
+    // It checks tenant role at runtime to decide whether to refresh schema
   }
   return ret;
 }
 
 int ObStandbyService::switch_to_standby(
-    const uint64_t tenant_id,
-    const obrpc::ObSwitchTenantArg::OpType &switch_optype,
+    const obrpc::ObSwitchRoleArg::OpType &switch_optype,
     const bool is_verify,
     share::ObAllTenantInfo &tenant_info,
     share::SCN &switch_scn,
-    ObTenantRoleTransCostDetail &cost_detail,
-    ObTenantRoleTransAllLSInfo &all_ls)
+    ObTenantRoleTransCostDetail &cost_detail)
 {
   int ret = OB_SUCCESS;
   const int32_t group_id = share::OBCG_DBA_COMMAND;
@@ -537,11 +301,11 @@ int ObStandbyService::switch_to_standby(
   } else if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pointer is null", KR(ret), KP(GCTX.srv_rpc_proxy_));
-  } else if (OB_UNLIKELY(obrpc::ObSwitchTenantArg::OpType::INVALID == switch_optype)) {
+  } else if (OB_UNLIKELY(obrpc::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid switch_optype", KR(ret), K(switch_optype));
   } else if (tenant_info.is_standby() && tenant_info.is_normal_status()) {
-    LOG_INFO("already is standby tenant, no need switch", K(tenant_id), K(tenant_info));
+    LOG_INFO("already is standby tenant, no need switch", K(tenant_info));
   } else {
     switch(tenant_info.get_switchover_status().value()) {
       case share::ObTenantSwitchoverStatus::NORMAL_STATUS: {
@@ -550,69 +314,58 @@ int ObStandbyService::switch_to_standby(
           ret = OB_OP_NOT_ALLOW;
           LOG_WARN("unexpected tenant role", KR(ret), K(tenant_info));
           LOG_USER_ERROR(OB_OP_NOT_ALLOW, "tenant role is not PRIMARY, switchover to standby is");
-        } else if (OB_UNLIKELY(!tenant_info.get_recovery_until_scn().is_max())) {
-          ret = OB_OP_NOT_ALLOW;
-          LOG_WARN("recovery_until_scn has been changed ", KR(ret), K(tenant_id), K(tenant_info));
-          LOG_USER_ERROR(OB_OP_NOT_ALLOW, "recovery_until_scn has been changed, switchover to standby is");
         } else if (is_verify) {
           // skip
         } else if (OB_FAIL(update_tenant_status_before_sw_to_standby_(
                             tenant_info.get_switchover_status(),
                             tenant_info.get_tenant_role(),
-                            tenant_info.get_switchover_epoch(),
-                            tenant_id,
                             tenant_info))) {
-          LOG_WARN("failed to update_tenant_status_before_sw_to_standby_", KR(ret), K(tenant_info),
-                            K(tenant_id));
+          LOG_WARN("failed to update_tenant_status_before_sw_to_standby_", KR(ret), K(tenant_info));
+        } else if (OB_FAIL(ERRSIM_AFTER_PERSIST_PREP_SW_TO_STANDBY)) {
+          LOG_WARN("errsim: after persist prep switching to standby", KR(ret));
         }
       }
       case share::ObTenantSwitchoverStatus::PREPARE_SWITCHING_TO_STANDBY_STATUS: {
         if (OB_FAIL(ret) || is_verify) {
-        } else if (OB_FAIL(switch_to_standby_prepare_ls_status_(tenant_id,
+        } else if (OB_FAIL(switch_to_standby_prepare_ls_status_(
                                                                 tenant_info.get_switchover_status(),
-                                                                tenant_info.get_switchover_epoch(),
                                                                 tenant_info))) {
-          LOG_WARN("failed to switch_to_standby_prepare_ls_status_", KR(ret), K(tenant_id), K(tenant_info));
+          LOG_WARN("failed to switch_to_standby_prepare_ls_status_", KR(ret),  K(tenant_info));
+        } else if (OB_FAIL(ERRSIM_AFTER_PERSIST_SWITCHING_TO_STANDBY)) {
+          LOG_WARN("errsim: after persist switching to standby", KR(ret));
         }
       }
       case share::ObTenantSwitchoverStatus::SWITCHING_TO_STANDBY_STATUS: {
         ObTenantRoleTransitionService role_transition_service;
         if (OB_FAIL(ret) || is_verify) {
         } else if (OB_FAIL(role_transition_service.init(
-            tenant_id,
             switch_optype,
             is_verify,
-            sql_proxy_,
-            GCTX.srv_rpc_proxy_,
-            &cost_detail,
-            &all_ls))) {
-          LOG_WARN("fail to init role_transition_service", KR(ret), K(tenant_id), K(switch_optype),
-              KP(sql_proxy_), KP(GCTX.srv_rpc_proxy_), K(cost_detail), K(all_ls));
+            &cost_detail))) {
+          LOG_WARN("fail to init role_transition_service", KR(ret), K(switch_optype),
+              KP(sql_proxy_), KP(GCTX.srv_rpc_proxy_), K(cost_detail));
         } else {
-          ObGlobalStatProxy global_proxy(*sql_proxy_, gen_meta_tenant_id(tenant_id));
-          (void)role_transition_service.set_switchover_epoch(tenant_info.get_switchover_epoch());
           if (OB_FAIL(role_transition_service.do_switch_access_mode_to_raw_rw(tenant_info))) {
-            LOG_WARN("failed to do_switch_access_mode", KR(ret), K(tenant_id), K(tenant_info));
+            LOG_WARN("failed to do_switch_access_mode", KR(ret), K(tenant_info));
           }
-          if (FAILEDx(role_transition_service.switchover_update_tenant_status(tenant_id,
+          if (FAILEDx(role_transition_service.switchover_update_tenant_status(
                                                      false /* switch_to_standby */,
                                                      share::STANDBY_TENANT_ROLE,
                                                      tenant_info.get_switchover_status(),
                                                      share::NORMAL_SWITCHOVER_STATUS,
-                                                     tenant_info.get_switchover_epoch(),
                                                      tenant_info))) {
-            LOG_WARN("fail to switchover_update_tenant_status", KR(ret), K(tenant_id), K(tenant_info));
-          } else {
-            (void)role_transition_service.broadcast_tenant_info(
-                  ObTenantRoleTransitionConstants::SWITCH_TO_STANDBY_LOG_MOD_STR);
+            LOG_WARN("fail to switchover_update_tenant_status", KR(ret), K(tenant_info));
           }
           switch_scn = role_transition_service.get_so_scn();
+
+          // Schema refresh trigger is now managed by MTL framework
+          // It checks tenant role at runtime to decide whether to refresh schema
         }
         break;
       }
       default: {
         ret = OB_OP_NOT_ALLOW;
-        LOG_WARN("switchover status not match", KR(ret), K(tenant_info), K(tenant_id));
+        LOG_WARN("switchover status not match", KR(ret), K(tenant_info));
         LOG_USER_ERROR(OB_OP_NOT_ALLOW, "switchover status not match, switchover to standby is");
         break;
       }
@@ -625,84 +378,53 @@ int ObStandbyService::switch_to_standby(
 int ObStandbyService::update_tenant_status_before_sw_to_standby_(
     const ObTenantSwitchoverStatus cur_switchover_status,
     const ObTenantRole cur_tenant_role,
-    const int64_t cur_switchover_epoch,
-    const uint64_t tenant_id,
     ObAllTenantInfo &new_tenant_info)
 {
   int ret = OB_SUCCESS;
-  ObMySQLTransaction trans;
   ObAllTenantInfo tenant_info;
-  int64_t new_switchover_ts = common::OB_INVALID_TIMESTAMP;
 
   if (OB_UNLIKELY(!cur_switchover_status.is_valid()
-                  || !cur_tenant_role.is_valid()
-                  || !is_user_tenant(tenant_id))) {
+                  || !cur_tenant_role.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(cur_switchover_status), K(cur_tenant_role));
+    LOG_WARN("invalid arg", KR(ret), K(cur_switchover_status), K(cur_tenant_role));
   } else if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(inited));
   } else {
-    const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
-    if (OB_FAIL(trans.start(sql_proxy_, exec_tenant_id))) {
-      LOG_WARN("fail to start trans", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(
-                    tenant_id, &trans, true, tenant_info))) {
-      LOG_WARN("failed to load tenant info", KR(ret), K(tenant_id));
-    } else if (OB_UNLIKELY(!tenant_info.get_recovery_until_scn().is_max())) {
-      ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("recovery_until_scn has been changed ", KR(ret), K(tenant_id), K(tenant_info));
-      LOG_USER_ERROR(OB_OP_NOT_ALLOW, "recovery_until_scn has been changed, switchover to standby is");
+    if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(
+                    false, tenant_info))) {
+      LOG_WARN("failed to load tenant info", KR(ret));
     } else if (cur_switchover_status != tenant_info.get_switchover_status()) {
       ret = OB_NEED_RETRY;
       LOG_WARN("tenant not expect switchover status", KR(ret), K(tenant_info), K(cur_switchover_status));
     } else if (cur_tenant_role != tenant_info.get_tenant_role()) {
       ret = OB_NEED_RETRY;
       LOG_WARN("tenant not expect tenant role", KR(ret), K(tenant_info), K(cur_tenant_role));
-    } else if (cur_switchover_epoch != tenant_info.get_switchover_epoch()) {
-      ret = OB_NEED_RETRY;
-      LOG_WARN("tenant not expect switchover epoch", KR(ret), K(tenant_info), K(cur_switchover_epoch));
-    } else if (OB_FAIL(ObAllTenantInfoProxy::update_tenant_role_in_trans(
-                  tenant_id, trans, cur_switchover_epoch,
+    } else if (OB_FAIL(ObAllTenantInfoProxy::update_tenant_role(
                   PRIMARY_TENANT_ROLE, cur_switchover_status,
-                  share::PREP_SWITCHING_TO_STANDBY_SWITCHOVER_STATUS, new_switchover_ts))) {
-      LOG_WARN("failed to update tenant role", KR(ret), K(tenant_id), K(cur_switchover_epoch), K(tenant_info));
+                  share::PREP_SWITCHING_TO_STANDBY_SWITCHOVER_STATUS))) {
+      LOG_WARN("failed to update tenant role", KR(ret), K(tenant_info));
     } else if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(
-                    tenant_id, &trans, true, new_tenant_info))) {
-      LOG_WARN("failed to load tenant info", KR(ret), K(tenant_id));
+                    false, new_tenant_info))) {
+      LOG_WARN("failed to load tenant info", KR(ret));
     }
   }
 
-  if (trans.is_started()) {
-    int temp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, KR(temp_ret));
-      ret = OB_SUCC(ret) ? temp_ret : ret;
-    }
-  }
+  // Removed transaction handling - not needed for KV storage
   CLUSTER_EVENT_ADD_LOG(ret, "update tenant before switchover to standby",
-      "tenant id", tenant_id,
-      "old switchover#", cur_switchover_epoch,
-      "new switchover#", tenant_info.get_switchover_epoch(),
+      "tenant id", OB_SYS_TENANT_ID,
       K(cur_switchover_status), K(cur_tenant_role));
   return ret;
 }
 
 int ObStandbyService::switch_to_standby_prepare_ls_status_(
-    const uint64_t tenant_id,
     const ObTenantSwitchoverStatus &status,
-    const int64_t switchover_epoch,
     ObAllTenantInfo &new_tenant_info)
 {
   int ret = OB_SUCCESS;
-  ObLSAttr sys_ls_attr;
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTenantSchema *tenant_schema = NULL;
-  int64_t new_switchover_epoch = OB_INVALID_VERSION;
 
-  if (!is_user_tenant(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service_ is NULL", KR(ret));
   } else if (OB_FAIL(check_inner_stat_())) {
@@ -713,234 +435,29 @@ int ObStandbyService::switch_to_standby_prepare_ls_status_(
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "switchover status not match, switchover to standby is");
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-    LOG_WARN("failed to get tenant ids", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_tenant_info(OB_SYS_TENANT_ID, tenant_schema))) {
+    LOG_WARN("failed to get tenant ids", KR(ret));
   } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_TENANT_NOT_EXIST;
-    LOG_WARN("tenant not exist", KR(ret), K(tenant_id));
+    LOG_WARN("tenant not exist", KR(ret));
   } else {
-    ObTenantLSInfo tenant_stat(GCTX.sql_proxy_, tenant_schema, tenant_id);
-    /* lock SYS_LS to get accurate LS list, then fix ls status to make ls status consistency
-       between __all_ls&__all_ls_status.
-       Refer to ls operator, insert/update/delete of ls table are executed in the SYS_LS lock
-       and normal switchover status */
-    if (OB_FAIL(ObLSServiceHelper::process_status_to_steady(true/* lock_sys_ls */,
-                                   share::PREP_SWITCHING_TO_STANDBY_SWITCHOVER_STATUS,
-                                   tenant_stat))) {
-      LOG_WARN("failed to process_ls_status_missmatch", KR(ret));
-    } else if (OB_FAIL(ObAllTenantInfoProxy::update_tenant_role(
-                    tenant_id, sql_proxy_, switchover_epoch,
+    // Simplified for single LS scenario:
+    // - Only SYS_LS exists, no need to process multiple LS status consistency
+    // - No transfer functionality, so no need to fix LS status mismatch
+    // - Directly proceed to update tenant role
+    LOG_INFO("skip process_status_to_steady for single LS scenario");
+    if (OB_FAIL(ObAllTenantInfoProxy::update_tenant_role(
                     share::STANDBY_TENANT_ROLE, status,
-                    share::SWITCHING_TO_STANDBY_SWITCHOVER_STATUS, new_switchover_epoch))) {
-      LOG_WARN("failed to update tenant role", KR(ret), K(tenant_id), K(switchover_epoch));
+                    share::SWITCHING_TO_STANDBY_SWITCHOVER_STATUS))) {
+      LOG_WARN("failed to update tenant role", KR(ret));
     } else if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(
-                       tenant_id, sql_proxy_, false, new_tenant_info))) {
-      LOG_WARN("failed to load tenant info", KR(ret), K(tenant_id));
-    } else if (OB_UNLIKELY(new_tenant_info.get_switchover_epoch() != new_switchover_epoch)) {
-      ret = OB_NEED_RETRY;
-      LOG_WARN("switchover is concurrency", KR(ret), K(switchover_epoch), K(new_tenant_info));
+                       false, new_tenant_info))) {
+      LOG_WARN("failed to load tenant info", KR(ret));
     }
 
     DEBUG_SYNC(SWITCHING_TO_STANDBY);
   }
 
-  return ret;
-}
-
-int ObStandbyService::write_upgrade_barrier_log(
-    ObMySQLTransaction &trans,
-    const uint64_t tenant_id,
-    const uint64_t data_version)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(write_barrier_log_(transaction::ObTxDataSourceType::STANDBY_UPGRADE,
-                                 trans, tenant_id, data_version))) {
-    LOG_WARN("fail to write upgrade barrier log", K(ret), K(tenant_id), K(data_version));
-  }
-
-  return ret;
-}
-
-int ObStandbyService::write_upgrade_data_version_barrier_log(
-    ObMySQLTransaction &trans,
-    const uint64_t tenant_id,
-    const uint64_t data_version)
-{
-  int ret = OB_SUCCESS;
-
-  if (ODV_MGR.is_enable_compatible_monotonic() &&
-          OB_FAIL(write_barrier_log_(transaction::ObTxDataSourceType::STANDBY_UPGRADE_DATA_VERSION,
-                                     trans, tenant_id, data_version))) {
-    LOG_WARN("fail to write upgrade data_version barrier log", K(ret), K(tenant_id),
-             K(data_version));
-  }
-
-  return ret;
-}
-
-int ObStandbyService::write_barrier_log_(
-    const transaction::ObTxDataSourceType type,
-    ObMySQLTransaction &trans,
-    const uint64_t tenant_id,
-    const uint64_t data_version)
-{
-  int ret = OB_SUCCESS;
-  ObStandbyUpgrade primary_data_version(data_version);
-  observer::ObInnerSQLConnection *inner_conn =
-      static_cast<observer::ObInnerSQLConnection *>(trans.get_connection());
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (OB_ISNULL(inner_conn)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("connection or trans service is null", KR(ret), KP(inner_conn));
-  } else if (!is_user_tenant(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("not user tenant_id", KR(ret), K(tenant_id));
-  } else {
-    const int64_t length = primary_data_version.get_serialize_size();
-    char *buf = NULL;
-    int64_t pos = 0;
-    ObArenaAllocator allocator("StandbyUpgrade");
-    if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(length)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc buf", KR(ret), K(length));
-    } else if (OB_FAIL(primary_data_version.serialize(buf, length, pos))) {
-      LOG_WARN("failed to serialize", KR(ret), K(primary_data_version), K(length), K(pos));
-    } else if (OB_UNLIKELY(pos > length)) {
-      ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("serialize error", KR(ret), K(pos), K(length), K(primary_data_version));
-    } else if (OB_FAIL(inner_conn->register_multi_data_source(
-                   tenant_id, SYS_LS, type, buf, length))) {
-      LOG_WARN("failed to register tx data", KR(ret), K(tenant_id));
-    }
-    LOG_INFO("write_barrier_log finished", KR(ret), K(tenant_id), K(type),
-             K(primary_data_version), K(length), KPHEX(buf, length));
-  }
-  return ret;
-}
-
-int ObStandbyService::check_can_create_standby_tenant(
-    const common::ObString &log_restore_source,
-    ObCompatibilityMode &compat_mode)
-{
-  int ret = OB_SUCCESS;
-  int64_t start_ts = ObTimeUtility::current_time();
-  share::ObBackupConfigParserMgr config_parser_mgr;
-  common::ObSqlString name;
-  common::ObSqlString value;
-  compat_mode = ObCompatibilityMode::OCEANBASE_MODE;
-
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (OB_FAIL(name.assign("log_restore_source"))) {
-    LOG_WARN("assign sql failed", KR(ret));
-  } else if (OB_FAIL(value.assign(log_restore_source))) {
-    LOG_WARN("fail to assign value", KR(ret), K(log_restore_source));
-  } else if (OB_FAIL(config_parser_mgr.init(name, value, 1002 /* fake_user_tenant_id */))) {
-    LOG_WARN("fail to init backup config parser mgr", KR(ret), K(name), K(value));
-  } else if (OB_FAIL(config_parser_mgr.only_check_before_update(compat_mode))) {
-    LOG_WARN("fail to only_check_before_update", KR(ret), K(name), K(value));
-  }
-
-  LOG_INFO("[CREATE STANDBY TENANT] check can create standby tenant", KR(ret), K(log_restore_source),
-           K(compat_mode), "cost", ObTimeUtility::current_time() - start_ts);
-  return ret;
-}
-
-int ObStandbyService::wait_create_standby_tenant_end(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  int64_t start_ts = ObTimeUtility::current_time();
-  bool is_dropped = false;
-  const uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
-  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
-  int64_t user_schema_version = OB_INVALID_VERSION;
-  int64_t meta_schema_version = OB_INVALID_VERSION;
-  const ObSimpleTenantSchema *tenant_schema = nullptr;
-
-  if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (!is_user_tenant(tenant_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
-  } else {
-    while (OB_SUCC(ret)) {
-      ObSchemaGetterGuard schema_guard;
-      if (THIS_WORKER.is_timeout()) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("failed to wait creating standby tenant end", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(meta_tenant_id, is_dropped))) {
-        LOG_WARN("meta tenant has been dropped", KR(ret), K(meta_tenant_id));
-      } else if (is_dropped) {
-        ret = OB_TENANT_HAS_BEEN_DROPPED;
-        LOG_WARN("meta tenant has been dropped", KR(ret), K(meta_tenant_id));
-      } else if (OB_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(user_tenant_id, is_dropped))) {
-        LOG_WARN("user tenant has been dropped", KR(ret), K(user_tenant_id));
-      } else if (is_dropped) {
-        ret = OB_TENANT_HAS_BEEN_DROPPED;
-        LOG_WARN("user tenant has been dropped", KR(ret), K(user_tenant_id));
-      } else if (OB_FAIL(GSCHEMASERVICE.get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-        LOG_WARN("failed to get schema guard", KR(ret));
-      } else if (OB_FAIL(schema_guard.get_tenant_info(user_tenant_id, tenant_schema))) {
-        LOG_WARN("failed to get tenant info", KR(ret), K(user_tenant_id));
-      } else if (OB_ISNULL(tenant_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tenant_schema is null", KR(ret), K(user_tenant_id));
-      } else if (tenant_schema->is_creating_standby_tenant_status()) {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(check_ls_restore_status_(user_tenant_id))) {
-          LOG_WARN("failed to check ls restore_status", KR(ret), KR(tmp_ret), K(user_tenant_id));
-          if (OB_CREATE_STANDBY_TENANT_FAILED == tmp_ret) {
-            ret = OB_SUCC(ret) ? tmp_ret : ret;
-          }
-        }
-      } else if (tenant_schema->is_normal()) {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(GSCHEMASERVICE.get_tenant_refreshed_schema_version(
-            meta_tenant_id, meta_schema_version))) {
-          if (OB_ENTRY_NOT_EXIST != tmp_ret) {
-            ret = tmp_ret;
-            LOG_WARN("get refreshed schema version failed", KR(ret), K(meta_tenant_id));
-          }
-        } else if (OB_TMP_FAIL(GSCHEMASERVICE.get_tenant_refreshed_schema_version(
-            user_tenant_id, user_schema_version))) {
-          if (OB_ENTRY_NOT_EXIST != tmp_ret) {
-            ret = tmp_ret;
-            LOG_WARN("get refreshed schema version failed", KR(ret), K(user_tenant_id));
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (ObSchemaService::is_formal_version(meta_schema_version)
-                  && ObSchemaService::is_formal_version(user_schema_version)) {
-          break;
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected tenant status", KR(ret), K(user_tenant_id), K(meta_tenant_id), KPC(tenant_schema));
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, "unexpected tenant status, create standby tenant failed");
-      }
-
-      if (OB_FAIL(ret)) {
-      } else {
-        LOG_INFO("[CREATE STANDBY TENANT] wait create standby tenant end", K(tenant_id), K(user_tenant_id),
-              K(meta_tenant_id), K(meta_schema_version), K(user_schema_version), KPC(tenant_schema));
-        ob_usleep(1000 * 1000L); // 1s
-      }
-    }
-  }
-
-  LOG_INFO("[CREATE STANDBY TENANT] finish to wait create standby tenant end", KR(ret), K(tenant_id),
-           "cost", ObTimeUtility::current_time() - start_ts, K(user_tenant_id),
-            K(meta_tenant_id), K(meta_schema_version), K(user_schema_version), KPC(tenant_schema));
-  return ret;
-}
-
-int ObStandbyService::check_ls_restore_status_(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
-  ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

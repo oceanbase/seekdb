@@ -24,6 +24,7 @@
 
 namespace oceanbase
 {
+
 namespace storage
 {
 
@@ -67,6 +68,7 @@ public:
     BACKFILL_TX = 5,
     TRANSFER_BACKFILL_TX = 6,
     REBUILD_TABLET = 7,
+    RESTORE_COMPLETE = 8,
     MAX
   };
 
@@ -78,6 +80,7 @@ public:
   int set_result(const int32_t result, const bool need_retry,
       const enum share::ObDagType::ObDagTypeEnum type = ObDagType::DAG_TYPE_MAX);
   bool is_failed() const;
+  virtual int check_allow_retry_with_stop(bool &allow_retry);
   virtual int check_allow_retry(bool &allow_retry);
   int get_result(int32_t &result);
   void reuse();

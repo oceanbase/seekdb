@@ -34,10 +34,7 @@ class ObAllVirtualSchemaSlot: public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    SLOT_ID,
+        SLOT_ID = common::OB_APP_MIN_COLUMN_ID,
     SCHEMA_VERSION,
     SCHEMA_COUNT,
     REF_CNT,

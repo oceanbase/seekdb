@@ -83,26 +83,7 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
     for (uint64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case SVR_IP: {
-          memset(svr_ip_buff_, 0, common::OB_IP_STR_BUFF);
-          if (!target_info.server_.ip_to_string(svr_ip_buff_, common::OB_IP_PORT_STR_BUFF)) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("get server_ip failed", K(ret), K(target_info));
-          } else {
-            cur_row_.cells_[i].set_varchar(ObString::make_string(svr_ip_buff_));
-            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
-                                                      ObCharset::get_default_charset()));
-          }
-          break;
-        }
-        case SVR_PORT: {
-          cur_row_.cells_[i].set_int(static_cast<int64_t>(target_info.server_.get_port()));
-          break;
-        }
-        case TENANT_ID: {
-          cur_row_.cells_[i].set_int(target_info.tenant_id_);
-          break;
-        }
+
         case IS_LEADER: {
           cur_row_.cells_[i].set_bool(target_info.is_leader_);
           break;

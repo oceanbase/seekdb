@@ -180,16 +180,16 @@ Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_par
 t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
 t_vec	1	idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%rowkey_vid%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx1%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 3
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx2%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 3
 use yjl_vec;
@@ -210,16 +210,16 @@ t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
 count(table_name)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%rowkey_vid%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx1%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx2%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 3
 use yjl_vec;
@@ -240,16 +240,16 @@ t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
 count(table_name)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%rowkey_vid%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx1%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx2%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
 
@@ -317,16 +317,16 @@ t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
 count(table_name)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%rowkey_vid%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx1%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 4
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx2%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 3
 use yjl_vec;
@@ -347,16 +347,16 @@ t_vec	1	idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
 count(table_name)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%rowkey_vid%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 1
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx1%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx2%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 3
 use yjl_vec;
@@ -375,16 +375,16 @@ t_vec	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES	NULL
 select count(table_name) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where database_name='yjl_vec');
 count(table_name)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%vid_rowkey%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%vid_rowkey%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%rowkey_vid%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%rowkey_vid%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx1%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx1%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
-select count(*) from oceanbase.CDB_OB_TABLE_LOCATIONS where table_name like '%idx2%' and DATABASE_NAME = 'yjl_vec' and ROLE='LEADER';
+select count(*) from oceanbase.__all_table where table_name like '%idx2%' and database_id = (select database_id from oceanbase.__all_database where DATABASE_NAME = 'yjl_vec');
 count(*)
 0
 use yjl_vec;

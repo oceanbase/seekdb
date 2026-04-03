@@ -1,0 +1,85 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_LOG_FETCHER_LS_CTX_ADDITIONAL_INFO_H_
+#define OCEANBASE_LOG_FETCHER_LS_CTX_ADDITIONAL_INFO_H_
+
+#include "logservice/palf/lsn.h"
+#include "share/ob_ls_id.h"
+#include "logservice/common_util/ob_log_ls_define.h"
+
+namespace oceanbase
+{
+namespace logfetcher
+{
+struct PartTransDispatchInfo
+{
+  PartTransDispatchInfo() :
+    last_dispatch_log_lsn_(),
+    current_checkpoint_(OB_INVALID_VERSION),
+    pending_task_count_(0),
+    task_count_in_queue_(0),
+    next_task_type_("INVALID"),
+    next_trans_log_lsn_(),
+    next_trans_committed_(false),
+    next_trans_ready_to_commit_(false),
+    next_trans_global_version_(OB_INVALID_VERSION)
+  {}
+
+  palf::LSN   last_dispatch_log_lsn_;
+  int64_t     current_checkpoint_;
+  int64_t     pending_task_count_;        // The total number of tasks waiting, both in the queue and in the Map
+  int64_t     task_count_in_queue_;       // Number of queued tasks
+
+  const char  *next_task_type_;
+  palf::LSN   next_trans_log_lsn_;
+  bool        next_trans_committed_;
+  bool        next_trans_ready_to_commit_;
+  int64_t     next_trans_global_version_;
+
+  TO_STRING_KV(
+      K_(last_dispatch_log_lsn),
+      K_(current_checkpoint),
+      K_(pending_task_count),
+      K_(task_count_in_queue),
+      K_(next_task_type),
+      K_(next_trans_log_lsn),
+      K_(next_trans_committed),
+      K_(next_trans_ready_to_commit),
+      K_(next_trans_global_version));
+};
+
+class ObILogFetcherLSCtxAddInfo
+{
+public:
+  virtual ~ObILogFetcherLSCtxAddInfo() {}
+
+  virtual int init(
+      const logservice::TenantLSID &ls_id,
+      const int64_t start_commit_version) = 0;
+
+  /// get tps info of current LS
+  virtual double get_tps() = 0;
+
+  /// get dispatch progress and dispatch info of current LS
+  virtual int get_dispatch_progress(
+      const share::ObLSID &ls_id,
+      int64_t &progress,
+      PartTransDispatchInfo &dispatch_info) = 0;
+};
+} // namespace logfetcher
+} // namespace oceanbase
+
+#endif

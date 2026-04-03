@@ -74,8 +74,9 @@ int ObVirtualSqlMonitor::inner_open()
     if (NULL != monitor_manager_) {
       if (key_ranges_.count() >= 1) {
         ObNewRange &req_id_range = key_ranges_.at(0);
-        if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() != 6
-                        || req_id_range.get_end_key().get_obj_cnt() != 6)) {
+        // In single-node mode, rowkey may have different column count
+        if (OB_UNLIKELY(req_id_range.get_start_key().get_obj_cnt() < 1
+                        || req_id_range.get_end_key().get_obj_cnt() < 1)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpected  # of rowkey columns",
                      K(ret),
@@ -83,14 +84,15 @@ int ObVirtualSqlMonitor::inner_open()
                      "size of end key", req_id_range.get_end_key().get_obj_cnt());
 
         } else {
-          ObObj id_low = (req_id_range.get_start_key().get_obj_ptr()[3]);
-          ObObj id_high = (req_id_range.get_end_key().get_obj_ptr()[3]);
+          // request_id is at index 0 in single-node mode
+          ObObj id_low = (req_id_range.get_start_key().get_obj_ptr()[0]);
+          ObObj id_high = (req_id_range.get_end_key().get_obj_ptr()[0]);
           if (id_low.is_min_value()) {
             start_id_ = monitor_manager_->get_start_index();
           } else if (id_low.is_max_value()) {
             start_id_ = monitor_manager_->get_start_index() + monitor_manager_->get_count();
           } else {
-            start_request_id = (req_id_range.get_start_key().get_obj_ptr()[3]).get_int();
+            start_request_id = (req_id_range.get_start_key().get_obj_ptr()[0]).get_int();
             if (OB_FAIL(monitor_manager_->get_by_request_id(start_request_id, index, plan_info, &ref))) {
               SERVER_LOG(WARN, "fail to get by request id", K(ret), K(start_request_id));
             } else {
@@ -104,7 +106,7 @@ int ObVirtualSqlMonitor::inner_open()
             } else if (id_high.is_max_value()) {
               end_id_ = monitor_manager_->get_start_index() + monitor_manager_->get_count();
             } else {
-              end_request_id = (req_id_range.get_end_key().get_obj_ptr()[3]).get_int();
+              end_request_id = (req_id_range.get_end_key().get_obj_ptr()[0]).get_int();
               if (OB_FAIL(monitor_manager_->get_by_request_id(end_request_id, index, plan_info, &ref))) {
                 SERVER_LOG(WARN, "fail to get by request id", K(ret), K(end_request_id));
               } else {
@@ -190,20 +192,6 @@ int ObVirtualSqlMonitor::inner_get_next_row(common::ObNewRow *&row)
       for (int64_t cell_idx = 0; cell_idx < col_count && OB_SUCC(ret); cell_idx++) {
         uint64_t col_id = output_column_ids_.at(cell_idx);
         switch (col_id) {
-          case TENANT_ID: {
-            cells[cell_idx].set_int(tenant_id_);
-            break;
-          } 
-          case SVR_IP: {
-            cells[cell_idx].set_varchar(ipstr_);
-            cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                    ObCharset::get_default_charset()));
-            break;
-          } 
-          case SVR_PORT: {
-            cells[cell_idx].set_int(port_);
-            break;
-          }
           case REQUEST_ID: {
             cells[cell_idx].set_int(request_id_);
             break;

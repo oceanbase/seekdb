@@ -115,9 +115,7 @@ int ObDependencyInfo::gen_dependency_dml(const uint64_t exec_tenant_id,
   int ret = OB_SUCCESS;
 
   const ObDependencyInfo &dep_info = *this;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id,
-                                                                                  tenant_id_)))
-    || OB_FAIL(dml.add_pk_column("dep_obj_id", extract_obj_id(exec_tenant_id,
+  if (OB_FAIL(dml.add_pk_column("dep_obj_id", extract_obj_id(exec_tenant_id,
                                                  dep_info.get_dep_obj_id())))
     || OB_FAIL(dml.add_pk_column("dep_obj_type", dep_info.get_dep_obj_type()))
     || OB_FAIL(dml.add_pk_column("dep_order", dep_info.get_order()))
@@ -149,7 +147,7 @@ int ObDependencyInfo::parse_from(common::sqlclient::ObMySQLResult &result)
   int ret = OB_SUCCESS;
   reset();
   ObDependencyInfo &dep = *this;
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tenant_id, dep, uint64_t);
+  dep.set_tenant_id(OB_SYS_TENANT_ID);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, dep_obj_id, dep, uint64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, dep_obj_type, dep, ObObjectType);
   EXTRACT_INT_FIELD_TO_CLASS_VALUE_MYSQL(result, dep_order, order, dep, uint64_t);
@@ -185,11 +183,9 @@ int ObDependencyInfo::delete_schema_object_dependency(common::ObISQLClient &tran
     LOG_WARN("delete error info unexpected.", K(ret), K(tenant_id),
                                               K(dep_obj_id), K(dep_obj_type));
   } else if (sql.assign_fmt("delete FROM %s WHERE dep_obj_id = %ld \
-                                                  AND tenant_id = %ld  \
                                                   AND dep_obj_type = %ld",
             OB_ALL_TENANT_DEPENDENCY_TNAME,
             extract_obj_id(tenant_id, dep_obj_id),
-            extract_tid,
             static_cast<uint64_t>(dep_obj_type))) {
     LOG_WARN("delete from __all_tenant_dependency table failed.", K(ret), K(tenant_id),
                                                                   K(extract_tid),
@@ -449,9 +445,8 @@ int ObDependencyInfo::collect_ref_infos(uint64_t tenant_id,
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE tenant_id = %lu AND dep_obj_id = %lu ORDER BY dep_order",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE dep_obj_id = %lu ORDER BY dep_order",
                                OB_ALL_TENANT_DEPENDENCY_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                dep_obj_id))) {
       LOG_WARN("failed to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
@@ -495,9 +490,8 @@ int ObDependencyInfo::collect_dep_infos(uint64_t tenant_id,
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE tenant_id = %lu AND ref_obj_id = %lu",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE ref_obj_id = %lu",
                                OB_ALL_TENANT_DEPENDENCY_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                ref_obj_id))) {
       LOG_WARN("failed to assign sql", K(ret));
     } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
@@ -550,9 +544,8 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t tenant_id,
   {
     SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE tenant_id = %lu AND ref_obj_id = %lu",
+      if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE ref_obj_id = %lu",
                                         OB_ALL_TENANT_DEPENDENCY_TNAME,
-                                        ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                         ref_obj_id))) {
         LOG_WARN("failed to assign sql", K(ret));
       } else if (OB_FAIL(sql_proxy.read(res, tenant_id, sql.ptr()))) {
@@ -633,9 +626,8 @@ int ObDependencyInfo::collect_all_dep_objs(
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql.assign_fmt(
           "SELECT dep_obj_id, dep_obj_type, schema_version FROM %s "
-          "WHERE tenant_id = %lu AND (ref_obj_id, ref_obj_type) IN (",
-          OB_ALL_TENANT_DEPENDENCY_TNAME,
-          ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+          "WHERE (ref_obj_id, ref_obj_type) IN (",
+          OB_ALL_TENANT_DEPENDENCY_TNAME))) {
         LOG_WARN("failed to assign sql", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < ref_obj_infos.count(); i++) {
@@ -721,9 +713,7 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
           && ObObjectType::TRIGGER != obj_type) {
         // types other than the above have different strategies for implementing INVALID status
         LOG_DEBUG("omitted object", K(i), K(objs.at(i)));
-      } else if (OB_FAIL(dml.add_pk_column(
-              "tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
-          || OB_FAIL(dml.add_pk_column("obj_id", objs.at(i).element<0>()))
+      } else if (OB_FAIL(dml.add_pk_column("obj_id", objs.at(i).element<0>()))
           || OB_FAIL(dml.add_pk_column("obj_type", objs.at(i).element<1>()))
           || OB_FAIL(dml.add_pk_column("obj_seq", 0))
           || OB_FAIL(dml.add_column("line", 0))
@@ -1187,9 +1177,7 @@ int ObReferenceObjTable::fill_rowkey_pairs(
 {
   int ret = OB_SUCCESS;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id,
-                                                                                  tenant_id)))
-      || OB_FAIL(dml.add_pk_column("dep_obj_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("dep_obj_id", ObSchemaUtils::get_extract_schema_id(
                  exec_tenant_id, dep_obj_key.dep_obj_id_)))
       || OB_FAIL(dml.add_pk_column("dep_obj_type", static_cast<uint64_t>(
                  dep_obj_key.dep_obj_type_)))) {

@@ -54,9 +54,6 @@ private:
   enum WAIT_COLUMN
   {
     SESSION_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    TENANT_ID,
     EVENT,
     P1TEXT,
     P1,

@@ -93,7 +93,7 @@ public:
   int gc();
   static const int64_t OB_MAX_QUEUE_SIZE = 100000;
   static const int64_t MAX_MEMORY_SIZE = 500 * 1024 * 1024L;
-  static const int64_t PAGE_SIZE = common::OB_MALLOC_BIG_BLOCK_SIZE;
+  static const int64_t ALLOC_PAGE_SIZE = common::OB_MALLOC_BIG_BLOCK_SIZE;
   static const int64_t OB_BATCH_GC_COUNT = 2000;
   static const int64_t OB_MAX_PUSH_INTERVAL = 10 * 1000 * 1000;
 private:

@@ -142,7 +142,7 @@ int ObSimpleServer::simple_init()
   //opts.devname_ = "eth0";
   opts.use_ipv6_ = false;
 
-  char *curr_dir = get_current_dir_name();
+  char *curr_dir = getcwd(NULL, 0);
   oceanbase::ObClusterVersion::get_instance().update_data_version(DATA_CURRENT_VERSION);
 
 
@@ -379,17 +379,8 @@ int ObSimpleServer::bootstrap()
     server_info.zone_ = "zone1";
     server_info.server_ = common::ObAddr(common::ObAddr::IPV4, local_ip_.c_str(), rpc_port_);
     server_info.region_ = "sys_region";
-    obrpc::ObBootstrapArg arg;
-    arg.cluster_role_ = common::PRIMARY_CLUSTER;
-    arg.server_list_.push_back(server_info);
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (NULL != shared_storage_info) {
-      ObString shared_storage_info_str(strlen(shared_storage_info), shared_storage_info);
-      arg.shared_storage_info_ = shared_storage_info_str;
-    }
-#endif
-    if (OB_FAIL(srv_proxy.bootstrap(arg))) {
-      SERVER_LOG(WARN, "bootstrap failed", K(arg), K(ret));
+    if (OB_FAIL(srv_proxy.bootstrap())) {
+      SERVER_LOG(WARN, "bootstrap failed", K(ret));
     }
   }
   SERVER_LOG(INFO, "ObSimpleServer::bootstrap end", K(ret));

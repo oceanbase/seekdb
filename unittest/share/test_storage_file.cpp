@@ -35,7 +35,7 @@ public:
     char buf[PATH_MAX];
     ASSERT_EQ(OB_SUCCESS, databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage", getcwd(buf, sizeof(buf))));
 #else
-    ASSERT_EQ(OB_SUCCESS, databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage", get_current_dir_name()));
+    ASSERT_EQ(OB_SUCCESS, databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage", getcwd(NULL, 0)));
 #endif
     ASSERT_EQ(OB_SUCCESS,
         databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_));

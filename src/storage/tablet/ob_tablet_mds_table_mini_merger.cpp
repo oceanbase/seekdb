@@ -504,7 +504,7 @@ int ObMdsDataCompatHelper::generate_mds_mini_sstable(
     ctx->static_param_.scn_range_.end_scn_ = mig_param.mds_checkpoint_scn_;
     ctx->static_param_.version_range_.snapshot_version_ = mig_param.mds_checkpoint_scn_.get_val_for_tx();
     ctx->static_param_.pre_warm_param_.type_ = ObPreWarmerType::MEM_PRE_WARM;
-    ctx->static_desc_.tablet_transfer_seq_ = mig_param.transfer_info_.transfer_seq_;
+    ctx->static_desc_.tablet_transfer_seq_ = 0;
     ctx->parallel_merge_ctx_.init_serial_merge(); // only use concurrent_cnt for small sstable temp space optimization
   }
 

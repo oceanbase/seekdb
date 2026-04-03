@@ -176,25 +176,6 @@ int ObAllVirtualVectorIndexInfo::process_curr_tenant(ObNewRow *&row)
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
-    case SVR_IP:
-      if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-        cells[i].set_varchar(ip_buf_);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "fail to execute ip_to_string", K(ret));
-      }
-      break;
-    case SVR_PORT:
-      cells[i].set_int(addr_.get_port());
-      break;
-    case TENANT_ID:
-      cells[i].set_int(MTL_ID());
-      break;
-    case LS_ID:
-      // index_id
-      cells[i].set_int(info_.ls_id_);
-      break;
     case ROWKEY_VID_TABLE_ID:
       cells[i].set_int(info_.rowkey_vid_table_id_);
       break;
@@ -258,7 +239,6 @@ void ObAllVirtualVectorIndexInfo::reset()
   memset(ip_buf_, 0, sizeof(ip_buf_));
   ObVirtualTableScannerIterator::reset();
 }
-
 
 } /* namespace observer */
 } /* namespace oceanbase */

@@ -101,12 +101,9 @@ void ObDDLTransController::run1()
     }
     if (OB_SUCC(ret) && tenant_ids.count() > 0) {
       LOG_INFO("refresh_schema tenants", K(tenant_ids));
-      ObUnitTableOperator ut_operator;
-      if (OB_ISNULL(GCTX.root_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
+      if (OB_ISNULL(GCTX.root_service_)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), KP(GCTX.root_service_), KP(GCTX.sql_proxy_));
-      } else if (OB_FAIL(ut_operator.init(*GCTX.sql_proxy_))) {
-        LOG_WARN("fail to init unit table operator", KR(ret), KP(GCTX.sql_proxy_));
+        LOG_WARN("invalid argument", KR(ret), KP(GCTX.root_service_));
       } else {
         // ignore ret continue
         for (int64_t i = 0; i < tenant_ids.count(); i++) {
@@ -118,8 +115,8 @@ void ObDDLTransController::run1()
           ObCurTraceId::init(GCONF.self_addr_);
           ObDIActionGuard(ObDIActionGuard::NS_ACTION, "control tenant[T_%ld]", tenant_id);
 
-          if (OB_FAIL(ut_operator.get_alive_servers_by_tenant(tenant_id, server_list))) {
-            LOG_WARN("get alive server failed", KR(ret), K(tenant_id));
+          if (OB_FAIL(server_list.push_back(GCTX.self_addr()))) {
+            LOG_WARN("fail to push self addr", KR(ret));
           }
           // overwrite ret to continue
           if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(tenant_id, server_list, &schema_version))) {

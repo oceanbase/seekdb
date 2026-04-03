@@ -18,10 +18,12 @@
 #define OCEANBASE_SHARE_OB_UNIT_GETTER_H_
 
 #include "lib/container/ob_array.h"
-#include "share/ob_unit_table_operator.h"
 #include "share/ob_unit_stat.h"
 #include "share/ob_check_stop_provider.h"
 #include "share/rc/ob_tenant_base.h"
+#include "share/unit/ob_unit_config.h" // for ObUnitConfig
+#include "share/unit/ob_resource_pool.h" // for ObResourcePool
+#include "share/unit/ob_unit_info.h" // for ObUnit
 
 namespace oceanbase
 {
@@ -186,7 +188,6 @@ private:
 
 private:
   bool inited_;
-  ObUnitTableOperator ut_operator_;
 
   static const char* unit_status_strs_[];
 

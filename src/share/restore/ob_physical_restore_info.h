@@ -19,7 +19,6 @@
 
 #include "share/backup/ob_backup_struct.h"
 #include "share/restore/ob_restore_type.h"//ObRestoreType
-#include "share/ob_tenant_info_proxy.h"//ObTenantRole
 #include "share/restore/ob_restore_persist_helper.h"//ObRestoreJobPersistKey
 #include "share/restore/ob_restore_progress_display_mode.h"
 

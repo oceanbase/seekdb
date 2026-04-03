@@ -268,7 +268,6 @@ int MockObServer::init_tenant_mgr()
   static const int64_t SERVER_MEM_MAX = 16LL << 30;
   ObVirtualTenantManager &omti = ObVirtualTenantManager::get_instance();
   obrpc::ObCommonRpcProxy common_rpc;
-  share::ObRsMgr rs_mgr;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObVirtualTenantManager::get_instance().init())) {
       LOG_ERROR("Fail to init ObVirtualTenantManager, ", K(ret));

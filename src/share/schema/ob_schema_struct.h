@@ -23,12 +23,11 @@
 #include "lib/net/ob_addr.h"
 #include "lib/compress/ob_compress_util.h"
 #include "common/ob_range.h"
+#include "common/ob_region.h"                // common::ObRegion
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row_util.h"
 #include "common/rowkey/ob_rowkey_info.h"
-#include "share/ob_arbitration_service_status.h" // for ObArbitrationServieStatus
 #include "common/ob_store_format.h"
-#include "share/ob_replica_info.h"
 #include "share/ob_duplicate_scope_define.h"
 #include "share/sequence/ob_sequence_option.h"
 #include "share/system_variable/ob_system_variable_factory.h"
@@ -1656,15 +1655,6 @@ struct ObSysParam
   ~ObSysParam();
 
   int init(const uint64_t tenant_id,
-           const common::ObZone &zone,
-           const common::ObString &name,
-           const int64_t data_type,
-           const common::ObString &value,
-           const common::ObString &min_val,
-           const common::ObString &max_val,
-           const common::ObString &info,
-           const int64_t flags);
-  int init(const uint64_t tenant_id,
            const common::ObString &name,
            const int64_t data_type,
            const common::ObString &value,
@@ -1677,7 +1667,6 @@ struct ObSysParam
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
   uint64_t tenant_id_;
-  common::ObZone zone_;
   char name_[common::OB_MAX_SYS_PARAM_NAME_LENGTH];
   int64_t data_type_;
   char value_[common::OB_MAX_SYS_PARAM_VALUE_LENGTH];
@@ -1753,9 +1742,6 @@ public:
   CheckZoneType check_zone_type_;
 };
 
-typedef common::ObIArray<share::ObZoneReplicaAttrSet> ZoneLocalityIArray;
-typedef common::ObArrayHelper<share::SchemaZoneReplicaAttrSet> ZoneLocalityArray;
-
 class ObCompareNameWithTenantID
 {
 public:
@@ -1794,7 +1780,6 @@ typedef common::ObArray<ObZoneScore> ObPrimaryZoneArray;
 class ObSchema
 {
 public:
-  friend class ObPrimaryZone;
   ObSchema();
   //explicit ObSchema(common::ObDataBuffer &buffer);
   explicit ObSchema(common::ObIAllocator *allocator);
@@ -1803,8 +1788,6 @@ public:
   virtual bool is_valid() const { return common::OB_SUCCESS == error_ret_; }
   virtual int zone_array2str(const common::ObIArray<common::ObZone> &zone_list,
                              char *str, const int64_t buf_size) const;
-  virtual int set_primary_zone_array(const common::ObIArray<ObZoneScore> &src,
-                                     common::ObIArray<ObZoneScore> &dst);
   virtual int string_array2str(const common::ObIArray<common::ObString> &string_array,
                                char *buf, const int64_t buf_size) const;
   virtual int str2string_array(const char *str,
@@ -1928,26 +1911,6 @@ struct SchemaObj
   TO_STRING_KV(K_(schema_type), K_(tenant_id), K_(schema_id), KP_(schema));
 };
 
-class ObPrimaryZone
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPrimaryZone();
-  ObPrimaryZone(common::ObIAllocator &alloc);
-  inline const common::ObString &get_primary_zone() const { return primary_zone_str_; }
-  inline const common::ObIArray<ObZoneScore> &get_primary_zone_array() const {
-    return primary_zone_array_;
-  }
-  int set_primary_zone_array(const common::ObIArray<ObZoneScore> &primary_zone_array);
-  int set_primary_zone(const common::ObString &zone);
-  void reset();
-  TO_STRING_KV(K_(primary_zone_str), K_(primary_zone_array));
-public:
-  common::ObIAllocator *allocator_;
-  common::ObString primary_zone_str_;
-  ObPrimaryZoneArray primary_zone_array_;
-};
-
 class ObSysVarSchema : public ObSchema
 {
   OB_UNIS_VERSION(1);
@@ -1986,9 +1949,6 @@ public:
   void set_flags(int64_t flags) { flags_ = flags; }
   int set_info(const common::ObString &info) { return deep_copy_str(info, info_); }
   const common::ObString &get_info() const { return info_; }
-  int set_zone(const common::ObZone &zone) { return zone_.assign(zone); }
-  int set_zone(const common::ObString &zone) { return zone_.assign(zone); }
-  const common::ObZone &get_zone() const { return zone_; }
   bool is_invisible() const { return 0 != (flags_ & ObSysVarFlag::INVISIBLE); }
   bool is_global() const { return 0 != (flags_ & ObSysVarFlag::GLOBAL_SCOPE); }
   bool is_query_sensitive() const { return 0 != (flags_ & ObSysVarFlag::QUERY_SENSITIVE); }
@@ -2002,7 +1962,6 @@ public:
                K_(min_val),
                K_(max_val),
                K_(info),
-               K_(zone),
                K_(schema_version),
                K_(flags));
 private:
@@ -2013,7 +1972,6 @@ private:
   common::ObString min_val_;
   common::ObString max_val_;
   common::ObString info_;
-  common::ObZone zone_;
   int64_t schema_version_;
   int64_t flags_;
 };
@@ -2104,32 +2062,16 @@ public:
   inline void set_schema_version(const int64_t schema_version) { schema_version_ = schema_version; }
   inline int set_tenant_name(const char *tenant_name) { return deep_copy_str(tenant_name, tenant_name_); }
   inline int set_comment(const char *comment) { return deep_copy_str(comment, comment_); }
-  inline int set_locality(const char *locality) { return deep_copy_str(locality, locality_str_); }
-  inline int set_previous_locality(const char *previous_locality) { return deep_copy_str(previous_locality, previous_locality_str_); }
   inline int set_tenant_name(const common::ObString &tenant_name) { return deep_copy_str(tenant_name, tenant_name_); }
   inline int set_zone_list(const common::ObIArray<common::ObString> &zone_list);
   int set_zone_list(const common::ObIArray<common::ObZone> &zone_list);
-  inline int set_primary_zone(const common::ObString &zone);
-  int set_primary_zone_array(const common::ObIArray<ObZoneScore> &primary_zone_array);
   inline int add_zone(const common::ObString &zone);
   inline void set_locked(const bool locked) { locked_ = locked; }
   inline void set_read_only(const bool read_only) { read_only_ = read_only; }
   inline int set_comment(const common::ObString &comment) { return deep_copy_str(comment, comment_); }
-  inline int set_locality(const common::ObString &locality) { return deep_copy_str(locality, locality_str_); }
-  inline int set_previous_locality(const common::ObString &previous_locality) { return deep_copy_str(previous_locality, previous_locality_str_); }
-  inline void set_arbitration_service_status(const ObArbitrationServiceStatus status) { arbitration_service_status_ = status; }
-  inline int set_arbitration_service_status_from_string(const common::ObString &status) { return arbitration_service_status_.parse_from_string(status); }
   inline void set_charset_type(const common::ObCharsetType type) { charset_type_ = type; }
   inline void set_collation_type(const common::ObCollationType type) { collation_type_ = type; }
   inline void set_name_case_mode(const common::ObNameCaseMode mode) { name_case_mode_ = mode; }
-  int set_zone_replica_attr_array(
-      const common::ObIArray<share::ObZoneReplicaAttrSet> &src);
-  int set_zone_replica_attr_array(
-      const common::ObIArray<share::SchemaZoneReplicaAttrSet> &src);
-  int set_specific_replica_attr_array(
-      share::SchemaReplicaAttrArray &schema_replica_set,
-      const common::ObIArray<ReplicaAttr> &src);
-  void reset_zone_replica_attr_array();
   inline void set_storage_format_version(const int64_t storage_format_version);
   inline void set_storage_format_work_version(const int64_t storage_format_work_version);
   void set_default_tablegroup_id(const uint64_t tablegroup_id) { default_tablegroup_id_ = tablegroup_id; }
@@ -2141,35 +2083,14 @@ public:
   inline int64_t get_schema_version() const { return schema_version_; }
   inline const char *get_tenant_name() const { return extract_str(tenant_name_); }
   inline const char *get_comment() const { return extract_str(comment_); }
-  inline const char *get_locality() const { return extract_str(locality_str_); }
-  inline const char *get_previous_locality() const { return extract_str(previous_locality_str_); }
   inline const common::ObString &get_tenant_name_str() const { return tenant_name_; }
-  inline const common::ObString &get_primary_zone() const { return primary_zone_; }
   inline bool get_locked() const { return locked_; }
   inline bool is_read_only() const { return read_only_; }
   inline const common::ObString &get_comment_str() const { return comment_; }
-  inline const common::ObString &get_locality_str() const { return locality_str_; }
-  inline const common::ObString &get_previous_locality_str() const { return previous_locality_str_; }
-  inline const ObArbitrationServiceStatus &get_arbitration_service_status() const { return arbitration_service_status_; }
-  inline const char* get_arbitration_service_status_str() const { return arbitration_service_status_.get_status_str(); }
+  inline common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
 
   inline common::ObCharsetType get_charset_type() const { return charset_type_; }
   inline common::ObCollationType get_collation_type() const { return collation_type_; }
-  inline const ObPrimaryZoneArray &get_primary_zone_array() const {
-    return primary_zone_array_;
-  }
-  int get_primary_zone_inherit(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      share::schema::ObPrimaryZone &primary_zone) const;
-  int get_zone_replica_attr_array(
-      ZoneLocalityIArray &locality) const;
-  int get_zone_replica_attr_array_inherit(
-      ObSchemaGetterGuard &schema_guard,
-      ZoneLocalityIArray &locality) const;
-  int get_paxos_replica_num(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      int64_t &num) const;
-  int64_t get_full_replica_num() const;
 
   int get_zone_list(
       common::ObIArray<common::ObZone> &zone_list) const;
@@ -2188,8 +2109,6 @@ public:
   {
     return common::ObCompatibilityMode::MYSQL_MODE == compatibility_mode_;
   }
-  inline void set_drop_tenant_time(const int64_t drop_tenant_time) { drop_tenant_time_ = drop_tenant_time; }
-  inline int64_t get_drop_tenant_time() const { return drop_tenant_time_; }
   inline bool is_dropping() const { return TENANT_STATUS_DROPPING == status_; }
   inline bool is_in_recyclebin() const { return in_recyclebin_; }
   inline void set_in_recyclebin(const bool in_recyclebin) { in_recyclebin_ = in_recyclebin; }
@@ -2208,17 +2127,15 @@ public:
   //standby no need sync alter tenant attribute, so reset those while create tenant
   int64_t get_convert_size() const;
   TO_STRING_KV(K_(tenant_id), K_(schema_version), K_(tenant_name), K_(zone_list),
-               K_(primary_zone), K_(charset_type), K_(locked), K_(comment), K_(name_case_mode),
-               K_(read_only), K_(locality_str),
-               K_(zone_replica_attr_array), K_(primary_zone_array), K_(previous_locality_str),
-               K_(default_tablegroup_id), K_(default_tablegroup_name), K_(compatibility_mode), K_(drop_tenant_time),
-               K_(status), K_(in_recyclebin), K_(arbitration_service_status));
+               K_(charset_type), K_(locked), K_(comment), K_(name_case_mode),
+               K_(read_only),
+               K_(default_tablegroup_id), K_(default_tablegroup_name), K_(compatibility_mode),
+               K_(status), K_(in_recyclebin));
 private:
   uint64_t tenant_id_;
   int64_t schema_version_;
   common::ObString tenant_name_;
   common::ObArrayHelper<common::ObString> zone_list_;
-  common::ObString primary_zone_;
   bool locked_;
   // read_only_ is not set now
   bool read_only_;  // After the schema is split, the value of the system variable shall prevail
@@ -2226,29 +2143,17 @@ private:
   common::ObCollationType collation_type_;
   common::ObNameCaseMode name_case_mode_;  //deprecated
   common::ObString comment_;
-  common::ObString locality_str_;
-  ZoneLocalityArray zone_replica_attr_array_;
-  // primary_zone_ is primary zone list,
   // The following is the parsed array of a single zone, which has been sorted according to priority
-  ObPrimaryZoneArray primary_zone_array_;
-  common::ObString previous_locality_str_;
   uint64_t default_tablegroup_id_;
   common::ObString default_tablegroup_name_;
   common::ObCompatibilityMode compatibility_mode_;//Cannot be modified after creation
-  int64_t drop_tenant_time_;
   ObTenantStatus status_;
   bool in_recyclebin_;
-  ObArbitrationServiceStatus arbitration_service_status_;
 };
 
 inline int ObTenantSchema::set_zone_list(const common::ObIArray<common::ObString> &zone_list)
 {
   return deep_copy_string_array(zone_list, zone_list_);
-}
-
-inline int ObTenantSchema::set_primary_zone(const common::ObString &zone)
-{
-  return deep_copy_str(zone, primary_zone_);
 }
 
 inline int ObTenantSchema::add_zone(const common::ObString &zone)
@@ -2257,11 +2162,7 @@ inline int ObTenantSchema::add_zone(const common::ObString &zone)
 }
 /*
 TODO: remove interfaces
-int ObDatabaseSchema::get_first_primary_zone_inherit()
 int ObDatabaseSchema::get_zone_list()
-int ObDatabaseSchema::get_zone_replica_attr_array_inherit()
-int ObDatabaseSchema::get_primary_zone_inherit()
-int ObDatabaseSchema::get_paxos_replica_num()
 */
 class ObDatabaseSchema : public ObSchema
 {
@@ -2315,9 +2216,6 @@ public:
   inline bool is_in_recyclebin() const { return in_recyclebin_; }
   inline bool is_or_in_recyclebin() const
   { return in_recyclebin_ || is_recyclebin_database_id(database_id_); }
-  int get_paxos_replica_num(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      int64_t &num) const;
   // In the current implementation, the zone_list of the Database is directly read from the corresponding tenant.
   //other methods
   int64_t get_convert_size() const;
@@ -2863,27 +2761,11 @@ public:
   virtual bool is_external_table() const = 0;
   virtual ObPartitionLevel get_part_level() const { return part_level_; }
   virtual bool has_self_partition() const = 0;
-  virtual int get_primary_zone_inherit(
-      ObSchemaGetterGuard &schema_guard,
-      ObPrimaryZone &primary_zone) const = 0;
-  virtual int get_zone_replica_attr_array_inherit(
-      ObSchemaGetterGuard &schema_guard,
-      ZoneLocalityIArray &locality) const = 0;
   virtual int get_zone_list(
       share::schema::ObSchemaGetterGuard &schema_guard,
       common::ObIArray<common::ObZone> &zone_list) const = 0;
-  virtual int get_locality_str_inherit(
-      share::schema::ObSchemaGetterGuard &guard,
-      const common::ObString *&locality_str) const = 0;
-  virtual int get_first_primary_zone_inherit(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const common::ObIArray<rootserver::ObReplicaAddr> &replica_addrs,
-      common::ObZone &first_primary_zone) const = 0;
   virtual uint64_t get_tablegroup_id() const = 0;
   virtual void set_tablegroup_id(const uint64_t tg_id) = 0;
-  virtual int get_paxos_replica_num(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      int64_t &num) const = 0;
   virtual share::ObDuplicateScope get_duplicate_scope() const = 0;
   inline virtual int64_t get_part_func_expr_num() const { return 0; }
   inline virtual void set_part_func_expr_num(const int64_t part_func_expr_num) { UNUSED(part_func_expr_num); }
@@ -3204,15 +3086,9 @@ protected:
   common::ObRowkey interval_range_;
 };
 /*TODO: Delete the following interfaces in ObTablegroupSchema and ObDatabaseSchema
-int ObTablegroupSchema::get_first_primary_zone_inherit()
 int ObTablegroupSchema::get_zone_list()
-int ObTablegroupSchema::get_zone_replica_attr_array_inherit()
-int ObTablegroupSchema::get_locality_str_inherit()
-int ObTablegroupSchema::get_primary_zone_inherit()
 int ObTablegroupSchema::check_is_readonly_at_all()
 int ObTablegroupSchema::check_is_readonly_at_all()
-int ObTablegroupSchema::get_full_replica_num()
-int ObTablegroupSchema::get_paxos_replica_num()
 int ObTablegroupSchema::get_all_replica_num()
 */
 class ObTablegroupSchema : public ObPartitionSchema
@@ -3268,22 +3144,6 @@ public:
       share::schema::ObSchemaGetterGuard &schema_guard,
       common::ObIArray<common::ObZone> &zone_list) const override;
 
-  virtual int get_zone_replica_attr_array_inherit(
-      ObSchemaGetterGuard &schema_guard,
-      ZoneLocalityIArray &locality) const override;
-  virtual int get_locality_str_inherit(
-      ObSchemaGetterGuard &schema_guard,
-      const common::ObString *&locality_str) const override;
-  virtual int get_first_primary_zone_inherit(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const common::ObIArray<rootserver::ObReplicaAddr> &replica_addrs,
-      common::ObZone &first_primary_zone) const override;
-  virtual int get_primary_zone_inherit(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      share::schema::ObPrimaryZone &primary_zone) const override;
-  virtual int get_paxos_replica_num(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      int64_t &num) const override;
   //partition related
   virtual share::ObDuplicateScope get_duplicate_scope() const override { return share::ObDuplicateScope::DUPLICATE_SCOPE_NONE; }
   inline virtual bool is_user_partition_table() const override

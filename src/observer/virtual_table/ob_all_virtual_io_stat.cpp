@@ -16,7 +16,6 @@
 
 #include "ob_all_virtual_io_stat.h"
 
-
 namespace oceanbase
 {
 using namespace common;
@@ -48,7 +47,7 @@ int ObAllVirtualIOStat::inner_get_next_row(ObNewRow *&row)
 //    const ObIOConfig &io_conf = io_manager.get_io_conf();
 //    const int64_t MACRO_BLOCK_SIZE_IN_MB = OBSERVER.get_partition_service().get_base_storage()->get_data_file().get_macro_block_size() / 1024 / 1024;
 //    switch(column_id) {
-//      case SVR_IP: {
+
 //        if (!OBSERVER.get_self().ip_to_string(svr_ip_, sizeof(svr_ip_))) {
 //          ret = OB_BUF_NOT_ENOUGH;
 //          SERVER_LOG(WARN, "svr ip buffer is not enough", K(ret));
@@ -58,7 +57,7 @@ int ObAllVirtualIOStat::inner_get_next_row(ObNewRow *&row)
 //        }
 //        break;
 //      }
-//      case SVR_PORT: {
+
 //        cells[i].set_int(OBSERVER.get_self().get_port());
 //        break;
 //      }

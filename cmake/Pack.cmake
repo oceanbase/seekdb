@@ -176,3 +176,15 @@ if(OB_BUILD_OBADMIN)
     )
   endif()
 endif()
+
+if(NOT APPLE)
+  ## oceanbase-libs
+  list(APPEND CPACK_COMPONENTS_ALL libs)
+  install(PROGRAMS
+    deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so.1
+    deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so.1.0.1
+    deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so
+    DESTINATION usr/libexec/seekdb/lib
+    COMPONENT libs
+  )
+endif()

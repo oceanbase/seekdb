@@ -493,22 +493,13 @@ int ObTabletReplayCreateHandler::replay_create_tablet(const ObTabletReplayItem &
   int ret = OB_SUCCESS;
   ObLSTabletService *ls_tablet_svr = nullptr;
   ObLSHandle ls_handle;
-  ObTabletTransferInfo tablet_transfer_info;
   const ObTabletMapKey &key = replay_item.key_;
   const ObMetaDiskAddr &addr = replay_item.addr_;
-  ObLSRestoreStatus ls_restore_status;
 
   if (OB_FAIL(get_tablet_svr_(key.ls_id_, ls_tablet_svr, ls_handle))) {
     LOG_WARN("fail to get ls tablet service", K(ret));
-  } else if (OB_FAIL(ls_handle.get_ls()->get_restore_status(ls_restore_status))) {
-    LOG_WARN("fail to get ls handle", K(ret), K(key));
-  } else if (ls_restore_status.is_in_clone_and_tablet_meta_incomplete()) {
-    LOG_INFO("the ls is_in_clone_and_tablet_meta_incomplete", K(key), K(ls_restore_status));
-  } else if (OB_FAIL(ls_tablet_svr->replay_create_tablet(addr, buf, buf_len, key.tablet_id_, tablet_transfer_info))) {
+  } else if (OB_FAIL(ls_tablet_svr->replay_create_tablet(addr, buf, buf_len, key.tablet_id_))) {
     LOG_WARN("fail to create tablet for replay", K(ret), K(key), K(addr));
-  } else if (tablet_transfer_info.has_transfer_table() &&
-      OB_FAIL(record_ls_transfer_info_(ls_handle, key.tablet_id_, tablet_transfer_info))) {
-    LOG_WARN("fail to record_ls_transfer_info", K(ret), K(key), K(tablet_transfer_info));
   }
   return ret;
 }
@@ -538,112 +529,16 @@ int ObTabletReplayCreateHandler::replay_clone_tablet(const ObTabletReplayItem &r
   ObLSHandle ls_handle;
   const ObTabletMapKey &key = replay_item.key_;
   const ObMetaDiskAddr &addr = replay_item.addr_;
-  ObTabletTransferInfo tablet_transfer_info;
   ObTabletHandle tablet_handle;
   if (OB_FAIL(get_tablet_svr_(key.ls_id_, ls_tablet_svr, ls_handle))) {
     LOG_WARN("fail to get ls tablet service", K(ret));
-  } else if (OB_FAIL(ls_tablet_svr->replay_create_tablet(addr, buf, buf_len, key.tablet_id_, tablet_transfer_info))) {
+  } else if (OB_FAIL(ls_tablet_svr->replay_create_tablet(addr, buf, buf_len, key.tablet_id_))) {
     LOG_WARN("fail to create tablet for replay", K(ret), K(key), K(addr));
-  } else if (tablet_transfer_info.has_transfer_table() &&
-      OB_FAIL(record_ls_transfer_info_(ls_handle, key.tablet_id_, tablet_transfer_info))) {
-    LOG_WARN("fail to record_ls_transfer_info", K(ret), K(key), K(tablet_transfer_info));
   } else if (OB_FAIL(ls_tablet_svr->get_tablet(key.tablet_id_,
                                                tablet_handle,
                                                ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US * 10,
                                                ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("fail to get tablet", K(ret), K(key), K(addr));
-  }
-  return ret;
-}
-
-int ObTabletReplayCreateHandler::check_is_need_record_transfer_info_(
-    const share::ObLSID &src_ls_id,
-    const share::SCN &transfer_start_scn,
-    bool &is_need)
-{
-  int ret = OB_SUCCESS;
-  ObLSService* ls_srv = nullptr;
-  ObLSHandle src_ls_handle;
-  ObLS *src_ls = NULL;
-  is_need = false;
-  if (!src_ls_id.is_valid() || !transfer_start_scn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("src_ls_id or transfer_start_scn is invalid", K(ret), K(src_ls_id), K(transfer_start_scn));
-  } else if (OB_ISNULL(ls_srv = MTL(ObLSService*))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ls srv should not be NULL", K(ret), KP(ls_srv));
-  } else if (OB_FAIL(ls_srv->get_ls(src_ls_id, src_ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    if (OB_LS_NOT_EXIST == ret) {
-      is_need = false;
-      LOG_WARN("source ls is not exist", KR(ret), K(src_ls_id));
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to get ls", KR(ret), K(src_ls_id));
-    }
-  } else if (OB_ISNULL(src_ls = src_ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls is NULL", KR(ret), K(src_ls_id));
-  } else if (src_ls->get_ls_meta().get_clog_checkpoint_scn() < transfer_start_scn) {
-    is_need = true;
-    LOG_INFO("src ls max decided scn is smaller than transfer start scn, need wait clog replay", K(ret),
-        K(src_ls_id), K(transfer_start_scn), "ls_meta", src_ls->get_ls_meta());
-  }
-  return ret;
-}
-
-int ObTabletReplayCreateHandler::record_ls_transfer_info_tmp(
-      const ObLSHandle &ls_handle,
-      const ObTabletID &tablet_id,
-      const ObTabletTransferInfo &tablet_transfer_info)
-{
-  return record_ls_transfer_info_(ls_handle, tablet_id, tablet_transfer_info);
-}
-int ObTabletReplayCreateHandler::record_ls_transfer_info_(
-    const ObLSHandle &ls_handle,
-    const ObTabletID &tablet_id,
-    const ObTabletTransferInfo &tablet_transfer_info)
-{
-  int ret = OB_SUCCESS;
-  storage::ObLS *ls = NULL;
-  bool is_need = false;
-  ObMigrationStatus current_migration_status = ObMigrationStatus::OB_MIGRATION_STATUS_MAX;
-  ObMigrationStatus new_migration_status = ObMigrationStatus::OB_MIGRATION_STATUS_MAX;
-  ObLSRestoreStatus ls_restore_status(ObLSRestoreStatus::LS_RESTORE_STATUS_MAX);
-  if (!ls_handle.is_valid() || !tablet_transfer_info.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ls_handle), K(tablet_transfer_info));
-  } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log stream not exist", K(ret));
-  } else if (OB_FAIL(ls->get_migration_status(current_migration_status))) {
-    LOG_WARN("failed to get ls migration status", K(ret));
-  } else if (OB_FAIL(ObMigrationStatusHelper::trans_reboot_status(current_migration_status, new_migration_status))) {
-    LOG_WARN("failed to trans fail status", K(ret), "ls_id", ls->get_ls_id(),
-        K(current_migration_status), K(new_migration_status));
-  } else if (ObMigrationStatus::OB_MIGRATION_STATUS_NONE != new_migration_status) {
-    LOG_INFO("The log stream does not need to record transfer_info", "ls_id", ls->get_ls_id(), K(current_migration_status), K(new_migration_status));
-  } else if (OB_FAIL(ls->get_restore_status(ls_restore_status))) {
-    LOG_WARN("failed to get ls restore status", K(ret), KPC(ls));
-  } else if (ls_restore_status.is_before_restore_to_consistent_scn()) {
-    LOG_INFO("the log stream in restore is before restore to consistent scn, no need to record transfer info", "ls_id", ls->get_ls_id(), K(ls_restore_status));
-  }else if (!tablet_transfer_info.has_transfer_table()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet should have transfer table", K(ret), "ls_id", ls->get_ls_id(), K(tablet_id), K(tablet_transfer_info));
-  } else if (ls->get_ls_startup_transfer_info().is_valid()) {
-    if (ls->get_ls_startup_transfer_info().ls_id_ != tablet_transfer_info.ls_id_
-        || ls->get_ls_startup_transfer_info().transfer_start_scn_ != tablet_transfer_info.transfer_start_scn_) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The transfer_info of different tablet records on the same ls is different", K(ret), "ls_id", ls->get_ls_id(),
-          K(tablet_id), K(tablet_transfer_info), "ls_startup_transfer_info", ls->get_ls_startup_transfer_info());
-    }
-  } else if (OB_FAIL(check_is_need_record_transfer_info_(tablet_transfer_info.ls_id_,
-      tablet_transfer_info.transfer_start_scn_, is_need))) {
-    LOG_WARN("failed to check is need record ls", K(ret), "ls_id", ls->get_ls_id(), K(tablet_id), K(tablet_transfer_info));
-  } else if (!is_need) {
-    // do nothing
-  } else if (OB_FAIL(ls->get_ls_startup_transfer_info().init(tablet_transfer_info.ls_id_,
-      tablet_transfer_info.transfer_start_scn_))) {
-    LOG_WARN("failed to init ls transfer info", K(ret), "ls_id", ls->get_ls_id(), K(tablet_id), K(tablet_transfer_info));
   }
   return ret;
 }

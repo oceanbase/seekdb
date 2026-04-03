@@ -94,20 +94,6 @@ int ObAllVirtualOptStatGatherMonitor::inner_get_next_row(ObNewRow *&row)
         ++cell_idx) {
       const uint64_t column_id = output_column_ids_.at(cell_idx);
       switch(column_id) {
-        case TENANT_ID: {
-          cells[cell_idx].set_int(stat_array_.at(index_).get_tenant_id());
-          break;
-        }
-        case SVR_IP: {
-          cells[cell_idx].set_varchar(ipstr_);
-          cells[cell_idx].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[cell_idx].set_int(port_);
-          break;
-        }
         case SESSION_ID: {
           cells[cell_idx].set_int(stat_array_.at(index_).get_session_id());
           break;

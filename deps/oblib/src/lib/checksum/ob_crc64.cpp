@@ -15,7 +15,9 @@
  */
 
 #include "lib/checksum/ob_crc64.h"
-#ifdef __linux__
+#if defined(__APPLE__) || defined(__ANDROID__)
+// ISA-L not available on macOS/Android
+#elif defined(__linux__)
 #include "isa-l/crc64.h"
 #include "isa-l/crc.h"
 #endif
@@ -1049,11 +1051,10 @@ uint64_t ob_crc64_isal(uint64_t uCRC64, const char* buf, int64_t cb)
   if (buf == NULL || cb <= 0) {
     return uCRC64;
   }
-#ifdef __linux__
-  return crc32_iscsi((unsigned char*)(buf), cb, uCRC64);
-#elif defined(__APPLE__)
-  // macOS: ISA-L is not available, use crc64_sse42 implementation
+#if defined(__APPLE__) || defined(__ANDROID__)
   return crc64_sse42(uCRC64, buf, cb);
+#elif defined(__linux__)
+  return crc32_iscsi((unsigned char*)(buf), cb, uCRC64);
 #endif
 }
 
@@ -1071,11 +1072,7 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
   vendor_info[3]='\0';
 
   if (strcmp((char*)vendor_info, "GenuineIntel") == 0) {
-#ifdef __linux__
-    ob_crc64_sse42_func = &ob_crc64_isal;
-    _OB_LOG_RET(WARN, OB_SUCCESS, "Use ISAL for crc64 calculate");
-#else
-    // macOS: ISA-L not available, use SSE42 instead
+#if defined(__APPLE__) || defined(__ANDROID__)
     asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "0"(1));
     if ((c & (1 << 20)) != 0) {
       ob_crc64_sse42_func = &crc64_sse42;
@@ -1084,6 +1081,9 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
       ob_crc64_sse42_func = &fast_crc64_sse42_manually;
       _OB_LOG_RET(WARN, OB_SUCCESS, "Use manual crc32 table lookup for crc64 calculate");
     }
+#elif defined(__linux__)
+    ob_crc64_sse42_func = &ob_crc64_isal;
+    _OB_LOG_RET(WARN, OB_SUCCESS, "Use ISAL for crc64 calculate");
 #endif
   } else{
     asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "0"(1));

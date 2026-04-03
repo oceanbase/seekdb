@@ -550,11 +550,9 @@ int ObMViewRefresher::complete_refresh()
     if (OB_SUCC(ret)) {
       const int64_t DEFAULT_TIMEOUT_US = GCONF.internal_sql_execute_timeout;
       ObTimeoutCtx timeout_ctx;
-      ObAddr rs_addr;
+      ObAddr rs_addr = GCTX.self_addr();
       if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, DEFAULT_TIMEOUT_US))) {
         LOG_WARN("fail to set default timeout ctx", KR(ret));
-      } else if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_addr))) {
-        LOG_WARN("fail to rootservice address", KR(ret));
       } else {
         LOG_INFO("mview complete refresh start", K(rs_addr), K(arg));
         if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr)

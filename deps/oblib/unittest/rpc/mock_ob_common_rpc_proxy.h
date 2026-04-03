@@ -30,15 +30,9 @@ public:
     : ObCommonRpcProxy(this)
   {
   }
-  MOCK_METHOD3(renew_lease,
-               int(const share::ObLeaseRequest &request, share::ObLeaseResponse &response,
-                   const ObRpcOpts &opts));
   MOCK_METHOD2(remove_root_partition, int(const common::ObAddr &server, const ObRpcOpts &opts));
   MOCK_METHOD2(rebuild_root_partition, int(const common::ObAddr &server, const ObRpcOpts &opts));
   MOCK_METHOD2(clear_rebuild_root_partition, int(const common::ObAddr &server, const ObRpcOpts &opts));
-  MOCK_METHOD3(fetch_location,
-               int(const UInt64 &table_id, common::ObSArray<share::ObPartitionLocation> &locations,
-                   const ObRpcOpts &opts));
   MOCK_METHOD3(create_tenant,
                int(const obrpc::ObCreateTenantArg, UInt64 &tenant_id, const ObRpcOpts &opts));
   MOCK_METHOD3(create_database,
@@ -54,7 +48,6 @@ public:
   MOCK_METHOD2(get_frozen_version, int(Int64 &frozen_version, const ObRpcOpts &opts));
   MOCK_METHOD2(update_index_status, int(const ObUpdateIndexStatusArg &, const ObRpcOpts &opts));
   MOCK_METHOD2(broadcast_ds_action, int(const ObDebugSyncActionArg &, const ObRpcOpts &));
-  MOCK_METHOD3(fetch_alive_server, int(const ObFetchAliveServerArg &, ObFetchAliveServerResult &, const ObRpcOpts &));
 };
 
 }//end namespace obrpc

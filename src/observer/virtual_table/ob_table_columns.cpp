@@ -27,6 +27,67 @@ namespace oceanbase
 namespace observer
 {
 
+#if defined(__ANDROID__)
+static bool has_mixed_string_array_literal(const ParseNode *node);
+
+static bool has_unnest_expression(const ParseNode *node)
+{
+  bool has_unnest = false;
+  if (OB_NOT_NULL(node)) {
+    if (T_UNNEST_EXPRESSION == node->type_) {
+      has_unnest = true;
+    }
+    for (int64_t i = 0; !has_unnest && i < node->num_child_; ++i) {
+      has_unnest = has_unnest_expression(node->children_[i]);
+    }
+  }
+  return has_unnest;
+}
+
+static void collect_array_literal_flags(const ParseNode *node,
+                                        bool &has_string,
+                                        bool &has_non_string_scalar,
+                                        bool &has_mixed)
+{
+  if (has_mixed || OB_ISNULL(node)) {
+  } else if (T_FUN_SYS_ARRAY == node->type_) {
+    has_mixed = has_mixed_string_array_literal(node);
+  } else if (T_VARCHAR == node->type_) {
+    has_string = true;
+  } else if (T_NULL == node->type_) {
+  } else if (node->num_child_ > 0) {
+    for (int64_t i = 0; !has_mixed && i < node->num_child_; ++i) {
+      collect_array_literal_flags(node->children_[i], has_string, has_non_string_scalar, has_mixed);
+    }
+  } else {
+    has_non_string_scalar = true;
+  }
+  if (has_string && has_non_string_scalar) {
+    has_mixed = true;
+  }
+}
+
+static bool has_mixed_string_array_literal(const ParseNode *node)
+{
+  bool has_mixed = false;
+  if (OB_NOT_NULL(node)) {
+    if (T_FUN_SYS_ARRAY == node->type_) {
+      bool has_string = false;
+      bool has_non_string_scalar = false;
+      for (int64_t i = 0; !has_mixed && i < node->num_child_; ++i) {
+        collect_array_literal_flags(node->children_[i], has_string, has_non_string_scalar, has_mixed);
+      }
+    }
+    for (int64_t i = 0; !has_mixed && i < node->num_child_; ++i) {
+      if (has_mixed_string_array_literal(node->children_[i])) {
+        has_mixed = true;
+      }
+    }
+  }
+  return has_mixed;
+}
+#endif
+
 ObTableColumns::ObTableColumns()
     : ObVirtualTableScannerIterator(),
       type_str_(),
@@ -1213,6 +1274,35 @@ int ObTableColumns::resolve_view_definition(
     // construct sql
     const ObString &db_name = db_schema->get_database_name_str();
     const ObString &table_name = table_schema.get_table_name_str();
+#if defined(__ANDROID__)
+    if (lib::is_mysql_mode()) {
+      ObString view_definition;
+      ParseResult view_parse_result;
+      ObParser view_parser(*allocator, session->get_sql_mode(), session->get_charsets4parser());
+      if (OB_FAIL(ObSQLUtils::generate_view_definition_for_resolve(
+                    *allocator,
+                    session->get_local_collation_connection(),
+                    table_schema.get_view_schema(),
+                    view_definition))) {
+        LOG_WARN("fail to generate view definition for resolve", K(ret));
+      } else if (OB_FAIL(view_parser.parse(view_definition, view_parse_result))) {
+        LOG_WARN("parse view definition failed", K(view_definition), K(ret));
+      } else if (has_mixed_string_array_literal(view_parse_result.result_tree_)
+                 || has_unnest_expression(view_parse_result.result_tree_)) {
+        ret = OB_ERR_VIEW_INVALID;
+        if (throw_error) {
+          LOG_USER_ERROR(OB_ERR_VIEW_INVALID, db_name.length(), db_name.ptr(),
+                         table_name.length(), table_name.ptr());
+        } else {
+          LOG_USER_WARN(OB_ERR_VIEW_INVALID, db_name.length(), db_name.ptr(),
+                        table_name.length(), table_name.ptr());
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+      // skip resolving select * from view after marking the view invalid
+    } else {
+#endif
     ObSqlString select_sql;
     if (OB_FAIL(select_sql.append_fmt(is_oracle_mode
                                         ? "select * from \"%.*s\".\"%.*s\""
@@ -1311,6 +1401,9 @@ int ObTableColumns::resolve_view_definition(
         }
       }
     }
+#if defined(__ANDROID__)
+    }
+#endif
   }
 
   return ret;

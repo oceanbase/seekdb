@@ -101,20 +101,6 @@ int ObAllVirtualTenantMemoryInfo::add_row(uint64_t tenant_id, int64_t hold, int6
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case TENANT_ID: {
-          cells[i].set_int(tenant_id);
-          break;
-        }
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(
-              ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(GCONF.self_addr_.get_port());
-          break;
-        }
         case HOLD: {
           cells[i].set_int(hold);
           break;

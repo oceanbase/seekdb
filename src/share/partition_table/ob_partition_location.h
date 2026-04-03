@@ -22,7 +22,6 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/ob_replica_define.h"
 #include "common/ob_role.h"
-#include "share/ls/ob_ls_info.h"
 
 namespace oceanbase
 {

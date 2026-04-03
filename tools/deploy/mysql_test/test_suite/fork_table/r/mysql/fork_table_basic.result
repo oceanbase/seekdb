@@ -359,6 +359,41 @@ id	name
 3	Data3
 4	Fork_Data
 ============================================
+10. Fork Table复制truncate info功能验证
+============================================
+alter system set _ob_enable_truncate_partition_preserve_global_index = true;
+drop table if exists t_trunc;
+Warnings:
+Note	1051	Unknown table 'db_fork_basic.t_trunc'
+drop table if exists t_trunc_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_basic.t_trunc_fork'
+create table t_trunc (
+id int primary key,
+k int,
+c varchar(20)
+) partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+create unique index idx_k on t_trunc(k) global partition by hash(k) partitions 2;
+insert into t_trunc values (1, 1, 'a'), (2, 2, 'b'), (120, 3, 'c');
+# 生成truncate info并保留索引
+alter table t_trunc truncate partition p0;
+# 截断后重新写入数据，验证旧数据不会被fork带回
+insert into t_trunc values (5, 5, 'p0_new'), (6, 6, 'p0_new2');
+# 源表校验（使用全局索引访问）
+select /*+index(t_trunc idx_k)*/ count(*) from t_trunc;
+count(*)
+3
+select /*+index(t_trunc idx_k)*/ count(*) from t_trunc where id in (1,2);
+count(*)
+0
+# 执行Fork并等待完成
+fork table t_trunc to t_trunc_fork;
+ERROR 0A000: fork table on partitioned table with global index is not supported
+# 目标表校验：应只包含新数据，截断过的数据不应出现
+============================================
 6. 清理
 ============================================
 drop table if exists t1;
@@ -372,8 +407,6 @@ drop table if exists t4_fork;
 drop table if exists t5;
 drop table if exists t5_fork;
 drop table if exists t_trunc;
-Warnings:
-Note	1051	Unknown table 'db_fork_basic.t_trunc'
 drop table if exists t_trunc_fork;
 Warnings:
 Note	1051	Unknown table 'db_fork_basic.t_trunc_fork'

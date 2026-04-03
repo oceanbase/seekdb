@@ -23,7 +23,6 @@ eval set SESSION ob_trx_idle_timeout = $__timeout_def__;
 sleep 2;
 
 connection conn0;
-let $__tenant_id__ = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name = 'sys', tenant_id, 1);
 
 connection conn1;
 --disable_warnings
@@ -63,7 +62,7 @@ connection conn1;
 commit;
 select * from test_uncommitted_trx_minor_merge;
 
-let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and tenant_id = $__tenant_id__ and table_type = 12 and size > 0 group by svr_port, c, 1);
+let $count = query_get_value(select count(1) as c from oceanbase.__all_virtual_table_mgr where tablet_id = $__tablet_id__ and table_type = 12 and size > 0 , c, 1);
 echo $count;
 
 connection conn1;

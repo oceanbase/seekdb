@@ -59,7 +59,8 @@ OB_SERIALIZE_MEMBER((ObDASVecAuxScanCtDef, ObDASAttachCtDef),
                     can_extract_range_, // FARM COMPAT WHITELIST
                     relevance_col_cnt_, // FARM COMPAT WHITELIST
                     is_hybrid_ // FARM COMPAT WHITELIST
-                    , use_rowkey_vid_tbl_);
+                    , use_rowkey_vid_tbl_,
+                    skip_delta_buffer_);
 OB_SERIALIZE_MEMBER(ObDASVecAuxScanRtDef);
 
 } // sql

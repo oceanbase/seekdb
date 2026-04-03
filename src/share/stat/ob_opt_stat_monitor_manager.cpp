@@ -30,8 +30,7 @@ using namespace sqlclient;
 
 namespace common
 {
-#define INSERT_COLUMN_USAGE "INSERT INTO __all_column_usage(tenant_id," \
-                                                            "table_id," \
+#define INSERT_COLUMN_USAGE "INSERT INTO __all_column_usage(table_id," \
                                                             "column_id," \
                                                             "equality_preds," \
                                                             "equijoin_preds," \
@@ -58,10 +57,10 @@ namespace common
   "SELECT column_id, equality_preds, equijoin_preds, nonequijion_preds, range_preds, " \
          "like_preds, null_preds, distinct_member, groupby_member " \
   "FROM oceanbase.__all_column_usage " \
-  "WHERE tenant_id = %lu and table_id = %lu and column_id in (%s);"
+  "WHERE table_id = %lu and column_id in (%s);"
 
 #define INSERT_MONITOR_MODIFIED \
-  "INSERT INTO %s (tenant_id, table_id, tablet_id, inserts, updates, deletes) VALUES "
+  "INSERT INTO %s (table_id, tablet_id, inserts, updates, deletes) VALUES "
 
 #define ON_DUPLICATE_UPDATE_MONITOR_MODIFIED \
   "ON DUPLICATE KEY UPDATE " \
@@ -69,8 +68,7 @@ namespace common
   "updates = updates + values(updates)," \
   "deletes = deletes + values(deletes);"
 
-#define INSERT_STALE_TABLE_STAT_SQL "INSERT /*+QUERY_TIMEOUT(60000000)*/INTO %s(tenant_id," \
-                                                                                "table_id," \
+#define INSERT_STALE_TABLE_STAT_SQL "INSERT /*+QUERY_TIMEOUT(60000000)*/INTO %s(table_id," \
                                                                                 "partition_id," \
                                                                                 "index_type," \
                                                                                 "object_type," \
@@ -90,7 +88,7 @@ namespace common
                                                                                 "ON DUPLICATE KEY UPDATE " \
                                                                                 "stale_stats = if(last_analyzed > 0, stale_stats, values(stale_stats))"
 
-#define STALE_TABLE_STAT_MOCK_VALUE_PATTERN "(%lu, %lu, %ld, 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1)"
+#define STALE_TABLE_STAT_MOCK_VALUE_PATTERN "(%lu, %ld, 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1)"
 
 
 void ObOptStatMonitorFlushAllTask::runTimerTask()
@@ -174,50 +172,33 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
 {
   int ret = OB_SUCCESS;
   int64_t timeout = -1;
-  ObSEArray<ObServerLocality, 4> all_server_arr;
-  bool has_read_only_zone = false; // UNUSED;
   if (OB_ISNULL(ctx.get_my_session()) ||
-      OB_ISNULL(GCTX.srv_rpc_proxy_) ||
-      OB_ISNULL(GCTX.locality_manager_)) {
+      OB_ISNULL(GCTX.srv_rpc_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(GCTX.srv_rpc_proxy_),
-                                    K(GCTX.locality_manager_), K(ctx.get_my_session()));
+                                    K(ctx.get_my_session()));
   } else {
     obrpc::ObFlushOptStatArg arg(ctx.get_my_session()->get_effective_tenant_id(),
                                  is_flush_col_usage,
                                  is_flush_dml_stat);
-    if (OB_FAIL(GCTX.locality_manager_->get_server_locality_array(all_server_arr,
-                                                                  has_read_only_zone))) {
-      LOG_WARN("fail to get server locality", K(ret));
-    } else {
-      ObSEArray<ObServerLocality, 4> failed_server_arr;
-      for (int64_t i = 0; OB_SUCC(ret) && i < all_server_arr.count(); i++) {
-        timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
-        if (!all_server_arr.at(i).is_active()
-            || ObServerStatus::OB_SERVER_ACTIVE != all_server_arr.at(i).get_server_status()
-            || 0 == all_server_arr.at(i).get_start_service_time()
-            || 0 != all_server_arr.at(i).get_server_stop_time()) {
-        //server may not serving
-        } else if (0 >= timeout) {
-          ret = OB_TIMEOUT;
-          LOG_WARN("query timeout is reached", K(ret), K(timeout));
-        } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(all_server_arr.at(i).get_addr())
-                                                  .timeout(timeout)
-                                                  .by(ctx.get_my_session()->get_rpc_tenant_id())
-                                                  .flush_local_opt_stat_monitoring_info(arg))) {
-          LOG_WARN("failed to flush opt stat monitoring info caused by unknow error",
-                                                K(ret), K(all_server_arr.at(i).get_addr()), K(arg));
-          //ignore flush cache failed, TODO @jiangxiu.wt can aduit it and flush cache manually later.
-          if (ignore_failed) {
-            LOG_USER_WARN(OB_ERR_DBMS_STATS_PL, "failed to flush opt stat monitoring info");
-            if (OB_FAIL(failed_server_arr.push_back(all_server_arr.at(i)))) {
-              LOG_WARN("failed to push back", K(ret));
-            }
-          }
-        }
+    timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
+    if (0 >= GCTX.start_service_time_) {
+      //server may not serving
+    } else if (0 >= timeout) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("query timeout is reached", K(ret), K(timeout));
+    } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(GCTX.self_addr())
+                                              .timeout(timeout)
+                                              .by(ctx.get_my_session()->get_rpc_tenant_id())
+                                              .flush_local_opt_stat_monitoring_info(arg))) {
+      LOG_WARN("failed to flush opt stat monitoring info caused by unknow error", K(ret), K(arg));
+      //ignore flush cache failed, TODO @jiangxiu.wt can aduit it and flush cache manually later.
+      if (ignore_failed) {
+        ret = OB_SUCCESS;
+        LOG_USER_WARN(OB_ERR_DBMS_STATS_PL, "failed to flush opt stat monitoring info");
       }
-      LOG_TRACE("flush database monitoring info cache", K(arg), K(failed_server_arr), K(all_server_arr));
     }
+    LOG_TRACE("flush database monitoring info cache", K(arg));
   }
   return ret;
 }
@@ -407,8 +388,7 @@ int ObOptStatMonitorManager::get_column_usage_sql(const StatKey &col_key,
   int64_t null_preds = flags & NULL_PREDS ? 1 : 0;
   int64_t distinct_member = flags & DISTINCT_MEMBER ? 1 : 0;
   int64_t groupby_member = flags & GROUPBY_MEMBER ? 1 : 0;
-  if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", ext_tenant_id)) ||
-      OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
+  if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("column_id", col_key.second)) ||
       OB_FAIL(dml_splicer.add_column("equality_preds", equality_preds)) ||
       OB_FAIL(dml_splicer.add_column("equijoin_preds", equijoin_preds)) ||
@@ -541,7 +521,6 @@ int ObOptStatMonitorManager::construct_get_column_usage_sql(ObIArray<ObColumnSta
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(select_sql.append_fmt(SELECT_FROM_COLUMN_USAGE,
-                                      ext_tenant_id,
                                       pure_table_id,
                                       col_ids.ptr()))) {
       LOG_WARN("failed to append fmt", K(ret));
@@ -617,8 +596,7 @@ int ObOptStatMonitorManager::get_dml_stat_sql(const ObOptDmlStat &dml_stat,
   uint64_t table_id = dml_stat.table_id_;
   uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id_, tenant_id_);
   uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id_, table_id);
-  if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", ext_tenant_id)) ||
-      OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
+  if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("tablet_id", dml_stat.tablet_id_)) ||
       OB_FAIL(dml_splicer.add_column("inserts", dml_stat.insert_row_count_)) ||
       OB_FAIL(dml_splicer.add_column("updates", dml_stat.update_row_count_)) ||
@@ -655,18 +633,18 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
   if (OB_FAIL(ObSchemaUtils::get_all_table_name(tenant_id_, all_table_name))) {
     LOG_WARN("failed to get all table name", K(ret));
   } else if (OB_FAIL(delete_table_sql.append_fmt("DELETE FROM %s m WHERE (NOT EXISTS (SELECT 1 " \
-            "FROM %s t, %s db WHERE t.tenant_id = db.tenant_id AND t.database_id = db.database_id "\
-            "AND t.table_id = m.table_id AND t.tenant_id = m.tenant_id AND db.database_name != '__recyclebin')) "\
+            "FROM %s t, %s db WHERE t.database_id = db.database_id "\
+            "AND t.table_id = m.table_id AND db.database_name != '__recyclebin')) "\
             "AND table_id > %ld;",
             share::OB_ALL_MONITOR_MODIFIED_TNAME, all_table_name, share::OB_ALL_DATABASE_TNAME,
             OB_MAX_INNER_TABLE_ID))) {
     LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(delete_part_sql.append_fmt("DELETE /*+leading(view3, m1) use_nl(view3, m1)*/FROM %s m1 WHERE (tenant_id, table_id, tablet_id) IN ( "\
+  } else if (OB_FAIL(delete_part_sql.append_fmt("DELETE /*+leading(view3, m1) use_nl(view3, m1)*/FROM %s m1 WHERE (table_id, tablet_id) IN ( "\
             "SELECT /*+leading(m, view1, view2, t, db) use_hash(m,view1) use_hash((m,view1),view2) use_nl((m,view1,view2),t), use_nl((m,view1,view2,t),db)*/ "\
-            "m.tenant_id, m.table_id, m.tablet_id FROM %s m, %s t, %s db WHERE t.table_id = m.table_id AND t.tenant_id = m.tenant_id AND t.part_level > 0 "\
-            "AND t.tenant_id = db.tenant_id AND t.database_id = db.database_id AND db.database_name != '__recyclebin' "\
-            "AND NOT EXISTS (SELECT 1 FROM %s p WHERE  p.table_id = m.table_id AND p.tenant_id = m.tenant_id AND p.tablet_id = m.tablet_id) "\
-            "AND NOT EXISTS (SELECT 1 FROM %s sp WHERE  sp.table_id = m.table_id AND sp.tenant_id = m.tenant_id AND sp.tablet_id = m.tablet_id)) "\
+            "m.table_id, m.tablet_id FROM %s m, %s t, %s db WHERE t.table_id = m.table_id AND t.part_level > 0 "\
+            "AND t.database_id = db.database_id AND db.database_name != '__recyclebin' "\
+            "AND NOT EXISTS (SELECT 1 FROM %s p WHERE  p.table_id = m.table_id AND p.tablet_id = m.tablet_id) "\
+            "AND NOT EXISTS (SELECT 1 FROM %s sp WHERE  sp.table_id = m.table_id AND sp.tablet_id = m.tablet_id)) "\
             "AND table_id > %ld;",
             share::OB_ALL_MONITOR_MODIFIED_TNAME, share::OB_ALL_MONITOR_MODIFIED_TNAME,
             all_table_name, share::OB_ALL_DATABASE_TNAME, share::OB_ALL_PART_TNAME,
@@ -925,8 +903,8 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
       } else if (is_valid) {
         uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(dml_stats.at(i).tenant_id_, dml_stats.at(i).tenant_id_);
         uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(dml_stats.at(i).tenant_id_, dml_stats.at(i).table_id_);
-        if (OB_FAIL(tablet_list.append_fmt("%s(%lu, %lu, %ld)", is_first ? "(" : " ,",
-                                                                ext_tenant_id, pure_table_id,
+        if (OB_FAIL(tablet_list.append_fmt("%s(%lu, %ld)", is_first ? "(" : " ,",
+                                                                pure_table_id,
                                                                 dml_stats.at(i).tablet_id_))) {
           LOG_WARN("failed to append sql", K(ret));
         } else {
@@ -953,7 +931,7 @@ int ObOptStatMonitorManager::do_get_opt_stats_expired_table_info(const int64_t t
                                      "FROM      %s m " \
                                      "WHERE (CASE WHEN m.last_inserts = 0 THEN 11 "\
                                                 "ELSE m.inserts * 1.0 / m.last_inserts END) >  10.0 "\
-                                              "AND (m.tenant_id, m.table_id, m.tablet_id) in %s",
+                                              "AND (m.table_id, m.tablet_id) in %s",
           share::OB_ALL_MONITOR_MODIFIED_TNAME,
           where_str.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
@@ -1333,14 +1311,12 @@ int ObOptStatMonitorManager::check_table_stat_expired_by_dml_info(const uint64_t
                                                       "sum(inserts+updates+deletes) AS total_modified_cnt,"\
                                                       "sum(last_inserts+last_updates+last_deletes) AS last_modified_cnt "\
                                                   "from     %s "\
-                                                  "WHERE    tenant_id = %lu "\
-                                                  "AND      table_id = %lu %s%s "\
+                                                  "WHERE    table_id = %lu %s%s "\
                                                   "GROUP BY table_id) m "\
                                         "WHERE     (CASE WHEN row_cnt = 0 THEN 10.1 "\
                                                     "ELSE (total_modified_cnt  * 1.0) / last_modified_cnt END) > 10.1 "\
                                         "AND row_cnt > 0;",
           share::OB_ALL_MONITOR_MODIFIED_TNAME,
-          ext_tenant_id,
           pure_table_id,
           tablet_list.empty() ? " " : " AND tablet_id in ",
           tablet_list.empty() ? " " : tablet_list.ptr()
@@ -1462,9 +1438,8 @@ int ObOptStatMonitorManager::do_mark_the_opt_stat_expired(const uint64_t tenant_
                                        diff_part_analyzed_list,
                                        expired_partition_ids))) {
       LOG_WARN("failed to gen part analyzed list", K(ret));
-    } else if (OB_FAIL(update_sql.append_fmt("update /*+QUERY_TIMEOUT(60000000)*/%s set stale_stats = 1 where tenant_id = %lu and table_id = %lu and %s",
+    } else if (OB_FAIL(update_sql.append_fmt("update /*+QUERY_TIMEOUT(60000000)*/%s set stale_stats = 1 where table_id = %lu and %s",
                                               share::OB_ALL_TABLE_STAT_TNAME,
-                                              ext_tenant_id,
                                               pure_table_id,
                                               !same_part_analyzed_list.empty() ? same_part_analyzed_list.ptr() : diff_part_analyzed_list.ptr()))) {
     } else if (OB_FAIL(mysql_proxy_->write(tenant_id, update_sql.ptr(), affected_rows))) {
@@ -1539,7 +1514,6 @@ int ObOptStatMonitorManager::gen_values_list(const uint64_t tenant_id,
       uint64_t ext_tenant_id = share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
       uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, no_table_stats.at(i).get_table_id());
       if (OB_FAIL(value.append_fmt(STALE_TABLE_STAT_MOCK_VALUE_PATTERN,
-                                   ext_tenant_id,
                                    pure_table_id,
                                    no_table_stats.at(i).get_partition_id()))) {
         LOG_WARN("failed to append fmt", K(ret));

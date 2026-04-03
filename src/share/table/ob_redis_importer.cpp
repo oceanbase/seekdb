@@ -123,9 +123,8 @@ int ObRedisImporter::get_tenant_memory_size(uint64_t &memory_size)
   ObMemAttr attr(MTL_ID(), "RedisImpt");
   sql.set_attr(attr);
   if (OB_FAIL(
-          sql.assign_fmt("SELECT sum(memory_size) as MEM from oceanbase.%s where tenant_id = %lu;",
-                         OB_ALL_VIRTUAL_UNIT_TNAME,
-                         tenant_id_))) {
+          sql.assign_fmt("SELECT sum(memory_size) as MEM from oceanbase.%s;",
+                         OB_ALL_VIRTUAL_UNIT_TNAME))) {
     LOG_WARN("assign_fmt failed", K(ret));
   } else if (OB_FAIL(get_sql_uint_result(sql.ptr(), "MEM", memory_size))) {
     LOG_WARN("fail to get sql uint result", K(ret));

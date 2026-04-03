@@ -335,7 +335,6 @@ private:
   obrpc::ObTenantFreezerRpcCb tenant_mgr_cb_; // callback after the trigger rpc finish.
   obrpc::ObSrvRpcProxy *svr_rpc_proxy_;
   obrpc::ObCommonRpcProxy *common_rpc_proxy_;
-  const share::ObRsMgr *rs_mgr_;
   ObAddr self_;
   ObRetryMajorInfo retry_major_info_;
 

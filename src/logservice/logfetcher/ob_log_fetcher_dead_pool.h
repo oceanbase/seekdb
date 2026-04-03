@@ -1,0 +1,98 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_LOG_FETCHER_DEAD_POOL_H__
+#define OCEANBASE_LOG_FETCHER_DEAD_POOL_H__
+
+#include "lib/utility/ob_macro_utils.h"   // DISALLOW_COPY_AND_ASSIGN
+#include "lib/thread/thread_mgr_interface.h" // TGTaskHandler
+
+#include "ob_log_config.h"                // ObLogFetcherConfig
+#include "ob_log_ls_fetch_ctx.h"          // FetchTaskList, LSFetchCtx
+
+namespace oceanbase
+{
+namespace logfetcher
+{
+
+class IObLogFetcherDeadPool
+{
+public:
+  static const int64_t MAX_THREAD_NUM = ObLogFetcherConfig::max_dead_pool_thread_num;
+
+public:
+  virtual ~IObLogFetcherDeadPool() {}
+
+public:
+  virtual int push(LSFetchCtx *task) = 0;
+  virtual int start() = 0;
+  virtual void stop() = 0;
+  virtual void mark_stop_flag() = 0;
+};
+
+/////////////////////////////////////////////////////////////////
+
+class IObLogErrHandler;
+class IObLogLSFetchMgr;
+
+class ObLogFetcherDeadPool : public IObLogFetcherDeadPool, public lib::TGTaskHandler
+{
+public:
+  ObLogFetcherDeadPool();
+  virtual ~ObLogFetcherDeadPool();
+
+public:
+  int init(const int64_t thread_num,
+      void *fetcher_host_host,
+      IObLogLSFetchMgr &ls_fetch_mgr,
+      IObLogErrHandler &err_handler);
+  void destroy();
+
+public:
+  // Implement the IObLogFetcherDeadPool virtual function
+  virtual int push(LSFetchCtx *task);
+  virtual int start();
+  virtual void stop();
+  virtual void mark_stop_flag();
+
+public:
+  // Overloading thread handling functions
+  virtual void handle(void *data) {}
+  // Overloading thread handling functions
+  virtual void handle(void *data, volatile bool &stop_flag) override;
+
+private:
+  static const int64_t IDLE_WAIT_TIME = 100 * 1000;
+  int handle_task_list_(
+      const int64_t thread_index,
+      LSFetchCtx &ls_fetch_ctx,
+      volatile bool &stop_flag);
+
+private:
+  bool                      inited_;
+  int                       tg_id_;
+  void                      *fetcher_host_;
+  IObLogErrHandler          *err_handler_;
+  IObLogLSFetchMgr          *ls_fetch_mgr_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObLogFetcherDeadPool);
+};
+
+
+}
+}
+
+#endif

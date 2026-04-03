@@ -487,7 +487,7 @@ int ObVectorIndexRefresher::do_refresh() {
         common::sqlclient::ObMySQLResult *result = nullptr;
         ObSqlString select_sql;
         if (OB_FAIL(select_sql.append_fmt(
-                "select tablet_id from oceanbase.DBA_OB_TABLE_LOCATIONS where table_id = %lu",
+                "select tablet_id from oceanbase.__all_virtual_tablet_to_ls where table_id = %lu",
                 domain_table_schema->get_table_id()))) {
           LOG_WARN("fail to assign sql", KR(ret));
         } else if (OB_FAIL(refresh_ctx_->trans_->read(
@@ -700,7 +700,7 @@ int ObVectorIndexRefresher::do_rebuild() {
     LOG_INFO("start to rebuild vec index");
     const int64_t ddl_rpc_timeout = GCONF._ob_ddl_timeout;
     ObTimeoutCtx timeout_ctx;
-    ObAddr rs_addr;
+    ObAddr rs_addr = GCTX.self_addr();
     obrpc::ObCommonRpcProxy *common_rpc_proxy = GCTX.rs_rpc_proxy_;
     SMART_VAR(ObRebuildIndexArg, rebuild_index_arg) {
       obrpc::ObAlterTableRes rebuild_index_res;
@@ -716,12 +716,7 @@ int ObVectorIndexRefresher::do_rebuild() {
       rebuild_index_arg.parallelism_ = refresh_ctx_->idx_parallel_creation_;
       rebuild_index_arg.vidx_refresh_info_.index_params_ = idx_parameters;
       rebuild_index_arg.rebuild_index_type_ = obrpc::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_VEC;
-      if (OB_ISNULL(GCTX.rs_mgr_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("GCTX.rs_mgr is null", K(ret));
-      } else if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_addr))) {
-        LOG_WARN("fail to rootservice address", KR(ret));
-      } else if (OB_ISNULL(common_rpc_proxy)) {
+      if (OB_ISNULL(common_rpc_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected common_rpc_proxy nullptr", K(ret));
       } else if (OB_FAIL(common_rpc_proxy->to(rs_addr).timeout(ddl_rpc_timeout).rebuild_vec_index(rebuild_index_arg, rebuild_index_res))) {

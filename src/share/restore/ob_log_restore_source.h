@@ -99,6 +99,7 @@ struct ObLogRestoreSourceItem
   static ObLogRestoreSourceType get_source_type(const ObString &type);
   static const char *get_source_type_str(const ObLogRestoreSourceType &type);
   TO_STRING_KV(K_(tenant_id), K_(id), K_(until_scn), K_(type), K_(value));
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogRestoreSourceItem);
 };

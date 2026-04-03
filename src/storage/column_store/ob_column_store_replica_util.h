@@ -79,9 +79,6 @@ public:
       const ObTablet &tablet,
       const ObStorageSchema &schema,
       bool &need_process_cs_replica);
-  static int check_cs_replica_global_visible(
-      const ObLSInfo &ls_info,
-      bool &is_global_visible);
   static int get_cs_replica_ls_set(
       const ObIArray<share::ObLSID> &ls_id_array,
       int64_t tenant_id,

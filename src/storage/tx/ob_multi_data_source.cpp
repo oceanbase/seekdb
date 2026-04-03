@@ -186,10 +186,7 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
               buffer_ctx.on_redo(arg.scn_);\
               break;\
               case NotifyType::TX_END:\
-              if (node.type_ == ObTxDataSourceType::TEST1 ||\
-                  node.type_ == ObTxDataSourceType::START_TRANSFER_IN ||\
-                  node.type_ == ObTxDataSourceType::TRANSFER_IN_ABORTED ||\
-                  node.type_ == ObTxDataSourceType::FINISH_TRANSFER_IN) {\
+              if (node.type_ == ObTxDataSourceType::TEST1) {\
                 can_do_tx_end = common::meta::MdsCheckCanDoTxEndWrapper<HELPER_CLASS>::\
                                 check_can_do_tx_end(arg.willing_to_commit_,\
                                                     arg.for_replay_,\
@@ -334,17 +331,6 @@ int ObMulSourceTxDataNotifier::notify_ls_table(const NotifyType type,
                                                const ObMulSourceDataNotifyArg &arg)
 {
   int ret = OB_SUCCESS;
-  //TODO by msy164651 just for check
-  share::ObLSAttr ls_attr;
-  int64_t pos = 0;
-  if (OB_FAIL(ls_attr.deserialize(buf, len, pos))) {
-    TRANS_LOG(WARN, "failed to deserialize ls attr", KR(ret), K(buf), K(len));
-  } else if (pos > len) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
-  }
-  TRANS_LOG(INFO, "ls table notify", KR(ret), K(ls_attr));
-
   ob_abort_log_cb_notify_(type, ret, arg.for_replay_);
 
   return ret;
@@ -427,15 +413,8 @@ ObMulSourceTxDataDump::dump_buf(
       break;
     }
     case ObTxDataSourceType::LS_TABLE: {
-      share::ObLSAttr ls_attr;
-      if (OB_FAIL(ls_attr.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "failed to deserialize ls attr", KR(ret), K(buf), K(len));
-      } else if (pos > len) {
-        ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
-      } else {
-        dump_str = helper.convert(ls_attr);
-      }
+      ret = OB_NOT_SUPPORTED;
+      TRANS_LOG(WARN, "not supported in lite version", KR(ret));
       break;
     }
     case ObTxDataSourceType::CREATE_TABLET_NEW_MDS: {

@@ -60,7 +60,6 @@ public:
     LOG_ARCHIVE_DEST_STATE_7 = 16,
     LOG_ARCHIVE_DEST_8 = 17,
     LOG_ARCHIVE_DEST_STATE_8 = 18,
-    LOG_RESTORE_SOURCE = 19,
     MAX_CONFIG_NAME
   };
   static const char *const type_str[Type::MAX_CONFIG_NAME];
@@ -95,13 +94,13 @@ struct BackupConfigItemPair final
   int set_value(const int64_t &value);
   TO_STRING_KV(K_(key), K_(value));
   common::ObSqlString key_;
-  common::ObSqlString value_;  
+  common::ObSqlString value_;
 };
 
 class ObIBackupConfigItemParser
 {
 public:
-  ObIBackupConfigItemParser(const ObBackupConfigType::Type &type,  const uint64_t tenant_id) 
+  ObIBackupConfigItemParser(const ObBackupConfigType::Type &type,  const uint64_t tenant_id)
     : tenant_id_(tenant_id), type_(type), config_items_() {}
   virtual ~ObIBackupConfigItemParser() {}
 
@@ -109,7 +108,7 @@ public:
   virtual int update_inner_config_table(common::ObISQLClient &trans) = 0;
   virtual int check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) = 0;
   virtual int check_before_update_inner_config(
-    const bool for_verify, 
+    const bool for_verify,
     ObCompatibilityMode &compat_mode) { return OB_NOT_SUPPORTED; }
   virtual int get_compatibility_mode(common::ObCompatibilityMode &compatibility_mode) { return OB_NOT_SUPPORTED; }
   int set_default_checksum_type(share::ObBackupPathString &backup_dest);
@@ -125,7 +124,7 @@ protected:
 class ObBackupConfigParserGenerator final
 {
 public:
-  ObBackupConfigParserGenerator(): is_setted_(false), restore_source_type_(share::ObLogRestoreSourceType::INVALID), 
+  ObBackupConfigParserGenerator(): is_setted_(false), restore_source_type_(share::ObLogRestoreSourceType::INVALID),
   config_parser_(nullptr), allocator_() {}
   ~ObBackupConfigParserGenerator() { reset(); }
   int set(const ObBackupConfigType &type, const uint64_t tenant_id, const common::ObSqlString &value);
@@ -143,7 +142,7 @@ private:
 };
 
 class ObBackupConfigChecker final
-{ 
+{
 public:
   ObBackupConfigChecker() : type_() {}
   ~ObBackupConfigChecker() {}
@@ -164,7 +163,7 @@ public:
   int only_check_before_update(ObCompatibilityMode &compat_mode);
 private:
   bool is_inited_;
-  ObBackupConfigParserGenerator parser_generator_; 
+  ObBackupConfigParserGenerator parser_generator_;
   DISALLOW_COPY_AND_ASSIGN(ObBackupConfigParserMgr);
 };
 
@@ -229,7 +228,7 @@ public:
   ChangeExternalStorageDestMgr();
   ~ChangeExternalStorageDestMgr() { reset(); }
   int init(
-    const uint64_t tenant_id, 
+    const uint64_t tenant_id,
     const common::ObFixedLengthString<common::OB_MAX_CONFIG_VALUE_LEN> &path,
     common::ObISQLClient &sql_proxy);
   void reset();
@@ -245,7 +244,7 @@ private:
   int64_t dest_id_;
   ObBackupDestType::TYPE dest_type_;
   common::ObISQLClient *sql_proxy_;
-public:  
+public:
   ObBackupDest backup_dest_;
 
   DISALLOW_COPY_AND_ASSIGN(ChangeExternalStorageDestMgr);

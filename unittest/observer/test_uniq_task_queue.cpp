@@ -18,6 +18,7 @@
 
 #include <gmock/gmock.h>
 #include "src/share/ob_common_rpc_proxy.h"
+#include "observer/ob_uniq_task_queue.h" // for ObUniqTaskQueue
 namespace oceanbase
 {
 namespace observer

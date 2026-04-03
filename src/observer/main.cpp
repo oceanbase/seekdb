@@ -129,35 +129,6 @@ static int create_observer_softlink()
   }
   return ret;
 }
-static int dump_config_to_json()
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator allocator(g_config_mem_attr);
-  ObJsonArray j_arr(&allocator);
-  ObJsonBuffer j_buf(&allocator);
-  FILE *out_file = nullptr;
-  const char *out_path = "./ob_all_available_parameters.json";
-  if (OB_FAIL(ObServerConfig::get_instance().to_json_array(allocator, j_arr))) {
-    MPRINT("dump cluster config to json failed, ret=%d\n", ret);
-  } else if (OB_FAIL(j_arr.print(j_buf, false))) {
-    MPRINT("print json array to buffer failed, ret=%d\n", ret);
-  } else if (nullptr == j_buf.ptr()) {
-    ret = OB_ERR_NULL_VALUE;
-    MPRINT("json buffer is null, ret=%d\n", ret);
-  } else if (nullptr == (out_file = fopen(out_path, "w"))) {
-    ret = OB_IO_ERROR;
-    MPRINT("failed to open file, errno=%d, ret=%d\n", errno, ret);
-  } else if (EOF == fputs(j_buf.ptr(), out_file)) {
-    ret = OB_IO_ERROR;
-    MPRINT("write json buffer to file failed, errno=%d, ret=%d\n", errno, ret);
-  }
-
-  if (nullptr != out_file) {
-    fclose(out_file);
-  }
-  return ret;
-}
-
 static void print_args(int argc, char *argv[])
 {
   for (int i = 0; i < argc - 1; ++i) {
@@ -318,9 +289,13 @@ int inner_main(int argc, char *argv[])
 #ifdef ENABLE_SANITY
   backtrace_symbolize_func = oceanbase::common::backtrace_symbolize;
 #endif
+#ifndef __ANDROID__
   if (0 != pthread_getname_np(pthread_self(), ob_get_tname(), OB_THREAD_NAME_BUF_LEN)) {
     snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
   }
+#else
+  snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
+#endif
   ObStackHeaderGuard stack_header_guard;
   int64_t memory_used = get_virtual_memory_used();
 #ifndef OB_USE_ASAN
@@ -461,13 +436,12 @@ int inner_main(int argc, char *argv[])
     print_all_limits();
     dl_iterate_phdr(callback, NULL);
 
-#ifdef __linux__
+#if defined(__APPLE__) || defined(__ANDROID__)
+    // macOS/Android don't support M_MMAP_MAX and M_ARENA_MAX
+#elif defined(__linux__)
     static const int DEFAULT_MMAP_MAX_VAL = 1024 * 1024 * 1024;
     mallopt(M_MMAP_MAX, DEFAULT_MMAP_MAX_VAL);
     mallopt(M_ARENA_MAX, 1); // disable malloc multiple arena pool
-#elif defined(__APPLE__)
-    // macOS doesn't support M_MMAP_MAX and M_ARENA_MAX
-    // These mallopt options are Linux-specific
 #endif
 
     // turn warn log on so that there's a observer.log.wf file which

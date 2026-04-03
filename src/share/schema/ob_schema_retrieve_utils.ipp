@@ -18,7 +18,6 @@
 #include "share/ob_get_compat_mode.h"
 #include "share/schema/ob_udf_mgr.h"
 #include "share/schema/ob_schema_mgr.h"
-#include "rootserver/ob_locality_util.h"
 #include "share/storage_cache_policy/ob_storage_cache_common.h"
 
 
@@ -1130,130 +1129,6 @@ int ObSchemaRetrieveUtils::retrieve_column_group_mapping(
  * NOTICE: When we retrieve column, use should marco like EXTRACT_**_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE.
  * Here, "**" means column type, such as BOOL, INT, UINT, VARCHAR.
  */
-
-template<typename T>
-int ObSchemaRetrieveUtils::fill_tenant_schema(
-    T &result,
-    ObTenantSchema &tenant_schema,
-    bool &is_deleted)
-{
-  int ret = common::OB_SUCCESS;
-  tenant_schema.reset();
-  is_deleted = false;
-  bool skip_null_error = false;
-  ObString info;
-  ObString locality;
-  ObString locality_default_value("");
-  ObString previous_locality;
-  ObString previous_locality_default_value("");
-  int64_t default_tablegroup_id_default_value = OB_INVALID_INDEX;
-  ObCompatibilityMode default_compat_mode = ObCompatibilityMode::MYSQL_MODE;
-  int64_t default_drop_tenant_time = OB_INVALID_VERSION;
-  int64_t default_in_recyclebin = 0;
-  ObString tenant_status_str("");
-  ObString default_tenant_status_str("NORMAL");
-  ObString arbitration_service_status_str("");
-  ObString default_arbitration_service_status_str("DISABLED");
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tenant_id, tenant_schema, uint64_t);
-  EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
-  if (!is_deleted) {
-    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, tenant_name, tenant_schema);
-    EXTRACT_VARCHAR_FIELD_MYSQL(result, "info", info);
-    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
-      result, "locality", locality, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, locality_default_value);
-    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
-      result, "previous_locality", previous_locality, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, previous_locality_default_value);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, locked, tenant_schema, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, tenant_schema, int64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, collation_type, tenant_schema, common::ObCollationType);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, default_tablegroup_id,
-        tenant_schema, uint64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_,
-        default_tablegroup_id_default_value);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, compatibility_mode,
-        tenant_schema, common::ObCompatibilityMode, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_,
-        default_compat_mode);
-    tenant_schema.set_charset_type(ObCharset::charset_type_by_coll(tenant_schema.get_collation_type()));
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, drop_tenant_time,
-        tenant_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_drop_tenant_time);
-    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "status", tenant_status_str,
-        skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_tenant_status_str);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, in_recyclebin,
-        tenant_schema, int64_t, skip_null_error,
-        ObSchemaService::g_ignore_column_retrieve_error_, default_in_recyclebin);
-    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "arbitration_service_status", arbitration_service_status_str,
-        skip_null_error, true/*ignore_column_retrieve_error*/, default_arbitration_service_status_str);
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(tenant_schema.set_comment(info))) {
-        SHARE_SCHEMA_LOG(WARN, "set_comment failed", K(ret));
-      } else if (OB_FAIL(tenant_schema.set_locality(locality))) {
-        SHARE_SCHEMA_LOG(WARN, "set locality failed", K(ret));
-      } else if (OB_FAIL(fill_replica_options(result, tenant_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to fill replica options", K(ret));
-      } else if (OB_FAIL(fill_schema_zone_region_replica_num_array(tenant_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "fill schema zone replica dist failed", K(ret));
-      } else if (OB_FAIL(tenant_schema.set_previous_locality(previous_locality))) {
-        SHARE_SCHEMA_LOG(WARN, "set previous locality failed", K(ret));
-      } else {} // good
-    }
-    if (OB_SUCC(ret)) {
-      ObTenantStatus status = TENANT_STATUS_MAX;
-      if (OB_FAIL(get_tenant_status(tenant_status_str, status))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to get tenant status", K(ret), K(tenant_status_str));
-      } else {
-        tenant_schema.set_status(status);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(tenant_schema.set_arbitration_service_status_from_string(arbitration_service_status_str))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to set arb status from string", K(ret), K(arbitration_service_status_str));
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    SHARE_SCHEMA_LOG(TRACE, "retrieve tenant schema", K(tenant_schema), K(is_deleted), KR(ret));
-  } else {
-    SHARE_SCHEMA_LOG(WARN, "retrieve tenant schema failed",
-                    "tenant_id", tenant_schema.get_tenant_id(),
-                    "schema_version", tenant_schema.get_schema_version(),
-                    K(is_deleted), KR(ret));
-  }
-  return ret;
-}
-
-template<typename SCHEMA>
-int ObSchemaRetrieveUtils::fill_schema_zone_region_replica_num_array(
-    SCHEMA &schema)
-{
-  int ret = OB_SUCCESS;
-  common::ObArray<common::ObZone> zone_list;
-  rootserver::ObLocalityDistribution locality_dist;
-  ObArray<share::ObZoneReplicaAttrSet> zone_replica_attr_array;
-  if (OB_FAIL(locality_dist.init())) {
-    SHARE_SCHEMA_LOG(WARN, "fail to init locality dist", K(ret));
-  } else if (OB_FAIL(schema.get_zone_list(zone_list))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to get zone list", K(ret));
-  } else if (OB_FAIL(locality_dist.parse_locality(
-          schema.get_locality_str(), zone_list))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to parse locality", K(ret));
-  } else if (OB_FAIL(locality_dist.get_zone_replica_attr_array(zone_replica_attr_array))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to get zone region replica num array", K(ret));
-  } else if (OB_FAIL(schema.set_zone_replica_attr_array(zone_replica_attr_array))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to set zone replica num array", K(ret));
-  } else if (schema.get_locality_str().length() > 0) {
-    // no need to fill locality
-  } else {
-    // For compatibility, fill format locality string if schema's locality is an empty string.
-    char locality_str[MAX_LOCALITY_LENGTH + 1];
-    int64_t pos = 0;
-    if (OB_FAIL(locality_dist.output_normalized_locality(
-            locality_str, MAX_LOCALITY_LENGTH, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to normalized locality", K(ret));
-    } else if (OB_FAIL(schema.set_locality(locality_str))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to set normalized locality back to schema", K(ret));
-    } else {} // no more to do
-  }
-  return ret;
-}
 
 template<typename T>
 int ObSchemaRetrieveUtils::fill_temp_table_schema(const uint64_t tenant_id, T &result, ObTableSchema &table_schema)
@@ -2681,43 +2556,6 @@ int ObSchemaRetrieveUtils::fill_schema_operation(
  *
  ***********************************************************************/
 
-template<typename T, typename S>
-int ObSchemaRetrieveUtils::retrieve_tenant_schema(
-    ObISQLClient &client,
-    T &result,
-    ObIArray<S> &tenant_schema_array)
-{
-  UNUSED(client);
-  int ret = common::OB_SUCCESS;
-
-  uint64_t prev_tenant_id = common::OB_INVALID_ID;
-  ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
-  S tenant_schema(&allocator);
-  while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
-    tenant_schema.reset();
-    allocator.reuse();
-    bool is_deleted = false;
-    if (OB_FAIL(fill_tenant_schema(result, tenant_schema, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill tenant schema", K(ret));
-    } else if (tenant_schema.get_tenant_id() == prev_tenant_id) {
-    } else if (is_deleted) {
-      SHARE_SCHEMA_LOG(INFO, "tenant is is_deleted, don't add",
-               "tenant_id", tenant_schema.get_tenant_id());
-    } else if (OB_FAIL(tenant_schema_array.push_back(tenant_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
-    } else {
-      SHARE_SCHEMA_LOG(INFO, "retrieve tenant schema", K(tenant_schema), K(is_deleted));
-    }
-    prev_tenant_id = tenant_schema.get_tenant_id();
-  }
-  if (ret != common::OB_ITER_END) {
-    SHARE_SCHEMA_LOG(WARN, "fail to get all tenant schema. iter quit. ", K(ret));
-  } else {
-    ret = common::OB_SUCCESS;
-  }
-  return ret;
-}
-
 template<typename T>
 int ObSchemaRetrieveUtils::retrieve_system_variable_obj(
     const uint64_t tenant_id,
@@ -2832,7 +2670,6 @@ int ObSchemaRetrieveUtils::fill_sysvar_schema(const uint64_t tenant_id, T &resul
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, max_val, schema);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, flags, schema, int64_t);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, info, schema);
-    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, zone, schema)
   }
   return ret;
 }
@@ -3562,87 +3399,6 @@ int ObSchemaRetrieveUtils::fill_user_schema(
 }
 
 template<typename T>
-int ObSchemaRetrieveUtils::fill_tenant_schema(T &result,
-                                              ObSimpleTenantSchema &tenant_schema,
-                                              bool &is_deleted)
-{
-  int ret = common::OB_SUCCESS;
-  tenant_schema.reset();
-  is_deleted = false;
-
-  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tenant_id, tenant_schema, uint64_t);
-  EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
-  if (!is_deleted) {
-    bool skip_null_error = false;
-    ObString primary_zone_str;
-    ObString locality_str;
-    ObString previous_locality_str;
-    int64_t default_gmt_modified = 0;
-    int64_t gmt_modified = 0;
-    ObCompatibilityMode default_compat_mode = ObCompatibilityMode::MYSQL_MODE;
-    int64_t default_drop_tenant_time = OB_INVALID_TIMESTAMP;
-    ObString tenant_status_str("");
-    ObString arbitration_service_status_str("");
-    ObString default_tenant_status_str("NORMAL");
-    ObString default_arbitration_service_status_str("DISABLED");
-    int64_t default_in_recyclebin = 0;
-    common::ObTimeZoneInfoWrap tz_info_wrap;
-    ret = GET_TIMESTAMP_COL_BY_NAME_IGNORE_NULL_WITH_DEFAULT_VALUE(
-          result.get_timestamp, "gmt_modified", gmt_modified,
-          default_gmt_modified, tz_info_wrap.get_time_zone_info());
-    tenant_schema.set_gmt_modified(gmt_modified);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, tenant_schema, int64_t);
-    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, tenant_name, tenant_schema);
-    EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "primary_zone", primary_zone_str);
-    EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "locality", locality_str);
-    EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "previous_locality", previous_locality_str);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, compatibility_mode,
-        tenant_schema, common::ObCompatibilityMode, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_,
-        default_compat_mode);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, drop_tenant_time,
-        tenant_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_,
-        default_drop_tenant_time);
-    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "status", tenant_status_str,
-        skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_tenant_status_str);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, in_recyclebin,
-        tenant_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_,
-        default_in_recyclebin);
-    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "arbitration_service_status", arbitration_service_status_str,
-        skip_null_error, true/*ignore_column_retrieve_error*/, default_arbitration_service_status_str);
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(tenant_schema.set_primary_zone(primary_zone_str))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to set primary zone", K(ret), K(primary_zone_str));
-    } else if (OB_FAIL(tenant_schema.set_locality(locality_str))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to set locality", K(ret), K(locality_str));
-    } else if (OB_FAIL(tenant_schema.set_previous_locality(previous_locality_str))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to set previous_locality", K(ret), K(previous_locality_str));
-    }
-    if (OB_SUCC(ret)) {
-      ObTenantStatus status = TENANT_STATUS_MAX;
-      if (OB_FAIL(get_tenant_status(tenant_status_str, status))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to get tenant status", K(ret), K(tenant_status_str));
-      } else {
-        tenant_schema.set_status(status);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(tenant_schema.set_arbitration_service_status_from_string(arbitration_service_status_str))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to set arb status from string", K(ret), K(arbitration_service_status_str));
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    SHARE_SCHEMA_LOG(TRACE, "retrieve tenant schema", K(tenant_schema), K(is_deleted), KR(ret));
-  } else {
-    SHARE_SCHEMA_LOG(WARN, "retrieve tenant schema failed",
-                    "tenant_id", tenant_schema.get_tenant_id(),
-                    "schema_version", tenant_schema.get_schema_version(),
-                    K(is_deleted), KR(ret));
-  }
-  return ret;
-}
-
-template<typename T>
 int ObSchemaRetrieveUtils::fill_trigger_id(const uint64_t tenant_id, T &result,
                                            uint64_t &trigger_id, bool &is_deleted)
 {
@@ -3971,18 +3727,6 @@ int ObSchemaRetrieveUtils::fill_replica_options(T &result, SCHEMA &schema)
   } else {
     if (OB_FAIL(schema.set_zone_list(zones))) {
       SHARE_SCHEMA_LOG(WARN, "set_zone_list failed", K(ret));
-    } else if (OB_FAIL(schema.set_primary_zone(primary_zone_str))) {
-      SHARE_SCHEMA_LOG(WARN, "set_primary_zone failed", K(ret));
-    } else if (!ObPrimaryZoneUtil::no_need_to_check_primary_zone(schema.get_primary_zone())) {
-      SMART_VAR(ObPrimaryZoneUtil, primary_zone_util, schema.get_primary_zone()) {
-      if (OB_FAIL(primary_zone_util.init())) {
-        SHARE_SCHEMA_LOG(WARN, "fail to init primary zone util", K(ret));
-      } else if (OB_FAIL(primary_zone_util.check_and_parse_primary_zone())) {
-        SHARE_SCHEMA_LOG(WARN, "fail to check and parse primary zone", K(ret));
-      } else if (OB_FAIL(schema.set_primary_zone_array(primary_zone_util.get_zone_array()))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to set primary zone array", K(ret));
-      } else {} // set primary zone array success
-      } // end smart var
     } else {} // empty primary zone, no need to check and parse
   }
   return ret;
@@ -4616,37 +4360,6 @@ int ObSchemaRetrieveUtils::get_constraint_id_and_name(const uint64_t tenant_id,
     EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "constraint_type", cst_type, ObConstraintType);
   }
 
-  return ret;
-}
-
-template<typename T>
-int ObSchemaRetrieveUtils::retrieve_drop_tenant_infos(
-    T &result,
-    ObIArray<ObDropTenantInfo> &drop_tenant_infos)
-{
-  int ret = common::OB_SUCCESS;
-  uint64_t prev_tenant_id = common::OB_INVALID_ID;
-  ObDropTenantInfo drop_tenant_info;
-  drop_tenant_infos.reset();
-  while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
-    drop_tenant_info.reset();
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, tenant_id, drop_tenant_info, uint64_t);
-    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, drop_tenant_info, int64_t);
-    if (OB_FAIL(ret)) {
-    } else if (drop_tenant_info.get_tenant_id() == prev_tenant_id) {
-      ret = common::OB_ERR_UNEXPECTED;
-      SHARE_SCHEMA_LOG(WARN, "duplicate drop tenant info", K(ret), K(drop_tenant_info), K(prev_tenant_id));
-    } else if (OB_FAIL(drop_tenant_infos.push_back(drop_tenant_info))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret), K(drop_tenant_info));
-    } else {
-      prev_tenant_id = drop_tenant_info.get_tenant_id();
-    }
-  }
-  if (ret != common::OB_ITER_END) {
-    SHARE_SCHEMA_LOG(WARN, "fail to get all drop tenant infos. iter quit. ", K(ret));
-  } else {
-    ret = common::OB_SUCCESS;
-  }
   return ret;
 }
 

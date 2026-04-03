@@ -196,11 +196,6 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ALTER_OUTLINE,)                                     \
   ACT(OB_DDL_OUTLINE_OPERATION_END, = 800)                       \
   ACT(OB_DDL_ZONE_OPERATION_BEGIN, = 801)                        \
-  ACT(OB_DDL_ALTER_ZONE,)                                        \
-  ACT(OB_DDL_ADD_ZONE,)                                          \
-  ACT(OB_DDL_DELETE_ZONE,)                                       \
-  ACT(OB_DDL_START_ZONE,)                                        \
-  ACT(OB_DDL_STOP_ZONE,)                                         \
   ACT(OB_DDL_ZONE_OPERATION_END, = 900)                          \
   ACT(OB_DDL_SYNONYM_OPERATION_BEGIN, = 901)                     \
   ACT(OB_DDL_CREATE_SYNONYM,)                                    \
@@ -1142,10 +1137,6 @@ public:
       common::ObIArray<ObDropTenantInfo> &drop_tenant_infos) = 0;
 
   // for liboblog used
-  virtual int query_tenant_status(
-      common::ObISQLClient &sql_client,
-      const uint64_t tenant_id,
-      TenantStatus &tenant_status) = 0;
   virtual int get_schema_version_by_timestamp(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,

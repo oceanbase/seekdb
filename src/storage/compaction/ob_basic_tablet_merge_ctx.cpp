@@ -22,6 +22,7 @@
 #include "storage/ob_storage_schema_util.h"
 #include "storage/ob_gc_upper_trans_helper.h"
 #include "ob_medium_list_checker.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "share/schema/ob_tenant_schema_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
@@ -450,10 +451,6 @@ int ObBasicTabletMergeCtx::build_ctx(bool &finish_flag)
     if (OB_TABLET_NOT_EXIST != ret) {
       LOG_PRINT_WRAPPER("failed to get ls_handle/tablet_handle/rebuild_seq");
     }
-  } else if (OB_FAIL(ObTablet::check_transfer_seq_equal(*get_tablet(), get_schedule_transfer_seq()))) {
-    LOG_WARN("new tablet transfer seq not eq with old transfer seq", K(ret),
-        "new_tablet_meta", get_tablet()->get_tablet_meta(),
-        "old_transfer_seq", get_schedule_transfer_seq());
   } else if (OB_FAIL(get_merge_tables(get_merge_table_result))) {
     if (OB_NO_NEED_MERGE != ret) {
       LOG_PRINT_WRAPPER("failed to get merge tables");
@@ -1028,9 +1025,7 @@ int ObBasicTabletMergeCtx::build_update_table_store_param(
   param.sstable_ = sstable;
   param.allow_duplicate_sstable_ = false;
 
-  if (OB_FAIL(param.init_with_ha_info(ObHATableStoreParam(
-          get_tablet()->get_tablet_meta().transfer_info_.transfer_seq_,
-          true /*need_check_transfer_seq*/)))) {
+  if (OB_FAIL(param.init_with_ha_info(ObHATableStoreParam()))) {
     LOG_WARN("failed to init with ha info", KR(ret));
   } else if (OB_FAIL(param.init_with_compaction_info(ObCompactionTableStoreParam(
                      get_inner_table_merge_type(),
@@ -1383,15 +1378,6 @@ int ObBasicTabletMergeCtx::swap_tablet(ObGetMergeTablesResult &get_merge_table_r
       tables_handle.reset(); // clear tables array
       if (OB_FAIL(swap_tablet())) {
         LOG_WARN("failed to get alloc tablet handle", KR(ret));
-      } else if (OB_FAIL(ObTablet::check_transfer_seq_equal(*get_tablet(), get_schedule_transfer_seq()))) {
-        LOG_WARN("new tablet transfer seq not eq with old transfer seq", K(ret),
-            "new_tablet_meta", get_tablet()->get_tablet_meta(),
-            "old_transfer_seq", get_schedule_transfer_seq());
-      } else if (GCTX.is_shared_storage_mode() && 
-                OB_FAIL(ObTablet::check_transfer_seq_equal(*get_tablet(), get_merge_table_result.transfer_seq_))) {
-        LOG_WARN("new tablet transfer seq not eq with old transfer seq in ss", K(ret),
-            "new_tablet_meta", get_tablet()->get_tablet_meta(),
-            "old_transfer_seq", get_merge_table_result.transfer_seq_, K(lbt()));
       } else if (OB_FAIL(get_merge_tables(get_merge_table_result))) {
         if (OB_NO_NEED_MERGE != ret) {
           LOG_WARN("failed to get merge tables", KR(ret), KPC(this));

@@ -97,15 +97,6 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
       for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; ++cell_idx) {
         uint64_t col_id = output_column_ids_.at(cell_idx);
         switch(col_id) {
-          case SVR_IP: {
-            cells[cell_idx].set_varchar(ipstr_);
-            cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-          case SVR_PORT: {
-            cells[cell_idx].set_int(port_);
-            break;
-          }
           case TOTAL_SIZE:{
             int64_t reserved_size = 0;
             if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {

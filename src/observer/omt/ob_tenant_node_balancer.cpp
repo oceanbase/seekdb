@@ -20,7 +20,6 @@
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "logservice/ob_server_log_block_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/tenant_snapshot/ob_tenant_snapshot_service.h"
 #include "share/resource_manager/ob_resource_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "observer/ob_server_event_history_table_operator.h"
@@ -99,111 +98,68 @@ void ObTenantNodeBalancer::handle()
   }
 
   // check whether tenant unit is changed, try to update unit config of tenant
-  ObSEArray<uint64_t, 10> tenants;
   if (!SERVER_STORAGE_META_SERVICE.is_started()) {
     // do nothing if not finish replaying slog
     LOG_INFO("server slog not finish replaying, need wait");
     ret = OB_NEED_RETRY;
-  } else if (OB_FAIL(unit_getter_.get_tenants(tenants))) {
-    LOG_WARN("get cluster tenants fail", K(ret));
   } else if (OB_FAIL(ODV_MGR.set(OB_SYS_TENANT_ID, GCONF.compatible))) {
     LOG_WARN("set sys tenant data version failed", K(ret));
   }
 
-  FLOG_INFO("refresh tenant config", K(tenants), K(ret));
+  FLOG_INFO("refresh tenant config", K(ret));
 
   {
     common::ObBKGDSessInActiveGuard inactive_guard;
   }
 }
 
-int ObTenantNodeBalancer::handle_notify_unit_resource(const obrpc::TenantServerUnitConfig &arg)
+int ObTenantNodeBalancer::notify_create_tenant()
 {
+  LOG_INFO("succ to receive notify of creating tenant");
   int ret = OB_SUCCESS;
-  if (!arg.is_delete_) {
-    if (OB_FAIL(notify_create_tenant(arg))) {
-      LOG_WARN("failed to notify update tenant", KR(ret), K(arg));
-    }
-  } else {
-    if (OB_FAIL(try_notify_drop_tenant(arg.tenant_id_))) {
-      LOG_WARN("fail to try drop tenant", KR(ret), K(arg));
-    }
-  }
-  return ret;
-}
 
-int ObTenantNodeBalancer::notify_create_tenant(const obrpc::TenantServerUnitConfig &unit)
-{
-  LOG_INFO("succ to receive notify of creating tenant", K(unit));
-  int ret = OB_SUCCESS;
-  bool is_hidden_sys = false;
-  bool unit_id_exist = false;
-
-  if (!unit.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(unit));
-  } else if (!SERVER_STORAGE_META_SERVICE.is_started()) {
+  if (!SERVER_STORAGE_META_SERVICE.is_started()) {
     ret = OB_SERVER_IS_INIT;
-    LOG_WARN("slog replay not finish", KR(ret),K(unit));
-  } else if (OB_FAIL(omt_->check_if_hidden_sys(unit.tenant_id_, is_hidden_sys))) {
-    LOG_WARN("fail to check_if_hidden_sys", KR(ret), K(unit));
-  } else if (omt_->has_tenant(unit.tenant_id_) && !is_hidden_sys) {
-    ret = OB_TENANT_EXIST;
-    LOG_WARN("tenant has exist", KR(ret), K(unit));
-  } else if (unit_id_exist) { // the unit may be wait_gc status
-    ret = OB_ENTRY_EXIST;
-    LOG_WARN("unit_id exist", KR(ret), K(unit));
+    LOG_WARN("slog replay not finish", KR(ret));
+  } else if (!omt_->has_tenant(OB_SYS_TENANT_ID)) {
+    ret = OB_TENANT_NOT_EXIST;
+    LOG_WARN("sys tenant not exist", KR(ret));
   } else {
-    const uint64_t tenant_id = unit.tenant_id_;
+    const uint64_t tenant_id = OB_SYS_TENANT_ID;
     ObUnitInfoGetter::ObTenantConfig basic_tenant_unit;
-    const bool has_memstore = (unit.replica_type_ != REPLICA_TYPE_LOGONLY);
+    const bool has_memstore = true;
     const int64_t create_timestamp = ObTimeUtility::current_time();
     basic_tenant_unit.unit_status_ = ObUnitInfoGetter::ObUnitStatus::UNIT_NORMAL;
     const int64_t create_tenant_timeout_ts = THIS_WORKER.get_timeout_ts();
     int64_t hidden_sys_data_disk_config_size = 0;
+    ObUnitConfig unit_config;
     if (create_tenant_timeout_ts < create_timestamp) {
       ret = OB_TIMEOUT;
       LOG_WARN("notify_create_tenant has timeout", K(ret), K(create_timestamp), K(create_tenant_timeout_ts));
+    } else if (OB_ISNULL(GCTX.log_block_mgr_)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", KR(ret), KP(GCTX.log_block_mgr_));
+    } else if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(false/*is_hidden_sys*/, GCTX.log_block_mgr_->get_log_disk_size()))) {
+      LOG_WARN("gen sys tenant unit config fail", KR(ret));
     } else if (OB_FAIL(basic_tenant_unit.init(tenant_id,
-                                       unit.unit_id_,
+                                       1/*unit_id*/,
                                        ObUnitInfoGetter::ObUnitStatus::UNIT_NORMAL,
-                                       unit.unit_config_,
-                                       unit.compat_mode_,
+                                       unit_config,
+                                       lib::Worker::CompatMode::MYSQL/*compat_mode*/,
                                        create_timestamp,
                                        has_memstore,
                                        false /*is_removed*/,
                                        hidden_sys_data_disk_config_size,
-                                       basic_tenant_unit.gen_init_actual_data_disk_size(unit.unit_config_)))) {
-      LOG_WARN("fail to init user tenant config", KR(ret), K(unit));
+                                       basic_tenant_unit.gen_init_actual_data_disk_size(unit_config)))) {
+      LOG_WARN("fail to init user tenant config", KR(ret), K(unit_config));
     } else if (OB_FAIL(check_new_tenant(basic_tenant_unit, false /*check_data_version*/, create_tenant_timeout_ts))) {
       LOG_WARN("failed to create new tenant", KR(ret), K(basic_tenant_unit), K(create_tenant_timeout_ts));
     } else {
       ret = OB_SUCCESS;
-      LOG_INFO("succ to create new user tenant", KR(ret), K(unit), K(basic_tenant_unit), K(create_tenant_timeout_ts));
+      LOG_INFO("succ to create new user tenant", KR(ret), K(unit_config), K(basic_tenant_unit), K(create_tenant_timeout_ts));
     }
   }
 
-  return ret;
-}
-// Mark as deleted rather than directly deleting, because during concurrency, another thread might have fetched the tenant but has not yet refreshed the tenant,
-// At this point, drop tenant will delete the tenant, and another thread will add it back when it refreshes the tenant a while later
-// So here we only make a mark, the deletion of tenant is uniformly done in refresh tenant
-int ObTenantNodeBalancer::try_notify_drop_tenant(const int64_t tenant_id)
-{
-  LOG_INFO("[DELETE_TENANT] succ to receive notify of dropping tenant", K(tenant_id));
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  TCWLockGuard guard(lock_);
-  if (OB_ISNULL(omt_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("omt_ is null", KR(ret),KP(omt_));
-  } else {
-    if (OB_TMP_FAIL(omt_->mark_del_tenant(tenant_id))) {
-      LOG_WARN("fail to mark del user_tenant", KR(ret), KR(tmp_ret), K(tenant_id));
-      ret = OB_SUCC(ret) ? tmp_ret : ret;
-    }
-  }
-  LOG_INFO("[DELETE_TENANT] mark drop tenant", KR(ret), K(tenant_id));
   return ret;
 }
 
@@ -292,7 +248,7 @@ int ObTenantNodeBalancer::check_new_tenant(
 
   if (OB_FAIL(omt_->get_tenant(tenant_id, tenant))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("real or hidden sys tenant must be exist", K(ret));
+    LOG_WARN("real or hidden sys tenant must be exist", K(ret));
   } else if (OB_ISNULL(tenant)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant should not be null here", KR(ret), K(tenant_id));

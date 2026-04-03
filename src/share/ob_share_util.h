@@ -28,7 +28,13 @@ class ObISQLClient;
 }
 namespace share
 {
-
+namespace schema
+{
+class ObTenantSchema;
+}
+class ObResourcePool;
+class ObUnit;
+typedef ObFixedLengthString<common::OB_SERVER_VERSION_LENGTH> ObBuildVersion;
 // available range is [start_id, end_id]
 class ObIDGenerator
 {
@@ -78,26 +84,11 @@ public:
   static int get_abs_timeout(const int64_t default_timeout, int64_t &abs_timeout);
   static int get_ctx_timeout(const int64_t default_timeout, int64_t &timeout);
 
-  // generate the count of arb replica of a log stream
-  // @params[in]  tenant_id, which tenant to check
-  // @params[in]  ls_id, which log stream to check
-  // @params[out] arb_replica_num, the result
-  static int generate_arb_replica_num(
-      const uint64_t tenant_id,
-      const ObLSID &ls_id,
-      int64_t &arb_replica_num);
-
   static int fetch_current_data_version(
              common::ObISQLClient &client,
              const uint64_t tenant_id,
              uint64_t &data_version);
 
-  // parse GCONF.all_server_list
-  // @params[in]  excluded_server_list, servers which will not be included in the output
-  // @params[out] config_all_server_list, servers in (GCONF.all_server_list - excluded_server_list)
-  static int parse_all_server_list(
-    const ObArray<ObAddr> &excluded_server_list,
-    ObArray<ObAddr> &config_all_server_list);
   // get ora_rowscn from one row
   // @params[in]: tenant_id, the table owner
   // @params[in]: sql, the sql should be "select ORA_ROWSCN from xxx", where count() is 1
@@ -107,8 +98,6 @@ public:
     const uint64_t tenant_id,
     const ObSqlString &sql,
     SCN &ora_rowscn);
-  static bool is_tenant_enable_rebalance(const uint64_t tenant_id);
-  static bool is_tenant_enable_transfer(const uint64_t tenant_id);
   static int mtl_get_tenant_role(const uint64_t tenant_id, ObTenantRole::Role &tenant_role);
   static int mtl_check_if_tenant_role_is_primary(const uint64_t tenant_id, bool &is_primary);
   static int mtl_check_if_tenant_role_is_standby(const uint64_t tenant_id, bool &is_standby);
@@ -121,6 +110,17 @@ public:
   static inline uint64_t compute_server_index(uint64_t server_id) {
     return server_id % (MAX_SERVER_COUNT + 1);
   }
+  static int get_sys_ls_readable_scn(SCN &readable_scn);
+  static int check_clog_disk_full_or_hang(
+             bool &clog_disk_is_full,
+             bool &clog_disk_is_hang);
+  static int check_data_disk_health_status(
+             bool &is_data_disk_healthy);
+  static int get_tenant_gts(const uint64_t &tenant_id, SCN &gts_scn);
+  static int gen_sys_unit(ObUnit &unit);
+  static int gen_sys_resource_pool(ObResourcePool &resource_pool);
+  static int gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_schema);
+  static int is_primary_cluster(bool &is_primary);
 };
 }//end namespace share
 }//end namespace oceanbase

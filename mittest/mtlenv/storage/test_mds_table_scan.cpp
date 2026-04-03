@@ -1356,8 +1356,7 @@ TEST_F(TestMdsTableScan, test_range_cross)
 
   // try push mini.
   const share::SCN &flush_scn = mds_mini->get_end_scn();
-  compaction::ObTabletMergeDagParam dag_param(compaction::MDS_MINI_MERGE, LS_ID, tablet_id,
-          tablet->get_tablet_meta().transfer_info_.transfer_seq_);
+  compaction::ObTabletMergeDagParam dag_param(compaction::MDS_MINI_MERGE, LS_ID, tablet_id, 0);
 
   compaction::ObTabletMergeCtx mini_ctx(dag_param, allocator_);
   mini_ctx.static_param_.scn_range_.end_scn_ = flush_scn;

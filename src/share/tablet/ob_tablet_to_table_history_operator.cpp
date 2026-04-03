@@ -62,9 +62,7 @@ int ObTabletToTableHistoryOperator::create_tablet_to_table_history(
             || !pair.get_tablet_id().is_valid_with_tenant(tenant_id))) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid tablet-table pair", KR(ret), K(tenant_id), K(pair));
-        } else if (OB_FAIL(dml_splicer.add_pk_column("tenant_id",
-                           ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)))
-                   || OB_FAIL(dml_splicer.add_pk_column("tablet_id", pair.get_tablet_id().id()))
+        } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", pair.get_tablet_id().id()))
                    || OB_FAIL(dml_splicer.add_pk_column("schema_version", schema_version))
                    || OB_FAIL(dml_splicer.add_column("table_id",
                               ObSchemaUtils::get_extract_schema_id(tenant_id, pair.get_table_id())))
@@ -125,9 +123,7 @@ int ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
             || !tablet_id.is_valid_with_tenant(tenant_id))) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid tablet_id", KR(ret), K(tenant_id), K(tablet_id));
-        } else if (OB_FAIL(dml_splicer.add_pk_column("tenant_id",
-                           ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)))
-                   || OB_FAIL(dml_splicer.add_pk_column("tablet_id", tablet_id.id()))
+        } else if (OB_FAIL(dml_splicer.add_pk_column("tablet_id", tablet_id.id()))
                    || OB_FAIL(dml_splicer.add_pk_column("schema_version", schema_version))
                    || OB_FAIL(dml_splicer.add_column("table_id",
                               ObSchemaUtils::get_extract_schema_id(tenant_id, table_id)))

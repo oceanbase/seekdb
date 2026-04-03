@@ -18,6 +18,7 @@
 
 #include "pl/sys_package/ob_dbms_upgrade.h"
 #include "pl/ob_pl_package_manager.h"
+#include "observer/ob_service.h" // for ObService
 
 namespace oceanbase
 {
@@ -85,37 +86,38 @@ int ObDBMSUpgrade::get_job_action(ObSqlString &job_action, ObSqlString &query_sq
   int ret = OB_SUCCESS;
 
   common::ObZone zone;
-  ObArray<ObServerInfoInTable> servers_info;
-  common::hash::ObHashSet<ObServerInfoInTable::ObBuildVersion> observer_version_set;
+  share::ObBuildVersion build_version;
+  common::hash::ObHashSet<ObBuildVersion> observer_version_set;
   bool need_comma = false;
 
   job_action.reset();
   query_sql.reset();
 
   OZ (observer_version_set.create((4)));
-  OZ (share::ObAllServerTracer::get_instance().get_servers_info(zone, servers_info));
-  for (int64_t i = 0; OB_SUCC(ret) && i < servers_info.count(); ++i) {
-    OZ (observer_version_set.set_refactored(servers_info.at(i).get_build_version()));
-  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(observer::ObService::get_build_version(build_version))) {
+    LOG_WARN("fail to get build version", KR(ret));
+  } else {
+    OZ (observer_version_set.set_refactored(build_version));
 
-  //OZ (get_package_and_svn(build_version, sizeof(build_version)));
-  //OZ (job_action.assign_fmt("delete FROM %s where build_version != '%s'", OB_ALL_NCOMP_DLL_V2_TNAME, build_version));
-  OZ (job_action.assign_fmt("delete FROM %s where build_version not in (", OB_ALL_NCOMP_DLL_V2_TNAME));
-  OZ (query_sql.assign_fmt("select key_id from %s where build_version not in (", OB_ALL_NCOMP_DLL_V2_TNAME));
-  for (common::hash::ObHashSet<ObServerInfoInTable::ObBuildVersion>::const_iterator iter = observer_version_set.begin();
-      OB_SUCC(ret) && iter != observer_version_set.end();
-      iter++) {
-    OZ (job_action.append_fmt("%s'%s'", need_comma ? ", " : "", iter->first.ptr()));
-    OZ (query_sql.append_fmt("%s'%s'", need_comma ? ", " : "", iter->first.ptr()));
-    OX (need_comma = true);
-  }
-  OZ (job_action.append(")"));
-  OZ (query_sql.append(")"));
+    //OZ (get_package_and_svn(build_version, sizeof(build_version)));
+    //OZ (job_action.assign_fmt("delete FROM %s where build_version != '%s'", OB_ALL_NCOMP_DLL_V2_TNAME, build_version));
+    OZ (job_action.assign_fmt("delete FROM %s where build_version not in (", OB_ALL_NCOMP_DLL_V2_TNAME));
+    OZ (query_sql.assign_fmt("select key_id from %s where build_version not in (", OB_ALL_NCOMP_DLL_V2_TNAME));
+    for (common::hash::ObHashSet<ObBuildVersion>::const_iterator iter = observer_version_set.begin();
+        OB_SUCC(ret) && iter != observer_version_set.end();
+        iter++) {
+      OZ (job_action.append_fmt("%s'%s'", need_comma ? ", " : "", iter->first.ptr()));
+      OZ (query_sql.append_fmt("%s'%s'", need_comma ? ", " : "", iter->first.ptr()));
+      OX (need_comma = true);
+    }
+    OZ (job_action.append(")"));
+    OZ (query_sql.append(")"));
 
-  if (observer_version_set.created()) {
-    observer_version_set.destroy();
+    if (observer_version_set.created()) {
+      observer_version_set.destroy();
+    }
   }
-
   return ret;
 }
 

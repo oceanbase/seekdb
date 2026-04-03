@@ -31,8 +31,7 @@ ObPxTargetMgr &ObPxTargetMgr::get_instance()
   return px_res_mgr;
 }
 
-int ObPxTargetMgr::init(const common::ObAddr &server,
-                        ObIAliveServerTracer &server_tracer)
+int ObPxTargetMgr::init(const common::ObAddr &server)
 {
   int ret = OB_SUCCESS;
   auto attr = SET_USE_500("PxResMgr");
@@ -48,7 +47,6 @@ int ObPxTargetMgr::init(const common::ObAddr &server,
     LOG_WARN("create alive_server_set_ failed", K(ret));
   } else {
     server_ = server;
-    server_tracer_ = &server_tracer;
     is_inited_ = true;
     LOG_INFO("ObPxTargetMgr inited success", K(server_));
   }
@@ -60,7 +58,6 @@ void ObPxTargetMgr::reset()
   is_inited_ = false;
   is_running_ = false;
   server_.reset();
-  server_tracer_ = NULL;
   px_info_map_.reset();
   alive_server_set_.clear();
   LOG_INFO("ObPxTargetMgr reset success", K(server_));
@@ -129,32 +126,10 @@ void ObPxTargetMgr::destroy()
 
 void ObPxTargetMgr::run_timer_task()
 {
-  int ret = OB_SUCCESS;
   ObPxResRefreshFunctor px_res_refresh_funtor;
 
   px_info_map_.for_each(px_res_refresh_funtor);
   px_res_refresh_funtor.set_need_refresh_all(false);
-
-  // check alive is a very slow and not necessary oper
-  if (REACH_TIME_INTERVAL(PX_REFRESH_CHECK_ALIVE_INTERVAL_US)) {
-    for (hash::ObHashSet<ObAddr>::const_iterator it = alive_server_set_.begin();
-        OB_SUCC(ret) && it != alive_server_set_.end(); it++) {
-      bool alive = true;
-      int64_t trace_time;
-      if (OB_FAIL(server_tracer_->is_alive(it->first, alive, trace_time))) {
-        LOG_WARN("check server alive failed", K(ret), K(it->first));
-        // ignore ret
-        ret = OB_SUCCESS;
-      } else if (!alive) {
-        // TODO: it's not very good, maybe not all tenant in this server
-        px_res_refresh_funtor.set_need_refresh_all(true);
-        LOG_INFO("found a server is not longer alive, so refresh all", K(it->first));
-      }
-    }
-    if (px_res_refresh_funtor.need_refresh_all_) {
-      alive_server_set_.clear();
-    }
-  }
 }
 
 int ObPxTargetMgr::add_tenant(const uint64_t tenant_id)

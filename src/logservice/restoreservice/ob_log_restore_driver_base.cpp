@@ -1,0 +1,165 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#define USING_LOG_PREFIX CLOG
+#include "ob_log_restore_driver_base.h"
+//#include "rootserver/ob_tenant_info_loader.h" // ObTenantInfoLoader
+#include "logservice/ob_log_service.h"
+
+namespace oceanbase
+{
+namespace logservice
+{
+ObLogRestoreDriverBase::ObLogRestoreDriverBase() :
+  inited_(false),
+  tenant_id_(OB_INVALID_TENANT_ID),
+  ls_svr_(NULL),
+  log_service_(NULL)
+{}
+
+ObLogRestoreDriverBase::~ObLogRestoreDriverBase()
+{
+  destroy();
+}
+
+int ObLogRestoreDriverBase::init(const uint64_t tenant_id,
+    ObLSService *ls_svr,
+    ObLogService *log_service)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("restore driver already init", K(inited_));
+  } else if (OB_UNLIKELY(tenant_id == OB_INVALID_TENANT_ID
+        || NULL == ls_svr
+        || NULL == log_service)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(tenant_id), K(ls_svr), K(log_service));
+  } else {
+    tenant_id_ = tenant_id;
+    ls_svr_ = ls_svr;
+    log_service_ = log_service;
+    inited_ = true;
+  }
+  return ret;
+}
+
+void ObLogRestoreDriverBase::destroy()
+{
+  inited_ = false;
+  tenant_id_ = OB_INVALID_TENANT_ID;
+  ls_svr_ = NULL;
+  log_service_ = NULL;
+}
+
+int ObLogRestoreDriverBase::do_schedule()
+{
+  int ret = OB_SUCCESS;
+  ObLS *ls = NULL;
+  ObLSIterator *iter = NULL;
+  common::ObSharedGuard<ObLSIterator> guard;
+  if (OB_UNLIKELY(! inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObLogRestoreArchiveDriver not init", K(ret));
+  } else if (OB_FAIL(ls_svr_->get_ls_iter(guard, ObLSGetMod::LOG_MOD))) {
+    LOG_WARN("get log stream iter failed", K(ret));
+  } else if (OB_ISNULL(iter = guard.get_ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("iter is NULL", K(ret), K(iter));
+  } else {
+    while (OB_SUCC(ret)) {
+      ls = NULL;
+      if (OB_FAIL(iter->get_next(ls))) {
+        if (OB_ITER_END != ret) {
+          LOG_WARN("iter ls get next failed", K(ret));
+        } else {
+          LOG_TRACE("iter to end", K(ret));
+        }
+      } else if (OB_ISNULL(ls)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("ls is NULL", K(ret), K(ls));
+      } else if (OB_FAIL(do_fetch_log_(*ls))) {
+        LOG_WARN("do fetch log failed", K(ret), K(ls));
+      }
+    } // while
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+    }
+  }
+  return ret;
+}
+
+int ObLogRestoreDriverBase::set_global_recovery_scn(const share::SCN &recovery_scn)
+{
+  int ret = OB_SUCCESS;
+  global_recovery_scn_ = recovery_scn;
+  return ret;
+}
+
+int ObLogRestoreDriverBase::check_replica_status_(storage::ObLS &ls, bool &can_fetch_log)
+{
+  int ret = OB_SUCCESS;
+  ObRestoreStatus restore_status;
+  if (OB_FAIL(ls.get_restore_status(restore_status))) {
+    LOG_WARN("get restore status failed", K(ret), K(ls));
+  } else {
+    can_fetch_log = restore_status.can_restore_log();
+  }
+  return ret;
+}
+
+// Restore log need be under control, otherwise log disk may be full as single ls restore log too fast
+// NB: Logs can be replayed only if its scn not bigger than replayable_point
+int ObLogRestoreDriverBase::get_upper_resotore_scn(share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  SCN replayable_point;
+  bool restore_log_limit = true;
+  if (OB_FAIL(check_fetch_log_unlimited_(restore_log_limit))) {
+    LOG_WARN("check_fetch_log_unlimited_ failed");
+  } else if (! restore_log_limit) {
+    scn = share::SCN::max_scn();
+  } else if (OB_FAIL(log_service_->get_replayable_point(replayable_point))) {
+    LOG_WARN("get replayable point failed", K(ret));
+  } else {
+    share::SCN advance_scn = share::SCN::plus(replayable_point, FETCH_LOG_AHEAD_THRESHOLD_NS);
+    scn = global_recovery_scn_ <= advance_scn ? global_recovery_scn_ : advance_scn;
+  }
+  return ret;
+}
+
+int ObLogRestoreDriverBase::check_fetch_log_unlimited_(bool &limit)
+{
+  int ret = OB_SUCCESS;
+  // TODO
+  limit = false;
+  //share::ObAllTenantInfo tenant_info;
+  //rootserver::ObTenantInfoLoader *tenant_info_loader = MTL(rootserver::ObTenantInfoLoader*);
+  //limit = true;
+  //bool is_prepare = false;
+
+  //if (OB_ISNULL(tenant_info_loader)) {
+  //  ret = OB_ERR_UNEXPECTED;
+  //  LOG_ERROR("tenant_info_loader is NULL", K(tenant_info_loader));
+  //} else if(OB_FAIL(tenant_info_loader->check_is_prepare_flashback_for_switch_to_primary_status(is_prepare))) {
+  //  LOG_WARN("fail to check tenant status", KR(ret), KPC(tenant_info_loader));
+  //} else if (is_prepare) {
+  //  limit = false;
+  //}
+  return ret;
+}
+
+} // namespace logservice
+} // namespace oceanbase

@@ -156,56 +156,37 @@ int ObAllVirtualIDService::inner_get_next_row(ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-      case OB_APP_MIN_COLUMN_ID: { // tenant_id
-        cur_row_.cells_[i].set_int(cur_tenant_id_);
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 1: { // svr_ip
-        if (false == self.ip_to_string(ip_buf_, common::OB_IP_STR_BUFF)) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "ip_to_string failed", K(ret), K(self));
-        } else {
-          cur_row_.cells_[i].set_varchar(ObString::make_string(ip_buf_));
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
-                                                ObCharset::get_default_charset()));
-        }
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 2: { // svr_port
-        cur_row_.cells_[i].set_int(self.get_port());
-        break;
-      }
-      case OB_APP_MIN_COLUMN_ID + 3: { // id_service_type
+      case OB_APP_MIN_COLUMN_ID: { // id_service_type
         cur_row_.cells_[i].set_int(service_type_[service_types_index_]);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 4: { // last_id
-          cur_row_.cells_[i].set_int(last_id_);
-          break;
+      case OB_APP_MIN_COLUMN_ID + 1: { // last_id
+        cur_row_.cells_[i].set_int(last_id_);
+        break;
       }
-      case OB_APP_MIN_COLUMN_ID + 5: { // limit_id
+      case OB_APP_MIN_COLUMN_ID + 2: { // limit_id
         cur_row_.cells_[i].set_int(limit_id_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 6: { // rec_log_ts
+      case OB_APP_MIN_COLUMN_ID + 3: { // rec_log_scn
         uint64_t v = rec_log_ts_.is_valid() ? rec_log_ts_.get_val_for_inner_table_field() : 0;
         cur_row_.cells_[i].set_uint64(v);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 7: { // latest_log_ts
+      case OB_APP_MIN_COLUMN_ID + 4: { // latest_log_scn
         uint64_t v = latest_log_ts_.is_valid() ? latest_log_ts_.get_val_for_inner_table_field() : 0;
         cur_row_.cells_[i].set_uint64(v);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 8: { // pre_allocated_range
+      case OB_APP_MIN_COLUMN_ID + 5: { // pre_allocated_range
         cur_row_.cells_[i].set_int(pre_allocated_range_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 9: { // submit_log_ts
+      case OB_APP_MIN_COLUMN_ID + 6: { // submit_log_ts
         cur_row_.cells_[i].set_int(submit_log_ts_);
         break;
       }
-      case OB_APP_MIN_COLUMN_ID + 10: { // is_master
+      case OB_APP_MIN_COLUMN_ID + 7: { // is_master
         cur_row_.cells_[i].set_bool(is_master_);
         break;
       }

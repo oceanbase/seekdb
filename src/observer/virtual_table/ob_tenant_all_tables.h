@@ -72,7 +72,7 @@ namespace observer
                     "CASE a.table_type WHEN 4 THEN 'VIEW' ELSE a.comment END as COMMENT " \
                     "from " \
                     "(" \
-                    "select tenant_id," \
+                    "select " \
                     "database_id," \
                     "table_id," \
                     "table_name, " \
@@ -86,9 +86,8 @@ namespace observer
                     "from oceanbase.__all_table where table_type in (0, 1, 2, 3, 4, 14)) a " \
                     "join oceanbase.__all_database b " \
                     "on a.database_id = b.database_id " \
-                    "and a.tenant_id = b.tenant_id " \
                     "left join (" \
-                    "select tenant_id," \
+                    "select " \
                     "table_id," \
                     "row_cnt," \
                     "avg_row_len," \
@@ -96,7 +95,6 @@ namespace observer
                     "from oceanbase.__all_table_stat " \
                     "where partition_id = -1 or partition_id = table_id) ts " \
                     "on a.table_id = ts.table_id " \
-                    "and a.tenant_id = ts.tenant_id " \
                     "where a.table_type in (0, 1, 2, 3, 4, 14) " \
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \
@@ -129,7 +127,7 @@ namespace observer
                     "CASE a.table_type WHEN 4 THEN 'VIEW' ELSE a.cmt END as \"COMMENT\" " \
                     "from " \
                     "(" \
-                    "select tenant_id," \
+                    "select " \
                     "database_id," \
                     "table_id," \
                     "table_name, " \
@@ -143,9 +141,8 @@ namespace observer
                     "from SYS.ALL_VIRTUAL_TABLE_REAL_AGENT where table_type in (0, 1, 2, 3, 4, 14)) a " \
                     "join SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT b " \
                     "on a.database_id = b.database_id " \
-                    "and a.tenant_id = b.tenant_id " \
                     "left join (" \
-                    "select tenant_id," \
+                    "select " \
                     "table_id," \
                     "row_cnt," \
                     "avg_row_len," \
@@ -153,7 +150,6 @@ namespace observer
                     "from SYS.ALL_VIRTUAL_TABLE_STAT_REAL_AGENT " \
                     "where partition_id = -1 or partition_id = table_id) ts " \
                     "on a.table_id = ts.table_id " \
-                    "and a.tenant_id = ts.tenant_id " \
                     "where a.table_type in (0, 1, 2, 3, 4, 14) " \
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \

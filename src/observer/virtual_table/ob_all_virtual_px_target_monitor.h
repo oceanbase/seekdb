@@ -43,10 +43,7 @@ private:
 private:
   enum TARGET_MONITOR_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    IS_LEADER,
+        IS_LEADER = common::OB_APP_MIN_COLUMN_ID,
     VERSION,
     PEER_IP,
     PEER_PORT,

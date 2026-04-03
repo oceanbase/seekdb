@@ -1780,7 +1780,7 @@ int ObXmlBin::get_key_info(int64_t text_index, int64_t& sorted_index, int64_t &k
     int64_t key_entry_len_pos = key_entry_offset_pos + meta_.key_entry_size_;
     if (sorted_index >= meta_.count_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get index unexpected.", K(ret), K(index), K(meta_.count_));
+      LOG_WARN("get index unexpected.", K(ret), K(sorted_index), K(meta_.count_));
     } else if (OB_FAIL(ObMulModeVar::read_size_var(meta_.data_ + key_entry_offset_pos, meta_.key_entry_size_, &key_offset))) {
       LOG_WARN("failed to get key offset.", K(ret));
     } else if (OB_FAIL(ObMulModeVar::read_size_var(meta_.data_ + key_entry_len_pos, meta_.key_entry_size_, &key_len))) {

@@ -154,10 +154,6 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
       const uint64_t col_id = output_column_ids_.at(cell_idx);
       switch (col_id) {
-        case TENANT_ID : {
-          cells[cell_idx].set_int(static_cast<int64_t>(tenant_id_));
-          break;
-        }
         case DATABASE_ID : {
           cells[cell_idx].set_int(static_cast<int64_t>(outline_info->get_database_id()));
           break;

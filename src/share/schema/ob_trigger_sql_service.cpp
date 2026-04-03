@@ -209,7 +209,6 @@ int ObTriggerSqlService::fill_dml_sql(const ObTriggerInfo &trigger_info,
                                                                    database_id);
   uint64_t pure_base_object_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id,
                                                                       base_object_id);
-  OZ (dml.add_pk_column("tenant_id", pure_tenant_id));
   OZ (dml.add_pk_column("trigger_id", pure_trigger_id));
   OZ (dml.add_column("owner_id", pure_owner_id));
   OZ (dml.add_column("database_id", pure_database_id));

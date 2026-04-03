@@ -1445,21 +1445,7 @@ int ObAdminDumpBackupDataExecutor::print_meta_index_index_list_()
 
 int ObAdminDumpBackupDataExecutor::print_ls_attr_info_()
 {
-  int ret = OB_SUCCESS;
-  storage::ObBackupDataLSAttrDesc ls_attr_desc;
-  if (OB_FAIL(inner_print_common_header_(backup_path_, storage_info_))) {
-    STORAGE_LOG(WARN, "fail to inner print common header", K(ret));
-  } else if (OB_FAIL(ObAdminDumpBackupDataUtil::read_backup_info_file(ObString(backup_path_), ObString(storage_info_), ls_attr_desc))) {
-    STORAGE_LOG(WARN, "fail to read ls attr info", K(ret), K(backup_path_), K(storage_info_));
-  } else {
-    ARRAY_FOREACH_X(ls_attr_desc.ls_attr_array_, i , cnt, OB_SUCC(ret)) {
-      const share::ObLSAttr ls_attr = ls_attr_desc.ls_attr_array_.at(i);
-      if (OB_FAIL(dump_ls_attr_info_(ls_attr))) {
-        STORAGE_LOG(WARN, "fail to dump ls attr info", K(ret), K(ls_attr));
-      }
-    }
-  }
-  PrintHelper::print_end_line();
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -2469,18 +2455,6 @@ int ObAdminDumpBackupDataExecutor::dump_backup_macro_block_id_mapping_meta_(
     }
   }
   PrintHelper::print_end_line();
-  return ret;
-}
-
-int ObAdminDumpBackupDataExecutor::dump_ls_attr_info_(const share::ObLSAttr &ls_attr)
-{
-  int ret = OB_SUCCESS;
-  PrintHelper::print_dump_title("ls_attr info");
-  PrintHelper::print_dump_line("ls_id", ls_attr.get_ls_id().id());
-  PrintHelper::print_dump_line("ls_group_id", ls_attr.get_ls_group_id());
-  PrintHelper::print_dump_line("flag", ls_attr.get_ls_flag().get_flag_value());
-  PrintHelper::print_dump_line("status", ls_attr.get_ls_status());
-  PrintHelper::print_dump_line("operation_type", ls_attr.get_ls_operation_type());
   return ret;
 }
 

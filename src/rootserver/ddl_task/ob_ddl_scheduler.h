@@ -687,7 +687,7 @@ int create_partition_split_task(
 private:
   static const int64_t TOTAL_LIMIT = 1024L * 1024L * 1024L;
   static const int64_t HOLD_LIMIT = 8 * 1024L * 1024L;
-  static const int64_t PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
+  static const int64_t ALLOC_PAGE_SIZE = common::OB_MALLOC_NORMAL_BLOCK_SIZE;
   bool is_inited_;
   bool is_stop_;
   DDLIdling idler_;

@@ -213,48 +213,6 @@ inline void ObFlashBackDatabaseStmt::set_new_db_name(const common::ObString &new
   flashback_db_arg_.new_db_name_ = new_db_name;
 }
 
-
-
-/**
- * flaskback tenant
- */
-
-class ObFlashBackTenantStmt : public ObDDLStmt
-{
-public:
-  ObFlashBackTenantStmt() : ObDDLStmt(stmt::T_FLASHBACK_TENANT) {}
-  explicit ObFlashBackTenantStmt(common::ObIAllocator *name_pool)
-    : ObDDLStmt(name_pool, stmt::T_FLASHBACK_TENANT)
-  {}
-  virtual ~ObFlashBackTenantStmt() {}
-  const obrpc::ObFlashBackTenantArg& get_flashback_tenant_arg() const { return flashback_tenant_arg_; }
-  inline void set_tenant_id(const uint64_t tenant_id);
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return flashback_tenant_arg_; }
-  uint64_t get_tenant_id() const { return flashback_tenant_arg_.tenant_id_; }
-  void set_origin_tenant_name(const common::ObString origin_tenant_name);
-  void set_new_tenant_name(const common::ObString &new_tenant_name);
-  TO_STRING_KV(K_(stmt_type),K_(flashback_tenant_arg));
-private:
-  obrpc::ObFlashBackTenantArg flashback_tenant_arg_;
-  DISALLOW_COPY_AND_ASSIGN(ObFlashBackTenantStmt);
-};
-
-inline void ObFlashBackTenantStmt::set_tenant_id(const uint64_t tenant_id)
-{
-  flashback_tenant_arg_.tenant_id_ = tenant_id;
-}
-
-inline void ObFlashBackTenantStmt::set_origin_tenant_name(const common::ObString origin_tenant_name)
-{
-  flashback_tenant_arg_.origin_tenant_name_ = origin_tenant_name;
-}
-
-inline void ObFlashBackTenantStmt::set_new_tenant_name(const common::ObString &new_tenant_name)
-{
-  flashback_tenant_arg_.new_tenant_name_ = new_tenant_name;
-}
-
-
 } // namespace sql
 } // namespace oceanbase
 

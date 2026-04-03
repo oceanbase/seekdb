@@ -1,0 +1,83 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_OB_UNITS_INFO_H_
+#define OCEANBASE_OB_UNITS_INFO_H_
+
+#include "lib/container/ob_se_array.h"              // ObSEArray
+#include "common/ob_zone.h"                         // ObZone
+#include "common/ob_region.h"                       // ObRegin
+#include "common/ob_zone_type.h"                    // ObZoneType
+
+namespace oceanbase
+{
+namespace logservice
+{
+// Records in table GV$OB_UNITS
+struct ObUnitsRecord
+{
+  common::ObAddr server_;
+  common::ObZone zone_;
+  common::ObZoneType zone_type_;
+  common::ObRegion region_;
+
+  ObUnitsRecord() { reset(); }
+
+  void reset()
+  {
+    server_.reset();
+    zone_.reset();
+    zone_type_ = common::ZONE_TYPE_INVALID;
+    region_.reset();
+  }
+
+  int init(
+      const common::ObAddr &server,
+      ObString &zone,
+      common::ObZoneType &zone_type,
+      ObString &region);
+
+  TO_STRING_KV(K_(server), K_(zone), K_(zone_type), K_(region));
+};
+
+class ObUnitsRecordInfo
+{
+public:
+  static const int64_t ALL_SERVER_DEFAULT_RECORDS_NUM = 16;
+  typedef common::ObSEArray<ObUnitsRecord, ALL_SERVER_DEFAULT_RECORDS_NUM> ObUnitsRecordArray;
+
+  ObUnitsRecordInfo() { reset(); }
+  virtual ~ObUnitsRecordInfo() { reset(); }
+
+  int init(const int64_t cluster_id);
+  void reset();
+  inline int64_t get_cluster_id() { return cluster_id_; }
+  inline ObUnitsRecordArray &get_units_record_array() { return units_record_array_; }
+  int add(ObUnitsRecord &record);
+
+  TO_STRING_KV(K_(cluster_id), K_(units_record_array));
+
+private:
+  int64_t cluster_id_;
+  ObUnitsRecordArray units_record_array_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObUnitsRecordInfo);
+};
+
+} // namespace logservice
+} // namespace oceanbase
+
+#endif

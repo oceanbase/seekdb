@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX RS_COMPACTION
 #include "rootserver/freeze/ob_major_merge_progress_util.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
-#include "share/transfer/ob_transfer_task_operator.h"
 #include "share/compaction/ob_schedule_batch_size_mgr.h"
 #include "src/share/ob_tablet_replica_checksum_operator.h"
 
@@ -111,8 +110,7 @@ const int64_t ObTabletLSPairCache::TABLET_LS_MAP_BUCKET_CNT;
 const int64_t ObTabletLSPairCache::RANGE_SIZE;
 ObTabletLSPairCache::ObTabletLSPairCache()
   : tenant_id_(0),
-    last_refresh_ts_(0),
-    max_task_id_()
+    last_refresh_ts_(0)
 {
 }
 
@@ -124,7 +122,6 @@ ObTabletLSPairCache::~ObTabletLSPairCache()
 void ObTabletLSPairCache::reuse()
 {
   last_refresh_ts_ = 0;
-  max_task_id_.reset();
   map_.reuse();
 }
 
@@ -132,7 +129,6 @@ void ObTabletLSPairCache::destroy()
 {
   tenant_id_ = 0;
   last_refresh_ts_ = 0;
-  max_task_id_.reset();
   if (map_.created()) {
     map_.destroy();
   }
@@ -231,39 +227,14 @@ int ObTabletLSPairCache::rebuild_map_by_tablet_cnt()
   return ret;
 }
 
-int ObTabletLSPairCache::check_exist_new_transfer_task(
-  bool &exist,
-  share::ObTransferTaskID &tmp_max_task_id)
-{
-  int ret = OB_SUCCESS;
-  exist = false;
-  if (OB_FAIL(ObTransferTaskOperator::get_max_task_id_from_history(
-      *GCTX.sql_proxy_,
-      tenant_id_,
-      tmp_max_task_id))) {
-    LOG_WARN("get max transfer task id from history failed", KR(ret), K_(tenant_id),
-      K(tmp_max_task_id));
-  } else if (tmp_max_task_id.is_valid() && tmp_max_task_id > max_task_id_) {
-    exist = true;
-  }
-  return ret;
-}
-
 int ObTabletLSPairCache::try_refresh(const bool force_refresh/* = false*/)
 {
   int ret = OB_SUCCESS;
-  bool exist = false;
-  share::ObTransferTaskID tmp_max_task_id;
-  if (OB_FAIL(check_exist_new_transfer_task(exist, tmp_max_task_id))) {
-    LOG_WARN("failed to check transfer task", KR(ret));
-  } else if ((force_refresh || !map_.created()) && OB_FAIL(rebuild_map_by_tablet_cnt())) {
+  if ((force_refresh || !map_.created()) && OB_FAIL(rebuild_map_by_tablet_cnt())) {
     LOG_WARN("failed to rebuild map by tablet cnt", KR(ret), K(force_refresh));
-  } else if (force_refresh
-      || (exist && (ObTimeUtility::fast_current_time() - last_refresh_ts_ >= REFRESH_CACHE_TIME_INTERVAL))) {
+  } else if (force_refresh) {
     if (OB_FAIL(refresh())) {
       LOG_WARN("failed to refresh", KR(ret));
-    } else {
-      max_task_id_ = tmp_max_task_id;
     }
   }
   return ret;

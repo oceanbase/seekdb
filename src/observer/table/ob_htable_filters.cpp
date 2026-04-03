@@ -245,8 +245,8 @@ int RegexStringComparator::compare_to(const ObString &b)
 int SubStringComparator::compare_to(const ObString &b)
 {
   int cmp_ret = 0;
-#ifdef __APPLE__
-  // macOS doesn't have strndupa, use strndup instead (requires free)
+#if defined(__APPLE__) || defined(__ANDROID__)
+  // macOS/Android don't have strndupa, use strndup instead (requires free)
   char *a_dup = strndup(comparator_value_.ptr(), comparator_value_.length());
   char *b_dup = strndup(b.ptr(), b.length());
 #else
@@ -259,8 +259,8 @@ int SubStringComparator::compare_to(const ObString &b)
     char* p = strcasestr(b_dup, a_dup);
     cmp_ret = (NULL == p) ? 1: 0;
   }
-#ifdef __APPLE__
-  // Free memory allocated by strndup on macOS
+#if defined(__APPLE__) || defined(__ANDROID__)
+  // Free memory allocated by strndup on macOS/Android
   if (a_dup != NULL) {
     free(a_dup);
   }

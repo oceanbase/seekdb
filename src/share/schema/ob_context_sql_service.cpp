@@ -135,10 +135,9 @@ int ObContextSqlService::delete_context(const uint64_t tenant_id,
   } else {
     // insert into __all_context_history
     if (FAILEDx(sql.assign_fmt(
-                "INSERT INTO %s(tenant_id, context_id, namespace, schema_version, is_deleted)"
-                " VALUES(%lu,%lu,\'%s\',%ld,%ld)",
+                "INSERT INTO %s(context_id, namespace, schema_version, is_deleted)"
+                " VALUES(%lu,\'%s\',%ld,%ld)",
                 OB_ALL_CONTEXT_HISTORY_TNAME,
-                ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                 ObSchemaUtils::get_extract_schema_id(exec_tenant_id, context_id),
                 ctx_namespace.ptr(),
                 new_schema_version, IS_DELETED))) {
@@ -152,9 +151,8 @@ int ObContextSqlService::delete_context(const uint64_t tenant_id,
     }
 
     // delete from __all_context
-    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE tenant_id = %ld AND context_id=%lu",
+    if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE context_id=%lu",
                                OB_ALL_CONTEXT_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
                                ObSchemaUtils::get_extract_schema_id(exec_tenant_id, context_id)))) {
       LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client->write(exec_tenant_id, sql.ptr(), affected_rows))) {
@@ -255,8 +253,7 @@ int ObContextSqlService::format_dml_sql(const ObContextSchema &context_schema,
   int ret = OB_SUCCESS;
   uint64_t tenant_id = context_schema.get_tenant_id();
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
-      || OB_FAIL(dml.add_pk_column("context_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, context_schema.get_context_id())))
+  if (OB_FAIL(dml.add_pk_column("context_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, context_schema.get_context_id())))
       || OB_FAIL(dml.add_column("namespace", context_schema.get_namespace()))
       || OB_FAIL(dml.add_column("schema_version", context_schema.get_schema_version()))
       || OB_FAIL(dml.add_column("database_name", context_schema.get_schema_name()))

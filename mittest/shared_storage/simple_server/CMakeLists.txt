@@ -19,5 +19,4 @@ function(ob_unittest_observer case)
   set_tests_properties(${case} PROPERTIES TIMEOUT 3600)
 endfunction()
 
-ob_unittest_observer(test_shared_storage_ls_gc test_shared_storage_ls_gc.cpp)
 ob_unittest_observer(test_storage_cache_policy_prewarmer test_storage_cache_policy_prewarmer.cpp)

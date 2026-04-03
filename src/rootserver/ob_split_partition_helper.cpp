@@ -18,7 +18,6 @@
 
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_split_partition_helper.h"
-#include "rootserver/ob_tenant_balance_service.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h"
 #include "src/share/scheduler/ob_partition_auto_split_helper.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
@@ -131,10 +130,8 @@ int ObSplitPartitionHelper::check_allow_split(
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = table_schema.get_tenant_id();
   bool is_db_in_recyclebin = false;
-  const ObTenantSchema *tenant_schema = nullptr;
   common::ObArray<const ObSimpleTableSchemaV2 *> table_schemas_in_tg;
   const uint64_t tablegroup_id = table_schema.get_tablegroup_id();
-  ObArray<share::ObZoneReplicaAttrSet> zone_locality;
   if (OB_UNLIKELY(table_schema.is_in_recyclebin())) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
     LOG_WARN("the table is in recyclebin.", KR(ret), K(table_schema));
@@ -148,21 +145,6 @@ int ObSplitPartitionHelper::check_allow_split(
   } else if (OB_UNLIKELY(!table_schema.is_user_table() && !table_schema.is_global_index_table())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported table type", K(ret), K(table_schema));
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_schema))) {
-    LOG_WARN("failed to get tenant schema", K(ret));
-  } else if (OB_FAIL(tenant_schema->get_zone_replica_attr_array(zone_locality))) {
-    LOG_WARN("failed to get zone replica attr array", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < zone_locality.count(); i++) {
-      if (zone_locality[i].get_columnstore_replica_num() > 0) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("split with column store replica not supported", K(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "split with column store replica");
-      }
-    }
   }
 
   if (OB_FAIL(ret)) {
@@ -304,15 +286,7 @@ int ObSplitPartitionHelper::check_enable_global_index_auto_split(
     if (tenant_config.is_valid()) {
       const ObString policy_str(tenant_config->global_index_auto_split_policy.str());
       if (0 == policy_str.case_compare("DISTRIBUTED")) {
-        int64_t primary_zone_num = 0;
-        int64_t unit_group_num = 0;
-        ObArray<share::ObSimpleUnitGroup> unit_group_array;
-        if (OB_FAIL(rootserver::ObTenantBalanceService::gather_stat_primary_zone_num_and_units(
-                tenant_id, primary_zone_num, unit_group_array))) {
-          LOG_WARN("failed to gather stat of primary zone and unit", KR(ret), K(tenant_id));
-        } else if (primary_zone_num > 1 || unit_group_array.count() > 1) {
-          enable_auto_split = true;
-        }
+        enable_auto_split = false;
       } else if (0 == policy_str.case_compare("ALL")) {
         enable_auto_split = true;
       }

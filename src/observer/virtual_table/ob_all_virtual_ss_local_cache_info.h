@@ -51,10 +51,7 @@ public:
 private:
   enum TABLE_COLUMN
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,	
-    CACHE_NAME,
+        CACHE_NAME = common::OB_APP_MIN_COLUMN_ID,
     PRIORITY,
     HIT_RATIO,
     TOTAL_HIT_CNT,

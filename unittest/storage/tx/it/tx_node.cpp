@@ -152,8 +152,7 @@ ObTxNode::ObTxNode(const int64_t ls_id,
                &get_gti_source_(),
                &get_ts_mgr_(),
                &rpc_proxy_,
-               &schema_service_,
-               &server_tracer_));
+               &schema_service_));
   tenant_.set(&txs_);
   OZ(fake_opt_stat_mgr_.init(tenant_id_));
   tenant_.set(&fake_opt_stat_mgr_);

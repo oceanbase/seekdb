@@ -146,19 +146,6 @@ int ObAllVirtualSysEvent::process_curr_tenant(ObNewRow *&row)
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
         switch(col_id) {
-           case TENANT_ID: {
-            cells[cell_idx].set_int(tenant_id_);
-            break;
-          }
-          case SVR_IP: {
-            cells[cell_idx].set_varchar(ipstr_);
-            cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-            break;
-          }
-          case SVR_PORT: {
-            cells[cell_idx].set_int(port_);
-            break;
-          }
           case EVENT_ID: {
             cells[cell_idx].set_int(OB_WAIT_EVENTS[event_iter_].event_id_);
             break;

@@ -582,19 +582,7 @@ int ObBackupUtils::get_ls_leader_(const uint64_t tenant_id, const share::ObLSID 
     const int64_t start_ts = ObTimeUtility::current_time();
     do {
       if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader))) {
-        if (OB_LS_LOCATION_NOT_EXIST == ret) {
-          LOG_WARN("failed to get location and force renew", K(ret), K(tenant_id), K(ls_id), K(cluster_id));
-          if (OB_TMP_FAIL(GCTX.location_service_->nonblock_renew(cluster_id, tenant_id, ls_id))) {
-            LOG_WARN("failed to nonblock renew from location cache", K(tmp_ret), K(cluster_id), K(tenant_id), K(ls_id));
-          }
-          if (ObTimeUtility::current_time() - start_ts > DEFAULT_CHECK_LS_LEADER_TIMEOUT) {
-            break;
-          } else {
-            ob_usleep(retry_us);
-          }
-        } else {
-          LOG_WARN("failed to nonblock get leader", K(ret), K(cluster_id), K(tenant_id), K(ls_id));
-        }
+        LOG_WARN("failed to nonblock get leader", K(ret), K(cluster_id), K(tenant_id), K(ls_id));
       } else {
         LOG_INFO("nonblock get leader", K(tenant_id), K(ls_id), K(leader), K(cluster_id));
       }

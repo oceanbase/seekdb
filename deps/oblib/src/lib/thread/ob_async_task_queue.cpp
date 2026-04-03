@@ -52,7 +52,7 @@ int ObAsyncTaskQueue::init(const int64_t thread_cnt, const int64_t queue_size, c
   } else if (OB_FAIL(allocator_.init(TOTAL_LIMIT, HOLD_LIMIT, page_size))) {
     LOG_WARN("allocator init failed", "total limit", static_cast<int64_t>(TOTAL_LIMIT),
         "hold limit", static_cast<int64_t>(HOLD_LIMIT),
-        "page size",  static_cast<int64_t>(PAGE_SIZE), K(ret));
+        "page size",  static_cast<int64_t>(ALLOC_PAGE_SIZE), K(ret));
   } else if (OB_FAIL(queue_.init(queue_size))) {
     LOG_WARN("queue init failed", K(queue_size), K(ret));
   } else if (OB_FAIL(create(thread_cnt, thread_name))) {

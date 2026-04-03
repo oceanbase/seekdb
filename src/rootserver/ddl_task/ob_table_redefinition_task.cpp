@@ -1474,9 +1474,9 @@ int ObTableRedefinitionTask::get_direct_load_job_stat(common::ObArenaAllocator &
   SMART_VAR(ObMySQLProxy::MySQLResult, select_res) {
     if (OB_FAIL(select_sql.assign_fmt(
         "SELECT JOB_ID, BATCH_SIZE, PARALLEL, MAX_ALLOWED_ERROR_ROWS, DETECTED_ERROR_ROWS, "
-        "STORE_PROCESSED_ROWS, COORDINATOR_STATUS FROM %s WHERE TENANT_ID=%lu "
-        "AND JOB_ID=%ld AND JOB_TYPE='direct' AND COORDINATOR_STATUS!='none'",
-        OB_ALL_VIRTUAL_LOAD_DATA_STAT_TNAME, tenant_id_, object_id_))) {
+        "STORE_PROCESSED_ROWS, COORDINATOR_STATUS FROM %s WHERE "
+        "JOB_ID=%ld AND JOB_TYPE='direct' AND COORDINATOR_STATUS!='none'",
+        OB_ALL_VIRTUAL_LOAD_DATA_STAT_TNAME, object_id_))) {
       LOG_WARN("failed to assign sql", KR(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, TABLE_REDEF_TASK_GET_DIRECT_LOAD_JOB_STAT_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));

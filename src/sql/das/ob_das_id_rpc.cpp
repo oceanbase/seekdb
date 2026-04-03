@@ -50,7 +50,8 @@ ObDASIDRequestRpc::ObDASIDRequestRpc()
   : is_inited_(false),
     is_running_(false),
     rpc_proxy_(NULL),
-    self_()
+    self_(),
+    local_id_counter_(1)  // Start from 1 to satisfy ObDASIDRpcResult validation (start_id > 0)
 {
 }
 
@@ -78,6 +79,7 @@ void ObDASIDRequestRpc::destroy()
   if (is_inited_) {
     rpc_proxy_ = NULL;
     self_.reset();
+    local_id_counter_ = 1;  // Reset to 1 for next init
     is_inited_ = false;
   }
 }
@@ -88,32 +90,26 @@ int ObDASIDRequestRpc::fetch_new_range(const ObDASIDRequest &msg,
                                        const bool force_renew)
 {
   int ret = OB_SUCCESS;
-  ObAddr server;
-  uint64_t tenant_id = msg.get_tenant_id();
-  if (is_user_tenant(tenant_id)) {
-    tenant_id = gen_meta_tenant_id(tenant_id);
-  }
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("das id request rpc not inited", KR(ret));
   } else if (!msg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid request", KR(ret), K(msg));
-  } else if (OB_FAIL(GCTX.location_service_->get_leader(GCONF.cluster_id,
-                                                        tenant_id,
-                                                        DAS_ID_LS,
-                                                        force_renew,
-                                                        server))) {
-    TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(GTI_LS));
-  } else if (OB_FAIL(rpc_proxy_
-                     ->to(server)
-                     .by(tenant_id)
-                     .timeout(timeout)
-                     .group_id(OBCG_ID_SERVICE)
-                     .sync_fetch_das_id(msg, res))) {
-      LOG_WARN("fetch new range failed", KR(ret), K(server), K(msg));
+  } else {
+    // Use local auto-increment counter instead of RPC
+    // Counter resets to 1 on restart, no persistence needed
+    const int64_t range = msg.get_range();
+    const int64_t start_id = ATOMIC_FAA(&local_id_counter_, range);
+    const int64_t end_id = start_id + range;
+    const uint64_t tenant_id = msg.get_tenant_id();
+
+    if (OB_FAIL(res.init(tenant_id, OB_SUCCESS, start_id, end_id))) {
+      LOG_WARN("init das id result failed", KR(ret), K(tenant_id), K(start_id), K(end_id));
+    } else {
+      LOG_TRACE("fetch new DAS ID range from local counter", K(msg), K(res));
+    }
   }
-  LOG_INFO("fetch new DAS ID range finish", KR(ret), K(msg), K(res));
   return ret;
 }
 } // namespace sql

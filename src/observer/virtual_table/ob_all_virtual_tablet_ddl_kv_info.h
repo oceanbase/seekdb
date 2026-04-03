@@ -49,7 +49,6 @@ private:
   int get_next_ddl_kv(ObDDLKV *&ddl_kv);
 private:
   common::ObAddr addr_;
-  int64_t ls_id_;
   ObSharedGuard<storage::ObLSIterator> ls_iter_guard_;
   storage::ObLSTabletIterator ls_tablet_iter_;
   ObArray<ObDDLKVHandle> ddl_kvs_handle_;

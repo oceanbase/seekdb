@@ -27,7 +27,6 @@
 #include "common/ob_region.h"
 #include "common/ob_zone_status.h"
 #include "common/ob_zone_type.h"
-#include "share/ob_replica_info.h"
 #include "share/scn.h"
 #include "common/ob_tablet_id.h"
 #include "share/tablet/ob_tablet_info.h"
@@ -94,13 +93,12 @@ public:
   const SCN &all_merged_scn() const { return all_merged_scn_.get_scn(); }
   const SCN &frozen_scn() const { return frozen_scn_.get_scn(); }
 
-  TO_STRING_KV(K_(tenant_id), K_(zone), K_(is_merging), K_(broadcast_scn), K_(last_merged_scn),
+  TO_STRING_KV(K_(tenant_id), K_(is_merging), K_(broadcast_scn), K_(last_merged_scn),
     K_(last_merged_time), K_(all_merged_scn), K_(merge_start_time), K_(merge_status), K_(frozen_scn),
     K_(start_merge_fail_times));
 
 public:
   uint64_t tenant_id_;
-  common::ObZone zone_;
   ObMergeInfoItem::ItemList list_;
 
   ObMergeInfoItem is_merging_;
@@ -133,7 +131,7 @@ public:
   const SCN &global_broadcast_scn() const { return global_broadcast_scn_.get_scn(); }
   const SCN &last_merged_scn() const { return last_merged_scn_.get_scn(); }
 
-  TO_STRING_KV(K_(tenant_id), K_(cluster), K_(frozen_scn),
+  TO_STRING_KV(K_(tenant_id), K_(frozen_scn),
     K_(global_broadcast_scn), K_(last_merged_scn), K_(is_merge_error),
     K_(merge_status), K_(error_type), K_(suspend_merging), K_(merge_start_time),
     K_(last_merged_time));
@@ -142,7 +140,6 @@ public:
   uint64_t tenant_id_;
   ObMergeInfoItem::ItemList list_;
 
-  ObMergeInfoItem cluster_;
   ObMergeInfoItem frozen_scn_;
   ObMergeInfoItem global_broadcast_scn_;
   ObMergeInfoItem last_merged_scn_;

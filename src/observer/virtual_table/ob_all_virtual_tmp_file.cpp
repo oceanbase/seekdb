@@ -116,18 +116,6 @@ int ObAllVirtualTmpFileInfo::fill_columns_(tmp_file::ObTmpFileInfo *tmp_file_inf
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
-        case TENANT_ID:
-          cur_row_.cells_[i].set_int(tmp_file_info->tenant_id_);
-          break;
-        case SVR_IP:
-          MEMSET(ip_buffer_, '\0', OB_IP_STR_BUFF);
-          (void)self_addr.ip_to_string(ip_buffer_, common::OB_IP_STR_BUFF);
-          cur_row_.cells_[i].set_varchar(ip_buffer_);
-          cur_row_.cells_[i].set_default_collation_type();
-          break;
-        case SVR_PORT:
-          cur_row_.cells_[i].set_int(self_addr.get_port());
-          break;
         case FILE_ID:
           cur_row_.cells_[i].set_int(tmp_file_info->fd_);
           break;

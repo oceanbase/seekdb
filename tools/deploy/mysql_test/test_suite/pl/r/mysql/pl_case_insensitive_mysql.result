@@ -1,19 +1,5 @@
 result_format: 4
 
-select "routine_name" as column_name, collation
-  from oceanbase.__all_collation
-    where id = 
-      (select collation_type 
-        from oceanbase.__all_column 
-          where table_id =
-                  (select table_id from oceanbase.__all_virtual_table where table_name = '__all_virtual_routine')
-                and column_name = 'routine_name');
-+--------------+--------------------+
-| column_name  | collation          |
-+--------------+--------------------+
-| routine_name | utf8mb4_general_ci |
-+--------------+--------------------+
-
 drop procedure if exists my_proc;
 create procedure my_proc() begin end;
 create procedure My_proc() begin end;

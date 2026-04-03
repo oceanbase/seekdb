@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_dbms_sched_job_master.h"
-#include "share/ob_primary_zone_util.h"//ObPrimaryZoneUtil
-
 #include "rootserver/ob_root_service.h"
 #include "storage/mview/ob_mview_sched_job_utils.h"
 #include "sql/session/ob_basic_session_info.h"
@@ -51,8 +49,6 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
           ) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null ptr", K(ret), K(sql_proxy), K(schema_service));
-  } else if (OB_FAIL(unit_operator_.init(*sql_proxy))) {
-      LOG_WARN("failed to init unit operator", KR(ret));
   } else if (OB_FAIL(table_operator_.init(sql_proxy))) {
     LOG_WARN("fail to init action record", K(ret));
   } else if (OB_FAIL(alive_jobs_.create(1024, ObMemAttr(tenant_id, "DbmsSched_Job")))) {
@@ -362,121 +358,10 @@ void ObDBMSSchedJobMaster::free_job_key(ObDBMSSchedJobKey *&job_key)
 int ObDBMSSchedJobMaster::get_execute_addr(ObDBMSSchedJobInfo &job_info, ObAddr &execute_addr)
 {
   int ret = OB_SUCCESS;
-  int64_t tenant_id = job_info.get_tenant_id();
-  ObSchemaGetterGuard schema_guard;
-  const ObTenantSchema *tenant_info = NULL;
-  common::ObSEArray<common::ObZone, DEFAULT_ZONE_SIZE> all_zone_list;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init yet", K(ret), K(inited_));
-  } else if (!job_info.valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dbms sched job info is invalid", K(ret), K(job_info));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid job id", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service_ is null", KR(ret), KP(schema_service_));
-  } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
-    LOG_WARN("fail get schema guard", K(ret));
-  } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_id, tenant_info))) {
-    LOG_WARN("fail to get tenant info", K(ret), K(tenant_id));
-  } else if (OB_ISNULL(tenant_info)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null ptr", K(ret), KP(tenant_info));
-  } else if (OB_FAIL(tenant_info->get_zone_list(all_zone_list))) {
-    LOG_WARN("fail to get zone list", K(ret));
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(job_info.get_zone())) {
-      ObSEArray<ObZone, DEFAULT_ZONE_SIZE> primary_zone_list;
-      int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(ObPrimaryZoneUtil::get_tenant_primary_zone_array(*tenant_info, primary_zone_list))) {
-        LOG_WARN("failed to get tenant primary zone array", KR(tmp_ret));
-      } else if (OB_TMP_FAIL(server_random_pick_from_zone_list(tenant_id, primary_zone_list, execute_addr))) {
-        LOG_WARN("get execute addr from primary zone failed",
-            KR(tmp_ret), K(tenant_id), K(primary_zone_list));
-      }
-      if (tmp_ret != OB_SUCCESS) {
-        if (OB_FAIL(server_random_pick_from_zone_list(tenant_id, all_zone_list, execute_addr))) {
-          LOG_WARN("get execute addr from all zone failed",
-              KR(ret), K(tenant_id), K(execute_addr));
-        }
-      }
-    } else if (0 == job_info.get_zone().compare("RANDOM")) {
-      if (OB_FAIL(server_random_pick_from_zone_list(tenant_id, all_zone_list, execute_addr))) {
-        LOG_WARN("get execute addr from random failed",
-            KR(ret), K(tenant_id), K(execute_addr));
-      }
-    } else {
-      common::ObSEArray<common::ObZone, FILTER_ZONE_SIZE> filter_zone_list;
-      for (int64_t i = 0; OB_SUCC(ret) && i < all_zone_list.count(); ++i) {
-        common::ObZone zone = all_zone_list.at(i);
-        if (0 == job_info.get_zone().case_compare(zone.str())) {
-          if (OB_FAIL(filter_zone_list.push_back(zone))) {
-            LOG_WARN("failed to push back to filter_zone_list",
-              KR(ret), K(job_info.get_tenant_id()), K(job_info.get_zone()));
-            }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (filter_zone_list.empty()) {
-          if(OB_FAIL(table_operator_.update_for_zone_not_exist(job_info))) {
-            LOG_WARN("update not zone info failed",KR(ret), K(job_info.get_tenant_id()), K(job_info.get_zone()));
-          }
-        } else if (OB_FAIL(server_random_pick_from_zone_list(tenant_id, filter_zone_list, execute_addr))) {
-          LOG_WARN("get execute addr from filter zone failed",
-            KR(ret), K(job_info.get_tenant_id()), K(job_info.get_zone()), K(execute_addr));
-        }
-      }
-    }
-  }
+  execute_addr = GCTX.self_addr();
   return ret;
 }
 
-int ObDBMSSchedJobMaster::server_random_pick_from_zone_list(int64_t tenant_id, common::ObIArray<common::ObZone> &zone_list, ObAddr &server)
-{
-  int ret = OB_SUCCESS;
-  common::ObSEArray<ObAddr, DEFALUT_SERVER_SIZE> total_server;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init yet", K(ret), K(inited_));
-  } else if (OB_INVALID_ID == tenant_id) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
-  } else if (0 == tenant_server_cache_.count() && OB_FAIL(update_tenant_server_cache())) {
-    LOG_WARN("update tenant server list failed", K(ret), K(tenant_id));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tenant_server_cache_.count(); ++i) {
-      common::ObZone zone;
-      ObAddr server = tenant_server_cache_.at(i);
-      int tmp_ret = OB_SUCCESS;
-      bool is_active = false;
-      bool is_service = false;
-      if (OB_TMP_FAIL(SVR_TRACER.get_server_zone(server, zone))) {
-        LOG_WARN("fail to get zone server list", KR(tmp_ret), K(zone));
-      } else if (OB_TMP_FAIL(SVR_TRACER.check_server_active(server, is_active))) {
-        LOG_WARN("fail to check server active", KR(tmp_ret), K(server));
-      } else if (OB_TMP_FAIL(SVR_TRACER.check_in_service(server, is_service))) {
-        LOG_WARN("fail to check server service", KR(tmp_ret), K(server));
-      } else if (is_active && is_service && has_exist_in_array(zone_list, zone)) {
-        if(OB_FAIL(total_server.push_back(server))) {
-          LOG_WARN("fail to push server to total", K(ret));
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret) && 0 == total_server.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not find an alive server", K(ret), K(total_server), K(tenant_id));
-  }
-  if (OB_SUCC(ret)) {
-    int64_t pos = rand_.get(0,65536) % total_server.count();
-    server = total_server.at(pos);
-  }
-  return ret;
-}
 int ObDBMSSchedJobMaster::check_tenant()
 {
   int ret = OB_SUCCESS;
@@ -490,11 +375,11 @@ int ObDBMSSchedJobMaster::check_tenant()
     const ObTenantSchema *tenant_schema = NULL;
     OZ (schema_guard.get_tenant_info(tenant_id_, tenant_schema));
     CK (OB_NOT_NULL(tenant_schema));
-    bool is_tenant_standby = false;
+    bool is_primary_cluster = true;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObAllTenantInfoProxy::is_standby_tenant(GCTX.sql_proxy_, tenant_id_, is_tenant_standby))) {
-      LOG_WARN("check is standby tenant failed", K(ret), K(tenant_id_));
-    } else if (is_tenant_standby) {
+    } else if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+      LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+    } else if (!is_primary_cluster) {
       clear_wait_vector();
       alive_jobs_.clear();
       LOG_INFO("tenant is standby, not check new jobs, and remove exist jobs", K(tenant_id_));
@@ -576,33 +461,11 @@ int ObDBMSSchedJobMaster::update_tenant_server_cache()
     ret = OB_NOT_INIT;
     LOG_WARN("dbms sched master not inited", K(ret), K(inited_));
   } else {
-    ObArray<ObUnit> units;
-    if (OB_FAIL(unit_operator_.get_units_by_tenant(gen_user_tenant_id(tenant_id_), units))) {
-      LOG_WARN("failed to get tenant unit", KR(ret), K(tenant_id_));
-    } else {
-      common::ObArray<ObAddr> server_list;
-      ObServerInfoInTable server_info;
-      for (int64_t i = 0; OB_SUCC(ret) && i < units.count(); i++) {
-        const ObUnit &unit = units.at(i);
-        ObAddr server = unit.server_;
-        if (OB_UNLIKELY(!server.is_valid())) {
-          // skip
-        } else if (OB_FAIL(SVR_TRACER.get_server_info(server, server_info))) {
-          LOG_WARN("fail to execute get_server_info", KR(ret), K(server));
-        } else if (!server_info.in_service() || !server_info.is_active() || server_info.is_stopped()) {
-          // skip
-        } else if (!has_exist_in_array(server_list, server) && OB_FAIL(server_list.push_back(server))) {
-          LOG_WARN("fail to execute push_back", KR(ret), K(server));
-        }
-      }
-      if (OB_SUCC(ret)) {
-        tenant_server_cache_.reuse();
-        for (int64_t i = 0; OB_SUCC(ret) && i < server_list.count(); i++) {
-           if(OB_FAIL(tenant_server_cache_.push_back(server_list.at(i)))) {
-              LOG_WARN("fail to execute push_back", KR(ret), K(tenant_server_cache_));
-           }
-        }
-      }
+    tenant_server_cache_.reuse();
+    if (GCTX.start_service_time_ <= 0) {
+      // do nothing, server may not started
+    } else if (OB_FAIL(tenant_server_cache_.push_back(GCTX.self_addr()))) {
+      LOG_WARN("fail to execute push_back", KR(ret), K(tenant_server_cache_));
     }
   }
   return ret;

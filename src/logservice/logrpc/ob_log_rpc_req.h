@@ -34,10 +34,6 @@ enum LogConfigChangeCmdType {
   CHANGE_REPLICA_NUM_CMD,
   ADD_MEMBER_CMD,
   REMOVE_MEMBER_CMD,
-#ifdef OB_BUILD_ARBITRATION
-  ADD_ARB_MEMBER_CMD,
-  REMOVE_ARB_MEMBER_CMD,
-#endif
   REPLACE_MEMBER_CMD,
   ADD_LEARNER_CMD,
   REMOVE_LEARNER_CMD,
@@ -59,10 +55,6 @@ inline const char *log_config_change_cmd2str(const LogConfigChangeCmdType state)
   {
     CHECK_CMD_TYPE_STR(ADD_MEMBER_CMD);
     CHECK_CMD_TYPE_STR(REMOVE_MEMBER_CMD);
-#ifdef OB_BUILD_ARBITRATION
-    CHECK_CMD_TYPE_STR(ADD_ARB_MEMBER_CMD);
-    CHECK_CMD_TYPE_STR(REMOVE_ARB_MEMBER_CMD);
-#endif
     CHECK_CMD_TYPE_STR(REPLACE_MEMBER_CMD);
     CHECK_CMD_TYPE_STR(ADD_LEARNER_CMD);
     CHECK_CMD_TYPE_STR(REMOVE_LEARNER_CMD);
@@ -189,26 +181,6 @@ enum LogServerProbeType
   PROBE_RESP,
 };
 
-struct LogServerProbeMsg {
-  OB_UNIS_VERSION(1);
-public:
-  LogServerProbeMsg();
-  LogServerProbeMsg(const common::ObAddr &src,
-                    const int64_t palf_id,
-                    const int64_t req_id,
-                    const LogServerProbeType msg_type,
-                    const int64_t status);
-  ~LogServerProbeMsg();
-  bool is_valid() const;
-  void reset();
-  TO_STRING_KV(K_(src), K_(palf_id), K_(req_id), K_(msg_type), K_(server_status));
-  common::ObAddr src_;
-  int64_t palf_id_;
-  int64_t req_id_;
-  LogServerProbeType msg_type_;
-  int64_t server_status_;
-};
-
 struct LogChangeAccessModeCmd {
   OB_UNIS_VERSION(1);
 public:
@@ -257,34 +229,6 @@ public:
   int64_t mode_version_;
   share::SCN flashback_scn_;
   bool is_flashback_req_;
-};
-
-struct LogProbeRsReq
-{
-  OB_UNIS_VERSION(1);
-public:
-  LogProbeRsReq();
-  LogProbeRsReq(const common::ObAddr src);
-  ~LogProbeRsReq() {
-    reset();
-  }
-  bool is_valid() const;
-  void reset();
-  TO_STRING_KV(K_(src));
-  common::ObAddr src_;
-};
-
-struct LogProbeRsResp
-{
-  OB_UNIS_VERSION(1);
-public:
-  LogProbeRsResp();
-  ~LogProbeRsResp() {
-    reset();
-  }
-  void reset();
-  TO_STRING_KV(K_(ret));
-  int ret_;
 };
 
 struct LogGetCkptReq {

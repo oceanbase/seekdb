@@ -32,10 +32,7 @@ class ObAllVirtualSchemaMemory: public common::ObVirtualTableScannerIterator
 {
   enum COLUMN_ID_LIST
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    ALLOCATOR_TYPE,
+        ALLOCATOR_TYPE = common::OB_APP_MIN_COLUMN_ID,
     USED_SCHEMA_MGR_CNT,
     FREE_SCHEMA_MGR_CNT,
     MEM_USED,

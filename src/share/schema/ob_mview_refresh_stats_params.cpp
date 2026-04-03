@@ -123,8 +123,7 @@ int ObMViewRefreshStatsParams::gen_sys_defaults_dml(uint64_t tenant_id, ObDMLSql
     LOG_WARN("invalid args", KR(ret), K(tenant_id), KPC(this));
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_column("collection_level", collection_level_)) ||
+    if (OB_FAIL(dml.add_column("collection_level", collection_level_)) ||
         OB_FAIL(dml.add_column("retention_period", retention_period_))) {
       LOG_WARN("add column failed", KR(ret));
     }
@@ -147,7 +146,9 @@ int ObMViewRefreshStatsParams::set_sys_defaults(ObISQLClient &sql_client, uint64
       const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
       ObDMLExecHelper exec(sql_client, exec_tenant_id);
       int64_t affected_rows = 0;
-      if (OB_FAIL(exec.exec_insert_update(OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME, dml,
+      if (OB_FAIL(dml.add_pk_column("id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+        LOG_WARN("fail to add primary key", KR(ret));
+      } else if (OB_FAIL(exec.exec_insert_update(OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME, dml,
                                           affected_rows))) {
         LOG_WARN("execute insert update failed", KR(ret));
       } else if (OB_UNLIKELY(!is_zero_row(affected_rows) && !is_single_row(affected_rows) &&
@@ -171,7 +172,7 @@ int ObMViewRefreshStatsParams::fetch_sys_defaults(ObISQLClient &sql_client, uint
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE tenant_id = 0",
+    if (OB_FAIL(sql.assign_fmt("SELECT collection_level, retention_period FROM %s ",
                                OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (for_update && OB_FAIL(sql.append(" for update"))) {
@@ -198,8 +199,7 @@ int ObMViewRefreshStatsParams::gen_mview_refresh_stats_params_dml(uint64_t tenan
     LOG_WARN("invalid args", KR(ret), K(tenant_id), K(mview_id), KPC(this));
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("mview_id", mview_id)) ||
+    if (OB_FAIL(dml.add_pk_column("mview_id", mview_id)) ||
         OB_FAIL(dml.add_column("collection_level", collection_level_)) ||
         OB_FAIL(dml.add_column("retention_period", retention_period_))) {
       LOG_WARN("add column failed", KR(ret));
@@ -249,8 +249,7 @@ int ObMViewRefreshStatsParams::drop_mview_refresh_stats_params(ObISQLClient &sql
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObDMLSqlSplicer dml;
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0)) ||
-        OB_FAIL(dml.add_pk_column("mview_id", mview_id))) {
+    if (OB_FAIL(dml.add_pk_column("mview_id", mview_id))) {
       LOG_WARN("add column failed", KR(ret));
     } else {
       ObDMLExecHelper exec(sql_client, exec_tenant_id);
@@ -278,9 +277,8 @@ int ObMViewRefreshStatsParams::drop_all_mview_refresh_stats_params(ObISQLClient 
   } else {
     const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("delete from %s where tenant_id = %ld",
-                               OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME,
-                               ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
+    if (OB_FAIL(sql.assign_fmt("delete from %s",
+                               OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
       LOG_WARN("fail to append sql", KR(ret));
@@ -314,16 +312,16 @@ int ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(ObISQLClient &sq
             "      ifnull(max(collection_level), 1) as collection_level,"
             "      ifnull(max(retention_period), 31) as retention_period"
             "    from %s"
-            "    where tenant_id = 0"
+            "    where 0 = 0"
             "  )"
             "  select"
             "    ifnull(e.collection_level, d.collection_level) collection_level,"
             "    ifnull(e.retention_period, d.retention_period) retention_period"
             "  from"
-            "    (select tenant_id, mview_id, collection_level, retention_period from %s"
+            "    (select mview_id, collection_level, retention_period from %s"
             "      right outer join"
-            "      (select tenant_id, mview_id from %s where tenant_id = 0 and mview_id = %ld)"
-            "      using (tenant_id, mview_id)"
+            "      (select mview_id from %s where mview_id = %ld)"
+            "      using (mview_id)"
             "    ) e,"
             "    defvals d"
             ")",
@@ -335,7 +333,7 @@ int ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(ObISQLClient &sq
       }
     } else {
       if (OB_FAIL(sql.assign_fmt("select collection_level, retention_period from %s"
-                                 " where tenant_id = 0 and mview_id = %ld",
+                                 " where mview_id = %ld",
                                  OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME, mview_id))) {
         LOG_WARN("fail to assign sql without sys defaults", KR(ret));
       } else if (OB_FAIL(read_stats_params(sql_client, exec_tenant_id, sql, params))) {

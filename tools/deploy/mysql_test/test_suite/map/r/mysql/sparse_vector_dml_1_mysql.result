@@ -229,3 +229,45 @@ id	c1	c11	c13	c14
 2	1	[1,2,3,4,5]	{1:123,4:345}	NULL
 truncate table test_sparse_vec_tbl;
 drop table if exists test_sparse_vec_tbl;
+create table test_sparse_vec_tbl(c1 int, c2 sparsevector);
+insert into test_sparse_vec_tbl (c2) values ('{}');
+insert into test_sparse_vec_tbl (c2) values ('');
+insert into test_sparse_vec_tbl (c2) values (NULL);
+insert into test_sparse_vec_tbl (c2) values ('{1:0.1, 1:0.2}');
+insert into test_sparse_vec_tbl (c2) values ('{"1":0.1, 2:0.2}');
+insert into test_sparse_vec_tbl (c2) values ('{"1":0.1, "2":0.2}');
+insert into test_sparse_vec_tbl (c2) values ('{"1":0.1, "2":0.2}  ');
+insert into test_sparse_vec_tbl (c2) values ('NULL');
+ERROR HY000: Incorrect arguments to sparse vector, expect '{'
+insert into test_sparse_vec_tbl (c2) values ('{a:0.1, 2:0.2}');
+ERROR HY000: Incorrect arguments to sparse vector dimension, must be an unsigned integer
+insert into test_sparse_vec_tbl (c2) values ('a:0.1, 2:0.2');
+ERROR HY000: Incorrect arguments to sparse vector, expect '{'
+insert into test_sparse_vec_tbl (c2) values ('{1.1:0.1, 2:0.2}');
+ERROR HY000: Incorrect arguments to sparse vector dimension, must be an unsigned integer
+insert into test_sparse_vec_tbl (c2) values ('{-1:0.1, 2:0.2}');
+ERROR HY000: Incorrect arguments to sparse vector dimension, must be an unsigned integer
+insert into test_sparse_vec_tbl (c2) values ('{1:abc, 2:0.2}');
+ERROR HY000: Incorrect arguments to sparse vector value, must be a float
+insert into test_sparse_vec_tbl (c2) values ('{a:abc, 2:0.2}');
+ERROR HY000: Incorrect arguments to sparse vector dimension, must be an unsigned integer
+insert into test_sparse_vec_tbl (c2) values ('{"-1":0.1, "2":0.2}');
+ERROR HY000: Incorrect arguments to sparse vector dimension, must be an unsigned integer
+insert into test_sparse_vec_tbl (c2) values ('{null:0.1, "2":0.2}');
+ERROR 42000: Null value
+insert into test_sparse_vec_tbl (c2) values ('{"null":0.1, 2:0.2}');
+ERROR 42000: Null value
+insert into test_sparse_vec_tbl (c2) values ('{1:"0.1", 2:0.2}');
+ERROR HY000: Incorrect arguments to sparse vector value, must be a float
+insert into test_sparse_vec_tbl (c2) values ('{32141784387374367:0.1, 2:0.2}');
+ERROR 22003: Out of range value for column 'c2' at row 1
+select c2 from test_sparse_vec_tbl;
+c2
+{}
+{}
+NULL
+{1:0.2}
+{1:0.1,2:0.2}
+{1:0.1,2:0.2}
+{1:0.1,2:0.2}
+drop table if exists test_sparse_vec_tbl;

@@ -55,35 +55,6 @@ int LogRequestHandler::change_access_mode_(const LogChangeAccessModeCmd &req)
   return ret;
 }
 
-int ObLogFlashbackService::get_ls_list_(const uint64_t tenant_id,
-                                        share::ObLSStatusInfoArray &ls_array)
-{
-  int ret = OB_SUCCESS;
-  common::ObFunction<int(const palf::PalfHandle&)> get_palf_info =
-  [&](const palf::PalfHandle &palf_handle)
-  {
-    int ret = OB_SUCCESS;
-    share::ObLSStatusInfo ls_status;
-    int64_t palf_id = -1;
-    palf_handle.get_palf_id(palf_id);
-    share::ObLSFlag flag(share::ObLSFlag::NORMAL_FLAG);
-    if (OB_FAIL(ls_status.init(tenant_id, share::ObLSID(palf_id), 1, share::ObLSStatus::OB_LS_NORMAL, 1, "z1", flag))) {
-      CLOG_LOG(WARN, "ls_status init failed", K(ret), K(palf_id));
-    } else if (OB_FAIL(ls_array.push_back(ls_status))) {
-      CLOG_LOG(WARN, "ls_array push_back failed", K(ret), K(palf_id));
-    }
-    return ret;
-  };
-  logservice::ObLogService *log_service = NULL;
-  log_service = MTL(logservice::ObLogService*);
-  if (false == get_palf_info.is_valid()) {
-    CLOG_LOG(ERROR, "invalid ObFunction", K(ret));
-  } else if (OB_FAIL(log_service->iterate_palf(get_palf_info))) {
-    CLOG_LOG(ERROR, "iterate_palf failed", K(ret));
-  }
-  return ret;
-}
-
 int ObLogFlashbackService::BaseLSOperator::update_leader_()
 {
   int ret = OB_SUCCESS;
@@ -258,12 +229,10 @@ TEST_F(TestObSimpleLogClusterFlashback, flashback_with_reconfirm1)
   // 3. change to FLASHBACK mode
   flashback_srv = get_cluster()[0]->get_flashback_service();
   sleep(2);
-  share::ObLSStatusInfoArray ls_array;
   const uint64_t tenant_id = MTL_ID();
   ObLogFlashbackService::ChangeModeOpArray mode_op_array;
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_ls_list_(tenant_id, ls_array));
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, ls_array, TIMEOUT_US));
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::FLASHBACK, ls_array, TIMEOUT_US, mode_op_array));
+  EXPECT_EQ(OB_SUCCESS, flashback_srv->wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, TIMEOUT_US));
+  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::FLASHBACK, TIMEOUT_US, mode_op_array));
   // 4. leader do flashback
   AccessMode unused_access_mode;
   EXPECT_EQ(OB_SUCCESS, leader1.palf_handle_impl_->get_access_mode(mode_version1, unused_access_mode));
@@ -328,13 +297,11 @@ TEST_F(TestObSimpleLogClusterFlashback, flashback_with_reconfirm1)
   // 10. change to FLASHBACK mode
   flashback_srv = get_cluster()[0]->get_flashback_service();
   sleep(2);
-  ls_array.reset();
   mode_op_array.reset();
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_ls_list_(tenant_id, ls_array));
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::PREPARE_FLASHBACK, ls_array, TIMEOUT_US, mode_op_array));
+  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::PREPARE_FLASHBACK, TIMEOUT_US, mode_op_array));
   EXPECT_EQ(OB_NOT_MASTER, submit_log(leader1, 1, leader_idx1));
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, ls_array, TIMEOUT_US));
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::FLASHBACK, ls_array, TIMEOUT_US, mode_op_array));
+  EXPECT_EQ(OB_SUCCESS, flashback_srv->wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, TIMEOUT_US));
+  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::FLASHBACK, TIMEOUT_US, mode_op_array));
 
   // 11. two followers do flashback
   do {
@@ -424,11 +391,9 @@ TEST_F(TestObSimpleLogClusterFlashback, flashback_after_restart)
 
   // change to flasback mode
   ObLogFlashbackService::ChangeModeOpArray mode_op_array;
-  share::ObLSStatusInfoArray ls_array;
   flashback_srv = get_cluster()[0]->get_flashback_service();
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_ls_list_(tenant_id, ls_array));
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, ls_array, TIMEOUT_US));
-  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::FLASHBACK, ls_array, TIMEOUT_US, mode_op_array));
+  EXPECT_EQ(OB_SUCCESS, flashback_srv->wait_all_ls_replicas_log_sync_(tenant_id, flashback_scn, TIMEOUT_US));
+  EXPECT_EQ(OB_SUCCESS, flashback_srv->get_and_change_access_mode_(tenant_id, flashback_scn, palf::AccessMode::FLASHBACK, TIMEOUT_US, mode_op_array));
 
   // after restarting servers in FLASHBACK MODE, committed_end_lsn will smaller than max_lsn
   leader1.reset();

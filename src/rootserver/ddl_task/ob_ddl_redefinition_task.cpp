@@ -1980,9 +1980,9 @@ int ObDDLRedefinitionTask::sync_table_level_stats_info(common::ObMySQLTransactio
   int64_t target_partition_id = new_table_schema.is_partitioned_table() ? -1 : target_object_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(dst_tenant_id_);
   if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld"
-      " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld",
+      " WHERE table_id = %ld and partition_id = %ld",
       OB_ALL_TABLE_STAT_TNAME, target_object_id_, target_partition_id,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_, partition_id))) {
+      object_id_, partition_id))) {
     LOG_WARN("fail to assign sql string", K(ret));
   } else if (OB_FAIL(trans.write(dst_tenant_id_, sql_string.ptr(), affected_rows))) {
     LOG_WARN("fail to update __all_table_stat", K(ret), K(sql_string));
@@ -1991,9 +1991,9 @@ int ObDDLRedefinitionTask::sync_table_level_stats_info(common::ObMySQLTransactio
     LOG_WARN("unexpected affected_rows", K(ret), K(affected_rows));
   } else if (!need_sync_history) {// do not need to sync history.
   } else if (OB_FAIL(history_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld"
-      " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld",
+      " WHERE table_id = %ld and partition_id = %ld",
       OB_ALL_TABLE_STAT_HISTORY_TNAME, target_object_id_, target_partition_id,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_, partition_id))) {
+      object_id_, partition_id))) {
     LOG_WARN("fail to assign history sql string", K(ret));
   } else if (OB_FAIL(trans.write(dst_tenant_id_, history_sql_string.ptr(), affected_rows))) {
     LOG_WARN("fail to update __all_table_stat_history", K(ret), K(sql_string));
@@ -2142,15 +2142,15 @@ int ObDDLRedefinitionTask::sync_one_column_table_level_stats_info(common::ObMySQ
   int64_t target_partition_id = new_table_schema.is_partitioned_table() ? -1 : target_object_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(dst_tenant_id_);
   if (OB_FAIL(column_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld and column_id = %ld",
+      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
       OB_ALL_COLUMN_STAT_TNAME, target_object_id_, target_partition_id, new_col_id,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_, partition_id,
+      object_id_, partition_id,
       old_col_id))) {
     LOG_WARN("fail to assign sql string", K(ret));
   } else if (OB_FAIL(histogram_sql_string.assign_fmt("UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld and column_id = %ld",
+      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
       OB_ALL_HISTOGRAM_STAT_TNAME, target_object_id_, target_partition_id, new_col_id,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_, partition_id,
+      object_id_, partition_id,
       old_col_id))) {
     LOG_WARN("fail to assign sql string", K(ret));
   } else if (OB_FAIL(trans.write(dst_tenant_id_, column_sql_string.ptr(), affected_rows))) {
@@ -2160,15 +2160,15 @@ int ObDDLRedefinitionTask::sync_one_column_table_level_stats_info(common::ObMySQ
   } else if (!need_sync_history) { // do not need to sync history
   } else if (OB_FAIL(column_history_sql_string.assign_fmt(
       "UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld and column_id = %ld",
+      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
       OB_ALL_COLUMN_STAT_HISTORY_TNAME, target_object_id_, target_partition_id, new_col_id,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_, partition_id, old_col_id))) {
+      object_id_, partition_id, old_col_id))) {
     LOG_WARN("fail to assign history sql string", K(ret));
   } else if (OB_FAIL(histogram_history_sql_string.assign_fmt(
       "UPDATE %s SET table_id = %ld, partition_id = %ld, column_id = %ld"
-      " WHERE tenant_id = %ld and table_id = %ld and partition_id = %ld and column_id = %ld",
+      " WHERE table_id = %ld and partition_id = %ld and column_id = %ld",
       OB_ALL_HISTOGRAM_STAT_HISTORY_TNAME, target_object_id_, target_partition_id, new_col_id,
-      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_, partition_id, old_col_id))) {
+      object_id_, partition_id, old_col_id))) {
     LOG_WARN("fail to assign history sql string", K(ret));
   } else if (OB_FAIL(trans.write(dst_tenant_id_, column_history_sql_string.ptr(), affected_rows))) {
     LOG_WARN("fail to update __all_column_stat_history", K(ret), K(column_history_sql_string));
@@ -2290,8 +2290,8 @@ int ObDDLRedefinitionTask::generate_sync_partition_level_stats_sql(const char *t
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(sql_string.append_fmt(" else partition_id end) where tenant_id=%ld and table_id=%ld and partition_id in (%.*s)",
-          ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_,
+    } else if (OB_FAIL(sql_string.append_fmt(" else partition_id end) where table_id=%ld and partition_id in (%.*s)",
+          object_id_,
           static_cast<int>(in_partitions_sql.length()), in_partitions_sql.ptr()))) {
       LOG_WARN("fail to append sql string", K(ret), K(object_id_), K(dst_tenant_id_), K(exec_tenant_id));
     }
@@ -2333,8 +2333,8 @@ int ObDDLRedefinitionTask::generate_sync_column_partition_level_stats_sql(const 
         LOG_WARN("append partition id failed", K(ret));
       }
     }
-    if (FAILEDx(sql_string.append_fmt(" else partition_id end) where tenant_id=%ld and table_id=%ld and partition_id in (%.*s) and column_id=%ld",
-          ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, dst_tenant_id_), object_id_,
+    if (FAILEDx(sql_string.append_fmt(" else partition_id end) where table_id=%ld and partition_id in (%.*s) and column_id=%ld",
+          object_id_,
           static_cast<int>(in_partitions_sql.length()), in_partitions_sql.ptr(), old_col_id))) {
       LOG_WARN("fail to append sql string", K(ret), K(object_id_), K(dst_tenant_id_), K(exec_tenant_id), K(old_col_id));
     }
@@ -2347,8 +2347,8 @@ int ObDDLRedefinitionTask::sync_table_prefs(common::ObMySQLTransaction &trans)
   int ret = OB_SUCCESS;
   ObSqlString sql_string;
   int64_t affected_rows = 0;
-  if (OB_FAIL(sql_string.assign_fmt("INSERT IGNORE INTO %s(tenant_id,table_id,pname,valnum,valchar,chgtime,spare1)"
-          " SELECT 0, %ld, pname, valnum, valchar, chgtime, spare1 FROM %s WHERE TABLE_ID = %ld",
+  if (OB_FAIL(sql_string.assign_fmt("INSERT IGNORE INTO %s(table_id,pname,valnum,valchar,chgtime,spare1)"
+          " SELECT %ld, pname, valnum, valchar, chgtime, spare1 FROM %s WHERE TABLE_ID = %ld",
       OB_ALL_OPTSTAT_USER_PREFS_TNAME, target_object_id_, OB_ALL_OPTSTAT_USER_PREFS_TNAME, object_id_))) {
     LOG_WARN("fail to assign sql string", K(ret));
   } else if (OB_FAIL(trans.write(dst_tenant_id_, sql_string.ptr(), affected_rows))) {

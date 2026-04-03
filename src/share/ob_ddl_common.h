@@ -73,6 +73,7 @@ namespace rootserver
 {
 class ObDDLTask;
 class ObDDLWaitTransEndCtx;
+class ObRootService;
 }
 namespace share
 {

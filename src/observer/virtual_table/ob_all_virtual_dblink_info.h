@@ -76,10 +76,7 @@ public:
   inline ObIAllocator *get_allocator() { return allocator_; }
 private:
   enum {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    SVR_IP,
-    SVR_PORT,
-    LINK_ID,
+        LINK_ID = common::OB_APP_MIN_COLUMN_ID,
     LOGGED_ON,
     HETEROGENEOUS,
     PROTOCOL,

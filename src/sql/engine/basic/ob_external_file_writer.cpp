@@ -144,7 +144,7 @@ int ObCsvFileWriter::flush_shared_buf(const char *shared_buf, bool continue_use_
   if (get_curr_pos() > 0 && use_shared_buf_) {
     if (OB_FAIL(flush_data(shared_buf, get_curr_pos()))) {
     } else {
-      if (has_lob_) { 
+      if (has_lob_) {
         increase_curr_line_len();
       }
       set_curr_pos(0);
@@ -565,108 +565,7 @@ int ObParquetFileWriter::close_file()
   return ret;
 }
 
-int ObOrcFileWriter::open_orc_file_writer(const orc::Type &orc_schema,
-                                          const orc::WriterOptions &options,
-                                          const int64_t &row_batch_size)
-{
-  int ret = OB_SUCCESS;
-  try {
-    ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoOrc"));
-    row_batch_size_ = row_batch_size;
-    if (!(orc_output_stream_ = std::unique_ptr<ObOrcOutputStream>(new ObOrcOutputStream(
-                                                               &file_appender_,
-                                                               &storage_appender_,
-                                                               file_location_,
-                                                               url_)))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error create orc output stream ", K(ret));
-    } else if (!is_file_opened_ && OB_FAIL(open_file())) {
-      LOG_WARN("failed to open file", K(ret));
-    } else if (!(orc_file_writer_ = orc::createWriter(orc_schema, orc_output_stream_.get(), options))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error create file writer", K(ret));
-    } else if (!(orc_row_batch_ = orc_file_writer_->createRowBatch(row_batch_size_))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error create orc row batch", K(ret));
-    }
-  } catch (const std::exception& ex) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error in open orc file writer", K(ret), "Info", ex.what());
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, ex.what());
-  } catch (...) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error in open orc file writer", K(ret));
-  }
-  return ret;
-}
 
-int ObOrcFileWriter::write_file()
-{
-  int ret = OB_SUCCESS;
-  orc::StructVectorBatch* root = static_cast<orc::StructVectorBatch *>(orc_row_batch_.get());
-  orc::ColumnVectorBatch* col_vector_batch = NULL;
-  if (batch_has_written_) {
-    // do nothing
-  } else if (OB_ISNULL(root) || !orc_row_batch_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
-  } else {
-    try {
-      for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < root->fields.size(); col_idx++) {
-        if (OB_ISNULL(col_vector_batch = root->fields[col_idx])) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
-        } else {
-          col_vector_batch->numElements = row_batch_offset_;
-        }
-      }
-      if (OB_SUCC(ret)) {
-        root->numElements = row_batch_offset_;
-        orc_file_writer_->add(*orc_row_batch_);
-        batch_allocator_.reuse();
-      }
-    } catch (const std::exception& ex) {
-      if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("caught exception when write orc row batch", K(ret), "Info", ex.what());
-        LOG_USER_ERROR(OB_ERR_UNEXPECTED, ex.what());
-      }
-    } catch (...) {
-      if (OB_SUCC(ret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("caught exception when write orc row batch", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObOrcFileWriter::close_file()
-{
-  int ret = OB_SUCCESS;
-  ObMallocHookAttrGuard guard(ObMemAttr(MTL_ID(), "IntoOrc"));
-  try {
-    if (orc_file_writer_) {
-      orc_file_writer_->close();
-      orc_file_writer_.reset();
-    }
-    if (orc_output_stream_) {
-      orc_output_stream_->close();
-      orc_output_stream_.reset();
-    }
-  } catch (const std::exception& ex) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("caught exception when close parquet file", K(ret), K(url_), "Info", ex.what());
-    LOG_USER_ERROR(OB_ERR_UNEXPECTED, ex.what());
-  } catch (...) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("caught exception when close parquet file", K(ret), K(url_));
-  }
-  if (OB_SUCC(ret) && OB_FAIL(ObExternalFileWriter::close_file())) {
-    LOG_WARN("failed to close file", K(ret));
-  }
-  return ret;
-}
 
 }
 }

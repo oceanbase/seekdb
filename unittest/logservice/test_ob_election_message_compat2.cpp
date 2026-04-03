@@ -756,7 +756,6 @@ TEST_F(TestElectionMsgCompat2, new_to_new_real_new) {
   LogConfigVersion config_version;
   config_version.generate(1, 1);
   int64_t pos = 0;
-  ASSERT_EQ(observer::ObServer::get_instance().is_arbitration_mode(), false);
   ASSERT_EQ(GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_1_0_0_0, false);
   palf::election::ElectionAcceptRequestMsg msg_request_src(1, ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 1), 1, 1, LsBiggestMinClusterVersionEverSeen(CLUSTER_VERSION_1_0_0_0), 123, 234, config_version);
   palf::election::ElectionAcceptRequestMsg msg_request_dst;

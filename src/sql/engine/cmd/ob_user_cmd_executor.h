@@ -133,17 +133,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObRenameUserExecutor);
 };
 
-class ObAlterUserPrimaryZoneStmt;
-class ObAlterUserPrimaryZoneExecutor
-{
-public:
-  ObAlterUserPrimaryZoneExecutor() {}
-  virtual ~ObAlterUserPrimaryZoneExecutor() {}
-  int execute(ObExecContext &ctx, ObAlterUserPrimaryZoneStmt &stmt);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAlterUserPrimaryZoneExecutor);
-};
-
 }
 }
 #endif //OCEANBASE_SQL_ENGINE_CMD_USER_CMD_EXECUTOR_

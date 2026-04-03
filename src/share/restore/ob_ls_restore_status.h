@@ -62,18 +62,6 @@ public:
     // restore failed
     RESTORE_FAILED = 13,
 
-    // clone
-    // log stream clone initial state
-    CLONE_START = 101,
-    // copy all tablets meta from tenant_snapshot
-    CLONE_COPY_ALL_TABLET_META = 102,
-    // copy ls meta from tenant snapshot
-    CLONE_COPY_LS_META = 103,
-    // wait clog replay finished
-    CLONE_CLOG_REPLAY = 104,
-    // clone failed
-    CLONE_FAILED = 105,
-
     LS_RESTORE_STATUS_MAX = 255
   };
 
@@ -94,7 +82,7 @@ public:
   bool is_quick_restore() const { return Status::QUICK_RESTORE == status_; }
   bool is_restore_major_data() const { return Status::RESTORE_MAJOR_DATA == status_; }
   bool is_none() const { return Status::NONE == status_; }
-  bool is_failed() const { return Status::RESTORE_FAILED == status_ || Status::CLONE_FAILED == status_; }
+  bool is_failed() const { return Status::RESTORE_FAILED == status_; }
   bool is_restore_sys_tablets() const { return Status::RESTORE_SYS_TABLETS == status_; }
   bool is_restore_tablets_meta() const { return Status::RESTORE_TABLETS_META == status_; }
   bool is_restore_to_consistent_scn() const { return Status::RESTORE_TO_CONSISTENT_SCN == status_; }
@@ -141,35 +129,17 @@ public:
              status_ == Status::RESTORE_FAILED);
   }
 
-
-
-  bool is_in_clone() const { return status_ >= Status::CLONE_START && status_ <= Status::CLONE_FAILED; }
-  bool is_in_clone_or_none() const { return is_none() || is_in_clone(); }
-  bool is_in_clone_and_tablet_meta_incomplete() const
-  {
-    return status_ >= Status::CLONE_START && status_ <= Status::CLONE_COPY_ALL_TABLET_META;
-  }
-  bool is_clone_first_step() const
-  {
-    return ((status_ >= Status::CLONE_START && status_ <= Status::CLONE_COPY_LS_META) ||
-             Status::CLONE_FAILED == status_);
-  }
-
   // if restore status is not in [RESTORE_START, RESTORE_SYS_TABLETS], log_replay_service can replay log.
   // if restore status is not in [RESTORE_START, RESTORE_SYS_TABLETS] or restore_failed, log_replay_service can replay log.
   bool can_replay_log() const { return !(status_ >= Status::RESTORE_START && status_ <= Status::RESTORE_SYS_TABLETS) &&
-                                       !(status_ >= Status::CLONE_START && status_ <= Status::CLONE_COPY_LS_META) &&
-                                       status_ != Status::RESTORE_FAILED &&
-                                       status_ != Status::CLONE_FAILED; }
+                                       status_ != Status::RESTORE_FAILED; }
 
   bool can_restore_log() const { return status_ == NONE ||
-    (status_ >= RESTORE_TO_CONSISTENT_SCN && status_ < RESTORE_FAILED) ||
-    (status_ >= CLONE_CLOG_REPLAY && status_ < CLONE_FAILED); }
+    (status_ >= RESTORE_TO_CONSISTENT_SCN && status_ < RESTORE_FAILED); }
 
   bool can_migrate() const
   {
-    return !(status_ >= RESTORE_START && status_ < WAIT_RESTORE_TABLETS_META) &&
-           !(status_ >= Status::CLONE_START && status_ <= Status::CLONE_CLOG_REPLAY);
+    return !(status_ >= RESTORE_START && status_ < WAIT_RESTORE_TABLETS_META);
   }
   bool is_in_restore_and_before_quick_restore() const
   {

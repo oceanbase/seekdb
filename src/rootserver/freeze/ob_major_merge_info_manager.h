@@ -74,13 +74,13 @@ public:
 
   int renew_snapshot_gc_scn();
   int try_gc_freeze_info();
-  int try_update_zone_info(const int64_t expected_epoch);
+  int try_update_zone_info();
 
   int check_snapshot_gc_scn();
   int check_need_broadcast(bool &need_broadcast);
-  int broadcast_freeze_info(const int64_t expected_epoch);
+  int broadcast_freeze_info();
   int get_local_latest_frozen_scn(share::SCN &frozen_scn);
-  int adjust_global_merge_info(const int64_t expected_epoch);
+  int adjust_global_merge_info();
   int get_gts(share::SCN &gts_scn) const;
 
 private:

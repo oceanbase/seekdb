@@ -18,9 +18,6 @@
 
 #include "ob_unit_resource.h"
 #include "share/ob_server_struct.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_disk_space_manager.h"
-#endif
 
 namespace oceanbase
 {

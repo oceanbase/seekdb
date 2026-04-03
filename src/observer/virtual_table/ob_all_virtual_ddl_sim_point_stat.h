@@ -56,10 +56,7 @@ public:
 private:
   enum DDLSimPointStatColumn
   {
-    SVR_IP = common::OB_APP_MIN_COLUMN_ID,
-    SVR_PORT,
-    TENANT_ID,
-    DDL_TASK_ID,
+        DDL_TASK_ID = common::OB_APP_MIN_COLUMN_ID,
     SIM_POINT_ID,
     TRIGGER_COUNT,
   };

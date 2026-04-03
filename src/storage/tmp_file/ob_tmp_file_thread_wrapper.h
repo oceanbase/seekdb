@@ -136,7 +136,7 @@ public:
   TO_STRING_KV(K(is_inited_), K(tg_id_), K(swap_job_num_), K(working_list_size_),
                K(flush_io_finished_round_), K(last_swap_timestamp_), K(has_set_stop()));
 private:
-  static const int64_t PAGE_SIZE = ObTmpFileGlobal::PAGE_SIZE;
+  static const int64_t ALLOC_PAGE_SIZE = ObTmpFileGlobal::ALLOC_PAGE_SIZE;
   static const int64_t PROCCESS_JOB_NUM_PER_BATCH = 128;
   void clean_up_lists_();
   int do_work_();

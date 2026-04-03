@@ -22,7 +22,6 @@
 
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/shared_storage/ob_file_manager.h"
-#include "storage/shared_storage/ob_disk_space_manager.h"
 #endif
 
 namespace oceanbase {

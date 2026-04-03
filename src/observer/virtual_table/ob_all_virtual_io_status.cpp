@@ -38,7 +38,6 @@ ObAllVirtualIOStatusIterator::~ObAllVirtualIOStatusIterator()
 
 }
 
-
 int ObAllVirtualIOStatusIterator::init_addr(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
@@ -114,15 +113,6 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
         case STORAGE_NAME: {
           cells[i].set_varchar("DATA");
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -239,15 +229,6 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
         case STORAGE_NAME: {
           cells[i].set_varchar("DATA");
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -513,19 +494,6 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
-        case TENANT_ID: {
-          cells[i].set_int(item.tenant_id_);
-          break;
-        }
         case GROUP_ID: {
           cells[i].set_int(item.group_id_);
           break;
@@ -952,19 +920,6 @@ int ObAllVirtualGroupIOStat::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
-        case TENANT_ID: {
-          cells[i].set_int(item.tenant_id_);
-          break;
-        }
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
         case GROUP_ID: {
           cells[i].set_int(item.group_id_);
           break;
@@ -1148,19 +1103,6 @@ int ObAllVirtualFunctionIOStat::inner_get_next_row(common::ObNewRow *&row)
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
-        case SVR_IP: {
-          cells[i].set_varchar(ip_buf_);
-          cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        }
-        case SVR_PORT: {
-          cells[i].set_int(addr_.get_port());
-          break;
-        }
-        case TENANT_ID: {
-          cells[i].set_int(item.tenant_id_);
-          break;
-        }
         case FUNCTION_NAME: {
           cells[i].set_varchar(get_io_function_name(item.function_type_));
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

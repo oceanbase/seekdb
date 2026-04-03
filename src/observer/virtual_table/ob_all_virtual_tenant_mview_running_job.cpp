@@ -120,19 +120,6 @@ int ObAllVirtualTenantMviewRunningJob::FillScanner::operator()(
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; ++cell_idx) {
       uint64_t col_id = output_column_ids_.at(cell_idx);
       switch(col_id) {
-        case SVR_IP: {
-          cur_row_->cells_[cell_idx].set_varchar(ip_buf_);
-          cur_row_->cells_[cell_idx].set_collation_type(default_collation);
-          break;
-        }
-        case SVR_PORT: {
-          cur_row_->cells_[cell_idx].set_int(port_);
-          break;
-        }
-        case TENANT_ID: {
-          cur_row_->cells_[cell_idx].set_int(MTL_ID());
-          break;
-        }
         case TABLE_ID: {
           cur_row_->cells_[cell_idx].set_int(mview_op.table_id_);
           break;

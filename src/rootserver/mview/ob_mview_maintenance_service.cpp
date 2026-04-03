@@ -75,8 +75,6 @@ int ObMViewMaintenanceService::init()
       LOG_WARN("fail to init mview push snapshot task", KR(ret));
     } else if (OB_FAIL(replica_safe_check_task_.init())) {
       LOG_WARN("fail to init mvref stats maintenance task", KR(ret));
-    } else if (OB_FAIL(collect_mv_merge_info_task_.init())) {
-      LOG_WARN("collect mv merge info task init failed", KR(ret));
     } else if (OB_FAIL(mview_clean_snapshot_task_.init())) {
       LOG_WARN("fail to init mview clean snapshot task", KR(ret));
     } else if (OB_FAIL(mview_update_cache_task_.init())) {
@@ -127,7 +125,6 @@ void ObMViewMaintenanceService::sys_ls_task_stop_()
   mview_push_refresh_scn_task_.stop();
   mview_push_snapshot_task_.stop();
   replica_safe_check_task_.stop();
-  collect_mv_merge_info_task_.stop();
   mview_clean_snapshot_task_.stop();
   mview_mds_task_.stop();
 }
@@ -140,7 +137,6 @@ void ObMViewMaintenanceService::wait()
   mview_push_refresh_scn_task_.wait();
   mview_push_snapshot_task_.wait();
   replica_safe_check_task_.wait();
-  collect_mv_merge_info_task_.wait();
   mview_clean_snapshot_task_.wait();
   mview_update_cache_task_.wait();
   mview_mds_task_.wait();
@@ -156,7 +152,6 @@ void ObMViewMaintenanceService::destroy()
   mview_push_refresh_scn_task_.destroy();
   mview_push_snapshot_task_.destroy();
   replica_safe_check_task_.destroy();
-  collect_mv_merge_info_task_.destroy();
   mview_clean_snapshot_task_.destroy();
   mview_update_cache_task_.destroy();
   mview_refresh_info_cache_.destroy();
@@ -188,8 +183,6 @@ int ObMViewMaintenanceService::inner_switch_to_leader()
       LOG_WARN("fail to start mview push snapshot task", KR(ret));
     } else if (OB_FAIL(replica_safe_check_task_.start())) {
       LOG_WARN("fail to start mvref stats maintenance task", KR(ret));
-    } else if (OB_FAIL(collect_mv_merge_info_task_.start())) {
-      LOG_WARN("collect mv merge info task start failed", KR(ret));
     } else if (OB_FAIL(mview_clean_snapshot_task_.start())) {
       LOG_WARN("fail to start mview clean snapshot task", KR(ret));
     } else if (OB_FAIL(mview_mds_task_.start())) {
@@ -447,7 +440,7 @@ int ObMViewMaintenanceService::get_mview_last_refresh_info_sql_(
   } else if (scn.is_valid() &&
              OB_FAIL(sql.append_fmt(" AS OF SNAPSHOT %ld", scn.get_val_for_sql()))) {
     LOG_WARN("fail to append sql", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" WHERE TENANT_ID = 0 AND MVIEW_ID IN (%.*s)",
+  } else if (OB_FAIL(sql.append_fmt(" WHERE MVIEW_ID IN (%.*s)",
                      (int)mview_id_array.length(), mview_id_array.ptr()))) {
     LOG_WARN("fail to append sql", K(ret));
   }

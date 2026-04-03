@@ -35,9 +35,8 @@ create table test_rollback_sql_sequence_t(num int, str varchar(50), tag int);
 let $__freeze_table_name__ = 'test_rollback_sql_sequence_t';
 
 connection conn0;
-let $__tenant_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ tenant_id from oceanbase.__all_virtual_table where table_name= $__freeze_table_name__, tenant_id, 1);
 let $__table_id__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= $__freeze_table_name__, table_id, 1);
-let $__svr_cnt__=query_get_value(select /*+QUERY_TIMEOUT(10000000)*/ count(*) as c from oceanbase.__all_server, c, 1);
+let $__svr_cnt__=1;
 
 connection conn1;
 #事务开始 插入数据

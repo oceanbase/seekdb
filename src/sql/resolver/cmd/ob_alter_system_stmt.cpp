@@ -94,21 +94,6 @@ int ObBackupSetDecryptionStmt::add_passwd(const ObString &passwd)
   return ret;
 }
 
-ObSetRegionBandwidthStmt::ObSetRegionBandwidthStmt()
-  : ObSystemCmdStmt(stmt::T_SET_REGION_NETWORK_BANDWIDTH)
-{
-  max_bw_ = -1;
-}
-
-int ObSetRegionBandwidthStmt::set_param(const char *src_region, const char *dst_region, const int64_t max_bw)
-{
-  int ret = common::OB_SUCCESS;
-  snprintf(src_region_, MAX_REGION_LENGTH, "%s", src_region);
-  snprintf(dst_region_, MAX_REGION_LENGTH, "%s", dst_region);
-  max_bw_ = max_bw;
-  return ret;
-}
-
 ObAddRestoreSourceStmt::ObAddRestoreSourceStmt()
   : ObSystemCmdStmt(stmt::T_ADD_RESTORE_SOURCE)
 {

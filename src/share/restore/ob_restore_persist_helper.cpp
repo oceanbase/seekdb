@@ -708,19 +708,7 @@ int ObRestorePersistHelper::init(const uint64_t tenant_id, const int32_t group_i
 int ObRestorePersistHelper::insert_initial_restore_progress(
     common::ObISQLClient &proxy, const ObRestoreProgressPersistInfo &persist_info) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.insert_or_update_row(proxy, persist_info, affected_rows))) {
-    LOG_WARN("failed to insert initial restore progress", K(ret));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -729,16 +717,7 @@ int ObRestorePersistHelper::get_restore_process(
       const ObRestoreJobPersistKey &key,
       ObRestoreProgressPersistInfo &persist_info) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator table_op;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(table_op.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(table_op.get_row(proxy, false, key, persist_info))) {
-    LOG_WARN("failed to get persist info", KR(ret), K(key));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -748,20 +727,7 @@ int ObRestorePersistHelper::update_restore_progress_by_tablet_cnt(
     const int64_t total_tablet_cnt,
     const int64_t finish_tablet_cnt) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator table_op;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(table_op.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("tablet_count=%ld, finish_tablet_count=%ld", total_tablet_cnt, finish_tablet_cnt))) {
-    LOG_WARN("fail to assign sql", K(ret));
-  } else if (OB_FAIL(table_op.update_column(proxy, key, sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to update restore progress", K(ret), K(key));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -771,20 +737,7 @@ int ObRestorePersistHelper::update_restore_progress_by_bytes(
     const int64_t total_bytes,
     const int64_t finish_bytes) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator table_op;
-  ObSqlString sql;
-  int64_t affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(table_op.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("total_bytes=%ld, finish_bytes=%ld", total_bytes, finish_bytes))) {
-    LOG_WARN("fail to assign sql", K(ret));
-  } else if (OB_FAIL(table_op.update_column(proxy, key, sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to update restore progress", K(ret), K(key));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -793,17 +746,7 @@ int ObRestorePersistHelper::update_restore_progress_by_bytes(
 int ObRestorePersistHelper::insert_restore_job_history(
        common::ObISQLClient &proxy, const ObHisRestoreJobPersistInfo &persist_info) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator table_op;
-  int64_t affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(table_op.init(OB_ALL_RESTORE_JOB_HISTORY_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(table_op.insert_row(proxy, persist_info, affected_rows))) {
-    LOG_WARN("failed to get persist info", KR(ret), K(persist_info));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 int ObRestorePersistHelper::get_restore_job_history(
@@ -811,75 +754,28 @@ int ObRestorePersistHelper::get_restore_job_history(
     const uint64_t initiator_tenant_id,
     ObHisRestoreJobPersistInfo &persist_info) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator table_op;
-  ObInitiatorRestoreJobPersistKey restore_key;
-  restore_key.initiator_job_id_ = initiator_job;
-  restore_key.initiator_tenant_id_ = initiator_tenant_id;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(table_op.init(OB_ALL_RESTORE_JOB_HISTORY_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(table_op.get_row(proxy, false, restore_key, persist_info))) {
-    LOG_WARN("failed to get persist info", KR(ret), K(restore_key));
-  }
-  return ret; 
+  int ret = OB_NOT_SUPPORTED;
+  return ret;
 }
 
 int ObRestorePersistHelper::insert_initial_ls_restore_progress(
     ObISQLClient &proxy, const ObLSRestoreProgressPersistInfo &persist_info) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.insert_or_update_row(proxy, persist_info, affected_rows))) {
-    LOG_WARN("failed to insert initial ls restore progress", K(ret));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObRestorePersistHelper::record_ls_his_restore_progress(
     common::ObISQLClient &proxy, const ObLSHisRestorePersistInfo &persist_info) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_his_restore_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_his_restore_table_operator.init(OB_ALL_LS_RESTORE_HISTORY_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls his restore progress table", K(ret));
-  } else if (OB_FAIL(ls_his_restore_table_operator.insert_row(proxy, persist_info, affected_rows))) {
-    LOG_WARN("failed to insert ls his restore progress", K(ret));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObRestorePersistHelper::inc_need_restore_ls_count_by_one(
     common::ObMySQLTransaction &trans, const ObLSRestoreJobPersistKey &ls_key, int result) const
 {
-  int ret = OB_SUCCESS;
-  ObRestoreJobPersistKey job_key = ls_key.generate_restore_job_key();
-  ObInnerTableOperator restore_progress_table_operator;
-  int64_t affected_rows = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.increase_column_by_one(trans, job_key, OB_STR_LS_COUNT, affected_rows))) {
-    LOG_WARN("failed to increase finished ls count in restore progress table", K(ret), K(job_key));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -887,42 +783,7 @@ int ObRestorePersistHelper::inc_need_restore_ls_count_by_one(
 int ObRestorePersistHelper::inc_finished_ls_count_by_one(
     ObMySQLTransaction &trans, const ObLSRestoreJobPersistKey &ls_key) const
 {
-  /*
-    1. remove ls from ls restore progress table;
-    2. inc finished ls count in restore progress table;
-    3. insert finished to history table. 
-  */
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator restore_progress_table_operator;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-  ObInnerTableOperator ls_his_restore_table_operator;
-
-  ObLSRestoreProgressPersistInfo progress_info;
-  ObLSHisRestorePersistInfo his_info;
-
-  ObRestoreJobPersistKey job_key = ls_key.generate_restore_job_key();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_his_restore_table_operator.init(OB_ALL_LS_RESTORE_HISTORY_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore history table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.get_row(trans, true/* need lock */, ls_key, progress_info))) {
-    LOG_WARN("failed to get ls restore progress", K(ret), K(ls_key));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.delete_row(trans, ls_key, affected_rows))) {
-    LOG_WARN("failed to delete ls restore progress", K(ret), K(ls_key), K(progress_info));
-  } else if (OB_FAIL(progress_info.generate_his_progress(his_info))) {
-    LOG_WARN("fail to generate his progress", K(ret));
-  } else if (OB_FAIL(record_ls_his_restore_progress(trans, his_info))) {
-    LOG_WARN("failed to insert ls his restore progress", K(ret), K(his_info));
-  } else if (OB_FAIL(restore_progress_table_operator.increase_column_by_one(trans, job_key, OB_STR_FINISH_LS_COUNT, affected_rows))) {
-    LOG_WARN("failed to increase finished ls count in restore progress table", K(ret), K(job_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -930,25 +791,7 @@ int ObRestorePersistHelper::inc_finished_ls_count_by_one(
 int ObRestorePersistHelper::inc_finished_tablet_count_by_one(
     common::ObMySQLTransaction &trans, const ObLSRestoreJobPersistKey &ls_key) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator restore_progress_table_operator;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  ObRestoreJobPersistKey job_key = ls_key.generate_restore_job_key();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.increase_column_by_one(trans, job_key, OB_STR_FINISH_TABLET_COUNT, affected_rows))) {
-    LOG_WARN("failed to increase finished tablet count in restore progress table", K(ret), K(job_key));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.increase_column_by_one(trans, ls_key, OB_STR_FINISH_TABLET_COUNT, affected_rows))) {
-    LOG_WARN("failed to increase finished tablet count in ls restore progress table", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -957,25 +800,7 @@ int ObRestorePersistHelper::inc_finished_restored_block_bytes(
     common::ObMySQLTransaction &trans, const ObLSRestoreJobPersistKey &ls_key, 
     const int64_t inc_finished_bytes) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator restore_progress_table_operator;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  ObRestoreJobPersistKey job_key = ls_key.generate_restore_job_key();
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.init(OB_ALL_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(restore_progress_table_operator.increase_column_by(trans, job_key, OB_STR_FINISH_BYTES, inc_finished_bytes, affected_rows))) {
-    LOG_WARN("failed to update finished bytes in restore progress table", K(ret), K(job_key), K(inc_finished_bytes));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.increase_column_by(trans, ls_key, OB_STR_FINISH_BYTES, inc_finished_bytes, affected_rows))) {
-    LOG_WARN("failed to update finished bytes in ls restore progress table", K(ret), K(ls_key), K(inc_finished_bytes));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -983,19 +808,7 @@ int ObRestorePersistHelper::update_log_restore_progress(
   common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
   const SCN &last_replay_scn) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.update_uint_column(proxy, ls_key, OB_STR_LAST_REPLAY_SCN, last_replay_scn.get_val_for_inner_table_field(), affected_rows))) {
-    LOG_WARN("failed to update last replay scn in ls restore progress table", K(ret), K(ls_key), K(last_replay_scn));
-  } 
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1005,64 +818,14 @@ int ObRestorePersistHelper::update_ls_restore_status(
     const int64_t finished_tablet_cnt, const int result, const char *comment) const
 
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-  char trace_id_str[OB_MAX_TRACE_ID_BUFFER_SIZE] = { 0 };
-  ObSqlString sql;
-  ObDMLSqlSplicer dml;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_ISNULL(comment)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("comment must not be null", K(ret), KP(comment));
-  } else if (OB_FALSE_IT(trace_id.to_string(trace_id_str, OB_MAX_TRACE_ID_BUFFER_SIZE))) {
-  } else if (OB_FAIL(dml.add_column(OB_STR_STATUS, static_cast<int32_t>(status)))) {
-    LOG_WARN("failed to add column", K(ret));
-  } else if (OB_FAIL(dml.add_column(OB_STR_FINISH_TABLET_COUNT, finished_tablet_cnt))) {
-    LOG_WARN("failed to add column", K(ret));
-  } else if (OB_FAIL(dml.add_column(OB_STR_RESULT, result))) {
-    LOG_WARN("failed to add column", K(ret));
-  } else if (OB_FAIL(dml.add_column(OB_STR_TRACE_ID, trace_id_str))) {
-    LOG_WARN("failed to add column", K(ret));
-  } else if (OB_FAIL(dml.add_column(OB_STR_COMMENT, comment))) {
-    LOG_WARN("failed to add column", K(ret));
-  } else if (OB_FAIL(dml.splice_assignments(sql))) {
-    LOG_WARN("failed to splice assignments", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.update_column(proxy, ls_key, sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to update ls restore progress", K(ret), K(ls_key));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObRestorePersistHelper::get_all_ls_restore_progress(common::ObISQLClient &proxy, 
     ObIArray<ObLSRestoreProgressPersistInfo> &ls_restore_progress_info)
 {
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else {
-    ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("select * from %s order by ls_id", OB_ALL_LS_RESTORE_PROGRESS_TNAME))) {
-      LOG_WARN("fail to assign sql", K(ret));
-    } else {
-      HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-        ObMySQLResult *result = NULL;
-        if (OB_FAIL(proxy.read(res, get_exec_tenant_id(), sql.ptr()))) {
-          LOG_WARN("failed to exec sql", K(ret), K(sql), "exec_tenant_id", get_exec_tenant_id());
-        } else if (OB_ISNULL(result = res.get_result())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("result is null", K(ret), K(sql), "exec_tenant_id", get_exec_tenant_id());
-        } else if (OB_FAIL(do_parse_ls_restore_progress_result_(*result, ls_restore_progress_info))) {
-          LOG_WARN("il to parse result", K(ret));
-        }
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1092,19 +855,7 @@ int ObRestorePersistHelper::set_ls_total_tablet_cnt(
     common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
     const int64_t total_tablet_cnt) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.update_int_column(proxy, ls_key, OB_STR_TABLET_COUNT, total_tablet_cnt, affected_rows))) {
-    LOG_WARN("failed to set ls total tablet cnt", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1112,19 +863,7 @@ int ObRestorePersistHelper::set_ls_finish_tablet_cnt(
     common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
     const int64_t finish_tablet_cnt) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.update_int_column(proxy, ls_key, OB_STR_FINISH_TABLET_COUNT, finish_tablet_cnt, affected_rows))) {
-    LOG_WARN("failed to set ls finish tablet cnt", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1132,18 +871,7 @@ int ObRestorePersistHelper::get_ls_total_tablet_cnt(
     common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
     int64_t &total_tablet_cnt) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.get_int_column(proxy, false /*need lock*/, ls_key, OB_STR_TABLET_COUNT, total_tablet_cnt))) {
-    LOG_WARN("failed to get ls tablet cnt", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1151,18 +879,7 @@ int ObRestorePersistHelper::get_ls_finish_tablet_cnt(
     common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
     int64_t &finish_tablet_cnt) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.get_int_column(proxy, false /*need lock*/, ls_key, OB_STR_FINISH_TABLET_COUNT, finish_tablet_cnt))) {
-    LOG_WARN("failed to get ls finish tablet cnt", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1170,19 +887,7 @@ int ObRestorePersistHelper::inc_total_tablet_count_by_one(
     common::ObISQLClient &proxy, 
     const ObLSRestoreJobPersistKey &ls_key) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.increase_column_by_one(proxy, ls_key, OB_STR_TABLET_COUNT, affected_rows))) {
-    LOG_WARN("failed to increase total tablet count in ls restore progress table", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1190,19 +895,7 @@ int ObRestorePersistHelper::dec_total_tablet_count_by_one(
     common::ObISQLClient &proxy, 
     const ObLSRestoreJobPersistKey &ls_key) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.decrease_column_by_one(proxy, ls_key, OB_STR_TABLET_COUNT, affected_rows))) {
-    LOG_WARN("failed to decrease total tablet count in ls restore progress table", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1211,36 +904,7 @@ int ObRestorePersistHelper::transfer_tablet(
     const ObLSRestoreJobPersistKey &src_ls_key,
     const ObLSRestoreJobPersistKey &dest_ls_key) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-  int64_t total_tablet_cnt = 0;
-  int64_t finish_tablet_cnt = 0;
-  
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.get_int_column(trans, true /*need lock*/, src_ls_key, OB_STR_TABLET_COUNT, total_tablet_cnt))) {
-    LOG_WARN("failed to get ls tablet cnt", K(ret), K(src_ls_key));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.get_int_column(trans, true /*need lock*/, src_ls_key, OB_STR_FINISH_TABLET_COUNT, finish_tablet_cnt))) {
-    LOG_WARN("failed to get ls finish tablet cnt", K(ret), K(src_ls_key));
-  } else if (total_tablet_cnt == finish_tablet_cnt && finish_tablet_cnt > 0) {
-    if (OB_FAIL(ls_restore_progress_table_operator.decrease_column_by_one(trans, src_ls_key, OB_STR_FINISH_TABLET_COUNT, affected_rows))) {
-      LOG_WARN("failed to decrease finish tablet count in ls restore progress table", K(ret), K(src_ls_key));
-#ifdef ERRSIM      
-    } else {
-      LOG_INFO("correct restore progress after transfer backfill", K(src_ls_key), K(dest_ls_key));
-#endif      
-    }
-  }
-  if (FAILEDx(ls_restore_progress_table_operator.decrease_column_by_one(trans, src_ls_key, OB_STR_TABLET_COUNT, affected_rows))) {
-    LOG_WARN("failed to decrease total tablet count in ls restore progress table", K(ret), K(src_ls_key));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.increase_column_by_one(trans, dest_ls_key, OB_STR_TABLET_COUNT, affected_rows))) {
-    LOG_WARN("failed to increase total tablet count in ls restore progress table", K(ret), K(dest_ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1249,69 +913,20 @@ int ObRestorePersistHelper::force_correct_restore_stat(
     common::ObISQLClient &proxy, 
     const ObLSRestoreJobPersistKey &ls_key) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-  ObSqlString sql;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("%s=%s, %s=%s", OB_STR_FINISH_TABLET_COUNT, OB_STR_TABLET_COUNT, OB_STR_FINISH_BYTES, OB_STR_TOTAL_BYTES))) {
-    LOG_WARN("failed to assign fmt", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.update_column(proxy, ls_key, sql.ptr(), affected_rows))) {
-    LOG_WARN("failed to force correct restore stat", K(ret), K(ls_key));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 
 int ObRestorePersistHelper::move_ls_restore_progress_to_history(common::ObMySQLTransaction &trans) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  const char *columns = "TENANT_ID, JOB_ID, LS_ID, SVR_IP, SVR_PORT, RESTORE_SCN, START_REPLAY_SCN, LAST_REPLAY_SCN, TABLET_COUNT, FINISH_TABLET_COUNT, TOTAL_BYTES, FINISH_BYTES, TRACE_ID, RESULT, COMMENT";
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (%s)", OB_ALL_LS_RESTORE_HISTORY_TNAME, columns))) {
-    LOG_WARN("failed to assign fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" SELECT %s FROM %s", columns, OB_ALL_LS_RESTORE_PROGRESS_TNAME))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(trans.write(gen_meta_tenant_id(tenant_id_), sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s", OB_ALL_LS_RESTORE_PROGRESS_TNAME))) {
-    LOG_WARN("failed to assign fmt", K(ret));
-  } else if (OB_FAIL(trans.write(gen_meta_tenant_id(tenant_id_), sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
 int ObRestorePersistHelper::record_restore_info(common::ObMySQLTransaction &trans) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObSqlString sql;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (NAME, VALUE)", OB_ALL_RESTORE_INFO_TNAME))) {
-    LOG_WARN("failed to assign fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" SELECT NAME, CASE WHEN VALUE IS NULL THEN '' ELSE VALUE END FROM %s", OB_ALL_RESTORE_JOB_TNAME))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(trans.write(gen_meta_tenant_id(tenant_id_), sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  } else if (FALSE_IT(sql.reset())) {
-  } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (NAME, VALUE)", OB_ALL_RESTORE_INFO_TNAME))) {
-    LOG_WARN("failed to assign fmt", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" SELECT 'job_id' as NAME, job_id as VALUE FROM %s limit 1", OB_ALL_RESTORE_JOB_TNAME))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else if (OB_FAIL(trans.write(gen_meta_tenant_id(tenant_id_), sql.ptr(), group_id_, affected_rows))) {
-    LOG_WARN("fail to exec sql", K(ret), K(sql));
-  } 
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1320,104 +935,7 @@ int ObRestorePersistHelper::get_backup_dest_list_from_restore_info(
     int64_t &job_id, 
     ObPhysicalRestoreBackupDestList &backup_dest_list) const
 {
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(sql.assign_fmt("select name, value from %s", OB_ALL_RESTORE_INFO_TNAME))) {
-    LOG_WARN("fail to assign sql", K(ret));
-  } else if (OB_FAIL(sql.append_fmt(" where name in ('%s', '%s', '%s', '%s', '%s')", 
-                     OB_STR_JOB_ID,
-                     OB_STR_BACKUP_SET_LIST,
-                     OB_STR_BACKUP_SET_DESC_LIST,
-                     OB_STR_BACKUP_PIECE_LIST,
-                     OB_STR_LOG_PATH_LIST))) {
-    LOG_WARN("failed to append fmt", K(ret));
-  } else {
-    job_id = -1;
-    HEAP_VAR(ObMySQLProxy::ReadResult, res) {
-      ObMySQLResult *result = NULL;
-      if (OB_FAIL(proxy.read(res, get_exec_tenant_id(), sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql), "exec_tenant_id", get_exec_tenant_id());
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", K(ret), K(sql), "exec_tenant_id", get_exec_tenant_id());
-      } else {
-        while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          ObString name;
-          EXTRACT_VARCHAR_FIELD_MYSQL(*result, "name", name);
-
-          if (OB_SUCC(ret)) {
-            if (name == OB_STR_JOB_ID) {
-              char value_buf[OB_INNER_TABLE_DEFAULT_VALUE_LENTH] = { 0 };
-              int64_t real_len = 0; // not used
-              EXTRACT_STRBUF_FIELD_MYSQL(*result, "value", value_buf, OB_INNER_TABLE_DEFAULT_VALUE_LENTH, real_len);
-              if (OB_SUCC(ret)) {
-                char *endptr = NULL;
-                job_id = strtoll(value_buf, &endptr, 0);
-                if (0 == strlen(value_buf) || '\0' != *endptr) {
-                  ret = OB_INVALID_DATA;
-                  LOG_WARN("not int value", K(ret), K(value_buf));
-                }
-              }
-            }
-          }
-
-          if (OB_SUCC(ret)) {
-            if (name == OB_STR_BACKUP_SET_LIST) {
-              ObString str;
-              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "value", str);
-              if (FAILEDx(backup_dest_list.backup_set_list_assign_with_format_str(str))) {
-                LOG_WARN("fail to assign backup set list", KR(ret), K(str));
-              }
-            }
-          }
-
-          if (OB_SUCC(ret)) {
-            if (name == OB_STR_BACKUP_SET_DESC_LIST) {
-              ObString str;
-              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "value", str);
-              if (FAILEDx(backup_dest_list.backup_set_desc_list_assign_with_format_str(str))) {
-                LOG_WARN("fail to assign backup set desc list", KR(ret), K(str));
-              } 
-            }
-          }
-
-          if (OB_SUCC(ret)) {
-            if (name == OB_STR_BACKUP_PIECE_LIST) {
-              ObString str;
-              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "value", str);
-              if (FAILEDx(backup_dest_list.backup_piece_list_assign_with_format_str(str))) {
-                LOG_WARN("fail to assign backup piece list", KR(ret), K(str));
-              }
-            }
-          }
-
-          if (OB_SUCC(ret)) {
-            if (name == OB_STR_LOG_PATH_LIST) {
-              ObString str;
-              EXTRACT_VARCHAR_FIELD_MYSQL(*result, "value", str);
-              if (FAILEDx(backup_dest_list.log_path_list_assign_with_format_str(str))) {
-                LOG_WARN("fail to assign log path list", KR(ret), K(str));
-              }
-            }
-          }
-        }
-
-        if (OB_ITER_END == ret) {
-          if (-1 == job_id) {
-            ret = OB_ENTRY_NOT_EXIST;
-            LOG_WARN("restore info is empty", K(ret), K_(tenant_id));
-          } else {
-            ret = OB_SUCCESS;
-          }
-        } else {
-          LOG_WARN("failed to get backup dest from restore info", K(ret));
-        }
-      }
-    }
-  }
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1425,19 +943,7 @@ int ObRestorePersistHelper::set_ls_total_bytes(
     common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
     const int64_t total_bytes) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.update_int_column(proxy, ls_key, OB_STR_TOTAL_BYTES, total_bytes, affected_rows))) {
-    LOG_WARN("failed to set ls total tablet cnt", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1445,18 +951,7 @@ int ObRestorePersistHelper::get_ls_total_bytes(
     common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
     int64_t &total_bytes) const
 {
-  int ret = OB_SUCCESS;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.get_int_column(proxy, false /*need lock*/, ls_key, OB_STR_TOTAL_BYTES, total_bytes))) {
-    LOG_WARN("failed to get ls tablet cnt", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1464,19 +959,7 @@ int ObRestorePersistHelper::set_ls_finish_bytes(
     common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,
     const int64_t finish_bytes) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.update_int_column(proxy, ls_key, OB_STR_FINISH_BYTES, finish_bytes, affected_rows))) {
-    LOG_WARN("failed to set ls finish tablet cnt", K(ret), K(ls_key));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
@@ -1485,18 +968,6 @@ int ObRestorePersistHelper::increase_ls_finish_bytes_by(
     const ObLSRestoreJobPersistKey &ls_key, 
     const int64_t finish_bytes) const
 {
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObInnerTableOperator ls_restore_progress_table_operator;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObRestorePersistHelper not init", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.init(OB_ALL_LS_RESTORE_PROGRESS_TNAME, *this, group_id_))) {
-    LOG_WARN("failed to init ls restore progress table", K(ret));
-  } else if (OB_FAIL(ls_restore_progress_table_operator.increase_column_by(proxy, ls_key, OB_STR_FINISH_BYTES, finish_bytes, affected_rows))) {
-    LOG_WARN("failed to increase finish bytes in ls restore progress table", K(ret), K(ls_key), K(finish_bytes));
-  }
-
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }

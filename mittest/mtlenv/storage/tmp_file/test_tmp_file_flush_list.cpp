@@ -178,7 +178,7 @@ void TestFlushListIterator::create_files(const FlushCtxState state, const int64_
     ObSharedNothingTmpFile &file = *file_handle.get();
     file.file_size_ = mock_dirty_data_size;
     file.cached_page_nums_ =
-      upper_align(mock_dirty_data_size, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE;
+      upper_align(mock_dirty_data_size, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     file_handles.push_back(file_handle);
   }
   ASSERT_EQ(file_num, file_handles.size());
@@ -227,7 +227,7 @@ void TestFlushListIterator::create_files_with_dir(
     ObSharedNothingTmpFile &file = *file_handle.get();
     file.file_size_ = mock_dirty_data_size;
     file.cached_page_nums_ =
-      upper_align(mock_dirty_data_size, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE;
+      upper_align(mock_dirty_data_size, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     file_handles.push_back(file_handle);
   }
   ASSERT_EQ(file_num, file_handles.size());
@@ -272,7 +272,7 @@ TEST_F(TestFlushListIterator, test_iter_order)
     ASSERT_NE(file_handle.get(), nullptr);
     ObSharedNothingTmpFile &file = *file_handle.get();
     file.file_size_ = mock_record.dirty_data_size_;
-    file.cached_page_nums_ = upper_align(file.file_size_, ObTmpFileGlobal::PAGE_SIZE) / ObTmpFileGlobal::PAGE_SIZE;
+    file.cached_page_nums_ = upper_align(file.file_size_, ObTmpFileGlobal::ALLOC_PAGE_SIZE) / ObTmpFileGlobal::ALLOC_PAGE_SIZE;
     ret = flush_prio_mgr.insert_data_flush_list(file, mock_record.dirty_data_size_);
     ASSERT_EQ(OB_SUCCESS, ret);
   }

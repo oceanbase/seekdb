@@ -19,7 +19,6 @@
 
 #include "common/ob_role.h"
 #include "lib/ob_define.h"
-#include "share/ob_tenant_info_proxy.h"                // ObTenantRole
 #include "logservice/applyservice/ob_log_apply_service.h"
 #include "mittest/palf_cluster/rpc/palf_cluster_rpc_req.h"
 #include "mittest/palf_cluster/rpc/palf_cluster_rpc_proxy.h"

@@ -170,10 +170,7 @@ public:
 public:
   ObRoutePolicy(const common::ObAddr &addr)
       :local_addr_(addr),
-      local_locality_(),
-      server_locality_array_(),
       has_refresh_locality_(false),
-      has_readonly_zone_(false),
       is_inited_(false)
   {}
   ~ObRoutePolicy() {}
@@ -193,34 +190,23 @@ public:
                                bool &is_proxy_hit);
 
   TO_STRING_KV(K(local_addr_),
-               K(local_locality_),
-               K(server_locality_array_),
                K(has_refresh_locality_),
-               K(has_readonly_zone_),
                K(is_inited_));
 
   inline bool is_follower_first_route_policy_type(const ObRoutePolicyCtx &ctx) const
   {
-    return !has_readonly_zone_ && (UNMERGE_FOLLOWER_FIRST == ctx.policy_type_);
+    return UNMERGE_FOLLOWER_FIRST == ctx.policy_type_;
   }
 
-  static int get_server_locality(const common::ObAddr &addr,
-                                 const common::ObIArray<share::ObServerLocality> &server_locality_array,
-                                 share::ObServerLocality &svr_locality);
   static bool is_same_idc(const share::ObServerLocality &locality1,
                           const share::ObServerLocality &locality2);
   static bool is_same_region(const share::ObServerLocality &locality1,
                              const share::ObServerLocality &locality2);
 
 protected:
-  int init_candidate_replica(const common::ObIArray<share::ObServerLocality> &server_locality_array,
-                             CandidateReplica &candi_replica);
-  int calc_position_type(const share::ObServerLocality &candi_locality,
-                         CandidateReplica &candi_replica);
+  int init_candidate_replica(CandidateReplica &candi_replica);
   int calc_intersect_repllica(const common::ObIArray<ObCandiTableLoc*> &phy_tbl_loc_info_list,
                               common::ObList<ObRoutePolicy::CandidateReplica, common::ObArenaAllocator> &intersect_server_list);
-  int get_merge_status(const share::ObServerLocality &candi_locality, CandidateReplica &candi_replica);
-  int get_zone_status(const share::ObServerLocality &candi_locality, CandidateReplica &candi_replica);
 
   int filter_replica(const ObAddr &local_server,
                      const share::ObLSID &ls_id,
@@ -237,12 +223,6 @@ protected:
       type = ctx.policy_type_;
     } else if (FORCE_READONLY_ZONE == ctx.policy_type_) {
       type = FORCE_READONLY_ZONE;
-    } else if (has_readonly_zone_) {
-      if (UNMERGE_FOLLOWER_FIRST == ctx.policy_type_) {
-        type = READONLY_ZONE_FIRST;
-      } else {
-        type = ctx.policy_type_;
-      }
     } else {
       type = READONLY_ZONE_FIRST;
     }
@@ -250,10 +230,7 @@ protected:
   }
 protected:
   common::ObAddr local_addr_;
-  share::ObServerLocality local_locality_;
-  common::ObSEArray<share::ObServerLocality, 32> server_locality_array_;
   bool has_refresh_locality_;
-  bool has_readonly_zone_;
   bool is_inited_;
 };
 

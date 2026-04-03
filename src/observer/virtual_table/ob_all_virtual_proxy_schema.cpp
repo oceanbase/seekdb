@@ -210,7 +210,6 @@ int ObAllVirtualProxySchema::gen_column_value(char *&buf, int64_t len,
   return ret;
 }
 
-
 int ObAllVirtualProxySchema::inner_open()
 {
   int ret = OB_SUCCESS;
@@ -221,7 +220,7 @@ int ObAllVirtualProxySchema::inner_open()
   } else if (OB_FAIL(schema_service_->get_cluster_schema_guard(schema_guard_))) {
     LOG_WARN("fail to get schema guard", KR(ret));
   } else {
-    const int64_t ROW_KEY_COUNT = 6;
+    const int64_t ROW_KEY_COUNT = 4;
     int64_t exec_tenant_id = OB_INVALID_ID;
     ObRowkey start_key;
     ObRowkey end_key;
@@ -514,7 +513,6 @@ int ObAllVirtualProxySchema::init_data_(
       } // unknown table, return succ
     }
 
-
     //3. try view
     if (OB_SUCC(ret) && OB_NOT_NULL(table_schema) && table_schema->is_view_table()) {
       LOG_TRACE("try view", K(tenant_name), K(database_name), K(table_name), K_(complex_table_type),
@@ -624,43 +622,6 @@ int ObAllVirtualProxySchema::batch_refresh_required_locations_(
     const ObIArray<ObString> &input_table_names)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(location_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("location_service_ is null", KR(ret));
-  } else {
-    // only requires 100ms of effectiveness, no need for real-time.
-    const int64_t expire_renew_time =
-        ObTimeUtility::current_time() - GCONF.location_cache_refresh_min_interval;
-    bool is_nonblock = false;
-    ObList<ObTabletID, ObIAllocator> tablet_list(convert_alloc_);
-    ARRAY_FOREACH(actual_tablet_ids_, idx) {
-      if (!actual_tablet_ids_.at(idx).is_valid()) {
-        // skip
-      } else if (OB_FAIL(tablet_list.push_back(actual_tablet_ids_.at(idx)))) {
-        LOG_WARN("push_back failed", KR(ret));
-      }
-    }
-
-    if (OB_SUCC(ret) && !tablet_list.empty()) {
-      if (OB_FAIL(location_service_->batch_renew_tablet_locations(
-        tenant_id,
-        tablet_list,
-        OB_SUCCESS,
-        is_nonblock,
-        expire_renew_time))) {
-        if (OB_GET_LOCATION_TIME_OUT == ret) {
-          // ignore ret
-          LOG_WARN("batch_renew_tablet_locations failed due to timeout, ignoring error code", 
-              KR(ret), K(input_tenant_name_), K(input_db_name_), K(input_table_names),
-              K(input_tablet_ids), K(tablet_ids_), K(table_names_), K(actual_tablet_ids_), 
-              "need refresh tablet", tablet_list);
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("failed to batch_refresh_required_locations_", KR(ret), K(tenant_id), K(tablet_list));
-        }
-      }
-    }
-  }
   return ret;
 }
 
@@ -991,173 +952,38 @@ int ObAllVirtualProxySchema::get_next_tenant_server_(
   return ret;
 }
 
-int ObAllVirtualProxySchema::get_replica_type_from_locality_(
-    const ZoneLocalityIArray &zone_locality_array,
-    const ObZone &zone,
-    ObReplicaType &replica_type)
-{
-  int ret = OB_SUCCESS;
-  replica_type = REPLICA_TYPE_FULL;
-  if (OB_UNLIKELY(zone_locality_array.empty() || zone.is_empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(zone_locality_array), K(zone));
-  } else {
-    bool zone_found = false;
-    FOREACH_CNT_X(zone_locality, zone_locality_array, !zone_found && OB_SUCCESS == ret) {
-      if (zone_locality->get_zone_set().at(0) == zone) {
-        zone_found = true;
-        if (zone_locality->get_readonly_replica_num() > 0) {
-          replica_type = REPLICA_TYPE_READONLY;
-        } else if (zone_locality->get_columnstore_replica_num() > 0) {
-          replica_type = REPLICA_TYPE_COLUMNSTORE;
-        } else if (zone_locality->get_full_replica_num() > 0) {
-          replica_type = REPLICA_TYPE_FULL;
-        } else {
-          // unrecognized replica_type
-          ret = OB_ERR_UNEXPECTED;
-          replica_type = REPLICA_TYPE_INVALID;
-          LOG_WARN("unrecognized replica type", KR(ret), KPC(zone_locality));
-        }
-      }
-    }
-    if (!zone_found) {
-      // tenant locality does not include this zone, regard as FULL
-      replica_type = REPLICA_TYPE_FULL;
-    }
-  }
-  return ret;
-}
-
-int ObAllVirtualProxySchema::fill_tenant_servers_(
-    const uint64_t tenant_id,
-    ObMySQLResult &result,
-    ObIArray<int64_t> &first_idx_in_zone)
-{
-  int ret = OB_SUCCESS;
-  int32_t svr_port = UINT16_MAX;
-  ObString svr_ip;
-  int64_t sql_port = OB_INVALID_INDEX;
-  ObReplicaType replica_type = REPLICA_TYPE_FULL;
-  ObReplicaProperty property;
-  ObLSRestoreStatus restore_status;
-  ObAddr server;
-  ObString zone;
-  uint64_t zone_hash = 0;
-  uint64_t last_zone_hash = 0;
-  ObTenantServer tenant_server;
-  ObLSReplicaLocation replica_location;
-  int64_t svr_idx = 0;
-  first_idx_in_zone.reset();
-  tenant_servers_.reset();
-  const ObTenantSchema *tenant_schema = NULL;
-  ObArray<share::ObZoneReplicaNumSet> zone_locality;
-
-  if (OB_FAIL(schema_guard_.get_tenant_info(tenant_id, tenant_schema))) {
-    LOG_WARN("fail to get tenant info", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(tenant_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tenant not exist", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(tenant_schema->get_zone_replica_attr_array(zone_locality))) {
-    LOG_WARN("fail to get zone_locality_array");
-  }
-
-  while (OB_SUCC(ret) && OB_SUCC(result.next())) {
-    tenant_server.reset();
-    svr_ip.reset();
-    zone.reset();
-    EXTRACT_VARCHAR_FIELD_MYSQL(result, "svr_ip", svr_ip);
-    EXTRACT_INT_FIELD_MYSQL(result, "svr_port", svr_port, int32_t);
-    EXTRACT_INT_FIELD_MYSQL(result, "inner_port", sql_port, int64_t);
-    EXTRACT_VARCHAR_FIELD_MYSQL(result, "zone", zone);
-    if (FAILEDx(get_replica_type_from_locality_(zone_locality, zone, replica_type))) {
-      LOG_WARN("failed to get replica_type", KR(ret), K(zone_locality), K(zone));
-    } else if (OB_UNLIKELY(!server.set_ip_addr(svr_ip, svr_port))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to set_ip_addr", KR(ret), K(svr_ip), K(svr_port));
-    } else if (OB_FAIL(replica_location.init(
-        server,
-        FOLLOWER,
-        sql_port,
-        replica_type,
-        property,
-        restore_status,
-        0 /*proposal_id*/))) {
-      LOG_WARN("fail to init replica location", KR(ret), K(server), K(sql_port), K(replica_type));
-    } else if (OB_FAIL(tenant_server.set_location(replica_location))) {
-      LOG_WARN("fail to init tenant_server", KR(ret), K(replica_location));
-    } else if (OB_FAIL(tenant_servers_.push_back(tenant_server))) {
-      LOG_WARN("failed to push back tenant_servers_", K(tenant_server), KR(ret));
-    } else {
-      zone_hash = zone.hash();
-      if (last_zone_hash != zone_hash) {
-        if (OB_FAIL(first_idx_in_zone.push_back(svr_idx))) {
-          LOG_WARN("fail to push back first_idx_in_zone", K(svr_idx), KR(ret));
-        } else {
-          last_zone_hash = zone_hash;
-        }
-      }
-      ++svr_idx;
-    }
-  }
-  if (OB_ITER_END != ret) {
-    LOG_WARN("failed to get tenant server info", KR(ret), K_(tenant_servers));
-  } else {
-    ret = OB_SUCCESS;
-    //virtual invalid idx, just used for compute svr_count_in_zone
-    if (OB_FAIL(first_idx_in_zone.push_back(svr_idx))) {
-      LOG_WARN("fail to push back first_idx_in_zone", KR(ret), K(svr_idx));
-    } else {
-      LOG_INFO("succ to fill tenant servers", K_(tenant_servers), K(first_idx_in_zone));
-    }
-  }
-  return ret;
-}
-
 int ObAllVirtualProxySchema::get_tenant_servers_by_join_(
     const uint64_t tenant_id,
     ObIArray<int64_t> &first_idx_in_zone)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql_proxy_ is null", KR(ret));
-  } else {
-    ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_);
+  first_idx_in_zone.reset();
+  tenant_servers_.reset();
 
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObMySQLResult *result = NULL;
-      ObSqlString sql;
-      first_idx_in_zone.reset();
-      tenant_servers_.reset();
-      const static char *SELECT_TENANT_ACTIVE_SERVERS_SQL =
-          "SELECT S.svr_ip, S.svr_port, S.inner_port, S.zone "
-          "FROM oceanbase.%s R, oceanbase.%s U, oceanbase.%s S "
-          "WHERE R.tenant_id = %lu "
-          "AND R.resource_pool_id = U.resource_pool_id "
-          "AND ((U.svr_ip = S.svr_ip AND U.svr_port = S.svr_port) "
-          "      OR (U.migrate_from_svr_port > 0 AND U.migrate_from_svr_ip = S.svr_ip AND U.migrate_from_svr_port = S.svr_port)) "
-          "AND S.inner_port > 0 "
-          "ORDER BY S.zone ASC "
-          "LIMIT %ld";
-      if (OB_FAIL(sql.append_fmt(
-          SELECT_TENANT_ACTIVE_SERVERS_SQL,
-          OB_ALL_RESOURCE_POOL_TNAME,
-          OB_ALL_UNIT_TNAME,
-          OB_ALL_SERVER_TNAME,
-          tenant_id,
-          INT64_MAX))) {
-        LOG_WARN("failed to append sql info", KR(ret));
-      } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute sql", KR(ret), K(sql));
-      } else if (OB_ISNULL(result = res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get result", KR(ret), K(sql), K(result));
-      } else if (OB_FAIL(fill_tenant_servers_(tenant_id, *result, first_idx_in_zone))) {
-        LOG_WARN("failed to fill_tenant_servers", KR(ret), K(tenant_id));
-      } else {
-        LOG_INFO("succ to get tenant_servers by join", K_(tenant_servers));
-      }
-    }
+  ObLSReplicaLocation replica_location;
+  int64_t svr_idx = 0;
+  ObReplicaProperty property;
+  ObLSRestoreStatus restore_status;
+  ObTenantServer tenant_server;
+
+  if (OB_ISNULL(GCTX.config_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
+  } else if (OB_FAIL(replica_location.init(
+        GCTX.self_addr(),
+        LEADER,
+        GCTX.config_->mysql_port/*sql_port*/,
+        REPLICA_TYPE_FULL,
+        property,
+        restore_status,
+        1/*proposal_id*/))) {
+    LOG_WARN("fail to init replica location", KR(ret));
+  } else if (OB_FAIL(tenant_server.set_location(replica_location))) {
+    LOG_WARN("fail to init tenant_server", KR(ret), K(replica_location));
+  } else if (OB_FAIL(tenant_servers_.push_back(tenant_server))) {
+    LOG_WARN("failed to push back tenant_servers_", K(tenant_server), KR(ret));
+  } else if (OB_FAIL(first_idx_in_zone.push_back(svr_idx))) {
+    LOG_WARN("fail to push back first_idx_in_zone", K(svr_idx), KR(ret));
   }
   return ret;
 }
@@ -1239,7 +1065,7 @@ int ObAllVirtualProxySchema::fill_row_(
   int ret = OB_SUCCESS;
   ObObj *cells = NULL;
   const int64_t col_count = output_column_ids_.count();
-  int64_t paxos_replica_num = OB_INVALID_COUNT;
+  int64_t paxos_replica_num = 1;
   ObCollationType coll_type = ObCharset::get_default_collation(ObCharset::get_default_charset());
   if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1259,23 +1085,9 @@ int ObAllVirtualProxySchema::fill_row_(
         LOG_WARN("fail to get table schema", KR(ret), K(data_table_id), K(table_schema));
       } else {
         part_num = main_table_schema->get_all_part_num();
-        if (OB_FAIL(main_table_schema->get_paxos_replica_num(schema_guard, paxos_replica_num))) {
-          LOG_WARN("fail to get table paxos replica_num", KR(ret), KPC(main_table_schema));
-        }
       }
     } else {
       part_num = table_schema.get_all_part_num();
-      if (OB_FAIL(table_schema.get_paxos_replica_num(schema_guard, paxos_replica_num))) {
-        LOG_WARN("fail to get table paxos replica_num", KR(ret));
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (OB_UNLIKELY(paxos_replica_num < 0)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("paxos replica num error", KR(ret),
-            K(paxos_replica_num), "table_id", table_schema.get_table_id());
-      }
     }
 
     uint64_t cell_idx = 0;
@@ -1300,21 +1112,6 @@ int ObAllVirtualProxySchema::fill_row_(
         }
         case TABLET_ID: {
           cells[cell_idx].set_int(tablet_id.id());
-          break;
-        }
-        case SERVER_IP: {
-          if (OB_UNLIKELY(!replica.get_server().ip_to_string(ip_buf_, OB_IP_STR_BUFF))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to covert ip to string", KR(ret),
-                K(cell_idx), K(output_column_ids_), K(col_id), K(replica));
-          } else {
-            cells[cell_idx].set_varchar(ip_buf_);
-            cells[cell_idx].set_collation_type(coll_type);
-          }
-          break;
-        }
-        case SQL_PORT: {
-          cells[cell_idx].set_int(replica.get_sql_port());
           break;
         }
         case TABLE_ID: {
@@ -1353,7 +1150,7 @@ int ObAllVirtualProxySchema::fill_row_(
           cells[cell_idx].set_int(replica.get_property().get_memstore_percent());
           break;
         }
-        // replace the meaning of the 'spare1' column with that of 'svr_port'(rpc_port)
+
         case SPARE1: { 
           cells[cell_idx].set_int(static_cast<int64_t>(replica.get_server().get_port()));
           break;

@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tenant_tablet_scheduler_task_mgr.h"
+#include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/compaction/ob_tenant_compaction_obj_mgr.h"

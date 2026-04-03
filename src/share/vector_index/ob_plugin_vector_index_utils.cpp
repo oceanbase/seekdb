@@ -695,7 +695,7 @@ int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObLSID &ls_id,
                                 vbitmap_table_param,
                                 index_id_iter))) { // read_local_tablet 4rd aux index get rowkey, backword
     LOG_WARN("fail to read local tablet", KR(ret), K(ls_id), K(index_type), KPC(adapter));
-  } else if (OB_FAIL(adapter->check_index_id_table_readnext_status(&ada_ctx, index_id_iter, target_scn))) {
+  } else if (OB_FAIL(adapter->check_index_id_table_readnext_status(&ada_ctx, index_id_iter, target_scn, false, ls_id))) {
     LOG_WARN("fail to check and sync vbitmap.", KR(ret));
   } // ToDo: may also need to sync vector to incr memdata
 
@@ -1039,7 +1039,8 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObLSID &ls_id,
                                                 common::ObNewRowIterator *&scan_iter,
                                                 ObIArray<uint64_t> *out_column_ids,
                                                 const bool need_all_columns,
-                                                const bool need_ora_scn)
+                                                const bool need_ora_scn,
+                                                const SCN *min_scn)
 {
   int ret = OB_SUCCESS;
   ObAccessService *tsc_service = MTL(ObAccessService *);
@@ -1145,6 +1146,16 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObLSID &ls_id,
           range.end_key_ = max_row_key;
           range.border_flag_.set_inclusive_start();
           range.border_flag_.set_inclusive_end();
+
+          // Incremental scan for index_id: only scan rows with scn in (min_scn, target_scn]
+          // Skip when min_scn is min (never written) to avoid invalid range
+          if (is_vec_index_id_type(type) && OB_NOT_NULL(min_scn) && min_scn->is_valid_and_not_min()
+              && target_scn >= *min_scn) {
+            uint64_t min_scn_val = min_scn->get_val_for_inner_table_field();
+            uint64_t max_scn_val = target_scn.get_val_for_inner_table_field();
+            row_objs[0].set_int(static_cast<int64_t>(min_scn_val + 1));
+            (row_objs + col_cnt)[0].set_int(static_cast<int64_t>(max_scn_val));
+          }
         } 
       } else {
         // vid_rowkey table or data table, get rowkey while complete

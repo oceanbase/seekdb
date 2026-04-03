@@ -57,7 +57,6 @@ public:
 public:
   virtual int nonblock_get_leader(const int64_t cluster_id, const int64_t tenant_id, const share::ObLSID &ls_id,
       common::ObAddr &leader) = 0;
-  virtual int nonblock_renew(const int64_t cluster_id, const int64_t tenant_id, const share::ObLSID &ls_id) = 0;
   virtual int nonblock_get(const int64_t cluster_id, const int64_t tenant_id, const share::ObLSID &ls_id,
       share::ObLSLocation &location) = 0;
 };
@@ -74,7 +73,6 @@ public:
 public:
   int nonblock_get_leader(const int64_t cluster_id, const int64_t tenant_id, const share::ObLSID &ls_id,
       common::ObAddr &leader);
-  int nonblock_renew(const int64_t cluster_id, const int64_t tenant_id, const share::ObLSID &ls_id);
   int nonblock_get(const int64_t cluster_id, const int64_t tenant_id, const share::ObLSID &ls_id,
       share::ObLSLocation &location);
 private:

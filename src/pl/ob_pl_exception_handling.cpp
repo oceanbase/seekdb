@@ -330,7 +330,8 @@ uintptr_t ObPLEH::readEncodedPointer(const uint8_t **data, uint8_t encoding)
     case DW_EH_PE_funcrel:
     case DW_EH_PE_aligned:
     default:
-      // not supported
+      LOG_ERROR_RET(OB_ERR_UNEXPECTED, "unsupported DWARF relative encoding in readEncodedPointer",
+                    K(encoding), "rel_encoding", encoding & 0x70);
       ob_abort();
       break;
   }
@@ -536,6 +537,12 @@ _Unwind_Reason_Code ObPLEH::handleLsda(int version,
     uint8_t lpStartEncoding = *lsda++;
 
     if (lpStartEncoding != DW_EH_PE_omit) {
+      uint8_t relEnc = lpStartEncoding & 0x70;
+      if (relEnc != DW_EH_PE_absptr && relEnc != DW_EH_PE_pcrel) {
+        LOG_WARN_RET(OB_ERR_UNEXPECTED, "unsupported lpStart encoding in LSDA, skip frame",
+                     K(lpStartEncoding), K(pc), K(funcStart));
+        return _URC_CONTINUE_UNWIND;
+      }
       readEncodedPointer(&lsda, lpStartEncoding);
     }
 
@@ -548,6 +555,16 @@ _Unwind_Reason_Code ObPLEH::handleLsda(int version,
     }
 
     uint8_t         callSiteEncoding = *lsda++;
+
+    if (callSiteEncoding != DW_EH_PE_omit) {
+      uint8_t relEnc = callSiteEncoding & 0x70;
+      if (relEnc != DW_EH_PE_absptr && relEnc != DW_EH_PE_pcrel) {
+        LOG_WARN_RET(OB_ERR_UNEXPECTED, "unsupported call site encoding in LSDA, skip frame",
+                     K(callSiteEncoding), K(pc), K(funcStart));
+        return _URC_CONTINUE_UNWIND;
+      }
+    }
+
     uint32_t        callSiteTableLength = static_cast<uint32_t>(readULEB128(&lsda));
     const uint8_t   *callSiteTableStart = lsda;
     const uint8_t   *callSiteTableEnd = callSiteTableStart + callSiteTableLength;

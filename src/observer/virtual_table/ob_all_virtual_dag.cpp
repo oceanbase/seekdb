@@ -125,7 +125,6 @@ int ObAllVirtualDag::init()
   return ret;
 }
 
-
 int ObAllVirtualDag::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
@@ -159,20 +158,6 @@ int ObAllVirtualDag::fill_cells(share::ObDagInfo &dag_info)
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
-    case SVR_IP:
-      //svr_ip
-      if (ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-        cells[i].set_varchar(ip_buf_);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      }
-      break;
-    case SVR_PORT:
-      //svr_port
-      cells[i].set_int(ObServerConfig::get_instance().self_addr_.get_port());
-      break;
-    case TENANT_ID:
-      cells[i].set_int(dag_info.tenant_id_);
-      break;
     case DAG_TYPE:
       //dag type
       if (dag_info.dag_type_ >= ObDagType::DAG_TYPE_MINI_MERGE && dag_info.dag_type_ < ObDagType::DAG_TYPE_MAX) {
@@ -277,7 +262,6 @@ int ObAllVirtualDagScheduler::init()
   return ret;
 }
 
-
 int ObAllVirtualDagScheduler::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
@@ -306,20 +290,6 @@ int ObAllVirtualDagScheduler::fill_cells(share::ObDagSchedulerInfo &dag_schedule
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
-    case SVR_IP:
-      //svr_ip
-      if (ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-        cells[i].set_varchar(ip_buf_);
-        cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-      }
-      break;
-    case SVR_PORT:
-      //svr_port
-      cells[i].set_int(ObServerConfig::get_instance().self_addr_.get_port());
-      break;
-    case TENANT_ID:
-      cells[i].set_int(dag_scheduler_info.tenant_id_);
-      break;
     case VALUE_TYPE:
       cells[i].set_varchar(share::ObDagSchedulerInfo::ObValueTypeStr[dag_scheduler_info.value_type_]);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

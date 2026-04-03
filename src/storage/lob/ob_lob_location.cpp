@@ -43,16 +43,7 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param, const uint64_t ten
     const int64_t retry_us = 200 * 1000;
     do {
       if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader))) {
-        if (OB_LS_LOCATION_NOT_EXIST == ret && renew_count++ < max_renew_count) {  // retry ten times
-          LOG_WARN("failed to get location and force renew", K(ret), K(tenant_id), K(ls_id), K(cluster_id));
-          if (OB_SUCCESS != (tmp_ret = GCTX.location_service_->nonblock_renew(cluster_id, tenant_id, ls_id))) {
-            LOG_WARN("failed to nonblock renew from location cache", K(tmp_ret), K(ls_id), K(cluster_id));
-          } else if (ObTimeUtility::current_time() > param.timeout_) {
-            renew_count = max_renew_count;
-          } else {
-            usleep(retry_us);
-          }
-        }
+        LOG_WARN("failed to get location", K(ret), K(tenant_id), K(ls_id), K(cluster_id));
       } else {
         LOG_DEBUG("get ls leader", K(tenant_id), K(ls_id), K(leader), K(cluster_id));
       }
@@ -217,17 +208,7 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param)
     const int64_t retry_us = 200 * 1000;
     do {
       if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader_addr))) {
-        if (OB_LS_LOCATION_NOT_EXIST == ret && renew_count++ < max_renew_count) {  // retry ten times
-          LOG_WARN("failed to get location and force renew", K(ret), K(tenant_id), K(ls_id), K(cluster_id), K(renew_count));
-          if (OB_SUCCESS != (tmp_ret = GCTX.location_service_->nonblock_renew(cluster_id, tenant_id, ls_id))) {
-            LOG_WARN("failed to nonblock renew from location cache", K(tmp_ret), K(ls_id), K(cluster_id));
-          } else if (ObTimeUtility::current_time() > param.timeout_) {
-            renew_count = max_renew_count;
-            LOG_WARN("renew timeout", K(ret), K(tmp_ret), K(param));
-          } else {
-            usleep(retry_us);
-          }
-        }
+        LOG_WARN("failed to get location", K(ret), K(tenant_id), K(ls_id), K(cluster_id), K(renew_count));
       } else {
         LOG_TRACE("[LOB] get ls leader", K(tenant_id), K(ls_id), K(leader_addr), K(cluster_id), K(renew_count));
       }

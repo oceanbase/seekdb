@@ -22,8 +22,10 @@
 #elif defined(__linux__)
 #include <endian.h>
 #endif
+#ifndef SEEKDB_NO_PYTHON
 #include <pybind11/stl.h>
 #include <cstring>
+#endif
 #include <memory>
 #include "observer/embed/python/ob_embed_impl.h"
 #include "observer/ob_server.h"
@@ -39,6 +41,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/utility/ob_print_utils.h"
 
+#ifndef SEEKDB_NO_PYTHON
 PYBIND11_MODULE(PYTHON_MODEL_NAME, m) {
     m.doc() = "OceanBase seekdb";
     char embed_version_str[oceanbase::common::OB_SERVER_VERSION_LENGTH];
@@ -73,6 +76,7 @@ PYBIND11_MODULE(PYTHON_MODEL_NAME, m) {
     pybind11::object atexit = pybind11::module::import("atexit");
     atexit.attr("register")(pybind11::cpp_function(oceanbase::embed::ObLiteEmbed::close));
 }
+#endif // SEEKDB_NO_PYTHON
 
 namespace oceanbase
 {
@@ -82,6 +86,7 @@ namespace embed
 using namespace oceanbase::common;
 using namespace oceanbase::observer;
 
+#ifndef SEEKDB_NO_PYTHON
 static pybind11::object decimal_module = pybind11::module::import("decimal");
 static pybind11::object decimal_class = decimal_module.attr("Decimal");
 static pybind11::object datetime_module = pybind11::module::import("datetime");
@@ -91,6 +96,7 @@ static pybind11::object utcfromtimestamp = datetime_class.attr("utcfromtimestamp
 static pybind11::object timedelta_class = datetime_module.attr("timedelta");
 static pybind11::object date_class = datetime_module.attr("date");
 static pybind11::module builtins = pybind11::module::import("builtins");
+#endif
 
 #define MPRINT(format, ...) fprintf(stderr, "[seekdb] " format "\n", ##__VA_ARGS__)
 
@@ -200,7 +206,9 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
   }
 
   struct statfs fs_info;
+#ifndef TMPFS_MAGIC
   const long TMPFS_MAGIC = 0x01021994;
+#endif
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
     MPRINT("create base dir failed %d, directory: %s", ret, opts.base_dir_.ptr());
@@ -499,6 +507,8 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
 }
 
 
+#ifndef SEEKDB_NO_PYTHON
+// Cursor, fetchone, fetchall, and ObLiteEmbedUtil depend on pybind11
 ObLiteEmbedCursor ObLiteEmbedConn::cursor()
 {
   std::shared_ptr<ObLiteEmbedConn> conn = shared_from_this();
@@ -643,6 +653,7 @@ pybind11::object ObLiteEmbedCursor::fetchone()
   }
   return pybind11::tuple(row_data);
 }
+#endif // SEEKDB_NO_PYTHON (cursor/fetch functions)
 
 void ObLiteEmbedConn::begin()
 {
@@ -695,6 +706,7 @@ void ObLiteEmbedConn::rollback()
   }
 }
 
+#ifndef SEEKDB_NO_PYTHON
 int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlclient::ObMySQLResult& result, ObObjMeta& obj_meta, pybind11::object &val)
 {
   int ret = OB_SUCCESS;
@@ -1151,6 +1163,8 @@ int ObLiteEmbedUtil::convert_collection_to_string(ObObj &obj, ObObjMeta &obj_met
   }
   return ret;
 }
+
+#endif // SEEKDB_NO_PYTHON
 
 } // end embed
 } // end oceanbase

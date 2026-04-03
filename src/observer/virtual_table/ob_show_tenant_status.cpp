@@ -42,7 +42,6 @@ void ObShowTenantStatus::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-
 int ObShowTenantStatus::add_tenant_status(const ObAddr &server_addr,
                                           const ObTenantSchema &tenant_schema,
                                           const ObSysVariableSchema &sys_variable_schema,
@@ -50,7 +49,7 @@ int ObShowTenantStatus::add_tenant_status(const ObAddr &server_addr,
                                           const int64_t col_count)
 {
   int ret = OB_SUCCESS;
-  char ip_buf[common::OB_IP_STR_BUFF];
+  UNUSED(server_addr);
   if (OB_ISNULL(cells) || col_count > reserved_column_cnt_) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cells is null or col_count error", K(col_count), K(ret));
@@ -64,26 +63,12 @@ int ObShowTenantStatus::add_tenant_status(const ObAddr &server_addr,
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
-      case HOST: {
-        if (false == server_addr.ip_to_string(ip_buf, common::OB_IP_STR_BUFF)) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "failed to convert ip to string", K(server_addr), K(ret));
-        } else {
-          cells[cell_idx].set_varchar(ObString::make_string(ip_buf));//host
-          cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-        }
-        break;
-      }
       case READ_ONLY: {
         if (sys_variable_schema.is_read_only()) {
           cells[cell_idx].set_int(1);
         } else {
           cells[cell_idx].set_int(0);
         }
-        break;
-      }
-      case PORT: {
-        cells[cell_idx].set_int(server_addr.get_port());//port
         break;
       }
       default: {

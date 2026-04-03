@@ -41,13 +41,12 @@ inline bool is_parallel_ddl(const obrpc::ObRpcPacketCode pcode)
          || obrpc::OB_PARALLEL_CREATE_INDEX == pcode
          || obrpc::OB_PARALLEL_UPDATE_INDEX_STATUS == pcode
          || obrpc::OB_PARALLEL_DROP_TABLE == pcode
-         || obrpc::OB_PARALLEL_CREATE_NORMAL_TENANT == pcode
          || obrpc::OB_PARALLEL_HTABLE_DDL == pcode;
 }
 
 inline bool need_ddl_lock(const obrpc::ObRpcPacketCode pcode)
 {
-  return obrpc::OB_PARALLEL_CREATE_NORMAL_TENANT != pcode;
+  return true;
 }
 
 // precondition: enable_ddl = false
@@ -55,11 +54,8 @@ inline bool is_allow_when_disable_ddl(const obrpc::ObRpcPacketCode pcode, const 
 {
   bool bret = false;
   if (OB_ISNULL(ddl_arg)) {
-  } else if (obrpc::OB_COMMIT_ALTER_TENANT_LOCALITY == pcode
-             || obrpc::OB_SCHEMA_REVISE == pcode // for upgrade
-             || obrpc::OB_UPGRADE_TABLE_SCHEMA == pcode
-             || ((obrpc::OB_MODIFY_TENANT == pcode
-                  || obrpc::OB_MODIFY_SYSVAR == pcode
+  } else if (obrpc::OB_SCHEMA_REVISE == pcode // for upgrade
+             || ((obrpc::OB_MODIFY_SYSVAR == pcode
                   || obrpc::OB_GRANT == pcode)
                  && ddl_arg->is_allow_when_disable_ddl())) {
     bret = true;
@@ -70,26 +66,12 @@ inline bool is_allow_when_disable_ddl(const obrpc::ObRpcPacketCode pcode, const 
 inline bool is_allow_when_create_tenant(const obrpc::ObRpcPacketCode pcode)
 {
   bool bret = false;
-  if (obrpc::OB_CREATE_TENANT == pcode
-      || obrpc::OB_DROP_TENANT == pcode
-      || obrpc::OB_MODIFY_TENANT == pcode
-      || obrpc::OB_LOCK_TENANT == pcode
-      || obrpc::OB_COMMIT_ALTER_TENANT_LOCALITY == pcode
-      || obrpc::OB_CREATE_TENANT_END == pcode
-      || obrpc::OB_PARALLEL_CREATE_NORMAL_TENANT == pcode) {
-    bret = true;
-  }
   return bret;
 }
 inline bool is_allow_when_drop_tenant(const obrpc::ObRpcPacketCode pcode)
 {
   bool bret = false;
-  if (obrpc::OB_DROP_TENANT == pcode
-      || obrpc::OB_MODIFY_TENANT == pcode
-      || obrpc::OB_LOCK_TENANT == pcode
-      || obrpc::OB_COMMIT_ALTER_TENANT_LOCALITY == pcode
-      || obrpc::OB_DROP_TABLE == pcode
-      || obrpc::OB_DROP_TENANT == pcode
+  if (obrpc::OB_DROP_TABLE == pcode
       || obrpc::OB_DROP_DATABASE == pcode
       || obrpc::OB_DROP_TABLEGROUP == pcode
       || obrpc::OB_DROP_INDEX == pcode
@@ -369,9 +351,15 @@ protected:
     } else if (is_ddl_like_) {
       // for ddl operation, we have to make sure whether ddl service is started
       if (!ObDDLServiceLauncher::is_ddl_service_started()) {
-        ret = OB_RS_NOT_MASTER;
-        RS_LOG(WARN, "DDL service not ready", KR(ret), K(pcode),
-               K(check_type_), K(is_ddl_like_), K(ddl_arg_));
+        if (GCTX.is_standby_cluster()) {
+          ret = OB_STANDBY_READ_ONLY;
+          RS_LOG(WARN, "standby tenant support read only", KR(ret), K(pcode),
+                 K(check_type_), K(is_ddl_like_), K(ddl_arg_));
+        } else {
+          ret = OB_RS_NOT_MASTER;
+          RS_LOG(WARN, "DDL service not ready", KR(ret), K(pcode),
+                 K(check_type_), K(is_ddl_like_), K(ddl_arg_));
+        }
       }
     }
     return ret;
@@ -438,20 +426,10 @@ protected:
 // DDL SYS RPC need leader to process and ignore RS status, treat this rpc as ddl operation
 #define DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(pcode, pname, stmt) DEFINE_RS_RPC_PROCESSOR_(pcode, pname, stmt, ObRPCProcessorCheckType::CHECK_LEADER, true, &arg_)
 
-DEFINE_LIMITED_RS_RPC_PROCESSOR(obrpc::OB_RENEW_LEASE, ObRpcRenewLeaseP, renew_lease(arg_, result_));
-DEFINE_LIMITED_RS_RPC_PROCESSOR(obrpc::OB_REPORT_SYS_LS, ObRpcReportSysLSP, report_sys_ls(arg_));
-DEFINE_LIMITED_RS_RPC_PROCESSOR(obrpc::OB_REMOVE_SYS_LS, ObRpcRemoveSysLSP, remove_sys_ls(arg_));
-DEFINE_LIMITED_RS_RPC_PROCESSOR(obrpc::OB_EXECUTE_BOOTSTRAP, ObRpcExecuteBootstrapP, execute_bootstrap(arg_));
-// check server_refreshed_ flag in rootservice
-DEFINE_LIMITED_RS_RPC_PROCESSOR(obrpc::OB_FETCH_ALIVE_SERVER, ObRpcFetchAliveServerP, fetch_alive_server(arg_, result_));
-
 // DEFINE_RS_RPC_PROCESSOR(obrpc::OB_MERGE_FINISH, ObRpcMergeFinishP, merge_finish(arg_));
-// DEFINE_RS_RPC_PROCESSOR(obrpc::OB_FETCH_ACTIVE_SERVER_STATUS, ObRpcFetchActiveServerStatusP, fetch_active_server_status(arg_, result_));
 
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_BROADCAST_DS_ACTION, ObBroadcastDSActionP, broadcast_ds_action(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_FETCH_LOCATION, ObRpcFetchLocationP, fetch_location(arg_, result_));
 DEFINE_SYS_TNT_RPC_PROCESSOR(obrpc::OB_ADMIN_SET_CONFIG, ObRpcAdminSetConfigP, admin_set_config(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_FLUSH_BALANCE_INFO, ObRpcAdminFlushBalanceInfoP, admin_clear_balance_task(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_COPY_TABLE_DEPENDENTS, ObRpcCopyTableDependentsP, copy_table_dependents(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_FINISH_REDEF_TABLE, ObRpcFinishRedefTableP, finish_redef_table(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ABORT_REDEF_TABLE, ObRpcAbortRedefTableP, abort_redef_table(arg_));
@@ -460,13 +438,6 @@ DEFINE_RS_RPC_PROCESSOR(obrpc::OB_START_REDEF_TABLE, ObRpcStartRedefTableP, star
 
 // ddl rpc processors
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_HIDDEN_TABLE, ObRpcCreateHiddenTableP, create_hidden_table(arg_, result_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_COMMIT_ALTER_TENANT_LOCALITY, ObRpcCommitAlterTenantLocalityP, commit_alter_tenant_locality(arg_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_TENANT, ObRpcCreateTenantP, create_tenant(arg_, result_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_PARALLEL_CREATE_NORMAL_TENANT, ObRpcParallelCreateNormalTenantP, parallel_create_normal_tenant(arg_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_TENANT_END, ObRpcCreateTenantEndP, create_tenant_end(arg_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_TENANT, ObRpcDropTenantP, drop_tenant(arg_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_MODIFY_TENANT, ObRpcModifyTenantP, modify_tenant(arg_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_LOCK_TENANT, ObRpcLockTenantP, lock_tenant(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_ADD_SYSVAR, ObRpcAddSysVarP, add_system_variable(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_MODIFY_SYSVAR, ObRpcModifySysVarP, modify_system_variable(arg_));
 DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_CREATE_DATABASE, ObRpcCreateDatabaseP, create_database(arg_, result_));
@@ -518,8 +489,6 @@ DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_PURGE_TABLE, ObRpcPurgeTableP, purge_table
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_PURGE_INDEX, ObRpcPurgeIndexP, purge_index(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_FLASHBACK_DATABASE, ObRpcFlashBackDatabaseP, flashback_database(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_PURGE_DATABASE, ObRpcPurgeDatabaseP, purge_database(arg_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_FLASHBACK_TENANT, ObRpcFlashBackTenantP, flashback_tenant(arg_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_PURGE_TENANT, ObRpcPurgeTenantP, purge_tenant(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_PURGE_EXPIRE_RECYCLE_OBJECTS, ObRpcPurgeExpireRecycleObjectsP, purge_expire_recycle_objects(arg_, result_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_FLASHBACK_TABLE_TO_SCN, ObRpcFlashBackTableToScnP, flashback_table_to_time_point(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_GET_TENANT_SCHEMA_VERSIONS, ObGetTenantSchemaVersionsP,
@@ -532,26 +501,7 @@ DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_EXECUTE_DDL_TASK, ObRpcExecuteDDLTaskP, ex
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_MAINTAIN_OBJ_DEPENDENCY_INFO, ObRpcMaintainObjDependencyInfoP, maintain_obj_dependency_info(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_MVIEW_COMPLETE_REFRESH, ObRpcMViewCompleteRefreshP, mview_complete_refresh(arg_, result_));
 
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_REFRESH_CONFIG, ObRpcRefreshConfigP, refresh_config());
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ROOT_MINOR_FREEZE, ObRpcRootMinorFreezeP, root_minor_freeze(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_CREATE_RESOURCE_UNIT, ObRpcCreateResourceUnitP, create_resource_unit(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ALTER_RESOURCE_UNIT, ObRpcAlterResourceUnitP, alter_resource_unit(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_DROP_RESOURCE_UNIT, ObRpcDropResourceUnitP, drop_resource_unit(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_CLONE_RESOURCE_POOL, ObRpcCloneResourcePoolP, clone_resource_pool(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_CREATE_RESOURCE_POOL, ObRpcCreateResourcePoolP, create_resource_pool(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ALTER_RESOURCE_POOL, ObRpcAlterResourcePoolP, alter_resource_pool(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_DROP_RESOURCE_POOL, ObRpcDropResoucePoolP, drop_resource_pool(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_SPLIT_RESOURCE_POOL, ObRpcSplitResourcePoolP, split_resource_pool(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_MERGE_RESOURCE_POOL, ObRpcMergeResourcePoolP, merge_resource_pool(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ALTER_RESOURCE_TENANT, ObRpcAlterResourceTenantP, alter_resource_tenant(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADD_ZONE, ObRpcAddZoneP, add_zone(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_DELETE_ZONE, ObRpcDeleteZoneP, delete_zone(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_START_ZONE, ObRpcStartZoneP, start_zone(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_STOP_ZONE, ObRpcStopZoneP, stop_zone(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ALTER_ZONE, ObRpcAlterZoneP, alter_zone(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADD_STORAGE, ObRpcAddStorageP, add_storage(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_DROP_STORAGE, ObRpcDropStorageP, drop_storage(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ALTER_STORAGE, ObRpcAlterStorageP, alter_storage(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_CHECK_DANGLING_REPLICA_FINISH, ObCheckDanglingReplicaFinishP, check_dangling_replica_finish(arg_));
 
 
@@ -588,34 +538,15 @@ DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_DROP_TRIGGER, ObRpcDropTriggerP, drop
 // Alter role ddl
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_ALTER_ROLE, ObRpcAlterRoleP, alter_role(arg_));
 
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_SWITCH_REPLICA_ROLE, ObRpcAdminSwitchReplicaRoleP, admin_switch_replica_role(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_SWITCH_RS_ROLE, ObRpcAdminSwitchRSRoleP, admin_switch_rs_role(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_DROP_REPLICA, ObRpcAdminDropReplicaP, admin_drop_replica(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_CHANGE_REPLICA, ObRpcAdminChangeReplicaP, admin_change_replica(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_MIGRATE_REPLICA, ObRpcAdminMigrateReplicaP, admin_migrate_replica(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_REPORT_REPLICA, ObRpcAdminReportReplicaP, admin_report_replica(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_RECYCLE_REPLICA, ObRpcAdminRecycleReplicaP, admin_recycle_replica(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_MERGE, ObRpcAdminMergeP, admin_merge(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_RECOVERY, ObRpcAdminRecoveryP, admin_recovery(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_CLEAR_ROOTTABLE, ObRpcAdminClearRoottableP, admin_clear_roottable(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_REFRESH_SCHEMA, ObRpcAdminRefreshSchemaP, admin_refresh_schema(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_CLEAR_LOCATION_CACHE, ObRpcAdminClearLocationCacheP, admin_clear_location_cache(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_REFRESH_MEMORY_STAT, ObRpcAdminRefreshMemStatP, admin_refresh_memory_stat(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_WASH_MEMORY_FRAGMENTATION, ObRpcAdminWashMemFragmentationP, admin_wash_memory_fragmentation(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_REFRESH_IO_CALIBRATION, ObRpcAdminRefreshIOCalibrationP, admin_refresh_io_calibration(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_RELOAD_UNIT, ObRpcAdminReloadUnitP, admin_reload_unit());
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_RELOAD_SERVER, ObRpcAdminReloadServerP, admin_reload_server());
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_RELOAD_ZONE, ObRpcAdminReloadZoneP, admin_reload_zone());
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_CLEAR_MERGE_ERROR, ObRpcAdminClearMergeErrorP, admin_clear_merge_error(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_ALTER_LS_REPLICA, ObRpcAdminAlterLSReplicaP, admin_alter_ls_replica(arg_));
-#ifdef OB_BUILD_ARBITRATION
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_ADD_ARBITRATION_SERVICE, ObRpcAdminAddArbitrationServiceP, admin_add_arbitration_service(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_REMOVE_ARBITRATION_SERVICE, ObRpcAdminRemoveArbitrationServiceP, admin_remove_arbitration_service(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_REPLACE_ARBITRATION_SERVICE, ObRpcAdminReplaceArbitrationServiceP, admin_replace_arbitration_service(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_REMOVE_CLUSTER_INFO_FROM_ARB_SERVER, ObRpcRemoveClusterInfoFromArbServerP, remove_cluster_info_from_arb_server(arg_));
-#endif
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_UPGRADE_VIRTUAL_SCHEMA, ObRpcAdminUpgradeVirtualSchemaP, admin_upgrade_virtual_schema());
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_RUN_JOB, ObRpcRunJobP, run_job(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_RUN_UPGRADE_JOB, ObRpcRunUpgradeJobP, run_upgrade_job(arg_));
 DEFINE_SYS_TNT_RPC_PROCESSOR(obrpc::OB_ADMIN_FLUSH_CACHE, ObRpcAdminFlushCacheP, admin_flush_cache(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_UPGRADE_CMD, ObRpcAdminUpgradeCmdP, admin_upgrade_cmd(arg_));
@@ -630,40 +561,21 @@ DEFINE_RS_RPC_PROCESSOR(obrpc::OB_CLEAN_SPLITTED_TABLET, ObRpcCleanSplittedTable
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_AUTO_SPLIT_TABLET_TASK_REQUEST, ObAutoSplitTabletTaskP, send_auto_split_tablet_task_request(arg_,result_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_CANCEL_DDL_TASK, ObRpcCancelDDLTaskP, cancel_ddl_task(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_FORCE_CREATE_SYS_TABLE, ObForceCreateSysTableP, force_create_sys_table(arg_));
-class ObForceSetLocalityP : public ObRootServerRPCProcessor<obrpc::OB_FORCE_SET_LOCALITY>
-{
-public:
-  explicit ObForceSetLocalityP(ObRootService &rs)
-    : ObRootServerRPCProcessor<obrpc::OB_FORCE_SET_LOCALITY>(rs, ObRPCProcessorCheckType::CHECK_FULL_SERVICE, false, NULL) {}
-protected:
-  virtual int leader_process() { return root_service_.force_set_locality(arg_); }
-  int before_process() {
-    int ret = OB_SUCCESS;
-    if (OB_SUCC(ObRootServerRPCProcessor<obrpc::OB_FORCE_SET_LOCALITY>::before_process())) {
-      ret = req_->is_from_unix_domain()? OB_SUCCESS : OB_NOT_SUPPORTED;
-    }
-    return ret;
-  }
-};
 
 //sequence ddl
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DO_SEQUENCE_DDL, ObRpcDoSequenceDDLP, do_sequence_ddl(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_BROADCAST_SCHEMA, ObBroadcastSchemaP, broadcast_schema(arg_));
 // only for upgrade
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_GET_RECYCLE_SCHEMA_VERSIONS, ObGetRecycleSchemaVersionsP, get_recycle_schema_versions(arg_, result_));
-DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_UPGRADE_TABLE_SCHEMA, ObRpcUpgradeTableSchemaP, upgrade_table_schema(arg_));
 
 // backup and restore
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_PHYSICAL_RESTORE_TENANT, ObRpcPhysicalRestoreTenantP, physical_restore_tenant(arg_, result_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_REBUILD_INDEX_IN_RESTORE, ObRpcRebuildIndexInRestoreP, rebuild_index_in_restore(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ARCHIVE_LOG, ObArchiveLogP, handle_archive_log(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_BACKUP_DATABASE, ObBackupDatabaseP, handle_backup_database(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_BACKUP_MANAGE, ObBackupManageP, handle_backup_manage(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_BACKUP_CLEAN, ObBackupCleanP, handle_backup_delete(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_DELETE_POLICY, ObDeletePolicyP, handle_delete_policy(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_PHYSICAL_RESTORE_RES, ObRpcPhysicalRestoreResultP, send_physical_restore_result(arg_));
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_RECOVER_TABLE, ObRecoverTableP, handle_recover_table(arg_));
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_CLONE_TENANT, ObRpcCloneTenantP, clone_tenant(arg_, result_));
 
 DEFINE_RS_RPC_PROCESSOR(obrpc::OB_RS_FLUSH_OPT_STAT_MONITORING_INFO, ObRpcFlushOptStatMonitoringInfoP, flush_opt_stat_monitoring_info(arg_));
 

@@ -21,8 +21,6 @@
 #include "share/ob_rpc_struct.h"
 #include "share/scheduler/ob_sys_task_stat.h"
 #include "share/backup/ob_backup_clean_struct.h"
-#include "rootserver/ob_transfer_partition_command.h"
-#include "share/ob_service_name_proxy.h"
 #include "share/table/ob_redis_importer.h"
 
 namespace oceanbase
@@ -179,169 +177,6 @@ private:
   common::ObZone zone_;
 };
 
-class ObAdminZoneStmt : public ObSystemCmdStmt
-{
-public:
-  ObAdminZoneStmt()
-      : ObSystemCmdStmt(stmt::T_ADMIN_ZONE),
-        arg_()
-  {
-  }
-
-  ObAdminZoneStmt(common::ObIAllocator *name_pool)
-      : ObSystemCmdStmt(name_pool, stmt::T_ADMIN_ZONE),
-        arg_()
-  {
-  }
-
-  virtual ~ObAdminZoneStmt() {}
-
-  inline const common::ObZone &get_zone() const { return arg_.zone_; }
-  inline void set_zone(const common::ObZone &zone) { arg_.zone_ = zone; }
-  inline const common::ObRegion &get_region() const { return arg_.region_; }
-  inline void set_region(const common::ObRegion &region) { arg_.region_ = region; }
-  inline const common::ObIDC &get_idc() const { return arg_.idc_; }
-  inline void set_idc(const common::ObIDC &idc) { arg_.idc_ = idc; }
-  inline const common::ObZoneType &get_zone_type() const { return arg_.zone_type_; }
-  inline void set_zone_type(const common::ObZoneType &zone_type) { arg_.zone_type_ = zone_type; }
-  inline const common::ObString &get_sql_stmt_str() const { return arg_.sql_stmt_str_; }
-  inline void set_sql_stmt_str(const common::ObString &sql_stmt_str) {arg_.sql_stmt_str_ = sql_stmt_str; }
-  inline obrpc::ObAdminZoneArg::AdminZoneOp get_op() const { return arg_.op_; }
-  inline void set_op(const obrpc::ObAdminZoneArg::AdminZoneOp op) {
-    arg_.op_ = op;
-    if (obrpc::ObAdminZoneArg::FORCE_STOP == op) {
-      arg_.force_stop_ = true;
-    }
-  }
-  inline int set_alter_region_option() {
-    return arg_.alter_zone_options_.add_member(obrpc::ObAdminZoneArg::ALTER_ZONE_REGION);
-  }
-  inline bool has_alter_region_option() {
-    return arg_.alter_zone_options_.has_member(obrpc::ObAdminZoneArg::ALTER_ZONE_REGION);
-  }
-  inline int set_alter_idc_option() {
-    return arg_.alter_zone_options_.add_member(obrpc::ObAdminZoneArg::ALTER_ZONE_IDC);
-  }
-  inline int has_alter_idc_option() {
-    return arg_.alter_zone_options_.has_member(obrpc::ObAdminZoneArg::ALTER_ZONE_IDC);
-  }
-  inline int set_alter_zone_type_option() {
-    return arg_.alter_zone_options_.add_member(obrpc::ObAdminZoneArg::ALTER_ZONE_TYPE);
-  }
-  inline bool has_alter_zone_type_option() {
-    return arg_.alter_zone_options_.has_member(obrpc::ObAdminZoneArg::ALTER_ZONE_TYPE);
-  }
-  const obrpc::ObAdminZoneArg &get_arg() const { return arg_; }
-private:
-  obrpc::ObAdminZoneArg arg_;
-};
-
-class ObAdminStorageStmt : public ObSystemCmdStmt
-{
-public:
-  ObAdminStorageStmt()
-      : ObSystemCmdStmt(stmt::T_ADMIN_STORAGE),
-        arg_()
-  {
-  }
-
-  ObAdminStorageStmt(common::ObIAllocator *name_pool)
-      : ObSystemCmdStmt(name_pool, stmt::T_ADMIN_STORAGE),
-        arg_()
-  {
-  }
-
-  virtual ~ObAdminStorageStmt() {}
-
-  inline const common::ObString get_path() const { return arg_.path_.str(); }
-  inline int set_path(const common::ObString &path) { return arg_.path_.assign(path); }
-  inline const common::ObString get_accessinfo() const { return arg_.access_info_.str(); }
-  inline int set_accessinfo(const common::ObString &access_info) { return arg_.access_info_.assign(access_info); }
-  inline const common::ObString get_attribute() const { return arg_.attribute_.str(); }
-  inline int set_attribute(const common::ObString &attribute) { return arg_.attribute_.assign(attribute); }
-  inline const common::ObZone &get_zone() const { return arg_.zone_; }
-  inline void set_zone(const common::ObZone &zone) { arg_.zone_ = zone; }
-  inline const common::ObRegion &get_region() const { return arg_.region_; }
-  inline void set_region(const common::ObRegion &region) { arg_.region_ = region; }
-  inline const share::ObScopeType::TYPE &get_scope_type() const { return arg_.scope_type_; }
-  inline void set_scope_type(const share::ObScopeType::TYPE &scope_type) { arg_.scope_type_ = scope_type; }
-  inline const share::ObStorageUsedType::TYPE &get_storage_use_type() const { return arg_.use_for_; }
-  inline void set_storage_use_type(const share::ObStorageUsedType::TYPE &use_for) { arg_.use_for_ = use_for; }
-  inline const bool &get_force_type() const { return arg_.force_type_; }
-  inline void set_force_type(const bool &force_type) { arg_.force_type_ = force_type; }
-  inline const bool &get_wait_type() const { return arg_.wait_type_; }
-  inline void set_wait_type(const bool &wait_type) { arg_.wait_type_ = wait_type; }
-  inline obrpc::ObAdminStorageArg::AdminStorageOp get_op() const { return arg_.op_; }
-  inline void set_op(const obrpc::ObAdminStorageArg::AdminStorageOp op) { arg_.op_ = op; }
-  inline int set_alter_accessinfo_option() {
-    return arg_.alter_storage_options_.add_member(obrpc::ObAdminStorageArg::ALTER_STORAGE_ACCESS_INFO);
-  }
-  inline bool has_alter_accessinfo_option() {
-    return arg_.alter_storage_options_.has_member(obrpc::ObAdminStorageArg::ALTER_STORAGE_ACCESS_INFO);
-  }
-  inline int set_alter_attribute_option() {
-    return arg_.alter_storage_options_.add_member(obrpc::ObAdminStorageArg::ALTER_STORAGE_ATTRIBUTE);
-  }
-  inline bool has_alter_attribute_option() {
-    return arg_.alter_storage_options_.has_member(obrpc::ObAdminStorageArg::ALTER_STORAGE_ATTRIBUTE);
-  }
-  const obrpc::ObAdminStorageArg &get_arg() const { return arg_; }
-private:
-  obrpc::ObAdminStorageArg arg_;
-};
-
-class ObSwitchReplicaRoleStmt : public ObSystemCmdStmt
-{
-public:
-  ObSwitchReplicaRoleStmt() : ObSystemCmdStmt(stmt::T_SWITCH_REPLICA_ROLE) {}
-  virtual ~ObSwitchReplicaRoleStmt() {}
-
-  obrpc::ObAdminSwitchReplicaRoleArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminSwitchReplicaRoleArg rpc_arg_;
-};
-
-class ObSwitchRSRoleStmt : public ObSystemCmdStmt
-{
-public:
-  ObSwitchRSRoleStmt() : ObSystemCmdStmt(stmt::T_SWITCH_RS_ROLE) {}
-  virtual ~ObSwitchRSRoleStmt() {}
-
-  obrpc::ObAdminSwitchRSRoleArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminSwitchRSRoleArg rpc_arg_;
-};
-
-class ObReportReplicaStmt : public ObSystemCmdStmt
-{
-public:
-  ObReportReplicaStmt() : ObSystemCmdStmt(stmt::T_REPORT_REPLICA) {}
-  virtual ~ObReportReplicaStmt() {}
-
-  obrpc::ObAdminReportReplicaArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminReportReplicaArg rpc_arg_;
-};
-
-class ObRecycleReplicaStmt : public ObSystemCmdStmt
-{
-public:
-  ObRecycleReplicaStmt() : ObSystemCmdStmt(stmt::T_RECYCLE_REPLICA) {}
-  virtual ~ObRecycleReplicaStmt() {}
-
-  obrpc::ObAdminRecycleReplicaArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminRecycleReplicaArg rpc_arg_;
-};
-
 class ObAdminMergeStmt: public ObSystemCmdStmt
 {
 public:
@@ -472,95 +307,6 @@ private:
   obrpc::ObAdminSetTPArg rpc_arg_;
 };
 
-class ObAlterLSReplicaStmt : public ObSystemCmdStmt
-{
-public:
-  ObAlterLSReplicaStmt() : ObSystemCmdStmt(stmt::T_ALTER_LS_REPLICA) {}
-  virtual ~ObAlterLSReplicaStmt() {}
-
-  obrpc::ObAdminAlterLSReplicaArg &get_rpc_arg() { return rpc_arg_; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminAlterLSReplicaArg rpc_arg_;
-};
-
-class ObAddArbitrationServiceStmt : public ObSystemCmdStmt
-{
-public:
-  ObAddArbitrationServiceStmt() : ObSystemCmdStmt(stmt::T_ADD_ARBITRATION_SERVICE) {}
-  virtual ~ObAddArbitrationServiceStmt() {}
-#ifndef OB_BUILD_ARBITRATION
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
-#else
-  obrpc::ObAdminAddArbitrationServiceArg &get_rpc_arg() { return rpc_arg_; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminAddArbitrationServiceArg rpc_arg_;
-#endif
-};
-
-class ObRemoveArbitrationServiceStmt : public ObSystemCmdStmt
-{
-public:
-  ObRemoveArbitrationServiceStmt() : ObSystemCmdStmt(stmt::T_REMOVE_ARBITRATION_SERVICE) {}
-  virtual ~ObRemoveArbitrationServiceStmt() {}
-#ifndef OB_BUILD_ARBITRATION
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
-#else
-  obrpc::ObAdminRemoveArbitrationServiceArg &get_rpc_arg() { return rpc_arg_; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminRemoveArbitrationServiceArg rpc_arg_;
-#endif
-};
-
-class ObReplaceArbitrationServiceStmt : public ObSystemCmdStmt
-{
-public:
-  ObReplaceArbitrationServiceStmt() : ObSystemCmdStmt(stmt::T_REPLACE_ARBITRATION_SERVICE) {}
-  virtual ~ObReplaceArbitrationServiceStmt() {}
-#ifndef OB_BUILD_ARBITRATION
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
-#else
-  obrpc::ObAdminReplaceArbitrationServiceArg &get_rpc_arg() { return rpc_arg_; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obrpc::ObAdminReplaceArbitrationServiceArg rpc_arg_;
-#endif
-};
-
-class ObClearLocationCacheStmt : public ObSystemCmdStmt
-{
-public:
-  ObClearLocationCacheStmt() : ObSystemCmdStmt(stmt::T_CLEAR_LOCATION_CACHE) {}
-  virtual ~ObClearLocationCacheStmt() {}
-
-  obrpc::ObAdminClearLocationCacheArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obrpc::ObAdminClearLocationCacheArg rpc_arg_;
-};
-
-class ObReloadUnitStmt : public ObSystemCmdStmt
-{
-public:
-  ObReloadUnitStmt() : ObSystemCmdStmt(stmt::T_RELOAD_UNIT) {}
-  virtual ~ObReloadUnitStmt() {}
-};
-
-class ObReloadServerStmt : public ObSystemCmdStmt
-{
-public:
-  ObReloadServerStmt() : ObSystemCmdStmt(stmt::T_RELOAD_SERVER) {}
-  virtual ~ObReloadServerStmt() {}
-};
-
-class ObReloadZoneStmt : public ObSystemCmdStmt
-{
-public:
-  ObReloadZoneStmt() : ObSystemCmdStmt(stmt::T_RELOAD_ZONE) {}
-  virtual ~ObReloadZoneStmt() {}
-};
-
 class ObClearMergeErrorStmt : public ObSystemCmdStmt
 {
 public:
@@ -613,34 +359,6 @@ public:
   inline void set_op(const AdminUpgradeOp op) { op_ = op; }
 private:
   AdminUpgradeOp op_;
-};
-
-class ObPhysicalRestoreTenantStmt : public ObSystemCmdStmt
-{
-public:
-  ObPhysicalRestoreTenantStmt()
-    : ObSystemCmdStmt(stmt::T_PHYSICAL_RESTORE_TENANT),
-      rpc_arg_(),
-      is_preview_(false) {}
-  virtual ~ObPhysicalRestoreTenantStmt() {}
-
-  obrpc::ObPhysicalRestoreTenantArg &get_rpc_arg() { return rpc_arg_; }
-  void set_is_preview(const bool is_preview) { is_preview_ = is_preview; }
-  bool get_is_preview() const { return is_preview_; }
-private:
-  obrpc::ObPhysicalRestoreTenantArg rpc_arg_;
-  bool is_preview_;
-};
-
-class ObRunJobStmt : public ObSystemCmdStmt
-{
-public:
-  ObRunJobStmt() : ObSystemCmdStmt(stmt::T_RUN_JOB) {}
-  virtual ~ObRunJobStmt() {}
-
-  obrpc::ObRunJobArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obrpc::ObRunJobArg rpc_arg_;
 };
 
 class ObRunUpgradeJobStmt : public ObSystemCmdStmt
@@ -790,21 +508,6 @@ public:
   ObDisableSqlThrottleStmt()
     : ObSystemCmdStmt(stmt::T_DISABLE_SQL_THROTTLE)
     {}
-};
-
-class ObChangeTenantStmt : public ObSystemCmdStmt
-{
-public:
-  ObChangeTenantStmt():
-    ObSystemCmdStmt(stmt::T_CHANGE_TENANT),
-    tenant_id_(OB_INVALID_TENANT_ID)
-  {}
-  virtual ~ObChangeTenantStmt() {}
-  void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
-  uint64_t get_tenant_id() { return tenant_id_; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(tenant_id));
-
-  uint64_t tenant_id_;
 };
 
 class ObArchiveLogStmt : public ObSystemCmdStmt
@@ -1307,33 +1010,6 @@ private:
   int64_t pos_;
 };
 
-class ObSetRegionBandwidthStmt : public ObSystemCmdStmt
-{
-public:
-  ObSetRegionBandwidthStmt();
-  virtual ~ObSetRegionBandwidthStmt() {}
-  const char* get_src_region() const { return src_region_; }
-  const char* get_dst_region() const { return dst_region_; }
-  int64_t get_max_bw() const { return max_bw_; }
-  int set_param(const char *src_region, const char *dst_region, const int64_t max_bw);
-  void set_src_region(const char *region_str)
-  {
-    snprintf(src_region_, MAX_REGION_LENGTH, "%s", region_str);
-  }
-  void set_dst_region(const char *region_str)
-  {
-    snprintf(dst_region_, MAX_REGION_LENGTH, "%s", region_str);
-  }
-  void set_dst_region(const int64_t max_bw) { max_bw_ = max_bw; }
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_) , K_(src_region), K_(dst_region), K_(max_bw));
-private:
-  // common::ObRegion src_region_;
-  // common::ObRegion dst_region_;
-  char src_region_[MAX_REGION_LENGTH];
-  char dst_region_[MAX_REGION_LENGTH];
-  int64_t max_bw_;
-};
-
 class ObAddRestoreSourceStmt : public ObSystemCmdStmt
 {
 public:
@@ -1370,19 +1046,6 @@ public:
   common::ObAddr server_;
 };
 
-class ObRecoverTenantStmt : public ObSystemCmdStmt
-{
-public:
-  ObRecoverTenantStmt()
-    : ObSystemCmdStmt(stmt::T_RECOVER),
-      rpc_arg_() {}
-  virtual ~ObRecoverTenantStmt() {}
-
-  obrpc::ObRecoverTenantArg &get_rpc_arg() { return rpc_arg_; }
-private:
-  obrpc::ObRecoverTenantArg rpc_arg_;
-};
-
 class ObRecoverTableStmt : public ObSystemCmdStmt
 {
 public:
@@ -1394,6 +1057,8 @@ private:
   obrpc::ObRecoverTableArg rpc_arg_;
 };
 
+
+
 class ObResetConfigStmt : public ObSystemCmdStmt
 {
 public:
@@ -1403,42 +1068,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
   obrpc::ObAdminSetConfigArg rpc_arg_;
-};
-
-class ObCancelCloneStmt : public ObSystemCmdStmt
-{
-public:
-  ObCancelCloneStmt() 
-    : ObSystemCmdStmt(stmt::T_CANCEL_CLONE),
-      clone_tenant_name_() {}
-  virtual ~ObCancelCloneStmt() {}
-  int set_clone_tenant_name(const ObString &tenant_name) { return clone_tenant_name_.assign(tenant_name); }
-  const ObString get_clone_tenant_name() { return clone_tenant_name_.str(); }
-	TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(clone_tenant_name));
-private:
-  common::ObFixedLengthString<common::OB_MAX_TENANT_NAME_LENGTH + 1> clone_tenant_name_;
-};
-class ObTransferPartitionStmt : public ObSystemCmdStmt
-{
-public:
-  ObTransferPartitionStmt()
-    : ObSystemCmdStmt(stmt::T_TRANSFER_PARTITION),
-      arg_() {}
-  virtual ~ObTransferPartitionStmt() {}
-
-  rootserver::ObTransferPartitionArg &get_arg() { return arg_; }
-private:
-  rootserver::ObTransferPartitionArg arg_;
-};
-
-class ObServiceNameStmt : public ObSystemCmdStmt
-{
-public:
-  ObServiceNameStmt() : ObSystemCmdStmt(stmt::T_SERVICE_NAME), arg_() {}
-  virtual ~ObServiceNameStmt() {}
-  share::ObServiceNameArg &get_arg() { return arg_; }
-private:
-  share::ObServiceNameArg arg_;
 };
 
 class ObModuleDataStmt : public ObSystemCmdStmt
@@ -1453,19 +1082,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
 private:
   table::ObModuleDataArg arg_;
-};
-
-class ObLoadLicenseStmt : public ObSystemCmdStmt
-{
-public:
-  ObLoadLicenseStmt() : ObSystemCmdStmt(stmt::T_LOAD_LICENSE), path_() {}
-  OB_INLINE ObString &get_path() { return path_; }
-  OB_INLINE const ObString &get_path() const { return path_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(path));
-
-private:
-  ObString path_;
 };
 
 } // end namespace sql

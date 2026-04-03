@@ -142,7 +142,6 @@ TestIndexTree::TestIndexTree()
   rpc::frame::ObReqTransport req_transport(NULL, NULL);
   obrpc::ObSrvRpcProxy rpc_proxy;
   obrpc::ObCommonRpcProxy rs_rpc_proxy;
-  share::ObRsMgr rs_mgr;
   int64_t tenant_id = 1;
   self.set_ip_addr("127.0.0.1", 8086);
   getter.add_tenant(tenant_id,

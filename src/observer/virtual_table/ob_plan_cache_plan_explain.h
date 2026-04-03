@@ -126,10 +126,7 @@ class ObPlanCachePlanExplain : public common::ObVirtualTableScannerIterator
 {
 public:
   enum {
-    TENANT_ID_COL = 16,
-    IP_COL,
-    PORT_COL,
-    PLAN_ID_COL,
+    PLAN_ID_COL = 16,
     OP_NAME_COL,
     TBL_NAME_COL,
     ROWS_COL,

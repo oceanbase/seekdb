@@ -47,9 +47,6 @@ private:
   enum INSPECT_COLUMN
   {
     SESSION_ID = common::OB_APP_MIN_COLUMN_ID,
-    TENANT_ID,
-    SVR_IP,
-    SVR_PORT,
     TRACE_ID,
     QC_ID,
     SQC_ID,

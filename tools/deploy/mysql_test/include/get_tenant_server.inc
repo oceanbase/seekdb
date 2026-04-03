@@ -16,13 +16,11 @@
 --disable_result_log
 connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
 connection obsys;
-let $__tenant_id__  = `select tenant_id from oceanbase.__all_tenant where tenant_name = $__tenant_name__ limit 1`;
-let $__resource_pool_id__ = `select resource_pool_id from oceanbase.__all_resource_pool where tenant_id = $__tenant_id__ limit 1`;
 
-let $__svr_ip__ = `select svr_ip from oceanbase.__all_unit where resource_pool_id = $__resource_pool_id__ limit 1`;
-let $__svr_port__ = `select svr_port from oceanbase.__all_unit where resource_pool_id = $__resource_pool_id__ limit 1`;
+let $__svr_ip__ = `select svr_ip from oceanbase.__all_virtual_server_stat`;
+let $__svr_port__ = `select svr_port from oceanbase.__all_virtual_server_stat`;
 
-let $__inner_port__ = `select inner_port from oceanbase.__all_server where svr_ip = '$__svr_ip__' and svr_port = $__svr_port__ limit 1`;
+let $__inner_port__ = `select sql_port from oceanbase.__all_virtual_server_stat`;
 
 let $TE_SERVER_IP = $__svr_ip__;
 let $TE_SERVER_PORT = $__inner_port__;

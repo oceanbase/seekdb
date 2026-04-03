@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_OB_LOG_SYSTABLE_QUERYER_H_
+#define OCEANBASE_OB_LOG_SYSTABLE_QUERYER_H_
+
+#include "ob_ls_log_stat_info.h"   // ObLSLogInfo
+#include "ob_all_server_info.h"    // ObAllServerInfo
+#include "ob_all_zone_info.h"      // ObAllZoneInfo, ObAllZoneTypeInfo
+#include "logservice/logfetcher/ob_log_fetcher_err_handler.h"
+#include "ob_all_units_info.h"     // ObUnitsRecordInfo
+
+namespace oceanbase
+{
+namespace common
+{
+class ObISQLClient;
+namespace sqlclient
+{
+class ObMySQLResult;
+}
+} // end namespace common
+
+namespace logservice
+{
+class ObLogSysTableQueryer
+{
+public:
+  ObLogSysTableQueryer();
+  virtual ~ObLogSysTableQueryer();
+  int init(const int64_t cluster_id,
+      const bool is_across_cluster,
+      common::ObISQLClient &sql_proxy,
+      logfetcher::IObLogErrHandler *err_handler);
+  bool is_inited() const { return is_inited_; }
+  void destroy();
+
+public:
+  // SELECT SVR_IP, SVR_PORT, ROLE, BEGIN_LSN, END_LSN FROM GV$OB_LOG_STAT
+  int get_ls_log_info(
+      const uint64_t tenant_id,
+      const share::ObLSID &ls_id,
+      ObLSLogInfo &ls_log_info);
+
+  //  SELECT SVR_IP, SVR_PORT, ZONE, ZONE_TYPE, REGION from GV$OB_UNITS;
+  int get_all_units_info(
+      const uint64_t tenant_id,
+      ObUnitsRecordInfo &units_record_info);
+
+  int get_all_server_info(
+      const uint64_t tenant_id,
+      ObAllServerInfo &all_server_info);
+
+  int get_all_zone_info(
+      const uint64_t tenant_id,
+      ObAllZoneInfo &all_zone_info);
+
+  int get_all_zone_type_info(
+      const uint64_t tenant_id,
+      ObAllZoneTypeInfo &all_zone_type_info);
+
+private:
+  int do_query_(const uint64_t tenant_id,
+      ObSqlString &sql,
+      ObISQLClient::ReadResult &result);
+
+  template <typename RecordsType>
+  int get_records_template_(common::sqlclient::ObMySQLResult &res,
+      RecordsType &records,
+      const char *event,
+      int64_t &record_count);
+
+  // ObLSLogInfo
+  // @param [in] res, result read from __all_virtual_log_stat table
+  // @param [out] ls_log_info, meta/user tenant's LS Palf Info
+  int parse_record_from_row_(common::sqlclient::ObMySQLResult &res,
+      ObLSLogInfo &ls_log_info);
+
+private:
+  bool is_inited_;                     // whether this class is inited
+  bool is_across_cluster_;             // whether the SQL query across cluster
+  int64_t cluster_id_;                 // ClusterID
+  common::ObISQLClient *sql_proxy_;    // sql_proxy to use
+  logfetcher::IObLogErrHandler *err_handler_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObLogSysTableQueryer);
+};
+
+} // namespace logservice
+} // namespace oceanbase
+
+#endif

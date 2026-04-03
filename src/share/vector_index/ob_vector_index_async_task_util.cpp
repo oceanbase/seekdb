@@ -306,18 +306,16 @@ int ObVecIndexAsyncTaskUtil::move_task_to_history_table(
   int64_t insert_rows = 0;
   int64_t delete_rows = 0;
 
-  if (OB_FAIL(sql.assign_fmt("REPLACE INTO %s SELECT * FROM %s WHERE tenant_id = %ld AND status = 3 ORDER BY gmt_create LIMIT %ld",
+  if (OB_FAIL(sql.assign_fmt("REPLACE INTO %s SELECT * FROM %s WHERE status = 3 ORDER BY gmt_create LIMIT %ld",
               share::OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME,
               share::OB_ALL_VECTOR_INDEX_TASK_TNAME,
-              ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
               batch_size))) {
     LOG_WARN("sql assign fmt failed", K(ret));
   } else if (OB_FAIL(proxy.write(tenant_id, sql.ptr(), insert_rows))) {
     LOG_WARN("fail to execute sql", K(ret), K(sql), K(tenant_id));
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s"
-          " WHERE tenant_id = %ld AND status = 3 AND gmt_modified <= (SELECT gmt_modified FROM %s ORDER BY gmt_modified desc LIMIT 1)",
+          " WHERE status = 3 AND gmt_modified <= (SELECT gmt_modified FROM %s ORDER BY gmt_modified desc LIMIT 1)",
           share::OB_ALL_VECTOR_INDEX_TASK_TNAME,
-          ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
           share::OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME))) {
     LOG_WARN("sql assign fmt failed", K(ret));
   } else if (OB_FAIL(proxy.write(tenant_id, sql.ptr(), delete_rows))) {
@@ -379,7 +377,7 @@ int ObVecIndexAsyncTaskUtil::insert_vec_tasks(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(batch_size));
   } else if (OB_FAIL(sql.assign_fmt(" INSERT INTO %s"
-                                    " (tenant_id, table_id, tablet_id,"
+                                    " (table_id, tablet_id,"
                                     " task_id, trigger_type, task_type, status, target_scn,"
                                     " ret_code, trace_id) VALUES",
                                     tname))) {
@@ -395,8 +393,7 @@ int ObVecIndexAsyncTaskUtil::insert_vec_tasks(
         ObVecIndexTaskStatus &task = task_ctx->task_status_;
         char trace_id_str[256] = { 0 };
         task.trace_id_.to_string(trace_id_str, sizeof(trace_id_str));
-        if (OB_FAIL(sql.append_fmt(" (%ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, '%s')",
-                                  ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
+        if (OB_FAIL(sql.append_fmt(" (%ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, '%s')",
                                   task.table_id_, task.tablet_id_.id(),
                                   task.task_id_, task.trigger_type_, task.task_type_,
                                   task.status_, task.target_scn_.get_val_for_sql(), task.ret_code_,
@@ -464,8 +461,7 @@ int ObVecIndexAsyncTaskUtil::update_vec_task(
   // WHERE FILTER
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(sql.append_fmt(" WHERE "
-                    "tenant_id = %ld AND table_id = %ld AND tablet_id = %ld AND task_id = %ld",
-                    ObSchemaUtils::get_extract_tenant_id(key.tenant_id_, key.tenant_id_),
+                    "table_id = %ld AND tablet_id = %ld AND task_id = %ld",
                     key.table_id_, key.tablet_id_, key.task_id_))) {
     LOG_WARN("sql append fmt failed", K(ret));
   }
@@ -534,6 +530,15 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
                   ret = OB_SUCCESS; // continue
                 }
               }
+
+              if (OB_FAIL(ret)) {
+              } else if (task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD ||
+                         task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
+                need_resumed = false;
+              }
+
+              LOG_INFO("resume task", K(ret), K(need_resumed), K(is_read_tenant_async_task),
+                       K(OB_NOT_NULL(ls) ? ls->get_ls_id() : ObLSID()), K(task_result));
               if (OB_FAIL(ret) || !need_resumed) {  // skip
               } else if (task_result.status_ != ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_FINISH) { // resume not finish task
                 ObVecIndexAsyncTaskCtx *task_ctx = nullptr;
@@ -739,7 +744,7 @@ int ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
     LOG_WARN("unexpected nullptr", K(ret));
   } else {
     int64_t target_scn = 0;
-    EXTRACT_INT_FIELD_MYSQL(*result, "tenant_id", task.tenant_id_, uint64_t);
+    task.tenant_id_ = OB_SYS_TENANT_ID;
     EXTRACT_INT_FIELD_MYSQL(*result, "table_id", task.table_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "tablet_id", task.tablet_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "task_id", task.task_id_, int64_t);
@@ -1629,7 +1634,7 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(refresh_snapshot_index_data(adaptor, tx_desc, snapshot))) {
     LOG_WARN("failed to refresh snapshot index data", K(ret));
-  } else if (OB_FAIL(adaptor.renew_single_snap_index())) {
+  } else if (OB_FAIL(adaptor.renew_single_snap_index(adaptor.get_snap_index_type() == VIAT_HNSW_BQ))) {
     LOG_WARN("fail to renew single snap index", K(ret));
   }
   /* Warning!!!
@@ -1641,7 +1646,7 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
   int tmp_ret = OB_SUCCESS;
   if (trans_start && OB_SUCCESS != (tmp_ret = ObInsertLobColumnHelper::end_trans(tx_desc, OB_SUCCESS != ret, timeout_us))) {
     ret = tmp_ret;
-    LOG_WARN("fail to end trans", K(ret), KPC(tx_desc));
+    LOG_WARN("fail to end trans", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(vec_idx_mgr_->replace_old_adapter(&adaptor))) {

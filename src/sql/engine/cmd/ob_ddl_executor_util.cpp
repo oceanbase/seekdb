@@ -244,7 +244,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
     LOG_INFO("start wait ddl retry task finish", K(task_id), "ddl_event_info", ObDDLEventInfo(), K(error_message));
 
     bool is_tenant_dropped = false;
-    bool is_tenant_standby = false;
+    bool is_primary_cluster = true;
     int tmp_ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
       if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(
@@ -289,11 +289,11 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(
           ret = OB_TENANT_HAS_BEEN_DROPPED;
           LOG_WARN("tenant has been dropped", K(ret), K(tenant_id));
         }
-        
+
         if (OB_FAIL(ret)) {
-        } else if (OB_TMP_FAIL(ObAllTenantInfoProxy::is_standby_tenant(GCTX.sql_proxy_, tenant_id, is_tenant_standby))) {
-          LOG_WARN("check is standby tenant failed", K(tmp_ret), K(tenant_id));
-        } else if (is_tenant_standby) {
+        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+          LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
+        } else if (!is_primary_cluster) {
           ret = OB_STANDBY_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
           LOG_WARN("tenant is standby now, stop wait", K(ret), K(tenant_id));
@@ -339,10 +339,8 @@ int ObDDLExecutorUtil::cancel_ddl_task(const int64_t tenant_id, obrpc::ObCommonR
   obrpc::ObCancelTaskArg rpc_arg;
   rpc_arg.task_id_ = *ObCurTraceId::get_trace_id();
 
-  ObAddr rs_leader_addr;
-  if (OB_FAIL(GCTX.rs_mgr_->get_master_root_server(rs_leader_addr))) {
-    LOG_WARN("fail to get rootservice address", K(ret));
-  } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(rs_leader_addr).cancel_sys_task(rpc_arg))) {
+  ObAddr rs_leader_addr = GCTX.self_addr();;
+  if (OB_FAIL(GCTX.srv_rpc_proxy_->to(rs_leader_addr).cancel_sys_task(rpc_arg))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {

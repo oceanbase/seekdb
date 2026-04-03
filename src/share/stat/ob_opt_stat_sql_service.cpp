@@ -19,16 +19,14 @@
 #include "observer/ob_sql_client_decorator.h"
 #include "share/stat/ob_opt_stat_monitor_manager.h"
 
-#define ALL_HISTOGRAM_STAT_COLUMN_NAME "tenant_id, "     \
-                                       "table_id, "      \
+#define ALL_HISTOGRAM_STAT_COLUMN_NAME "table_id, "      \
                                        "partition_id, "  \
                                        "column_id, "     \
                                        "endpoint_num, "    \
                                        "b_endpoint_value," \
                                        "endpoint_repeat_cnt"
 
-#define ALL_COLUMN_STAT_COLUMN_NAME  "tenant_id, "     \
-                                     "table_id, "      \
+#define ALL_COLUMN_STAT_COLUMN_NAME  "table_id, "      \
                                      "partition_id, "  \
                                      "column_id, "     \
                                      "object_type as stat_level, " \
@@ -45,8 +43,7 @@
                                      "density,"        \
                                      "last_analyzed"  \
 
-#define INSERT_TABLE_STAT_SQL "REPLACE INTO __all_table_stat(tenant_id," \
-                                                               "table_id," \
+#define INSERT_TABLE_STAT_SQL "REPLACE INTO __all_table_stat(table_id," \
                                                                "partition_id," \
                                                                "index_type," \
                                                                "object_type," \
@@ -66,8 +63,7 @@
                                                                "spare1,"\
                                                                "spare2) VALUES " \
 
-#define UPDATE_TABLE_STAT_FAILCOUNT_SQL "INSERT /*+QUERY_TIMEOUT(60000000)*/INTO %s(tenant_id," \
-                                                                                "table_id," \
+#define UPDATE_TABLE_STAT_FAILCOUNT_SQL "INSERT /*+QUERY_TIMEOUT(60000000)*/INTO %s(table_id," \
                                                                                 "partition_id," \
                                                                                 "index_type," \
                                                                                 "object_type," \
@@ -89,9 +85,8 @@
                                                                                 " spare2 = COALESCE(spare2, 0) + 1," \
                                                                                 "last_analyzed = last_analyzed "
 
-#define UPDATE_TABLE_STAT_FAILCOUNT_VALUE  " (%lu, %lu, %ld, 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1, 1)"
-#define REPLACE_COL_STAT_SQL "REPLACE INTO __all_column_stat(tenant_id," \
-                                                              "table_id," \
+#define UPDATE_TABLE_STAT_FAILCOUNT_VALUE  " (%lu, %ld, 0, 0, 0, -1, -1, 0, 0, -1, -1, 0, 0, 0, 0, 0, 1, 1)"
+#define REPLACE_COL_STAT_SQL "REPLACE INTO __all_column_stat(table_id," \
                                                               "partition_id," \
                                                               "column_id," \
                                                               "object_type," \
@@ -114,8 +109,7 @@
                                                               "spare1%s%s) VALUES "
 
 
-#define INSERT_HISTOGRAM_STAT_SQL "INSERT INTO __all_histogram_stat(tenant_id," \
-                                                                      "table_id," \
+#define INSERT_HISTOGRAM_STAT_SQL "INSERT INTO __all_histogram_stat(table_id," \
                                                                       "partition_id," \
                                                                       "column_id," \
                                                                       "object_type," \
@@ -131,8 +125,7 @@
 #define UPDATE_HISTOGRAM_TYPE_SQL "UPDATE /*+%.*s*/ __all_column_stat SET histogram_type = 0, bucket_cnt = 0 WHERE %.*s"
 
 // not used yet.
-#define INSERT_ONLINE_TABLE_STAT_SQL "INSERT INTO oceanbase.__all_table_stat(tenant_id," \
-                                                               "table_id," \
+#define INSERT_ONLINE_TABLE_STAT_SQL "INSERT INTO oceanbase.__all_table_stat(table_id," \
                                                                "partition_id," \
                                                                "index_type," \
                                                                "object_type," \
@@ -169,8 +162,7 @@
 //TODO DAISI, MICRO/MACRO/MEMTABLE/SSTABLE
 //TODO DAISI, check lock.
 
-#define INSERT_ONLINE_COL_STAT_SQL "INSERT INTO __all_column_stat(tenant_id," \
-                                                                  "table_id," \
+#define INSERT_ONLINE_COL_STAT_SQL "INSERT INTO __all_column_stat(table_id," \
                                                                   "partition_id," \
                                                                   "column_id," \
                                                                   "object_type," \
@@ -206,8 +198,7 @@
                                          "user_stats = VALUES(user_stats);"
 // TODO DAISI, add a sys_func to merge NDV by llc.
 
-#define INSERT_TASK_OPT_STAT_GATHER_SQL "INSERT INTO %s(tenant_id," \
-                                                        "task_id," \
+#define INSERT_TASK_OPT_STAT_GATHER_SQL "INSERT INTO %s(task_id," \
                                                         "type," \
                                                         "ret_code," \
                                                         "failed_count,"\
@@ -215,8 +206,7 @@
                                                         "start_time," \
                                                         "end_time) VALUES (%s);"
 
-#define INSERT_TABLE_OPT_STAT_GATHER_SQL "INSERT INTO %s(tenant_id," \
-                                                         "task_id," \
+#define INSERT_TABLE_OPT_STAT_GATHER_SQL "INSERT INTO %s(task_id," \
                                                          "table_id," \
                                                          "ret_code," \
                                                          "start_time," \
@@ -227,16 +217,14 @@
                                                          "spare3) VALUES (%s);"
 
 
-#define ALL_HISTOGRAM_STAT_COLUMN_NAME "tenant_id, "     \
-                                       "table_id, "      \
+#define ALL_HISTOGRAM_STAT_COLUMN_NAME "table_id, "      \
                                        "partition_id, "  \
                                        "column_id, "     \
                                        "endpoint_num, "    \
                                        "b_endpoint_value," \
                                        "endpoint_repeat_cnt"
 
-#define FETCH_ALL_COLUMN_STAT_SQL_COL   "SELECT col_stat.tenant_id as tenant_id, "     \
-                                            "col_stat.table_id as table_id, "      \
+#define FETCH_ALL_COLUMN_STAT_SQL_COL   "SELECT col_stat.table_id as table_id, "      \
                                             "col_stat.partition_id as partition_id, "  \
                                             "col_stat.column_id as column_id, "     \
                                             "col_stat.object_type as stat_level, " \
@@ -257,21 +245,20 @@
                                             "hist_stat.b_endpoint_value as b_endpoint_value," \
                                             "hist_stat.endpoint_repeat_cnt as endpoint_repeat_cnt "\
                                             "FROM %s col_stat LEFT JOIN %s hist_stat "\
-                                            "ON col_stat.tenant_id = hist_stat.tenant_id AND "\
-                                            "   col_stat.table_id = hist_stat.table_id AND "\
+                                            "ON col_stat.table_id = hist_stat.table_id AND "\
                                             "   col_stat.partition_id = hist_stat.partition_id AND "\
                                             "   col_stat.column_id = hist_stat.column_id "\
                                             "WHERE %.*s "\
-                                            "ORDER BY tenant_id, table_id, partition_id, column_id, endpoint_num;"
+                                            "ORDER BY table_id, partition_id, column_id, endpoint_num;"
 
-#define INSERT_SYSTEM_STAT_SQL "REPLACE INTO %s(tenant_id," \
+#define INSERT_SYSTEM_STAT_SQL "REPLACE INTO %s(id," \
                                                 "last_analyzed," \
                                                 "cpu_speed," \
                                                 "disk_seq_read_speed," \
                                                 "disk_rnd_read_speed," \
                                                 "network_speed) VALUES " 
 
-#define DELETE_SYSTEM_STAT_SQL "DELETE FROM %s WHERE TENANT_ID=%ld" 
+#define DELETE_SYSTEM_STAT_SQL "DELETE FROM %s WHERE ID=%ld"
 
 namespace oceanbase
 {
@@ -334,8 +321,7 @@ int ObOptStatSqlService::fetch_table_stat(const uint64_t tenant_id,
                                       "last_analyzed,"
                                       "spare1 as sample_size FROM %s ", share::OB_ALL_TABLE_STAT_TNAME))) {
       LOG_WARN("fail to append SQL stmt string.", K(sql), K(ret));
-    } else if (OB_FAIL(sql.append_fmt(" WHERE TENANT_ID = %ld AND TABLE_ID=%ld",
-                                      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
+    } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%ld",
                                       ObSchemaUtils::get_extract_schema_id(exec_tenant_id, key.table_id_)))) {
       LOG_WARN("fail to append SQL where string.", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
@@ -426,8 +412,7 @@ int ObOptStatSqlService::batch_fetch_table_stats(const uint64_t tenant_id,
       LOG_WARN("failed to generate in list", K(ret));
     } else if (!part_list.empty() && OB_FAIL(part_str.append_fmt(" AND partition_id in %s", part_list.ptr()))) {
       LOG_WARN("fail to append partition string.", K(ret));
-    } else if (OB_FAIL(sql.append_fmt(" WHERE TENANT_ID = %ld AND TABLE_ID=%ld %s",
-                                      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
+    } else if (OB_FAIL(sql.append_fmt(" WHERE TABLE_ID=%ld %s",
                                       ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
                                       !part_str.empty() ? part_str.ptr() : " "))) {
       LOG_WARN("fail to append SQL where string.", K(ret));
@@ -644,9 +629,8 @@ int ObOptStatSqlService::construct_delete_column_histogram_sql(const uint64_t te
     if (OB_ISNULL(column_stats.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(column_stats.at(i)));
-    } else if (where_str.append_fmt(" %s (%lu, %ld, %ld, %lu) %s",
-                                     i != 0 ? "," : "(TENANT_ID, TABLE_ID, PARTITION_ID, COLUMN_ID) IN (",
-                                     ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
+    } else if (where_str.append_fmt(" %s (%ld, %ld, %lu) %s",
+                                     i != 0 ? "," : "(TABLE_ID, PARTITION_ID, COLUMN_ID) IN (",
                                      ObSchemaUtils::get_extract_schema_id(exec_tenant_id, column_stats.at(i)->get_table_id()),
                                      column_stats.at(i)->get_partition_id(),
                                      column_stats.at(i)->get_column_id(),
@@ -750,8 +734,7 @@ int ObOptStatSqlService::delete_table_stat(const uint64_t exec_tenant_id,
             ))) {
     LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(where_str.append_fmt(
-                      "tenant_id = %lu and table_id = %ld %s%s;",
-                      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, exec_tenant_id),
+                      "table_id = %ld %s%s;",
                       ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
                       has_part ? "AND partition_id in " : "",
                       has_part ? in_list.ptr() : ""))) {
@@ -847,8 +830,7 @@ int ObOptStatSqlService::delete_column_stat(const uint64_t exec_tenant_id,
             OB_FAIL(hint_str.append_fmt("ENABLE_PARALLEL_DML parallel(%ld)",degree))) {
     LOG_WARN("failed to append sql", K(ret));
   } else if (OB_FAIL(where_str.append_fmt(
-                      "tenant_id = %lu and table_id = %ld and column_id in %s %s%s;",
-                      ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, exec_tenant_id),
+                      "table_id = %ld and column_id in %s %s%s;",
                       ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
                       column_list.ptr(),
                       has_part ? "AND partition_id in " : "",
@@ -910,8 +892,7 @@ int ObOptStatSqlService::get_table_stat_sql(const uint64_t tenant_id,
   uint64_t table_id = stat.get_table_id();
   uint64_t ext_tenant_id = ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(tenant_id, table_id);
-  if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", ext_tenant_id)) ||
-      OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
+  if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_pk_column("partition_id", stat.get_partition_id())) ||
       OB_FAIL(dml_splicer.add_column("index_type", is_index_stat)) ||
       OB_FAIL(dml_splicer.add_column("object_type", stat.get_object_type())) ||
@@ -990,8 +971,7 @@ int ObOptStatSqlService::get_column_stat_sql(const uint64_t tenant_id,
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", ext_tenant_id)) ||
-        OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
+    if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
         OB_FAIL(dml_splicer.add_pk_column("partition_id", stat.get_partition_id())) ||
         OB_FAIL(dml_splicer.add_pk_column("column_id", stat.get_column_id())) ||
         OB_FAIL(dml_splicer.add_column("object_type", stat.get_stat_level())) ||
@@ -1047,8 +1027,7 @@ int ObOptStatSqlService::get_histogram_stat_sql(const uint64_t tenant_id,
     LOG_WARN("failed to get valid obj str", K(ret));
   } else if (OB_FAIL(get_obj_binary_hex_str(bucket.endpoint_value_, allocator, b_endpoint_value))) {
     LOG_WARN("failed to convert obj to binary string", K(ret));
-  } else if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", ext_tenant_id)) ||
-             OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
+  } else if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
              OB_FAIL(dml_splicer.add_pk_column("partition_id", stat.get_partition_id())) ||
              OB_FAIL(dml_splicer.add_pk_column("column_id", stat.get_column_id())) ||
              OB_FAIL(dml_splicer.add_column("object_type", stat.get_stat_level())) ||
@@ -1662,8 +1641,7 @@ int ObOptStatSqlService::generate_specified_keys_list_str_for_column(const uint6
     }
     if (OB_SUCC(ret)) {
       const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-      if (OB_FAIL(keys_list_str.append_fmt(" (col_stat.TENANT_ID=%lu AND col_stat.TABLE_ID=%ld AND col_stat.PARTITION_ID IN (%.*s) AND col_stat.COLUMN_ID IN (%.*s))",
-                                            ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id),
+      if (OB_FAIL(keys_list_str.append_fmt(" (col_stat.TABLE_ID=%ld AND col_stat.PARTITION_ID IN (%.*s) AND col_stat.COLUMN_ID IN (%.*s))",
                                             ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id),
                                             partition_list_str.string().length(),
                                             partition_list_str.string().ptr(),
@@ -1955,17 +1933,15 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t tenant_id,
   } else if (OB_FAIL(raw_sql.append_fmt("select /*+opt_param('enable_in_range_optimization','true') opt_param('use_default_opt_stat','true')*/"\
                                          "tablet_id, max(row_count) from "\
                                          "(select cast(tablet_id as unsigned) as tablet_id, cast(inserts - deletes as signed) as row_count "\
-                                         "from %s where tenant_id = %lu and table_id = %lu and tablet_id in %s union all "\
+                                         "from %s where table_id = %lu and tablet_id in %s union all "\
                                          "select cast(tablet_id as unsigned) as tablet_id, cast(row_count as signed) as row_count from %s, "\
                                          "(select frozen_scn from %s order by frozen_scn desc limit 1) where "\
-                                         "tenant_id = %lu and compaction_scn = frozen_scn and (tablet_id, ls_id) in %s) group by tablet_id;",
+                                         "compaction_scn = frozen_scn and (tablet_id) in %s) group by tablet_id;",
                                          share::OB_ALL_MONITOR_MODIFIED_TNAME,
-                                         share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                          share::schema::ObSchemaUtils::get_extract_schema_id(tenant_id, real_table_id),
                                          tablet_list_str.ptr(),
                                          share::OB_ALL_TABLET_CHECKSUM_TNAME,
                                          share::OB_ALL_FREEZE_INFO_TNAME,
-                                         share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id,tenant_id),
                                          tablet_ls_list_str.ptr()))) {
     LOG_WARN("failed to append fmt", K(ret));
   } else {
@@ -2035,10 +2011,9 @@ int ObOptStatSqlService::gen_tablet_list_str(const ObIArray<ObTabletID> &all_tab
                                              all_tablet_ids.at(i).id(),
                                              suffix))) {
         LOG_WARN("failed to append fmt", K(ret));
-      } else if (OB_FAIL(tablet_ls_list_str.append_fmt("%c(%lu, %ld)%c",
+      } else if (OB_FAIL(tablet_ls_list_str.append_fmt("%c(%lu)%c",
                                                        prefix,
                                                        all_tablet_ids.at(i).id(),
-                                                       all_ls_ids.at(i).id(),
                                                        suffix))) {
         LOG_WARN("failed to append fmt", K(ret));
       } else {/*do nothing*/}
@@ -2174,7 +2149,7 @@ int ObOptStatSqlService::get_update_fail_count_value_list(
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < part_ids.count(); ++i) {
     ObSqlString value;
-    if (OB_FAIL(value.append_fmt(UPDATE_TABLE_STAT_FAILCOUNT_VALUE, tenant_id,
+    if (OB_FAIL(value.append_fmt(UPDATE_TABLE_STAT_FAILCOUNT_VALUE,
                                  table_id, part_ids.at(i)))) {
       LOG_WARN("failed to append fmt", K(ret));
     } else if (OB_FAIL(value_str.append_fmt(
@@ -2192,8 +2167,7 @@ int ObOptStatSqlService::get_gather_stat_task_value(const ObOptStatTaskInfo &tas
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t tenant_id = task_info.tenant_id_;
-  if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", tenant_id)) ||
-      OB_FAIL(dml_splicer.add_pk_column("task_id", task_info.task_id_)) ||
+  if (OB_FAIL(dml_splicer.add_pk_column("task_id", task_info.task_id_)) ||
       OB_FAIL(dml_splicer.add_column("type", task_info.type_)) ||
       OB_FAIL(dml_splicer.add_column("ret_code", task_info.ret_code_)) ||
       OB_FAIL(dml_splicer.add_column("failed_count", task_info.failed_count_)) ||
@@ -2215,8 +2189,7 @@ int ObOptStatSqlService::get_gather_stat_value(const ObOptStatGatherStat &gather
   uint64_t tenant_id = gather_stat.get_tenant_id();
   uint64_t table_id = gather_stat.get_table_id();
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(tenant_id, table_id);
-  if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", tenant_id)) ||
-      OB_FAIL(dml_splicer.add_pk_column("task_id", gather_stat.get_task_id())) ||
+  if (OB_FAIL(dml_splicer.add_pk_column("task_id", gather_stat.get_task_id())) ||
       OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
       OB_FAIL(dml_splicer.add_column("ret_code", gather_stat.get_ret_code())) ||
       OB_FAIL(dml_splicer.add_time_column("start_time", gather_stat.get_start_time())) ||
@@ -2280,7 +2253,7 @@ int ObOptStatSqlService::get_system_stat_sql(const uint64_t tenant_id,
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t ext_tenant_id = ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id);
-  if (OB_FAIL(dml_splicer.add_pk_column("tenant_id", ext_tenant_id)) ||
+  if (OB_FAIL(dml_splicer.add_pk_column("id", ext_tenant_id)) ||
       OB_FAIL(dml_splicer.add_time_column("last_analyzed", stat.get_last_analyzed() == 0 ?
                                                         current_time : stat.get_last_analyzed())) ||
       OB_FAIL(dml_splicer.add_column("cpu_speed", stat.get_cpu_speed())) ||
@@ -2310,7 +2283,7 @@ int ObOptStatSqlService::fetch_system_stat(const uint64_t tenant_id,
       LOG_WARN("sql service has not been initialized.", K(ret));
     } else if (OB_FAIL(sql.append_fmt("SELECT * FROM %s ", share::OB_ALL_AUX_STAT_TNAME))) {
       LOG_WARN("fail to append SQL stmt string.", K(sql), K(ret));
-    } else if (OB_FAIL(sql.append_fmt(" WHERE TENANT_ID = %ld", ext_tenant_id))) {
+    } else if (OB_FAIL(sql.append_fmt(" WHERE ID = %ld", ext_tenant_id))) {
       LOG_WARN("fail to append SQL where string.", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, exec_tenant_id, sql.ptr()))) {
       LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));

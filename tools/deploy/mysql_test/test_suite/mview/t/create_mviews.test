@@ -129,7 +129,7 @@ create materialized view lob_mv1 as select * from lob_t1;
 let $container_tid = query_get_value(select data_table_id from oceanbase.__all_table where table_name = 'LOB_MV1', data_table_id, 1);
 --disable_query_log
 eval select table_type from oceanbase.__all_table where table_id = $container_tid;
-eval select table_type from oceanbase.dba_ob_table_locations where table_name like '%aux_lob%' and tablet_id > 0 and role = 'LEADER' and data_table_id = $container_tid;
+eval select table_type from oceanbase.__all_table where table_name like '%aux_lob%' and tablet_id > 0 and data_table_id = $container_tid;
 --enable_query_log
 --sorted_result
 select * from lob_mv1;
@@ -140,7 +140,7 @@ select * from lob_mv1;
 drop materialized view lob_mv1;
 --disable_query_log
 eval select table_type from oceanbase.__all_table where table_id = $container_tid;
-eval select table_type from oceanbase.dba_ob_table_locations where table_name like '%aux_lob%' and data_table_id = $container_tid;
+eval select table_type from oceanbase.__all_table where table_name like '%aux_lob%' and data_table_id = $container_tid;
 --enable_query_log
 drop table lob_t1;
 

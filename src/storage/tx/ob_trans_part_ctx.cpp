@@ -327,6 +327,7 @@ void ObPartTransCtx::default_init_()
   reserve_allocator_.reset();
   elr_handler_.reset();
   trace_log_.reset();
+  has_async_index_redo_ = false;
 }
 
 // thread-unsafe
@@ -485,8 +486,11 @@ int ObPartTransCtx::handle_timeout(const int64_t delay)
           TRANS_LOG(INFO, "callback scheduler txn commit has timeout", K(tmp_ret), KPC(this));
         } else {
           // make scheduler retry commit if clog disk has fatal error
-          logservice::coordinator::ObFailureDetector *detector = MTL(logservice::coordinator::ObFailureDetector *);
-          if (NULL != detector && detector->is_clog_disk_has_fatal_error()) {
+          bool clog_is_full = false;
+          bool clog_is_hang = false;
+          if (OB_FAIL(ObShareUtil::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
+            TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
+          } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_NOT_MASTER);
             TRANS_LOG(WARN, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
           }
@@ -1264,7 +1268,6 @@ int ObPartTransCtx::check_rs_scheduler_is_alive_(bool &is_alive)
   int ret = OB_SUCCESS;
   int64_t trace_time = 0;
   int64_t cur_time = ObTimeUtility::current_time();
-  share::ObAliveServerTracer *server_tracer = NULL;
   is_alive = true;
   if (OB_ISNULL(trans_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1272,16 +1275,12 @@ int ObPartTransCtx::check_rs_scheduler_is_alive_(bool &is_alive)
   } else if (need_force_abort_() && !exec_info_.scheduler_.is_valid()) {
     is_alive = false;
     TRANS_LOG(WARN, "a aborting trans will be gc with invalid scheduler", K(ret), K(is_alive), KPC(this));
-  } else if (OB_ISNULL(server_tracer = trans_service_->get_server_tracer())) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "server tracer is NULL", KR(ret), K(*this));
-  } else if (OB_FAIL(server_tracer->is_alive(exec_info_.scheduler_, is_alive, trace_time))) {
-    TRANS_LOG(WARN, "server tracer error", KR(ret), "context", *this);
-    // To be conservative, if the server tracer reports an error, the scheduler
-    // is alive by default
-    is_alive = true;
+  } else if (exec_info_.scheduler_ != addr_) {
+    is_alive = false;
+    TRANS_LOG(INFO, "scheduler is not local address, consider it unreachable",
+              K(exec_info_.scheduler_), K(addr_), KPC(this));
   } else {
-    // do nothing
+    is_alive = true;
   }
 
   return ret;
@@ -1823,7 +1822,7 @@ int ObPartTransCtx::compensate_abort_log_()
 int ObPartTransCtx::abort_(int reason)
 {
   int ret = OB_SUCCESS;
-  REC_TRANS_TRACE_EXT2(tlog_, abort, OB_ID(reason), reason);
+  REC_TRANS_TRACE_EXT2(tlog_, abort_, OB_ID(reason), reason);
   if (OB_FAIL(do_local_tx_end_(TxEndAction::ABORT_TX))) {
     TRANS_LOG(WARN, "do local tx abort failed", K(ret), K(reason));
   }
@@ -2090,7 +2089,7 @@ int ObPartTransCtx::on_success(ObTxLogCb *log_cb)
     CtxLockGuard guard(lock_, CtxLockGuard::MODE::CTX);
     try_submit_next_log_(false);
   }
-  
+
   if (retry_submit_mds) {
     CtxLockGuard guard(lock_, CtxLockGuard::MODE::CTX);
     if (OB_TMP_FAIL(submit_log_impl_(ObTxLogType::TX_MULTI_DATA_SOURCE_LOG))) {
@@ -2828,6 +2827,7 @@ int ObPartTransCtx::init_log_block_(ObTxLogBlock &log_block,
   // the log_entry_no will be backfill before log-block to be submitted
   header.init(cluster_id_, cluster_version_, -1 /*log_entry_no*/, trans_id_, exec_info_.scheduler_);
   if (OB_UNLIKELY(serial_final)) { header.set_serial_final(); }
+  if (OB_UNLIKELY(has_async_index_redo_)) { header.set_has_async_index(); }
   return log_block.init_for_fill(suggested_buf_size);
 }
 
@@ -2835,6 +2835,7 @@ inline int ObPartTransCtx::reuse_log_block_(ObTxLogBlock &log_block)
 {
   ObTxLogBlockHeader &header = log_block.get_header();
   header.init(cluster_id_, cluster_version_, exec_info_.next_log_entry_no_, trans_id_, exec_info_.scheduler_);
+  if (OB_UNLIKELY(has_async_index_redo_)) { header.set_has_async_index(); }
   return log_block.reuse_for_fill();
 }
 
@@ -5785,15 +5786,12 @@ int ObPartTransCtx::switch_to_leader(const SCN &start_working_ts)
     TRANS_LOG(WARN, "switch role state error", KR(ret), K(*this));
   } else {
     const bool contain_mds_table_lock = is_contain_mds_type_(ObTxDataSourceType::TABLE_LOCK);
-    const bool contain_mds_transfer_out = is_contain_mds_type_(ObTxDataSourceType::START_TRANSFER_OUT)
-                           || is_contain_mds_type_(ObTxDataSourceType::START_TRANSFER_OUT_PREPARE)
-                           || is_contain_mds_type_(ObTxDataSourceType::START_TRANSFER_OUT_V2);
+    const bool contain_mds_transfer_out = false;
     const bool contain_mds_tablet_split = is_contain_mds_type_(ObTxDataSourceType::TABLET_SPLIT);
-    const bool contain_mds_tablet_transfer_in = is_contain_mds_type_(ObTxDataSourceType::TRANSFER_IN_ABORTED)
-                           || is_contain_mds_type_(ObTxDataSourceType::FINISH_TRANSFER_IN);
-    const bool need_kill_tx = contain_mds_table_lock 
-                           || contain_mds_transfer_out 
-                           || contain_mds_tablet_split 
+    const bool contain_mds_tablet_transfer_in = false;
+    const bool need_kill_tx = contain_mds_table_lock
+                           || contain_mds_transfer_out
+                           || contain_mds_tablet_split
                            || contain_mds_tablet_transfer_in;
     bool kill_by_append_mode_initial_scn = false;
     if (append_mode_initial_scn.is_valid()) {
@@ -5816,7 +5814,7 @@ int ObPartTransCtx::switch_to_leader(const SCN &start_working_ts)
 
             TRANS_LOG(WARN, "abort self instantly with a tx_commit request",
                       K(contain_mds_table_lock), K(contain_mds_transfer_out), K(contain_mds_tablet_split),
-                      K(contain_mds_tablet_transfer_in), K(need_kill_tx), K(kill_by_append_mode_initial_scn), 
+                      K(contain_mds_tablet_transfer_in), K(need_kill_tx), K(kill_by_append_mode_initial_scn),
                       K(append_mode_initial_scn), KPC(this));
             if (OB_FAIL(do_local_tx_end_(TxEndAction::ABORT_TX))) {
               //Temporary fix:
@@ -5898,7 +5896,7 @@ int ObPartTransCtx::switch_to_leader(const SCN &start_working_ts)
 }
 
 inline bool ObPartTransCtx::need_callback_scheduler_() {
-  return is_local_tx_() 
+  return is_local_tx_()
     && ObPartTransAction::COMMIT == part_trans_action_
     && addr_ == exec_info_.scheduler_
     && commit_cb_.is_enabled()
@@ -7415,7 +7413,7 @@ int ObPartTransCtx::check_pending_log_overflow(const int64_t stmt_timeout)
   int ret = OB_SUCCESS;
   const int64_t MAX_LOCAL_RETRY_US = 1 * 1000 * 1000; // 1s
   const int64_t LOCAL_RETRY_INTERVAL_US = 50 * 1000;  // 50ms
-                                                      
+
   if (OB_SUCC(ret) && ATOMIC_LOAD(&has_extra_log_cb_group_)) {
     omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
     const int64_t trx_max_log_cb_limit =
@@ -7442,9 +7440,9 @@ int ObPartTransCtx::check_pending_log_overflow(const int64_t stmt_timeout)
             ret = OB_SUCCESS;
           }
         }
-  
+
         cur_us = ObTimeUtility::current_time();
-  
+
         if (cur_us >= stmt_timeout) {
           TRANS_LOG(INFO, "retry to wait log cb until stmt timeout", K(ret), K(stmt_timeout),
                     K(busy_cb_cnt), K(extra_cb_group_cnt), K(start_wait_us), KPC(this));
@@ -7465,7 +7463,7 @@ int ObPartTransCtx::check_pending_log_overflow(const int64_t stmt_timeout)
       }
     }
   }
-  
+
   return ret;
 }
 
@@ -8116,30 +8114,6 @@ int ObPartTransCtx::dump_2_text(FILE *fd)
   return ret;
 }
 
-int ObPartTransCtx::get_ls_replica_readable_scn_(const ObLSID &ls_id, SCN &snapshot_version)
-{
-  int ret = OB_SUCCESS;
-  ObLSService *ls_svr =  MTL(ObLSService *);
-  ObLSHandle handle;
-  ObLS *ls = nullptr;
-
-  if (OB_ISNULL(ls_svr)) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "log stream service is NULL", K(ret));
-  } else if (OB_FAIL(ls_svr->get_ls(ls_id, handle, ObLSGetMod::TRANS_MOD))) {
-    TRANS_LOG(WARN, "get log stream failed", K(ret));
-  } else if (OB_ISNULL(ls = handle.get_ls())) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "get ls failed", K(ret));
-  } else if (OB_FAIL(ls->get_ls_replica_readable_scn(snapshot_version))) {
-    TRANS_LOG(WARN, "get ls replica readable scn failed", K(ret), K(ls_id));
-  } else {
-    // do nothing
-  }
-  TRANS_LOG(INFO, "get ls replica readable scn", K(ret), K(snapshot_version), KPC(this));
-  return ret;
-}
-
 int ObPartTransCtx::handle_ask_tx_state_for_4377(bool &is_alive)
 {
   int ret = OB_SUCCESS;
@@ -8233,7 +8207,12 @@ void ObPartTransCtx::post_keepalive_msg_(const int status)
 
 void ObPartTransCtx::notify_scheduler_tx_killed_(const int kill_reason)
 {
-  post_keepalive_msg_(kill_reason);
+  if (exec_info_.scheduler_ != addr_) {
+    TRANS_LOG(INFO, "scheduler is not local address, skip notify scheduler tx killed",
+              K(exec_info_.scheduler_), K(addr_), K(kill_reason), KPC(this));
+  } else {
+    post_keepalive_msg_(kill_reason);
+  }
 }
 
 int ObPartTransCtx::submit_redo_log_out(ObTxLogBlock &log_block,

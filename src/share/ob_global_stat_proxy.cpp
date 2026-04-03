@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_dml_sql_splicer.h"
 #include "rootserver/ob_root_utils.h"
 
 namespace oceanbase
@@ -57,6 +58,8 @@ int ObGlobalStatProxy::set_init_value(
     ObGlobalStatItem target_data_version_item(list, "target_data_version", static_cast<int64_t>(target_data_version));
     ObGlobalStatItem upgrade_begin_data_version_item(list, "upgrade_begin_data_version", static_cast<int64_t>(upgrade_begin_data_version));
     ObGlobalStatItem current_data_version_item(list, "current_data_version", static_cast<int64_t>(current_data_version));
+    ObGlobalStatItem change_stream_refresh_scn_item(list, "change_stream_refresh_scn", 0);
+    ObGlobalStatItem change_stream_min_dep_lsn_item(list, "change_stream_min_dep_lsn", 0);
 
     if (OB_FAIL(update(list))) {
       LOG_WARN("update failed", KR(ret), K(list));
@@ -96,6 +99,8 @@ int ObGlobalStatProxy::set_tenant_init_global_stat(
     ObGlobalStatItem upgrade_begin_data_version_item(list, "upgrade_begin_data_version", static_cast<int64_t>(upgrade_begin_data_version));
     // only Normal state tenant can refresh snapshot_gc_scn
     ObGlobalStatItem snapshot_gc_scn_item(list, "snapshot_gc_scn", snapshot_gc_scn.get_val_for_inner_table_field());
+    ObGlobalStatItem change_stream_refresh_scn_item(list, "change_stream_refresh_scn", 0);
+    ObGlobalStatItem change_stream_min_dep_lsn_item(list, "change_stream_min_dep_lsn", 0);
     if (OB_FAIL(update(list))) {
       LOG_WARN("update failed", KR(ret), K(list));
     }
@@ -171,127 +176,6 @@ int ObGlobalStatProxy::set_ddl_epoch(const int64_t ddl_epoch, bool is_incrementa
   return ret;
 }
 
-int ObGlobalStatProxy::update_current_data_version(const uint64_t current_data_version)
-{
-  int ret = OB_SUCCESS;
-  ObGlobalStatItem::ItemList list;
-  ObGlobalStatItem item(list, "current_data_version", current_data_version);
-  bool is_incremental = true;
-  if (!is_valid() || current_data_version <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), "valid", is_valid(), K(current_data_version));
-  } else if (OB_FAIL(update(list, is_incremental))) {
-    LOG_WARN("update failed", KR(ret), K(list));
-  }
-  return ret;
-}
-
-
-int ObGlobalStatProxy::get_current_data_version(uint64_t &current_data_version)
-{
-  int ret = OB_SUCCESS;
-  current_data_version = 0;
-  ObGlobalStatItem::ItemList list;
-  ObGlobalStatItem item(list, "current_data_version", OB_INVALID_VERSION);
-  if (!is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid());
-  } else if (OB_FAIL(get(list))) {
-    LOG_WARN("get failed", KR(ret));
-  } else {
-    current_data_version = static_cast<uint64_t>(item.value_);
-  }
-  return ret;
-}
-
-int ObGlobalStatProxy::update_target_data_version(const uint64_t target_data_version)
-{
-  int ret = OB_SUCCESS;
-  ObGlobalStatItem::ItemList list;
-  ObGlobalStatItem item(list, "target_data_version", target_data_version);
-  bool is_incremental = true;
-  if (!is_valid() || target_data_version <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), "valid", is_valid(), K(target_data_version));
-  } else if (OB_FAIL(update(list, is_incremental))) {
-    LOG_WARN("update failed", KR(ret), K(list));
-  }
-  return ret;
-}
-
-int ObGlobalStatProxy::get_target_data_version(
-    const bool for_update,
-    uint64_t &target_data_version)
-{
-  int ret = OB_SUCCESS;
-  target_data_version = 0;
-  ObGlobalStatItem::ItemList list;
-  ObGlobalStatItem item(list, "target_data_version", OB_INVALID_VERSION);
-  if (!is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid());
-  } else if (OB_FAIL(get(list, for_update))) {
-    LOG_WARN("get failed", KR(ret));
-  } else {
-    target_data_version = static_cast<uint64_t>(item.value_);
-  }
-  return ret;
-}
-
-int ObGlobalStatProxy::update_upgrade_begin_data_version(const uint64_t upgrade_begin_data_version)
-{
-  int ret = OB_SUCCESS;
-  ObGlobalStatItem::ItemList list;
-  ObGlobalStatItem item(list, "upgrade_begin_data_version", upgrade_begin_data_version);
-  bool is_incremental = true;
-  if (!is_valid() || upgrade_begin_data_version <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), "valid", is_valid(), K(upgrade_begin_data_version));
-  } else if (OB_FAIL(update(list, is_incremental))) {
-    LOG_WARN("update failed", KR(ret), K(list));
-  }
-  return ret;
-}
-
-int ObGlobalStatProxy::get_upgrade_begin_data_version(
-    const bool for_update,
-    uint64_t &upgrade_begin_data_version)
-{
-  int ret = OB_SUCCESS;
-  upgrade_begin_data_version = 0;
-  ObGlobalStatItem::ItemList list;
-  ObGlobalStatItem item(list, "upgrade_begin_data_version", OB_INVALID_VERSION);
-  if (!is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid());
-  } else if (OB_FAIL(get(list, for_update))) {
-    LOG_WARN("get failed", KR(ret));
-  } else {
-    upgrade_begin_data_version = static_cast<uint64_t>(item.value_);
-  }
-  return ret;
-}
-
-
-int ObGlobalStatProxy::get_finish_data_version(uint64_t &finish_data_version,
-                                               share::SCN &barrier_scn) {
-  int ret = OB_SUCCESS;
-  finish_data_version = 0;
-  ObGlobalStatItem::ItemList list;
-  ObGlobalStatItem version_item(list, "finish_data_version", OB_INVALID_VERSION);
-  ObGlobalStatItem scn_item(list, "data_version_barrier_scn", OB_INVALID_SCN_VAL);
-  if (!is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid());
-  } else if (OB_FAIL(get(list))) {
-    LOG_WARN("get failed", KR(ret));
-  } else {
-    finish_data_version = static_cast<uint64_t>(version_item.value_);
-    barrier_scn.convert_for_inner_table_field(static_cast<uint64_t>(scn_item.value_));
-  }
-  return ret;
-}
-
 int ObGlobalStatProxy::update_major_refresh_mv_merge_scn(const share::SCN &scn, bool is_incremental)
 {
   int ret = OB_SUCCESS;
@@ -320,26 +204,6 @@ int ObGlobalStatProxy::get_major_refresh_mv_merge_scn(const bool for_update, sha
     LOG_WARN("get failed", KR(ret));
   } else {
     scn.convert_for_inner_table_field(static_cast<uint64_t>(scn_item.value_));
-  }
-  return ret;
-}
-
-int ObGlobalStatProxy::get_target_data_version_ora_rowscn(
-  const uint64_t tenant_id,
-  share::SCN &target_data_version_ora_rowscn)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString sql;
-  target_data_version_ora_rowscn.set_invalid();
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("GCTX.sql_proxy_ is null", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(sql.assign_fmt(
-              "SELECT ORA_ROWSCN FROM %s WHERE TABLE_NAME = '__all_global_stat' AND COLUMN_NAME"
-              " = 'target_data_version'", OB_ALL_CORE_TABLE_TNAME))) {
-    LOG_WARN("assign sql failed", KR(ret));
-  } else if (OB_FAIL(ObShareUtil::get_ora_rowscn(*GCTX.sql_proxy_, tenant_id, sql, target_data_version_ora_rowscn))) {
-    LOG_WARN("fail to get target_data_version_ora_rowscn", KR(ret), K(tenant_id), K(sql));
   }
   return ret;
 }
@@ -712,6 +576,185 @@ int ObGlobalStatProxy::select_ddl_epoch_for_update(
       LOG_WARN("get more row than one", KR(ret), KR(tmp_ret));
     } else {
       ret = OB_SUCCESS;
+    }
+  }
+  return ret;
+}
+
+// ---------------------------------------------------------------------------
+// Change Stream: advance change_stream_refresh_scn in __all_global_stat.
+// Only advances (UPDATE … WHERE column_value < new_val) to guarantee monotonic progress.
+// ---------------------------------------------------------------------------
+int ObGlobalStatProxy::advance_change_stream_refresh_scn(
+    common::ObISQLClient &sql_client,
+    const uint64_t tenant_id,
+    const SCN &refresh_scn,
+    int64_t &affected_rows)
+{
+  int ret = OB_SUCCESS;
+  affected_rows = 0;
+  if (!is_valid_tenant_id(tenant_id) || !refresh_scn.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(refresh_scn));
+  } else {
+    ObSqlString sql;
+    const uint64_t scn_val = refresh_scn.get_val_for_inner_table_field();
+    if (OB_FAIL(sql.assign_fmt(
+        "UPDATE %s SET column_value = %lu WHERE table_name = '%s' AND "
+        "column_name = '%s' AND column_value < %lu",
+        OB_ALL_CORE_TABLE_TNAME, scn_val,
+        "__all_global_stat", "change_stream_refresh_scn", scn_val))) {
+      LOG_WARN("fail to assign sql", KR(ret), K(tenant_id), K(scn_val));
+    } else if (OB_FAIL(sql_client.write(tenant_id, sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", KR(ret), K(tenant_id), K(sql));
+    }
+  }
+  return ret;
+}
+
+int ObGlobalStatProxy::get_change_stream_refresh_scn(
+    common::ObISQLClient &sql_client,
+    const uint64_t tenant_id,
+    const bool for_update,
+    SCN &refresh_scn)
+{
+  int ret = OB_SUCCESS;
+  refresh_scn.reset();
+  if (!is_valid_tenant_id(tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
+  } else {
+    ObSqlString sql;
+    const char *for_update_str = for_update ? "FOR UPDATE" : "";
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      common::sqlclient::ObMySQLResult *result = nullptr;
+      if (OB_FAIL(sql.assign_fmt(
+          "SELECT column_value FROM %s WHERE table_name = '%s' AND column_name = '%s' %s",
+          OB_ALL_CORE_TABLE_TNAME,
+          "__all_global_stat", "change_stream_refresh_scn", for_update_str))) {
+        LOG_WARN("fail to assign sql", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(tenant_id), K(sql));
+      } else if (OB_ISNULL(result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("result is null", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(result->next())) {
+        LOG_WARN("fail to get next row", KR(ret), K(tenant_id));
+      } else {
+        ObString column_value_str;
+        EXTRACT_VARCHAR_FIELD_MYSQL(*result, "column_value", column_value_str);
+        if (OB_SUCC(ret)) {
+          char *endptr = nullptr;
+          char buf[common::MAX_ZONE_INFO_LENGTH] = {0};
+          const int64_t str_len = column_value_str.length();
+          const int64_t buf_len = sizeof(buf);
+          if (str_len <= 0 || column_value_str.empty()) {
+            refresh_scn = SCN::min_scn();
+          } else if (str_len >= buf_len) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("buf not enough for column_value", KR(ret), K(tenant_id), K(str_len));
+          } else {
+            MEMCPY(buf, column_value_str.ptr(), str_len);
+            buf[str_len] = '\0';
+            const uint64_t scn_val = strtoull(buf, &endptr, 0);
+            if ('\0' != *endptr) {
+              ret = OB_INVALID_DATA;
+              LOG_WARN("invalid column_value for change_stream_refresh_scn", KR(ret), K(tenant_id), K(column_value_str));
+            } else if (OB_FAIL(refresh_scn.convert_for_inner_table_field(scn_val))) {
+              LOG_WARN("fail to convert val to SCN", KR(ret), K(scn_val));
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// ---------------------------------------------------------------------------
+// Change Stream: advance change_stream_min_dep_lsn in __all_global_stat.
+// Min LSN that change stream still depends on; only advance (larger value) for log recycling.
+// ---------------------------------------------------------------------------
+int ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
+    common::ObISQLClient &sql_client,
+    const uint64_t tenant_id,
+    const int64_t min_dep_lsn,
+    int64_t &affected_rows)
+{
+  int ret = OB_SUCCESS;
+  affected_rows = 0;
+  if (!is_valid_tenant_id(tenant_id) || min_dep_lsn < 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(min_dep_lsn));
+  } else {
+    ObSqlString sql;
+    if (OB_FAIL(sql.assign_fmt(
+        "UPDATE %s SET column_value = %ld WHERE table_name = '%s' AND "
+        "column_name = '%s' AND column_value < %ld",
+        OB_ALL_CORE_TABLE_TNAME, min_dep_lsn,
+        "__all_global_stat", "change_stream_min_dep_lsn", min_dep_lsn))) {
+      LOG_WARN("fail to assign sql", KR(ret), K(tenant_id), K(min_dep_lsn));
+    } else if (OB_FAIL(sql_client.write(tenant_id, sql.ptr(), affected_rows))) {
+      LOG_WARN("fail to execute sql", KR(ret), K(tenant_id), K(sql));
+    }
+  }
+  return ret;
+}
+
+int ObGlobalStatProxy::get_change_stream_min_dep_lsn(
+    common::ObISQLClient &sql_client,
+    const uint64_t tenant_id,
+    const bool for_update,
+    int64_t &min_dep_lsn)
+{
+  int ret = OB_SUCCESS;
+  min_dep_lsn = 0;
+  if (!is_valid_tenant_id(tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(tenant_id));
+  } else {
+    ObSqlString sql;
+    const char *for_update_str = for_update ? "FOR UPDATE" : "";
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      common::sqlclient::ObMySQLResult *result = nullptr;
+      if (OB_FAIL(sql.assign_fmt(
+          "SELECT column_value FROM %s WHERE table_name = '%s' AND column_name = '%s' %s",
+          OB_ALL_CORE_TABLE_TNAME,
+          "__all_global_stat", "change_stream_min_dep_lsn", for_update_str))) {
+        LOG_WARN("fail to assign sql", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(sql_client.read(res, tenant_id, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(tenant_id), K(sql));
+      } else if (OB_ISNULL(result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("result is null", KR(ret), K(tenant_id));
+      } else if (OB_FAIL(result->next())) {
+        LOG_WARN("fail to get next row", KR(ret), K(tenant_id));
+      } else {
+        ObString column_value_str;
+        EXTRACT_VARCHAR_FIELD_MYSQL(*result, "column_value", column_value_str);
+        if (OB_SUCC(ret)) {
+          char *endptr = nullptr;
+          char buf[common::MAX_ZONE_INFO_LENGTH] = {0};
+          const int64_t str_len = column_value_str.length();
+          const int64_t buf_len = sizeof(buf);
+          if (str_len <= 0 || column_value_str.empty()) {
+            min_dep_lsn = 0;
+          } else if (str_len >= buf_len) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("buf not enough for column_value", KR(ret), K(tenant_id), K(str_len));
+          } else {
+            MEMCPY(buf, column_value_str.ptr(), str_len);
+            buf[str_len] = '\0';
+            const int64_t val = strtoll(buf, &endptr, 0);
+            if ('\0' != *endptr) {
+              ret = OB_INVALID_DATA;
+              LOG_WARN("invalid column_value for change_stream_min_dep_lsn", KR(ret), K(tenant_id), K(column_value_str));
+            } else {
+              min_dep_lsn = val;
+            }
+          }
+        }
+      }
     }
   }
   return ret;

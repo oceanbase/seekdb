@@ -37,8 +37,7 @@ namespace observer
     private:
       enum SYS_COLUMN
       {
-        TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-        TYPE,
+        TYPE = common::OB_APP_MIN_COLUMN_ID,
         MODULE_NAME,
         ACTION_NAME,
         CLIENT_IDENTIFIER,

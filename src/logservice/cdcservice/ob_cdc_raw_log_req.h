@@ -1,0 +1,375 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_CDC_RAW_LOG_REQ_H_
+#define OCEANBASE_CDC_RAW_LOG_REQ_H_
+
+#include "lib/compress/ob_compress_util.h"
+#include "logservice/palf/lsn.h"
+#include "ob_cdc_req_struct.h"
+#include "share/ob_ls_id.h"
+#include "share/scn.h"
+
+namespace oceanbase
+{
+
+namespace obrpc
+{
+
+class ObCdcFetchRawLogReq
+{
+public:
+  OB_UNIS_VERSION(1);
+public:
+  ObCdcFetchRawLogReq() { reset(); }
+  ~ObCdcFetchRawLogReq() { reset(); }
+  void reset();
+
+  // would not reset other fields
+  // if caller want to get a brand new rpc request
+  // use reset above
+  void reset(const share::ObLSID &ls_id,
+       const palf::LSN &start_lsn,
+       const uint64_t size,
+       const int64_t progress);
+
+  void set_aux_param(const int64_t file_id,
+       const int32_t seq_no,
+       const int32_t rpc_count)
+  {
+    set_file_id(file_id);
+    set_seq_no(seq_no),
+    set_current_round_rpc_count(rpc_count);
+  }
+
+  void set_client_id(const ObCdcRpcId &client_id) {
+    client_id_ = client_id;
+  }
+
+  const ObCdcRpcId &get_client_id() const {
+    return client_id_;
+  }
+
+  void set_tenant_id(const uint64_t tenant_id) {
+    tenant_id_ = tenant_id;
+  }
+
+  uint64_t get_tenant_id() const {
+    return tenant_id_;
+  }
+
+  const share::ObLSID& get_ls_id() const {
+    return ls_id_;
+  }
+
+  const palf::LSN& get_start_lsn() const {
+    return start_lsn_;
+  }
+
+  void set_file_id(const int64_t file_id) {
+    file_id_ = file_id;
+  }
+
+  int64_t get_file_id() const {
+    return file_id_;
+  }
+
+  uint64_t get_req_size() const {
+    return size_;
+  }
+
+  int64_t get_progress() const {
+    return progress_;
+  }
+
+  void set_seq_no(const int32_t seq) {
+    seq_ = seq;
+  }
+
+  int32_t get_seq_no() const {
+    return seq_;
+  }
+
+  void set_current_round_rpc_count(const int32_t rpc_count) {
+    cur_round_rpc_count_ = rpc_count;
+  }
+
+  int32_t get_current_round_rpc_count() const {
+    return cur_round_rpc_count_;
+  }
+
+  void set_compressor_type(const common::ObCompressorType comp_type) {
+    compressor_type_ = comp_type;
+  }
+
+  common::ObCompressorType get_compressor_type() const {
+    return compressor_type_;
+  }
+
+  void set_flag(int8_t flag) {
+    flag_ = flag;
+  }
+
+  int8_t get_flag() const {
+    return flag_;
+  }
+
+  void set_client_type(const obrpc::ObCdcClientType client_type) {
+    client_type_ = client_type;
+  }
+
+  obrpc::ObCdcClientType get_client_type() const {
+    return client_type_;
+  }
+
+  TO_STRING_KV(
+    K(client_id_),
+    K(tenant_id_),
+    K(ls_id_),
+    K(start_lsn_),
+    K(file_id_),
+    K(size_),
+    K(progress_),
+    K(seq_),
+    K(cur_round_rpc_count_),
+    K(compressor_type_),
+    K(flag_)
+  );
+
+private:
+	int64_t rpc_ver_;
+	ObCdcRpcId client_id_;
+	uint64_t tenant_id_;
+	share::ObLSID ls_id_;
+	palf::LSN start_lsn_;
+	int64_t file_id_;
+	uint64_t size_;
+	int64_t progress_;
+	int32_t seq_;
+	int32_t cur_round_rpc_count_;
+	ObCompressorType compressor_type_;
+	int8_t flag_;
+  ObCdcClientType client_type_;
+};
+
+enum class ObCdcFetchRawSource
+{
+  UNKNOWN,
+  PALF,
+  ARCHIVE,
+};
+
+class ObCdcFetchRawStatus
+{
+public:
+  OB_UNIS_VERSION(1);
+public:
+  ObCdcFetchRawStatus() { reset(); }
+  ~ObCdcFetchRawStatus() { reset(); }
+  void reset() {
+    source_ = ObCdcFetchRawSource::UNKNOWN;
+    read_active_file_ = false;
+    process_time_ = 0;
+    read_palf_time_ = 0;
+    local_to_svr_time_ = 0;
+    queue_time_ = 0;
+  }
+
+  void set_source(const ObCdcFetchRawSource source) {
+    source_ = source;
+  }
+
+  ObCdcFetchRawSource get_source() const {
+    return source_;
+  }
+
+  void set_read_active(bool read_active) {
+    read_active_file_ = read_active;
+  }
+
+  bool get_read_active() const {
+    return read_active_file_;
+  }
+
+  void set_process_time(const int64_t ptime) {
+    process_time_ = ptime;
+  }
+
+  int64_t get_process_time() const {
+    return process_time_;
+  }
+  void set_read_palf_time(const int64_t rtime) {
+    read_palf_time_ = rtime;
+  }
+
+  int64_t get_read_palf_time() const {
+    return read_palf_time_;
+  }
+
+  void set_read_archive_time(const int64_t rtime) {
+    read_archive_time_ = rtime;
+  }
+
+  int64_t get_read_archive_time() const {
+    return read_archive_time_;
+  }
+
+  void set_local_to_svr_time(const int64_t l2s_time) {
+    local_to_svr_time_ = l2s_time;
+  }
+
+  int64_t get_local_to_svr_time() const {
+    return local_to_svr_time_;
+  }
+
+  void set_queue_time(const int64_t qtime) {
+    queue_time_ = qtime;
+  }
+
+  int64_t get_queue_time() const {
+    return queue_time_;
+  }
+
+  TO_STRING_KV(
+    K(source_),
+    K(read_active_file_),
+    K(process_time_),
+    K(read_palf_time_),
+    K(read_archive_time_),
+    K(local_to_svr_time_),
+    K(queue_time_)
+  );
+
+private:
+	ObCdcFetchRawSource source_;
+	bool read_active_file_;
+	int64_t process_time_;
+	int64_t read_palf_time_;
+  int64_t read_archive_time_;
+  int64_t local_to_svr_time_;
+	int64_t queue_time_;
+};
+
+class ObCdcFetchRawLogResp
+{
+public:
+  static const int64_t FETCH_BUF_LEN = 8 << 20; // 20MB
+public:
+  OB_UNIS_VERSION(1);
+public:
+  ObCdcFetchRawLogResp() {
+    reset();
+  }
+  ~ObCdcFetchRawLogResp() { reset(); }
+
+  void reset();
+
+  // these info is get from rpc request, set them once.
+  void reset(const share::ObLSID &ls_id,
+       const int64_t file_id,
+       const int32_t seq_no,
+       const int32_t cur_round_rpc_count);
+
+  void set_err(const int32_t err) {
+    err_ = err;
+  }
+
+  int32_t get_err() const {
+    return err_;
+  }
+
+  void set_feedback(const FeedbackType feedback) {
+    feedback_type_ = feedback;
+  }
+
+  FeedbackType get_feedback() const {
+    return feedback_type_;
+  }
+
+  ObCdcFetchRawStatus &get_fetch_status() {
+    return fetch_status_;
+  }
+
+  const ObCdcFetchRawStatus &get_fetch_status() const {
+    return fetch_status_;
+  }
+
+  void set_read_size(const int64_t read_size) {
+    read_size_ = read_size;
+  }
+
+  int64_t get_read_size() const {
+    return read_size_;
+  }
+
+  void set_replayable_point_scn(const share::SCN &scn) {
+    replayable_point_scn_ = scn;
+  }
+
+  const share::SCN &get_replayable_point_scn() const {
+    return replayable_point_scn_;
+  }
+
+  const char *get_log_data() const {
+    return log_entry_buf_ + aligned_offset_;
+  }
+
+  char *get_log_buffer() {
+    return log_entry_buf_ + aligned_offset_;
+  }
+
+  const char *get_log_buffer() const {
+    return log_entry_buf_ + aligned_offset_;
+  }
+
+  int64_t get_buffer_len() const {
+    // assume that log_entry_buf is a array
+    return FETCH_BUF_LEN;
+  }
+
+  TO_STRING_KV(
+    K(err_),
+    K(ls_id_),
+    K(file_id_),
+    K(seq_),
+    K(cur_round_rpc_count_),
+    K(feedback_type_),
+    K(fetch_status_),
+    K(read_size_),
+    K(replayable_point_scn_),
+    K(aligned_offset_)
+  );
+
+private:
+  int64_t rpc_ver_;
+  int32_t err_;
+  share::ObLSID ls_id_;
+  int64_t file_id_;
+  int32_t seq_;
+  int32_t cur_round_rpc_count_;
+  FeedbackType feedback_type_;
+  ObCdcFetchRawStatus fetch_status_;
+  int64_t read_size_;
+  share::SCN replayable_point_scn_;
+  int64_t aligned_offset_;    // just for alignment, never serialize or deserialize it
+  char log_entry_buf_[FETCH_BUF_LEN + palf::LOG_DIO_ALIGN_SIZE];
+};
+
+}
+
+}
+
+#endif

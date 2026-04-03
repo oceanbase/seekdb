@@ -40,7 +40,6 @@ ObTenantFreezer::ObTenantFreezer()
     is_freezing_tx_data_(false),
     svr_rpc_proxy_(nullptr),
     common_rpc_proxy_(nullptr),
-    rs_mgr_(nullptr),
     freeze_trigger_tg_id_(-1),
     freeze_trigger_timer_task_(*this),
     freeze_thread_pool_(),
@@ -65,7 +64,6 @@ void ObTenantFreezer::destroy()
   self_.reset();
   svr_rpc_proxy_ = nullptr;
   common_rpc_proxy_ = nullptr;
-  rs_mgr_ = nullptr;
   freezer_stat_.reset();
   freezer_history_.reset();
   throttle_is_skipping_cache_.reset();
@@ -88,11 +86,10 @@ int ObTenantFreezer::init()
   } else if (OB_UNLIKELY(!GCONF.self_addr_.is_valid()) ||
              OB_ISNULL(GCTX.net_frame_) ||
              OB_ISNULL(GCTX.srv_rpc_proxy_) ||
-             OB_ISNULL(GCTX.rs_rpc_proxy_) ||
-             OB_ISNULL(GCTX.rs_mgr_)) {
+             OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[TenantFreezer] invalid argument", KR(ret), KP(GCTX.srv_rpc_proxy_),
-             KP(GCTX.rs_rpc_proxy_), KP(GCTX.rs_mgr_), K(GCONF.self_addr_));
+             KP(GCTX.rs_rpc_proxy_), K(GCONF.self_addr_));
   } else if (OB_FAIL(freeze_thread_pool_.init_and_start(FREEZE_THREAD_NUM))) {
     LOG_WARN("[TenantFreezer] fail to initialize freeze thread pool", KR(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantFreezer, freeze_trigger_tg_id_))) {
@@ -106,7 +103,6 @@ int ObTenantFreezer::init()
     self_ = GCONF.self_addr_;
     svr_rpc_proxy_ = GCTX.srv_rpc_proxy_;
     common_rpc_proxy_ = GCTX.rs_rpc_proxy_;
-    rs_mgr_ = GCTX.rs_mgr_;
     tenant_info_.tenant_id_ = MTL_ID();
     freezer_stat_.reset();
     freezer_history_.reset();

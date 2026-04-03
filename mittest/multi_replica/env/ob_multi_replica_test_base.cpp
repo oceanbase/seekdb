@@ -159,7 +159,7 @@ int ObMultiReplicaTestBase::bootstrap_multi_replica( const std::string & app_nam
   if (!is_inited_ && OB_SUCC(ret)) {
     env_prefix_ =
         env_prefix + "_test_data"; //+ std::to_string(ObTimeUtility::current_time()) + "_";
-    exec_dir_ = get_current_dir_name();
+    exec_dir_ = getcwd(NULL, 0);
     env_prefix_path_ = exec_dir_ + "/" + env_prefix_;
     event_file_path_ = env_prefix_path_ + "/" + CLUSTER_EVENT_FILE_NAME;
 

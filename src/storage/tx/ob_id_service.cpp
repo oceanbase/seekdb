@@ -75,15 +75,15 @@ int ObIDService::check_and_fill_ls()
 
     if (OB_ISNULL(ls_svr)) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "log stream service is NULL", K(ret));
+      TRANS_LOG(WARN, "log stream service is NULL", K(ret), K(MTL_ID()), K(IDS_LS));
     } else if (OB_FAIL(ls_svr->get_ls(IDS_LS, handle, ObLSGetMod::TRANS_MOD))) {
-      TRANS_LOG(WARN, "get id service log stream failed");
+      TRANS_LOG(WARN, "get id service log stream failed", K(ret), K(MTL_ID()), K(IDS_LS));
     } else if (OB_ISNULL(ls = handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "id service log stream not exist");
+      TRANS_LOG(WARN, "id service log stream not exist", K(ret), K(MTL_ID()), K(IDS_LS));
     } else {
       ls_ = ls;
-      TRANS_LOG(INFO, "ls set success");
+      TRANS_LOG(INFO, "ls set success", K(MTL_ID()), K(IDS_LS), KP(ls_));
     }
   }
   return ret;

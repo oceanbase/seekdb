@@ -100,6 +100,7 @@ public:
 	    ReadBuf &read_buf,
 	    int64_t &out_read_size, 
             LogIOContext &io_ctx) final;
+  LSN get_log_tail() const { return log_tail_; }
   INHERIT_TO_STRING_KV("ILogStorage", ILogStorage, K_(start_lsn), K_(log_tail), KP(buf_), K_(buf_len), K_(is_inited));
 private:
   const char *buf_;

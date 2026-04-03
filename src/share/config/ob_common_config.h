@@ -100,18 +100,13 @@ public:
   virtual ObServerRole get_server_type() const = 0;
   virtual bool is_debug_sync_enabled() const { return false; }
   virtual uint64_t get_tenant_id() const { return common::OB_SYS_TENANT_ID; }
-  int to_json_array(ObIAllocator &allocator, ObJsonArray &j_arr) const;
-
-  OB_UNIS_VERSION_V(1);
-
-protected:
-  // whitout lock, only used inner
-  virtual int add_extra_config_unsafe(const char *config_str,
-                               const int64_t version,
-                               const bool check_config);
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCommonConfig);
+  protected:
+   // whitout lock, only used inner
+  virtual int add_extra_config_unsafe(const char *config_str,
+                                      const int64_t version,
+                                      const bool check_config);
 };
 
 } //end of namespace common

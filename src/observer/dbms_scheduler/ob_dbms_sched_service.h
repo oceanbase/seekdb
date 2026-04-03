@@ -20,7 +20,7 @@
 #include "share/ob_define.h"
 #include "logservice/ob_log_base_type.h"                        //ObIRoleChangeSubHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/dbms_scheduler/ob_dbms_sched_job_master.h"
-#include "rootserver/ob_primary_ls_service.h" // ObTenantThreadHelper
+#include "rootserver/ob_tenant_thread_helper.h" // for ObTenantThreadHelper
 
 namespace oceanbase
 {

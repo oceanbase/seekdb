@@ -48,8 +48,6 @@ int ObDiskUsageReportTask::init(ObMySQLProxy &sql_proxy)
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(result_map_.create(OB_MAX_SERVER_TENANT_CNT * 5, SET_USE_500("OB_DISK_REP")))) {
     STORAGE_LOG(WARN, "Failed to create result_map_", K(ret));
-  } else if (OB_FAIL(disk_usage_table_operator_.init(sql_proxy))) {
-    STORAGE_LOG(WARN, "failed to init disk_usage_table_operator_", K(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     is_inited_ = true;
@@ -83,9 +81,6 @@ void ObDiskUsageReportTask::runTimerTask()
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "fail to get server ip", K(ret), K(addr));
   } else {
-     if (OB_FAIL(execute_gc_disk_usage(addr_buffer, addr.get_port(), self_svr_seq))) {
-        STORAGE_LOG(WARN, "fail to gc tenant stat", K(ret));
-     }
      if (OB_FAIL(report_tenant_disk_usage(addr_buffer, addr.get_port(), self_svr_seq))) {
        STORAGE_LOG(WARN, "Failed to report tenant disk usage", K(ret));
      }
@@ -157,15 +152,6 @@ int ObDiskUsageReportTask::report_tenant_disk_usage(const char *svr_ip,
   } else if (OB_FAIL(result_map_.foreach_refactored(copy_result))) {
     STORAGE_LOG(WARN, "fail to copy result", K(ret));
   }
-  for (int64_t i = 0; i < result_arr.count() && OB_SUCC(ret); ++i) {
-    const ObDiskUsageReportMap &pair = result_arr.at(i);
-    if (OB_FAIL(disk_usage_table_operator_.update_tenant_space_usage(
-        pair.first.tenant_id_, svr_ip, svr_port, seq_num,
-        pair.first.file_type_, pair.second.first, pair.second.second))) {
-      STORAGE_LOG(WARN, "failed to update disk usage of log and meta", K(ret), K(pair.first));
-    }
-  }
-
   return ret;
 }
 
@@ -463,52 +449,6 @@ int ObDiskUsageReportTask::count_tenant_tmp()
         } // end MTL_SWITCH
       }
     } // end for
-  }
-  return ret;
-}
-
-
-int ObDiskUsageReportTask::delete_tenant_all(const uint64_t tenant_id,
-                                             const char *svr_ip,
-                                             const int32_t svr_port,
-                                             const int64_t seq_num)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    STORAGE_LOG(WARN, "ObDistUsageReportTask not init", K(ret));
-  } else if (OB_FAIL(disk_usage_table_operator_.delete_tenant_all(tenant_id,
-                                                                  svr_ip,
-                                                                  svr_port,
-                                                                  seq_num))) {
-    STORAGE_LOG(WARN, "failed to delete all tenant rows", K(ret), K(tenant_id), K(svr_ip),
-        K(svr_port), K(seq_num));
-  }
-  return ret;
-}
-
-int ObDiskUsageReportTask::execute_gc_disk_usage(const char *svr_ip,
-                                                 const int32_t svr_port,
-                                                 const int64_t seq_num)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<uint64_t, 16> tenant_ids;
-
-  if (OB_ISNULL(svr_ip) || OB_UNLIKELY(svr_port <= 0 || seq_num < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(ret), KP(svr_ip), K(svr_port), K(seq_num));
-  } else if (OB_FAIL(disk_usage_table_operator_.get_all_tenant_ids(
-      svr_ip, svr_port, seq_num, tenant_ids))) {
-    STORAGE_LOG(WARN, "failed to get all tenant ids", K(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); i++) {
-      const uint64_t tenant_id = tenant_ids.at(i);
-      if (GCTX.omt_->has_tenant(tenant_id)) {
-        continue; // do nothing, just skip;
-      } else if (OB_FAIL(delete_tenant_all(tenant_id, svr_ip, svr_port, seq_num))) {
-        STORAGE_LOG(WARN, "failed to delete tenant all", K(ret), K(tenant_id));
-      }
-    }
   }
   return ret;
 }

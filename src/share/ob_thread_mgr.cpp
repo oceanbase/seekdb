@@ -19,9 +19,6 @@
 #include "storage/tx/ob_trans_service.h"
 #include "observer/ob_srv_deliver.h"
 #include "observer/ob_startup_accel_task_handler.h"
-#ifdef OB_BUILD_ARBITRATION
-#include "logservice/arbserver/ob_arb_srv_deliver.h"
-#endif
 #include "logservice/rcservice/ob_role_change_service.h"
 #include "observer/ob_startup_accel_task_handler.h"
 #ifdef OB_BUILD_SHARED_STORAGE

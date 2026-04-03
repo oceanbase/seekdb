@@ -1,0 +1,92 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_LOGSERVICE_OB_LOG_RESTORE_DEFINE_H_
+#define OCEANBASE_LOGSERVICE_OB_LOG_RESTORE_DEFINE_H_
+
+#include "lib/container/ob_array.h"           // Array
+#include "lib/net/ob_addr.h"                  // ObAddr
+#include "lib/ob_define.h"
+#include "lib/string/ob_fixed_length_string.h"
+#include "lib/utility/ob_macro_utils.h"
+#include "lib/utility/ob_print_utils.h"
+#include "logservice/palf/lsn.h"              // LSN
+#include "share/ob_define.h"
+#include "share/backup/ob_backup_struct.h"     // ObBackupPathString
+namespace oceanbase
+{
+namespace logservice
+{
+const int64_t MAX_FETCH_LOG_BUF_LEN = 4 * 1024 * 1024L;
+const int64_t MAX_LS_FETCH_LOG_TASK_CONCURRENCY = 4;
+
+typedef std::pair<share::ObBackupPathString, share::ObBackupPathString> DirInfo;
+typedef common::ObSEArray<std::pair<share::ObBackupPathString, share::ObBackupPathString>, 1> DirArray;
+
+struct ObLogRestoreErrorContext
+{
+  enum class ErrorType
+  {
+    FETCH_LOG,
+    SUBMIT_LOG,
+  };
+
+  ErrorType error_type_;
+  int ret_code_;
+  share::ObTaskId trace_id_;
+  palf::LSN err_lsn_;
+  ObLogRestoreErrorContext() { reset(); }
+  virtual ~ObLogRestoreErrorContext() { reset(); }
+  void reset();
+  ObLogRestoreErrorContext &operator=(const ObLogRestoreErrorContext &other);
+  TO_STRING_KV(K_(ret_code), K_(trace_id), K_(error_type), K_(err_lsn));
+};
+
+struct ObRestoreLogContext
+{
+  bool seek_done_;
+  palf::LSN lsn_;
+
+  ObRestoreLogContext() { reset(); }
+  ~ObRestoreLogContext() { reset(); }
+  void reset();
+  TO_STRING_KV(K_(seek_done), K_(lsn));
+};
+
+struct ObLogRestoreSourceTenant final
+{
+  ObLogRestoreSourceTenant() { reset(); }
+  ~ObLogRestoreSourceTenant() { reset(); }
+  void reset();
+  int set(const ObLogRestoreSourceTenant &other);
+  bool is_valid() const;
+  int64_t source_cluster_id_;
+  uint64_t source_tenant_id_;
+  common::ObFixedLengthString<OB_MAX_USER_NAME_LENGTH> user_name_;
+  common::ObFixedLengthString<OB_MAX_PASSWORD_LENGTH> user_passwd_;
+  bool is_oracle_;
+  common::ObArray<common::ObAddr> ip_list_;
+
+  TO_STRING_KV(K_(source_cluster_id),
+      K_(source_tenant_id),
+      K_(user_name),
+      K_(user_passwd),  // TODO remove it
+      K_(is_oracle),
+      K_(ip_list));
+};
+} // namespace logservice
+} // namespace oceanbase
+
+#endif /* OCEANBASE_LOGSERVICE_OB_LOG_RESTORE_DEFINE_H_ */

@@ -40,33 +40,10 @@ int ObExpVisitor::add_row(const Op &cur_op)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
   } else {
-    ObString ipstr;
-    common::ObAddr addr;
     ObQueryFlag scan_flag;
     for (int64_t i =  0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
-      case ObPlanCachePlanExplain::TENANT_ID_COL : {
-        cells[i].set_int(tenant_id_);
-        break;
-      }
-      case ObPlanCachePlanExplain::IP_COL: {
-        ipstr.reset();
-        if (OB_FAIL(ObServerUtils::get_server_ip(&allocator_, ipstr))) {
-          SERVER_LOG(ERROR, "get server ip failed", K(ret));
-        } else {
-          cells[i].set_varchar(ipstr);
-          cells[i].set_collation_type(ObCharset::get_default_collation(
-                                        ObCharset::get_default_charset()));
-        }
-        break;
-      }
-      case ObPlanCachePlanExplain::PORT_COL: {
-        addr.reset();
-        addr = GCTX.self_addr();
-        cells[i].set_int(addr.get_port());
-        break;
-      }
       case ObPlanCachePlanExplain::PLAN_ID_COL: {
         cells[i].set_int(plan_id_);
         break;
@@ -352,12 +329,13 @@ int ObPlanCachePlanExplain::set_tenant_plan_id(const common::ObIArray<common::Ob
 {
   int ret = OB_SUCCESS;
   // display only one plan
+  // In single-node mode, rowkey only has plan_id (index 0)
   if (ranges.count() == 1 && ranges.at(0).is_single_rowkey()) {
     ObRowkey start_key = ranges.at(0).start_key_;
     const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
     scan_all_plan_ = false;
     if (OB_ISNULL(start_key_obj_ptr)
-        || start_key.get_obj_cnt() != 4)  /* (tenant_id, svr_ip, svr_port, plan_id) */ {
+        || start_key.get_obj_cnt() < 1) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN,
                  "fail to init plan visitor",
@@ -365,8 +343,8 @@ int ObPlanCachePlanExplain::set_tenant_plan_id(const common::ObIArray<common::Ob
                  K(start_key_obj_ptr),
                  "count", start_key.get_obj_cnt());
     } else {
-      tenant_id_ = start_key_obj_ptr[0].get_int();
-      plan_id_ = start_key_obj_ptr[3].get_int();
+      tenant_id_ = is_sys_tenant(effective_tenant_id_) ? OB_SYS_TENANT_ID : effective_tenant_id_;
+      plan_id_ = start_key_obj_ptr[0].get_int();  // plan_id is at index 0
     }
   } else {
     scan_all_plan_ = true;

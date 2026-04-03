@@ -87,22 +87,22 @@ drop procedure if exists drop_tenant_force;/
 create procedure drop_tenant_force(tenant_name varchar(64))
 begin
   declare recyclebin_value int;
-  select value from oceanbase.CDB_OB_SYS_VARIABLES where name = 'recyclebin' and tenant_id=1 into recyclebin_value;
+  select value from oceanbase.CDB_OB_SYS_VARIABLES where name = 'recyclebin' into recyclebin_value;
   set recyclebin = off;
 
   -- 首先删除租户
-  set @sql_text = concat("drop tenant if exists ", tenant_name, " force;");
-  prepare stmt from @sql_text;
-  execute stmt;
+  --set @sql_text = concat("drop tenant if exists ", tenant_name, " force;");
+  --prepare stmt from @sql_text;
+  --execute stmt;
 
   -- 清理resource pool
-  set @pool_name = concat("pool_for_tenant_", tenant_name);
-  set @sql_text = concat("drop resource pool if exists ", @pool_name, ";");
-  prepare stmt from @sql_text;
-  execute stmt;
+  --set @pool_name = concat("pool_for_tenant_", tenant_name);
+  --set @sql_text = concat("drop resource pool if exists ", @pool_name, ";");
+  --prepare stmt from @sql_text;
+  --execute stmt;
 
-  deallocate prepare stmt;
-  set recyclebin = recyclebin_value;
+  --deallocate prepare stmt;
+  --set recyclebin = recyclebin_value;
 end /
 
 -- =================================== create_mysql_tenant ===================================

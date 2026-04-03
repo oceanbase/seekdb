@@ -123,7 +123,6 @@ ob_set_subtarget(ob_share backup
   backup/ob_backup_connectivity.cpp
   backup/ob_backup_io_adapter.cpp
   backup/ob_backup_path.cpp
-  backup/ob_backup_server_mgr.cpp
   backup/ob_backup_struct.cpp
   backup/ob_tenant_archive_mgr.cpp
   backup/ob_tenant_archive_round.cpp
@@ -156,9 +155,6 @@ ob_set_subtarget(ob_share cache
 )
 
 ob_set_subtarget(ob_share common
-  ob_alive_server_tracer.cpp
-  ob_all_server_tracer.cpp
-  ob_arbitration_service_status.cpp
   ob_autoincrement_param.cpp
   ob_autoincrement_service.cpp
   ob_bg_thread_monitor.cpp
@@ -178,10 +174,11 @@ ob_set_subtarget(ob_share common
   ob_debug_sync.cpp
   ob_debug_sync_point.cpp
   ob_device_manager.cpp
-  ob_disk_usage_table_operator.cpp
   ob_dml_sql_splicer.cpp
   ob_encryption_util.cpp
   ob_errno.cpp
+  ob_kv_storage.cpp
+  ob_all_tenant_info.cpp
   ob_event_history_table_operator.cpp
   ob_tenant_id_schema_version.cpp
   ob_freeze_info_proxy.cpp
@@ -190,49 +187,36 @@ ob_set_subtarget(ob_share common
   ob_gais_rpc.cpp
   ob_get_compat_mode.cpp
   ob_global_autoinc_service.cpp
-  ob_global_context_operator.cpp
   ob_global_merge_table_operator.cpp
   ob_global_stat_proxy.cpp
   ob_gts_info.cpp
   ob_i_tablet_scan.cpp
   ob_index_builder_util.cpp
   ob_fts_index_builder_util.cpp
-  ob_inner_config_root_addr.cpp
   ob_io_device_helper.cpp
   ob_kv_parser.cpp
   ob_log_restore_proxy.cpp
-  ob_leader_election_waiter.cpp
   ob_lease_struct.cpp
-  ob_heartbeat_handler.cpp
-  ob_heartbeat_struct.cpp
   ob_list_parser.cpp
   ob_local_device.cpp
   ob_locality_info.cpp
-  ob_locality_priority.cpp
-  ob_locality_table_operator.cpp
   ob_ls_id.cpp
   ob_table_range.cpp
   ob_max_id_fetcher.cpp
   ob_occam_time_guard.cpp
   ob_order_perserving_encoder.cpp
   ob_partition_modify.cpp
-  ob_primary_zone_util.cpp
   ob_priv_common.cpp
   ob_proposal_id.cpp
   ob_plugin_helper.cpp
-  ob_replica_info.cpp
   ob_resource_limit.cpp
-  ob_root_addr_agent.cpp
   ob_rpc_share.cpp
-  ob_rs_mgr.cpp
   ob_scanner.cpp
   ob_schema_status_proxy.cpp
   ob_server_blacklist.cpp
   ob_server_locality_cache.cpp
   ob_server_status.cpp
   ob_server_struct.cpp
-  ob_server_table_operator.cpp
-  ob_service_epoch_proxy.cpp
   ob_share_util.cpp
   ob_simple_batch.cpp
   ob_simple_mem_limit_getter.cpp
@@ -245,7 +229,6 @@ ob_set_subtarget(ob_share common
   ob_tablet_meta_table_compaction_operator.cpp
   ob_task_define.cpp
   ob_telemetry.cpp
-  ob_tenant_info_proxy.cpp
   ob_tenant_role.cpp
   ob_tenant_switchover_status.cpp
   ob_tenant_mem_limit_getter.cpp
@@ -255,17 +238,13 @@ ob_set_subtarget(ob_share common
   ob_time_zone_info_manager.cpp
   ob_unique_index_row_transformer.cpp
   ob_unit_getter.cpp
-  ob_unit_table_operator.cpp
   ob_upgrade_utils.cpp
   ob_virtual_table_iterator.cpp
   ob_virtual_table_projector.cpp
   ob_virtual_table_scanner_iterator.cpp
-  ob_web_service_root_addr.cpp
-  ob_zone_info.cpp
   ob_freeze_info_manager.cpp
   ob_zone_merge_info.cpp
   ob_zone_merge_table_operator.cpp
-  ob_zone_table_operation.cpp
   ob_rootservice_list.cpp
   ob_admin_dump_helper.cpp
   ob_inner_kv_table_operator.cpp
@@ -278,7 +257,6 @@ ob_set_subtarget(ob_share common
   ob_partition_split_query.cpp
   ob_vec_index_builder_util.cpp
   ob_domain_index_builder_util.cpp
-  ob_service_name_proxy.cpp
   ob_compatibility_control.cpp
   ob_device_credential_task.cpp
   ob_dynamic_partition_manager.cpp
@@ -287,6 +265,10 @@ ob_set_subtarget(ob_share common
   ob_timezone_importer.cpp
   ob_srs_importer.cpp
 )
+
+# ob_local_device.cpp defines AIO emulation types/functions for Android/macOS that
+# conflict with stub definitions in ob_file.h when merged into the same translation unit.
+set_source_files_properties(ob_local_device.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 ob_set_subtarget(ob_share common_mixed
   client_feedback/ob_client_feedback_basic.cpp
@@ -301,14 +283,6 @@ ob_set_subtarget(ob_share common_mixed
   interrupt/ob_interrupt_rpc_proxy.cpp
   location_cache/ob_location_service.cpp
   location_cache/ob_location_struct.cpp
-  location_cache/ob_location_update_task.cpp
-  location_cache/ob_ls_location_service.cpp
-  location_cache/ob_ls_location_map.cpp
-  location_cache/ob_tablet_ls_service.cpp
-  location_cache/ob_tablet_ls_map.cpp
-  location_cache/ob_tablet_location_broadcast.cpp
-  location_cache/ob_vtable_location_service.cpp
-  location_cache/ob_tablet_location_refresh_service.cpp
   inner_table/ob_inner_table_schema.vt.cpp
   inner_table/ob_inner_table_schema.lob.cpp
   inner_table/ob_inner_table_schema_misc.ipp
@@ -355,13 +329,10 @@ ob_set_subtarget(ob_share common_mixed
   table/ob_table_load_dml_stat.cpp
   table/ob_table_load_row.cpp
   transfer/ob_transfer_info.cpp
-  transfer/ob_transfer_task_operator.cpp
   table/ob_table_load_sql_statistics.cpp
   tenant_snapshot/ob_tenant_snapshot_id.cpp
-  tenant_snapshot/ob_tenant_snapshot_table_operator.cpp
   table/ob_ttl_util.cpp
   table/ob_table_config_util.cpp
-  restore/ob_tenant_clone_table_operator.cpp
   index_usage/ob_index_usage_info_mgr.cpp
   index_usage/ob_index_usage_report_task.cpp
   table/ob_table_util.cpp
@@ -371,7 +342,6 @@ ob_set_subtarget(ob_share common_mixed
   scheduler/ob_sys_task_stat.cpp
   scheduler/ob_dag_warning_history_mgr.cpp
   scheduler/ob_partition_auto_split_helper.cpp
-  compaction/ob_compaction_locality_cache.cpp
   compaction/ob_table_ckm_items.cpp
   compaction/ob_compaction_time_guard.cpp
   compaction/ob_schedule_batch_size_mgr.cpp
@@ -379,6 +349,17 @@ ob_set_subtarget(ob_share common_mixed
   compaction/ob_batch_exec_dag.cpp
   compaction/ob_new_micro_info.cpp
   storage/ob_i_pre_warmer.cpp
+  storage/ob_sqlite_connection.cpp
+  storage/ob_sqlite_connection_pool.cpp
+  storage/ob_reserved_snapshot_table_storage.cpp
+  storage/ob_deadlock_event_history_table_storage.cpp
+  storage/ob_server_event_history_table_storage.cpp
+  storage/ob_tenant_event_history_table_storage.cpp
+  storage/ob_tablet_replica_checksum_table_storage.cpp
+  storage/ob_zone_merge_info_table_storage.cpp
+  storage/ob_merge_info_table_storage.cpp
+  storage/ob_column_checksum_error_info_table_storage.cpp
+  storage/ob_rootservice_job_table_storage.cpp
   storage_cache_policy/ob_storage_cache_common.cpp
   storage_cache_policy/ob_storage_cache_partition_sql_helper.cpp
   partition_table/ob_partition_location.cpp
@@ -405,6 +386,7 @@ ob_set_subtarget(ob_share tablet
   tablet/ob_tablet_table_operator.cpp
   tablet/ob_tablet_to_ls_operator.cpp
   tablet/ob_tablet_table_iterator.cpp
+  tablet/ob_tablet_meta_table_storage.cpp
   tablet/ob_tablet_to_ls_iterator.cpp
   tablet/ob_tablet_filter.cpp
   tablet/ob_tablet_to_table_history_operator.cpp
@@ -420,6 +402,7 @@ ob_set_subtarget(ob_share config
   config/ob_server_config.cpp
   config/ob_system_config.cpp
   config/ob_system_config_key.cpp
+  config/ob_config_storage.cpp
 )
 
 ob_set_subtarget(ob_share deadlock
@@ -433,24 +416,6 @@ ob_set_subtarget(ob_share deadlock
   deadlock/ob_lcl_scheme/ob_lcl_message.cpp
   deadlock/ob_lcl_scheme/ob_lcl_node.cpp
   deadlock/ob_lcl_scheme/ob_lcl_utils.cpp
-)
-
-ob_set_subtarget(ob_share ls
-  ls/ob_inmemory_ls_table.cpp
-  ls/ob_ls_info.cpp
-  ls/ob_ls_operator.cpp
-  ls/ob_ls_status_operator.cpp
-  ls/ob_ls_life_manager.cpp
-  ls/ob_ls_table.cpp
-  ls/ob_ls_table_operator.cpp
-  ls/ob_persistent_ls_table.cpp
-  ls/ob_rpc_ls_table.cpp
-  ls/ob_ls_table_iterator.cpp
-  ls/ob_ls_replica_filter.cpp
-  ls/ob_ls_recovery_stat_operator.cpp
-  ls/ob_ls_creator.cpp
-  ls/ob_ls_election_reference_info_operator.cpp
-  ls/ob_ls_log_stat_info.cpp
 )
 
 ob_set_subtarget(ob_share redolog
@@ -563,6 +528,7 @@ ob_set_subtarget(ob_share schema
   schema/ob_schema_getter_guard_objpriv_mysql.cpp
   schema/ob_location_schema_struct.cpp
   schema/ob_schema_getter_guard_location.cpp
+  schema/ob_standby_schema_refresh_trigger.cpp
 )
 
 ob_set_subtarget(ob_share stat
@@ -625,8 +591,6 @@ ob_set_subtarget(ob_share io
   io/ob_io_struct.cpp
   io/ob_io_calibration.cpp
   io/ob_io_manager.cpp
-  io/ob_storage_io_usage_proxy.cpp
-  io/ob_storage_io_usage_reporter.cpp
 )
 
 ob_set_subtarget(ob_share unit
@@ -634,13 +598,6 @@ ob_set_subtarget(ob_share unit
   unit/ob_unit_config.cpp
   unit/ob_unit_resource.cpp
   unit/ob_unit_info.cpp
-)
-ob_set_subtarget(ob_share balance
-  ob_balance_define.cpp
-  balance/ob_balance_job_table_operator.cpp
-  balance/ob_balance_task_table_operator.cpp
-  balance/ob_balance_task_helper_operator.cpp
-  balance/ob_transfer_partition_task_table_operator.cpp
 )
 
 ob_set_subtarget(ob_share ncomp_dll
@@ -681,8 +638,6 @@ ob_set_subtarget(ob_share object_storage
   object_storage/ob_device_config_parser.cpp
   object_storage/ob_device_connectivity.cpp
   object_storage/ob_device_manifest.cpp
-  object_storage/ob_device_manifest_task.cpp
-  object_storage/ob_zone_storage_table_operation.cpp
   object_storage/ob_object_storage_struct.cpp
 )
 
@@ -707,6 +662,15 @@ ob_set_subtarget(ob_share vector_index
   vector_index/ob_vector_embedding_handler.cpp
   vector_index/ob_json_helper.cpp
   vector_index/ob_hybrid_vector_refresh_task.cpp
+)
+
+ob_set_subtarget(ob_share change_stream
+  change_stream/ob_change_stream_fetcher.cpp
+  change_stream/ob_change_stream_dispatcher.cpp
+  change_stream/ob_change_stream_worker.cpp
+  change_stream/ob_change_stream_plugin.cpp
+  change_stream/ob_change_stream_mgr.cpp
+  change_stream/ob_cs_plugin_async_index.cpp
 )
 
 ob_set_subtarget(ob_share vector_type
@@ -739,11 +703,6 @@ ob_set_subtarget(ob_share domain_id
 ob_set_subtarget(ob_share semistruct
   semistruct/ob_sub_column_path.cpp
 )
-if (NOT OB_BUILD_STANDALONE)
-  ob_set_subtarget(ob_share dummy_license_mgr
-    ob_dummy_license_utils.cpp
-  )
-endif()
 
 ob_set_subtarget(ob_share ai_service
   ai_service/ob_ai_service_struct.cpp

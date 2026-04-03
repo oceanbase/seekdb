@@ -22,20 +22,13 @@
 #include "share/partition_table/ob_partition_location.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_lonely_table_clean_rpc_struct.h"
-#include "share/ob_rs_mgr.h"
 #include "share/ob_time_zone_info_manager.h"
 #include "common/storage/ob_freeze_define.h" // for ObFrozenStatus
-#include "rootserver/ob_alter_locality_finish_checker.h"
 #include "share/config/ob_server_config.h"
 #include "observer/ob_server_struct.h"
-#include "share/ls/ob_ls_info.h"
 
 namespace oceanbase
 {
-namespace rootserver
-{
-class ObCommitAlterTenantLocalityArg;
-}
 namespace obrpc
 {
 class ObCommonRpcProxy
@@ -47,16 +40,10 @@ public:
 #include "ob_common_rpc_proxy.ipp"
 #undef OB_RPC_DECLARATIONS
 public:
-  inline void set_rs_mgr(share::ObRsMgr &rs_mgr)
-  {
-    rs_mgr_ = &rs_mgr;
-  }
-
   //send to rs, only need set rs_mgr, no need set dst_server
-  inline ObCommonRpcProxy to_rs(share::ObRsMgr &rs_mgr) const
+  inline ObCommonRpcProxy to_rs() const
   {
     ObCommonRpcProxy proxy = this->to();
-    proxy.set_rs_mgr(rs_mgr);
     return proxy;
   }
 
@@ -65,68 +52,25 @@ public:
   inline ObCommonRpcProxy to_addr(const ::oceanbase::common::ObAddr &dst) const
   {
     ObCommonRpcProxy proxy = this->to(dst);
-    proxy.reset_rs_mgr();
     return proxy;
-  }
-
-private:
-  inline void reset_rs_mgr()
-  {
-    rs_mgr_ = NULL;
   }
 
 protected:
 
 #define CALL_WITH_RETRY(call_stmt)                                      \
-  common::ObAddr rs;                                                    \
   do {                                                                  \
     int ret = common::OB_SUCCESS;                                       \
-    const bool use_remote_rs = GCONF.cluster_id != dst_cluster_id_ && OB_INVALID_CLUSTER_ID != dst_cluster_id_;\
-    rs.reset();                                                         \
-    if (NULL != rs_mgr_) {                                              \
-      if (use_remote_rs) {                           \
-        if (OB_FAIL(rs_mgr_->get_master_root_server(dst_cluster_id_, rs))) {  \
-          if (OB_ENTRY_NOT_EXIST != ret) {                                                      \
-            SHARE_LOG(WARN, "failed to get remote master rs", KR(ret), K_(dst_cluster_id));     \
-          } else if (OB_FAIL(rs_mgr_->renew_master_rootserver(dst_cluster_id_))) {       \
-            SHARE_LOG(WARN, "failed to renew remote master rs", KR(ret), K_(dst_cluster_id));   \
-          } else if (OB_FAIL(rs_mgr_->get_master_root_server(dst_cluster_id_, rs))) {    \
-            SHARE_LOG(WARN, "failed to get remote master rs", KR(ret), K_(dst_cluster_id));     \
-          }                                                                                    \
-        }                                                               \
-      } else if (OB_FAIL(rs_mgr_->get_master_root_server(rs))) {        \
-        SHARE_LOG(WARN, "failed to get master rs", KR(ret));            \
-      }                                                                 \
-      if (OB_FAIL(ret)) {                                               \
-      } else {                                                          \
-        set_server(rs);                                                 \
-      }                                                                 \
-    }                                                                   \
+    set_server(GCTX.self_addr());                                       \
     if (OB_SUCC(ret)) {                                                 \
       ret = call_stmt;                                                  \
       const int64_t RETRY_TIMES = 3;                                    \
       for (int64_t i = 0;                                               \
            (common::OB_RS_NOT_MASTER == ret                             \
-            || common::OB_SERVER_IS_INIT == ret                         \
-            || (use_remote_rs && OB_FAIL(ret)))                         \
-           && NULL != rs_mgr_ && i < RETRY_TIMES;                       \
+            || common::OB_SERVER_IS_INIT == ret)                        \
+           && i < RETRY_TIMES;                                          \
            ++i) {                                                       \
-        if (use_remote_rs) {                         \
-          if (OB_FAIL(rs_mgr_->renew_master_rootserver(dst_cluster_id_))) {  \
-            SHARE_LOG(WARN, "failed to get master rs", K(ret), K(dst_cluster_id_));          \
-          } else if (OB_FAIL(rs_mgr_->get_master_root_server(dst_cluster_id_, rs))) {  \
-            SHARE_LOG(WARN, "failed to get remote master rs", KR(ret), K_(dst_cluster_id));     \
-          }                                                            \
-        } else if (OB_FAIL(rs_mgr_->renew_master_rootserver())) {              \
-          SHARE_LOG(WARN, "renew_master_rootserver failed", K(ret), "retry", i); \
-        } else if (OB_FAIL(rs_mgr_->get_master_root_server(rs))) {      \
-          SHARE_LOG(WARN, "get master root service failed", K(ret), "retry", i); \
-        }                                                               \
-        if (OB_FAIL(ret)) {                                             \
-        } else {                                                        \
-          set_server(rs);                                               \
-          ret = call_stmt;                                              \
-        }                                                               \
+        set_server(GCTX.self_addr());                                   \
+        ret = call_stmt;                                                \
       }                                                                 \
     }                                                                   \
     return ret;                                                         \
@@ -163,8 +107,6 @@ protected:
   }
 #undef CALL_WIRTH_RETRY
 
-private:
-  share::ObRsMgr *rs_mgr_;
 }; // end of class ObCommonRpcProxy
 
 } // end of namespace share

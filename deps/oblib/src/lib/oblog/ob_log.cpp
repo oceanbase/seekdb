@@ -1609,6 +1609,7 @@ int ObLogger::check_tl_log_limiter(const int32_t level,
 {
   int ret = OB_SUCCESS;
   allow = true;
+  return ret;
   if (OB_LIKELY(is_inited())) {
     auto log_limiter = (nullptr != tl_log_limiter_ ? tl_log_limiter_ : default_log_limiter_);
     if (enable_log_limit_) {

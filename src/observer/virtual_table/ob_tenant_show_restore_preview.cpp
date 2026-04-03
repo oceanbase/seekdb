@@ -15,7 +15,6 @@
  */
 
 #include "observer/virtual_table/ob_tenant_show_restore_preview.h"
-#include "rootserver/restore/ob_restore_util.h"
 #include "share/restore/ob_restore_uri_parser.h"
 
 
@@ -80,8 +79,8 @@ int ObTenantShowRestorePreview::init()
     SHARE_LOG(WARN, "failed to varchar", KR(ret), K(backup_dest_value));
   } else if (OB_FAIL(ObPhysicalRestoreUriParser::parse(uri_, allocator, tenant_path_array))) {
     SHARE_LOG(WARN, "fail to parse uri", K(ret));
-  } else if (OB_FAIL(rootserver::ObRestoreUtil::check_restore_using_complement_log(tenant_path_array, only_contain_backup_set_))) {
-    SHARE_LOG(WARN, "check restore using complement log failed", K(ret));
+//  } else if (OB_FAIL(rootserver::ObRestoreUtil::check_restore_using_complement_log(tenant_path_array, only_contain_backup_set_))) {
+//    SHARE_LOG(WARN, "check restore using complement log failed", K(ret));
   } else if (!session_->user_variable_exists(OB_BACKUP_DECRYPTION_PASSWD_ARRAY_SESSION_STR)) {
   } else if (OB_FAIL(session_->get_user_variable_value(OB_BACKUP_DECRYPTION_PASSWD_ARRAY_SESSION_STR, passwd))) {
     SHARE_LOG(WARN, "failed to get user passwd", K(ret));
@@ -91,9 +90,9 @@ int ObTenantShowRestorePreview::init()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(parse_restore_scn_from_session_(backup_passwd, tenant_path_array))) {
     SHARE_LOG(WARN, "failed to parse restore timestamp from session", KR(ret));
-  } else if (OB_FAIL(rootserver::ObRestoreUtil::get_restore_source(only_contain_backup_set_,
-      tenant_path_array, backup_passwd, restore_scn_, backup_set_list_, backup_piece_list_, log_path_list_))) {
-    SHARE_LOG(WARN, "failed to get restore source", K(ret), K(restore_scn_), K(backup_passwd));
+//  } else if (OB_FAIL(rootserver::ObRestoreUtil::get_restore_source(only_contain_backup_set_,
+//      tenant_path_array, backup_passwd, restore_scn_, backup_set_list_, backup_piece_list_, log_path_list_))) {
+//    SHARE_LOG(WARN, "failed to get restore source", K(ret), K(restore_scn_), K(backup_passwd));
   } else {
     idx_ = 0;
     total_cnt_ = backup_set_list_.count() + backup_piece_list_.count();
@@ -136,9 +135,9 @@ int ObTenantShowRestorePreview::parse_restore_scn_from_session_(
     if (OB_FAIL(restore_scn_.convert_for_inner_table_field(restore_scn))) {
       SHARE_LOG(WARN, "failed to convert for inner table field", K(ret), K(restore_scn));
     }
-  } else if (OB_FAIL(rootserver::ObRestoreUtil::fill_restore_scn(
-      src_scn, restore_timestamp_str, false/*with_restore_scn*/, tenant_path_array, backup_passwd, only_contain_backup_set_, restore_scn_))) {
-    SHARE_LOG(WARN, "failed to parse restore scn", K(ret));
+//  } else if (OB_FAIL(rootserver::ObRestoreUtil::fill_restore_scn(
+//      src_scn, restore_timestamp_str, false/*with_restore_scn*/, tenant_path_array, backup_passwd, only_contain_backup_set_, restore_scn_))) {
+//    SHARE_LOG(WARN, "failed to parse restore scn", K(ret));
   }
   return ret;
 }

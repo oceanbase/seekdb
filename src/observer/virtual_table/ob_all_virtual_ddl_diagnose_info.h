@@ -89,8 +89,7 @@ private:
   int collect_task_gmt_create_time();
   enum DDLDiagnoseInfoColumn
   {
-    TENANT_ID,
-    DDL_TASK_ID,
+    DDL_TASK_ID = common::OB_APP_MIN_COLUMN_ID,
     OBJECT_ID,
     OP_NAME,
     CREATE_TIME,

@@ -147,6 +147,7 @@ int ObMajorFreezeHelper::get_freeze_info(
   int ret = OB_SUCCESS;
 
   ObArray<obrpc::ObSimpleFreezeInfo> tmp_info_array;
+  bool is_primary_cluster = true;
   bool want_to_freeze_all = param.freeze_all_ || param.freeze_all_user_ || param.freeze_all_meta_;
   if (want_to_freeze_all) {
     if (OB_FAIL(get_specific_tenant_freeze_info(param.freeze_all_, param.freeze_all_user_, 
@@ -163,10 +164,11 @@ int ObMajorFreezeHelper::get_freeze_info(
   } else if (tmp_info_array.empty() && !want_to_freeze_all) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("freeze info array should not be empty", KR(ret), K(param));
+  } else if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
+    LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
   } else {
     const int64_t info_cnt = tmp_info_array.count();
     for (int64_t i = 0; OB_SUCC(ret) && (i < info_cnt); ++i) {
-      share::ObAllTenantInfo tenant_info;
       bool is_restore = false;
       const uint64_t tenant_id = tmp_info_array.at(i).tenant_id_;
       if (OB_FAIL(check_tenant_is_restore(tenant_id, is_restore))) {
@@ -178,19 +180,11 @@ int ObMajorFreezeHelper::get_freeze_info(
         if (OB_TMP_FAIL(add_user_warning(tenant_id, warn_buf))) {
           LOG_WARN("fail to add user warning", KR(tmp_ret), K(tenant_id));
         }
-      } else if (OB_FAIL(share::ObAllTenantInfoProxy::load_tenant_info(tenant_id, GCTX.sql_proxy_,
-                                                                false, tenant_info))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS; // ignore ret, so as to process the next tenant
-          LOG_WARN("tenant may be deleted, skip major freeze for this tenant", K(tenant_id));
-        } else {
-          LOG_WARN("fail to load tenant info", KR(ret), K(tenant_id));
-        }
       }
       // Skip major freeze for standby tenants and thus avoid OB_MAJOR_FREEZE_NOT_ALLOW incurred by
       // standby tenants, only when launching major freeze on more than one tenant or all_user or all.
-      else if (tenant_info.is_standby() && ((info_cnt > 1) || param.freeze_all_user_ || param.freeze_all_)) {
-        LOG_INFO("skip major freeze for standby tenant", K(tenant_info));
+      else if (!is_primary_cluster && ((info_cnt > 1) || param.freeze_all_user_ || param.freeze_all_)) {
+        LOG_INFO("skip major freeze for standby tenant", K(is_primary_cluster));
         const char *warn_buf = "standby tenant sync freeze info from primary tenant, not allowed to launch major freeze";
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(add_user_warning(tenant_id, warn_buf))) {

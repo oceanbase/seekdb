@@ -66,8 +66,7 @@ static void delay_process_by_probability(int64_t percentage) {
 const char *ObLoadDataBase::SERVER_TENANT_MEMORY_EXAMINE_SQL =
     "SELECT case when memstore_used < freeze_trigger * 1.02 then false else true end"
     " as need_wait_freeze"
-    " FROM oceanbase.__all_virtual_tenant_memstore_info WHERE tenant_id = %ld"
-    " and svr_ip = '%s' and svr_port = %d";
+    " FROM oceanbase.__all_virtual_tenant_memstore_info";
 
 const char *log_file_column_names = "\nBatchId\tLineNum\tType\tErrCode\tErrMsg\t\n";
 const char *log_file_row_fmt = "%ld\t%ld\t%s\t%d\t%.*s\t\n";
@@ -260,10 +259,7 @@ int ObLoadDataBase::memory_wait_local(ObExecContext &ctx,
       } else if (!leader_addr.ip_to_string(leader_ip_str, sizeof(leader_ip_str))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("format leader ip failed", K(ret), K(leader_addr));
-      } else if (OB_FAIL(sql.assign_fmt(SERVER_TENANT_MEMORY_EXAMINE_SQL,
-                                        tenant_id,
-                                        leader_ip_str,
-                                        leader_addr.get_port()))) {
+      } else if (OB_FAIL(sql.assign_fmt(SERVER_TENANT_MEMORY_EXAMINE_SQL))) {
         LOG_WARN("fail to append sql", K(ret), K(tenant_id), K(leader_addr));
       } else if (OB_FAIL(sql_proxy_->read(res, OB_SYS_TENANT_ID, sql.ptr()))) {
         LOG_WARN("fail to execute sql", K(ret), K(sql));

@@ -25,24 +25,21 @@
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_leader_election_waiter.h"
 #include "lib/worker.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
-#include "ob_root_balancer.h"
 #include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "lib/container/ob_iarray.h"
-#include "share/ls/ob_ls_table_operator.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/ddl/ob_ddl_clog.h"
+#include "share/ob_lonely_table_clean_rpc_struct.h" // for ObForceDropLonelyLobAuxTableArg
 #include "share/ob_freeze_info_proxy.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_fork_table_util.h"
 #include "common/ob_common_utility.h"
 #include "share/config/ob_config.h" // ObConfigPairs
 #include "rootserver/parallel_ddl/ob_index_name_checker.h"
-#include "rootserver/parallel_ddl/ob_tablet_balance_allocator.h"
 #include "pl_ddl/ob_pl_ddl_service.h"
 
 namespace oceanbase
@@ -64,7 +61,6 @@ class ObCreateMLogArg;
 namespace share
 {
 class SCN;
-class ObLSTableOperator;
 class ObAutoincrementService;
 class ObSplitInfo;
 namespace schema
@@ -93,9 +89,6 @@ namespace rootserver
 {
 class ObDDLOperator;
 class ObTenantDDLService;
-class ObCommitAlterTenantLocalityArg;
-class ObCommitAlterTablegroupLocalityArg;
-class ObCommitAlterTableLocalityArg;
 class ObDDLSQLTransaction;
 class ObTableGroupHelp;
 //class ObFreezeInfoManager;
@@ -117,7 +110,6 @@ public:
            obrpc::ObCommonRpcProxy &common_rpc,
            common::ObMySQLProxy &sql_proxy,
            share::schema::ObMultiVersionSchemaService &schema_service,
-           share::ObLSTableOperator &lst_operator,
            ObSnapshotInfoManager &snapshot_mgr,
            ObTenantDDLService &tenant_ddl_service);
   bool is_inited() const { return inited_; }
@@ -125,12 +117,7 @@ public:
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return *schema_service_; }
   common::ObMySQLProxy &get_sql_proxy() { return *sql_proxy_; }
   ObSnapshotInfoManager &get_snapshot_mgr() { return *snapshot_mgr_; }
-  share::ObLSTableOperator &get_lst_operator() { return *lst_operator_; }
   share::schema::ObIndexNameChecker &get_index_name_checker() { return index_name_checker_; }
-  share::schema::ObNonPartitionedTableTabletAllocator &get_non_partitioned_tablet_allocator()
-  {
-     return non_partitioned_tablet_allocator_;
-  }
 
   // create_index_table will fill table_id and frozen_version to table_schema
   virtual int create_index_table(const obrpc::ObCreateIndexArg &arg,
@@ -248,7 +235,6 @@ public:
   virtual int update_index_status(const obrpc::ObUpdateIndexStatusArg &arg);
   virtual int update_mview_status(const obrpc::ObUpdateMViewStatusArg &arg);
 
-  int upgrade_table_schema(const obrpc::ObUpgradeTableSchemaArg &arg);
   virtual int add_table_schema(share::schema::ObTableSchema &table_schema,
       share::schema::ObSchemaGetterGuard &schema_guard);
   virtual int drop_inner_table(const share::schema::ObTableSchema &table_schema, const bool delete_priv = true);
@@ -758,10 +744,6 @@ public:
       const obrpc::ObPurgeRecycleBinArg &arg,
       const ObIArray<share::schema::ObRecycleObject> &recycle_objs,
       int64_t &purged_objects);
-  int purge_recyclebin_tenant(
-      const obrpc::ObPurgeRecycleBinArg &arg,
-      const ObIArray<share::schema::ObRecycleObject> &recycle_objs,
-      int64_t &purged_objects);
   int flashback_index(const obrpc::ObFlashBackIndexArg &arg);
   int flashback_index_in_trans(share::schema::ObSchemaGetterGuard &schema_guard,
                                const share::schema::ObTableSchema &table_schema,
@@ -968,8 +950,6 @@ public:
     share::schema::ObSchemaGetterGuard &hold_buf_dst_tenant_schema_guard,
     share::schema::ObSchemaGetterGuard *&src_tenant_schema_guard,
     share::schema::ObSchemaGetterGuard *&dst_tenant_schema_guard);
-  int check_tenant_in_alter_locality(const uint64_t tenant_id, bool &in_alter_locality);
-
   // only push schema version, and publish schema
   int log_nop_operation(const obrpc::ObDDLNopOpreatorArg &arg);
 
@@ -2183,29 +2163,6 @@ private:
                          const common::ObIArray<uint64_t> &user_ids,
                          const ObString *ddl_stmt_str);
 
-  //----End of Functions for managing privileges----
-  int try_modify_databases_attributes_in_tenant(
-      const obrpc::ObModifyTenantArg &arg,
-      ObDDLOperator &ddl_operator,
-      ObMySQLTransaction &trans,
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      share::schema::ObTenantSchema &tenant_schema,
-      int64_t &sub_pz_count);
-  int try_modify_tablegroups_attributes_in_tenant(
-      const obrpc::ObModifyTenantArg &arg,
-      ObDDLOperator &ddl_operator,
-      ObMySQLTransaction &trans,
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      share::schema::ObTenantSchema &tenant_schema,
-      int64_t &sub_pz_count);
-  int try_modify_tables_attributes_in_tenant(
-      const obrpc::ObModifyTenantArg &arg,
-      ObDDLOperator &ddl_operator,
-      ObMySQLTransaction &trans,
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      share::schema::ObTenantSchema &tenant_schema,
-      int64_t &sub_pz_count);
-
   typedef common::hash::ObPlacementHashSet<share::schema::ObIndexNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> AddIndexNameHashSet;
   typedef common::hash::ObPlacementHashSet<share::schema::ObIndexNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> DropIndexNameHashSet;
   typedef common::hash::ObPlacementHashSet<share::schema::ObIndexNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> RenameIndexNameHashSet;
@@ -2267,7 +2224,6 @@ private:
                                   common::ObSqlString &err_table_list);
   int alter_outline_in_trans(const obrpc::ObAlterOutlineArg &alter_outline_arg);
 
-  int check_tenant_has_been_dropped_(const uint64_t tenant_id, bool &is_dropped);
   template<typename SCHEMA, typename ALTER_SCHEMA>
   static int check_partition_name_valid(const SCHEMA &orig_schema,
                                  const ALTER_SCHEMA &alter_schema,
@@ -2406,19 +2362,7 @@ private:
       const int64_t part_id,
       const share::schema::ObPartition *&part);
   int check_table_pk(const share::schema::ObTableSchema &orig_table_schema);
-  int clean_global_context(const ObContextSchema &context_schema);
 
-  int get_hard_code_system_table_schema_(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
-      share::schema::ObTableSchema &hard_code_schema);
-  int create_system_table_(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const share::schema::ObTableSchema &hard_code_schema);
-  int alter_system_table_column_(
-      share::schema::ObSchemaGetterGuard &schema_guard,
-      const share::schema::ObTableSchema &hard_code_schema);
-  int check_add_system_table_column_(const ObColumnSchemaV2 &column, bool &can_add);
   int get_obj_privs_ora(const uint64_t tenant_id,
                         const uint64_t obj_id,
                         const uint64_t obj_type,
@@ -2587,7 +2531,6 @@ private:
   obrpc::ObCommonRpcProxy *common_rpc_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
-  share::ObLSTableOperator *lst_operator_;
   //TODO(jingqian): used to choose partition server, use load balancer finnally
   ObSnapshotInfoManager *snapshot_mgr_;
   ObTenantDDLService *tenant_ddl_service_;
@@ -2595,7 +2538,6 @@ private:
 
   // for paralled ddl to cache oracle's index name map
   share::schema::ObIndexNameChecker index_name_checker_;
-  share::schema::ObNonPartitionedTableTabletAllocator non_partitioned_tablet_allocator_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDDLService);
 };

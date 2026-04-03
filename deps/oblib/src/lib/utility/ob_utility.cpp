@@ -132,5 +132,12 @@ int mprotect_page(const void *mem_ptr, int64_t len, int prot, const char *addr_n
   }
   return ret;
 }
+char* upper_align_buf(char *in_buf, int64_t align)
+{
+  char *out_buf = NULL;
+
+  out_buf = reinterpret_cast<char*>(upper_align(reinterpret_cast<int64_t>(in_buf), align));
+  return out_buf;
+}
 } //common
 } //oceanbase

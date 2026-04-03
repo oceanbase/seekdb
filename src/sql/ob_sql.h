@@ -41,10 +41,6 @@ namespace oceanbase
 
 namespace share
 {
-class ObRsMgr;
-} // end of namespace share
-namespace share
-{
 namespace schema
 {
 class ObMaxConcurrentParam;
@@ -76,8 +72,7 @@ public:
   int init(common::ObOptStatManager *opt_stat_mgr,
            rpc::frame::ObReqTransport *transport,
            common::ObITabletScan *vt_partition_service,
-           common::ObAddr &addr,
-           share::ObRsMgr &rs_mgr);
+           common::ObAddr &addr);
   void destroy();
 public:
   /// print statatistics of SQL module
@@ -218,7 +213,6 @@ public:
     opt_stat_mgr_(NULL),
     transport_(NULL),
     vt_partition_service_(NULL),
-    rs_mgr_(NULL),
     execution_id_(0),
     px_sequence_id_(0)
   {
@@ -500,7 +494,6 @@ private:
   // END global singleton dependency interface
 
   common::ObAddr self_addr_;
-  share::ObRsMgr *rs_mgr_;
   volatile int64_t execution_id_ CACHE_ALIGNED;
   volatile uint64_t px_sequence_id_;
   ObMaintainDepInfoTaskQueue queue_;

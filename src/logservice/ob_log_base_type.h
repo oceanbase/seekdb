@@ -97,15 +97,6 @@ enum ObLogBaseType
   // for obj lock garbage collect service
   OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE = 27,
 
-  // for tenant_transfer_service
-  TENANT_TRANSFER_SERVICE_LOG_BASE_TYPE = 28,
-  
-  //for tenant balance 
-  TENANT_BALANCE_SERVICE_LOG_BASE_TYPE = 29,
-  //for tenant balance task execute
-
-  BALANCE_EXECUTE_SERVICE_LOG_BASE_TYPE = 30,
-  
   //for backup task scheduler service
   BACKUP_TASK_SCHEDULER_LOG_BASE_TYPE = 31,
 
@@ -117,9 +108,6 @@ enum ObLogBaseType
   
   //for log archive service
   BACKUP_ARCHIVE_SERVICE_LOG_BASE_TYPE = 34,
-
-  //for transfer handler
-  TRANSFER_HANDLER_LOG_BASE_TYPE = 35,
 
   COMMON_LS_SERVICE_LOG_BASE_TYPE = 36,
 
@@ -141,9 +129,6 @@ enum ObLogBaseType
 
   // for mview maintenance service
   MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE = 43,
-
-  // for share storage net throt
-  SHARE_STORAGE_NRT_THROT_LOG_BASE_TYPE = 44,
 
   // for DBMS_SCHEDULER
   DBMS_SCHEDULER_LOG_BASE_TYPE = 45,
@@ -172,8 +157,8 @@ enum ObLogBaseType
   // for new DDL scheduler
   SYS_DDL_SCHEDULER_LOG_BASE_TYPE = 52,
 
-  // for tenant disaster recovery
-  DISASTER_RECOVERY_SERVICE_LOG_BASE_TYPE = 53,
+  // for tenant disaster recovery (abandoned)
+  // DISASTER_RECOVERY_SERVICE_LOG_BASE_TYPE = 53,
 
   // for new DDL service
   DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE = 54,
@@ -187,6 +172,8 @@ enum ObLogBaseType
 #endif
   // for vector index scheduler
   VEC_INDEX_SERVICE_LOG_BASE_TYPE  = 60,
+  // for sys tenant load sys package service on sys ls leader
+  SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE = 61,
   // pay attention!!!
   // add log type in log_base_type_to_string
   // max value
@@ -257,12 +244,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"DUP_TABLE", str_len);
   } else if (log_type == OBJ_LOCK_GARBAGE_COLLECT_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"OBJ_LOCK_GARBAGE_COLLECT_SERVICE", str_len);
-  } else if (log_type == TENANT_TRANSFER_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str ,"TENANT_TRANSFER_SERVICE", str_len);
-  } else if (log_type == TENANT_BALANCE_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str ,"TENANT_BALANCE", str_len);
-  } else if (log_type == BALANCE_EXECUTE_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str ,"BALANCE_EXECUTE_SERVICE", str_len);
   } else if (log_type == BACKUP_DATA_SERVICE_LOG_BASE_TYPE) {
     strncpy(str, "BACKUP_DATA_SERVICE", str_len);
   } else if (log_type == BACKUP_CLEAN_SERVICE_LOG_BASE_TYPE) {
@@ -271,8 +252,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str, "BACKUP_ARCHIVE_SERVICE", str_len);
   } else if (log_type == BACKUP_TASK_SCHEDULER_LOG_BASE_TYPE) {
     strncpy(str, "BACKUP_TASK_SCHEDULER", str_len);
-  } else if (log_type == TRANSFER_HANDLER_LOG_BASE_TYPE) {
-    strncpy(str, "TRANSFER_HANDLER", str_len);
   } else if (log_type == COMMON_LS_SERVICE_LOG_BASE_TYPE) {
     strncpy(str ,"COMMON_LS_SERVICE", str_len);
   } else if (log_type == LS_BLOCK_TX_SERVICE_LOG_BASE_TYPE) {
@@ -291,8 +270,6 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"TABLE_LOAD_RESOURCE_SERVICE", str_len);
   } else if (log_type == MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE) {
     strncpy(str, "MVIEW_MAINTENANCE_SERVICE_LOG_BASE_TYPE", str_len);
-  } else if (log_type == SHARE_STORAGE_NRT_THROT_LOG_BASE_TYPE) {
-    strncpy(str ,"SHARE_STORAGE_NRT_THROT_SERVICE", str_len);
   } else if (log_type == TABLE_LOCK_LOG_BASE_TYPE) {
     strncpy(str ,"TABLE_LOCK", str_len);
   } else if (log_type == SHARED_STORAGE_PRE_WARM_LOG_BASE_TYPE) {
@@ -315,10 +292,10 @@ int log_base_type_to_string(const ObLogBaseType log_type,
 #endif
   } else if (log_type == SYS_DDL_SCHEDULER_LOG_BASE_TYPE) {
     strncpy(str ,"SYS_DDL_SCHEDULER", str_len);
-  } else if (log_type == DISASTER_RECOVERY_SERVICE_LOG_BASE_TYPE) {
-    strncpy(str ,"DISASTER_RECOVERY_SERVICE", str_len);
   } else if (log_type == DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE) {
     strncpy(str ,"DDL_SERVICE_LAUNCHER", str_len);
+  } else if (log_type == SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE) {
+    strncpy(str ,"SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE", str_len);
 #ifdef OB_BUILD_SHARED_STORAGE
   } else if (log_type == SSLOG_GTS_LOG_BASE_TYPE) {
     strncpy(str ,"SSLOG_GTS", str_len);

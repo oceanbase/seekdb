@@ -249,6 +249,7 @@ c1	c2	c3
 9	[0.928764,0.254038,0.272721,0.648755,0.966464,0.200054,0.093298,0.901419,0.676738,0.122339]	{9:0.9,10:1,11:1.1}
 select * from t1 where c1 > 5 order by negative_inner_product(c3, '{12:1, 13:1}') APPROXIMATE limit 2;
 c1	c2	c3
+10	[0.345999,0.254102,0.950869,0.275233,0.844568,0.215723,0.302821,0.563644,0.811224,0.175574]	{10:1,11:1.1,12:1.2}
 drop index idx1 on t1;
 select * from t1 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 2;
 c1	c2	c3

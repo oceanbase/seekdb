@@ -79,12 +79,11 @@ int ObDDLSqlService::log_operation(
   
   if (OB_SUCC(ret)) {
     int64_t affected_rows = 0;
-    if (OB_FAIL(sql_string->append_fmt("INSERT INTO %s (SCHEMA_VERSION, TENANT_ID, EXEC_TENANT_ID, USER_ID, DATABASE_ID, "
+    if (OB_FAIL(sql_string->append_fmt("INSERT INTO %s (SCHEMA_VERSION, EXEC_TENANT_ID, USER_ID, DATABASE_ID, "
                 "DATABASE_NAME, TABLEGROUP_ID, TABLE_ID, TABLE_NAME, OPERATION_TYPE, DDL_STMT_STR, gmt_modified) "
-                "values (%ld, %lu, %lu, %lu, %lu, %.*s, %ld, %lu, %.*s, %d, %.*s, now(6))",
+                "values (%ld, %lu, %lu, %lu, %.*s, %ld, %lu, %.*s, %d, %.*s, now(6))",
                 OB_ALL_DDL_OPERATION_TNAME,
                 schema_operation.schema_version_,
-                is_tenant_operation(schema_operation.op_type_) ? schema_operation.tenant_id_ : OB_INVALID_TENANT_ID,
                 static_cast<int64_t>(exec_tenant_id), // not used after schema splited
                 fill_schema_id(sql_tenant_id, schema_operation.user_id_),
                 fill_schema_id(sql_tenant_id, schema_operation.database_id_),
@@ -112,9 +111,9 @@ int ObDDLSqlService::log_operation(
     } else {
       int64_t affected_rows = 0;
       sql_string->reuse();
-      if (OB_FAIL(sql_string->append_fmt("INSERT INTO %s (TENANT_ID, DDL_ID_STR, DDL_STMT_STR, gmt_modified) "
-          "values(%lu, ",
-          OB_ALL_DDL_ID_TNAME, exec_tenant_id))) {
+      if (OB_FAIL(sql_string->append_fmt("INSERT INTO %s (DDL_ID_STR, DDL_STMT_STR, gmt_modified) "
+          "values( ",
+          OB_ALL_DDL_ID_TNAME))) {
         LOG_WARN("sql string append format string failed, ", K(ret));
       } else if (OB_FAIL(sql_append_hex_escape_str(*ddl_id_str, *sql_string))) {
         LOG_WARN("sql_append_hex_escape_str failed", K(*ddl_id_str), K(ret));

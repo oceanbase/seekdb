@@ -207,8 +207,7 @@ int ObErrorInfo::gen_error_dml(const uint64_t exec_tenant_id,
   int ret = OB_SUCCESS;
 
   const ObErrorInfo &error_info = *this;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", error_info.extract_tenant_id()))
-      || OB_FAIL(dml.add_pk_column("obj_id", error_info.extract_obj_id()))
+  if (OB_FAIL(dml.add_pk_column("obj_id", error_info.extract_obj_id()))
       || OB_FAIL(dml.add_pk_column("obj_type", error_info.get_obj_type()))
       || OB_FAIL(dml.add_pk_column("obj_seq", error_info.get_obj_seq()))
       || OB_FAIL(dml.add_column("line", error_info.get_line()))
@@ -292,12 +291,10 @@ int ObErrorInfo::del_error(ObISQLClient &sql_client)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("delete error info unexpected.", K(ret), K(error_info));
   } else if (OB_FAIL(sql.assign_fmt("delete FROM %s WHERE obj_id = %ld \
-                                                  AND tenant_id = %ld  \
                                                   AND obj_seq = %ld \
                                                   AND obj_type = %ld", 
              OB_ALL_TENANT_ERROR_TNAME, 
              error_info.extract_obj_id(),
-             error_info.extract_tenant_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
     LOG_WARN("delete from __all_error table failed.", K(ret));
@@ -321,12 +318,10 @@ int ObErrorInfo::get_error_obj_seq(common::ObISQLClient &sql_client,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error info is invalid", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("SELECT obj_id, obj_seq FROM %s WHERE obj_id = %ld  \
-                                                                  AND tenant_id= %ld \
                                                                   AND obj_seq = %ld\
                                                                   AND obj_type = %ld",
              OB_ALL_TENANT_ERROR_TNAME,
              error_info.extract_obj_id(),
-             error_info.extract_tenant_id(),
              error_info.get_obj_seq(),
              error_info.get_obj_type()))) {
     // do nothing

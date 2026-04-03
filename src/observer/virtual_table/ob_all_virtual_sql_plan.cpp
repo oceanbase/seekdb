@@ -23,6 +23,9 @@ using namespace oceanbase::share;
 namespace oceanbase {
 namespace observer {
 
+const int64_t ObAllVirtualSqlPlan::KEY_PLAN_ID_IDX;
+const int64_t ObAllVirtualSqlPlan::ROWKEY_COUNT;
+
 ObAllVirtualSqlPlan::PlanInfo::PlanInfo()
 {
   reset();
@@ -140,8 +143,7 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
   ObObj *cells = cur_row_.cells_;
-  ObString ipstr;
-  common::ObAddr addr;
+    common::ObAddr addr;
   #define REFINE_LENGTH(len) ((len) > MAX_LENGTH ? MAX_LENGTH : (len))
   if (OB_ISNULL(cells) || OB_ISNULL(plan_item)) {
     ret = OB_INVALID_ARGUMENT;
@@ -150,29 +152,8 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
-    case TENANT_ID: {
-      cells[cell_idx].set_int(tenant_id_);
-      break;
-    }
     case PLAN_ID: {
       cells[cell_idx].set_int(plan_id_);
-      break;
-    }
-    case SVR_IP: {
-      ipstr.reset();
-      if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, ipstr))) {
-        SERVER_LOG(ERROR, "get server ip failed", K(ret));
-      } else {
-        cells[cell_idx].set_varchar(ipstr);
-        cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
-                                      ObCharset::get_default_charset()));
-      }
-      break;
-    }
-    case SVR_PORT: {
-      addr.reset();
-      addr = GCTX.self_addr();
-      cells[cell_idx].set_int(addr.get_port());
       break;
     }
     case SQL_ID: {
@@ -417,6 +398,7 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
   bool is_always_true = false;
   bool is_always_false = false;
   plan_ids_.reuse();
+  const int64_t tenant_id = effective_tenant_id_;
   for (int64_t i = 0; OB_SUCC(ret) && !is_always_true && !is_always_false && i < N; i++) {
     start_key.reset();
     end_key.reset();
@@ -428,65 +410,38 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
     if (start_key.get_obj_cnt() != end_key.get_obj_cnt() || 
         start_key.get_obj_cnt() != ROWKEY_COUNT) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid range", K(ret));
+      SERVER_LOG(WARN, "invalid range", K(ret), K(start_key.get_obj_cnt()), K(ROWKEY_COUNT));
     } else if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid arguments", K(ret));
-    } else if (start_key_obj_ptr[KEY_TENANT_ID_IDX].is_min_value() && 
-               end_key_obj_ptr[KEY_TENANT_ID_IDX].is_max_value()) {
+    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() &&
+               end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
       is_always_true = true;
-      if (OB_FAIL(dump_all_tenant_plans())) {
-        SERVER_LOG(WARN, "failed to dump all tenant plans", K(ret));
+      if (OB_FAIL(dump_tenant_plans(tenant_id))) {
+        SERVER_LOG(WARN, "failed to dump tenant plans", K(ret));
       }
-    } else if (start_key_obj_ptr[KEY_TENANT_ID_IDX].is_max_value() &&
-               end_key_obj_ptr[KEY_TENANT_ID_IDX].is_min_value()) {
+    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() &&
+               end_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value()) {
       is_always_false = true;
-    } else if (start_key_obj_ptr[KEY_TENANT_ID_IDX].is_min_value() ||
-               end_key_obj_ptr[KEY_TENANT_ID_IDX].is_max_value() ||
-               start_key_obj_ptr[KEY_TENANT_ID_IDX] != end_key_obj_ptr[KEY_TENANT_ID_IDX]) {
+    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() ||
+               end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() ||
+               start_key_obj_ptr[KEY_PLAN_ID_IDX] != end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
       ret = OB_NOT_IMPLEMENT;
-      SERVER_LOG(WARN, "tenant id only supports exact value", K(ret));
-    } else if (start_key_obj_ptr[KEY_TENANT_ID_IDX] == end_key_obj_ptr[KEY_TENANT_ID_IDX]) {
-      if (ObIntType != start_key_obj_ptr[KEY_TENANT_ID_IDX].get_type() || 
-          (start_key_obj_ptr[KEY_TENANT_ID_IDX].get_type() != end_key_obj_ptr[KEY_TENANT_ID_IDX].get_type())) {
+      SERVER_LOG(WARN, "plan id only supports exact value", K(ret));
+    } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX] == end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
+      if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() ||
+          (start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() != end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type())) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "expect tenant id type to be int",
-                    K(start_key_obj_ptr[KEY_TENANT_ID_IDX].get_type()),
-                    K(end_key_obj_ptr[KEY_TENANT_ID_IDX].get_type()));
+        SERVER_LOG(WARN, "expect plan id type to be int",
+                    K(start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()),
+                    K(end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()));
       } else {
-        int64_t tenant_id = start_key_obj_ptr[KEY_TENANT_ID_IDX].get_int();
-        if (tenant_id != effective_tenant_id_ && 
-            !is_sys_tenant(effective_tenant_id_)) {
-          //do nothing
-        } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() && 
-                   end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
-          if (OB_FAIL(dump_tenant_plans(tenant_id))) {
-            SERVER_LOG(WARN, "failed to dump tenant plans", K(ret));
-          }
-        } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() &&
-                  end_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value()) {
-          //do nothing
-        } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value() ||
-                  end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() ||
-                  start_key_obj_ptr[KEY_PLAN_ID_IDX] != end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
-          ret = OB_NOT_IMPLEMENT;
-          SERVER_LOG(WARN, "tenant id only supports exact value", K(ret));
-        } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX] == end_key_obj_ptr[KEY_PLAN_ID_IDX]) {
-          if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() || 
-              (start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() != end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type())) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "expect plan id type to be int",
-                        K(start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()),
-                        K(end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()));
-          } else {
-            int64_t plan_id = start_key_obj_ptr[KEY_PLAN_ID_IDX].get_int();
-            PlanInfo info;
-            info.tenant_id_ = tenant_id;
-            info.plan_id_ = plan_id;
-            if (OB_FAIL(plan_ids_.push_back(info))) {
-              SERVER_LOG(WARN, "failed to push back plan info", K(ret));
-            }
-          }
+        int64_t plan_id = start_key_obj_ptr[KEY_PLAN_ID_IDX].get_int();
+        PlanInfo info;
+        info.tenant_id_ = tenant_id;
+        info.plan_id_ = plan_id;
+        if (OB_FAIL(plan_ids_.push_back(info))) {
+          SERVER_LOG(WARN, "failed to push back plan info", K(ret));
         }
       }
     }

@@ -19,7 +19,6 @@
 
 #include "share/ob_zone_merge_info.h"
 #include "share/tablet/ob_tablet_info.h"
-#include "share/compaction/ob_compaction_locality_cache.h"
 #include "rootserver/ob_root_utils.h"
 #include "rootserver/freeze/ob_checksum_validator.h"
 #include "common/ob_tablet_id.h"
@@ -32,7 +31,6 @@ namespace oceanbase
 {
 namespace share
 {
-class ObIServerTrace;
 namespace schema
 {
 class ObSchemaGetterGuard;
@@ -63,11 +61,9 @@ public:
       const bool is_primary_service,
       common::ObMySQLProxy &sql_proxy,
       share::schema::ObMultiVersionSchemaService &schema_service,
-      share::ObIServerTrace &server_trace,
       ObMajorMergeInfoManager &merge_info_mgr) = 0;
   virtual int set_basic_info(
-      const share::ObFreezeInfo &freeze_info,
-      const int64_t expected_epoch) = 0;
+      const share::ObFreezeInfo &freeze_info) = 0;
   virtual int clear_cached_info() = 0;
   virtual int check_progress() = 0;
   virtual void reset_uncompacted_tablets() {};
@@ -94,12 +90,10 @@ public:
       const bool is_primary_service,
       common::ObMySQLProxy &sql_proxy,
       share::schema::ObMultiVersionSchemaService &schema_service,
-      share::ObIServerTrace &server_trace,
       ObMajorMergeInfoManager &merge_info_mgr) override;
 
   virtual int set_basic_info(
-    const share::ObFreezeInfo &freeze_info,
-    const int64_t expected_epoch) override; // For each round major_freeze, need invoke this once.
+    const share::ObFreezeInfo &freeze_info) override; // For each round major_freeze, need invoke this once.
   virtual int clear_cached_info() override;
   virtual int get_uncompacted_tablets(
     common::ObArray<share::ObTabletReplica> &uncompacted_tablets,
@@ -187,10 +181,8 @@ private:
   int last_errno_;
   uint64_t tenant_id_;
   share::ObFreezeInfo freeze_info_;
-  uint64_t expected_epoch_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
-  share::ObIServerTrace *server_trace_;
   ObMajorMergeInfoManager *merge_info_mgr_;
   compaction::ObMergeProgress progress_;
   compaction::ObIndexCkmValidatePairArray idx_ckm_validate_array_;
@@ -200,7 +192,6 @@ private:
   // record each table compaction/verify status
   compaction::ObTableCompactionInfoMap table_compaction_map_; // <table_id, compaction_info>
   ObFTSGroupArray fts_group_array_;
-  share::ObCompactionLocalityCache ls_locality_cache_;
   ObChecksumValidator ckm_validator_;
   compaction::ObUncompactInfo uncompact_info_;
   // cache of ls_infos in __all_ls_meta_table

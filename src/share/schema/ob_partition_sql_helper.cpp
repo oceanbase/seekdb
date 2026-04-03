@@ -515,9 +515,7 @@ int ObAddPartInfoHelper::add_part_info_dml_column(const uint64_t exec_tenant_id,
    } else {
      const ObPartitionOption &part_option = table->get_part_option();
      const ObSubPartitionOption &subpart_option = table->get_sub_part_option();
-     if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                exec_tenant_id, table->get_tenant_id())))
-       || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+     if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                 exec_tenant_id, table->get_table_id())))
        || OB_FAIL(dml.add_column("part_type", part_option.get_part_func_type()))
        || OB_FAIL(dml.add_column(OBJ_GET_K(part_option, part_num)))
@@ -551,9 +549,7 @@ int ObAddPartInfoHelper::add_part_dml_column(const uint64_t exec_tenant_id,
       sub_part_num = part.get_sub_part_num();
     }
     PartitionType partition_type = part.get_partition_type();
-    if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                               exec_tenant_id, table->get_tenant_id())))
-        || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+    if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                  exec_tenant_id, table->get_table_id())))
         || OB_FAIL(dml.add_pk_column("part_id", part.get_part_id()))
         || OB_FAIL(dml.add_pk_column("part_idx", part.get_part_idx()))
@@ -599,9 +595,7 @@ int ObAddPartInfoHelper::add_subpart_dml_column(const uint64_t exec_tenant_id,
     LOG_WARN("subpart_idx is invalid", KR(ret), K(subpart));
   } else {
     PartitionType partition_type = subpart.get_partition_type();
-    if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                               exec_tenant_id, table->get_tenant_id())))
-        || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+    if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                  exec_tenant_id, table->get_table_id())))
         || OB_FAIL(dml.add_pk_column("part_id", part_id))
         || OB_FAIL(dml.add_pk_column("sub_part_id", subpart_id))
@@ -641,9 +635,7 @@ int ObAddPartInfoHelper::add_def_subpart_dml_column(const uint64_t exec_tenant_i
     LOG_WARN("table is null", K(ret));
   } else {
     // For def subpartition, sub_part_idx and sub_part_id should be equal
-    if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                               exec_tenant_id, table->get_tenant_id())))
-        || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+    if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                  exec_tenant_id, table->get_table_id())))
         || OB_FAIL(dml.add_pk_column("sub_part_id", def_subpart_idx))
         || OB_FAIL(dml.add_column("schema_version", table->get_schema_version()))
@@ -852,9 +844,7 @@ int ObDropPartInfoHelper::add_part_info_dml_column(
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table is null", K(ret));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                    exec_tenant_id, table->get_tenant_id())))
-             || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                       exec_tenant_id, table->get_table_id())))
              || OB_FAIL(dml.add_pk_column("schema_version", table->get_schema_version()))) {
     LOG_WARN("dml add part info failed", K(ret));
@@ -871,9 +861,7 @@ int ObDropPartInfoHelper::add_part_dml_column(const uint64_t exec_tenant_id,
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table is null", K(ret));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                    exec_tenant_id, table->get_tenant_id())))
-             || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                       exec_tenant_id, table->get_table_id())))
              || OB_FAIL(dml.add_pk_column("part_id", part.get_part_id()))
              || OB_FAIL(dml.add_pk_column("schema_version", table->get_schema_version()))) {
@@ -894,9 +882,7 @@ int ObDropPartInfoHelper::add_subpart_dml_column(const uint64_t exec_tenant_id,
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table is null", K(ret));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                                    exec_tenant_id, table->get_tenant_id())))
-             || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                       exec_tenant_id, table->get_table_id())))
              || OB_FAIL(dml.add_pk_column("part_id", part_id))
              || OB_FAIL(dml.add_pk_column("sub_part_id", subpart_id))
@@ -917,9 +903,7 @@ int ObDropPartInfoHelper::add_def_subpart_dml_column(const uint64_t exec_tenant_
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table is null", K(ret));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                               exec_tenant_id, table->get_tenant_id())))
-      || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                exec_tenant_id, table->get_table_id())))
       || OB_FAIL(dml.add_pk_column("sub_part_id", subpart_idx))
       || OB_FAIL(dml.add_pk_column("schema_version", table->get_schema_version()))) {
@@ -938,9 +922,7 @@ int ObAddIncSubPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDML
   if (subpart_idx < 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subpart_idx is invalid", KR(ret), K(part_info));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id, tenant_id)))
-      || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                exec_tenant_id, part_info.table_id_)))
       || OB_FAIL(dml.add_pk_column("part_id", part_info.part_id_))
       || OB_FAIL(dml.add_pk_column("sub_part_id", part_info.sub_part_id_))
@@ -1044,9 +1026,7 @@ int ObAddIncPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDMLSql
   if (part_idx < 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("part_idx is invalid", KR(ret), K(part_info));
-  } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id, tenant_id)))
-      || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                exec_tenant_id, part_info.table_id_)))
       || OB_FAIL(dml.add_pk_column("part_id", part_info.part_id_))
       || OB_FAIL(dml.add_pk_column("part_idx", part_idx))
@@ -1166,9 +1146,7 @@ int ObDropIncSubPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDM
   const uint64_t tenant_id = part_info.tenant_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
   const int64_t deleted = true;
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id, part_info.tenant_id_)))
-      || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                exec_tenant_id, part_info.table_id_)))
       || OB_FAIL(dml.add_pk_column("part_id", part_info.part_id_))
       || OB_FAIL(dml.add_pk_column("sub_part_id", part_info.sub_part_id_))
@@ -1197,9 +1175,7 @@ int ObDropIncPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDMLSq
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = part_info.tenant_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
-                                             exec_tenant_id, part_info.tenant_id_)))
-      || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(
                                                exec_tenant_id, part_info.table_id_)))
       || OB_FAIL(dml.add_pk_column("part_id", part_info.part_id_))
       || OB_FAIL(dml.add_column("schema_version", part_info.schema_version_))) {
@@ -1834,8 +1810,7 @@ int ObRenameIncPartHelper::rename_partition_info(const bool update_part_idx)
     } else if (OB_ISNULL(inc_part = part_array[0])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inc_part is null", KR(ret));
-    } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
-          || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
+    } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
           || OB_FAIL(dml.add_pk_column("part_id", inc_part->get_part_id()))
           || OB_FAIL(dml.add_column("schema_version", schema_version_))
           || OB_FAIL(dml.add_column("part_name", inc_part->get_part_name().ptr()))) {
@@ -1915,8 +1890,7 @@ int ObRenameIncSubpartHelper::rename_subpartition_info()
       } else if (OB_ISNULL(inc_subpart = subpart_array[0])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inc_subpart is null", KR(ret));
-      } else if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))
-              ||OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
+      } else if (OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(exec_tenant_id, table_id)))
               ||OB_FAIL(dml.add_pk_column("part_id", inc_part->get_part_id()))
               ||OB_FAIL(dml.add_pk_column("sub_part_id", inc_subpart->get_sub_part_id()))
               ||OB_FAIL(dml.add_column("schema_version", schema_version_))

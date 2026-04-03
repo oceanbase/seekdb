@@ -66,8 +66,6 @@ int ObDBMSSchedulerMysql::disable(
   CK (OB_LIKELY(3 == params.count()));
   OZ (dml.add_gmt_modified(now));
   OX (tenant_id = ctx.get_my_session()->get_effective_tenant_id());
-  OZ (dml.add_pk_column("tenant_id",
-    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
   OZ (dml.add_column("enabled", false));
   OZ (dml.splice_update_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
@@ -90,8 +88,6 @@ int ObDBMSSchedulerMysql::enable(
   CK (OB_LIKELY(1 == params.count()));
   OZ (dml.add_gmt_modified(now));
   OX (tenant_id = ctx.get_my_session()->get_effective_tenant_id());
-  OZ (dml.add_pk_column("tenant_id",
-    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
   OZ (dml.add_column("enabled", true));
   OZ (dml.splice_update_sql(OB_ALL_TENANT_SCHEDULER_JOB_TNAME, sql));
@@ -117,8 +113,6 @@ int ObDBMSSchedulerMysql::set_attribute(
   CK (OB_LIKELY(3 == params.count()));
   OZ (dml.add_gmt_modified(now));
   OX (tenant_id = ctx.get_my_session()->get_effective_tenant_id());
-  OZ (dml.add_pk_column("tenant_id",
-    share::schema::ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id)));
   OZ (dml.add_pk_column("job_name", ObHexEscapeSqlStr(params.at(0).get_string())));
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(

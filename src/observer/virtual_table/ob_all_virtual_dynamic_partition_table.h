@@ -39,8 +39,7 @@ private:
                      common::ObNewRow *&row);
 private:
   enum {
-    TENANT_ID = common::OB_APP_MIN_COLUMN_ID,
-    TENANT_SCHEMA_VERSION,
+    TENANT_SCHEMA_VERSION = common::OB_APP_MIN_COLUMN_ID,
     DATABASE_NAME,
     TABLE_NAME,
     TABLE_ID,

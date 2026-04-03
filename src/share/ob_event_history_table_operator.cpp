@@ -19,7 +19,8 @@
 #include "ob_event_history_table_operator.h"
 #include "share/config/ob_server_config.h"
 #include "share/deadlock/ob_deadlock_inner_table_service.h"
-#include "share/ob_debug_sync.h" 
+#include "share/ob_debug_sync.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -181,14 +182,35 @@ int ObEventHistoryTableOperator::ObEventTableUpdateTask::process()
 ObEventHistoryTableOperator::ObEventHistoryTableOperator()
   : inited_(false), stopped_(false), last_event_ts_(0),
     lock_(ObLatchIds::RS_EVENT_TS_LOCK), proxy_(NULL), event_queue_(),
-    event_table_name_(NULL), self_addr_(), is_rootservice_event_history_(false),
+    self_addr_(), is_rootservice_event_history_(false),
     is_server_event_history_(false),
-    timer_()
+    timer_(), event_type_(ObEventHistoryType::SERVER)
 {
 }
 
 ObEventHistoryTableOperator::~ObEventHistoryTableOperator()
 {
+}
+
+int ObEventHistoryTableOperator::init(ObSQLiteConnectionPool *pool, ObEventHistoryType event_type)
+{
+  int ret = OB_SUCCESS;
+  if (inited_) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret));
+  } else if (OB_ISNULL(pool)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("pool is null", K(ret));
+  } else if (OB_FAIL(storage_.init(pool))) {
+    LOG_WARN("failed to init storage", K(ret));
+  } else if (event_type == ObEventHistoryType::TENANT && OB_FAIL(tenant_storage_.init(pool))) {
+    LOG_WARN("failed to init tenant storage", K(ret));
+  } else {
+    event_type_ = event_type;
+    inited_ = true;
+    LOG_INFO("ObEventHistoryTableOperator init with SQLite storage", K(event_type));
+  }
+  return ret;
 }
 
 int ObEventHistoryTableOperator::init(common::ObMySQLProxy &proxy)
@@ -201,10 +223,10 @@ int ObEventHistoryTableOperator::init(common::ObMySQLProxy &proxy)
     const int64_t thread_count = 1;
     const int64_t queue_size_square_of_2 = 10;
     if (OB_FAIL(event_queue_.init(thread_count, "EvtHisUpdTask", TASK_QUEUE_SIZE, TASK_MAP_SIZE,
-        TOTAL_LIMIT, HOLD_LIMIT, PAGE_SIZE))) {
+        TOTAL_LIMIT, HOLD_LIMIT, ALLOC_PAGE_SIZE))) {
       LOG_WARN("task_queue_ init failed", K(thread_count), LITERAL_K(TASK_QUEUE_SIZE),
           LITERAL_K(TASK_MAP_SIZE), LITERAL_K(TOTAL_LIMIT), LITERAL_K(HOLD_LIMIT),
-          LITERAL_K(PAGE_SIZE), K(ret));
+          LITERAL_K(ALLOC_PAGE_SIZE), K(ret));
     } else if (is_server_event_history_ &&
           OB_FAIL(timer_.init_and_start(thread_count, 5_s, "EventTimer", queue_size_square_of_2))) {
       LOG_WARN("int global event report timer failed", KR(ret));
@@ -260,16 +282,15 @@ int ObEventHistoryTableOperator::default_async_delete()
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "not init", K(ret));
+  } else if (!storage_.is_inited()) {
+    ret = OB_NOT_INIT;
+    SHARE_LOG(WARN, "storage not initialized", K(ret));
   } else {
+    // Use SQLite storage
     const int64_t now = ObTimeUtility::current_time();
-    ObSqlString sql;
-    const bool is_delete = true;
     const int64_t delete_timestap = now - GCONF.ob_event_history_recycle_interval;
-    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE gmt_create < usec_to_time(%ld) LIMIT 1024",
-            event_table_name_, delete_timestap))) {
-      SHARE_LOG(WARN, "assign_fmt failed", K(ret), K(event_table_name_));
-    } else if (OB_FAIL(add_task(sql, is_delete, now))) {
-      SHARE_LOG(WARN, "add_task failed", K(sql), K(is_delete), K(ret));
+    if (OB_FAIL(storage_.delete_expired(delete_timestap, 1024))) {
+      SHARE_LOG(WARN, "failed to delete expired events", K(ret));
     }
   }
   return ret;
