@@ -1615,6 +1615,11 @@ int ObDMLService::init_dml_param(const ObDASDMLBaseCtDef &base_ctdef,
   if (!dml_param.has_async_index_ && base_ctdef.table_param_.get_data_table().has_async_index()) {
     dml_param.has_async_index_ = true;
   }
+  if (dml_param.has_async_index_
+      && base_ctdef.is_access_vidx_as_master_table_
+      && base_ctdef.table_param_.get_data_table().is_vector_index_id()) {
+    dml_param.check_schema_version_ = false;
+  }
   if (OB_FAIL(dml_param.snapshot_.assign(snapshot))) {
     LOG_WARN("assign snapshot fail", K(ret));
   }

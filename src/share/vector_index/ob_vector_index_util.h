@@ -507,6 +507,10 @@ public:
     const ObString &table_name,
     ObSchemaGetterGuard &schema_guard,
     const int64_t lob_inrow_threshold);
+  static bool should_set_max_lob_inrow_threshold_for_async_index(
+      const ObTableSchema &tbl_schema,
+      const ObIndexType vec_index_type,
+      const ObString &index_params);
   static int check_table_has_vector_of_fts_index(
       const ObTableSchema &data_table_schema,
       ObSchemaGetterGuard &schema_guard,

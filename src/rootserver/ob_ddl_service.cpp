@@ -7055,6 +7055,7 @@ int ObDDLService::generate_aux_index_schema_(
   } else {
     ObIndexBuilder index_builder(*this);
     const bool global_index_without_column_info = true;
+    bool need_alter_data_table_lob_inrow_threshold = false;
     if (create_index_arg.is_rebuild_index_) {
       if (OB_FAIL(ObVectorIndexUtil::generate_index_schema_from_exist_table(trans,
                                                                             tenant_id,
@@ -7074,6 +7075,11 @@ int ObDDLService::generate_aux_index_schema_(
                                               true/*generate_id*/,
                                               index_schema))) {
       LOG_WARN("fail to generate schema", K(ret), K(create_index_arg));
+    } else if (ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
+                   nonconst_data_schema, index_schema.get_index_type(), index_schema.get_index_params())
+               && FALSE_IT(nonconst_data_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD))) {
+    } else if (FALSE_IT(need_alter_data_table_lob_inrow_threshold =
+                   nonconst_data_schema.get_lob_inrow_threshold() != data_schema->get_lob_inrow_threshold())) {
     } else if (create_index_arg.is_offline_rebuild_){
       index_schema.set_in_offline_ddl_white_list(true);
       nonconst_data_schema.set_in_offline_ddl_white_list(true);
@@ -7111,6 +7117,18 @@ int ObDDLService::generate_aux_index_schema_(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(nonconst_data_schema.check_create_index_on_hidden_primary_key(index_schema))) {
       LOG_WARN("failed to check create index on table", K(ret), K(index_schema));
+    } else if (gen_columns.empty() && need_alter_data_table_lob_inrow_threshold) {
+      ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+      if (OB_FAIL(ddl_operator.alter_table_options(schema_guard,
+                                                   nonconst_data_schema,
+                                                   *data_schema,
+                                                   false,
+                                                   trans))) {
+        LOG_WARN("failed to alter table lob inrow threshold for async vector index",
+            K(ret), K(nonconst_data_schema), KPC(data_schema), K(index_schema));
+      }
+    }
+    if (OB_FAIL(ret)) {
     } else if (gen_columns.empty()) {
       if (OB_FAIL(create_index_table(create_index_arg,
                                      tenant_data_version,

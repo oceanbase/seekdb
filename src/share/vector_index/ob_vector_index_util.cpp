@@ -1394,6 +1394,16 @@ int ObVectorIndexUtil::check_ivf_lob_inrow_threshold(
   return ret;
 }
 
+bool ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
+    const ObTableSchema &tbl_schema,
+    const ObIndexType vec_index_type,
+    const ObString &index_params)
+{
+  return share::schema::is_vec_hnsw_index(vec_index_type)
+      && tbl_schema.is_heap_organized_table()
+      && ObVectorIndexUtil::is_sync_mode_async(index_params, true /* is_hnsw_heap_table */);
+}
+
 int ObVectorIndexUtil::check_table_has_vector_index(const ObTableSchema &data_table_schema, ObSchemaGetterGuard &schema_guard,
     bool &has_vec_index)
 {
