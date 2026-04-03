@@ -152,6 +152,7 @@ public:
       bool construct_all = false);
   static int generate_hard_code_schema_version(ObIArray<ObTableSchema> &tables);
   static int64_t get_inner_table_core_schema_version(ObIArray<ObTableSchema> &tables);
+  static int64_t get_inner_table_sys_schema_version(ObIArray<ObTableSchema> &tables);
   static int add_sys_table_lob_aux_table(
              uint64_t tenant_id,
              uint64_t data_table_id,

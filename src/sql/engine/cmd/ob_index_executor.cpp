@@ -101,6 +101,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   }
   if (FAILEDx(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
     LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
+  } else if (FALSE_IT(create_index_arg.data_version_ = data_version)) {
   } else {
     bool is_parallel_ddl = true;
     if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
@@ -138,6 +139,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   }
   if (FAILEDx(ObResolverUtils::check_sync_ddl_user(my_session, is_sync_ddl_user))) {
     LOG_WARN("Failed to check sync_dll_user", K(ret));
+  } else if (0 == res.task_id_) {
   } else if (!is_sys_index && !is_sync_ddl_user) {
     // Only consider index synchronization check for non-system tables and non-backup recovery scenarios
     bool build_index_need_retry_at_executor = false;

@@ -262,15 +262,18 @@ int ObLoadInnerTableSchemaExecutor::call_next_arg_(ObLoadTenantTableSchemaProxy&
   return ret;
 }
 
-int ObLoadInnerTableSchemaExecutor::load_core_schema_version(
+int ObLoadInnerTableSchemaExecutor::load_schema_version(
     const uint64_t tenant_id,
     common::ObISQLClient &client,
-    const int64_t core_schema_version)
+    const int64_t core_schema_version,
+    const int64_t sys_schema_version)
 {
   int ret = OB_SUCCESS;
   share::ObGlobalStatProxy proxy(client, tenant_id);
   if (OB_FAIL(proxy.set_core_schema_version(core_schema_version))) {
     LOG_WARN("failed to set core_schema_version", KR(ret));
+  } else if (OB_FAIL(proxy.set_sys_schema_version(sys_schema_version))) {
+    LOG_WARN("failed to set sys_schema_version", KR(ret));
   }
   return ret;
 }

@@ -76,6 +76,40 @@ public:
   ObString select_sql_;
 };
 
+struct ObMVRequiredColumnsInfo {
+  OB_UNIS_VERSION(1);
+
+public:
+  ObMVRequiredColumnsInfo()
+  : base_table_id_(OB_INVALID_ID)
+  {
+  }
+  ObMVRequiredColumnsInfo(const uint64_t base_table_id, const ObSEArray<uint64_t, 16> &required_columns)
+  {
+    base_table_id_ = base_table_id;
+    required_columns_.assign(required_columns);
+  }
+  int assign(const ObMVRequiredColumnsInfo &other);
+  TO_STRING_KV(K_(base_table_id), K_(required_columns));
+
+public:
+  uint64_t base_table_id_;
+  ObSEArray<uint64_t, 16> required_columns_;
+};
+
+struct ObMVAdditionalInfo {
+  OB_UNIS_VERSION(1);
+
+public:
+  share::schema::ObTableSchema container_table_schema_;
+  share::schema::ObMVRefreshInfo mv_refresh_info_;
+  ObSEArray<ObMVRequiredColumnsInfo, 8> required_columns_infos_;
+
+  int assign(const ObMVAdditionalInfo &other);
+
+  TO_STRING_KV(K_(container_table_schema), K_(mv_refresh_info));
+};
+
 struct ObMViewCompleteRefreshRes final
 {
   OB_UNIS_VERSION(1);

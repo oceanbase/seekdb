@@ -74,6 +74,10 @@ namespace rootserver
 class ObRandomZoneSelector;
 struct ObReplicaAddr;
 }
+namespace obrpc
+{
+struct ObMVAdditionalInfo;
+}
 namespace share
 {
 namespace schema
@@ -569,6 +573,7 @@ public:
   {}
   ~ObSchemaIdVersion() {}
   int init(const uint64_t schema_id, const int64_t schema_version);
+  void reset();
   uint64_t get_schema_id() const { return schema_id_; }
   int64_t get_schema_version() const { return schema_version_; }
   TO_STRING_KV(K_(schema_id), K_(schema_version));
@@ -1123,6 +1128,16 @@ inline bool is_index_local_storage(ObIndexType index_type)
            || is_local_vec_index(index_type)
            || is_global_local_fts_index(index_type)
            || is_local_multivalue_index(index_type);
+}
+
+inline bool is_index_support_empty_table_opt(ObIndexType index_type)
+{
+  return INDEX_TYPE_NORMAL_LOCAL == index_type
+          || INDEX_TYPE_UNIQUE_LOCAL == index_type
+          || INDEX_TYPE_NORMAL_GLOBAL == index_type
+          || INDEX_TYPE_UNIQUE_GLOBAL == index_type
+          || INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE == index_type
+          || INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE == index_type;
 }
 
 // Note: When adding new related table, you need to modify OB_MAX_TRANSFER_BINDING_TABLET_CNT

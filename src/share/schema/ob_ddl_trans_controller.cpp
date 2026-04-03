@@ -109,8 +109,8 @@ void ObDDLTransController::run1()
         for (int64_t i = 0; i < tenant_ids.count(); i++) {
           ObZone zone;
           ObArray<ObAddr> server_list;
-          uint64_t tenant_id = tenant_ids.at(i);
-          int64_t schema_version = OB_INVALID_VERSION;
+          const uint64_t tenant_id = tenant_ids.at(i);
+          int64_t refreshed_schema_version = OB_INVALID_VERSION;
           int64_t start_time = ObTimeUtility::current_time();
           ObCurTraceId::init(GCONF.self_addr_);
           ObDIActionGuard(ObDIActionGuard::NS_ACTION, "control tenant[T_%ld]", tenant_id);
@@ -119,13 +119,13 @@ void ObDDLTransController::run1()
             LOG_WARN("fail to push self addr", KR(ret));
           }
           // overwrite ret to continue
-          if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(tenant_id, server_list, &schema_version))) {
+          if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(tenant_id, server_list, refreshed_schema_version))) {
             LOG_WARN("fail to publish_schema", KR(ret), K(tenant_id));
-          } else if (OB_FAIL(broadcast_consensus_version(tenant_id, schema_version, server_list))) {
-            LOG_WARN("fail to broadcast consensus version", KR(ret), K(tenant_id), K(schema_version));
+          } else if (OB_FAIL(broadcast_consensus_version(tenant_id, refreshed_schema_version, server_list))) {
+            LOG_WARN("fail to broadcast consensus version", KR(ret), K(tenant_id), K(refreshed_schema_version));
           } else {
             int64_t end_time = ObTimeUtility::current_time();
-            LOG_INFO("refresh_schema", KR(ret), K(tenant_id), K(end_time - start_time), K(schema_version));
+            LOG_INFO("refresh_schema", KR(ret), K(tenant_id), K(end_time - start_time), K(refreshed_schema_version));
           }
          }
       }
