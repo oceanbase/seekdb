@@ -534,8 +534,7 @@ int ObCSDispatcher::do_dispatch_()
       batch_in_flight = true;
     }
 
-    LOG_INFO("CSDispatcher: subtasks pushed to workers",
-             K(exec_ctx->batch_sn_), K(pushed), K(exec_ctx->task_count_), K(total_subtask_cnt));
+    LOG_INFO("CSDispatcher: subtasks pushed to workers", K(pushed), K(total_subtask_cnt));
 
     const int64_t unpushed = total_subtask_cnt - pushed;
     if (unpushed > 0) {
