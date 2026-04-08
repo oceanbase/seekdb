@@ -27,6 +27,8 @@
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "share/ob_server_struct.h"
+#include "share/ob_share_util.h"
+#include "common/ob_timeout_ctx.h"
 
 namespace oceanbase
 {
@@ -3004,7 +3006,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       // Read index_id_table using copied base_scn (thread-safe)
       if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id,
                                                               this,
-                                                              SCN::max_scn(),
+                                                              query_scn,
                                                               INDEX_TYPE_VEC_INDEX_ID_LOCAL,
                                                               *allocator_,
                                                               *allocator_,
@@ -3113,9 +3115,20 @@ int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
   common::ObArenaAllocator tmp_alloc(common::ObMemAttr(tenant_id_, "BGBitmapRefresh"));
   ObVectorQueryAdaptorResultContext ctx(tenant_id_, 0, &tmp_alloc, &tmp_alloc);
   ObArray<uint64_t> i_vids;
-  if (OB_FAIL(ctx.init_bitmaps())) {
+  share::SCN snapshot_scn;
+  const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
+  transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+  ObTimeoutCtx timeout_ctx;
+  if (OB_ISNULL(txs)) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("trans service is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, DEFAULT_TIMEOUT))) {
+    LOG_WARN("fail to set default timeout ctx", KR(ret));
+  } else if (OB_FAIL(txs->get_read_snapshot_version(timeout_ctx.get_abs_timeout(), snapshot_scn))) {
+    LOG_WARN("fail to get read snapshot version", KR(ret));
+  } else if (OB_FAIL(ctx.init_bitmaps())) {
     LOG_WARN("failed to init bitmaps for background bitmap refresh", K(ret));
-  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, SCN::max_scn(), i_vids))) {
+  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, snapshot_scn, i_vids))) {
     LOG_WARN("background bitmap refresh failed", K(ret), K(vbitmap_tablet_id_));
   }
   return ret;
