@@ -145,7 +145,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     expr_op_ctx_store_(NULL),
     task_executor_ctx_(*this),
     my_session_(NULL),
-    sql_proxy_(NULL),
+    exec_stat_collector_(NULL),
     stmt_factory_(NULL),
     expr_factory_(NULL),
     outline_params_wrapper_(NULL),
@@ -177,7 +177,6 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     op_kit_store_(),
     convert_allocator_(nullptr),
     mem_context_(nullptr),
-    pwj_map_(nullptr),
     group_pwj_map_(nullptr),
     check_status_times_(0),
     vt_ift_(nullptr),
@@ -220,6 +219,10 @@ ObExecContext::~ObExecContext()
   row_id_list_array_.reset();
   destroy_eval_allocator();
   reset_op_ctx();
+  if (OB_NOT_NULL(exec_stat_collector_)) {
+    exec_stat_collector_->~ObExecStatCollector();
+    exec_stat_collector_ = NULL;
+  }
   
   if (NULL != phy_plan_ctx_) {
     if (!THIS_WORKER.has_req_flag()) {
@@ -304,6 +307,23 @@ void ObExecContext::clean_resolve_ctx()
 uint64_t ObExecContext::get_ser_version() const
 {
   return SER_VERSION_1;
+}
+
+int ObExecContext::get_exec_stat_collector(ObExecStatCollector *&collector)
+{
+  int ret = OB_SUCCESS;
+  collector = exec_stat_collector_;
+  if (OB_ISNULL(collector)) {
+    void *buf = allocator_.alloc(sizeof(ObExecStatCollector));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate execution stat collector failed", K(ret));
+    } else {
+      collector = new (buf) ObExecStatCollector();
+      exec_stat_collector_ = collector;
+    }
+  }
+  return ret;
 }
 
 void ObExecContext::reset_op_ctx()

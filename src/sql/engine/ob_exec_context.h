@@ -307,9 +307,9 @@ public:
   inline ObSQLSessionMgr *get_session_mgr() const;
 
   /**
-   * @brief get execution stat from all tasks
+   * @brief get execution stat collector on demand
    */
-  ObExecStatCollector &get_exec_stat_collector();
+  int get_exec_stat_collector(ObExecStatCollector *&collector);
 
   /**
    * @brief set admission version
@@ -658,8 +658,7 @@ protected:
   ObExprOperatorCtx **expr_op_ctx_store_;
   ObTaskExecutorCtx task_executor_ctx_;
   ObSQLSessionInfo *my_session_;
-  common::ObMySQLProxy *sql_proxy_;
-  ObExecStatCollector exec_stat_collector_;
+  ObExecStatCollector *exec_stat_collector_;
   ObStmtFactory *stmt_factory_;
   ObRawExprFactory *expr_factory_;
   const share::schema::ObOutlineParamsWrapper *outline_params_wrapper_;
@@ -732,7 +731,6 @@ protected:
   // just for convert charset in query response result
   lib::MemoryContext convert_allocator_;
   lib::MemoryContext mem_context_;
-  PWJTabletIdMap* pwj_map_;
   GroupPWJTabletIdMap *group_pwj_map_;
   // sample result
   Ob2DArray<ObPxTabletRange> part_ranges_;
@@ -796,7 +794,7 @@ protected:
   bool force_local_plan_;
   ObDiagnosisManager diagnosis_manager_;
   common::ObArenaAllocator deterministic_udf_cache_allocator_;
-
+  
   // Granule type for current GI task
   ObGranuleType current_granule_type_;
 
@@ -881,11 +879,6 @@ inline ObTaskExecutorCtx *ObExecContext::get_task_executor_ctx()
 inline ObSQLSessionMgr *ObExecContext::get_session_mgr() const
 {
   return GCTX.session_mgr_;
-}
-
-inline ObExecStatCollector &ObExecContext::get_exec_stat_collector()
-{
-  return exec_stat_collector_;
 }
 
 inline void ObExecContext::set_admission_version(uint64_t admission_version)
