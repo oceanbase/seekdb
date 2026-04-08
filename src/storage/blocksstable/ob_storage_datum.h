@@ -280,7 +280,9 @@ OB_INLINE int ObStorageDatum::from_obj_enhance(const common::ObObj &obj)
 OB_INLINE int ObStorageDatum::to_obj_enhance(common::ObObj &obj, const common::ObObjMeta &meta) const
 {
   int ret = common::OB_SUCCESS;
-  if (is_outrow()) {
+  if (is_null()) {
+    obj.set_null();
+  } else if (is_outrow()) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "lob should not set outrow in datum", K(ret), K(*this), K(obj), K(meta));
   } else if (is_ext()) {
