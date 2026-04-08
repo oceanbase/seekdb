@@ -1544,7 +1544,8 @@ int ObVecIndexAsyncTask::process_data_for_index(ObPluginVectorIndexAdaptor &adap
             vid_bound.set_vid(vid_datum->storage_datums_[vid_column_pos].get_int());
             current_count += 1;
             if (adaptor.is_sparse_vector_index_type()) {
-              if (curr_total_length >= VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD) {
+              if (curr_total_length >= VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD
+                  || current_count >= VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD) {
                 if (OB_FAIL(adaptor.add_snap_index(
                         vectors, vids, out_extra_obj, extra_column_count, current_count, sparse_byte_lens))) {
                   LOG_WARN("failed to add sparse snap index", K(ret), K(vectors), K(vids), K(current_count));
