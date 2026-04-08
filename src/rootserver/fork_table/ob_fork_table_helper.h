@@ -29,6 +29,10 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
                                ObSchemaGetterGuard &schema_guard,
                                const ObForkTableArg *fork_table_arg = nullptr);
 
+int check_has_async_vector_index(const ObTableSchema &src_table_schema,
+                                 ObSchemaGetterGuard &schema_guard,
+                                 bool &has_async_vec_index);
+
 // Helper class for fork table operations
 // This class encapsulates fork table logic to reduce intrusion into
 // create_tables_in_trans

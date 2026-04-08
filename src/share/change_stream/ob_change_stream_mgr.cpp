@@ -20,6 +20,8 @@
 #include "share/rc/ob_tenant_base.h"
 #include "lib/thread/thread_define.h"
 #include "share/ob_thread_define.h"
+#include "share/ob_global_stat_proxy.h"
+#include "storage/tx/ob_ts_mgr.h"
 
 namespace oceanbase
 {
@@ -120,6 +122,45 @@ void ObChangeStreamMgr::destroy()
     worker_.destroy();
   }
   is_inited_ = false;
+}
+
+int ObChangeStreamMgr::wait_refresh_scn(
+    common::ObISQLClient &sql_client,
+    const uint64_t tenant_id,
+    const int64_t timeout_us)
+{
+  int ret = common::OB_SUCCESS;
+  SCN safe_visible_scn;
+  SCN current_refresh_scn;
+  const int64_t SLEEP_INTERVAL_US = 100 * 1000; // 100ms
+  const int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
+
+  if (OB_FAIL(OB_TS_MGR.get_ts_sync(tenant_id, abs_timeout_us - ObTimeUtility::current_time(),
+                                     safe_visible_scn))) {
+    LOG_WARN("get gts for safe visible scn failed", KR(ret), K(tenant_id));
+  } else {
+    bool is_satisfied = false;
+    while (OB_SUCC(ret) && !is_satisfied) {
+      const int64_t now = ObTimeUtility::current_time();
+      if (now >= abs_timeout_us) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("wait change stream refresh scn timeout", KR(ret),
+                 K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
+      } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
+                     sql_client, tenant_id, false, current_refresh_scn))) {
+        LOG_WARN("get change stream refresh scn failed", KR(ret), K(tenant_id));
+      } else if (current_refresh_scn >= safe_visible_scn) {
+        is_satisfied = true;
+        LOG_INFO("change stream refresh scn caught up",
+                 K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
+      } else {
+        LOG_INFO("waiting for change stream refresh scn",
+                 K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
+        ob_usleep(SLEEP_INTERVAL_US);
+      }
+    }
+  }
+  return ret;
 }
 
 }  // namespace share

@@ -95,6 +95,25 @@ static int check_table_index_features(const ObTableSchema &table_schema,
   return ret;
 }
 
+int check_has_async_vector_index(const ObTableSchema &src_table_schema,
+                                 ObSchemaGetterGuard &schema_guard,
+                                 bool &has_async_vec_index)
+{
+  int ret = OB_SUCCESS;
+  bool has_semantic_index = false;
+  bool has_ivf_index = false;
+  bool has_spatial_index = false;
+  bool has_global_index = false;
+  has_async_vec_index = false;
+  if (OB_FAIL(check_table_index_features(src_table_schema, schema_guard,
+                                         has_semantic_index, has_ivf_index,
+                                         has_spatial_index, has_global_index,
+                                         has_async_vec_index))) {
+    LOG_WARN("fail to check table index features", K(ret));
+  }
+  return ret;
+}
+
 int check_fork_table_supported(const ObTableSchema &src_table_schema,
                                ObSchemaGetterGuard &schema_guard,
                                const ObForkTableArg *fork_table_arg)
@@ -165,12 +184,6 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
              K(src_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED,
                    "fork table on table with spatial index is");
-  } else if (has_async_vec_index) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("fork table on table with async vector index is not supported",
-             KR(ret), K(src_table_schema));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                   "fork table on table with async vector index is");
   } else if (src_table_schema.is_partitioned_table() && has_global_index) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN(

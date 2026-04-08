@@ -48,6 +48,13 @@ public:
 
   bool is_inited() const { return is_inited_; }
 
+  /// Block until change_stream_refresh_scn >= current safe visible scn, or timeout.
+  /// Can be called from any node (RS / observer) as long as sql_client is valid.
+  static int wait_refresh_scn(
+      common::ObISQLClient &sql_client,
+      const uint64_t tenant_id,
+      const int64_t timeout_us);
+
   /// Fetcher: consumes CLOG by transaction, pushes committed tx to Dispatcher.
   ObCSFetcher &get_fetcher() { return fetcher_; }
 
