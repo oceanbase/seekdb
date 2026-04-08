@@ -2279,7 +2279,9 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
                  || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE || type_ == T_OP_SQ_NSEQ)
              && (type1.is_collection_sql_type() != type2.is_collection_sql_type())
              && !ob_is_null(type1.get_type())
-             && !ob_is_null(type2.get_type())) {
+             && !ob_is_null(type2.get_type())
+             && !ob_is_string_or_lob_type(type1.get_type())
+             && !ob_is_string_or_lob_type(type2.get_type())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Incorrect cmp type with scalar and collection arguments", K(type1), K(type2), K(type_), K(ret));
 #endif
