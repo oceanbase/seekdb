@@ -453,7 +453,20 @@ int OptTableMeta::init_column_meta(const OptSelectivityCtx &ctx,
                    scale_ratio_,
                    col_stats,
                    &ctx.get_allocator()))) {
+#ifdef _WIN32
+      LOG_WARN("failed to get column stats, fall back to default", K(ret), KPC(this));
+      ret = OB_SUCCESS;
+      col_stats.reset();
+      for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
+        ObGlobalColumnStat s;
+        column_metas.at(i).set_default_meta(rows_);
+        if (OB_FAIL(col_stats.push_back(s))) {
+          LOG_WARN("failed to push back column id", K(ret));
+        }
+      }
+#else
       LOG_WARN("failed to get column stats", K(ret), KPC(this));
+#endif
     } else if (column_ids.count() != col_stats.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error column size not equal with column_stats",

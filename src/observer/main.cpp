@@ -61,53 +61,63 @@ extern "C" void win32_trace(const char *msg) {
 #include <signal.h>
 #pragma init_seg(compiler)
 
-typedef struct {
-  DWORD ThreadId;
-  EXCEPTION_POINTERS *ExceptionPointers;
-  BOOL ClientPointers;
-} MY_MINIDUMP_EXCEPTION_INFORMATION;
+// dbghelp types/functions loaded dynamically to avoid dbghelp.h header
+// compatibility issues with clang-cl (missing IN/OUT macros).
+enum { AddrModeFlat = 3 };
+#ifndef SYMOPT_UNDNAME
+#define SYMOPT_UNDNAME       0x00000002
+#define SYMOPT_DEFERRED_LOADS 0x00000004
+#define SYMOPT_LOAD_LINES    0x00000010
+#endif
+#ifndef IMAGE_FILE_MACHINE_AMD64
+#define IMAGE_FILE_MACHINE_AMD64 0x8664
+#endif
+typedef struct _tagADDRESS64 {
+  DWORD64 Offset;
+  WORD Segment;
+  DWORD Mode; // ADDRESS_MODE
+} ADDRESS64;
+typedef struct _STACKFRAME64 {
+  ADDRESS64 AddrPC;
+  ADDRESS64 AddrReturn;
+  ADDRESS64 AddrFrame;
+  ADDRESS64 AddrStack;
+  ADDRESS64 AddrBStore;
+  PVOID FuncTableEntry;
+  DWORD64 Params[4];
+  BOOL Far;
+  BOOL Virtual;
+  DWORD64 Reserved[3];
+  // KdHelp64 omitted - zero-init is fine
+  BYTE _KdHelp[128];
+} STACKFRAME64;
+typedef struct _SYMBOL_INFO {
+  ULONG SizeOfStruct;
+  ULONG TypeIndex;
+  ULONG64 Reserved[2];
+  ULONG Index;
+  ULONG Size;
+  ULONG64 ModBase;
+  ULONG Flags;
+  ULONG64 Value;
+  ULONG64 Address;
+  ULONG Register;
+  ULONG Scope;
+  ULONG Tag;
+  ULONG NameLen;
+  ULONG MaxNameLen;
+  CHAR Name[1];
+} SYMBOL_INFO;
+typedef BOOL (WINAPI *StackWalk64Fn)(DWORD, HANDLE, HANDLE, STACKFRAME64*, PVOID,
+  PVOID, PVOID, PVOID, PVOID);
+typedef BOOL (WINAPI *SymInitializeFn)(HANDLE, PCSTR, BOOL);
+typedef BOOL (WINAPI *SymCleanupFn)(HANDLE);
+typedef DWORD (WINAPI *SymSetOptionsFn)(DWORD);
+typedef BOOL (WINAPI *SymFromAddrFn)(HANDLE, DWORD64, DWORD64*, SYMBOL_INFO*);
+typedef PVOID (WINAPI *SymFunctionTableAccess64Fn)(HANDLE, DWORD64);
+typedef DWORD64 (WINAPI *SymGetModuleBase64Fn)(HANDLE, DWORD64);
 
-typedef BOOL (WINAPI *MiniDumpWriteDumpFn)(
-    HANDLE, DWORD, HANDLE, ULONG,
-    MY_MINIDUMP_EXCEPTION_INFORMATION*, void*, void*);
 
-static void write_minidump(EXCEPTION_POINTERS *ep) {
-  char path[MAX_PATH];
-  SYSTEMTIME st;
-  GetLocalTime(&st);
-  snprintf(path, sizeof(path), "observer_crash_%04d%02d%02d_%02d%02d%02d_%lu.dmp",
-           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
-           (unsigned long)GetCurrentProcessId());
-  HMODULE hDbgHelp = LoadLibraryA("dbghelp.dll");
-  if (!hDbgHelp) {
-    win32_trace("[WIN32-TRACE] Failed to load dbghelp.dll\r\n");
-    return;
-  }
-  auto pMiniDumpWriteDump = (MiniDumpWriteDumpFn)GetProcAddress(hDbgHelp, "MiniDumpWriteDump");
-  if (!pMiniDumpWriteDump) {
-    win32_trace("[WIN32-TRACE] MiniDumpWriteDump not found in dbghelp.dll\r\n");
-    return;
-  }
-  HANDLE hFile = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-  if (hFile != INVALID_HANDLE_VALUE) {
-    MY_MINIDUMP_EXCEPTION_INFORMATION mei;
-    mei.ThreadId = GetCurrentThreadId();
-    mei.ExceptionPointers = ep;
-    mei.ClientPointers = FALSE;
-    BOOL ok = pMiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), hFile,
-                                 2 /*MiniDumpWithFullMemory*/,
-                                 &mei, NULL, NULL);
-    CloseHandle(hFile);
-    char msg[512];
-    snprintf(msg, sizeof(msg), "[WIN32-TRACE] Minidump %s: %s\r\n",
-             ok ? "written" : "FAILED", path);
-    win32_trace(msg);
-  } else {
-    win32_trace("[WIN32-TRACE] Failed to create minidump file\r\n");
-  }
-}
-
-static volatile LONG g_dumping = 0;
 static volatile LONG g_crash_count = 0;
 static volatile LONG g_bg_crash_count = 0;
 static DWORD g_main_thread_id = 0;
@@ -119,7 +129,7 @@ static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
     return EXCEPTION_CONTINUE_SEARCH;
   }
   LONG crash_seq = InterlockedIncrement(&g_crash_count);
-  char buf[4096];
+  char buf[16384];
   DWORD tid = GetCurrentThreadId();
   BOOL is_main = (tid == g_main_thread_id);
   int n = snprintf(buf, sizeof(buf),
@@ -151,7 +161,76 @@ static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
       "  Module: %s + 0x%llX\r\n", modname, (unsigned long long)mod_rva);
   }
   {
-    n += snprintf(buf + n, sizeof(buf) - n, "  Stack (RIP-based, RVAs):");
+    HMODULE hDbgHlp = LoadLibraryA("dbghelp.dll");
+    auto pStackWalk64 = hDbgHlp ? (StackWalk64Fn)GetProcAddress(hDbgHlp, "StackWalk64") : nullptr;
+    auto pSymInit = hDbgHlp ? (SymInitializeFn)GetProcAddress(hDbgHlp, "SymInitialize") : nullptr;
+    auto pSymCleanup = hDbgHlp ? (SymCleanupFn)GetProcAddress(hDbgHlp, "SymCleanup") : nullptr;
+    auto pSymSetOpts = hDbgHlp ? (SymSetOptionsFn)GetProcAddress(hDbgHlp, "SymSetOptions") : nullptr;
+    auto pSymFromAddr = hDbgHlp ? (SymFromAddrFn)GetProcAddress(hDbgHlp, "SymFromAddr") : nullptr;
+    auto pSymFTA64 = hDbgHlp ? (SymFunctionTableAccess64Fn)GetProcAddress(hDbgHlp, "SymFunctionTableAccess64") : nullptr;
+    auto pSymGMB64 = hDbgHlp ? (SymGetModuleBase64Fn)GetProcAddress(hDbgHlp, "SymGetModuleBase64") : nullptr;
+
+    if (pStackWalk64 && pSymInit && pSymCleanup && pSymSetOpts && pSymFTA64 && pSymGMB64) {
+      n += snprintf(buf + n, sizeof(buf) - n, "  StackWalk64 backtrace:\r\n");
+      HANDLE hProcess = GetCurrentProcess();
+      HANDLE hThread = GetCurrentThread();
+      pSymSetOpts(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+      pSymInit(hProcess, NULL, TRUE);
+
+      STACKFRAME64 sf = {};
+      sf.AddrPC.Offset = ctx->Rip;
+      sf.AddrPC.Mode = AddrModeFlat;
+      sf.AddrFrame.Offset = ctx->Rbp;
+      sf.AddrFrame.Mode = AddrModeFlat;
+      sf.AddrStack.Offset = ctx->Rsp;
+      sf.AddrStack.Mode = AddrModeFlat;
+
+      for (int fi = 0; fi < 32 && n < (int)sizeof(buf) - 256; fi++) {
+        if (!pStackWalk64(IMAGE_FILE_MACHINE_AMD64, hProcess, hThread, &sf, ctx,
+                         NULL, (PVOID)pSymFTA64, (PVOID)pSymGMB64, NULL)) {
+          break;
+        }
+        DWORD64 addr = sf.AddrPC.Offset;
+        if (addr == 0) break;
+
+        char sym_buf[sizeof(SYMBOL_INFO) + 256];
+        SYMBOL_INFO *sym = (SYMBOL_INFO *)sym_buf;
+        memset(sym_buf, 0, sizeof(sym_buf));
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen = 255;
+        DWORD64 displacement = 0;
+
+        HMODULE frame_mod = NULL;
+        char frame_modname[MAX_PATH] = {0};
+        uintptr_t frame_mod_offset = 0;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)addr, &frame_mod) && frame_mod) {
+          GetModuleFileNameA(frame_mod, frame_modname, sizeof(frame_modname));
+          frame_mod_offset = addr - (uintptr_t)frame_mod;
+        }
+
+        if (pSymFromAddr && pSymFromAddr(hProcess, addr, &displacement, sym)) {
+          n += snprintf(buf + n, sizeof(buf) - n,
+            "    #%02d 0x%p %s+0x%llX", fi, (void*)addr, sym->Name, (unsigned long long)displacement);
+        } else {
+          const char *short_mod = strrchr(frame_modname, '\\');
+          short_mod = short_mod ? short_mod + 1 : frame_modname;
+          n += snprintf(buf + n, sizeof(buf) - n,
+            "    #%02d 0x%p (%s+0x%llX)", fi, (void*)addr, short_mod, (unsigned long long)frame_mod_offset);
+        }
+        if (frame_mod && frame_mod == GetModuleHandleA(NULL)) {
+          n += snprintf(buf + n, sizeof(buf) - n, " [RVA=0x%llX]", (unsigned long long)(addr - exe_base));
+        }
+        n += snprintf(buf + n, sizeof(buf) - n, "\r\n");
+      }
+      pSymCleanup(hProcess);
+    } else {
+      n += snprintf(buf + n, sizeof(buf) - n, "  StackWalk64: dbghelp.dll functions not available\r\n");
+    }
+  }
+  {
+    n += snprintf(buf + n, sizeof(buf) - n, "  Stack scan (RVAs):");
     uintptr_t rsp_val = (uintptr_t)ctx->Rsp;
     for (int fi = 0; fi < 64 && n < (int)sizeof(buf) - 64; fi++) {
       uintptr_t *slot = (uintptr_t *)(rsp_val + fi * 8);
@@ -173,25 +252,19 @@ static LONG WINAPI win32_vectored_handler(EXCEPTION_POINTERS *ep) {
   }
 
   if (is_main) {
-    if (InterlockedCompareExchange(&g_dumping, 1, 0) == 0) {
-      write_minidump(ep);
-    }
     win32_trace("[WIN32-TRACE] Main thread crash, terminating.\r\n");
     TerminateProcess(GetCurrentProcess(), 3);
   }
 
   LONG bg_seq = InterlockedIncrement(&g_bg_crash_count);
-  if (bg_seq <= 3) {
-    if (InterlockedCompareExchange(&g_dumping, 1, 0) == 0) {
-      write_minidump(ep);
-    }
+  {
+    char msg2[256];
+    snprintf(msg2, sizeof(msg2),
+      "[WIN32-TRACE] Background thread crash #%ld, terminating process to avoid corruption.\r\n",
+      bg_seq);
+    win32_trace(msg2);
   }
-  if (bg_seq > 200) {
-    win32_trace("[WIN32-TRACE] Too many bg-thread crashes (>200), terminating.\r\n");
-    TerminateProcess(GetCurrentProcess(), 3);
-  }
-  win32_trace("[WIN32-TRACE] Background thread crash, killing thread only.\r\n");
-  ExitThread(1);
+  TerminateProcess(GetCurrentProcess(), 3);
   return EXCEPTION_CONTINUE_SEARCH;
 }
 static struct Win32EarlyInit {

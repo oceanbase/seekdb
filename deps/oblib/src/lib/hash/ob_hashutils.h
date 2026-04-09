@@ -1025,7 +1025,7 @@ class BigArrayTemp
                        array_size);
         ret = -1;
       } else {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
         for (int64_t i = 0; i < array_size; ++i) {
           new (&array_[i]) T();
         }
@@ -1227,9 +1227,10 @@ int do_create(Array &array, const int64_t total_size, const int64_t array_size, 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     _OB_LOG(WARN, "alloc memory failed,size:%ld", total_size * item_size);
   } else {
-#ifdef __APPLE__
-    // On macOS, we must call constructors to initialize complex types like pthread_rwlock_t
+#if defined(__APPLE__) || defined(_WIN32)
+    // On macOS/Windows, we must call constructors to initialize complex types like pthread_rwlock_t
     // because memset(0) is not sufficient for dynamic initialization.
+    // On Windows PThreads4W, pthread_mutex_t is a pointer and PTHREAD_MUTEX_INITIALIZER is -1 (not 0).
     typedef typename std::remove_pointer<Array>::type ItemType;
     for (int64_t i = 0; i < total_size; ++i) {
       new (&array[i]) ItemType();

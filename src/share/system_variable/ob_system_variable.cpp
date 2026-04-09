@@ -3454,16 +3454,12 @@ int ObSetSysVar::find_set(const ObString &str)
   } else if (OB_UNLIKELY(str.length() >=  MAX_STR_BUF_LEN)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("system variable string is too long", K(ret), K(str));
-#if defined(__APPLE__) || defined(__ANDROID__)
-  } else if (OB_ISNULL(buf = strndup(str.ptr(), str.length()))) {
+  } else if (OB_ISNULL(buf = (char *)alloca(str.length() + 1))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to alloc memory", K(ret));
-#elif defined(__linux__)
-  } else if (OB_ISNULL(buf = strndupa(str.ptr(), str.length()))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("failed to alloc memory", K(ret));
-#endif
   } else {
+    MEMCPY(buf, str.ptr(), str.length());
+    buf[str.length()] = '\0';
     char *value = NULL;
     char *saveptr = NULL;
     for (value = strtok_r(buf, ",", &saveptr);
@@ -3477,16 +3473,10 @@ int ObSetSysVar::find_set(const ObString &str)
         err_obj.set_varchar(part_str);
         int log_ret = OB_SUCCESS;
         if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, err_obj))) {
-          // log_ret is only used for logging, does not overwrite ret
           LOG_ERROR("fail to log error", K(ret), K(log_ret), K(err_obj));
         }
       }
     }
-#ifdef __APPLE__
-    // Free memory allocated by strndup on macOS
-    free(buf);
-    buf = NULL;
-#endif
   }
   return ret;
 }

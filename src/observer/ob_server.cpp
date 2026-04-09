@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include "observer/ob_server.h"
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"

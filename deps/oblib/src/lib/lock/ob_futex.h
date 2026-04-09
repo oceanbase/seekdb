@@ -62,10 +62,16 @@ inline int futex_wake(volatile int *p, int val)
 {
   if (val == 1) {
     WakeByAddressSingle((PVOID)p);
+    // WakeByAddressSingle doesn't report whether anyone was actually woken.
+    // Return 1 (optimistic) to match Linux futex(FUTEX_WAKE) semantics where
+    // the return value is the number of waiters woken. ObLatchWaitQueue::wake_up
+    // relies on this to stop its retry loop after successfully signaling a waiter.
+    // Returning 0 causes the loop to wake ALL waiters (thundering herd).
+    return 1;
   } else {
     WakeByAddressAll((PVOID)p);
+    return val;
   }
-  return 0;
 }
 
 inline int futex_wait(volatile int *p, int val, const timespec *timeout)

@@ -988,9 +988,16 @@ int ObStaticEngineCG::generate_spec_final(ObLogicalOperator &op, ObOpSpec &spec)
   if (log_op_def::LOG_SET == op.get_type()
       && !static_cast<ObLogSet &>(op).is_recursive_union()
       && spec.is_vectorized()) {
-    ObSetSpec &set_op = static_cast<ObSetSpec&>(spec);
-    for (int64_t i = 0; OB_SUCC(ret) && i < set_op.set_exprs_.count(); ++i) {
-      ObExpr *expr = set_op.set_exprs_.at(i);
+    ExprFixedArray *set_exprs = nullptr;
+    if (PHY_VEC_HASH_UNION == spec.type_
+        || PHY_VEC_HASH_INTERSECT == spec.type_
+        || PHY_VEC_HASH_EXCEPT == spec.type_) {
+      set_exprs = &static_cast<ObHashSetVecSpec&>(spec).set_exprs_;
+    } else {
+      set_exprs = &static_cast<ObSetSpec&>(spec).set_exprs_;
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < set_exprs->count(); ++i) {
+      ObExpr *expr = set_exprs->at(i);
       if (!expr->is_batch_result()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected status: set expr is not batch result", K(expr->type_), K(ret));
