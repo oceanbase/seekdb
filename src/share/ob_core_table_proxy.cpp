@@ -387,7 +387,7 @@ int ObCoreTableProxy::load(const bool for_update)
   all_row_.reset();
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+  HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     if (!is_valid()) {
       ret = OB_INVALID_ARGUMENT;

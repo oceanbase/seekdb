@@ -28,6 +28,7 @@
 #include "observer/ob_server_struct.h"
 #include "rootserver/ob_ddl_service_launcher.h"   // for ObDDLServiceLauncher
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
+#include "common/ob_smart_call.h"
 
 namespace oceanbase
 {
@@ -421,7 +422,7 @@ protected:
       : ObRootServerRPCProcessor<pcode>(rs, check_type, is_ddl_like, arg) {}                  \
   protected:                                                                                  \
     virtual int leader_process() {                   \
-      return root_service_.stmt; }                   \
+      return SMART_CALL(root_service_.stmt); }       \
   };
 
 // RPC need rs in full service status (RS restart task success)
@@ -602,6 +603,7 @@ DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_DIRECTORY, ObRpcDropDirectoryP, drop_
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DO_CONTEXT_DDL, ObRpcDoContextDDLP, do_context_ddl(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_RECOMPILE_ALL_VIEWS_BATCH, ObRpcRecompileAllViewsBatchP, recompile_all_views_batch(arg_));
 
+DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_SYNC_REWRITE_RULES, ObRpcAdminSyncRewriteRulesP, admin_sync_rewrite_rules(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_CCL_RULE, ObRpcCreateCCLRuleDDLP, create_ccl_rule_ddl(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_CCL_RULE, ObRpcDropCCLRuleDDLP, drop_ccl_rule_ddl(arg_));
 //rebuild tablet

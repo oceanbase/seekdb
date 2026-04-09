@@ -252,7 +252,8 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
     LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
+    ob_abort();
+    LOG_WARN("stack overflow, maybe too deep recursive", K(ret), KCSTRING(lbt()));
   } else if (log_op_def::LOG_EXCHANGE == root_op.get_type() &&
       static_cast<const ObLogExchange *>(&root_op)->is_px_consumer()) {
     // The current exchange is a QC, abstract all the sub-plans below into a dfo tree

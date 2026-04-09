@@ -428,7 +428,11 @@ int ObRawExpr::formalize(const ObSQLSessionInfo *session_info,
                          bool need_deduce_type)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(formalize(session_info, solidify_session_vars, NULL, OB_INVALID_INDEX_INT64, need_deduce_type))) {
+  if (OB_FAIL(SMART_CALL(formalize(session_info,
+                                   solidify_session_vars,
+                                   NULL,
+                                   OB_INVALID_INDEX_INT64,
+                                   need_deduce_type)))) {
     LOG_WARN("formalize with local vars failed", K(ret));
   }
   return ret;
@@ -445,8 +449,8 @@ int ObRawExpr::formalize(const ObSQLSessionInfo *session_info,
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("fail to check stack overflow", K(ret), K(is_stack_overflow));
   } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
+    LOG_INFO("stack usage is high before raw expr formalize, continue with smart call protection",
+             K(is_stack_overflow));
   } else if (OB_FAIL(extract_info())) {
     LOG_WARN("failed to extract info", K(*this));
   } else if (need_deduce_type &&
@@ -4575,8 +4579,7 @@ int ObSysFunRawExpr::check_param_num()
     ret = OB_ERR_FUNCTION_UNKNOWN;
     // Do not report error to USER, external will continue to attempt parsing as UDF based on this error code
     LOG_WARN("system function not exists, maybe a user define function", K(func_name_), K(ret));
-    // ObCStringHelper helper;
-    // LOG_USER_ERROR(ret, "FUNCTION", helper.convert(func_name_)); //throw to user
+    // LOG_USER_ERROR(ret, "FUNCTION", to_cstring(func_name_)); //throw to user
   } else if (OB_UNLIKELY(NULL == (op = get_op()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail to make function", K(func_name_), K(ret));
@@ -4600,8 +4603,7 @@ int ObSysFunRawExpr::check_param_num(int32_t param_count)
     ret = OB_ERR_FUNCTION_UNKNOWN;
     // Do not report error to USER, external will continue to attempt parsing as UDF based on this error code
     LOG_WARN("system function not exists, maybe a user define function", K(func_name_), K(ret));
-    // ObCStringHelper helper;
-    // LOG_USER_ERROR(ret, "FUNCTION", helper.convert(func_name_)); //throw to user
+    // LOG_USER_ERROR(ret, "FUNCTION", to_cstring(func_name_)); //throw to user
   } else if (OB_UNLIKELY(NULL == (op = get_op()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail to make function", K(func_name_), K(ret));

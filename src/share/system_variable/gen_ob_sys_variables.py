@@ -226,13 +226,6 @@ def make_head_file(pdir, head_file_name, sorted_list):
   head_file.write("  static int64_t get_store_idx(int64_t var_id);\n");
   head_file.write("  static bool has_invalid_sys_var_id();\n");
   head_file.write("};\n");
-  head_file.write("\n");
-
-  # Add ESSENTIAL_SYS_VARS declaration
-  head_file.write("// Auto-generated ESSENTIAL_SYS_VARS array for inner session initialization\n");
-  head_file.write("// These variables are frequently used in session initialization, tenant processing, schema setting and other critical processes\n");
-  head_file.write("extern const ObSysVarClassType ESSENTIAL_SYS_VARS[];\n");
-  head_file.write("extern const int64_t ESSENTIAL_SYS_VARS_COUNT;\n");
 
   head_file.write("\n");
   head_file.write("} // end namespace share\n");
@@ -504,6 +497,7 @@ public:
   void destroy();
   int create_sys_var(ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var, int64_t store_idx = -1);
   int create_all_sys_vars();
+  int create_all_sys_vars_();
   int free_sys_var(ObBasicSysVar *sys_var, int64_t sys_var_idx);
   static int create_sys_var(ObIAllocator &allocator_, ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var_ptr);
   static int calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &store_idx);
@@ -679,6 +673,7 @@ def make_sys_var_cpp(pdir, filename, list_sorted_by_name, list_sorted_by_id):
   wfile.write(file_head_annotation);
   wfile.write("#define USING_LOG_PREFIX SQL_SESSION\n");
   wfile.write("#include \"" + pdir + "/" + filename.replace(".cpp", ".h") + "\"\n")
+  wfile.write("#include \"common/ob_smart_call.h\"\n")
   # wfile.write("#include \"share/system_variable/ob_system_variable_init.cpp\"\n")
   wfile.write("using namespace oceanbase::common;\n");
   wfile.write("""
@@ -933,6 +928,11 @@ int ObSysVarFactory::free_sys_var(ObBasicSysVar *sys_var, int64_t sys_var_idx)
 
 int ObSysVarFactory::create_all_sys_vars()
 {
+  return SMART_CALL(create_all_sys_vars_());
+}
+
+int ObSysVarFactory::create_all_sys_vars_()
+{
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_init_store_mem())) {
     LOG_WARN("Fail to init", K(ret));
@@ -1087,107 +1087,6 @@ def gen_upgrade_script():
   print(info.read())
   print('\n=========run gen_upgrade_scripts.py, end=========\n')
 
-def generate_essential_sys_vars_in_init_cpp(cpp_filename, list_sorted_by_id):
-  """
-  Generate ESSENTIAL_SYS_VARS array in ob_system_variable_init.cpp which is used for inner session initialization,
-  including:
-  1. some essential vars (such as ob_compatibility_mode, sql_mode, ob_read_consistency)
-  2. all system vars with INFLUENCE_PLAN flag
-  """
-  # some essential vars
-  essential_core_vars = [
-    "ob_compatibility_mode",
-    "sql_mode",
-    "ob_read_consistency",
-    "lower_case_table_names",      # needed for table name resolution in SQL parsing
-    "collation_connection",        # needed for expression resolution in SQL parsing
-    "character_set_connection",     # needed for expression resolution in SQL parsing
-    "ob_check_sys_variable",
-    "ob_compatibility_version",
-    "ob_log_level",                # needed for process_session_variable_fast
-    "debug_sync",                   # needed for process_session_variable_fast
-    "ob_global_debug_sync",         # needed for process_session_variable_fast
-    "wait_timeout",                 # needed for process_session_variable_fast
-  ]
-
-  essential_vars = []
-  influence_plan_vars = []
-
-  # iterate all system vars
-  for (name, attributes) in list_sorted_by_id:
-    var_name_upper = "SYS_VAR_" + name.upper()
-
-    # check if it is an essential var
-    if name in essential_core_vars:
-      essential_vars.append((var_name_upper, name, "core"))
-    # check if it has INFLUENCE_PLAN flag
-    elif "INFLUENCE_PLAN" in attributes["flags"]:
-      influence_plan_vars.append((var_name_upper, name, "influence_plan"))
-
-  # sort the vars by the order of the original array: first core vars, then influence_plan vars
-  essential_vars.extend(influence_plan_vars)
-
-  # read the existing cpp file
-  import codecs
-  with codecs.open(cpp_filename, 'r', encoding='utf-8') as rfile:
-    content = rfile.read()
-
-  # generate ESSENTIAL_SYS_VARS array content
-  essential_array_content = []
-  essential_array_content.append('// Auto-generated ESSENTIAL_SYS_VARS array for inner session initialization')
-  essential_array_content.append('// These variables are frequently used in session initialization, tenant processing, schema setting and other critical processes')
-  essential_array_content.append('const ObSysVarClassType ESSENTIAL_SYS_VARS[] = {')
-
-  # write core vars comment
-  core_vars_written = False
-  influence_plan_vars_written = False
-
-  for var_name_upper, name, var_type in essential_vars:
-    if var_type == "core" and not core_vars_written:
-      essential_array_content.append('  // compatibility mode related vars - affect SQL parsing and execution behavior')
-      core_vars_written = True
-    elif var_type == "influence_plan" and not influence_plan_vars_written:
-      essential_array_content.append('  ')
-      essential_array_content.append('  // all system vars with INFLUENCE_PLAN flag - affect execution plan generation')
-      influence_plan_vars_written = True
-
-    # add variable comment
-    comment = "  " + var_name_upper + ","
-    if var_type == "influence_plan":
-      comment += "        // " + name
-    essential_array_content.append(comment)
-
-  essential_array_content.append('};')
-  essential_array_content.append('')
-  essential_array_content.append('const int64_t ESSENTIAL_SYS_VARS_COUNT = sizeof(ESSENTIAL_SYS_VARS) / sizeof(ESSENTIAL_SYS_VARS[0]);')
-  essential_array_content.append('')
-
-  # find the position to insert the array (after static variables but before VarsInit)
-  lines = content.split('\n')
-  insert_pos = -1
-
-  for i, line in enumerate(lines):
-    if 'static bool HasInvalidSysVar = false;' in line:
-      insert_pos = i + 1
-      break
-
-  if insert_pos == -1:
-    raise Exception("Could not find insertion point in ob_system_variable_init.cpp")
-
-  # insert the essential vars array
-  lines[insert_pos:insert_pos] = [''] + essential_array_content
-
-  # write back to file
-  os.chmod(cpp_filename, stat.S_IRUSR + stat.S_IWUSR + stat.S_IRGRP + stat.S_IROTH)
-  with codecs.open(cpp_filename, 'w', encoding='utf-8') as wfile:
-    wfile.write('\n'.join(lines))
-  os.chmod(cpp_filename, stat.S_IRUSR + stat.S_IRGRP + stat.S_IROTH)
-
-  print("Generate ESSENTIAL_SYS_VARS array in " + str(cpp_filename) + " successfully!")
-  print("Generated " + str(len(essential_vars)) + " essential system variables:")
-  print("  - " + str(len([v for v in essential_vars if v[2] == 'core'])) + " core variables")
-  print("  - " + str(len([v for v in essential_vars if v[2] == 'influence_plan'])) + " INFLUENCE_PLAN variables")
-
 pdir = "share/system_variable"
 json_file_name = "ob_system_variable_init.json"
 head_file_name = "ob_system_variable_init.h"
@@ -1207,9 +1106,6 @@ make_alias_file(pdir, alias_file_name, list_sorted_by_id)
 make_sys_var_class_type_h(pdir, sys_var_class_type_head_file_name, list_sorted_by_id)
 make_sys_var_h(pdir, sys_var_fac_head_file_name, list_sorted_by_id)
 make_sys_var_cpp(pdir, sys_var_fac_cpp_file_name, list_sorted_by_name, list_sorted_by_id)
-
-# generate ESSENTIAL_SYS_VARS array in ob_system_variable_init.cpp
-generate_essential_sys_vars_in_init_cpp(cpp_file_name, list_sorted_by_id)
 
 #gen_sys_vars_dict_script_for_upgrade(sys_vars_dict_script_file_name, list_sorted_by_id)
 #gen_upgrade_script()

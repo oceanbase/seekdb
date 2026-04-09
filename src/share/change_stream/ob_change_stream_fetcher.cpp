@@ -20,6 +20,7 @@
 #include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/serialization.h"
+#include "common/ob_smart_call.h"
 #include "share/change_stream/ob_change_stream_fetcher.h"
 #include "share/change_stream/ob_change_stream_mgr.h"
 #include "share/ob_global_stat_proxy.h"
@@ -103,19 +104,14 @@ int ObCSFetcher::init_consumption_position_()
     LOG_WARN("CSFetcher: fail to load change_stream_min_dep_lsn", KR(ret));
   } else {
     start_lsn = palf::LSN(persisted_min_dep_lsn);
-    if (OB_UNLIKELY(!start_lsn.is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("CSFetcher: persisted min_dep_lsn is invalid", KR(ret), K(persisted_min_dep_lsn));
-    } else if (current_lsn_.is_valid() && start_lsn < current_lsn_) {
+    if (current_lsn_.is_valid() && start_lsn < current_lsn_) {
       start_lsn = current_lsn_;
     }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(logservice::seek_log_iterator(ls_id_, start_lsn, iter_))) {
-        LOG_WARN("CSFetcher: fail to seek_log_iterator by min_dep_lsn", KR(ret), K(start_lsn));
-      } else {
-        current_lsn_ = start_lsn;
-        FLOG_INFO("CSFetcher: initialized from global_stat min_dep_lsn", K(start_lsn));
-      }
+    if (OB_FAIL(logservice::seek_log_iterator(ls_id_, start_lsn, iter_))) {
+      LOG_WARN("CSFetcher: fail to seek_log_iterator by min_dep_lsn", KR(ret), K(start_lsn));
+    } else {
+      current_lsn_ = start_lsn;
+      FLOG_INFO("CSFetcher: initialized from global_stat min_dep_lsn", K(start_lsn));
     }
   }
   if (OB_SUCC(ret)) {
@@ -284,10 +280,8 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
 // get_refresh_scn: get GTS, then decide refresh_scn based on async-index state:
 //   1. !has_async: return GTS — no async vector index tables.
 //   2. has_async && tx_info_ not empty: return OB_SUCCESS with invalid refresh_scn — worker handles.
-//   3. has_async && current_lsn_.is_valid() && current_lsn_ >= max_lsn:
-//      return GTS — no pending logs to consume.
-//   4. otherwise (including invalid current_lsn_): return current_scn_ —
-//      still consuming logs / cannot prove caught-up.
+//   3. has_async && current_lsn_ >= max_lsn: return GTS — no pending logs to consume.
+//   4. has_async && current_lsn_ < max_lsn: return current_scn_ — still consuming logs.
 // ---------------------------------------------------------------------------
 int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
 {
@@ -331,7 +325,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
     }
   }
 
-  if (current_lsn_.is_valid() && current_lsn_ >= max_lsn) {
+  if (current_lsn_ >= max_lsn) {
     // Case 3: caught up — no pending logs, advance to GTS.
     SCN gts_scn;
     if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), NULL, gts_scn))) {
@@ -340,8 +334,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
       refresh_scn = gts_scn;
     }
   } else {
-    // Case 4: still consuming logs, or current_lsn_ is invalid (e.g. restart init phase).
-    // In both cases, be conservative and only advance to current_scn_.
+    // Case 4: still consuming logs — advance only to current_scn_.
     refresh_scn = current_scn_;
   }
   return ret;
@@ -748,6 +741,14 @@ int ObCSFetcher::handle_rollback_to_log_(
 
 void ObCSFetcher::run1()
 {
+  int ret = SMART_CALL(run1_());
+  if (OB_FAIL(ret)) {
+    LOG_WARN("CSFetcher: run1 failed", KR(ret));
+  }
+}
+
+int ObCSFetcher::run1_()
+{
   lib::set_thread_name("CSFetcher");
 
   int ret = OB_SUCCESS;
@@ -1039,6 +1040,7 @@ void ObCSFetcher::run1()
   FLOG_INFO("CSFetcher: stopped",
             "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
             K(current_lsn_), K(current_scn_), K(total_tx_committed_));
+  return ret;
 }
 
 }  // namespace share

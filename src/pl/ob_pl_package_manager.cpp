@@ -323,7 +323,7 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
       }
       // do not cache the compilation results of system packages into the PL cache when loading system packages.
       param.enable_pl_cache_ = false;
-      SMART_VAR(char[OB_MAX_SQL_LENGTH], sql_buf) {
+      HEAP_VAR(char[OB_MAX_SQL_LENGTH], sql_buf) {
         while (OB_SUCC(ret) && !eof) {
           if (FAILEDx(read_package_sql(stream, sql_buf, OB_MAX_SQL_LENGTH, eof))) {
             LOG_WARN("fail to read package sql data", K(ret));

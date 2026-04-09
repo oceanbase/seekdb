@@ -3126,10 +3126,10 @@ int ObLSTabletService::insert_rows(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(ctx), K(dml_param), K(column_ids), KP(row_iter));
   } else {
-    ObDMLRunningCtx run_ctx(ctx,
+    HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
                             ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
-                            ObDmlFlag::DF_INSERT);
+                            ObDmlFlag::DF_INSERT) {
     int64_t row_count = 0;
     int64_t batch_idx = 0;
     ObDatumRow *rows = nullptr;
@@ -3138,7 +3138,7 @@ int ObLSTabletService::insert_rows(
     } else {
       tablet_handle.reset();
       ObTabletHandle tmp_handle;
-      SMART_VAR(ObRowsInfo, rows_info) {
+      HEAP_VAR(ObRowsInfo, rows_info) {
         ObRelativeTable &relative_table = run_ctx.relative_table_;
         const ObColDescIArray &col_descs = *(run_ctx.col_descs_);
         blocksstable::ObDatumRowIterator *unused_dup_row_iter = nullptr;
@@ -3186,7 +3186,8 @@ int ObLSTabletService::insert_rows(
       LOG_ERROR("lob data may not be insert", K(ret), K(run_ctx.lob_dml_ctx_));
     }
 
-  }
+      }
+}
 
   if (OB_SUCC(ret)) {
     LOG_DEBUG("succeeded to insert rows", K(ret), K(afct_num));
@@ -3272,10 +3273,10 @@ int ObLSTabletService::insert_rows_with_fetch_dup(
     LOG_WARN("invalid args", K(ret), K(ctx), K(dml_param),
         K(column_ids), K(duplicated_column_ids), KP(row_iter), K(flag));
   } else {
-    ObDMLRunningCtx run_ctx(ctx,
+    HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
                             ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
-                            ObDmlFlag::DF_INSERT);
+                            ObDmlFlag::DF_INSERT) {
     int64_t row_count = 0;
     ObDatumRow *rows = nullptr;
     if (OB_FAIL(prepare_dml_running_ctx(&column_ids, nullptr, tablet_handle, run_ctx))) {
@@ -3283,7 +3284,7 @@ int ObLSTabletService::insert_rows_with_fetch_dup(
     } else {
       tablet_handle.reset();
       ObTabletHandle tmp_handle;
-      SMART_VAR(ObRowsInfo, rows_info) {
+      HEAP_VAR(ObRowsInfo, rows_info) {
         int64_t dup_row_count = 0;
         bool has_ignore_dup_error = false;
         ObRelativeTable &relative_table = run_ctx.relative_table_;
@@ -3367,6 +3368,7 @@ int ObLSTabletService::insert_rows_with_fetch_dup(
       }
     }
   }
+  } // end HEAP_VAR(run_ctx)
 
   if (OB_SUCC(ret)) {
     LOG_DEBUG("succeeded to insert rows with fetch dup", K(ret));
@@ -3423,11 +3425,11 @@ int ObLSTabletService::update_rows(
     LOG_WARN("invalid args", K(ret), K(ctx), K(dml_param),
         K(column_ids), K(updated_column_ids), KP(row_iter));
   } else {
-    ObDMLRunningCtx run_ctx(ctx,
+    HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
                             ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
                             ObDmlFlag::DF_UPDATE,
-                            true /* is_need_check_old_row_ */);
+                            true /* is_need_check_old_row_ */) {
     ObIAllocator &work_allocator = run_ctx.allocator_;
     bool rowkey_change = false;
     UpdateIndexArray update_idx;
@@ -3480,7 +3482,7 @@ int ObLSTabletService::update_rows(
       */
       const bool use_row_by_row_update = ctx.mvcc_acc_ctx_.write_flag_.is_immediate_row_check() &&
         rowkey_change && (!relative_table.is_storage_index_table() || relative_table.is_unique_index());
-      // delay_new is for oracle compatible, refer to
+      // delay_new is for oracle compatible, refer to 
       //const bool delay_new = check_exist && lib::is_oracle_mode();
       // batch interface can be compatible with the oracle behavior in a batch, so no need delay_new for performance
       const bool delay_new = false;
@@ -3647,12 +3649,13 @@ int ObLSTabletService::update_rows(
       affected_rows = afct_num;
       EVENT_ADD(STORAGE_UPDATE_ROW_COUNT, afct_num);
     }
-  }
+      }
+}
   NG_TRACE(S_update_rows_end);
   return ret;
 }
 
-// delay_new is for oracle compatible, refer to
+// delay_new is for oracle compatible, refer to 
 int ObLSTabletService::delay_process_new_rows(
     ObDMLRunningCtx &run_ctx,
     const common::ObIArray<int64_t> &update_idx,
@@ -3728,10 +3731,10 @@ int ObLSTabletService::put_rows(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(ctx), K(dml_param), K(column_ids), KP(row_iter));
   } else {
-    ObDMLRunningCtx run_ctx(ctx,
+    HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
                             ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
-                            ObDmlFlag::DF_UPDATE);
+                            ObDmlFlag::DF_UPDATE) {
     ObDatumRow *rows = nullptr;
     int64_t row_count = 0;
     const ObRelativeTable &data_table = run_ctx.relative_table_;
@@ -3740,7 +3743,7 @@ int ObLSTabletService::put_rows(
       LOG_WARN("failed to prepare dml running ctx", K(ret));
     } else {
       ObTabletHandle tmp_handle;
-      SMART_VAR(ObRowsInfo, rows_info) {
+      HEAP_VAR(ObRowsInfo, rows_info) {
       const ObRelativeTable &data_table = run_ctx.relative_table_;
       const ObColDescIArray &col_descs = *(run_ctx.col_descs_);
         while (OB_SUCC(ret) && OB_SUCC(get_next_rows(row_iter, rows, row_count))) {
@@ -3790,7 +3793,8 @@ int ObLSTabletService::put_rows(
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("lob data may not be insert", K(ret), K(run_ctx.lob_dml_ctx_));
     }
-  }
+      }
+}
 
   if (OB_SUCC(ret)) {
     LOG_DEBUG("succeeded to put rows", K(ret));
@@ -3825,11 +3829,11 @@ int ObLSTabletService::delete_rows(
     LOG_WARN("invalid args", K(ret), K(dml_param), K(column_ids),
         KP(row_iter), K(ctx));
   } else {
-    ObDMLRunningCtx run_ctx(ctx,
+    HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
                             ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
                             ObDmlFlag::DF_DELETE,
-                            true /* is_need_check_old_row_ */);
+                            true /* is_need_check_old_row_ */) {
     int64_t row_count = 0;
     ObDatumRow *rows = nullptr;
     ObDatumRow *tmp_rows = nullptr;
@@ -3845,7 +3849,7 @@ int ObLSTabletService::delete_rows(
         ctx.update_full_column_ =  true;
       }
 
-      SMART_VAR(ObRowsInfo, rows_info) {
+      HEAP_VAR(ObRowsInfo, rows_info) {
         ObRelativeTable &relative_table = run_ctx.relative_table_;
         const ObColDescIArray &col_descs = *(run_ctx.col_descs_);
          ObIAllocator &work_allocator = run_ctx.allocator_;
@@ -3918,7 +3922,8 @@ int ObLSTabletService::delete_rows(
       affected_rows = afct_num;
       EVENT_ADD(STORAGE_DELETE_ROW_COUNT, afct_num);
     }
-  }
+      }
+}
   NG_TRACE(S_delete_rows_end);
   return ret;
 }
@@ -3952,10 +3957,10 @@ int ObLSTabletService::lock_rows(
     LOG_WARN("invalid argument", K(ret), K(ctx), K(dml_param), KPC(row_iter));
   } else {
     timeguard.click("Get");
-    ObDMLRunningCtx run_ctx(ctx,
+    HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
                             ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
-                            ObDmlFlag::DF_LOCK);
+                            ObDmlFlag::DF_LOCK) {
     ObDatumRow *row = nullptr;
     if (OB_FAIL(prepare_dml_running_ctx(nullptr, nullptr, tablet_handle, run_ctx))) {
       LOG_WARN("failed to prepare dml running ctx", K(ret));
@@ -4005,7 +4010,8 @@ int ObLSTabletService::lock_rows(
         affected_rows = afct_num;
       }
     }
-  }
+      }
+}
   NG_TRACE(S_lock_rows_end);
   return ret;
 }
@@ -4032,10 +4038,10 @@ int ObLSTabletService::lock_row(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ctx), K(dml_param), K(row));
   } else {
-    ObDMLRunningCtx run_ctx(ctx,
+    HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
                             ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
-                            ObDmlFlag::DF_LOCK);
+                            ObDmlFlag::DF_LOCK) {
     if (OB_FAIL(prepare_dml_running_ctx(nullptr, nullptr, tablet_handle, run_ctx))) {
       LOG_WARN("failed to prepare dml running ctx", K(ret));
     } else if (OB_FAIL(run_ctx.relative_table_.get_rowkey_column_ids(col_desc))) {
@@ -4053,7 +4059,8 @@ int ObLSTabletService::lock_row(
         ++afct_num;
       }
     }
-  }
+      }
+}
 
   return ret;
 }
@@ -5092,11 +5099,8 @@ int ObLSTabletService::insert_vector_index_rows(
                                                            &vec_idx_param,
                                                            vec_dim);
     if (OB_SUCCESS == tmp_ret) {
-      const bool is_async_index = share::ObVectorIndexUtil::is_sync_mode_async(vec_idx_param);
-      if (!is_async_index) {
-        adaptor_guard.get_adatper()->update_index_id_dml_scn(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_.version_);
-        adaptor_guard.get_adatper()->update_can_skip(NOT_SKIP);
-      }
+      adaptor_guard.get_adatper()->update_index_id_dml_scn(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_.version_);
+      adaptor_guard.get_adatper()->update_can_skip(NOT_SKIP);
     } else {
       LOG_WARN("acquire_adapter_guard for index_id table failed, skip adapter update",
                K(tmp_ret), K(run_ctx.relative_table_.get_tablet_id()));

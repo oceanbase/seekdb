@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ob_resolver.h"
+#include "common/ob_smart_call.h"
 #include "sql/resolver/cmd/ob_alter_system_resolver.h"
 #include "sql/resolver/cmd/ob_switch_role_resolver.h"
 #include "sql/resolver/dml/ob_insert_resolver.h"
@@ -153,11 +154,11 @@ ObResolver::~ObResolver()
 }
 
 template <typename ResolverType>
-int ObResolver::stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
+__attribute__((noinline)) int ObResolver::stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(ResolverType, stmt_resolver, params) {
-    if (OB_FAIL(stmt_resolver.resolve(parse_tree))) {
+    if (OB_FAIL(SMART_CALL(stmt_resolver.resolve(parse_tree)))) {
       LOG_WARN("execute stmt_resolver failed", K(ret), K(parse_tree.type_));
     }
     stmt = stmt_resolver.get_basic_stmt();
@@ -166,13 +167,13 @@ int ObResolver::stmt_resolver_func(ObResolverParams &params, const ParseNode &pa
 }
 
 template <typename SelectResolverType>
-int ObResolver::select_stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
+__attribute__((noinline)) int ObResolver::select_stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(SelectResolverType, stmt_resolver, params) {
     stmt_resolver.set_calc_found_rows(true);
     stmt_resolver.set_has_top_limit(true);
-    if (OB_FAIL(stmt_resolver.resolve(parse_tree))) {
+    if (OB_FAIL(SMART_CALL(stmt_resolver.resolve(parse_tree)))) {
       LOG_WARN("execute stmt_resolver failed", K(ret), K(parse_tree.type_));
     }
     stmt = stmt_resolver.get_basic_stmt();
@@ -610,9 +611,9 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_CHECK_TABLE:
       case T_SHOW_CREATE_USER:
       case T_SHOW_CATALOGS:
-      case T_SHOW_CREATE_CATALOG:
+      case T_SHOW_CREATE_CATALOG: 
       case T_SHOW_LOCATIONS:
-      case T_SHOW_CREATE_LOCATION:
+      case T_SHOW_CREATE_LOCATION: 
       case T_LOCATION_UTILS_LIST: {
         REGISTER_STMT_RESOLVER(Show);
         break;

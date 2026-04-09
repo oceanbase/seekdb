@@ -27,7 +27,6 @@
 #include "share/schema/ob_schema_printer.h"
 #include "storage/ob_locality_manager.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include <openssl/md5.h>
 #include "share/resource_manager/ob_resource_manager.h"
 #include "observer/omt/ob_tenant_srs.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
@@ -610,7 +609,7 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
       if (session->get_ddl_info().is_ddl_check_default_value()) {
         effective_tenant_id = OB_SERVER_TENANT_ID;
       }
-      SMART_VARS_2((ObExecContext, exec_ctx, tmp_allocator),
+      HEAP_VARS_2((ObExecContext, exec_ctx, tmp_allocator),
                    (ObStaticEngineExprCG, expr_cg, tmp_allocator,
                     session, schema_guard,
                     phy_plan_ctx->get_original_param_cnt(),
@@ -3671,7 +3670,7 @@ int64_t ObSqlFatalErrExtraInfoGuard::to_string(char *buf, const int64_t buf_len)
       dep_tables = &(query_ctx->global_dependency_tables_);
     }
     if (OB_NOT_NULL(exec_ctx_->get_my_session())) {
-      OZ (exec_ctx_->get_my_session()->get_sys_var_in_pc_str(sys_var_values));
+      sys_var_values = exec_ctx_->get_my_session()->get_sys_var_in_pc_str();
     }
   }
   // Print the schema information of the plan dependencies

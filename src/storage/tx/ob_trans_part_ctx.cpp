@@ -6970,7 +6970,7 @@ int ObPartTransCtx::notify_data_source_(const NotifyType notify_type,
     int64_t total_time = 0;
 
     if (OB_FAIL(
-            ObMulSourceTxDataNotifier::notify(notify_array, notify_type, arg, this, total_time))) {
+            SMART_CALL(ObMulSourceTxDataNotifier::notify(notify_array, notify_type, arg, this, total_time)))) {
       TRANS_LOG(WARN, "notify data source failed", K(ret), K(arg));
     }
     if (notify_array.count() > 0) {

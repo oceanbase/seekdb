@@ -83,11 +83,11 @@ int check_stack_overflow(bool &is_overflow,
       ret = OB_ERR_UNEXPECTED;
       is_overflow = true;
       COMMON_LOG(ERROR, "stack size smaller than reserved_stack_size ",
-          K(ret), K(stack_size), K(reserved_size));
+          K(ret), K(stack_size), K(reserved_size), KCSTRING(lbt()));
     } else if (OB_UNLIKELY(stack_eof < static_cast<char *>(cur_stack))) {
       is_overflow = true;
       ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(ERROR, "stack incorrect params", K(ret), KP(stack_eof), KP(cur_stack));
+      COMMON_LOG(ERROR, "stack incorrect params", K(ret), KP(stack_eof), KP(cur_stack), KCSTRING(lbt()));
     } else {
       int64_t cur_stack_used = stack_eof - (static_cast<char *>(cur_stack));
       if (used_size != nullptr) {
@@ -97,7 +97,7 @@ int check_stack_overflow(bool &is_overflow,
       if (OB_UNLIKELY(cur_stack_used > (static_cast<int64_t>(stack_size) - reserved_size))) {
         is_overflow = true;
         COMMON_LOG(WARN, "stack possible overflow", KP(cur_stack), KP(stack_eof),
-            KP(stack_start), K(stack_size), K(reserved_size), K(cur_stack_used));
+            KP(stack_start), K(stack_size), K(reserved_size), K(cur_stack_used), KCSTRING(lbt()));
       }
     }
   }

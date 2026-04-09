@@ -23,6 +23,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/charset/ob_charset.h"
 #include "sql/parser/ob_parser_utils.h"
+#include "sql/udr/ob_udr_struct.h"
 
 namespace oceanbase
 {
@@ -53,7 +54,8 @@ class ObParser
 {
 public:
   explicit ObParser(common::ObIAllocator &allocator, ObSQLMode mode,
-                    ObCharsets4Parser charsets4parser = ObCharsets4Parser());
+                    ObCharsets4Parser charsets4parser = ObCharsets4Parser(),
+                    QuestionMarkDefNameCtx *ctx = nullptr);
   virtual ~ObParser();
   /// @param queries Note that all three members of ObString is valid, size() is the length
   ///                of the single statement, length() is the length of remainer statements
@@ -81,6 +83,16 @@ public:
                 ParseResult &parse_result,
                 const bool no_throw_parser_error);
 
+private:
+  int parse_(const common::ObString &stmt,
+                    ParseResult &parse_result,
+                    ParseMode mode=STD_MODE,
+                    const bool is_batched_multi_stmt_split_on = false,
+                    const bool no_throw_parser_error = false,
+                    const bool is_pl_inner_parse = false,
+                    const bool is_dbms_sql = false,
+                    const bool is_parser_dynamic_sql = false);
+public:
   virtual int parse(const common::ObString &stmt,
                     ParseResult &parse_result,
                     ParseMode mode=STD_MODE,
@@ -211,6 +223,7 @@ private:
   ObSQLMode sql_mode_;
 
   ObCharsets4Parser charsets4parser_;
+  QuestionMarkDefNameCtx *def_name_ctx_;
 };
 
 } // end namespace sql

@@ -97,8 +97,8 @@ int Thread::start()
   } else if (stack_size_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid stack_size", K(ret), K(stack_size_));
-#if !defined(OB_USE_ASAN) && !defined(__APPLE__) && !defined(__ANDROID__) && !defined(_WIN32)
-  } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), stack_size_))) {
+#if !defined(OB_USE_ASAN) && !defined(_WIN32)
+  } else if (OB_ISNULL(stack_addr_ = g_stack_allocer.alloc(0 == GET_TENANT_ID() ? OB_SERVER_TENANT_ID : GET_TENANT_ID(), stack_size_ + SIG_STACK_SIZE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc stack memory failed", K(stack_size_));
 #endif
@@ -120,11 +120,11 @@ int Thread::start()
       // On macOS/Android, pthread_attr_setstack often fails with EINVAL if address/size
       // are not perfectly aligned or if the memory is already managed in a way
       // that pthread doesn't like. Use setstacksize instead and let the system
-      // allocate the stack.
+      // allocate the stack, while keeping our stack_addr_ for stack_header logic.
       pret = pthread_attr_setstacksize(&attr, stack_size_);
       if (pret != 0) {
         // Fallback to default if setstacksize fails
-        pret = 0;
+        pret = 0; 
       } else {
         size_t actual_stack_size = 0;
         pthread_attr_getstacksize(&attr, &actual_stack_size);
@@ -156,7 +156,7 @@ int Thread::start()
         }
       }
     } else {
-      int64_t total_size = stack_size_;
+      int64_t total_size = stack_size_ + SIG_STACK_SIZE;
       LOG_ERROR("pthread_attr_setstack failed", K(pret), K(total_size), K_(stack_size), KP(stack_addr_));
     }
     if (0 != pret) {
@@ -364,13 +364,13 @@ void Thread::destroy_stack()
 {
 #ifdef _WIN32
   pth_ = pthread_null();
-#else
-#if !defined(OB_USE_ASAN)
+#elif !defined(OB_USE_ASAN)
   if (stack_addr_ != nullptr) {
     g_stack_allocer.dealloc(stack_addr_);
     stack_addr_ = nullptr;
+    pth_ = 0;
   }
-#endif
+#else
   pth_ = 0;
 #endif
 }
@@ -378,6 +378,7 @@ void Thread::destroy_stack()
 void* Thread::__th_start(void *arg)
 {
   Thread * const th = reinterpret_cast<Thread*>(arg);
+
   // Set high QoS for this thread (platform-independent)
   // On macOS, threads in a daemon process inherit low QoS priority which causes scheduling delays.
   ob_set_thread_qos(ObThreadQoS::USER_INITIATED);
@@ -391,16 +392,32 @@ void* Thread::__th_start(void *arg)
   current_thread_ = th;
   th->tid_ = gettid();
 
-#if  !defined(OB_USE_ASAN) && !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
-  ObStackHeader *stack_header = nullptr;
-  if (th->stack_addr_ != nullptr) {
-    stack_header = ProtectedStackAllocator::stack_header(th->stack_addr_);
-    abort_unless(stack_header->check_magic());
-  }
+#if !defined(OB_USE_ASAN) && !defined(_WIN32)
+  ObStackHeader *stack_header = ProtectedStackAllocator::stack_header(th->stack_addr_);
+  abort_unless(stack_header->check_magic());
 
-  if (stack_header != nullptr) {
-    stack_header->pth_ = (uint64_t)pthread_self();
+  #ifndef OB_USE_ASAN
+  /**
+    signal handler stack
+   */
+  #if !defined(__APPLE__)
+  stack_t nss;
+  stack_t oss;
+  bzero(&nss, sizeof(nss));
+  bzero(&oss, sizeof(oss));
+  nss.ss_sp = &((char*)th->stack_addr_)[th->stack_size_];
+  nss.ss_size = SIG_STACK_SIZE;
+  bool restore_sigstack = false;
+  if (-1 == sigaltstack(&nss, &oss)) {
+    LOG_WARN_RET(OB_ERR_SYS, "sigaltstack failed, ignore it", K(errno));
+  } else {
+    restore_sigstack = true;
   }
+  DEFER(if (restore_sigstack) { sigaltstack(&oss, nullptr); });
+  #endif // !__APPLE__
+  #endif
+
+  stack_header->pth_ = (uint64_t)pthread_self();
 #endif
 
   int ret = OB_SUCCESS;

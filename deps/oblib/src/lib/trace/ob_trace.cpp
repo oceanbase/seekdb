@@ -105,9 +105,8 @@ void flush_trace()
 }
 uint64_t UUID::gen_rand()
 {
-  static thread_local std::random_device dev;
-  static thread_local std::mt19937 rng(dev());
-  static thread_local std::uniform_int_distribution<uint64_t> dist;
+  static thread_local std::mt19937 rng(std::random_device{}());
+  static std::uniform_int_distribution<uint64_t> dist;
   return dist(rng);
 }
 

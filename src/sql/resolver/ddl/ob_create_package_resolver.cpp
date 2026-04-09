@@ -49,14 +49,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
     HEAP_VAR(ObPLPackageAST, package_ast, *allocator_) {
       int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
       ObPLPackageGuard package_guard(params_.session_info_->get_effective_tenant_id());
-      ObPLResolver resolver(*params_.allocator_,
-                            *params_.session_info_,
-                            *(params_.schema_checker_->get_schema_mgr()),
-                            package_guard,
-                            *params_.sql_proxy_,
-                            *params_.expr_factory_,
-                            NULL,
-                            false);
       ObCreatePackageStmt *stmt = NULL;
       ParseNode *package_block_node = NULL ;
       ParseNode *sp_name_node = NULL;
@@ -67,6 +59,14 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
       ObString package_name;
       bool is_invoker_right = false;
       bool has_accessible_by = false;
+      HEAP_VAR(ObPLResolver, resolver, *params_.allocator_,
+                            *params_.session_info_,
+                            *(params_.schema_checker_->get_schema_mgr()),
+                            package_guard,
+                            *params_.sql_proxy_,
+                            *params_.expr_factory_,
+                            NULL,
+                            false) {
       CK (OB_NOT_NULL(package_block_node = parse_tree.children_[0]));
       CK (T_PACKAGE_BLOCK == package_block_node->type_);
       CK (OB_UNLIKELY(PACKAGE_BLOCK_NODE_CHILD_COUNT == package_block_node->num_child_));
@@ -189,9 +189,12 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
               OZ (package_info.set_exec_env(ObString("4194304,45,45,45,")));
             }
           } else {
-            char buf[OB_MAX_PROC_ENV_LENGTH];
+            char *buf = static_cast<char*>(allocator_->alloc(OB_MAX_PROC_ENV_LENGTH));
             int64_t pos = 0;
-            if (OB_FAIL(ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+            if (OB_ISNULL(buf)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("fail to allocate memory", K(ret));
+            } else if (OB_FAIL(ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
               LOG_WARN("failed to generate exec env", K(ret));
             } else if (OB_FAIL(package_info.set_exec_env(ObString(pos, buf)))) {
               LOG_WARN("set exec env failed", K(ret));
@@ -217,17 +220,18 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           }
         }
       }
+      } // end HEAP_VAR(ObPLResolver)
       // resolve package body to obtain analyze result again if it exists
       if (OB_SUCC(ret) && package_ast.is_inited()) {
         ObWarningBufferIgnoreScope ignore_errors_in_warning_buffer;
         HEAP_VAR(ObPLPackageAST, package_body_ast, *allocator_) {
           ObPLPackageGuard package_guard(params_.session_info_->get_effective_tenant_id());
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
-          ObPLCompiler compiler(*params_.allocator_,
+          HEAP_VAR(ObPLCompiler, compiler, *params_.allocator_,
                                 *params_.session_info_,
                                 *schema_guard,
                                 package_guard,
-                                *params_.sql_proxy_);
+                                *params_.sql_proxy_) {
           const ObPackageInfo *package_body_info = NULL;
           OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
                                                 db_name,
@@ -276,6 +280,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
             }
           }
         }
+        } // end HEAP_VAR(ObPLCompiler)
         if (OB_FAIL(ret)) {
           ret = OB_SUCCESS;
         }
@@ -722,10 +727,15 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
             OZ (package_info.set_exec_env(ObString("4194304,45,45,45,")));
           }
         } else {
-          char buf[OB_MAX_PROC_ENV_LENGTH];
+          char *buf = static_cast<char*>(allocator_->alloc(OB_MAX_PROC_ENV_LENGTH));
           int64_t pos = 0;
-          OZ (ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos));
-          OZ (package_info.set_exec_env(ObString(pos, buf)));
+          if (OB_ISNULL(buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to allocate memory", K(ret));
+          } else {
+            OZ (ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos));
+            OZ (package_info.set_exec_env(ObString(pos, buf)));
+          }
         }
       }
       if (OB_SUCC(ret)) {

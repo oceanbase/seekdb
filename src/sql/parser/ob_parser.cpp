@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PARSER
 #include "ob_parser.h"
+#include "common/ob_smart_call.h"
 #include "lib/oblog/ob_log.h"
 #include "parse_malloc.h"
 #include "parse_node.h"
@@ -27,10 +28,12 @@ using namespace oceanbase::common;
 
 ObParser::ObParser(common::ObIAllocator &allocator,
                    ObSQLMode mode,
-                   ObCharsets4Parser charsets4parser)
+                   ObCharsets4Parser charsets4parser,
+                   QuestionMarkDefNameCtx *ctx)
     :allocator_(&allocator),
      sql_mode_(mode),
-     charsets4parser_(charsets4parser)
+     charsets4parser_(charsets4parser),
+     def_name_ctx_(ctx)
 {}
 
 ObParser::~ObParser()
@@ -949,7 +952,7 @@ int ObParser::parse_sql(const ObString &stmt,
   return ret;
 }
 
-int ObParser::parse(const ObString &query,
+int ObParser::parse_(const ObString &query,
                     ParseResult &parse_result,
                     ParseMode parse_mode,
                     const bool is_batched_multi_stmt_split_on,
@@ -989,6 +992,7 @@ int ObParser::parse(const ObString &query,
   parse_result.is_for_trigger_ = (TRIGGER_MODE == parse_mode);
   parse_result.is_dynamic_sql_ = (DYNAMIC_SQL_MODE == parse_mode);
   parse_result.is_dbms_sql_ = (DBMS_SQL_MODE == parse_mode) || is_dbms_sql;
+  parse_result.is_for_udr_ = (UDR_SQL_MODE == parse_mode);
   parse_result.is_batched_multi_enabled_split_ = is_batched_multi_stmt_split_on;
   parse_result.is_not_utf8_connection_ = ObCharset::is_valid_collation(charsets4parser_.string_collation_) ?
         (ObCharset::charset_type_by_coll(charsets4parser_.string_collation_) != CHARSET_UTF8MB4) : false;
@@ -1005,6 +1009,11 @@ int ObParser::parse(const ObString &query,
   parse_result.connection_collation_ = charsets4parser_.string_collation_;
   parse_result.mysql_compatible_comment_ = false;
   parse_result.enable_compatible_comment_ = true;
+  if (nullptr != def_name_ctx_) {
+    parse_result.question_mark_ctx_.by_defined_name_ = true;
+    parse_result.question_mark_ctx_.name_ = def_name_ctx_->name_;
+    parse_result.question_mark_ctx_.count_ = def_name_ctx_->count_;
+  }
 
   parse_result.pl_parse_info_.is_inner_parse_ = is_pl_inner_parse;
   parse_result.pl_parse_info_.is_parse_dynamic_sql_ = is_parse_dynamic_sql;
@@ -1109,6 +1118,26 @@ int ObParser::parse(const ObString &query,
   }
   return ret;
 }
+
+int ObParser::parse(const ObString &query,
+                    ParseResult &parse_result,
+                    ParseMode parse_mode,
+                    const bool is_batched_multi_stmt_split_on,
+                    const bool no_throw_parser_error,
+                    const bool is_pl_inner_parse,
+                    const bool is_dbms_sql,
+                    const bool is_parse_dynamic_sql)
+{
+  return SMART_CALL(parse_(query,
+                          parse_result,
+                          parse_mode,
+                          is_batched_multi_stmt_split_on,
+                          no_throw_parser_error,
+                          is_pl_inner_parse,
+                          is_dbms_sql,
+                          is_parse_dynamic_sql));
+}
+
 // Through parser for prepare interface, for spi_prepare call in mysql mode
 int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_result)
 {

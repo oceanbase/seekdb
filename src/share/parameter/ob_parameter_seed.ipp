@@ -629,9 +629,9 @@ DEF_PARAM(tablet_meta_table_check_interval, TIME, OB_CLUSTER_PARAMETER, "30m", "
          "and make adjustments to ensure the correctness of tablet meta table. Range: [1m,+∞)",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // TODO fixme after remove all other versions
-DEF_PARAM(min_observer_version, STR, OB_CLUSTER_PARAMETER, "1.3.0.0", "the min observer version",
+DEF_PARAM(min_observer_version, STR, OB_CLUSTER_PARAMETER, "1.2.0.0", "the min observer version",
         ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(compatible, VERSION, OB_CLUSTER_PARAMETER, "1.3.0.0", "compatible version for persisted data",
+DEF_PARAM(compatible, VERSION, OB_CLUSTER_PARAMETER, "1.2.0.0", "compatible version for persisted data",
             ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_ddl, BOOL, OB_CLUSTER_PARAMETER, "True", "specifies whether DDL operation is turned on. "
          "Value:  True:turned on;  False: turned off",
@@ -869,9 +869,9 @@ DEF_PARAM(__min_full_resource_pool_memory, INT, OB_CLUSTER_PARAMETER, "107374182
 //        "Range: [1, 100] in percentage",
 //        ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(_lcl_op_interval, TIME, OB_CLUSTER_PARAMETER, "5s", "[0ms, 5s]",
+DEF_PARAM(_lcl_op_interval, TIME, OB_CLUSTER_PARAMETER, "30ms", "[0ms, 1s]",
          "Scan interval for every detector node, smaller interval support larger deadlock scale, but cost more system resource. "
-         "0ms means disable deadlock, default value is 5s. Range:[0ms, 5s]",
+         "0ms means disable deadlock, default value is 30ms. Range:[0ms, 1s]",
          ObParameterAttr(Section::TRANS, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(enable_sys_unit_standalone, BOOL, OB_CLUSTER_PARAMETER, "False",
@@ -1064,8 +1064,8 @@ DEF_PARAM(data_disk_usage_limit_percentage, INT, OB_CLUSTER_PARAMETER, "90", "[5
 DEF_PARAM(sys_bkgd_net_percentage, INT, OB_CLUSTER_PARAMETER, "60", "[0,100]",
         "the net percentage of sys background net. Range: [0, 100] in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(disk_io_thread_count, INT_WITH_CHECKER, OB_CLUSTER_PARAMETER, "1", common::ObConfigEvenIntChecker,
-                     "[1,32]",
+DEF_PARAM(disk_io_thread_count, INT_WITH_CHECKER, OB_CLUSTER_PARAMETER, "8", common::ObConfigEvenIntChecker,
+                     "[2,32]",
                      "The number of io threads on each disk. The default value is 8. Range: [2,32] in even integer",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(sync_io_thread_count, INT, OB_CLUSTER_PARAMETER, "0",
@@ -1236,9 +1236,9 @@ DEF_PARAM(sql_work_area, CAP, OB_CLUSTER_PARAMETER, "1G", "[10M,)",
 DEF_PARAM(__easy_memory_limit, CAP, OB_CLUSTER_PARAMETER, "4G", "[256M,)",
         "max memory size which can be used by libeasy. The default value is 4G. Range: [256M,)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(stack_size, CAP, OB_CLUSTER_PARAMETER, "512K", "[512K, 20M]",
+DEF_PARAM(stack_size, CAP, OB_CLUSTER_PARAMETER, "256K", "[256K, 20M]",
         "the size of routine execution stack"
-        "Range: [512K, 20M]",
+        "Range: [256K, 20M]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
 DEF_PARAM(__easy_memory_reserved_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0,100]",
         "the percentage of easy memory reserved size. The default value is 0. Range: [0,100]",
@@ -1868,7 +1868,7 @@ DEF_PARAM(_ob_ash_size, CAP, OB_CLUSTER_PARAMETER, "0M", "[0,1G]",
         "to limit the memory size for ash buffer. Range: [0,1G] 0 means using default ash size"
         ", 30MB in normal case, 10M in mini mode",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_ob_ash_enable, BOOL, OB_CLUSTER_PARAMETER, "False",
+DEF_PARAM(_ob_ash_enable, BOOL, OB_CLUSTER_PARAMETER, "True",
          "enable active session history",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_ob_ash_disk_write_enable, BOOL, OB_CLUSTER_PARAMETER, "True",
@@ -1882,7 +1882,7 @@ DEF_PARAM(_ob_sqlstat_enable, BOOL, OB_CLUSTER_PARAMETER, "True", "enable/disabl
 
 DEF_PARAM(_enable_inner_session_mgr, BOOL, OB_CLUSTER_PARAMETER, "True", "enable/disable inner session mgr",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_enable_trace_tablet_leak, BOOL, OB_CLUSTER_PARAMETER, "False",
+DEF_PARAM(_enable_trace_tablet_leak, BOOL, OB_CLUSTER_PARAMETER, "False", 
         "enable t3m tablet leak checker. The default value is False",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
 DEF_PARAM(enable_auto_split, BOOL_WITH_CHECKER, OB_CLUSTER_PARAMETER, "False",
@@ -1926,7 +1926,7 @@ DEF_PARAM(kv_ttl_duty_duration, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "", comm
     "ttl background task working time duration"
     "begin_time or end_time in Range, e.g., [23:00:00, 24:00:00]",
     ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(vector_index_optimize_duty_time, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "[24:00:00, 24:00:00]", common::ObVecIndexOptDutyTimeChecker,
+DEF_PARAM(vector_index_optimize_duty_time, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "[00:00:00, 24:00:00]", common::ObVecIndexOptDutyTimeChecker,
     "A runtime range bounded by start time and end time for vector index background task, e.g., [23:00:00, 24:00:00]",
     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(kv_ttl_history_recycle_interval, TIME, OB_CLUSTER_PARAMETER, "7d", "[1d, 180d]",
@@ -2031,7 +2031,7 @@ DEF_PARAM(max_partition_num, INT, OB_CLUSTER_PARAMETER, "8192", "[8192, 65536]",
 DEF_PARAM(json_document_max_depth, INT, OB_CLUSTER_PARAMETER, "100", "[100,1024]",
         "maximum nesting depth allowed in a JSON document",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,100)",
+DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,100)", 
         "Multi-mode memory tracking mechanism",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // automatically faststack
@@ -2148,9 +2148,9 @@ DEF_PARAM(direct_load_allow_fallback, BOOL, OB_CLUSTER_PARAMETER, "True",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // regexp engine
 DEF_PARAM(_regex_engine, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "ICU", common::ObConfigRegexpEngineChecker,
-        "specifies the regexp engine. Values: ICU(International Components for Unicode)",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-        "ICU");
+                     "specifies the regexp engine. Values: ICU(International Components for Unicode), Hyperscan",
+                     ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
+                     "ICU, Hyperscan");
 
 DEF_PARAM(_preset_runtime_bloom_filter_size, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Whether build runtime bloom filter with row count estimated by optimizor."
@@ -2309,7 +2309,7 @@ DEF_PARAM(_enable_auth_switch, BOOL, OB_CLUSTER_PARAMETER, "True",
          "Control whether to use auth_switch.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(_enable_malloc_v2, BOOL, OB_CLUSTER_PARAMETER, "False",
+DEF_PARAM(_enable_malloc_v2, BOOL, OB_CLUSTER_PARAMETER, "True",
          "Enable or disable ob_malloc_v2.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 

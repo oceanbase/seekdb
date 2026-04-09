@@ -411,29 +411,30 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
     } else if (is_sys_tenant(tenant_id)) {
       schema = hard_code_schema;
     } else {
-      ObTableSchema new_schema;
-      if (OB_FAIL(schema_cache_.get_schema(TABLE_SCHEMA,
-                                           tenant_id,
-                                           schema_id,
-                                           OB_CORE_SCHEMA_VERSION ,
-                                           handle,
-                                           schema))) {
-        if (ret != OB_ENTRY_NOT_EXIST) {
-          LOG_WARN("get schema from cache failed", KR(ret), K(tenant_id),
-                   K(schema_type), K(schema_id), K(schema_version));
-        } else if (OB_FAIL(new_schema.assign(*hard_code_schema))) { // overwrite ret
-          LOG_WARN("fail to assign all core schema", KR(ret), K(tenant_id));
-        } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
-                  tenant_id, new_schema))) {
-          LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret), K(tenant_id));
-        } else if (OB_FAIL(schema_cache_.put_and_fetch_schema(schema_type,
-                                                              tenant_id,
-                                                              schema_id,
-                                                              OB_CORE_SCHEMA_VERSION,
-                                                              new_schema,
-                                                              handle,
-                                                              schema))) {
-          LOG_WARN("fail to push back tenant's __all_core_table schema", KR(ret), K(tenant_id));
+      HEAP_VAR(ObTableSchema, new_schema) {
+        if (OB_FAIL(schema_cache_.get_schema(TABLE_SCHEMA,
+                                             tenant_id,
+                                             schema_id,
+                                             OB_CORE_SCHEMA_VERSION ,
+                                             handle,
+                                             schema))) {
+          if (ret != OB_ENTRY_NOT_EXIST) {
+            LOG_WARN("get schema from cache failed", KR(ret), K(tenant_id),
+                     K(schema_type), K(schema_id), K(schema_version));
+          } else if (OB_FAIL(new_schema.assign(*hard_code_schema))) { // overwrite ret
+            LOG_WARN("fail to assign all core schema", KR(ret), K(tenant_id));
+          } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
+                    tenant_id, new_schema))) {
+            LOG_WARN("fail to construct tenant's __all_core_table schema", KR(ret), K(tenant_id));
+          } else if (OB_FAIL(schema_cache_.put_and_fetch_schema(schema_type,
+                                                                tenant_id,
+                                                                schema_id,
+                                                                OB_CORE_SCHEMA_VERSION,
+                                                                new_schema,
+                                                                handle,
+                                                                schema))) {
+            LOG_WARN("fail to push back tenant's __all_core_table schema", KR(ret), K(tenant_id));
+          }
         }
       }
     }

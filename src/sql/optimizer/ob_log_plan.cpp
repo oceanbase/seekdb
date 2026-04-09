@@ -9597,8 +9597,8 @@ int ObLogPlan::get_subplan_filter_correlated_equal_keys(const ObLogicalOperator 
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
+    LOG_INFO("stack usage is high before replacing generated columns, continue with smart call protection",
+             K(is_stack_overflow));
   } else if (OB_FAIL(append(filters, top->get_filter_exprs()))) {
     LOG_WARN("failed to append filter exprs", K(ret));
   } else if (log_op_def::LOG_TABLE_SCAN == top->get_type()) {
@@ -11073,8 +11073,8 @@ int ObLogPlan::get_source_table_info(ObLogicalOperator &top,
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
+    LOG_INFO("stack usage is high during plan generation recursion, continue with smart call protection",
+             K(is_stack_overflow));
   } else if (top.is_table_scan()) {
     ObLogTableScan &table_scan = static_cast<ObLogTableScan&>(top);
     if (table_scan.get_table_id() == source_table_id && !table_scan.get_is_index_global()) {
@@ -11414,15 +11414,15 @@ int ObLogPlan::do_post_plan_processing()
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(set_use_batch_for_table_scan(root, false, false))) {
     LOG_WARN("failed to set use batch for table scan", K(ret));
-  } else if (OB_FAIL(adjust_final_plan_info(root))) {
+  } else if (OB_FAIL(SMART_CALL(adjust_final_plan_info(root)))) {
     LOG_WARN("failed to adjust parent-child relationship", K(ret));
   } else if (OB_FAIL(remove_duplicate_constraints())) {
     LOG_WARN("failed to remove duplicate constraints", K(ret));
   } else if (OB_FAIL(update_re_est_cost(root))) {
     LOG_WARN("failed to re est cost", K(ret));
-  } else if (OB_FAIL(choose_duplicate_table_replica(root,
+  } else if (OB_FAIL(SMART_CALL(choose_duplicate_table_replica(root,
                                                     get_optimizer_context().get_local_server_addr(),
-                                                    true))) {
+                                                    true)))) {
     LOG_WARN("failed to set duplicated table location", K(ret));
   } else if (OB_FAIL(set_advisor_table_id(root))) {
     LOG_WARN("failed to set advise table id from duplicate table", K(ret));
@@ -11450,8 +11450,8 @@ int ObLogPlan::adjust_final_plan_info(ObLogicalOperator *&op)
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
+    LOG_INFO("stack usage is high before final plan adjustment, continue with smart call protection",
+             K(is_stack_overflow));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < op->get_num_of_child(); i++) {
       ObLogicalOperator *child = NULL;
@@ -11722,8 +11722,8 @@ int ObLogPlan::choose_duplicate_table_replica(ObLogicalOperator *op,
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
+    LOG_INFO("stack usage is high before duplicate-table replica selection, continue with smart call protection",
+             K(is_stack_overflow));
   } else if (log_op_def::LOG_TEMP_TABLE_INSERT == op->get_type()) {
     // do nothing
   } else if (log_op_def::LOG_TABLE_SCAN == op->get_type() &&
@@ -11887,8 +11887,8 @@ int ObLogPlan::collect_table_location(ObLogicalOperator *op)
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
-    ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
+    LOG_INFO("stack usage is high before collecting table locations, continue with smart call protection",
+             K(is_stack_overflow));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < op->get_num_of_child(); i++) {
       if (OB_FAIL(SMART_CALL(collect_table_location(op->get_child(i))))) {

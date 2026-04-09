@@ -212,6 +212,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     deterministic_udf_cache_allocator_("UDFCACHE", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
     current_granule_type_(OB_GRANULE_UNINITIALIZED)
 {
+  exec_stat_collector_.init(&allocator_);
 }
 
 ObExecContext::~ObExecContext()
