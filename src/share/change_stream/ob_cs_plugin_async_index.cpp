@@ -673,6 +673,9 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
         // Direct insert into index_id_table: bypass ObVecIndexDMLIterator which returns 0 rows for
         // is_no_need_update_vector_index() (vec_index_id_type). Use raw write_iter path instead.
         ins_ctdef->is_access_vidx_as_master_table_ = true;
+        // cs_plugin_async_index writes table 4 with a fallback schema guard, so skip storage
+        // schema_version validation here and let tablet existence / write path decide validity.
+        ins_ctdef->skip_check_schema_version_ = true;
         insert_op->set_das_ctdef(ins_ctdef);
       }
     }
@@ -1010,6 +1013,7 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
     const ObCSVecIndexInfo &vec_info)
 {
   int ret = common::OB_SUCCESS;
+  int64_t max_commit_version = 0;
 
   const bool need_vsag = (events.count() > 0) &&
       (schema::is_vec_delta_buffer_type(vec_info.index_type_) ||
@@ -1106,6 +1110,10 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
         }
       }
 
+      for (int64_t i = 0; i < events.count(); ++i) {
+        max_commit_version = std::max(max_commit_version, events.at(i).commit_version_);
+      }
+
       if (OB_SUCC(ret)) {
         int64_t insert_count = 0;
         for (int64_t i = 0; i < events.count(); ++i) {
@@ -1166,6 +1174,15 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
               }
             }
           }
+        }
+      }
+      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor) && max_commit_version > 0) {
+        SCN max_dml_scn;
+        if (OB_FAIL(max_dml_scn.convert_for_gts(max_commit_version))) {
+          LOG_WARN("Failed to convert async index max commit version to scn",
+                   K(ret), K(max_commit_version), K(vec_info.index_id_table_id_));
+        } else {
+          adaptor->update_index_id_dml_scn(max_dml_scn);
         }
       }
       // After writing to vsag, proactively refresh the bitmap so the first query

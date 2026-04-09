@@ -2570,6 +2570,11 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status_async(
   ObArray<uint64_t> i_vids;
   ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(row_iter);
   SCN bitmap_scn = vbitmap_data_->scn_;
+  const SCN last_dml_scn = OB_NOT_NULL(incr_data_) ? incr_data_->last_dml_scn_ : SCN();
+  const bool bitmap_catch_up_dml =
+      bitmap_scn.is_valid() &&
+      last_dml_scn.is_valid() &&
+      bitmap_scn >= last_dml_scn;
 
   if (OB_ISNULL(ctx) || OB_ISNULL(table_scan_iter)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2598,12 +2603,12 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status_async(
           }
         }
         if (OB_SUCC(ret) && ctx->status_ != PVQ_COM_DATA) {
-          if (snap_data_->rb_flag_) {
-            ctx->status_ = PVQ_LACK_SCN;
-            ctx->flag_ = PVQP_SECOND;
-          } else {
+          if (bitmap_catch_up_dml) {
             ctx->status_ = PVQ_OK;
             ctx->flag_ = PVQP_FIRST;
+          } else {
+            ctx->status_ = PVQ_LACK_SCN;
+            ctx->flag_ = PVQP_SECOND;
           }
         }
       }
@@ -2641,12 +2646,12 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status_async(
         }
       }
       if (OB_SUCC(ret) && ctx->status_ != PVQ_COM_DATA) {
-        if (snap_data_->rb_flag_) {
-          ctx->status_ = PVQ_LACK_SCN;
-          ctx->flag_ = PVQP_SECOND;
-        } else {
+        if (bitmap_catch_up_dml) {
           ctx->status_ = PVQ_OK;
           ctx->flag_ = PVQP_FIRST;
+        } else {
+          ctx->status_ = PVQ_LACK_SCN;
+          ctx->flag_ = PVQP_SECOND;
         }
       }
     }
