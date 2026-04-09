@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
+#include "share/ob_debug_sync.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/serialization.h"
@@ -787,9 +788,40 @@ void ObCSFetcher::run1()
       bool old_has_async = has_async_index_tables_;
       bool new_has_async = false;
       if (OB_SUCC(get_has_async_cached_(new_has_async))) {
-        running_mode_ = has_async_index_tables_ ? ACTIVE : IDLE;
-        if (ACTIVE == running_mode_) {
-          iter_ready = false;
+        RunningMode new_mode = has_async_index_tables_ ? ACTIVE : IDLE;
+        if (new_mode != running_mode_) {
+          if (ACTIVE == running_mode_ && IDLE == new_mode) {
+            // Transitioning ACTIVE -> IDLE: clean up tx_info_ entries that are solely
+            // owned by the fetcher (in_dispatch_time_ == 0, i.e. never pushed to dispatcher).
+            // This covers two cases:
+            //   1. DDL tx (is_ddl_ = true): never dispatched; cleaned inline on commit.
+            //   2. DML tx whose redo was seen but commit log not yet consumed.
+            // In both cases, IDLE mode will never consume the commit log, so these entries
+            // would remain permanently and block refresh_scn when switching back to ACTIVE.
+            // Entries with in_dispatch_time_ > 0 are already in the dispatcher ring buffer;
+            // their ownership belongs to the dispatcher and must not be freed here.
+            common::ObSEArray<int64_t, 16> stale_tx_ids;
+            for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::iterator it = tx_info_.begin();
+                 it != tx_info_.end(); ++it) {
+              if (OB_NOT_NULL(it->second) && it->second->in_dispatch_time_ == 0) {
+                (void)stale_tx_ids.push_back(it->first);
+              }
+            }
+            for (int64_t i = 0; i < stale_tx_ids.count(); ++i) {
+              ObCSTxInfo *tx = nullptr;
+              if (OB_SUCCESS == tx_info_.erase_refactored(stale_tx_ids.at(i), &tx)
+                  && OB_NOT_NULL(tx)) {
+                LOG_INFO("CSFetcher: ACTIVE->IDLE, discard undispatched tx_info",
+                         "tx_id", stale_tx_ids.at(i), "is_ddl", tx->is_ddl_);
+                tx->destroy();
+                OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
+              }
+            }
+          }
+          running_mode_ = new_mode;
+          if (ACTIVE == running_mode_) {
+            iter_ready = false;
+          }
         }
         if (old_has_async != new_has_async || REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
           FLOG_INFO("CSFetcher: mode switched",
@@ -901,6 +933,11 @@ void ObCSFetcher::run1()
             if (OB_NOT_NULL(mutator_buf) && mutator_size > 0) {
               if (OB_FAIL(handle_redo_log_(tx_id, mutator_buf, mutator_size, lsn))) {
                 LOG_WARN("CSFetcher: fail to handle_redo_log", KR(ret), K(tx_id), K(lsn));
+              } else {
+                // Fires after a DML redo log is processed; tx_info_ entry (in_dispatch_time_==0)
+                // exists and commit log not yet consumed.  Used in regression tests for the
+                // ACTIVE->IDLE cleanup of orphaned DML tx_info_.
+                DEBUG_SYNC(CS_FETCHER_AFTER_DML_REDO_LOG);
               }
             }
           }
@@ -921,6 +958,10 @@ void ObCSFetcher::run1()
                   LOG_WARN("CSFetcher: fail to get tx_info on MDS DDL", KR(ret), K(tid));
                 } else if (OB_NOT_NULL(tx)) {
                   tx->is_ddl_ = true;
+                  // Fires after DDL_TRANS MDS log is processed; tx_info_ entry (is_ddl_=true,
+                  // in_dispatch_time_==0) exists and commit log not yet consumed.  Used in
+                  // regression tests for the ACTIVE->IDLE cleanup of orphaned DDL tx_info_.
+                  DEBUG_SYNC(CS_FETCHER_AFTER_DDL_MDS_LOG);
                 }
                 break;
               }
