@@ -42,7 +42,8 @@ static int check_table_index_features(const ObTableSchema &table_schema,
                                       bool &has_ivf_index,
                                       bool &has_spatial_index,
                                       bool &has_global_index,
-                                      bool &has_async_vec_index)
+                                      bool &has_async_vec_index,
+                                      bool &has_column_store_index)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
@@ -51,6 +52,7 @@ static int check_table_index_features(const ObTableSchema &table_schema,
   has_spatial_index = false;
   has_global_index = false;
   has_async_vec_index = false;
+  has_column_store_index = false;
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("fail to get simple index infos", K(ret));
   } else {
@@ -58,7 +60,8 @@ static int check_table_index_features(const ObTableSchema &table_schema,
     const bool is_heap_table = table_schema.is_heap_organized_table();
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() &&
                         (!has_semantic_index || !has_ivf_index ||
-                         !has_spatial_index || !has_global_index || !has_async_vec_index);
+                         !has_spatial_index || !has_global_index ||
+                         !has_async_vec_index || !has_column_store_index);
          ++i) {
       const ObTableSchema *index_schema = nullptr;
       const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
@@ -89,6 +92,15 @@ static int check_table_index_features(const ObTableSchema &table_schema,
         if (index_schema->is_global_index_table()) {
           has_global_index = true;
         }
+        if (!has_column_store_index) {
+          int64_t index_cg_cnt = 0;
+          if (OB_FAIL(index_schema->get_store_column_group_count(index_cg_cnt))) {
+            LOG_WARN("failed to get store column group count for index", KR(ret),
+                     K(index_table_id));
+          } else if (index_cg_cnt > 1) {
+            has_column_store_index = true;
+          }
+        }
       }
     }
   }
@@ -104,11 +116,13 @@ int check_has_async_vector_index(const ObTableSchema &src_table_schema,
   bool has_ivf_index = false;
   bool has_spatial_index = false;
   bool has_global_index = false;
+  bool has_column_store_index = false;
   has_async_vec_index = false;
   if (OB_FAIL(check_table_index_features(src_table_schema, schema_guard,
                                          has_semantic_index, has_ivf_index,
                                          has_spatial_index, has_global_index,
-                                         has_async_vec_index))) {
+                                         has_async_vec_index,
+                                         has_column_store_index))) {
     LOG_WARN("fail to check table index features", K(ret));
   }
   return ret;
@@ -124,6 +138,7 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
   bool has_spatial_index = false;
   bool has_global_index = false;
   bool has_async_vec_index = false;
+  bool has_column_store_index = false;
   int64_t column_group_cnt = 0;
   if (src_table_schema.is_tmp_table() || src_table_schema.is_ctas_tmp_table()) {
     ret = OB_NOT_SUPPORTED;
@@ -170,8 +185,14 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
   } else if (OB_FAIL(check_table_index_features(
                  src_table_schema, schema_guard, has_semantic_index,
                  has_ivf_index, has_spatial_index, has_global_index,
-                 has_async_vec_index))) {
+                 has_async_vec_index, has_column_store_index))) {
     LOG_WARN("fail to check table index features", K(ret), K(src_table_schema));
+  } else if (has_column_store_index) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on table with column store index is not supported",
+             KR(ret), K(src_table_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                   "fork table on table with column store index is");
   } else if (has_semantic_index) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("fork table on table with semantic index is not supported",
