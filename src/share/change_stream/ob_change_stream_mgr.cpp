@@ -64,7 +64,7 @@ int ObChangeStreamMgr::init()
     LOG_WARN("ObChangeStreamMgr: fetcher init failed", K(ret));
   } else if (OB_FAIL(dispatcher_.init())) {
     LOG_WARN("ObChangeStreamMgr: dispatcher init failed", K(ret));
-  } else if (OB_FAIL(worker_.init(GET_THREAD_NUM_BY_NPROCESSORS(2)))) {
+  } else if (OB_FAIL(worker_.init(GET_THREAD_NUM_BY_NPROCESSORS(1)))) {
     LOG_WARN("ObChangeStreamMgr: worker init failed", K(ret));
   } else {
     is_inited_ = true;
