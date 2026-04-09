@@ -38,11 +38,6 @@ OB_SERIALIZE_MEMBER(ObPxFinishSqcResultMsg, dfo_id_, sqc_id_, rc_, trans_result_
                     interm_result_ids_, fb_info_, err_msg_, das_retry_rc_,
                     sqc_memstore_row_read_count_, sqc_ssstore_row_read_count_);
 OB_SERIALIZE_MEMBER(ObPxFinishTaskResultMsg, dfo_id_, sqc_id_, task_id_, rc_);
-OB_SERIALIZE_MEMBER((ObPxBloomFilterChInfo, dtl::ObDtlChTotalInfo), filter_id_);
-OB_SERIALIZE_MEMBER((ObPxBloomFilterChSet, dtl::ObDtlChSet), filter_id_, sqc_id_);
-OB_SERIALIZE_MEMBER(ObPxCreateBloomFilterChannelMsg, sqc_count_, sqc_id_, ch_set_info_);
-OB_SERIALIZE_MEMBER(ObPxBloomFilterData, filter_, tenant_id_, filter_id_,
-                    server_id_, px_sequence_id_, bloom_filter_count_);
 OB_SERIALIZE_MEMBER(ObPxDmlRowInfo, row_match_count_, row_duplicated_count_, row_deleted_count_);
 OB_SERIALIZE_MEMBER(ObPxTabletRange, tablet_id_, range_cut_, range_weights_);
 
@@ -57,7 +52,6 @@ int ObPxTaskChSet::assign(const ObPxTaskChSet &other)
   }
   return ret;
 }
-
 
 void ObPxDmlRowInfo::set_px_dml_row_info(const ObPhysicalPlanCtx &plan_ctx)
 {

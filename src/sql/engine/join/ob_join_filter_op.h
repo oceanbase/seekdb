@@ -155,10 +155,6 @@ public:
       ObJoinFilterRuntimeConfig &config,
       ObP2PDatahubMsgBase &msg, int64_t sqc_count, int64_t estimated_rows);
   void set_task_id(int64_t task_id)  { task_id_ = task_id; }
-
-  inline void set_bf_idx_at_sqc_proxy(int64_t idx) { bf_idx_at_sqc_proxy_ = idx; }
-
-  inline int64_t get_bf_idx_at_sqc_proxy() { return bf_idx_at_sqc_proxy_; }
   void set_px_sequence_id(int64_t id) { px_sequence_id_ = id; }
   int64_t get_px_sequence_id() { return px_sequence_id_; }
   int load_runtime_config(const ObJoinFilterSpec &spec, ObExecContext &ctx);
@@ -317,12 +313,6 @@ public:
 
 class ObJoinFilterOp : public ObOperator
 {
-  struct ObJoinFilterMsg {
-    ObJoinFilterMsg() : bf_msg_(nullptr), range_msg_(nullptr), in_msg_(nullptr) {}
-    ObRFBloomFilterMsg *bf_msg_;
-    ObRFRangeFilterMsg *range_msg_;
-    ObRFInFilterMsg *in_msg_;
-  };
 public:
   TO_STRING_KV(K(force_dump_));
 public:
@@ -463,7 +453,6 @@ private:
   static constexpr double ACCEPTABLE_FILTER_RATE = 0.98;
   static const int64_t N_HYPERLOGLOG_BIT = 14;
 public:
-  ObJoinFilterMsg *filter_create_msg_;
   ObArray<ObP2PDatahubMsgBase *> shared_rf_msgs_; // sqc level share
   ObArray<ObP2PDatahubMsgBase *> local_rf_msgs_;
   uint64_t *join_filter_hash_values_;

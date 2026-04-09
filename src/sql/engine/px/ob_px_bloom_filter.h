@@ -92,16 +92,7 @@ public:
   int put_batch(uint64_t *batch_hash_values, const EvalBound &bound, const ObBitVector &skip, bool &is_empty);
   int merge_filter(ObPxBloomFilter *filter);
   int64_t get_value_true_count() const { return true_count_; };
-  int process_recieve_count(int64_t whole_expect_size, int64_t cur_buf_size = 1);
-  int process_first_phase_recieve_count(
-      int64_t whole_expect_size,
-      int64_t phase_expect_size,
-      int64_t begin_idx,
-      bool &first_phase_end);
   int64_t *get_bits_array() { return bits_array_; }
-  void inc_merge_filter_count() { ATOMIC_INC(&px_bf_merge_filter_count_); }
-  void dec_merge_filter_count() { ATOMIC_DEC(&px_bf_merge_filter_count_); }
-  bool is_merge_filter_finish() const { return 0 == px_bf_merge_filter_count_; }
   int64_t get_bits_array_length() const { return bits_array_length_; }
   int64_t get_bits_count() const { return bits_count_; }
   void set_begin_idx(int64_t idx) { begin_idx_ = idx; }
@@ -149,11 +140,6 @@ private:
 public:
   common::ObArenaAllocator allocator_;
 public:
-  // No need to serialize
-   int64_t px_bf_recieve_count_;  // Current number of bloom filters received
-   int64_t px_bf_recieve_size_;   // Expected number to be received
-   volatile int64_t px_bf_merge_filter_count_; // current number of threads holding the filter and performing merge filter operations
-   ObArray<BloomFilterReceiveCount> receive_count_array_;
    int64_t block_mask_;          // for locating block
 DISALLOW_COPY_AND_ASSIGN(ObPxBloomFilter);
 };
@@ -187,150 +173,13 @@ public:
               K(is_shuffle_), K(p2p_dh_id_));
   ObLogJoinFilter *log_join_filter_create_op_; // not need to serialize, only used in optimizor
 };
-
-class ObPXBloomFilterHashWrapper
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPXBloomFilterHashWrapper() : tenant_id_(common::OB_INVALID_TENANT_ID),
-     filter_id_(common::OB_INVALID_ID), server_id_(common::OB_INVALID_ID),
-     px_sequence_id_(common::OB_INVALID_ID), task_id_(common::OB_INVALID_ID) {}
-  explicit ObPXBloomFilterHashWrapper(int64_t tenant_id, int64_t filter_id,
-      int64_t server_id, int64_t px_sequence_id, int64_t task_id) :
-      tenant_id_(tenant_id), filter_id_(filter_id),
-      server_id_(server_id), px_sequence_id_(px_sequence_id), task_id_(task_id)   {}
-  ~ObPXBloomFilterHashWrapper(){}
-  void init(int64_t tenant_id, int64_t filter_id,
-      int64_t server_id, int64_t px_sequence_id, int64_t task_id = 0)
-  {
-    tenant_id_ = tenant_id;
-    filter_id_ = filter_id;
-    server_id_ = server_id;
-    px_sequence_id_ = px_sequence_id;
-    task_id_ = task_id;
-  }
-  inline bool operator==(const ObPXBloomFilterHashWrapper &other) const
-  {
-    return (tenant_id_ == other.tenant_id_ &&
-            filter_id_ == other.filter_id_ &&
-            server_id_ == other.server_id_ &&
-            px_sequence_id_ == other.px_sequence_id_ &&
-            task_id_ == other.task_id_);
-  }
-  inline uint64_t hash() const;
-  inline int hash(uint64_t &hash_ret) const;
-  int64_t tenant_id_;
-  int64_t filter_id_;
-  int64_t server_id_;
-  int64_t px_sequence_id_;
-  int64_t task_id_;
-  TO_STRING_KV(K_(tenant_id), K_(filter_id), K_(server_id), K_(px_sequence_id), K_(task_id))
-};
-
-
-
-inline uint64_t ObPXBloomFilterHashWrapper::hash() const
-{
-  uint64_t hash_ret = 0;
-  hash_ret = common::murmurhash(&tenant_id_, sizeof(uint64_t), 0);
-  hash_ret = common::murmurhash(&filter_id_, sizeof(uint64_t), hash_ret);
-  hash_ret = common::murmurhash(&server_id_, sizeof(uint64_t), hash_ret);
-  hash_ret = common::murmurhash(&px_sequence_id_, sizeof(uint64_t), hash_ret);
-  hash_ret = common::murmurhash(&task_id_, sizeof(uint64_t), hash_ret);
-  return hash_ret;
-}
-inline int ObPXBloomFilterHashWrapper::hash(uint64_t &hash_ret) const
-{
-  hash_ret = hash();
-  return OB_SUCCESS;
-}
-
-class ObPxReadAtomicGetBFCall
-{
-public:
-  ObPxReadAtomicGetBFCall() : bloom_filter_(NULL) {}
-  ~ObPxReadAtomicGetBFCall() = default;
-  void operator() (common::hash::HashMapPair<ObPXBloomFilterHashWrapper,
-      ObPxBloomFilter *> &entry);
-  ObPxBloomFilter *bloom_filter_;
-};
-class ObPxBloomFilterManager
-{
-public:
-  static ObPxBloomFilterManager &instance();
-  int init();
-  // This get interface is only for merge filter customization.
-  int get_px_bf_for_merge_filter(ObPXBloomFilterHashWrapper &key, ObPxBloomFilter *&filter);
-  void destroy();
-private:
-  typedef common::hash::ObHashMap<ObPXBloomFilterHashWrapper, ObPxBloomFilter *> MAP;
-  static const int64_t DEFAULT_HASH_MAP_BUCKETS_COUNT = 10000; //1w
-  static const int64_t BUCKET_NUM = DEFAULT_HASH_MAP_BUCKETS_COUNT;
-private:
-  MAP map_;
-  bool is_inited_;
-private:
-  ObPxBloomFilterManager();
-  ~ObPxBloomFilterManager();
-  DISALLOW_COPY_AND_ASSIGN(ObPxBloomFilterManager);
-};
-
-typedef common::ObSEArray<ObPXBloomFilterHashWrapper, 2> ObPxBFSEArray;
-
-
 enum ObSendBFPhase
 {
   FIRST_LEVEL,
   SECOND_LEVEL
 };
-struct ObPxBFSendBloomFilterArgs
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObPxBFSendBloomFilterArgs() : bf_key_(), bloom_filter_(), next_peer_addrs_(),
-      expect_bloom_filter_count_(0), current_bloom_filter_count_(0),
-      expect_phase_count_(0), phase_(FIRST_LEVEL), timeout_timestamp_(0) {}
-  bool is_first_phase() { return FIRST_LEVEL == phase_; }
-  ObPXBloomFilterHashWrapper bf_key_;
-  ObPxBloomFilter bloom_filter_;
-  common::ObSArray<common::ObAddr> next_peer_addrs_;
-  int64_t expect_bloom_filter_count_;
-  int64_t current_bloom_filter_count_;
-  int64_t expect_phase_count_;
-  ObSendBFPhase phase_;
-  int64_t timeout_timestamp_;
-};
 
 } //end sql
-
-namespace obrpc {
-
-class ObPxBFProxy
-    : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObPxBFProxy);
-  RPC_AP(PR1 send_bloom_filter, OB_PX_SEND_BLOOM_FILTER, (sql::ObPxBFSendBloomFilterArgs));
-};
-
-}
-
-namespace sql {
-
-class ObSendBloomFilterP
-    : public obrpc::ObRpcProcessor<obrpc::ObPxBFProxy::ObRpc<obrpc::OB_PX_SEND_BLOOM_FILTER> >
-{
-public:
-  ObSendBloomFilterP() {}
-  virtual ~ObSendBloomFilterP() = default;
-  virtual int init() final;
-  virtual void destroy() final;
-  virtual int process() final;
-private:
-  int process_px_bloom_filter_data();
-};
-
-} // namespace sql
 
 namespace common
 {

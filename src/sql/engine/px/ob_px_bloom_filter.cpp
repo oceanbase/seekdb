@@ -66,8 +66,7 @@ int BloomFilterIndex::assign(const BloomFilterIndex &other)
 
 ObPxBloomFilter::ObPxBloomFilter() : data_length_(0), max_bit_count_(0), bits_count_(0), fpp_(0.0),
     hash_func_count_(0), is_inited_(false), bits_array_length_(0),
-    bits_array_(NULL), true_count_(0), begin_idx_(0), end_idx_(0), allocator_(),
-    px_bf_recieve_count_(0), px_bf_recieve_size_(0), px_bf_merge_filter_count_(0)
+    bits_array_(NULL), true_count_(0), begin_idx_(0), end_idx_(0), allocator_()
 {
 
 }
@@ -170,8 +169,6 @@ int ObPxBloomFilter::init(const ObPxBloomFilter *filter)
 void ObPxBloomFilter::reset_filter()
 {
   MEMSET(bits_array_, 0, bits_array_length_ * sizeof(int64_t));
-  px_bf_recieve_count_ = 0;
-  px_bf_recieve_size_ = 0;
 }
 
 void ObPxBloomFilter::reset_for_rescan()
@@ -339,67 +336,6 @@ int ObPxBloomFilter::merge_filter(ObPxBloomFilter *filter)
   return ret;
 }
 
-
-int ObPxBloomFilter::process_recieve_count(int64_t whole_expect_size, int64_t cur_buf_size)
-{
-  int ret = OB_SUCCESS;
-  if (whole_expect_size <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the size is not invalid", K(ret));
-  } else {
-    if (px_bf_recieve_size_ <= 0) {
-      px_bf_recieve_size_ = whole_expect_size;
-    }
-    ATOMIC_AAF(&px_bf_recieve_count_, cur_buf_size);
-    if (px_bf_recieve_count_ > px_bf_recieve_size_) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to process receive count", K(ret), K(px_bf_recieve_count_),
-         K(px_bf_recieve_size_));
-    }
-  }
-  return ret;
-}
-
-int ObPxBloomFilter::process_first_phase_recieve_count(int64_t whole_expect_size,
-    int64_t phase_expect_size, int64_t begin_idx, bool &first_phase_end)
-{
-  int ret = OB_SUCCESS;
-  first_phase_end = false;
-  if (whole_expect_size <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the size is not invalid", K(ret));
-  } else {
-    if (px_bf_recieve_size_ <= 0) {
-      px_bf_recieve_size_ = whole_expect_size;
-    }
-    ATOMIC_INC(&px_bf_recieve_count_);
-    if (px_bf_recieve_count_ > px_bf_recieve_size_) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to process receive count", K(ret), K(px_bf_recieve_count_),
-         K(px_bf_recieve_size_));
-    } else if (receive_count_array_.empty()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("emptry receive count array", K(ret));
-    } else {
-      bool find = false;
-      for (int i = 0; OB_SUCC(ret) && i < receive_count_array_.count(); ++i) {
-        if (begin_idx == receive_count_array_.at(i).begin_idx_) {
-          int64_t cur_count = ATOMIC_AAF(&receive_count_array_.at(i).reciv_count_, 1);
-          first_phase_end = (cur_count == phase_expect_size);
-          find = true;
-          break;
-        }
-      }
-      if (!find) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected process first phase", K(ret), K(receive_count_array_.count()));
-      }
-    }
-  }
-  return ret;
-}
-
-
 int ObPxBloomFilter::regenerate()
 {
   int ret = OB_SUCCESS;
@@ -431,7 +367,6 @@ int ObPxBloomFilter::regenerate()
 void ObPxBloomFilter::reset()
 {
   // need reset memory
-  receive_count_array_.reset();
   allocator_.reset();
 }
 
@@ -706,143 +641,6 @@ int ObPxBFStaticInfo::init(int64_t tenant_id, int64_t filter_id,
   }
   return ret;
 }
-//-------------------------------------division line----------------------------
-void ObPxReadAtomicGetBFCall::operator() (common::hash::HashMapPair<ObPXBloomFilterHashWrapper,
-      ObPxBloomFilter *> &entry)
-{
-  bloom_filter_ = entry.second;
-  bloom_filter_->inc_merge_filter_count();
-}
-//-------------------------------------division line----------------------------
-ObPxBloomFilterManager &ObPxBloomFilterManager::instance()
-{
-  static ObPxBloomFilterManager the_px_bloom_filter_manager;
-  return the_px_bloom_filter_manager;
-}
-ObPxBloomFilterManager::~ObPxBloomFilterManager()
-{
-  destroy();
-}
-ObPxBloomFilterManager::ObPxBloomFilterManager() : map_(), is_inited_(false)
-{
-}
-int ObPxBloomFilterManager::init()
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("no need to init twice filter manager", K(ret));
-  } else if (OB_FAIL(map_.create(BUCKET_NUM,
-      ObModIds::OB_HASH_PX_BLOOM_FILTER_KEY,
-      ObModIds::OB_HASH_NODE_PX_BLOOM_FILTER_KEY))) {
-    LOG_WARN("create hash table failed", K(ret));
-  } else {
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-void ObPxBloomFilterManager::destroy()
-{
-  if (IS_INIT) {
-    map_.destroy();
-  }
-}
-
-
-
-int ObPxBloomFilterManager::get_px_bf_for_merge_filter(ObPXBloomFilterHashWrapper &key,
-    ObPxBloomFilter *&filter)
-{
-  int ret = OB_SUCCESS;
-  ObPxReadAtomicGetBFCall get_bf_call;
-  if (OB_FAIL(map_.read_atomic(key, get_bf_call))) {
-    LOG_WARN("fail to get row store in result manager", K(ret));
-  } else {
-    filter = get_bf_call.bloom_filter_;
-  }
-  return ret;
-}
 
 OB_SERIALIZE_MEMBER(ObPxBFStaticInfo, is_inited_, tenant_id_, filter_id_,
     server_id_, is_shared_, skip_subpart_, p2p_dh_id_, is_shuffle_);
-OB_SERIALIZE_MEMBER(ObPXBloomFilterHashWrapper, tenant_id_, filter_id_,
-    server_id_, px_sequence_id_, task_id_)
-OB_SERIALIZE_MEMBER(ObPxBFSendBloomFilterArgs, bf_key_, bloom_filter_,
-    next_peer_addrs_, expect_bloom_filter_count_,
-    current_bloom_filter_count_, expect_phase_count_,
-    phase_, timeout_timestamp_);
-
-int ObSendBloomFilterP::init()
-{
-  return OB_SUCCESS;
-}
-
-int ObSendBloomFilterP::process_px_bloom_filter_data()
-{
-  int ret = OB_SUCCESS;
-  bool phase_end = false;
-  ObPxBloomFilter *filter = NULL;
-  if (OB_FAIL(ObPxBloomFilterManager::instance().get_px_bf_for_merge_filter(
-      arg_.bf_key_, filter))) {
-    LOG_WARN("fail to get px bloom filter", K(ret));
-  }
-
-  if (OB_SUCC(ret) && OB_NOT_NULL(filter)) {
-    if (OB_FAIL(filter->merge_filter(&arg_.bloom_filter_))) {
-      LOG_WARN("fail to merge filter", K(ret));
-    } else if (!arg_.is_first_phase() &&
-        OB_FAIL(filter->process_recieve_count(arg_.expect_bloom_filter_count_,
-        arg_.current_bloom_filter_count_))) {
-      LOG_WARN("fail to process receive count", K(ret));
-    } else if (arg_.is_first_phase() && OB_FAIL(filter->process_first_phase_recieve_count(
-        arg_.expect_bloom_filter_count_,
-        arg_.expect_phase_count_,
-        arg_.bloom_filter_.get_begin_idx(),
-        phase_end))) {
-      LOG_WARN("fail to process receive count", K(ret));
-    }
-  }
-
-  if (OB_SUCC(ret) && phase_end && arg_.is_first_phase() && !arg_.next_peer_addrs_.empty()) {
-    ObPxBFProxy proxy;
-    if (OB_FAIL(share::init_obrpc_proxy(proxy))) {
-      LOG_WARN("fail to init obrpc proxy", K(ret));
-    } else {
-      ObPxBFSendBloomFilterArgs new_arg;
-      new_arg.bf_key_ = arg_.bf_key_;
-      if (OB_FAIL(new_arg.bloom_filter_.init(filter))) {
-        LOG_WARN("fail to init arg bloom filter", K(ret));
-      } else {
-        new_arg.expect_bloom_filter_count_ = arg_.expect_bloom_filter_count_;
-        new_arg.current_bloom_filter_count_ = arg_.expect_phase_count_;
-        new_arg.phase_ = ObSendBFPhase::SECOND_LEVEL;
-        new_arg.bloom_filter_.set_begin_idx(arg_.bloom_filter_.get_begin_idx());
-        new_arg.bloom_filter_.set_end_idx(arg_.bloom_filter_.get_end_idx());
-        new_arg.timeout_timestamp_ = arg_.timeout_timestamp_;
-        for (int i = 0; OB_SUCC(ret) && i < arg_.next_peer_addrs_.count(); ++i) {
-          if (arg_.next_peer_addrs_.at(i) != GCTX.self_addr()) {
-            if (OB_FAIL(proxy.to(arg_.next_peer_addrs_.at(i))
-                      .by(arg_.bf_key_.tenant_id_)
-                      .timeout(arg_.timeout_timestamp_)
-                      .compressed(ObCompressorType::LZ4_COMPRESSOR)
-                      .send_bloom_filter(new_arg, NULL))) {
-              LOG_WARN("fail to send bloom filter", K(ret));
-            }
-          }
-        }
-      }
-    }
-  }
-  if (OB_NOT_NULL(filter)) {
-    (void)filter->dec_merge_filter_count();
-  }
-  return ret;
-}
-
-void ObSendBloomFilterP::destroy() {}
-
-int ObSendBloomFilterP::process()
-{
-  return process_px_bloom_filter_data();
-}

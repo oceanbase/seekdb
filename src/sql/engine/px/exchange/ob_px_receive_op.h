@@ -127,8 +127,6 @@ public:
 
 
   int wrap_get_next_batch(const int64_t max_row_cnt);
-  int prepare_send_bloom_filter();
-  int try_send_bloom_filter();
 
   int erase_dtl_interm_result();
   int send_channel_ready_msg(int64_t child_dfo_id);
@@ -183,12 +181,6 @@ protected:
   // stored rows used for get batch rows from DTL reader.
   const ObChunkDatumStore::StoredRow **stored_rows_;
   const ObCompactRow **vector_rows_;
-  obrpc::ObPxBFProxy bf_rpc_proxy_;
-  int64_t bf_ctx_idx_; // the idx of bloom_filter_id_array_ in spec
-  int64_t bf_send_idx_; // the idx of bf_send_ctx_array_ in sqc proxy
-  // each_group_size_ only used in ObPxMsgProc::mark_rpc_filter()(this func will calc group_size, then each_group_size_ keep it for next use)
-  // means how many node(sqc level) in this group 
-  int64_t each_group_size_;
 };
 
 class ObPxFifoReceiveOpInput : public ObPxReceiveOpInput

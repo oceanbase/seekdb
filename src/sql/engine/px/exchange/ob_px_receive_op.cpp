@@ -109,11 +109,7 @@ ObPxReceiveOp::ObPxReceiveOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     ts_(0),
     ch_info_(),
     stored_rows_(NULL),
-    vector_rows_(nullptr),
-    bf_rpc_proxy_(),
-    bf_ctx_idx_(0),
-    bf_send_idx_(0),
-    each_group_size_(0)
+    vector_rows_(nullptr)
 {}
 
 int ObPxReceiveOp::inner_open()
@@ -136,11 +132,6 @@ int ObPxReceiveOp::inner_open()
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("alloc vector rows pointer failed", K(ret));
         }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(init_obrpc_proxy(bf_rpc_proxy_))) {
-        LOG_WARN("fail init rpc proxy", K(ret));
       }
     }
   }
@@ -412,7 +403,6 @@ int ObPxReceiveOp::active_all_receive_channel()
   return ret;
 }
 
-
 int ObPxReceiveOp::wrap_get_next_batch(const int64_t max_row_cnt)
 {
   const int64_t max_cnt = std::min(max_row_cnt, spec_.max_batch_size_);
@@ -661,76 +651,6 @@ int ObPxFifoReceiveOp::inner_get_next_batch(const int64_t max_row_cnt)
     brs_.end_ = true;
     ret = OB_SUCCESS;
   }
-  return ret;
-}
-
-int ObPxReceiveOp::try_send_bloom_filter()
-{
-  int ret = OB_SUCCESS;
-  /*ObPxReceiveOpInput *recv_input = reinterpret_cast<ObPxReceiveOpInput*>(input_);
-  ObPxSQCProxy *sqc_proxy = reinterpret_cast<ObPxSQCProxy *>(recv_input->get_ch_provider());
-  ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  common::ObIArray<ObBloomFilterSendCtx> &bf_send_ctx_array = sqc_proxy->get_bf_send_ctx_array();
-  int64_t bfsendctxcount = bf_send_ctx_array.count();
-  while (OB_SUCC(ret) && bf_send_idx_ < bf_send_ctx_array.count()) {
-    if (bf_send_ctx_array.at(bf_send_idx_).bloom_filter_ready()) {
-      int64_t start_time = ObTimeUtility::current_time();
-      ObBloomFilterSendCtx &bf_send_ctx = bf_send_ctx_array.at(bf_send_idx_);
-      ObPxBFSendBloomFilterArgs args;
-      OZ(args.bloom_filter_.init(&bf_send_ctx.get_filter_data()->filter_));
-      if (OB_SUCC(ret)) {
-        args.bf_key_.init(bf_send_ctx.get_filter_data()->tenant_id_,
-            bf_send_ctx.get_filter_data()->filter_id_,
-            bf_send_ctx.get_filter_data()->server_id_,
-            bf_send_ctx.get_filter_data()->px_sequence_id_);
-        args.expect_bloom_filter_count_ = bf_send_ctx.get_filter_data()->bloom_filter_count_;
-        args.current_bloom_filter_count_ = 1;
-        args.phase_ = ObSendBFPhase::FIRST_LEVEL;
-        args.timeout_timestamp_ = phy_plan_ctx->get_timeout_timestamp();
-      }
-      if (OB_SUCC(ret)) {
-        common::ObIArray<BloomFilterIndex> &filter_index_array = bf_send_ctx.get_filter_indexes();
-        ObPxBloomFilterChSet &bf_chset = bf_send_ctx.get_bf_ch_set();
-        int64_t ch_info_count = bf_chset.count();
-        args.expect_phase_count_ = ch_info_count;
-        int64_t filter_idx = 0;
-        while (bf_send_ctx.get_filter_channel_idx() < filter_index_array.count() && OB_SUCC(ret)) {
-          filter_idx = ATOMIC_FAA(&bf_send_ctx.get_filter_channel_idx(), 1);
-          if (filter_idx < filter_index_array.count()) {
-            args.next_peer_addrs_.reuse();
-            auto channel_filter_idx = filter_index_array.at(filter_idx);
-            args.bloom_filter_.set_begin_idx(channel_filter_idx.begin_idx_);
-            args.bloom_filter_.set_end_idx(channel_filter_idx.end_idx_);
-            ObDtlChannelInfo chan_info; // just for declare a reference, don't use chan_info to do anything else
-            ObDtlChannelInfo &ch_info = chan_info;
-            for (int i = 0; OB_SUCC(ret) && i < channel_filter_idx.channel_ids_.count(); ++i) {
-              if (OB_FAIL(bf_chset.get_channel_info(channel_filter_idx.channel_ids_.at(i), ch_info))) {
-                LOG_WARN("failed get ObDtlChannelInfo", K(channel_filter_idx.channel_ids_.at(i)), K(i), K(ret));
-              } else if (OB_FAIL(args.next_peer_addrs_.push_back(ch_info.peer_))) {
-                LOG_WARN("failed push back peer addr", K(i), K(ret));
-              }
-            }
-            if (OB_FAIL(ret)) {
-            } else if (channel_filter_idx.channel_id_ >= ch_info_count) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected channel id", K(channel_filter_idx.channel_id_), K(ch_info_count));
-            } else if (OB_FAIL(bf_chset.get_channel_info(channel_filter_idx.channel_id_, ch_info))) {
-                LOG_WARN("failed get ObDtlChannelInfo", K(channel_filter_idx.channel_id_), K(ret));
-            } else if (OB_FAIL(bf_rpc_proxy_.to(ch_info.peer_)
-                        .by(bf_send_ctx.get_filter_data()->tenant_id_)
-                        .timeout(phy_plan_ctx->get_timeout_timestamp())
-                        .compressed(bf_send_ctx.get_bf_compress_type())
-                        .send_bloom_filter(args, NULL))) {
-              LOG_WARN("fail to send bloom filter", K(ret));
-            }
-          }
-        }
-        op_monitor_info_.otherstat_1_value_ = ObTimeUtility::current_time() - start_time;
-        bf_send_ctx.set_bloom_filter_ready(false); // all piece of bloom filter was sent, this thread sent the last one piece
-      }
-    }
-    ++bf_send_idx_;
-  }*/
   return ret;
 }
 
