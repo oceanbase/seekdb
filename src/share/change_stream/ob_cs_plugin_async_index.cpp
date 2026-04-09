@@ -306,13 +306,35 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
             ret = common::OB_ERR_UNEXPECTED;
             LOG_WARN("no vector column id found for vector index", K(ret), K(table_id), K(index_id_table_id));
           } else {
-            // Check SYNC_MODE=ASYNC: only async HNSW indexes on heap table are supported.
-            // Note: For HNSW+heap+async, there is no delta_buffer table; index_params come from index_id table.
-            // vec_index_id + heap: SYNC_MODE default is ASYNC when not specified (index_id table may have empty params).
+            // Check SYNC_MODE=ASYNC: only non-semantic async HNSW indexes on heap
+            // table are handled here. Semantic indexes use different aux tables and
+            // should not enter the delta_buffer path below.
             ObString index_params_str = index_schema->get_index_params();
             bool is_async_mode = ObVectorIndexUtil::is_sync_mode_async(index_params_str, true /* is_hnsw_heap_table */);
-            if (OB_SUCC(ret) && !is_async_mode) {
-              //skip non-async vector index (SYNC_MODE!=ASYNC)
+            bool is_semantic_index = false;
+            if (OB_SUCC(ret) && !index_params_str.empty()) {
+              const ObColumnSchemaV2 *data_col_schema = data_table_schema->get_column_schema(vec_col_ids.at(0));
+              if (OB_ISNULL(data_col_schema)) {
+                ret = common::OB_ERR_UNEXPECTED;
+                LOG_WARN("data column schema is null", K(ret), K(table_id), K(index_id_table_id),
+                         K(vec_col_ids));
+              } else if (ob_is_varchar_type(data_col_schema->get_data_type(),
+                                            data_col_schema->get_collation_type())) {
+                ObVectorIndexParam param;
+                int tmp_ret = ObVectorIndexUtil::parser_params_from_string(
+                    index_params_str, ObVectorIndexType::VIT_HNSW_INDEX, param, false /* set_default */);
+                if (OB_SUCCESS != tmp_ret) {
+                  LOG_WARN("failed to parse vector index params for semantic index check",
+                           K(tmp_ret), K(table_id), K(index_id_table_id), K(index_params_str));
+                } else {
+                  is_semantic_index = (param.endpoint_[0] != '\0' && param.dim_ > 0);
+                }
+              }
+            }
+            if (OB_SUCC(ret) && (!is_async_mode || is_semantic_index)) {
+              // skip:
+              // 1. non-async vector index (SYNC_MODE!=ASYNC)
+              // 2. semantic vector index, which does not use delta_buffer
             } else if (OB_SUCC(ret)) {
               for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < vec_col_ids.count(); ++col_idx) {
                 int64_t vec_column_id = vec_col_ids.at(col_idx);
