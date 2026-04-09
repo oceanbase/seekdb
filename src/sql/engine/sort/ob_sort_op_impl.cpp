@@ -401,12 +401,15 @@ bool ObSortOpImpl::Compare::operator()(
   bool less = false;
   int &ret = ret_;
   if (OB_UNLIKELY(OB_SUCCESS != ret)) {
-    // already fail
+    // Use pointer comparison to maintain strict weak ordering in error state,
+    // preventing Apple libc++ sort consistency check from triggering abort().
+    less = l < r;
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
     LOG_WARN("not init or invalid argument", K(ret), KP(l), KP(r));
   } else if (OB_FAIL(fast_check_status())) {
     LOG_WARN("fast check failed", K(ret));
+    less = l < r;
   } else if (enable_encode_sortkey_) {
     const ObDatum l_cell = l->cells()[0];
     const ObDatum r_cell = r->cells()[0];
