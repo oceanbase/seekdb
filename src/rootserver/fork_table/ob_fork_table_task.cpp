@@ -425,7 +425,7 @@ int ObForkTableTask::build_data(const ObDDLTaskStatus next_task_status)
     LOG_WARN("fail to try schedule fork dags", K(ret));
   } else if (OB_FAIL(ObDDLRedoLogWriter::write_auto_fork_log(SYS_LS,
                                                              ObDDLClogType::DDL_TABLE_FORK_START_LOG,
-                                                             logservice::ObReplayBarrierType::PRE_BARRIER,
+                                                             logservice::ObReplayBarrierType::STRICT_BARRIER,
                                                              start_log,
                                                              start_log_scn))) {
     LOG_WARN("fail to write table fork start log", K(ret), K(start_log));
