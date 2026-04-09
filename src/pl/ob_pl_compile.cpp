@@ -717,14 +717,14 @@ int ObPLCompiler::analyze_package(const ObString &source,
     ObPLParser parser(allocator_, session_info_.get_charsets4parser(), session_info_.get_sql_mode());
     ObStmtNodeTree *parse_tree = NULL;
     CHECK_COMPATIBILITY_MODE(&session_info_);
-    HEAP_VAR(ObPLResolver, resolver, allocator_,
+    ObPLResolver resolver(allocator_,
                           session_info_,
                           schema_guard_,
                           package_guard_,
                           sql_proxy_,
                           package_ast.get_expr_factory(),
                           parent_ns,
-                          false) {
+                          false);
     const ObTriggerInfo *trg_info = NULL;
     if (PL_PACKAGE_BODY == package_ast.get_package_type() && is_for_trigger) {
       uint64_t trg_id = ObTriggerInfo::get_package_trigger_id(package_ast.get_id());
@@ -751,7 +751,6 @@ int ObPLCompiler::analyze_package(const ObString &source,
     if (OB_NOT_NULL(package_ast.get_body())) {
       (const_cast<ObPLBlockNS &>(package_ast.get_body()->get_namespace())).set_external_ns(NULL);
     }
-    } // end HEAP_VAR(ObPLResolver)
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(parent_ns)) { // after resolve package body, check package legal
     OZ (check_package_body_legal(parent_ns, package_ast));

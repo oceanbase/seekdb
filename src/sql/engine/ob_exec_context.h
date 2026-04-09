@@ -324,7 +324,7 @@ public:
   /**
    * @brief get admission addr set
    */
-  hash::ObHashMap<ObAddr, int64_t> &get_admission_addr_map();
+  int get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map);
 
   /**
    * @brief get allocator.
@@ -892,7 +892,7 @@ inline uint64_t ObExecContext::get_admission_version() const
   return admission_version_;
 }
 
-inline hash::ObHashMap<ObAddr, int64_t> &ObExecContext::get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map)
+inline int ObExecContext::get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map)
 {
   int ret = OB_SUCCESS;
   addr_map = nullptr;
@@ -903,7 +903,7 @@ inline hash::ObHashMap<ObAddr, int64_t> &ObExecContext::get_admission_addr_map(h
       admission_addr_map_ = new (buf) AdmissionAddrMap();
     }
   }
-  return *admission_addr_map_;
+  return ret;
 }
 
 struct ObTempExprCtxReplaceGuard

@@ -227,11 +227,11 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         HEAP_VAR(ObPLPackageAST, package_body_ast, *allocator_) {
           ObPLPackageGuard package_guard(params_.session_info_->get_effective_tenant_id());
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
-          HEAP_VAR(ObPLCompiler, compiler, *params_.allocator_,
+          ObPLCompiler compiler(*params_.allocator_,
                                 *params_.session_info_,
                                 *schema_guard,
                                 package_guard,
-                                *params_.sql_proxy_) {
+                                *params_.sql_proxy_);
           const ObPackageInfo *package_body_info = NULL;
           OZ (schema_checker_->get_package_info(session_info_->get_effective_tenant_id(),
                                                 db_name,
@@ -280,7 +280,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
             }
           }
         }
-        } // end HEAP_VAR(ObPLCompiler)
         if (OB_FAIL(ret)) {
           ret = OB_SUCCESS;
         }

@@ -224,7 +224,7 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
                                                 exec_ctx.get_admission_version()))) {
       LOG_WARN("release target failed", K(ret), K(tenant_id), K(exec_ctx.get_admission_version()));
     }
-    (void)addr_map.destroy();
+    (void)addr_map->destroy();
     LOG_DEBUG("release resource, notify wait threads");
   }
 }
