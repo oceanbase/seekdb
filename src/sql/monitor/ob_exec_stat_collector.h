@@ -40,11 +40,8 @@ class ObSQLSessionInfo;
 class ObExecStatCollector
 {
 public:
-  ObExecStatCollector() : allocator_(NULL), extend_buf_(NULL), length_(0), capacity_(0) {}
+  ObExecStatCollector() : length_(0) {}
   ~ObExecStatCollector() {}
-
-  void init(common::ObIAllocator *allocator) { allocator_ = allocator; }
-  void reset() { length_ = 0; }
 
   int collect_plan_monitor_info(uint64_t job_id,
                            uint64_t task_id,
@@ -58,10 +55,8 @@ private:
   /* functions */
   DISALLOW_COPY_AND_ASSIGN(ObExecStatCollector);
   static const int64_t MAX_STAT_BUF_COUNT = 10240;
-  common::ObIAllocator *allocator_;
-  char *extend_buf_;
+  char extend_buf_[MAX_STAT_BUF_COUNT];
   int64_t length_;
-  int64_t capacity_;
 };
 
 class ObExecStatDispatch

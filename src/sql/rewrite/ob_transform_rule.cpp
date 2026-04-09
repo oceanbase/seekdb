@@ -188,8 +188,8 @@ int ObTransformRule::transform_stmt_recursively(common::ObIArray<ObParentDMLStmt
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(current_level), K(is_stack_overflow), K(ret));
   } else if (is_stack_overflow) {
-    LOG_INFO("stack usage is high before transform recursion, continue with smart call protection",
-             K(current_level), K(is_stack_overflow));
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (stmt->is_select_stmt() &&
         OB_FAIL(static_cast<const ObSelectStmt *>(stmt)->get_set_stmt_size(size))) {
     LOG_WARN("failed to get set stm size", K(ret));
@@ -230,8 +230,8 @@ int ObTransformRule::transform_pre_order(common::ObIArray<ObParentDMLStmt> &pare
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(current_level), K(is_stack_overflow), K(ret));
   } else if (is_stack_overflow) {
-    LOG_INFO("stack usage is high before pre-order transform, continue with smart call protection",
-             K(current_level), K(is_stack_overflow));
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (OB_FAIL(transform_self(parent_stmts, current_level, stmt))) {
     LOG_WARN("failed to transform self statement", K(ret));
   } else if (OB_FAIL(transform_children(parent_stmts, current_level, stmt))) {
@@ -253,8 +253,8 @@ int ObTransformRule::transform_post_order(ObIArray<ObParentDMLStmt> &parent_stmt
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(current_level), K(is_stack_overflow), K(ret));
   } else if (is_stack_overflow) {
-    LOG_INFO("stack usage is high before post-order transform, continue with smart call protection",
-             K(current_level), K(is_stack_overflow));
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (OB_FAIL(transform_children(parent_stmts, current_level, stmt))) {
     LOG_WARN("failed to transform children stmt", K(ret));
   } else if (OB_FAIL(transform_self(parent_stmts, current_level, stmt))) {
@@ -276,8 +276,8 @@ int ObTransformRule::transform_root_only(ObIArray<ObParentDMLStmt> &parent_stmts
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("check stack overflow failed", K(current_level), K(is_stack_overflow), K(ret));
   } else if (is_stack_overflow) {
-    LOG_INFO("stack usage is high before root-only transform, continue with smart call protection",
-             K(current_level), K(is_stack_overflow));
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(current_level), K(is_stack_overflow), K(ret));
   } else if (OB_FAIL(transform_self(parent_stmts, current_level, stmt))) {
     LOG_WARN("failed to transform self statement", K(ret));
   } else if (OB_FAIL(transform_temp_tables(parent_stmts, current_level, stmt))) {

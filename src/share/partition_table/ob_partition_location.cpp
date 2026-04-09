@@ -52,38 +52,8 @@ ObReplicaLocation::ObReplicaLocation()
 
 void ObReplicaLocation::reset()
 {
-  replica_type_ = REPLICA_TYPE_FULL;
+  replica_type_ = REPLICA_TYPE_INVALID;
   property_.reset();
-}
-
-ObAddr ObReplicaLocation::get_server() const
-{
-  return GCTX.self_addr();
-}
-
-void ObReplicaLocation::set_server(const ObAddr &server)
-{
-  UNUSED(server);
-}
-
-ObRole ObReplicaLocation::get_role() const
-{
-  return LEADER;
-}
-
-void ObReplicaLocation::set_role(ObRole role)
-{
-  UNUSED(role);
-}
-
-int64_t ObReplicaLocation::get_sql_port() const
-{
-  return GCTX.self_addr().get_port();
-}
-
-void ObReplicaLocation::set_sql_port(int64_t sql_port)
-{
-  UNUSED(sql_port);
 }
 
 ObPartitionLocation::ObPartitionLocation()

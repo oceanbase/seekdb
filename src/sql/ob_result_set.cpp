@@ -750,7 +750,7 @@ int ObResultSet::deal_feedback_info(ObPhysicalPlan *physical_plan, bool is_rollb
       }
     }
     if (physical_plan->try_record_plan_info()) {
-      if (OB_FAIL(physical_plan->set_feedback_info_with_stack_overflow_check(ctx))) {
+      if (OB_FAIL(SMART_CALL(physical_plan->set_feedback_info(ctx)))) {
         LOG_WARN("fail to set feed_back info", K(ret));
       } else {
         physical_plan->set_record_plan_info(false);

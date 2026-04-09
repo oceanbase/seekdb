@@ -239,7 +239,6 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("failed to do stack overflow check", K(ret));
   } else if (is_stack_overflow) {
-    ob_abort();
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("stack overflow", K(ret));
   } else {

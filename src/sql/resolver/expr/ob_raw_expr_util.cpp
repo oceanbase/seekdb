@@ -8343,7 +8343,7 @@ int ObRawExprUtils::get_col_ref_expr_recursively(ObRawExpr *expr,
     LOG_WARN("failed to check stack overflow", K(ret), K(is_stack_overflow));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow), KCSTRING(lbt()));
+    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (OB_ISNULL(expr)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("expr passed in is NULL", K(ret));

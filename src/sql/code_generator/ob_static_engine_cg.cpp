@@ -445,7 +445,7 @@ int ObStaticEngineCG::check_expr_columnlized(const ObRawExpr *expr)
 int ObStaticEngineCG::check_exprs_columnlized(ObLogicalOperator &op)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObRawExpr *, 4> child_outputs;
+  ObSEArray<ObRawExpr *, 16> child_outputs;
 
   // clear IS_COLUMNLIZED flag
   if (OB_FAIL(clear_all_exprs_specific_flag(cur_op_exprs_, IS_COLUMNLIZED))) {
@@ -730,7 +730,7 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
   //    Corresponding ObExpr added to calc_exprs_
   if (OB_SUCC(ret)) {
     // get all child output exprs
-    ObSEArray<ObRawExpr *, 4> child_outputs;
+    ObSEArray<ObRawExpr *, 16> child_outputs;
     // table lookup operator don't dependent any output result of child except calc_part_id_expr_
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_num_of_child(); i++) {
       ObLogicalOperator *child_op = op.get_child(i);
@@ -877,7 +877,7 @@ int ObStaticEngineCG::generate_calc_exprs(
     bool need_flatten_gen_col)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObRawExpr *, 4> calc_raw_exprs;
+  ObSEArray<ObRawExpr *, 16> calc_raw_exprs;
   ObRawExprUniqueSet flattened_cur_op_exprs(true);
   auto filter_func = [&](ObRawExpr *e) { return !has_exist_in_array(dep_exprs, e); };
   if (OB_FAIL(ret)) {
@@ -2922,7 +2922,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
   }
 
   if (OB_SUCC(ret)) {
-    ObSEArray<ObRawExpr *, 4> all_need_save_exprs;
+    ObSEArray<ObRawExpr *, 32> all_need_save_exprs;
     ObRawExpr *stmt_id_expr = const_cast<ObRawExpr *>(op.get_stmt_id_expr());
     if (OB_FAIL(append(all_need_save_exprs, primary_dml_info->column_convert_exprs_))) {
       LOG_WARN("fail to append expr to array", K(ret));
@@ -3283,7 +3283,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableInsertUpSpec &spec, 
     } else {
       common::ObIArray<ObRawExpr *> &child_output_exprs = child_op->get_output_exprs();
       ObSEArray<ObRawExpr *, 8> contain_exprs;
-      ObSEArray<ObRawExpr *, 4> all_need_save_exprs;
+      ObSEArray<ObRawExpr *, 32> all_need_save_exprs;
       for (int i = 0; OB_SUCC(ret) && i < upd_pri_dml_info->assignments_.count(); i++) {
         ObRawExpr *raw_expr = upd_pri_dml_info->assignments_.at(i).expr_;
         if (OB_FAIL(ObRawExprUtils::extract_contain_exprs(raw_expr,
@@ -3906,8 +3906,8 @@ int ObStaticEngineCG::generate_spec(ObLogGranuleIterator &op, ObGranuleIteratorS
   const bool pwj_gi = ObGranuleUtil::pwj_gi(spec.gi_attri_flag_);
   const bool enable_repart_pruning = ObGranuleUtil::enable_partition_pruning(spec.gi_attri_flag_);
   if (OB_SUCC(ret) && (pwj_gi || enable_repart_pruning)) {
-    ObSEArray<int64_t, 4> dml_tsc_op_ids;
-    ObSEArray<int64_t, 4> dml_tsc_ref_ids;
+    ObSEArray<int64_t, 32> dml_tsc_op_ids;
+    ObSEArray<int64_t, 32> dml_tsc_ref_ids;
     if (OB_FAIL(generate_dml_tsc_ids(spec, op, dml_tsc_op_ids, dml_tsc_ref_ids))) {
       LOG_WARN("generate pw dml tsc ids failed", K(ret));
     } else {
@@ -4099,7 +4099,7 @@ int ObStaticEngineCG::generate_basic_transmit_spec(
   if (OB_SUCC(ret) &&
       (ObPQDistributeMethod::PARTITION_RANGE == op.get_dist_method()
        || ObPQDistributeMethod::RANGE == op.get_dist_method())) {
-    ObSEArray<ObExpr *, 4> sampling_saving_row;
+    ObSEArray<ObExpr *, 16> sampling_saving_row;
     OZ(append(sampling_saving_row, spec.get_child()->output_));
     if (NULL != spec.random_expr_) {
       OZ(sampling_saving_row.push_back(spec.random_expr_));
@@ -7404,8 +7404,8 @@ int ObStaticEngineCG::generate_spec(ObLogWindowFunction &op, ObWindowFunctionSpe
 {
   UNUSED(in_root_job);
   int ret = OB_SUCCESS;
-  ObSEArray<ObExpr*, 4> rd_expr;
-  ObSEArray<ObExpr*, 4> all_expr;
+  ObSEArray<ObExpr*, 16> rd_expr;
+  ObSEArray<ObExpr*, 16> all_expr;
   spec.enable_hash_base_distinct_ = true;
   int tmp_ret = OB_E(EventTable::EN_DISABLE_HASH_BASE_DISTINCT) OB_SUCCESS;
   if (OB_SUCCESS != tmp_ret) {
@@ -9144,7 +9144,7 @@ int ObStaticEngineCG::check_only_one_unique_key(const ObLogPlan& log_plan,
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard *schema_guard = log_plan.get_optimizer_context().get_schema_guard();
-  ObSEArray<ObAuxTableMetaInfo, 4> simple_index_infos;
+  ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   const ObTableSchema *index_schema = NULL;
   int64_t unique_index_cnt = 0;
   if (OB_ISNULL(schema_guard) || OB_ISNULL(table_schema)) {
@@ -9431,8 +9431,8 @@ int ObStaticEngineCG::exist_registered_vec_op(ObLogicalOperator &op, const bool 
 int ObStaticEngineCG::generate_spec(ObLogExpand &op, ObExpandVecSpec &spec, const bool in_root_job)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObExpr *, 4> expand_exprs;
-  ObSEArray<ObExpr *, 4> gby_exprs;
+  ObSEArray<ObExpr *, 16> expand_exprs;
+  ObSEArray<ObExpr *, 16> gby_exprs;
   ObSEArray<ObExpandVecSpec::DupExprPair, 8> dup_expr_pairs;
   ObHashRollupInfo *hash_rollup_info = NULL;
   if (OB_ISNULL(phy_plan_)) {

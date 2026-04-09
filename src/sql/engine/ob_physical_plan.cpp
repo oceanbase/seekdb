@@ -1494,11 +1494,6 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
   return ret;
 }
 
-int ObPhysicalPlan::set_feedback_info_with_stack_overflow_check(ObExecContext &ctx)
-{
-  return SMART_CALL(set_feedback_info(ctx));
-}
-
 int ObPhysicalPlan::set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_local_session_vars)
 {
   int ret = OB_SUCCESS;

@@ -246,11 +246,6 @@ int ObDASCtx::check_same_server(const ObDASTabletLoc *tablet_loc)
   return ret;
 }
 
-const common::ObAddr &ObDASCtx::same_tablet_addr() const
-{
-  return GCTX.self_addr();
-}
-
 int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
                                   const ObCandiTabletLoc &candi_tablet_loc,
                                   ObDASTabletLoc *&tablet_loc)

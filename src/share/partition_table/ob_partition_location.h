@@ -60,12 +60,12 @@ public:
 
   ObReplicaLocation();
   void reset();
-  common::ObAddr get_server() const;
-  void set_server(const common::ObAddr &server);
-  common::ObRole get_role() const;
-  void set_role(common::ObRole role);
-  int64_t get_sql_port() const;
-  void set_sql_port(int64_t sql_port);
+  const common::ObAddr &get_server() const { return GCTX.self_addr(); }
+  void set_server(const common::ObAddr &) {}
+  common::ObRole get_role() const { return LEADER; }
+  void set_role(common::ObRole) {}
+  int64_t get_sql_port() const { return GCTX.self_addr().get_port(); }
+  void set_sql_port(int64_t) {}
   inline bool is_valid() const;
   inline bool operator==(const ObReplicaLocation &other) const;
   inline bool operator!=(const ObReplicaLocation &other) const;
@@ -80,16 +80,12 @@ public:
 
 inline bool ObReplicaLocation::is_valid() const
 {
-  return get_server().is_valid();
-  //TODO:
-  //return server_.is_valid() && common::ObReplicaTypeCheck::is_replica_type_valid(replica_type_);
+  return REPLICA_TYPE_INVALID != replica_type_;
 }
 
 bool ObReplicaLocation::operator==(const ObReplicaLocation &other) const
 {
-  return get_server() == other.get_server() && get_role() == other.get_role()
-      && get_sql_port() == other.get_sql_port()
-      && replica_type_ == other.replica_type_
+  return replica_type_ == other.replica_type_
       && property_ == other.property_;
 }
 

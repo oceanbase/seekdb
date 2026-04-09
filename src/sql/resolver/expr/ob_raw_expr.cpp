@@ -449,8 +449,8 @@ int ObRawExpr::formalize(const ObSQLSessionInfo *session_info,
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("fail to check stack overflow", K(ret), K(is_stack_overflow));
   } else if (is_stack_overflow) {
-    LOG_INFO("stack usage is high before raw expr formalize, continue with smart call protection",
-             K(is_stack_overflow));
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (OB_FAIL(extract_info())) {
     LOG_WARN("failed to extract info", K(*this));
   } else if (need_deduce_type &&

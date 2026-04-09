@@ -154,7 +154,7 @@ ObResolver::~ObResolver()
 }
 
 template <typename ResolverType>
-__attribute__((noinline)) int ObResolver::stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
+int ObResolver::stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(ResolverType, stmt_resolver, params) {
@@ -167,7 +167,7 @@ __attribute__((noinline)) int ObResolver::stmt_resolver_func(ObResolverParams &p
 }
 
 template <typename SelectResolverType>
-__attribute__((noinline)) int ObResolver::select_stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
+int ObResolver::select_stmt_resolver_func(ObResolverParams &params, const ParseNode &parse_tree, ObStmt *&stmt)
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(SelectResolverType, stmt_resolver, params) {

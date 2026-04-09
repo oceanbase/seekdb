@@ -1107,8 +1107,6 @@ int ObMemtable::check_row_locked_on_frozen_stores_(
       // determined simultaneously from lock_state.
       bool row_is_decided = false;
       const ObIArray<ObITable *> *stores = &iter_tables;
-      blocksstable::ObDatumRowkeyHelper shared_rowkey_converter;
-      blocksstable::ObDatumRowkey shared_datum_rowkey;
       for (int64_t i = stores->count() - 2; OB_SUCC(ret) && !row_is_decided && i >= 0; i--) {
         lock_state.reset();
         // Try to enter fork snapshot if this table is a fork source
@@ -1134,34 +1132,38 @@ int ObMemtable::check_row_locked_on_frozen_stores_(
           TRANS_LOG(DEBUG, "check_row_locked meet memtable", K(ret),
                     KPC(memtable_key), K(ctx), KPC(memtable), K(lock_state));
         } else if (stores->at(i)->is_sstable()) {
+          blocksstable::ObDatumRowkeyHelper rowkey_converter;
+          blocksstable::ObDatumRowkey datum_rowkey;
           ObSSTable *sstable = static_cast<ObSSTable *>(stores->at(i));
-          if (OB_FAIL(shared_rowkey_converter.convert_datum_rowkey(
+          if (OB_FAIL(rowkey_converter.convert_datum_rowkey(
                         memtable_key->get_rowkey()->get_rowkey(),
-                        shared_datum_rowkey))) {
+                        datum_rowkey))) {
             STORAGE_LOG(WARN, "Failed to convert datum rowkey", K(ret), KPC(memtable_key));
           } else if (OB_FAIL(sstable->check_row_locked(param,
-                                                       shared_datum_rowkey,
+                                                       datum_rowkey,
                                                        context,
                                                        lock_state,
                                                        check_exist))) {
             TRANS_LOG(WARN, "sstable check row lock fail", K(ret),
-                      KPC(memtable_key), K(ctx), K(shared_datum_rowkey), K(lock_state));
+                      KPC(memtable_key), K(ctx), K(datum_rowkey), K(lock_state));
           }
           TRANS_LOG(DEBUG, "check_row_locked meet sstable", K(ret),
                     KPC(memtable_key), K(ctx), KPC(sstable), K(lock_state));
         } else if (stores->at(i)->is_direct_load_memtable()) {
           ObDDLKV *ddl_kv = static_cast<ObDDLKV *>(iter_tables.at(i));
-          if (OB_FAIL(shared_rowkey_converter.convert_datum_rowkey(
+          blocksstable::ObDatumRowkeyHelper rowkey_converter;
+          blocksstable::ObDatumRowkey datum_rowkey;
+          if (OB_FAIL(rowkey_converter.convert_datum_rowkey(
                         memtable_key->get_rowkey()->get_rowkey(),
-                        shared_datum_rowkey))) {
+                        datum_rowkey))) {
             STORAGE_LOG(WARN, "Failed to convert datum rowkey", K(ret), KPC(memtable_key));
           } else if (OB_FAIL(ddl_kv->check_row_locked(param,
-                                                      shared_datum_rowkey,
+                                                      datum_rowkey,
                                                       context,
                                                       lock_state,
                                                       check_exist))) {
             TRANS_LOG(WARN, "direct load memtable check row lock fail", K(ret),
-                      KPC(memtable_key), K(check_exist), K(shared_datum_rowkey), K(lock_state));
+                      KPC(memtable_key), K(check_exist), K(datum_rowkey), K(lock_state));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -2386,7 +2388,7 @@ int ObMemtable::set_(
 {
   int ret = OB_SUCCESS;
   ObTxSEQ write_seq;
-  HEAP_VAR(blocksstable::ObRowWriter, row_writer) {
+  blocksstable::ObRowWriter row_writer;
   ObMemtableData mtd;
   ObRowData old_row_data;
   ObStoreCtx &ctx = *(context.store_ctx_);
@@ -2537,7 +2539,6 @@ int ObMemtable::set_(
       }
     }
   }
-  } // end of HEAP_VAR(row_writer)
   return ret;
 }
 

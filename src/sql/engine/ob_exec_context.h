@@ -892,16 +892,17 @@ inline uint64_t ObExecContext::get_admission_version() const
   return admission_version_;
 }
 
-inline hash::ObHashMap<ObAddr, int64_t> &ObExecContext::get_admission_addr_map()
+inline hash::ObHashMap<ObAddr, int64_t> &ObExecContext::get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map)
 {
+  int ret = OB_SUCCESS;
+  addr_map = nullptr;
   typedef hash::ObHashMap<ObAddr, int64_t> AdmissionAddrMap;
   if (OB_ISNULL(admission_addr_map_)) {
-    void *buf = ob_malloc(sizeof(AdmissionAddrMap), ObMemAttr(MTL_ID(), "PxAdmAddrMap"));
+    void *buf = ob_malloc(sizeof(AdmissionAddrMap), ObMemAttr(OB_SYS_TENANT_ID, "PxAdmAddrMap"));
     if (OB_NOT_NULL(buf)) {
       admission_addr_map_ = new (buf) AdmissionAddrMap();
     }
   }
-  OB_ASSERT(OB_NOT_NULL(admission_addr_map_));
   return *admission_addr_map_;
 }
 

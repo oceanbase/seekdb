@@ -76,7 +76,7 @@ inline int alloc_stack(const size_t stack_size, void *&stack_addr)
     ori_stack_size : all_stack_size)) {
   } else if (all_stack_size + stack_size > ALL_STACK_LIMIT) {
     ret = OB_SIZE_OVERFLOW;
-  } else if (OB_ISNULL(stack_addr = lib::g_stack_allocer.smart_call_alloc( tenant_id, stack_size))) {
+  } else if (OB_ISNULL(stack_addr = lib::g_stack_allocer.smart_call_alloc(tenant_id, stack_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     all_stack_size += stack_size;

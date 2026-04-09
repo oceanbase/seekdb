@@ -30,24 +30,11 @@ int ObExecStatCollector::add_stat(const T *value)
   if (OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(value));
-  } else {
-    if (OB_ISNULL(extend_buf_)) {
-      if (OB_ISNULL(allocator_)) {
-        ret = OB_NOT_INIT;
-      } else if (OB_ISNULL(extend_buf_ = (char *)allocator_->alloc(MAX_STAT_BUF_COUNT))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        capacity_ = MAX_STAT_BUF_COUNT;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(serialization::encode_vi32(
-                  extend_buf_, capacity_, length_, value->get_type()))) {
-        LOG_WARN("fail to encode type", K(ret), K(value));
-      } else if (OB_FAIL(value->serialize(extend_buf_, capacity_, length_))) {
-        LOG_WARN("fail to serialize value", K(ret), K(value));
-      }
-    }
+  } else if (OB_FAIL(serialization::encode_vi32(
+              extend_buf_, MAX_STAT_BUF_COUNT, length_, value->get_type()))) {
+    LOG_WARN("fail to encode type", K(ret), K(value));
+  } else if (OB_FAIL(value->serialize(extend_buf_, MAX_STAT_BUF_COUNT, length_))) {
+    LOG_WARN("fail to serialize value", K(ret), K(value));
   }
   return ret;
 }
@@ -55,23 +42,12 @@ int ObExecStatCollector::add_stat(const T *value)
 int ObExecStatCollector::add_raw_stat(const common::ObString &str)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(extend_buf_)) {
-    if (OB_ISNULL(allocator_)) {
-      ret = OB_NOT_INIT;
-    } else if (OB_ISNULL(extend_buf_ = (char *)allocator_->alloc(MAX_STAT_BUF_COUNT))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      capacity_ = MAX_STAT_BUF_COUNT;
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (length_ + str.length() >= capacity_) {
-      ret = OB_BUF_NOT_ENOUGH;
-      LOG_DEBUG("buffer size not enough", K(ret),K(length_), K(str.length()));
-    } else {
-      MEMCPY(extend_buf_ + length_, str.ptr(), str.length());
-      length_ += str.length();
-    }
+  if (length_ + str.length() >= MAX_STAT_BUF_COUNT) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_DEBUG("buffer size not enough", K(ret),K(length_), K(str.length()));
+  } else {
+    MEMCPY(extend_buf_ + length_, str.ptr(), str.length());
+    length_ += str.length();
   }
   return ret;
 }
@@ -79,13 +55,9 @@ int ObExecStatCollector::add_raw_stat(const common::ObString &str)
 int ObExecStatCollector::get_extend_info(ObIAllocator &allocator, ObString &str)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(extend_buf_) || length_ == 0) {
-    str.reset();
-  } else {
-    const ObString tmp_str(length_, extend_buf_);
-    if (OB_FAIL(ob_write_string(allocator, tmp_str, str))) {
-      LOG_WARN("fail to write string", K(tmp_str), K(ret));
-    }
+  const ObString tmp_str(length_, extend_buf_);
+  if (OB_FAIL(ob_write_string(allocator, tmp_str, str))) {
+    LOG_WARN("fail to write string", K(tmp_str), K(ret));
   }
   return ret;
 }

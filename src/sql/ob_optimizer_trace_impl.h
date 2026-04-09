@@ -153,7 +153,7 @@ inline ObOptimizerTraceImpl** get_local_tracer()
   do {                                  \
     CHECK_CAN_TRACE_LOG {               \
       tracer->new_line();               \
-      tracer->append(args); \
+      SMART_CALL(tracer->append(args)); \
     }                                   \
   } while (0);                          \
 

@@ -715,7 +715,7 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
         } else if (plan->try_record_plan_info()) { 
           if(exec_ctx_.get_feedback_info().is_valid() && 
              plan->get_logical_plan().is_valid() &&
-             OB_FAIL(plan->set_feedback_info(exec_ctx_))) {
+             OB_FAIL(SMART_CALL(plan->set_feedback_info(exec_ctx_)))) {
             LOG_WARN("failed to set feedback info", K(ret));
           } else {
             plan->set_record_plan_info(false);

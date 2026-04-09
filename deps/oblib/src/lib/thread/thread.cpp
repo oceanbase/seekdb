@@ -378,7 +378,6 @@ void Thread::destroy_stack()
 void* Thread::__th_start(void *arg)
 {
   Thread * const th = reinterpret_cast<Thread*>(arg);
-
   // Set high QoS for this thread (platform-independent)
   // On macOS, threads in a daemon process inherit low QoS priority which causes scheduling delays.
   ob_set_thread_qos(ObThreadQoS::USER_INITIATED);

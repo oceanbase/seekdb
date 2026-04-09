@@ -4149,10 +4149,8 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("failed to check stack overflow", K(ret), K(is_stack_overflow));
   } else if (is_stack_overflow) {
-    // Let SMART_CALL at upper layers extend stack for parser path instead of
-    // returning early here and disconnecting client with OB_SIZE_OVERFLOW.
-    LOG_INFO("stack usage is high before parser_and_check, continue with smart call protection",
-             K(is_stack_overflow));
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (OB_ISNULL(pctx)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));

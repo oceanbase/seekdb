@@ -56,6 +56,8 @@ const char *print_server_role(const ObServerRole server_role)
 }
 
 static int64_t reserved_stack_size = 32L << 10;
+STATIC_ASSERT(reserved_stack_size < STACK_RESERVED_SIZE,
+    "default reserved stack size should be less than stack size reserved in smart call");
 
 int64_t get_reserved_stack_size()
 {

@@ -161,7 +161,7 @@ public:
   int build_external_table_location(
       uint64_t table_loc_id, uint64_t ref_table_id, common::ObIArray<ObAddr> &locations);
   int build_related_tablet_map(const ObDASTableLocMeta &loc_meta);
-  const common::ObAddr &same_tablet_addr() const;
+  const common::ObAddr &same_tablet_addr() const { return GCTX.self_addr(); }
 
   int find_group_param_by_param_idx(int64_t param_idx,
                                     bool &exist, uint64_t &array_idx);
