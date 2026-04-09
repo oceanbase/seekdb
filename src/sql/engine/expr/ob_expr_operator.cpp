@@ -2284,6 +2284,12 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
              && !ob_is_string_or_lob_type(type2.get_type())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Incorrect cmp type with scalar and collection arguments", K(type1), K(type2), K(type_), K(ret));
+  } else if (lib::is_mysql_mode()
+             && type_ == T_OP_NSEQ
+             && type1.is_collection_sql_type()
+             && type2.is_collection_sql_type()) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("Incorrect cmp type with collection arguments for null-safe equal", K(type1), K(type2), K(type_), K(ret));
 #endif
   } else if ((type1.is_collection_sql_type() || type2.is_collection_sql_type())
              && !(type_ == T_OP_EQ
@@ -2531,14 +2537,21 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
   } else if (OB_FAIL(expr.calc_cmp_type2(cmp_type, type1, type2, type_ctx,
                                          left_param->is_static_const_expr(),
                                          right_param->is_static_const_expr()))) {
-    if (lib::is_mysql_mode()
-        && ret == OB_INVALID_ARGUMENT
-        && (expr.get_type() == T_OP_EQ || expr.get_type() == T_OP_NE
-            || expr.get_type() == T_OP_SQ_EQ || expr.get_type() == T_OP_SQ_NE)
-        && ((type1.is_collection_sql_type() && is_string_literal_cmp_operand(right_param))
-            || (type2.is_collection_sql_type() && is_string_literal_cmp_operand(left_param)))) {
-      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-      ret = OB_ERR_INVALID_JSON_TEXT;
+    if (lib::is_mysql_mode() && ret == OB_INVALID_ARGUMENT
+        && (type1.is_collection_sql_type() != type2.is_collection_sql_type())) {
+      // Keep 1210 only when: non-collection side IS a column ref AND collection side is NOT a column
+      // ref (e.g. scalar_col <> array_map(...)). All other cases (collection column/ROW vs scalar,
+      // collection expr vs scalar expr) -> 5083.
+      bool is_scalar_col_vs_collection_expr =
+          (type1.is_collection_sql_type() && !left_param->is_column_ref_expr()
+           && right_param->is_column_ref_expr())
+       || (type2.is_collection_sql_type() && !right_param->is_column_ref_expr()
+           && left_param->is_column_ref_expr());
+      if (!is_scalar_col_vs_collection_expr) {
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        LOG_WARN("Incorrect cmp type with collection and scalar arguments", K(ret));
+      }
+      // else: scalar column vs collection expression -> keep OB_INVALID_ARGUMENT (1210)
     }
   } else {
 #else
