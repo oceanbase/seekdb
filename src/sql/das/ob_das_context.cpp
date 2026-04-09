@@ -240,27 +240,15 @@ int ObDASCtx::check_same_server(const ObDASTabletLoc *tablet_loc)
   if (OB_ISNULL(tablet_loc)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet location is null", KR(ret), KP(tablet_loc));
-  } else if (same_server_) {
-    if (!same_tablet_addr_.is_valid()) {
-      ObDASTabletLoc *first_tablet = NULL;
-      FOREACH_X(table_node, table_locs_, NULL == first_tablet)
-      {
-        ObDASTableLoc *cur_table_loc = *table_node;
-        for (DASTabletLocListIter tablet_node = cur_table_loc->tablet_locs_begin();
-        NULL == first_tablet && tablet_node != cur_table_loc->tablet_locs_end(); ++tablet_node) {
-          first_tablet = *tablet_node;
-        }
-      }
-      if (OB_ISNULL(first_tablet)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("first tablet location is null", KR(ret), KP(first_tablet));
-      } else {
-        same_tablet_addr_ = first_tablet->server_;
-      }
-    }
-    same_server_ = (tablet_loc->server_ == same_tablet_addr_);
+  } else {
+    same_server_ = 1;
   }
   return ret;
+}
+
+const common::ObAddr &ObDASCtx::same_tablet_addr() const
+{
+  return GCTX.self_addr();
 }
 
 int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,

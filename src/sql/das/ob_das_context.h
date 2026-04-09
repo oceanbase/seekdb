@@ -78,7 +78,6 @@ public:
       group_params_(nullptr),
       skip_scan_group_id_(-1),
       group_rescan_cnt_(-1),
-      same_tablet_addr_(),
       use_gts_opt_(false),
       parent_table_set_(allocator),
       real_das_dop_(0),
@@ -151,7 +150,6 @@ public:
     table_locs_.clear();
     related_tablet_map_.clear();
     external_table_locs_.clear();
-    same_tablet_addr_.reset();
     same_server_ = 1;
   }
   ObDASTaskFactory &get_das_factory() { return das_factory_; }
@@ -163,7 +161,7 @@ public:
   int build_external_table_location(
       uint64_t table_loc_id, uint64_t ref_table_id, common::ObIArray<ObAddr> &locations);
   int build_related_tablet_map(const ObDASTableLocMeta &loc_meta);
-  const ObAddr &same_tablet_addr() const { return same_tablet_addr_; }
+  const common::ObAddr &same_tablet_addr() const;
 
   int find_group_param_by_param_idx(int64_t param_idx,
                                     bool &exist, uint64_t &array_idx);
@@ -205,7 +203,6 @@ private:
   const GroupParamArray *group_params_; //only allowed to be modified by GroupParamBackupGuard
   int64_t skip_scan_group_id_; //only allowed to be modified by GroupParamBackupGuard
   int64_t group_rescan_cnt_; //only allowed to be modified by GroupParamBackupGuard
-  ObAddr same_tablet_addr_;
   bool use_gts_opt_; // without get gts
   DASTableIdList parent_table_set_; // The list of parent table, for inner sql.
   int64_t real_das_dop_;

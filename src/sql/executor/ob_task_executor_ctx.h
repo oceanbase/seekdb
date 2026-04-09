@@ -184,9 +184,6 @@ private:
   RemoteExecuteStreamHandle *task_resp_handler_;
   // Used to encapsulate the Op Tree of the top-level Job of executor, outputting data externally
   ObExecuteResult execute_result_;
-  // Used to record the correspondence between virtual table's partition_id and machine's (ip, port),
-  // The index of this array corresponds to the partition_id of the server
-  common::ObList<common::ObAddr, common::ObIAllocator> virtual_part_servers_;
   // Used for temporarily passing parameters when calculating the partition id of a virtual table, it's best to reset this member variable after calculation
   CalcVirtualPartitionIdParams calc_params_;
   //

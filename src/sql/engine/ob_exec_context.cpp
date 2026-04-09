@@ -182,7 +182,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     vt_ift_(nullptr),
     px_batch_id_(0),
     admission_version_(UINT64_MAX),
-    admission_addr_map_(),
+    admission_addr_map_(NULL),
     use_temp_expr_ctx_cache_(false),
     temp_expr_ctx_map_(),
     dml_event_(ObDmlEventType::DE_INVALID),
@@ -269,7 +269,7 @@ ObExecContext::~ObExecContext()
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
   }
-  admission_addr_map_.destroy();
+  release_admission_addr_map();
   if (!temp_expr_ctx_map_.created()) {
   // do nothing
   } else {
@@ -288,6 +288,16 @@ ObExecContext::~ObExecContext()
     lob_access_ctx_ = nullptr;
   }
   auto_dop_map_.destroy();
+}
+
+void ObExecContext::release_admission_addr_map()
+{
+  if (OB_NOT_NULL(admission_addr_map_)) {
+    admission_addr_map_->destroy();
+    admission_addr_map_->~ObHashMap();
+    ob_free(admission_addr_map_);
+    admission_addr_map_ = NULL;
+  }
 }
 
 void ObExecContext::clean_resolve_ctx()

@@ -55,37 +55,40 @@ struct ObReplicaLocation //TODO(xiumin): delete it
 {
   OB_UNIS_VERSION(1);
 public:
-  common::ObAddr server_;
-  common::ObRole role_;
-  int64_t sql_port_;
-  int64_t reserved_;
   common::ObReplicaType replica_type_;
   common::ObReplicaProperty property_; // memstore_percent is used
 
   ObReplicaLocation();
   void reset();
+  common::ObAddr get_server() const;
+  void set_server(const common::ObAddr &server);
+  common::ObRole get_role() const;
+  void set_role(common::ObRole role);
+  int64_t get_sql_port() const;
+  void set_sql_port(int64_t sql_port);
   inline bool is_valid() const;
   inline bool operator==(const ObReplicaLocation &other) const;
   inline bool operator!=(const ObReplicaLocation &other) const;
-  bool is_leader_like() const { return common::is_leader_like(role_); }
-  bool is_leader_by_election() const { return common::is_leader_by_election(role_); }
-  bool is_strong_leader() const { return common::is_strong_leader(role_); }
-  bool is_standby_leader() const { return common::is_standby_leader(role_); }
-  bool is_follower() const { return common::is_follower(role_); }
-  TO_STRING_KV(K_(server), K_(role), K_(sql_port), K_(replica_type), K_(reserved), K_(property));
+  bool is_leader_like() const { return common::is_leader_like(get_role()); }
+  bool is_leader_by_election() const { return common::is_leader_by_election(get_role()); }
+  bool is_strong_leader() const { return common::is_strong_leader(get_role()); }
+  bool is_standby_leader() const { return common::is_standby_leader(get_role()); }
+  bool is_follower() const { return common::is_follower(get_role()); }
+  TO_STRING_KV("server", get_server(), "role", get_role(), "sql_port", get_sql_port(),
+               K_(replica_type), K_(property));
 };
 
 inline bool ObReplicaLocation::is_valid() const
 {
-  return server_.is_valid();
+  return get_server().is_valid();
   //TODO:
   //return server_.is_valid() && common::ObReplicaTypeCheck::is_replica_type_valid(replica_type_);
 }
 
 bool ObReplicaLocation::operator==(const ObReplicaLocation &other) const
 {
-  return server_ == other.server_ && role_ == other.role_
-      && sql_port_ == other.sql_port_
+  return get_server() == other.get_server() && get_role() == other.get_role()
+      && get_sql_port() == other.get_sql_port()
       && replica_type_ == other.replica_type_
       && property_ == other.property_;
 }

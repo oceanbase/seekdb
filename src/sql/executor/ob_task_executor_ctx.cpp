@@ -52,7 +52,6 @@ OB_SERIALIZE_MEMBER(ObTaskExecutorCtx,
 
 ObTaskExecutorCtx::ObTaskExecutorCtx(ObExecContext &exec_context)
     : task_resp_handler_(NULL),
-      virtual_part_servers_(exec_context.get_allocator()),
       exec_ctx_(&exec_context),
       expected_worker_cnt_(0),
       minimal_worker_cnt_(0),

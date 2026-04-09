@@ -111,8 +111,8 @@ int ObFeedbackManager::add_partition_fb_info(const ObFBPartitionParam &param)
     for (int64_t i = 0; OB_SUCC(ret) && (i < rl_array.count()); ++i) {
       fb_rl.reset();
       const ObReplicaLocation &rl = rl_array.at(i);
-      fb_rl.server_ = rl.server_;
-      fb_rl.role_ = rl.role_;
+      fb_rl.server_ = rl.get_server();
+      fb_rl.role_ = rl.get_role();
       fb_rl.replica_type_ = rl.replica_type_;
       if (!fb_rl.is_valid_obj()) {
         LOG_WARN("invalid feedback replica", K(fb_rl));

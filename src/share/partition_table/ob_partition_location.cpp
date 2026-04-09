@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_PT
 
 #include "ob_partition_location.h"
+#include "observer/ob_server.h"
 
 
 namespace oceanbase
@@ -34,10 +35,6 @@ OB_SERIALIZE_MEMBER(ObPartitionLocation,
                     is_mark_fail_);
 
 OB_SERIALIZE_MEMBER(ObReplicaLocation,
-                    server_,
-                    role_,
-                    sql_port_,
-                    reserved_,
                     replica_type_,
                     property_);
 
@@ -55,12 +52,38 @@ ObReplicaLocation::ObReplicaLocation()
 
 void ObReplicaLocation::reset()
 {
-  server_.reset();
-  role_ = FOLLOWER;
-  sql_port_ = OB_INVALID_INDEX;
-  reserved_ = 0;
   replica_type_ = REPLICA_TYPE_FULL;
   property_.reset();
+}
+
+ObAddr ObReplicaLocation::get_server() const
+{
+  return GCTX.self_addr();
+}
+
+void ObReplicaLocation::set_server(const ObAddr &server)
+{
+  UNUSED(server);
+}
+
+ObRole ObReplicaLocation::get_role() const
+{
+  return LEADER;
+}
+
+void ObReplicaLocation::set_role(ObRole role)
+{
+  UNUSED(role);
+}
+
+int64_t ObReplicaLocation::get_sql_port() const
+{
+  return GCTX.self_addr().get_port();
+}
+
+void ObReplicaLocation::set_sql_port(int64_t sql_port)
+{
+  UNUSED(sql_port);
 }
 
 ObPartitionLocation::ObPartitionLocation()
@@ -138,13 +161,13 @@ int ObPartitionLocation::add_with_no_check(const ObReplicaLocation &replica_loca
 {
   int ret = OB_SUCCESS;
   int64_t idx = OB_INVALID_INDEX;
-  if (OB_LIKELY(OB_SUCCESS != (ret = (find(replica_location.server_, idx))))) {
+  if (OB_LIKELY(OB_SUCCESS != (ret = (find(replica_location.get_server(), idx))))) {
     if (OB_LIKELY(OB_ENTRY_NOT_EXIST == ret)) {
       if (OB_FAIL(replica_locations_.push_back(replica_location))) {
         LOG_WARN("push back replica location failed", K(ret));
       }
     } else {
-      LOG_WARN("find server location failed", K(ret), "server", replica_location.server_);
+      LOG_WARN("find server location failed", K(ret), "server", replica_location.get_server());
     }
   } else {
     ret = OB_ERR_ALREADY_EXISTS;
@@ -188,7 +211,7 @@ int ObPartitionLocation::find(const ObAddr &server, int64_t &idx) const
   // May be used before table_id/partition_id set, can not check self validity here.
   // server(ObAddr) is checked by caller, no need check again.
   for (int64_t i = 0; OB_ENTRY_NOT_EXIST == ret && i < replica_locations_.count(); ++i) {
-    if (replica_locations_.at(i).server_ == server) {
+    if (replica_locations_.at(i).get_server() == server) {
       idx = i;
       ret = OB_SUCCESS;
     }

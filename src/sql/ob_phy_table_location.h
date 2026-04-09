@@ -53,6 +53,7 @@ class ObPhyTableLocation final
 public:
 public:
   ObPhyTableLocation();
+  ~ObPhyTableLocation();
   void reset();
   int assign(const ObPhyTableLocation &other);
   int assign_from_phy_table_loc_info(const ObCandiTableLoc &other);
@@ -96,6 +97,7 @@ public:
   ObDuplicateType get_duplicate_type() const { return duplicate_type_; }
 private:
   int try_build_location_idx_map();
+  void release_location_idx_map();
 private:
   /* Used for addressing location by table ID (possibly generated alias id) */
   uint64_t table_location_key_;
@@ -108,7 +110,7 @@ private:
 
   // for lookup performance
   static const int FAST_LOOKUP_LOC_IDX_SIZE_THRES = 3;
-  common::hash::ObHashMap<int64_t, int64_t, common::hash::NoPthreadDefendMode> location_idx_map_;
+  common::hash::ObHashMap<int64_t, int64_t, common::hash::NoPthreadDefendMode> *location_idx_map_;
 };
 
 template<typename SrcArray, typename DstArray>
