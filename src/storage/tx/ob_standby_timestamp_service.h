@@ -71,7 +71,6 @@ public:
   int switch_to_leader();
   
   int handle_request(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result);
-  int check_leader(bool &leader);
   int get_number(int64_t &gts);
   int64_t get_last_id() const { return last_id_; }
   void get_virtual_info(int64_t &ts_value, common::ObRole &role, int64_t &proposal_id);
