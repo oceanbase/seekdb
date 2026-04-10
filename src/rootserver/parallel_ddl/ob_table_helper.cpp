@@ -48,8 +48,7 @@ ObTableHelper::ObTableHelper(
   const char* parallel_ddl_type,
   ObDDLSQLTransaction *external_trans,
   bool enable_ddl_parallel)
-  : ObDDLHelper(schema_service, tenant_id, parallel_ddl_type, external_trans, enable_ddl_parallel),
-    new_tables_(),
+  : new_tables_(),
     new_sequences_(),
     new_mock_fk_parent_tables_()
 {}
