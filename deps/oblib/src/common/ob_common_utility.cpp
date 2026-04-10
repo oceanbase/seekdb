@@ -87,7 +87,7 @@ int check_stack_overflow(bool &is_overflow,
       ret = OB_ERR_UNEXPECTED;
       is_overflow = true;
       COMMON_LOG(ERROR, "stack size smaller than reserved_stack_size ",
-          K(ret), K(stack_size), K(reserved_size), KCSTRING(lbt()));
+          K(ret), K(stack_size), K(reserved_size));
     } else if (OB_UNLIKELY(stack_eof < static_cast<char *>(cur_stack))) {
       is_overflow = true;
       ret = OB_ERR_UNEXPECTED;

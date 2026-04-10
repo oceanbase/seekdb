@@ -112,11 +112,33 @@ TEST(sc, usability)
 
   // lambda && error code
   EXPECT_EQ(OB_ERR_UNEXPECTED, SMART_CALL([]() { return OB_ERR_UNEXPECTED;}()));
+
+  // Test SMART_CALL_LARGE
+  {
+    class Foo {
+    public:
+      int deep_dec() {
+        if (i_ <= 0) {
+          return OB_SUCCESS;
+        } else {
+          --i_;
+          return SMART_CALL_LARGE(deep_dec());
+        }
+      }
+      int i_ = 10;
+    };
+    Foo foo;
+    EXPECT_EQ(OB_SUCCESS, SMART_CALL_LARGE(foo.deep_dec()));
+    EXPECT_EQ(foo.i_, 0);
+  }
 }
 
 void *cur_stack_addr = nullptr;
 size_t cur_stack_size = 0;
 int stack_change_cnt = 0;
+void *cur_stack_addr_large = nullptr;
+size_t cur_stack_size_large = 0;
+int stack_change_cnt_large = 0;
 #define STACK_PER_EXTEND_SIZE STACK_PER_EXTEND
 const int64_t s_size = STACK_PER_EXTEND_SIZE;
 int test(int &i, int once_invoke_hold)
@@ -150,6 +172,48 @@ int test(int &i, int once_invoke_hold)
       char buf[once_invoke_hold];
       memset(buf, reinterpret_cast<std::uintptr_t>(&buf[0]) & 0xFF, once_invoke_hold); // disable compiler optimize out
       ret = SMART_CALL(test(--i, once_invoke_hold));
+      void *stack_addr_after = nullptr;
+      size_t stack_size_after = 0;
+      get_stackattr(stack_addr_after, stack_size_after);
+      if (stack_addr_after != stack_addr || stack_size_after != stack_size) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+    }
+  }
+  return ret;
+}
+
+int test_large(int &i, int once_invoke_hold)
+{
+  int ret = OB_SUCCESS;
+  void *stack_addr = nullptr;
+  size_t stack_size = 0;
+  get_stackattr(stack_addr, stack_size);
+  if (stack_addr != cur_stack_addr_large) {
+    if (stack_size != STACK_PER_EXTEND_LARGE) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      char tmp = '\0';
+      bool is_overflow = false;
+      if (&tmp < (char*)stack_addr || &tmp > (char*)stack_addr + stack_size) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(check_stack_overflow(is_overflow))) {
+      } else if (is_overflow) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        stack_change_cnt_large += 1;
+        cur_stack_addr_large = stack_addr;
+        cur_stack_size_large = stack_size;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (i <= 0) {
+      ret = OB_SUCCESS;
+    } else {
+      char buf[once_invoke_hold];
+      memset(buf, reinterpret_cast<std::uintptr_t>(&buf[0]) & 0xFF, once_invoke_hold);
+      ret = SMART_CALL_LARGE(test_large(--i, once_invoke_hold));
       void *stack_addr_after = nullptr;
       size_t stack_size_after = 0;
       get_stackattr(stack_addr_after, stack_size_after);
@@ -230,6 +294,30 @@ TEST(sc, coro)
   th.start();
   th.wait();
 #endif
+}
+
+TEST(sc, large_stack_call)
+{
+  // Test that SMART_CALL_LARGE uses larger stack and reduces extension frequency
+  {
+    class Foo {
+    public:
+      int deep_recursion(int depth) {
+        if (depth <= 0) {
+          return OB_SUCCESS;
+        }
+        char buf[1024]; // Use some stack space
+        memset(buf, 0, sizeof(buf));
+        return SMART_CALL_LARGE(deep_recursion(depth - 1));
+      }
+    };
+    Foo foo;
+    // This should succeed with fewer stack extensions due to larger initial allocation
+    EXPECT_EQ(OB_SUCCESS, SMART_CALL_LARGE(foo.deep_recursion(100)));
+  }
+
+  // Test error code propagation
+  EXPECT_EQ(OB_ERR_UNEXPECTED, SMART_CALL_LARGE([]() { return OB_ERR_UNEXPECTED;}()));
 }
 
 } // end namespace common

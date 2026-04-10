@@ -1525,7 +1525,9 @@ int ObSql::handle_sql_execute(const ObString &sql,
       if (mode == PC_PS_MODE || mode == PC_PL_MODE) {
         pctx->get_param_store_for_update().reset();
       }
-      if (OB_FAIL(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err))) {
+      // Use SMART_CALL_LARGE for complex SQL plan generation when plan cache misses
+      // This prevents frequent stack extending during physical plan generation
+      if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err)))) {
         if (OB_ERR_PROXY_REROUTE == ret) {
           LOG_DEBUG("fail to handle physical plan", K(ret));
         } else {
@@ -2263,7 +2265,8 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
           } else if (!result.get_is_from_plan_cache()) {
             pctx->set_original_param_cnt(origin_params_count);
             pctx->get_param_store_for_update().reset();
-            if (OB_FAIL(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err))) {
+            // Use SMART_CALL_LARGE for complex SQL plan generation when plan cache misses
+            if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err)))) {
               if (OB_ERR_PROXY_REROUTE == ret) {
                 LOG_DEBUG("fail to handle physical plan", K(ret));
               } else {
@@ -2465,7 +2468,8 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
       }
       PlanCacheMode mode = remote_sql_info.use_ps_ ? PC_PS_MODE : PC_TEXT_MODE;
       mode = remote_sql_info.sql_from_pl_ ? PC_PL_MODE : mode;
-      if (OB_FAIL(handle_physical_plan(trimed_stmt, context, tmp_result, *pc_ctx, get_plan_err))) {
+      // Use SMART_CALL_LARGE for remote query plan generation
+      if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(trimed_stmt, context, tmp_result, *pc_ctx, get_plan_err)))) {
         if (OB_ERR_PROXY_REROUTE == ret) {
           LOG_DEBUG("fail to handle physical plan", K(ret));
         } else {
@@ -2614,7 +2618,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
     //do nothing
   }
   if (OB_SUCC(ret) && !result.get_is_from_plan_cache()) { // did not get plan from plan cache, take the long path to generate plan
-    if (OB_FAIL(handle_physical_plan(trimed_stmt, context, result, *pc_ctx, get_plan_err))) {
+    if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(trimed_stmt, context, result, *pc_ctx, get_plan_err)))) {
       if (OB_ERR_PROXY_REROUTE == ret) {
         LOG_DEBUG("fail to handle physical plan", K(ret));
       } else {

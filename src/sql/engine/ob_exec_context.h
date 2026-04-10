@@ -895,7 +895,6 @@ inline uint64_t ObExecContext::get_admission_version() const
 inline int ObExecContext::get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t> *&addr_map)
 {
   int ret = OB_SUCCESS;
-  addr_map = nullptr;
   typedef hash::ObHashMap<ObAddr, int64_t> AdmissionAddrMap;
   if (OB_ISNULL(admission_addr_map_)) {
     void *buf = ob_malloc(sizeof(AdmissionAddrMap), ObMemAttr(OB_SYS_TENANT_ID, "PxAdmAddrMap"));
@@ -903,6 +902,7 @@ inline int ObExecContext::get_admission_addr_map(hash::ObHashMap<ObAddr, int64_t
       admission_addr_map_ = new (buf) AdmissionAddrMap();
     }
   }
+  addr_map = admission_addr_map_;
   return ret;
 }
 

@@ -29,6 +29,7 @@ namespace common
 static constexpr int64_t ALL_STACK_LIMIT = 10L << 20;
 static constexpr int64_t STACK_PER_EXTEND = (2L << 20) - ACHUNK_PRESERVE_SIZE * 2;
 static constexpr int64_t STACK_RESERVED_SIZE = 64L << 10;
+static constexpr int64_t STACK_RESERVED_SIZE_LARGE = 200L << 10;
 RLOCAL_EXTERN(int64_t, all_stack_size);
 
 int jump_call(void * arg_, int(*func_) (void*), void* stack_addr);
@@ -112,12 +113,13 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
     ret = call_with_new_stack(arg_, func_, stack_addr, stack_size);       \
     ret;                                                                  \
   })
-#define SMART_CALL(func)                                                    \
+
+#define __SMART_CALL_IMPL(reserved_size, func)                              \
   ({                                                                        \
     int ret = OB_SUCCESS;                                                   \
     bool is_overflow = false;                                               \
     RECURSION_CHECKER_GUARD;                                                \
-    if (OB_FAIL(check_stack_overflow(is_overflow, STACK_RESERVED_SIZE))) {  \
+    if (OB_FAIL(check_stack_overflow(is_overflow, reserved_size))) {        \
     } else if (!is_overflow) {                                              \
       ret = func;                                                           \
     } else {                                                                \
@@ -130,6 +132,10 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
     }                                                                       \
     ret;                                                                    \
   })
+
+#define SMART_CALL(func) __SMART_CALL_IMPL(STACK_RESERVED_SIZE, func)
+#define SMART_CALL_LARGE(func) __SMART_CALL_IMPL(STACK_RESERVED_SIZE_LARGE, func)
+
 #else
 #define CALL_WITH_NEW_STACK(func, stack_addr, stack_size)   \
   ({                                                        \
@@ -137,11 +143,12 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
     ret = func;                                             \
     ret;                                                    \
   })
-#define SMART_CALL(func)                                                    \
+
+#define __SMART_CALL_IMPL(reserved_size, func)                             \
   ({                                                                        \
     int ret = OB_SUCCESS;                                                   \
     bool is_overflow = false;                                               \
-    if (OB_FAIL(check_stack_overflow(is_overflow, STACK_RESERVED_SIZE))) {  \
+    if (OB_FAIL(check_stack_overflow(is_overflow, reserved_size))) {        \
     } else if (!is_overflow) {                                              \
       ret = func;                                                           \
     } else {                                                                \
@@ -149,6 +156,9 @@ inline void dealloc_stack(void *stack_addr, size_t stack_size)
    }                                                                        \
     ret;                                                                    \
   })
+
+#define SMART_CALL(func) __SMART_CALL_IMPL(STACK_RESERVED_SIZE, func)
+#define SMART_CALL_LARGE(func) __SMART_CALL_IMPL(STACK_RESERVED_SIZE_LARGE, func)
 #endif
 } // end of namespace common
 } // end of namespace oceanbase
