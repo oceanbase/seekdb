@@ -83,9 +83,9 @@ public:
   union {
     int32_t flag_;
     struct {
-      ObTableHasBackupFlag::FLAG has_backup_flag_ : SF_BIT_HAS_BACKUP;
-      ObTableHasLocalFlag::FLAG has_local_flag_   : SF_BIT_HAS_LOCAL;
-      int64_t reserved_: SF_BIT_RESERVED;
+      uint32_t has_backup_flag_ : SF_BIT_HAS_BACKUP;
+      uint32_t has_local_flag_  : SF_BIT_HAS_LOCAL;
+      uint32_t reserved_: SF_BIT_RESERVED;
     };
   };
 };
