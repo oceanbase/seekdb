@@ -40,6 +40,9 @@
 #include "common/ob_version_def.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/allocator/ob_malloc.h"
+#include "sql/plan_cache/ob_ps_cache.h"
+#include "sql/ob_result_set.h"
 
 using namespace oceanbase;
 using namespace oceanbase::embed;
@@ -184,14 +187,14 @@ void seekdb_close(seekdb_handle db)
   delete db;
 }
 
-int seekdb_connect(seekdb_handle db, const char* db_name, seekdb_conn_handle* out)
+int seekdb_connect_ex(seekdb_handle db, const char* db_name, int autocommit, seekdb_conn_handle* out)
 {
   if (!db || !out) return -1;
   seekdb_conn_t* conn = new (std::nothrow) seekdb_conn_t();
   if (!conn) return -2;
   conn->db = db;
   try {
-    conn->conn = ObLiteEmbed::connect(db_name ? db_name : "oceanbase", true);
+    conn->conn = ObLiteEmbed::connect(db_name ? db_name : "oceanbase", autocommit != 0);
     *out = conn;
     return 0;
   } catch (const std::exception& e) {
@@ -199,6 +202,11 @@ int seekdb_connect(seekdb_handle db, const char* db_name, seekdb_conn_handle* ou
     delete conn;
     return -3;
   }
+}
+
+int seekdb_connect(seekdb_handle db, const char* db_name, seekdb_conn_handle* out)
+{
+  return seekdb_connect_ex(db, db_name, 0, out);
 }
 
 void seekdb_disconnect(seekdb_conn_handle conn)
@@ -297,4 +305,358 @@ const char* seekdb_error(seekdb_handle db)
 {
   if (!db || db->last_error.empty()) return nullptr;
   return db->last_error.c_str();
+}
+
+/* Statement API implementation */
+
+struct seekdb_stmt_t {
+  seekdb_conn_handle conn;
+  std::string sql;
+  std::shared_ptr<ObLiteEmbedConn> conn_ptr;
+  ObCommonSqlProxy::ReadResult* read_result;
+  sqlclient::ObMySQLResult* mysql_result;
+  std::vector<std::string> column_names;
+  std::vector<ObObj> current_row;
+  bool has_row;
+  bool done;
+  int param_count;  // number of ? placeholders
+  std::string last_error;
+  // True prepared statement support
+  uint64_t stmt_id;
+  bool prepared;
+  common::ObArenaAllocator allocator_;
+  common::ParamStore params_;
+};
+
+int seekdb_prepare(seekdb_conn_handle conn, const char* sql, seekdb_stmt_handle* out)
+{
+  if (!conn || !sql || !out) return -1;
+  if (!conn->conn) return -2;
+
+  seekdb_stmt_t* stmt = new (std::nothrow) seekdb_stmt_t();
+  if (!stmt) return -3;
+
+  stmt->conn = conn;
+  stmt->sql = sql;
+  stmt->conn_ptr = conn->conn;
+  stmt->read_result = nullptr;
+  stmt->mysql_result = nullptr;
+  stmt->has_row = false;
+  stmt->done = false;
+  stmt->prepared = false;
+  stmt->stmt_id = 0;
+  // Initialize params_ with wrapper allocator
+  new (&stmt->params_) common::ParamStore(common::ObWrapperAllocator(&stmt->allocator_));
+
+  // Call real prepare_stmt via ObLiteEmbedConn
+  int64_t param_count = 0;
+  uint64_t stmt_id = 0;
+  int ret = conn->conn->prepare_stmt(sql, stmt_id, param_count);
+  LOG_WARN("[SEEKDB_DEBUG] prepare_stmt returned", K(ret), K(stmt_id), K(param_count));
+  if (ret != OB_SUCCESS) {
+    conn->db->last_error = "prepare_stmt failed";
+    delete stmt;
+    return ret;
+  }
+
+  stmt->stmt_id = stmt_id;
+  stmt->param_count = static_cast<int>(param_count);
+  stmt->prepared = true;
+
+  // Initialize params_ - OceanBase ParamStore is 0-indexed
+  // So params_[0] = first parameter, params_[1] = second parameter, etc.
+  if (param_count > 0) {
+    stmt->params_.reserve(param_count);
+    for (int64_t i = 0; i < param_count; i++) {
+      ObObjParam obj;
+      obj.set_null();
+      obj.set_param_meta();
+      stmt->params_.push_back(obj);
+    }
+  }
+
+  *out = stmt;
+  return 0;
+}
+
+int seekdb_step(seekdb_stmt_handle stmt)
+{
+  if (!stmt) return -1;
+  if (stmt->done) return SEEKDB_DONE;  // 101
+
+  // First step: execute the prepared statement
+  if (!stmt->has_row && stmt->mysql_result == nullptr) {
+    uint64_t affected = 0;
+    int64_t result_seq = 0;
+
+    int ret = OB_SUCCESS;
+    if (stmt->prepared) {
+      ret = stmt->conn_ptr->execute_stmt(stmt->stmt_id, stmt->params_, affected, result_seq);
+    } else {
+      stmt->last_error = "statement not prepared";
+      return -1;
+    }
+
+    if (ret != OB_SUCCESS) {
+      stmt->last_error = "execute_stmt failed";
+      LOG_WARN("execute_stmt failed", K(ret), K(stmt->stmt_id));
+      return ret;
+    }
+
+    // For non-SELECT statements, we're done
+    if (affected != UINT64_MAX) {
+      stmt->done = true;
+      return SEEKDB_DONE;  // 101
+    }
+
+    // SELECT statement - get result
+    stmt->read_result = stmt->conn_ptr->get_res();
+    if (stmt->read_result && stmt->read_result->get_result()) {
+      stmt->mysql_result = stmt->read_result->get_result();
+      ObInnerSQLResult* inner_result = reinterpret_cast<ObInnerSQLResult*>(stmt->mysql_result);
+
+      // Get column names
+      const ColumnsFieldIArray* fields = inner_result->result_set().get_field_columns();
+      if (fields) {
+        for (int64_t i = 0; i < fields->count(); i++) {
+          const ObField& field = fields->at(i);
+          stmt->column_names.emplace_back(field.cname_.ptr(), field.cname_.length());
+        }
+      }
+
+      // Fetch first row
+      ret = stmt->mysql_result->next();
+      if (ret == OB_ITER_END) {
+        stmt->done = true;
+        return SEEKDB_DONE;  // 101
+      }
+      if (ret != OB_SUCCESS) {
+        stmt->last_error = "failed to fetch row";
+        return ret;
+      }
+
+      // Store current row values
+      int64_t col_count = stmt->mysql_result->get_column_count();
+      stmt->current_row.resize(col_count);
+      for (int64_t i = 0; i < col_count; i++) {
+        stmt->mysql_result->get_obj(i, stmt->current_row[i]);
+      }
+      stmt->has_row = true;
+      return SEEKDB_ROW;  // 100
+    }
+  } else if (stmt->has_row) {
+    // Fetch next row
+    int ret = stmt->mysql_result->next();
+    if (ret == OB_ITER_END) {
+      stmt->done = true;
+      return SEEKDB_DONE;  // 101
+    }
+    if (ret != OB_SUCCESS) {
+      stmt->last_error = "failed to fetch row";
+      return ret;
+    }
+
+    // Update current row values
+    int64_t col_count = stmt->mysql_result->get_column_count();
+    stmt->current_row.resize(col_count);
+    for (int64_t i = 0; i < col_count; i++) {
+      stmt->mysql_result->get_obj(i, stmt->current_row[i]);
+    }
+    return SEEKDB_ROW;  // 100
+  }
+
+  stmt->done = true;
+  return SEEKDB_DONE;  // 101
+}
+
+int seekdb_reset(seekdb_stmt_handle stmt)
+{
+  if (!stmt) return -1;
+
+  stmt->read_result = nullptr;
+  stmt->mysql_result = nullptr;
+  stmt->has_row = false;
+  stmt->done = false;
+  stmt->current_row.clear();
+  stmt->column_names.clear();
+
+  return 0;
+}
+
+int seekdb_finalize(seekdb_stmt_handle stmt)
+{
+  if (!stmt) return -1;
+
+  // Autocommit if needed
+  if (stmt->conn_ptr && stmt->conn_ptr->need_autocommit()) {
+    stmt->conn_ptr->commit();
+  }
+
+  // Close prepared statement
+  if (stmt->prepared && stmt->conn_ptr) {
+    stmt->conn_ptr->close_stmt(stmt->stmt_id);
+    stmt->prepared = false;
+  }
+
+  delete stmt;
+  return 0;
+}
+
+/* Parameter binding - fill ParamStore for real prepared statements */
+int seekdb_bind_int(seekdb_stmt_handle stmt, int col, int val)
+{
+  // SQLite is 1-indexed, but ParamStore is 0-indexed
+  if (!stmt || col < 1 || col > stmt->param_count) return -1;
+  ObObjParam& param = stmt->params_.at(col - 1);  // Convert to 0-indexed
+  param.set_int(val);
+  param.set_param_meta();
+  return 0;
+}
+
+int seekdb_bind_int64(seekdb_stmt_handle stmt, int col, long long val)
+{
+  // SQLite is 1-indexed, but ParamStore is 0-indexed
+  if (!stmt || col < 1 || col > stmt->param_count) return -1;
+  ObObjParam& param = stmt->params_.at(col - 1);  // Convert to 0-indexed
+  param.set_int(val);
+  param.set_param_meta();
+  return 0;
+}
+
+int seekdb_bind_double(seekdb_stmt_handle stmt, int col, double val)
+{
+  // SQLite is 1-indexed, but ParamStore is 0-indexed
+  if (!stmt || col < 1 || col > stmt->param_count) return -1;
+  ObObjParam& param = stmt->params_.at(col - 1);  // Convert to 0-indexed
+  param.set_double(val);
+  param.set_param_meta();
+  return 0;
+}
+
+int seekdb_bind_text(seekdb_stmt_handle stmt, int col, const char* val)
+{
+  // SQLite is 1-indexed, but ParamStore is 0-indexed
+  if (!stmt || col < 1 || col > stmt->param_count) return -1;
+  ObObjParam& param = stmt->params_.at(col - 1);  // Convert to 0-indexed
+  if (!val) {
+    param.set_null();
+  } else {
+    // Deep copy string into allocator
+    size_t len = strlen(val);
+    char* buf = static_cast<char*>(stmt->allocator_.alloc(len));
+    if (buf) {
+      memcpy(buf, val, len);
+      param.set_varchar(ObString(len, buf));
+    } else {
+      param.set_varchar(ObString(val));
+    }
+  }
+  param.set_param_meta();
+  return 0;
+}
+
+int seekdb_bind_null(seekdb_stmt_handle stmt, int col)
+{
+  // SQLite is 1-indexed, but ParamStore is 0-indexed
+  if (!stmt || col < 1 || col > stmt->param_count) return -1;
+  ObObjParam& param = stmt->params_.at(col - 1);  // Convert to 0-indexed
+  param.set_null();
+  param.set_param_meta();
+  return 0;
+}
+
+int seekdb_bind_parameter_count(seekdb_stmt_handle stmt)
+{
+  if (!stmt) return 0;
+  return stmt->param_count;
+}
+
+/* Result access */
+int seekdb_column_count(seekdb_stmt_handle stmt)
+{
+  if (!stmt) return 0;
+  return static_cast<int>(stmt->current_row.size());
+}
+
+const char* seekdb_column_name(seekdb_stmt_handle stmt, int col)
+{
+  if (!stmt || col < 0 || col >= static_cast<int>(stmt->column_names.size())) return nullptr;
+  return stmt->column_names[col].c_str();
+}
+
+int seekdb_column_type(seekdb_stmt_handle stmt, int col)
+{
+  if (!stmt || col < 0 || col >= static_cast<int>(stmt->current_row.size())) return 0;
+  const ObObj& obj = stmt->current_row[col];
+  if (obj.is_null()) return 0;           // NULL
+  if (obj.is_integer_type()) return 1;  // INTEGER
+  if (obj.is_float()) return 2;         // FLOAT
+  if (obj.is_string_type()) return 3;   // TEXT
+  if (obj.is_blob()) return 4;          // BLOB
+  return 3;  // default to TEXT
+}
+
+int seekdb_column_int(seekdb_stmt_handle stmt, int col)
+{
+  if (!stmt || col < 0 || col >= static_cast<int>(stmt->current_row.size())) return 0;
+  return stmt->current_row[col].get_int();
+}
+
+long long seekdb_column_int64(seekdb_stmt_handle stmt, int col)
+{
+  if (!stmt || col < 0 || col >= static_cast<int>(stmt->current_row.size())) return 0;
+  return stmt->current_row[col].get_int();
+}
+
+double seekdb_column_double(seekdb_stmt_handle stmt, int col)
+{
+  if (!stmt || col < 0 || col >= static_cast<int>(stmt->current_row.size())) return 0.0;
+  return stmt->current_row[col].get_double();
+}
+
+const char* seekdb_column_text(seekdb_stmt_handle stmt, int col)
+{
+  if (!stmt || col < 0 || col >= static_cast<int>(stmt->current_row.size())) return nullptr;
+  const ObObj& obj = stmt->current_row[col];
+  if (obj.is_null()) return nullptr;
+
+  static thread_local std::string buf;
+  ObString str_val;
+  if (obj.get_string(str_val) == OB_SUCCESS) {
+    buf.assign(str_val.ptr(), str_val.length());
+    return buf.c_str();
+  }
+
+  // Fallback: convert to string
+  char tmp[OB_MAX_VARCHAR_LENGTH];
+  int64_t pos = 0;
+  if (obj.print_plain_str_literal(tmp, sizeof(tmp), pos) == OB_SUCCESS) {
+    buf.assign(tmp, pos);
+    return buf.c_str();
+  }
+
+  return nullptr;
+}
+
+int seekdb_column_bytes(seekdb_stmt_handle stmt, int col)
+{
+  if (!stmt || col < 0 || col >= static_cast<int>(stmt->current_row.size())) return 0;
+  const ObObj& obj = stmt->current_row[col];
+  ObString str_val;
+  if (obj.get_string(str_val) == OB_SUCCESS) {
+    return static_cast<int>(str_val.length());
+  }
+  return 0;
+}
+
+/* Utility */
+const char* seekdb_errmsg(seekdb_conn_handle conn)
+{
+  if (!conn || !conn->db || conn->db->last_error.empty()) return "no error";
+  return conn->db->last_error.c_str();
+}
+
+const char* seekdb_libversion(void)
+{
+  return "SeekDB-1.0.0";
 }

@@ -4,6 +4,7 @@
 if(BUILD_EMBED_MODE OR CMAKE_SYSTEM_NAME STREQUAL "Android")
   add_library(seekdb_embed_c SHARED c/seekdb_embed.cpp python/ob_embed_impl.cpp)
   target_compile_definitions(seekdb_embed_c PRIVATE SEEKDB_NO_PYTHON)
+  target_include_directories(seekdb_embed_c INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/c)
   target_link_libraries(seekdb_embed_c PUBLIC oceanbase_static)
   set_target_properties(seekdb_embed_c PROPERTIES
     OUTPUT_NAME "seekdb_embed_c"

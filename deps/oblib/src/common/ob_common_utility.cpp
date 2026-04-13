@@ -55,7 +55,7 @@ const char *print_server_role(const ObServerRole server_role)
   return role_string;
 }
 
-static int64_t reserved_stack_size = 64L << 10;
+static int64_t reserved_stack_size = 32L << 10;
 
 int64_t get_reserved_stack_size()
 {

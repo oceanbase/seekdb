@@ -22,6 +22,12 @@
  */
 #pragma once
 
+/* SeekDB return codes */
+#define SEEKDB_OK    0
+#define SEEKDB_ERROR 1
+#define SEEKDB_ROW   100
+#define SEEKDB_DONE  101
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,6 +43,7 @@ void seekdb_close(seekdb_handle db);
 
 /* Connection */
 int seekdb_connect(seekdb_handle db, const char* db_name, seekdb_conn_handle* out);
+int seekdb_connect_ex(seekdb_handle db, const char* db_name, int autocommit, seekdb_conn_handle* out);
 void seekdb_disconnect(seekdb_conn_handle conn);
 
 /* Query execution */
@@ -52,6 +59,36 @@ int seekdb_result_affected_rows(seekdb_result_handle result);
 
 /* Error */
 const char* seekdb_error(seekdb_handle db);
+
+/* Statement API (SQLite-style prepare/step) */
+typedef struct seekdb_stmt_t* seekdb_stmt_handle;
+
+int seekdb_prepare(seekdb_conn_handle conn, const char* sql, seekdb_stmt_handle* out);
+int seekdb_step(seekdb_stmt_handle stmt);
+int seekdb_reset(seekdb_stmt_handle stmt);
+int seekdb_finalize(seekdb_stmt_handle stmt);
+
+/* Parameter binding */
+int seekdb_bind_int(seekdb_stmt_handle stmt, int col, int val);
+int seekdb_bind_int64(seekdb_stmt_handle stmt, int col, long long val);
+int seekdb_bind_double(seekdb_stmt_handle stmt, int col, double val);
+int seekdb_bind_text(seekdb_stmt_handle stmt, int col, const char* val);
+int seekdb_bind_null(seekdb_stmt_handle stmt, int col);
+int seekdb_bind_parameter_count(seekdb_stmt_handle stmt);
+
+/* Result access (after step) */
+int seekdb_column_count(seekdb_stmt_handle stmt);
+const char* seekdb_column_name(seekdb_stmt_handle stmt, int col);
+int seekdb_column_type(seekdb_stmt_handle stmt, int col);
+int seekdb_column_int(seekdb_stmt_handle stmt, int col);
+long long seekdb_column_int64(seekdb_stmt_handle stmt, int col);
+double seekdb_column_double(seekdb_stmt_handle stmt, int col);
+const char* seekdb_column_text(seekdb_stmt_handle stmt, int col);
+int seekdb_column_bytes(seekdb_stmt_handle stmt, int col);
+
+/* Utility */
+const char* seekdb_errmsg(seekdb_conn_handle conn);
+const char* seekdb_libversion(void);
 
 #ifdef __cplusplus
 }
