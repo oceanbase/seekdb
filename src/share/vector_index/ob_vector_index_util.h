@@ -731,7 +731,12 @@ public:
       int64_t &centroid_ith, int64_t &cid_vector_ith,
       int64_t &rowkey_cid_ith, int64_t &sq_meta_ith,
       int64_t &pq_centroid_ith, int64_t &pq_code_ith);
-
+  static int check_rename_rebuild_confilt(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      common::ObMySQLTransaction &trans,
+      rootserver::ObDDLService &ddl_service,
+      const ObTableSchema &origin_table_schema,
+      const ObString &ori_index_name);
   static int add_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
                                   const uint64_t vidx_table_id,
                                   const common::ObString &exec_env);

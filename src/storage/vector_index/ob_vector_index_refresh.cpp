@@ -590,8 +590,6 @@ int ObVectorIndexRefresher::do_rebuild() {
     LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
   } else if (OB_FAIL(ObVectorIndexRefresher::get_current_scn(refresh_ctx_->scn_))) {
     LOG_WARN("fail to get current scn", KR(ret));
-  } else {
-    DEBUG_SYNC(BEFORE_DBMS_VECTOR_REBUILD);
   }
   // 1. get base_table row count ( if need )
   // 2. get domain_table row count (if need )
@@ -684,6 +682,8 @@ int ObVectorIndexRefresher::do_rebuild() {
     LOG_WARN("no need to start rebuild", K(base_table_row_cnt));
   } 
   
+  DEBUG_SYNC(BEFORE_DBMS_VECTOR_REBUILD);
+
   if (OB_FAIL(ret)) {
   } else if (is_hybrid_vector &&
              !idx_parameters.empty() &&
@@ -716,7 +716,15 @@ int ObVectorIndexRefresher::do_rebuild() {
       rebuild_index_arg.parallelism_ = refresh_ctx_->idx_parallel_creation_;
       rebuild_index_arg.vidx_refresh_info_.index_params_ = idx_parameters;
       rebuild_index_arg.rebuild_index_type_ = obrpc::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_VEC;
-      if (OB_ISNULL(common_rpc_proxy)) {
+
+      if (OB_FAIL(rebuild_index_arg.based_schema_object_infos_.push_back(
+              ObBasedSchemaObjectInfo(domain_table_schema->get_table_id(), TABLE_SCHEMA,
+                                      domain_table_schema->get_schema_version(), tenant_id)))) {
+        LOG_WARN("fail to push back index table based schema info", KR(ret));
+      }
+
+      if (OB_FAIL(ret)) {
+      } else if (OB_ISNULL(common_rpc_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected common_rpc_proxy nullptr", K(ret));
       } else if (OB_FAIL(common_rpc_proxy->to(rs_addr).timeout(ddl_rpc_timeout).rebuild_vec_index(rebuild_index_arg, rebuild_index_res))) {
