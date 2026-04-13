@@ -93,7 +93,7 @@ int ObAlterTableConstraintChecker::check_can_add_cst_on_multi_column(
       } else if (OB_UNLIKELY(1 != (*iter)->get_column_cnt())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected column count of not null constraint", K(ret), KPC(*iter));
-      } else if (OB_INVALID_ID == *(*iter)->cst_col_begin()) {
+      } else if (OB_INVALID_ID != *(*iter)->cst_col_begin()) {
         can_add_cst_on_multi_column = false;
       }
     }
