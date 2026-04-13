@@ -284,6 +284,7 @@ uintptr_t ObPLEH::readEncodedPointer(const uint8_t **data, uint8_t encoding)
   // first get value
   switch (encoding & 0x0F) {
     case DW_EH_PE_absptr:
+    case DW_EH_PE_signed:
       result = ReadType<uintptr_t>(p);
       break;
     case DW_EH_PE_uleb128:
@@ -353,6 +354,7 @@ unsigned ObPLEH::getEncodingSize(uint8_t Encoding)
 
   switch (Encoding & 0x0F) {
   case DW_EH_PE_absptr:
+  case DW_EH_PE_signed:
     return sizeof(uintptr_t);
   case DW_EH_PE_udata2:
     return sizeof(uint16_t);
@@ -537,6 +539,12 @@ _Unwind_Reason_Code ObPLEH::handleLsda(int version,
     uint8_t lpStartEncoding = *lsda++;
 
     if (lpStartEncoding != DW_EH_PE_omit) {
+      if (0 != (lpStartEncoding & DW_EH_PE_indirect)) {
+        LOG_WARN_RET(OB_ERR_UNEXPECTED, "unexpected DW_EH_PE_indirect in lpStart encoding, "
+                     "LSDA likely unrelocated, skip frame",
+                     K(lpStartEncoding), K(pc), K(funcStart));
+        return _URC_CONTINUE_UNWIND;
+      }
       uint8_t relEnc = lpStartEncoding & 0x70;
       if (relEnc != DW_EH_PE_absptr && relEnc != DW_EH_PE_pcrel) {
         LOG_WARN_RET(OB_ERR_UNEXPECTED, "unsupported lpStart encoding in LSDA, skip frame",
@@ -557,6 +565,17 @@ _Unwind_Reason_Code ObPLEH::handleLsda(int version,
     uint8_t         callSiteEncoding = *lsda++;
 
     if (callSiteEncoding != DW_EH_PE_omit) {
+      // Call site entries are function-relative offsets and should never use
+      // DW_EH_PE_indirect. If the indirect flag is set, the LSDA pointer for
+      // this frame is likely unrelocated (known issue with RuntimeDyld on
+      // macOS ARM64 for certain JIT-compiled trigger packages). Skip this
+      // frame and let the exception propagate to the caller.
+      if (0 != (callSiteEncoding & DW_EH_PE_indirect)) {
+        LOG_WARN_RET(OB_ERR_UNEXPECTED, "unexpected DW_EH_PE_indirect in call site encoding, "
+                     "LSDA likely unrelocated, skip frame",
+                     K(callSiteEncoding), K(pc), K(funcStart));
+        return _URC_CONTINUE_UNWIND;
+      }
       uint8_t relEnc = callSiteEncoding & 0x70;
       if (relEnc != DW_EH_PE_absptr && relEnc != DW_EH_PE_pcrel) {
         LOG_WARN_RET(OB_ERR_UNEXPECTED, "unsupported call site encoding in LSDA, skip frame",
