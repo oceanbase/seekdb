@@ -1091,7 +1091,7 @@ int ObInnerSQLConnection::start_transaction_inner(
     sql = ObString::make_string("START TRANSACTION");
   }
   ObSqlQueryExecutor executor(sql);
-  HEAP_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
+  SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("connection not inited", K(ret));
@@ -1379,7 +1379,7 @@ int ObInnerSQLConnection::rollback()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner conn is not in trans", K(ret));
   } else {
-    HEAP_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
+    SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
       if (!inited_) {
         ret = OB_NOT_INIT;
         LOG_WARN("connection not inited", K(ret));
@@ -1453,7 +1453,7 @@ int ObInnerSQLConnection::commit()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner conn is not in trans", K(ret));
   } else {
-    HEAP_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
+    SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
       if (!inited_) {
         ret = OB_NOT_INIT;
         LOG_WARN("connection not inited", K(ret));
@@ -1546,7 +1546,7 @@ int ObInnerSQLConnection::execute_write_inner(const uint64_t tenant_id, const Ob
   FLTSpanGuard(inner_execute_write);
   ObSqlQueryExecutor executor(sql);
   const bool local_execute = is_local_execute(GCONF.cluster_id, tenant_id);
-  HEAP_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
+  SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("connection not inited", K(ret));
@@ -1933,7 +1933,7 @@ int ObInnerSQLConnection::execute(
 {
   int ret = OB_SUCCESS;
   FLTSpanGuard(inner_execute);
-  HEAP_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
+  SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), diagnostic_info_) {
     if (OB_FAIL(res.init())) {
       LOG_WARN("init result set", K(ret));
     } else if (!inited_) {

@@ -8249,8 +8249,7 @@ int ObPLResolver::resolve_object_construct(const sql::ObQualifiedName &q_name,
       LOG_WARN("type name is not same as constructor name", K(uinfo), K(ret));
     }
     if (OB_SUCC(ret)) {
-      ObArenaAllocator allocator;
-      HEAP_VAR(ObPLFunctionAST, dummy_ast, allocator) {
+      SMART_VAR(ObPLFunctionAST, dummy_ast, resolve_ctx_.allocator_) {
         ObSEArray<ObObjAccessIdx, 1> access_idxs;
         OZ (resolve_udf_info(uinfo, access_idxs, dummy_ast));
       }
@@ -12668,7 +12667,7 @@ int ObPLResolver::check_params_legal_in_body_routine(ObPLFunctionAST &routine_as
     const common::ObIArray<ObPLRoutineParam *> &body_params = body_routine_info->get_params();
     CK (OB_LIKELY(parent_params.count() == body_params.count()));
     ObArenaAllocator allocator;
-    HEAP_VAR(ObPLFunctionAST, parent_ast, allocator) {
+    SMART_VAR(ObPLFunctionAST, parent_ast, allocator) {
       for (int64_t i = 0; OB_SUCC(ret) && i < parent_params.count(); ++i) {
         ObPLRoutineParam* parent_param = parent_params.at(i);
         ObPLRoutineParam* body_param = body_params.at(i);

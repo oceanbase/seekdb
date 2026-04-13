@@ -11414,15 +11414,15 @@ int ObLogPlan::do_post_plan_processing()
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(set_use_batch_for_table_scan(root, false, false))) {
     LOG_WARN("failed to set use batch for table scan", K(ret));
-  } else if (OB_FAIL(SMART_CALL(adjust_final_plan_info(root)))) {
+  } else if (OB_FAIL(adjust_final_plan_info(root))) {
     LOG_WARN("failed to adjust parent-child relationship", K(ret));
   } else if (OB_FAIL(remove_duplicate_constraints())) {
     LOG_WARN("failed to remove duplicate constraints", K(ret));
   } else if (OB_FAIL(update_re_est_cost(root))) {
     LOG_WARN("failed to re est cost", K(ret));
-  } else if (OB_FAIL(SMART_CALL(choose_duplicate_table_replica(root,
+  } else if (OB_FAIL(choose_duplicate_table_replica(root,
                                                     get_optimizer_context().get_local_server_addr(),
-                                                    true)))) {
+                                                    true))) {
     LOG_WARN("failed to set duplicated table location", K(ret));
   } else if (OB_FAIL(set_advisor_table_id(root))) {
     LOG_WARN("failed to set advise table id from duplicate table", K(ret));

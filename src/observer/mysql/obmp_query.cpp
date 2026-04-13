@@ -994,7 +994,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   int64_t sys_version = 0;
   SQL_INFO_GUARD(sql, session.get_cur_sql_id());
   ObIAllocator &allocator = CURRENT_CONTEXT->get_arena_allocator();
-  HEAP_VAR(ObMySQLResultSet, result, session, allocator) {
+  SMART_VAR(ObMySQLResultSet, result, session, allocator) {
     if (OB_FAIL(get_tenant_schema_info_(session.get_effective_tenant_id(),
                                         &cached_schema_info,
                                         schema_guard,

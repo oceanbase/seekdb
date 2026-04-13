@@ -5,13 +5,6 @@ project(objit
   LANGUAGES C CXX)
 
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstack-usage")
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-usage")
-        message(STATUS "ENABLE_STACK_USAGE: -fstack-usage enabled (.su emitted per translation unit)")
-      else()
-          message(WARNING "ENABLE_STACK_USAGE: ignored (only GNU and Clang support -fstack-usage)")
-        endif()
 if(NOT DEP_DIR OR NOT DEVTOOLS_DIR)
   message(FATAL_ERROR "DEP_DIR and DEVTOOLS_DIR must be set")
 endif()

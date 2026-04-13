@@ -7064,7 +7064,7 @@ int ObStaticEngineCG::fill_aggr_info(ObAggFunRawExpr &raw_expr,
       OZ(aggr_info.dll_udf_->from_raw_expr(raw_expr));
     }
 
-    ObSEArray<ObExpr*, 4> all_param_exprs;
+    ObSEArray<ObExpr*, 16> all_param_exprs;
     if (OB_SUCC(ret)) {
       const ObOrderDirection order_direction = default_asc_direction();
       const bool is_ascending = is_ascending_direction(order_direction);
