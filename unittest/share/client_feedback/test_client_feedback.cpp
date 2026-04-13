@@ -120,6 +120,10 @@ TEST(ObFeedbackPartitionLocation, common)
 TEST(ObFeedbackManager, common)
 {
   INIT_SUCC(ret);
+
+  ObAddr addr;
+  addr.set_ip_addr("2.2.2.2", 2222);
+  GCTX.self_addr_seq_.set_addr(addr);
   ObFeedbackManager fbm;
 
   ObFeedbackPartitionLocation fpl;
@@ -139,9 +143,6 @@ TEST(ObFeedbackManager, common)
   pl.set_partition_id(1);
   ObReplicaLocation replica2;
   replica2.replica_type_ = REPLICA_TYPE_FULL;
-  ret = pl.add(replica2);
-  AS;
-  replica2.replica_type_ = REPLICA_TYPE_BACKUP;
   ret = pl.add(replica2);
   AS;
 
@@ -176,7 +177,7 @@ TEST(ObFeedbackManager, common)
   char buf[LEN];
   int64_t pos = 0;
 
-  ret = fbm.serialize(buf, 10, pos);
+  ret = fbm.serialize(buf, 2, pos);
   AF(OB_SIZE_OVERFLOW);
   ASSERT_EQ(0, pos);
 
@@ -189,31 +190,11 @@ TEST(ObFeedbackManager, common)
   ObFeedbackManager fbm2;
   pos = 0;
 
-  ret = fbm2.deserialize(buf, 10, pos);
+  ret = fbm2.deserialize(buf, 2, pos);
   AF(OB_INVALID_DATA);
   ASSERT_EQ(0, pos);
 
-  ret = fbm2.deserialize(buf, 9, pos);
-  AF(OB_INVALID_DATA);
-  ASSERT_EQ(0, pos);
-
-  ret = fbm2.deserialize(buf, 8, pos);
-  AF(OB_INVALID_DATA);
-  ASSERT_EQ(0, pos);
-
-  ret = fbm2.deserialize(buf, 7, pos);
-  AF(OB_INVALID_DATA);
-  ASSERT_EQ(0, pos);
-
-  ret = fbm2.deserialize(buf, 6, pos);
-  AF(OB_INVALID_DATA);
-  ASSERT_EQ(0, pos);
-
-  ret = fbm2.deserialize(buf, 5, pos);
-  AF(OB_INVALID_DATA);
-  ASSERT_EQ(0, pos);
-
-  ret = fbm2.deserialize(buf, 4, pos);
+  ret = fbm2.deserialize(buf, 1, pos);
   AF(OB_SIZE_OVERFLOW);
   ASSERT_EQ(0, pos);
 

@@ -1275,6 +1275,7 @@ inline void ObLogger::do_log_message(const bool is_async,
   } else if (OB_UNLIKELY(!allow) && !need_print_log_limit_msg()) {
     inc_dropped_log_count(level);
   } else if (OB_ISNULL(local_buf = get_local_buf())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_STDERR("failed to get local buf\n");
   } else {
     ++curr_logging_seq_;
