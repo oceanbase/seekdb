@@ -1123,9 +1123,14 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
         LOG_WARN("incr_data is null after init attempt", K(ret));
       } else {
         index_handler = static_cast<obvsag::VectorIndexPtr>(incr_data->index_);
+        SCN dml_scn;
         if (OB_ISNULL(index_handler)) {
           ret = common::OB_ERR_UNEXPECTED;
           LOG_WARN("vsag index handler is null after init attempt", K(ret));
+        } else if (OB_FAIL(dml_scn.convert_for_tx(events.at(events.count()-1).commit_version_))) {
+          LOG_WARN("convert for tx failed", KR(ret), K(events.at(events.count()-1).commit_version_));
+        } else {
+          incr_data->last_dml_scn_.inc_update(dml_scn);
         }
       }
 

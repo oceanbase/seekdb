@@ -1159,7 +1159,9 @@ bool ObPluginVectorIndexAdaptor::is_sync_index()
 
 void ObPluginVectorIndexAdaptor::update_index_id_dml_scn(share::SCN &current_scn)
 {
-  incr_data_->last_dml_scn_.atomic_set(current_scn);
+  if (OB_NOT_NULL(incr_data_)) {
+    incr_data_->last_dml_scn_.inc_update(current_scn);
+  }
 }
 
 void ObPluginVectorIndexAdaptor::update_index_id_read_scn()
@@ -2485,7 +2487,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status(ObVectorQue
   SCN read_scn = SCN::min_scn();
   ObArray<uint64_t> i_vids;
   ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(row_iter);
-  bool is_skip_4th_index = is_pruned_read_index_id();
+  bool is_skip_4th_index = !is_async_mode && is_pruned_read_index_id();
   // TODO First determine if waiting for PVQ_WAIT is needed
   if (OB_ISNULL(ctx) || OB_ISNULL(table_scan_iter)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2991,6 +2993,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
 
   if (OB_SUCC(ret)) {
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPK"));
+    const SCN last_dml_scn = OB_NOT_NULL(incr_data_) ? incr_data_->last_dml_scn_ : SCN();
     // 1. Read lock and copy out vbitmap_data_ (scn + bitmap) first, use copy for all subsequent ops
     {
       TCRLockGuard rd_mem_lock_guard(vbitmap_data_->mem_data_rwlock_);
@@ -3000,7 +3003,19 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       ROARING_TRY_CATCH(dbitmap = roaring::api::roaring64_bitmap_copy(vbitmap_data_->bitmap_->delete_bitmap_));
     }
 
-    if (OB_SUCC(ret) && OB_NOT_NULL(ibitmap) && OB_NOT_NULL(dbitmap)) {
+    const bool can_skip_scan_4th_table =
+        base_scn.is_valid_and_not_min() &&
+        last_dml_scn.is_valid() &&
+        base_scn >= last_dml_scn;
+
+    if (OB_SUCC(ret) && can_skip_scan_4th_table && !REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      roaring::api::roaring64_bitmap_free(ctx->bitmaps_->insert_bitmap_);
+      roaring::api::roaring64_bitmap_free(ctx->bitmaps_->delete_bitmap_);
+      ctx->bitmaps_->insert_bitmap_ = ibitmap;
+      ctx->bitmaps_->delete_bitmap_ = dbitmap;
+      ibitmap = nullptr;
+      dbitmap = nullptr;
+    } else if (OB_NOT_NULL(ibitmap) && OB_NOT_NULL(dbitmap)) {
       storage::ObTableScanParam scan_param;
       schema::ObTableParam table_param(*allocator_);
       // Read index_id_table using copied base_scn (thread-safe)
@@ -3071,6 +3086,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
             dbitmap = nullptr;
             // 4. Lock and copy back to vbitmap_data_
             if (last_row_scn > vbitmap_data_->scn_){
+              update_index_id_dml_scn(last_row_scn);
               TCWLockGuard lock_guard(vbitmap_data_->mem_data_rwlock_);
               TCWLockGuard wr_vbit_bitmap_lock_guard(vbitmap_data_->bitmap_rwlock_);
               if (last_row_scn > vbitmap_data_->scn_){
