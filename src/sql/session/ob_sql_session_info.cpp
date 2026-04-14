@@ -167,6 +167,9 @@ ObSQLSessionInfo::ObSQLSessionInfo(const uint64_t tenant_id) :
       unit_gc_min_sup_proxy_version_(0),
       has_ccl_rule_(false),
       last_update_ccl_cnt_time_(-1)
+#ifdef __ANDROID__
+      , last_ccl_check_schema_version_(common::OB_INVALID_VERSION)
+#endif
 {
   MEMSET(tenant_buff_, 0, sizeof(share::ObTenantSpaceFetcher));
   MEMSET(vip_buf_, 0, sizeof(vip_buf_));
@@ -597,9 +600,23 @@ int ObSQLSessionInfo::has_ccl_rules(share::schema::ObSchemaGetterGuard *&schema_
 {
   int ret = OB_SUCCESS;
   int64_t cur_time = ObTimeUtility::current_time();
-  if (last_update_ccl_cnt_time_ == -1 || cur_time - last_update_ccl_cnt_time_ > 5 * 1000 * 1000LL) {
+#ifdef __ANDROID__
+  // On Android the 5s cache may hide newly committed CCL rules; re-check on schema version change.
+  int64_t cur_schema_ver = OB_INVALID_VERSION;
+  (void)schema_guard->get_schema_version(get_effective_tenant_id(), cur_schema_ver);
+  bool need_refresh = (last_update_ccl_cnt_time_ == -1
+                       || cur_time - last_update_ccl_cnt_time_ > 5 * 1000 * 1000LL
+                       || cur_schema_ver != last_ccl_check_schema_version_);
+#else
+  bool need_refresh = (last_update_ccl_cnt_time_ == -1
+                       || cur_time - last_update_ccl_cnt_time_ > 5 * 1000 * 1000LL);
+#endif
+  if (need_refresh) {
     uint64_t ccl_cnt = 0;
     last_update_ccl_cnt_time_ = cur_time;
+#ifdef __ANDROID__
+    last_ccl_check_schema_version_ = cur_schema_ver;
+#endif
     if (OB_FAIL(schema_guard->get_ccl_rule_count(get_effective_tenant_id(), ccl_cnt))) {
       LOG_WARN("fail to get ccl rule count", K(ret));
     }

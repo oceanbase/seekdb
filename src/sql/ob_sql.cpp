@@ -3045,14 +3045,63 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
   } else if (basic_stmt->is_dml_stmt()
             || basic_stmt->is_explain_stmt()
             || basic_stmt->is_help_stmt()) {
+#ifdef __ANDROID__
+    // On Android: if the outline's max_concurrent is stricter than all DATABASE_AND_TABLE CCL
+    // rules, skip level-3 CCL check (outline is the binding constraint).
+    bool skip_level3_ccl = false;
+    if (OB_NOT_NULL(pc_ctx) && basic_stmt->is_dml_stmt() && OB_NOT_NULL(sql_ctx.schema_guard_)) {
+      int64_t outline_max = ObGlobalHint::UNSET_MAX_CONCURRENT;
+      const ObGlobalHint &gh =
+          static_cast<ObDMLStmt*>(basic_stmt)->get_query_ctx()->get_query_hint().get_global_hint();
+      outline_max = gh.max_concurrent_;
+      if (ObGlobalHint::UNSET_MAX_CONCURRENT == outline_max) {
+        const share::schema::ObOutlineParamsWrapper *pw =
+            pc_ctx->exec_ctx_.get_outline_params_wrapper();
+        if (OB_NOT_NULL(pw)) {
+          for (int64_t i = 0; i < pw->get_outline_params().count(); ++i) {
+            const share::schema::ObMaxConcurrentParam *p = pw->get_outline_params().at(i);
+            if (OB_NOT_NULL(p) && p->is_concurrent_limit_param()) {
+              outline_max = p->get_concurrent_num();
+              break;
+            }
+          }
+        }
+      }
+      if (ObGlobalHint::UNSET_MAX_CONCURRENT != outline_max) {
+        bool all_above = true;
+        share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
+        if (OB_SUCCESS == sql_ctx.schema_guard_->get_ccl_rule_infos(
+                MTL_ID(), share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+            && OB_NOT_NULL(rules)) {
+          for (int64_t i = 0; all_above && i < rules->size(); ++i) {
+            const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
+            const share::schema::ObCCLRuleSchema *fs = nullptr;
+            if (OB_ISNULL(s)
+                || OB_SUCCESS != sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id(
+                       MTL_ID(), s->get_ccl_rule_id(), fs)
+                || OB_ISNULL(fs)
+                || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
+              all_above = false;
+            }
+          }
+        } else {
+          all_above = false;
+        }
+        skip_level3_ccl = all_above;
+      }
+    }
+#endif
     //ccl check level-3: after resolve sql
     if (OB_NOT_NULL(pc_ctx)
+#ifdef __ANDROID__
+        && !skip_level3_ccl
+#endif
         && OB_FAIL(ObSQLUtils::match_ccl_rule(
              pc_ctx->allocator_, result.get_session(), sql_ctx, ObString(parse_result.input_sql_len_, parse_result.input_sql_),
              mode == PC_PS_MODE, pc_ctx->fp_result_.parameterized_params_, pc_ctx->sql_ctx_.format_sql_id_, CclRuleContainsInfo::DATABASE_AND_TABLE, &parse_result, basic_stmt))) {
       LOG_WARN("fail to match ccl rule", K(ret));
     } else if (OB_FAIL(generate_plan(parse_result, pc_ctx, sql_ctx, result, mode, basic_stmt,
-                                     stmt_need_privs))) {
+                                               stmt_need_privs))) {
       LOG_WARN("failed to generate plan", K(ret));
     }
   } else if (stmt::T_EXECUTE == basic_stmt->get_stmt_type() &&
@@ -3955,6 +4004,58 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       }
 
       if (OB_SUCC(ret) && (PC_TEXT_MODE == pc_ctx.mode_ || PC_PS_MODE == pc_ctx.mode_)) {
+#ifdef __ANDROID__
+        bool skip_level3_ccl = false;
+        share::schema::ObSchemaGetterGuard *sg = pc_ctx.sql_ctx_.schema_guard_;
+        if (OB_NOT_NULL(sg)) {
+          // Get outline max_concurrent: prefer plan cache value, fall back to current schema outline.
+          int64_t outline_max = ObGlobalHint::UNSET_MAX_CONCURRENT;
+          if (plan->is_limited_concurrent_num()) {
+            outline_max = plan->get_max_concurrent_num();
+          } else {
+            // Plan was compiled before the outline existed; look up the outline from schema now.
+            const share::schema::ObOutlineInfo *outline_info = nullptr;
+            const uint64_t db_id = pc_ctx.sql_ctx_.bl_key_.db_id_;
+            const ObString &sql_id = pc_ctx.sql_ctx_.bl_key_.sql_id_;
+            if (OB_INVALID_ID != db_id && !sql_id.empty()
+                && OB_SUCCESS == sg->get_outline_info_with_sql_id(
+                       session->get_effective_tenant_id(), db_id, sql_id, false /*normal*/, outline_info)
+                && OB_NOT_NULL(outline_info) && outline_info->has_outline_params()) {
+              const share::schema::ObOutlineParamsWrapper &pw = outline_info->get_outline_params_wrapper();
+              for (int64_t i = 0; i < pw.get_outline_params().count(); ++i) {
+                const share::schema::ObMaxConcurrentParam *p = pw.get_outline_params().at(i);
+                if (OB_NOT_NULL(p) && p->is_concurrent_limit_param()) {
+                  outline_max = p->get_concurrent_num();
+                  break;
+                }
+              }
+            }
+          }
+          if (ObGlobalHint::UNSET_MAX_CONCURRENT != outline_max) {
+            bool all_above = true;
+            share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
+            if (OB_SUCCESS == sg->get_ccl_rule_infos(
+                    MTL_ID(), share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+                && OB_NOT_NULL(rules)) {
+              for (int64_t i = 0; all_above && i < rules->size(); ++i) {
+                const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
+                const share::schema::ObCCLRuleSchema *fs = nullptr;
+                if (OB_ISNULL(s)
+                    || OB_SUCCESS != sg->get_ccl_rule_with_ccl_rule_id(
+                           MTL_ID(), s->get_ccl_rule_id(), fs)
+                    || OB_ISNULL(fs)
+                    || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
+                  all_above = false;
+                }
+              }
+            } else {
+              all_above = false;
+            }
+            skip_level3_ccl = all_above;
+          }
+        }
+        if (!skip_level3_ccl)
+#endif
         if (OB_FAIL(ObSQLUtils::match_ccl_rule(&pc_ctx, *session, PC_PS_MODE == pc_ctx.mode_,
                                                plan->get_dependency_table()))) {
           LOG_WARN("fail to match ccl rule in plan cache", K(ret), K(pc_ctx.mode_),
