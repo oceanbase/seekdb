@@ -1191,27 +1191,22 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
                                                   insert_count))) {
                 LOG_WARN("Failed to add vectors to vsag index",
                          K(ret), K(insert_count), K(dim), K(ls_id), K(vec_info.index_id_table_id_));
+              } else {
+                int tmp_ret = adaptor->update_incr_bitmap(vids, insert_count);
+                if (OB_SUCCESS != tmp_ret) {
+                  LOG_WARN("failed to update incr bitmap after vsag write (non-fatal)",
+                           K(tmp_ret), K(insert_count), K(inc_tablet_id));
+                }
               }
             }
           }
         }
       }
-      // After writing to vsag, proactively refresh the bitmap so the first query
-      // does not incur the overhead of building it from scratch.  This mirrors the
-      // query-time path (complete_index_mem_data_incremental) but is triggered here
-      // because change_stream already holds the adapter and knows data has landed.
-      // A failure is non-fatal: the bitmap will still be refreshed lazily on the
-      // next query if this call fails.
-      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor)) {
-        if (!adaptor->is_vbitmap_tablet_valid()) {
-          LOG_INFO("skip background bitmap refresh: vbitmap tablet id not ready yet",
-                   K(inc_tablet_id), K(vec_info.index_id_table_id_), KPC(adaptor));
-        } else {
-          int tmp_ret = adaptor->refresh_bitmap_background();
-          if (OB_SUCCESS != tmp_ret) {
-            LOG_WARN("background bitmap refresh failed (non-fatal), will retry on next query",
-                     K(tmp_ret), K(inc_tablet_id), K(vec_info.index_id_table_id_));
-          }
+      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor) && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+        int tmp_ret = adaptor->refresh_bitmap_background();
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("background bitmap refresh failed (non-fatal), will retry on next query",
+                   K(tmp_ret), K(inc_tablet_id), K(vec_info.index_id_table_id_));
         }
       }
     }

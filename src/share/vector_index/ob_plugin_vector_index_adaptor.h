@@ -723,6 +723,7 @@ public:
   // complete_index_mem_data_incremental with SYS_LS (consistent with write_to_vsag_).
   // Same table-scan code path as a query-time refresh, but without a live query context.
   int refresh_bitmap_background();
+  int update_incr_bitmap(const int64_t *vids, int64_t count);
   int prepare_delta_mem_data(roaring::api::roaring64_bitmap_t *gene_bitmap,
                              ObArray<uint64_t> &i_vids,
                              ObVectorQueryAdaptorResultContext *ctx);

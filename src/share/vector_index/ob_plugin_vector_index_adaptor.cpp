@@ -3146,11 +3146,31 @@ int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
     LOG_WARN("failed to init bitmaps for background bitmap refresh", K(ret));
   } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, snapshot_scn, i_vids))) {
     LOG_WARN("background bitmap refresh failed", K(ret), K(vbitmap_tablet_id_));
+  } else {
+    FLOG_INFO("refresh_bitmap_background", K(snapshot_scn), K(i_vids.count()));
   }
   return ret;
 }
 
-
+int ObPluginVectorIndexAdaptor::update_incr_bitmap(const int64_t *vids, int64_t count)
+{
+  INIT_SUCC(ret);
+  if (!is_mem_data_init_atomic(VIRT_INC) || OB_ISNULL(incr_data_->bitmap_) ||
+      OB_ISNULL(incr_data_->bitmap_->insert_bitmap_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("incr_data bitmap not initialized, skip update_incr_bitmap", K(ret), K(count));
+  } else if (OB_ISNULL(vids) || count <= 0) {
+    // nothing to do
+  } else {
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPH"));
+    TCWLockGuard lock_guard(incr_data_->bitmap_rwlock_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
+      ROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(
+          incr_data_->bitmap_->insert_bitmap_, static_cast<uint64_t>(vids[i])));
+    }
+  }
+  return ret;
+}
 
 bool ObPluginVectorIndexAdaptor::check_if_complete_delta(roaring::api::roaring64_bitmap_t *gene_bitmap, int64_t count)
 {
