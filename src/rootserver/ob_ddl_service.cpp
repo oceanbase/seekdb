@@ -27743,9 +27743,12 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obrpc::ObAlter
       if (OB_FAIL(schema_guard.get_table_schema(tenant_id, arg.database_name_, arg.index_name_, true/*index*/, index_table_schema))) {
         LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K(index_table_schema));
       } else if (OB_ISNULL(index_table_schema)) {
-        ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
-        LOG_WARN("index table schema should not be null", K(ret), K(arg.index_name_));
-        LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, arg.index_name_.length(), arg.index_name_.ptr());
+        // In rebuild path, old index may disappear after concurrent schema switch.
+        // Return EAGAIN so upper layer can retry/convert to user-friendly message
+        // instead of exposing "Can't DROP ...".
+        ret = OB_EAGAIN;
+        LOG_WARN("index table not found during rebuild, possibly due to concurrent DDL",
+          K(ret), K(arg), K(data_table_id), KPC(table_schema));
       } else if (arg.is_need_check_based_schema_objects() &&
                  OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
         LOG_WARN("index table schema changed since rebuild request, parallel ddl conflict", KR(ret), K(arg));
