@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.ServiceProcess;
 using System.Text;
 using Microsoft.Win32;
@@ -175,6 +177,246 @@ public sealed class ConfiguratorEngine
         {
             log($"Start service: {ex.Message}");
         }
+    }
+
+    // ── Root password setup (minimal MySQL protocol client) ────
+
+    public static bool TrySetRootPassword(int port, string newPassword, Action<string> log)
+    {
+        if (string.IsNullOrEmpty(newPassword))
+        {
+            log("Root password is empty, skipping.");
+            return true;
+        }
+
+        log("Waiting for server to accept connections...");
+        for (int attempt = 0; attempt < 90; attempt++)
+        {
+            try
+            {
+                using var tcp = new TcpClient();
+                tcp.ReceiveTimeout = 15_000;
+                tcp.SendTimeout = 15_000;
+                tcp.Connect("127.0.0.1", port);
+                using var stream = tcp.GetStream();
+                stream.ReadTimeout = 15_000;
+                stream.WriteTimeout = 15_000;
+
+                log($"[attempt {attempt}] Connected to 127.0.0.1:{port}, reading greeting...");
+                var (greetSeq, greetPayload) = ReadMySqlPacket(stream);
+                log($"[attempt {attempt}] Greeting received: {greetPayload.Length} bytes, protocol={greetPayload[0]}");
+
+                if (greetPayload[0] == 0xFF)
+                {
+                    string errMsg = greetPayload.Length > 9
+                        ? Encoding.UTF8.GetString(greetPayload, 9, greetPayload.Length - 9) : "unknown";
+                    log($"Server returned error on connect: {errMsg}");
+                    Thread.Sleep(2000);
+                    continue;
+                }
+                if (greetPayload[0] != 10)
+                {
+                    log($"Unexpected protocol version {greetPayload[0]}, retrying...");
+                    Thread.Sleep(2000);
+                    continue;
+                }
+
+                byte[] scramble = ExtractScramble(greetPayload);
+                string serverVersion = ExtractServerVersion(greetPayload);
+                log($"Server version: {serverVersion}, scramble length: {scramble.Length}");
+
+                var authPkt = BuildHandshakeResponse("root", Array.Empty<byte>(), scramble);
+                WriteMySqlPacket(stream, 1, authPkt);
+                log("Handshake response sent (root, empty password).");
+
+                var (_, authResp) = ReadMySqlPacket(stream);
+                log($"Auth response: first byte=0x{authResp[0]:X2}, length={authResp.Length}");
+
+                if (authResp[0] == 0xFE)
+                {
+                    log("Auth switch request received, sending empty auth data...");
+                    WriteMySqlPacket(stream, 3, Array.Empty<byte>());
+                    (_, authResp) = ReadMySqlPacket(stream);
+                    log($"Auth switch response: first byte=0x{authResp[0]:X2}, length={authResp.Length}");
+                }
+
+                if (authResp[0] == 0xFF)
+                {
+                    int errCode = authResp.Length >= 3
+                        ? (authResp[1] | (authResp[2] << 8)) : 0;
+                    string err = ParseErrorPacket(authResp);
+                    log($"Auth error: {err}");
+                    if (IsRetryableError(errCode, err))
+                    {
+                        log("Server still initializing, will retry...");
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+                    return false;
+                }
+                if (authResp[0] != 0x00)
+                {
+                    log($"Unexpected auth response 0x{authResp[0]:X2}, retrying...");
+                    Thread.Sleep(2000);
+                    continue;
+                }
+                log("Authenticated as root successfully.");
+
+                var escaped = newPassword.Replace("\\", "\\\\").Replace("'", "\\'");
+                var sql = $"ALTER USER root IDENTIFIED BY '{escaped}'";
+                log($"Executing: {sql.Substring(0, Math.Min(sql.Length, 60))}...");
+                WriteMySqlPacket(stream, 0, BuildComQuery(sql));
+
+                var (_, qr) = ReadMySqlPacket(stream);
+                log($"Query response: first byte=0x{qr[0]:X2}, length={qr.Length}");
+
+                if (qr[0] == 0x00)
+                {
+                    log("Root password set successfully.");
+                    return true;
+                }
+                else
+                {
+                    string err = ParseErrorPacket(qr);
+                    log($"ALTER USER failed: {err}");
+                    return false;
+                }
+            }
+            catch (SocketException ex)
+            {
+                if (attempt % 10 == 0)
+                    log($"[attempt {attempt}] Server not ready: {ex.Message}");
+                Thread.Sleep(2000);
+            }
+            catch (IOException ex)
+            {
+                if (attempt % 10 == 0)
+                    log($"[attempt {attempt}] IO error: {ex.Message}");
+                Thread.Sleep(2000);
+            }
+            catch (Exception ex)
+            {
+                log($"Password setup error: {ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
+        }
+        log("Server did not become ready within 3 minutes.");
+        return false;
+    }
+
+    private static bool IsRetryableError(int errCode, string errMsg)
+    {
+        if (errCode == 8001) return true;  // Server is initializing
+        if (errCode == 5065) return true;  // Tenant not ready
+        if (errCode == 5066) return true;  // Server is starting up
+        var lower = errMsg.ToLowerInvariant();
+        return lower.Contains("initializing") || lower.Contains("starting")
+            || lower.Contains("not ready") || lower.Contains("bootstrap");
+    }
+
+    private static string ParseErrorPacket(byte[] payload)
+    {
+        if (payload.Length < 4 || payload[0] != 0xFF) return "unknown error";
+        int errCode = payload[1] | (payload[2] << 8);
+        int msgStart = 3;
+        if (payload.Length > 4 && payload[3] == (byte)'#')
+            msgStart = Math.Min(9, payload.Length);
+        string msg = msgStart < payload.Length
+            ? Encoding.UTF8.GetString(payload, msgStart, payload.Length - msgStart) : "";
+        return $"#{errCode} {msg}";
+    }
+
+    private static string ExtractServerVersion(byte[] payload)
+    {
+        int pos = 1;
+        int end = pos;
+        while (end < payload.Length && payload[end] != 0) end++;
+        return Encoding.UTF8.GetString(payload, pos, end - pos);
+    }
+
+    private static (byte seq, byte[] payload) ReadMySqlPacket(NetworkStream s)
+    {
+        byte[] hdr = new byte[4];
+        ReadFully(s, hdr, 0, 4);
+        int len = hdr[0] | (hdr[1] << 8) | (hdr[2] << 16);
+        byte seq = hdr[3];
+        byte[] payload = new byte[len];
+        if (len > 0) ReadFully(s, payload, 0, len);
+        return (seq, payload);
+    }
+
+    private static void WriteMySqlPacket(NetworkStream s, byte seq, byte[] payload)
+    {
+        byte[] hdr =
+        [
+            (byte)(payload.Length & 0xFF),
+            (byte)((payload.Length >> 8) & 0xFF),
+            (byte)((payload.Length >> 16) & 0xFF),
+            seq,
+        ];
+        s.Write(hdr, 0, 4);
+        s.Write(payload, 0, payload.Length);
+        s.Flush();
+    }
+
+    private static void ReadFully(NetworkStream s, byte[] buf, int off, int count)
+    {
+        while (count > 0)
+        {
+            int n = s.Read(buf, off, count);
+            if (n == 0) throw new IOException("Connection closed by server.");
+            off += n;
+            count -= n;
+        }
+    }
+
+    /// <summary>Extract 20-byte scramble from server greeting packet.</summary>
+    private static byte[] ExtractScramble(byte[] payload)
+    {
+        int pos = 1;
+        while (pos < payload.Length && payload[pos] != 0) pos++; // skip server version
+        pos++; // null terminator
+        pos += 4; // connection id
+        byte[] scramble = new byte[20];
+        Array.Copy(payload, pos, scramble, 0, 8); // auth-plugin-data-part-1
+        pos += 8 + 1; // + filler
+        if (pos + 4 < payload.Length)
+        {
+            pos += 2 + 1 + 2 + 2; // caps-low, charset, status, caps-high
+            int authDataLen = payload[pos]; pos++;
+            pos += 10; // reserved
+            int part2Len = Math.Max(13, authDataLen - 8);
+            int toCopy = Math.Min(12, Math.Min(part2Len, payload.Length - pos));
+            if (toCopy > 0) Array.Copy(payload, pos, scramble, 8, toCopy);
+        }
+        return scramble;
+    }
+
+    private static byte[] BuildHandshakeResponse(string user, byte[] authData, byte[] scramble)
+    {
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms);
+        uint caps = 0x0008_A207; // PROTOCOL_41 | SECURE_CONNECTION | PLUGIN_AUTH | CONNECT_WITH_DB=0
+        w.Write(caps);
+        w.Write((uint)16_777_216); // max packet size
+        w.Write((byte)45); // utf8mb4
+        w.Write(new byte[23]); // reserved
+        w.Write(Encoding.UTF8.GetBytes(user));
+        w.Write((byte)0); // null term
+        w.Write((byte)authData.Length);
+        if (authData.Length > 0) w.Write(authData);
+        w.Write(Encoding.UTF8.GetBytes("mysql_native_password"));
+        w.Write((byte)0);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildComQuery(string sql)
+    {
+        var sqlBytes = Encoding.UTF8.GetBytes(sql);
+        var pkt = new byte[1 + sqlBytes.Length];
+        pkt[0] = 0x03; // COM_QUERY
+        Array.Copy(sqlBytes, 0, pkt, 1, sqlBytes.Length);
+        return pkt;
     }
 
     // ── Registry: persist install info for removal ──────────────

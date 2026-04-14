@@ -365,8 +365,7 @@ function Do-Package {
 
     # Sign binaries before they are packaged into the MSI
     $exesToSign = @(
-        "$buildDir\src\observer\seekdb.exe",
-        "$buildDir\src\observer\observer.exe"
+        "$buildDir\src\observer\seekdb.exe"
     ) | Where-Object { Test-Path $_ }
     if ($exesToSign) { Do-CodeSign $exesToSign }
 

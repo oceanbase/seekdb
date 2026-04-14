@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         "Initializing database (may take a long time)",
         "Adjusting Windows service",
         "Starting the server",
+        "Setting root password",
         "Updating the Start menu link",
     ];
 
@@ -286,6 +287,7 @@ public partial class MainWindow : Window
         void Log(string msg)
         {
             _logBuffer.AppendLine(msg);
+            App.Log(msg);
             Dispatcher.Invoke(() => LblApplySubtitle.Text = msg);
         }
 
@@ -394,10 +396,25 @@ public partial class MainWindow : Window
                 Dispatcher.Invoke(() => MarkStep(5, true));
             }
 
-            // Step 6: Start menu link (placeholder)
+            // Step 6: Set root password
             Dispatcher.Invoke(() => MarkStepRunning(6));
+            if (!string.IsNullOrEmpty(_cfg.RootPassword))
+            {
+                bool pwdOk = ConfiguratorEngine.TrySetRootPassword(
+                    _cfg.Port, _cfg.RootPassword, Log);
+                Dispatcher.Invoke(() => MarkStep(6, pwdOk));
+                if (!pwdOk) allOk = false;
+            }
+            else
+            {
+                Log("Root password is empty, skipping.");
+                Dispatcher.Invoke(() => MarkStep(6, true));
+            }
+
+            // Step 7: Start menu link (placeholder)
+            Dispatcher.Invoke(() => MarkStepRunning(7));
             Log("Start menu link updated.");
-            Dispatcher.Invoke(() => MarkStep(6, true));
+            Dispatcher.Invoke(() => MarkStep(7, true));
 
             // Persist install info for uninstall/removal wizard
             ConfiguratorEngine.SaveInstallInfo(

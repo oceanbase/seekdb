@@ -38,7 +38,6 @@ if(WIN32)
   # Binaries -> bin/
   install(PROGRAMS
     ${CMAKE_BINARY_DIR}/src/observer/seekdb.exe
-    ${CMAKE_BINARY_DIR}/src/observer/observer.exe
     DESTINATION bin
     COMPONENT server)
 
@@ -47,14 +46,12 @@ if(WIN32)
   # all DLL dependencies of the built executables — similar to how MySQL bundles
   # its runtime libraries into the MSI package.
   set(_SEEKDB_EXE "${CMAKE_BINARY_DIR}/src/observer/seekdb.exe")
-  set(_OBSERVER_EXE "${CMAKE_BINARY_DIR}/src/observer/observer.exe")
   set(_VCPKG_BIN_DIR "${OB_VCPKG_DIR}/bin")
 
   file(WRITE "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake.in" [=[
 file(GET_RUNTIME_DEPENDENCIES
   EXECUTABLES
     "@_SEEKDB_EXE@"
-    "@_OBSERVER_EXE@"
   RESOLVED_DEPENDENCIES_VAR _resolved
   UNRESOLVED_DEPENDENCIES_VAR _unresolved
   CONFLICTING_DEPENDENCIES_PREFIX _conflicts
