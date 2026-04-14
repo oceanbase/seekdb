@@ -385,6 +385,11 @@ tools/ob-configserver/bin/*
 tools/ob-configserver/tests/*.log
 tools/ob-configserver/tests/*.out
 
+## .NET Configurator build output (rebuilt by dotnet publish)
+tools/windows/seekdbConfigurator/bin/
+tools/windows/seekdbConfigurator/obj/
+tools/windows/seekdbConfigurator/publish/
+
 ############# deps #############
 deps/oblib/src/common/storage/ob_io_selector.h
 deps/oblib/src/grpc/*.pb.h

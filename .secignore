@@ -206,6 +206,8 @@
   https://aka.ms*
   http://crl.microsoft.com*
   https://api.nuget.org*
+  http://timestamp.digicert.com*
+  http://wixtoolset.org*
 **/Doxyfile
   www.doxygen.org)
   https://www.gnu.org/software/libiconv/

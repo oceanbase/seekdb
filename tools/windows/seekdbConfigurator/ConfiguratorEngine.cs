@@ -2,12 +2,15 @@ using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
 using System.Text;
+using Microsoft.Win32;
 
 namespace seekdbConfigurator;
 
 /// <summary>Applies wizard settings by writing seekdb.cnf and invoking seekdb.exe (same idea as tools/windows/seekdb_manage.ps1).</summary>
 public sealed class ConfiguratorEngine
 {
+    private const string RegistryKeyPath = @"Software\SeekDB";
+
     public static string? FindSeekdbExe()
     {
         var exeDir = Path.GetDirectoryName(Environment.ProcessPath);
@@ -171,6 +174,175 @@ public sealed class ConfiguratorEngine
         catch (Exception ex)
         {
             log($"Start service: {ex.Message}");
+        }
+    }
+
+    // ── Registry: persist install info for removal ──────────────
+
+    public static void SaveInstallInfo(string dataDirectory, string serviceName, int port)
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.CreateSubKey(RegistryKeyPath);
+            key.SetValue("DataDirectory", dataDirectory);
+            key.SetValue("ServiceName", serviceName);
+            key.SetValue("Port", port, RegistryValueKind.DWord);
+        }
+        catch { }
+    }
+
+    public static (string? dataDir, string? serviceName, int port) LoadInstallInfo()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(RegistryKeyPath);
+            if (key == null) return (null, null, 2881);
+            var dataDir = key.GetValue("DataDirectory") as string;
+            var serviceName = key.GetValue("ServiceName") as string;
+            var port = key.GetValue("Port") is int p ? p : 2881;
+            return (dataDir, serviceName, port);
+        }
+        catch { return (null, null, 2881); }
+    }
+
+    public static void CleanRegistry()
+    {
+        try { Registry.LocalMachine.DeleteSubKeyTree(RegistryKeyPath, false); }
+        catch { }
+    }
+
+    // ── Removal helpers (use sc.exe to avoid ServiceController assembly
+    //    loading issues in single-file publish) ──────────────────
+
+    public static string? FindSeekdbServiceName()
+    {
+        try
+        {
+            var output = new StringBuilder();
+            RunProcess("sc.exe", "query type= service state= all",
+                line => output.AppendLine(line));
+            foreach (var line in output.ToString().Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var name = trimmed.Substring("SERVICE_NAME:".Length).Trim();
+                    if (name.StartsWith("seekdb", StringComparison.OrdinalIgnoreCase))
+                        return name;
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static bool ServiceExists(string serviceName)
+    {
+        return RunProcess("sc.exe", $"query {serviceName}") == 0;
+    }
+
+    public static bool TryStopService(string serviceName, Action<string> log)
+    {
+        log($"Stopping service '{serviceName}'...");
+        int rc = RunProcess("sc.exe", $"stop {serviceName}", log);
+        if (rc != 0 && rc != 1062)
+        {
+            log($"sc.exe stop exit code {rc}.");
+            return false;
+        }
+        // Wait for the service to fully stop (poll up to 60 seconds)
+        for (int i = 0; i < 30; i++)
+        {
+            Thread.Sleep(2000);
+            var output = new StringBuilder();
+            RunProcess("sc.exe", $"query {serviceName}", line => output.AppendLine(line));
+            if (output.ToString().Contains("STOPPED", StringComparison.OrdinalIgnoreCase))
+            {
+                log("Service stopped.");
+                return true;
+            }
+        }
+        log("Service stop timed out, proceeding anyway.");
+        return true;
+    }
+
+    public static bool TryRemoveService(string? seekdbExe, string serviceName, Action<string> log)
+    {
+        if (seekdbExe != null && File.Exists(seekdbExe))
+        {
+            var args = $"--remove-service {serviceName}";
+            log($"{seekdbExe} {args}");
+            int rc = RunProcess(seekdbExe, args, log);
+            if (rc == 0) { log("Service removed."); return true; }
+            log($"--remove-service exit code {rc}, falling back to sc.exe...");
+        }
+
+        int rc2 = RunProcess("sc.exe", $"delete {serviceName}", s => log(s));
+        if (rc2 == 0) { log("Service removed via sc.exe."); return true; }
+        log($"sc.exe delete exit code {rc2}.");
+        return false;
+    }
+
+    public static bool TryRemoveFirewallRules(int port, Action<string> log)
+    {
+        try
+        {
+            var ruleName = $"seekdb TCP {port}";
+            int rc = RunProcess("netsh",
+                $"advfirewall firewall delete rule name=\"{ruleName}\"",
+                s => log(s));
+            log(rc == 0 ? "Firewall rules removed." : "No matching firewall rules found (OK).");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log($"Firewall cleanup: {ex.Message}");
+            return false;
+        }
+    }
+
+    public static bool TryRemoveConfigFile(string dataDirectory, Action<string> log)
+    {
+        try
+        {
+            var cnfPath = Path.Combine(dataDirectory.TrimEnd('\\'), "etc", "seekdb.cnf");
+            if (File.Exists(cnfPath))
+            {
+                File.Delete(cnfPath);
+                log($"Configuration file removed: {cnfPath}");
+            }
+            else
+            {
+                log("No configuration file found.");
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log($"Remove config file: {ex.Message}");
+            return false;
+        }
+    }
+
+    public static bool TryRemoveDataDirectory(string dataDirectory, Action<string> log)
+    {
+        try
+        {
+            if (Directory.Exists(dataDirectory))
+            {
+                Directory.Delete(dataDirectory, true);
+                log($"Data directory removed: {dataDirectory}");
+            }
+            else
+            {
+                log("Data directory does not exist.");
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log($"Remove data directory: {ex.Message}");
+            return false;
         }
     }
 }

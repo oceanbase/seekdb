@@ -398,6 +398,11 @@ public partial class MainWindow : Window
             Dispatcher.Invoke(() => MarkStepRunning(6));
             Log("Start menu link updated.");
             Dispatcher.Invoke(() => MarkStep(6, true));
+
+            // Persist install info for uninstall/removal wizard
+            ConfiguratorEngine.SaveInstallInfo(
+                _cfg.DataDirectory, _cfg.ServiceName, _cfg.Port);
+            Log("Install info saved to registry.");
         });
 
         LblApplySubtitle.Text = allOk

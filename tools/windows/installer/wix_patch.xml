@@ -1,7 +1,9 @@
 <CPackWiXPatch>
-  <!-- Add bin/ directory to system PATH -->
-  <CPackWiXFragment Id="CM_CP_bin.seekdb.exe">
-    <Environment Id="PATH" Name="PATH" Value="[INSTALL_ROOT]bin"
-                 Permanent="no" Part="last" Action="set" System="yes" />
+  <!-- Patch the server feature to add a ComponentRef that links in
+       the Fragment from wix_launch_configurator.wxs.  This causes
+       the WiX linker to pull in the whole Fragment, including the
+       LaunchApplication CustomAction and the PATH Environment. -->
+  <CPackWiXFragment Id="CM_C_server">
+    <ComponentRef Id="SeekDBPathEnv" />
   </CPackWiXFragment>
 </CPackWiXPatch>

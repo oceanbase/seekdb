@@ -23,7 +23,20 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/tools/windows/installer/seekdb.ico")
   set(CPACK_WIX_PRODUCT_ICON "${CMAKE_SOURCE_DIR}/tools/windows/installer/seekdb.ico")
 endif()
 
-# Add bin/ to system PATH
 set(CPACK_WIX_CMAKE_PACKAGE_REGISTRY "SeekDB")
+
+# Exit-dialog checkbox: "Run seekdb Configurator" (checked by default).
+# These properties go directly into the Package via properties.wxi,
+# which is guaranteed to be included by CPack regardless of Fragment linking.
+set(CPACK_WIX_PROPERTY_WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT "Run seekdb Configurator")
+set(CPACK_WIX_PROPERTY_WIXUI_EXITDIALOGOPTIONALCHECKBOX "1")
+
+# Patch the CM_C_server Feature to add a ComponentRef that pulls in our
+# extra Fragment (which carries the CustomAction and PATH env-var component).
+set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/tools/windows/installer/wix_patch.xml")
+
+# Extra WiX source: CustomAction for launching Configurator + PATH env var
+set(CPACK_WIX_EXTRA_SOURCES
+  "${CMAKE_SOURCE_DIR}/tools/windows/installer/wix_launch_configurator.wxs")
 
 include(CPack)

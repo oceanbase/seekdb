@@ -166,6 +166,23 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
       COMPONENT server)
   endif()
 
+  # seekdb Configurator -> bin/
+  # Built by 'dotnet publish' (self-contained single-file) before cpack runs.
+  # build.ps1 places the output under tools/windows/seekdbConfigurator/publish/.
+  set(_CONFIGURATOR_EXE
+    "${CMAKE_SOURCE_DIR}/tools/windows/seekdbConfigurator/publish/seekdbConfigurator.exe")
+  if(EXISTS "${_CONFIGURATOR_EXE}")
+    install(PROGRAMS "${_CONFIGURATOR_EXE}"
+      DESTINATION bin
+      COMPONENT server)
+  else()
+    message(WARNING
+      "seekdbConfigurator.exe not found at ${_CONFIGURATOR_EXE}. "
+      "The MSI will not include the post-install Configurator wizard. "
+      "Run 'dotnet publish' on seekdbConfigurator.csproj first, or use "
+      "'build.ps1 package' which does this automatically.")
+  endif()
+
   # TODO: Utils (ob_admin/ob_error) — uncomment when Windows tool builds are ready
   # if(OB_BUILD_OBADMIN)
   #   list(APPEND CPACK_COMPONENTS_ALL utils)

@@ -27,6 +27,12 @@ param(
 $ErrorActionPreference = "Stop"
 $TOPDIR = $PSScriptRoot
 
+# Force all tool output to English (avoids encoding issues on non-English systems)
+$env:DOTNET_CLI_UI_LANGUAGE = "en"
+$env:VSLANG                = "1033"
+[Console]::OutputEncoding   = [System.Text.Encoding]::UTF8
+$OutputEncoding             = [System.Text.Encoding]::UTF8
+
 # ── Dependency path defaults (override via env vars) ────────────────
 $DefaultVcpkgDir  = if ($env:OB_VCPKG_DIR)    { $env:OB_VCPKG_DIR }    else { "C:/VcpkgInstalled/x64-windows" }
 $DefaultOpenSSLDir = if ($env:OB_OPENSSL_DIR)  { $env:OB_OPENSSL_DIR }  else { "C:/Program Files/OpenSSL-Win64" }
@@ -36,6 +42,90 @@ $DefaultWinDepsZip = if ($env:OB_WIN_DEPS_ZIP) { $env:OB_WIN_DEPS_ZIP } else { "
 # ── Helpers ─────────────────────────────────────────────────────────
 function Write-Log  { param([string]$msg) Write-Host "[build.ps1] $msg" }
 function Write-Err  { param([string]$msg) Write-Host "[build.ps1][ERROR] $msg" -ForegroundColor Red }
+
+# ── Code signing (DigiCert Software Trust Manager) ─────────────────
+# Enabled automatically when SM_API_KEY env var is present.
+# Required env vars: SM_API_KEY, SM_CLIENT_CERT_FILE,
+#                    SM_CLIENT_CERT_PASSWORD, SM_HOST
+# Required tools:    smctl, signtool (Windows SDK)
+
+$script:SigningReady = $null   # $null = not checked, $true/$false = result
+
+function Find-SignTool {
+    $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $sdkGlobs = @(
+        "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe",
+        "$env:ProgramFiles\Windows Kits\10\bin\*\x64\signtool.exe"
+    )
+    foreach ($g in $sdkGlobs) {
+        $found = Get-ChildItem -Path $g -ErrorAction SilentlyContinue |
+                 Sort-Object { [version]($_.Directory.Parent.Name) } -Descending |
+                 Select-Object -First 1
+        if ($found) { return $found.FullName }
+    }
+    return $null
+}
+
+function Initialize-CodeSigning {
+    if ($null -ne $script:SigningReady) { return $script:SigningReady }
+
+    if (-not $env:SM_API_KEY) {
+        Write-Log "Code signing: SM_API_KEY not set, skipping."
+        $script:SigningReady = $false
+        return $false
+    }
+
+    $smctl = Get-Command smctl -ErrorAction SilentlyContinue
+    if (-not $smctl) {
+        Write-Err "SM_API_KEY is set but smctl not found in PATH. Signing disabled."
+        $script:SigningReady = $false
+        return $false
+    }
+
+    $script:SignToolPath = Find-SignTool
+    if (-not $script:SignToolPath) {
+        Write-Err "signtool.exe not found (need Windows SDK). Signing disabled."
+        $script:SigningReady = $false
+        return $false
+    }
+
+    Write-Log "Code signing: syncing certificates from DigiCert STM..."
+    & smctl windows certsync 2>&1 | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "smctl windows certsync failed. Signing disabled."
+        $script:SigningReady = $false
+        return $false
+    }
+
+    Write-Log "Code signing: ready (signtool=$($script:SignToolPath))"
+    $script:SigningReady = $true
+    return $true
+}
+
+function Do-CodeSign {
+    param([string[]]$Files)
+
+    if (-not (Initialize-CodeSigning)) { return }
+
+    foreach ($f in $Files) {
+        if (-not (Test-Path $f)) {
+            Write-Err "Cannot sign, file not found: $f"
+            continue
+        }
+        $name = Split-Path $f -Leaf
+        Write-Log "Signing $name ..."
+        & $script:SignToolPath sign `
+            /tr http://timestamp.digicert.com /td sha256 `
+            /fd sha256 /a $f 2>&1 | Out-Host
+        if ($LASTEXITCODE -eq 0) {
+            Write-Log "  Signed: $name"
+        } else {
+            Write-Err "  Signing failed for $name (exit code $LASTEXITCODE)"
+        }
+    }
+}
 
 function Show-Usage {
     Write-Host @"
@@ -218,10 +308,67 @@ function Do-Ninja {
     }
 }
 
+# ── build seekdb Configurator (.NET WPF wizard) ─────────────────────
+function Do-BuildConfigurator {
+    $projDir = "$TOPDIR\tools\windows\seekdbConfigurator"
+    $proj    = "$projDir\seekdbConfigurator.csproj"
+    $pubDir  = "$projDir\publish"
+
+    if (-not (Test-Path $proj)) {
+        Write-Err "Configurator project not found: $proj"
+        return $false
+    }
+
+    $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
+    if (-not $dotnetCmd) {
+        Write-Err ".NET SDK not found. Install .NET 8 SDK to build the Configurator."
+        Write-Log "  The MSI will be created without the Configurator wizard."
+        return $false
+    }
+
+    Write-Log "Building seekdb Configurator (self-contained, single-file) ..."
+    if (Test-Path $pubDir) { Remove-Item -Recurse -Force $pubDir }
+
+    & dotnet publish $proj `
+        -c Release `
+        -r win-x64 `
+        --self-contained `
+        -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
+        -o $pubDir 2>&1 | Out-Host
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Configurator build failed (exit code $LASTEXITCODE)"
+        return $false
+    }
+
+    if (Test-Path "$pubDir\seekdbConfigurator.exe") {
+        Write-Log "Configurator built: $pubDir\seekdbConfigurator.exe"
+        Do-CodeSign "$pubDir\seekdbConfigurator.exe"
+        return $true
+    } else {
+        Write-Err "seekdbConfigurator.exe not found after publish."
+        return $false
+    }
+}
+
 # ── package: build release + create installer ───────────────────────
 function Do-Package {
+    # Build the Configurator first so it is available when cpack runs
+    $cfgOk = Do-BuildConfigurator
+    if (-not $cfgOk) {
+        Write-Log "Proceeding without Configurator in the MSI."
+    }
+
     $buildDir = Do-Build -BuildType "RelWithDebInfo" -ExtraCMakeArgs @("-DOB_BUILD_PACKAGE=ON")
     Do-Ninja -BuildDir $buildDir
+
+    # Sign binaries before they are packaged into the MSI
+    $exesToSign = @(
+        "$buildDir\src\observer\seekdb.exe",
+        "$buildDir\src\observer\observer.exe"
+    ) | Where-Object { Test-Path $_ }
+    if ($exesToSign) { Do-CodeSign $exesToSign }
 
     Write-Log "Creating installer package in $buildDir ..."
     Push-Location $buildDir
@@ -243,8 +390,15 @@ function Do-Package {
             Write-Err "Package generation failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
         }
-        $packages = Get-ChildItem -Path $buildDir -Include "seekdb-*.msi","seekdb-*.zip" -File
+        $packages = @(
+            Get-ChildItem -Path "$buildDir\seekdb-*.msi" -File -ErrorAction SilentlyContinue
+            Get-ChildItem -Path "$buildDir\seekdb-*.zip" -File -ErrorAction SilentlyContinue
+        )
         if ($packages) {
+            # Sign MSI installers
+            $msiFiles = $packages | Where-Object { $_.Extension -eq ".msi" }
+            if ($msiFiles) { Do-CodeSign ($msiFiles | ForEach-Object { $_.FullName }) }
+
             Write-Log "Package(s) created:"
             foreach ($pkg in $packages) {
                 Write-Log "  $($pkg.FullName)"
