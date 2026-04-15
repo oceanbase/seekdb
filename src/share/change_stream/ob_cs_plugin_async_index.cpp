@@ -283,8 +283,8 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
     common::ObSEArray<schema::ObColDesc, 16> col_descs;
     if (OB_FAIL(data_table_schema->get_simple_index_infos(simple_index_infos))) {
       LOG_WARN("fail to get simple index infos", K(ret), K(table_id));
-    } else if (OB_FAIL(data_table_schema->get_column_ids(col_descs))) {
-      LOG_WARN("fail to get column descs", K(ret), K(table_id));
+    } else if (OB_FAIL(data_table_schema->get_store_column_ids(col_descs))) {
+      LOG_WARN("fail to get store column descs", K(ret), K(table_id));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
         const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
@@ -1202,7 +1202,7 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
           }
         }
       }
-      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor) && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor) && REACH_TIME_INTERVAL(500 * 1000)) {
         int tmp_ret = adaptor->refresh_bitmap_background();
         if (OB_SUCCESS != tmp_ret) {
           LOG_WARN("background bitmap refresh failed (non-fatal), will retry on next query",
