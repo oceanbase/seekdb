@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    OceanBase Lite Windows build script — mirrors build.sh on Linux/macOS.
+    OceanBase Lite Windows build script - mirrors build.sh on Linux/macOS.
 
 .EXAMPLE
     .\build.ps1 -h
@@ -8,21 +8,36 @@
     .\build.ps1 release
     .\build.ps1 release --ninja
     .\build.ps1 release --ninja -j 16
+    .\build.ps1 release --ninja --init
     .\build.ps1 debug
     .\build.ps1 clean
 #>
 
-param(
-    [Parameter(Position = 0)]
-    [string]$Action = "debug",
+# Manual arg parsing to support both -flag and --flag styles (like build.sh)
+$Action = "debug"
+$Ninja  = $false
+$Init   = $false
+$Jobs   = 0
+$h      = $false
 
-    [switch]$Ninja,
-
-    [Alias("j")]
-    [int]$Jobs = 0,
-
-    [switch]$h
-)
+$i = 0
+while ($i -lt $args.Count) {
+    $a = "$($args[$i])"
+    switch -Wildcard ($a) {
+        { $_ -in "-h", "--help", "-help" } { $h = $true }
+        { $_ -in "--ninja", "-ninja" }     { $Ninja = $true }
+        { $_ -in "--init", "-init" }       { $Init = $true }
+        { $_ -in "-j", "--jobs" } {
+            $i++
+            if ($i -lt $args.Count) { $Jobs = [int]$args[$i] }
+        }
+        default {
+            if (-not $a.StartsWith("-")) { $Action = $a }
+            else { Write-Host "[build.ps1][WARN] Unknown flag: $a" -ForegroundColor Yellow }
+        }
+    }
+    $i++
+}
 
 $ErrorActionPreference = "Stop"
 $TOPDIR = $PSScriptRoot
@@ -33,17 +48,44 @@ $env:VSLANG                = "1033"
 [Console]::OutputEncoding   = [System.Text.Encoding]::UTF8
 $OutputEncoding             = [System.Text.Encoding]::UTF8
 
-# ── Dependency path defaults (override via env vars) ────────────────
-$DefaultVcpkgDir  = if ($env:OB_VCPKG_DIR)    { $env:OB_VCPKG_DIR }    else { "C:/VcpkgInstalled/x64-windows" }
-$DefaultOpenSSLDir = if ($env:OB_OPENSSL_DIR)  { $env:OB_OPENSSL_DIR }  else { "C:/Program Files/OpenSSL-Win64" }
-$DefaultLLVMDir   = if ($env:OB_LLVM_DIR)      { $env:OB_LLVM_DIR }     else { "C:/Program Files/LLVM18" }
-$DefaultWinDepsZip = if ($env:OB_WIN_DEPS_ZIP) { $env:OB_WIN_DEPS_ZIP } else { "$TOPDIR/win_deps.zip" }
+# -- Dependency paths -------------------------------------------------
+# Priority: env var > deps/3rd (if initialized via `init`) > system defaults
+$DEPS_3RD  = "$TOPDIR\deps\3rd"
+$TOOLS_DIR = "$DEPS_3RD\tools"
+$DepsInitialized = Test-Path "$DEPS_3RD\DONE"
 
-# ── Helpers ─────────────────────────────────────────────────────────
+$DefaultVcpkgDir = if ($env:OB_VCPKG_DIR) { $env:OB_VCPKG_DIR }
+    elseif ($DepsInitialized) { "$DEPS_3RD\vcpkg\x64-windows" }
+    else { "C:/VcpkgInstalled/x64-windows" }
+
+$DefaultOpenSSLDir = if ($env:OB_OPENSSL_DIR) { $env:OB_OPENSSL_DIR }
+    elseif ($DepsInitialized) { "$DEPS_3RD\openssl" }
+    else { "C:/Program Files/OpenSSL-Win64" }
+
+$DefaultLLVMDir = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR }
+    elseif ($DepsInitialized) { "$TOOLS_DIR\llvm18" }
+    else { "C:/Program Files/LLVM18" }
+
+# When deps/3rd is initialized, add tools to PATH
+if ($DepsInitialized) {
+    $toolPaths = @(
+        "$TOOLS_DIR\cmake\bin",
+        "$TOOLS_DIR\ninja",
+        "$TOOLS_DIR\llvm18\bin",
+        "$TOOLS_DIR\win_flex_bison"
+    )
+    foreach ($tp in $toolPaths) {
+        if ((Test-Path $tp) -and ($env:PATH -notlike "*$tp*")) {
+            $env:PATH = "$tp;$env:PATH"
+        }
+    }
+}
+
+# -- Helpers ---------------------------------------------------------
 function Write-Log  { param([string]$msg) Write-Host "[build.ps1] $msg" }
 function Write-Err  { param([string]$msg) Write-Host "[build.ps1][ERROR] $msg" -ForegroundColor Red }
 
-# ── Code signing (DigiCert Software Trust Manager) ─────────────────
+# -- Code signing (DigiCert Software Trust Manager) -----------------
 # Enabled automatically when SM_API_KEY env var is present.
 # Required env vars: SM_API_KEY, SM_CLIENT_CERT_FILE,
 #                    SM_CLIENT_CERT_PASSWORD, SM_HOST
@@ -92,7 +134,7 @@ function Initialize-CodeSigning {
     }
 
     Write-Log "Code signing: syncing certificates from DigiCert STM..."
-    & smctl windows certsync 2>&1 | Out-Host
+    & smctl windows certsync | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Err "smctl windows certsync failed. Signing disabled."
         $script:SigningReady = $false
@@ -118,7 +160,7 @@ function Do-CodeSign {
         Write-Log "Signing $name ..."
         & $script:SignToolPath sign `
             /tr http://timestamp.digicert.com /td sha256 `
-            /fd sha256 /a $f 2>&1 | Out-Host
+            /fd sha256 /a $f | Out-Host
         if ($LASTEXITCODE -eq 0) {
             Write-Log "  Signed: $name"
         } else {
@@ -131,24 +173,29 @@ function Show-Usage {
     Write-Host @"
 
 Usage:
-    .\build.ps1 -h                       Show this help
-    .\build.ps1 init                     Extract pre-built deps (win_deps.zip)
-    .\build.ps1 clean                    Remove build_* directories
-    .\build.ps1 [BuildType]                Configure only (cmake)
-    .\build.ps1 [BuildType] --ninja        Configure + compile (ninja)
-    .\build.ps1 [BuildType] --ninja -j 16  Configure + compile with 16 jobs
-    .\build.ps1 package                    Build release + generate MSI/ZIP installer
+    .\build.ps1 -h                              Show this help
+    .\build.ps1 init                            Download & extract deps (from HTTP)
+    .\build.ps1 pack                            Pack deps from this machine into tar.gz
+    .\build.ps1 clean                           Remove build_* directories
+    .\build.ps1 [BuildType]                       Configure only (cmake)
+    .\build.ps1 [BuildType] --ninja               Configure + compile (ninja)
+    .\build.ps1 [BuildType] --ninja -j 16         Compile with 16 jobs
+    .\build.ps1 [BuildType] --ninja --init          Init deps, then build
+    .\build.ps1 package                           Build release + MSI/ZIP installer
 
 BuildType:
     debug           Debug build (default)
     release         RelWithDebInfo build
     relwithdebinfo  Alias for release
 
+Flags:
+    --ninja         Configure + compile with Ninja
+    --init          Run dependency init before building (like build.sh --init)
+
 Environment variables (override dependency paths):
-    OB_VCPKG_DIR      vcpkg install root   (default: C:/VcpkgInstalled/x64-windows)
-    OB_OPENSSL_DIR    OpenSSL root          (default: C:/Program Files/OpenSSL-Win64)
-    OB_LLVM_DIR       LLVM 18 root          (default: C:/Program Files/LLVM18)
-    OB_WIN_DEPS_ZIP   Path to deps zip      (default: <project>/win_deps.zip)
+    OB_VCPKG_DIR      vcpkg install root   (default: deps/3rd or C:/VcpkgInstalled)
+    OB_OPENSSL_DIR    OpenSSL root          (default: deps/3rd or C:/Program Files/OpenSSL-Win64)
+    OB_LLVM_DIR       LLVM 18 root          (default: deps/3rd or C:/Program Files/LLVM18)
 
 "@
 }
@@ -162,71 +209,67 @@ if ($Jobs -eq 0) {
     Write-Log "Auto jobs: $Jobs (cpus=$cpuCount, mem=${totalMemGB}GB, ~3GB/job)"
 }
 
-# ── init: extract dependency archive ────────────────────────────────
+# -- init: download & extract dependencies (mirrors build.sh init) ---
 function Do-Init {
-    $zipPath = $DefaultWinDepsZip
-    if (-not (Test-Path $zipPath)) {
-        Write-Err "Deps archive not found: $zipPath"
-        Write-Log "Set OB_WIN_DEPS_ZIP or place win_deps.zip in the project root."
-        Write-Log ""
-        Write-Log "To create win_deps.zip on a machine that already has deps installed:"
-        Write-Log "  .\build.ps1 pack"
+    $depCreateScript = "$TOPDIR\deps\init\dep_create.ps1"
+    if (-not (Test-Path $depCreateScript)) {
+        Write-Err "dep_create.ps1 not found: $depCreateScript"
         exit 1
     }
 
-    Write-Log "Extracting deps from $zipPath ..."
-    $destDir = "$TOPDIR\win_deps"
-    if (Test-Path $destDir) {
-        Write-Log "Removing existing win_deps/ ..."
-        Remove-Item -Recurse -Force $destDir
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log "Running dep_create.ps1 ..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $depCreateScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "dep_create.ps1 failed (exit code $LASTEXITCODE)"
+        exit $LASTEXITCODE
     }
-    Expand-Archive -Path $zipPath -DestinationPath $destDir -Force
-    Write-Log "Dependencies extracted to $destDir"
-    Write-Log ""
-    Write-Log "Set the following env vars (or they will use defaults):"
-    Write-Log "  `$env:OB_VCPKG_DIR   = '$destDir\vcpkg\x64-windows'"
-    Write-Log "  `$env:OB_OPENSSL_DIR = '$destDir\openssl'"
-    Write-Log "  `$env:OB_LLVM_DIR    = '$destDir\llvm18'"
+    $sw.Stop()
+    $min = [math]::Floor($sw.Elapsed.TotalSeconds / 60)
+    $sec = $sw.Elapsed.Seconds
+    Write-Log "dep_create.ps1 completed in ${min}m${sec}s"
+
+    # Refresh path defaults now that deps/3rd is populated
+    $script:DepsInitialized = $true
+    $script:DefaultVcpkgDir  = "$DEPS_3RD\vcpkg\x64-windows"
+    $script:DefaultOpenSSLDir = "$DEPS_3RD\openssl"
+    $script:DefaultLLVMDir   = "$TOOLS_DIR\llvm18"
+
+    $toolPaths = @(
+        "$TOOLS_DIR\cmake\bin",
+        "$TOOLS_DIR\ninja",
+        "$TOOLS_DIR\llvm18\bin",
+        "$TOOLS_DIR\win_flex_bison"
+    )
+    foreach ($tp in $toolPaths) {
+        if ((Test-Path $tp) -and ($env:PATH -notlike "*$tp*")) {
+            $env:PATH = "$tp;$env:PATH"
+        }
+    }
 }
 
-# ── pack: create dependency archive from current machine ────────────
+# -- pack: create tar.gz dep archives from current machine -----------
 function Do-Pack {
-    $packDir = "$TOPDIR\win_deps_staging"
-    if (Test-Path $packDir) { Remove-Item -Recurse -Force $packDir }
-    New-Item -ItemType Directory -Path $packDir | Out-Null
-
-    Write-Log "Packing vcpkg from: $DefaultVcpkgDir"
-    if (Test-Path $DefaultVcpkgDir) {
-        $vcpkgDest = "$packDir\vcpkg\x64-windows"
-        New-Item -ItemType Directory -Path "$packDir\vcpkg" -Force | Out-Null
-        Copy-Item -Recurse -Path $DefaultVcpkgDir -Destination $vcpkgDest
-    } else {
-        Write-Err "vcpkg dir not found: $DefaultVcpkgDir"
+    $packScript = "$TOPDIR\deps\init\pack_win_deps.ps1"
+    if (-not (Test-Path $packScript)) {
+        Write-Err "pack_win_deps.ps1 not found: $packScript"
+        exit 1
     }
 
-    Write-Log "Packing OpenSSL from: $DefaultOpenSSLDir"
-    if (Test-Path $DefaultOpenSSLDir) {
-        Copy-Item -Recurse -Path $DefaultOpenSSLDir -Destination "$packDir\openssl"
-    } else {
-        Write-Err "OpenSSL dir not found: $DefaultOpenSSLDir"
+    $outDir = "$TOPDIR\win_deps_archives"
+    if (-not (Test-Path $outDir)) {
+        New-Item -ItemType Directory -Path $outDir | Out-Null
     }
 
-    Write-Log "Packing LLVM from: $DefaultLLVMDir"
-    if (Test-Path $DefaultLLVMDir) {
-        Copy-Item -Recurse -Path $DefaultLLVMDir -Destination "$packDir\llvm18"
-    } else {
-        Write-Err "LLVM dir not found: $DefaultLLVMDir"
+    Write-Log "Running pack_win_deps.ps1 -> $outDir ..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $packScript -OutputDir $outDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "pack_win_deps.ps1 failed (exit code $LASTEXITCODE)"
+        exit $LASTEXITCODE
     }
-
-    $outZip = "$TOPDIR\win_deps.zip"
-    Write-Log "Compressing to $outZip ..."
-    if (Test-Path $outZip) { Remove-Item $outZip }
-    Compress-Archive -Path "$packDir\*" -DestinationPath $outZip -CompressionLevel Optimal
-    Remove-Item -Recurse -Force $packDir
-    Write-Log "Done! Archive: $outZip"
 }
 
-# ── clean ───────────────────────────────────────────────────────────
+# -- clean -----------------------------------------------------------
 function Do-Clean {
     Write-Log "Cleaning build directories ..."
     Get-ChildItem -Path $TOPDIR -Directory -Filter "build*" | ForEach-Object {
@@ -236,7 +279,7 @@ function Do-Clean {
     Write-Log "Clean done."
 }
 
-# ── cmake configure ────────────────────────────────────────────────
+# -- cmake configure ------------------------------------------------
 function Do-Build {
     param(
         [string]$BuildType,
@@ -268,7 +311,7 @@ function Do-Build {
 
     Push-Location $buildDir
     try {
-        & cmake @cmakeArgs 2>&1 | Out-Host
+        & cmake @cmakeArgs | Out-Host
         if ($LASTEXITCODE -ne 0) {
             Write-Err "CMake configure failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
@@ -289,14 +332,14 @@ function Do-Build {
     return $buildDir
 }
 
-# ── ninja build ─────────────────────────────────────────────────────
+# -- ninja build -----------------------------------------------------
 function Do-Ninja {
     param([string]$BuildDir)
 
     Write-Log "Building with Ninja (-j $Jobs) in $BuildDir ..."
     Push-Location $BuildDir
     try {
-        & ninja -j $Jobs observer 2>&1 | Out-Host
+        & ninja -j $Jobs observer | Out-Host
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Build failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
@@ -308,7 +351,7 @@ function Do-Ninja {
     }
 }
 
-# ── build seekdb Configurator (.NET WPF wizard) ─────────────────────
+# -- build seekdb Configurator (.NET WPF wizard) ---------------------
 function Do-BuildConfigurator {
     $projDir = "$TOPDIR\tools\windows\seekdbConfigurator"
     $proj    = "$projDir\seekdbConfigurator.csproj"
@@ -335,7 +378,7 @@ function Do-BuildConfigurator {
         --self-contained `
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
-        -o $pubDir 2>&1 | Out-Host
+        -o $pubDir | Out-Host
 
     if ($LASTEXITCODE -ne 0) {
         Write-Err "Configurator build failed (exit code $LASTEXITCODE)"
@@ -352,7 +395,7 @@ function Do-BuildConfigurator {
     }
 }
 
-# ── package: build release + create installer ───────────────────────
+# -- package: build release + create installer -----------------------
 function Do-Package {
     # Build the Configurator first so it is available when cpack runs
     $cfgOk = Do-BuildConfigurator
@@ -375,15 +418,15 @@ function Do-Package {
         $wixFound = Get-Command wix -ErrorAction SilentlyContinue
         if ($wixFound) {
             Write-Log "WiX v4 found, generating MSI..."
-            & cpack -G WIX -C RelWithDebInfo 2>&1 | Out-Host
+            & cpack -G WIX -C RelWithDebInfo | Out-Host
             if ($LASTEXITCODE -ne 0) {
                 Write-Log "WiX MSI generation failed, falling back to ZIP..."
-                & cpack -G ZIP -C RelWithDebInfo 2>&1 | Out-Host
+                & cpack -G ZIP -C RelWithDebInfo | Out-Host
             }
         } else {
             Write-Log "WiX not found, generating ZIP package..."
             Write-Log "  To generate MSI: dotnet tool install --global wix"
-            & cpack -G ZIP -C RelWithDebInfo 2>&1 | Out-Host
+            & cpack -G ZIP -C RelWithDebInfo | Out-Host
         }
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Package generation failed (exit code $LASTEXITCODE)"
@@ -410,7 +453,7 @@ function Do-Package {
     }
 }
 
-# ── Main ────────────────────────────────────────────────────────────
+# -- Main ------------------------------------------------------------
 if ($h) {
     Show-Usage
     exit 0
@@ -424,16 +467,19 @@ switch ($Action.ToLower()) {
         Do-Pack
     }
     "package" {
+        if ($Init) { Do-Init }
         Do-Package
     }
     "clean" {
         Do-Clean
     }
     { $_ -in "release", "relwithdebinfo" } {
+        if ($Init) { Do-Init }
         $buildDir = Do-Build -BuildType "RelWithDebInfo"
         if ($Ninja) { Do-Ninja -BuildDir $buildDir }
     }
     { $_ -in "debug", "" } {
+        if ($Init) { Do-Init }
         $buildDir = Do-Build -BuildType "Debug"
         if ($Ninja) { Do-Ninja -BuildDir $buildDir }
     }
