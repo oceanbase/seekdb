@@ -6,6 +6,7 @@ repo=https://mirrors.oceanbase.com/oceanbase/development-kit/windows/11/x86_64
 [deps]
 devdeps-vcpkg-all-20260414.tar.gz
 devdeps-openssl-20260414.tar.gz
+devdeps-vsag-20260416.tar.gz
 
 [tools]
 obdevtools-cmake-20260414.tar.gz
