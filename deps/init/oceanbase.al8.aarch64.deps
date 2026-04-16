@@ -1,7 +1,7 @@
 [target-default]
 os=8
 arch=aarch64
-repo=https://ob-yum.oceanbase-dev.com/8/aarch64/test
+repo=http://mirrors.oceanbase.com/oceanbase/community/stable
 
 [target-community]
 os=8
