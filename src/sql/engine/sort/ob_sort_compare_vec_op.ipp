@@ -24,34 +24,24 @@ bool GeneralCompare<Store_Row, has_addon>::operator()(const Store_Row *l, const 
 {
   bool less = false;
   int &ret = ret_;
-  if (OB_UNLIKELY(OB_SUCCESS != ret)) {
-    // Use pointer comparison as a consistent fallback to maintain strict weak ordering.
-    // Returning false for all pairs would cause introsort's right-scan loop
-    // (while !comp(pivot, *i)) to advance past array bounds, triggering abort().
-    less = l < r;
-  } else if (OB_FAIL(fast_check_status())) {
-    SQL_ENG_LOG(WARN, "fast check failed", K(ret));
-    less = l < r;
+  if (CompareBase::ENABLE == encode_sk_state_) {
+    ObLength l_len = 0;
+    ObLength r_len = 0;
+    const char *l_data = nullptr;
+    const char *r_data = nullptr;
+    l->get_cell_payload(*sk_row_meta_, 0, l_data, l_len);
+    r->get_cell_payload(*sk_row_meta_, 0, r_data, r_len);
+    int cmp = 0;
+    cmp = MEMCMP(l_data, r_data, min(l_len, r_len));
+    less = cmp != 0 ? (cmp < 0) : (l_len - r_len) < 0;
+  } else if (CompareBase::FALLBACK_TO_DISABLE == encode_sk_state_ && has_addon) {
+    const Store_Row *l_real_cmp_row = l->get_addon_ptr(*sk_row_meta_);
+    const Store_Row *r_real_cmp_row = r->get_addon_ptr(*sk_row_meta_);
+    less = (compare(l_real_cmp_row, r_real_cmp_row, addon_row_meta_) > 0);
   } else {
-    if (CompareBase::ENABLE == encode_sk_state_) {
-      ObLength l_len = 0;
-      ObLength r_len = 0;
-      const char *l_data = nullptr;
-      const char *r_data = nullptr;
-      l->get_cell_payload(*sk_row_meta_, 0, l_data, l_len);
-      r->get_cell_payload(*sk_row_meta_, 0, r_data, r_len);
-      int cmp = 0;
-      cmp = MEMCMP(l_data, r_data, min(l_len, r_len));
-      less = cmp != 0 ? (cmp < 0) : (l_len - r_len) < 0;
-    } else if (CompareBase::FALLBACK_TO_DISABLE == encode_sk_state_ && has_addon) {
-      const Store_Row *l_real_cmp_row = l->get_addon_ptr(*sk_row_meta_);
-      const Store_Row *r_real_cmp_row = r->get_addon_ptr(*sk_row_meta_);
-      less = (compare(l_real_cmp_row, r_real_cmp_row, addon_row_meta_) > 0);
-    } else {
-      __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
-      __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);
-      less = (compare(l, r, sk_row_meta_) > 0);
-    }
+    __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
+    __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);
+    less = (compare(l, r, sk_row_meta_) > 0);
   }
   return less;
 }
@@ -263,17 +253,9 @@ template <typename Store_Row, bool is_basic_cmp, bool is_topn_sort>
 bool SingleColCompare<Store_Row, is_basic_cmp, is_topn_sort>::operator()(const Store_Row *l, const Store_Row *r)
 {
   bool less = false;
-  int &ret = ret_;
-  if (OB_UNLIKELY(OB_SUCCESS != ret)) {
-    less = l < r;
-  } else if (OB_FAIL(fast_check_status())) {
-    SQL_ENG_LOG(WARN, "fast check failed", K(ret));
-    less = l < r;
-  } else {
-    __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
-    __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);
-    less = (compare(l, r, sk_row_meta_) > 0);
-  }
+  __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
+  __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);
+  less = (compare(l, r, sk_row_meta_) > 0);
   return less;
 }
 
@@ -497,17 +479,9 @@ template <typename Store_Row, bool has_addon>
 bool FixedCompare<Store_Row, has_addon>::operator()(const Store_Row *l, const Store_Row *r)
 {
   bool less = false;
-  int &ret = ret_;
-  if (OB_UNLIKELY(OB_SUCCESS != ret)) {
-    less = l < r;
-  } else if (OB_FAIL(fast_check_status())) {
-    SQL_ENG_LOG(WARN, "fast check failed", K(ret));
-    less = l < r;
-  } else {
-    __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
-    __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);
-    less = (compare(l, r, sk_row_meta_) > 0);
-  }
+  __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
+  __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);
+  less = (compare(l, r, sk_row_meta_) > 0);
   return less;
 }
 
