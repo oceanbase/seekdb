@@ -1371,8 +1371,10 @@ static void assign_datums(const ObDatum **datums, const uint16_t selector[], con
     ObDatum &dst = srow->cells()[col_idx];
     dst.pack_ = src.pack_;
     dst.ptr_ = reinterpret_cast<char *>(srow) + srow->row_size_;
-    if (!src.is_null()) {
+    if (!src.is_null() && OB_LIKELY(nullptr != src.ptr_)) {
       T::assign_datum_value((void *)dst.ptr_, src.ptr_, src.len_);
+    } else if (OB_UNLIKELY(!src.is_null() && nullptr == src.ptr_)) {
+      dst.set_null();
     }
     srow->row_size_ += src.len_;
   }
