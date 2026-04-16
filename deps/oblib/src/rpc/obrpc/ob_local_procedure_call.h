@@ -244,6 +244,7 @@ int post(ObRpcProxy& proxy, ObRpcPacketCode pcode, const Input& args, UCB* ucb, 
         } else {
           if (OB_NOT_NULL(new_cb)) {
             auto *newcb = reinterpret_cast<UCB*>(new_cb);
+            set_ucb_args(newcb, args);
             init_ucb(proxy, newcb, start_ts, payload_sz);
           }
           int64_t receive_ts = ObTimeUtility::current_time();
