@@ -12,6 +12,17 @@
     failed to link for some reason.
   -->
   <Fragment>
+    <!-- Read the configurator exe path persisted to the registry during
+         install.  AppSearch runs early in every session (install, uninstall,
+         repair) so the property is available when custom actions fire.
+         This is critical for uninstall: the Directory-table default for
+         INSTALL_ROOT may revert to the compile-time default, but this
+         property always reflects the ACTUAL installed location. -->
+    <Property Id="SEEKDB_CONFIGURATOR_EXE">
+      <RegistrySearch Id="FindConfiguratorExe" Root="HKLM"
+                      Key="Software\SeekDB" Name="ConfiguratorExe" Type="raw" />
+    </Property>
+
     <!-- Wire the ExitDialog's Finish button to fire LaunchApplication
          when the checkbox is checked.  WixUI shows the checkbox but
          does NOT include this Publish by default — we must add it.
@@ -22,19 +33,26 @@
                Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
     </UI>
 
-    <!-- Type 34 custom action: fire-and-forget launch of Configurator (install). -->
+    <!-- Type 34 custom action: fire-and-forget launch of Configurator (install).
+         During install [INSTALL_ROOT] is always correctly resolved by the
+         session, so Type 34 (Directory + ExeCommand) works fine here. -->
     <CustomAction Id="LaunchApplication"
                   Directory="INSTALL_ROOT"
                   ExeCommand="&quot;[INSTALL_ROOT]bin\seekdbConfigurator.exe&quot;"
                   Execute="immediate"
                   Return="asyncNoWait" />
 
-    <!-- Type 34 custom action: launch Configurator in remove mode (uninstall).
-         Runs synchronously so removal completes before MSI deletes files.
+    <!-- Type 50 custom action: launch Configurator in remove mode (uninstall).
+         Uses the SEEKDB_CONFIGURATOR_EXE property (populated from the
+         registry by AppSearch) so the correct path is resolved even when
+         the user chose a non-default install directory.  Type 34 with
+         Directory="INSTALL_ROOT" failed in that scenario because the
+         directory property could revert to its default value during
+         uninstall, pointing to a non-existent path.
          Return="ignore" ensures uninstall proceeds even if user cancels. -->
     <CustomAction Id="RunConfiguratorRemove"
-                  Directory="INSTALL_ROOT"
-                  ExeCommand="&quot;[INSTALL_ROOT]bin\seekdbConfigurator.exe&quot; --remove"
+                  Property="SEEKDB_CONFIGURATOR_EXE"
+                  ExeCommand="--remove"
                   Execute="immediate"
                   Return="ignore" />
 
@@ -42,7 +60,7 @@
          Only runs on full uninstall (not upgrades). -->
     <InstallExecuteSequence>
       <Custom Action="RunConfiguratorRemove" Before="RemoveFiles"
-              Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
+              Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE) AND SEEKDB_CONFIGURATOR_EXE" />
     </InstallExecuteSequence>
 
     <!-- Add bin/ to system PATH (cleanly removed on uninstall). -->
@@ -52,6 +70,10 @@
                      Permanent="no" Part="last" Action="set" System="yes" />
         <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="PathConfigured"
                        Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="InstallRoot"
+                       Type="string" Value="[INSTALL_ROOT]" />
+        <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="ConfiguratorExe"
+                       Type="string" Value="[INSTALL_ROOT]bin\seekdbConfigurator.exe" />
       </Component>
     </DirectoryRef>
   </Fragment>
