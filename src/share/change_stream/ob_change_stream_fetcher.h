@@ -40,7 +40,7 @@ namespace share
 {
 
 /// Interval for advancing min_dep_lsn to global_stat (us).
-static constexpr int64_t CS_FETCHER_MIN_DEP_LSN_ADVANCE_INTERVAL_US = 10 * 1000 * 1000;
+static constexpr int64_t CS_FETCHER_MIN_DEP_LSN_ADVANCE_INTERVAL_US = 5 * 1000 * 1000;
 /// Interval for advancing refresh_scn to global_stat (us).
 static constexpr int64_t CS_FETCHER_REFRESH_SCN_ADVANCE_INTERVAL_US =  200 * 1000;
 /// Interval for schema version check and mode switching (us).
