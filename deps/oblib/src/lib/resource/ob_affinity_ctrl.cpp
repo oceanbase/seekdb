@@ -132,6 +132,8 @@ int ObAffinityCtrl::run_on_node(const int node) {
     // Just set the TLS node value
     get_tls_node() = node;
   }
+#else
+  }
 #endif
 
   return ret;

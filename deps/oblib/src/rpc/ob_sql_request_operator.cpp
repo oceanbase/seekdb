@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2025 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX RPC
+#endif
 #include "ob_sql_request_operator.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "rpc/obmysql/ob_easy_sql_request_operator.h"

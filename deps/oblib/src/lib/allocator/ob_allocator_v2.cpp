@@ -17,6 +17,9 @@
 #include "lib/allocator/ob_allocator_v2.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+#ifdef _WIN32
+#include "lib/alloc/alloc_failed_reason.h"
+#endif
 
 using namespace oceanbase::lib;
 namespace oceanbase

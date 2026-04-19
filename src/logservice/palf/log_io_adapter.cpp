@@ -16,6 +16,12 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_io_adapter.h"
+#ifdef _WIN32
+#include <io.h>
+static int ob_ftruncate(int fd, long long len) {
+  return _chsize_s(fd, len) == 0 ? 0 : -1;
+}
+#endif
 #include "share/ob_local_device.h"                            // ObLocalDevice
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/io/ob_io_manager.h"                           // ObIOManager
@@ -281,7 +287,11 @@ int LogIOAdapter::truncate(const ObIOFd &io_fd, const int64_t offset)
   if (!io_fd.is_valid() || 0 > offset) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(io_fd), K(offset));
+#ifdef _WIN32
+  } else if (0 != ob_ftruncate(io_fd.second_id_, offset)) {
+#else
   } else if (0 != ftruncate(io_fd.second_id_, offset)) {
+#endif
     ret = convert_sys_errno();
     PALF_LOG(WARN, "ftruncate failed", K(ret), K(errno), K(io_fd), K(offset));
   }

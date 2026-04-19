@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX RPC
+#endif
 #include "rpc/ob_request.h"
 using namespace oceanbase::common;
 
@@ -21,7 +24,7 @@ namespace oceanbase
 {
 namespace rpc
 {
-void __attribute__((weak)) response_rpc_error_packet(ObRequest* req, int ret)
+void OB_WEAK_SYMBOL response_rpc_error_packet(ObRequest* req, int ret)
 {
   UNUSED(ret);
   RPC_REQ_OP.response_result(req, NULL);

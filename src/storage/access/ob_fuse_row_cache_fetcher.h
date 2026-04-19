@@ -26,7 +26,7 @@ namespace oceanbase
 namespace storage
 {
 
-class ObTableAccessContext;
+struct ObTableAccessContext;
 
 class ObFuseRowCacheFetcher final
 {

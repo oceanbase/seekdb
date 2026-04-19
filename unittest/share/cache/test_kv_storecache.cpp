@@ -92,7 +92,7 @@ void TestKVCache::SetUp()
   }
 
   // set observer memory limit
-  CHUNK_MGR.set_limit(5L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(5LL * 1024 * 1024 * 1024);
 }
 
 void TestKVCache::TearDown()
@@ -192,12 +192,12 @@ TEST(ObKVGlobalCache, normal)
 TEST(TestKVCacheValue, wash_stress)
 {
   int ret = OB_SUCCESS;
-  const int64_t bucket_num = 1024L * 1024L;
-  const int64_t max_cache_size = 100L * 1024L * 1024L * 1024L;
+  const int64_t bucket_num = 1024LL * 1024;
+  const int64_t max_cache_size = 100LL * 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
   const uint64_t tenant_id = 900;
-  const int64_t lower_mem_limit = 40L * 1024L * 1024L * 1024L;
-  const int64_t upper_mem_limit = 60L * 1024L * 1024L * 1024L;
+  const int64_t lower_mem_limit = 40LL * 1024 * 1024 * 1024;
+  const int64_t upper_mem_limit = 60LL * 1024 * 1024 * 1024;
   CHUNK_MGR.set_limit(upper_mem_limit * 3 / 2);
   ret = ObTenantManager::get_instance().init(100000);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1069,9 +1069,9 @@ TEST_F(TestKVCache, compute_wash_size_when_min_wash_negative)
   TG_WAIT(lib::TGDefIDs::KVCacheRep);
 
 
-  const uint64_t min_memory = 6L * 1024L * 1024L * 1024L;
-  const uint64_t max_memory = 12L * 1024L * 1024L * 1024L;
-  const uint64_t memory_usage = 6L * 1024L * 1024L * 1024L + 100L + 1024L + 1024L;
+  const uint64_t min_memory = 6LL * 1024 * 1024 * 1024;
+  const uint64_t max_memory = 12LL * 1024 * 1024 * 1024;
+  const uint64_t memory_usage = 6LL * 1024 * 1024 * 1024 + 100LL + 1024 + 1024;
   ObTenantResourceMgrHandle resource_handle;
   ASSERT_EQ(OB_SUCCESS, ObResourceMgr::get_instance().get_tenant_resource_mgr(tenant_id_, resource_handle));
   resource_handle.get_memory_mgr()->set_limit(max_memory);
@@ -1090,9 +1090,9 @@ TEST_F(TestKVCache, compute_wash_size_when_min_wash_negative)
   inst_handle.inst_->status_.store_size_ = memory_usage;
   inst_handle.inst_->status_.map_size_ = 0;
 
-  CHUNK_MGR.set_limit(10L * 1024L * 1024L * 1024L);
-  // CHUNK_MGR.hold_bytes_ = 10L * 1024L * 1024L * 1024L;
-  CHUNK_MGR.total_hold_ = 10L * 1024L * 1024L * 1024L;
+  CHUNK_MGR.set_limit(10LL * 1024 * 1024 * 1024);
+  // CHUNK_MGR.hold_bytes_ = 10LL * 1024 * 1024 * 1024;
+  CHUNK_MGR.total_hold_ = 10LL * 1024 * 1024 * 1024;
 
   // compute
   ObKVGlobalCache::get_instance().store_.compute_tenant_wash_size();
@@ -1145,7 +1145,7 @@ TEST_F(TestKVCache, get_mb_list)
 /*
 TEST(ObSyncWashRt, sync_wash_mb_rt)
 {
-  const int64_t max_cache_size = 512L * 1024L * 1024L * 1024L;
+  const int64_t max_cache_size = 512LL * 1024 * 1024 * 1024;
   ASSERT_EQ(OB_SUCCESS, ObKVGlobalCache::get_instance().init(ObKVGlobalCache::DEFAULT_BUCKET_NUM, max_cache_size));
   ObKVGlobalCache::get_instance().wash_timer_.stop();
   ObKVGlobalCache::get_instance().wash_timer_.wait();

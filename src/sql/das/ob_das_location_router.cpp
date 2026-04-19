@@ -1053,51 +1053,12 @@ int ObDASLocationRouter::nonblock_get_leader(const uint64_t tenant_id,
                                              ObDASTabletLoc &tablet_loc)
 {
   int ret = OB_SUCCESS;
-  bool is_cache_hit = false;
   tablet_loc.tablet_id_ = tablet_id;
-  ObTransService *trans_service = MTL(ObTransService *);
-  bool is_local_leader = false;
   if (OB_FAIL(all_tablet_list_.push_back(tablet_id))) {
     LOG_WARN("store access tablet id failed", K(ret), K(tablet_id));
-  } else if (get_total_retry_cnt() == 0
-             && OB_SUCC(trans_service->check_and_get_ls_info(tablet_id, tablet_loc.ls_id_, is_local_leader))
-             && is_local_leader) {
-    // when not in retry, try local leader optimization
+  } else {
+    tablet_loc.ls_id_ = share::ObLSID::SYS_LS_ID;
     tablet_loc.server_ = GCTX.self_addr();
-  } else if (OB_FAIL(GCTX.location_service_->nonblock_get(tenant_id,
-                                                          tablet_id,
-                                                          tablet_loc.ls_id_))) {
-    LOG_WARN("nonblock get ls id failed", K(ret), K(tablet_id));
-  } else if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(GCONF.cluster_id,
-                                                                 tenant_id,
-                                                                 tablet_loc.ls_id_,
-                                                                 tablet_loc.server_))) {
-    LOG_WARN("nonblock get ls location failed", K(ret), K(tablet_loc));
-  }
-  if (OB_SUCC(ret) && get_total_retry_cnt() > 0 && last_errno_ == OB_NOT_MASTER) {
-    // flush ls cache when OB_NOT_MASTER
-    if (OB_FAIL(trans_service->remove_tablet(tablet_id, tablet_loc.ls_id_))) {
-      LOG_WARN("failed to remove tablet cache", K(ret), K(tablet_id));
-    }
-  }
-  if (is_partition_change_error(ret)) {
-    /*During the execution phase, if nonblock location interface is used to obtain the location
-     * and an exception occurs, retries are necessary.
-     * However, statement-level retries cannot rollback many execution states,
-     * so it is necessary to avoid retries in this scenario as much as possible.
-     * During the execution phase, when encountering a location exception for the first time,
-     * try to refresh the location once synchronously.
-     * If it fails, then proceed with statement-level retries.*/
-    ObLSLocation ls_loc;
-    int tmp_ret = OB_SUCCESS;
-    if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = block_renew_tablet_location(tablet_id, ls_loc)))) {
-      LOG_WARN("block renew tablet location failed", KR(tmp_ret), K(tablet_id));
-    } else if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = ls_loc.get_leader(tablet_loc.server_)))) {
-      LOG_WARN("get leader of ls location failed", KR(tmp_ret), K(tablet_id), K(ls_loc));
-    } else {
-      tablet_loc.ls_id_ = ls_loc.get_ls_id();
-      ret = OB_SUCCESS;
-    }
   }
   save_cur_exec_status(ret);
   return ret;

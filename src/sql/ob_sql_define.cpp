@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SQL
 #include "ob_sql_define.h"
 
 namespace oceanbase

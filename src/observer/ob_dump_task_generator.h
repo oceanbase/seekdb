@@ -38,6 +38,10 @@ class ObDumpTaskGenerator
     2. kill -62 pid
     3. See the results in log/memory_meta file
   */
+#ifdef _WIN32
+#pragma push_macro("CONTEXT_ALL")
+#undef CONTEXT_ALL
+#endif
   enum TaskType
   {
     CONTEXT_ALL          = 0,
@@ -49,6 +53,9 @@ class ObDumpTaskGenerator
     SET_LEAK_RATE       = 6,
     MEMORY_LEAK         = 7,
   };
+#ifdef _WIN32
+#pragma pop_macro("CONTEXT_ALL")
+#endif
 public:
   static int generate_task_from_file();
 private:

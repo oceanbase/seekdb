@@ -426,7 +426,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
           for (int64_t j = 0; OB_SUCC(ret) && !find && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
             if (sqc.get_exec_addr() == temp_table_ctx.interm_result_infos_.at(j).addr_) {
               ObTempTableResultInfo &info = temp_table_ctx.interm_result_infos_.at(j);
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
                 std::random_device rd;
                 std::mt19937 g(rd());
                 std::shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end(), g);
@@ -473,7 +473,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
           for (int64_t j = 0; OB_SUCC(ret) && !find && j < temp_table_ctx.interm_result_infos_.count(); ++j) {
             if (sqc.get_exec_addr() == temp_table_ctx.interm_result_infos_.at(j).addr_) {
               ObTempTableResultInfo &info = temp_table_ctx.interm_result_infos_.at(j);
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
                 std::random_device rd;
                 std::mt19937 g(rd());
                 std::shuffle(info.interm_result_ids_.begin(), info.interm_result_ids_.end(), g);

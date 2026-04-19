@@ -1,9 +1,19 @@
-execute_process(
-  COMMAND env NEED_PARSER_CACHE=${NEED_PARSER_CACHE} bash gen_parser.sh
-  RESULT_VARIABLE RET
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/pl/parser
-  OUTPUT_FILE _gen_pl_parser.output
-  ERROR_FILE _gen_parser.error)
+if(WIN32)
+  find_program(PWSH_EXE NAMES pwsh pwsh.exe powershell powershell.exe REQUIRED)
+  execute_process(
+    COMMAND ${PWSH_EXE} -NoProfile -ExecutionPolicy Bypass -File gen_parser_win.ps1
+    RESULT_VARIABLE RET
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/pl/parser
+    OUTPUT_FILE _gen_pl_parser.output
+    ERROR_FILE _gen_parser.error)
+else()
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -E env NEED_PARSER_CACHE=${NEED_PARSER_CACHE} bash gen_parser.sh
+    RESULT_VARIABLE RET
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/src/pl/parser
+    OUTPUT_FILE _gen_pl_parser.output
+    ERROR_FILE _gen_parser.error)
+endif()
 if(RET AND NOT RET EQUAL 0)
   message(FATAL_ERROR "Generate pl parser failed and check error in ${PROJECT_SOURCE_DIR}/src/pl/parser/_gen_parser.error")
 endif()
@@ -85,10 +95,12 @@ set(SYS_PACK_RELEASE_DIR ${CMAKE_BINARY_DIR}/syspack_release CACHE PATH "The pat
 set(SYS_PACK_RELEASE_STAMP ${SYS_PACK_RELEASE_DIR}/.stamp)
 file(GLOB SQL_FILES "${SYS_PACK_SQL_SOURCE_DIR}/*.sql")
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
 add_custom_command(
   OUTPUT ${gen_syspack_src} ${SYS_PACK_RELEASE_STAMP}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${SYS_PACK_RELEASE_DIR}
-  COMMAND python3 ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py -rd ${SYS_PACK_RELEASE_DIR}
+  COMMAND ${Python3_EXECUTABLE} ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py -rd ${SYS_PACK_RELEASE_DIR}
   COMMAND ${CMAKE_COMMAND} -E touch ${SYS_PACK_RELEASE_STAMP}
   DEPENDS ${SQL_FILES} ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

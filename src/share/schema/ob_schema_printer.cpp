@@ -4055,7 +4055,11 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
       int64_t type_pos = 0;
       uint64_t sub_type = static_cast<uint64_t>(common::ObGeoType::GEOTYPEMAX);
       char type_str[OB_MAX_SYS_PARAM_NAME_LENGTH];
+#ifdef _WIN32
+      memset(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
+#else
       bzero(type_str, OB_MAX_SYS_PARAM_NAME_LENGTH);
+#endif
       if (ObGeometryTC == param->get_param_type().get_type_class()) {
         CK (OB_NOT_NULL(param_type));
         OX (sub_type = param_type->int32_values_[1]);

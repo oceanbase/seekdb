@@ -23,8 +23,15 @@
 #include <exception>
 #pragma push_macro("E")
 #undef E
+#ifdef _WIN32
+#pragma push_macro("S")
+#undef S
+#endif
 #include <boost/geometry.hpp>
 #include <boost/geometry/core/exception.hpp>
+#ifdef _WIN32
+#pragma pop_macro("S")
+#endif
 #pragma pop_macro("E")
 #include "lib/ob_errno.h"
 #include "lib/geo/ob_geo_bin.h"

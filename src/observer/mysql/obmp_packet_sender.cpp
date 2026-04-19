@@ -22,6 +22,10 @@
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "sql/session/ob_sess_info_verify.h"
 #include "observer/mysql/ob_feedback_proxy_utils.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
+#include <ctime>
 
 namespace oceanbase
 {
@@ -449,8 +453,25 @@ int ObMPPacketSender::send_error_packet(int err,
 
       struct timeval tv;
       struct tm tm;
+#ifdef _WIN32
+      {
+        FILETIME ft;
+        GetSystemTimePreciseAsFileTime(&ft);
+        ULARGE_INTEGER uli;
+        uli.LowPart = ft.dwLowDateTime;
+        uli.HighPart = ft.dwHighDateTime;
+        uint64_t us = (uli.QuadPart - 116444736000000000ULL) / 10;
+        tv.tv_sec = static_cast<long>(us / 1000000);
+        tv.tv_usec = static_cast<long>(us % 1000000);
+      }
+      {
+        time_t sec = tv.tv_sec;
+        localtime_s(&tm, &sec);
+      }
+#else
       (void)gettimeofday(&tv, NULL);
       ::localtime_r((const time_t *)&tv.tv_sec, &tm);
+#endif
 
       char tmp_msg_buf[MAX_MSG_BUF_SIZE];
       strncpy(tmp_msg_buf, message.ptr(), message.length()); // msg_buf is overwriten

@@ -26,6 +26,10 @@
 #ifdef __APPLE__
 #include <pthread.h>
 #endif
+#ifdef _WIN32
+#include <windows.h>
+#include <errno.h>
+#endif
 #include "lib/ob_abort.h"
 
 extern "C" {
@@ -52,6 +56,41 @@ inline int futex_wait(volatile int *p, int val, const timespec *timeout)
 // macOS implementation using ulock (Darwin's native futex-like mechanism)
 extern int futex_wake(volatile int *p, int val);
 extern int futex_wait(volatile int *p, int val, const timespec *timeout);
+#elif defined(_WIN32)
+// Windows implementation using WaitOnAddress/WakeByAddressSingle (Windows 8+)
+inline int futex_wake(volatile int *p, int val)
+{
+  if (val == 1) {
+    WakeByAddressSingle((PVOID)p);
+    // WakeByAddressSingle doesn't report whether anyone was actually woken.
+    // Return 1 (optimistic) to match Linux futex(FUTEX_WAKE) semantics where
+    // the return value is the number of waiters woken. ObLatchWaitQueue::wake_up
+    // relies on this to stop its retry loop after successfully signaling a waiter.
+    // Returning 0 causes the loop to wake ALL waiters (thundering herd).
+    return 1;
+  } else {
+    WakeByAddressAll((PVOID)p);
+    return val;
+  }
+}
+
+inline int futex_wait(volatile int *p, int val, const timespec *timeout)
+{
+  DWORD milliseconds = INFINITE;
+  if (timeout) {
+    milliseconds = static_cast<DWORD>(timeout->tv_sec * 1000 + timeout->tv_nsec / 1000000);
+  }
+
+  int compare_value = val;
+  if (!WaitOnAddress((volatile VOID*)p, &compare_value, sizeof(int), milliseconds)) {
+    DWORD error = GetLastError();
+    if (error == ERROR_TIMEOUT) {
+      return ETIMEDOUT;
+    }
+    return error;
+  }
+  return 0;
+}
 #endif
 
 namespace oceanbase {

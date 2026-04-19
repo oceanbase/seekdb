@@ -213,8 +213,193 @@ static inline int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen,
   return fd;
 }
 #endif
+#elif defined(_WIN32)
+// ============================================================
+// Windows I/O event emulation (epoll + eventfd + misc POSIX)
+// ============================================================
+#include <synchapi.h>   // WaitOnAddress / WakeByAddressSingle
+#include <afunix.h>     // AF_UNIX / sockaddr_un (Windows 10+)
+#include <vector>
+#include <map>
+
+// ---- epoll flags ----
+#define EPOLLIN    0x001
+#define EPOLLOUT   0x004
+#define EPOLLERR   0x008
+#define EPOLLHUP   0x010
+#define EPOLLRDHUP 0x2000
+#define EPOLLET    (1U << 31)
+#define EPOLL_CLOEXEC  0
+#define EPOLL_CTL_ADD  1
+#define EPOLL_CTL_DEL  2
+#define EPOLL_CTL_MOD  3
+
+struct epoll_event {
+  uint32_t events;
+  union {
+    void    *ptr;
+    int      fd;
+    uint32_t u32;
+    uint64_t u64;
+  } data;
+};
+
+struct WinEpollEntry { SOCKET sock; epoll_event ev; };
+struct WinEpollState { std::vector<WinEpollEntry> entries; };
+static std::map<int, WinEpollState*> g_win_epoll_map;
+static int g_win_epoll_id = 0x70000000;
+
+static inline int epoll_create1(int /*flags*/) {
+  int id = ++g_win_epoll_id;
+  g_win_epoll_map[id] = new WinEpollState();
+  return id;
+}
+static inline int epoll_ctl(int epfd, int op, int fd, struct epoll_event *ev) {
+  auto it = g_win_epoll_map.find(epfd);
+  if (it == g_win_epoll_map.end()) return -1;
+  WinEpollState *st = it->second;
+  SOCKET s = (SOCKET)fd;
+  if (op == EPOLL_CTL_ADD) {
+    WinEpollEntry e; e.sock = s; e.ev = *ev;
+    st->entries.push_back(e);
+  } else if (op == EPOLL_CTL_DEL) {
+    for (auto eit = st->entries.begin(); eit != st->entries.end(); ++eit)
+      if (eit->sock == s) { st->entries.erase(eit); break; }
+  } else if (op == EPOLL_CTL_MOD) {
+    for (auto &e : st->entries)
+      if (e.sock == s) { e.ev = *ev; break; }
+  }
+  return 0;
+}
+extern "C" int ob_win32_epoll_wait_impl(int epfd, struct epoll_event *events, int maxevents, int timeout) {
+  auto it = g_win_epoll_map.find(epfd);
+  if (it == g_win_epoll_map.end()) return -1;
+  WinEpollState *st = it->second;
+  int n = (int)st->entries.size();
+  if (n == 0) { Sleep(timeout < 0 ? INFINITE : (DWORD)timeout); return 0; }
+  std::vector<WSAPOLLFD> pfds(n);
+  for (int i = 0; i < n; i++) {
+    pfds[i].fd = st->entries[i].sock;
+    pfds[i].events = 0;
+    if (st->entries[i].ev.events & EPOLLIN)  pfds[i].events |= POLLRDNORM;
+    if (st->entries[i].ev.events & EPOLLOUT) pfds[i].events |= POLLWRNORM;
+    pfds[i].revents = 0;
+  }
+  int ret = WSAPoll(pfds.data(), (ULONG)n, timeout < 0 ? -1 : timeout);
+  if (ret <= 0) return ret;
+  int cnt = 0;
+  for (int i = 0; i < n && cnt < maxevents; i++) {
+    if (!pfds[i].revents) continue;
+    events[cnt] = st->entries[i].ev;
+    events[cnt].events = 0;
+    if (pfds[i].revents & POLLRDNORM) events[cnt].events |= EPOLLIN;
+    if (pfds[i].revents & POLLWRNORM) events[cnt].events |= EPOLLOUT;
+    if (pfds[i].revents & POLLERR)    events[cnt].events |= EPOLLERR;
+    if (pfds[i].revents & POLLHUP)    events[cnt].events |= EPOLLHUP;
+    cnt++;
+  }
+  return cnt;
+}
+static inline int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout) {
+  return ob_win32_epoll_wait_impl(epfd, events, maxevents, timeout);
+}
+
+// ---- eventfd emulation via loopback socket pair ----
+#define EFD_NONBLOCK 1
+static std::map<int, SOCKET> g_win_evfd_write_map;
+static inline int eventfd(unsigned int /*initval*/, int flags) {
+  SOCKET lstn = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (lstn == INVALID_SOCKET) return -1;
+  struct sockaddr_in addr = {};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = 0;
+  if (bind(lstn, (sockaddr*)&addr, sizeof(addr)) != 0 ||
+      listen(lstn, 1) != 0) { closesocket(lstn); return -1; }
+  int alen = sizeof(addr);
+  getsockname(lstn, (sockaddr*)&addr, &alen);
+  SOCKET wfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  if (connect(wfd, (sockaddr*)&addr, sizeof(addr)) != 0) {
+    closesocket(lstn); closesocket(wfd); return -1;
+  }
+  SOCKET rfd = accept(lstn, NULL, NULL);
+  closesocket(lstn);
+  if (rfd == INVALID_SOCKET) { closesocket(wfd); return -1; }
+  if (flags & EFD_NONBLOCK) {
+    u_long mode = 1;
+    ioctlsocket(rfd, FIONBIO, &mode);
+    ioctlsocket(wfd, FIONBIO, &mode);
+  }
+  g_win_evfd_write_map[(int)rfd] = wfd;
+  return (int)rfd;
+}
+
+// ---- futex constants (implementation already in ob_futex.h) ----
+#ifndef FUTEX_WAKE_PRIVATE
+#define FUTEX_WAKE_PRIVATE 1
 #endif
-#include <sys/un.h>
+#ifndef FUTEX_WAIT_PRIVATE
+#define FUTEX_WAIT_PRIVATE 128
+#endif
+
+// ---- socket/shutdown compat ----
+#ifndef SHUT_RD
+#define SHUT_RD   SD_RECEIVE
+#define SHUT_WR   SD_SEND
+#define SHUT_RDWR SD_BOTH
+#endif
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 0
+#endif
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 0
+#endif
+#ifndef TCP_KEEPIDLE
+#define TCP_KEEPIDLE 3
+#endif
+#ifndef SO_REUSEPORT
+#define SO_REUSEPORT SO_REUSEADDR
+#endif
+
+// ---- accept4 ----
+static inline int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int /*flags*/) {
+  SOCKET fd = accept((SOCKET)sockfd, addr, addrlen);
+  if (fd == INVALID_SOCKET) return -1;
+  u_long m = 1; ioctlsocket(fd, FIONBIO, &m);
+  return (int)fd;
+}
+
+// All fds in this file (sockets, eventfds) are Winsock handles on Windows.
+// CRT _close/_read/_write crash on Winsock handles; use Winsock API instead.
+static inline int win32_close_sock(int fd) {
+  auto it = g_win_evfd_write_map.find(fd);
+  if (it != g_win_evfd_write_map.end()) {
+    closesocket(it->second);
+    g_win_evfd_write_map.erase(it);
+  }
+  return closesocket((SOCKET)fd);
+}
+static inline ssize_t win32_sock_read(int fd, void *buf, size_t count) {
+  int r = recv((SOCKET)fd, (char*)buf, (int)count, 0);
+  if (r == SOCKET_ERROR) { errno = EAGAIN; return -1; }
+  return r;
+}
+static inline ssize_t win32_sock_write(int fd, const void *buf, size_t count) {
+  SOCKET target = (SOCKET)fd;
+  auto it = g_win_evfd_write_map.find(fd);
+  if (it != g_win_evfd_write_map.end()) {
+    target = it->second;
+  }
+  int r = send(target, (const char*)buf, (int)count, 0);
+  if (r == SOCKET_ERROR) { errno = EAGAIN; return -1; }
+  return r;
+}
+#define close(fd) win32_close_sock(fd)
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#endif
 #include "lib/ash/ob_active_session_guard.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
@@ -343,7 +528,25 @@ public:
   int read(char* buf, int64_t buf_size, int64_t& read_size, ssl_state_st &ssl_st)
   {
     int ret = OB_SUCCESS;
+#ifdef _WIN32
+    int64_t read_ret;
+    if (OB_LIKELY(NULL == ssl_st.ssl)) {
+      int r = recv((SOCKET)fd_, buf, (int)buf_size, 0);
+      if (r == SOCKET_ERROR) {
+        int wsa_err = WSAGetLastError();
+        if (wsa_err == WSAEWOULDBLOCK) { errno = EAGAIN; }
+        else if (wsa_err == WSAEINTR) { errno = EINTR; }
+        else { errno = EIO; }
+        read_ret = -1;
+      } else {
+        read_ret = r;
+      }
+    } else {
+      read_ret = ob_read_regard_ssl(fd_, buf, buf_size, ssl_st);
+    }
+#else
     int64_t read_ret = ob_read_regard_ssl(fd_, buf, buf_size, ssl_st);
+#endif
     if (read_ret > 0) {
       read_size = read_ret;
     } else if (0 == read_ret) {
@@ -538,7 +741,23 @@ private:
     int64_t pos = 0;
     while(pos < sz && OB_SUCCESS == ret) {
       int64_t wbytes = 0;
-      if ((wbytes = ob_write_regard_ssl(fd, buf + pos, sz - pos, ssl_st_)) >= 0) {
+#ifdef _WIN32
+      if (OB_LIKELY(NULL == ssl_st_.ssl)) {
+        int w = send((SOCKET)fd, buf + pos, (int)(sz - pos), 0);
+        if (w == SOCKET_ERROR) {
+          int wsa_err = WSAGetLastError();
+          if (wsa_err == WSAEWOULDBLOCK) { errno = EAGAIN; }
+          else if (wsa_err == WSAEINTR) { errno = EINTR; }
+          else { errno = EIO; }
+          wbytes = -1;
+        } else { wbytes = w; }
+      } else {
+        wbytes = ob_write_regard_ssl(fd, buf + pos, sz - pos, ssl_st_);
+      }
+#else
+      wbytes = ob_write_regard_ssl(fd, buf + pos, sz - pos, ssl_st_);
+#endif
+      if (wbytes >= 0) {
         pos += wbytes;
       } else if (EAGAIN == errno || EWOULDBLOCK == errno) {
         LOG_INFO("write return EAGAIN", K(fd));
@@ -654,7 +873,23 @@ public:
     int64_t pos = 0;
     while(pos < sz && OB_SUCCESS == ret) {
       int64_t wbytes = 0;
-      if ((wbytes = ob_write_regard_ssl(fd_, buf + pos, sz - pos, ssl_st_)) >= 0) {
+#ifdef _WIN32
+      if (OB_LIKELY(NULL == ssl_st_.ssl)) {
+        int w = send((SOCKET)fd_, buf + pos, (int)(sz - pos), 0);
+        if (w == SOCKET_ERROR) {
+          int wsa_err = WSAGetLastError();
+          if (wsa_err == WSAEWOULDBLOCK) { errno = EAGAIN; }
+          else if (wsa_err == WSAEINTR) { errno = EINTR; }
+          else { errno = EIO; }
+          wbytes = -1;
+        } else { wbytes = w; }
+      } else {
+        wbytes = ob_write_regard_ssl(fd_, buf + pos, sz - pos, ssl_st_);
+      }
+#else
+      wbytes = ob_write_regard_ssl(fd_, buf + pos, sz - pos, ssl_st_);
+#endif
+      if (wbytes >= 0) {
         pos += wbytes;
         LOG_DEBUG("write fd", K(wbytes));
       } else if (EAGAIN == errno || EWOULDBLOCK == errno) {
@@ -776,7 +1011,11 @@ int ObSqlSock::write_handshake_packet(const char* buf, int64_t sz) {
   int64_t pos = 0;
   while(pos < sz && OB_SUCCESS == ret) {
     int64_t wbytes = 0;
+#ifdef _WIN32
+    if ((wbytes = send((SOCKET)fd_, buf + pos, (int)(sz - pos), 0)) >= 0) {
+#else
     if ((wbytes = write(fd_, buf + pos, sz - pos)) >= 0) {
+#endif
       pos += wbytes;
     } else if (EINTR == errno) {
       //continue
@@ -930,7 +1169,11 @@ static int listen_create_unix(const char* unix_path, bool need_monopolize)
 static void evfd_read(int fd)
 {
   uint64_t v = 0;
+#ifdef _WIN32
+  while(win32_sock_read(fd, &v, sizeof(v)) < 0 && errno == EINTR)
+#else
   while(read(fd, &v, sizeof(v)) < 0 && errno == EINTR)
+#endif
     ;
 }
 
@@ -938,7 +1181,11 @@ static int evfd_write(int fd)
 {
   uint64_t v = 1;
   int64_t bytes = 0;
+#ifdef _WIN32
+  while((bytes = win32_sock_write(fd, &v, sizeof(v))) < 0 && errno == EINTR)
+#else
   while((bytes = write(fd, &v, sizeof(v))) < 0 && errno == EINTR)
+#endif
     ;
   return bytes == sizeof(v)? OB_SUCCESS: OB_IO_ERROR;
 }
@@ -1162,7 +1409,11 @@ private:
     ObDIActionGuard ag("HandleEpollEvent");
     const int maxevents = 512;
     struct epoll_event events[maxevents];
+#ifdef _WIN32
+    int cnt = ob_win32_epoll_wait_impl(epfd_, events, maxevents, 1000);
+#else
     int cnt = ob_epoll_wait(epfd_, events, maxevents, 1000);
+#endif
 
     for(int i = 0; i < cnt; i++) {
       uint64_t num64 = events[i].data.u64;
@@ -1292,7 +1543,12 @@ private:
     while(1){
       int fd = -1;
       if ((fd = accept4(lfd, NULL, NULL, SOCK_NONBLOCK|SOCK_CLOEXEC)) < 0) {
+#ifdef _WIN32
+        int wsa_err = WSAGetLastError();
+        if (WSAEWOULDBLOCK == wsa_err || EAGAIN == errno || EWOULDBLOCK == errno) {
+#else
         if (EAGAIN == errno || EWOULDBLOCK == errno) {
+#endif
           break;
         } else {
           LOG_ERROR_RET(OB_ERR_SYS, "accept4 fail", K(lfd), K(errno));

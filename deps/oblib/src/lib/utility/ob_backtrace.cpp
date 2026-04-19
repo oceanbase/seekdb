@@ -16,6 +16,17 @@
 
 #define USING_LOG_PREFIX LIB
 
+#ifdef _WIN32
+// Include Windows headers first, before any headers that might undefine OPTIONAL
+#include <windows.h>
+// Clang may not define OPTIONAL from specstrings.h; dbghelp.h requires it
+#ifndef OPTIONAL
+#define OPTIONAL
+#endif
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+#endif
+
 #include "ob_backtrace.h"
 #include "lib/utility/utility.h"
 
@@ -114,6 +125,19 @@ bool read_min_max_addr(int64_t &min_addr, int64_t &max_addr)
 }
 
 bool g_enable_backtrace = true;
+
+#ifdef _WIN32
+// Windows implementation of ob_backtrace using CaptureStackBackTrace
+int _ob_backtrace(void** buffer, int size)
+{
+  if (!g_enable_backtrace) {
+    return 0;
+  }
+  USHORT frames = CaptureStackBackTrace(0, size, buffer, NULL);
+  return (int)frames;
+}
+#endif
+
 struct ProcMapInfo
 {
   int64_t code_start_addr_;

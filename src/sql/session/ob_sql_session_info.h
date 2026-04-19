@@ -1772,6 +1772,9 @@ private:
   uint64_t unit_gc_min_sup_proxy_version_;
   bool has_ccl_rule_;
   int64_t last_update_ccl_cnt_time_;
+#ifdef __ANDROID__
+  int64_t last_ccl_check_schema_version_;
+#endif
 };
 
 

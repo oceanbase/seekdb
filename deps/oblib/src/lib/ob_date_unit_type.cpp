@@ -17,6 +17,9 @@
 #include <sys/types.h>
 #include "lib/ob_date_unit_type.h"
 #include "lib/utility/ob_macro_utils.h"
+#ifdef _WIN32
+#include <stdint.h>
+#endif
 
 const char *ob_date_unit_type_str(enum ObDateUnitType type)
 {

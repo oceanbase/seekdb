@@ -410,7 +410,7 @@ int ObEventHistoryTableOperator::add_event_to_timer_(const common::ObSqlString &
   } else if (OB_FAIL(timer_.schedule_task_ignore_handle_repeat_and_immediately(15_s, [retry_times, self_addr, uniq_holder, proxy]() mutable -> bool {
     int ret = OB_SUCCESS;
     bool stop_flag = false;
-    char ip[64] = {0};
+    char ip[MAX_IP_ADDR_LENGTH] = {0};
     int64_t affected_rows = 0;
     ObCStringHelper helper;
     const char *sql = helper.convert(uniq_holder->get_ob_string());

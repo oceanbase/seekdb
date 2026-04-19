@@ -24,6 +24,11 @@
 #define bswap_16 OSSwapInt16
 #define bswap_32 OSSwapInt32
 #define bswap_64 OSSwapInt64
+#elif defined(_WIN32)
+#include <stdlib.h>
+#define bswap_16 _byteswap_ushort
+#define bswap_32 _byteswap_ulong
+#define bswap_64 _byteswap_uint64
 #endif
 #include "common/ob_target_specific.h"
 #include "storage/blocksstable/encoding/ob_encoding_query_util.h"

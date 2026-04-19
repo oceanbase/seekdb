@@ -356,6 +356,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         LOG_WARN("failed to write string to session", K(ret));
       }
     }
+    uint64_t tenant_id = create_table_arg.schema_.get_tenant_id();
     if (OB_SUCC(ret)) {
       ObInnerSQLConnectionPool *pool = static_cast<observer::ObInnerSQLConnectionPool*>(sql_proxy->get_pool());
       if (OB_ISNULL(pool)) {
@@ -373,8 +374,21 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         LOG_WARN("failed to prepare drop table arg", K(ret));
       } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
         LOG_WARN("schema_guard reset failed", K(ret));
-      } else if (OB_FAIL(common_rpc_proxy->create_table(create_table_arg, create_table_res))) { //2, create table;
-        LOG_WARN("rpc proxy create table failed", K(ret), "dst", common_rpc_proxy->get_server());
+      } else if (create_table_arg.schema_.is_interval_part()) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("create ctas for interval part table is not supported", KR(ret));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "create ctas for interval part table is");
+      } else {// 2. create table
+        DEBUG_SYNC(BEFORE_SEND_PARALLEL_CREATE_TABLE);
+        create_table_arg.is_parallel_ = false;
+        if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(*common_rpc_proxy, my_session, "[parallel create table]",
+                                                            &ObCommonRpcProxy::parallel_create_table, create_table_arg, create_table_res,
+                                                            tenant_id))) {
+          LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(create_table_res));
+        }
+      }
+      if (OB_FAIL(ret)) {
+        // do nothing
       } else if (!(OB_INVALID_ID == create_table_res.table_id_
                   || (OB_INVALID_ID != create_table_res.table_id_
                       && true == create_table_res.do_nothing_)) ) { // If the table already exists, subsequent query inserts will not be performed
@@ -595,34 +609,24 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("common rpc proxy should not be null", K(ret));
     } else if (OB_ISNULL(select_stmt)) { // Processing for normal table creation
+      bool &is_parallel_create = create_table_arg.is_parallel_;
       if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
         LOG_WARN("schema_guard reset failed", KR(ret));
-      } else if (table_schema.is_view_table()
-                 || !enable_parallel_create_table) {
-        if (OB_FAIL(common_rpc_proxy->create_table(create_table_arg, res))) {
-          LOG_WARN("rpc proxy create table failed", KR(ret), "dst", common_rpc_proxy->get_server());
-        }
+      } else if (table_schema.is_view_table()) {
+        is_parallel_create = false;
+      } else {
+        omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
+        is_parallel_create = tenant_config.is_valid()
+                             && tenant_config->_enable_parallel_table_creation;
+      }
+      if (OB_FAIL(ret)) {
+        // do nothing
       } else {
         DEBUG_SYNC(BEFORE_SEND_PARALLEL_CREATE_TABLE);
-        int64_t start_time = ObTimeUtility::current_time();
-        ObTimeoutCtx ctx;
-        create_table_arg.is_parallel_ = true;
-        if (OB_FAIL(ctx.set_timeout(common_rpc_proxy->get_timeout()))) {
-          LOG_WARN("fail to set timeout ctx", K(ret));
-        } else if (OB_FAIL(common_rpc_proxy->parallel_create_table(create_table_arg, res))) {
-          LOG_WARN("rpc proxy create table failed", KR(ret), "dst", common_rpc_proxy->get_server());
-        } else {
-          int64_t refresh_time = ObTimeUtility::current_time();
-          if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
-              ctx, my_session, tenant_id, res.schema_version_, res.do_nothing_ /*skip_consensus*/))) {
-            LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
-          }
-          int64_t end_time = ObTimeUtility::current_time();
-          LOG_INFO("[parallel_create_table]", KR(ret),
-                   "cost", end_time - start_time,
-                   "execute_time", refresh_time - start_time,
-                   "wait_schema", end_time - refresh_time,
-                   "table_name", create_table_arg.schema_.get_table_name());
+        if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(*common_rpc_proxy, my_session, "[parallel create table]",
+                                                          &ObCommonRpcProxy::parallel_create_table, create_table_arg, res,
+                                                          tenant_id))) {
+          LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(res));
         }
       }
       if (OB_SUCC(ret)) {
@@ -782,6 +786,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
   ObSArray<obrpc::ObIndexArg *> add_index_arg_list;
   ObSArray<obrpc::ObIndexArg *> drop_index_args;
   alter_table_arg.index_arg_list_.reset();
+  uint64_t tenant_id = alter_table_arg.exec_tenant_id_;
   if (OB_ISNULL(my_session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
@@ -837,6 +842,8 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
       LOG_WARN("fail to get global index pre split schema if need", K(ret), K(alter_table_arg));
       //overwrite ret code
       ret = OB_SUCCESS;
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, alter_table_arg.data_version_))) {
+      LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
     }
     DEBUG_SYNC(BEFORE_SEND_ALTER_TABLE);
 
@@ -878,6 +885,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
           }
         }
       }
+    } else if (res.ddl_res_array_.empty()) {
     } else if (is_create_index(res.ddl_type_) || DDL_NORMAL_TYPE == res.ddl_type_) {
       // TODO(shuangcan): alter table create index returns DDL_NORMAL_TYPE now, check if we can fix this later
       // Synchronize until index creation is successful
@@ -2406,6 +2414,7 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else {
+    uint64_t data_version = 0;
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     tmp_arg.session_id_ = my_session->get_sessid_for_table();

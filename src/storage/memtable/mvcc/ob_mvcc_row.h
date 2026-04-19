@@ -229,9 +229,9 @@ private:
 public:
   // the snapshot flag of the snapshot version barrier
   static const int64_t NORMAL_READ_BIT =              0x0L;
-  static const int64_t WEAK_READ_BIT =                0x1L << 62;
-  static const int64_t COMPACT_READ_BIT =             0x2L << 62;
-  static const int64_t SNAPSHOT_VERSION_BARRIER_BIT = 0x3L << 62;
+  static const int64_t WEAK_READ_BIT =                INT64_C(0x1) << 62;
+  static const int64_t COMPACT_READ_BIT =             INT64_C(0x2) << 62;
+  static const int64_t SNAPSHOT_VERSION_BARRIER_BIT = INT64_C(0x3) << 62;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

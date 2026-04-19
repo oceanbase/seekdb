@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_location_executor.h"
 #include "sql/resolver/ddl/ob_create_location_stmt.h"
 #include "sql/resolver/ddl/ob_drop_location_stmt.h"

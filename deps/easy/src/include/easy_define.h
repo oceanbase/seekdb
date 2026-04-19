@@ -26,9 +26,21 @@
 #include <assert.h>
 #include <stddef.h>
 #include <inttypes.h>
+#ifndef _WIN32
 #include <unistd.h>
 #include <execinfo.h>
 #include <sys/uio.h>
+#include <signal.h>
+#else
+// Windows alternatives
+#include <io.h>
+#include <process.h>
+#include <signal.h>
+#include <pthread.h>
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+typedef int sigset_t;
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // define

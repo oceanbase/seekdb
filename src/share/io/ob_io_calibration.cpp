@@ -20,6 +20,12 @@
 #include "ob_io_calibration.h"
 #include "observer/ob_server.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/shared_storage/ob_file_manager.h"
 #endif
@@ -361,7 +367,11 @@ int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load, const int64_t threa
     } else if (OB_FAIL(TG_START(tg_id_))) {
       LOG_WARN("start thread failed", K(ret));
     } else {
+#ifdef _WIN32
+      Sleep(static_cast<DWORD>(BENCHMARK_TIMEOUT_S * 1000));
+#else
       sleep(BENCHMARK_TIMEOUT_S);
+#endif
       TG_STOP(tg_id_);
       TG_WAIT(tg_id_);
       TG_DESTROY(tg_id_);
@@ -529,7 +539,7 @@ void ObIOBenchController::run1()
   // prepare io bench runner
   const double MIN_FREE_SPACE_PERCENTAGE = 0.1; // if auto extend is on, _datafile_usage_upper_bound_percentage maybe less than (1 - 0.1 = 0.9), may cause OB_SERVER_OUTOF_DISK_SPACE
   const int64_t MIN_CALIBRATION_BLOCK_COUNT = 1024L * 1024L * 1024L / OB_DEFAULT_MACRO_BLOCK_SIZE;
-  const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20L * 1024L * 1024L * 1024L / OB_DEFAULT_MACRO_BLOCK_SIZE;
+  const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20LL * 1024LL * 1024LL * 1024LL / OB_DEFAULT_MACRO_BLOCK_SIZE;
   int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
   int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
 #ifdef OB_BUILD_SHARED_STORAGE

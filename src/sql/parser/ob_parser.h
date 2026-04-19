@@ -112,6 +112,10 @@ public:
   static int pre_parse(const common::ObString &stmt,
                        PreParseResult &res);
 
+// Windows winbase.h defines S_NORMAL as 0, which conflicts with this enum
+#ifdef S_NORMAL
+#undef S_NORMAL
+#endif
 enum State {
   S_START = 0,
   S_COMMENT,

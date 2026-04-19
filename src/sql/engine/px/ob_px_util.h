@@ -1073,14 +1073,6 @@ public:
               const int64_t task_id,
               dtl::ObDtlChTotalInfo &ch_total_info,
               dtl::ObDtlChSet &ch_set);
-  static int get_transmit_bf_dtl_channel_set(
-              const int64_t sqc_id,
-              dtl::ObDtlChTotalInfo &ch_total_info,
-              dtl::ObDtlChSet &ch_set);
-  static int get_receive_bf_dtl_channel_set(
-              const int64_t sqc_id,
-              dtl::ObDtlChTotalInfo &ch_total_info,
-              dtl::ObDtlChSet &ch_set);
 };
 
 

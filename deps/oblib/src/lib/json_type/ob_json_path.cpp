@@ -2343,7 +2343,7 @@ bool ObJsonPathUtil::is_scalar(const ObJsonPathNodeType node_type)
 
 bool ObJsonPathUtil::is_escape(char ch)
 {
-  return (('\n' == ch) || (ch == '\t') || (ch == '\r') || (ch == '\f') || (ch == '\e'));
+  return (('\n' == ch) || (ch == '\t') || (ch == '\r') || (ch == '\f') || (ch == '\033'));
 }
 int ObJsonPathUtil::append_character_of_escape(ObJsonBuffer& buf, char ch)
 {
@@ -2356,7 +2356,7 @@ int ObJsonPathUtil::append_character_of_escape(ObJsonBuffer& buf, char ch)
     ret = buf.append("r");
   } else if ('\f' == ch) {
     ret = buf.append("f");
-  } else if ('\e' == ch) {
+  } else if ('\033' == ch) {
     ret = buf.append("e");
   } else {
     ret = OB_ERR_UNEXPECTED;

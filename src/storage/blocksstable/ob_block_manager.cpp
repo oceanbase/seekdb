@@ -1713,8 +1713,7 @@ int ObBlockManager::InspectBadBlockTask::check_block(
 
 int ObBlockManager::extend_file_size_if_need() {
   int ret = OB_SUCCESS;
-  int64_t reserved_size =
-      4 * 1024 * 1024 * 1024L; // default RESERVED_DISK_SIZE -> 4G
+  int64_t reserved_size = ObStorageLoggerManager::RESERVED_DISK_SIZE;
 
   if (OB_ISNULL(io_device_)) {
     ret = OB_NOT_INIT;

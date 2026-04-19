@@ -17,6 +17,9 @@
 #include <openssl/engine.h>
 #include "ob_ssl_config.h"
 #include "lib/lock/ob_spin_rwlock.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
 
 namespace oceanbase {
 namespace common {
@@ -530,7 +533,20 @@ ssize_t ob_read_regard_ssl(int fd, void *buf, size_t nbytes, ssl_state_st &ssl_s
   ssize_t rbytes = 0;
   SSL* ssl = NULL;
   if (OB_LIKELY(NULL == ssl_st.ssl)) {
+#ifdef _WIN32
+    int r = recv((SOCKET)fd, (char*)buf, (int)nbytes, 0);
+    if (r == SOCKET_ERROR) {
+      int wsa_err = WSAGetLastError();
+      if (wsa_err == WSAEWOULDBLOCK) { errno = EAGAIN; }
+      else if (wsa_err == WSAEINTR) { errno = EINTR; }
+      else { errno = EIO; }
+      rbytes = -1;
+    } else {
+      rbytes = r;
+    }
+#else
     rbytes = read(fd, buf, nbytes);
+#endif
   } else {
     if (OB_UNLIKELY(0 == ssl_st.hand_shake_done)) {
         ERR_clear_error();
@@ -592,7 +608,20 @@ ssize_t ob_write_regard_ssl(int fd, const void *buf, size_t nbytes, ssl_state_st
 {
   ssize_t wbytes = 0;
   if (OB_LIKELY(NULL == ssl_st.ssl)) {
+#ifdef _WIN32
+    int w = send((SOCKET)fd, (const char*)buf, (int)nbytes, 0);
+    if (w == SOCKET_ERROR) {
+      int wsa_err = WSAGetLastError();
+      if (wsa_err == WSAEWOULDBLOCK) { errno = EAGAIN; }
+      else if (wsa_err == WSAEINTR) { errno = EINTR; }
+      else { errno = EIO; }
+      wbytes = -1;
+    } else {
+      wbytes = w;
+    }
+#else
     wbytes = write(fd, buf, nbytes);
+#endif
   } else {
      if (OB_UNLIKELY(0 == ssl_st.hand_shake_done)) {
         ERR_clear_error();

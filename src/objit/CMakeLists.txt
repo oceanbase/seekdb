@@ -20,6 +20,11 @@ elseif(APPLE)
     list(APPEND CMAKE_PREFIX_PATH "${zstd_DIR}/..")
   endif()
   find_package(zstd REQUIRED CONFIG)
+elseif(WIN32)
+  set(LLVM_DIR "${OB_LLVM_DIR}/lib/cmake/llvm")
+  set(LIBXML2_LIBRARY "${OB_VCPKG_DIR}/lib")
+  set(LIBXML2_INCLUDE_DIR "${OB_VCPKG_DIR}/include")
+  message(STATUS "LLVM_DIR: ${LLVM_DIR}")
 else()
   set(LLVM_DIR "${DEVTOOLS_DIR}/lib/cmake/llvm")
   set(ZLIB_LIBRARY "${DEP_DIR}/lib64/libz.a")
@@ -39,16 +44,29 @@ message(STATUS "This is SOURCE dir " ${PROJECT_SOURCE_DIR})
 
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
-add_definitions(-g -O2 -frtti)
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
+if(WIN32)
+  add_definitions(-g -O2 /GR)
+else()
+  add_definitions(-g -O2 -frtti)
+  add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
+endif()
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
-if( ${ARCHITECTURE} STREQUAL "x86_64" )
+if( ${ARCHITECTURE} STREQUAL "x86_64" OR ${ARCHITECTURE} STREQUAL "AMD64" OR ${ARCHITECTURE} STREQUAL "amd64" )
   LLVM_MAP_COMPONENTS_TO_LIBNAMES(llvm_libs Support Core IRReader ExecutionEngine OrcJit McJit X86CodeGen X86AsmParser runtimedyld bitreader bitwriter object objectyaml target DebugInfoDWARF Symbolize)
 else()
   LLVM_MAP_COMPONENTS_TO_LIBNAMES(llvm_libs Support Core IRReader ExecutionEngine OrcJit McJit AArch64CodeGen AArch64AsmParser runtimedyld bitreader bitwriter object objectyaml target DebugInfoDWARF Symbolize)
 endif()
+
+# Set linker flags for Windows before including HandleLLVMOptions.cmake
+# This prevents the /Brepro and /INCREMENTAL conflict warning
+if(WIN32)
+  set(CMAKE_EXE_LINKER_FLAGS "/INCREMENTAL:NO ${CMAKE_EXE_LINKER_FLAGS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "/INCREMENTAL:NO ${CMAKE_SHARED_LINKER_FLAGS}")
+  set(CMAKE_MODULE_LINKER_FLAGS "/INCREMENTAL:NO ${CMAKE_MODULE_LINKER_FLAGS}")
+endif()
+
 set(CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(${LLVM_CMAKE_DIR}/HandleLLVMOptions.cmake)
 

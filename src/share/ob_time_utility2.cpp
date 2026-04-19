@@ -80,7 +80,11 @@ int ObTimeUtility2::make_second(struct tm &t, time_t &second)
     struct tm tm_cmp;
     time_t t_cmp = -1;
 
+#ifdef _WIN32
+    if ((0 == localtime_s(&tm_cmp, &t_cmp))
+#else
     if ((NULL != localtime_r(&t_cmp, &tm_cmp))
+#endif
         && (t.tm_sec == tm_cmp.tm_sec && t.tm_min == tm_cmp.tm_min
             && t.tm_hour == tm_cmp.tm_hour && t.tm_mday == tm_cmp.tm_mday
             && t.tm_mon == tm_cmp.tm_mon && t.tm_year == tm_cmp.tm_year)) {
@@ -122,7 +126,11 @@ int ObTimeUtility2::usec_format_to_str(int64_t usec, const ObString &format, cha
   memset(&t, 0, sizeof(struct tm));
   t.tm_isdst = -1;
   time_t second_time_t = static_cast<time_t>(second);
+#ifdef _WIN32
+  if (0 != localtime_s(&t, &second_time_t)) {
+#else
   if (NULL == localtime_r(&second_time_t, &t)) {
+#endif
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("convert second to struct tm failed", K(second));
   } else if (OB_FAIL(timestamp_format_to_str(t, incre_usec, format, buf, buf_len, pos))) {

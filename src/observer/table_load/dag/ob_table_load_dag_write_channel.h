@@ -29,7 +29,7 @@ class ObDirectLoadBatchRows;
 } // namespace storage
 namespace observer
 {
-class ObTableLoadStoreTrans;
+struct ObTableLoadStoreTrans;
 class ObTableLoadTransStoreWriter;
 class ObTableLoadDagChunkWriter;
 

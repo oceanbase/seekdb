@@ -19,6 +19,16 @@
 
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/container/ob_vector.h" // for ObVector
+// winuser.h defines DIFFERENCE as a raster-op code (value 11),
+// which conflicts with S2's OpType::DIFFERENCE enum. Undefine it here
+// and restore it after all S2 includes so Windows code still compiles.
+#ifdef _WIN32
+#ifdef DIFFERENCE
+#pragma push_macro("DIFFERENCE")
+#undef DIFFERENCE
+#define OB_S2_PUSHED_DIFFERENCE_
+#endif
+#endif
 #include "s2/s2cell.h"
 #include "s2/s2cap.h"
 #include "s2/s2latlng.h"
@@ -29,6 +39,12 @@
 #include "s2/s2latlng_rect.h"
 #include "lib/geo/ob_geo_to_s2_visitor.h"
 #include "lib/geo/ob_geo_common.h"
+#ifdef _WIN32
+#ifdef OB_S2_PUSHED_DIFFERENCE_
+#pragma pop_macro("DIFFERENCE")
+#undef OB_S2_PUSHED_DIFFERENCE_
+#endif
+#endif
 
 
 namespace oceanbase {

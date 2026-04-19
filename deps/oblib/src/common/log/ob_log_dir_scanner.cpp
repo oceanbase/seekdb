@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "common/log/ob_log_dir_scanner.h"
 #include <dirent.h>
 #include "common/log/ob_log_entry.h"
@@ -119,7 +121,11 @@ int ObLogDirScanner::search_log_dir_(const char *log_dir)
   common::ObVector<ObSimpleLogFile> log_files(NULL, ObModIds::OB_SLOG_SCANNER);
   DIR *plog_dir = opendir(log_dir);
   if (OB_UNLIKELY(NULL == plog_dir)) {
+#ifdef _WIN32
+    func_ret = _mkdir(log_dir);
+#else
     func_ret = mkdir(log_dir, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+#endif
     if (func_ret != 0
         && EEXIST != errno) {
       ret = OB_ERROR;

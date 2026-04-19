@@ -27,6 +27,12 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rpc/obrpc/ob_rpc_net_handler.h"
 
+#ifdef _WIN32
+#ifdef OPTIONAL
+#undef OPTIONAL
+#endif
+#endif
+
 using namespace oceanbase::common;
 
 namespace oceanbase
@@ -34,21 +40,21 @@ namespace oceanbase
 
 namespace obrpc
 {
-int __attribute__((weak)) check_arb_white_list(int64_t cluster_id, bool& is_arb)
+int OB_WEAK_SYMBOL check_arb_white_list(int64_t cluster_id, bool& is_arb)
 {
   //do nothing
   int ret = OB_SUCCESS;
   return ret;
 }
 
-int64_t __attribute__((weak)) get_stream_rpc_max_wait_timeout(int64_t tenant_id)
+int64_t OB_WEAK_SYMBOL get_stream_rpc_max_wait_timeout(int64_t tenant_id)
 {
   //do nothing
   UNUSED(tenant_id);
   return ObRpcProcessorBase::DEFAULT_WAIT_NEXT_PACKET_TIMEOUT;
 }
 
-bool __attribute__((weak)) stream_rpc_update_timeout()
+bool OB_WEAK_SYMBOL stream_rpc_update_timeout()
 {
   //do nothing
   return false;

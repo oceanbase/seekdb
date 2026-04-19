@@ -20,6 +20,21 @@
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "src/sql/engine/ob_exec_context.h"
 #include "share/object/ob_obj_cast_util.h"
+#include <cstring>
+
+#ifdef _WIN32
+static inline void *memmem(const void *haystack, size_t haystacklen, const void *needle, size_t needlelen)
+{
+  if (needlelen == 0) return const_cast<void *>(haystack);
+  if (haystacklen < needlelen) return nullptr;
+  const unsigned char *h = static_cast<const unsigned char *>(haystack);
+  const unsigned char *n = static_cast<const unsigned char *>(needle);
+  for (size_t i = 0; i <= haystacklen - needlelen; ++i) {
+    if (memcmp(h + i, n, needlelen) == 0) return const_cast<unsigned char *>(h + i);
+  }
+  return nullptr;
+}
+#endif
 
 namespace oceanbase
 {

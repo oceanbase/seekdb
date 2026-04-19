@@ -19,6 +19,9 @@
 #include "lib/atomic/ob_atomic.h"
 #include "lib/queue/ob_link.h"
 #include "lib/hash/ob_hashutils.h"
+#ifdef _WIN32
+typedef int key_t;  // key_t is POSIX-only; on Windows provide the equivalent int definition
+#endif
 
 namespace oceanbase
 {

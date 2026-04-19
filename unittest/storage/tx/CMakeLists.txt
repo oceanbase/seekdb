@@ -17,6 +17,7 @@ add_library(mock_tx_log_adapter SHARED
 
 # target_link_libraries(mock_tx_ctx PUBLIC oceanbase mockcontainer)
 target_link_libraries(mock_tx_log_adapter PUBLIC oceanbase mockcontainer)
+add_dependencies(mock_tx_log_adapter oblib_grpc)
 
 # function(c2pc_unittest case)
 #   ob_unittest(${ARGV})

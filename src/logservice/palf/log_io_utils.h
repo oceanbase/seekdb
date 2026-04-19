@@ -23,6 +23,8 @@ namespace oceanbase
 namespace palf
 {
 
+int open_directory(const char *dir_path);
+
 int openat_with_retry(const int dir_fd,
                       const char *block_path,
                       const int flag,

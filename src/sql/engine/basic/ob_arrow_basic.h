@@ -46,13 +46,14 @@ public:
   virtual void Free(uint8_t* buffer, int64_t size, int64_t alignment) override;
 
   virtual void ReleaseUnused() override;
-  /// The number of bytes that were allocated.
-  virtual int64_t total_bytes_allocated() const override;
-  virtual int64_t num_allocations() const override;
   /// The number of bytes that were allocated and not yet free'd through
   /// this allocator.
   virtual int64_t bytes_allocated() const override;
   virtual int64_t max_memory() const override { return -1; }
+
+  virtual int64_t total_bytes_allocated() const override { return total_alloc_size_; }
+
+  virtual int64_t num_allocations() const override { return 0; }
 
   virtual std::string backend_name() const override { return "Arrow"; }
 private:

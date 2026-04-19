@@ -17,9 +17,11 @@
 #ifndef _OCEANBASE_COMMON_OB_TIME_UTILITY_H_
 #define _OCEANBASE_COMMON_OB_TIME_UTILITY_H_
 #include <stdlib.h>
+#ifndef _WIN32
 #include <sys/time.h>
-#include <time.h>
 #include <unistd.h>
+#endif
+#include <time.h>
 #include "lib/coro/co_var.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_unify_serialize.h"

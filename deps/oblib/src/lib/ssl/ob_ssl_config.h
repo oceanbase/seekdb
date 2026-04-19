@@ -19,6 +19,10 @@
 
 #include <stdint.h>
 #include <openssl/ssl.h>
+#ifdef _WIN32
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
 
 namespace oceanbase {
 namespace common {

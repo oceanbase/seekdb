@@ -43,7 +43,7 @@ class ObAllVirtualMdsNodeStat : public common::ObVirtualTableScannerIterator
   friend class ApplyOnTabletOp;
   friend class ApplyOnLSOp;
   friend class ApplyOnTenantOp;
-  static constexpr int64_t IP_BUFFER_SIZE = 64;
+  static constexpr int64_t IP_BUFFER_SIZE = 65;  // >= MAX_IP_ADDR_LENGTH (e.g. INET6 on Windows)
 public:
   explicit ObAllVirtualMdsNodeStat(omt::ObMultiTenant *omt) : omt_(omt) {}
   virtual int inner_get_next_row(common::ObNewRow *&row) override;

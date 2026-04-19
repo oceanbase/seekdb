@@ -182,8 +182,8 @@ int deep_copy_parse_node(void *malloc_pool, const ParseNode *src_node, ParseNode
   return ret;
 }
 
-int __attribute__((weak)) check_mem_status() { return OB_PARSER_SUCCESS; }
-int __attribute__((weak)) try_check_mem_status(int64_t check_try_times) { return OB_PARSER_SUCCESS; }
+int OB_WEAK_SYMBOL check_mem_status() { return OB_PARSER_SUCCESS; }
+int OB_WEAK_SYMBOL try_check_mem_status(int64_t check_try_times) { return OB_PARSER_SUCCESS; }
 
 ParseNode *new_node(void *malloc_pool, ObItemType type, int num)
 {

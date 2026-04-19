@@ -1929,7 +1929,11 @@ int ObPartDataFragMgr::next_insert_task(int64_t batch_row_count, ObInsertTask &t
   while (OB_SUCC(ret) && row_count < batch_row_count) {
     new_top_begin_point.reset();
     //handle one frag from head
+#ifdef _WIN32
+    while (OB_EAGAIN == queue_.top(link)) { YieldProcessor(); }
+#else
     while (OB_EAGAIN == queue_.top(link)) { pause(); }
+#endif
     if (OB_ISNULL(frag = static_cast<ObDataFrag *>(link))) {
       ret = OB_ERR_UNEXPECTED;
     } else if ((row_count += frag->row_cnt) > batch_row_count) {

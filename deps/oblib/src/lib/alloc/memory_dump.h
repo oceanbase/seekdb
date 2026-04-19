@@ -22,6 +22,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/rc/context.h"
 #include "lib/thread/thread_mgr_interface.h"
+#include "lib/utility/ob_platform_utils.h"  // ffsl() on Windows
 
 // This file will be placed under lib for a short period of time to facilitate unit testing. After the function is stable, move to ob
 // The corresponding MySimpleThreadPool will also be deleted

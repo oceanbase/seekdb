@@ -18,7 +18,9 @@
 
 #include "lib/signal/ob_signal_utils.h"
 #include <time.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#endif
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/charset/ob_mysql_global.h"
@@ -40,13 +42,16 @@ _RLOCAL(ByteBuf<256>, crash_restore_buffer);
 void crash_restore_handler(int sig, siginfo_t *s, void *p)
 {
   if (SIGSEGV == sig || SIGABRT == sig ||
-      SIGBUS == sig || SIGFPE == sig) {
+#ifndef _WIN32
+      SIGBUS == sig ||
+#endif
+      SIGFPE == sig) {
     int64_t len = 0;
-#ifdef __x86_64__
+#if defined(__x86_64__) && !defined(_WIN32)
     safe_backtrace(crash_restore_buffer, 255, &len);
 #endif
     crash_restore_buffer[len++] = '\0';
-    siglongjmp(*g_jmp, 1);
+    ob_siglongjmp(*g_jmp, 1);
   } else {
     ob_signal_handler(sig, s, p);
   }

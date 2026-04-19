@@ -7624,7 +7624,11 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     } else {
       MEMSET(buf, 0, sizeof(buf));
       char *real_secure_file = nullptr;
+#ifdef _WIN32
+      if (NULL == (real_secure_file = ::_fullpath(buf, to_cstring(secure_file_priv), sizeof(buf)))) {
+#else
       if (NULL == (real_secure_file = ::realpath(to_cstring(secure_file_priv), buf))) {
+#endif
         // pass
       } else {
         ObString secure_file_priv_tmp(real_secure_file);
@@ -7652,7 +7656,11 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       } else {
         MEMSET(buf, 0, sizeof(buf));
         char *real_secure_file = nullptr;
+#ifdef _WIN32
+        if (NULL == (real_secure_file = ::_fullpath(buf, secure_file_path, sizeof(buf)))) {
+#else
         if (NULL == (real_secure_file = ::realpath(secure_file_path, buf))) {
+#endif
           // continue
         } else {
           ObString secure_file_path_tmp(real_secure_file);

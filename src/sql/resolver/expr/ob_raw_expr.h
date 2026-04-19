@@ -68,7 +68,7 @@ class ObIRawExprCopier;
 class ObSelectStmt;
 class ObRTDatumArith;
 class ObLogicalOperator;
-class ObInListInfo;
+struct ObInListInfo;
 extern ObRawExpr *USELESS_POINTER;
 struct ObExprEqualCheckContext;
 

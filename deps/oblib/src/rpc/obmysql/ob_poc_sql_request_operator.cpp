@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX RPC_OBMYSQL
+#endif
 #include "rpc/obmysql/ob_poc_sql_request_operator.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "rpc/obmysql/ob_sql_sock_processor.h"
 
-void __attribute__((weak)) request_finish_callback();
+void OB_WEAK_SYMBOL request_finish_callback();
 namespace oceanbase
 {
 using namespace common;

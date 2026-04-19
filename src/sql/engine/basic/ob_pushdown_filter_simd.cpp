@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#if defined(__x86_64__)
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
 #include <immintrin.h>
 #endif
 
@@ -29,7 +29,7 @@ using namespace share;
 namespace sql
 {
 
-#if defined(__x86_64__)
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
 // Mark the null datums:
 //   set %vec to 1 if NULL
 //   keep %vec bit unchanged for not null
@@ -104,7 +104,7 @@ void mark_filtered_datums_simd(const ObDatum *datums,
                                 const int64_t size,
                                 ObBitVector &bit_vec)
 {
-#if defined(__x86_64__)
+#if defined(__GNUC__) && defined(__x86_64__) && !defined(_MSC_VER)
   bit_vec.reset(size);
   mark_null_datums(datums, size, bit_vec);
   mark_zero_values(values, size, bit_vec);

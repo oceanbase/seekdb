@@ -17,6 +17,9 @@
 
 #include "ob_syslog_rate_limiter.h"
 #include "lib/time/ob_time_utility.h"
+#ifdef _WIN32
+#include "lib/hash/ob_hashutils.h"
+#endif
 
 
 using namespace oceanbase;

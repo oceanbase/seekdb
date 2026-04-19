@@ -253,6 +253,49 @@ int ObExprOperator::cg_expr(ObExprCGCtx &,
 // check function pointer in vtable to detect cg_expr() is overwrite or not.
 bool ObExprOperator::is_default_expr_cg() const
 {
+#ifdef _WIN32
+  // MSVC stores a thunk address in pointer-to-member-function for virtual
+  // functions, not a vtable offset like GCC/Clang. The GCC vtable-index trick
+  // below does not work on MSVC and causes access violation.
+  // Return false (assume cg_expr is overridden) so the SQL engine proceeds
+  // normally; any truly unsupported operator will fail at cg_expr call time.
+  static ObArenaAllocator alloc;
+  static ObExprOperator base(alloc, T_NULL, "fake_null_operator", 0, VALID_FOR_GENERATED_COL);
+  typedef int (ObExprOperator::*CGFunc)(
+      ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const;
+  static_assert(sizeof(int64_t) == sizeof(CGFunc), "size mismatch");
+  union {
+    CGFunc func_;
+    int64_t val_;
+  } base_fv;
+  base_fv.func_ = &ObExprOperator::cg_expr;
+  // On MSVC the thunk address is the same for all classes sharing the same
+  // virtual slot, so we resolve through actual vtable pointers instead.
+  // Parse the MSVC thunk to extract the vtable offset:
+  //   48 8B 01        mov rax, [rcx]
+  //   FF 60 NN        jmp [rax+NN]       (1-byte displacement)
+  //   FF A0 NNNNNNNN  jmp [rax+NNNNNNNN] (4-byte displacement)
+  //   FF 20           jmp [rax]          (zero displacement)
+  const unsigned char *thunk = reinterpret_cast<const unsigned char *>(
+      reinterpret_cast<void *>(base_fv.val_));
+  int64_t vtable_offset = -1;
+  if (thunk[0] == 0x48 && thunk[1] == 0x8B && thunk[2] == 0x01 && thunk[3] == 0xFF) {
+    if (thunk[4] == 0x20) {
+      vtable_offset = 0;
+    } else if (thunk[4] == 0x60) {
+      vtable_offset = static_cast<int64_t>(static_cast<int8_t>(thunk[5]));
+    } else if (thunk[4] == 0xA0) {
+      int32_t disp;
+      memcpy(&disp, &thunk[5], sizeof(disp));
+      vtable_offset = static_cast<int64_t>(disp);
+    }
+  }
+  if (vtable_offset < 0) {
+    return false;
+  }
+  const int64_t func_idx = vtable_offset / sizeof(void *);
+  return (*(void ***)(&base))[func_idx] == (*(void ***)(this))[func_idx];
+#else
   static ObArenaAllocator alloc;
   static ObExprOperator base(alloc, T_NULL, "fake_null_operator", 0, VALID_FOR_GENERATED_COL);
   typedef int (ObExprOperator::*CGFunc)(
@@ -266,6 +309,7 @@ bool ObExprOperator::is_default_expr_cg() const
   func_val.func_ = &ObExprOperator::cg_expr;
   const int64_t func_idx = func_val.val_ / sizeof(void *);
   return (*(void ***)(&base))[func_idx] == (*(void ***)(this))[func_idx];
+#endif
 }
 
 ObObjType ObExprOperator::get_calc_cast_type(ObObjType param_type, ObObjType calc_type)
@@ -2231,17 +2275,26 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
     LOG_WARN("Incorrect cmp type with roaringbitmap arguments", K(type1), K(type2), K(type_), K(ret));
 #if defined(__ANDROID__)
   } else if (lib::is_mysql_mode()
-             && (type_ == T_OP_EQ || type_ == T_OP_NE
-                 || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE)
+             && (type_ == T_OP_EQ || type_ == T_OP_NE || type_ == T_OP_NSEQ
+                 || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE || type_ == T_OP_SQ_NSEQ)
              && (type1.is_collection_sql_type() != type2.is_collection_sql_type())
              && !ob_is_null(type1.get_type())
-             && !ob_is_null(type2.get_type())) {
+             && !ob_is_null(type2.get_type())
+             && !ob_is_string_or_lob_type(type1.get_type())
+             && !ob_is_string_or_lob_type(type2.get_type())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Incorrect cmp type with scalar and collection arguments", K(type1), K(type2), K(type_), K(ret));
+  } else if (lib::is_mysql_mode()
+             && type_ == T_OP_NSEQ
+             && type1.is_collection_sql_type()
+             && type2.is_collection_sql_type()) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("Incorrect cmp type with collection arguments for null-safe equal", K(type1), K(type2), K(type_), K(ret));
 #endif
   } else if ((type1.is_collection_sql_type() || type2.is_collection_sql_type())
              && !(type_ == T_OP_EQ
-                  || type_ == T_OP_NE)) {
+                  || type_ == T_OP_NE
+                  || type_ == T_OP_NSEQ)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("Incorrect cmp type with collection arguments", K(type1), K(type2), K(type_), K(ret));
   } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
@@ -2484,14 +2537,21 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
   } else if (OB_FAIL(expr.calc_cmp_type2(cmp_type, type1, type2, type_ctx,
                                          left_param->is_static_const_expr(),
                                          right_param->is_static_const_expr()))) {
-    if (lib::is_mysql_mode()
-        && ret == OB_INVALID_ARGUMENT
-        && (expr.get_type() == T_OP_EQ || expr.get_type() == T_OP_NE
-            || expr.get_type() == T_OP_SQ_EQ || expr.get_type() == T_OP_SQ_NE)
-        && ((type1.is_collection_sql_type() && is_string_literal_cmp_operand(right_param))
-            || (type2.is_collection_sql_type() && is_string_literal_cmp_operand(left_param)))) {
-      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-      ret = OB_ERR_INVALID_JSON_TEXT;
+    if (lib::is_mysql_mode() && ret == OB_INVALID_ARGUMENT
+        && (type1.is_collection_sql_type() != type2.is_collection_sql_type())) {
+      // Keep 1210 only when: non-collection side IS a column ref AND collection side is NOT a column
+      // ref (e.g. scalar_col <> array_map(...)). All other cases (collection column/ROW vs scalar,
+      // collection expr vs scalar expr) -> 5083.
+      bool is_scalar_col_vs_collection_expr =
+          (type1.is_collection_sql_type() && !left_param->is_column_ref_expr()
+           && right_param->is_column_ref_expr())
+       || (type2.is_collection_sql_type() && !right_param->is_column_ref_expr()
+           && left_param->is_column_ref_expr());
+      if (!is_scalar_col_vs_collection_expr) {
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
+        LOG_WARN("Incorrect cmp type with collection and scalar arguments", K(ret));
+      }
+      // else: scalar column vs collection expression -> keep OB_INVALID_ARGUMENT (1210)
     }
   } else {
 #else

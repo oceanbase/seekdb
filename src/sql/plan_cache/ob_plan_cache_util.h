@@ -54,7 +54,7 @@ class ObTablePartitionInfo;
 class ObPlanCacheValue;
 class ObDASCtx;
 class ObILibCacheObject;
-class ObILibCacheKey;
+struct ObILibCacheKey;
 class ObILibCacheNode;
 class ObPlanCacheKey;
 class ObPlanCacheCtx;

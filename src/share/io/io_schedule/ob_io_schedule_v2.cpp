@@ -52,7 +52,6 @@ int QSchedCallback::handle(TCRequest* tc_req)
     LOG_WARN("get device channel failed", K(ret), K(req));
   } else if (FALSE_IT(result->time_log_.dequeue_ts_ = ObTimeUtility::fast_current_time())) {
   } else {
-    // lock request condition to prevent canceling halfway
     ObThreadCondGuard guard(result->get_cond());
     if (OB_FAIL(guard.get_ret())) {
       LOG_ERROR("fail to guard master condition", K(ret));
@@ -116,7 +115,8 @@ int ObIOManagerV2::init()
 int ObIOManagerV2::start()
 {
   int ret = OB_SUCCESS;
-  if (0 != qsched_start(root_qid_, 1)) {
+  int sched_ret = qsched_start(root_qid_, 1);
+  if (0 != sched_ret) {
     ret = OB_ERR_SYS;
   } else if (OB_FAIL(io_submitter_.start())) {
   }

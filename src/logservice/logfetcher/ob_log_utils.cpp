@@ -19,11 +19,13 @@
 #include "ob_log_utils.h"
 
 #include <sys/types.h>
+#ifndef _WIN32
 #include <net/if.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
+#endif
 
 #include "lib/string/ob_string.h"                       // ObString
 #include "lib/utility/serialization.h"                  // serialization
@@ -55,7 +57,11 @@ int print_human_tstamp(char *buf, const int64_t buf_len, int64_t &pos,
     tv.tv_sec = usec_tstamp / _SEC_;
     tv.tv_usec = usec_tstamp % _SEC_;
     struct tm tm;
+#ifdef _WIN32
+    ::localtime_s(&tm, (const time_t *) &tv.tv_sec);
+#else
     ::localtime_r((const time_t *) &tv.tv_sec, &tm);
+#endif
     ret = common::databuff_printf(buf, buf_len, pos,
                                   "[%04d-%02d-%02d %02d:%02d:%02d.%06ld]",
                                   tm.tm_year + 1900,
@@ -108,12 +114,6 @@ int get_local_ip(ObString &local_ip)
   int ret = OB_SUCCESS;
   const static char *DEFAULT_IP = "127.0.0.1";
   const static char *DEFAULT_DEV = "DEFAULT";
-  const static int64_t BUFSIZE = 128;
-  int sock_fd = 0;
-  struct ifconf conf;
-  struct ifreq *ifr = NULL;
-  char buff[BUFSIZE];
-  int64_t ifreq_num = 0;
   const char *ret_ip = DEFAULT_IP;
   const char *local_dev = DEFAULT_DEV;
 
@@ -121,6 +121,17 @@ int get_local_ip(ObString &local_ip)
     LOG_ERROR("invalid argument", K(local_ip));
     ret = OB_INVALID_ARGUMENT;
   } else {
+#ifdef _WIN32
+    UNUSED(local_dev);
+    ret_ip = DEFAULT_IP;
+#else
+    const static int64_t BUFSIZE = 128;
+    int sock_fd = 0;
+    struct ifconf conf;
+    struct ifreq *ifr = NULL;
+    char buff[BUFSIZE];
+    int64_t ifreq_num = 0;
+
     sock_fd = socket(PF_INET, SOCK_DGRAM, 0);
     if (sock_fd < 0){
       LOG_ERROR("socket fail", K(sock_fd), K(errno), KERRMSG);
@@ -137,7 +148,6 @@ int get_local_ip(ObString &local_ip)
         LOG_WARN("no valid network device, set default IP", K(ifreq_num), KP(ifr));
         ret_ip = DEFAULT_IP;
       } else {
-        // Set default IP
         ret_ip = DEFAULT_IP;
 
         for (int64_t i = 0; i < ifreq_num; i++) {
@@ -157,6 +167,7 @@ int get_local_ip(ObString &local_ip)
       close(sock_fd);
       sock_fd = 0;
     }
+#endif
 
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(ret_ip)) {

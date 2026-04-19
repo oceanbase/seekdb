@@ -20,6 +20,45 @@
 #ifdef __APPLE__
 #include <fcntl.h>                              // For fcntl, F_PREALLOCATE on macOS
 #include <unistd.h>                             // For ftruncate
+#elif defined(_WIN32)
+#include <io.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <direct.h>
+#include <windows.h>
+static bool ob_resolve_path_at2(int dir_fd, const char *rel_path, char *out, size_t out_size) {
+  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
+      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
+    return false;
+  }
+  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
+  if (h == INVALID_HANDLE_VALUE) return false;
+  char dir_path[1024];
+  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
+  if (len == 0 || len >= sizeof(dir_path)) return false;
+  const char *clean = dir_path;
+  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
+  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
+  return written > 0 && (size_t)written < out_size;
+}
+static int openat(int dir_fd, const char *path, int flags, ...) {
+  int mode = 0;
+  if (flags & _O_CREAT) { mode = _S_IREAD | _S_IWRITE; }
+  char abs[1024];
+  const char *p = path;
+  if (ob_resolve_path_at2(dir_fd, path, abs, sizeof(abs))) p = abs;
+  return ::_open(p, flags | _O_BINARY, mode);
+}
+static int unlinkat(int dir_fd, const char *path, int flag) {
+  char abs[1024];
+  const char *p = path;
+  if (ob_resolve_path_at2(dir_fd, path, abs, sizeof(abs))) p = abs;
+  if (flag) { return ::_rmdir(p); }
+  return ::_unlink(p);
+}
+static int fallocate(int fd, int, off_t, off_t len) {
+  return ::_chsize_s(fd, len);
+}
 #endif
 #include "observer/ob_server.h"                 // OBSERVER
 #include "observer/ob_server_utils.h"           // get_log_disk_info_in_config

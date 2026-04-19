@@ -29,7 +29,7 @@
 #define EXTRACT_MEM_ADDR(ptr) (reinterpret_cast<char *>(*reinterpret_cast<int64_t *>((ptr))))
 #define STORE_MEM_ADDR(addr, dst)                                                                  \
   do {                                                                                             \
-    *reinterpret_cast<int64_t *>((dst)) = static_cast<int64_t>(reinterpret_cast<intptr_t>((addr))); \
+    *reinterpret_cast<int64_t *>((dst)) = static_cast<int64_t>(reinterpret_cast<intptr_t>((const void*)(addr))); \
   } while (false)
 
 namespace oceanbase

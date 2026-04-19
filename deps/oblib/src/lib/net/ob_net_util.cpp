@@ -24,6 +24,145 @@ using namespace oceanbase::common;
 namespace oceanbase {
 namespace obsys {
 
+#ifdef _WIN32
+
+static PIP_ADAPTER_ADDRESSES ob_win32_get_adapters(ULONG family)
+{
+  ULONG buf_len = 15000;
+  PIP_ADAPTER_ADDRESSES addrs = nullptr;
+  ULONG rc = ERROR_BUFFER_OVERFLOW;
+  for (int tries = 0; tries < 3 && rc == ERROR_BUFFER_OVERFLOW; ++tries) {
+    addrs = (PIP_ADAPTER_ADDRESSES)malloc(buf_len);
+    if (nullptr == addrs) {
+      return nullptr;
+    }
+    rc = GetAdaptersAddresses(family, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                              nullptr, addrs, &buf_len);
+    if (rc == ERROR_BUFFER_OVERFLOW) {
+      free(addrs);
+      addrs = nullptr;
+    }
+  }
+  if (rc != NO_ERROR) {
+    if (addrs) { free(addrs); }
+    return nullptr;
+  }
+  return addrs;
+}
+
+static bool ob_win32_match_adapter_name(PIP_ADAPTER_ADDRESSES adapter, const char *dev_name)
+{
+  if (0 == strcmp(adapter->AdapterName, dev_name)) {
+    return true;
+  }
+  char friendly[256] = {0};
+  WideCharToMultiByte(CP_UTF8, 0, adapter->FriendlyName, -1, friendly, sizeof(friendly), nullptr, nullptr);
+  return (0 == strcmp(friendly, dev_name));
+}
+
+int ObNetUtil::get_local_addr_ipv6(const char *dev_name, char *ipv6, int len,
+                                   bool *is_linklocal)
+{
+  int ret = OB_ERROR;
+  if (nullptr == dev_name) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("devname can not be NULL", K(ret));
+  } else if (len < INET6_ADDRSTRLEN) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_WARN("the buffer size cannot be less than INET6_ADDRSTRLEN",
+             "INET6_ADDRSTRLEN", INET6_ADDRSTRLEN, K(len), K(ret));
+  } else {
+    PIP_ADAPTER_ADDRESSES addrs = ob_win32_get_adapters(AF_INET6);
+    if (nullptr == addrs) {
+      ret = OB_ERR_SYS;
+      LOG_WARN("GetAdaptersAddresses failed", K(ret));
+    } else {
+      int level = -1;
+      for (PIP_ADAPTER_ADDRESSES cur = addrs; cur != nullptr; cur = cur->Next) {
+        if (!ob_win32_match_adapter_name(cur, dev_name)) {
+          continue;
+        }
+        for (PIP_ADAPTER_UNICAST_ADDRESS ua = cur->FirstUnicastAddress; ua != nullptr; ua = ua->Next) {
+          if (ua->Address.lpSockaddr->sa_family != AF_INET6) {
+            continue;
+          }
+          struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)ua->Address.lpSockaddr;
+          int cur_level = -1;
+          bool linklocal = false;
+          if (IN6_IS_ADDR_LOOPBACK(&in6->sin6_addr)) {
+            cur_level = 0;
+          } else if (IN6_IS_ADDR_LINKLOCAL(&in6->sin6_addr)) {
+            cur_level = 1;
+            linklocal = true;
+          } else if (IN6_IS_ADDR_SITELOCAL(&in6->sin6_addr)) {
+            cur_level = 2;
+          } else if (IN6_IS_ADDR_V4MAPPED(&in6->sin6_addr)) {
+            cur_level = 3;
+          } else {
+            cur_level = 4;
+          }
+          if (cur_level > level) {
+            if (nullptr == inet_ntop(AF_INET6, &in6->sin6_addr, ipv6, len)) {
+              ret = OB_ERR_SYS;
+              LOG_WARN("call inet_ntop fail", K(errno), K(ret));
+            } else {
+              level = cur_level;
+              ret = OB_SUCCESS;
+              if (nullptr != is_linklocal) {
+                *is_linklocal = linklocal;
+              }
+            }
+          }
+        }
+      }
+      if (level == -1 && OB_SUCCESS != ret) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid devname specified by -i", "devname", dev_name, "info",
+                 "you may list devnames by shell command: ipconfig");
+      }
+      free(addrs);
+    }
+  }
+  return ret;
+}
+
+int ObNetUtil::get_local_addr_ipv4(const char *dev_name, uint32_t &addr)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == dev_name) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("devname can not be NULL", K(ret));
+  } else {
+    PIP_ADAPTER_ADDRESSES addrs = ob_win32_get_adapters(AF_INET);
+    if (nullptr == addrs) {
+      ret = OB_ERR_SYS;
+      LOG_WARN("GetAdaptersAddresses failed", K(ret));
+    } else {
+      bool has_found = false;
+      for (PIP_ADAPTER_ADDRESSES cur = addrs; cur != nullptr && !has_found; cur = cur->Next) {
+        if (!ob_win32_match_adapter_name(cur, dev_name)) {
+          continue;
+        }
+        for (PIP_ADAPTER_UNICAST_ADDRESS ua = cur->FirstUnicastAddress; ua != nullptr && !has_found; ua = ua->Next) {
+          if (ua->Address.lpSockaddr->sa_family != AF_INET) {
+            continue;
+          }
+          has_found = true;
+          struct sockaddr_in *in = (struct sockaddr_in *)ua->Address.lpSockaddr;
+          addr = in->sin_addr.s_addr;
+        }
+      }
+      if (!has_found) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid devname specified by -i", "devname", dev_name, "info",
+                 "you may list devnames by shell command: ipconfig");
+      }
+      free(addrs);
+    }
+  }
+  return ret;
+}
+#else
 int ObNetUtil::get_local_addr_ipv6(const char *dev_name, char *ipv6, int len,
                                    bool *is_linklocal)
 {
@@ -131,6 +270,7 @@ int ObNetUtil::get_local_addr_ipv4(const char *dev_name, uint32_t &addr)
 
   return ret;
 }
+#endif
 
 struct sockaddr_storage* ObNetUtil::make_unix_sockaddr_any(bool is_ipv6,
                                                            int port,
@@ -166,7 +306,11 @@ struct sockaddr_storage* ObNetUtil::make_unix_sockaddr(bool is_ipv6, const void 
 
 void ObNetUtil::sockaddr_to_addr(struct sockaddr_storage *sock_addr_s, bool &is_ipv6, void *ip, int &port)
 {
+#ifdef _WIN32
+  struct sockaddr *sock_addr = (struct sockaddr *)sock_addr_s;
+#else
   struct sockaddr *sock_addr = (typeof(sock_addr))sock_addr_s;
+#endif
   is_ipv6 = AF_INET6 == sock_addr->sa_family;
   if (!is_ipv6) {
     sockaddr_in *addr_in = (sockaddr_in*)sock_addr;
@@ -226,6 +370,59 @@ char* ObNetUtil::sockaddr_to_str(struct sockaddr_storage *addr, char *buf, int l
 
 
 
+#ifdef _WIN32
+int ObNetUtil::get_ifname_by_addr(const char *local_ip, char *if_name, uint64_t if_name_len, bool& has_found)
+{
+  int ret = OB_SUCCESS;
+  struct in_addr ip;
+  struct in6_addr ip6;
+  int af_type = AF_INET;
+  if (1 == inet_pton(AF_INET, local_ip, &ip)) {
+  } else if (1 == inet_pton(AF_INET6, local_ip, &ip6)) {
+    af_type = AF_INET6;
+  } else {
+    ret = OB_ERR_SYS;
+    LOG_ERROR("call inet_pton failed, maybe the local_ip is invalid",
+               KCSTRING(local_ip), K(errno), K(ret));
+  }
+
+  if (OB_SUCCESS == ret) {
+    PIP_ADAPTER_ADDRESSES addrs = ob_win32_get_adapters(af_type);
+    if (nullptr == addrs) {
+      ret = OB_ERR_SYS;
+      LOG_ERROR("GetAdaptersAddresses failed", K(ret));
+    } else {
+      for (PIP_ADAPTER_ADDRESSES cur = addrs; cur != nullptr && !has_found; cur = cur->Next) {
+        for (PIP_ADAPTER_UNICAST_ADDRESS ua = cur->FirstUnicastAddress; ua != nullptr && !has_found; ua = ua->Next) {
+          bool matched = false;
+          if (AF_INET == af_type && AF_INET == ua->Address.lpSockaddr->sa_family) {
+            matched = (0 == memcmp(&ip, &(((struct sockaddr_in *)ua->Address.lpSockaddr)->sin_addr), sizeof(ip)));
+          } else if (AF_INET6 == af_type && AF_INET6 == ua->Address.lpSockaddr->sa_family) {
+            matched = (0 == memcmp(&ip6, &(((struct sockaddr_in6 *)ua->Address.lpSockaddr)->sin6_addr), sizeof(ip6)));
+          }
+          if (matched) {
+            has_found = true;
+            char friendly[256] = {0};
+            WideCharToMultiByte(CP_UTF8, 0, cur->FriendlyName, -1, friendly, sizeof(friendly), nullptr, nullptr);
+            if (if_name_len < strlen(friendly) + 1) {
+              ret = OB_BUF_NOT_ENOUGH;
+              _LOG_ERROR("the buffer is not enough, need:%lu, have:%lu, ret:%d",
+                         (unsigned long)(strlen(friendly) + 1), (unsigned long)if_name_len, ret);
+            } else {
+              snprintf(if_name, (size_t)if_name_len, "%s", friendly);
+            }
+          }
+        }
+      }
+      if (!has_found) {
+        LOG_WARN("can not find ifname by local ip", KCSTRING(local_ip));
+      }
+      free(addrs);
+    }
+  }
+  return ret;
+}
+#else
 int ObNetUtil::get_ifname_by_addr(const char *local_ip, char *if_name, uint64_t if_name_len, bool& has_found)
 {
   int ret = OB_SUCCESS;
@@ -274,6 +471,7 @@ int ObNetUtil::get_ifname_by_addr(const char *local_ip, char *if_name, uint64_t 
   }
   return ret;
 }
+#endif
 
 int ObNetUtil::get_int_value(const ObString &str, int64_t &value)
 {

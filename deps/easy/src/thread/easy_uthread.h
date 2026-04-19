@@ -3,11 +3,17 @@
 
 #include "util/easy_pool.h"
 #include <easy_list.h>
-// ucontext.h requires _XOPEN_SOURCE on macOS
+
+#ifdef _WIN32
+// Windows: uthread is not used; provide a stub ucontext_t so the structs compile.
+typedef struct ucontext_t { int dummy; } ucontext_t;
+#else
+// Unix/Linux/macOS: use native ucontext
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE
 #endif
 #include <ucontext.h>
+#endif
 
 /**
  * Create a user-mode thread
@@ -94,4 +100,4 @@ void easy_uthread_set_errcode(easy_uthread_t *t, int errcode);
 
 EASY_CPP_END
 
-#endif
+#endif // EASY_UTHREAD_H

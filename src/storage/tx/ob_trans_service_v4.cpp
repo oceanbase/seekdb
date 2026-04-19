@@ -210,7 +210,7 @@ int ObTransService::do_commit_tx_(ObTxDesc &tx,
   return ret;
 }
 
-#define DELETED_UNRETRYABLE_ERROR(ret) (OB_LS_IS_DELETED == ret || OB_TENANT_HAS_BEEN_DROPPED)
+#define DELETED_UNRETRYABLE_ERROR(ret) (OB_LS_IS_DELETED == ret || OB_TENANT_HAS_BEEN_DROPPED == ret)
 /*
  * try send commit msg to coordinator, and register retry task
  * if msg send fail, the retry task will retry later
@@ -1396,18 +1396,9 @@ bool ObTransService::check_ls_readable_(ObLS &ls,
 {
   int ret = OB_SUCCESS;
   bool readable = false;
-  SCN scn;
-  if (ObTxReadSnapshot::SRC::WEAK_READ_SERVICE == src || MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-    readable = snapshot <= ls.get_ls_wrs_handler()->get_ls_weak_read_ts();
-  } else if (OB_FAIL(ls.get_max_decided_scn(scn))) {
-    // For standby tenant, use get_max_decided_scn as a replacement for get_ls_replica_readable_scn
-    // (which was removed during code pruning)
-    TRANS_LOG(WARN, "get max decided scn fail", K(ret), K(ls.get_ls_id()));
-  } else {
-    readable = snapshot <= scn;
-    if (!readable) {
-      TRANS_LOG(INFO, "check replica readable fail", K(ret), K(snapshot), K(scn));
-    }
+  readable = snapshot <= ls.get_ls_wrs_handler()->get_ls_weak_read_ts();
+  if (!readable) {
+    TRANS_LOG(INFO, "check replica readable fail", K(ret), K(snapshot));
   }
   return readable;
 }

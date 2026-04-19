@@ -29,7 +29,7 @@ using namespace sql;
 int ObPxBloomFilter::might_contain_simd(uint64_t hash, bool &is_match)
 {
   int ret = OB_SUCCESS;
-#if defined(__x86_64__)
+#if OB_USE_MULTITARGET_CODE
   specific::avx512::inline_might_contain_simd(bits_array_, block_mask_, hash, is_match);
 #else
   ret = might_contain_nonsimd(hash, is_match);

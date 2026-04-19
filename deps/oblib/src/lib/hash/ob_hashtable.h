@@ -250,7 +250,7 @@ struct ObHashTableBucket : public MProtect
 
   ObHashTableBucket() : node(NULL)
   {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
     init_hash_lock(lock);
     init_hash_cond(cond);
 #endif

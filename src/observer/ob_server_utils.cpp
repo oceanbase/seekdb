@@ -19,7 +19,9 @@
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_struct.h"
 #include "storage/ob_file_system_router.h"
+#ifndef _WIN32
 #include <sys/utsname.h>
+#endif
 #include "share/ob_version.h"
 
 namespace oceanbase
@@ -158,19 +160,38 @@ const char *ObServerUtils::build_syslog_file_info()
   const static int64_t max_info_len = 512;
   static char info[max_info_len];
 
-  // OS info
+#ifdef _WIN32
+  const char *os_sysname = "Windows";
+  const char *os_release = "10";
+  const char *os_machine = "x86_64";
+#else
   struct utsname uts;
   if (0 != ::uname(&uts)) {
     ret = OB_ERR_SYS;
     LOG_WARN("call uname failed");
   }
+  const char *os_sysname = uts.sysname;
+  const char *os_release = uts.release;
+  const char *os_machine = uts.machine;
+#endif
 
-  // time zone info
   int gmtoff_hour = 0;
   int gmtoff_minute = 0;
   if (OB_SUCC(ret)) {
     time_t t = time(NULL);
     struct tm lt;
+#ifdef _WIN32
+    if (0 != localtime_s(&lt, &t)) {
+      ret = OB_ERR_SYS;
+      LOG_WARN("call localtime failed");
+    } else {
+      TIME_ZONE_INFORMATION tzi;
+      GetTimeZoneInformation(&tzi);
+      long bias_seconds = -tzi.Bias * 60L;
+      gmtoff_hour = static_cast<int>((std::abs(bias_seconds) / 3600) * (bias_seconds < 0 ? -1 : 1));
+      gmtoff_minute = static_cast<int>(std::abs(bias_seconds) % 3600 / 60);
+    }
+#else
     if (NULL == localtime_r(&t, &lt)) {
       ret = OB_ERR_SYS;
       LOG_WARN("call localtime failed");
@@ -178,6 +199,7 @@ const char *ObServerUtils::build_syslog_file_info()
       gmtoff_hour = (std::abs(lt.tm_gmtoff) / 3600) * (lt.tm_gmtoff < 0 ? -1 : 1);
       gmtoff_minute = std::abs(lt.tm_gmtoff) % 3600 / 60;
     }
+#endif
   }
 
   if (OB_SUCC(ret)) {
@@ -185,7 +207,7 @@ const char *ObServerUtils::build_syslog_file_info()
                      "observer version: %s, revision: %s, "
                      "sysname: %s, os release: %s, machine: %s, tz GMT offset: %02d:%02d",
                      PACKAGE_STRING, build_version(),
-                     uts.sysname, uts.release, uts.machine, gmtoff_hour, gmtoff_minute);
+                     os_sysname, os_release, os_machine, gmtoff_hour, gmtoff_minute);
     if (n <= 0) {
       ret = OB_ERR_SYS;
       LOG_WARN("snprintf failed");
@@ -284,7 +306,19 @@ int ObServerUtils::cal_all_part_disk_default_percentage(int64_t& data_disk_total
   }
 
   if (OB_SUCC(ret)) {
-    if (data_statvfs.f_fsid == clog_statvfs.f_fsid) {
+#ifdef _WIN32
+    auto get_volume_serial = [](const char *path) -> DWORD {
+      char root[MAX_PATH];
+      if (!GetVolumePathNameA(path, root, MAX_PATH)) return 0;
+      DWORD serial = 0;
+      GetVolumeInformationA(root, NULL, 0, &serial, NULL, NULL, NULL, 0);
+      return serial;
+    };
+    bool same_fs = (get_volume_serial(data_dir) == get_volume_serial(clog_dir));
+#else
+    bool same_fs = (data_statvfs.f_fsid == clog_statvfs.f_fsid);
+#endif
+    if (same_fs) {
       shared_mode = true;
       data_disk_default_percentage = DEFAULT_DATA_DISK_PERCENTAGE_IN_SHARED_MODE;
       clog_disk_default_percentage = DEFAULT_CLOG_DISK_PERCENTAGE_IN_SHARED_MODE;

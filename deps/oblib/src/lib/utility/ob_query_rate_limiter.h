@@ -18,7 +18,9 @@
 #define OB_QUERY_RATE_LIMITER_H
 
 #include <stdint.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#endif
 #include <algorithm>
 #include "lib/atomic/ob_atomic.h"
 #include "lib/utility/ob_rate_limiter.h"

@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX LIB
+#endif
 #include "lib/wide_integer/ob_wide_integer.h"
 #include "lib/allocator/ob_allocator.h"
 

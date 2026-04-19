@@ -98,14 +98,14 @@ static struct timespec make_timespec(int64_t us)
 
 extern "C" {
 #ifdef __linux__
-int __attribute__((weak)) futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
+int OB_WEAK_SYMBOL futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
 {
   return syscall(SYS_futex, uaddr, futex_op, val, timeout);
 }
 #elif defined(__APPLE__)
 // macOS: futex_hook is not used directly, we use __ulock_* syscalls instead
 // Keep this stub for compatibility
-int __attribute__((weak)) futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
+int OB_WEAK_SYMBOL futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct timespec* timeout)
 {
   (void)uaddr;
   (void)futex_op;

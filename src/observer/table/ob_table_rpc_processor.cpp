@@ -29,7 +29,7 @@ using namespace oceanbase::share;
 using namespace oceanbase::obrpc;
 using namespace oceanbase::sql;
 
-void __attribute__((weak)) request_finish_callback();
+void OB_WEAK_SYMBOL request_finish_callback();
 
 bool ObTableLoginP::can_use_redis_v2()
 {

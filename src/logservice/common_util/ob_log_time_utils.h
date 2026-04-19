@@ -44,8 +44,8 @@ namespace logservice
  */
 static const int64_t _K_ = (1L << 10);
 static const int64_t _M_ = (1L << 20);
-static const int64_t _G_ = (1L << 30);
-static const int64_t _T_ = (1L << 40);
+static const int64_t _G_ = (1LL << 30);
+static const int64_t _T_ = (1LL << 40);
 
 #define TS_TO_STR(tstamp) HumanTstampConverter(tstamp).str()
 #define TVAL_TO_STR(tval) HumanTimevalConverter(tval).str()

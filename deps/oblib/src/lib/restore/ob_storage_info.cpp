@@ -421,7 +421,11 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
     tmp[info_len] = '\0';
     token = tmp;
     for (char *str = token; OB_SUCC(ret); str = NULL) {
+#ifdef _WIN32
+      token = ::strtok_s(str, "&", &saved_ptr);
+#else
       token = ::strtok_r(str, "&", &saved_ptr);
+#endif
       if (NULL == token) {
         break;
       } else if (0 == strncmp(REGION, token, strlen(REGION))) {
@@ -1222,7 +1226,11 @@ int check_sts_credential_format(const char *sts_credential_str, ObStsCredential 
     tmp_sts_credential[sts_credential_len] = '\0';
     token = tmp_sts_credential;
     for (char *str = token; OB_SUCC(ret); str = nullptr) {
+#ifdef _WIN32
+      token = ::strtok_s(str, "&", &saved_ptr);
+#else
       token = ::strtok_r(str, "&", &saved_ptr);
+#endif
       if (nullptr == token) {
         break;
       } else if (0 == strncmp(STS_AK, token, strlen(STS_AK))) {

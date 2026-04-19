@@ -578,7 +578,7 @@ public:
     cell_ = cell;
     is_padding_mode_ = is_padding_mode;
   }
-  inline value_type &operator*()
+  inline const value_type &operator*() const
   {
     OB_ASSERT(nullptr != decoder_);
     OB_ASSERT(OB_SUCCESS == decoder_->decode(ctx_->obj_meta_.get_type(), cell_, index_, meta_length_));
@@ -588,7 +588,7 @@ public:
     }
     return cell_;
   }
-  inline value_type *operator->()
+  inline const value_type *operator->() const
   {
     OB_ASSERT(nullptr != decoder_);
     OB_ASSERT(OB_SUCCESS == decoder_->decode(ctx_->obj_meta_.get_type(), cell_, index_, meta_length_));
@@ -620,11 +620,10 @@ public:
     index_++;
     return *this;
   }
-  inline ObDictDecoderIterator &operator+(int64_t offset)
+  inline ObDictDecoderIterator operator+(int64_t offset) const
   {
     OB_ASSERT(nullptr != decoder_);
-    index_ += offset;
-    return *this;
+    return ObDictDecoderIterator(decoder_, ctx_, index_ + offset, meta_length_, cell_, is_padding_mode_);
   }
   inline ObDictDecoderIterator &operator+=(int64_t offset)
   {
@@ -632,29 +631,28 @@ public:
     index_ += offset;
     return *this;
   }
-  inline difference_type operator-(const ObDictDecoderIterator &rhs)
+  inline difference_type operator-(const ObDictDecoderIterator &rhs) const
   {
     return index_ - rhs.index_;
   }
-  inline ObDictDecoderIterator &operator-(int64_t offset)
+  inline ObDictDecoderIterator operator-(int64_t offset) const
   {
     OB_ASSERT(nullptr != decoder_);
-    index_ -= offset;
-    return *this;
+    return ObDictDecoderIterator(decoder_, ctx_, index_ - offset, meta_length_, cell_, is_padding_mode_);
   }
   inline bool operator==(const ObDictDecoderIterator &rhs) const
   {
     return (this->index_ == rhs.index_);
   }
-  inline bool operator!=(const ObDictDecoderIterator &rhs)
+  inline bool operator!=(const ObDictDecoderIterator &rhs) const
   {
     return (this->index_ != rhs.index_);
   }
-  inline bool operator<(const ObDictDecoderIterator &rhs)
+  inline bool operator<(const ObDictDecoderIterator &rhs) const
   {
     return (this->index_ < rhs.index_);
   }
-  inline bool operator<=(const ObDictDecoderIterator &rhs)
+  inline bool operator<=(const ObDictDecoderIterator &rhs) const
   {
     return (this->index_ <= rhs.index_);
   }
@@ -663,7 +661,7 @@ private:
   const ObColumnDecoderCtx *ctx_;
   int64_t index_;
   int64_t meta_length_;
-  value_type cell_;
+  mutable value_type cell_;
   bool is_padding_mode_;
 };
 

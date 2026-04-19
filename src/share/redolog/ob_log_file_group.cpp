@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX COMMON
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "ob_log_file_group.h"
 #include "share/redolog/ob_log_file_handler.h"
 #include "share/config/ob_server_config.h"
@@ -55,6 +58,15 @@ int ObLogFileGroup::init(const char *log_dir)
   } else if (OB_ISNULL(log_dir) || OB_UNLIKELY(0 == STRLEN(log_dir))) {
     LOG_WARN("invalid args", K(ret), K(log_dir));
   } else {
+#ifdef _WIN32
+    ULARGE_INTEGER free_bytes_available, total_bytes, total_free_bytes;
+    if (!GetDiskFreeSpaceExA(log_dir, &free_bytes_available, &total_bytes, &total_free_bytes)) {
+      ret = OB_IO_ERROR;
+      LOG_WARN("failed to get disk space", K(ret), K(log_dir), K(errno), KERRMSG);
+    } else {
+      total_disk_size_ = static_cast<int64_t>(total_bytes.QuadPart);
+    }
+#else
     struct statfs buf;
     if (0 != ::statfs(log_dir, &buf)) {
       ret = OB_IO_ERROR;
@@ -62,6 +74,7 @@ int ObLogFileGroup::init(const char *log_dir)
     } else {
       total_disk_size_ = (int64_t)buf.f_bsize * (int64_t)buf.f_blocks;
     }
+#endif
   }
 
   if (OB_SUCC(ret)) {

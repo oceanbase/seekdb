@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SQL
+
 #include "ob_end_trans_cb_packet_param.h"
 #include "sql/ob_result_set.h"
 

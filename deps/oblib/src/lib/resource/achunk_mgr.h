@@ -20,7 +20,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <functional>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 #include "lib/alloc/alloc_struct.h"
 #include "lib/alloc/abit_set.h"
 #include "lib/atomic/ob_atomic.h"
@@ -36,7 +38,7 @@ namespace lib
 class ProtectedStackAllocator;
 struct AChunk;
 
-static const uint64_t MAXADDR = (1L << 52);
+static const uint64_t MAXADDR = (1ULL << 52);
 static const uint64_t CHUNK_BITMAP_SIZE = MAXADDR / MEMCHK_CHUNK_ALIGN;
 
 // A stack style chunk list, support push and pop operations.

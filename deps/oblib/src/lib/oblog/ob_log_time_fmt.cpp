@@ -46,11 +46,23 @@ const char *ObTime2Str::ob_timestamp_str(const int64_t ts)
   struct tm t;
   time_t ts_s = ts / 1000000;// convert to second precision
   TimestampStrBuffer_ &buffer = timestamp_str_buffer[buffer_idx++ & IDX_MASK];
+#ifdef _WIN32
+  if (ts_s < 0) ts_s = 0;
+  errno_t err = localtime_s(&t, &ts_s);
+  if (err != 0) {
+    memset(&t, 0, sizeof(t));
+    t.tm_year = 70;
+    t.tm_mday = 1;
+  }
+  size_t idx = strftime(&buffer[0], sizeof(buffer), "%F %T", &t);
+  idx += snprintf(&buffer[idx], TIME_BUFFER_SIZE - idx, ".%lld", ts % 1000000);
+#else
   size_t idx = strftime(&buffer[0],
                         sizeof(buffer),
                         "%F %T",
                         localtime_r(&ts_s, &t));
   idx += snprintf(&buffer[idx], TIME_BUFFER_SIZE - idx, ".%ld", ts % 1000000);
+#endif
   buffer[idx] = '\0';
   return buffer;
 }

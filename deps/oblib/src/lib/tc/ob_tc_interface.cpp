@@ -81,8 +81,13 @@ static QDiscRoot* fetch_root(int qid, int chan_id)
 static QDiscRoot* create_and_fetch_root(int qid, int chan_id)
 {
   int64_t target_id = (chan_id + 1) * QID_CAPACITY + qid;
+#ifndef _WIN32
   QDesc* tpl = (typeof(tpl))qdtable[qid];
   IQDisc** slot = (typeof(slot))(qdtable + target_id);
+#else
+  QDesc* tpl = static_cast<QDesc*>(qdtable[qid]);
+  IQDisc** slot = reinterpret_cast<IQDisc**>(qdtable + target_id);
+#endif
   if (NULL == *slot) {
     *slot = qdisc_new_from_tpl(tpl, chan_id);
   }
@@ -93,9 +98,17 @@ static IQDisc* create_path_and_fetch_leaf(int qid, int chan_id)
 {
   if (qid < 0 || NULL == qdtable[qid]) return NULL;
   int64_t target_id = (chan_id + 1) * QID_CAPACITY + qid;
+#ifndef _WIN32
   IQDisc** slot = (typeof(slot))(qdtable + target_id);
+#else
+  IQDisc** slot = reinterpret_cast<IQDisc**>(qdtable + target_id);
+#endif
   if (*slot) return *slot;
+#ifndef _WIN32
   QDesc* tpl = (typeof(tpl))qdtable[qid];
+#else
+  QDesc* tpl = static_cast<QDesc*>(qdtable[qid]);
+#endif
   int parent_id = tpl->get_parent();
   assert(parent_id >= 0);
   IQDisc* parent = create_path_and_fetch_leaf(parent_id, chan_id);
@@ -120,7 +133,11 @@ int qdisc_create(int type, int parent_id, const char* name)
   int root = -1;
   if (id >= 0) {
     if (type != QDISC_ROOT) {
+#ifndef _WIN32
       QDesc* parent = (typeof(parent))imap_fetch(parent_id);
+#else
+      QDesc* parent = static_cast<QDesc*>(imap_fetch(parent_id));
+#endif
       root = parent->get_root();
       if (root < 0) {
         root = parent_id;
@@ -144,7 +161,11 @@ int qdisc_set_weight(int qid, int64_t weight)
 {
   int err = 0;
   QWGuard("set_weight");
+#ifndef _WIN32
   QDesc* q = (typeof(q))imap_fetch(qid);
+#else
+  QDesc* q = static_cast<QDesc*>(imap_fetch(qid));
+#endif
   if (NULL == q) {
     err = -ENOENT;
   } else {
@@ -158,7 +179,11 @@ int qdisc_set_limit(int qid, int64_t limit)
   int err = 0;
   QWGuard("set_limit");
   limit = (limit <= 0) ? INT64_MAX : limit;
+#ifndef _WIN32
   QDesc* q = (typeof(q))imap_fetch(qid);
+#else
+  QDesc* q = static_cast<QDesc*>(imap_fetch(qid));
+#endif
   if (NULL == q) {
     err = -ENOENT;
   } else {
@@ -172,7 +197,11 @@ int qdisc_set_reserve(int qid, int64_t limit)
   int err = 0;
   QWGuard("set_reserve");
   limit = limit < 0 ? INT64_MAX : limit;
+#ifndef _WIN32
   QDesc* q = (typeof(q))imap_fetch(qid);
+#else
+  QDesc* q = static_cast<QDesc*>(imap_fetch(qid));
+#endif
   if (NULL == q) {
     err = -ENOENT;
   } else {
@@ -185,8 +214,13 @@ int qdisc_add_limit(int qid, int limiter_id)
 {
   int err = 0;
   QWGuard("add_limit");
+#ifndef _WIN32
   QDesc* q = (typeof(q))imap_fetch(qid);
   ITCLimiter* L = (typeof(L))imap_fetch(limiter_id);
+#else
+  QDesc* q = static_cast<QDesc*>(imap_fetch(qid));
+  ITCLimiter* L = static_cast<ITCLimiter*>(imap_fetch(limiter_id));
+#endif
   if (NULL == q) {
     err = -ENOENT;
     TC_INFO("qdisc add limit fail, get qdesc fail: qid: %d, limiter_id: %d, q: %p, L: %p", qid, limiter_id, q, L);
@@ -203,8 +237,13 @@ int qdisc_del_limit(int qid, int limiter_id)
 {
   int err = 0;
   QWGuard("del_limit");
+#ifndef _WIN32
   QDesc* q = (typeof(q))imap_fetch(qid);
   ITCLimiter* L = (typeof(L))imap_fetch(limiter_id);
+#else
+  QDesc* q = static_cast<QDesc*>(imap_fetch(qid));
+  ITCLimiter* L = static_cast<ITCLimiter*>(imap_fetch(limiter_id));
+#endif
   if (NULL == q) {
     err = -ENOENT;
     TC_INFO("qdisc del limit fail, get qdesc fail: qid: %d, limiter_id: %d, q: %p, L: %p", qid, limiter_id, q, L);
@@ -221,8 +260,13 @@ int qdisc_add_reserve(int qid, int limiter_id)
 {
   int err = 0;
   QWGuard("add_reserve");
+#ifndef _WIN32
   QDesc* q = (typeof(q))imap_fetch(qid);
   ITCLimiter* L = (typeof(L))imap_fetch(limiter_id);
+#else
+  QDesc* q = static_cast<QDesc*>(imap_fetch(qid));
+  ITCLimiter* L = static_cast<ITCLimiter*>(imap_fetch(limiter_id));
+#endif
   if (NULL == q) {
     err = -ENOENT;
     TC_INFO("qdisc add reserve fail, get qdesc fail: qid: %d, limiter_id: %d, q: %p, L: %p", qid, limiter_id, q, L);
@@ -239,8 +283,13 @@ int qdisc_del_reserve(int qid, int limiter_id)
 {
   int err = 0;
   QWGuard("del_reserve");
+#ifndef _WIN32
   QDesc* q = (typeof(q))imap_fetch(qid);
   ITCLimiter* L = (typeof(L))imap_fetch(limiter_id);
+#else
+  QDesc* q = static_cast<QDesc*>(imap_fetch(qid));
+  ITCLimiter* L = static_cast<ITCLimiter*>(imap_fetch(limiter_id));
+#endif
   if (NULL == q) {
     err = -ENOENT;
     TC_INFO("qdisc del reserve fail, get qdesc fail: qid: %d, limiter_id: %d, q: %p, L: %p", qid, limiter_id, q, L);
@@ -257,7 +306,11 @@ int qsched_set_handler(int qid, ITCHandler* handler)
 {
   int err = 0;
   QWGuard("set_handler");
+#ifndef _WIN32
   QDescRoot* root = (typeof(root))imap_fetch(qid);
+#else
+  QDescRoot* root = static_cast<QDescRoot*>(imap_fetch(qid));
+#endif
   if (NULL == root) {
     err = -ENOENT;
     TC_INFO("qdisc set handler fail: qid: %d, handler: %p, root: %p", qid, handler, root);
@@ -274,7 +327,11 @@ int qsched_start(int qid, int n_thread)
   if (n_thread >= MAX_N_CHAN) {
     n_thread = MAX_N_CHAN;
   }
+#ifndef _WIN32
   QDescRoot* root = (typeof(root))imap_fetch(qid);
+#else
+  QDescRoot* root = static_cast<QDescRoot*>(imap_fetch(qid));
+#endif
   if (NULL == root) {
     err = -ENOENT;
     TC_INFO("qdisc start fail: qid: %d, n_thread: %d, root: %p", qid, n_thread, root);
@@ -288,7 +345,11 @@ int qsched_stop(int qid)
 {
   int err = 0;
   QWGuard("stop");
+#ifndef _WIN32
   QDescRoot* root = (typeof(root))imap_fetch(qid);
+#else
+  QDescRoot* root = static_cast<QDescRoot*>(imap_fetch(qid));
+#endif
   if (NULL == root) {
     err = -ENOENT;
     TC_INFO("qdisc stop fail: qid: %d, root: %p", qid, root);
@@ -302,7 +363,11 @@ int qsched_wait(int qid)
 {
   int err = 0;
   QWGuard("wait");
+#ifndef _WIN32
   QDescRoot* root = (typeof(root))imap_fetch(qid);
+#else
+  QDescRoot* root = static_cast<QDescRoot*>(imap_fetch(qid));
+#endif
   if (NULL == root) {
     err = -ENOENT;
     TC_INFO("qdisc wait fail: qid: %d, root: %p", qid, root);
@@ -316,7 +381,11 @@ int qsched_submit(int qid, TCRequest* req, uint32_t chan_id)
 {
   int err = 0;
   QRGuard("submit");
+#ifndef _WIN32
   QDescRoot* root = (typeof(root))imap_fetch(qid);
+#else
+  QDescRoot* root = static_cast<QDescRoot*>(imap_fetch(qid));
+#endif
   if (NULL == root) {
     err = -ENOENT;
     TC_INFO("qdisc submit fail: qid: %d, req: %p, chan_id: %d", qid, req, chan_id);
@@ -363,7 +432,11 @@ int tclimit_set_limit(int limiter_id, int64_t limit)
   int err = 0;
   QWGuard("set_limit");
   limit = (limit <= 0) ? INT64_MAX : limit;
+#ifndef _WIN32
   ITCLimiter* L = (typeof(L))imap_fetch(limiter_id);
+#else
+  ITCLimiter* L = static_cast<ITCLimiter*>(imap_fetch(limiter_id));
+#endif
   if (NULL == L) {
     err = -ENOENT;
   } else {
@@ -376,7 +449,11 @@ int tclimit_get_limit(int limiter_id, int64_t &limit)
 {
   int err = 0;
   QRGuard("get_limit");
+#ifndef _WIN32
   ITCLimiter* L = (typeof(L))imap_fetch(limiter_id);
+#else
+  ITCLimiter* L = static_cast<ITCLimiter*>(imap_fetch(limiter_id));
+#endif
   if (NULL == L) {
     err = -ENOENT;
   } else {

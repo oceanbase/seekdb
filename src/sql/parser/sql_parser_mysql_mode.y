@@ -20,6 +20,9 @@
 %locations
 %verbose
 %error-verbose
+%code requires {
+#include "parse_node.h"
+}
 %{
 #include <stdint.h>
 #define YYDEBUG 1
@@ -295,7 +298,7 @@ END_P SET_VAR DELIMITER
 
         EFFECTIVE EMPTY ENABLE ENABLE_EXTENDED_ROWID ENABLE_MACRO_BLOCK_BLOOM_FILTER ENCRYPT ENCRYPTED ENCRYPTION END ENDPOINT ENDS ENFORCED ENGINE_ ENGINES ENUM ENTITY ERROR_CODE ERROR_P ERRORS ESTIMATE
         ESCAPE EVENT EVENTS EVERY EXCHANGE EXCLUDING EXECUTE EXPANSION EXPIRE EXPIRE_INFO EXPORT OUTLINE EXTENDED
-        EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN EXTERNAL EXTERNAL_STORAGE_DEST EXPIRE_TIME
+        EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN EXTERNAL EXTERNAL_STORAGE_DEST EXPIRE_TIME EXCLUSIVE
 
         FAIL FAILOVER FAST FAULTS FILE_BLOCK_SIZE FIELDS FILEX FINAL_COUNT FIRST FIRST_VALUE FIXED FLUSH FOLLOWER FORMAT
         FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
@@ -308,7 +311,7 @@ END_P SET_VAR DELIMITER
 
         ID IDENTIFIED IGNORE_SERVER_IDS IK_MODE ILOG IMMEDIATE IMPORT INCLUDING INCR INDEXES INDEX_TABLE_ID INFO INITIAL_SIZE
         INNODB INSERT_METHOD INSTALL INSTANCE INVOKER IO IOPS_WEIGHT IO_THREAD IPC ISOLATE ISOLATION ISSUER
-        INCREMENT IS_TENANT_SYS_POOL INVISIBLE MERGE ISNULL INTERSECT INCREMENTAL INNER_PARSE ILOGCACHE INPUT INDEXED INCONSISTENT INDIVIDUAL
+        INCREMENT IS_TENANT_SYS_POOL INVISIBLE MERGE ISNULL INTERSECT INCREMENTAL INNER_PARSE ILOGCACHE INPUT INDEXED INPLACE INSTANT INCONSISTENT INDIVIDUAL
 
         JOB JSON JSON_ARRAYAGG JSON_OBJECTAGG JSON_QUERY JSON_VALUE JSON_TABLE
 
@@ -362,7 +365,7 @@ END_P SET_VAR DELIMITER
         STRATEGY SYNCHRONIZATION SYNCHRONOUS STOP STORAGE STORAGE_FORMAT_VERSION STORE STORING STRING STRIPE_SIZE
         SUBCLASS_ORIGIN SUBDATE SUBJECT SUBPARTITION SUBPARTITIONS SUBSTR SUBSTRING SUCCESSFUL SUM
         SUPER SUSPEND SWAPS SWITCH SWITCHES SWITCHOVER SYSTEM SYSTEM_USER SYSDATE SESSION_ALIAS
-        SIZE SKEWONLY SEQUENCE SLOG STATEMENT_ID SKIP_HEADER PARSE_HEADER IGNORE_LAST_EMPTY_COLUMN SKIP_BLANK_LINES STATEMENT SUM_OPNSIZE SS_MICRO_CACHE SPARSEVECTOR
+        SIZE SKEWONLY SEQUENCE SLOG STATEMENT_ID SKIP_HEADER PARSE_HEADER IGNORE_LAST_EMPTY_COLUMN SKIP_BLANK_LINES STATEMENT SUM_OPNSIZE SS_MICRO_CACHE SPARSEVECTOR SHARED
 
         TABLE_CHECKSUM TABLE_MODE TABLE_ID TABLE_NAME TABLEGROUPS TABLES TABLET TABLET_ID TABLET_MAX_SIZE TASK_ID
         TEMPLATE TEMPORARY TEMPTABLE TENANT TEXT THAN TIME TIMESTAMP TIMESTAMPADD TIMESTAMPDIFF TP_NO
@@ -568,6 +571,7 @@ END_P SET_VAR DELIMITER
 %type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url opt_sub_path credential_option_list credential_option opt_credential location_utils_stmt
 
 %type <node> vector_similarity_expr vector_similarity_metric
+%type <node> algorithm_opt lock_opt
 %start sql_stmt
 %%
 ////////////////////////////////////////////////////////////////
@@ -8934,7 +8938,7 @@ TYPE COMP_EQ STRING_VALUE
 }
 | COLUMN_BLOOM_FILTER COMP_EQ '(' intnum_list ')'
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_BLOOM_FILTER, 1, $4)
+  malloc_non_terminal_node($$, result->malloc_pool_, T_COLUMN_BLOOM_FILTER, 1, $4);
 }
 | FILE_EXTENSION COMP_EQ STRING_VALUE
 {
@@ -10687,7 +10691,7 @@ INSERT
 
 /*TODO: support no_param_column_ref case*/
 column_list_with_boost:
-with_param_column_ref { $$ = $1}
+with_param_column_ref { $$ = $1; }
 | column_list_with_boost ',' with_param_column_ref
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
@@ -14628,7 +14632,7 @@ table_factor %prec LOWER_COMMA
 natural_join_type:
 NATURAL except_full_outer_join_type
 {
-  $$ = $2
+  $$ = $2;
 }
 | NATURAL FULL opt_outer JOIN
 {
@@ -15947,7 +15951,7 @@ calibration_info_list:
 }
 | STRING_VALUE
 {
-  $$ = $1
+  $$ = $1;
 }
 | calibration_info_list ',' STRING_VALUE
 {
@@ -18174,6 +18178,56 @@ DROP CONSTRAINT constraint_name
 | REMOVE TTL
 {
   malloc_terminal_node($$, result->malloc_pool_, T_REMOVE_TTL);
+}
+| ALGORITHM opt_equal_mark algorithm_opt
+{
+  (void)($2);
+  (void)($3);
+  $$ = NULL;
+}
+| LOCK_ opt_equal_mark lock_opt
+{
+  (void)($2);
+  (void)($3);
+  $$ = NULL;
+}
+;
+
+algorithm_opt:
+DEFAULT
+{
+  (void) ($$);
+}
+| INPLACE
+{
+  (void) ($$);
+}
+| COPY
+{
+  (void) ($$);
+}
+| INSTANT
+{
+  (void) ($$);
+}
+;
+
+lock_opt:
+DEFAULT
+{
+  (void) ($$);
+}
+| NONE
+{
+ (void) ($$);
+}
+| SHARED
+{
+  (void) ($$);
+}
+| EXCLUSIVE
+{
+  (void) ($$);
 }
 ;
 
@@ -20942,7 +20996,7 @@ FILE_ID opt_equal_mark INTNUM
 opt_file_id:
 file_id
 {
-  $$ = $1
+  $$ = $1;
 }
 |
 {
@@ -23710,7 +23764,7 @@ MIN_MAX
 }
 | SUM
 {
-  malloc_terminal_node($$, result->malloc_pool_, T_COL_SKIP_INDEX_SUM)
+  malloc_terminal_node($$, result->malloc_pool_, T_COL_SKIP_INDEX_SUM);
 }
 ;
 
@@ -24184,6 +24238,7 @@ ACCESS_INFO
 |       EXCEPT %prec HIGHER_PARENS
 |       EXCHANGE
 |       EXCLUDING
+|       EXCLUSIVE
 |       EXPANSION
 |       EXPIRE
 |       EXPIRED
@@ -24270,6 +24325,8 @@ ACCESS_INFO
 |       INVOKER
 |       INCREMENT
 |       INCREMENTAL
+|       INPLACE
+|       INSTANT
 |       IO
 |       IOPS_WEIGHT
 |       IO_THREAD
@@ -24605,6 +24662,7 @@ ACCESS_INFO
 |       SET_TP
 |       SHARDING
 |       SHARE
+|       SHARED
 |       SIGNED
 |       SIZE %prec LOWER_PARENS
 |       SIMPLE

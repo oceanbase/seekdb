@@ -45,8 +45,8 @@ void PalfDiskOptions::reset()
 
 bool PalfDiskOptions::is_valid() const
 {
-  const int64_t MIN_DURATION = 1 * 1000 * 1000L;
-  const int64_t MAX_DURATION = 3 * 24 * 60 * 60 * 1000 * 1000L;
+  const int64_t MIN_DURATION = 1LL * 1000 * 1000;
+  const int64_t MAX_DURATION = 3LL * 24 * 60 * 60 * 1000 * 1000;
   return 0 <= log_disk_usage_limit_size_
     && 0 <=log_disk_utilization_threshold_ && 100 >= log_disk_utilization_threshold_
     && 1 <=log_disk_utilization_limit_threshold_ && 100 >= log_disk_utilization_limit_threshold_

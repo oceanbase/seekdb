@@ -459,6 +459,70 @@ bool ObLiteEmbedConn::need_autocommit()
   return need_ac;
 }
 
+// Prepared Statement API Implementation
+
+int ObLiteEmbedConn::prepare_stmt(const char* sql, uint64_t &stmt_id, int64_t &param_count)
+{
+  int ret = OB_SUCCESS;
+  LOG_INFO("[PS_DEBUG] prepare_stmt called", K(sql), KP(session_), KP(conn_));
+  if (OB_ISNULL(session_) || OB_ISNULL(conn_)) {
+    ret = OB_CONNECT_ERROR;
+    LOG_WARN("session or conn is null", KR(ret), KP(session_), KP(conn_));
+  } else {
+    LOG_INFO("[PS_DEBUG] calling conn_->stmt_prepare", K(sql));
+    ObString sql_str(sql);
+    ret = conn_->stmt_prepare(OB_SYS_TENANT_ID, sql_str, stmt_id, param_count);
+    LOG_INFO("[PS_DEBUG] conn_->stmt_prepare returned", KR(ret), K(sql));
+    if (OB_FAIL(ret)) {
+      LOG_WARN("stmt_prepare failed", KR(ret), K(sql));
+    } else {
+      FLOG_INFO("prepare_stmt success", K(sql), K(stmt_id), K(param_count));
+    }
+  }
+  return ret;
+}
+
+int ObLiteEmbedConn::execute_stmt(uint64_t stmt_id, const common::ParamStore &params,
+                                   uint64_t &affected_rows, int64_t &result_seq)
+{
+  int ret = OB_SUCCESS;
+  int64_t affected = 0;
+  result_seq = ATOMIC_AAF(&result_seq_, 1);
+  ObCurTraceId::init(GCTX.self_addr());
+  reset_result();
+  if (OB_NOT_NULL(session_)) {
+    common::ob_setup_tsi_warning_buffer(&session_->get_warnings_buffer());
+  }
+
+  if (OB_ISNULL(session_) || OB_ISNULL(conn_)) {
+    ret = OB_CONNECT_ERROR;
+    LOG_WARN("session or conn is null", KR(ret), KP(session_), KP(conn_));
+  } else if (OB_FAIL(conn_->stmt_execute(OB_SYS_TENANT_ID, stmt_id, params, affected))) {
+    LOG_WARN("stmt_execute failed", KR(ret), K(stmt_id));
+  } else {
+    affected_rows = static_cast<uint64_t>(affected);
+  }
+  if (OB_NOT_NULL(session_)) {
+    session_->reset_warnings_buf();
+  }
+  common::ob_setup_tsi_warning_buffer(NULL);
+  return ret;
+}
+
+int ObLiteEmbedConn::close_stmt(uint64_t stmt_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(session_) || OB_ISNULL(conn_)) {
+    ret = OB_CONNECT_ERROR;
+    LOG_WARN("session or conn is null", KR(ret));
+  } else if (OB_FAIL(conn_->stmt_close(OB_SYS_TENANT_ID, stmt_id))) {
+    LOG_WARN("stmt_close failed", KR(ret), K(stmt_id));
+  } else {
+    FLOG_INFO("close_stmt success", K(stmt_id));
+  }
+  return ret;
+}
+
 int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &result_seq, std::string &errmsg)
 {
   int ret = OB_SUCCESS;
@@ -474,22 +538,45 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
   if (OB_ISNULL(conn_) || OB_ISNULL(session_)) {
     ret = OB_CONNECT_ERROR;
     LOG_WARN("conn is empty", KR(ret), KP(conn_), KP(session_));
-  } else if (OB_ISNULL(result_ = (common::ObCommonSqlProxy::ReadResult*)ob_malloc(sizeof(common::ObCommonSqlProxy::ReadResult), mem_attr))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc mem failed", KR(ret));
-  } else if (FALSE_IT(new (result_) common::ObCommonSqlProxy::ReadResult())) {
-  } else if (OB_FAIL(conn_->execute_read(OB_SYS_TENANT_ID, sql_string, *result_, true))) {
-    LOG_WARN("execute sql failed", KR(ret), K(sql), K(session_->is_in_transaction()));
   } else {
-    observer::ObInnerSQLResult& res = static_cast<observer::ObInnerSQLResult&>(*result_->get_result());
-    if (res.result_set().get_stmt_type() == sql::stmt::T_SELECT) {
-      affected_rows = UINT64_MAX;
-    } else {
-      affected_rows = res.result_set().get_affected_rows();
+    // Check if this is a SELECT query
+    bool is_select = false;
+    const char* p = sql;
+    while (*p == ' ') p++;  // skip leading spaces
+    if (strncasecmp(p, "SELECT", 6) == 0) {
+      is_select = true;
     }
-    int64_t end_time = ObTimeUtility::current_time();
-    FLOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows), K(res.result_set().get_stmt_type()),
-        "cost", end_time-start_time);
+
+    if (is_select) {
+      // Use execute_read for SELECT queries
+      if (OB_ISNULL(result_ = (common::ObCommonSqlProxy::ReadResult*)ob_malloc(sizeof(common::ObCommonSqlProxy::ReadResult), mem_attr))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("alloc mem failed", KR(ret));
+      } else if (FALSE_IT(new (result_) common::ObCommonSqlProxy::ReadResult())) {
+      } else if (OB_FAIL(conn_->execute_read(OB_SYS_TENANT_ID, sql_string, *result_, true))) {
+        LOG_WARN("execute sql failed", KR(ret), K(sql), K(session_->is_in_transaction()));
+      } else {
+        observer::ObInnerSQLResult& res = static_cast<observer::ObInnerSQLResult&>(*result_->get_result());
+        affected_rows = UINT64_MAX;
+        int64_t end_time = ObTimeUtility::current_time();
+        FLOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows), K(res.result_set().get_stmt_type()),
+            "cost", end_time-start_time);
+      }
+    } else {
+      // Use execute_write for non-SELECT queries (INSERT, UPDATE, DELETE, CREATE, BEGIN, etc.)
+      int64_t affected = 0;
+      ret = conn_->execute_write(OB_SYS_TENANT_ID, sql_string, affected, true);
+      if (OB_FAIL(ret)) {
+        LOG_WARN("execute sql failed", KR(ret), K(sql), K(session_->is_in_transaction()));
+      } else {
+        affected_rows = static_cast<uint64_t>(affected);
+        int64_t end_time = ObTimeUtility::current_time();
+        FLOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows),
+            "cost", end_time-start_time);
+        // Reset transaction variables after execute to allow prepared statements to work
+        session_->reset_tx_variable(true);
+      }
+    }
   }
   {
     ObString err_msg = handle_err_msg(ret);

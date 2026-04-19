@@ -19,6 +19,9 @@
 #include "share/object_storage/ob_device_manifest.h"
 #include "share/object_storage/ob_device_config_parser.h"
 #include "share/ob_io_device_helper.h"
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 
 namespace oceanbase
 {
@@ -277,7 +280,11 @@ int ObDeviceManifest::dump2file(
       } else if (OB_FAIL(databuff_printf(his_manifest_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s.history",
                                          data_dir_, MANIFEST_FILE_NAME))) {
         LOG_WARN("fail to construct history manifest path", KR(ret));
-      } else if ((fd = ::open(tmp_manifest_path, O_WRONLY | O_CREAT | O_TRUNC,
+      } else if ((fd = ::open(tmp_manifest_path, O_WRONLY | O_CREAT | O_TRUNC
+#ifdef _WIN32
+                                | _O_BINARY
+#endif
+                                ,
                                 S_IRUSR | S_IWUSR | S_IRGRP)) < 0) {
         ret = ObIODeviceLocalFileOp::convert_sys_errno();
         LOG_WARN("fail to create tmp manifest", KR(ret), K(tmp_manifest_path), K(errno), KERRMSG);

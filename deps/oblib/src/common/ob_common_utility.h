@@ -16,7 +16,9 @@
 
 #ifndef _OCEABASE_COMMON_OB_COMMON_UTILITY_H_
 #define _OCEABASE_COMMON_OB_COMMON_UTILITY_H_
+#ifndef _WIN32
 #include <sys/time.h>
+#endif
 #include "lib/ob_define.h"
 #include "lib/time/ob_tsc_timestamp.h"
 namespace oceanbase

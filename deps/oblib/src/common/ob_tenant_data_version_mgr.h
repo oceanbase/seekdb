@@ -102,7 +102,11 @@ private:
     // tenant_id: version_str version_val removed remove_timestamp
     // for removed field, 1 stands for tenant is removed, 0 stands for tenant is active
     // e.g. 1001: 4.3.0.1 17180065793 0 0
+#ifdef _WIN32
+    static constexpr const char *DUMP_BUF_FORMAT = "%llu: %s %llu %d %llu";
+#else
     static constexpr const char *DUMP_BUF_FORMAT = "%lu: %s %lu %d %lu";
+#endif
     // the max length of uint64 decimal format is 20, so:
     // tenant_id(20) + version_str(OB_SERVER_VERSION_LENGTH) + version_val(20) +
     // removed(1) + remove_timestamp(20) + spaces_and_others(10)

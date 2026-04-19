@@ -19,6 +19,11 @@
 #include <sys/prctl.h>
 #elif defined(__APPLE__)
 #include <pthread.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
 #endif
 #include "lib/ob_define.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -32,6 +37,14 @@ void set_thread_name_inner(const char* name)
 {
 #ifdef __APPLE__
   pthread_setname_np(name);
+#elif defined(_WIN32)
+  wchar_t wname[16] = {0};
+  int len = MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, 15);
+  if (len == 0) {
+    MultiByteToWideChar(CP_UTF8, 0, name, 14, wname, 15);
+  }
+  wname[15] = L'\0';
+  SetThreadDescription(GetCurrentThread(), wname);
 #else
   prctl(PR_SET_NAME, name);
 #endif

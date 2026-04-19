@@ -43,8 +43,6 @@ public:
                                         int64_t rows,
                                         bool is_eof,
                                         bool append_whole_block);
-private:
-  static int process_px_bloom_filter_data(ObDtlLinkedBuffer *&buffer);
 };
 
 class ObDtlBCSendMessageP

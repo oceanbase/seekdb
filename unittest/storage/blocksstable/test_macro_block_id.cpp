@@ -140,15 +140,15 @@ TEST_F(TestMacroBlockId, test_transfer_seq)
            sizeof(int64_t),
            true,
            OB_LOG_LEVEL_WARN);
-  int64_t tablet_version1 = test_block_id.meta_version_id();
+  uint64_t tablet_version1 = test_block_id.meta_version_id();
   OB_LOG(INFO, "tablet_version1");
   hex_dump(&tablet_version1,
-           sizeof(int64_t),
+           sizeof(uint64_t),
            true,
            OB_LOG_LEVEL_WARN);
 
   ASSERT_EQ(-1, transfer_seq1);
-  ASSERT_EQ(17592186044415, tablet_version1); // compile failed when using ObStorageObjectOpt::INVALID_TABLET_VERSION
+  ASSERT_EQ(ObStorageObjectOpt::INVALID_TABLET_VERSION, tablet_version1);
   ASSERT_FALSE(test_block_id.is_valid());
 
   const int64_t buf_len = 50;

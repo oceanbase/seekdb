@@ -216,24 +216,6 @@ public:
   // @param[out]:
   // - exist
 
-  // 1. won't cache versions.
-  // @param[in]:
-  // - table_ids
-  // @param[out]:
-  // - versions
-  int get_table_schema_versions(
-      const common::ObIArray<uint64_t> &table_ids,
-      common::ObIArray<ObSchemaIdVersion> &versions);
-
-  // 1. won't cache versions.
-  // @param[in]:
-  // - table_ids
-  // @param[out]:
-  // - versions
-  int get_mock_fk_parent_table_schema_versions(
-      const common::ObIArray<uint64_t> &table_ids,
-      common::ObIArray<ObSchemaIdVersion> &versions);
-
   // 1. won't cache
   //
   // https://docs.oracle.com/cd/E18283_01/server.112/e17118/sql_elements008.htm
@@ -278,6 +260,21 @@ public:
       const ObString &index_name,
       const bool is_built_in,
       ObIndexSchemaInfo &index_info);
+
+  // 1. won't cache versions.
+  // @param[in]:
+  // - obj_ids
+  // @param[out]:
+  // - versions
+#ifndef GET_OBJ_SCHEMA_VERSIONS
+#define GET_OBJ_SCHEMA_VERSIONS(OBJECT_NAME) \
+  int get_##OBJECT_NAME##_schema_versions(const common::ObIArray<uint64_t> &obj_ids, \
+                                          common::ObIArray<ObSchemaIdVersion> &versions);
+
+  GET_OBJ_SCHEMA_VERSIONS(table);
+  GET_OBJ_SCHEMA_VERSIONS(mock_fk_parent_table);
+#undef GET_OBJ_SCHEMA_VERSIONS
+#endif
 
   // 1. won't cache
   // 2. this function is used to get obj_privs of specified object
@@ -371,7 +368,9 @@ int get_table_id_and_table_name_in_tablegroup(
   // @param[out]:
   // - sequence_schema: return NULL if sequence not exist
   int get_sequence_schema(const uint64_t sequence_id,
-                          const ObSequenceSchema *&sequence_schema); 
+                          const ObSequenceSchema *&sequence_schema);
+
+  int get_sys_variable_schema(const ObSysVariableSchema *&sys_variable_schema);
 
   /* -------------- interfaces with cache end ---------------*/
 private:

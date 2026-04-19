@@ -137,6 +137,7 @@ connection conn1;
 drop table if exists t_vec;
 --enable_warnings
 create table t_vec(c1 int, c2 int, primary key(c1));
+insert into t_vec values(1, 1);
 --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 show create table t_vec;
 

@@ -199,9 +199,12 @@ public:
   const value_type &operator[](int64_t i) const { return vec_[i]; }
   // iterator
   iterator begin() { return vec_.begin(); }
-  const_iterator begin() const { return const_iterator(&*(const_cast<common::ObArray<T, ModulePageAllocator, false> *>(&vec_))->begin()); }
+  const_iterator begin() const { return const_iterator(const_cast<common::ObArray<T, ModulePageAllocator, false> *>(&vec_)->get_data()); }
   iterator end() { return vec_.end(); }
-  const_iterator end() const { return const_iterator(&*(const_cast<common::ObArray<T, ModulePageAllocator, false> *>(&vec_))->end()); }
+  const_iterator end() const {
+    auto *arr = const_cast<common::ObArray<T, ModulePageAllocator, false> *>(&vec_);
+    return const_iterator(arr->get_data() + arr->count());
+  }
   // ObArray<T, ModulePageAllocator, false>& get_vec_() const { return vec_; }
   int remove(int64_t idx) { return vec_.remove(idx); }
 

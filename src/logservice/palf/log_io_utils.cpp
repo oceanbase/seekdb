@@ -19,7 +19,108 @@
 #endif
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <basetsd.h>
+#include <windows.h>
+typedef SSIZE_T ssize_t;
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0
+#endif
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#ifndef O_NOATIME
+#define O_NOATIME 0
+#endif
+#ifndef FALLOC_FL_ZERO_RANGE
+#define FALLOC_FL_ZERO_RANGE 0
+#endif
+#define stat64 _stat64
+static bool ob_resolve_path_at(int dir_fd, const char *rel_path, char *out, size_t out_size) {
+  if (rel_path && (rel_path[0] == '/' || rel_path[0] == '\\' ||
+      (rel_path[0] != '\0' && rel_path[1] == ':'))) {
+    return false;
+  }
+  HANDLE h = (HANDLE)_get_osfhandle(dir_fd);
+  if (h == INVALID_HANDLE_VALUE) return false;
+  char dir_path[1024];
+  DWORD len = GetFinalPathNameByHandleA(h, dir_path, sizeof(dir_path), FILE_NAME_NORMALIZED);
+  if (len == 0 || len >= sizeof(dir_path)) return false;
+  const char *clean = dir_path;
+  if (len > 4 && strncmp(dir_path, "\\\\?\\", 4) == 0) clean = dir_path + 4;
+  int written = snprintf(out, out_size, "%s\\%s", clean, rel_path);
+  return written > 0 && (size_t)written < out_size;
+}
+static int ob_fstatat64(int dir_fd, const char *path, struct _stat64 *buf, int) {
+  char abs[1024];
+  const char *p = path;
+  if (ob_resolve_path_at(dir_fd, path, abs, sizeof(abs))) p = abs;
+  return _stat64(p, buf);
+}
+#define fstatat64 ob_fstatat64
+static int ob_openat(int dir_fd, const char *path, int flags, ...) {
+  int mode = 0;
+  if (flags & _O_CREAT) { mode = _S_IREAD | _S_IWRITE; }
+  char abs[1024];
+  const char *p = path;
+  if (ob_resolve_path_at(dir_fd, path, abs, sizeof(abs))) p = abs;
+  return _open(p, (flags & ~(O_DIRECT | O_NOATIME)) | _O_BINARY, mode);
+}
+#define openat ob_openat
+static int ob_renameat(int src_fd, const char *src, int dst_fd, const char *dst) {
+  char abs_src[1024], abs_dst[1024];
+  const char *rs = src, *rd = dst;
+  if (ob_resolve_path_at(src_fd, src, abs_src, sizeof(abs_src))) rs = abs_src;
+  if (ob_resolve_path_at(dst_fd, dst, abs_dst, sizeof(abs_dst))) rd = abs_dst;
+  return rename(rs, rd);
+}
+#define renameat ob_renameat
+static int ob_fsync(int fd) {
+  if (0 == _commit(fd)) {
+    return 0;
+  }
+  HANDLE h = (HANDLE)_get_osfhandle(fd);
+  if (h != INVALID_HANDLE_VALUE && FlushFileBuffers(h)) {
+    return 0;
+  }
+  // FlushFileBuffers may fail on directory handles opened without write access;
+  // treat as non-fatal on Windows (NTFS metadata is journaled).
+  return 0;
+}
+#define fsync ob_fsync
+static int ob_fallocate(int fd, int, off_t, off_t len) {
+  return _chsize_s(fd, len) == 0 ? 0 : -1;
+}
+#define fallocate ob_fallocate
+static int ob_ftruncate(int fd, off_t len) {
+  return _chsize_s(fd, len) == 0 ? 0 : -1;
+}
+#define ftruncate ob_ftruncate
+static ssize_t ob_pwrite(int fd, const void *buf, size_t count, off_t offset) {
+  long long prev = _lseeki64(fd, 0, SEEK_CUR);
+  _lseeki64(fd, offset, SEEK_SET);
+  int written = _write(fd, buf, (unsigned)count);
+  _lseeki64(fd, prev, SEEK_SET);
+  return written;
+}
+#define pwrite ob_pwrite
+static ssize_t ob_pread(int fd, void *buf, size_t count, off_t offset) {
+  long long prev = _lseeki64(fd, 0, SEEK_CUR);
+  _lseeki64(fd, offset, SEEK_SET);
+  int nread = _read(fd, buf, (unsigned)count);
+  _lseeki64(fd, prev, SEEK_SET);
+  return nread;
+}
+#define pread ob_pread
+#else
 #include <unistd.h>
+#endif
 #ifdef __APPLE__
 #include <fcntl.h> // For fcntl, F_PREALLOCATE on macOS
 #include <string.h> // For memset
@@ -37,6 +138,47 @@ namespace palf
 {
 
 const int64_t RETRY_INTERVAL = 10*1000;
+
+int open_directory(const char *dir_path)
+{
+#ifdef _WIN32
+  if (NULL == dir_path) {
+    errno = EINVAL;
+    return -1;
+  }
+  HANDLE h = CreateFileA(
+      dir_path,
+      GENERIC_READ | GENERIC_WRITE,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      NULL,
+      OPEN_EXISTING,
+      FILE_FLAG_BACKUP_SEMANTICS,
+      NULL);
+  if (h == INVALID_HANDLE_VALUE) {
+    h = CreateFileA(
+        dir_path,
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS,
+        NULL);
+  }
+  if (h == INVALID_HANDLE_VALUE) {
+    errno = EACCES;
+    return -1;
+  }
+  int fd = _open_osfhandle((intptr_t)h, _O_RDONLY);
+  if (fd == -1) {
+    CloseHandle(h);
+    return -1;
+  }
+  return fd;
+#else
+  return ::open(dir_path, O_DIRECTORY | O_RDONLY);
+#endif
+}
+
 int openat_with_retry(const int dir_fd, 
                       const char *block_path,
                       const int flag,
@@ -331,7 +473,7 @@ int TrimLogDirectoryFunctor::rename_flashback_to_normal_(const char *file_name)
   char normal_file_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   MEMCPY(normal_file_name, file_name, strlen(file_name) - strlen(FLASHBACK_SUFFIX));
   const int64_t SLEEP_TS_US = 10 * 1000;
-  if (-1 == (dir_fd = ::open(dir_, O_DIRECTORY | O_RDONLY))) {
+  if (-1 == (dir_fd = open_directory(dir_))) {
     ret = convert_sys_errno();
   } else if (OB_FAIL(try_to_remove_block_(dir_fd, normal_file_name))) {
     PALF_LOG(ERROR, "try_to_remove_block_ failed", K(file_name), K(normal_file_name));

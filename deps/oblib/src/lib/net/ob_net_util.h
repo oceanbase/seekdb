@@ -18,6 +18,22 @@
 #define OCEANBASE_NET_UTIL_H_
 
 #include <stdint.h>
+#include <inttypes.h>
+#include <sys/types.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#pragma push_macro("CONST")
+#undef CONST
+#define CONST const
+#include <iphlpapi.h>
+#pragma pop_macro("CONST")
+#pragma comment(lib, "iphlpapi.lib")
+#ifdef ERROR
+#undef ERROR
+#endif
+#else
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
@@ -29,10 +45,9 @@
 #include <netdb.h>
 #include <sys/time.h>
 #include <net/if.h>
-#include <inttypes.h>
-#include <sys/types.h>
 #ifdef __linux__
 #include <linux/unistd.h>
+#endif
 #endif
 #include <string>
 

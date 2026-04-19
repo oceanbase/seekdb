@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 
 #if 0
 struct MProtect

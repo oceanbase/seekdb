@@ -330,7 +330,7 @@ public:
 private:
   static uint64_t next2n(const uint64_t x)
   {
-    return x <= 2 ? x : (1UL << 63) >> (__builtin_clzll(x - 1) - 1);
+    return x <= 2 ? x : (1ULL << 63) >> (__builtin_clzll(x - 1) - 1);
   }
 
   Node* next_node(Node* node) {

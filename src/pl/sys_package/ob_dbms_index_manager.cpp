@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 #include "ob_dbms_index_manager.h"
-#include "share/ob_share_util.h"
-#include "share/ob_global_stat_proxy.h"
-#include "storage/tx/ob_trans_service.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
 #include "share/rc/ob_tenant_base.h"
 #include "lib/mysqlclient/ob_mysql_proxy.h"
 
@@ -37,49 +35,18 @@ int ObDBMSIndexManager::refresh(
   UNUSED(params);
   UNUSED(result);
 
-  SCN safe_visible_scn;
-  SCN current_refresh_scn;
-  const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
-  const int64_t SLEEP_INTERVAL_US = 100 * 1000;
-  ObSQLSessionInfo *session = OB_NOT_NULL(ctx.exec_ctx_) ? ctx.exec_ctx_->get_my_session() : nullptr;
   ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
+  const int64_t timeout_us = GCONF.internal_sql_execute_timeout;
 
-  if (OB_ISNULL(ctx.exec_ctx_) || OB_ISNULL(session)) {
+  if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", KR(ret));
+    LOG_WARN("exec ctx is null", KR(ret));
   } else if (OB_ISNULL(mysql_proxy)) {
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy is not inited", KR(ret));
-  } else {
-    transaction::ObTransService *txs = MTL(transaction::ObTransService *);
-    if (OB_ISNULL(txs)) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("trans service is null", KR(ret));
-    } else {
-      ObTimeoutCtx timeout_ctx;
-      if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, DEFAULT_TIMEOUT))) {
-        LOG_WARN("fail to set default timeout ctx", KR(ret));
-      } else if (OB_FAIL(txs->get_read_snapshot_version(timeout_ctx.get_abs_timeout(), safe_visible_scn))) {
-        LOG_WARN("get read snapshot version failed", KR(ret));
-      } else {
-        bool is_satisfied = false;
-        while (OB_SUCC(ret) && !is_satisfied) {
-          if (OB_FAIL(THIS_WORKER.check_status())) {
-            LOG_WARN("check status failed", KR(ret));
-          } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
-                       *mysql_proxy, MTL_ID(), false, current_refresh_scn))) {
-            LOG_WARN("get change stream refresh scn failed", KR(ret));
-          } else if (current_refresh_scn >= safe_visible_scn) {
-            LOG_INFO("current refresh scn is already greater than or equal to safe visible scn", K(current_refresh_scn), K(safe_visible_scn));
-            is_satisfied = true;
-            LOG_INFO("change stream refresh completed", K(safe_visible_scn), K(current_refresh_scn));
-          } else {
-            LOG_INFO("current refresh scn is less than safe visible scn, sleep and retry", K(current_refresh_scn), K(safe_visible_scn));
-            ob_usleep(SLEEP_INTERVAL_US);
-          }
-        }
-      }
-    }
+  } else if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
+                 *mysql_proxy, MTL_ID(), timeout_us))) {
+    LOG_WARN("wait change stream refresh failed", KR(ret));
   }
   return ret;
 }

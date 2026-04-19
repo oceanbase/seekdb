@@ -141,7 +141,11 @@ private:
   static const int64_t MIN_GLOBAL_WASH_THRESHOLD = 8L;  // 8 * 2M = 16M
   static const int64_t FLUSH_PRESERVE_TENANT_NUM = 10; // number preversed for flush
   static const int64_t DEFAULT_TENANT_BUCKET_NUM = 64;
-  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024L * 1024L * 1024L * 1024L;  //1T
+#ifndef _WIN32
+  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
+#else
+  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
+#endif
   static const int64_t MAX_MB_NUM = DEFAULT_MAX_CACHE_SIZE / lib::ACHUNK_SIZE;
 
 public:

@@ -32,8 +32,12 @@
 #include <boost/geometry/geometries/concepts/linestring_concept.hpp>
 #include <boost/geometry/geometries/concepts/point_concept.hpp>
 #include <boost/geometry/geometries/concepts/polygon_concept.hpp>
+#ifndef _WIN32
 #include <boost/geometry/multi/core/tags.hpp>
-
+#else
+#include <boost/geometry/core/tags.hpp>
+#include <boost/geometry/core/mutable_range.hpp>
+#endif
 #include "ob_geo_bin.h"
 
 namespace boost {
@@ -360,6 +364,38 @@ struct tag<oceanbase::common::ObWkbGeogMultiPolygon> {
   typedef boost::geometry::multi_polygon_tag type;
 };
 
+#ifdef _WIN32
+// vcpkg Boost.Geometry's MultiPolygon concept requires mutable range traits
+// (clear/resize/push_back). ObWkb*MultiPolygon are read-only WKB types, so
+// these are no-op stubs to satisfy the concept checker.
+template <>
+struct clear<oceanbase::common::ObWkbGeomMultiPolygon> {
+  static inline void apply(oceanbase::common::ObWkbGeomMultiPolygon &) {}
+};
+template <>
+struct resize<oceanbase::common::ObWkbGeomMultiPolygon> {
+  static inline void apply(oceanbase::common::ObWkbGeomMultiPolygon &, std::size_t) {}
+};
+template <>
+struct push_back<oceanbase::common::ObWkbGeomMultiPolygon> {
+  template <typename T>
+  static inline void apply(oceanbase::common::ObWkbGeomMultiPolygon &, T &&) {}
+};
+
+template <>
+struct clear<oceanbase::common::ObWkbGeogMultiPolygon> {
+  static inline void apply(oceanbase::common::ObWkbGeogMultiPolygon &) {}
+};
+template <>
+struct resize<oceanbase::common::ObWkbGeogMultiPolygon> {
+  static inline void apply(oceanbase::common::ObWkbGeogMultiPolygon &, std::size_t) {}
+};
+template <>
+struct push_back<oceanbase::common::ObWkbGeogMultiPolygon> {
+  template <typename T>
+  static inline void apply(oceanbase::common::ObWkbGeogMultiPolygon &, T &&) {}
+};
+#endif // _WIN32
 
 } // namespace traits
 } // namespace geometry

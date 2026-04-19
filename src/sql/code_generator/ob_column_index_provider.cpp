@@ -13,7 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#ifdef _WIN32
+#define USING_LOG_PREFIX SQL
+#endif
 #include "sql/code_generator/ob_column_index_provider.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 

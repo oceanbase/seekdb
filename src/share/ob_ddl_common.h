@@ -1364,10 +1364,11 @@ public:
       const bool calc_sstable,
       const bool calc_memtable,
       int64_t &physical_row_count /*OUT*/);
-  static int check_table_empty_in_oracle_mode(
-      const uint64_t tenant_id,
-      const uint64_t table_id,
-      share::schema::ObSchemaGetterGuard &schema_guard,
+  static int check_table_empty(
+      const share::schema::ObSysVariableSchema &sys_var_schema,
+      const ObString &database_name,
+      const share::schema::ObTableSchema &table_schema,
+      const ObSQLMode sql_mode,
       bool &is_table_empty);
   static int check_tenant_status_normal(
       ObISQLClient *proxy,

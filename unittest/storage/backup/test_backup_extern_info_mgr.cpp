@@ -102,9 +102,13 @@ void TestBackupExternInfoMgr::inner_init_()
   ObBackupIoAdapter util;
 #ifdef __APPLE__
   char buf[PATH_MAX];
-  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr", getcwd(buf, sizeof(buf)));
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr_workdir", getcwd(buf, sizeof(buf)));
 #else
-  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr", getcwd(NULL, 0));
+#if defined(__ANDROID__)
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr_workdir", getcwd(NULL, 0));
+#else
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr_workdir", get_current_dir_name());
+#endif
 #endif
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_);

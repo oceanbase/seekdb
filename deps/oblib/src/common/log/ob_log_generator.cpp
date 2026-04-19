@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "common/log/ob_log_generator.h"
 
 namespace oceanbase

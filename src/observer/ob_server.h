@@ -17,7 +17,9 @@
 #ifndef _OCEABASE_OBSERVER_OB_SERVER_H_
 #define _OCEABASE_OBSERVER_OB_SERVER_H_
 
+#ifndef _WIN32
 #include <sys/statvfs.h>
+#endif
 #include "lib/net/ob_net_util.h"
 #include "lib/random/ob_mysql_random.h"
 #include "lib/container/ob_iarray.h"
@@ -30,7 +32,11 @@
 #include "share/location_cache/ob_location_service.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
 #include "share/ob_kv_storage.h"
+#ifdef _WIN32
+#include "diagnose/lua/ob_lua_handler_win.h"
+#else
 #include "diagnose/lua/ob_lua_handler.h"
+#endif
 
 #include "sql/ob_sql.h"
 #include "sql/engine/cmd/ob_load_data_rpc.h"
@@ -149,7 +155,7 @@ public:
     int init(ObServer *observer, int tg_id);
     virtual void runTimerTask() override;
   private:
-    const static int64_t REFRESH_INTERVAL = 60L * 60L * 1000L * 1000L;//1hr
+    const static int64_t REFRESH_INTERVAL = 60LL * 60 * 1000 * 1000;//1hr
     ObServer *obs_;
     bool is_inited_;
   };

@@ -589,7 +589,6 @@ int ObJoinFilterSpec::update_sync_row_count_flag()
 
 //------------------------------------------ ObJoinFilterOp --------------------------------
 
-
 bool ObJoinFilterOp::is_valid()
 {
   return child_ != NULL && MY_SPEC.mode_ != JoinFilterMode::NOT_INIT &&
@@ -597,7 +596,7 @@ bool ObJoinFilterOp::is_valid()
 }
 
 ObJoinFilterOp::ObJoinFilterOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
-    : ObOperator(exec_ctx, spec, input), filter_create_msg_(nullptr), join_filter_hash_values_(NULL),
+    : ObOperator(exec_ctx, spec, input), join_filter_hash_values_(NULL),
       lucky_devil_champions_(), profile_(ObSqlWorkAreaType::HASH_WORK_AREA),
       sql_mem_processor_(profile_, op_monitor_info_)
 {
@@ -1099,7 +1098,6 @@ int ObJoinFilterOp::try_send_join_filter()
   }
   return ret;
 }
-
 
 int ObJoinFilterOp::calc_each_bf_group_size(int64_t &each_group_size)
 {

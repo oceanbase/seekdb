@@ -26,6 +26,9 @@
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
 #include "logservice/ob_log_compression.h"
 #endif
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 namespace oceanbase
 {
 using namespace common;
@@ -41,7 +44,11 @@ int ObAdminDumpBlockHelper::mmap_log_file(char *&buf_out,
   int ret = OB_SUCCESS;
   void *buf = NULL;
   struct stat stat_buf;
-  if (-1 == (fd_out = ::open(path, O_RDONLY))) {
+  if (-1 == (fd_out = ::open(path, O_RDONLY
+#ifdef _WIN32
+      | _O_BINARY
+#endif
+      ))) {
     ret = palf::convert_sys_errno();
     LOG_WARN("open file fail", K(path), KERRMSG, K(ret));
   } else if (MAP_FAILED== (buf = ::mmap(NULL, buf_len, PROT_READ, MAP_PRIVATE, fd_out, 0)) || NULL == buf) {
@@ -175,7 +182,11 @@ int ObAdminDumpBlock::decompress_()
   int64_t log_len = 0;
   int fd_out = 0;
   char *buf_out = NULL;
-  if (-1 == (fd_out = ::open(path, O_RDONLY))) {
+  if (-1 == (fd_out = ::open(path, O_RDONLY
+#ifdef _WIN32
+      | _O_BINARY
+#endif
+      ))) {
     ret = palf::convert_sys_errno();
     LOG_WARN("open file fail", K(path), KERRMSG, K(ret));
   } else if (-1 == fstat(fd_out, &stat_buf)) {

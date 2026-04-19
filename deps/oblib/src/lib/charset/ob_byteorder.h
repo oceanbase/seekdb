@@ -19,7 +19,12 @@
 
 #include <stdint.h>
 #include "lib/charset/ob_template_helper.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <netinet/in.h>
+#endif
 #include <string.h>
 
 /*
@@ -42,7 +47,7 @@ inline uint32_t load32be(const char *ptr) {
 }
 
 __attribute__((always_inline)) inline char *store16be(char *ptr, uint16_t val) {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(_WIN32)
   // _byteswap_ushort is an intrinsic on MSVC, but htons is not.
   val = _byteswap_ushort(val);
 #else

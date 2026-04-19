@@ -75,7 +75,7 @@ int init_io_device(const char *test_name,
   const int64_t bucket_num = 1024L;
   const int64_t max_cache_size = 1024L * 1024L * 512;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
-  const int64_t mem_limit = 10 * 1024L * 1024L * 1024L;
+  const int64_t mem_limit = 10LL * 1024 * 1024 * 1024;
   lib::set_memory_limit(mem_limit);
 
   if (NULL == getcwd(cur_dir,  OB_MAX_FILE_NAME_LENGTH)) {

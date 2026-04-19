@@ -18,7 +18,7 @@
 
 #include "rpc/obmysql/packet/ompk_handshake.h"
 
-ObString __attribute__((weak)) get_display_mysql_version_cfg()
+ObString OB_WEAK_SYMBOL get_display_mysql_version_cfg()
 {
   return ObString((DEFAULT_MYSQL_VERSION_CSTR)); // default server version string for mysql mode
 }

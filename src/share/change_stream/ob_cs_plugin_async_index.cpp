@@ -50,7 +50,6 @@
 #include "share/schema/ob_table_param.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_server_struct.h"
-#include "share/ob_debug_sync.h"
 
 namespace oceanbase
 {
@@ -215,9 +214,6 @@ int ObCSAsyncIndexProcessor::process(common::ObIArray<ObCSRow> &rows)
     }
 
     // Step 2 — for each tablet group: batch insert into index_id_table, then write into vsag
-    if (groups.count() > 0) {
-      DEBUG_SYNC(CS_ASYNC_VECTOR_INDEX_BEFORE_APPLY);
-    }
     for (int64_t gi = 0; OB_SUCC(ret) && gi < groups.count(); ++gi) {
       TabletEventGroup &g = groups.at(gi);
       if (g.events_.count() <= 0) {
@@ -310,13 +306,35 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
             ret = common::OB_ERR_UNEXPECTED;
             LOG_WARN("no vector column id found for vector index", K(ret), K(table_id), K(index_id_table_id));
           } else {
-            // Check SYNC_MODE=ASYNC: only async HNSW indexes on heap table are supported.
-            // Note: For HNSW+heap+async, there is no delta_buffer table; index_params come from index_id table.
-            // vec_index_id + heap: SYNC_MODE default is ASYNC when not specified (index_id table may have empty params).
+            // Check SYNC_MODE=ASYNC: only non-semantic async HNSW indexes on heap
+            // table are handled here. Semantic indexes use different aux tables and
+            // should not enter the delta_buffer path below.
             ObString index_params_str = index_schema->get_index_params();
             bool is_async_mode = ObVectorIndexUtil::is_sync_mode_async(index_params_str, true /* is_hnsw_heap_table */);
-            if (OB_SUCC(ret) && !is_async_mode) {
-              //skip non-async vector index (SYNC_MODE!=ASYNC)
+            bool is_semantic_index = false;
+            if (OB_SUCC(ret) && !index_params_str.empty()) {
+              const ObColumnSchemaV2 *data_col_schema = data_table_schema->get_column_schema(vec_col_ids.at(0));
+              if (OB_ISNULL(data_col_schema)) {
+                ret = common::OB_ERR_UNEXPECTED;
+                LOG_WARN("data column schema is null", K(ret), K(table_id), K(index_id_table_id),
+                         K(vec_col_ids));
+              } else if (ob_is_varchar_type(data_col_schema->get_data_type(),
+                                            data_col_schema->get_collation_type())) {
+                ObVectorIndexParam param;
+                int tmp_ret = ObVectorIndexUtil::parser_params_from_string(
+                    index_params_str, ObVectorIndexType::VIT_HNSW_INDEX, param, false /* set_default */);
+                if (OB_SUCCESS != tmp_ret) {
+                  LOG_WARN("failed to parse vector index params for semantic index check",
+                           K(tmp_ret), K(table_id), K(index_id_table_id), K(index_params_str));
+                } else {
+                  is_semantic_index = (param.endpoint_[0] != '\0' && param.dim_ > 0);
+                }
+              }
+            }
+            if (OB_SUCC(ret) && (!is_async_mode || is_semantic_index)) {
+              // skip:
+              // 1. non-async vector index (SYNC_MODE!=ASYNC)
+              // 2. semantic vector index, which does not use delta_buffer
             } else if (OB_SUCC(ret)) {
               for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < vec_col_ids.count(); ++col_idx) {
                 int64_t vec_column_id = vec_col_ids.at(col_idx);
@@ -677,6 +695,7 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
         // Direct insert into index_id_table: bypass ObVecIndexDMLIterator which returns 0 rows for
         // is_no_need_update_vector_index() (vec_index_id_type). Use raw write_iter path instead.
         ins_ctdef->is_access_vidx_as_master_table_ = true;
+        ins_ctdef->skip_check_schema_version_ = true;
         insert_op->set_das_ctdef(ins_ctdef);
       }
     }
@@ -884,16 +903,11 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
       ret = common::OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid vbitmap_tablet_id from schema", K(ret), K(vec_info.index_id_table_id_));
     } else {
-      // Aux table tablets (e.g. 1152921504606846978) are in user LS (1001), not SYS_LS.
-      // Using wrong ls_id causes OB_INVALID_ARGUMENT in DAS insert.
-      if (OB_NOT_NULL(GCTX.sql_proxy_) &&
-          OB_SUCC(ObTabletToLSTableOperator::get_ls_by_tablet(*GCTX.sql_proxy_, tenant_id, vbitmap_tablet_id, ls_id))) {
-            insert_op->set_tablet_id(vbitmap_tablet_id);
-            insert_op->set_ls_id(ls_id);
-      }
+      insert_op->set_tablet_id(vbitmap_tablet_id);
+      insert_op->set_ls_id(ls_id);
     }
 
-    if (OB_SUCC(ret) && ls_id.is_valid()) {
+    if (OB_SUCC(ret)) {
       void *snapshot_buf = allocator.alloc(sizeof(transaction::ObTxReadSnapshot));
       if (OB_ISNULL(snapshot_buf)) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
@@ -1109,9 +1123,14 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
         LOG_WARN("incr_data is null after init attempt", K(ret));
       } else {
         index_handler = static_cast<obvsag::VectorIndexPtr>(incr_data->index_);
+        SCN dml_scn;
         if (OB_ISNULL(index_handler)) {
           ret = common::OB_ERR_UNEXPECTED;
           LOG_WARN("vsag index handler is null after init attempt", K(ret));
+        } else if (OB_FAIL(dml_scn.convert_for_tx(events.at(events.count()-1).commit_version_))) {
+          LOG_WARN("convert for tx failed", KR(ret), K(events.at(events.count()-1).commit_version_));
+        } else {
+          incr_data->last_dml_scn_.inc_update(dml_scn);
         }
       }
 
@@ -1172,27 +1191,22 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
                                                   insert_count))) {
                 LOG_WARN("Failed to add vectors to vsag index",
                          K(ret), K(insert_count), K(dim), K(ls_id), K(vec_info.index_id_table_id_));
+              } else {
+                int tmp_ret = adaptor->update_incr_bitmap(vids, insert_count);
+                if (OB_SUCCESS != tmp_ret) {
+                  LOG_WARN("failed to update incr bitmap after vsag write (non-fatal)",
+                           K(tmp_ret), K(insert_count), K(inc_tablet_id));
+                }
               }
             }
           }
         }
       }
-      // After writing to vsag, proactively refresh the bitmap so the first query
-      // does not incur the overhead of building it from scratch.  This mirrors the
-      // query-time path (complete_index_mem_data_incremental) but is triggered here
-      // because change_stream already holds the adapter and knows data has landed.
-      // A failure is non-fatal: the bitmap will still be refreshed lazily on the
-      // next query if this call fails.
-      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor)) {
-        if (!adaptor->is_vbitmap_tablet_valid()) {
-          LOG_INFO("skip background bitmap refresh: vbitmap tablet id not ready yet",
-                   K(inc_tablet_id), K(vec_info.index_id_table_id_), KPC(adaptor));
-        } else {
-          int tmp_ret = adaptor->refresh_bitmap_background();
-          if (OB_SUCCESS != tmp_ret) {
-            LOG_WARN("background bitmap refresh failed (non-fatal), will retry on next query",
-                     K(tmp_ret), K(inc_tablet_id), K(vec_info.index_id_table_id_));
-          }
+      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor) && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+        int tmp_ret = adaptor->refresh_bitmap_background();
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("background bitmap refresh failed (non-fatal), will retry on next query",
+                   K(tmp_ret), K(inc_tablet_id), K(vec_info.index_id_table_id_));
         }
       }
     }
@@ -1264,6 +1278,28 @@ int ObCSPluginAsyncIndex::commit()
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSPluginAsyncIndex not inited", K(ret));
+  } else {
+    // Periodically trigger GC of fallback schema cache to prevent
+    // TenaSchMgrForLi arena memory leak.
+    // At commit() time all process() calls have completed and all
+    // schema_guard handles are released (ref_cnt == 0), so GC can
+    // evict every fallback cache entry and reset the arena.
+    static int64_t last_gc_time = 0;
+    const int64_t GC_INTERVAL_US = 30L * 1000L * 1000L; // 30 seconds
+    const int64_t now = common::ObTimeUtility::current_time();
+    if (now - ATOMIC_LOAD(&last_gc_time) > GC_INTERVAL_US) {
+      ATOMIC_STORE(&last_gc_time, now);
+      schema::ObMultiVersionSchemaService *schema_service =
+          MTL(schema::ObTenantSchemaService *) != nullptr
+              ? MTL(schema::ObTenantSchemaService *)->get_schema_service()
+              : nullptr;
+      if (OB_NOT_NULL(schema_service)) {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_TMP_FAIL(schema_service->try_eliminate_schema_mgr())) {
+          LOG_WARN("try_eliminate_schema_mgr for fallback gc failed", K(tmp_ret));
+        }
+      }
+    }
   }
   return ret;
 }

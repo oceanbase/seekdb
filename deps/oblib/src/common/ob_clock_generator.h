@@ -26,6 +26,31 @@
 #include "lib/thread/thread_pool.h"
 #include "lib/ash/ob_ash_bkgd_sess_inactive_guard.h"
 
+// Windows nanosleep implementation with improved precision
+#ifdef _WIN32
+#include <windows.h>
+#include <mmsystem.h>
+#pragma comment(lib, "winmm.lib")
+inline int nanosleep(const struct timespec *req, struct timespec *rem) {
+  if (!req) return -1;
+  DWORD ms = static_cast<DWORD>(req->tv_sec * 1000 + req->tv_nsec / 1000000);
+  if (ms == 0 && (req->tv_sec > 0 || req->tv_nsec > 0)) {
+    ms = 1;
+  }
+  static bool timer_set = false;
+  if (!timer_set) {
+    timeBeginPeriod(1);
+    timer_set = true;
+  }
+  Sleep(ms);
+  if (rem) {
+    rem->tv_sec = 0;
+    rem->tv_nsec = 0;
+  }
+  return 0;
+}
+#endif
+
 namespace oceanbase
 {
 namespace common

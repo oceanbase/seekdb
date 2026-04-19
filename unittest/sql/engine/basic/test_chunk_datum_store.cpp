@@ -442,7 +442,7 @@ int TestChunkDatumStore::init_tenant_mgr()
   int64_t tenant_id = OB_SYS_TENANT_ID;
   self.set_ip_addr("127.0.0.1", 8086);
   ret = getter.add_tenant(tenant_id,
-                          2L * 1024L * 1024L * 1024L, 4L * 1024L * 1024L * 1024L);
+                          2LL * 1024 * 1024 * 1024, 4LL * 1024 * 1024 * 1024);
   EXPECT_EQ(OB_SUCCESS, ret);
   const int64_t ulmt = 128LL << 30;
   const int64_t llmt = 128LL << 30;
@@ -520,7 +520,7 @@ TEST_F(TestChunkDatumStore, has_next_bug)
   ASSERT_EQ(OB_ITER_END, it.get_next_row(ver_cells_, eval_ctx_));
 
   int64_t mem_used = rs_alloc_.total_ - mem_before_iterate;
-  ASSERT_LT(mem_used, 500L * 1024L)
+  ASSERT_LT(mem_used, 500LL * 1024)
       << " mem_before_iterate: " << mem_before_iterate
       << " cur_mem: " << rs_alloc_.total_;
 }
@@ -545,7 +545,7 @@ TEST_F(TestChunkDatumStore, iteration_age)
     CALL(verify_row, it, i, true);
   }
   int64_t mem_used = rs_alloc_.total_ - mem_before_iterate;
-  ASSERT_GT(mem_used, 1024L * 1024L)
+  ASSERT_GT(mem_used, 1LL * 1024 * 1024)
       << " mem_before_iterate: " << mem_before_iterate
       << " cur_mem: " << rs_alloc_.total_;
 
@@ -558,7 +558,7 @@ TEST_F(TestChunkDatumStore, iteration_age)
   }
 
   mem_used = rs_alloc_.total_ - mem_before_iterate;
-  ASSERT_LT(mem_used, 500L * 1024L)
+  ASSERT_LT(mem_used, 500LL * 1024)
       << " mem_before_iterate: " << mem_before_iterate
       << " cur_mem: " << rs_alloc_.total_;
 }

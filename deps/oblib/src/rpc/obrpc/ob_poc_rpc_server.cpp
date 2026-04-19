@@ -14,32 +14,43 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX RPC_OBRPC
+#endif
 #include "rpc/obrpc/ob_poc_rpc_server.h"
 #include "rpc/obrpc/ob_net_keepalive.h"
 
 #define rk_log_macro(level, ret, format, ...) _OB_LOG_RET(level, ret, "PNIO " format, ##__VA_ARGS__)
 #include "lib/lock/ob_futex.h"
+#ifdef _WIN32
+static inline int cfgi_impl(const char *k, const char *v) {
+  const char *e = getenv(k);
+  return atoi(e ? e : v);
+}
+#define cfgi(k, v) cfgi_impl(k, v)
+#else
 #define cfgi(k, v) atoi(getenv(k)?:v)
+#endif
 namespace oceanbase
 {
 namespace obrpc
 {
 extern const int easy_head_size;
-int64_t  __attribute__((weak)) get_max_rpc_packet_size() {
+int64_t  OB_WEAK_SYMBOL get_max_rpc_packet_size() {
   return OB_MAX_RPC_PACKET_LENGTH;
 }
-void __attribute__((weak)) stream_rpc_register(const int64_t pkt_id, int64_t send_time_us)
+void OB_WEAK_SYMBOL stream_rpc_register(const int64_t pkt_id, int64_t send_time_us)
 {
   UNUSED(pkt_id);
   UNUSED(send_time_us);
   RPC_LOG_RET(WARN, OB_ERR_UNEXPECTED, "should not reach here");
 }
-void __attribute__((weak)) stream_rpc_unregister(const int64_t pkt_id)
+void OB_WEAK_SYMBOL stream_rpc_unregister(const int64_t pkt_id)
 {
   UNUSED(pkt_id);
   RPC_LOG_RET(WARN, OB_ERR_UNEXPECTED, "should not reach here");
 }
-int __attribute__((weak)) stream_rpc_reverse_probe(const ObRpcReverseKeepaliveArg& reverse_keepalive_arg)
+int OB_WEAK_SYMBOL stream_rpc_reverse_probe(const ObRpcReverseKeepaliveArg& reverse_keepalive_arg)
 {
   UNUSED(reverse_keepalive_arg);
   return OB_ERR_UNEXPECTED;

@@ -157,7 +157,7 @@ TEST_F(TestExternalSort, test_async) {
 			}
 		}
 
-		const int64_t fragment_mem_limit = 16L * 1024L * 1024L;
+		const int64_t fragment_mem_limit = 16LL * 1024 * 1024;
 		const int64_t file_buf_size = 2 * 1024 * 1024;
 		const int64_t expire_timestamp = 0;
 		const int64_t buf_length = 256 * 1204;
@@ -216,8 +216,8 @@ int main(int argc, char **argv) {
 	if (OB_TMP_FAIL(oceanbase::common::ObDeviceManager::get_instance().init_devices_env())) {
 		STORAGE_LOG(ERROR, "fail to init device manager", K(tmp_ret));
 	}
-    oceanbase::lib::set_memory_limit(8L * 1024L * 1024L * 1024L);
-	oceanbase::common::ObIOManager::get_instance().init(1024L * 1024L * 1024L);
+    oceanbase::lib::set_memory_limit(8LL * 1024 * 1024 * 1024);
+	oceanbase::common::ObIOManager::get_instance().init(1LL * 1024 * 1024 * 1024);
 	oceanbase::common::ObLogger::get_logger().set_log_level("TRACE");
 	testing::InitGoogleTest(&argc, argv);
 	return RUN_ALL_TESTS();

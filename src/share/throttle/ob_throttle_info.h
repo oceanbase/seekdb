@@ -40,7 +40,7 @@ public:
   {
     return hash_;
   }
-  bool is_valid() const { return thread_idx_ > 0; }
+  bool is_valid() const { return thread_idx_ >= 0; }
   bool operator<(const ThrottleID &rhs) {
     bool bool_ret = false;
     if (thread_idx_ < rhs.thread_idx_) {

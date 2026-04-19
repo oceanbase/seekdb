@@ -133,7 +133,12 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
     time(&cur_time);
     struct tm human_time;
     struct tm *human_time_ptr = nullptr;
-    if (nullptr == (human_time_ptr = (localtime_r(&cur_time, &human_time)))) {
+#ifdef _WIN32
+    human_time_ptr = (0 == localtime_s(&human_time, &cur_time)) ? &human_time : nullptr;
+#else
+    human_time_ptr = localtime_r(&cur_time, &human_time);
+#endif
+    if (nullptr == human_time_ptr) {
       ret = OB_ERR_SYS;
       LOG_WARN("fail to get localtime", KR(ret), K(errno));
     } else if ((human_time_ptr->tm_hour == hour) && (human_time_ptr->tm_min == minute)) {
@@ -209,7 +214,7 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
 {
   int ret = OB_SUCCESS;
   // keep 30 days for tablet_checksum whose (tablet_id, ls_id) is (1, 1)
-  const int64_t MAX_KEEP_INTERVAL_NS =  30 * 24 * 60 * 60 * 1000L * 1000L * 1000L; // 30 day
+  const int64_t MAX_KEEP_INTERVAL_NS =  30LL * 24 * 60 * 60 * 1000 * 1000 * 1000; // 30 day
   const int64_t MIN_RESERVED_COUNT = 8;
   SCN cur_gts_scn;
   SCN min_keep_compaction_scn;

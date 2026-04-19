@@ -97,7 +97,7 @@ class ObTenantMdsService;
   class ObTenantRestoreInfoMgr;
   class ObTableScanIterator;
   class ObTenantCGReadInfoMgr;
-  class ObDDLMergeBucketLock;
+  struct ObDDLMergeBucketLock;
   class ObTenantDirectLoadMgr;
   class ObEmptyReadBucket;
   class ObTabletMemtableMgrPool;

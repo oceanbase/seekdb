@@ -105,7 +105,7 @@ protected:
   {
     const int64_t KV_CACHE_WASH_TIMER_INTERVAL_US = 60 * 1000L * 1000L;
     const int64_t DEFAULT_BUCKET_NUM = 10000000L;
-    const int64_t DEFAULT_MAX_CACHE_SIZE = 1024L * 1024L * 1024L * 1024L;
+    const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024 * 1024 * 1024;
     int ret = OB_SUCCESS;
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
     if (OB_FAIL(ObKVGlobalCache::get_instance().init(&(ObTenantMemLimitGetter::get_instance()),

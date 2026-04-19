@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "ob_smart_call.h"
 #include "deps/oblib/src/common/ob_common_utility.h"
 
@@ -23,7 +25,25 @@ namespace common
 {
 
 
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(_WIN32)
+OB_NOINLINE int jump_call(void * arg_, int(*func_) (void*), void* stack_addr)
+{
+  int ret = 0;
+  __asm__ __volatile__ (
+    "leaq  -0x10(%3), %3\n\t"                      /* reserve space for old RSP on new stack, 0x10 for align */
+    "movq  %%rsp, (%3)\n\t"                        /* store RSP in new stack */
+    "movq  %3, %%rsp\n\t"                          /* jump to new stack */
+    "subq  $0x20, %%rsp\n\t"                       /* allocate 32-byte shadow space (Win64 ABI) */
+    "movq  %1, %%rcx\n\t"                          /* Win64 ABI: first arg in RCX */
+    "call *%2\n\t"                                 /* run the second arg func_ */
+    "movq  0x20(%%rsp), %%rsp\n\t"                 /* jump back to old stack */
+    :"=a" (ret)                                    /* specify rax assigned to ret */
+    :"r"(arg_), "r"(func_), "r"(stack_addr)
+    :"rcx", "rdx", "r8", "r9", "r10", "r11", "memory"
+  );
+  return ret;
+}
+#elif defined(__x86_64__)
 OB_NOINLINE int jump_call(void * arg_, int(*func_) (void*), void* stack_addr)
 {
   int ret = 0;

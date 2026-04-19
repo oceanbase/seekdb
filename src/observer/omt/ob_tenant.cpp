@@ -817,7 +817,7 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_threshold_ = 80;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_percentage_ = 100;
-    mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2 * 60 * 60 * 1000 * 1000L;//2h
+    mtl_init_ctx_->palf_options_.disk_options_.log_disk_throttling_maximum_duration_ = 2LL * 60 * 60 * 1000 * 1000;//2h
     mtl_init_ctx_->palf_options_.disk_options_.log_writer_parallelism_ = 3;
     ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
     if (OB_UNLIKELY(!tenant_config.is_valid())) {
@@ -1072,7 +1072,7 @@ int ObTenant::try_wait()
   return ret;
 }
 
-void __attribute__((weak)) print_all_thread(const char* desc, uint64_t tenant_id)
+void OB_WEAK_SYMBOL print_all_thread(const char* desc, uint64_t tenant_id)
 {
   UNUSED(desc);
   UNUSED(tenant_id);
@@ -1645,6 +1645,7 @@ void ObTenant::regist_threads_to_cgroup()
   }
 
   if (OB_SUCC(thread_list_lock_.trylock())) {
+#ifndef _WIN32
     DLIST_FOREACH_REMOVESAFE(thread_list_node_, thread_list_)
     {
       Thread *thread = thread_list_node_->get_data();
@@ -1663,6 +1664,7 @@ void ObTenant::regist_threads_to_cgroup()
         }
       }
     }
+#endif
     LOG_INFO("regist threads to cgroup from thread list", K(ret), K(id_), K(thread_list_.get_size()));
     thread_list_lock_.unlock();
   }

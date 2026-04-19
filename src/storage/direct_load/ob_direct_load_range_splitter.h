@@ -29,7 +29,7 @@ class ObSSTable;
 } // namespace blocksstable
 namespace storage
 {
-class ObDirectLoadTableDataDesc;
+struct ObDirectLoadTableDataDesc;
 class ObITableReadInfo;
 class ObDirectLoadOriginTable;
 class ObDirectLoadSSTable;

@@ -35,7 +35,7 @@ static const int64_t data_version = 1;
 static const int64_t tenant_id = 1;
 static const int64_t pure_id = 3001;
 static const int64_t row_count_per_macro = 2900;//row count in one macro block
-static const int64_t query_timeout = 10L * 3600L * 1000L * 1000L;//10 hour
+static const int64_t query_timeout = 10LL * 3600 * 1000 * 1000;//10 hour
 static const int64_t query_speed_over_limit_percentage = 10;
 static const int64_t update_rows_num = 1000;
 static const common::ObString bianque_format("%Y-%m-%dT%H:%i:%sZ");

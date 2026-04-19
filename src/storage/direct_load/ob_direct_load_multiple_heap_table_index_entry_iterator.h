@@ -45,7 +45,9 @@ public:
   }
 public:
   reference operator*() { return *this; }
+  const self_t &operator*() const { return *this; }
   value_ptr_t operator->() { return this; }
+  const self_t *operator->() const { return this; }
   operator value_ptr_t() { return this; }
   bool operator==(const self_t &other) const
   {

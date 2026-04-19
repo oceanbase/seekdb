@@ -274,7 +274,7 @@ SubObjectMgr *ObjectMgr::create_sub_mgr()
     {}
     AObject *realloc_object(AObject *obj,  const uint64_t size, const ObMemAttr &attr)
     {
-      sub_mgr_.lock();
+      int lock_ret = sub_mgr_.lock();
       AObject *new_obj = sub_mgr_.realloc_object(obj, size, attr);
       sub_mgr_.unlock();
       return new_obj;

@@ -31,7 +31,7 @@ int64_t ObLogFixedTimer::g_wait_time = ObLogFetcherConfig::default_timer_task_wa
 
 ObLogFixedTimer::ObLogFixedTimer() :
     inited_(false),
-    tid_(0),
+    tid_{},
     err_handler_(NULL),
     task_queue_(),
     task_cond_(),
@@ -61,7 +61,7 @@ int ObLogFixedTimer::init(IObLogErrHandler &err_handler, const int64_t max_task_
   } else if (OB_FAIL(allocator_.init(queue_task_size, ObModIds::OB_LOG_TIMER))) {
     LOG_ERROR("init allocator fail", KR(ret), K(queue_task_size));
   } else {
-    tid_ = 0;
+    tid_ = {};
     err_handler_ = &err_handler;
     stop_flag_ = true;
     inited_ = true;
@@ -81,7 +81,7 @@ void ObLogFixedTimer::destroy()
 
   inited_ = false;
   stop_flag_ = true;
-  tid_ = 0;
+  tid_ = {};
   err_handler_ = NULL;
   task_queue_.destroy();
   allocator_.destroy();
@@ -117,13 +117,17 @@ void ObLogFixedTimer::stop()
   if (inited_) {
     stop_flag_ = true;
 
+#ifdef _WIN32
+    if (tid_.p != nullptr) {
+#else
     if (0 != tid_) {
+#endif
       int pthread_ret = pthread_join(tid_, NULL);
       if (0 != pthread_ret) {
-        LOG_ERROR_RET(OB_ERR_SYS, "pthread_join fail", K(tid_), K(pthread_ret), KERRNOMSG(pthread_ret));
+        LOG_ERROR_RET(OB_ERR_SYS, "pthread_join fail", K(pthread_ret), KERRNOMSG(pthread_ret));
       }
 
-      tid_ = 0;
+      tid_ = {};
 
       LOG_INFO("stop oblog timer succ");
     }

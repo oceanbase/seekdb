@@ -1,0 +1,14 @@
+﻿[target-default]
+os=windows
+arch=x86_64
+repo=https://mirrors.oceanbase.com/oceanbase/development-kit/windows/11/x86_64
+
+[deps]
+devdeps-vcpkg-all-20260414.tar.gz
+devdeps-openssl-20260414.tar.gz
+
+[tools]
+obdevtools-cmake-20260414.tar.gz
+obdevtools-ninja-20260414.tar.gz
+obdevtools-llvm-18.1.8-20260414.tar.gz
+obdevtools-win-flex-bison-20260414.tar.gz

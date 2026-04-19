@@ -21,6 +21,24 @@
 //   //clock_gettime(CLOCK_REALTIME, &tp);
 //   return tp.tv_sec * 1000000 + tp.tv_nsec/1000;
 // }
+#ifdef _WIN32
+#include <windows.h>
+#include <stdint.h>
+
+static int clock_gettime_realtime(struct timespec *tp) {
+    FILETIME ft;
+    GetSystemTimePreciseAsFileTime(&ft);
+
+    unsigned long long t = ((unsigned long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    t -= 116444736000000000ULL;
+    tp->tv_sec  = t / 10000000ULL;
+    tp->tv_nsec = (t % 10000000ULL) * 100;
+    return 0;
+}
+
+#define CLOCK_REALTIME 0
+#define clock_gettime(a, b) clock_gettime_realtime(b)
+#endif
 
 static int64_t tc_get_ns()
 {

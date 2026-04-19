@@ -16,18 +16,15 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#ifdef __APPLE__
+#if defined(__APPLE__) && defined(__MACH__)
 #include <signal.h>
 #include <errno.h>
 #include <unistd.h>
 #include <pthread.h>
 
-// macOS doesn't have sigtimedwait. Use simple sigwait since thread wakeup
-// is handled by pthread_kill(SIGUSR1) in the destructor.
-// The timeout is not implemented - relies on external wakeup signal.
 static int sigtimedwait(const sigset_t *set, siginfo_t *info, const struct timespec *timeout) {
   (void)info;
-  (void)timeout; // Timeout not implemented; wakeup via pthread_kill(SIGUSR1)
+  (void)timeout;
 
   int signum = 0;
   int result = sigwait(const_cast<sigset_t*>(set), &signum);
@@ -136,7 +133,11 @@ int ObSignalHandle::deal_signals(int signum)
       break;
     }
     case SIGTERM: {
+#ifdef _WIN32
+      TerminateProcess(GetCurrentProcess(), 1);
+#else
       raise(SIGKILL);
+#endif
       break;
     }
     case SIGUSR1: {

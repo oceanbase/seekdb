@@ -1,0 +1,65 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_ROOTSERVER_OB_CREATE_MATERIALIZED_VIEW_HELPER_H_
+#define OCEANBASE_ROOTSERVER_OB_CREATE_MATERIALIZED_VIEW_HELPER_H_
+
+#include "rootserver/parallel_ddl/ob_create_view_helper.h"
+#include "rootserver/parallel_ddl/ob_table_helper.h"
+
+namespace oceanbase
+{
+namespace rootserver
+{
+class ObCreateMaterializedViewHelper : public ObCreateViewHelper, public ObTableHelper
+{
+public:
+  ObCreateMaterializedViewHelper(
+    share::schema::ObMultiVersionSchemaService *schema_service,
+    const uint64_t tenant_id,
+    const obrpc::ObCreateTableArg &arg,
+    obrpc::ObCreateTableRes &res,
+    ObDDLSQLTransaction *external_trans = nullptr,
+    bool enable_ddl_parallel = true)
+    : ObDDLHelper(schema_service, tenant_id, "[parallel create materialized view]", external_trans, enable_ddl_parallel),
+      ObCreateViewHelper(schema_service, tenant_id, arg, res, external_trans, enable_ddl_parallel),
+      ObTableHelper(schema_service, tenant_id, "[parallel create materialized view]", external_trans, enable_ddl_parallel),
+      task_record_() {}
+  virtual ~ObCreateMaterializedViewHelper() {}
+
+protected:
+  virtual int generate_schemas_() override;
+  virtual int generate_table_schema_() override { return generate_container_table_schema_(); }
+  virtual int generate_aux_table_schemas_() override;
+  virtual int generate_foreign_keys_() override { return OB_SUCCESS; };
+  virtual int generate_sequence_object_() override { return OB_SUCCESS; };
+
+  virtual int operate_schemas_() override;
+  virtual int calc_schema_version_cnt_() override;
+  virtual int construct_and_adjust_result_(int &return_ret) override;
+
+
+private:
+  int append_generate_schema_for_mv_();
+  int generate_container_table_schema_();
+  int create_schemas_for_mv_();
+private:
+  ObDDLTaskRecord task_record_;
+};
+
+} // end namespace rootserver
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ROOTSERVER_OB_CREATE_MATERIALIZED_VIEW_HELPER_H_

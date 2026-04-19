@@ -16,6 +16,13 @@
 
 #include "ob_async_log_struct.h"
 #include "deps/oblib/src/lib/allocator/ob_slice_alloc.h"
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
+
+#if defined(_WIN32) && !defined(O_CLOEXEC)
+#define O_CLOEXEC 0
+#endif
 
 
 namespace oceanbase
@@ -68,7 +75,11 @@ int ObPLogFileStruct::reopen(const bool redirect_flag)
   if (OB_UNLIKELY(strlen(filename_) <= 0)) {
     LOG_STDERR("invalid argument log_file = %p\n", filename_);
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY((tmp_fd = ::open(filename_, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, LOG_FILE_MODE)) < 0)) {
+  } else if (OB_UNLIKELY((tmp_fd = ::open(filename_, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC
+#ifdef _WIN32
+          | _O_BINARY
+#endif
+          , LOG_FILE_MODE)) < 0)) {
     LOG_STDERR("open file = %s errno = %d error = %m\n", filename_, errno);
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(0 != fstat(tmp_fd, &stat_))) {

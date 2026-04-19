@@ -17,12 +17,15 @@
 #ifndef SRC_SHARE_OB_LOCAL_DEVICE_H_
 #define SRC_SHARE_OB_LOCAL_DEVICE_H_
 
-#if defined(__APPLE__) || defined(__ANDROID__)
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <libaio.h>
+#elif defined(__APPLE__) || defined(_WIN32) || defined(__ANDROID__)
 #ifndef OB_LIBAIO_STUB_DEFINED
 #define OB_LIBAIO_STUB_DEFINED
+#include <stdint.h>
 #include <stddef.h>
-// Stub types for libaio (not available on macOS/Android)
-typedef unsigned long io_context_t;
+// Stub types for libaio (not available on macOS/Windows/Android)
+typedef uintptr_t io_context_t;
 struct iocb {
   void *data;
   short aio_lio_opcode;
@@ -44,8 +47,6 @@ static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t co
   iocb->aio_fildes = fd; iocb->aio_buf = buf; iocb->aio_nbytes = count; iocb->aio_offset = offset; iocb->aio_lio_opcode = 0;
 }
 #endif // OB_LIBAIO_STUB_DEFINED
-#elif defined(__linux__)
-#include <libaio.h>
 #endif
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "common/storage/ob_io_device.h"

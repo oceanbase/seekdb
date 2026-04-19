@@ -19,8 +19,54 @@
 #include "achunk_mgr.h"
 #include "lib/utility/utility.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+
+#ifdef _WIN32
+#include <windows.h>
+// Windows defines constants related to mmap
+#define PROT_READ 0x1
+#define PROT_WRITE 0x2
+#define MAP_PRIVATE 0x02
+#define MAP_ANONYMOUS 0x20
+#define MAP_FAILED ((void*)-1)
+#define MADV_DONTNEED 4
+#endif
+
 using namespace oceanbase::lib;
 int ObLargePageHelper::large_page_type_ = INVALID_LARGE_PAGE_TYPE;
+
+#ifdef _WIN32
+// Windows implementation of mmap compatible function
+static void* ob_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset) {
+  (void)addr; (void)prot; (void)flags; (void)fd; (void)offset;
+  void* ptr = ::VirtualAlloc(NULL, length, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  return ptr ? ptr : MAP_FAILED;
+}
+
+// Windows implementation of munmap compatible function.
+// Uses VirtualQuery to find the AllocationBase because the addr passed in
+// may be an aligned sub-address within a larger VirtualAlloc reservation
+// (see direct_alloc reserve-then-commit alignment strategy).
+static int ob_munmap(void* addr, size_t length) {
+  (void)length;
+  MEMORY_BASIC_INFORMATION mbi;
+  if (VirtualQuery(addr, &mbi, sizeof(mbi)) == 0) {
+    return -1;
+  }
+  return ::VirtualFree(mbi.AllocationBase, 0, MEM_RELEASE) ? 0 : -1;
+}
+
+// Windows implementation of madvise compatible function.
+// Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
+// making them inaccessible (ACCESS_VIOLATION on access). MEM_RESET only tells
+// the OS that page contents are no longer needed while keeping pages committed
+// and safely accessible — matching Linux madvise(MADV_DONTNEED) semantics.
+static int ob_madvise_impl(void* addr, size_t length, int advice) {
+  if (advice == MADV_DONTNEED) {
+    return ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE) != NULL ? 0 : -1;
+  }
+  return 0;
+}
+#endif
 
 void ObLargePageHelper::set_param(const char *param)
 {
@@ -71,7 +117,24 @@ void *AChunkMgr::direct_alloc(const uint64_t size, const bool can_use_huge_page,
     if (((uint64_t)ptr & (ACHUNK_ALIGN_SIZE - 1)) != 0) {
       // not aligned
       low_free(ptr, size);
-
+#ifdef _WIN32
+      // On Windows, VirtualFree(MEM_RELEASE) frees the ENTIRE VirtualAlloc region;
+      // partial munmap is not supported.  Use reserve-then-commit for alignment:
+      // 1) Reserve an oversized region (virtual address space only, no physical pages)
+      // 2) Commit only the aligned sub-region (physical pages allocated)
+      // 3) ob_munmap uses VirtualQuery(AllocationBase) to free the whole reservation later
+      uint64_t reserve_size = size + ACHUNK_ALIGN_SIZE;
+      void *reserved = ::VirtualAlloc(NULL, reserve_size, MEM_RESERVE, PAGE_NOACCESS);
+      if (reserved != nullptr) {
+        const uint64_t addr = align_up2((uint64_t)reserved, ACHUNK_ALIGN_SIZE);
+        ptr = ::VirtualAlloc((void*)addr, size, MEM_COMMIT, PAGE_READWRITE);
+        if (ptr == nullptr) {
+          ::VirtualFree(reserved, 0, MEM_RELEASE);
+        }
+      } else {
+        ptr = nullptr;
+      }
+#else
       uint64_t new_size = size + ACHUNK_ALIGN_SIZE;
       /* alloc_shadow should be set to false since partitial sanity_munmap is not supported */
       ptr = low_alloc(new_size, can_use_huge_page, huge_page_used, false/*alloc_shadow*/);
@@ -85,6 +148,7 @@ void *AChunkMgr::direct_alloc(const uint64_t size, const bool can_use_huge_page,
         }
         ptr = (void*)addr;
       }
+#endif
     } else {
       // aligned address returned
     }
@@ -136,14 +200,26 @@ void *AChunkMgr::low_alloc(const uint64_t size, const bool can_use_huge_page, bo
   if (NULL == ptr) {
     if (OB_LIKELY(ObLargePageHelper::PREFER_LARGE_PAGE != large_page_type) &&
         OB_LIKELY(ObLargePageHelper::ONLY_LARGE_PAGE != large_page_type)) {
+#ifdef _WIN32
+      if (MAP_FAILED == (ptr = ob_mmap(ptr, size, prot, flags, fd, offset))) {
+#else
       if (MAP_FAILED == (ptr = ::mmap(ptr, size, prot, flags, fd, offset))) {
+#endif
         ptr = nullptr;
       }
     } else {
+#ifdef _WIN32
+      if (MAP_FAILED == (ptr = ob_mmap(ptr, size, prot, huge_flags, fd, offset))) {
+#else
       if (MAP_FAILED == (ptr = ::mmap(ptr, size, prot, huge_flags, fd, offset))) {
+#endif
         ptr = nullptr;
         if (ObLargePageHelper::PREFER_LARGE_PAGE == large_page_type) {
+#ifdef _WIN32
+          if (MAP_FAILED == (ptr = ob_mmap(ptr, size, prot, flags, fd, offset))) {
+#else
           if (MAP_FAILED == (ptr = ::mmap(ptr, size, prot, flags, fd, offset))) {
+#endif
             ptr = nullptr;
           }
         }
@@ -234,10 +310,12 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
   if (OB_NOT_NULL(chunk)) {
     chunk->alloc_bytes_ = size;
     SANITY_UNPOISON(chunk, all_size); // maybe no need?
-  } else if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-    LOG_DBA_WARN_V2(OB_LIB_ALLOCATE_MEMORY_FAIL, OB_ALLOCATE_MEMORY_FAILED,
-        "[OOPS]: over total memory limit. ", "The details: ",
-        "hold= ", get_hold(), ", limit= ", get_limit());
+  } else {
+    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      LOG_DBA_WARN_V2(OB_LIB_ALLOCATE_MEMORY_FAIL, OB_ALLOCATE_MEMORY_FAILED,
+          "[OOPS]: over total memory limit. ", "The details: ",
+          "hold= ", get_hold(), ", limit= ", get_limit());
+    }
   }
 
   return chunk;
@@ -249,7 +327,7 @@ void AChunkMgr::free_chunk(AChunk *chunk)
     const int64_t hold_size = chunk->hold();
     const uint64_t all_size = chunk->aligned();
     const double max_large_cache_ratio = 0.5;
-    int64_t max_large_cache_size = min(limit_ - get_used(), max_chunk_cache_size_) * max_large_cache_ratio;
+    int64_t max_large_cache_size = static_cast<int64_t>(min(limit_ - get_used(), max_chunk_cache_size_) * max_large_cache_ratio);
     bool freed = true;
     if (cache_hold_ + hold_size <= max_chunk_cache_size_
         && (NORMAL_ACHUNK_SIZE == all_size || large_cache_hold_ <= max_large_cache_size)
@@ -358,19 +436,29 @@ int AChunkMgr::madvise(void *addr, size_t length, int advice)
 {
   int result = 0;
   if (length > 0) {
+#ifdef _WIN32
+    result = ob_madvise_impl(addr, length, advice);
+#else
     do {
       result = ::madvise(addr, length, advice);
     } while (result == -1 && errno == EAGAIN);
+#endif
   }
   return result;
 }
 
 void AChunkMgr::munmap(void *addr, size_t length)
 {
+#ifdef _WIN32
+  if (-1 == ob_munmap(addr, length)) {
+    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "munmap failed", KP(addr), K(length));
+  }
+#else
   int orig_errno = errno;
   if (-1 == ::munmap(addr, length)) {
     LOG_ERROR_RET(OB_ERR_UNEXPECTED, "munmap failed", KP(addr), K(length), K(orig_errno), K(errno));
   }
+#endif
 }
 
 int64_t AChunkMgr::to_string(char *buf, const int64_t buf_len) const
@@ -404,15 +492,25 @@ int64_t AChunkMgr::to_string(char *buf, const int64_t buf_len) const
   const char *thp_status = get_transparent_hugepage_status();
 
   ret = databuff_printf(buf, buf_len, pos,
+#ifdef _WIN32
+      "[chunk_mgr] limit=%15ld hold=%15ld total_hold=%15ld used=%15ld freelists_hold=%15ld"
+      " total_maps=%15ld total_unmaps=%15ld large_maps=%15ld large_unmaps=%15ld huge_maps=%15ld huge_unmaps=%15ld"
+      " resident_size=%15ld virtual_memory_used=%15ld",
+#else
       "[chunk_mgr] limit=%'15ld hold=%'15ld total_hold=%'15ld used=%'15ld freelists_hold=%'15ld"
       " total_maps=%'15ld total_unmaps=%'15ld large_maps=%'15ld large_unmaps=%'15ld huge_maps=%'15ld huge_unmaps=%'15ld"
       " resident_size=%'15ld virtual_memory_used=%'15ld",
+#endif
       limit_, hold_, total_hold_, get_used(), cache_hold_,
       total_maps, total_unmaps, large_maps, large_unmaps, huge_maps, huge_unmaps,
       resident_size, virtual_memory_used);
   if (OB_SUCC(ret)) {
     ret = databuff_printf(buf, buf_len, pos,
+#ifdef _WIN32
+                          " unmanaged_memory_size=%15ld unmanaged_memory_dist: ",
+#else
                           " unmanaged_memory_size=%'15ld unmanaged_memory_dist: ",
+#endif
                           get_unmanaged_memory_size());
   }
   if (OB_SUCC(ret)) {
@@ -427,7 +525,11 @@ int64_t AChunkMgr::to_string(char *buf, const int64_t buf_len) const
 #endif
   if (OB_SUCC(ret)) {
     ret = databuff_printf(buf, buf_len, pos,
+#ifdef _WIN32
+        " [OS_PARAMS] vm.max_map_count=%15ld transparent_hugepages=%15s",
+#else
         " [OS_PARAMS] vm.max_map_count=%'15ld transparent_hugepages=%15s",
+#endif
         max_map_count, thp_status);
   }
 
@@ -441,7 +543,11 @@ int64_t AChunkMgr::to_string(char *buf, const int64_t buf_len) const
       pops += free_list.get_pops();
     }
     ret = databuff_printf(buf, buf_len, pos,
+#ifdef _WIN32
+        "\n[CHUNK_MGR] %2d MB_CACHE: hold=%15ld count=%15ld pushes=%15ld pops=%15ld maps=%15ld unmaps=%15ld\n",
+#else
         "\n[CHUNK_MGR] %'2d MB_CACHE: hold=%'15ld count=%'15ld pushes=%'15ld pops=%'15ld maps=%'15ld unmaps=%'15ld\n",
+#endif
         2, hold, count, pushes, pops, normal_maps, normal_unmaps);
   }
 
@@ -456,7 +562,11 @@ int64_t AChunkMgr::to_string(char *buf, const int64_t buf_len) const
     maps += get_maps(i);
     unmaps += get_unmaps(i);
     ret = databuff_printf(buf, buf_len, pos,
+#ifdef _WIN32
+        "[CHUNK_MGR] %2d MB_CACHE: hold=%15ld count=%15ld pushes=%15ld pops=%15ld maps=%15ld unmaps=%15ld\n",
+#else
         "[CHUNK_MGR] %'2d MB_CACHE: hold=%'15ld count=%'15ld pushes=%'15ld pops=%'15ld maps=%'15ld unmaps=%'15ld\n",
+#endif
         LARGE_ACHUNK_SIZE_MAP[i - MIN_LARGE_ACHUNK_INDEX], hold, count, pushes, pops, maps, unmaps);
   }
   return pos;

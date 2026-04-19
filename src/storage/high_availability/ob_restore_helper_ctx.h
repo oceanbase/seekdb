@@ -20,6 +20,29 @@
 #include "lib/container/ob_array.h"
 #include "storage/ob_storage_rpc.h"
 #include "storage/ob_storage_grpc.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#ifndef CONST
+#define CONST const
+#define _OB_UNDEF_CONST
+#endif
+#ifndef OPTIONAL
+#define OPTIONAL
+#define _OB_UNDEF_OPTIONAL
+#endif
+#include <mswsock.h>
+#ifdef _OB_UNDEF_CONST
+#undef CONST
+#undef _OB_UNDEF_CONST
+#endif
+#ifdef _OB_UNDEF_OPTIONAL
+#undef OPTIONAL
+#undef _OB_UNDEF_OPTIONAL
+#endif
+#undef ERROR
+#undef DELETE
+#endif
 #include "grpc/storageservice.grpc.pb.h"
 #include "storage/tablet/ob_tablet_common.h"
 #include "ob_storage_ha_struct.h"

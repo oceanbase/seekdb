@@ -66,7 +66,11 @@ int ObVTOAUtility::get_vip4rds(int sockfd, struct vtoa_get_vs4rds *vs, socklen_t
     vs->daddr = daddr.sin_addr.s_addr;
     vs->dport = daddr.sin_port;
 
+#ifdef _WIN32
+    if (getsockopt(sockfd, IPPROTO_IP, VTOA_SO_GET_VS4RDS, (char*)vs, (int*)len) < 0) {
+#else
     if (getsockopt(sockfd, IPPROTO_IP, VTOA_SO_GET_VS4RDS, vs, len) < 0) {
+#endif
       ret = OB_ERR_UNEXPECTED;
       LOG_DEBUG("getsockopt VTOA_SO_GET_VS4RDS may not support", K(sockfd), KERRNOMSG(errno));
     }

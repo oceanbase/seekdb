@@ -466,11 +466,18 @@ private:
   bool is_vectorized_expr(const ObRawExpr *raw_expr) const;
   int compute_max_batch_size(const ObRawExpr *raw_expr);
 
+#ifdef _WIN32
+#pragma push_macro("small")
+#undef small
+#endif
   enum class ObExprBatchSize {
     one = 1,
     small = 8,
     full = 65535
   };
+#ifdef _WIN32
+#pragma pop_macro("small")
+#endif
   // Certain exprs can NOT be executed vectorizely. Check the exps within this
   // routine
   ObExprBatchSize

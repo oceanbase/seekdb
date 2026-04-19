@@ -279,7 +279,7 @@ int ObExprMod::mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
         datum.set_null();
       }
     } else {
-      datum.set_uint(left_ui % labs(right_i));
+      datum.set_uint(left_ui % llabs(right_i));
     }
   }
   return ret;

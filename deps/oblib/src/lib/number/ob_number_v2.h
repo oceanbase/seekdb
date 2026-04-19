@@ -1880,6 +1880,80 @@ bool ObNumber::operator!=(const ObNumber &other) const
   return !is_equal(other);
 }
 
+/*
+  For integer values, the following optimizations can be made:
+  Calculate the corresponding value for each digit position (an integer has at most two digits),
+  and fill the DESC of Number based on the integer parameter (sign bit, exp, etc.).
+  For example, for 1000000001, with a digit position of 10^9, continuously dividing by 10^9
+  can calculate the values of the two digit positions as (1, 1), i.e., the digit array is
+  [1, 1], and it can be known that the exponent value is 1, the sign bit value is 1,
+  and the effective length of digit is 2
+*/
+template <class IntegerT>
+int ObNumber::from_integer_(const IntegerT value, IAllocator &allocator) {
+  int ret = OB_SUCCESS;
+  static const uint64_t MAX_DIGITS[3] = {1L,
+           1000000000L,
+           1000000000000000000L};
+  if (0 == value) {
+    set_zero();
+  } else {
+    Desc desc;
+    uint64_t abs_val = 0;
+
+    if (std::is_signed<IntegerT>::value) { // If it is a signed integer, call abs
+  #ifdef __clang__
+  #pragma clang diagnostic push
+  #pragma clang diagnostic ignored "-Wabsolute-value"
+  #endif
+      abs_val = (uint64_t)std::labs(value);
+  #ifdef __clang__
+  #pragma clang diagnostic pop
+  #endif
+
+    } else { // otherwise directly assign
+      abs_val = value;
+    }
+    uint64_t exp = 0;
+    uint32_t digits[OB_MAX_INTEGER_DIGIT] = {0};
+    uint8_t idx = 0;
+    uint8_t zero_cnt = 0;
+
+    for (int i = 2; i >= 0; i--) {
+      if (abs_val >= MAX_DIGITS[i]) {
+        idx += zero_cnt;
+        digits[idx++] = uint32_t(abs_val / MAX_DIGITS[i]);
+        exp = std::max(exp, (uint64_t)i);
+        abs_val %= MAX_DIGITS[i];
+        zero_cnt = 0;
+      } else if (exp > 0) {
+        zero_cnt++;
+      }
+    }
+
+    desc.exp_ = ((uint8_t)exp + EXP_ZERO) & 0x7f;
+    if (value >= 0) {
+      desc.sign_ = POSITIVE;
+    } else {
+      desc.sign_ = NEGATIVE;
+      desc.exp_ = 0x7f & (~desc.exp_);
+      ++desc.exp_;
+    }
+    desc.len_ = idx;
+    desc.reserved_ = 0;
+
+    uint32_t* digit_mem = NULL;
+    if (OB_ISNULL(digit_mem = (uint32_t *)allocator.alloc(sizeof(uint32_t) * idx))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      _OB_LOG(ERROR, "fail to alloc obnumber digit memory, ret=%d digit_mem=%p idx=%u", ret, digit_mem, idx);
+    } else {
+      MEMCPY(digit_mem, digits, ITEM_SIZE(digits_)*idx);
+      assign(desc.desc_, (uint32_t*)digit_mem);
+    }
+  }
+  return ret;
+}
+
 int ObNumber::abs_compare_sys(const uint64_t &other, int64_t exp) const
 {
   int cmp = 0;
@@ -2353,8 +2427,13 @@ inline int64_t ObNumber::exp_integer_align_(const Desc d1, const Desc d2)
     if (0 != exp2) {
       exp2 -= EXP_ZERO;
     }
+#ifdef _WIN32
+    int64_t min_exp1 = std::abs(std::min(exp1 - len1 + 1, (int64_t)0));
+    int64_t min_exp2 = std::abs(std::min(exp2 - len2 + 1, (int64_t)0));
+#else
     int64_t min_exp1 = labs(std::min(exp1 - len1 + 1, (int64_t)0));
     int64_t min_exp2 = labs(std::min(exp2 - len2 + 1, (int64_t)0));
+#endif
     ret = std::max(min_exp1, min_exp2);
   }
 
@@ -2428,10 +2507,18 @@ inline int ObNumber::exp_cmp_(const Desc d1, const Desc d2)
       exp2 += 1;
     }
     if (0 != exp1) {
+#ifdef _WIN32
+      exp1 = std::abs(exp1 - EXP_ZERO);
+#else
       exp1 = labs(exp1 - EXP_ZERO);
+#endif
     }
     if (0 != exp2) {
+#ifdef _WIN32
+      exp2 = std::abs(exp2 - EXP_ZERO);
+#else
       exp2 = labs(exp2 - EXP_ZERO);
+#endif
     }
 
     ret = (int)(exp1 - exp2);

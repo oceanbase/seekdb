@@ -16,6 +16,10 @@
 
 #define USING_LOG_PREFIX SQL
 
+#ifdef _WIN32
+#include "lib/alloc/alloc_assist.h"
+#define memmem ob_memmem
+#endif
 #include "share/object/ob_obj_cast_util.h"
 #include "share/ob_json_access_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"

@@ -129,7 +129,7 @@ protected:
                      int64_t &net_packet_buf_pos);
 protected:
   //const int16_t COMPRESS_BLOCK_SIZE = 1024;
-  const int64_t MAX_COMPRESS_DATA_SIZE = (1UL << 32) - 1024;// 4G - 1K
+  const int64_t MAX_COMPRESS_DATA_SIZE = (1ULL << 32) - 1024;// 4G - 1K
   const int16_t COMPRESS_BLOCK_SIZE = (1 << 15) - 1024;// 31K
   const int32_t COMPRESS_RING_BUFFER_SIZE = 1 << 17;//128K
   const int64_t ENCODE_SEGMENT_COST_TIME = 3 * 1000;//3ms

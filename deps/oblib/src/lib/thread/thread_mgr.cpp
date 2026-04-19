@@ -36,13 +36,15 @@ void set_tenant_tg_helper(TGHelper *tg_helper)
 #include "lib/thread/thread_define.h"
 #undef TG_DEF
 
-CreateFunc create_funcs_[] = {nullptr};
+CreateFunc create_funcs_[TGDefIDs::END] = {nullptr};
 bool create_func_inited_ = false;
 
-void __attribute__((weak)) init_create_func()
+#ifndef _WIN32
+void OB_WEAK_SYMBOL init_create_func()
 {
   lib_init_create_func();
 }
+#endif
 
 void lib_init_create_func()
 {

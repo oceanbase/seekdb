@@ -188,7 +188,7 @@ int ObVirtualOpenCursorTable::FillScanner::get_session_cursor_sql_text(ObSQLSess
   int ret = OB_SUCCESS;
   int64_t cursor_id = cursor->get_id();
   ObPsStmtId inner_stmt_id = OB_INVALID_ID;
-  if (0 == (cursor_id & (1L << 31))) {
+  if (0 == (cursor_id & (1LL << 31))) {
     if (OB_ISNULL(sess_info.get_ps_cache())) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN,"ps : ps cache is null.", K(ret), K(cursor_id));

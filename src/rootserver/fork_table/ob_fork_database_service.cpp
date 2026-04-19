@@ -20,9 +20,11 @@
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ob_ddl_service.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
 #include "share/ob_fork_table_util.h"
 #include "share/ob_fts_index_builder_util.h"
 #include "storage/ddl/ob_ddl_lock.h"
+#include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 namespace oceanbase {
 using namespace common;
@@ -292,6 +294,52 @@ int ObDDLService::fork_database(
           LOG_INFO("destination database created", K(tenant_id), "dst_db_id",
                    dst_db_schema.get_database_id(), "dst_db_name",
                    dst_db_schema.get_database_name());
+        }
+      }
+    }
+
+    // For tables with async vector indexes, lock source tables to block DML
+    // and wait for ChangeStream to catch up before obtaining the snapshot.
+    // This ensures the fork snapshot covers both main table data and async index data.
+    if (OB_SUCC(ret) && user_table_schemas.count() > 0) {
+      bool need_wait = false;
+      observer::ObInnerSQLConnection *iconn =
+          static_cast<observer::ObInnerSQLConnection *>(trans.get_connection());
+      const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
+      if (OB_ISNULL(iconn)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("inner connection is null", KR(ret));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < user_table_schemas.count(); ++i) {
+        const ObTableSchema *table_schema = user_table_schemas.at(i);
+        bool has_async_vec_index = false;
+        if (OB_ISNULL(table_schema)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("table schema is null", KR(ret), K(i));
+        } else if (OB_FAIL(check_has_async_vector_index(*table_schema, schema_guard,
+                                                         has_async_vec_index))) {
+          LOG_WARN("fail to check async vector index", KR(ret),
+                   "table_id", table_schema->get_table_id());
+        } else if (has_async_vec_index) {
+          if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
+                         tenant_id, table_schema->get_table_id(),
+                         transaction::tablelock::SHARE, lock_timeout_us, iconn))) {
+            LOG_WARN("fail to lock source table for async index sync", KR(ret),
+                     K(tenant_id), "table_id", table_schema->get_table_id());
+          } else {
+            need_wait = true;
+            LOG_INFO("locked source table for async index sync",
+                     K(tenant_id), "table_id", table_schema->get_table_id());
+          }
+        }
+      }
+      if (OB_SUCC(ret) && need_wait) {
+        if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
+                       get_sql_proxy(), tenant_id, lock_timeout_us))) {
+          LOG_WARN("fail to wait change stream refresh", KR(ret), K(tenant_id));
+        } else {
+          LOG_INFO("async index sync completed before fork database snapshot",
+                   K(tenant_id));
         }
       }
     }

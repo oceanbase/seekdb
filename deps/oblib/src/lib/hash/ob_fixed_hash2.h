@@ -101,7 +101,7 @@ private:
     Node* prev = NULL;
     return NULL != key? ol_search_next(get_pre(key), key, prev): (Node*)nodes_;
   }
-  static uint64_t last2n(uint64_t x) { return x == 0? 0 : (1UL << 63) >> (__builtin_clzll(x)); }
+  static uint64_t last2n(uint64_t x) { return x == 0? 0 : (1ULL << 63) >> (__builtin_clzll(x)); }
   Node* get_pre(uint64_t hash) { return (Node*)(nodes_ + (hash>>shift_)); }
   Node* get_pre(Node* node) { return get_pre(node->hash()); }
   static void init_buckets(BaseNode* nodes, int64_t limit) {

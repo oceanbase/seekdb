@@ -25,7 +25,7 @@ namespace share {
 const uint64_t OB_INVALID_SCN_VAL = UINT64_MAX;
 const uint64_t OB_MIN_SCN_TS_NS = 0;
 const uint64_t OB_BASE_SCN_TS_NS = 1;
-const uint64_t OB_MAX_SCN_TS_NS = (1UL << 62) - 1;     //4611686018427387903
+const uint64_t OB_MAX_SCN_TS_NS = (1ULL << 62) - 1;     //4611686018427387903
 
 class SCN
 {

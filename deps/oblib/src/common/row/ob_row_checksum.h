@@ -100,7 +100,7 @@ int ObRowChecksumValue::string2column_checksum(Allocator &allocator, const char 
     p = str;
     char *end = NULL;
     for (int64_t i = 0; i < count; i++) {
-      column_checksum_array_[i].first = strtoul(p, &end, 10);
+      column_checksum_array_[i].first = strtoull(p, &end, 10);
       if (*end != ':') {
         ret = OB_INVALID_DATE_FORMAT;
         COMMON_LOG(WARN, "invalid column check string format", K(ret), K(str));
@@ -108,7 +108,7 @@ int ObRowChecksumValue::string2column_checksum(Allocator &allocator, const char 
       }
       end++;
       p = end;
-      column_checksum_array_[i].second = strtoul(p, &end, 10);
+      column_checksum_array_[i].second = strtoull(p, &end, 10);
       if (*end != ',' && *end != '\0') {
         ret = OB_INVALID_DATE_FORMAT;
         COMMON_LOG(WARN, "invalid column check string format", K(ret), K(str));

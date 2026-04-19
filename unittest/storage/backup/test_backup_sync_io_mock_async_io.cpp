@@ -55,8 +55,8 @@ int init_device(const int64_t media_id, ObLocalDevice &device)
 {
   int ret = OB_SUCCESS;
   const int64_t IO_OPT_COUNT = 6;
-  const int64_t block_size = 1024L * 1024L * 2L; // 2MB
-  const int64_t data_disk_size = 1024L * 1024L * 1024L; // 1GB
+  const int64_t block_size = 2LL * 1024 * 1024; // 2MB
+  const int64_t data_disk_size = 1LL * 1024 * 1024 * 1024; // 1GB
   const int64_t data_disk_percentage = 50L;
   ObIODOpt io_opts[IO_OPT_COUNT];
   io_opts[0].key_ = "data_dir";                   io_opts[0].value_.value_str = TEST_DATA_DIR;
@@ -105,7 +105,7 @@ public:
   virtual void SetUp()
   {
     ObIOManager::get_instance().destroy();
-    const int64_t memory_limit = 10L * 1024L * 1024L * 1024L; // 10GB
+    const int64_t memory_limit = 10LL * 1024 * 1024 * 1024; // 10GB
     OK(ObIOManager::get_instance().init(memory_limit));
     OK(ObIOManager::get_instance().start());
 
@@ -121,7 +121,7 @@ public:
     tenant_ctx.set(io_service);
     ObTenantEnv::set_tenant(&tenant_ctx);
 
-    ObMallocAllocator::get_instance()->set_tenant_limit(1, 8L * 1024L * 1024L * 1024L /* 8 GB */);
+    ObMallocAllocator::get_instance()->set_tenant_limit(1, 8LL * 1024 * 1024 * 1024 /* 8 GB */);
   }
   virtual void TearDown()
   {

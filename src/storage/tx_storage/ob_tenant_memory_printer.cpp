@@ -119,6 +119,9 @@ int ObTenantMemoryPrinter::print_tenant_usage_(
   MTL_SWITCH(tenant_id) {
     storage::ObTenantFreezer *freezer = nullptr;
     if (FALSE_IT(freezer = MTL(storage::ObTenantFreezer *))) {
+    } else if (OB_ISNULL(freezer)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("freezer is null", K(ret), K(tenant_id));
     } else if (OB_FAIL(freezer->print_tenant_usage(print_buf,
                                                    buf_len,
                                                    pos))) {

@@ -44,11 +44,19 @@ private:
   bool is_queue(int type) { return type >= QDISC_ROOT && type < QDISC_QUEUE_END; }
   void collect_cfg(StrFormat& f) {
     for(int i = 0; i < N; i++) {
+#ifndef _WIN32
       IQD* qd = (typeof(qd))imap_fetch(i);
+#else
+      IQD* qd = static_cast<IQD*>(imap_fetch(i));
+#endif
       if (NULL == qd) continue;
       char b[256];
       if (is_queue(qd->get_type())) {
+#ifndef _WIN32
         QDesc* desc = (typeof(desc))qd;
+#else
+        QDesc* desc = static_cast<QDesc*>(qd);
+#endif
         f.append(" %s:%ld", desc->get_name(), desc->get_weight());
         f.append(",%s", format_bytes(b, sizeof(b), desc->get_limit()));
         f.append(",%s", format_bytes(b, sizeof(b), desc->get_reserve()));
@@ -59,9 +67,17 @@ private:
   int collect_active_grp_idx(int* idx, int limit, bool leaf_only) {
     int active_cnt = 0;
     for(int i = 0; active_cnt < limit && i < N; i++) {
+#ifndef _WIN32
       IQD* qd = (typeof(qd))imap_fetch(i);
+#else
+      IQD* qd = static_cast<IQD*>(imap_fetch(i));
+#endif
       if (NULL == qd || !is_queue(qd->get_type())) continue;
+#ifndef _WIN32
       QDesc* desc = (typeof(desc))qd;
+#else
+      QDesc* desc = static_cast<QDesc*>(qd);
+#endif
       if (NULL == desc || (leaf_only && QDISC_BUFFER_QUEUE != desc->get_type())) continue;
       QStat cur_stat;
       desc->get_stat(cur_stat);
@@ -75,7 +91,11 @@ private:
     char b[16];
     for(int j = 0; j < cnt; j++) {
       int i = idx[j];
+#ifndef _WIN32
       QDesc* desc = (typeof(desc))imap_fetch(i);
+#else
+      QDesc* desc = static_cast<QDesc*>(imap_fetch(i));
+#endif
       QStat cur_stat;
       desc->get_stat(cur_stat);
       int64_t total_count = cur_stat.count_ - last_stat_[i].count_;
@@ -86,9 +106,17 @@ private:
   void collect_qcount(StrFormat& f, int chan_id, int* idx, int cnt) {
     for(int j = 0; j < cnt; j++) {
       int i = idx[j];
+#ifndef _WIN32
       QDesc* desc = (typeof(desc))imap_fetch(i);
+#else
+      QDesc* desc = static_cast<QDesc*>(imap_fetch(i));
+#endif
       if (QDISC_BUFFER_QUEUE != desc->get_type()) continue;
+#ifndef _WIN32
       BufferQueue* q = (typeof(q))fetch_qdisc(i, chan_id);
+#else
+      BufferQueue* q = static_cast<BufferQueue*>(fetch_qdisc(i, chan_id));
+#endif
       if (NULL != q) {
         f.append(" %ld", q->cnt());
       } else {

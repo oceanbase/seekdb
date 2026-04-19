@@ -159,7 +159,7 @@ int ObLSTxCtxIterator::get_next_tx_id_(ObTransID& tx_id)
   return ret;
 }
 
-__attribute__((weak)) int ObLSTxCtxMgr::init(const int64_t tenant_id,
+OB_WEAK_SYMBOL int ObLSTxCtxMgr::init(const int64_t tenant_id,
                        const ObLSID &ls_id,
                        ObTxTable *tx_table,
                        ObLockTable *lock_table,
@@ -348,7 +348,7 @@ int ObLSTxCtxMgr::create_tx_ctx_(const ObTxCreateArg &arg,
       // for transfer compatibility, we need old version follower's epoch be 0, so we need not check it
       if (!arg.for_replay_) {
         // pack `epoch(15bit) | ts_ns(48bit)` into int64_t, set most significant bit to zero
-        epoch_v = ~(1UL << 63) & ((epoch << 48) | (ObTimeUtility::current_time_ns() & ~(0xFFFFUL << 48)));
+        epoch_v = ~(1ULL << 63) & ((epoch << 48) | (ObTimeUtility::current_time_ns() & ~(0xFFFFULL << 48)));
       } else {
         epoch_v = -1;
       }

@@ -60,13 +60,6 @@ int ObDtlSendMessageP::process_msg(ObDtlRpcDataResponse &response, ObDtlSendArgs
       LOG_TRACE("receive drain cmd, unregister rpc channel", KP(arg.chid_));
       ret = OB_SUCCESS;
       tmp_ret = OB_SUCCESS;
-    } else if (header.is_px_bloom_filter_data()) {
-      ObDtlLinkedBuffer *buf = &arg.buffer_;
-      if (OB_FAIL(process_px_bloom_filter_data(buf))) {
-        LOG_WARN("fail to process px bloom filter data", K(ret));
-      } else {
-        tmp_ret = OB_SUCCESS;
-      }
     } else if (arg.buffer_.is_data_msg() && 1 == arg.buffer_.seq_no()) {
       ret = tmp_ret;
       LOG_WARN("failed to get channel", K(ret));
@@ -136,48 +129,6 @@ int ObDtlBCSendMessageP::process()
   LOG_TRACE("finish process broadcast msg", K(ret), K(arg_.bc_buffer_), K(resps), K(args));
   // rpc response must return OB_SUCCESS, otherwise response will not be serialized
   return OB_SUCCESS;
-}
-
-int ObDtlSendMessageP::process_px_bloom_filter_data(ObDtlLinkedBuffer *&buffer)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(buffer)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("linked buffer is null", K(ret));
-  } else {
-    ObPxBloomFilterData bf_data;
-    ObDtlMsgHeader header;
-    ObPxBloomFilter *filter = NULL;
-    if (OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(*buffer, header))) {
-      LOG_WARN("fail to decode header of buffer", K(ret));
-    }
-    if (OB_SUCC(ret)) {
-      const char *buf = buffer->buf();
-      int64_t size = buffer->size();
-      int64_t &pos = buffer->pos();
-      if (OB_FAIL(common::serialization::decode(buf, size, pos, bf_data))) {
-        LOG_WARN("fail to decode bloom filter data", K(ret));
-      } else {
-        ObPXBloomFilterHashWrapper bf_key(bf_data.tenant_id_, bf_data.filter_id_,
-            bf_data.server_id_, bf_data.px_sequence_id_, 0/*task_id*/);
-        if (OB_FAIL(ObPxBloomFilterManager::instance().get_px_bf_for_merge_filter(
-            bf_key, filter))) {
-          LOG_WARN("fail to get px bloom filter", K(ret));
-        }
-        // get_px_bf_for_merge_filter will only increase the filter's reference count upon success
-        if (OB_SUCC(ret) && OB_NOT_NULL(filter)) {
-          if (OB_FAIL(filter->merge_filter(&bf_data.filter_))) {
-            LOG_WARN("fail to merge filter", K(ret));
-          } else if (OB_FAIL(filter->process_recieve_count(bf_data.bloom_filter_count_))) {
-            LOG_WARN("fail to process receive count", K(ret));
-          }
-          // merge and process operations completed, need to decrease its reference count.
-          (void)filter->dec_merge_filter_count();
-        }
-      }
-    }
-  }
-  return ret;
 }
 
 }  // dtl

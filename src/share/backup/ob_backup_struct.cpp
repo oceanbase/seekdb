@@ -2038,7 +2038,16 @@ int ObBackupUtils::convert_timestamp_to_date(
     struct tm time_info;
     struct tm *time_info_ptr = NULL;
 
+#ifdef _WIN32
+    if (0 != localtime_s(&time_info, &rawtime)) {
+      time_info_ptr = NULL;
+    } else {
+      time_info_ptr = &time_info;
+    }
+    if (NULL == time_info_ptr) {
+#else
     if (NULL == (time_info_ptr = (localtime_r(&rawtime, &time_info)))) {
+#endif
       ret = OB_ERR_SYS;
       LOG_WARN("get localtime failed", K(ret));
     } else if (0 == strftime(buf, MAX_BUF_LENGTH, "%Y%m%d", time_info_ptr)) {
@@ -4282,7 +4291,11 @@ int share::backup_time_to_strftime(const int64_t &ts_s, char *buf,
   int64_t strftime_len = 0;
   time_t t = static_cast<time_t>(ts_s);
 
+#ifdef _WIN32
+  (void) localtime_s(&lt, &t);
+#else
   (void) localtime_r(&t, &lt);
+#endif
   if (OB_FAIL(format.assign("%Y%m%d"))) {
     LOG_WARN("failed to build format string", K(ret), K(concat));
   } else if (OB_FAIL(format.append_fmt("%c", concat))) {

@@ -15,7 +15,7 @@
  *
  * Change Stream Dispatcher: parsed row, execution context, and subtasks.
  * Single-threaded Dispatcher consumes committed transactions from the ring buffer,
- * parses redo, slices by rowkey hash, and pushes subtasks to Workers.
+ * parses redo, slices by heap_pk range, and pushes subtasks to Workers.
  */
 
 #ifndef OB_CS_DISPATCHER_H_
@@ -76,7 +76,7 @@ struct ObCSRow
 // Execution context and subtask (created by Dispatcher, consumed by Worker)
 // ---------------------------------------------------------------------------
 
-/// Subtask (sliced by rowkey hash; same rowkey is processed by one Worker serially).
+/// Subtask (sliced by heap_pk range; adjacent rows stay together per worker chunk).
 class ObCSExecSubTask : public common::LinkTask
 {
 public:

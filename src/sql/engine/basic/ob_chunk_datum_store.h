@@ -414,7 +414,11 @@ public:
       if (nullptr != store_row_) {
         uint32_t payload_len = store_row_->cnt_ * sizeof(ObDatum);
         //reserve the memory of datum.ptr_ to assign ObObj
+#ifdef _WIN32
+        memset(store_row_->payload_, 0, payload_len);
+#else
         bzero(store_row_->payload_, payload_len);
+#endif
         store_row_->row_size_ = payload_len + sizeof(StoredRow);
       }
       saved_ = false;

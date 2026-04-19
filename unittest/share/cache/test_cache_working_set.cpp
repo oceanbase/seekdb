@@ -78,7 +78,7 @@ void TestCacheWorkingSet::TearDown()
 
 TEST_F(TestCacheWorkingSet, basic)
 {
-  CHUNK_MGR.set_limit(2L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(2LL * 1024 * 1024 * 1024);
   Key key;
   Value value;
   const TestKVCacheValue<V_SIZE> *pvalue = NULL;
@@ -140,7 +140,7 @@ TEST_F(TestCacheWorkingSet, basic)
 
 TEST_F(TestCacheWorkingSet, parallel)
 {
-  CHUNK_MGR.set_limit(5L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(5LL * 1024 * 1024 * 1024);
 
   ObWorkingSetStress<K_SIZE, V_SIZE> ws_stress;
   ASSERT_EQ(OB_SUCCESS, ws_stress.init(tenant_id_, true));
@@ -191,7 +191,7 @@ TEST_F(TestCacheWorkingSet, cache_size_increase)
 
 TEST_F(TestCacheWorkingSet, hit_ratio)
 {
-  mem_limit_ = 2L * 1024L * 1024L * 1024L;
+  mem_limit_ = 2LL * 1024 * 1024 * 1024;
   ASSERT_EQ(OB_SUCCESS, ObTenantManager::get_instance().set_tenant_mem_limit(tenant_id_, mem_limit_, mem_limit_));
   const int64_t kv_cnt = mem_limit_ / 2 / V_SIZE;
   double hit_ratio = 0.0;

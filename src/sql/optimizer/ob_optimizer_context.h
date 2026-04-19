@@ -586,7 +586,12 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     if (0 > runtime_filter_type_) {
       get_runtime_filter_type();
     }
+#ifdef _WIN32
+    // Windows SDK defines IN as macro, use numeric value to avoid conflict (IN = 3 in RuntimeFilterType)
+    return 0 != (runtime_filter_type_ & (1 << 3));
+#else
     return 0 != (runtime_filter_type_ & (1 << RuntimeFilterType::IN));
+#endif
   }
   void get_runtime_filter_type() {
     runtime_filter_type_ = session_info_->get_runtime_filter_type();

@@ -25,6 +25,11 @@
 #define bswap_16(x) OSSwapInt16(x)
 #define bswap_32(x) OSSwapInt32(x)
 #define bswap_64(x) OSSwapInt64(x)
+#elif defined(_WIN32)
+// Windows: use compiler intrinsics from <stdlib.h>
+#define bswap_16(x) _byteswap_ushort(x)
+#define bswap_32(x) _byteswap_ulong(x)
+#define bswap_64(x) _byteswap_uint64(x)
 #endif
 #include "rpc/obrpc/ob_rpc_proxy.h"
 

@@ -79,8 +79,6 @@ public:
   // Received ReceiveDataChannel message, notify ObPxReceive that it can receive data now
   virtual int on_receive_data_ch_msg(
       const ObPxReceiveDataChannelMsg &pkt) const = 0;
-  virtual int on_create_filter_ch_msg(
-      const ObPxCreateBloomFilterChannelMsg &pkt) const = 0;
   virtual int on_whole_msg(
       const ObBarrierWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
@@ -119,8 +117,6 @@ public:
       const ObPxTransmitDataChannelMsg &pkt) const;
   virtual int on_receive_data_ch_msg(
       const ObPxReceiveDataChannelMsg &pkt) const;
-  virtual int on_create_filter_ch_msg(
-      const ObPxCreateBloomFilterChannelMsg &pkt) const;
   virtual int on_interrupted(
       const common::ObInterruptCode &pkt) const;
   virtual int on_whole_msg(

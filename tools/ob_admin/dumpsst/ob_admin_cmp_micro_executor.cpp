@@ -48,7 +48,11 @@ int ObAdminCmpMicroExecutor::open_file()
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < 2; ++i) {
-    if (0 > (fd_[i] = ::open(data_file_path_[i], O_RDWR))) {
+    if (0 > (fd_[i] = ::open(data_file_path_[i], O_RDWR
+#ifdef _WIN32
+        | _O_BINARY
+#endif
+        ))) {
       ret = OB_IO_ERROR;
       STORAGE_LOG(WARN, "failed to open data_file", K(data_file_path_[i]), K(ret), K(errno), KERRMSG);
     } else {

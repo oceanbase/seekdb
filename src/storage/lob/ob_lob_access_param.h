@@ -31,7 +31,7 @@ namespace storage
 {
 
 class ObDMLBaseParam;
-class ObLobAccessCtx;
+struct ObLobAccessCtx;
 class ObLobMetaInfo;
 
 struct ObLobAccessParam {

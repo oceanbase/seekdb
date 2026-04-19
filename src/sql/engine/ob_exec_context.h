@@ -73,7 +73,7 @@ class ObMySQLProxy;
 
 namespace storage
 {
-class ObLobAccessCtx;
+struct ObLobAccessCtx;
 }
 
 namespace pl
@@ -168,7 +168,6 @@ public:
 struct ObUserLoggingCtx
 {
   friend class ObExecContext;
-  friend class Guard;
   class Guard
   {
   public:
@@ -177,6 +176,7 @@ struct ObUserLoggingCtx
   private:
     ObUserLoggingCtx &ctx_;
   };
+  friend class Guard;
   ObUserLoggingCtx() : column_name_(NULL), row_num_(-1) {}
   inline bool skip_logging() const { return NULL == column_name_ || row_num_ <= 0; }
   inline const ObString *get_column_name() const  { return column_name_; }
@@ -458,7 +458,6 @@ public:
   void set_px_sqc_id(const int64_t sqc_id) { px_sqc_id_ = sqc_id; }
   int64_t get_px_sqc_id() const { return px_sqc_id_; }
 
-  common::ObIArray<ObJoinFilterDataCtx> &get_bloom_filter_ctx_array() { return bloom_filter_ctx_array_; }
 
   char **get_frames() const { return frames_; }
   void set_frames(char **frames) { frames_ = frames; }
@@ -712,9 +711,6 @@ protected:
   // for ddl sstable insert
   int64_t px_task_id_;
   int64_t px_sqc_id_;
-
-  //bloom filter ctx array
-  common::ObArray<ObJoinFilterDataCtx> bloom_filter_ctx_array_;
 
   // data frames and count
   char **frames_;

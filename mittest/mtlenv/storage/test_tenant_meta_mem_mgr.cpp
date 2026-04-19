@@ -1768,7 +1768,7 @@ TEST_F(TestTenantMetaMemMgr, test_normal_tablet_buffer_fragment)
   static const int64_t tablet_cnt = 155000;
   ObTabletHandle *tablets = new ObTabletHandle[tablet_cnt];
   const int64_t before_tenant_mem = lib::get_tenant_memory_limit(MTL_ID());
-  const int64_t this_case_tenant_mem = 3 * 1024 * 1024 * 1024L;  /* 3GB */
+  const int64_t this_case_tenant_mem = 3LL * 1024 * 1024 * 1024;  /* 3GB */
   lib::set_tenant_memory_limit(MTL_ID(), this_case_tenant_mem);
   for (int64_t i = 0; i < tablet_cnt; ++i) {
     ObTabletHandle tablet_handle;

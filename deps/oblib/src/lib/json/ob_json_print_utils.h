@@ -139,6 +139,6 @@ private:
 } // end namespace oceanbase
 
 #define SJ(X) oceanbase::json::ObFormatedJsonPrinter< \
-    typename std::remove_pointer<typeof(X)>::type>((X))
+    typename std::remove_reference<typename std::remove_pointer<typeof(X)>::type>::type>((X))
 
 #endif /* LIB_JSON_OB_JSON_PRINT_UTILS_ */

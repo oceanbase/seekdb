@@ -55,7 +55,7 @@ public:
   ObOptStatMonitorFlushAllTask() : optstat_monitor_mgr_(NULL) {}
   virtual ~ObOptStatMonitorFlushAllTask() {}
   virtual void runTimerTask() override;
-  const static int64_t FLUSH_INTERVAL = 24L * 3600L * 1000L * 1000L; // 24h
+  const static int64_t FLUSH_INTERVAL = 24LL * 3600LL * 1000LL * 1000LL; // 24h
   ObOptStatMonitorManager *optstat_monitor_mgr_;
 };
 

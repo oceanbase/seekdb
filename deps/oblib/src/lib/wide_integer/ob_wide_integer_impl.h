@@ -194,6 +194,18 @@ struct ObWideInteger<Bits, Signed>::_impl
                x, Limits<ObWideInteger<Bits, Signed>>::min()) >= 0;
   }
 
+#ifdef _WIN32
+  static uint64_t get_item(const unsigned __int128 &val, unsigned idx)
+  {
+      if (idx == 0) {
+          return static_cast<uint64_t>(val);
+      } else if (idx == 1) {
+          return static_cast<uint64_t>(val >> 64);
+      }
+      return 0;
+  }
+#endif
+
   template<typename T, class = typename std::enable_if<std::is_integral<T>::value>::type>
   static uint64_t get_item(const T &val, unsigned idx)
   {

@@ -69,7 +69,11 @@ void TestLSTabletInfoWR::inner_init()
 {
   int ret = OB_SUCCESS;
   common::ObBackupIoAdapter util;
-  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr", getcwd(NULL, 0));
+#if defined(__ANDROID__)
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr_workdir", getcwd(NULL, 0));
+#else
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_extern_info_mgr_workdir", get_current_dir_name());
+#endif
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_);
   EXPECT_EQ(OB_SUCCESS, ret);

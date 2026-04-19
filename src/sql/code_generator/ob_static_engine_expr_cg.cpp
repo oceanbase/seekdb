@@ -1839,13 +1839,13 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
 static inline void mark_expr_is_added(ObExpr &e)
 {
   uint64_t &v = *reinterpret_cast<uint64_t *>(&e.inner_functions_);
-  v |= 1UL << 63;
+  v |= 1ULL << 63;
 }
 
 static inline void clear_expr_is_added(ObExpr &e)
 {
   uint64_t &v = *reinterpret_cast<uint64_t *>(&e.inner_functions_);
-  v &= ~(1UL << 63);
+  v &= ~(1ULL << 63);
 }
 
 static inline bool expr_is_added(ObExpr &e)

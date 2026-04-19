@@ -481,7 +481,42 @@ int databuff_vprintf(char *buf, const int64_t buf_len, int64_t &pos, const char 
 {
   int ret = OB_SUCCESS;
   if (NULL != buf && 0 <= pos && pos < buf_len) {
+#ifdef _WIN32
+    char local_fmt[4096];
+    const char *actual_fmt = fmt;
+    if (NULL != fmt) {
+      const char *src = fmt;
+      char *dst = local_fmt;
+      char *dst_end = local_fmt + sizeof(local_fmt) - 3;
+      while (*src && dst < dst_end) {
+        if (*src == '%') {
+          *dst++ = *src++;
+          if (*src == '%') { *dst++ = *src++; continue; }
+          while (*src == '-' || *src == '+' || *src == ' ' || *src == '#' || *src == '0' || *src == '\'') {
+            if (*src == '\'') { src++; } else { *dst++ = *src++; }
+          }
+          while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
+          if (*src == '.') { *dst++ = *src++; while (*src >= '0' && *src <= '9') { *dst++ = *src++; } }
+          if (*src == 'l' && *(src+1) == 'l') {
+            *dst++ = *src++; *dst++ = *src++;
+          } else if (*src == 'l' && (*(src+1) == 'd' || *(src+1) == 'i' || *(src+1) == 'o' ||
+                     *(src+1) == 'u' || *(src+1) == 'x' || *(src+1) == 'X')) {
+            *dst++ = 'l'; *dst++ = 'l'; src++;
+          } else if (*src == 'l') {
+            *dst++ = *src++;
+          }
+          if (*src) { *dst++ = *src++; }
+        } else {
+          *dst++ = *src++;
+        }
+      }
+      *dst = '\0';
+      actual_fmt = local_fmt;
+    }
+    int len = vsnprintf(buf + pos, buf_len - pos, actual_fmt, args);
+#else
     int len = vsnprintf(buf + pos, buf_len - pos, fmt, args);
+#endif
     if (len < 0) {
       ret = OB_ERR_UNEXPECTED;
     } else if (len < buf_len - pos) {

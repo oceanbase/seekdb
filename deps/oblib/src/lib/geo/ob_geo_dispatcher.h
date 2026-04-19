@@ -1177,14 +1177,18 @@ static inline int ob_boost_geometry_exception_handle()
     ret = OB_ERR_STD_RUNTIME_ERROR;
   } catch (const boost::geometry::centroid_exception &) { // boost errors
     ret = OB_ERR_BOOST_GEOMETRY_CENTROID_EXCEPTION;
-  } catch (const boost::geometry::overlay_invalid_input_exception &) {
-    ret = OB_ERR_BOOST_GEOMETRY_OVERLAY_INVALID_INPUT_EXCEPTION;
   } catch (const boost::geometry::turn_info_exception &) {
     ret = OB_ERR_BOOST_GEOMETRY_TURN_INFO_EXCEPTION;
   } catch (const boost::geometry::empty_input_exception &) {
     ret = OB_ERR_BOOST_GEOMETRY_EMPTY_INPUT_EXCEPTION;
   } catch (const boost::geometry::inconsistent_turns_exception &) {
     ret = OB_ERR_BOOST_GEOMETRY_INCONSISTENT_TURNS_EXCEPTION;
+#ifdef _WIN32
+  } catch (const boost::geometry::invalid_input_exception &) {
+#else
+  } catch (const boost::geometry::overlay_invalid_input_exception &) {
+#endif
+    ret = OB_ERR_BOOST_GEOMETRY_OVERLAY_INVALID_INPUT_EXCEPTION;
   } catch (const boost::geometry::exception &) {
     ret = OB_ERR_BOOST_GEOMETRY_UNKNOWN_EXCEPTION;
   } catch (const boost::numeric::positive_overflow &) {

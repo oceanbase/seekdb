@@ -287,7 +287,7 @@ int ObBootstrap::execute_bootstrap()
                     DBA_STEP_INC_INFO(bootstrap),
                     "bootstrap refresh all schema begin.");
   }
-  if (FAILEDx(ddl_service_.refresh_schema(OB_SYS_TENANT_ID, nullptr, &table_schemas))) {
+  if (FAILEDx(ddl_service_.refresh_schema(OB_SYS_TENANT_ID, true, nullptr, &table_schemas))) {
     LOG_WARN("failed to refresh_schema", K(ret));
     LOG_DBA_ERROR_V2(OB_BOOTSTRAP_REFRESH_ALL_SCHEMA_FAIL, ret,
                      DBA_STEP_INC_INFO(bootstrap),
@@ -329,9 +329,10 @@ int ObBootstrap::load_all_schema(
     LOG_WARN("failed to init executor", KR(ret));
   } else if (OB_FAIL(executor.execute())) {
     LOG_WARN("failed to execute load all schema", KR(ret));
-  } else if (OB_FAIL(ObLoadInnerTableSchemaExecutor::load_core_schema_version(
+  } else if (OB_FAIL(ObLoadInnerTableSchemaExecutor::load_schema_version(
           OB_SYS_TENANT_ID, ddl_service.get_sql_proxy(),
-          ObSchemaUtils::get_inner_table_core_schema_version(table_schemas)))) {
+          ObSchemaUtils::get_inner_table_core_schema_version(table_schemas),
+          ObSchemaUtils::get_inner_table_sys_schema_version(table_schemas)))) {
       LOG_WARN("failed to load core schema version", KR(ret));
   }
   LOG_INFO("finish load all schemas", KR(ret), "cost", ObTimeUtility::current_time() - begin_time);
@@ -841,7 +842,7 @@ int ObBootstrap::init_global_stat()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_status_proxy is null", KR(ret));
     } else if (OB_FAIL(global_stat_proxy.set_init_value(
-               OB_CORE_SCHEMA_VERSION, baseline_schema_version,
+               OB_CORE_SCHEMA_VERSION, OB_CORE_SCHEMA_VERSION, baseline_schema_version,
                rootservice_epoch, snapshot_gc_scn, snapshot_gc_timestamp, ddl_epoch,
                DATA_CURRENT_VERSION, DATA_CURRENT_VERSION, DATA_CURRENT_VERSION))) {
       LOG_WARN("set_init_value failed", KR(ret), "schema_version", OB_CORE_SCHEMA_VERSION,

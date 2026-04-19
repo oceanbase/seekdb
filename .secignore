@@ -200,6 +200,14 @@
   https://openwebapi.oceanbase.com*
   https://mirrors.tuna.tsinghua.edu.cn*
   https://lldb.llvm.org*
+  http://schemas.microsoft.com*
+  https://github.com/dotnet*
+  http://www.microsoft.com*
+  https://aka.ms*
+  http://crl.microsoft.com*
+  https://api.nuget.org*
+  http://timestamp.digicert.com*
+  http://wixtoolset.org*
 **/Doxyfile
   www.doxygen.org)
   https://www.gnu.org/software/libiconv/

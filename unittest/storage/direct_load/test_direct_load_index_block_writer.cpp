@@ -147,7 +147,7 @@ void TestIndexBlockWriter::SetUp()
   // init ObRowGenerate
   ASSERT_EQ(OB_SUCCESS, row_generate_.init(table_schema_));
 
-  ret = getter.add_tenant(1, 8L * 1024L * 1024L, 2L * 1024L * 1024L * 1024L);
+  ret = getter.add_tenant(1, 8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024);
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
@@ -156,7 +156,7 @@ void TestIndexBlockWriter::SetUp()
     ASSERT_EQ(OB_SUCCESS, ret);
   }
   // set observer memory limit
-  CHUNK_MGR.set_limit(8L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(8LL * 1024 * 1024 * 1024);
   EXPECT_EQ(OB_SUCCESS, init_tenant_mgr());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1));

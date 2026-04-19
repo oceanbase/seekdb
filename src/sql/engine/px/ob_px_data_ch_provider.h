@@ -139,26 +139,6 @@ private:
   ObDfo *root_dfo_;
 };
 
-class ObPxBloomfilterChProvider
-{
-public:
-  ObPxBloomfilterChProvider(ObThreadCond &msg_ready_cond) : msg_set_(false), msg_ready_cond_(msg_ready_cond) {}
-  virtual ~ObPxBloomfilterChProvider() = default;
-  int init();
-  int get_data_ch_nonblock(
-        ObPxBloomFilterChSet &ch_set,
-        int64_t &sqc_count,
-        int64_t timeout_ts,
-        bool is_transmit,
-        const common::ObAddr &qc_addr,
-        int64_t query_start_time);
-  int add_msg(const ObPxCreateBloomFilterChannelMsg &msg);
-private:
-  bool msg_set_;
-  ObPxCreateBloomFilterChannelMsg msg_;
-  common::ObThreadCond &msg_ready_cond_;
-};
-
 }
 }
 #endif /* __OB_SQL_ENGINE_PX_DATA_CH_PROVIDER_H__ */

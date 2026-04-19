@@ -35,8 +35,15 @@ extern "C" {
 #endif
 
   const char* build_version() { return "@BUILD_NUMBER@-@GIT_REVISION@"; }
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdate-time"
+#endif
   const char* build_time() { return __TIME__; }
   const char* build_date() { return __DATE__; }
+#if defined(__clang__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
   const char* build_flags() { return "@BUILD_FLAGS@"; }
   const char* build_branch() { return "@GIT_BRANCH@"; }
   const char* build_info() { return "@BUILD_INFO@"; }

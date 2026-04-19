@@ -50,7 +50,7 @@ private:
   // recycled very quickly, due to the algorithm choses one point each second. Theoretically, a single column in sstable
   // can hold at least 65536(1MB/16) commit version pair, which means 65536 seconds. So we only iterate all tablets once
   // an hour.
-  const static int64_t MINI_RECYCLE_COMMIT_VERSIONS_INTERVAL_US = 1L * 60L * 60L * 1000L * 1000L; // an hour
+  const static int64_t MINI_RECYCLE_COMMIT_VERSIONS_INTERVAL_US = 1LL * 60LL * 60LL * 1000LL * 1000LL; // an hour
 
   static int64_t PERIODICAL_SELECT_INTERVAL_NS;
 

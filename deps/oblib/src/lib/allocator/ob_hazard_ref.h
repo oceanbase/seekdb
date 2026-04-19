@@ -19,6 +19,17 @@
 
 #include "lib/ob_define.h"
 #include "lib/thread_local/ob_tsi_utils.h"
+#ifdef _WIN32
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+// #ifndef NOMINMAX
+// #define NOMINMAX
+// #endif
+#endif
 namespace oceanbase
 {
 namespace common

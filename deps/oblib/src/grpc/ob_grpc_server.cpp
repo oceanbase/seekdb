@@ -22,10 +22,12 @@
 #include <memory>
 #include <thread>
 #include <string>
+#ifndef _WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#endif
 #include <errno.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/support/interceptor.h>

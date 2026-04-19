@@ -77,7 +77,7 @@ public:
   ObPrivControlMode(const uint8_t *values);
   bool is_valid() { return is_valid_; }
   bool check_mode_valid(uint8_t mode) { return mode > 2 ? false : true; }
-  u_int64_t get_value() const { return value_; }
+  uint64_t get_value() const { return value_; }
 private:
   bool is_valid_;
 	union {

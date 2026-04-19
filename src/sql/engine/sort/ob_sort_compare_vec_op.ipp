@@ -25,8 +25,13 @@ bool GeneralCompare<Store_Row, has_addon>::operator()(const Store_Row *l, const 
   bool less = false;
   int &ret = ret_;
   if (OB_UNLIKELY(OB_SUCCESS != ret)) {
+    // Use pointer comparison as a consistent fallback to maintain strict weak ordering.
+    // Returning false for all pairs would cause introsort's right-scan loop
+    // (while !comp(pivot, *i)) to advance past array bounds, triggering abort().
+    less = l < r;
   } else if (OB_FAIL(fast_check_status())) {
     SQL_ENG_LOG(WARN, "fast check failed", K(ret));
+    less = l < r;
   } else {
     if (CompareBase::ENABLE == encode_sk_state_) {
       ObLength l_len = 0;
@@ -260,8 +265,10 @@ bool SingleColCompare<Store_Row, is_basic_cmp, is_topn_sort>::operator()(const S
   bool less = false;
   int &ret = ret_;
   if (OB_UNLIKELY(OB_SUCCESS != ret)) {
+    less = l < r;
   } else if (OB_FAIL(fast_check_status())) {
     SQL_ENG_LOG(WARN, "fast check failed", K(ret));
+    less = l < r;
   } else {
     __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
     __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);
@@ -492,8 +499,10 @@ bool FixedCompare<Store_Row, has_addon>::operator()(const Store_Row *l, const St
   bool less = false;
   int &ret = ret_;
   if (OB_UNLIKELY(OB_SUCCESS != ret)) {
+    less = l < r;
   } else if (OB_FAIL(fast_check_status())) {
     SQL_ENG_LOG(WARN, "fast check failed", K(ret));
+    less = l < r;
   } else {
     __builtin_prefetch(l, 0 /* read */, 2 /*high temp locality*/);
     __builtin_prefetch(r, 0 /* read */, 2 /*high temp locality*/);

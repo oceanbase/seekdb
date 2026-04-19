@@ -102,7 +102,7 @@ ObTabletMediumCompactionInfoRecorder::ObTabletMediumCompactionInfoRecorder()
     allocator_(nullptr),
     mds_ctx_(nullptr)
 {
-#if defined(__x86_64__)
+#if defined(__x86_64__) && !defined(_WIN32)
   STATIC_ASSERT(sizeof(ObTabletMediumCompactionInfoRecorder) <= 104, "size of medium recorder is oversize");
 #endif
 }

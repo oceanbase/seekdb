@@ -16,11 +16,13 @@
 
 #define USING_LOG_PREFIX RPC_OBRPC
 #include "ob_net_keepalive.h"
+#ifndef _WIN32
 #include <sys/ioctl.h>
 #ifdef __linux__
 #include <sys/epoll.h>
 #endif
 #include <sys/poll.h>
+#endif
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/utility.h"
 #include "lib/ash/ob_active_session_guard.h"
@@ -32,7 +34,7 @@ namespace oceanbase
 {
 namespace obrpc
 {
-void __attribute__((weak)) keepalive_make_data(ObNetKeepAliveData &ka_data)
+void OB_WEAK_SYMBOL keepalive_make_data(ObNetKeepAliveData &ka_data)
 {
   // do-nothing
 }

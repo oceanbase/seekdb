@@ -21,10 +21,12 @@
 #include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
 #include <poll.h>
 #include <sys/syscall.h>
 #include <fcntl.h>
+#endif
 #include "lib/coro/co_var.h"
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -37,7 +39,15 @@ namespace oceanbase
 {
 namespace common
 {
+#ifdef _WIN32
+typedef jmp_buf ObJumpBuf;
+#define ob_sigsetjmp(env, savemask) setjmp(env)
+#define ob_siglongjmp(env, val) longjmp(env, val)
+#else
 typedef sigjmp_buf ObJumpBuf;
+#define ob_sigsetjmp(env, savemask) sigsetjmp(env, savemask)
+#define ob_siglongjmp(env, val) siglongjmp(env, val)
+#endif
 RLOCAL_EXTERN(ObJumpBuf *, g_jmp);
 RLOCAL_EXTERN(ByteBuf<256>, crash_restore_buffer);
 
@@ -52,7 +62,7 @@ void do_with_crash_restore(Function &&func, bool &has_crash)
   ObJumpBuf *g_jmp_bak = g_jmp;
   ObJumpBuf jmp;
   g_jmp = &jmp;
-  int js = sigsetjmp(*g_jmp, 1);
+  int js = ob_sigsetjmp(*g_jmp, 1);
   if (0 == js) {
     get_signal_handler() = crash_restore_handler;
     func();

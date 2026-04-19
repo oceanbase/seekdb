@@ -46,12 +46,20 @@ private:
   static const int64_t BLOCK_SIZE = palf::PALF_PHY_BLOCK_SIZE;
   static const int64_t LOG_POOL_META_SERIALIZE_SIZE = 4 * KB;
   static const int64_t SLEEP_TS_US = 1 * 1000;
+#ifdef _WIN32
+  static const int CREATE_FILE_FLAG = O_RDWR | O_CREAT | O_EXCL;
+  static const int OPEN_FILE_FLAG = O_RDWR;
+  static const int OPEN_DIR_FLAG = O_RDONLY;
+  static const int CREATE_DIR_MODE = 0755;
+  static const int CREATE_FILE_MODE = 0644;
+#else
   static const int CREATE_FILE_FLAG = O_RDWR | O_CREAT | O_EXCL | O_SYNC | O_DIRECT;
   static const int OPEN_FILE_FLAG = O_RDWR | O_SYNC | O_DIRECT;
   static const int OPEN_DIR_FLAG = O_DIRECTORY | O_RDONLY;
   static const int CREATE_DIR_MODE =
       S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IROTH;
   static const int CREATE_FILE_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+#endif
   static const int64_t RUN_INTERVAL = 1 * 1000 * 1000;
   static const int64_t PRINT_INTERVAL = 3 * 1000 * 1000;
 

@@ -16,6 +16,14 @@
 
 #define USING_LOG_PREFIX PL
 
+#ifdef _WIN32
+#include <io.h>
+#define access _access
+#ifndef F_OK
+#define F_OK 0
+#endif
+#endif
+
 #include "ob_pl_package_manager.h"
 #include "pl/ob_pl_package.h"
 #include "pl/ob_pl_compile.h"

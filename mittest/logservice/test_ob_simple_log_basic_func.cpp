@@ -189,7 +189,7 @@ TEST_F(TestObSimpleLogClusterBasicFunc, test_locate_by_scn_coarsely)
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->locate_by_scn_coarsely(input_scn, result_lsn));
   EXPECT_TRUE(
       check_locate_correct(lsn_array, scn_array, input_scn, result_lsn, true));
-  input_ts_ns += 1000 * 1000 * 1000 * 1000L;
+  input_ts_ns += 1000LL * 1000 * 1000 * 1000;
   input_scn.convert_for_logservice(input_ts_ns);
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->locate_by_scn_coarsely(input_scn, result_lsn));
   EXPECT_TRUE(

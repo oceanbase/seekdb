@@ -173,80 +173,6 @@ int ObNumber::compare(const number::ObNumber::Desc &this_desc,
   return ret;
 }
 
-/*
-  For integer values, the following optimizations can be made:
-  Calculate the corresponding value for each digit position (an integer has at most two digits),
-  and fill the DESC of Number based on the integer parameter (sign bit, exp, etc.).
-  For example, for 1000000001, with a digit position of 10^9, continuously dividing by 10^9
-  can calculate the values of the two digit positions as (1, 1), i.e., the digit array is
-  [1, 1], and it can be known that the exponent value is 1, the sign bit value is 1,
-  and the effective length of digit is 2
-*/
-template <class IntegerT>
-int ObNumber::from_integer_(const IntegerT value, IAllocator &allocator) {
-  int ret = OB_SUCCESS;
-  static const uint64_t MAX_DIGITS[3] = {1L,
-           1000000000L,
-           1000000000000000000L};
-  if (0 == value) {
-    set_zero();
-  } else {
-    Desc desc;
-    uint64_t abs_val = 0;
-
-    if (std::is_signed<IntegerT>::value) { // If it is a signed integer, call abs
-  #ifdef __clang__
-  #pragma clang diagnostic push
-  #pragma clang diagnostic ignored "-Wabsolute-value"
-  #endif
-      abs_val = (uint64_t)std::labs(value);
-  #ifdef __clang__
-  #pragma clang diagnostic pop
-  #endif
-
-    } else { // otherwise directly assign
-      abs_val = value;
-    }
-    uint64_t exp = 0;
-    uint32_t digits[OB_MAX_INTEGER_DIGIT] = {0};
-    uint8_t idx = 0;
-    uint8_t zero_cnt = 0;
-
-    for (int i = 2; i >= 0; i--) {
-      if (abs_val >= MAX_DIGITS[i]) {
-        idx += zero_cnt;
-        digits[idx++] = uint32_t(abs_val / MAX_DIGITS[i]);
-        exp = std::max(exp, (uint64_t)i);
-        abs_val %= MAX_DIGITS[i];
-        zero_cnt = 0;
-      } else if (exp > 0) {
-        zero_cnt++;
-      }
-    }
-
-    desc.exp_ = ((uint8_t)exp + EXP_ZERO) & 0x7f;
-    if (value >= 0) {
-      desc.sign_ = POSITIVE;
-    } else {
-      desc.sign_ = NEGATIVE;
-      desc.exp_ = 0x7f & (~desc.exp_);
-      ++desc.exp_;
-    }
-    desc.len_ = idx;
-    desc.reserved_ = 0;
-
-    uint32_t* digit_mem = NULL;
-    if (OB_ISNULL(digit_mem = (uint32_t *)allocator.alloc(sizeof(uint32_t) * idx))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("fail to alloc obnumber digit memory", K(ret), K(digit_mem), K(idx));
-    } else {
-      MEMCPY(digit_mem, digits, ITEM_SIZE(digits_)*idx);
-      assign(desc.desc_, (uint32_t*)digit_mem);
-    }
-  }
-  return ret;
-}
-
 int ObNumber::from_(const int64_t value, IAllocator &allocator)
 {
   return from_integer_(value, allocator);
@@ -7072,8 +6998,13 @@ int ObNumberBuilder::build_hex_integer_(const char *str, const int64_t integer_s
               --c_p;
             }
             break;
+#ifdef _WIN32
+          case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+          case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+#else
           case 'a'...'f':
           case 'A'...'F':
+#endif
           case '1':
           case '2':
           case '3':
@@ -7559,8 +7490,13 @@ int ObNumberBuilder::find_point_(
               sign_appeared = true;
             }
             break;
+#ifdef _WIN32
+          case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+          case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+#else
           case 'a'...'f':
           case 'A'...'F':
+#endif
             if (!fmt->has_x_) {
               ret = OB_INVALID_NUMERIC;
               LIB_LOG(WARN, "ObNumber got format error: got ", K(ret), K(c));

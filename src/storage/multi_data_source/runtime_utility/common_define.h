@@ -25,6 +25,11 @@
 #include "src/share/ob_errno.h"
 #include "src/share/scn.h"
 #include "src/share/ob_occam_time_guard.h"
+#ifdef _WIN32
+#ifdef DELETE
+#undef DELETE
+#endif
+#endif
 
 #ifdef OB_BUILD_PACKAGE
   #define MDS_ASSERT(x) \

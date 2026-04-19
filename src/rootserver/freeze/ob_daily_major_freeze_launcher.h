@@ -62,7 +62,11 @@ private:
   static const int64_t MAJOR_FREEZE_LAUNCHER_THREAD_CNT = 1;
   static const int64_t LAUNCHER_INTERVAL_US = 5 * 1000 * 1000; // 5s
   static const int64_t MAJOR_FREEZE_RETRY_INTERVAL_US = 1000 * 1000; // 1s
+#ifdef _WIN32
+  static constexpr int64_t MODIFY_GC_INTERVAL = 86400000000LL; // 1 day
+#else
   static const int64_t MODIFY_GC_INTERVAL = 24 * 60 * 60 * 1000 * 1000L; // 1 day
+#endif
   static const int64_t TABLET_CKM_CHECK_INTERVAL_US = 30 * 60 * 1000 * 1000L; // 30 min
 
   bool is_inited_;

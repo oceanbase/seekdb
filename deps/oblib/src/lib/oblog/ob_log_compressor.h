@@ -21,7 +21,11 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/task/ob_timer_service.h"
+#ifdef _WIN32
+#include <regex>
+#else
 #include <regex.h>
+#endif
 
 namespace oceanbase {
 namespace common {
@@ -208,8 +212,13 @@ private:
   ObSyslogCompareFunctor cmp_;
   ObSyslogPriorityArray oldest_files_;
 
+#ifdef _WIN32
+  std::regex regex_archive_;
+  std::regex regex_uncompressed_;
+#else
   regex_t regex_archive_;
   regex_t regex_uncompressed_;
+#endif
 
   ObLogCompressorTimerTask timer_task_;
 };

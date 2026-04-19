@@ -16,8 +16,19 @@
 
 #define USING_LOG_PREFIX LIB
 #include <dirent.h>
+#ifdef _WIN32
+#include <windows.h>
+#ifdef ERROR
+#undef ERROR
+#endif
+#include <regex>
+#include <sys/utime.h>
+#define utime _utime
+#define utimbuf _utimbuf
+#else
 #include <regex.h>
 #include <utime.h>
+#endif
 
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/thread/thread_mgr.h"
@@ -39,8 +50,10 @@ ObLogCompressor::ObLogCompressor() :
   compressor_(NULL), next_compressor_(NULL), oldest_files_(cmp_, NULL),
   timer_task_(*this)
 {
+#ifndef _WIN32
   memset(&regex_archive_, 0, sizeof(regex_archive_));
   memset(&regex_uncompressed_, 0, sizeof(regex_uncompressed_));
+#endif
 }
 
 ObLogCompressor::~ObLogCompressor()
@@ -57,6 +70,18 @@ int ObLogCompressor::init()
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_ERROR("the ObLogCompressor has been inited", K(ret));
+#ifdef _WIN32
+  } else {
+    try {
+      regex_archive_.assign(OB_ARCHIVED_SYSLOG_FILE_PATTERN);
+      regex_uncompressed_.assign(OB_UNCOMPRESSED_SYSLOG_FILE_PATTERN);
+    } catch (...) {
+      ret = OB_ERR_SYS;
+      LOG_ERROR("failed to compile regex pattern", K(ret));
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(log_compress_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
+#else
   } else if (0 != (sys_err = regcomp(&regex_archive_, OB_ARCHIVED_SYSLOG_FILE_PATTERN, REG_EXTENDED))) {
     ret = OB_ERR_SYS;
     LOG_ERROR("failed to compile archive regex pattern", K(ret), K(sys_err));
@@ -65,6 +90,7 @@ int ObLogCompressor::init()
     ret = OB_ERR_SYS;
     LOG_ERROR("failed to compile uncompressed regex pattern", K(ret), K(sys_err));
   } else if (OB_FAIL(log_compress_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
+#endif
     ret = OB_ERR_SYS;
     LOG_ERROR("failed to init ObThreadCond", K(ret));
   } else {
@@ -127,8 +153,10 @@ void ObLogCompressor::destroy()
     compressor_ = NULL;
     next_compressor_ = NULL;
 
+#ifndef _WIN32
     regfree(&regex_archive_);
     regfree(&regex_uncompressed_);
+#endif
 
     is_inited_ = false;
     LOG_INFO("syslog compressor destroyed");
@@ -200,6 +228,19 @@ bool ObLogCompressor::is_compressed_file(const char *file)
 {
   int ret = OB_SUCCESS;
   bool is_compressed = false;
+#ifdef _WIN32
+  if (OB_ISNULL(file)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argumet for file is null", K(ret));
+  } else {
+    try {
+      std::regex regex(OB_COMPRESSED_SYSLOG_FILE_PATTERN);
+      is_compressed = std::regex_match(file, regex);
+    } catch (...) {
+      LOG_ERROR("failed to compile regex pattern", K(ret));
+    }
+  }
+#else
   regex_t regex;
   if (OB_ISNULL(file)) {
     ret = OB_INVALID_ARGUMENT;
@@ -212,6 +253,7 @@ bool ObLogCompressor::is_compressed_file(const char *file)
     }
     regfree(&regex);
   }
+#endif
   return is_compressed;
 }
 
@@ -273,7 +315,9 @@ void ObLogCompressor::run_timer_task()
           }
           if (S_ISREG(stat_info.st_mode)) {
             total_size += stat_info.st_size;
-#ifdef __APPLE__
+#ifdef _WIN32
+            int64_t tmp_time = static_cast<int64_t>(stat_info.st_mtime) * 1000000000L;
+#elif defined(__APPLE__)
             // macOS uses st_mtimespec instead of st_mtim
             int64_t tmp_time = stat_info.st_mtimespec.tv_sec * 1000000000L + stat_info.st_mtimespec.tv_nsec;
 #else
@@ -281,12 +325,19 @@ void ObLogCompressor::run_timer_task()
 #endif
             syslog_file.mtime_ = tmp_time;
             if (enable_delete_file
+#ifdef _WIN32
+                && std::regex_match(entry->d_name, regex_archive_)
+#else
                 && regexec(&regex_archive_, entry->d_name, 0, NULL, 0) == 0
+#endif
                 && OB_FAIL(oldest_files_.push(syslog_file))) {
               LOG_ERROR("failed to put file into array", K(ret), K(syslog_file.file_name_), K(tmp_time));
             }
-
+#ifdef _WIN32
+            if (std::regex_match(entry->d_name, regex_uncompressed_)) {
+#else
             if (regexec(&regex_uncompressed_, entry->d_name, 0, NULL, 0) == 0) {
+#endif
               int log_type = get_log_type_(syslog_file.file_name_);
               if (log_type >= 0 && log_type < OB_SYSLOG_COMPRESS_TYPE_COUNT) {
                 log_file_count[log_type]++;
@@ -557,6 +608,16 @@ int64_t ObLogCompressor::get_disk_remaining_size_()
 {
   int ret = OB_SUCCESS;
   int64_t remaining_size = 0;
+#ifdef _WIN32
+  ULARGE_INTEGER free_bytes_available;
+  if (!GetDiskFreeSpaceExA(syslog_dir_, &free_bytes_available, NULL, NULL)) {
+    remaining_size = -1;
+    ret = OB_ERR_SYS;
+    LOG_ERROR("fail to get disk remaining size", K(ret), K(syslog_dir_));
+  } else {
+    remaining_size = static_cast<int64_t>(free_bytes_available.QuadPart);
+  }
+#else
   struct statfs file_system;
   if (statfs(syslog_dir_, &file_system) == -1) {
     remaining_size = -1;
@@ -565,6 +626,7 @@ int64_t ObLogCompressor::get_disk_remaining_size_()
   } else {
     remaining_size = file_system.f_bsize * file_system.f_bavail;
   }
+#endif
   return remaining_size;
 }
 

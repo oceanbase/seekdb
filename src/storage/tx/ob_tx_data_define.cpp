@@ -495,7 +495,7 @@ bool ObTxData::is_valid_in_tx_data_table() const
 }
 
 
-__attribute__((weak)) void ObTxData::dec_ref()
+OB_WEAK_SYMBOL void ObTxData::dec_ref()
 {
 #ifdef UNITTEST
   return;

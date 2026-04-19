@@ -24,6 +24,29 @@
 #include "logservice/cdcservice/ob_cdc_req.h"
 #include "logservice/cdcservice/ob_cdc_rpc_proxy.h"    // ObCdcProxy
 #include "logservice/logfetcher/ob_log_grpc_client.h"  // ObGrpcStreamAsyncCallback
+#ifdef _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#ifndef CONST
+#define CONST const
+#define _OB_UNDEF_CONST
+#endif
+#ifndef OPTIONAL
+#define OPTIONAL
+#define _OB_UNDEF_OPTIONAL
+#endif
+#include <mswsock.h>
+#ifdef _OB_UNDEF_CONST
+#undef CONST
+#undef _OB_UNDEF_CONST
+#endif
+#ifdef _OB_UNDEF_OPTIONAL
+#undef OPTIONAL
+#undef _OB_UNDEF_OPTIONAL
+#endif
+#undef ERROR
+#undef DELETE
+#endif
 #include "grpc/logservice.grpc.pb.h"                   // LogService gRPC
 #include "grpc/ob_grpc_context.h"                      // ObGrpcClient
 #include <memory>                                       // std::unique_ptr

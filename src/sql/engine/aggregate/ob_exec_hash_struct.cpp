@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#define USING_LOG_PREFIX SQL_ENG
 #include "ob_exec_hash_struct.h"
 
 namespace oceanbase

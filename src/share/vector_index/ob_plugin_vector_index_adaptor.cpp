@@ -27,6 +27,8 @@
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "share/ob_server_struct.h"
+#include "share/ob_share_util.h"
+#include "common/ob_timeout_ctx.h"
 
 namespace oceanbase
 {
@@ -198,6 +200,8 @@ int ObVectorQueryAdaptorResultContext::init_bitmaps()
   if (OB_ISNULL(tmp_allocator_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ctx allocator invalid.", K(ret));
+  } else if (OB_NOT_NULL(bitmaps_)) {
+    // bitmap has already been initialized
   } else {
     ObVectorIndexRoaringBitMap *bitmaps = nullptr;
     if (OB_ISNULL(bitmaps = static_cast<ObVectorIndexRoaringBitMap*>
@@ -205,6 +209,8 @@ int ObVectorQueryAdaptorResultContext::init_bitmaps()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to create vbitmap msg", K(ret));
     } else {
+      bitmaps->insert_bitmap_ = nullptr;
+      bitmaps->delete_bitmap_ = nullptr;
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPC"));
       ROARING_TRY_CATCH(bitmaps->insert_bitmap_ = roaring::api::roaring64_bitmap_create());
       if (OB_SUCC(ret) && OB_ISNULL(bitmaps->insert_bitmap_)) {
@@ -221,7 +227,25 @@ int ObVectorQueryAdaptorResultContext::init_bitmaps()
         bitmaps->delete_bitmap_ = nullptr;
       }
     }
-    bitmaps_ = bitmaps;
+    if (OB_FAIL(ret)) {
+      if (OB_NOT_NULL(bitmaps)) {
+        if (OB_NOT_NULL(bitmaps->insert_bitmap_)) {
+          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPA"));
+          roaring::api::roaring64_bitmap_free(bitmaps->insert_bitmap_);
+          bitmaps->insert_bitmap_ = nullptr;
+        }
+        if (OB_NOT_NULL(bitmaps->delete_bitmap_)) {
+          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPB"));
+          roaring::api::roaring64_bitmap_free(bitmaps->delete_bitmap_);
+          bitmaps->delete_bitmap_ = nullptr;
+        }
+        tmp_allocator_->free(bitmaps);
+        bitmaps = nullptr;
+      }
+      bitmaps_ = nullptr;
+    } else {
+      bitmaps_ = bitmaps;
+    }
   }
   return ret;
 }
@@ -1135,7 +1159,9 @@ bool ObPluginVectorIndexAdaptor::is_sync_index()
 
 void ObPluginVectorIndexAdaptor::update_index_id_dml_scn(share::SCN &current_scn)
 {
-  incr_data_->last_dml_scn_.atomic_set(current_scn);
+  if (OB_NOT_NULL(incr_data_)) {
+    incr_data_->last_dml_scn_.inc_update(current_scn);
+  }
 }
 
 void ObPluginVectorIndexAdaptor::update_index_id_read_scn()
@@ -2461,7 +2487,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status(ObVectorQue
   SCN read_scn = SCN::min_scn();
   ObArray<uint64_t> i_vids;
   ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(row_iter);
-  bool is_skip_4th_index = is_pruned_read_index_id();
+  bool is_skip_4th_index = !is_async_mode && is_pruned_read_index_id();
   // TODO First determine if waiting for PVQ_WAIT is needed
   if (OB_ISNULL(ctx) || OB_ISNULL(table_scan_iter)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2556,7 +2582,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status_async(
         OB_FAIL(ctx->init_bitmaps())) {
       LOG_WARN("failed to init ctx bitmaps.", K(ret));
     } else {
-      ret = complete_index_mem_data_incremental(ctx, ls_id, i_vids);
+      ret = complete_index_mem_data_incremental(ctx, ls_id, query_scn, i_vids);
       if (OB_FAIL(ret)) {
         LOG_WARN("failed to complete index mem data incrementally", K(ret), K(vbitmap_data_->scn_));
       } else {
@@ -2887,6 +2913,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data(SCN read_scn,
 
 int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQueryAdaptorResultContext *ctx,
                                                                    ObLSID ls_id,
+                                                                   SCN query_scn,
                                                                    ObArray<uint64_t> &i_vids)
 {
   INIT_SUCC(ret);
@@ -2966,6 +2993,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
 
   if (OB_SUCC(ret)) {
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPK"));
+    const SCN last_dml_scn = OB_NOT_NULL(incr_data_) ? incr_data_->last_dml_scn_ : SCN();
     // 1. Read lock and copy out vbitmap_data_ (scn + bitmap) first, use copy for all subsequent ops
     {
       TCRLockGuard rd_mem_lock_guard(vbitmap_data_->mem_data_rwlock_);
@@ -2975,13 +3003,25 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       ROARING_TRY_CATCH(dbitmap = roaring::api::roaring64_bitmap_copy(vbitmap_data_->bitmap_->delete_bitmap_));
     }
 
-    if (OB_SUCC(ret) && OB_NOT_NULL(ibitmap) && OB_NOT_NULL(dbitmap)) {
+    const bool can_skip_scan_4th_table =
+        base_scn.is_valid_and_not_min() &&
+        last_dml_scn.is_valid() &&
+        base_scn >= last_dml_scn;
+
+    if (OB_SUCC(ret) && can_skip_scan_4th_table && !REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      roaring::api::roaring64_bitmap_free(ctx->bitmaps_->insert_bitmap_);
+      roaring::api::roaring64_bitmap_free(ctx->bitmaps_->delete_bitmap_);
+      ctx->bitmaps_->insert_bitmap_ = ibitmap;
+      ctx->bitmaps_->delete_bitmap_ = dbitmap;
+      ibitmap = nullptr;
+      dbitmap = nullptr;
+    } else if (OB_NOT_NULL(ibitmap) && OB_NOT_NULL(dbitmap)) {
       storage::ObTableScanParam scan_param;
       schema::ObTableParam table_param(*allocator_);
       // Read index_id_table using copied base_scn (thread-safe)
       if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id,
                                                               this,
-                                                              SCN::max_scn(),
+                                                              query_scn,
                                                               INDEX_TYPE_VEC_INDEX_ID_LOCAL,
                                                               *allocator_,
                                                               *allocator_,
@@ -3002,19 +3042,18 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
               LOG_WARN("get next row failed.", K(ret));
             }
           } else {
-            if (OB_FAIL(add_datum_row_into_array(datum_row, i_vids, d_vids))) {
+            // Only process rows up to query snapshot (index_id_table PK SCN).
+            uint64_t row_scn_val = datum_row->storage_datums_[0].get_uint64();
+            SCN row_scn;
+            if (OB_FAIL(row_scn.convert_for_inner_table_field(row_scn_val))) {
+              LOG_WARN("failed to convert row scn", K(ret), K(row_scn_val));
+            } else if (row_scn > query_scn) {
+              // Skip rows newer than query snapshot.
+            } else if (OB_FAIL(add_datum_row_into_array(datum_row, i_vids, d_vids))) {
               LOG_WARN("failed to add vid into array.", K(ret), KP(datum_row));
-            } else {
-              // Track max SCN from rows (storage_datums_[0] is scn column); use it for update
-              // Reverse scan yields rows high-to-low, so "last row" = min SCN; we use max SCN
-              // to correctly record "read up to" for next incremental
-              uint64_t row_scn_val = datum_row->storage_datums_[0].get_uint64();
-              SCN row_scn;
-              if (OB_FAIL(row_scn.convert_for_inner_table_field(row_scn_val))) {
-                LOG_WARN("failed to convert row scn", K(ret), K(row_scn_val));
-              } else if (row_scn > last_row_scn) {
-                last_row_scn = row_scn;
-              }
+            } else if (row_scn > last_row_scn) {
+              // Track max SCN from merged rows for next incremental progress.
+              last_row_scn = row_scn;
             }
           }
         }
@@ -3047,6 +3086,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
             dbitmap = nullptr;
             // 4. Lock and copy back to vbitmap_data_
             if (last_row_scn > vbitmap_data_->scn_){
+              update_index_id_dml_scn(last_row_scn);
               TCWLockGuard lock_guard(vbitmap_data_->mem_data_rwlock_);
               TCWLockGuard wr_vbit_bitmap_lock_guard(vbitmap_data_->bitmap_rwlock_);
               if (last_row_scn > vbitmap_data_->scn_){
@@ -3091,15 +3131,46 @@ int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
   common::ObArenaAllocator tmp_alloc(common::ObMemAttr(tenant_id_, "BGBitmapRefresh"));
   ObVectorQueryAdaptorResultContext ctx(tenant_id_, 0, &tmp_alloc, &tmp_alloc);
   ObArray<uint64_t> i_vids;
-  if (OB_FAIL(ctx.init_bitmaps())) {
+  share::SCN snapshot_scn;
+  const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
+  transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+  ObTimeoutCtx timeout_ctx;
+  if (OB_ISNULL(txs)) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("trans service is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, DEFAULT_TIMEOUT))) {
+    LOG_WARN("fail to set default timeout ctx", KR(ret));
+  } else if (OB_FAIL(txs->get_read_snapshot_version(timeout_ctx.get_abs_timeout(), snapshot_scn))) {
+    LOG_WARN("fail to get read snapshot version", KR(ret));
+  } else if (OB_FAIL(ctx.init_bitmaps())) {
     LOG_WARN("failed to init bitmaps for background bitmap refresh", K(ret));
-  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, i_vids))) {
+  } else if (OB_FAIL(complete_index_mem_data_incremental(&ctx, share::SYS_LS, snapshot_scn, i_vids))) {
     LOG_WARN("background bitmap refresh failed", K(ret), K(vbitmap_tablet_id_));
+  } else {
+    FLOG_INFO("refresh_bitmap_background", K(snapshot_scn), K(i_vids.count()));
   }
   return ret;
 }
 
-
+int ObPluginVectorIndexAdaptor::update_incr_bitmap(const int64_t *vids, int64_t count)
+{
+  INIT_SUCC(ret);
+  if (!is_mem_data_init_atomic(VIRT_INC) || OB_ISNULL(incr_data_->bitmap_) ||
+      OB_ISNULL(incr_data_->bitmap_->insert_bitmap_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("incr_data bitmap not initialized, skip update_incr_bitmap", K(ret), K(count));
+  } else if (OB_ISNULL(vids) || count <= 0) {
+    // nothing to do
+  } else {
+    lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPH"));
+    TCWLockGuard lock_guard(incr_data_->bitmap_rwlock_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
+      ROARING_TRY_CATCH(roaring::api::roaring64_bitmap_add(
+          incr_data_->bitmap_->insert_bitmap_, static_cast<uint64_t>(vids[i])));
+    }
+  }
+  return ret;
+}
 
 bool ObPluginVectorIndexAdaptor::check_if_complete_delta(roaring::api::roaring64_bitmap_t *gene_bitmap, int64_t count)
 {
@@ -4166,7 +4237,17 @@ int ObPluginVectorIndexAdaptor::query_result(ObLSID &ls_id,
           LOG_INFO("query result need refresh adapter, ls leader",
               K(ret), K(ls_id), K(ctx->get_ls_leader()), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()), K(row->storage_datums_[0].get_string()));
         } else if (OB_FAIL(deserialize_snap_data(query_cond, row))) {
-          LOG_WARN("failed to deserialize snap data", K(ret));
+          if (ret == OB_ERR_VSAG_RETURN_ERROR) {
+            // snapshot data may be transiently incomplete under concurrent DDL/DML;
+            // trigger refresh path and let upper layer retry with refreshed memdata.
+            ctx->status_ = PVQ_REFRESH;
+            ret = OB_SUCCESS;
+            LOG_INFO("deserialize snap data got vsag transient error, mark refresh",
+                K(ls_id), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()),
+                K(row->storage_datums_[0].get_string()));
+          } else {
+            LOG_WARN("failed to deserialize snap data", K(ret));
+          }
         }
       }
     }

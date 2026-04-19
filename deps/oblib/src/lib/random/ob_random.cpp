@@ -16,6 +16,31 @@
 
 #include "lib/random/ob_random.h"
 
+#ifdef _WIN32
+#include <cstdlib>
+#include <cmath>
+static uint16_t *ob_win32_seed48(uint16_t seed16v[3])
+{
+  static uint16_t old_seed[3];
+  old_seed[0] = seed16v[0];
+  old_seed[1] = seed16v[1];
+  old_seed[2] = seed16v[2];
+  return old_seed;
+}
+#define seed48 ob_win32_seed48
+
+static long ob_win32_jrand48(uint16_t xsubi[3])
+{
+  uint64_t x = (uint64_t)xsubi[0] | ((uint64_t)xsubi[1] << 16) | ((uint64_t)xsubi[2] << 32);
+  x = (x * UINT64_C(0x5DEECE66D) + UINT64_C(0xB)) & UINT64_C(0xFFFFFFFFFFFF);
+  xsubi[0] = (uint16_t)(x & 0xFFFF);
+  xsubi[1] = (uint16_t)((x >> 16) & 0xFFFF);
+  xsubi[2] = (uint16_t)((x >> 32) & 0xFFFF);
+  return (long)(int32_t)(x >> 16);
+}
+#define jrand48 ob_win32_jrand48
+#endif
+
 namespace oceanbase
 {
 namespace common
@@ -65,7 +90,11 @@ int64_t ObRandom::rand(const int64_t a, const int64_t b)
   const int64_t r2 = jrand48(seed);
   int64_t min = a < b ? a : b;
   int64_t max = a < b ? b : a;
+#ifdef _WIN32
+  return min + llabs((r1 << 32) | r2) % (max - min + 1);
+#else
   return min + labs((r1 << 32) | r2) % (max - min + 1);
+#endif
 }
 
 int64_t ObRandom::get()
@@ -82,7 +111,11 @@ int64_t ObRandom::get(const int64_t a, const int64_t b)
 {
   int64_t min = a < b ? a : b;
   int64_t max = a < b ? b : a;
+#ifdef _WIN32
+  return min + llabs(get()) % (max - min + 1);
+#else
   return min + labs(get()) % (max - min + 1);
+#endif
 }
 
 int32_t ObRandom::get_int32()

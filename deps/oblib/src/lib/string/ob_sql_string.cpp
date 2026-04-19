@@ -199,7 +199,42 @@ int ObSqlString::vappend(const char *fmt, va_list ap)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(fmt));
   } else {
+#ifdef _WIN32
+    char local_fmt[4096];
+    const char *actual_fmt = fmt;
+    {
+      const char *src = fmt;
+      char *dst = local_fmt;
+      char *dst_end = local_fmt + sizeof(local_fmt) - 3;
+      while (*src && dst < dst_end) {
+        if (*src == '%') {
+          *dst++ = *src++;
+          if (*src == '%') { *dst++ = *src++; continue; }
+          while (*src == '-' || *src == '+' || *src == ' ' || *src == '#' || *src == '0' || *src == '\'') {
+            if (*src == '\'') { src++; } else { *dst++ = *src++; }
+          }
+          while (*src >= '0' && *src <= '9') { *dst++ = *src++; }
+          if (*src == '.') { *dst++ = *src++; while (*src >= '0' && *src <= '9') { *dst++ = *src++; } }
+          if (*src == 'l' && *(src+1) == 'l') {
+            *dst++ = *src++; *dst++ = *src++;
+          } else if (*src == 'l' && (*(src+1) == 'd' || *(src+1) == 'i' || *(src+1) == 'o' ||
+                     *(src+1) == 'u' || *(src+1) == 'x' || *(src+1) == 'X')) {
+            *dst++ = 'l'; *dst++ = 'l'; src++;
+          } else if (*src == 'l') {
+            *dst++ = *src++;
+          }
+          if (*src) { *dst++ = *src++; }
+        } else {
+          *dst++ = *src++;
+        }
+      }
+      *dst = '\0';
+      actual_fmt = local_fmt;
+    }
+    int64_t n = vsnprintf(data_ + len_, data_size_ - len_, actual_fmt, ap);
+#else
     int64_t n = vsnprintf(data_ + len_, data_size_ - len_, fmt, ap);
+#endif
     if (n < 0) {
       ret = OB_ERR_SYS;
       LOG_WARN("vsnprintf failed", K(ret), K(n), K(errno));
@@ -207,7 +242,11 @@ int ObSqlString::vappend(const char *fmt, va_list ap)
       if (OB_FAIL(reserve(n + len_))) {
         LOG_WARN("reserve data failed", K(ret), "size", n + len_);
       } else {
+#ifdef _WIN32
+        n = vsnprintf(data_ + len_, data_size_ - len_, actual_fmt, ap2);
+#else
         n = vsnprintf(data_ + len_, data_size_ - len_, fmt, ap2);
+#endif
         if (n < 0) {
           ret = OB_ERR_SYS;
           LOG_WARN("vsnprintf failed", K(ret), K(n), K(errno));

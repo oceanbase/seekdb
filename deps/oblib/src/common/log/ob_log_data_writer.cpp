@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "common/log/ob_log_data_writer.h"
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 #include "lib/file/ob_file.h"
 #include "common/log/ob_log_dir_scanner.h"
 #include "common/log/ob_log_generator.h"
@@ -187,7 +192,11 @@ int ObLogDataWriter::reuse(const char *pool_file, const char *fname)
   } else if (0 != rename(pool_file, tmp_pool_file)) {
     ret = OB_IO_ERROR;
     SHARE_LOG(WARN, "rename error", KCSTRING(pool_file), KCSTRING(tmp_pool_file), KERRMSG);
-  } else if ((fd = open(tmp_pool_file, OPEN_FLAG)) < 0) {
+  } else if ((fd = ::open(tmp_pool_file, OPEN_FLAG
+#ifdef _WIN32
+                          | _O_BINARY
+#endif
+                          )) < 0) {
     ret = OB_IO_ERROR;
     SHARE_LOG(ERROR, "open file failed", KCSTRING(tmp_pool_file), KERRMSG);
   } else if (unintr_pwrite(fd, ObLogGenerator::eof_flag_buf_,

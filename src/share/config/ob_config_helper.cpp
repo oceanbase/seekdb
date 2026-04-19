@@ -746,7 +746,7 @@ int64_t ObConfigIntParser::get(const char *str, bool &valid)
     valid = false;
   } else {
     valid = true;
-    value = strtol(str, &p_end, 0);
+    value = strtoll(str, &p_end, 0);
     if ('\0' == *p_end) {
       valid = true;
     } else {
@@ -773,7 +773,7 @@ int64_t ObConfigReadableIntParser::get(const char *str, bool &valid)
     valid = false;
   } else {
     valid = true;
-    value = strtol(str, &p_unit, 0);
+    value = strtoll(str, &p_unit, 0);
 
     if (OB_ISNULL(p_unit)) {
       valid = false;
@@ -804,7 +804,7 @@ int64_t ObConfigTimeParser::get(const char *str, bool &valid)
     valid = false;
   } else {
     valid = true;
-    value = strtol(str, &p_unit, 0);
+    value = strtoll(str, &p_unit, 0);
 
     if (OB_ISNULL(p_unit)) {
       valid = false;

@@ -15,7 +15,11 @@
  */
 
 #include "ob_base_log_buffer.h"
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
+#endif
 
 namespace oceanbase
 {
@@ -34,7 +38,11 @@ void ObBaseLogBufferMgr::destroy()
 {
   for (int64_t i = 0; i < log_buf_cnt_; ++i) {
     if (NULL != log_ctrls_[i].base_buf_) {
+#ifdef _WIN32
+      UnmapViewOfFile(log_ctrls_[i].base_buf_);
+#else
       munmap(log_ctrls_[i].base_buf_, SHM_BUFFER_SIZE);
+#endif
       log_ctrls_[i].base_buf_ = NULL;
       log_ctrls_[i].data_buf_ = NULL;
     }

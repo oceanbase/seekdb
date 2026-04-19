@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2025 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#ifdef _WIN32
+#define USING_LOG_PREFIX RPC_OBRPC
+#endif
 #include "rpc/obrpc/ob_rpc_result_code.h"
 
 OB_SERIALIZE_MEMBER(oceanbase::obrpc::ObRpcResultCode, rcode_, msg_, warnings_)

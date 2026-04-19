@@ -41,7 +41,7 @@ TEST(TestObArchiveOverwrite, oss_push_log)
   ObArchiveIO archive_io;
   const int64_t part_size = 5 * 1024 * 1024L;
   const int64_t total_size = 10 * 1024 * 1024L;
-  const uint64_t test_memory = 6L * 1024L * 1024L * 1024L;
+  const uint64_t test_memory = 6LL * 1024 * 1024 * 1024;
   ASSERT_EQ(OB_SUCCESS, ObDeviceManager::get_instance().init_devices_env());
   EXPECT_EQ(0, ObIOManager::get_instance().init(test_memory));
   char *data = (char*)ob_malloc(total_size, "ArchiveTest");

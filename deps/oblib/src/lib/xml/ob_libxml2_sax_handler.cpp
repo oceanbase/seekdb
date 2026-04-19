@@ -106,7 +106,11 @@ void ObLibXml2SaxHandler::init()
 {
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(common::OB_SERVER_TENANT_ID, "XmlGlobal"));
   xmlInitParser();
+#ifdef _WIN32
+  LOG_INFO("saxhandler init");
+#else
   LOG_INFO("saxhandler init", K(xmlIsMainThread()));
+#endif
 }
 
 void ObLibXml2SaxHandler::destroy()

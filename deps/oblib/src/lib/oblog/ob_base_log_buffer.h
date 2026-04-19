@@ -18,7 +18,9 @@
 #define OB_BASE_LOG_BUFFER_H_
 
 #include "lib/ob_errno.h"
+#ifndef _WIN32
 #include <sys/shm.h>
+#endif
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <stdlib.h>

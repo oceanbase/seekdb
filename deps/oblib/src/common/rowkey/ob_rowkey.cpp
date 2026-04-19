@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX COMMON
+
 #include "ob_rowkey.h"
 #include "common/rowkey/ob_store_rowkey.h"
 #include "common/object/ob_obj_compare.h"

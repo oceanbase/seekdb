@@ -29,7 +29,7 @@ static const int64_t MAX_BUCKET_ARRAY_CAPACITY = ObTmpFileWBPIndexCache::MAX_BUC
 static const int64_t BUCKET_CAPACITY = ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::BUCKET_CAPACITY;
 static const int64_t fd = 1;
 static uint64_t tenant_id = OB_SYS_TENANT_ID;
-static const int64_t TENANT_MEMORY = 8L * 1024L * 1024L * 1024L /* 8 GB */;
+static const int64_t TENANT_MEMORY = 8LL * 1024 * 1024 * 1024 /* 8 GB */;
 static const double TMP_FILE_WBP_MEM_LIMIT_PROP = 50; //[0, 100]
 /* ----------------------------- Mock Class -------------------------------- */
 class MockWBPIndexCache

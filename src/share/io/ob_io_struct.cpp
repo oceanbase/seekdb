@@ -25,6 +25,62 @@
 #include "storage/shared_storage/ob_file_manager.h"
 #endif
 
+#ifdef _WIN32
+
+static inline void usage_to_timeval(FILETIME *ft, struct timeval *tv)
+{
+    ULARGE_INTEGER time;
+    time.LowPart = ft->dwLowDateTime;
+    time.HighPart = ft->dwHighDateTime;
+
+    // Convert 100-nanosecond intervals to seconds and microseconds
+    tv->tv_sec = (long)(time.QuadPart / 10000000);
+    tv->tv_usec = (long)((time.QuadPart % 10000000) / 10);
+}
+
+#ifndef _WIN32
+static inline int getrusage(int who, struct rusage *usage)
+#else
+inline int getrusage(int who, struct rusage *usage)
+#endif
+{
+    FILETIME ctime, etime, stime, utime;
+
+    memset(usage, 0, sizeof(struct rusage));
+
+    if (who == RUSAGE_SELF) {
+        PROCESS_MEMORY_COUNTERS pmc;
+        HANDLE proc = GetCurrentProcess();
+
+        if (!GetProcessTimes(proc, &ctime, &etime, &stime, &utime)) {
+            return -1;
+        }
+        if (!GetProcessMemoryInfo(proc, &pmc, sizeof(pmc))) {
+            return -1;
+        }
+
+        usage_to_timeval(&stime, &usage->ru_stime);
+        usage_to_timeval(&utime, &usage->ru_utime);
+
+        usage->ru_majflt = pmc.PageFaultCount;
+        usage->ru_maxrss = pmc.PeakWorkingSetSize / 1024;
+
+        return 0;
+    } else if (who == RUSAGE_THREAD) {
+        if (!GetThreadTimes(GetCurrentThread(), &ctime, &etime, &stime, &utime)) {
+            return -1;
+        }
+
+        usage_to_timeval(&stime, &usage->ru_stime);
+        usage_to_timeval(&utime, &usage->ru_utime);
+
+        return 0;
+    }
+
+    return -1;
+}
+#endif
+
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -1306,7 +1362,6 @@ int ObSyncIOChannel::init(ObDeviceChannel *device_channel, const int64_t thread_
   } else {
     is_inited_ = true;
   }
-
   if (OB_UNLIKELY(!is_inited_)) {
     destroy();
   }
@@ -1351,7 +1406,7 @@ int ObSyncIOChannel::submit(ObIORequest &req)
 {
   int ret = OB_SUCCESS;
   const int64_t current_ts = ObTimeUtility::current_time();
-  const int64_t io_depth = get_io_depth(min(max(GMEMCONF.get_server_memory_limit() / 10, static_cast<int64_t>(500 * 1024L * 1024L)), static_cast<int64_t>(4 * 1024L * 1024L * 1024L)));
+  const int64_t io_depth = get_io_depth(min(max(GMEMCONF.get_server_memory_limit() / 10, static_cast<int64_t>(500LL * 1024LL * 1024LL)), static_cast<int64_t>(4LL * 1024LL * 1024LL * 1024LL)));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));

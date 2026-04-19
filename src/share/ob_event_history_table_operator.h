@@ -72,7 +72,7 @@ private:
 class ObEventHistoryTableOperator
 {
 public:
-  static const int64_t EVENT_TABLE_CLEAR_INTERVAL = 2L * 3600L * 1000L * 1000L; // 2 Hours
+  static const int64_t EVENT_TABLE_CLEAR_INTERVAL = 2LL * 3600LL * 1000LL * 1000LL; // 2 Hours
   template<bool Truncate, typename T>
   struct ValueConverter {};
   class ObEventTableUpdateTask : public common::IObDedupTask

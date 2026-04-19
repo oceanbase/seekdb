@@ -32,6 +32,11 @@ namespace checkpoint
 class ObCheckpointDList;
 class ObDataCheckpoint;
 
+#ifdef _WIN32
+// OUT is defined as empty SAL annotation macro in Windows SDK. Permanently undef.
+#pragma push_macro("OUT")
+#undef OUT
+#endif
 enum ObFreezeCheckpointLocation
 {
   LS_FROZEN = 1,
@@ -40,6 +45,7 @@ enum ObFreezeCheckpointLocation
   PREPARE = 8,
   OUT = 16,
 };
+// Do NOT restore OUT - keep it undefined for all uses of ObFreezeCheckpointLocation::OUT
 
 static inline
 int freeze_checkpoint_location_to_string(const ObFreezeCheckpointLocation location,

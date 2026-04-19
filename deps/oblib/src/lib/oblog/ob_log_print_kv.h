@@ -20,6 +20,24 @@
 #include <cerrno>
 #include <type_traits>
 
+#ifdef _WIN32
+#include <io.h>
+// Windows uses _isatty instead of isatty
+#define isatty _isatty
+// Windows file descriptor constants (if not already defined)
+#ifndef STDIN_FILENO
+#define STDIN_FILENO  0
+#endif
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO 1
+#endif
+#ifndef STDERR_FILENO
+#define STDERR_FILENO 2
+#endif
+#else
+#include <unistd.h>
+#endif
+
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_template_utils.h"

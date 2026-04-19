@@ -26,7 +26,7 @@ typedef IAlloc IHashAlloc;
 
 inline uint64_t next2n(const uint64_t x)
 {
-  return x <= 2 ? x : (1UL << 63) >> (__builtin_clzll(x - 1) - 1);
+  return x <= 2 ? x : (1ULL << 63) >> (__builtin_clzll(x - 1) - 1);
 }
 
 // b63 b62 .. b1 b0 => b0 b1 .. b62 b63

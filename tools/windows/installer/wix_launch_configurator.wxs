@@ -1,0 +1,81 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <!--
+    This Fragment is pulled in by a ComponentRef patch on CM_C_server
+    (see wix_patch.xml).  Once the linker resolves SeekDBPathEnv it
+    includes the ENTIRE Fragment, so the CustomAction and Environment
+    all end up in the final MSI.
+
+    The two WIXUI_EXITDIALOG* properties are injected separately via
+    CPACK_WIX_PROPERTY_* (in WIX.cmake) so they live directly inside
+    the Package and are guaranteed to be present even if this Fragment
+    failed to link for some reason.
+  -->
+  <Fragment>
+    <!-- Read the configurator exe path persisted to the registry during
+         install.  AppSearch runs early in every session (install, uninstall,
+         repair) so the property is available when custom actions fire.
+         This is critical for uninstall: the Directory-table default for
+         INSTALL_ROOT may revert to the compile-time default, but this
+         property always reflects the ACTUAL installed location. -->
+    <Property Id="SEEKDB_CONFIGURATOR_EXE">
+      <RegistrySearch Id="FindConfiguratorExe" Root="HKLM"
+                      Key="Software\SeekDB" Name="ConfiguratorExe" Type="raw" />
+    </Property>
+
+    <!-- Wire the ExitDialog's Finish button to fire LaunchApplication
+         when the checkbox is checked.  WixUI shows the checkbox but
+         does NOT include this Publish by default — we must add it.
+         Order="1" ensures DoAction fires before EndDialog (Order=999). -->
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish"
+               Event="DoAction" Value="LaunchApplication" Order="1"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
+
+    <!-- Type 34 custom action: fire-and-forget launch of Configurator (install).
+         During install [INSTALL_ROOT] is always correctly resolved by the
+         session, so Type 34 (Directory + ExeCommand) works fine here. -->
+    <CustomAction Id="LaunchApplication"
+                  Directory="INSTALL_ROOT"
+                  ExeCommand="&quot;[INSTALL_ROOT]bin\seekdbConfigurator.exe&quot;"
+                  Execute="immediate"
+                  Return="asyncNoWait" />
+
+    <!-- Type 50 custom action: launch Configurator in remove mode (uninstall).
+         Uses the SEEKDB_CONFIGURATOR_EXE property (populated from the
+         registry by AppSearch) so the correct path is resolved even when
+         the user chose a non-default install directory.  Type 34 with
+         Directory="INSTALL_ROOT" failed in that scenario because the
+         directory property could revert to its default value during
+         uninstall, pointing to a non-existent path.
+         Return="ignore" ensures uninstall proceeds even if user cancels. -->
+    <CustomAction Id="RunConfiguratorRemove"
+                  Property="SEEKDB_CONFIGURATOR_EXE"
+                  ExeCommand="--remove"
+                  Execute="immediate"
+                  Return="ignore" />
+
+    <!-- Schedule the removal configurator before files are deleted.
+         Only runs on full uninstall (not upgrades). -->
+    <InstallExecuteSequence>
+      <Custom Action="RunConfiguratorRemove" Before="RemoveFiles"
+              Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE) AND SEEKDB_CONFIGURATOR_EXE" />
+    </InstallExecuteSequence>
+
+    <!-- Add bin/ to system PATH (cleanly removed on uninstall). -->
+    <DirectoryRef Id="INSTALL_ROOT">
+      <Component Id="SeekDBPathEnv" Guid="B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E">
+        <Environment Id="SeekDBPath" Name="PATH" Value="[INSTALL_ROOT]bin"
+                     Permanent="no" Part="last" Action="set" System="yes" />
+        <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="PathConfigured"
+                       Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="InstallRoot"
+                       Type="string" Value="[INSTALL_ROOT]" />
+        <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="ConfiguratorExe"
+                       Type="string" Value="[INSTALL_ROOT]bin\seekdbConfigurator.exe" />
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+
+</Wix>

@@ -41,18 +41,34 @@ add_library(zstd_objs OBJECT
   ob_zstd_wrapper.cpp
   ob_zstd_wrapper.h)
 
-target_compile_options(zstd_objs PRIVATE -fvisibility=hidden)
+if(NOT WIN32)
+  target_compile_options(zstd_objs PRIVATE -fvisibility=hidden)
+endif()
 target_link_libraries(zstd_objs PUBLIC oblib_base)
 
-add_custom_command(
-  OUTPUT zstd_objs.o
-  COMMAND ${OB_LD_BIN} ${ARCH_ARGS} ${OB_DEPLOY} -r $<TARGET_OBJECTS:zstd_objs> -o zstd_objs.tmp.o
-  COMMAND ${OB_OBJCOPY_BIN} --localize-hidden zstd_objs.tmp.o zstd_objs.o
-  DEPENDS zstd_objs
-  COMMAND_EXPAND_LISTS
-  )
+if(WIN32)
+  # On Windows, use llvm-lib to create a static library from COFF object files
+  add_custom_command(
+    OUTPUT zstd_objs.lib
+    COMMAND llvm-lib /OUT:zstd_objs.lib $<TARGET_OBJECTS:zstd_objs>
+    DEPENDS zstd_objs
+    COMMAND_EXPAND_LISTS
+    )
+  oblib_add_extra_objects(${CMAKE_CURRENT_BINARY_DIR}/zstd_objs.lib)
+  set_source_files_properties(zstd_objs.lib PROPERTIES GENERATED TRUE)
+  oblib_add_library(zstd zstd_objs.lib)
+else()
+  # On Unix/Linux/macOS, use ld -r for partial linking
+  add_custom_command(
+    OUTPUT zstd_objs.o
+    COMMAND ${OB_LD_BIN} ${ARCH_ARGS} ${OB_DEPLOY} -r $<TARGET_OBJECTS:zstd_objs> -o zstd_objs.tmp.o
+    COMMAND ${OB_OBJCOPY_BIN} --localize-hidden zstd_objs.tmp.o zstd_objs.o
+    DEPENDS zstd_objs
+    COMMAND_EXPAND_LISTS
+    )
+  oblib_add_extra_objects(${CMAKE_CURRENT_BINARY_DIR}/zstd_objs.o)
+  set_source_files_properties(zstd_objs.o PROPERTIES GENERATED TRUE)
+  oblib_add_library(zstd zstd_objs.o)
+endif()
 
-oblib_add_extra_objects(${CMAKE_CURRENT_BINARY_DIR}/zstd_objs.o)
-set_source_files_properties(zstd_objs.o PROPERTIES GENERATED TRUE)
-oblib_add_library(zstd zstd_objs.o)
 set_target_properties(zstd PROPERTIES LINKER_LANGUAGE C)

@@ -58,8 +58,8 @@ public:
   static const int32_t NORMAL_UPDATE_PARAM = 300;
   static const int32_t DEFAULT_ROW_CNT_PER_MACRO_BLOCK = 1000;
   static const int32_t DEFAULT_INCREMENT_ROW_FACTOR = 10;
-  static const int64_t MAX_ESTIMATE_SPEND_TIME = 24 * 60 * 60 * 1000 * 1000l; // 24 hours
-  static const int64_t PRINT_ESTIMATE_WARN_INTERVAL = 5 * 60 * 1000 * 1000; // 1 min
+  static const int64_t MAX_ESTIMATE_SPEND_TIME = 24LL * 60 * 60 * 1000 * 1000; // 24 hours
+  static const int64_t PRINT_ESTIMATE_WARN_INTERVAL = 5LL * 60 * 1000 * 1000; // 5 min
 protected:
   virtual int inner_update_progress_mgr(const int64_t total_scanned_row_cnt) { return OB_SUCCESS; }
 private:

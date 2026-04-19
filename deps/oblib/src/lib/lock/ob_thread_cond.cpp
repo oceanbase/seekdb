@@ -15,6 +15,9 @@
  */
 
 #include <limits>
+#ifdef _WIN32
+#include "lib/hash/ob_hashutils.h"
+#endif
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/stat/ob_diagnose_info.h"
 

@@ -422,7 +422,7 @@ private:
   int trigger_log_sync_();
 
 private:
-  static const int64_t MAX_TABLET_GROUP_SIZE = 2 * 1024L * 1024L * 1024L; //2G
+  static const int64_t MAX_TABLET_GROUP_SIZE = 2LL * 1024LL * 1024LL * 1024LL; //2G
   static const int64_t MAX_TABLET_COUNT = 100;
   bool is_inited_;
   ObRestoreDagNetCtx *ctx_;

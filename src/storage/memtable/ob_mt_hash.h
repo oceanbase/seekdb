@@ -677,7 +677,7 @@ private:
     int64_t count = 0;
     int64_t bucket_node_count = 0;
     int64_t mt_node_count = 0;
-    const int64_t PRINT_LIMIT = 10L * 1000L * 1000L * 1000L; // large enough
+    const int64_t PRINT_LIMIT = 10LL * 1000 * 1000 * 1000; // large enough
     ObHashNode *node = const_cast<ObHashNode*>(&zero_node_);
     const int64_t DUMP_BUF_LEN = 16 * 1024;
     HEAP_VAR(char[DUMP_BUF_LEN], buf)

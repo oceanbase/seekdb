@@ -237,7 +237,11 @@ private:
   }
 
 private:
-  static constexpr uint64_t KEY_MASK = 1UL << 63;
+#ifndef _WIN32
+  static constexpr uint64_t KEY_MASK = 1ULL << 63;
+#else
+  static constexpr uint64_t KEY_MASK = UINT64_C(1) << 63;
+#endif
   static constexpr int64_t MIN_BUCKET_SIZE = 128;
   static constexpr int64_t CACHE_LINE_SIZE = 64;
   static constexpr int64_t MAX_SEEK_TIMES = 8;

@@ -16,7 +16,10 @@
 
 #include "lib/file/file_directory_utils.h"
 #include "ob_all_virtual_cgroup_config.h"
+#ifndef _WIN32
 #include <fts.h>
+#include <unistd.h>
+#endif
 namespace oceanbase
 {
 using namespace lib;
@@ -74,6 +77,10 @@ int ObAllVirtualCgroupConfig::inner_get_next_row(common::ObNewRow *&row)
 
 int ObAllVirtualCgroupConfig::check_cgroup_dir_exist_(const char *cgroup_path)
 {
+#ifdef _WIN32
+  (void)cgroup_path;
+  return OB_FILE_NOT_EXIST;  // no cgroup on Windows
+#else
   int ret = OB_SUCCESS;
   bool exist_cgroup = false;
   int link_len = 0;
@@ -94,10 +101,15 @@ int ObAllVirtualCgroupConfig::check_cgroup_dir_exist_(const char *cgroup_path)
     cgroup_origin_path_[link_len] = '\0';
   }
   return ret;
+#endif
 }
 
 int ObAllVirtualCgroupConfig::read_cgroup_path_dir_(const char *cgroup_path)
 {
+#ifdef _WIN32
+  (void)cgroup_path;
+  return OB_FILE_NOT_EXIST;  // no cgroup on Windows
+#else
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_cgroup_dir_exist_(cgroup_path))) {
     SERVER_LOG(WARN, "cgroup config file not exist : ", K(ret), K(cgroup_path));
@@ -118,6 +130,7 @@ int ObAllVirtualCgroupConfig::read_cgroup_path_dir_(const char *cgroup_path)
     }
   }
   return ret;
+#endif
 }
 
 int ObAllVirtualCgroupConfig::add_cgroup_config_info_(const char *cgroup_path)

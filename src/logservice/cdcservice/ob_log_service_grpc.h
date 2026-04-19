@@ -19,6 +19,29 @@
 
 #include "lib/ob_define.h"
 #include "lib/net/ob_addr.h"
+#ifdef _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#ifndef CONST
+#define CONST const
+#define _OB_UNDEF_CONST
+#endif
+#ifndef OPTIONAL
+#define OPTIONAL
+#define _OB_UNDEF_OPTIONAL
+#endif
+#include <mswsock.h>
+#ifdef _OB_UNDEF_CONST
+#undef CONST
+#undef _OB_UNDEF_CONST
+#endif
+#ifdef _OB_UNDEF_OPTIONAL
+#undef OPTIONAL
+#undef _OB_UNDEF_OPTIONAL
+#endif
+#undef ERROR
+#undef DELETE
+#endif
 #include "grpc/logservice.grpc.pb.h"
 #include "grpc/ob_grpc_context.h"
 #include "lib/oblog/ob_log_module.h"

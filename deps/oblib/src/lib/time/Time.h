@@ -1,6 +1,13 @@
 #ifndef TBSYS_TIME_H
 #define TBSYS_TIME_H
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+// Windows: sys/time.h not available, use winsock2.h for timeval
+#define _WINSOCKAPI_
+#include <winsock2.h>
+#include <windows.h>
+#endif
 #include <stdint.h>
 #include <string>
 namespace obutil

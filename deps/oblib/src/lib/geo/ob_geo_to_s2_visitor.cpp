@@ -110,7 +110,7 @@ S2Point ObWkbToS2Visitor::MakeS2PointFromXy(double x, double y)
     double t = (y - bound_->minY_) / (bound_->maxY_ - bound_->minY_);
     double u = stToUV(s);
     double v = stToUV(t);
-    ret = {1, u, v};
+    ret = S2Point(1, u, v);
   } else {
     invalid_ = true;
   }

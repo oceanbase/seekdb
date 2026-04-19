@@ -100,7 +100,7 @@ public:
     ASSERT_EQ(OB_SUCCESS, init_tenant_mgr());
     blocksstable::TestDataFilePrepare::SetUp();
     ASSERT_EQ(OB_SUCCESS, blocksstable::ObTmpFileManager::get_instance().init());
-    CHUNK_MGR.set_limit(128L * 1024L * 1024L * 1024L);
+    CHUNK_MGR.set_limit(128LL * 1024 * 1024 * 1024);
     GCONF.enable_sql_operator_dump.set_value("True");
     uint64_t cluster_version = CLUSTER_VERSION_1_0_0_0;
     common::ObClusterVersion::get_instance().update_cluster_version(cluster_version);
@@ -390,8 +390,8 @@ int ObHashSetDumpTest::init_tenant_mgr()
 
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = getter.add_tenant(tenant_id,
-                          4L * 1024L * 1024L * 1024L,
-                          8L * 1024L * 1024L * 1024L);
+                          4LL * 1024 * 1024 * 1024,
+                          8LL * 1024 * 1024 * 1024);
   EXPECT_EQ(OB_SUCCESS, ret);
   const int64_t ulmt = 256LL << 30;
   const int64_t llmt = 256LL << 30;
@@ -403,7 +403,7 @@ int ObHashSetDumpTest::init_tenant_mgr()
     lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(
           OB_SERVER_TENANT_ID, common::ObCtxIds::DEFAULT_CTX_ID);
   EXPECT_EQ(OB_SUCCESS, ret);
-  ret = ctx_allocator->set_limit(8L * 1024L * 1024L * 1024L);
+  ret = ctx_allocator->set_limit(8LL * 1024 * 1024 * 1024);
   EXPECT_EQ(OB_SUCCESS, ret);
   oceanbase::lib::set_memory_limit(128LL << 32);
   return ret;

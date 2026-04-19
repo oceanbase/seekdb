@@ -1291,7 +1291,7 @@ int ObHashPartInfrastructureVecImpl::decide_hp_infras_type(const common::ObIArra
   } else {
     int32_t row_fixed_size = RowMeta::get_row_fixed_size(exprs_cnt, payload_len, ObHashPartItem::get_extra_size());
     switch(static_cast<int64_t>(std::ceil(static_cast<double>(row_fixed_size) / 8))) {
-      case 1 ... 6:
+      case 1: case 2: case 3: case 4: case 5: case 6:
         bkt_type = ObHashPartInfrastructureVecImpl::BYTE_TYPE_48;
         break;
       case 7:

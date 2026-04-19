@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX LIB_MYSQLC
 #include "lib/mysqlclient/ob_isql_connection_pool.h"
+#ifndef _WIN32
 #include <poll.h>
+#endif
 #include "lib/mysqlclient/ob_mysql_statement.h"
 #include "lib/mysqlclient/ob_server_connection_pool.h"
 #include "lib/mysqlclient/ob_mysql_connection_pool.h"
@@ -127,19 +129,29 @@ int ObMySQLStatement::wait_for_mysql(int &status)
   pfd.events =
     (input_status & MYSQL_WAIT_READ ? POLLIN : 0) |
     (input_status & MYSQL_WAIT_WRITE ? POLLOUT : 0) |
+#ifndef _WIN32
     (input_status & MYSQL_WAIT_EXCEPT ? POLLPRI : 0);
+#else
+    0;
+#endif
   int res = 0;
   while (res <= 0 && OB_SUCC(ret)) {
     if (OB_FAIL(THIS_WORKER.check_status())) {
       LOG_WARN("check status failed", K(ret));
     } else {
+#ifdef _WIN32
+      res = WSAPoll(&pfd, 1, timeout);
+#else
       res = poll(&pfd, 1, timeout);
+#endif
     }
   }
   if (OB_SUCC(ret)) {
     status |= pfd.revents & POLLIN ? MYSQL_WAIT_READ : 0;
     status |= pfd.revents & POLLOUT ? MYSQL_WAIT_WRITE : 0;
+#ifndef _WIN32
     status |= pfd.revents & POLLPRI ? MYSQL_WAIT_EXCEPT : 0;
+#endif
   }
   return ret;
 }

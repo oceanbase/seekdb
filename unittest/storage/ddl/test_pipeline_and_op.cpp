@@ -109,7 +109,7 @@ private:
   int try_generate_output_chunk(bool scan_end = false);
 
 private:
-  static const int64_t TENANT_MEMORY = 16L * 1024L * 1024L * 1024L /* 16 GB */;
+  static const int64_t TENANT_MEMORY = 16LL * 1024 * 1024 * 1024 /* 16 GB */;
   static const int64_t BDRS_MAX_BATCH_SIZE = 512;
   static const int64_t CG_ROW_FILE_MEMEORY_LIMIT = 64 * 1024 /* 64 KB */;
   share::ObLSID ls_id_;

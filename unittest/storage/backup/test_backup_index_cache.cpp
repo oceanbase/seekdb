@@ -77,7 +77,7 @@ void TestBackupIndexCache::SetUp()
   }
   ASSERT_EQ(OB_SUCCESS, ret);
 
-  CHUNK_MGR.set_limit(5L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(5LL * 1024 * 1024 * 1024);
   ret = OB_BACKUP_INDEX_CACHE.init();
   ASSERT_EQ(OB_SUCCESS, ret);
 }

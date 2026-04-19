@@ -19,6 +19,10 @@
 #include "ob_ddl_heart_beat_task.h"
 #include "share/ob_common_rpc_proxy.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#define sleep(sec) Sleep((sec) * 1000)
+#endif
 
 namespace oceanbase
 {

@@ -39,6 +39,15 @@
 #define OB_UCA_CNT_MID4  32
 #define OB_UCA_PREVIOUS_CONTEXT_HEAD 64
 #define OB_UCA_PREVIOUS_CONTEXT_TAIL 128
+#ifdef _WIN32
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+#define strncasecmp _strnicmp
+#endif
 
 static inline uint16_t *ob_char_weight_addr(ObUCAInfo *uca, ob_wc_t wc) {
   unsigned int page, ofst;

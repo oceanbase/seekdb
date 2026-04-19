@@ -29,6 +29,48 @@ static inline void* memalign(size_t alignment, size_t size) {
   }
   return nullptr;
 }
+#elif defined(_WIN32)
+#include <windows.h>
+#include <fcntl.h>
+#include <io.h>
+#include <malloc.h>
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#ifndef F_GETFL
+#define F_GETFL 0
+#endif
+static inline void* memalign(size_t alignment, size_t size) {
+  (void)alignment;
+  return malloc(size);
+}
+static inline int ob_ftruncate(int fd, int64_t length) {
+  return _chsize_s(fd, length);
+}
+static inline int ob_fsync(int fd) {
+  return _commit(fd);
+}
+static inline int fcntl(int, int, ...) {
+  return 0;
+}
+static inline int64_t ob_pwrite(int fd, const void *buf, int64_t count, int64_t offset) {
+  HANDLE h = (HANDLE)_get_osfhandle(fd);
+  OVERLAPPED ov = {};
+  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
+  ov.OffsetHigh = (DWORD)((uint64_t)offset >> 32);
+  DWORD written = 0;
+  if (!WriteFile(h, buf, (DWORD)count, &written, &ov)) return -1;
+  return (int64_t)written;
+}
+static inline int64_t ob_pread(int fd, void *buf, int64_t count, int64_t offset) {
+  HANDLE h = (HANDLE)_get_osfhandle(fd);
+  OVERLAPPED ov = {};
+  ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
+  ov.OffsetHigh = (DWORD)((uint64_t)offset >> 32);
+  DWORD nread = 0;
+  if (!ReadFile(h, buf, (DWORD)count, &nread, &ov)) return -1;
+  return (int64_t)nread;
+}
 #endif
 
 namespace oceanbase
@@ -61,7 +103,11 @@ int open(const ObString &fname, const T &file, int &fd)
     if (NULL == fname_ptr) {
       _OB_LOG(WARN, "prepare fname string fail fname=[%.*s]", fname.length(), fname.ptr());
       ret = OB_INVALID_ARGUMENT;
-    } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags(), file.get_open_mode()))) {
+    } else if (-1 == (fd = ::open(fname_ptr, file.get_open_flags()
+#ifdef _WIN32
+            | _O_BINARY
+#endif
+            , file.get_open_mode()))) {
       if (ENOENT == errno) {
         ret = OB_FILE_NOT_EXIST;
       } else if (EEXIST == errno) {
@@ -102,7 +148,11 @@ bool IFileReader::is_opened() const
 void IFileReader::revise(int64_t pos)
 {
   if (-1 != fd_) {
+#ifdef _WIN32
+    if(0 != ob_ftruncate(fd_, pos)) {
+#else
     if(0 != ::ftruncate(fd_, pos)) {
+#endif
        _OB_LOG_RET(WARN, OB_ERR_SYS, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, pos, errno);
     }
   }
@@ -223,7 +273,7 @@ int DirectFileReader::pread_by_fd(const int fd, void *buf, const int64_t count,
     ret = OB_ERROR;
   } else if (!param_align
              && NULL == buffer_
-             && NULL == (buffer_ = (char *)::memalign(align_size_, buffer_size_))) {
+             && NULL == (buffer_ = (char *)memalign(align_size_, buffer_size_))) {
     _OB_LOG(WARN,
               "prepare buffer fail param_align=%s buffer=%p buf=%p count=%ld offset=%ld align_size=%ld buffer_size=%ld",
               STR_BOOL(param_align), buffer_, buf, count, offset, align_size_, buffer_size_);
@@ -413,7 +463,11 @@ int BufferFileAppender::fsync()
     _OB_LOG(WARN, "file has not been open");
     ret = OB_ERROR;
   } else if (OB_SUCCESS == (ret = buffer_sync_())) {
+#ifdef _WIN32
+    if (0 != ob_fsync(fd_)) {
+#else
     if (0 != ::fsync(fd_)) {
+#endif
       _OB_LOG(WARN, "fsync fail fd=%d errno=%u", fd_, errno);
       ret = OB_IO_ERROR;
     }
@@ -600,13 +654,21 @@ int DirectFileAppender::fsync()
     ret = OB_ERROR;
   } else if (OB_SUCCESS == (ret = buffer_sync_(&need_truncate))) {
     if (need_truncate
+#ifdef _WIN32
+        && 0 != ob_ftruncate(fd_, file_pos_)) {
+#else
         && 0 != ::ftruncate(fd_, file_pos_)) {
+#endif
       _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, file_pos_, errno);
       ret = OB_IO_ERROR;
     }
   }
   if (OB_SUCC(ret)) {
+#ifdef _WIN32
+    if (0 != ob_fsync(fd_)) {
+#else
     if (0 != ::fsync(fd_)) {
+#endif
       _OB_LOG(WARN, "fsync fail fd=%d errno=%u", fd_, errno);
       ret = OB_IO_ERROR;
     }
@@ -669,7 +731,11 @@ int DirectFileAppender::append(const void *buf, const int64_t count, const bool 
           file_pos_ += count;
         }
         if (!param_align
+#ifdef _WIN32
+            && 0 != ob_ftruncate(fd_, file_pos_)) {
+#else
             && 0 != ::ftruncate(fd_, file_pos_)) {
+#endif
           _OB_LOG(WARN, "ftruncate fail fd=%d file_pos=%ld errno=%u", fd_, file_pos_, errno);
           ret = OB_IO_ERROR;
         }
@@ -691,7 +757,7 @@ int DirectFileAppender::prepare_buffer_()
 {
   int ret = OB_SUCCESS;
   if (NULL == buffer_
-      && NULL == (buffer_ = (char *)::memalign(align_size_, buffer_size_))) {
+      && NULL == (buffer_ = (char *)memalign(align_size_, buffer_size_))) {
     _OB_LOG(WARN, "prepare buffer fail align_size=%ld buffer_size=%ld", align_size_, buffer_size_);
     ret = OB_ERROR;
   } else if (0 != (file_pos_ % align_size_)) {
@@ -776,7 +842,11 @@ int64_t unintr_pwrite(const int fd, const void *buf, const int64_t count, const 
   int64_t write_ret = 0;
   while (length2write > 0) {
     for (int64_t retry = 0; retry < 3;) {
+#ifdef _WIN32
+      write_ret = ob_pwrite(fd, (char *)buf + offset2write, length2write, offset + offset2write);
+#else
       write_ret = ::pwrite(fd, (char *)buf + offset2write, length2write, offset + offset2write);
+#endif
       if (0 >= write_ret) {
         if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
           continue;
@@ -840,7 +910,11 @@ int64_t unintr_pread(const int fd, void *buf, const int64_t count, const int64_t
   int64_t read_ret = 0;
   while (length2read > 0) {
     for (int64_t retry = 0; retry < 3;) {
+#ifdef _WIN32
+      read_ret = ob_pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
+#else
       read_ret = ::pread(fd, (char *)buf + offset2read, length2read, offset + offset2read);
+#endif
       if (0 > read_ret) {
         if (errno == EINTR) { // Blocking IO does not need to judge EAGAIN
           continue;
@@ -1036,7 +1110,7 @@ int ObFileBuffer::assign(const int64_t size, const int64_t align)
       base_pos_ = 0;
       buffer_size_ = 0;
     }
-    if (NULL == (buffer_ = (char *)::memalign(align, alloc_size))) {
+    if (NULL == (buffer_ = (char *)memalign(align, alloc_size))) {
       _OB_LOG(WARN, "memalign fail align=%ld alloc_size=%ld size=%ld errno=%u", align, alloc_size, size,
                 errno);
       ret = OB_ERROR;

@@ -75,6 +75,20 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
     pos = 0;
     tzset(); // init tzname
     int64_t current_time_us = ObTimeUtility::current_time();
+    bool is_neg = false;
+    int64_t tz_hour = 0;
+    int64_t tz_minuts = 0;
+#ifdef _WIN32
+    long tz_seconds = 0;
+    _get_timezone(&tz_seconds);
+    int64_t gmtoff = -tz_seconds;
+    if (gmtoff < 0) {
+      is_neg = true;
+      gmtoff = -gmtoff;
+    }
+    tz_hour = gmtoff / 3600;
+    tz_minuts = (gmtoff % 3600) / 60;
+#else
     struct tm tmp_tm;
 #ifdef __APPLE__
     time_t current_time_t = static_cast<time_t>(current_time_us / 1000000L);
@@ -82,13 +96,13 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
 #else
     UNUSED(localtime_r(&current_time_us, &tmp_tm));
 #endif
-    bool is_neg = false;
     if (tmp_tm.tm_gmtoff < 0) {
       is_neg = true;
       tmp_tm.tm_gmtoff = 0 - tmp_tm.tm_gmtoff;
     }
-    const int64_t tz_hour = tmp_tm.tm_gmtoff / 3600;
-    const int64_t tz_minuts = (tmp_tm.tm_gmtoff % 3600) % 60;
+    tz_hour = tmp_tm.tm_gmtoff / 3600;
+    tz_minuts = (tmp_tm.tm_gmtoff % 3600) % 60;
+#endif
     if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::system_time_zone_str_,
                                 ObSpecialSysVarValues::SYSTEM_TIME_ZONE_MAX_LEN,
                                 pos,
@@ -3440,16 +3454,12 @@ int ObSetSysVar::find_set(const ObString &str)
   } else if (OB_UNLIKELY(str.length() >=  MAX_STR_BUF_LEN)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("system variable string is too long", K(ret), K(str));
-#if defined(__APPLE__) || defined(__ANDROID__)
-  } else if (OB_ISNULL(buf = strndup(str.ptr(), str.length()))) {
+  } else if (OB_ISNULL(buf = (char *)alloca(str.length() + 1))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to alloc memory", K(ret));
-#elif defined(__linux__)
-  } else if (OB_ISNULL(buf = strndupa(str.ptr(), str.length()))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("failed to alloc memory", K(ret));
-#endif
   } else {
+    MEMCPY(buf, str.ptr(), str.length());
+    buf[str.length()] = '\0';
     char *value = NULL;
     char *saveptr = NULL;
     for (value = strtok_r(buf, ",", &saveptr);
@@ -3463,16 +3473,10 @@ int ObSetSysVar::find_set(const ObString &str)
         err_obj.set_varchar(part_str);
         int log_ret = OB_SUCCESS;
         if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, err_obj))) {
-          // log_ret is only used for logging, does not overwrite ret
           LOG_ERROR("fail to log error", K(ret), K(log_ret), K(err_obj));
         }
       }
     }
-#ifdef __APPLE__
-    // Free memory allocated by strndup on macOS
-    free(buf);
-    buf = NULL;
-#endif
   }
   return ret;
 }

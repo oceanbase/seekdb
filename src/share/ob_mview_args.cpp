@@ -175,6 +175,32 @@ OB_SERIALIZE_MEMBER(ObMViewRefreshInfo,
                     mview_target_data_sync_scn_,
                     select_sql_);
 
+OB_SERIALIZE_MEMBER(ObMVRequiredColumnsInfo,
+                    base_table_id_,
+                    required_columns_);
+
+int ObMVRequiredColumnsInfo::assign(const ObMVRequiredColumnsInfo &other)
+{
+  int ret = common::OB_SUCCESS;
+  OX(base_table_id_ = other.base_table_id_);
+  OZ(required_columns_.assign(other.required_columns_));
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER(ObMVAdditionalInfo,
+                    container_table_schema_,
+                    mv_refresh_info_,
+                    required_columns_infos_);
+
+int ObMVAdditionalInfo::assign(const ObMVAdditionalInfo &other)
+{
+  int ret = common::OB_SUCCESS;
+  OZ(container_table_schema_.assign(other.container_table_schema_));
+  OX(mv_refresh_info_ = other.mv_refresh_info_);
+  OZ(required_columns_infos_.assign(other.required_columns_infos_));
+  return ret;
+}
+
 bool ObAlterMViewArg::is_valid() const
 {
   bool is_valid = true;

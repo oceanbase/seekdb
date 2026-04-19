@@ -19,6 +19,10 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#ifdef _WIN32
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
 #include "lib/lock/ob_latch.h"
 
 namespace oceanbase {

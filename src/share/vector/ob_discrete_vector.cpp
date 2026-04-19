@@ -21,6 +21,7 @@ namespace oceanbase
 {
 namespace common
 {
+#ifndef _WIN32
 
 template<typename BasicOp>
 int ObDiscreteVector<BasicOp>::default_hash(BATCH_EVAL_HASH_ARGS) const
@@ -205,5 +206,6 @@ template class ObDiscreteVector<VectorBasicOp<VEC_TC_GEO>>;
 template class ObDiscreteVector<VectorBasicOp<VEC_TC_UDT>>;
 template class ObDiscreteVector<VectorBasicOp<VEC_TC_COLLECTION>>;
 template class ObDiscreteVector<VectorBasicOp<VEC_TC_ROARINGBITMAP>>;
+#endif
 } // end namespace common
 } // end namespace oceanbase

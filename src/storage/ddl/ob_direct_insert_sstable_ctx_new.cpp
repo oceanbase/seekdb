@@ -93,7 +93,7 @@ int ObTenantDirectLoadMgr::init()
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = MTL_ID();
   const int64_t bucket_num = common::hash::cal_next_prime(common::calculate_scaled_value_by_memory(4096L, 100000L));
-  const int64_t memory_limit = 1024L * 1024L * 1024L * 10L; // 10GB
+  const int64_t memory_limit = 1024LL * 1024LL * 1024LL * 10LL; // 10GB
   lib::ObMemAttr attr(tenant_id, "TenantDLMgr");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -1175,7 +1175,7 @@ int ObTabletDirectLoadMgr::update(
 {
   int ret = OB_SUCCESS;
   const int64_t bucket_num = 97L; // 97
-  const int64_t memory_limit = 1024L * 1024L * 1024L * 10L; // 10GB
+  const int64_t memory_limit = 1024LL * 1024LL * 1024LL * 10LL; // 10GB
   ObLSService *ls_service = nullptr;
   ObLSHandle ls_handle;
   ObTabletHandle tablet_handle;

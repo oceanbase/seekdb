@@ -17,7 +17,14 @@
 #ifndef OB_JIT_ALLOCATOR_H
 #define OB_JIT_ALLOCATOR_H
 
+#ifdef _WIN32
+#include <windows.h>
+#define PROT_READ   0x1
+#define PROT_WRITE  0x2
+#define PROT_EXEC   0x4
+#else
 #include <sys/mman.h>
+#endif
 #include "lib/oblog/ob_log.h"
 #include "lib/alloc/alloc_assist.h"
 #include "lib/utility/ob_print_utils.h"

@@ -1,0 +1,12 @@
+.gitattributes export-ignore
+.gitignore export-ignore
+
+# All OceanBase code is auto-formatted using clang-format.
+*.c filter=codeformat
+*.cc filter=codeformat
+*.cpp filter=codeformat
+*.h filter=codeformat
+*.hpp filter=codeformat
+*.i filter=codeformat
+*.ic filter=codeformat
+*.js filter=codeformat

@@ -119,8 +119,6 @@ public:
   bool all_tasks_finish_;
   bool interrupted_; // Mark whether the current SQC is interrupted by QC
   common::ObSEArray<ObPxTabletInfo, 8> partitions_info_;
-  ObPxBloomfilterChProvider bf_ch_provider_;
-  ObPxCreateBloomFilterChannelMsgP px_bloom_filter_msg_proc_;
   ObOptStatsGatherWholeMsgP opt_stats_gather_whole_msg_proc_;
   // Used for saving whole msg provider in datahub, generally there will not be one in a single sub-plan
   // More than one operator will use datahub, so the size can default to 1

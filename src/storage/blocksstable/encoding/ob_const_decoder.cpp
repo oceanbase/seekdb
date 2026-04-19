@@ -595,7 +595,7 @@ int ObConstDecoder::comparison_operator(
     } else {
       // Const value is not null
       ObDictDecoderIterator dict_iter = dict_decoder_.begin(&col_ctx, filter.is_padding_mode(), dict_meta_length);
-      ObStorageDatum& const_datum = *(dict_iter + meta_header_->const_ref_);
+      ObStorageDatum const_datum = *(dict_iter + meta_header_->const_ref_);
       if (need_padding(filter.is_padding_mode(), col_ctx.obj_meta_)) {
         if (OB_FAIL(storage::pad_column(col_ctx.obj_meta_, col_ctx.col_param_->get_accuracy(),
                                         *col_ctx.allocator_, const_datum))) {
@@ -685,7 +685,7 @@ int ObConstDecoder::bt_operator(
     if (meta_header_->const_ref_ == dict_count) {
     } else {
       ObDictDecoderIterator dict_iter = dict_decoder_.begin(&col_ctx, filter.is_padding_mode(), dict_meta_length);
-      ObStorageDatum& const_datum = *(dict_iter + meta_header_->const_ref_);
+      ObStorageDatum const_datum = *(dict_iter + meta_header_->const_ref_);
       if (need_padding(filter.is_padding_mode(), col_ctx.obj_meta_)) {
         if (OB_FAIL(storage::pad_column(col_ctx.obj_meta_, col_ctx.col_param_->get_accuracy(),
                                         *col_ctx.allocator_, const_datum))) {
@@ -775,7 +775,7 @@ int ObConstDecoder::in_operator(
     if (meta_header_->const_ref_ == dict_count) {
     } else {
       ObDictDecoderIterator dict_iter = dict_decoder_.begin(&col_ctx, filter.is_padding_mode(), dict_meta_length);
-      ObStorageDatum& const_datum = *(dict_iter + meta_header_->const_ref_);
+      ObStorageDatum const_datum = *(dict_iter + meta_header_->const_ref_);
       if (need_padding(filter.is_padding_mode(), col_ctx.obj_meta_)) {
         if (OB_FAIL(storage::pad_column(col_ctx.obj_meta_, col_ctx.col_param_->get_accuracy(),
                                         *col_ctx.allocator_, const_datum))) {

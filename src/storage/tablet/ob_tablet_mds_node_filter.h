@@ -111,7 +111,7 @@ public:
     return ret;
   }
 private:
-  const common::ObVersionRange read_version_range_;
+  common::ObVersionRange read_version_range_;
   ObMdsReadInfoCollector *collector_;
 };
 

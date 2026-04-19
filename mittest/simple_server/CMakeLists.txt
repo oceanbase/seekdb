@@ -123,6 +123,7 @@ ob_unittest_observer(test_all_virtual_proxy_partition_info_default_value rootser
 ob_unittest_observer(test_schema_service_sql_impl rootservice/test_schema_service_sql_impl.cpp)
 ob_unittest_observer(test_ob_parallel_migration_mode rootservice/test_ob_parallel_migration_mode.cpp)
 ob_unittest_observer(test_create_tenant_compare rootservice/test_create_tenant_compare.cpp)
+ob_unittest_observer(test_max_id_cache rootservice/test_max_id_cache.cpp)
 ####### rootservice case #########
 
 

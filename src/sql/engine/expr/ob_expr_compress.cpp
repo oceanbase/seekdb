@@ -86,8 +86,7 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else {
-#ifdef __APPLE__
-      // On macOS ARM64, uLongf is unsigned long, but new_len is uint64_t (unsigned long long)
+#if defined(__APPLE__) || defined(_WIN32)
       uLongf new_len_zlib = static_cast<uLongf>(new_len);
       if (OB_UNLIKELY(Z_OK != compress(reinterpret_cast<unsigned char*>(buf + COMPRESS_HEADER_LEN), &new_len_zlib,
           reinterpret_cast<const unsigned char*>(str_val.ptr()), static_cast<uLong>(str_val.length())))) {
@@ -213,8 +212,7 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
           LOG_WARN("stringtext result reserve buffer failed");
         } else {
-#ifdef __APPLE__
-          // On macOS ARM64, uLongf is unsigned long, but orig_len is uint64_t (unsigned long long)
+#if defined(__APPLE__) || defined(_WIN32)
           uLongf orig_len_zlib = static_cast<uLongf>(orig_len);
           if (OB_UNLIKELY(Z_OK != uncompress(reinterpret_cast<unsigned char*>(buf), &orig_len_zlib,
               reinterpret_cast<const unsigned char*>(str_val.ptr() + COMPRESS_HEADER_LEN), static_cast<uLong>(str_val.length())))) {

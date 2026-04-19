@@ -26,8 +26,10 @@
 #include <openssl/x509.h>
 #include <openssl/pem.h>
 #include <openssl/bio.h>
+#ifndef _WIN32
 #include <sys/syscall.h>
 #include <unistd.h>
+#endif
 #include "lib/ob_running_mode.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"

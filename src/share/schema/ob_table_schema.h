@@ -32,6 +32,11 @@
 #include "common/ob_range.h"
 #include "common/ob_store_format.h"
 #include "common/ob_tablet_id.h"
+#ifdef _WIN32
+#ifndef strtok_r
+#define strtok_r strtok_s
+#endif
+#endif
 #include "share/ob_define.h"
 #include "share/ob_get_compat_mode.h"
 #include "share/schema/ob_schema_struct.h"

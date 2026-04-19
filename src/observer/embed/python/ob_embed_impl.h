@@ -48,6 +48,12 @@ public:
   sql::ObSQLSessionInfo *&get_session() { return session_; }
   common::ObCommonSqlProxy::ReadResult *get_res() { return result_; }
   bool need_autocommit();
+
+  // Prepared Statement API
+  int prepare_stmt(const char* sql, uint64_t &stmt_id, int64_t &param_count);
+  int execute_stmt(uint64_t stmt_id, const common::ParamStore &params,
+                   uint64_t &affected_rows, int64_t &result_seq);
+  int close_stmt(uint64_t stmt_id);
 private:
   observer::ObInnerSQLConnection *conn_;
   int64_t result_seq_;

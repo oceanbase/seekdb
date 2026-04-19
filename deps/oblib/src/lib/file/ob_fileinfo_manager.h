@@ -20,10 +20,12 @@
 #include <dirent.h>
 #ifdef __APPLE__
 #include <sys/mount.h> // sys/vfs.h is not available on macOS, use sys/mount.h instead
-#else
+#elif defined(__linux__)
 #include <sys/vfs.h>
 #endif
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>

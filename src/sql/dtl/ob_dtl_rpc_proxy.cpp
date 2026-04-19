@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_rpc_proxy.h"
 
 namespace oceanbase {

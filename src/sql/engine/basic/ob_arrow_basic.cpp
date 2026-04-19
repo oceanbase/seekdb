@@ -62,8 +62,8 @@ arrow::Status ObArrowMemPool::Reallocate(int64_t old_size, int64_t new_size, int
   uint8_t* old = *ptr;
   arrow::Status status_ret = Allocate(new_size, alignment, ptr);
   if (arrow::Status::OK() == status_ret) {
-  MEMCPY(*ptr, old, std::min(old_size, new_size));
-  Free(old, old_size, alignment);
+    MEMCPY(*ptr, old, std::min(old_size, new_size));
+    Free(old, old_size, alignment);
   }
   LOG_DEBUG("ObArrowMemPool::Reallocate", K(old_size), K(new_size), "stack", lbt());
   return status_ret;
@@ -72,6 +72,7 @@ arrow::Status ObArrowMemPool::Reallocate(int64_t old_size, int64_t new_size, int
 void ObArrowMemPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
   UNUSED(alignment);
   int ret = OB_SUCCESS;
+  UNUSED(alignment);
   ob_free_align(buffer);
   total_hold_size_ -= size;
   LOG_DEBUG("ObArrowMemPool::Free", K(size), "stack", lbt());
@@ -84,16 +85,6 @@ void ObArrowMemPool::ReleaseUnused() {
 int64_t ObArrowMemPool::bytes_allocated() const {
   LOG_DEBUG("ObArrowMemPool::bytes_allocated", "stack", lbt());
   return total_hold_size_;
-}
-
-int64_t ObArrowMemPool::total_bytes_allocated() const {
-  LOG_DEBUG("ObArrowMemPool::total_bytes_allocated", "stack", lbt());
-  return total_alloc_size_;
-}
-
-int64_t ObArrowMemPool::num_allocations() const {
-  LOG_DEBUG("ObArrowMemPool::num_allocations", "stack", lbt());
-  return num_allocations_;
 }
 
 /* ObArrowFile */

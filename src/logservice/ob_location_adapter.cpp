@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#define USING_LOG_PREFIX CLOG
 #include "ob_location_adapter.h"
 #include "share/location_cache/ob_location_service.h"
 #include "rpc/obrpc/ob_rpc_net_handler.h"

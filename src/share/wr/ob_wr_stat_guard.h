@@ -19,7 +19,11 @@
 #include "lib/statistic_event/ob_stat_event.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/stat/ob_diagnostic_info.h"
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/resource.h>
+#endif
 #ifdef __APPLE__
 // macOS doesn't support RUSAGE_THREAD, use RUSAGE_SELF as fallback
 #ifndef RUSAGE_THREAD
@@ -62,11 +66,25 @@ public:
 private:
   int64_t get_ru_utime()
   {
+#ifdef _WIN32
+    FILETIME creation, exit, kernel, user;
+    if (!GetThreadTimes(GetCurrentThread(), &creation, &exit, &kernel, &user)) {
+      return 0;
+    }
+    auto filetime_to_us = [](const FILETIME &ft) -> int64_t {
+      ULARGE_INTEGER u;
+      u.LowPart = ft.dwLowDateTime;
+      u.HighPart = ft.dwHighDateTime;
+      return static_cast<int64_t>(u.QuadPart / 10); // 100ns -> us
+    };
+    return filetime_to_us(user) + filetime_to_us(kernel);
+#else
     struct rusage ru;
     getrusage(RUSAGE_THREAD, &ru);
     int64_t ru_utime = ru.ru_utime.tv_sec * 1000000 + ru.ru_utime.tv_usec +
                        ru.ru_stime.tv_sec * 1000000 + ru.ru_stime.tv_usec;
     return ru_utime;
+#endif
   }
   int64_t begin_ts_;
   int64_t begin_ru_cputime_;

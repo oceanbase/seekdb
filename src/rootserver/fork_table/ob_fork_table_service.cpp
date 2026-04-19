@@ -22,7 +22,9 @@
 #include "share/ob_fork_table_util.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "share/ob_fts_index_builder_util.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
 #include "storage/ddl/ob_ddl_lock.h"
+#include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 namespace oceanbase {
 using namespace common;
@@ -406,6 +408,40 @@ int ObDDLService::fork_table(const obrpc::ObForkTableArg &fork_table_arg,
         LOG_WARN("start transaction failed", KR(ret), K(tenant_id),
                  K(refreshed_schema_version));
       } else if (FALSE_IT(src_table_schemas.push_back(src_table_schema))) {
+      }
+
+      // For tables with async vector indexes, lock the source table to block DML
+      // and wait for ChangeStream to catch up before obtaining the snapshot.
+      // This ensures the fork snapshot covers both main table data and async index data.
+      if (OB_SUCC(ret)) {
+        bool has_async_vec_index = false;
+        if (OB_FAIL(check_has_async_vector_index(*src_table_schema, schema_guard,
+                                                 has_async_vec_index))) {
+          LOG_WARN("fail to check async vector index", KR(ret),
+                   "table_id", src_table_schema->get_table_id());
+        } else if (has_async_vec_index) {
+          observer::ObInnerSQLConnection *iconn =
+              static_cast<observer::ObInnerSQLConnection *>(trans.get_connection());
+          const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
+          if (OB_ISNULL(iconn)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("inner connection is null", KR(ret));
+          } else if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
+                         tenant_id, src_table_schema->get_table_id(),
+                         transaction::tablelock::EXCLUSIVE, lock_timeout_us, iconn))) {
+            LOG_WARN("fail to lock source table for async index sync", KR(ret),
+                     K(tenant_id), "table_id", src_table_schema->get_table_id());
+          } else if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
+                         get_sql_proxy(), tenant_id, lock_timeout_us))) {
+            LOG_WARN("fail to wait change stream refresh", KR(ret), K(tenant_id));
+          } else {
+            LOG_INFO("async index sync completed before fork snapshot",
+                     K(tenant_id), "table_id", src_table_schema->get_table_id());
+          }
+        }
+      }
+
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(
                      trans, schema_guard, tenant_id, src_table_schemas,
                      fork_snapshot_version))) {

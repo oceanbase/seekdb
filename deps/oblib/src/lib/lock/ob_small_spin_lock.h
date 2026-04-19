@@ -21,6 +21,13 @@
 #include "lib/atomic/ob_atomic.h"
 #include "lib/stat/ob_diagnose_info.h"
 
+#ifdef _WIN32
+#include <windows.h>
+namespace {
+inline void ob_small_spin_lock_usleep(unsigned int us) { Sleep((DWORD)(us / 1000)); }
+}
+#endif
+
 namespace oceanbase
 {
 namespace common
@@ -135,7 +142,11 @@ public:
           // Sleep when it exceeds spin limit.
           if (MaxSpin <= (cnt++)) {
             cnt = 0;
+#ifdef _WIN32
+            ob_small_spin_lock_usleep(USleep);
+#else
             ::usleep(USleep);
+#endif
           }
           PAUSE();
         }
@@ -144,7 +155,11 @@ public:
           // Sleep when it exceeds spin limit.
           if (MaxSpin <= (cnt++)) {
             cnt = 0;
+#ifdef _WIN32
+            ob_small_spin_lock_usleep(USleep);
+#else
             ::usleep(USleep);
+#endif
           }
           PAUSE();
         }

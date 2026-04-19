@@ -119,7 +119,6 @@ public:
   ObIOFlag &operator=(const ObIOFlag &other)
   {
     this->flag_ = other.flag_;
-    this->func_type_ = other.func_type_;
     this->group_id_ = other.group_id_;
     this->sys_module_id_ = other.sys_module_id_;
     return *this;
@@ -186,6 +185,7 @@ private:
   // needs to close device and fd.
   static constexpr int64_t IO_CLOSE_DEV_AND_FD_BIT = 1;
   static constexpr int64_t IO_RESERVED_BIT = 64 - IO_MODE_BIT
+                                                - IO_FUNC_TYPE_BIT
                                                 - IO_WAIT_EVENT_BIT
                                                 - IO_SYNC_FLAG_BIT
                                                 - IO_DETECT_FLAG_BIT
@@ -199,15 +199,15 @@ private:
     int64_t flag_;
     struct {
       int64_t mode_ : IO_MODE_BIT;
-      uint8_t func_type_ : IO_FUNC_TYPE_BIT; 
+      int64_t func_type_ : IO_FUNC_TYPE_BIT;
       int64_t wait_event_id_ : IO_WAIT_EVENT_BIT;
-      bool is_sync_ : IO_SYNC_FLAG_BIT;
-      bool is_unlimited_ : IO_UNLIMITED_FLAG_BIT;
-      bool is_detect_ : IO_DETECT_FLAG_BIT;
-      bool is_write_through_ : IO_WRITE_THROUGH_BIT; 
-      bool is_sealed_ : IO_SEALED_FLAG_BIT;
-      bool is_time_detect_ : IO_TIME_DETECT_FLAG_BIT;
-      bool need_close_dev_and_fd_ : IO_CLOSE_DEV_AND_FD_BIT;
+      int64_t is_sync_ : IO_SYNC_FLAG_BIT;
+      int64_t is_unlimited_ : IO_UNLIMITED_FLAG_BIT;
+      int64_t is_detect_ : IO_DETECT_FLAG_BIT;
+      int64_t is_write_through_ : IO_WRITE_THROUGH_BIT;
+      int64_t is_sealed_ : IO_SEALED_FLAG_BIT;
+      int64_t is_time_detect_ : IO_TIME_DETECT_FLAG_BIT;
+      int64_t need_close_dev_and_fd_ : IO_CLOSE_DEV_AND_FD_BIT;
       int64_t reserved_ : IO_RESERVED_BIT;
     };
   };

@@ -17,7 +17,11 @@
 
 
 #include "ob_log_fetch_log_rpc.h"
+#ifndef _WIN32
 #include <unistd.h>                       // getpid
+#else
+#include <process.h>                      // _getpid
+#endif
 #include "share/ob_errno.h"                 // OB_SUCCESS
 #include "lib/atomic/ob_atomic.h"         // ATOMIC_*
 #include "lib/utility/ob_macro_utils.h"   // OB_FAIL

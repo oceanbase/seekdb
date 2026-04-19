@@ -105,7 +105,7 @@ int get_log_base_directory(char *log_file_name, const int64_t log_file_name_len,
 
 int main(int argc, char *argv[])
 {
-#ifndef __APPLE__
+#if !defined(__APPLE__) && !defined(_WIN32)
   init_malloc_hook();
 #endif
   int ret = 0;

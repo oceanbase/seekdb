@@ -353,54 +353,54 @@ class ObTransformRule
 {
 public:
   static const int64_t TRANSFORMER_DEFAULT_MAX_RECURSIVE_LEVEL = 150;
-  static const uint64_t ALL_TRANSFORM_RULES = (1L << TRANSFORM_TYPE_COUNT_PLUS_ONE) - 1L;
+  static const uint64_t ALL_TRANSFORM_RULES = (1LL << TRANSFORM_TYPE_COUNT_PLUS_ONE) - 1LL;
   static const uint64_t ALL_HEURISTICS_RULES =
-      (1L << SIMPLIFY_EXPR) |
-      (1L << SIMPLIFY_DISTINCT) |
-      (1L << SIMPLIFY_GROUPBY) |
-      (1L << SIMPLIFY_WINFUNC) |
-      (1L << SIMPLIFY_ORDERBY) |
-      (1L << SIMPLIFY_LIMIT) |
-      (1L << SIMPLIFY_SUBQUERY) |
-      (1L << FASTMINMAX) |
-      (1L << ELIMINATE_OJ) |
-      (1L << VIEW_MERGE) |
-      (1L << WHERE_SQ_PULL_UP) |
-      (1L << QUERY_PUSH_DOWN) |
-      (1L << SIMPLIFY_SET) |
-      (1L << PROJECTION_PRUNING) |
-      (1L << JOIN_ELIMINATION) |
-      (1L << AGGR_SUBQUERY) |
-      (1L << PREDICATE_MOVE_AROUND) |
-      (1L << NL_FULL_OUTER_JOIN) |
-      (1L << JOIN_LIMIT_PUSHDOWN) |
-      (1L << CONST_PROPAGATE) |
-      (1L << LEFT_JOIN_TO_ANTI) |
-      (1L << COUNT_TO_EXISTS) |
-      (1L << CONDITIONAL_AGGR_COALESCE) |
-      (1L << SEMI_TO_INNER) |
-      (1L << DISTINCT_AGGREGATE);
+      (1LL << SIMPLIFY_EXPR) |
+      (1LL << SIMPLIFY_DISTINCT) |
+      (1LL << SIMPLIFY_GROUPBY) |
+      (1LL << SIMPLIFY_WINFUNC) |
+      (1LL << SIMPLIFY_ORDERBY) |
+      (1LL << SIMPLIFY_LIMIT) |
+      (1LL << SIMPLIFY_SUBQUERY) |
+      (1LL << FASTMINMAX) |
+      (1LL << ELIMINATE_OJ) |
+      (1LL << VIEW_MERGE) |
+      (1LL << WHERE_SQ_PULL_UP) |
+      (1LL << QUERY_PUSH_DOWN) |
+      (1LL << SIMPLIFY_SET) |
+      (1LL << PROJECTION_PRUNING) |
+      (1LL << JOIN_ELIMINATION) |
+      (1LL << AGGR_SUBQUERY) |
+      (1LL << PREDICATE_MOVE_AROUND) |
+      (1LL << NL_FULL_OUTER_JOIN) |
+      (1LL << JOIN_LIMIT_PUSHDOWN) |
+      (1LL << CONST_PROPAGATE) |
+      (1LL << LEFT_JOIN_TO_ANTI) |
+      (1LL << COUNT_TO_EXISTS) |
+      (1LL << CONDITIONAL_AGGR_COALESCE) |
+      (1LL << SEMI_TO_INNER) |
+      (1LL << DISTINCT_AGGREGATE);
   static const uint64_t ALL_COST_BASED_RULES =
-      (1L << OR_EXPANSION) |
-      (1L << WIN_MAGIC) |
-      (1L << GROUPBY_PUSHDOWN) |
-      (1L << GROUPBY_PULLUP) |
-      (1L << SUBQUERY_COALESCE) |
-      (1L << SEMI_TO_INNER) |
-      (1L << TEMP_TABLE_OPTIMIZATION) |
-      (1L << MV_REWRITE) |
-      (1L << LATE_MATERIALIZATION);
+      (1LL << OR_EXPANSION) |
+      (1LL << WIN_MAGIC) |
+      (1LL << GROUPBY_PUSHDOWN) |
+      (1LL << GROUPBY_PULLUP) |
+      (1LL << SUBQUERY_COALESCE) |
+      (1LL << SEMI_TO_INNER) |
+      (1LL << TEMP_TABLE_OPTIMIZATION) |
+      (1LL << MV_REWRITE) |
+      (1LL << LATE_MATERIALIZATION);
   
   static const uint64_t ALL_EXPR_LEVEL_HEURISTICS_RULES =
-      (1L << SIMPLIFY_EXPR) |
-      (1L << SIMPLIFY_DISTINCT) |
-      (1L << SIMPLIFY_WINFUNC) |
-      (1L << SIMPLIFY_ORDERBY) |
-      (1L << SIMPLIFY_LIMIT) |
-      (1L << PROJECTION_PRUNING) |
-      (1L << PREDICATE_MOVE_AROUND) |
-      (1L << JOIN_LIMIT_PUSHDOWN) |
-      (1L << CONST_PROPAGATE);
+      (1LL << SIMPLIFY_EXPR) |
+      (1LL << SIMPLIFY_DISTINCT) |
+      (1LL << SIMPLIFY_WINFUNC) |
+      (1LL << SIMPLIFY_ORDERBY) |
+      (1LL << SIMPLIFY_LIMIT) |
+      (1LL << PROJECTION_PRUNING) |
+      (1LL << PREDICATE_MOVE_AROUND) |
+      (1LL << JOIN_LIMIT_PUSHDOWN) |
+      (1LL << CONST_PROPAGATE);
 
   ObTransformRule(ObTransformerCtx *ctx,
                   TransMethod transform_method,

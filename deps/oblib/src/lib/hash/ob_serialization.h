@@ -22,7 +22,44 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+// Windows: unistd.h equivalents
+#include <io.h>
+#include <process.h>
+// Windows: define POSIX file permission constants
+#ifndef S_IRWXU
+#define S_IRWXU 0000700  // User: read, write, execute
+#endif
+#ifndef S_IRUSR
+#define S_IRUSR 0000400  // User: read
+#endif
+#ifndef S_IWUSR
+#define S_IWUSR 0000200  // User: write
+#endif
+#ifndef S_IXUSR
+#define S_IXUSR 0000100  // User: execute
+#endif
+#ifndef S_IRGRP
+#define S_IRGRP 0000040  // Group: read
+#endif
+#ifndef S_IWGRP
+#define S_IWGRP 0000020  // Group: write
+#endif
+#ifndef S_IXGRP
+#define S_IXGRP 0000010  // Group: execute
+#endif
+#ifndef S_IROTH
+#define S_IROTH 0000004  // Others: read
+#endif
+#ifndef S_IWOTH
+#define S_IWOTH 0000002  // Others: write
+#endif
+#ifndef S_IXOTH
+#define S_IXOTH 0000001  // Others: execute
+#endif
+#endif
 #include "lib/hash/ob_hashutils.h"
 
 namespace oceanbase

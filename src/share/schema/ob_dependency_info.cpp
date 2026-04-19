@@ -542,7 +542,7 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t tenant_id,
   const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
   const int64_t init_count = objs.count();
   {
-    SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
+    HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE ref_obj_id = %lu",
                                         OB_ALL_TENANT_DEPENDENCY_TNAME,
@@ -622,7 +622,7 @@ int ObDependencyInfo::collect_all_dep_objs(
   const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
   const int64_t init_count = objs.count();
   if (OB_SUCC(ret) && !ref_obj_infos.empty()) {
-    SMART_VAR(common::ObMySQLProxy::MySQLResult, res) {
+    HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql.assign_fmt(
           "SELECT dep_obj_id, dep_obj_type, schema_version FROM %s "

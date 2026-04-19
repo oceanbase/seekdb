@@ -45,6 +45,17 @@ inline int call_with_new_stack(void * arg_, int(*func_) (void*), void *stack_add
     // Do not introduce other code between the two set_stackattr
     set_stackattr(stack_addr, stack_size);
     DEFER(set_stackattr(ori_stack_addr, ori_stack_size));
+#ifdef _WIN32
+    // Windows SEH validates RSP against TIB StackBase/StackLimit when
+    // dispatching exceptions. Without updating TIB, any exception on the
+    // new heap-allocated stack is undispatchable, causing std::terminate.
+    NT_TIB *tib = reinterpret_cast<NT_TIB *>(NtCurrentTeb());
+    void *ori_tib_base = tib->StackBase;
+    void *ori_tib_limit = tib->StackLimit;
+    tib->StackBase = static_cast<char *>(stack_addr) + stack_size;
+    tib->StackLimit = stack_addr;
+    DEFER(tib->StackBase = ori_tib_base; tib->StackLimit = ori_tib_limit);
+#endif
     ret = jump_call(arg_, func_, (char *)stack_addr + stack_size);
   }
 #else

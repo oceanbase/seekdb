@@ -18,10 +18,47 @@
 #define OCEANBASE_COMMON_OB_LOG_DEFINITION_H_
 
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #ifdef __APPLE__
-// macOS does not support O_DIRECT
 #ifndef O_DIRECT
 #define O_DIRECT 0
+#endif
+#elif defined(_WIN32)
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#ifndef O_SYNC
+#define O_SYNC 0
+#endif
+#endif
+#ifdef _WIN32
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#ifndef O_SYNC
+#define O_SYNC 0
+#endif
+#ifndef S_IRUSR
+#define S_IRUSR _S_IREAD
+#endif
+#ifndef S_IWUSR
+#define S_IWUSR _S_IWRITE
+#endif
+#ifndef S_IRGRP
+#define S_IRGRP 0
+#endif
+#ifndef S_IROTH
+#define S_IROTH 0
+#endif
+#ifndef S_IRWXU
+#define S_IRWXU (_S_IREAD | _S_IWRITE | _S_IEXEC)
+#endif
+#ifndef S_IXGRP
+#define S_IXGRP 0
+#endif
+#ifndef S_IXOTH
+#define S_IXOTH 0
 #endif
 #endif
 

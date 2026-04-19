@@ -31,7 +31,7 @@ public:
   virtual int execute(int argc, char *argv[]);
   void reset();
 private:
-  static const int64_t DEFAULT_BENCH_FILE_SIZE = 1024L * 1024L * 1024L * 100L;
+  static const int64_t DEFAULT_BENCH_FILE_SIZE = 1024LL * 1024 * 1024 * 100;
   int parse_cmd(int argc, char *argv[]);
   void print_usage();
   const char *conf_dir_;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
+#include "share/ob_debug_sync.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/serialization.h"
@@ -102,14 +103,19 @@ int ObCSFetcher::init_consumption_position_()
     LOG_WARN("CSFetcher: fail to load change_stream_min_dep_lsn", KR(ret));
   } else {
     start_lsn = palf::LSN(persisted_min_dep_lsn);
-    if (current_lsn_.is_valid() && start_lsn < current_lsn_) {
+    if (OB_UNLIKELY(!start_lsn.is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("CSFetcher: persisted min_dep_lsn is invalid", KR(ret), K(persisted_min_dep_lsn));
+    } else if (current_lsn_.is_valid() && start_lsn < current_lsn_) {
       start_lsn = current_lsn_;
     }
-    if (OB_FAIL(logservice::seek_log_iterator(ls_id_, start_lsn, iter_))) {
-      LOG_WARN("CSFetcher: fail to seek_log_iterator by min_dep_lsn", KR(ret), K(start_lsn));
-    } else {
-      current_lsn_ = start_lsn;
-      FLOG_INFO("CSFetcher: initialized from global_stat min_dep_lsn", K(start_lsn));
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(logservice::seek_log_iterator(ls_id_, start_lsn, iter_))) {
+        LOG_WARN("CSFetcher: fail to seek_log_iterator by min_dep_lsn", KR(ret), K(start_lsn));
+      } else {
+        current_lsn_ = start_lsn;
+        FLOG_INFO("CSFetcher: initialized from global_stat min_dep_lsn", K(start_lsn));
+      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -278,8 +284,10 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
 // get_refresh_scn: get GTS, then decide refresh_scn based on async-index state:
 //   1. !has_async: return GTS — no async vector index tables.
 //   2. has_async && tx_info_ not empty: return OB_SUCCESS with invalid refresh_scn — worker handles.
-//   3. has_async && current_lsn_ >= max_lsn: return GTS — no pending logs to consume.
-//   4. has_async && current_lsn_ < max_lsn: return current_scn_ — still consuming logs.
+//   3. has_async && current_lsn_.is_valid() && current_lsn_ >= max_lsn:
+//      return GTS — no pending logs to consume.
+//   4. otherwise (including invalid current_lsn_): return current_scn_ —
+//      still consuming logs / cannot prove caught-up.
 // ---------------------------------------------------------------------------
 int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
 {
@@ -323,7 +331,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
     }
   }
 
-  if (current_lsn_ >= max_lsn) {
+  if (current_lsn_.is_valid() && current_lsn_ >= max_lsn) {
     // Case 3: caught up — no pending logs, advance to GTS.
     SCN gts_scn;
     if (OB_FAIL(OB_TS_MGR.get_gts(MTL_ID(), NULL, gts_scn))) {
@@ -332,7 +340,8 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
       refresh_scn = gts_scn;
     }
   } else {
-    // Case 4: still consuming logs — advance only to current_scn_.
+    // Case 4: still consuming logs, or current_lsn_ is invalid (e.g. restart init phase).
+    // In both cases, be conservative and only advance to current_scn_.
     refresh_scn = current_scn_;
   }
   return ret;
@@ -787,9 +796,40 @@ void ObCSFetcher::run1()
       bool old_has_async = has_async_index_tables_;
       bool new_has_async = false;
       if (OB_SUCC(get_has_async_cached_(new_has_async))) {
-        running_mode_ = has_async_index_tables_ ? ACTIVE : IDLE;
-        if (ACTIVE == running_mode_) {
-          iter_ready = false;
+        RunningMode new_mode = has_async_index_tables_ ? ACTIVE : IDLE;
+        if (new_mode != running_mode_) {
+          if (ACTIVE == running_mode_ && IDLE == new_mode) {
+            // Transitioning ACTIVE -> IDLE: clean up tx_info_ entries that are solely
+            // owned by the fetcher (in_dispatch_time_ == 0, i.e. never pushed to dispatcher).
+            // This covers two cases:
+            //   1. DDL tx (is_ddl_ = true): never dispatched; cleaned inline on commit.
+            //   2. DML tx whose redo was seen but commit log not yet consumed.
+            // In both cases, IDLE mode will never consume the commit log, so these entries
+            // would remain permanently and block refresh_scn when switching back to ACTIVE.
+            // Entries with in_dispatch_time_ > 0 are already in the dispatcher ring buffer;
+            // their ownership belongs to the dispatcher and must not be freed here.
+            common::ObSEArray<int64_t, 16> stale_tx_ids;
+            for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::iterator it = tx_info_.begin();
+                 it != tx_info_.end(); ++it) {
+              if (OB_NOT_NULL(it->second) && it->second->in_dispatch_time_ == 0) {
+                (void)stale_tx_ids.push_back(it->first);
+              }
+            }
+            for (int64_t i = 0; i < stale_tx_ids.count(); ++i) {
+              ObCSTxInfo *tx = nullptr;
+              if (OB_SUCCESS == tx_info_.erase_refactored(stale_tx_ids.at(i), &tx)
+                  && OB_NOT_NULL(tx)) {
+                LOG_INFO("CSFetcher: ACTIVE->IDLE, discard undispatched tx_info",
+                         "tx_id", stale_tx_ids.at(i), "is_ddl", tx->is_ddl_);
+                tx->destroy();
+                OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
+              }
+            }
+          }
+          running_mode_ = new_mode;
+          if (ACTIVE == running_mode_) {
+            iter_ready = false;
+          }
         }
         if (old_has_async != new_has_async || REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
           FLOG_INFO("CSFetcher: mode switched",
@@ -901,6 +941,11 @@ void ObCSFetcher::run1()
             if (OB_NOT_NULL(mutator_buf) && mutator_size > 0) {
               if (OB_FAIL(handle_redo_log_(tx_id, mutator_buf, mutator_size, lsn))) {
                 LOG_WARN("CSFetcher: fail to handle_redo_log", KR(ret), K(tx_id), K(lsn));
+              } else {
+                // Fires after a DML redo log is processed; tx_info_ entry (in_dispatch_time_==0)
+                // exists and commit log not yet consumed.  Used in regression tests for the
+                // ACTIVE->IDLE cleanup of orphaned DML tx_info_.
+                DEBUG_SYNC(CS_FETCHER_AFTER_DML_REDO_LOG);
               }
             }
           }
@@ -921,6 +966,10 @@ void ObCSFetcher::run1()
                   LOG_WARN("CSFetcher: fail to get tx_info on MDS DDL", KR(ret), K(tid));
                 } else if (OB_NOT_NULL(tx)) {
                   tx->is_ddl_ = true;
+                  // Fires after DDL_TRANS MDS log is processed; tx_info_ entry (is_ddl_=true,
+                  // in_dispatch_time_==0) exists and commit log not yet consumed.  Used in
+                  // regression tests for the ACTIVE->IDLE cleanup of orphaned DDL tx_info_.
+                  DEBUG_SYNC(CS_FETCHER_AFTER_DDL_MDS_LOG);
                 }
                 break;
               }

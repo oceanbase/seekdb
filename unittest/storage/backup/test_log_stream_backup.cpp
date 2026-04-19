@@ -168,7 +168,7 @@ void TestLogStreamBackup::SetUp()
   } else {
     ASSERT_EQ(OB_SUCCESS, ret);
   }
-  CHUNK_MGR.set_limit(5L * 1024L * 1024L * 1024L);
+  CHUNK_MGR.set_limit(5LL * 1024 * 1024 * 1024);
   ret = ObTmpFileManager::get_instance().init();
   ASSERT_EQ(OB_SUCCESS, ret);
 }

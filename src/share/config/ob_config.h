@@ -587,7 +587,7 @@ private:
 inline ObConfigCapacityItem &ObConfigCapacityItem::operator = (int64_t value)
 {
   char buf[2L<<10];
-  (void) snprintf(buf, sizeof(buf), "%ldB", value);
+  (void) snprintf(buf, sizeof(buf), "%lldB", (long long)value);
   if (!set_value(buf)) {
     OB_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "obconfig capacity item set value failed");
   }
@@ -635,7 +635,7 @@ private:
 };
 inline ObConfigTimeItem &ObConfigTimeItem::operator = (int64_t value){
   char buf[2L<<10];
-  (void) snprintf(buf, sizeof(buf), "%ldus", value);
+  (void) snprintf(buf, sizeof(buf), "%lldus", (long long)value);
   if (!set_value(buf)) {
     OB_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "obconfig time item set value failed");
   }
@@ -684,7 +684,7 @@ private:
 inline ObConfigIntItem &ObConfigIntItem::operator = (int64_t value)
 {
   char buf[64];
-  (void) snprintf(buf, sizeof(buf), "%ld", value);
+  (void) snprintf(buf, sizeof(buf), "%lld", (long long)value);
   if (!set_value(buf)) {
     OB_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "obconfig int item set value failed");
   }

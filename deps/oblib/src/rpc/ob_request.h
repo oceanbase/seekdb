@@ -17,7 +17,9 @@
 #ifndef _OCEABASE_RPC_OB_REQUEST_H_
 #define _OCEABASE_RPC_OB_REQUEST_H_
 
+#ifndef _WIN32
 #include <arpa/inet.h>
+#endif
 #include "io/easy_io.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/net/ob_addr.h"

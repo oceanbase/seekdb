@@ -35,7 +35,7 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::trace;
 using namespace oceanbase::sql;
-void __attribute__((weak)) request_finish_callback();
+void OB_WEAK_SYMBOL request_finish_callback();
 ObMPQuery::ObMPQuery(const ObGlobalContext &gctx)
     : ObMPBase(gctx),
       single_process_timestamp_(0),

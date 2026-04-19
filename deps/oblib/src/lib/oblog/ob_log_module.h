@@ -566,6 +566,10 @@ LOG_MOD_END(PL)
                                                                 info_string, ##args)
 #define _LIB_UTILITY_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(LIB, UTILITY, level,             \
                                                                 _fmt_, ##args)
+#ifdef _WIN32
+#define LIB_UTIL_LOG(level, info_string, args...) LIB_LOG(level, info_string, ##args)
+#define _LIB_UTIL_LOG(level, _fmt_, args...) _LIB_LOG(level, _fmt_, ##args)
+#endif
 #define LIB_WS_LOG(level, info_string, args...) OB_SUB_MOD_LOG(LIB, WS, level,                   \
                                                                 info_string, ##args)
 #define _LIB_WS_LOG(level, _fmt_, args...) _OB_SUB_MOD_LOG(LIB, WS, level,                       \
@@ -1013,6 +1017,10 @@ LOG_MOD_END(PL)
 #define _LIB_TIME_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LIB_TIME_LOG(level, ##args); }
 #define LIB_UTILITY_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; LIB_UTILITY_LOG(level, ##args); }
 #define _LIB_UTILITY_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LIB_UTILITY_LOG(level, ##args); }
+#ifdef _WIN32
+#define LIB_UTIL_LOG_RET(level, errcode, args...) LIB_LOG_RET(level, errcode, ##args)
+#define _LIB_UTIL_LOG_RET(level, errcode, args...) _LIB_LOG_RET(level, errcode, ##args)
+#endif
 #define LIB_WS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; LIB_WS_LOG(level, ##args); }
 #define _LIB_WS_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _LIB_WS_LOG(level, ##args); }
 #define LIB_OCI_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; LIB_OCI_LOG(level, ##args); }
@@ -1315,6 +1323,12 @@ extern const char *ob_strerror(const int oberr);
       } \
     } while (0)
 
+#ifdef _WIN32
+#define LOG_DBA_ERROR_BASE(dba_event, print_rd_log, errcode, args...) do {} while (0)
+#define LOG_DBA_WARN_BASE(dba_event, print_rd_log, errcode, args...) do {} while (0)
+#define LOG_DBA_INFO_BASE(dba_event, print_rd_log, args...) do {} while (0)
+#define LOG_DBA_FORCE_PRINT(level, dba_event, errcode, args...) do {} while (0)
+#else
 #define LOG_DBA_ERROR_BASE(dba_event, print_rd_log, errcode, args...) \
     do \
     { \
@@ -1351,6 +1365,7 @@ extern const char *ob_strerror(const int oberr);
                                           dba_event, true, OB_LOG_LEVEL_DIRECT_NO_ERRCODE(level), errcode, LOG_VALUES(args)); \
       } \
     } while (0)
+#endif
 
 // LOG_DBA_XXX_V2: print both dba log(alert.log) and rd log(observer.log)
 #define LOG_DBA_ERROR_V2(dba_event, errcode, args...) LOG_DBA_ERROR_BASE(dba_event, true, errcode, args)
@@ -1367,6 +1382,14 @@ extern const char *ob_strerror(const int oberr);
 // example:
 //    #define USING_LOG_PREFIX COMMON
 //    LOG_ERROR(...) will expand to COMMON_LOG(ERROR, ...)
+
+#if defined(_WIN32) && defined(ERROR)
+#undef ERROR
+#endif
+
+#ifndef USING_LOG_PREFIX
+#define USING_LOG_PREFIX COMMON
+#endif
 
 #define LOG_ERROR(args...) LOG_MACRO_JOIN(USING_LOG_PREFIX, _LOG) (ERROR, ##args)
 #define LOG_ERROR_RET(args...) LOG_MACRO_JOIN(USING_LOG_PREFIX, _LOG_RET) (ERROR, ##args)

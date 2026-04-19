@@ -241,11 +241,17 @@ int ObUdfUtil::load_so(const common::ObString dl, ObUdfSoHandler &handler)
   char so_name[OB_MAX_UDF_NAME_LENGTH + ObUdfUtil::UDF_MAX_EXPAND_LENGTH];
   MEMSET(so_name, 0, so_name_max_len);
   MEMCPY(so_name, dl.ptr(), dl.length());
+#ifdef _WIN32
+  if (OB_ISNULL(handler_tmp = (ObUdfSoHandler)LoadLibraryA(so_name))) {
+    ret = OB_CANT_OPEN_LIBRARY;
+    DWORD err_code = GetLastError();
+    LOG_WARN("failed to open dl", K(ret), K(err_code));
+#else
   if (OB_ISNULL(handler_tmp = dlopen(so_name, RTLD_NOW))) {
-    /* some error happened */
     ret = OB_CANT_OPEN_LIBRARY;
     char *error_msg = dlerror();
     LOG_WARN("failed to open dl", K(ret), K(error_msg));
+#endif
   } else {
     /* we got the so handler success */
     handler = handler_tmp;
@@ -257,7 +263,11 @@ int ObUdfUtil::load_so(const common::ObString dl, ObUdfSoHandler &handler)
 void ObUdfUtil::unload_so(ObUdfSoHandler &handler)
 {
   if (nullptr != handler) {
+#ifdef _WIN32
+    FreeLibrary((HMODULE)handler);
+#else
     dlclose(handler);
+#endif
   }
 }
 

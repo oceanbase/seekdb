@@ -18,6 +18,11 @@
 #include "ob_backup_other_blocks_mgr.h"
 #include "storage/backup/ob_backup_ctx.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#define sleep(sec) Sleep((sec) * 1000)
+#endif
+
 namespace oceanbase
 {
 namespace backup

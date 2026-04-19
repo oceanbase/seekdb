@@ -122,6 +122,7 @@ ERROR HY000: Incorrect arguments to index name
 "=========================================== show index of normal index creating ==========================================="
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 int, primary key(c1));
+insert into t_vec values(1, 1);
 show create table t_vec;
 Table	Create Table
 t_vec	CREATE TABLE `t_vec` (

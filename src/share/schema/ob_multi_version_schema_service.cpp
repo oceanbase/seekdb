@@ -2231,7 +2231,7 @@ int ObMultiVersionSchemaService::async_refresh_schema(
     // do nothing
   } else {
     int64_t retry_cnt = 0;
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
     const useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms
 #else
     const __useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms
@@ -3029,8 +3029,7 @@ int ObMultiVersionSchemaService::try_gc_tenant_schema_mgr_for_fallback(
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", K(ret));
-  } else if (OB_INVALID_TENANT_ID == tenant_id
-             || OB_SYS_TENANT_ID == tenant_id) {
+  } else if (OB_INVALID_TENANT_ID == tenant_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
   } else {
@@ -3472,6 +3471,24 @@ bool ObMultiVersionSchemaService::is_tenant_refreshed(const uint64_t tenant_id) 
     bret = !schema_not_refreshed;
   }
   return bret;
+}
+
+int ObMultiVersionSchemaService::check_all_tenant_schema_refreshed(bool &all_refreshed)
+{
+  int ret = OB_SUCCESS;
+  all_refreshed = true;
+  ObArray<uint64_t> tenant_ids;
+  if (OB_FAIL(get_tenant_ids(tenant_ids))) {
+    LOG_WARN("get tenant ids failed", KR(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < tenant_ids.count(); i++) {
+      if (!is_tenant_refreshed(tenant_ids.at(i))) {
+        all_refreshed = false;
+        break;
+      }
+    }
+  }
+  return ret;
 }
 
 // sql should retry when tenant is normal but never refresh schema successfully.

@@ -20,6 +20,8 @@
 #include "lib/thread/ob_dynamic_thread_pool.h"
 #ifdef __APPLE__
 #include <unistd.h>
+#elif defined(_WIN32)
+#include <windows.h>
 #endif
 
 namespace oceanbase
@@ -142,6 +144,9 @@ void ObSimpleThreadPoolBase<T>::run1()
       ObBKGDSessInActiveGuard inactive_guard;
 #ifdef __APPLE__
       usleep(static_cast<useconds_t>((10 + thread_idx - old_thread_num) * 1000));
+#elif defined(_WIN32)
+      // Windows: use Sleep instead of usleep
+      Sleep((10 + thread_idx - old_thread_num));
 #else
       usleep(static_cast<__useconds_t>((10 + thread_idx - old_thread_num) * 1000));
 #endif

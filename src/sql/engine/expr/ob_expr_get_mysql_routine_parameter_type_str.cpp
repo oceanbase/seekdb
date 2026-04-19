@@ -83,7 +83,7 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate memory for type str failed", K(ret));
         } else {
-          bzero(type_str, OB_MAX_SYS_PARAM_NAME_LENGTH);
+          memset(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
           OZ (ob_sql_type_str(param->get_param_type().get_meta_type(),
                               param->get_param_type().get_accuracy(),
                               param->get_extended_type_info(), ctx.exec_ctx_.get_my_session()->get_local_nls_length_semantics(),

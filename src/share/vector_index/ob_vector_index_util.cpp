@@ -1394,6 +1394,16 @@ int ObVectorIndexUtil::check_ivf_lob_inrow_threshold(
   return ret;
 }
 
+bool ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
+    const ObTableSchema &tbl_schema,
+    const ObIndexType vec_index_type,
+    const ObString &index_params)
+{
+  return share::schema::is_vec_hnsw_index(vec_index_type)
+      && tbl_schema.is_heap_organized_table()
+      && ObVectorIndexUtil::is_sync_mode_async(index_params, true /* is_hnsw_heap_table */);
+}
+
 int ObVectorIndexUtil::check_table_has_vector_index(const ObTableSchema &data_table_schema, ObSchemaGetterGuard &schema_guard,
     bool &has_vec_index)
 {
@@ -3538,11 +3548,12 @@ int ObVectorIndexUtil::check_index_param(
           LOG_WARN("hnsw vector index sync_mode does not support MANUAL",
             K(ret), K(sync_interval_type));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index sync_mode MANUAL is");
-        } else if (!type_hybrid_vec_is_set && !tbl_schema.is_heap_organized_table() && sync_mode_is_set) {
+        } else if (!type_hybrid_vec_is_set && !tbl_schema.is_heap_organized_table() && sync_mode_is_set
+                   && sync_interval_type == ObVectorIndexSyncIntervalType::VSIT_NUMERIC) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("hnsw vector index on non-heap table does not support sync_mode parameter",
-            K(ret), K(tbl_schema.get_table_id()));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index on non-heap table setting sync_mode is");
+          LOG_WARN("hnsw vector index on non-heap table does not support sync_mode=ASYNC",
+            K(ret), K(tbl_schema.get_table_id()), K(sync_interval_type));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index on non-heap table setting sync_mode=ASYNC is");
         }
       }
       if (OB_FAIL(ret)) {
@@ -4610,6 +4621,42 @@ int ObVectorIndexUtil::get_dbms_vector_job_info(common::ObISQLClient &sql_client
                                                                     schema_guard,
                                                                     job_info))) {
     LOG_WARN("fail to get vector index job info", K(ret), K(tenant_id), K(vidx_table_id));
+  }
+  return ret;
+}
+
+
+int ObVectorIndexUtil::check_rename_rebuild_confilt(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    common::ObMySQLTransaction &trans,
+    rootserver::ObDDLService &ddl_service,
+    const ObTableSchema &origin_table_schema,
+    const ObString &ori_index_name)
+{
+  int ret = OB_SUCCESS;
+  const ObTableSchema *orig_index_schema = nullptr;
+  ObDropIndexArg tmp_drop_arg;
+  tmp_drop_arg.tenant_id_ = origin_table_schema.get_tenant_id();
+  tmp_drop_arg.index_name_ = ori_index_name;
+  if (OB_FAIL(ddl_service.get_index_schema_by_name(origin_table_schema.get_table_id(),
+                                      origin_table_schema.get_database_id(),
+                                      tmp_drop_arg,
+                                      schema_guard,
+                                      orig_index_schema))) {
+    LOG_WARN("failed to get index schema by name", K(ret), K(ori_index_name));
+  } else if (OB_NOT_NULL(orig_index_schema) && orig_index_schema->is_vec_index()) {
+    bool has_rebuild_index_task = false;
+    if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::check_has_index_or_mlog_task(trans,
+                                                                      *orig_index_schema,
+                                                                      origin_table_schema.get_tenant_id(),
+                                                                      origin_table_schema.get_table_id(),
+                                                                      has_rebuild_index_task))) {
+      LOG_WARN("fail to check has index or mlog task", KR(ret), K(ori_index_name));
+    } else if (has_rebuild_index_task) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("not support to rename vector index while rebuild is in progress", KR(ret), K(ori_index_name));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "rename vector index while rebuild is in progress");
+    }
   }
   return ret;
 }

@@ -17,6 +17,14 @@
 #ifndef OCEANBASE_LIB_OBLOG_OB_LOG_
 #define OCEANBASE_LIB_OBLOG_OB_LOG_
 
+#ifdef _WIN32
+// Windows defines ERROR macro (as 0), which conflicts with log level ERROR
+// Undefine it before including any headers that might use ERROR as a log level
+#ifdef ERROR
+#undef ERROR
+#endif
+#endif
+
 #ifdef __APPLE__
 // Define _DARWIN_C_SOURCE before including any system headers to enable BSD types (u_int, u_short, etc.)
 // This must be defined before including sys/types.h
@@ -32,23 +40,25 @@
 #include <stdarg.h>
 #include <time.h>
 #include <stdio.h>
+#ifndef _WIN32
 #include <strings.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include <sys/uio.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <deque>
 #include <string>
 #include <pthread.h>
-#include <sys/time.h>
 #include <stdint.h>
 #include <cstring>
-#include <sys/uio.h>
 #ifdef __APPLE__
 #include <sys/mount.h> // For statfs on macOS
-#else
+#elif defined(__linux__)
 #include <sys/statfs.h>
 #endif
 #include <signal.h>
@@ -65,6 +75,25 @@
 #include "lib/signal/ob_signal_handlers.h"
 #include "common/ob_common_utility.h"
 #include "lib/oblog/ob_log_dba_event.h"
+
+// Undefine Windows min/max macros to avoid conflicts with std::min/std::max
+#ifdef _WIN32
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
+#endif
+#ifdef ERROR
+#undef ERROR
+#endif
+#ifdef DELETE
+#undef DELETE
+#endif
+#ifdef ERROR_SEEK
+#undef ERROR_SEEK
+#endif
+#endif
 
 #define OB_LOG_MAX_PAR_MOD_SIZE 64
 #define OB_LOG_MAX_SUB_MOD_SIZE 64
@@ -84,6 +113,14 @@ class ObBlockAllocMgr;
 class ObFIFOAllocator;
 class ObPLogItem;
 class ObLogCompressor;
+
+#ifdef _WIN32
+// Flag to indicate that main() has been entered and the logging system is safe to use.
+// Before main(), global constructors/destructors may trigger OB_LOG macros, but the
+// logging infrastructure (thread-local storage, file I/O, etc.) may not be ready.
+// This flag is zero-initialized (.bss) before any dynamic initialization runs.
+extern bool g_ob_log_main_entered;
+#endif
 
 extern void allow_next_syslog(int64_t count = 1);
 extern int logdata_vprintf(char *buf, const int64_t buf_len, int64_t &pos, const char *fmt, va_list args);
@@ -584,13 +621,21 @@ public:
   }
 
   //@brief Check whether the level to print.
+#if defined(_WIN32)
+  bool need_to_print(const int32_t level) { return (level <= get_log_level()); }
+#else
   bool __attribute__((weak, noinline, cold)) need_to_print(const int32_t level) { return (level <= get_log_level()); }
+#endif
   bool __attribute__((weak, noinline, cold)) need_to_print_dba(const int32_t level, bool force = false);
   //@brief Check whether the level of the par-module to print.
+#if defined(_WIN32)
+  bool need_to_print(const uint64_t par_mod_id, const int32_t level);
+  bool need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id, const int32_t level);
+#else
   bool __attribute__((weak, noinline, cold)) need_to_print(const uint64_t par_mod_id, const int32_t level);
-  //@brief Check whether the level of the sub-module to print.
   bool __attribute__((weak, noinline, cold)) need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id,
                             const int32_t level);
+#endif
 
   //@brief Set the log-file's name.
   //@param[in] filename The log-file's name.
@@ -967,6 +1012,18 @@ void ObLogger::log_it(const char *mod_name,
             const int errcode,
             Function &&log_data_func)
 {
+#ifdef _WIN32
+    // On Windows, the full logging system is not safe during static init/destroy
+    // (before main() enters or after main() returns). Fall back to stderr.
+    if (OB_UNLIKELY(!g_ob_log_main_entered)) {
+      if (OB_NOT_NULL(file) && OB_NOT_NULL(function)) {
+        static constexpr const char *const lvlstr[] = {"ERROR", "WARN", "INFO", "EDIAG", "WDIAG", "TRACE", "DEBUG"};
+        const char *lvl = (level >= 0 && level < (int)(sizeof(lvlstr)/sizeof(lvlstr[0]))) ? lvlstr[level] : "?";
+        fprintf(stderr, "[PRE-MAIN] %-5s %s:%d %s\n", lvl, file, line, function);
+      }
+      return;
+    }
+#endif
     int ret = OB_SUCCESS;
     if (OB_LIKELY(level <= OB_LOG_LEVEL_DEBUG)
         && OB_LIKELY(level >= OB_LOG_LEVEL_DBA_ERROR)
@@ -1045,13 +1102,21 @@ inline void ObLogger::log_message_va(const char *mod_name,
   }
 }
 
+#if defined(_WIN32)
+inline bool ObLogger::need_to_print(const uint64_t par_mod_id, const int32_t level)
+#else
 bool __attribute__((weak, noinline, cold)) ObLogger::need_to_print(const uint64_t par_mod_id, const int32_t level)
+#endif
 {
   return (level <= get_log_level(par_mod_id));
 }
 
+#if defined(_WIN32)
+inline bool ObLogger::need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id, const int32_t level)
+#else
 bool __attribute__((weak, noinline, cold)) ObLogger::need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id,
                                     const int32_t level)
+#endif
 {
   return (level <= get_log_level(par_mod_id, sub_mod_id));
 }
@@ -1330,16 +1395,22 @@ _Pragma("GCC diagnostic pop")
 }
 
 template <typename ... Args>
+#ifdef _WIN32
+__attribute__((noinline)) void OB_PRINT(const char *mod_name, const int32_t level, const char *file, const int32_t line,
+#else
 __attribute__((noinline, cold)) void OB_PRINT(const char *mod_name, const int32_t level, const char *file, const int32_t line,
+#endif
               const char *function,
               const int errcode, const char *info_string,
               const char *, /* placeholder */
               Args const && ... args)
 {
   int ret = OB_SUCCESS;
+#ifndef _WIN32
   if (OB_LOG_LEVEL_ERROR == level) {
     OB_LOGGER.issue_dba_error(errcode, file, line, info_string);
   }
+#endif
   if (OB_LIKELY(!OB_LOGGER.get_guard())) {
     OB_LOGGER.get_guard() = true;
     OB_LOGGER.log_message_kv(mod_name, level, file, line, function, errcode,
@@ -1358,6 +1429,9 @@ void OB_PRINT_DBA(const char *mod_name, const char *mod_name_bracket,
                   const char *, /* placeholder */
                   Args const && ... args)
 {
+#ifdef _WIN32
+  if (OB_UNLIKELY(!g_ob_log_main_entered)) return;
+#endif
   if (OB_LIKELY(!OB_LOGGER.get_guard())) {
     OB_LOGGER.get_guard() = true;
     OB_LOGGER.log_message_value(mod_name_bracket, nullptr, level, file, line, function, errcode, false,
@@ -1369,12 +1443,18 @@ void OB_PRINT_DBA(const char *mod_name, const char *mod_name_bracket,
 __attribute__((noinline, cold))
 inline bool need_to_print(const int32_t level)
 {
+#ifdef _WIN32
+  if (OB_UNLIKELY(!g_ob_log_main_entered)) return false;
+#endif
   return OB_LOGGER.need_to_print(level);
 }
 
 __attribute__((noinline, cold))
 inline bool need_to_print(const uint64_t par_mod_id, const int32_t level)
 {
+#ifdef _WIN32
+  if (OB_UNLIKELY(!g_ob_log_main_entered)) return false;
+#endif
   return OB_LOGGER.need_to_print(par_mod_id, level);
 }
 
@@ -1382,6 +1462,9 @@ __attribute__((noinline, cold))
 inline bool need_to_print(const uint64_t par_mod_id, const uint64_t sub_mod_id,
                           const int32_t level)
 {
+#ifdef _WIN32
+  if (OB_UNLIKELY(!g_ob_log_main_entered)) return false;
+#endif
   return OB_LOGGER.need_to_print(par_mod_id, sub_mod_id, level);
 }
 

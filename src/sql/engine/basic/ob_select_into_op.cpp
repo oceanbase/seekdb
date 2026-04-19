@@ -2213,7 +2213,11 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
   int64_t tenant_id = MTL_ID();
   if (OB_FAIL(sql_str.append(file_path.empty() ? "." : file_path))) {
     LOG_WARN("failed to append string", K(ret));
+#ifdef _WIN32
+  } else if (OB_ISNULL(actual_path = _fullpath(full_path_buf, sql_str.ptr(), PATH_MAX))) {
+#else
   } else if (OB_ISNULL(actual_path = realpath(sql_str.ptr(), full_path_buf))) {
+#endif
     ret = OB_FILE_NOT_EXIST;
     LOG_WARN("file not exist", K(ret), K(sql_str));
   } else if (OB_FAIL(ObSchemaUtils::get_tenant_varchar_variable(tenant_id,

@@ -29,7 +29,7 @@ struct ObNetKeepAliveData
 {
 public:
   ObNetKeepAliveData()
-    : rs_server_status_(0) {}
+    : rs_server_status_(0), start_service_time_(0) {}
   int encode(char *buf, const int64_t buf_len, int64_t &pos) const;
   int decode(const char *buf, const int64_t data_len, int64_t &pos);
   int32_t get_encoded_size() const;

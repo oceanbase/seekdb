@@ -26,6 +26,7 @@
 #include "share/change_stream/ob_change_stream_mgr.h"
 #include "share/schema/ob_tenant_schema_service.h"
 #include "share/ob_server_struct.h"
+#include "share/ob_debug_sync.h"
 #include "share/ob_global_stat_proxy.h"
 #include "common/ob_tablet_id.h"
 
@@ -188,7 +189,7 @@ int ObCSDispatcher::push(ObCSTxInfo *tx)
 //   2) deserialize ObMemtableMutatorRow → table_id, rowkey, seq_no
 //      (ObRowData::deserialize is zero-copy, so this is already lightweight)
 //   3) check visibility (seq_no vs rollback_list)
-//   4) slice by rowkey.murmurhash(), add raw row buffer to subtask
+//   4) slice by heap_pk range, keeping adjacent rows in the same subtask
 //
 // Non-data entries (table locks, etc.) are skipped by reading encrypted_len
 // and advancing pos.
@@ -287,7 +288,7 @@ static int parse_redo_record(ObCSRedoRecord &redo,
     cs_row.old_row_        = mut_row.old_row_;
     cs_row.seq_no_         = mut_row.seq_no_;
     cs_row.column_cnt_     = mut_row.get_column_cnt();
-    int64_t slice_id = cs_row.heap_pk_ % exec_ctx.sub_tasks_.count();
+    int64_t slice_id = cs_row.heap_pk_ % slice_count;
     if (OB_FAIL(exec_ctx.sub_tasks_.at(slice_id).add_row(cs_row))) {
       LOG_WARN("parse_redo_record: add_row failed", K(ret));
       break;
@@ -299,7 +300,7 @@ static int parse_redo_record(ObCSRedoRecord &redo,
 
 // ---------------------------------------------------------------------------
 // Add one tx's redo records into existing subtasks.
-// Iterates redo_list_, parses each redo record, dispatches rows by rowkey hash.
+// Iterates redo_list_, parses each redo record, dispatches rows by heap_pk range.
 // Passes tx reference so parse_redo_record can check rollback visibility.
 // ---------------------------------------------------------------------------
 static int add_tx_redo_to_subtasks(ObCSTxInfo &tx,
@@ -346,14 +347,14 @@ void ObCSDispatcher::run1()
     }
     // ① Epoch change detected → abort recovery.
     if (dispatcher_epoch_ != ATOMIC_LOAD(&epoch_)) {
-      LOG_INFO("ObCSDispatcher: batch failure detected, entering recovery",
+      FLOG_INFO("ObCSDispatcher: batch failure detected, entering recovery",
                K(dispatcher_epoch_), K(ATOMIC_LOAD(&epoch_)));
       // Wait for all in-flight batches to finish their abort/cleanup.
       while (ATOMIC_LOAD(&active_batch_count_) > 0) {
         if (has_set_stop()) { break; }
         usleep(1000);
         if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-          LOG_INFO("ObCSDispatcher: recovery waiting for active batches",
+          FLOG_INFO("ObCSDispatcher: recovery waiting for active batches",
                    K(ATOMIC_LOAD(&active_batch_count_)));
         }
       }
@@ -377,7 +378,7 @@ void ObCSDispatcher::run1()
       // Idle: wait for Fetcher to push new data (or 100ms timeout as fallback).
       ObThreadCondGuard cond_guard(dispatch_cond_);
       if (dispatch_sn_ >= tx_ring_.end_sn()) {   // Re-check under lock to avoid missed signal.
-        (void)dispatch_cond_.wait(100 * 1000);    // 100ms timeout.
+        (void)dispatch_cond_.wait(100);    // 100ms timeout.
       }
       if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
         LOG_INFO("CSDispatcher: idle waiting for new transactions",
@@ -515,11 +516,18 @@ int ObCSDispatcher::do_dispatch_()
   // active_batch_count_ MUST be incremented before any push, so that even
   // if the last-worker fires immediately, the count is already > 0.
   if (OB_SUCC(ret)) {
-    exec_ctx->task_count_ = exec_ctx->sub_tasks_.count();
+    int64_t debug_start = ObTimeUtil::current_time();
+    DEBUG_SYNC(CS_ASYNC_VECTOR_INDEX_BEFORE_APPLY);
+    int64_t debug_end = ObTimeUtil::current_time();
+    if (debug_end - debug_start > 10 * 1000) {
+      FLOG_INFO("DEBUG_SYNC wait", K(debug_end - debug_start));
+    }
+    const int64_t total_subtask_cnt = exec_ctx->sub_tasks_.count();
+    exec_ctx->task_count_ = total_subtask_cnt;
     ATOMIC_INC(&active_batch_count_);
 
     int64_t pushed = 0;
-    for (int64_t i = 0; i < exec_ctx->sub_tasks_.count(); ++i) {
+    for (int64_t i = 0; i < total_subtask_cnt; ++i) {
       if (OB_FAIL(mgr->get_worker().push_subtask(i, &exec_ctx->sub_tasks_.at(i)))) {
         LOG_WARN("push_subtask failed", KR(ret), K(i));
         break;
@@ -531,10 +539,9 @@ int ObCSDispatcher::do_dispatch_()
       batch_in_flight = true;
     }
 
-    LOG_INFO("CSDispatcher: subtasks pushed to workers",
-             K(exec_ctx->batch_sn_), K(pushed), K(exec_ctx->task_count_), K(exec_ctx->sub_tasks_));
+    LOG_INFO("CSDispatcher: subtasks pushed to workers", K(pushed), K(total_subtask_cnt));
 
-    const int64_t unpushed = exec_ctx->sub_tasks_.count() - pushed;
+    const int64_t unpushed = total_subtask_cnt - pushed;
     if (unpushed > 0) {
       // Push failure (partial or total).  Instead of adjusting task_count_
       // (which races with workers' last-worker check), we bump task_finish_

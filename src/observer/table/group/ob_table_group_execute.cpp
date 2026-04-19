@@ -23,7 +23,7 @@
 using namespace oceanbase::observer;
 using namespace oceanbase::transaction;
 
-void __attribute__((weak)) request_finish_callback();
+void OB_WEAK_SYMBOL request_finish_callback();
 
 namespace oceanbase
 {

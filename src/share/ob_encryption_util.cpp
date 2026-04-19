@@ -326,11 +326,16 @@ static void ob_free_openssl(void *ptr, const char *, int)
 int ObEncryptionUtil::init_ssl_malloc()
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  // CRYPTO_set_mem_functions fails if OpenSSL has already allocated memory
+  // (e.g. via AWS SDK DLLs loaded at startup). Not critical on Windows.
+#else
   int tmp_ret = CRYPTO_set_mem_functions(ob_malloc_openssl, ob_realloc_openssl, ob_free_openssl);
   if (OB_UNLIKELY(tmp_ret != 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to set crypto mem functions", K(tmp_ret), K(ret));
   }
+#endif
   return ret;
 }
 

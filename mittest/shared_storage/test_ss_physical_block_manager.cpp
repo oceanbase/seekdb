@@ -625,7 +625,7 @@ TEST_F(TestSSPhysicalBlockManager, resize_file_size)
   int64_t file_size = BLOCK_SIZE * total_block_cnt;
 
   ObConcurrentFIFOAllocator allocator;
-  const int64_t max_cache_mem_size = 2 * 1024 * 1024 * 1024L;
+  const int64_t max_cache_mem_size = 2LL * 1024 * 1024 * 1024;
   ASSERT_EQ(OB_SUCCESS, allocator.init(BLOCK_SIZE, ObMemAttr(MTL_ID(), "TestBlkMgr"), max_cache_mem_size));
   ObSSMicroCacheStat cache_stat;
   ObSSPhysicalBlockManager blk_mgr(cache_stat, allocator);
@@ -745,7 +745,7 @@ TEST_F(TestSSPhysicalBlockManager, test_parallel_allocate_block)
   const static uint64_t FILE_SIZE = (1L << 32);
   const static uint32_t BLOCK_SIZE = (1 << 21);
   ObConcurrentFIFOAllocator allocator;
-  const int64_t max_cache_mem_size = 2 * 1024 * 1024 * 1024L;
+  const int64_t max_cache_mem_size = 2LL * 1024 * 1024 * 1024;
   ASSERT_EQ(OB_SUCCESS, allocator.init(BLOCK_SIZE, ObMemAttr(MTL_ID(), "TestBlkMgr"), max_cache_mem_size));
   ObSSMicroCacheStat cache_stat;
   ObSSPhysicalBlockManager blk_mgr(cache_stat, allocator);
@@ -800,7 +800,7 @@ TEST_F(TestSSPhysicalBlockManager, test_parallel_allocate_block_and_check_reuse_
   const static uint64_t FILE_SIZE = (1L << 40);
   const static uint32_t BLOCK_SIZE = (1 << 21);
   ObConcurrentFIFOAllocator allocator;
-  const int64_t max_cache_mem_size = 2 * 1024 * 1024 * 1024L;
+  const int64_t max_cache_mem_size = 2LL * 1024 * 1024 * 1024;
   ASSERT_EQ(OB_SUCCESS, allocator.init(BLOCK_SIZE, ObMemAttr(MTL_ID(), "TestBlkMgr"), max_cache_mem_size));
   ObSSMicroCacheStat cache_stat;
   ObSSPhysicalBlockManager blk_mgr(cache_stat, allocator);

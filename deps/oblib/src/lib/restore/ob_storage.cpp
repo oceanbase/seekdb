@@ -111,7 +111,11 @@ const char *get_storage_type_str(const ObStorageType &type)
 {
   const char *str = "UNKNOWN";
   STATIC_ASSERT(static_cast<int64_t>(OB_STORAGE_MAX_TYPE) == ARRAYSIZEOF(OB_STORAGE_TYPES_STR), "ObStorageType count mismatch");
+#ifdef _WIN32
+  if (type < OB_STORAGE_MAX_TYPE) {
+#else
   if (type >= 0 && type < OB_STORAGE_MAX_TYPE) {
+#endif
     str = OB_STORAGE_TYPES_STR[type];
   }
   return str;

@@ -1387,7 +1387,7 @@ int ObTableLocation::get_is_weak_read(const ObDMLStmt &dml_stmt,
   } else if (share::ObTenantEnv::get_tenant() == nullptr) { //table api can't invoke MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID 
     is_weak_read = false;
   } else if (!MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID()) {
-    is_weak_read = true;
+    is_weak_read = false;
   } else {
     ObConsistencyLevel consistency_level = INVALID_CONSISTENCY;
     ObTxConsistencyType trans_consistency_type = ObTxConsistencyType::INVALID;

@@ -507,6 +507,10 @@ public:
     const ObString &table_name,
     ObSchemaGetterGuard &schema_guard,
     const int64_t lob_inrow_threshold);
+  static bool should_set_max_lob_inrow_threshold_for_async_index(
+      const ObTableSchema &tbl_schema,
+      const ObIndexType vec_index_type,
+      const ObString &index_params);
   static int check_table_has_vector_of_fts_index(
       const ObTableSchema &data_table_schema,
       ObSchemaGetterGuard &schema_guard,
@@ -727,7 +731,12 @@ public:
       int64_t &centroid_ith, int64_t &cid_vector_ith,
       int64_t &rowkey_cid_ith, int64_t &sq_meta_ith,
       int64_t &pq_centroid_ith, int64_t &pq_code_ith);
-
+  static int check_rename_rebuild_confilt(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      common::ObMySQLTransaction &trans,
+      rootserver::ObDDLService &ddl_service,
+      const ObTableSchema &origin_table_schema,
+      const ObString &ori_index_name);
   static int add_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
                                   const uint64_t vidx_table_id,
                                   const common::ObString &exec_env);

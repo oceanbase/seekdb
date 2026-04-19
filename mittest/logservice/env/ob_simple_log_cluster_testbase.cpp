@@ -107,7 +107,7 @@ int ObSimpleLogClusterTestBase::init_log_shared_storage_()
   device_config.storage_id_ = 1;
   device_config.max_iops_ = 0;
   device_config.max_bandwidth_ = 0;
-  const uint64_t test_memory = 6L * 1024L * 1024L * 1024L;
+  const uint64_t test_memory = 6LL * 1024 * 1024 * 1024;
   char tenant_uri[OB_MAX_URI_LENGTH] = {'\0'};
   ObBackupDest dest;
   uint64_t storage_id = OB_INVALID_ID;
@@ -142,8 +142,8 @@ int ObSimpleLogClusterTestBase::start()
   // set easy allocator for watching easy memory holding
   easy_pool_set_allocator(ob_easy_realloc);
   ev_set_allocator(ob_easy_realloc);
-  lib::set_memory_limit(10L * 1000L * 1000L * 1000L);
-  const uint64_t mittest_memory = 6L * 1024L * 1024L * 1024L;
+  lib::set_memory_limit(10LL * 1000 * 1000 * 1000);
+  const uint64_t mittest_memory = 6LL * 1024 * 1024 * 1024;
   ObTenantBase *tmp_base = OB_NEW(ObTenantBase, "mittest", tenant_id_);
   share::ObTenantEnv::set_tenant(tmp_base);
   const std::string clog_dir = test_name_;
@@ -280,7 +280,7 @@ int ObSimpleLogClusterTestBase::init_global_kv_cache_()
   int ret = OB_SUCCESS;
   const int64_t KV_CACHE_WASH_TIMER_INTERVAL_US = 60 * 1000L * 1000L;
   const int64_t DEFAULT_BUCKET_NUM = 10000000L;
-  const int64_t DEFAULT_MAX_CACHE_SIZE = 1024L * 1024L * 1024L * 1024L;
+  const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024 * 1024 * 1024;
   if (OB_FAIL(ObKVGlobalCache::get_instance().init(
           &ObTenantMemLimitGetter::get_instance(), DEFAULT_BUCKET_NUM,
           DEFAULT_MAX_CACHE_SIZE, lib::ACHUNK_SIZE,
