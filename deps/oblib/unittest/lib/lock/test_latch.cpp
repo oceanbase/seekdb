@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <thread>
 #include "gtest/gtest.h"
 #define private public
 #include "deps/oblib/src/lib/rc/context.h"
@@ -341,7 +342,7 @@ TEST(ObLatch, invaid_unlock)
   ASSERT_EQ(OB_ERR_UNEXPECTED, rwlock.unlock());
 }
 
-typedef lib::ObjectSetV2::Lock TestSpinLock;
+typedef lib::LightMutex TestSpinLock;
 void *my_thread_func(void* arg)
 {
   TestSpinLock *lock = (TestSpinLock*)arg;
@@ -371,6 +372,60 @@ TEST(TestSpinLock, normal)
   }
   ASSERT_EQ(0, lock.get_wait_cnt());
 }
+
+TEST(TestSpinLock, trylock_success)
+{
+  lib::LightMutex lock;
+  // trylock on free lock should succeed
+  ASSERT_EQ(OB_SUCCESS, lock.trylock());
+  lock.unlock();
+}
+
+TEST(TestSpinLock, trylock_fail_when_held)
+{
+  lib::LightMutex lock;
+  ASSERT_EQ(OB_SUCCESS, lock.lock());
+  // trylock on an already-held lock should fail (non-reentrant)
+  ASSERT_NE(OB_SUCCESS, lock.trylock());
+  lock.unlock();
+}
+
+TEST(TestSpinLock, lock_timeout)
+{
+  lib::LightMutex lock;
+  ASSERT_EQ(OB_SUCCESS, lock.lock());
+  // lock with a short timeout on an already-held lock should return OB_TIMEOUT
+  ASSERT_EQ(OB_TIMEOUT, lock.lock(1000000)); // 1s timeout
+  lock.unlock();
+}
+
+TEST(TestSpinLock, wake_timeout_lock)
+{
+  lib::LightMutex lock;
+  ASSERT_EQ(OB_SUCCESS, lock.lock());
+
+  int child_ret = OB_TIMEOUT;
+  std::thread t([&]() {
+    // try to lock with a long timeout (5s), expect to succeed after main thread unlocks
+    child_ret = lock.lock(5000000);
+    if (OB_SUCCESS == child_ret) {
+      lock.unlock();
+    }
+  });
+
+  // sleep a short while to make sure the child thread enters futex_wait
+  usleep(200000); // 200ms
+  ASSERT_GT(lock.get_wait_cnt(), 0);
+
+  // unlock to wake the waiting thread
+  lock.unlock();
+  t.join();
+
+  // the child thread should have acquired the lock successfully, not timed out
+  ASSERT_EQ(OB_SUCCESS, child_ret);
+  ASSERT_EQ(0, lock.get_wait_cnt());
+}
+
 }
 }
 

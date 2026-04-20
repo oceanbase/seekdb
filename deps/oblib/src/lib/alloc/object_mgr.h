@@ -23,11 +23,6 @@
 #include "lib/ob_abort.h"
 #include "lib/ob_define.h"
 #include "lib/alloc/alloc_interface.h"
-#ifndef ENABLE_SANITY
-#include "lib/lock/ob_latch.h"
-#else
-#include "lib/alloc/ob_latch_v2.h"
-#endif
 #include "object_set.h"
 
 namespace oceanbase
@@ -42,8 +37,12 @@ public:
   AObject *alloc_object(uint64_t size, const ObMemAttr &attr)
   {
     static int64_t global_idx = 0;
+    AObject *obj = NULL;
     static thread_local int idx = ATOMIC_FAA(&global_idx, 1);
-    return obj_sets_[idx % parallel_].alloc_object(size, attr);
+    for (int64_t i = 0; NULL == obj && i < parallel_; i++) {
+      obj = obj_sets_[(idx + i) % parallel_].alloc_object(size, attr);
+    }
+    return obj;
   }
   AObject *realloc_object(
       AObject *obj, const uint64_t size, const ObMemAttr &attr);
@@ -67,7 +66,7 @@ public:
                const bool enable_dirty_list,
                IBlockMgr *blk_mgr);
   virtual ~SubObjectMgr() {}
-  OB_INLINE int lock(const int64_t abs_timeout_us = INT64_MAX) { return locker_.lock(abs_timeout_us); }
+  OB_INLINE int lock(const int64_t timeout_us = INT64_MAX) { return locker_.lock(timeout_us); }
   OB_INLINE void unlock() { locker_.unlock(); }
   OB_INLINE bool trylock() { return locker_.trylock(); }
   OB_INLINE AObject *alloc_object(uint64_t size, const ObMemAttr &attr)
@@ -98,13 +97,9 @@ public:
   }
 private:
   ObTenantCtxAllocator &ta_;
-#ifndef ENABLE_SANITY
-  lib::ObMutex mutex_;
-#else
-  lib::ObMutexV2 mutex_;
-#endif
-  SetLocker<decltype(mutex_)> normal_locker_;
-  SetLockerNoLog<decltype(mutex_)> no_log_locker_;
+  LightMutex mutex_;
+  SetLocker<LightMutex> normal_locker_;
+  SetLockerNoLog<LightMutex> no_log_locker_;
   ISetLocker &locker_;
   BlockSet bs_;
   ObjectSet os_;
@@ -113,7 +108,8 @@ private:
 class ObjectMgr final : public IBlockMgr
 {
   static const int N = 32;
-  static const int64_t ALLOC_LOCK_TIMEOUT_US = 1000;
+  static const int64_t ALLOC_LOCK_TIMEOUT_US = 1LL * 1000 * 1000;  // 1s
+  static const int64_t ALLOC_MAX_LOCK_TRY_CNT = 32;
   friend class SubObjectMgr;
 public:
   struct Stat
