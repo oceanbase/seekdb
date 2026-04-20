@@ -48,6 +48,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "share/schema/ob_table_param.h"
+#include "share/schema/ob_schema_utils.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_server_struct.h"
 
@@ -283,8 +284,8 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
     common::ObSEArray<schema::ObColDesc, 16> col_descs;
     if (OB_FAIL(data_table_schema->get_simple_index_infos(simple_index_infos))) {
       LOG_WARN("fail to get simple index infos", K(ret), K(table_id));
-    } else if (OB_FAIL(data_table_schema->get_column_ids(col_descs))) {
-      LOG_WARN("fail to get column descs", K(ret), K(table_id));
+    } else if (OB_FAIL(data_table_schema->get_store_column_ids(col_descs))) {
+      LOG_WARN("fail to get store column descs", K(ret), K(table_id));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
         const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
@@ -648,11 +649,23 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
           OB_FAIL(ins_ctdef->column_accuracys_.reserve(column_count))) {
         LOG_WARN("Failed to reserve column arrays", K(ret), K(column_count));
       } else {
+        // Only include columns that build_insert_buffer_from_events_() actually populates:
+        // the 3 rowkey columns (scn, vid, type) and the hnsw vector column.
+        // Other columns (e.g. partition key columns from the data table) are not carried
+        // in ObASyncIndexEvent and would be left NULL, causing OB_ERR_DEFENSIVE_CHECK
+        // when the column is NOT nullable.
         common::ObSEArray<const schema::ObColumnSchemaV2 *, 8> sorted_columns;
         for (schema::ObTableSchema::const_column_iterator iter = index_id_schema->column_begin();
              OB_SUCC(ret) && iter != index_id_schema->column_end(); ++iter) {
-          if (OB_FAIL(sorted_columns.push_back(*iter))) {
-            LOG_WARN("Failed to collect column", K(ret));
+          const schema::ObColumnSchemaV2 *col = *iter;
+          if (OB_ISNULL(col)) {
+            ret = common::OB_ERR_UNEXPECTED;
+            LOG_WARN("column_schema is null", K(ret));
+          } else if (col->get_rowkey_position() > 0 ||
+                     schema::ObSchemaUtils::is_vec_hnsw_vector_column(col->get_column_flags())) {
+            if (OB_FAIL(sorted_columns.push_back(col))) {
+              LOG_WARN("Failed to collect column", K(ret));
+            }
           }
         }
         if (OB_SUCC(ret)) {
@@ -679,14 +692,15 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
         }
       }
 
+      const int64_t actual_col_count = ins_ctdef->column_ids_.count();
       if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->table_param_.convert(
               index_id_schema, ctx_.schema_version_, ins_ctdef->column_ids_))) {
         LOG_WARN("Failed to convert table_param", K(ret), K(vec_info.index_id_table_id_));
-      } else if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->new_row_projector_.prepare_allocate(column_count))) {
-        LOG_WARN("Failed to prepare new_row_projector", K(ret), K(column_count));
+      } else if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->new_row_projector_.prepare_allocate(actual_col_count))) {
+        LOG_WARN("Failed to prepare new_row_projector", K(ret), K(actual_col_count));
       } else if (OB_SUCC(ret)) {
         // Identity mapping: output column i = stored row index i (DASDMLIterator uses this for col_count).
-        for (int64_t i = 0; i < column_count; ++i) {
+        for (int64_t i = 0; i < actual_col_count; ++i) {
           ins_ctdef->new_row_projector_.at(i) = i;
         }
         ins_ctdef->is_ignore_ = false;
@@ -720,7 +734,12 @@ int ObCSAsyncIndexProcessor::build_das_ins_rtdef_(common::ObArenaAllocator &allo
     LOG_WARN("ins_rtdef is null after allocation", K(ret));
   } else {
     const int64_t current_time = common::ObTimeUtility::current_time();
-    const int64_t timeout_us = GCONF.internal_sql_execute_timeout;
+    // Use at least 5 minutes for change-stream async index DAS insert to
+    // tolerate large batches; internal_sql_execute_timeout default is 30s
+    // which is too small here.
+    static const int64_t CS_ASYNC_INDEX_DAS_TIMEOUT_US = 5L * 60L * 1000L * 1000L;
+    const int64_t default_timeout_us = GCONF.internal_sql_execute_timeout;
+    const int64_t timeout_us = MAX(default_timeout_us, CS_ASYNC_INDEX_DAS_TIMEOUT_US);
     ins_rtdef->timeout_ts_ = current_time + timeout_us;
     ins_rtdef->tenant_schema_version_ = ctx_.schema_version_;
     ins_rtdef->prelock_ = false;
@@ -794,7 +813,7 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
         LOG_WARN("column_schema is null", K(ret));
         break;
       } else if (0 == col_schema->get_rowkey_position() &&
-                 col_schema->get_column_name_str().prefix_match("__vector_")) {
+                 schema::ObSchemaUtils::is_vec_hnsw_vector_column(col_schema->get_column_flags())) {
         vector_col_id = col_schema->get_column_id();
         break;
       }
@@ -1202,7 +1221,7 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
           }
         }
       }
-      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor) && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      if (OB_SUCC(ret) && OB_NOT_NULL(adaptor) && REACH_TIME_INTERVAL(500 * 1000)) {
         int tmp_ret = adaptor->refresh_bitmap_background();
         if (OB_SUCCESS != tmp_ret) {
           LOG_WARN("background bitmap refresh failed (non-fatal), will retry on next query",
