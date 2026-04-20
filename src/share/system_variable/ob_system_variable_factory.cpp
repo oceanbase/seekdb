@@ -3109,7 +3109,7 @@ ObSysVarClassType ObSysVarFactory::find_sys_var_id_by_name(const ObString &sys_v
               LITERAL_K(ObSysVarFactory::ALL_SYS_VARS_COUNT), K(lbt()));
   } else if (OB_UNLIKELY(ObSysVarFactory::ALL_SYS_VARS_COUNT == lower_idx)) {
     // std::lower_bound returns ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME +
-    // The address of ObSysVarFactory::ALL_SYS_VARS_COUNT, which is not found rather than an error
+    // The address of ObSysVarFactory::ALL_SYS_VARS_COUNT, which means not found, not an error
     ret = OB_SEARCH_NOT_FOUND;
   } else if (0 != sys_var_name.case_compare(
       ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME[lower_idx])) {
@@ -3159,6 +3159,16 @@ int ObSysVarFactory::calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_
   return ret;
 }
 
+int ObSysVarFactory::calc_sys_var_store_idx_by_name(const common::ObString &sys_var_name,
+                                                    int64_t &store_idx)
+{
+  int ret = OB_SUCCESS;
+  ObSysVarClassType sys_var_id = find_sys_var_id_by_name(sys_var_name);
+  if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
+    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_name), K(lbt()));
+  }
+  return ret;
+}
 
 bool ObSysVarFactory::is_valid_sys_var_store_idx(int64_t store_idx)
 {
@@ -3250,6 +3260,24 @@ void ObSysVarFactory::destroy()
   all_sys_vars_created_ = false;
 }
 
+int ObSysVarFactory::free_sys_var(ObBasicSysVar *sys_var, int64_t sys_var_idx)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(store_) && OB_NOT_NULL(store_buf_)) {
+    OV (OB_NOT_NULL(sys_var));
+    OV (is_valid_sys_var_store_idx(sys_var_idx));
+    OV (sys_var == store_[sys_var_idx], OB_ERR_UNEXPECTED, sys_var, sys_var_idx);
+    if (OB_NOT_NULL(store_buf_[sys_var_idx])) {
+      OX (store_buf_[sys_var_idx]->~ObBasicSysVar());
+      OX (allocator_.free(store_buf_[sys_var_idx]));
+      OX (store_buf_[sys_var_idx] = nullptr);
+    }
+    OX (store_buf_[sys_var_idx] = store_[sys_var_idx]);
+    OX (store_buf_[sys_var_idx]->clean_value());
+    OX (store_[sys_var_idx] = nullptr);
+  }
+  return ret;
+}
 
 int ObSysVarFactory::create_all_sys_vars()
 {

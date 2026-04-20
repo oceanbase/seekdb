@@ -3670,7 +3670,7 @@ int64_t ObSqlFatalErrExtraInfoGuard::to_string(char *buf, const int64_t buf_len)
       dep_tables = &(query_ctx->global_dependency_tables_);
     }
     if (OB_NOT_NULL(exec_ctx_->get_my_session())) {
-      sys_var_values = exec_ctx_->get_my_session()->get_sys_var_in_pc_str();
+      OZ (exec_ctx_->get_my_session()->get_sys_var_in_pc_str(sys_var_values));
     }
   }
   // Print the schema information of the plan dependencies

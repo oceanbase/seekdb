@@ -3,31 +3,18 @@ add_subdirectory(restore)
 
 ob_set_subtarget(oblib_lib_extra ALONE
   timezone/ob_timezone_util.cpp
-  geo/ob_geo_func_difference1.cpp
-  geo/ob_geo_func_difference2.cpp
-  geo/ob_geo_func_difference3.cpp
-  geo/ob_geo_func_covered_by1.cpp
-  geo/ob_geo_func_covered_by2.cpp
-  geo/ob_geo_func_within1.cpp
-  geo/ob_geo_func_within2.cpp
-  geo/ob_geo_func_union1.cpp
-  geo/ob_geo_func_union2.cpp
-  geo/ob_geo_func_touches1.cpp
-  geo/ob_geo_func_touches2.cpp
-  geo/ob_geo_func_touches3.cpp
-  geo/ob_geo_func_equals1.cpp
-  geo/ob_geo_func_equals2.cpp
-  geo/ob_geo_func_equals3.cpp
+  geo/ob_geo_func_difference.cpp
+  geo/ob_geo_func_covered_by.cpp
+  geo/ob_geo_func_within.cpp
+  geo/ob_geo_func_union.cpp
+  geo/ob_geo_func_touches.cpp
+  geo/ob_geo_func_equals.cpp
   geo/ob_geo_func_intersects.cpp
   geo/ob_geo_func_symdifference1.cpp
   geo/ob_geo_func_symdifference2.cpp
-  geo/ob_geo_func_symdifference3.cpp
   geo/ob_geo_func_distance.cpp
-  geo/ob_geo_func_crosses1.cpp
-  geo/ob_geo_func_crosses2.cpp
-  geo/ob_geo_func_overlaps1.cpp
-  geo/ob_geo_func_overlaps2.cpp
-  geo/ob_geo_func_overlaps3.cpp
+  geo/ob_geo_func_crosses.cpp
+  geo/ob_geo_func_overlaps.cpp
   stat/ob_diagnostic_info_util.cpp
 )
 

@@ -35,8 +35,11 @@ namespace omt
 
 // Forward declarations
 class ObTenant;
+class ObResourceGroup;
 
 static const int64_t WORKER_CHECK_PERIOD = 500L;
+static const int64_t REQUEST_WAIT_TIME = 100 * 1000L;
+static const int64_t NESTING_REQUEST_WAIT_TIME = 1 * 1000 * 1000L;
 
 // Quick Queue Priorities
 enum { QQ_HIGH = 0, QQ_NORMAL, QQ_LOW, QQ_MAX_PRIO };
@@ -84,11 +87,23 @@ public:
   Status check_throttle();
   Status check_rate_limiter();
 
+  OB_INLINE bool large_query() const { return large_query_; }
+  OB_INLINE void set_large_query(bool v=true) { large_query_ = v; }
+  OB_INLINE bool is_level_worker() const { return get_worker_level() > 0; }
+  OB_INLINE void set_priority_limit(uint8_t limit) { priority_limit_ = limit; }
+  OB_INLINE bool is_high_priority() const { return priority_limit_ == QQ_HIGH; }
+  OB_INLINE bool is_normal_priority() const { return priority_limit_ == QQ_NORMAL; }
+  OB_INLINE bool is_default_worker() const { return !is_group_worker() &&
+                                                    !is_level_worker() &&
+                                                    priority_limit_ > QQ_NORMAL; }
+
   OB_INLINE int64_t get_query_start_time() const { return query_start_time_; }
   OB_INLINE int64_t get_query_enqueue_time() const { return query_enqueue_time_; }
   OB_INLINE ObTenant* get_tenant() { return tenant_; }
-  OB_INLINE bool large_query() const { return large_query_; }
-  OB_INLINE void set_large_query(bool v = true) { large_query_ = v; }
+  OB_INLINE bool is_lq_yield() const { return is_lq_yield_; }
+  OB_INLINE void set_lq_yield(bool v=true) { is_lq_yield_ = v; }
+  OB_INLINE int64_t get_last_wakeup_ts() { return last_wakeup_ts_; }
+  OB_INLINE void set_last_wakeup_ts(int64_t last_wakeup_ts) { last_wakeup_ts_ = last_wakeup_ts; }
   OB_INLINE int64_t blocking_ts() const { return OB_NOT_NULL(blocking_ts_) ? (*blocking_ts_) : 0; }
   OB_INLINE const char *get_module_name() const { return module_name_; }
   OB_INLINE bool is_doing_ddl() const { return OB_NOT_NULL(is_doing_ddl_) ? (*is_doing_ddl_) : false; }
@@ -96,6 +111,7 @@ public:
   static thread_local uint64_t serving_tenant_id_;
 private:
   void set_th_worker_thread_name();
+  void update_ru_cputime();
   void process_request(rpc::ObRequest &req);
 
 private:
@@ -108,6 +124,8 @@ private:
 
   bool pause_flag_;
   bool large_query_;
+  uint8_t priority_limit_;
+  bool is_lq_yield_;
 
   int64_t query_start_time_;
   int64_t query_enqueue_time_;
@@ -118,6 +136,7 @@ private:
   // if upper scheduler support retry, need this request retry?
   bool need_retry_;
 
+  int64_t last_wakeup_ts_;
   int64_t* blocking_ts_;
   int64_t idle_us_;
   static const int64_t MAX_MODULE_NAME_LEN = 23; //no more than 3 int64_t
@@ -133,13 +152,27 @@ inline void ObThWorker::reset()
   tenant_ = nullptr;
   group_ = nullptr;
   pause_flag_ = false;
+  large_query_ = false;
+  priority_limit_ = RQ_LOW;
   query_start_time_ = 0;
   query_enqueue_time_ = 0;
   can_retry_ = true;
   need_retry_ = false;
+  last_wakeup_ts_ = 0;
 }
 
-int create_worker(ObThWorker* &worker, ObTenant *tenant);
+/* create a worker
+worker: save the new ObThWorker,
+tidx: set worker's tidx_, an index of worker
+tenant: set worker's tenant, which the worker belongs to
+group_id: set worker's group_id
+level: set worker's level, in ObResourceGroup level = INT32_MAX, in ObTenant level = 0,
+group: set worker's group, in ObResourceGroup level = this, in ObTenant level = nullptr,
+*/
+int create_worker(ObThWorker* &worker, ObTenant *tenant, uint64_t group_id,
+                  int32_t level = INT32_MAX, bool force = false, ObResourceGroup *group = nullptr,
+                  int32_t group_index = -1);
+                    // defalut level=INT32_MAX, group=nullptr
 int destroy_worker(ObThWorker *worker);
 
 #define THIS_THWORKER static_cast<oceanbase::omt::ObThWorker &>(THIS_WORKER)

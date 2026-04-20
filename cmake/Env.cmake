@@ -139,10 +139,6 @@ if(WIN32)
   set(CMAKE_CXX_FLAGS "/std:c++20")
   set(DEBUG_PREFIX "")
   set(FILE_PREFIX "")
-elseif(OB_ANDROID)
-  set(CMAKE_CXX_STANDARD 20)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_CXX_EXTENSIONS ON)
 else()
   set(CMAKE_CXX_FLAGS "-std=gnu++20")
 endif()
@@ -254,39 +250,6 @@ elseif(WIN32)
   set(OB_CC "clang-cl")
   set(OB_CXX "clang-cl")
   add_definitions(-DWIN32_LEAN_AND_MEAN -DNOMINMAX)
-
-  # All bundled / vcpkg-provided vendor libraries (s2.lib, sqlite3.lib,
-  # zlib.lib, ...) are built against the Release MSVC runtime. Using /MDd
-  # in a Debug build makes MSVC STL set _ITERATOR_DEBUG_LEVEL=2, which
-  # then trips #pragma detect_mismatch at link time against those
-  # vendor .obj files built with _ITERATOR_DEBUG_LEVEL=0. Force the
-  # Release runtime (MultiThreadedDLL) for all configs on Windows and
-  # pin _ITERATOR_DEBUG_LEVEL=0 to match vendor libs.
-  cmake_policy(SET CMP0091 NEW)
-  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
-      CACHE STRING "MSVC runtime library (must match vendor libs)" FORCE)
-  add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
-  # vcpkg ships both Release (lib/) and Debug (debug/lib/) variants of
-  # several libraries (gRPC, protobuf, abseil, ...). In a Debug build CMake
-  # would otherwise resolve imported targets from find_package(... CONFIG)
-  # to the /MDd + _ITERATOR_DEBUG_LEVEL=2 Debug variant and trip
-  # #pragma detect_mismatch at link time. Map every non-Release config to
-  # Release so imported targets always resolve to the Release .lib that
-  # matches our CRT. These must be set at top-level (Env.cmake is included
-  # before project() in root CMakeLists.txt) so the mapping is in scope of
-  # every target that links against such imported libs.
-  set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release)
-  set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
-  set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release)
-  # /RTC1 requires the debug CRT; strip it so Debug builds can use /MD.
-  foreach(_flag_var
-          CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
-          CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
-    if(DEFINED ${_flag_var})
-      string(REGEX REPLACE "[ \t]*/RTC[^ \t]*" "" ${_flag_var} "${${_flag_var}}")
-    endif()
-  endforeach()
-  unset(_flag_var)
   ob_define(SYS_UM_INCLUDE_DIR "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/um")
   ob_define(SYS_UCRT_INCLUDE_DIR "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/ucrt")
   ob_define(SYS_SHARED_INCLUDE_DIR "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/shared")
@@ -294,18 +257,6 @@ elseif(WIN32)
   ob_define(OB_OPENSSL_DIR "C:/Program Files/OpenSSL-Win64")
   ob_define(OB_LLVM_DIR "C:/Program Files/LLVM18")
   ob_define(OB_VSAG_DIR "${DEP_3RD_DIR}/vsag")
-  # These paths may arrive from -D... with native Windows backslashes. If we
-  # let them flow unchanged into configure_file()/file(WRITE) outputs, CMake
-  # 3.20+ will reject the resulting scripts with "Invalid character escape"
-  # (\w, \d, \x, ...). Normalize once here so all downstream uses are safe.
-  foreach(_ob_path_var
-          SYS_UM_INCLUDE_DIR SYS_UCRT_INCLUDE_DIR SYS_SHARED_INCLUDE_DIR
-          OB_VCPKG_DIR OB_OPENSSL_DIR OB_LLVM_DIR OB_VSAG_DIR)
-    if(DEFINED ${_ob_path_var})
-      file(TO_CMAKE_PATH "${${_ob_path_var}}" ${_ob_path_var})
-    endif()
-  endforeach()
-  unset(_ob_path_var)
 elseif(UNIX)
   # NO RELERO: -Wl,-znorelro
   # Partial RELRO: -Wl,-z,relro

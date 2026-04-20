@@ -21,10 +21,6 @@
 #include "lib/queue/ob_priority_queue.h"
 #include "lib/thread/thread_pool.h"
 #include "lib/thread/ob_dynamic_thread_pool.h"
-#include "lib/thread/ob_adaptive_worker_pool.h"
-#include "lib/list/ob_dlist.h"
-#include "lib/lock/ob_mutex.h"
-#include "lib/thread/threads.h"
 #include "common/ob_queue_thread.h"
 
 namespace oceanbase
@@ -46,83 +42,35 @@ struct QueueTypeMap<ObTLinkQueue16> {
 template <class T = ObLightyQueue>
 class ObSimpleThreadPoolBase
     : public ObSimpleDynamicThreadPool
-    , public lib::ObAdaptiveWorkerPool<ObSimpleThreadPoolBase<T>>
 {
   using TaskType = typename QueueTypeMap<T>::TaskType;
   using QElemType = typename QueueTypeMap<T>::QElemType;
-  static const int64_t QUEUE_WAIT_TIME = 1000 * 1000;
-  static const int64_t SHRINK_TIMEOUT_US = 1 * 1000 * 1000;
-
-  struct Worker;
-  using WorkerNode = common::ObDLinkNode<Worker *>;
-  using WorkerList = common::ObDList<WorkerNode>;
-
-  struct Worker : public lib::Threads {
-    ObSimpleThreadPoolBase *pool_;
-    int64_t idx_;
-    WorkerNode worker_node_;
-    Worker(ObSimpleThreadPoolBase *pool, int64_t idx)
-        : lib::Threads(1), pool_(pool), idx_(idx) {
-      worker_node_.get_data() = this;
-    }
-    void run1() override;
-  };
-  friend struct Worker;
-
+  static const int64_t QUEUE_WAIT_TIME = 100 * 1000;
 public:
   ObSimpleThreadPoolBase();
   virtual ~ObSimpleThreadPoolBase();
 
-  int init(const int64_t thread_num, const int64_t task_num_limit,
-           const char *name = "unknown",
-           const uint64_t tenant_id = OB_SERVER_TENANT_ID);
+  int init(const int64_t thread_num, const int64_t task_num_limit, const char *name = "unknown", const uint64_t tenant_id = OB_SERVER_TENANT_ID);
   void destroy();
   int push(TaskType *task);
-  virtual int64_t get_queue_num() const override { return queue_.size(); }
-  virtual void notify_stop() override { queue_.wake_all(); }
-  int64_t worker_count() const override {
-    return lib::ObAdaptiveWorkerPool<ObSimpleThreadPoolBase<T>>::worker_count();
+  virtual int64_t get_queue_num() const override
+  {
+    return queue_.size();
   }
-
-  // Pool-level control
-  void stop();
-  void wait();
-  bool has_set_stop() const { return stop_; }
-
-  // RunWrapper
-  void set_run_wrapper(lib::IRunWrapper *rw) { run_wrapper_ = rw; }
-  lib::IRunWrapper *get_run_wrapper() const { return run_wrapper_; }
-
-  // Thread count queries (TG handler compatibility)
-  int64_t get_thread_count() const { return worker_count(); }
-  uint64_t get_thread_idx() const { return cur_worker_idx_; }
-
-  // Thread count configuration
-  int set_thread_count(int64_t n_threads);
-  int set_adaptive_thread(int64_t min_thread_num, int64_t max_thread_num);
-
-  // CRTP for lib::ObAdaptiveWorkerPool
-  bool do_add_worker();
-  int64_t queue_size() const { return queue_.size(); }
-
-  // Reap stopped workers (called by Mgr background thread only)
-  void reap_workers() override;
-
-protected:
+private:
   virtual void handle(TaskType *task) = 0;
   virtual void handle_drop(TaskType *task) {
+    // when thread set stop left task will be process by handle_drop (default impl is handle)
+    // users should define it's behaviour to manage task memory or some what
     handle(task);
   }
-  virtual void run1();
+protected:
+  void run1();
 
 private:
+  const char* name_;
   bool is_inited_;
-  bool stop_;
   T queue_;
-  lib::IRunWrapper *run_wrapper_;
-  WorkerList workers_;
-  lib::ObMutex workers_lock_;
-  uint64_t cur_worker_idx_;
 };
 
 using ObSimpleThreadPool = ObSimpleThreadPoolBase<ObLightyQueue>;

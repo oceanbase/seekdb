@@ -30,8 +30,6 @@
 #include "sql/rewrite/ob_transformer_impl.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/code_generator/ob_code_generator.h"
-#include "sql/udr/ob_udr_utils.h"
-#include "sql/udr/ob_udr_mgr.h"
 #include "share/resource_manager/ob_resource_manager.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "pl/ob_pl_resolver.h"
@@ -1012,14 +1010,12 @@ int ObSql::do_real_prepare(const ObString &sql,
                            bool is_inner_sql)
 {
   int ret = OB_SUCCESS;
-  bool enable_udr = false;
   ParseResult parse_result;
   MEMSET(&parse_result, 0, SIZEOF(ParseResult));
   ObStmt *basic_stmt = NULL;
   stmt::StmtType stmt_type = stmt::T_NONE;
   int64_t param_cnt = 0;
   PsCacheInfoCtx info_ctx;
-  ObUDRItemMgr::UDRItemRefGuard item_guard;
   ObIAllocator &allocator = result.get_mem_pool();
   ObSQLSessionInfo &session = result.get_session();
   ObExecContext &ectx = result.get_exec_context();
@@ -1039,7 +1035,6 @@ int ObSql::do_real_prepare(const ObString &sql,
   pc_ctx.set_is_inner_sql(is_inner_sql);
 
   CHECK_COMPATIBILITY_MODE(context.session_info_);
-  enable_udr = context.get_enable_user_defined_rewrite();
   if (OB_ISNULL(context.session_info_) || OB_ISNULL(context.schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL", K(ret));
@@ -1120,18 +1115,7 @@ int ObSql::do_real_prepare(const ObString &sql,
     }
     if (OB_FAIL(generate_stmt(parse_result, NULL, context, allocator, result, basic_stmt))) {
       LOG_WARN("generate stmt failed", K(ret));
-    } else if (!is_from_pl
-              && !is_inner_sql
-              && !(ObStmt::is_dml_write_stmt(stmt_type) && // returning into from oci not supported
-                   static_cast<ObDelUpdStmt*>(basic_stmt)->get_returning_into_exprs().count() > 0)
-              && enable_udr
-              && OB_FAIL(ObUDRUtils::match_udr_item(sql, session, ectx, allocator, item_guard))) {
-      if (!ObSQLUtils::check_need_disconnect_parser_err(ret)) {
-        ectx.set_need_disconnect(false);
-      }
-      LOG_WARN("failed to match rewrite rule", K(ret));
     } else if (ObStmt::is_dml_stmt(stmt_type)
-              && NULL == item_guard.get_ref_obj()
               && !ObStmt::is_show_stmt(stmt_type)
               && !is_inner_sql
               && !is_from_pl
@@ -2415,8 +2399,7 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
       // The cut-out query will eventually go through the batched multi-stmt logic to query the plan cache and generate the plan
       ObParser parser(allocator,
                       session->get_sql_mode(),
-                      session->get_charsets4parser(),
-                      pc_ctx->def_name_ctx_);
+                      session->get_charsets4parser());
       ObMPParseStat parse_stat;
       if (OB_FAIL(parser.split_multiple_stmt(remote_sql_info.remote_sql_, queries, parse_stat))) {
         LOG_WARN("split multiple stmt failed", K(ret), K(remote_sql_info));
@@ -2866,7 +2849,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
       context.need_match_all_params_ = resolver_ctx.query_ctx_->need_match_all_params_;
       context.all_local_session_vars_ = &(resolver_ctx.query_ctx_->all_local_session_vars_);
       context.cur_stmt_ = stmt;
-      context.res_map_rule_version_ = 0;
       context.resource_map_rule_.shadow_copy(resource_map_rule);
       LOG_DEBUG("got plan const param constraints", K(resolver_ctx.query_ctx_->all_plan_const_param_constraints_));
       LOG_DEBUG("got all const param constraints", K(resolver_ctx.query_ctx_->all_possible_const_param_constraints_));
@@ -3049,14 +3031,63 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
   } else if (basic_stmt->is_dml_stmt()
             || basic_stmt->is_explain_stmt()
             || basic_stmt->is_help_stmt()) {
+#ifdef __ANDROID__
+    // On Android: if the outline's max_concurrent is stricter than all DATABASE_AND_TABLE CCL
+    // rules, skip level-3 CCL check (outline is the binding constraint).
+    bool skip_level3_ccl = false;
+    if (OB_NOT_NULL(pc_ctx) && basic_stmt->is_dml_stmt() && OB_NOT_NULL(sql_ctx.schema_guard_)) {
+      int64_t outline_max = ObGlobalHint::UNSET_MAX_CONCURRENT;
+      const ObGlobalHint &gh =
+          static_cast<ObDMLStmt*>(basic_stmt)->get_query_ctx()->get_query_hint().get_global_hint();
+      outline_max = gh.max_concurrent_;
+      if (ObGlobalHint::UNSET_MAX_CONCURRENT == outline_max) {
+        const share::schema::ObOutlineParamsWrapper *pw =
+            pc_ctx->exec_ctx_.get_outline_params_wrapper();
+        if (OB_NOT_NULL(pw)) {
+          for (int64_t i = 0; i < pw->get_outline_params().count(); ++i) {
+            const share::schema::ObMaxConcurrentParam *p = pw->get_outline_params().at(i);
+            if (OB_NOT_NULL(p) && p->is_concurrent_limit_param()) {
+              outline_max = p->get_concurrent_num();
+              break;
+            }
+          }
+        }
+      }
+      if (ObGlobalHint::UNSET_MAX_CONCURRENT != outline_max) {
+        bool all_above = true;
+        share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
+        if (OB_SUCCESS == sql_ctx.schema_guard_->get_ccl_rule_infos(
+                MTL_ID(), share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+            && OB_NOT_NULL(rules)) {
+          for (int64_t i = 0; all_above && i < rules->size(); ++i) {
+            const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
+            const share::schema::ObCCLRuleSchema *fs = nullptr;
+            if (OB_ISNULL(s)
+                || OB_SUCCESS != sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id(
+                       MTL_ID(), s->get_ccl_rule_id(), fs)
+                || OB_ISNULL(fs)
+                || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
+              all_above = false;
+            }
+          }
+        } else {
+          all_above = false;
+        }
+        skip_level3_ccl = all_above;
+      }
+    }
+#endif
     //ccl check level-3: after resolve sql
     if (OB_NOT_NULL(pc_ctx)
+#ifdef __ANDROID__
+        && !skip_level3_ccl
+#endif
         && OB_FAIL(ObSQLUtils::match_ccl_rule(
              pc_ctx->allocator_, result.get_session(), sql_ctx, ObString(parse_result.input_sql_len_, parse_result.input_sql_),
              mode == PC_PS_MODE, pc_ctx->fp_result_.parameterized_params_, pc_ctx->sql_ctx_.format_sql_id_, CclRuleContainsInfo::DATABASE_AND_TABLE, &parse_result, basic_stmt))) {
       LOG_WARN("fail to match ccl rule", K(ret));
     } else if (OB_FAIL(generate_plan(parse_result, pc_ctx, sql_ctx, result, mode, basic_stmt,
-                                     stmt_need_privs))) {
+                                               stmt_need_privs))) {
       LOG_WARN("failed to generate plan", K(ret));
     }
   } else if (stmt::T_EXECUTE == basic_stmt->get_stmt_type() &&
@@ -3178,9 +3209,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
       // and we shouldn't add this plan to plan cache.
       if (NULL != pc_ctx) {
         pc_ctx->should_add_plan_ = (effective_tid==phy_plan->get_tenant_id());
-        if (!pc_ctx->rule_name_.empty() && OB_FAIL(phy_plan->set_rule_name(pc_ctx->rule_name_))) {
-          LOG_WARN("failed to deep copy rule name", K(ret));
-        }
       }
     }
 
@@ -3344,8 +3372,7 @@ int ObSql::generate_stmt_with_reconstruct_sql(ObDMLStmt* &stmt,
     ParseResult parse_result;
     ObParser parser(pc_ctx->allocator_,
                     session->get_sql_mode(),
-                    session->get_charsets4parser(),
-                    pc_ctx->def_name_ctx_);
+                    session->get_charsets4parser());
     stmt->get_query_ctx()->global_dependency_tables_.reuse();
     if (OB_FAIL(parser.parse(sql, parse_result))) {
       LOG_WARN("failed to parser sql", K(ret));
@@ -3960,6 +3987,58 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
       }
 
       if (OB_SUCC(ret) && (PC_TEXT_MODE == pc_ctx.mode_ || PC_PS_MODE == pc_ctx.mode_)) {
+#ifdef __ANDROID__
+        bool skip_level3_ccl = false;
+        share::schema::ObSchemaGetterGuard *sg = pc_ctx.sql_ctx_.schema_guard_;
+        if (OB_NOT_NULL(sg)) {
+          // Get outline max_concurrent: prefer plan cache value, fall back to current schema outline.
+          int64_t outline_max = ObGlobalHint::UNSET_MAX_CONCURRENT;
+          if (plan->is_limited_concurrent_num()) {
+            outline_max = plan->get_max_concurrent_num();
+          } else {
+            // Plan was compiled before the outline existed; look up the outline from schema now.
+            const share::schema::ObOutlineInfo *outline_info = nullptr;
+            const uint64_t db_id = pc_ctx.sql_ctx_.bl_key_.db_id_;
+            const ObString &sql_id = pc_ctx.sql_ctx_.bl_key_.sql_id_;
+            if (OB_INVALID_ID != db_id && !sql_id.empty()
+                && OB_SUCCESS == sg->get_outline_info_with_sql_id(
+                       session->get_effective_tenant_id(), db_id, sql_id, false /*normal*/, outline_info)
+                && OB_NOT_NULL(outline_info) && outline_info->has_outline_params()) {
+              const share::schema::ObOutlineParamsWrapper &pw = outline_info->get_outline_params_wrapper();
+              for (int64_t i = 0; i < pw.get_outline_params().count(); ++i) {
+                const share::schema::ObMaxConcurrentParam *p = pw.get_outline_params().at(i);
+                if (OB_NOT_NULL(p) && p->is_concurrent_limit_param()) {
+                  outline_max = p->get_concurrent_num();
+                  break;
+                }
+              }
+            }
+          }
+          if (ObGlobalHint::UNSET_MAX_CONCURRENT != outline_max) {
+            bool all_above = true;
+            share::schema::ObCCLRuleMgr::CCLRuleInfos *rules = nullptr;
+            if (OB_SUCCESS == sg->get_ccl_rule_infos(
+                    MTL_ID(), share::schema::CclRuleContainsInfo::DATABASE_AND_TABLE, rules)
+                && OB_NOT_NULL(rules)) {
+              for (int64_t i = 0; all_above && i < rules->size(); ++i) {
+                const share::schema::ObSimpleCCLRuleSchema *s = rules->at(i);
+                const share::schema::ObCCLRuleSchema *fs = nullptr;
+                if (OB_ISNULL(s)
+                    || OB_SUCCESS != sg->get_ccl_rule_with_ccl_rule_id(
+                           MTL_ID(), s->get_ccl_rule_id(), fs)
+                    || OB_ISNULL(fs)
+                    || static_cast<int64_t>(fs->get_max_concurrency()) <= outline_max) {
+                  all_above = false;
+                }
+              }
+            } else {
+              all_above = false;
+            }
+            skip_level3_ccl = all_above;
+          }
+        }
+        if (!skip_level3_ccl)
+#endif
         if (OB_FAIL(ObSQLUtils::match_ccl_rule(&pc_ctx, *session, PC_PS_MODE == pc_ctx.mode_,
                                                plan->get_dependency_table()))) {
           LOG_WARN("fail to match ccl rule in plan cache", K(ret), K(pc_ctx.mode_),
@@ -4004,7 +4083,7 @@ int ObSql::get_outline_data(ObSqlCtx &context,
   }
 
   if (OB_SUCC(ret) && !outline_content.empty()) {
-    ObParser parser(pc_ctx.allocator_, session->get_sql_mode(), session->get_charsets4parser(), pc_ctx.def_name_ctx_);
+    ObParser parser(pc_ctx.allocator_, session->get_sql_mode(), session->get_charsets4parser());
     ObSqlString sql_helper;
     ObString temp_outline_sql;
     if (OB_FAIL(sql_helper.assign_fmt("select %.*s 1 from dual", outline_content.length(),
@@ -4161,9 +4240,9 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
   } else {
     pctx->reset_datum_param_store();
     pctx->get_param_store_for_update().reuse();
-    ObParser parser(allocator, session->get_sql_mode(), session->get_charsets4parser(), pc_ctx.def_name_ctx_);
+    ObParser parser(allocator, session->get_sql_mode(), session->get_charsets4parser());
     if (OB_FAIL(parser.parse(outlined_stmt, parse_result,
-                             pc_ctx.is_rewrite_sql_ ? UDR_SQL_MODE : STD_MODE,
+                             STD_MODE,
                              pc_ctx.sql_ctx_.handle_batched_multi_stmt(),
                              false, lib::is_mysql_mode() && NULL != session->get_pl_context()))) {
       LOG_WARN("Generate syntax tree failed", K(ret),
@@ -4376,7 +4455,6 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
   pc_ctx.fp_result_.pc_key_.namespace_ = ObLibCacheNameSpace::NS_CRSR;
   plan_added = false;
   bool is_batch_exec = pc_ctx.sql_ctx_.is_batch_params_execute();
-  bool enable_udr = pc_ctx.sql_ctx_.get_enable_user_defined_rewrite();
   if (OB_ISNULL(phy_plan) || OB_ISNULL(plan_cache)) {
     ret = OB_NOT_INIT;
     LOG_WARN("Fail to generate plan", K(phy_plan), K(plan_cache));
@@ -4403,12 +4481,8 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
                                      phy_plan->stat_.format_sql_id_))) {
     LOG_WARN("failed to ob write string", K(ret));
   } else {
-    sql::ObUDRMgr *rule_mgr = MTL(sql::ObUDRMgr*);
     phy_plan->set_outline_state(outline_state);
     phy_plan->stat_.db_id_ = pc_ctx.sql_ctx_.bl_key_.db_id_;
-    phy_plan->stat_.is_rewrite_sql_ = pc_ctx.is_rewrite_sql_;
-    phy_plan->stat_.rule_version_ = rule_mgr->get_rule_version();
-    phy_plan->stat_.enable_udr_ = enable_udr;
     phy_plan->stat_.is_inner_ = result.get_session().is_inner();
 
     if (PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_) {
@@ -4495,8 +4569,7 @@ void ObSql::check_template_sql_can_be_prepare(ObPlanCacheCtx &pc_ctx, ObPhysical
     ParseResult parse_result;
     ObParser parser(pc_ctx.allocator_,
                     session->get_sql_mode(),
-                    session->get_charsets4parser(),
-                    pc_ctx.def_name_ctx_);
+                    session->get_charsets4parser());
     if (OB_FAIL(parser.parse(temp_sql, parse_result))) {
       LOG_DEBUG("generate syntax tree failed", K(temp_sql), K(ret));
     } else {
@@ -4764,59 +4837,6 @@ int ObSql::try_get_plan(ObPlanCacheCtx &pc_ctx, ObResultSet &result, bool is_ena
   return ret;
 }
 
-int ObSql::pc_add_udr_plan(const ObUDRItemMgr::UDRItemRefGuard &item_guard,
-                           ObPlanCacheCtx &pc_ctx,
-                           ObResultSet &result,
-                           ObOutlineState &outline_state,
-                           bool& plan_added)
-{
-  int ret = OB_SUCCESS;
-  int get_plan_err = OB_SUCCESS;
-  bool add_plan_to_pc = false;
-  ParseResult parse_result;
-  MEMSET(&parse_result, 0, SIZEOF(ParseResult));
-  ObIAllocator &allocator = result.get_mem_pool();
-  ObSQLSessionInfo &session = result.get_session();
-  ObPlanCache *plan_cache = session.get_plan_cache();
-  bool is_enable_transform_tree = !session.get_enable_exact_mode();
-  ObExecContext &ectx = result.get_exec_context();
-  ObPhysicalPlanCtx *pctx = ectx.get_physical_plan_ctx();
-  ParamStore param_store( (ObWrapperAllocator(&allocator)) );
-  const ObString &raw_sql = pc_ctx.raw_sql_;
-  ObPlanCacheCtx tmp_pc_ctx(raw_sql, pc_ctx.mode_,
-                            allocator, pc_ctx.sql_ctx_, ectx, session.get_effective_tenant_id());
-  tmp_pc_ctx.fp_result_ = pc_ctx.fp_result_;
-  tmp_pc_ctx.normal_parse_const_cnt_ = pc_ctx.normal_parse_const_cnt_;
-  tmp_pc_ctx.set_is_rewrite_sql(true);
-  tmp_pc_ctx.rule_name_ = pc_ctx.rule_name_;
-  const ObUDRItem *rule_item = item_guard.get_ref_obj();
-  ObParser parser(allocator, session.get_sql_mode(),
-                  session.get_charsets4parser(),
-                  pc_ctx.def_name_ctx_);
-  if (OB_ISNULL(rule_item)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rule item is null", K(ret));
-  } else if (OB_FAIL(tmp_pc_ctx.fixed_param_info_list_.assign(rule_item->get_fixed_param_value_array()))) {
-    LOG_WARN("failed to assign fixed param info list", K(ret));
-  } else if (OB_FAIL(tmp_pc_ctx.dynamic_param_info_list_.assign(rule_item->get_dynamic_param_info_array()))) {
-    LOG_WARN("failed to assign dynamic param info list", K(ret));
-  } else if (OB_FAIL(tmp_pc_ctx.tpl_sql_const_cons_.assign(pc_ctx.tpl_sql_const_cons_))) {
-    LOG_WARN("failed to assign tpl sql const cons", K(ret));
-  } else if (OB_FAIL(parser.parse(raw_sql, parse_result))) {
-    LOG_WARN("failed to parse sql", K(ret), K(raw_sql));
-  } else if (OB_FAIL(ObSqlParameterization::parameterize_syntax_tree(allocator,
-                                                                     false/*is_transform_outline*/,
-                                                                     tmp_pc_ctx,
-                                                                     parse_result.result_tree_,
-                                                                     param_store,
-                                                                     session.get_charsets4parser()))) {
-    LOG_WARN("parameterize syntax tree failed", K(ret));
-  } else if (OB_FAIL(pc_add_plan(tmp_pc_ctx, result, outline_state, plan_cache, plan_added))) {
-    LOG_WARN("failed to add plan", K(ret));
-  }
-  return ret;
-}
-
 OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
                                             ObSqlCtx &context,
                                             ObResultSet &result,
@@ -4836,9 +4856,6 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
   ParseResult outline_parse_result;
   MEMSET(&outline_parse_result, 0, SIZEOF(ParseResult));
   bool add_plan_to_pc = false;
-  bool is_match_udr = false;
-  ObUDRItemMgr::UDRItemRefGuard item_guard;
-  UDRBackupRecoveryGuard backup_recovery_guard(context, pc_ctx);
   ObSQLSessionInfo &session = result.get_session();
   ObPlanCache *plan_cache = session.get_plan_cache();
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
@@ -4857,15 +4874,6 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
       (context.is_batch_params_execute() || pc_ctx.exec_ctx_.has_dynamic_values_table()) &&
       OB_FAIL(get_reconstructed_batch_stmt(pc_ctx, outlined_stmt))) {
     LOG_WARN("failed to get first batched stmt item", K(ret));
-  } else if (OB_FAIL(ObUDRUtils::match_udr_and_refill_ctx(outlined_stmt,
-                                                          context,
-                                                          result,
-                                                          pc_ctx,
-                                                          is_match_udr,
-                                                          item_guard))) {
-    LOG_WARN("failed to match udr and refill ctx", K(ret));
-  } else if (is_match_udr
-    && FALSE_IT(outlined_stmt = item_guard.get_ref_obj()->get_replacement())) {
   } else if (OB_FAIL(handle_parser(outlined_stmt,
                                    result.get_exec_context(),
                                    pc_ctx,
@@ -4913,7 +4921,6 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
     } else {
       LOG_WARN("Failed to generate plan", K(ret), K(result.get_exec_context().need_disconnect()));
     }
-  } else if (OB_FALSE_IT(backup_recovery_guard.recovery())) {
   } else if (OB_FAIL(try_get_plan(pc_ctx, result, use_plan_cache, add_plan_to_pc))) {
     LOG_WARN("failed to try get plan", K(ret), K(add_plan_to_pc));
   } else if (OB_FAIL(need_add_plan(pc_ctx,
@@ -4923,13 +4930,7 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
     LOG_WARN("get need_add_plan failed", K(ret));
   } else if (!add_plan_to_pc) {
     // do nothing
-  } else if (is_match_udr && OB_FAIL(pc_add_udr_plan(item_guard,
-                                                     pc_ctx,
-                                                     result,
-                                                     outline_state,
-                                                     plan_added))) {
-    LOG_WARN("fail to add plan to plan cache", K(ret));
-  } else if (!is_match_udr && OB_FAIL(pc_add_plan(pc_ctx, result, outline_state, plan_cache, plan_added))) {
+  } else if (OB_FAIL(pc_add_plan(pc_ctx, result, outline_state, plan_cache, plan_added))) {
     LOG_WARN("fail to add plan to plan cache", K(ret));
   }
   //if the error code is ob_timeout, we add more error info msg for dml query.

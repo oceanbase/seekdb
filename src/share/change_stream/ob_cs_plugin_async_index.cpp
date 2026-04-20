@@ -48,7 +48,6 @@
 #include "lib/allocator/ob_allocator.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "share/schema/ob_table_param.h"
-#include "share/schema/ob_schema_utils.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_server_struct.h"
 
@@ -400,49 +399,7 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                   vec_info.vec_col_idx_ = vec_col_idx;
                   vec_info.index_type_ = index_schema->get_index_type();
                   vec_info.dim_ = dim;
-
-                  // Identify extra columns in index_id_table (partition key columns from
-                  // data table) that are neither rowkey nor vector columns.
-                  // These must be extracted from redo row and populated during insert.
-                  const schema::ObTableSchema *idx_id_schema = nullptr;
-                  if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_id_table_id, idx_id_schema))) {
-                    LOG_WARN("fail to get index_id_table schema for part key resolution",
-                             K(ret), K(index_id_table_id));
-                  } else if (OB_NOT_NULL(idx_id_schema)) {
-                    for (schema::ObTableSchema::const_column_iterator cit = idx_id_schema->column_begin();
-                         OB_SUCC(ret) && cit != idx_id_schema->column_end(); ++cit) {
-                      const schema::ObColumnSchemaV2 *c = *cit;
-                      if (OB_ISNULL(c)) {
-                        // skip
-                      } else if (c->get_rowkey_position() > 0) {
-                        // rowkey column (scn/vid/type), already handled
-                      } else if (schema::ObSchemaUtils::is_vec_hnsw_vector_column(c->get_column_flags())) {
-                        // vector column, already handled
-                      } else {
-                        // Extra column (partition key): find its index in data table's col_descs
-                        const uint64_t col_id = c->get_column_id();
-                        int64_t data_col_idx = -1;
-                        for (int64_t ci = 0; ci < col_descs.count(); ++ci) {
-                          if (col_descs.at(ci).col_id_ == static_cast<uint32_t>(col_id)) {
-                            data_col_idx = ci;
-                            break;
-                          }
-                        }
-                        if (data_col_idx >= 0) {
-                          if (OB_FAIL(vec_info.part_key_col_ids_.push_back(col_id))) {
-                            LOG_WARN("fail to push part_key_col_id", K(ret), K(col_id));
-                          } else if (OB_FAIL(vec_info.part_key_col_idxs_.push_back(data_col_idx))) {
-                            LOG_WARN("fail to push part_key_col_idx", K(ret), K(data_col_idx));
-                          }
-                        } else {
-                          LOG_TRACE("extra column in index_id_table not found in data table col_descs, skip",
-                                    K(col_id), K(index_id_table_id));
-                        }
-                      }
-                    }
-                  }
-
-                  if (OB_SUCC(ret) && OB_FAIL(vec_infos.push_back(vec_info))) {
+                  if (OB_FAIL(vec_infos.push_back(vec_info))) {
                     LOG_WARN("fail to push back vec_info", K(ret), K(vec_info));
                   }
                 }
@@ -571,28 +528,6 @@ int ObCSAsyncIndexProcessor::build_event_from_row_(
     event.type_      = event_type;
     event.vec_data_  = vec_data;
     event.vec_data_len_ = vec_len;
-
-    // Extract partition key column values from the redo row.
-    // Use the same ObRowReader pattern as extract_vector_data_().
-    if (vec_info.part_key_col_idxs_.count() > 0) {
-      const memtable::ObRowData &src_row =
-          (ObCSAsyncIndexEventType::INSERT == event_type) ? row.new_row_ : row.old_row_;
-      if (OB_NOT_NULL(src_row.data_) && src_row.size_ > 0) {
-        blocksstable::ObRowReader row_reader;
-        for (int64_t pk = 0; OB_SUCC(ret) && pk < vec_info.part_key_col_idxs_.count(); ++pk) {
-          blocksstable::ObStorageDatum pk_datum;
-          if (OB_FAIL(row_reader.read_column(
-                  src_row.data_, src_row.size_,
-                  vec_info.part_key_col_idxs_.at(pk), pk_datum))) {
-            LOG_WARN("fail to read partition key column from redo row",
-                     K(ret), K(pk), "col_idx", vec_info.part_key_col_idxs_.at(pk),
-                     "col_id", vec_info.part_key_col_ids_.at(pk));
-          } else if (OB_FAIL(event.part_key_datums_.push_back(pk_datum))) {
-            LOG_WARN("fail to push partition key datum", K(ret), K(pk));
-          }
-        }
-      }
-    }
   }
   return ret;
 }
@@ -864,7 +799,7 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
         LOG_WARN("column_schema is null", K(ret));
         break;
       } else if (0 == col_schema->get_rowkey_position() &&
-                 schema::ObSchemaUtils::is_vec_hnsw_vector_column(col_schema->get_column_flags())) {
+                 col_schema->get_column_name_str().prefix_match("__vector_")) {
         vector_col_id = col_schema->get_column_id();
         break;
       }
@@ -913,18 +848,6 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
         }
         if (OB_SUCC(ret) && vector_idx >= 0 && vector_idx < col_count) {
           datum_row.storage_datums_[vector_idx].set_null();
-        }
-        // Populate partition key columns from event's extracted redo data.
-        if (OB_SUCC(ret)) {
-          for (int64_t pk = 0; OB_SUCC(ret) && pk < vec_info.part_key_col_ids_.count()
-               && pk < event.part_key_datums_.count(); ++pk) {
-            int64_t pk_col_idx = -1;
-            int hash_ret = col_id_to_idx_map.get_refactored(
-                vec_info.part_key_col_ids_.at(pk), pk_col_idx);
-            if (common::OB_SUCCESS == hash_ret && pk_col_idx >= 0 && pk_col_idx < col_count) {
-              datum_row.storage_datums_[pk_col_idx] = event.part_key_datums_.at(pk);
-            }
-          }
         }
       }
       if (OB_FAIL(ret)) {

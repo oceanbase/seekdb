@@ -48,7 +48,7 @@ target_include_directories(
   ${DEP_DIR}/include/apr-1/
   ${DEP_DIR}/include/icu
   ${DEP_DIR}/include/icu/common
-  $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${DEP_DIR}/include/apache-arrow>
+  ${DEP_DIR}/include/apache-arrow
   ${DEP_DIR}/include/fast_float
   ${USSL_INCLUDE_DIRS}
 )
@@ -100,7 +100,7 @@ if (OB_USE_CLANG)
       -Wno-ambiguous-reversed-operator -Wno-invalid-partial-specialization
       -Wno-string-concatenation
       /EHsc -Wno-missing-noreturn -Wno-undefined-func-template
-      -Wno-undef -Wno-sign-conversion -Wno-strict-prototypes -Wno-switch-default -Wno-language-extension-token
+      -Wno-undef -Wno-sign-conversion -Wno-strict-prototypes -Wno-switch-default -Wno-language-extension-token  
       -Wno-missing-prototypes -Wno-extra-semi-stmt -Wno-unused-macros -Wno-unsafe-buffer-usage -Wno-c++98-compat -Wno-c++98-compat-pedantic
       -Wno-reserved-identifier -Wno-padded -Wno-variadic-macros -Wno-global-constructors -Wno-undefined-reinterpret-cast
       -Wno-tautological-unsigned-zero-compare -Wno-integer-overflow -Wno-shift-count-overflow -Wno-cast-function-type -Wno-cast-function-type-strict
@@ -110,8 +110,8 @@ if (OB_USE_CLANG)
       -Wno-exit-time-destructors -Wno-inconsistent-missing-destructor-override -Wno-shadow -Wno-unreachable-code
       -Wno-switch-enum -Wno-atomic-implicit-seq-cst -Wno-documentation-unknown-command
       -Wno-implicit-int-conversion -Wno-gnu-conditional-omitted-operand -Wno-cast-align -Wno-comma -Wno-tautological-type-limit-compare
-      -Wno-disabled-macro-expansion -Wno-unreachable-code-break -Wno-missing-variable-declarations
-      -Wno-nonportable-system-include-path -Wno-c99-extensions -Wno-flexible-array-extensions
+      -Wno-disabled-macro-expansion -Wno-unreachable-code-break -Wno-missing-variable-declarations 
+      -Wno-nonportable-system-include-path -Wno-c99-extensions -Wno-flexible-array-extensions 
       -Wno-compound-token-split-by-space -Wno-newline-eof -Wno-shadow-field -Wno-microsoft-unqualified-friend -Wno-float-equal
       -Wno-used-but-marked-unused -Wno-unreachable-code-return -Wno-float-conversion -Wno-conditional-uninitialized
       -Wno-signed-enum-bitfield -Wno-bitfield-enum-conversion -Wno-redundant-parens -Wno-gnu-statement-expression
@@ -222,7 +222,7 @@ if(APPLE OR ANDROID)
   set(_LIB_PATH "${DEP_DIR}/lib/")
   # macOS and Android don't have libaio
   set(LIBAIO_LINK_OPTION "")
-  # On macOS, arrow/parquet are in lib/, but s2/protoc/protobuf/lz4/zstd are in lib64/
+  # On macOS, arrow/parquet are in lib/, but s2/orc/snappy/protoc/protobuf/lz4/zstd are in lib64/
   if(APPLE)
     set(_LIB_PATH_EXTRA "${DEP_DIR}/lib64/")
   else()
@@ -322,7 +322,12 @@ if(WIN32)
     ${VCPKG_LIB_DIR}/brotlienc.lib
     ${VCPKG_LIB_DIR}/brotlidec.lib
     ${VCPKG_LIB_DIR}/bz2.lib
-
+    ${VCPKG_LIB_DIR}/orc.lib
+    ${VCPKG_LIB_DIR}/snappy.lib
+    ${VCPKG_LIB_DIR}/libprotoc.lib
+    ${VCPKG_LIB_DIR}/libprotobuf.lib
+    ${VCPKG_LIB_DIR}/lz4.lib
+    ${VCPKG_LIB_DIR}/zstd.lib
     ${VCPKG_LIB_DIR}/sqlite3.lib
     ${VCPKG_LIB_DIR}/pthreadVC3.lib
     ws2_32 crypt32 bcrypt userenv wldap32 advapi32
@@ -346,10 +351,16 @@ else()
     ${DEP_DIR}/lib/libicustubdata.a
     ${DEP_DIR}/lib/libicuuc.a
     ${DEP_DIR}/lib/libprotobuf-c.a
-    $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libarrow.a>
-    $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libparquet.a>
-    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<NOT:$<PLATFORM_ID:Darwin>>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
-    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<PLATFORM_ID:Darwin>>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2 -llz4 -lzstd>
+    ${_LIB_PATH}/libarrow.a
+    ${_LIB_PATH}/libparquet.a
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
+    $<$<PLATFORM_ID:Darwin>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2>
+    ${_LIB_PATH_EXTRA}/liborc.a
+    ${_LIB_PATH_EXTRA}/libsnappy.a
+    $<$<NOT:$<BOOL:${ANDROID}>>:${_LIB_PATH_EXTRA}/libprotoc.a>
+    ${_LIB_PATH_EXTRA}/libprotobuf.a
+    ${_LIB_PATH_EXTRA}/liblz4.a
+    ${_LIB_PATH_EXTRA}/libzstd.a
     $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
     ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
     $<$<BOOL:${ANDROID}>:-llog>

@@ -2082,7 +2082,6 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
     } else if (OB_FAIL(ob_write_string(allocator, ObString(parse_result.no_param_sql_len_, parse_result.no_param_sql_), prepare_result.route_sql_))) {
       LOG_WARN("failed to write string", K(sql), K(ret));
     } else {
-#ifdef __APPLE__
       // Pass secondary_namespace for trigger packages so that SQL in trigger body
       // is fully resolved at compile time, catching references to dropped columns
       // early instead of crashing at runtime. For non-trigger PL, keep using simple
@@ -2093,9 +2092,6 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
         ns_for_prepare = secondary_namespace;
       }
       PLPrepareCtx pl_prepare_ctx(session, ns_for_prepare, false, false, false);
-#else
-      PLPrepareCtx pl_prepare_ctx(session, NULL, false, false, false);
-#endif
       SMART_VAR(PLPrepareResult, pl_prepare_result) {
         CK (OB_NOT_NULL(GCTX.sql_engine_));
         OZ (pl_prepare_result.init(session));
@@ -4786,7 +4782,7 @@ int ObSPIService::spi_destruct_obj(ObPLExecCtx *ctx,
 int ObSPIService::spi_interface_impl(pl::ObPLExecCtx *ctx, const char *interface_name)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(interface_name)) {
+  if (OB_UNLIKELY(nullptr == interface_name || nullptr == ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Argument passed in is NULL", K(ctx), K(interface_name), K(ret));
   } else if (OB_ISNULL(ctx->exec_ctx_)

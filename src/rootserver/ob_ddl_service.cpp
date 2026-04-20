@@ -478,8 +478,7 @@ int ObDDLService::create_mlog_table(
       ret = OB_ERR_MLOG_EXIST;
       LOG_WARN("a materialized view log already exists on table",
           KR(ret), K(arg.table_name_));
-      ObCStringHelper helper;
-      LOG_USER_ERROR(OB_ERR_MLOG_EXIST, helper.convert(arg.table_name_));
+      LOG_USER_ERROR(OB_ERR_MLOG_EXIST, to_cstring(arg.table_name_));
     }
   } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
       tenant_id, is_oracle_mode))) {
@@ -6907,7 +6906,7 @@ int ObDDLService::generate_aux_index_schema_(
       LOG_WARN("fail to generate schema", K(ret), K(create_index_arg));
     } else if (ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
                    nonconst_data_schema, index_schema.get_index_type(), index_schema.get_index_params())
-               && FALSE_IT(nonconst_data_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD_FOR_VEC_ASYNC_INDEX))) {
+               && FALSE_IT(nonconst_data_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD))) {
     } else if (FALSE_IT(need_alter_data_table_lob_inrow_threshold =
                    nonconst_data_schema.get_lob_inrow_threshold() != data_schema->get_lob_inrow_threshold())) {
     } else if (create_index_arg.is_offline_rebuild_){
@@ -7239,9 +7238,8 @@ int ObDDLService::lock_tables_in_recyclebin(const ObDatabaseSchema &database_sch
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table is not exist", K(ret), K(recycle_obj));
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_schema.get_database_name_str()),
-                       helper.convert(recycle_obj.get_object_name()));
+        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(database_schema.get_database_name_str()),
+                       to_cstring(recycle_obj.get_object_name()));
       } else if (table_schema->is_materialized_view() && OB_FAIL(lock_mview(trans, *table_schema))) {
         LOG_WARN("fail to lock mview", KR(ret), KPC(table_schema));
       }
@@ -7255,9 +7253,8 @@ int ObDDLService::lock_tables_in_recyclebin(const ObDatabaseSchema &database_sch
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table is not exist", K(ret), K(recycle_obj));
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_schema.get_database_name_str()),
-                       helper.convert(recycle_obj.get_object_name()));
+        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(database_schema.get_database_name_str()),
+                       to_cstring(recycle_obj.get_object_name()));
       } else if (OB_FAIL(lock_table(trans, *table_schema))) {
         LOG_WARN("fail to lock_table", KR(ret), KPC(table_schema));
       }
@@ -7587,9 +7584,9 @@ int ObDDLService::alter_table_index(obrpc::ObAlterTableArg &alter_table_arg,
                                                                       index_schema,
                                                                       trans))) {
                 LOG_WARN("failed to alter table add index!", K(index_schema), K(ret));
-              } else if (is_only_add_index_on_empty_table
+              } else if (is_only_add_index_on_empty_table 
                          && FALSE_IT(max_schema_version = std::max(max_schema_version, index_schema.get_schema_version()))) {
-                LOG_WARN("fail to build single table write defensive", KR(ret), K(index_schema));
+                LOG_WARN("fail to build single table write defensive", KR(ret), K(index_schema));       
               } else {
                 // The index data is stored separately from the main table,
                 // the partition needs to be built, and insert ori_schema_version in the outer insert
@@ -7827,8 +7824,7 @@ int ObDDLService::alter_table_index(obrpc::ObAlterTableArg &alter_table_arg,
             //In current cases, alter index will be overrided by the rename index operation
             LOG_WARN("failed to rename index that is altering index visible attribute!", K(ori_index_name));
             ret = OB_ERR_WRONG_OBJECT;
-            ObCStringHelper helper;
-            LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, helper.convert(ori_index_name), "visible attribute", "updated");
+            LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, to_cstring(ori_index_name), "visible attribute", "updated");
           } else if (OB_FAIL(check_index_table_exist(origin_table_schema.get_tenant_id(),
                                               origin_table_schema.get_database_id(),
                                               origin_table_schema.get_table_id(),
@@ -7893,7 +7889,7 @@ int ObDDLService::alter_table_index(obrpc::ObAlterTableArg &alter_table_arg,
         }
       }
     }
-    if (OB_SUCC(ret) && is_only_add_index_on_empty_table
+    if (OB_SUCC(ret) && is_only_add_index_on_empty_table 
                      && OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(new_table_schema,
                                                                                           max_schema_version,
                                                                                           trans))) {
@@ -14580,7 +14576,7 @@ int ObDDLService::alter_table_in_trans(obrpc::ObAlterTableArg &alter_table_arg,
                                                trans,
                                                alter_table_arg.allocator_,
                                                tenant_data_version,
-                                               is_only_add_index_on_empty_table,
+                                               is_only_add_index_on_empty_table, 
                                                res,
                                                ddl_tasks,
                                                new_fetched_snapshot))) {
@@ -16992,9 +16988,8 @@ int ObDDLService::get_and_check_table_schema(
       K(origin_database_name), K(origin_table_name));
     } else if (NULL == orig_table_schema) {
       ret = OB_TABLE_NOT_EXIST;
-      ObCStringHelper helper;
-      LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(origin_database_name),
-      helper.convert(origin_table_name));
+      LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(origin_database_name),
+      to_cstring(origin_table_name));
     } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(
                        tenant_id,
                        orig_table_schema->get_database_id(),
@@ -17056,9 +17051,8 @@ int ObDDLService::get_and_check_table_schema(
                && !orig_table_schema->is_tmp_table()
                && !orig_table_schema->is_external_table()) {
       ret = OB_ERR_WRONG_OBJECT;
-      ObCStringHelper helper;
       LOG_USER_ERROR(OB_ERR_WRONG_OBJECT,
-      helper.convert(origin_database_name), helper.convert(origin_table_name), "BASE TABLE");
+      to_cstring(origin_database_name), to_cstring(origin_table_name), "BASE TABLE");
     // NOTE: if_offline_ddl is true only in the execution phase of offline ddl, skip check_can_do_ddl check
     } else if (!is_offline_ddl && !orig_table_schema->check_can_do_ddl()) {
       ret = OB_OP_NOT_ALLOW;
@@ -24138,9 +24132,8 @@ int ObDDLService::check_db_and_table_is_exist(const obrpc::ObTruncateTableArg &a
     // Before checking the table name, we should use mysql mode to escape the table name anyway,
     // otherwise we may not find the table name in select sql
     bool do_oracle_mode_escape = false;
-    ObCStringHelper helper;
-    const char *tmp_table_name = helper.convert(ObHexEscapeSqlStr(table_name, skip_escape, do_oracle_mode_escape));
-    const char *tmp_database_name = helper.convert(ObHexEscapeSqlStr(database_name, skip_escape, do_oracle_mode_escape));
+    const char *tmp_table_name = to_cstring(ObHexEscapeSqlStr(table_name, skip_escape, do_oracle_mode_escape));
+    const char *tmp_database_name = to_cstring(ObHexEscapeSqlStr(database_name, skip_escape, do_oracle_mode_escape));
     if (OB_ISNULL(tmp_table_name)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table name is NULL", KR(ret), K(tenant_id));
@@ -24196,9 +24189,8 @@ int ObDDLService::check_db_and_table_is_exist(const obrpc::ObTruncateTableArg &a
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("can not find table",
                   KR(ret), K(tenant_id), K(table_name), K(database_name));
-          ObCStringHelper helper;
-          LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name),
-                                            helper.convert(table_name));
+          LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(database_name),
+                                            to_cstring(table_name));
         } else if (0 != tmp_session_id && is_oracle_mode) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("truncate oracle tmp table not supported",
@@ -24208,9 +24200,8 @@ int ObDDLService::check_db_and_table_is_exist(const obrpc::ObTruncateTableArg &a
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("can not find table",
                 KR(ret), K(tenant_id), K(table_name), K(database_name));
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name),
-                                            helper.convert(table_name));
+        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(database_name),
+                                            to_cstring(table_name));
       }
     }
   }
@@ -24826,8 +24817,7 @@ int ObDDLService::check_table_schema_is_legal(const obrpc::ObTruncateTableArg &a
   } else {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("truncate table not exist", KR(ret), K(table_name), K(table_id), K(database_name));
-    ObCStringHelper helper;
-    LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
+    LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(database_name), to_cstring(table_name));
   }
   return ret;
 }
@@ -25002,8 +24992,7 @@ int ObDDLService::truncate_table(const ObTruncateTableArg &arg,
         LOG_WARN("fail to get table schema", K(ret), K(tenant_id), K(arg.database_name_), K(arg.table_name_));
       } else if (NULL == orig_table_schema) {
         ret = OB_TABLE_NOT_EXIST;
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg.database_name_), helper.convert(arg.table_name_));
+        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(arg.database_name_), to_cstring(arg.table_name_));
       } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(tenant_id,
                  orig_table_schema->get_database_id(), is_db_in_recyclebin))) {
         LOG_WARN("check database in recyclebin failed", K(ret), K(tenant_id), K(*orig_table_schema));
@@ -25033,8 +25022,7 @@ int ObDDLService::truncate_table(const ObTruncateTableArg &arg,
           LOG_WARN("truncate table is not supported on system table", K(ret));
         } else {
           ret = OB_TABLE_NOT_EXIST;
-          ObCStringHelper helper;
-          LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg.database_name_), helper.convert(arg.table_name_));
+          LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(arg.database_name_), to_cstring(arg.table_name_));
         }
       } else if (OB_FAIL(check_enable_sys_table_ddl(*orig_table_schema, OB_DDL_TRUNCATE_TABLE_CREATE))) {
         LOG_WARN("ddl is not allowed on system table", K(ret));
@@ -27094,9 +27082,8 @@ int ObDDLService::check_table_exists(const uint64_t tenant_id,
           // let it go, for case compatible
         } else if (expected_table_type != tmp_table_schema->get_table_type()) {
           ret = OB_ERR_WRONG_OBJECT;
-          ObCStringHelper helper;
-          LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, helper.convert(table_item.database_name_),
-              helper.convert(table_item.table_name_), "VIEW");
+          LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, to_cstring(table_item.database_name_),
+              to_cstring(table_item.table_name_), "VIEW");
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -27607,11 +27594,9 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obrpc::
             if (!drop_table_arg.if_exist_) {
               // OB_ERR_MVIEW_NOT_EXIST can only print one mview, report an error and exit the loop when encountering the first non-existent mview
               ret = OB_ERR_MVIEW_NOT_EXIST;
-              ObCStringHelper helper;
-              LOG_USER_ERROR(OB_ERR_MVIEW_NOT_EXIST, helper.convert(table_item.database_name_), helper.convert(table_item.table_name_));
+              LOG_USER_ERROR(OB_ERR_MVIEW_NOT_EXIST, to_cstring(table_item.database_name_), to_cstring(table_item.table_name_));
             } else {
-              ObCStringHelper helper;
-              LOG_USER_NOTE(OB_ERR_MVIEW_NOT_EXIST, helper.convert(table_item.database_name_), helper.convert(table_item.table_name_));
+              LOG_USER_NOTE(OB_ERR_MVIEW_NOT_EXIST, to_cstring(table_item.database_name_), to_cstring(table_item.table_name_));
               ret = OB_SUCCESS;
             }
           } else {
@@ -27710,7 +27695,7 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obrpc::ObAlter
 {
   int ret = OB_SUCCESS;
   LOG_INFO("RS start to rebuild vec index", K(arg));
-
+  
   if (OB_FAIL(check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("check_inner_stat error", K(ret), K(is_inited()));
@@ -27738,8 +27723,7 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obrpc::ObAlter
       LOG_WARN("failed to get data table schema", K(ret), K(arg));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      ObCStringHelper helper;
-      LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg.database_name_), helper.convert(arg.table_name_));
+      LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(arg.database_name_), to_cstring(arg.table_name_));
       LOG_WARN("table not found", K(arg), K(ret));
     } else if (table_schema->is_in_recyclebin()) {
       ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
@@ -27765,7 +27749,7 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obrpc::ObAlter
         ret = OB_EAGAIN;
         LOG_WARN("index table not found during rebuild, possibly due to concurrent DDL",
           K(ret), K(arg), K(data_table_id), KPC(table_schema));
-      } else if (arg.is_need_check_based_schema_objects() &&
+      } else if (arg.is_need_check_based_schema_objects() && 
                  OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
         LOG_WARN("index table schema changed since rebuild request, parallel ddl conflict", KR(ret), K(arg));
       } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
@@ -27868,8 +27852,7 @@ int ObDDLService::rebuild_index(const ObRebuildIndexArg &arg, obrpc::ObAlterTabl
     LOG_WARN("failed to get data table schema", K(arg), KR(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    ObCStringHelper helper;
-    LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg.database_name_), helper.convert(arg.table_name_));
+    LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(arg.database_name_), to_cstring(arg.table_name_));
     LOG_WARN("table not found", K(arg), KR(ret));
   } else if (table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;

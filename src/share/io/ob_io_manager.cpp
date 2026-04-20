@@ -1557,7 +1557,7 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   } else if (OB_FAIL(ObShareUtil::check_data_disk_health_status(is_data_disk_healthy))) {
     LOG_WARN("fail to check data disk status", KR(ret));
   } else if ((SLOG_IO != info.flag_.get_sys_module_id() &&
-              CLOG_READ_IO != info.flag_.get_sys_module_id() &&
+              CLOG_READ_IO != info.flag_.get_sys_module_id() && 
               CLOG_WRITE_IO != info.flag_.get_sys_module_id()) &&
               !info.fd_.device_handle_->is_object_device() &&
               !is_data_disk_healthy) {
@@ -2242,8 +2242,7 @@ int ObTenantIOManager::print_io_function_status()
           LOG_WARN("fail to calc func usage", K(ret), K(i), K(j));
         } else if (avg_size < std::numeric_limits<double>::epsilon()) {
         } else {
-          ObCStringHelper helper;
-          const char *func_name = helper.convert(get_io_function_name(static_cast<share::ObFunctionType>(i)));
+          const char *func_name = to_cstring(get_io_function_name(static_cast<share::ObFunctionType>(i)));
           snprintf(io_status, sizeof(io_status), 
                     "function_name:%s, mode:%s, avg_size:%ld, avg_iops:%ld, avg_bw:%ld, [delay/us]: prepare:%ld, schedule:%ld, submit:%ld, device:%ld, total:%ld",
                     func_name,

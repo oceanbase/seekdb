@@ -1235,8 +1235,6 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
         audit_record.table_scan_ = plan->contain_table_scan();
         audit_record.plan_id_ = plan->get_plan_id();
         audit_record.plan_hash_ = plan->get_plan_hash_value();
-        audit_record.rule_name_ = const_cast<char *>(plan->get_rule_name().ptr());
-        audit_record.rule_name_len_ = plan->get_rule_name().length();
       }
       if (NULL != plan || result.is_pl_stmt(result.get_stmt_type())) {
         audit_record.partition_hit_ = session.partition_hit().get_bool();

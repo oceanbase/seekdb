@@ -40,7 +40,7 @@ namespace share
 {
 
 /// Interval for advancing min_dep_lsn to global_stat (us).
-static constexpr int64_t CS_FETCHER_MIN_DEP_LSN_ADVANCE_INTERVAL_US = 60 * 1000 * 1000;
+static constexpr int64_t CS_FETCHER_MIN_DEP_LSN_ADVANCE_INTERVAL_US = 5 * 1000 * 1000;
 /// Interval for advancing refresh_scn to global_stat (us).
 static constexpr int64_t CS_FETCHER_REFRESH_SCN_ADVANCE_INTERVAL_US =  200 * 1000;
 /// Interval for schema version check and mode switching (us).
@@ -131,7 +131,11 @@ public:
   /// For log reclaim: returns the minimum LSN still depended on (via out param); returns error code.
   int get_min_dep_lsn(palf::LSN &min_lsn);
 
-  /// For change_stream_refresh_scn: returns SCN to advance (GTS when no async or async but no in-flight tx).
+  /// For change_stream_refresh_scn:
+  /// - no async table: returns GTS
+  /// - async table with in-flight tx: returns invalid SCN (skip advancing this round)
+  /// - async table without in-flight tx: returns GTS only when current_lsn catches up;
+  ///   otherwise returns current_scn to avoid over-advancing.
   int get_refresh_scn(SCN &refresh_scn);
   /// For log reclaim: returns the minimum LSN still depended on by in-flight tx.
   palf::LSN get_min_dep_lsn() const;

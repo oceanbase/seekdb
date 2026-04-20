@@ -23,8 +23,6 @@
 #include "share/schema/ob_schema_getter_guard.h"  // ObSchemaGetterGuard
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfo, ObAllTenantInfoProxy
 #include "observer/ob_service.h"  // ObService
-#include "lib/ob_running_mode.h"
-#include "share/ob_thread_mgr.h"
 
 namespace oceanbase
 {
@@ -36,74 +34,49 @@ namespace schema
 int ObStandbySchemaRefreshTrigger::init()
 {
   int ret = OB_SUCCESS;
-
+  
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (lib::is_embed_mode()) {
-    is_inited_ = true;
-    LOG_INFO("ObStandbySchemaRefreshTrigger skip init in embed mode");
-  } else if (OB_FAIL(schedule_())) {
-    LOG_WARN("failed to schedule standby schema refresh trigger", KR(ret));
+  } else if (OB_FAIL(ObTenantThreadHelper::create("StandbySchem",
+        lib::TGDefIDs::SimpleLSService, *this))) {
+    LOG_WARN("failed to create STANDBY_SCHEMA_REFRESH_TRIGGER", KR(ret));
+  } else if (OB_FAIL(ObTenantThreadHelper::start())) {
+    LOG_WARN("failed to start STANDBY_SCHEMA_REFRESH_TRIGGER", KR(ret));
   } else {
     is_inited_ = true;
-    is_scheduled_ = true;
     LOG_INFO("ObStandbySchemaRefreshTrigger init success");
   }
-
-  return ret;
-}
-
-int ObStandbySchemaRefreshTrigger::stop()
-{
-  int ret = OB_SUCCESS;
-  if (is_inited_ && is_scheduled_) {
-    TG_CANCEL_TASK(lib::TGDefIDs::ServerGTimer, *this);
-  }
-  return ret;
-}
-
-int ObStandbySchemaRefreshTrigger::wait()
-{
-  int ret = OB_SUCCESS;
-  if (is_inited_ && is_scheduled_ && !lib::is_embed_mode()) {
-    TG_WAIT_TASK(lib::TGDefIDs::ServerGTimer, *this);
-    is_scheduled_ = false;
-  }
+  
   return ret;
 }
 
 void ObStandbySchemaRefreshTrigger::destroy()
 {
   LOG_INFO("ObStandbySchemaRefreshTrigger destroy");
-  stop();
-  wait();
-  is_scheduled_ = false;
+  ObTenantThreadHelper::destroy();
   is_inited_ = false;
 }
 
-int ObStandbySchemaRefreshTrigger::schedule_()
+void ObStandbySchemaRefreshTrigger::do_work()
 {
+  LOG_INFO("ObStandbySchemaRefreshTrigger thread start");
   int ret = OB_SUCCESS;
-  if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, *this,
-      DEFAULT_IDLE_TIME, true /*schedule repeatly*/))) {
-    LOG_WARN("failed to schedule standby schema refresh trigger task", KR(ret));
-  }
-  return ret;
-}
-
-void ObStandbySchemaRefreshTrigger::runTimerTask()
-{
-  int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(is_inited));
   } else {
-    ObCurTraceId::init(GCONF.self_addr_);
-    if (OB_FAIL(submit_tenant_refresh_schema_task_())) {
-      LOG_WARN("submit_tenant_refresh_schema_task_ failed", KR(ret));
+    while (!has_set_stop()) {
+      ObCurTraceId::init(GCONF.self_addr_);
+      if (OB_FAIL(submit_tenant_refresh_schema_task_())) {
+        LOG_WARN("submit_tenant_refresh_schema_task_ failed", KR(ret));
+      }
+      
+      idle(DEFAULT_IDLE_TIME);
     }
   }
+  
+  LOG_INFO("ObStandbySchemaRefreshTrigger thread end");
 }
 
 int ObStandbySchemaRefreshTrigger::check_inner_stat_()
@@ -120,7 +93,7 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
 {
   int ret = OB_SUCCESS;
   ObAllTenantInfo tenant_info;
-
+  
   // Check if tenant is standby cluster
   if (GCTX.is_standby_cluster()) {
     // Tenant is standby and in normal status, proceed with schema refresh
@@ -141,7 +114,7 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
                KR(ret), K(schema_version));
     }
   }
-
+  
   return ret;
 }
 

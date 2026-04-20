@@ -681,10 +681,8 @@ int ObVectorIndexRefresher::do_rebuild() {
     triggered = false;
     LOG_WARN("no need to start rebuild", K(base_table_row_cnt));
   } 
-
-  if (OB_SUCC(ret)) {
-    DEBUG_SYNC(BEFORE_DBMS_VECTOR_REBUILD);
-  }
+  
+  DEBUG_SYNC(BEFORE_DBMS_VECTOR_REBUILD);
 
   if (OB_FAIL(ret)) {
   } else if (is_hybrid_vector &&
@@ -718,7 +716,7 @@ int ObVectorIndexRefresher::do_rebuild() {
       rebuild_index_arg.parallelism_ = refresh_ctx_->idx_parallel_creation_;
       rebuild_index_arg.vidx_refresh_info_.index_params_ = idx_parameters;
       rebuild_index_arg.rebuild_index_type_ = obrpc::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_VEC;
-
+      
       if (OB_FAIL(rebuild_index_arg.based_schema_object_infos_.push_back(
               ObBasedSchemaObjectInfo(domain_table_schema->get_table_id(), TABLE_SCHEMA,
                                       domain_table_schema->get_schema_version(), tenant_id)))) {
@@ -735,11 +733,11 @@ int ObVectorIndexRefresher::do_rebuild() {
         LOG_INFO("succ to send rebuild vector index rpc", K(rs_addr), K(refresh_ctx_));
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(rebuild_index_arg.tenant_id_,
-                                                       rebuild_index_res.task_id_,
-                                                       false/*do not retry at executor*/,
-                                                       session_info,
-                                                       common_rpc_proxy,
+        if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(rebuild_index_arg.tenant_id_, 
+                                                       rebuild_index_res.task_id_, 
+                                                       false/*do not retry at executor*/, 
+                                                       session_info, 
+                                                       common_rpc_proxy, 
                                                        is_support_cancel))) {
           LOG_WARN("fail wait rebuild vec index finish", K(ret));
         } else {

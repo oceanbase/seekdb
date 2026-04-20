@@ -4,7 +4,7 @@ include(cmake/Utils.cmake)
 include(cmake/Env.cmake)
 
 project("OceanBase"
-  VERSION 1.3.0.0
+  VERSION 1.2.0.0
   DESCRIPTION "OceanBase seekdb database system"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
@@ -126,6 +126,21 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-#pragma-messages")
 if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
   file(REAL_PATH ${STDC_SHARED_LIB_SYMLINK} STDC_SHARED_LIB)
   message(STATUS "STDC_SHARED_LIB: ${STDC_SHARED_LIB}")
+endif()
+
+set(HYPERSCAN_LIB "")
+set(HYPERSCAN_SHARED_LIB "")
+if (${ARCHITECTURE} STREQUAL "x86_64" OR ${ARCHITECTURE} STREQUAL "amd64")
+   if (WIN32)
+    set(HYPERSCAN_LIB "${OB_VCPKG_DIR}/lib/hs.lib")
+    include_directories("${OB_VCPKG_DIR}/include")
+    message(STATUS "Using Windows Hyperscan library: ${HYPERSCAN_LIB}")
+  else()
+    set(HYPERSCAN_LIB "${DEP_DIR}/lib/libhs.a")
+    set(HYPERSCAN_SHARED_LIB_SYMLINK "${DEP_DIR}/lib/libhs.so")
+    file(REAL_PATH ${HYPERSCAN_SHARED_LIB_SYMLINK} HYPERSCAN_SHARED_LIB)
+    message(STATUS "HYPERSCAN_SHARED_LIB: ${HYPERSCAN_SHARED_LIB}")
+  endif()
 endif()
 
 add_subdirectory(deps/oblib)

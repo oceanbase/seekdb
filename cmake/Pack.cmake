@@ -45,14 +45,9 @@ if(WIN32)
   # Uses file(GET_RUNTIME_DEPENDENCIES) at install time to recursively resolve
   # all DLL dependencies of the built executables — similar to how MySQL bundles
   # its runtime libraries into the MSI package.
-  # OB_VCPKG_DIR / OB_VSAG_DIR are normalized to forward slashes in Env.cmake;
-  # the TO_CMAKE_PATH calls below are defensive (idempotent) in case a future
-  # caller injects backslashes — configure_file() would otherwise bake them
-  # verbatim into _bundle_dlls.cmake and trigger CMake 3.20+'s "Invalid
-  # character escape" error (\w, \d, \x, ...).
-  file(TO_CMAKE_PATH "${CMAKE_BINARY_DIR}/src/observer/seekdb.exe" _SEEKDB_EXE)
-  file(TO_CMAKE_PATH "${OB_VCPKG_DIR}/bin" _VCPKG_BIN_DIR)
-  file(TO_CMAKE_PATH "${OB_VSAG_DIR}/bin" _VSAG_BIN_DIR)
+  set(_SEEKDB_EXE "${CMAKE_BINARY_DIR}/src/observer/seekdb.exe")
+  set(_VCPKG_BIN_DIR "${OB_VCPKG_DIR}/bin")
+  set(_VSAG_BIN_DIR "${OB_VSAG_DIR}/bin")
 
   file(WRITE "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake.in" [=[
 file(GET_RUNTIME_DEPENDENCIES

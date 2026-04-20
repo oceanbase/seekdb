@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include <chrono>
-
 #define USING_LOG_PREFIX STORAGE
 #define private public
 #define protected public
@@ -262,8 +260,8 @@ void TestBackupExternalSort::SetUp()
   TestDataFilePrepare::SetUp();
   EXPECT_EQ(OB_SUCCESS, init_tenant_mgr());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
-  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
-  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
+  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1));
+  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache", 1));
   ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
 
   static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
