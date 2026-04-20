@@ -62,6 +62,8 @@ public:
   bool is_inited() const { return NULL != data_; }
   int push(void* p);
   int pop(void*& p, int64_t timeout = 0);
+  // Broadcast to all per-seq conds so every worker currently blocked in pop()
+  void wake_all();
 private:
   static uint64_t calc_n_cond(uint64_t capacity)
   {

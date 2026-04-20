@@ -121,6 +121,12 @@ public:
       ;
   }
 
+  // Broadcast to wake up every worker currently blocked in pop().
+  void wake_all()
+  {
+    (void)sem_.signal(INT32_MAX);
+  }
+
   QueueType* get_queue(const int i)
   {
     return &queue_[i];
