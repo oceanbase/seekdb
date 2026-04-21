@@ -2146,12 +2146,6 @@ DEF_PARAM(default_load_mode, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "DISABLED",
 DEF_PARAM(direct_load_allow_fallback, BOOL, OB_CLUSTER_PARAMETER, "True",
         "Control whether an error is reported when direct load of the derivative operation scenario is not supported.",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-// regexp engine
-DEF_PARAM(_regex_engine, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "ICU", common::ObConfigRegexpEngineChecker,
-                     "specifies the regexp engine. Values: ICU(International Components for Unicode), Hyperscan",
-                     ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-                     "ICU, Hyperscan");
-
 DEF_PARAM(_preset_runtime_bloom_filter_size, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Whether build runtime bloom filter with row count estimated by optimizor."
          "Value:  True:turned on  False: turned off",

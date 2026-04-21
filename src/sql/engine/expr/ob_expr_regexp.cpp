@@ -98,14 +98,13 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     //we need convert it the need collation in advance, and no need to think about in regexp.
     bool is_case_sensitive = ObCharset::is_bin_sort(res_cs_type);
     bool need_utf8 = false;
-    bool is_use_hs = type_ctx.get_session()->get_enable_hyperscan_regexp_engine();
     type1.set_calc_type(ObVarcharType);
     type1.set_calc_collation_level(type.get_collation_level());
     type2.set_calc_type(ObVarcharType);
     type2.set_calc_collation_level(type.get_collation_level());
     if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
       LOG_WARN("fail to check need utf8", K(ret));
-    } else if (need_utf8 || is_use_hs) {
+    } else if (need_utf8) {
       type2.set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
     } else {
       type2.set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
@@ -115,7 +114,7 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
       LOG_WARN("fail to check need utf8", K(ret));
-    } else if (need_utf8 || is_use_hs) {
+    } else if (need_utf8) {
       type1.set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
     } else {
       type1.set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
@@ -143,9 +142,8 @@ int ObExprRegexp::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObE
      const bool const_text = text->is_const_expr();
      const bool const_pattern = pattern->is_const_expr();
      rt_expr.extra_ = (!const_text && const_pattern) ? 1 : 0;
-     const bool is_use_hs = op_cg_ctx.session_->get_enable_hyperscan_regexp_engine();
-     rt_expr.eval_func_ = is_use_hs ? eval_hs_regexp : eval_regexp;
-     LOG_DEBUG("regexp expr cg", K(const_text), K(const_pattern), K(rt_expr.extra_), K(is_use_hs));
+     rt_expr.eval_func_ = eval_regexp;
+     LOG_DEBUG("regexp expr cg", K(const_text), K(const_pattern), K(rt_expr.extra_));
   }
   return ret;
 }
@@ -210,12 +208,8 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       bool is_case_sensitive = ObCharset::is_bin_sort(expr.args_[0]->datum_meta_.cs_type_);
       ObString text_utf;
       ObExprRegexpSessionVariables regexp_vars;
-      const ObCollationType constexpr expected_bin_coll =
-        std::is_same<RegExpCtx, ObExprRegexContext>::value ? CS_TYPE_UTF16_BIN :
-                                                             CS_TYPE_UTF8MB4_BIN;
-      const ObCollationType constexpr expected_ci_coll =
-        std::is_same<RegExpCtx, ObExprRegexContext>::value ? CS_TYPE_UTF16_GENERAL_CI :
-                                                             CS_TYPE_UTF8MB4_GENERAL_CI;
+      const ObCollationType constexpr expected_bin_coll = CS_TYPE_UTF16_BIN;
+      const ObCollationType constexpr expected_ci_coll = CS_TYPE_UTF16_GENERAL_CI;
       if (OB_FAIL(RegExpCtx::get_regexp_flags(match_string, is_case_sensitive, false, true, flags))) {
         LOG_WARN("failed to get regexp flags", K(ret));
       } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_regexp_session_vars(regexp_vars))) {
@@ -252,15 +246,6 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
 int ObExprRegexp::eval_regexp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   return regexp_match<ObExprRegexContext>(expr, ctx, expr_datum);
-}
-
-int ObExprRegexp::eval_hs_regexp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-{
-#if defined(__x86_64__)
-  return regexp_match<ObExprHsRegexCtx>(expr, ctx, expr_datum);
-#else
-  return OB_NOT_IMPLEMENT;
-#endif
 }
 
 }

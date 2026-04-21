@@ -39,6 +39,7 @@
 #include "rpc/obmysql/ob_mysql_packet.h"
 #include "share/system_variable/ob_system_variable_factory.h"
 #include "share/system_variable/ob_system_variable_alias.h"
+#include "share/system_variable/ob_system_variable_init.h"
 #include "share/client_feedback/ob_client_feedback_manager.h"
 #include "sql/session/ob_session_val_map.h"
 #include "sql/ob_sql_mode_manager.h"
@@ -80,6 +81,7 @@ private:
   bool value_;
   bool freeze_;
 };
+
 struct ObSessionNLSParams //oracle nls parameters
 {
   ObLengthSemantics nls_length_semantics_;
@@ -159,6 +161,9 @@ public:
   static const int64_t APPROX_MEM_USAGE_PER_SESSION = 256 * 1024L;
   static const uint64_t VALID_PROXY_SESSID = 0;
   static const uint32_t INVALID_SESSID = common::INVALID_SESSID;
+  // Reference to auto-generated essential system variables array
+  static const share::ObSysVarClassType* const ESSENTIAL_SYS_VARS;
+  static const int64_t ESSENTIAL_SYS_VARS_COUNT;
 
   enum SafeWeakReadSnapshotSource
   {
@@ -718,11 +723,29 @@ public:
     sys_vars_cache_.set_nls_timestamp_tz_format(nls_formats[ObNLSFormatEnum::NLS_TIMESTAMP_TZ]);
   }
   int get_influence_plan_sys_var(ObSysVarInPC &sys_vars) const;
-  const common::ObString &get_sys_var_in_pc_str() const { return sys_var_in_pc_str_; }
+  int get_sys_var_in_pc_str(common::ObString &str) {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(gen_sys_var_in_pc_str_lazy())) {
+      SQL_LOG(WARN, "fail to generate sys var in pc str", K(ret));
+    } else {
+      str = sys_var_in_pc_str_;
+    }
+    return ret;
+  }
   const common::ObString &get_config_in_pc_str() const { return config_in_pc_str_; }
-  uint64_t get_sys_var_config_hash_val() const { return sys_var_config_hash_val_; }
+  int get_sys_var_config_hash_val(uint64_t &val) {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(gen_sys_var_in_pc_str_lazy())) {
+      SQL_LOG(WARN, "fail to generate sys var in pc str", K(ret));
+    } else {
+      val = sys_var_config_hash_val_;
+    }
+    return ret;
+  }
   void eval_sys_var_config_hash_val();
   int gen_sys_var_in_pc_str();
+  int gen_sys_var_in_pc_str_lazy();
+  void mark_sys_var_str_dirty(); // sys_var_in_pc_str_ need to be regenerated
   int gen_configs_in_pc_str();
   uint32_t get_server_sid() const { return sessid_; }
   // Used for view or function compatibility display.
@@ -925,13 +948,23 @@ public:
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const common::ObString &var_name,
                                      common::ObObj &val);
+  static int get_global_sys_variable(uint64_t actual_tenant_id,
+                                     common::ObIAllocator &calc_buf,
+                                     const common::ObDataTypeCastParams &dtc_params,
+                                     const share::ObSysVarClassType var_id,
+                                     common::ObObj &val);
   share::ObBasicSysVar *get_sys_var(const int64_t idx);
   int64_t get_sys_var_count() const { return share::ObSysVarFactory::ALL_SYS_VARS_COUNT; }
   // deserialized scene need use base_value as baseline.
   int load_default_sys_variable(const bool print_info_log, const bool is_sys_tenant, bool is_deserialized = false);
+  int load_essential_sys_vars_only(const bool print_info_log, const bool is_sys_tenant, bool is_deserialized = false);
+  int init_essential_system_variables_by_id(const bool print_info_log, const bool is_sys_tenant, bool is_deserialized = false);
+  // lazy load mechanism: ensure the specified system variable is loaded
+  int ensure_sys_var_loaded(const share::ObSysVarClassType sys_var_id) const;
   int load_default_configs_in_pc();
   int update_query_sensitive_system_variable(share::schema::ObSchemaGetterGuard &schema_guard);
   int process_variable_for_tenant(const common::ObString &var, common::ObObj &val);
+  int process_variable_for_tenant(const share::ObSysVarClassType sys_var_id, common::ObObj &val);
   int load_sys_variable(common::ObIAllocator &calc_buf,
                         const common::ObString &name,
                         const common::ObObj &type,
@@ -948,7 +981,8 @@ public:
                         const common::ObString &min_val,
                         const common::ObString &max_val,
                         const int64_t flags,
-                        bool is_from_sys_table);
+                        bool is_from_sys_table,
+                        int64_t store_idx = -1);
   // Convert varchar type value, max_val, min_val to the corresponding type ObObj
   int cast_sys_variable(common::ObIAllocator &calc_buf,
                         bool is_range_value,
@@ -958,8 +992,16 @@ public:
                         int64_t flags,
                         common::ObObj &out_type,
                         common::ObObj &out_value);
-  ///@{ Update the value of system variables
-  // Update system variables according to kv pairs
+
+  int load_sys_variable_fast(common::ObIAllocator &calc_buf,
+                            const share::ObSysVarClassType sys_var_id,
+                            const common::ObObj &type,
+                            const common::ObObj &value,
+                            const common::ObObj &min_val,
+                            const common::ObObj &max_val,
+                            int64_t flags,
+                            bool is_update_sys_var);
+
   int update_sys_variable(const common::ObString &var, const common::ObString &val);
   int update_sys_variable(const share::ObSysVarClassType sys_var_id, const common::ObObj &val);
   int update_sys_variable(const share::ObSysVarClassType sys_var_id, const common::ObString &val);
@@ -1482,7 +1524,8 @@ public:
 protected:
   int process_session_variable(share::ObSysVarClassType var, const common::ObObj &value,
                                const bool check_timezone_valid = true,
-                               const bool is_update_sys_var = false);
+                               const bool is_update_sys_var = false,
+                               const bool is_load_default = false);
   int process_session_variable_fast();
   //@brief process session log_level setting like 'all.*:info, sql.*:debug'.
   //int process_session_ob_binlog_row_image(const common::ObObj &value);
@@ -2358,6 +2401,7 @@ private:
   common::ObString config_in_pc_str_;
   bool is_first_gen_; // is first generate sys_var_in_pc_str_;
   bool is_first_gen_config_; // whether is first time t o generate config_in_pc_str_
+  bool need_regenerate_sys_var_str_;
   share::ObSysVarFactory sys_var_fac_;
   char trace_id_buff_[64];//Since the trace_id system variable is updated in the case of a slow query, a buffer is used to store its content, preventing frequent memory allocation
   int64_t next_frag_mem_point_; // Used to control memory fragmentation of sys var (repeatedly setting the same varchar value can cause memory fragmentation)
@@ -2517,7 +2561,6 @@ private:
   bool has_ccl_rule_;
   int64_t last_ccl_cnt_update_time_;
 public:
-  bool get_enable_hyperscan_regexp_engine() const;
   int8_t get_min_const_integer_precision() const;
 };
 

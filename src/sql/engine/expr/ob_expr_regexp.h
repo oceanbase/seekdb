@@ -56,7 +56,6 @@ public:
                       ObExpr &rt_expr) const override;
 
   static int eval_regexp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int eval_hs_regexp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
 private:
   template<typename RegExpCtx>
   static int regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
