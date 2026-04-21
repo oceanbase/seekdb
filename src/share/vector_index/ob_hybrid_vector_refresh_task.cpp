@@ -21,6 +21,7 @@
 #include "src/storage/ls/ob_ls.h"
 #include "src/storage/tx/ob_trans_service.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
+#include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
 
 namespace oceanbase
 {
@@ -220,7 +221,7 @@ int ObHybridVectorRefreshTask::do_work()
         exec_finish = true;
         break;
       }
-      default :
+      default : 
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected task status", K(ret), K(current_status()), KPC(get_task_ctx()));
         break;
@@ -435,9 +436,9 @@ int ObHybridVectorRefreshTask::get_embedded_table_column_ids(ObPluginVectorIndex
   return ret;
 }
 
-int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
-    ObDMLBaseParam &dml_param,
-    share::schema::ObTableDMLParam &table_param,
+int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id, 
+    ObDMLBaseParam &dml_param, 
+    share::schema::ObTableDMLParam &table_param, 
     ObIArray<uint64_t> &dml_column_ids,
     transaction::ObTxDesc *tx_desc,
     oceanbase::transaction::ObTxReadSnapshot &snapshot,
@@ -486,6 +487,8 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
 int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor)
 {
   int ret = OB_SUCCESS;
+  bool use_request_model_name = false;
+  ObAIFuncExprInfo *ai_func_info = nullptr;
   omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService *);
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx)) {
@@ -495,6 +498,16 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
     LOG_WARN("failed to get ai service guard", K(ret), KPC(task_ctx));
   } else if (OB_FAIL(task_ctx->ai_service_.get_ai_endpoint_by_ai_model_name(adaptor.get_endpoint(), task_ctx->endpoint_, false /*need_check*/))) {
     LOG_WARN("failed to get endpoint info", K(ret), K(adaptor));
+  } else if (OB_FALSE_IT(use_request_model_name = !task_ctx->endpoint_->get_request_model_name().empty())) {
+  } else if (use_request_model_name && OB_FAIL(ob_write_string(task_ctx->allocator_, task_ctx->endpoint_->get_request_model_name(), task_ctx->request_model_name_))) {
+    LOG_WARN("failed to copy request_model_name", K(ret));
+  } else if (!use_request_model_name && OB_FAIL(ObAIFuncUtils::get_ai_func_info(task_ctx->allocator_, adaptor.get_endpoint(), ai_func_info))) {
+    LOG_WARN("failed to get ai func info", K(ret), K(adaptor.get_endpoint()));
+  } else if (!use_request_model_name && OB_ISNULL(ai_func_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai func info is null", K(ret));
+  } else if (!use_request_model_name && OB_FAIL(ob_write_string(task_ctx->allocator_, ai_func_info->model_, task_ctx->request_model_name_))) {
+    LOG_WARN("failed to copy model_name from ai func info", K(ret));
   }
   return ret;
 }
@@ -544,7 +557,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
     } else if (FALSE_IT(table_param = new(table_param)schema::ObTableParam(task_ctx->allocator_))) {
     } else if (FALSE_IT(ctx_->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time()))) {
     } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
-        &adaptor,
+        &adaptor, 
         ctx_->task_status_.target_scn_,
         INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL,
         task_ctx->allocator_,
@@ -570,7 +583,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
         task_ctx->batch_cnt_ = MAX(task_ctx->batch_cnt_ / 4, ObHybridVectorRefreshTaskCtx::MIN_BATCH_CNT);
       }
     }
-
+  
     int cur_row_count = 0;
     ObSEArray<ObString, 4> chunk_array;
     ObSEArray<ObString, 4> tmp_chunk_array;
@@ -663,7 +676,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
             LOG_WARN("failed to get access key", K(ret));
           } else if (OB_FAIL(ob_write_string(task_ctx->allocator_, endpoint->get_url(), url, true))) {
             LOG_WARN("fail to write string", K(ret));
-          } else if (OB_FAIL(task_ctx->embedding_task_->init(url, endpoint->get_request_model_name(),
+          } else if (OB_FAIL(task_ctx->embedding_task_->init(url, task_ctx->request_model_name_,
                              endpoint->get_provider(), access_key, chunk_array, dim, http_timeout_us, http_max_retries))) {
             LOG_WARN("failed to init embedding task", K(ret), KPC(endpoint));
           } else {
@@ -703,10 +716,10 @@ int ObHybridVectorRefreshTask::check_embedding_finish(bool &finish)
 }
 
 int ObHybridVectorRefreshTask::do_refresh_only(
-    ObPluginVectorIndexAdaptor &adaptor,
-    transaction::ObTxDesc *tx_desc,
-    oceanbase::transaction::ObTxReadSnapshot &snapshot,
-    storage::ObStoreCtxGuard &store_ctx_guard,
+    ObPluginVectorIndexAdaptor &adaptor, 
+    transaction::ObTxDesc *tx_desc, 
+    oceanbase::transaction::ObTxReadSnapshot &snapshot, 
+    storage::ObStoreCtxGuard &store_ctx_guard, 
     storage::ObValueRowIterator &index_id_iter,
     storage::ObValueRowIterator &delta_delete_iter)
 {
@@ -734,7 +747,7 @@ int ObHybridVectorRefreshTask::do_refresh_only(
       LOG_WARN("failed to insert rows to index id table", K(ret), K(adaptor.get_vbitmap_table_id()));
     }
     store_ctx_guard.reset();
-
+  
     // delete from 3 table.
     affected_rows = 0;
     if (OB_FAIL(ret)) {
@@ -843,7 +856,7 @@ int ObHybridVectorRefreshTask::delete_embedded_table(ObPluginVectorIndexAdaptor 
       common::ObNewRowIterator *scan_iter = nullptr;
       ObStorageDatumUtils util;
       ObArenaAllocator scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-      if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
+      if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
           &adaptor,
           snapshot.version(),
           INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL,
@@ -975,7 +988,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
       int64_t loop_cnt = 0;
       if (OB_FAIL(new_row.init(task_ctx->embedded_table_column_ids_.count()))) {
         LOG_WARN("fail to init datum row", K(ret), K(task_ctx->embedded_table_column_ids_), K(new_row));
-      } else if (adaptor.get_is_need_vid() && OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
+      } else if (adaptor.get_is_need_vid() && OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
               &adaptor,
               ctx_->task_status_.target_scn_,
               INDEX_TYPE_VEC_VID_ROWKEY_LOCAL,
@@ -1053,7 +1066,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
             ObTableScanIterator *embedded_table_scan_iter = nullptr;
             ObArenaAllocator embedde_scan_allocator("VecEmbedding", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
             ObRowkey rowkey(obj_ptr, embedded_rowkey_count);
-            if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
+            if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
                 &adaptor,
                 snapshot.version(),
                 INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL,
@@ -1098,7 +1111,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
             }
           }
         }
-
+        
         CHECK_TASK_CANCELLED_IN_PROCESS(ret, loop_cnt, ctx_);
       }
       if (OB_NOT_NULL(tsc_service)) {
