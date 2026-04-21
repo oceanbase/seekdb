@@ -91,7 +91,9 @@ inline int calc_clz(const uint32_t s)
 inline int calc_clz(const uint64_t s)
 {
   OB_ASSERT(0ULL != s);
-  return __builtin_clzl(s);
+  // __builtin_clzl takes `unsigned long` which is 32-bit on Windows LLP64.
+  // For a uint64_t we must use __builtin_clzll to avoid truncation.
+  return __builtin_clzll(s);
 }
 
 template<typename T, typename ID_TYPE, int64_t TSI_HOLD_NUM>

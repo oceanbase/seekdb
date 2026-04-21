@@ -47,7 +47,14 @@ int64_t get_packing_size(bool &bit_packing, const uint64_t v, bool enable_bit_pa
       // at least one bit
       bit_size = 1;
     } else {
-      bit_size = sizeof(v) * CHAR_BIT - __builtin_clzl(v);
+      // NOTE: `v` is uint64_t (64-bit). Must use __builtin_clzll, because
+      // on Windows (LLP64, clang-cl) `unsigned long` is 32-bit and
+      // __builtin_clzl silently truncates `v` to 32 bits, producing a
+      // wrong bit_size for values whose high 32 bits are non-zero.
+      // This causes bit_packing to lose bits and corrupt data (e.g. the
+      // DOUBLE column during DDL complement, which was the trigger for
+      // OB_ERR_COMPRESS_DECOMPRESS_DATA -4257 seen on Windows).
+      bit_size = sizeof(v) * CHAR_BIT - __builtin_clzll(v);
     }
     size = bit_size / CHAR_BIT;
     int64_t ext = bit_size % CHAR_BIT;
@@ -80,7 +87,9 @@ int64_t get_int_size(const uint64_t v)
 {
   int64_t bit_size = 1;
   if (v > 0) {
-    bit_size = sizeof(v) * CHAR_BIT - __builtin_clzl(v);
+    // see note in get_packing_size: must be __builtin_clzll for uint64_t
+    // because `unsigned long` is 32-bit on Windows LLP64.
+    bit_size = sizeof(v) * CHAR_BIT - __builtin_clzll(v);
   }
   return (bit_size + CHAR_BIT - 1) / CHAR_BIT;
 }

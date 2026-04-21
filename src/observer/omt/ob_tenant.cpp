@@ -17,6 +17,12 @@
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_tenant.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#endif
+
 #include "share/resource_manager/ob_resource_manager.h"
 #include "sql/engine/px/ob_px_target_mgr.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
@@ -714,8 +720,7 @@ ObTenant::ObTenant(const int64_t id,
       ctx_(nullptr),
       st_metrics_(),
       sql_limiter_(),
-      worker_us_(0),
-      cpu_time_us_(0)
+      worker_us_(0)
 {
   token_usage_check_ts_ = ObTimeUtility::current_time();
 }
@@ -1767,11 +1772,6 @@ void ObTenant::check_worker_count()
     }
     IGNORE_RETURN workers_lock_.unlock();
   }
-
-  if (GCONF._enable_new_sql_nio && GCONF._enable_tenant_sql_net_thread &&
-      (is_sys_tenant(id_) || is_user_tenant(id_))) {
-    GCTX.net_frame_->reload_tenant_sql_thread_config(id_);
-  }
 }
 
 void ObTenant::check_group_worker_count()
@@ -1936,22 +1936,30 @@ void ObTenant::update_token_usage()
     token_usage_ = std::max(.0, 1.0 * (total_us - idle_us) / total_us);
     IGNORE_RETURN ATOMIC_FAA(&worker_us_, total_us - idle_us);
   }
+}
 
-  if (OB_NOT_NULL(GCTX.cgroup_ctrl_) && GCTX.cgroup_ctrl_->is_valid()) {
-    //do nothing
-  } else if (duration >= 1000 * 1000 && OB_SUCC(thread_list_lock_.trylock())) {  // every second
-    int64_t cpu_time_inc = 0;
-    DLIST_FOREACH_REMOVESAFE(thread_list_node_, thread_list_)
-    {
-      Thread *thread = thread_list_node_->get_data();
-      int64_t inc = 0;
-      if (OB_SUCC(thread->get_cpu_time_inc(inc))) {
-        cpu_time_inc += inc;
-      }
-    }
-    thread_list_lock_.unlock();
-    IGNORE_RETURN ATOMIC_FAA(&cpu_time_us_, cpu_time_inc);
+int64_t ObTenant::get_cpu_time() const
+{
+#ifdef _WIN32
+  FILETIME creation, exit, kernel, user;
+  if (!GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user)) {
+    return 0;
   }
+  auto filetime_to_us = [](const FILETIME &ft) -> int64_t {
+    ULARGE_INTEGER u;
+    u.LowPart = ft.dwLowDateTime;
+    u.HighPart = ft.dwHighDateTime;
+    return static_cast<int64_t>(u.QuadPart / 10); // 100ns -> us
+  };
+  return filetime_to_us(user) + filetime_to_us(kernel);
+#else
+  struct rusage usage;
+  if (getrusage(RUSAGE_SELF, &usage) != 0) {
+    return 0;
+  }
+  return (int64_t)usage.ru_utime.tv_sec * 1000000LL + usage.ru_utime.tv_usec
+       + (int64_t)usage.ru_stime.tv_sec * 1000000LL + usage.ru_stime.tv_usec;
+#endif
 }
 
 void ObTenant::periodically_check()

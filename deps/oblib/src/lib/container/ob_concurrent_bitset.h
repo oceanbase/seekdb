@@ -203,7 +203,10 @@ int ObConcurrentBitset<SIZE, IS_USE_LOCK>::find_and_set_first_zero_without_lock(
                && !is_succ) {
           uint64_t start_pos_in_word = i == 0 ? start_pos % PER_WORD_BIT_NUM : 0;
           found_word = cur_word | ((1ULL << start_pos_in_word) - 1);//set [lowest_bit, start_pos_in_word) = 1
-          first_zero_idx = __builtin_ctzl(~found_word);
+          // found_word is uint64_t; __builtin_ctzl on Windows LLP64 would
+          // only look at the low 32 bits and return wrong indices for bits
+          // in the upper half of the word. Use __builtin_ctzll instead.
+          first_zero_idx = __builtin_ctzll(~found_word);
           uint64_t new_word = cur_word | (1ULL << first_zero_idx);
           is_succ = ATOMIC_BCAS(&word_array_[valid_idx], cur_word ,new_word);
         }
@@ -242,7 +245,8 @@ int ObConcurrentBitset<SIZE, IS_USE_LOCK>::find_and_set_first_zero_with_lock(uin
         uint64_t start_pos_in_word = i == 0 ? start_pos_ % PER_WORD_BIT_NUM : 0;
         found_word = word_array_[valid_idx] | ((1ULL << start_pos_in_word) - 1);//set [lowest_bit, start_pos_in_word) = 1
         if ((found_word & FULL_WORD_VALUE) != FULL_WORD_VALUE) {//if start_pos_in_word is highest bit and equal to 1, stop judgement.
-          first_zero_idx = __builtin_ctzl(~found_word);
+          // see above: use ctzll for uint64_t on Windows LLP64 correctness.
+          first_zero_idx = __builtin_ctzll(~found_word);
           word_array_[valid_idx] |= (1ULL << first_zero_idx);
           is_found = true;
         }

@@ -62,7 +62,9 @@ static void InitDecintInfo(const wide::ObWideInteger<Bits, Signed> &val, ObScale
   while (num.items_[cnt] == 0 && cnt > 0) {
     cnt--;
   }
-  binary_digits_cnt = (64 - __builtin_clzl(num.items_[cnt])) + cnt * 64;
+  // items_ are uint64_t; must use __builtin_clzll because `unsigned long`
+  // is 32-bit on Windows LLP64 and would silently truncate the argument.
+  binary_digits_cnt = (64 - __builtin_clzll(num.items_[cnt])) + cnt * 64;
   scale_factor = MAX(0, static_cast<int64_t>(binary_digits_cnt * LOG10_2- EPSILON) - 18);
   decint_info.exponent += scale_factor;
   while (scale_factor > 0) {

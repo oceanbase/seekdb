@@ -452,7 +452,9 @@ public:
       if (OB_FAIL(bits_.reserve(cnt_))) {
         SQL_ENG_LOG(WARN, "bit set reserve failed", K(ret));
       } else {
-        h2_shift_ = sizeof(cnt_) * CHAR_BIT - __builtin_clzl(cnt_);
+        // cnt_ is int64_t; __builtin_clzl takes `unsigned long` which is
+        // 32-bit on Windows LLP64 and would truncate. Use __builtin_clzll.
+        h2_shift_ = sizeof(cnt_) * CHAR_BIT - __builtin_clzll(cnt_);
       }
     }
     return ret;

@@ -445,7 +445,9 @@ OB_INLINE int64_t ObBitVectorImpl<WordType>::popcount64(uint64_t v)
 {
   int64_t cnt = 0;
 #if __POPCNT__
-  cnt = __builtin_popcountl(v);
+  // v is uint64_t; use popcountll because on Windows LLP64 `unsigned long`
+  // is 32-bit and __builtin_popcountl would drop the high 32 bits.
+  cnt = __builtin_popcountll(v);
 #else
   if (0 != v) {
     v = v - ((v >> 1) & 0x5555555555555555UL);
