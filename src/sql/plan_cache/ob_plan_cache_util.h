@@ -608,10 +608,6 @@ struct ObPlanStat
   common::ObString config_str_;
   common::ObString raw_sql_; // record the original sql when generating plan
   common::ObCollationType sql_cs_type_;
-  common::ObString rule_name_;
-  bool is_rewrite_sql_;
-  int64_t rule_version_; // the rule version when query rewrite generates a plan
-  bool enable_udr_;
   //******** for spm ******
   // Is this plan currently evolving
   uint64_t  db_id_;
@@ -712,10 +708,6 @@ struct ObPlanStat
       outline_id_(common::OB_INVALID_ID),
       is_last_exec_succ_(true),
       sql_cs_type_(common::CS_TYPE_INVALID),
-      rule_name_(),
-      is_rewrite_sql_(false),
-      rule_version_(OB_INVALID_VERSION),
-      enable_udr_(false),
       db_id_(common::OB_INVALID_ID),
       constructed_sql_(),
       sql_id_(),
@@ -796,10 +788,6 @@ struct ObPlanStat
       outline_id_(rhs.outline_id_),
       is_last_exec_succ_(rhs.is_last_exec_succ_),
       sql_cs_type_(rhs.sql_cs_type_),
-      rule_name_(),
-      is_rewrite_sql_(false),
-      rule_version_(OB_INVALID_VERSION),
-      enable_udr_(false),
       db_id_(rhs.db_id_),
       is_bind_sensitive_(rhs.is_bind_sensitive_),
       is_bind_aware_(rhs.is_bind_aware_),
@@ -1099,7 +1087,6 @@ public:
     enable_nlj_spf_use_rich_format_(false),
     enable_index_merge_(false),
     bloom_filter_ratio_(0),
-    enable_hyperscan_regexp_engine_(false),
     realistic_runtime_bloom_filter_size_(false),
     enable_parallel_das_dml_(false),
     direct_load_allow_fallback_(false),
@@ -1157,7 +1144,6 @@ public:
   bool enable_nlj_spf_use_rich_format_;
   bool enable_index_merge_;
   int bloom_filter_ratio_;
-  bool enable_hyperscan_regexp_engine_;
   bool realistic_runtime_bloom_filter_size_;
   bool enable_parallel_das_dml_;
   bool direct_load_allow_fallback_;

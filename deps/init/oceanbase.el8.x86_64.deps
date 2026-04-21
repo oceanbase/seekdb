@@ -1,7 +1,7 @@
 [target-default]
 os=8
 arch=x86_64
-repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/8/x86_64/
+repo=http://mirrors.oceanbase.com/oceanbase/community/stable
 
 [target-community]
 os=8
@@ -34,7 +34,6 @@ devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el8.x86_64.rpm
 devdeps-grpc-abiv1-1.46.7-572026031815.el8.x86_64.rpm
 devdeps-roaringbitmap-croaring-3.0.0-42024042816.el8.x86_64.rpm
 devdeps-apache-arrow-20.0.0-452026020914.el8.x86_64.rpm
-devdeps-hyperscan-5.4.2-242024090219.el8.x86_64.rpm
 devdeps-vsag-abiv1-1.1.0-1752026041310.el8.x86_64.rpm
 devdeps-apache-orc-2.1.1-122026020912.el8.x86_64.rpm
 devdeps-fast-float-6.1.3-42024112122.el8.x86_64.rpm
@@ -53,10 +52,5 @@ obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm
 devdeps-oblogmsg-1.1-52024052811.el8.x86_64.rpm
 devdeps-rocksdb-6.22.1-32024123015.el8.x86_64.rpm
 obstack-2.0.4-172024070513.el8.x86_64.rpm
-obshell-4.4.0.1-12026012311.el8.x86_64.rpm target=community
-#obshell-4.4.1.1-32026031914.el8.x86_64.rpm target=community
 
 [test-utils]
-ob-deploy-4.1.0-2.el8.x86_64.rpm target=community
-obclient-2.2.2-1.el8.x86_64.rpm target=community
-libobclient-2.2.2-3.el8.x86_64.rpm target=community
