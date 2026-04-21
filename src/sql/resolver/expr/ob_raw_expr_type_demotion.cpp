@@ -184,6 +184,8 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session or expr factory is null", K(ret), KP(session_), KP(expr_factory_));
   } else if (OB_ISNULL(exec_ctx = const_cast<ObExecContext *>(session_->get_cur_exec_ctx()))
+          || OB_ISNULL(exec_ctx->get_sql_ctx())
+          || OB_ISNULL(exec_ctx->get_physical_plan_ctx())
           || OB_ISNULL(query_ctx_ = expr_factory_->get_query_ctx())) {
     // exec ctx and query ctx may be null, in which case the type demotion is disabled.
     disabled = true;
