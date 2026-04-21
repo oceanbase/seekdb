@@ -1056,6 +1056,8 @@ int ObExpr::init_vector(ObEvalCtx &ctx,
     int32_t *lens = get_discrete_vector_lens(ctx);
     ObBitVector &nulls = get_nulls(ctx);
     nulls.reset(size);
+    MEMSET(ptrs, 0, sizeof(char *) * size);
+    MEMSET(lens, 0, sizeof(int32_t) * size);
     // for collection expr, we need reset ptr to frame, so that we can write collection cells
     if (use_reserve_buf || is_nested_expr()) {
       reset_discretes_ptr(ctx.frames_[frame_idx_], size, get_discrete_vector_ptrs(ctx));

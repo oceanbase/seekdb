@@ -221,8 +221,12 @@ int ObDbmsStatsUtils::check_is_stat_table(share::schema::ObSchemaGetterGuard &sc
     if (OB_FAIL(check_is_sys_table(schema_guard, tenant_id, table_id, is_valid))) {
       LOG_WARN("failed to check is sys table", K(ret));
     }
-  } else if (is_virtual_table(table_id)) {//check virtual table
+  } else if (is_virtual_table(table_id)) {
+#ifdef _WIN32
+    is_valid = false;
+#else
     is_valid = !is_no_stat_virtual_table(table_id);
+#endif
   } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
     LOG_WARN("failed to get table schema", K(ret), K(tenant_id), K(table_id));
   } else if (OB_ISNULL(table_schema) || OB_UNLIKELY(!table_schema->is_normal_schema())) {

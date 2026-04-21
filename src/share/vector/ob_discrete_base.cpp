@@ -32,7 +32,7 @@ int ObDiscreteBase::to_rows(const sql::RowMeta &row_meta, sql::ObCompactRow **st
   if (OB_LIKELY(!is_collection_expr())) {
     for (int64_t i = 0; i < size; i++) {
       int64_t row_idx = selector[i];
-      if (nulls_->at(row_idx)) {
+      if (nulls_->at(row_idx) || OB_UNLIKELY(nullptr == ptrs_[row_idx])) {
         stored_rows[i]->set_null(row_meta, col_idx);
       } else {
         stored_rows[i]->set_cell_payload(row_meta, col_idx, ptrs_[row_idx], lens_[row_idx]);
@@ -51,7 +51,7 @@ int ObDiscreteBase::to_rows(const sql::RowMeta &row_meta, sql::ObCompactRow **st
   int ret = OB_SUCCESS;
   if (OB_LIKELY(!is_collection_expr())) {
     for (int64_t row_idx = 0; row_idx < size; row_idx++) {
-      if (nulls_->at(row_idx)) {
+      if (nulls_->at(row_idx) || OB_UNLIKELY(nullptr == ptrs_[row_idx])) {
         stored_rows[row_idx]->set_null(row_meta, col_idx);
       } else {
         stored_rows[row_idx]->set_cell_payload(row_meta, col_idx, ptrs_[row_idx], lens_[row_idx]);
