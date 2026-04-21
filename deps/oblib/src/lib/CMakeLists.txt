@@ -568,7 +568,21 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     libfmt.a
   )
 elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
-  message(STATUS "Need to support Windows architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+  target_link_directories(oblib_lib PUBLIC ${OB_VSAG_DIR}/lib)
+  target_include_directories(oblib_lib PUBLIC ${OB_VSAG_DIR}/include)
+  target_link_libraries(oblib_lib
+    PUBLIC
+    cpuinfo.lib
+    simd.lib
+    vsag_static.lib
+    diskann.lib
+    openblas.lib
+    libomp.lib
+    roaring.lib
+    antlr4-runtime-static.lib
+    antlr4-autogen.lib
+    fmt.lib
+  )
 else()
   message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()

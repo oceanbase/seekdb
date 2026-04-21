@@ -256,6 +256,7 @@ elseif(WIN32)
   ob_define(OB_VCPKG_DIR "C:/VcpkgInstalled/x64-windows")
   ob_define(OB_OPENSSL_DIR "C:/Program Files/OpenSSL-Win64")
   ob_define(OB_LLVM_DIR "C:/Program Files/LLVM18")
+  ob_define(OB_VSAG_DIR "${DEP_3RD_DIR}/vsag")
 elseif(UNIX)
   # NO RELERO: -Wl,-znorelro
   # Partial RELRO: -Wl,-z,relro
