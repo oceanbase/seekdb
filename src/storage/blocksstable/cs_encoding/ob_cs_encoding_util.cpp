@@ -35,7 +35,11 @@ int64_t ObCSEncodingUtil::get_bit_size(const uint64_t v)
 {
   int64_t bit_size = 1;
   if (v > 0) {
-    bit_size = sizeof(v) * CHAR_BIT - __builtin_clzl(v);
+    // NOTE: must use __builtin_clzll (not __builtin_clzl) for a uint64_t
+    // argument. On Windows LLP64 `unsigned long` is 32-bit, so clzl silently
+    // truncates the value and under-counts the required bit width, which can
+    // cause bit_packing encoders to lose bits and corrupt stored data.
+    bit_size = sizeof(v) * CHAR_BIT - __builtin_clzll(v);
   }
   return bit_size;
 }

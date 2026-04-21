@@ -15,6 +15,7 @@
  */
 
 #include "lib/lock/cond.h"
+#include "lib/ob_abort.h"
 
 using namespace oceanbase::common;
 
@@ -26,6 +27,14 @@ Cond::Cond()
     int rt = pthread_condattr_init(&_attr);
     if (0 != rt) {
       _OB_LOG_RET(WARN, OB_ERR_SYS, "Failed to init cond attr, err=%d", rt);
+#ifdef _WIN32
+      // On Windows (pthreads4w), pthread_cond_t is an opaque pointer. If init
+      // fails (e.g. kernel object exhaustion, errno=ENOSPC=28), subsequent
+      // signal/broadcast/wait on the uninitialized _cond dereferences a NULL
+      // internal pointer inside pthreadVC3.dll and causes a native crash.
+      // Fast-fail here to produce a clear failure instead of a follow-up AV.
+      ob_abort();
+#endif
     }
     // Set the attribute to use CLOCK_MONOTONIC clock source
     // Note: pthread_condattr_setclock is Linux-specific, not available on macOS
@@ -43,6 +52,9 @@ Cond::Cond()
     rt = pthread_cond_init(&_cond, &_attr);
     if (0 != rt) {
       _OB_LOG_RET(WARN, OB_ERR_SYS, "Failed to init cond, err=%d", rt);
+#ifdef _WIN32
+      ob_abort();
+#endif
     }
 }
 

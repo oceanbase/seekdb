@@ -29,7 +29,9 @@ OB_INLINE int64_t popcount64(uint64_t v)
 {
   int64_t cnt = 0;
 #if __POPCNT__
-  cnt = __builtin_popcountl(v);
+  // v is uint64_t; use popcountll because `unsigned long` is 32-bit on
+  // Windows LLP64 and popcountl would drop the high 32 bits.
+  cnt = __builtin_popcountll(v);
 #else
   if (0 != v) {
     v = v - ((v >> 1) & 0x5555555555555555UL);

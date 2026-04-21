@@ -61,7 +61,9 @@ OB_INLINE uint64_t ob_popcount64(uint64_t v)
 {
   int64_t cnt = 0;
 #if __POPCNT__
-  cnt = __builtin_popcountl(v);
+  // v is uint64_t; __builtin_popcountl takes `unsigned long` which is only
+  // 32-bit on Windows LLP64. Use __builtin_popcountll to count all 64 bits.
+  cnt = __builtin_popcountll(v);
 #else
   if (0 != v) {
     v -= ((v >> 1) & 0x5555555555555555UL);

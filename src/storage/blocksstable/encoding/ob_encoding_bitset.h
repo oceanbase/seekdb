@@ -125,7 +125,11 @@ private:
     } else {
       int64_t wc_before = which_word(pos);
       for (int64_t i = 0; i < wc_before; ++i) {
-        ret += __builtin_popcountl(words_[i]);
+        // each word is uint64_t; __builtin_popcountl takes `unsigned long`
+        // which is 32-bit on Windows LLP64 and would undercount bits in
+        // the upper 32 bits. Use __builtin_popcountll for a full 64-bit
+        // count that is correct on both LP64 and LLP64.
+        ret += __builtin_popcountll(words_[i]);
       }
       ret += popcnt64(words_[wc_before], pos - wc_before * BITS_PER_WORD);
     }
@@ -140,7 +144,8 @@ private:
     } else {
       int64_t wc_before = which_word(pos);
       for (int64_t i = 0; i < wc_before; ++i) {
-        ret += __builtin_popcountl(words[i]);
+        // see note above: use 64-bit builtin to stay correct on Windows.
+        ret += __builtin_popcountll(words[i]);
       }
       ret += popcnt64(words[wc_before], pos - wc_before * BITS_PER_WORD);
     }
@@ -149,7 +154,10 @@ private:
 
   inline static int64_t popcnt64(const uint64_t word, const int64_t pos)
   {
-    return (0 == pos) ? 0 : __builtin_popcountl(word << (BITS_PER_WORD - pos));
+    // word is uint64_t. Must use the 64-bit variant __builtin_popcountll;
+    // on Windows LLP64 `unsigned long` is 32-bit and popcountl would
+    // silently drop the upper half of the word.
+    return (0 == pos) ? 0 : __builtin_popcountll(word << (BITS_PER_WORD - pos));
   }
 
 private:
