@@ -720,7 +720,12 @@ int ObCSAsyncIndexProcessor::build_das_ins_rtdef_(common::ObArenaAllocator &allo
     LOG_WARN("ins_rtdef is null after allocation", K(ret));
   } else {
     const int64_t current_time = common::ObTimeUtility::current_time();
-    const int64_t timeout_us = GCONF.internal_sql_execute_timeout;
+    // Use at least 5 minutes for change-stream async index DAS insert to
+    // tolerate large batches; internal_sql_execute_timeout default is 30s
+    // which is too small here.
+    static const int64_t CS_ASYNC_INDEX_DAS_TIMEOUT_US = 5L * 60L * 1000L * 1000L;
+    const int64_t default_timeout_us = GCONF.internal_sql_execute_timeout;
+    const int64_t timeout_us = MAX(default_timeout_us, CS_ASYNC_INDEX_DAS_TIMEOUT_US);
     ins_rtdef->timeout_ts_ = current_time + timeout_us;
     ins_rtdef->tenant_schema_version_ = ctx_.schema_version_;
     ins_rtdef->prelock_ = false;
