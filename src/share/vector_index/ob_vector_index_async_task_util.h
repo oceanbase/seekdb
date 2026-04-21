@@ -352,7 +352,7 @@ private:
 class ObVecIndexAsyncTask : public ObVecIndexIAsyncTask
 {
 public:
-  ObVecIndexAsyncTask()
+  ObVecIndexAsyncTask() 
       : ObVecIndexIAsyncTask(ObMemAttr(MTL_ID(), "VecIdxASyTask"))
   {
   }
@@ -387,6 +387,9 @@ private:
       bool check_null_chunk = false);
   int delete_incr_table_data(ObPluginVectorIndexAdaptor &adaptor, storage::ObDMLBaseParam &dml_param, transaction::ObTxDesc *tx_desc);
   bool check_task_satisfied_memory_limited(ObPluginVectorIndexAdaptor &adaptor);
+  
+  int fetch_commit_scn_from_tx_table(const transaction::ObTransID &tx_id, share::SCN &commit_scn);
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObVecIndexAsyncTask);
 };

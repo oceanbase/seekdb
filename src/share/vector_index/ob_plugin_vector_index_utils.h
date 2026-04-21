@@ -57,6 +57,10 @@ class ObPluginVectorIndexUtils
 {
 public:
   static int get_task_read_snapshot(ObLSID &ls_id, SCN &read_version);
+
+  static int check_can_do_refresh_memdata(ObPluginVectorIndexAdaptor *adapter,
+                                          SCN target_scn,
+                                          bool &can_do_refresh_memdata);
   static int refresh_memdata(ObLSID &ls_id,
                              ObPluginVectorIndexAdaptor *adapter,
                              SCN target_scn,
@@ -85,6 +89,8 @@ public:
 
   static void set_ls_leader_flag(const ObLSID &ls_id, const bool is_leader);
   static int get_ls_leader_flag(const ObLSID &ls_id, bool &is_leader);
+
+  static int get_read_scn(bool is_leader, ObLSID &ls_id, SCN &target_scn);
   static int query_need_refresh_memdata(ObPluginVectorIndexAdaptor *adapter, ObLSID &ls_id);
 
   static int add_key_ranges(uint64_t table_id, ObRowkey& rowkey, storage::ObTableScanParam &scan_param);
@@ -110,12 +116,12 @@ public:
                                               int64_t extra_info_count,
                                               ObVecExtraInfoObj *output_extra_objs,
                                               bool &get_data);
-  static int read_object_from_embedded_table_iter(ObObj *&input_obj,
+  static int read_object_from_embedded_table_iter(ObObj *&input_obj, 
                                                   int32_t data_table_rowkey_count,
-                                                  uint64_t table_id,
-                                                  storage::ObTableScanParam &scan_param,
+                                                  uint64_t table_id, 
+                                                  storage::ObTableScanParam &scan_param, 
                                                   common::ObNewRowIterator *iter,
-                                                  ObIAllocator &allocator,
+                                                  ObIAllocator &allocator, 
                                                   ObObj &output_vec_obj,
                                                   int64_t extra_column_count,
                                                   ObVecExtraInfoObj *output_extra_info_objs,

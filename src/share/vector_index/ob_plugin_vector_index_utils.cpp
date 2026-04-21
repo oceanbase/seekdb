@@ -256,12 +256,12 @@ int ObPluginVectorIndexUtils::read_object_from_vid_rowkey_table_iter(ObObj *inpu
   return ret;
 }
 
-int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input_obj,
+int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input_obj, 
                                                                    int32_t data_table_rowkey_count,
-                                                                   uint64_t table_id,
-                                                                   storage::ObTableScanParam &scan_param,
+                                                                   uint64_t table_id, 
+                                                                   storage::ObTableScanParam &scan_param, 
                                                                    common::ObNewRowIterator *iter,
-                                                                   ObIAllocator &allocator,
+                                                                   ObIAllocator &allocator, 
                                                                    ObObj &output_vec_obj,
                                                                    int64_t extra_column_count,
                                                                    ObVecExtraInfoObj *output_extra_info_objs,
@@ -269,7 +269,7 @@ int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input
 {
   INIT_SUCC(ret);
   ObRowkey rowkey(input_obj, data_table_rowkey_count + 1);
-
+  
   if (OB_FAIL(add_key_ranges(table_id, rowkey, scan_param))) {
     LOG_WARN("failed to set vid id key", K(ret));
   } else if (OB_FAIL(iter_table_rescan(scan_param, iter))) {
@@ -277,7 +277,7 @@ int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input
   } else {
     blocksstable::ObDatumRow *datum_row = nullptr;
     storage::ObTableScanIterator *scan_iter = dynamic_cast<storage::ObTableScanIterator *>(iter);
-
+    
     if (OB_ISNULL(scan_iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to cast to vid iter.", K(ret));
@@ -556,9 +556,9 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
             }
           } else if (is_hybrid_vector && OB_FAIL(read_object_from_embedded_table_iter(obj_ptr,
                                                                                        data_table_rowkey_count,
-                                                                                       data_table_table_id,
-                                                                                       data_scan_param,
-                                                                                       data_iter,
+                                                                                       data_table_table_id, 
+                                                                                       data_scan_param, 
+                                                                                       data_iter, 
                                                                                        batch_temp_allocator,
                                                                                        output_vec_obj[i],
                                                                                        extra_column_count,
@@ -597,7 +597,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
     } else if (!adapter->get_is_need_vid()) {
       bool get_data = false;
       int32_t data_table_rowkey_count = 1;
-
+      
       for (int64_t j = 0; OB_SUCC(ret) && j < ada_ctx.get_count(); j += ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE) {
         batch_temp_allocator.reuse();
         int64_t vec_cnt = ada_ctx.get_vec_cnt();
@@ -619,9 +619,9 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
             LOG_WARN("failed to read obj from data table.", K(ret));
           } else if (is_hybrid_vector && OB_FAIL(read_object_from_embedded_table_iter(input_obj,
                                                                                        0,
-                                                                                       data_table_table_id,
-                                                                                       data_scan_param,
-                                                                                       data_iter,
+                                                                                       data_table_table_id, 
+                                                                                       data_scan_param, 
+                                                                                       data_iter, 
                                                                                        batch_temp_allocator,
                                                                                        output_vec_obj[i],
                                                                                        extra_column_count,
@@ -629,7 +629,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
                                                                                        get_data))) {
             LOG_WARN("failed to read obj from embedded table.", K(ret));
           }
-        }
+        } 
 
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
@@ -925,6 +925,24 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
   return ret;
 }
 
+int ObPluginVectorIndexUtils::get_read_scn(bool is_leader, ObLSID &ls_id, SCN &target_scn)
+{
+  int ret = OB_SUCCESS;
+  ObLSHandle ls_handle;
+  // ObLSWRSHandler::get_ls_weak_read_ts
+  storage::ObLSService *ls_svr = MTL(storage::ObLSService*);
+  if (OB_ISNULL(ls_svr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr", K(ret), KP(ls_svr), K(ls_id));
+  } else if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::SHARE_MOD))) {
+    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
+  } else  if (is_leader && OB_FAIL(target_scn.convert_from_ts(ObTimeUtility::fast_current_time()))) {
+    LOG_WARN("failed to convert ts to scn", K(ret));
+  } else if (!is_leader && FALSE_IT(target_scn = ls_handle.get_ls()->get_ls_wrs_handler()->get_ls_weak_read_ts())) {
+  }
+  return ret;
+}
+
 int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdaptor *adapter, ObLSID &ls_id)
 {
   int ret = OB_SUCCESS;
@@ -954,6 +972,25 @@ int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdap
   return ret;
 }
 
+int ObPluginVectorIndexUtils::check_can_do_refresh_memdata(ObPluginVectorIndexAdaptor *adapter, SCN target_scn, bool &can_do_refresh_memdata)
+{
+  int ret = OB_SUCCESS;
+  can_do_refresh_memdata = false;
+  if (OB_ISNULL(adapter)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr", K(ret));
+  } else {
+    SCN cur_adapter_replace_scn = adapter->get_replace_scn();
+    if (!cur_adapter_replace_scn.is_valid()) {
+      can_do_refresh_memdata = true; 
+    } else {
+      can_do_refresh_memdata = target_scn > cur_adapter_replace_scn;
+    }
+    LOG_INFO("scn check result", K(target_scn), K(cur_adapter_replace_scn), K(can_do_refresh_memdata), K(*adapter));
+  }
+  return ret;
+}
+
 int ObPluginVectorIndexUtils::refresh_memdata(ObLSID &ls_id,
                                               ObPluginVectorIndexAdaptor *adapter,
                                               SCN target_scn,
@@ -975,11 +1012,14 @@ int ObPluginVectorIndexUtils::refresh_memdata(ObLSID &ls_id,
   } else if (OB_FAIL(test_read_local_data(ls_id, adapter, INDEX_TYPE_IS_NOT, target_scn, allocator))) {
     LOG_WARN("fail to test read local data.", K(ret), K(ls_id), K(INDEX_TYPE_IS_NOT));
   }
-#endif
+#endif 
+  bool can_do_refresh_memdata = false;
   if (OB_ISNULL(adapter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid adapter", K(ret), KPC(adapter));
-  } else {
+  } else if (OB_FAIL(check_can_do_refresh_memdata(adapter, target_scn, can_do_refresh_memdata))) {
+    LOG_WARN("failed to check can do refresh memdata", K(ret));
+  } else if (can_do_refresh_memdata) {
     MTL_SWITCH(adapter->get_tenant_id()) {
       ObPluginVectorIndexAdaptor *new_adapter = adapter;
       ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *);
@@ -1000,14 +1040,19 @@ int ObPluginVectorIndexUtils::refresh_memdata(ObLSID &ls_id,
         LOG_WARN("failed to refresh adapter from table", K(ret), KPC(adapter));
       }
       if (adapter != new_adapter && OB_NOT_NULL(new_adapter)) {
+        bool has_replace = false;
         if (OB_SUCC(ret)) {
+          // Set replace scn before replace_old_adapter
+          DEBUG_SYNC(BEFORE_REPLACE_OLD_ADAPTOR);
           RWLock::WLockGuard lock_guard(vec_idx_mgr->get_adapter_map_lock());
-          if (OB_FAIL(vec_idx_mgr->replace_old_adapter(new_adapter))) {
+          if (OB_FAIL(new_adapter->set_replace_scn(target_scn))) {
+            LOG_WARN("failed to set replace scn", K(ret), K(target_scn));
+          } else if (OB_FAIL(vec_idx_mgr->replace_old_adapter_with_scn_check(new_adapter, has_replace))) {
             LOG_WARN("failed to replace old adapter", K(ret));
           }
         }
-        if (OB_FAIL(ret)) {
-          LOG_INFO("release new vector index adapter on failed", K(ret), K(new_adapter));
+        if (OB_FAIL(ret) || !has_replace) {
+          LOG_INFO("release new vector index adapter on failed", K(ret), K(new_adapter), K(has_replace));
           new_adapter->~ObPluginVectorIndexAdaptor();
           void *adpt_buff  = reinterpret_cast<void*>(new_adapter);
           vector_index_service->get_allocator().free(adpt_buff);
@@ -1841,7 +1886,7 @@ ObAdapterCreateType ObPluginVectorIndexUtils::index_type_to_create_type(schema::
 }
 
 int ObPluginVectorIndexUtils::get_vector_index_prefix_inner(const ObTableSchema &index_schema,
-                                                      const ObString index_name,
+                                                      const ObString index_name, 
                                                       ObString &prefix)
 {
   int ret = OB_SUCCESS;

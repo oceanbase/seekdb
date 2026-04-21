@@ -532,7 +532,7 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
               }
 
               if (OB_FAIL(ret)) {
-              } else if (task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD ||
+              } else if (task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD || 
                          task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
                 need_resumed = false;
               }
@@ -974,7 +974,7 @@ int ObVecIndexAsyncTaskHandler::push_task(
       task = nullptr;
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(task) &&
+    } else if (OB_NOT_NULL(task) && 
         (task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_PREPARE || task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_FINISH)) {
       task->reset_status();
       handle_ls_process_task_cnt(task->get_ls_id(), true);
@@ -1048,7 +1048,7 @@ void ObVecIndexAsyncTaskHandler::handle(void *task)
   } else {
     async_task = static_cast<ObVecIndexIAsyncTask *>(task);
     ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *);
-    if (async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_OPTINAL
+    if (async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_OPTINAL 
     || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING
     || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD
     || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
@@ -1075,7 +1075,7 @@ void ObVecIndexAsyncTaskHandler::handle(void *task)
       LOG_WARN("unexpected task type", K(ret), KPC(async_task));
     }
   }
-  if (OB_NOT_NULL(async_task)
+  if (OB_NOT_NULL(async_task) 
       && (async_task->get_task_type() != ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING || async_task->all_finished())) {
     handle_ls_process_task_cnt(async_task->get_ls_id(), false);
     dec_async_task_ref();
@@ -1225,6 +1225,30 @@ int ObVecIndexATaskUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to get next new row", K(ret));
       }
+    }
+  }
+  return ret;
+}
+
+int ObVecIndexAsyncTask::fetch_commit_scn_from_tx_table(
+    const transaction::ObTransID &tx_id,
+    share::SCN &commit_scn)
+{
+  int ret = OB_SUCCESS;
+  int64_t tx_state = 0;
+  share::SCN recycled_scn;
+  ObLSHandle ls_handle;
+  if (OB_FAIL(MTL(ObLSService *)->get_ls(ls_id_, ls_handle, ObLSGetMod::TRANS_MOD))) {
+    LOG_WARN("get ls handle fail", K(ret), K(ls_id_));
+  } else {
+    ObTxTableGuard tx_table_guard;
+    if (OB_FAIL(ls_handle.get_ls()->get_tx_table()->get_tx_table_guard(tx_table_guard))) {
+      LOG_WARN("get tx table guard failed", KR(ret), K(ls_id_));
+    } else if (OB_FAIL(tx_table_guard.try_get_tx_state(tx_id, tx_state, commit_scn, recycled_scn))) {
+      LOG_WARN("get tx state from tx_table failed", KR(ret), K(ls_id_), K(tx_id));
+    } else if (tx_state != ObTxData::COMMIT) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected tx state", K(ret), K(tx_state), K(tx_id));
     }
   }
   return ret;
@@ -1388,7 +1412,7 @@ int ObVecIndexAsyncTask::process_data_for_index(ObPluginVectorIndexAdaptor &adap
     } else if (OB_ISNULL(vectors = static_cast<float *>(allocator_.alloc(sizeof(float) * dim * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc new mem.", K(ret));
-    }
+    } 
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(vids = static_cast<int64_t *>(allocator_.alloc(sizeof(int64_t) * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1643,15 +1667,28 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
   * Therefore, the order of these two locks must not be reversed;
   * otherwise, a deadlock could occur between the query and asynchronous tasks. */
   RWLock::WLockGuard query_lock_guard(old_adapter_->get_query_lock()); // lock for query before end trans
-  RWLock::WLockGuard lock_guard(vec_idx_mgr_->get_adapter_map_lock());
-  int tmp_ret = OB_SUCCESS;
-  if (trans_start && OB_SUCCESS != (tmp_ret = ObInsertLobColumnHelper::end_trans(tx_desc, OB_SUCCESS != ret, timeout_us))) {
-    ret = tmp_ret;
-    LOG_WARN("fail to end trans", K(ret));
+  share::SCN commit_scn;
+  transaction::ObTransID tx_id;
+  if (OB_NOT_NULL(tx_desc)) {
+    tx_id = tx_desc->get_tx_id(); // save tx_id before end_trans
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(vec_idx_mgr_->replace_old_adapter(&adaptor))) {
-    LOG_WARN("failed to replace old adapter", K(ret));
+  int tmp_ret = OB_SUCCESS;
+  if (trans_start && OB_NOT_NULL(tx_desc) && OB_SUCCESS != (tmp_ret = ObInsertLobColumnHelper::end_trans(tx_desc, OB_SUCCESS != ret, timeout_us))) {
+    ret = tmp_ret;
+    LOG_WARN("fail to end trans", K(ret), KPC(tx_desc));
+  } else if (OB_SUCC(ret) && OB_FAIL(fetch_commit_scn_from_tx_table(tx_id, commit_scn))) {
+    LOG_WARN("fail to fetch commit scn from tx_table", K(ret), K(tx_id));
+  }
+
+  RWLock::WLockGuard lock_guard(vec_idx_mgr_->get_adapter_map_lock());
+  if (OB_SUCC(ret)) {
+    // can skip only use when create vector index and no dml 
+    adaptor.update_can_skip(NOT_SKIP);
+    if (OB_FAIL(adaptor.set_replace_scn(commit_scn))) {
+      LOG_WARN("failed to set replace scn", K(ret), K(commit_scn));
+    } else if (OB_FAIL(vec_idx_mgr_->replace_old_adapter(&adaptor))) {
+      LOG_WARN("failed to replace old adapter", K(ret));
+    }
   }
 
   return ret;
