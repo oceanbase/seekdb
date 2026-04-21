@@ -1,0 +1,308 @@
+drop table if exists t1,t2;
+select dbms_vector.index_vector_memory_advisor('HNSW');
+ERROR 42000: Incorrect number of arguments
+select dbms_vector.index_vector_memory_advisor('HNSW',10000);
+ERROR 42000: Incorrect number of arguments
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,10);
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('HNSW',10000,10,'FLOAT32');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('HNSW',10000,10,'FLOAT32','');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('HNSW',1000000,10,'FLOAT32','M=10,TYPE=HNSW');
+ERROR 0A000: the vector index params of distance not set is not supported
+select dbms_vector.index_vector_memory_advisor('HNSW',1000000,10,'FLOAT32','M=10,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW',1000000,10,'FLOAT32','M=10,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 462.3 MB
+select dbms_vector.index_vector_memory_advisor('hnsw',1000000,10,'float32','M=10,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('hnsw',1000000,10,'float32','M=10,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 462.3 MB
+select dbms_vector.index_vector_memory_advisor('HNSW',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 462.3 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,DISTANCE=L2')
+Suggested minimum vector memory is 444.3 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,10,'FLOAT32','M=10,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,10,'FLOAT32','M=10,DISTANCE=L2')
+Suggested minimum vector memory is 533.5 MB, memory consumption when providing search service is 243.9 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 444.3 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=INNER_PRODUCT');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=INNER_PRODUCT')
+Suggested minimum vector memory is 444.3 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 444.3 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=COSINE');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=COSINE')
+Suggested minimum vector memory is 444.3 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_BQ,DISTANCE=COSINE');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_BQ,DISTANCE=COSINE')
+Suggested minimum vector memory is 543.1 MB, memory consumption when providing search service is 248.7 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_BQ,DISTANCE=INNER_PRODUCT');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,10,'FLOAT32','M=10,TYPE=HNSW_BQ,DISTANCE=INNER_PRODUCT')
+Suggested minimum vector memory is 543.1 MB, memory consumption when providing search service is 248.7 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=2,DISTANCE=L2');
+ERROR 0A000: Not supported feature or function
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=20,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,10,'FLOAT32','M=20,DISTANCE=L2')
+Suggested minimum vector memory is 482.9 MB
+select dbms_vector.index_vector_memory_advisor('HNSW',1000000,768,'FLOAT32','M=30,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW',1000000,768,'FLOAT32','M=30,DISTANCE=L2')
+Suggested minimum vector memory is 7.6 GB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2')
+Suggested minimum vector memory is 2.3 GB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2')
+Suggested minimum vector memory is 4.5 GB, memory consumption when providing search service is 530.8 MB
+select dbms_vector.index_vector_memory_advisor('HNSW',1000000,768,'FLOAT32','M=30,DISTANCE=L2,EXTRA_INFO_ACTUAL_SIZE=1000');
+dbms_vector.index_vector_memory_advisor('HNSW',1000000,768,'FLOAT32','M=30,DISTANCE=L2,EXTRA_INFO_ACTUAL_SIZE=1000')
+Suggested minimum vector memory is 9.9 GB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2,EXTRA_INFO_ACTUAL_SIZE=1000');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2,EXTRA_INFO_ACTUAL_SIZE=1000')
+Suggested minimum vector memory is 4.5 GB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2,EXTRA_INFO_ACTUAL_SIZE=1000');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=30,DISTANCE=L2,EXTRA_INFO_ACTUAL_SIZE=1000')
+Suggested minimum vector memory is 6.7 GB, memory consumption when providing search service is 1.6 GB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=16,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=16,DISTANCE=L2')
+Suggested minimum vector memory is 4.2 GB, memory consumption when providing search service is 400.6 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=16,DISTANCE=L2,REFINE_TYPE=SQ8,BQ_USE_FHT=TRUE,BQ_BITS_QUERY=4') as result;
+result
+Suggested minimum vector memory is 1.7 GB, memory consumption when providing search service is 407.9 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=16,DISTANCE=L2,REFINE_TYPE=SQ8,BQ_USE_FHT=TRUE,BQ_BITS_QUERY=32') as result;
+result
+Suggested minimum vector memory is 1.6 GB, memory consumption when providing search service is 403.1 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',1000000,768,'FLOAT32','M=16,DISTANCE=L2,REFINE_TYPE=FP32,BQ_USE_FHT=FALSE,BQ_BITS_QUERY=32') as result;
+result
+Suggested minimum vector memory is 4.2 GB, memory consumption when providing search service is 400.6 MB
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',1000000,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_FLAT',1000000,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 777.9 KB, memory consumption when providing search service is 6.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_SQ8',1000000,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_SQ8',1000000,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 777.9 KB, memory consumption when providing search service is 6.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 1.6 MB, memory consumption when providing search service is 18.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_FLAT',10,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 3.4 KB, memory consumption when providing search service is 480 Bytes
+select dbms_vector.index_vector_memory_advisor('IVF_SQ8',10,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_SQ8',10,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 3.4 KB, memory consumption when providing search service is 480 Bytes
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',10,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',10,10,'FLOAT32','SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 3.9 KB, memory consumption when providing search service is 960 Bytes
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',1000000,10,'FLOAT32','NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_FLAT',1000000,10,'FLOAT32','NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 1.4 MB, memory consumption when providing search service is 4.7 KB
+select dbms_vector.index_vector_memory_advisor('IVF_SQ8',1000000,10,'FLOAT32','NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_SQ8',1000000,10,'FLOAT32','NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 1.4 MB, memory consumption when providing search service is 4.7 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 3.8 MB, memory consumption when providing search service is 16.7 KB
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',1000000,20,'FLOAT32','NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_FLAT',1000000,20,'FLOAT32','NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 2.6 MB, memory consumption when providing search service is 9.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_SQ8',1000000,20,'FLOAT32','NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_SQ8',1000000,20,'FLOAT32','NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 2.6 MB, memory consumption when providing search service is 9.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,20,'FLOAT32','NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,20,'FLOAT32','NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 6.8 MB, memory consumption when providing search service is 33.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 3.8 MB, memory consumption when providing search service is 18.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','TYPE=HNSW_SQ,DISTANCE=L2,NBITS=12');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',1000000,10,'FLOAT32','TYPE=HNSW_SQ,DISTANCE=L2,NBITS=12')
+Suggested minimum vector memory is 93.9 MB, memory consumption when providing search service is 198.0 KB
+create table t1 (id int auto_increment, c1 vector(3));
+insert into t1(c1) select array(1/UNIFORM(1,1000,RANDOM(1)), 1/UNIFORM(1,1000,RANDOM(2)) , 1/UNIFORM(1,1000,RANDOM(3))) from table(generator(10000));
+analyze table t1;
+select sum(table_rows), max(table_rows) from information_schema.PARTITIONS  WHERE  table_name = 't1';
+sum(table_rows)	max(table_rows)
+10000	10000
+select dbms_vector.index_vector_memory_estimate();
+ERROR 42000: Incorrect number of arguments
+select dbms_vector.index_vector_memory_estimate('t1');
+ERROR 42000: Incorrect number of arguments
+select dbms_vector.index_vector_memory_estimate('t1','c1');
+ERROR 42000: Incorrect number of arguments
+select dbms_vector.index_vector_memory_estimate('t1','c1','HNSW');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_estimate('t1','c1','SPIV');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_estimate('t1','c2','HNSW','M=10,TYPE=HNSW,DISTANCE=L2');
+ERROR HY000: Column not found
+select dbms_vector.index_vector_memory_estimate('t1','c1','HNSW','M=10,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','HNSW','M=10,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 4.0 MB
+select dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=10,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=10,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 4.0 MB
+select dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_SQ','M=10,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_SQ','M=10,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 22.8 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 22.8 MB
+select dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_BQ','M=10,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_BQ','M=10,DISTANCE=L2')
+Suggested minimum vector memory is 14.0 MB, memory consumption when providing search service is 6.9 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=10,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=10,DISTANCE=L2')
+Suggested minimum vector memory is 14.0 MB, memory consumption when providing search service is 6.9 MB
+select dbms_vector.index_vector_memory_estimate('t1','c1','HNSW','M=32,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','HNSW','M=32,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 8.0 MB
+select dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=32,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=32,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 8.0 MB
+select dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_SQ','M=32,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_SQ','M=32,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 18.6 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=32,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=32,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 18.6 MB
+select dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_BQ','M=32,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','HNSW_BQ','M=32,DISTANCE=L2')
+Suggested minimum vector memory is 23.6 MB, memory consumption when providing search service is 11.7 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=32,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=32,DISTANCE=L2')
+Suggested minimum vector memory is 23.6 MB, memory consumption when providing search service is 11.7 MB
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF_FLAT','TYPE=IVF_FLAT,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','IVF_FLAT','TYPE=IVF_FLAT,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 279.6 KB, memory consumption when providing search service is 1.8 KB
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32','TYPE=IVF_FLAT,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32','TYPE=IVF_FLAT,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 279.6 KB, memory consumption when providing search service is 1.8 KB
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF_SQ8','TYPE=IVF_SQ8,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','IVF_SQ8','TYPE=IVF_SQ8,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 279.6 KB, memory consumption when providing search service is 1.8 KB
+select dbms_vector.index_vector_memory_advisor('IVF_SQ8',10000,3,'FLOAT32','TYPE=IVF_SQ8,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_SQ8',10000,3,'FLOAT32','TYPE=IVF_SQ8,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 279.6 KB, memory consumption when providing search service is 1.8 KB
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF_PQ','TYPE=IVF_PQ,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','IVF_PQ','TYPE=IVF_PQ,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 402.3 KB, memory consumption when providing search service is 5.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','TYPE=IVF_PQ,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','TYPE=IVF_PQ,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 402.3 KB, memory consumption when providing search service is 5.4 KB
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF_FLAT','TYPE=IVF_FLAT,NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','IVF_FLAT','TYPE=IVF_FLAT,NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32','TYPE=IVF_FLAT,NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32','TYPE=IVF_FLAT,NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF_SQ8','TYPE=IVF_SQ8,NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','IVF_SQ8','TYPE=IVF_SQ8,NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_SQ8',10000,3,'FLOAT32','TYPE=IVF_SQ8,NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_SQ8',10000,3,'FLOAT32','TYPE=IVF_SQ8,NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF_PQ','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t1','c1','IVF_PQ','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 402.0 KB, memory consumption when providing search service is 5.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 402.0 KB, memory consumption when providing search service is 5.0 KB
+select dbms_vector.index_vector_memory_estimate('t1','c1','IVF_PQ','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2,NBITS=12');
+dbms_vector.index_vector_memory_estimate('t1','c1','IVF_PQ','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2,NBITS=12')
+Suggested minimum vector memory is 38.8 MB, memory consumption when providing search service is 59.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2,NBITS=12');
+dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','TYPE=IVF_PQ,NLIST=100,DISTANCE=L2,NBITS=12')
+Suggested minimum vector memory is 38.8 MB, memory consumption when providing search service is 59.0 KB
+create table t2 (id int auto_increment, c1 vector(3)) partition by hash(id) partitions 8;
+insert into t2(c1) select array(1/UNIFORM(1,1000,RANDOM(1)), 1/UNIFORM(1,1000,RANDOM(2)) , 1/UNIFORM(1,1000,RANDOM(3))) from table(generator(10000));
+analyze table t2;
+select sum(table_rows), max(table_rows) from information_schema.PARTITIONS  WHERE  table_name = 't2';
+sum(table_rows)	max(table_rows)
+10000	1250
+select dbms_vector.index_vector_memory_estimate('t2','c1','HNSW','M=10,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','HNSW','M=10,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 2.2 MB
+select dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=10,TYPE=HNSW,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=10,TYPE=HNSW,DISTANCE=L2',1250)
+Suggested minimum vector memory is 2.2 MB
+select dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_SQ','M=10,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_SQ','M=10,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 22.8 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=10,TYPE=HNSW_SQ,DISTANCE=L2',1250)
+Suggested minimum vector memory is 22.8 MB
+select dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_BQ','M=10,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_BQ','M=10,DISTANCE=L2')
+Suggested minimum vector memory is 13.8 MB, memory consumption when providing search service is 6.9 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=10,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=10,DISTANCE=L2',1250)
+Suggested minimum vector memory is 13.8 MB, memory consumption when providing search service is 6.9 MB
+select dbms_vector.index_vector_memory_estimate('t2','c1','HNSW','M=32,TYPE=HNSW,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','HNSW','M=32,TYPE=HNSW,DISTANCE=L2')
+Suggested minimum vector memory is 4.5 MB
+select dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=32,TYPE=HNSW,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('HNSW',10000,3,'FLOAT32','M=32,TYPE=HNSW,DISTANCE=L2',1250)
+Suggested minimum vector memory is 4.5 MB
+select dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_SQ','M=32,TYPE=HNSW_SQ,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_SQ','M=32,TYPE=HNSW_SQ,DISTANCE=L2')
+Suggested minimum vector memory is 18.6 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=32,TYPE=HNSW_SQ,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('HNSW_SQ',10000,3,'FLOAT32','M=32,TYPE=HNSW_SQ,DISTANCE=L2',1250)
+Suggested minimum vector memory is 18.6 MB
+select dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_BQ','M=32,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','HNSW_BQ','M=32,DISTANCE=L2')
+Suggested minimum vector memory is 20.0 MB, memory consumption when providing search service is 11.7 MB
+select dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=32,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('HNSW_BQ',10000,3,'FLOAT32','M=32,DISTANCE=L2',1250)
+Suggested minimum vector memory is 20.0 MB, memory consumption when providing search service is 11.7 MB
+select dbms_vector.index_vector_memory_estimate('t2','c1','IVF_FLAT','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','IVF_FLAT','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2',1250)
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_estimate('t2','c1','IVF_SQ8','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','IVF_SQ8','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_advisor('IVF_SQ8',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('IVF_SQ8',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2',1250)
+Suggested minimum vector memory is 263.4 KB, memory consumption when providing search service is 1.4 KB
+select dbms_vector.index_vector_memory_estimate('t2','c1','IVF_PQ','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+dbms_vector.index_vector_memory_estimate('t2','c1','IVF_PQ','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2')
+Suggested minimum vector memory is 402.0 KB, memory consumption when providing search service is 5.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2',1250);
+dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2',1250)
+Suggested minimum vector memory is 402.0 KB, memory consumption when providing search service is 5.0 KB
+select dbms_vector.index_vector_memory_estimate('t2','c1','IVF_PQ','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2,NBITS=12');
+dbms_vector.index_vector_memory_estimate('t2','c1','IVF_PQ','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2,NBITS=12')
+Suggested minimum vector memory is 38.8 MB, memory consumption when providing search service is 59.0 KB
+select dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2,NBITS=12',1250);
+dbms_vector.index_vector_memory_advisor('IVF_PQ',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2,NBITS=12',1250)
+Suggested minimum vector memory is 38.8 MB, memory consumption when providing search service is 59.0 KB
+select dbms_vector.index_vector_memory_estimate(NULL,'c1','IVF_FLAT','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_estimate('t2',NULL,'IVF_FLAT','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_estimate('t2','c1',NULL,'NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_estimate('t2','c1','IVF_FLAT',NULL);
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor(NULL,10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',NULL,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,NULL,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,NULL,'NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2');
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32',NULL);
+ERROR HY000: Invalid argument
+select dbms_vector.index_vector_memory_advisor('IVF_FLAT',10000,3,'FLOAT32','NLIST=100,SAMPLE_PER_NLIST=100,DISTANCE=L2',NULL);
+ERROR HY000: Invalid argument
+drop table t1,t2;
