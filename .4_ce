@@ -1,0 +1,82 @@
+#!/bin/bash
+TOPDIR="$(dirname $(readlink -f "$0"))"
+
+#do compilation strip
+./strip2ce
+
+#public mysqltest
+bash tools/deploy/public_mysqltest.sh
+
+mkdir -p bak/obd
+mv tools/deploy/obd/*.yaml* bak/obd
+mv tools/deploy/obd.sh bak/
+mv tools/deploy/init.sql bak/
+mv tools/deploy/init_user.sql bak/
+mv tools/deploy/init_create_tenant_routines.sql bak/
+mv tools/deploy/activate_obd.sh bak/
+mv tools/deploy/copy.sh bak/
+mv tools/deploy/mysql_test/psmalltest.py bak/psmalltest.py
+
+#remove deploy
+rm -rf tools/deploy/*
+
+#move public test folder and obd folder to instead the exist folder
+mv test/mysql_test/ tools/deploy/
+mv bak/psmalltest.py tools/deploy/mysql_test/
+mv bak/* tools/deploy/
+rm -fr bak
+
+#backup some test file for opensource farm
+mkdir -p bak/test
+mv test/obproxy_test_config bak/test/
+mv test/.obcdc_conf bak/test/
+
+#remove test folder
+rm -rf test
+
+#remove vector index dataset
+rm -rf unittest/share/vector_index/data
+
+# mvback some test conf for opensource farm
+mkdir -p test
+mv bak/test/obproxy_test_config test/
+rm -rf bak
+
+#update deps url
+sed -i 's|ob-yum\.oceanbase-dev\.com/8/x86_64/test|mirrors.oceanbase.com/oceanbase/development-kit/al/8/x86_64/|g' deps/init/oceanbase.al8.x86_64.deps
+
+sed -i 's|ob-yum\.oceanbase-dev\.com/8/aarch64/test|mirrors.oceanbase.com/oceanbase/development-kit/al/8/aarch64/|g' deps/init/oceanbase.al8.aarch64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/7/x86_64/|mirrors.oceanbase.com/oceanbase/development-kit/el/7/x86_64/|g' deps/init/oceanbase.el7.x86_64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/community/stable/el/7/x86_64/|mirrors.oceanbase.com/oceanbase/community/stable/el/7/x86_64/|g' deps/init/oceanbase.el7.x86_64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/8/x86_64/|mirrors.oceanbase.com/oceanbase/development-kit/el/8/x86_64/|g' deps/init/oceanbase.el8.x86_64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/7/aarch64/|mirrors.oceanbase.com/oceanbase/development-kit/el/7/aarch64/|g' deps/init/oceanbase.el7.aarch64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/8/aarch64/|mirrors.oceanbase.com/oceanbase/development-kit/el/8/aarch64/|g' deps/init/oceanbase.el8.aarch64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/9/x86_64/|mirrors.oceanbase.com/oceanbase/development-kit/el/9/x86_64/|g' deps/init/oceanbase.el9.x86_64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/9/aarch64/|mirrors.oceanbase.com/oceanbase/development-kit/el/9/aarch64/|g' deps/init/oceanbase.el9.aarch64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/8/x86_64/|mirrors.oceanbase.com/oceanbase/development-kit/el/8/x86_64/|g' deps/init/oceanbase.el9.x86_64.deps
+
+sed -i 's|yum-test\.obvos\.alibaba-inc\.com/oceanbase/development-kit/el/8/aarch64/|mirrors.oceanbase.com/oceanbase/development-kit/el/8/aarch64/|g' deps/init/oceanbase.el9.aarch64.deps
+
+# DELETE THE PROXYRO PASSWORD
+sed -i '/3u^0kCdpE/d' tools/deploy/obd/*.yaml*
+sed -i '/3u^0kCdpE/d' tools/deploy/init*sql
+
+sed -i 's/obd_business/obd_dev/g' tools/deploy/activate_obd.sh
+
+sed -i '/version:/d' tools/deploy/obd/*.yaml*
+sed -i '/release:/d' tools/deploy/obd/*.yaml*
+sed -i '/package_hash:/d' tools/deploy/obd/*.yaml*
+sed -i 's/oceanbase:/oceanbase-ce:/g' tools/deploy/obd/*.yaml*
+sed -i 's/obproxy:/obproxy-ce:/g' tools/deploy/obd/*.yaml*
+sed -i 's/oceanbase$/oceanbase-ce/g' tools/deploy/obd/*.yaml*
+
+#remove useless files
+rm -rf .obdev CLOSE_SOURCES NEWS strip2ce .4_ce .gitlab_test.yaml
