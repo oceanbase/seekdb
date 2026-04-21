@@ -48,6 +48,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "share/schema/ob_table_param.h"
+#include "share/schema/ob_schema_utils.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/ob_server_struct.h"
 
@@ -648,11 +649,23 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
           OB_FAIL(ins_ctdef->column_accuracys_.reserve(column_count))) {
         LOG_WARN("Failed to reserve column arrays", K(ret), K(column_count));
       } else {
+        // Only include columns that build_insert_buffer_from_events_() actually populates:
+        // the 3 rowkey columns (scn, vid, type) and the hnsw vector column.
+        // Other columns (e.g. partition key columns from the data table) are not carried
+        // in ObASyncIndexEvent and would be left NULL, causing OB_ERR_DEFENSIVE_CHECK
+        // when the column is NOT nullable.
         common::ObSEArray<const schema::ObColumnSchemaV2 *, 8> sorted_columns;
         for (schema::ObTableSchema::const_column_iterator iter = index_id_schema->column_begin();
              OB_SUCC(ret) && iter != index_id_schema->column_end(); ++iter) {
-          if (OB_FAIL(sorted_columns.push_back(*iter))) {
-            LOG_WARN("Failed to collect column", K(ret));
+          const schema::ObColumnSchemaV2 *col = *iter;
+          if (OB_ISNULL(col)) {
+            ret = common::OB_ERR_UNEXPECTED;
+            LOG_WARN("column_schema is null", K(ret));
+          } else if (col->get_rowkey_position() > 0 ||
+                     schema::ObSchemaUtils::is_vec_hnsw_vector_column(col->get_column_flags())) {
+            if (OB_FAIL(sorted_columns.push_back(col))) {
+              LOG_WARN("Failed to collect column", K(ret));
+            }
           }
         }
         if (OB_SUCC(ret)) {
@@ -679,14 +692,15 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
         }
       }
 
+      const int64_t actual_col_count = ins_ctdef->column_ids_.count();
       if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->table_param_.convert(
               index_id_schema, ctx_.schema_version_, ins_ctdef->column_ids_))) {
         LOG_WARN("Failed to convert table_param", K(ret), K(vec_info.index_id_table_id_));
-      } else if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->new_row_projector_.prepare_allocate(column_count))) {
-        LOG_WARN("Failed to prepare new_row_projector", K(ret), K(column_count));
+      } else if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->new_row_projector_.prepare_allocate(actual_col_count))) {
+        LOG_WARN("Failed to prepare new_row_projector", K(ret), K(actual_col_count));
       } else if (OB_SUCC(ret)) {
         // Identity mapping: output column i = stored row index i (DASDMLIterator uses this for col_count).
-        for (int64_t i = 0; i < column_count; ++i) {
+        for (int64_t i = 0; i < actual_col_count; ++i) {
           ins_ctdef->new_row_projector_.at(i) = i;
         }
         ins_ctdef->is_ignore_ = false;
@@ -799,7 +813,7 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
         LOG_WARN("column_schema is null", K(ret));
         break;
       } else if (0 == col_schema->get_rowkey_position() &&
-                 col_schema->get_column_name_str().prefix_match("__vector_")) {
+                 schema::ObSchemaUtils::is_vec_hnsw_vector_column(col_schema->get_column_flags())) {
         vector_col_id = col_schema->get_column_id();
         break;
       }
