@@ -906,7 +906,7 @@ private:
   ObLogCompressor* log_compressor_;
   // juse use it for test promise log print
   bool enable_log_limit_;
-  static char *get_local_buf();
+  RLOCAL_STATIC(ByteBuf<LOCAL_BUF_SIZE>, local_buf_);
   struct {
     ProbeAction action_;
     char file_[128];
@@ -1259,7 +1259,6 @@ inline void ObLogger::do_log_message(const bool is_async,
 
   bool force_bt = false;
   bool disable = false;
-  char *local_buf = nullptr;
   check_probe(file, line, force_bt, disable);
   if(OB_UNLIKELY(disable)) return;
   ObPLogFDType fd_type = get_fd_type(mod_name, level, dba_event);
@@ -1274,13 +1273,10 @@ inline void ObLogger::do_log_message(const bool is_async,
     LOG_STDERR("precheck_tl_log_limiter error, ret=%d\n", ret);
   } else if (OB_UNLIKELY(!allow) && !need_print_log_limit_msg()) {
     inc_dropped_log_count(level);
-  } else if (OB_ISNULL(local_buf = get_local_buf())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_STDERR("failed to get local buf\n");
   } else {
     ++curr_logging_seq_;
     // format to local buf
-    ObPLogItem *log_item = new (local_buf) ObPLogItem();
+    ObPLogItem *log_item = new (local_buf_) ObPLogItem();
     log_item->set_buf_size(MAX_LOG_SIZE);
     log_item->set_log_level(level);
     log_item->set_timestamp(start_ts);
@@ -1366,7 +1362,7 @@ _Pragma("GCC diagnostic pop")
       // stat
       if (OB_FAIL(ret)) {
         inc_dropped_log_count(level);
-        if ((char*)log_item != local_buf) {
+        if ((char*)log_item != local_buf_) {
           free_log_item(log_item);
         }
         log_item = NULL;

@@ -77,24 +77,7 @@ const char* OB_WEAK_SYMBOL ob_strerror(const int oberr)
   return ret;
 }
 
-struct ObLoggerLocalBufMgr {
-  char *buf_;
-  ObLoggerLocalBufMgr() {
-    buf_ = (char*)::malloc(ObLogger::LOCAL_BUF_SIZE);
-  }
-  ~ObLoggerLocalBufMgr() {
-    if (buf_ != nullptr) {
-      ::free(buf_);
-      buf_ = nullptr;
-    }
-  }
-};
-
-char *ObLogger::get_local_buf()
-{
-  static thread_local ObLoggerLocalBufMgr mgr;
-  return mgr.buf_;
-}
+_RLOCAL(ByteBuf<ObLogger::LOCAL_BUF_SIZE>, ObLogger::local_buf_);
 extern void update_easy_log_level();
 lib::ObRateLimiter *ObLogger::default_log_limiter_ = nullptr;
 _RLOCAL(lib::ObRateLimiter*, ObLogger::tl_log_limiter_);
@@ -686,10 +669,7 @@ ObLogger::TraceBuffer *ObLogger::get_trace_buffer()
   RLOCAL_INLINE(TraceBuffer*, tb);
   if (OB_UNLIKELY(NULL == tb)) {
     STATIC_ASSERT(sizeof(TraceBuffer) <= LOCAL_BUF_SIZE - LOG_ITEM_SIZE, "check sizeof TraceBuffer failed");
-    char *local_buf = get_local_buf();
-    if (OB_NOT_NULL(local_buf)) {
-      tb = new (local_buf + LOG_ITEM_SIZE) TraceBuffer(); /* LOG_ITEM_SIZE is reserved for ObPlogitem */
-    }
+    tb = new (&local_buf_[0] + LOG_ITEM_SIZE) TraceBuffer(); /* LOG_ITEM_SIZE is reserved for ObPlogitem */
   }
   return tb;
 }
