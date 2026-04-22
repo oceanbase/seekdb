@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_MEMTABLE_OB_MEMTABLE_INTERFACE_
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_INTERFACE_
 
+#include "lib/atomic/ob_atomic.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_id_map.h"
 #include "lib/allocator/ob_lf_fifo_allocator.h"
@@ -26,7 +27,7 @@
 #include "storage/ob_i_table.h"
 #include "storage/memtable/mvcc/ob_mvcc_ctx.h"
 #include "storage/tx/ob_trans_define.h"
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+#include "storage/checkpoint/ob_common_checkpoint.h"
 
 namespace oceanbase
 {
@@ -189,24 +190,12 @@ public:
 
   virtual bool is_empty() const override { return false; }
 
-  virtual int64_t dec_ref()
-  {
-    int64_t ref_cnt = ObITable::dec_ref();
-    checkpoint::ObCheckpointDiagnoseMgr *cdm = MTL(checkpoint::ObCheckpointDiagnoseMgr*);
-    if (0 == ref_cnt) {
-      if (get_tablet_id().is_ls_inner_tablet()) {
-        REPORT_CHECKPOINT_DIAGNOSE_INFO(update_start_gc_time_for_checkpoint_unit, this)
-      }
-    }
-    return ref_cnt;
-  }
+  virtual int64_t dec_ref() { return ObITable::dec_ref(); }
 
   void set_trace_id(const int64_t trace_id)
   {
-    if (get_tablet_id().is_ls_inner_tablet()) {
-      ADD_CHECKPOINT_DIAGNOSE_INFO_AND_SET_TRACE_ID(checkpoint::ObCheckpointUnitDiagnoseInfo, trace_id);
-    } else {
-      ADD_CHECKPOINT_DIAGNOSE_INFO_AND_SET_TRACE_ID(checkpoint::ObMemtableDiagnoseInfo, trace_id);
+    if (checkpoint::INVALID_TRACE_ID != trace_id) {
+      ATOMIC_STORE(&trace_id_, trace_id);
     }
   }
   void reset_trace_id() { ATOMIC_STORE(&trace_id_, checkpoint::INVALID_TRACE_ID); }
@@ -214,7 +203,7 @@ public:
 protected:
   share::ObLSID ls_id_;
   share::SCN snapshot_version_;
-  // a round tablet freeze identifier for checkpoint diagnose
+  // batch id for freeze/flush log correlation
   int64_t trace_id_;
 };
 }  // namespace storage

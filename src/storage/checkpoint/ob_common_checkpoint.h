@@ -29,6 +29,9 @@ namespace storage
 namespace checkpoint
 {
 
+// Batch id for freeze/flush log correlation (replaces ObCheckpointDiagnoseMgr trace ids).
+static const int64_t INVALID_TRACE_ID = -1;
+
 enum ObCommonCheckpointType
 {
   INVALID_BASE_TYPE = 0,

@@ -677,9 +677,7 @@
 # 12432: __all_virtual_column_group_mapping_history
 # 12432: __all_column_group_mapping  # BASE_TABLE_NAME
 # 12432: __all_column_group_mapping_history  # BASE_TABLE_NAME1
-# 12437: __all_virtual_checkpoint_diagnose_memtable_info
-# 12438: __all_virtual_checkpoint_diagnose_checkpoint_unit_info
-# 12439: __all_virtual_checkpoint_diagnose_info
+# 12437-12439: checkpoint diagnose virtual tables (removed)
 # 12440: __all_virtual_wr_system_event
 # 12440: __wr_system_event  # BASE_TABLE_NAME
 # 12441: __all_virtual_wr_event_name

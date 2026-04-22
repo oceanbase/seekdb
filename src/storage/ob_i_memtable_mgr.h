@@ -21,7 +21,7 @@
 #include "lib/lock/ob_qsync_lock.h"
 #include "common/ob_tablet_id.h"
 #include "storage/ob_i_table.h"
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+#include "storage/checkpoint/ob_common_checkpoint.h"
 
 namespace oceanbase
 {

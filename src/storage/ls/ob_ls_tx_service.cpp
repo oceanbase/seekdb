@@ -22,6 +22,7 @@
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/tx_storage/ob_tenant_freezer.h"
 
 namespace oceanbase
 {
@@ -649,7 +650,7 @@ int ObLSTxService::flush(SCN &recycle_scn)
         && recycle_scn >= common_checkpoints_[i]->get_rec_scn()) {
       if (!has_gen_diagnose_trace) {
         has_gen_diagnose_trace = true;
-        MTL(ObCheckpointDiagnoseMgr*)->acquire_trace_id(ls_id_, trace_id);
+        (void)acquire_checkpoint_batch_trace_id(ls_id_, trace_id);
       }
       TRANS_LOG(INFO,
                 "common_checkpoints flush",

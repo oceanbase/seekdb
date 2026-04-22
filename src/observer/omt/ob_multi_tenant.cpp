@@ -345,7 +345,6 @@ int ObMultiTenant::init(ObAddr myaddr,
     MTL_BIND2(mtl_new_default, rootserver::ObMViewMaintenanceService::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, storage::ObTenantRestoreInfoMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, ObResourceLimitCalculator::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
-    MTL_BIND2(mtl_new_default, ObCheckpointDiagnoseMgr::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, storage::ObTenantRestoreInfoMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, ObGlobalIteratorPool::mtl_init, nullptr, nullptr, nullptr, ObGlobalIteratorPool::mtl_destroy);
     MTL_BIND2(mtl_new_default, ObWorkloadRepositoryContext::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
@@ -1017,9 +1016,6 @@ int ObMultiTenant::update_tenant_config(uint64_t tenant_id)
       if (OB_TMP_FAIL(update_throttle_config_(tenant_id))) {
         LOG_WARN("update throttle config failed", K(ret), K(tenant_id));
       }
-      if (OB_TMP_FAIL(update_checkpoint_diagnose_config())) {
-        LOG_WARN("failed to update tenant ddl config", K(tmp_ret), K(tenant_id));
-      }
       if (OB_TMP_FAIL(update_tenant_query_response_time_flush_config())) {
         LOG_WARN("failed to update tenant query response time flush config", K(tmp_ret), K(tenant_id));
       }
@@ -1071,21 +1067,6 @@ int ObMultiTenant::update_tenant_ddl_config()
     }
   }
 #endif
-  return ret;
-}
-
-int ObMultiTenant::update_checkpoint_diagnose_config()
-{
-  int ret = OB_SUCCESS;
-  ObCheckpointDiagnoseMgr *cdm = MTL(ObCheckpointDiagnoseMgr*);
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
-  const int64_t checkpoint_diagnose_preservation_count = tenant_config->_checkpoint_diagnose_preservation_count;
-  if (OB_ISNULL(cdm)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cdm should not be null", K(ret));
-  } else if(OB_FAIL(cdm->update_max_trace_info_size(checkpoint_diagnose_preservation_count))) {
-    LOG_WARN("failed to update_max_trace_info_size", K(ret), K(checkpoint_diagnose_preservation_count));
-  }
   return ret;
 }
 
