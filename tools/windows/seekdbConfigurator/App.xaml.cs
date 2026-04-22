@@ -46,16 +46,17 @@ public partial class App : System.Windows.Application
         if (!isAdmin)
         {
             Log("Not admin, attempting UAC re-launch...");
+            Process? child = null;
             try
             {
-                var p = Process.Start(new ProcessStartInfo
+                child = Process.Start(new ProcessStartInfo
                 {
                     UseShellExecute = true,
                     FileName = Environment.ProcessPath!,
                     Arguments = argsStr,
                     Verb = "runas",
                 });
-                Log($"Re-launched as admin, child pid={p?.Id}");
+                Log($"Re-launched as admin, child pid={child?.Id}");
             }
             catch (Exception ex)
             {
@@ -63,6 +64,30 @@ public partial class App : System.Windows.Application
                 if (removeMode) { Shutdown(); return; }
                 new MainWindow().Show();
                 return;
+            }
+
+            // When invoked from the MSI uninstall custom action (Type 50,
+            // Execute="immediate"), msiexec launches this exe and waits for
+            // THIS process to exit before advancing to the next action
+            // (RemoveFiles, then the Finish dialog).  Our current process is
+            // only a UAC stub; the real work runs in the elevated child.
+            // If we Shutdown() immediately after spawning it, MSI thinks the
+            // CA is done and the installer UI jumps straight to the Finish
+            // page while the user is still interacting with the configurator.
+            // Block here until the elevated child exits so the installer
+            // stays in sync with the configurator's progress.
+            if (child != null)
+            {
+                try
+                {
+                    Log($"Waiting for elevated child (pid={child.Id}) to exit...");
+                    child.WaitForExit();
+                    Log($"Elevated child exited with code {child.ExitCode}.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"WaitForExit failed: {ex.Message}");
+                }
             }
 
             Shutdown();

@@ -12,6 +12,32 @@
     failed to link for some reason.
   -->
   <Fragment>
+    <!-- Read the configurator exe path persisted to the registry during
+         install.  AppSearch runs early in every session (install, uninstall,
+         repair) so the property is available when custom actions fire.
+         This is critical for uninstall: the Directory-table default for
+         INSTALL_ROOT may revert to the compile-time default, but this
+         property always reflects the ACTUAL installed location.
+
+         Secure="yes" whitelists this property for client -> server transfer.
+         Without it, MSI drops the property with
+           "Ignoring disallowed property SEEKDB_CONFIGURATOR_EXE"
+         during the hop from the non-elevated client UI process to the
+         elevated server Execute process.  Because server-side AppSearch is
+         skipped whenever client-side AppSearch already ran, the property
+         would otherwise be empty when RunConfiguratorRemove is evaluated,
+         silently failing the condition and never launching the uninstall
+         configurator (observed specifically on the
+           double-click MSI -> Maintenance -> Remove  code path).
+         A standalone  <Property Id="SecureCustomProperties" ...>  doesn't
+         work here because CPack WiX already emits that property and ours
+         gets silently dropped on duplicate id; Secure="yes" is the robust
+         way; WiX merges it into the final SecureCustomProperties list. -->
+    <Property Id="SEEKDB_CONFIGURATOR_EXE" Secure="yes">
+      <RegistrySearch Id="FindConfiguratorExe" Root="HKLM"
+                      Key="Software\SeekDB" Name="ConfiguratorExe" Type="raw" />
+    </Property>
+
     <!-- Wire the ExitDialog's Finish button to fire LaunchApplication
          when the checkbox is checked.  WixUI shows the checkbox but
          does NOT include this Publish by default — we must add it.
@@ -22,27 +48,74 @@
                Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
     </UI>
 
-    <!-- Type 34 custom action: fire-and-forget launch of Configurator (install). -->
+    <!-- Type 34 custom action: fire-and-forget launch of Configurator (install).
+         During install [INSTALL_ROOT] is always correctly resolved by the
+         session, so Type 34 (Directory + ExeCommand) works fine here. -->
     <CustomAction Id="LaunchApplication"
                   Directory="INSTALL_ROOT"
                   ExeCommand="&quot;[INSTALL_ROOT]bin\seekdbConfigurator.exe&quot;"
                   Execute="immediate"
                   Return="asyncNoWait" />
 
-    <!-- Type 34 custom action: launch Configurator in remove mode (uninstall).
-         Runs synchronously so removal completes before MSI deletes files.
+    <!-- Type 50 custom action: launch Configurator in remove mode (uninstall).
+         Uses the SEEKDB_CONFIGURATOR_EXE property set by the SetProperty
+         element below immediately before this action fires.
          Return="ignore" ensures uninstall proceeds even if user cancels. -->
     <CustomAction Id="RunConfiguratorRemove"
-                  Directory="INSTALL_ROOT"
-                  ExeCommand="&quot;[INSTALL_ROOT]bin\seekdbConfigurator.exe&quot; --remove"
+                  Property="SEEKDB_CONFIGURATOR_EXE"
+                  ExeCommand="--remove"
                   Execute="immediate"
                   Return="ignore" />
 
+    <!-- (Re)compute SEEKDB_CONFIGURATOR_EXE on the SERVER side right before
+         RunConfiguratorRemove fires.
+
+         Background: AppSearch on the client populates SEEKDB_CONFIGURATOR_EXE
+         from HKLM\Software\SeekDB\ConfiguratorExe, but the property does NOT
+         survive the client -> server hop (CPack's SecureCustomProperties
+         list doesn't include it, and  Secure="yes"  on a Fragment-level
+         property gets silently dropped by CPack's template).  Server-side
+         AppSearch is also skipped because MSI believes client-side AppSearch
+         already ran.  Net result: the property is empty on the server and
+         the  RunConfiguratorRemove  Type 50 CA has no exe path to launch.
+
+         INSTALL_ROOT, however, IS in SecureCustomProperties (added by CPack)
+         and its value (also populated by AppSearch from
+         HKLM\Software\SeekDB\InstallRoot) does reach the server process
+         correctly even when the user installed to a non-default directory.
+         We leverage that to reconstruct the full exe path here.
+
+         NOTE: we use WiX 4's  <SetProperty>  element rather than a hand-
+         authored  <CustomAction Property Value>  + separate  <Custom>  pair,
+         because in this codebase the latter got silently dropped by CPack's
+         WiX 4 linker (it did not appear in the final MSI's CustomAction
+         table).  SetProperty creates both the CA and the sequence entry as
+         one atomic unit that the linker keeps. -->
+    <SetProperty Id="SEEKDB_CONFIGURATOR_EXE"
+                 Value="[INSTALL_ROOT]bin\seekdbConfigurator.exe"
+                 Sequence="execute"
+                 Before="RunConfiguratorRemove"
+                 Condition="Installed AND REMOVE AND (NOT UPGRADINGPRODUCTCODE)" />
+
     <!-- Schedule the removal configurator before files are deleted.
-         Only runs on full uninstall (not upgrades). -->
+         Only runs on uninstall (not fresh install, not upgrades).
+
+         We deliberately avoid  REMOVE="ALL"  string matching because the value
+         differs between code paths:
+           - msiexec /x {ProductCode} (Control Panel / ARP)   -> REMOVE = "ALL"
+           - msiexec /i pkg.msi  + MaintenanceTypeDlg Remove  -> REMOVE = "CM_C_server,ProductFeature"
+         and a case-sensitive compare silently skips the CA in the second case.
+         Case-insensitive compare (~= / =~) is finicky across MSI versions and
+         once caused install-time error 2717 (bad action condition).
+
+         Instead we rely on  Installed AND REMOVE  which is unambiguous: REMOVE
+         is only set (to any non-empty value) when msiexec is actually tearing
+         something down, and Installed guards against running during the very
+         first install session.  UPGRADINGPRODUCTCODE filters out major-upgrade
+         uninstalls where we want a silent handover to the new version. -->
     <InstallExecuteSequence>
       <Custom Action="RunConfiguratorRemove" Before="RemoveFiles"
-              Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
+              Condition="Installed AND REMOVE AND (NOT UPGRADINGPRODUCTCODE)" />
     </InstallExecuteSequence>
 
     <!-- Add bin/ to system PATH (cleanly removed on uninstall). -->
@@ -52,6 +125,10 @@
                      Permanent="no" Part="last" Action="set" System="yes" />
         <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="PathConfigured"
                        Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="InstallRoot"
+                       Type="string" Value="[INSTALL_ROOT]" />
+        <RegistryValue Root="HKLM" Key="Software\SeekDB" Name="ConfiguratorExe"
+                       Type="string" Value="[INSTALL_ROOT]bin\seekdbConfigurator.exe" />
       </Component>
     </DirectoryRef>
   </Fragment>
