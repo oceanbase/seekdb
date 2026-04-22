@@ -200,75 +200,105 @@ int ObODPSCatalogProperties::to_json_kv_string(char *buf, const int64_t buf_len,
   int ret = OB_SUCCESS;
 
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ACCESSTYPE)],
-                     to_cstring(ObHexStringWrap(access_type_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ACCESSTYPE)],
+                       helper.convert(ObHexStringWrap(access_type_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ACCESSID)],
-                     to_cstring(ObHexStringWrap(access_id_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ACCESSID)],
+                       helper.convert(ObHexStringWrap(access_id_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ACCESSKEY)],
-                     to_cstring(ObHexStringWrap(access_key_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ACCESSKEY)],
+                       helper.convert(ObHexStringWrap(access_key_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::STSTOKEN)],
-                     to_cstring(ObHexStringWrap(sts_token_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::STSTOKEN)],
+                       helper.convert(ObHexStringWrap(sts_token_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ENDPOINT)],
-                     to_cstring(ObHexStringWrap(endpoint_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::ENDPOINT)],
+                       helper.convert(ObHexStringWrap(endpoint_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::TUNNEL_ENDPOINT)],
-                     to_cstring(ObHexStringWrap(tunnel_endpoint_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::TUNNEL_ENDPOINT)],
+                       helper.convert(ObHexStringWrap(tunnel_endpoint_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::PROJECT_NAME)],
-                     to_cstring(ObHexStringWrap(project_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::PROJECT_NAME)],
+                       helper.convert(ObHexStringWrap(project_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::QUOTA_NAME)],
-                     to_cstring(ObHexStringWrap(quota_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::QUOTA_NAME)],
+                       helper.convert(ObHexStringWrap(quota_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::COMPRESSION_CODE)],
-                     to_cstring(ObHexStringWrap(compression_code_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::COMPRESSION_CODE)],
+                       helper.convert(ObHexStringWrap(compression_code_))));
+  }
   OZ(J_COMMA());
-  OZ(databuff_printf(buf,
-                     buf_len,
-                     pos,
-                     R"("%s":"%s")",
-                     OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::REGION)],
-                     to_cstring(ObHexStringWrap(region_))));
+  {
+    ObCStringHelper helper;
+    OZ(databuff_printf(buf,
+                       buf_len,
+                       pos,
+                       R"("%s":"%s")",
+                       OPTION_NAMES[static_cast<size_t>(ObOdpsCatalogOptions::REGION)],
+                       helper.convert(ObHexStringWrap(region_))));
+  }
 
   return ret;
 }

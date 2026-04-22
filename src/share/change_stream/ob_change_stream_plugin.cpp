@@ -57,12 +57,15 @@ int ObCSDebugPlugin::process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &ctx)
       }
     }
     if (OB_SUCC(ret)) {
-      LOG_DEBUG("CSDebugPlugin: row",
-               K(i), K(row.tablet_id_), K(row.heap_pk_),
-               K(row.commit_version_), K(row.seq_no_), K(row.column_cnt_),
-               "dml", blocksstable::get_dml_str(row.dml_flag_),
-               "new_row", has_new ? to_cstring(new_datum_row) : "NULL",
-               "old_row", has_old ? to_cstring(old_datum_row) : "NULL");
+      {
+        ObCStringHelper helper;
+        LOG_DEBUG("CSDebugPlugin: row",
+                 K(i), K(row.tablet_id_), K(row.heap_pk_),
+                 K(row.commit_version_), K(row.seq_no_), K(row.column_cnt_),
+                 "dml", blocksstable::get_dml_str(row.dml_flag_),
+                 "new_row", has_new ? helper.convert(new_datum_row) : "NULL",
+                 "old_row", has_old ? helper.convert(old_datum_row) : "NULL");
+      }
     }
   }
   return ret;

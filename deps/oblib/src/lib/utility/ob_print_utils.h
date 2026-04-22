@@ -303,11 +303,6 @@ const char *to_cstring(const T &obj)
   return to_cstring(obj, BoolType<HAS_MEMBER(T, to_cstring)>());
 }
 
-template <>
-const char *to_cstring<const char *>(const char *const &str);
-template <>
-const char *to_cstring<int64_t>(const int64_t &v);
-
 template <typename T>
 const char *to_cstring(T *obj)
 {
@@ -424,12 +419,12 @@ int databuff_print_multi_objs(char* buf, const int64_t buf_len, int64_t &pos, co
 ObCStringHelper: convert the object to cstring with an inner buffer
 If you need a persistent cstring, you cannot use this class.
 */
-class ObCStringHelperV2
+class ObCStringHelper
 {
   const static int64_t EXPAND_BUF_LEN = 16L << 10;
   const static int64_t HELPER_MEMORY_LIMIT = 64L << 20;
 public:
-  ObCStringHelperV2()
+  ObCStringHelper()
     : allocator_(SET_USE_500("CStringHelper"))
   {
 #ifdef ENABLE_DEBUG_LOG
@@ -513,7 +508,7 @@ private:
   void force_alloc();
 
 private:
-  DISABLE_COPY_ASSIGN(ObCStringHelperV2);
+  DISABLE_COPY_ASSIGN(ObCStringHelper);
 private:
   ObArenaAllocator allocator_;
   char reserve_buf_[1024];
@@ -521,25 +516,6 @@ private:
   int64_t buf_len_ = ARRAYSIZEOF(reserve_buf_);
   int64_t pos_= 0;
   int ob_errno_ = OB_SUCCESS;
-};
-
-class ObCStringHelper
-{
-public:
-  template<typename T>
-  const char *convert(const T &obj)
-  {
-    return to_cstring(obj);
-  }
-  template<typename T>
-  int convert(const T &obj, const char *&str)
-  {
-    str = to_cstring(obj);
-    return NULL == str ? OB_ERROR : OB_SUCCESS;
-  }
-  void reset()
-  {
-  }
 };
 
 /// @return OB_SUCCESS or OB_ALLOCATE_MEMORY_FAILED

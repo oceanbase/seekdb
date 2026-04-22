@@ -201,7 +201,8 @@ int ObCreateIndexHelper::lock_objects_by_id_()
     LOG_WARN("fail to get orig table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(orig_data_table_schema_)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(arg_.database_name_), to_cstring(arg_.table_name_));
+    ObCStringHelper helper;
+    LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(arg_.database_name_), helper.convert(arg_.table_name_));
     LOG_WARN("table not exist", KR(ret), K_(arg));
   } else if (OB_FAIL(add_lock_table_udt_id_(*orig_data_table_schema_))) {
     LOG_WARN("fail to add lock table udt id", KR(ret));
@@ -620,7 +621,7 @@ int ObCreateIndexHelper::create_tablets_()
     LOG_WARN("fail to get frozen status for create tablet", KR(ret), K_(tenant_id));
   } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(tenant_id_, schema_guard))) {
     LOG_WARN("fail to get tenant schema guard", KR(ret), K_(tenant_id));
-  } else if (create_index_on_empty_table_opt_
+  } else if (create_index_on_empty_table_opt_ 
              && OB_FAIL(ObCreateIndexOnEmptyTableHelper::get_major_frozen_scn(tenant_id_, frozen_scn))) {
     // we will create empty major when create index on empty table, so we need to get timestamp as major version to make sure data in the index table is consistent with the data table.
     LOG_WARN("fail to get wait major frozen scn", KR(ret));

@@ -473,7 +473,8 @@ ObMulSourceTxDataDump::dump_buf(
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
       } else {
-        dump_str = to_cstring(modify_arg);
+        ObCStringHelper helper;
+        dump_str = helper.convert(modify_arg);
       }
       break;
     }

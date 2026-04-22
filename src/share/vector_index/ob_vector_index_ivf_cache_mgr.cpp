@@ -236,9 +236,15 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
     LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "is_inited=%d;", is_inited_))) {
     LOG_WARN("failed to fill statistics", K(ret), K(this));
-  } else if (OB_FAIL(databuff_printf(
-                 info.statistics_, sizeof(info.statistics_), pos, "index_param=%s;", to_cstring(vec_param_)))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
+  } else {
+    ObCStringHelper helper;
+    if (OB_FAIL(databuff_printf(
+                   info.statistics_, sizeof(info.statistics_), pos, "index_param=%s;", helper.convert(vec_param_)))) {
+      LOG_WARN("failed to fill statistics", K(ret), K(this));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    // do nothing
   } else {
     if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "["))) {
       LOG_WARN("failed to fill statistics", K(ret), K(this));

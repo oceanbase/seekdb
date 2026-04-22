@@ -919,7 +919,7 @@ int ObTabletTableStore::calculate_read_tables(
   } else if (OB_FAIL(calculate_ddl_read_tables(snapshot_version, tablet, iterator, base_table))) {
     LOG_WARN("calculate ddl read tables failed", K(ret));
   }
-
+  
   if (OB_FAIL(ret)) {
   } else if (OB_NOT_NULL(base_table)) {
     // TODO@wenqu: better abstract to calculate read tables in ddl path
@@ -3020,9 +3020,9 @@ int ObTabletTableStore::replace_ha_remote_sstables_(
         }
       } else if (OB_FAIL(new_table_handle.get_sstable(new_sstable))) {
         LOG_WARN("failed to get sstable", K(ret), K(new_table_handle));
-      }
-
-      if (OB_FAIL(ret)) {
+      } 
+      
+      if (OB_FAIL(ret)) {        
       } else if (check_continue && OB_NOT_NULL(last_table) && new_sstable->get_start_scn() != last_table->get_end_scn()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table is not continue", K(ret), KPC(last_table), KPC(new_sstable), KPC(old_table));
@@ -3197,7 +3197,7 @@ int ObTabletTableStore::build_split_new_table_store_(
   } else if (is_mds_merge(param.tablet_split_param_.merge_type_) && 1 != batch_tables.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected new table count", K(ret), K(param));
-  } else if (is_mds_merge(param.tablet_split_param_.merge_type_)
+  } else if (is_mds_merge(param.tablet_split_param_.merge_type_) 
       && OB_FAIL(ObTabletSplitUtil::check_split_minors_can_be_accepted(
         old_store.mds_sstables_,
         batch_tables,
@@ -3255,7 +3255,7 @@ int ObTabletTableStore::build_fork_new_table_store_(
   int ret = OB_SUCCESS;
   ObSEArray<ObITable *, OB_DEFAULT_SE_ARRAY_COUNT> batch_tables;
   int64_t inc_base_snapshot_version = -1;
-
+  
   if (OB_FAIL(param.tables_handle_.get_tables(batch_tables))) {
     LOG_WARN("get tables failed when build fork new table store", KR(ret),
         "tablet_id", tablet.get_tablet_id(), "param_fork", param.tablet_fork_param_);
@@ -3320,7 +3320,7 @@ int ObTabletTableStore::build_fork_minor_tables_(
   ObSEArray<ObITable *, common::MAX_SSTABLE_CNT_IN_STORAGE> dst_minor_tables;
   const SCN &clog_checkpoint_scn = tablet.get_tablet_meta().clog_checkpoint_scn_;
   const int64_t fork_snapshot_version = param.tablet_fork_param_.snapshot_version_;
-
+  
   // 1. Extract src minor sstables from tables_array
   for (int64_t i = 0; OB_SUCC(ret) && i < tables_array.count(); i++) {
     ObITable *src_table = tables_array.at(i);
@@ -3350,7 +3350,7 @@ int ObTabletTableStore::build_fork_minor_tables_(
     LOG_WARN("failed to check dst store minor sstables for fork", KR(ret),
         "tablet_id", tablet.get_tablet_id(), "dst_minor_cnt", dst_minor_tables.count(), K(fork_snapshot_version));
   }
-
+  
   // 4. Check continuity and merge with dst minor tables
   if (OB_SUCC(ret)) {
     ObITable *newest_minor_in_src = src_minor_tables.empty() ? nullptr : src_minor_tables.at(src_minor_tables.count() - 1);
@@ -3382,11 +3382,12 @@ int ObTabletTableStore::build_fork_minor_tables_(
     } else if (OB_FAIL(check_minor_tables_(merged_minor_tables))) {
       ObITable *first = merged_minor_tables.at(0);
       ObITable *last = merged_minor_tables.at(merged_minor_tables.count() - 1);
+      ObCStringHelper helper;
       LOG_WARN("merged minor tables is not continuous for fork", KR(ret),
           "tablet_id", tablet.get_tablet_id(),
           "merged_cnt", merged_minor_tables.count(),
-          "first", OB_ISNULL(first) ? "NULL" : to_cstring(first->get_key()),
-          "last", OB_ISNULL(last) ? "NULL" : to_cstring(last->get_key()),
+          "first", OB_ISNULL(first) ? "NULL" : helper.convert(first->get_key()),
+          "last", OB_ISNULL(last) ? "NULL" : helper.convert(last->get_key()),
           K(fork_snapshot_version), K(clog_checkpoint_scn));
     } else if (merged_minor_tables.at(merged_minor_tables.count() - 1)->get_end_scn() != clog_checkpoint_scn) {
       ret = OB_ERR_UNEXPECTED;
@@ -3412,7 +3413,7 @@ int ObTabletTableStore::build_fork_minor_tables_(
           K(fork_snapshot_version), K(clog_checkpoint_scn));
     }
   }
-
+  
   return ret;
 }
 

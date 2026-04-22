@@ -2521,12 +2521,13 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
     case T_DATE: {
       ObString time_str(static_cast<int32_t>(node->str_len_), node->str_value_);
       ObDateSqlMode date_sql_mode;
+      ObCStringHelper helper;
       if (FALSE_IT(date_sql_mode.init(sql_mode))) {
       } else if (enable_mysql_compatible_dates) {
         ObMySQLDate mdate;
         if (OB_FAIL(ObTimeConverter::str_to_mdate(time_str, mdate, date_sql_mode))) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", to_cstring(time_str));
+          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", helper.convert(time_str));
         } else {
           val.set_mysql_date(mdate);
         }
@@ -2534,7 +2535,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
         int32_t time_val = 0;
         if (OB_FAIL(ObTimeConverter::str_to_date(time_str, time_val, date_sql_mode))) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", to_cstring(time_str));
+          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", helper.convert(time_str));
         } else {
           val.set_date(time_val);
         }
@@ -2549,9 +2550,10 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
     case T_TIME: {
       ObString time_str(static_cast<int32_t>(node->str_len_), node->str_value_);
       int64_t time_val = 0;
+      ObCStringHelper helper;
       if (OB_FAIL(ObTimeConverter::str_to_time(time_str, time_val, &scale))) {
         ret = OB_ERR_WRONG_VALUE;
-        LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "TIME", to_cstring(time_str));
+        LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "TIME", helper.convert(time_str));
       } else {
         val.set_time(time_val);
         val.set_scale(scale);
@@ -2582,17 +2584,19 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       } else if (FALSE_IT(date_sql_mode.allow_invalid_dates_ = false)) {
       } else if (enable_mysql_compatible_dates) {
         ObMySQLDateTime mdt;
+        ObCStringHelper helper;
         if( OB_FAIL(ObTimeConverter::str_to_mdatetime(time_str, cvrt_ctx, mdt, &scale, date_sql_mode))) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATETIME", to_cstring(time_str));
+          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATETIME", helper.convert(time_str));
         } else {
           val.set_mysql_datetime(mdt);
         }
       } else {
         int64_t time_val = 0;
+        ObCStringHelper helper;
         if (OB_FAIL(ObTimeConverter::str_to_datetime(time_str, cvrt_ctx, time_val, &scale, date_sql_mode))) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATETIME", to_cstring(time_str));
+          LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATETIME", helper.convert(time_str));
         } else {
           val.set_datetime(time_val);
         }
@@ -5453,7 +5457,8 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
                         OB_MAX_INTEGER_DISPLAY_WIDTH);
         } else if (OB_UNLIKELY(precision < scale)) {
           ret = OB_ERR_M_BIGGER_THAN_D;
-          LOG_USER_ERROR(OB_ERR_M_BIGGER_THAN_D, to_cstring(ident_name));
+          ObCStringHelper helper;
+          LOG_USER_ERROR(OB_ERR_M_BIGGER_THAN_D, helper.convert(ident_name));
           LOG_WARN("precision less then scale", K(ret), K(scale), K(precision));
         } else {
           // mysql> create table t1(a decimal(0, 0));
@@ -5492,7 +5497,8 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         LOG_WARN("scale of number overflow", K(ret), K(scale), K(precision));
       } else if (OB_UNLIKELY(precision < scale)) {
         ret = OB_ERR_M_BIGGER_THAN_D;
-        LOG_USER_ERROR(OB_ERR_M_BIGGER_THAN_D, to_cstring(ident_name));
+        ObCStringHelper helper;
+        LOG_USER_ERROR(OB_ERR_M_BIGGER_THAN_D, helper.convert(ident_name));
         LOG_WARN("precision less then scale", K(ret), K(scale), K(precision));
       } else {
         // mysql> create table t1(a decimal(0, 0));
@@ -6144,7 +6150,8 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
         LOG_WARN("foreign key column is generated column", K(ret), K(i), K(fk_col_name));
       } else if (!fk_col_schema->is_nullable() && is_mysql_compat_mode) {
         ret = OB_ERR_FK_COLUMN_NOT_NULL;
-        LOG_USER_ERROR(OB_ERR_FK_COLUMN_NOT_NULL, to_cstring(fk_col_name), to_cstring(arg.foreign_key_name_));
+        ObCStringHelper helper;
+        LOG_USER_ERROR(OB_ERR_FK_COLUMN_NOT_NULL, helper.convert(fk_col_name), helper.convert(arg.foreign_key_name_));
       } else if (is_mysql_compat_mode) {
         // check if fk column is base column of virtual generated column in MySQL mode
         const uint64_t fk_col_id = fk_col_schema->get_column_id();
@@ -7625,9 +7632,11 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       MEMSET(buf, 0, sizeof(buf));
       char *real_secure_file = nullptr;
 #ifdef _WIN32
-      if (NULL == (real_secure_file = ::_fullpath(buf, to_cstring(secure_file_priv), sizeof(buf)))) {
+      ObCStringHelper helper;
+      if (NULL == (real_secure_file = ::_fullpath(buf, helper.convert(secure_file_priv), sizeof(buf)))) {
 #else
-      if (NULL == (real_secure_file = ::realpath(to_cstring(secure_file_priv), buf))) {
+      ObCStringHelper helper;
+      if (NULL == (real_secure_file = ::realpath(helper.convert(secure_file_priv), buf))) {
 #endif
         // pass
       } else {

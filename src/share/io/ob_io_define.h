@@ -698,7 +698,7 @@ public:
   ObIOCallback *get_io_callback();
   bool need_trace() const;
   storage::ObStorageCheckID get_check_id() const { return storage::ObStorageCheckID::IO_HANDLE; }
-  TO_STRING_KV("io_result", to_cstring(result_));
+  TO_STRING_KV_WITH_HELPER("io_result", helper.convert(result_));
 
 private:
   void estimate();

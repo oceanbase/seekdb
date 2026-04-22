@@ -157,11 +157,11 @@ protected:
   int gen_event_ts(int64_t &event_ts);
   // Helper method to build entry from variadic template args
   template <int Floor, bool Truncate, typename Name, typename Value, typename ...Rest>
-  int build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelperV2 &helper, Name &&name, Value &&value, Rest &&...others);
+  int build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelper &helper, Name &&name, Value &&value, Rest &&...others);
   template <int Floor, bool Truncate>
-  int build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelperV2 &helper);
+  int build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelper &helper);
   template <int Floor, bool Truncate, typename Value>
-  int build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelperV2 &helper, Value &&extra_info);
+  int build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelper &helper, Value &&extra_info);
 protected:
   static constexpr const char * names[7] = {"name1", "name2", "name3", "name4", "name5", "name6", "extra_info"}; // only valid in compile time
   static constexpr const char * values[6] = {"value1", "value2", "value3", "value4", "value5", "value6"}; // only valid in compile time
@@ -255,7 +255,7 @@ int ObEventHistoryTableOperator::add_event(const char *module, const char *event
     entry.module_.assign_ptr(module, static_cast<int32_t>(strlen(module)));
     entry.event_.assign_ptr(event, static_cast<int32_t>(strlen(event)));
 
-    common::ObCStringHelperV2 helper;
+    common::ObCStringHelper helper;
     if (OB_FAIL((build_entry_helper_<0, Truncate>(entry, helper, std::forward<Rest>(others)...)))) {
       SHARE_LOG(WARN, "build entry failed", K(ret));
     } else if (OB_FAIL(storage_.insert(entry))) {
@@ -295,7 +295,7 @@ int ObEventHistoryTableOperator::sync_add_event(const char *module, const char *
     entry.module_.assign_ptr(module, static_cast<int32_t>(strlen(module)));
     entry.event_.assign_ptr(event, static_cast<int32_t>(strlen(event)));
 
-    common::ObCStringHelperV2 helper;
+    common::ObCStringHelper helper;
     if (OB_FAIL((build_entry_helper_<0, false>(entry, helper, std::forward<Rest>(others)...)))) {
       SHARE_LOG(WARN, "build entry failed", K(ret));
     } else if (OB_FAIL(storage_.insert(entry))) {
@@ -348,7 +348,7 @@ int ObEventHistoryTableOperator::async_add_tenant_event(
     temp_entry.svr_addr_ = self_addr_;
     temp_entry.module_.assign_ptr(module, static_cast<int32_t>(strlen(module)));
     temp_entry.event_.assign_ptr(event, static_cast<int32_t>(strlen(event)));
-    common::ObCStringHelperV2 helper;
+    common::ObCStringHelper helper;
     if (OB_FAIL((build_entry_helper_<0, false>(temp_entry, helper, std::forward<Rest>(others)...)))) {
       SHARE_LOG(WARN, "build entry failed", K(ret));
     } else {
@@ -411,7 +411,7 @@ int ObEventHistoryTableOperator::add_event_with_retry(const char *module, const 
     entry.module_.assign_ptr(module, static_cast<int32_t>(strlen(module)));
     entry.event_.assign_ptr(event, static_cast<int32_t>(strlen(event)));
 
-    common::ObCStringHelperV2 helper;
+    common::ObCStringHelper helper;
     if (CLICK_FAIL((build_entry_helper_<0, false>(entry, helper, std::forward<Rest>(others)...)))) {
       SHARE_LOG(WARN, "build entry failed", K(ret));
     } else if (CLICK_FAIL(storage_.insert(entry))) {
@@ -477,7 +477,7 @@ int ObEventHistoryTableOperator::add_event_helper_(share::ObDMLSqlSplicer &dml, 
 
 // Helper methods to build entry from variadic template args
 template <int Floor, bool Truncate, typename Name, typename Value, typename ...Rest>
-int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelperV2 &helper, Name &&name, Value &&value, Rest &&...others)
+int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelper &helper, Name &&name, Value &&value, Rest &&...others)
 {
   int ret = OB_SUCCESS;
   ValueConverter<Truncate, Value> converter;
@@ -513,8 +513,8 @@ int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &
     }
   }
 
-  // Convert value to string using ObCStringHelperV2 for universal type conversion
-  // Use ObCStringHelperV2 to convert any type to string
+  // Convert value to string using ObCStringHelper for universal type conversion
+  // Use ObCStringHelper to convert any type to string
   // This handles all types including ObAddr, numeric types, and types with to_string
   const char *cstr = helper.convert(value);
   if (OB_ISNULL(cstr)) {
@@ -563,7 +563,7 @@ int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &
 }
 
 template <int Floor, bool Truncate>
-int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelperV2 &helper)
+int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelper &helper)
 {
   // All fields processed, nothing to do
   UNUSED(helper);
@@ -571,15 +571,15 @@ int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &
 }
 
 template <int Floor, bool Truncate, typename Value>
-int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelperV2 &helper, Value &&extra_info)
+int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &entry, common::ObCStringHelper &helper, Value &&extra_info)
 {
   static_assert(Floor == 6, "if there is an extra_info column, it must be 13th args in this row, no more, no less");
   int ret = OB_SUCCESS;
   common::ObString extra_info_str;
 
-  // Use ObCStringHelperV2 to convert any type to string
+  // Use ObCStringHelper to convert any type to string
   // Handle different types: string, ObString, or other types
-  // Use ObCStringHelperV2 to convert any type to string
+  // Use ObCStringHelper to convert any type to string
   const char *cstr = helper.convert(extra_info);
   if (OB_ISNULL(cstr)) {
     ret = helper.get_ob_errno();

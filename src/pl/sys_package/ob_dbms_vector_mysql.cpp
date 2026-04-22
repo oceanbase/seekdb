@@ -304,7 +304,8 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       LOG_WARN("failed to get table id", K(ret), K(database_name), K(table_name));
     } else if (table_id == OB_INVALID_ID) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_USER_ERROR(OB_TABLE_NOT_EXIST, to_cstring(database_name), to_cstring(table_name));
+      ObCStringHelper helper;
+      LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
     } else if (OB_FAIL(schema_guard->get_column_schema(
                    exec_ctx->get_my_session()->get_effective_tenant_id(),
                    table_id,
@@ -326,8 +327,8 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
         sqlclient::ObMySQLResult *result = NULL;
-        if (OB_FAIL(query_string.assign_fmt("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema='%s' and table_name='%s'",
-                to_cstring(database_name), to_cstring(table_name)))) {
+        if (OB_FAIL(query_string.assign_fmt("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema='%.*s' and table_name='%.*s'",
+                database_name.length(), database_name.ptr(), table_name.length(), table_name.ptr()))) {
           LOG_WARN("assign sql string failed", K(ret), K(database_name), K(table_name), K(column_name));
         } else if (OB_FAIL(GCTX.sql_proxy_->read(res, tenant_id, query_string.ptr()))) {
           LOG_WARN("read record failed", K(ret), K(tenant_id), K(query_string));
@@ -515,7 +516,7 @@ int ObDBMSVectorMySql::get_estimate_memory_str(ObVectorIndexParam index_param,
       }
       break;
     }
-    case ObVectorIndexAlgorithmType::VIAT_SPIV:
+    case ObVectorIndexAlgorithmType::VIAT_SPIV: 
     {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "esitamte sparse vector memory is");

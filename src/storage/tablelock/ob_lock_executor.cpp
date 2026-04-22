@@ -474,8 +474,9 @@ int ObLockExecutor::query_lock_id_(const ObString &lock_name,
 
   lock_id = OB_INVALID_OBJECT_ID;
 
+  ObCStringHelper helper;
   OZ (databuff_printf(where_cond, WHERE_CONDITION_BUFFER_SIZE,
-                      "WHERE name = '%s'", to_cstring(lock_name)));
+                      "WHERE name = '%s'", helper.convert(lock_name)));
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
   OZ (ObTableAccessHelper::read_single_row(tenant_id,
@@ -504,11 +505,9 @@ int ObLockExecutor::query_lock_id_and_lock_handle_(const ObString &lock_name,
   int64_t lock_handle_len = 0;
   // generate corresponding lock handle for the lock name,
   // and insert them into the inner table DBMS_LOCK_ALLOCATED
-
-  lock_id = OB_INVALID_OBJECT_ID;
-
+  ObCStringHelper helper;
   OZ (databuff_printf(where_cond, WHERE_CONDITION_BUFFER_SIZE,
-                      "WHERE name = '%s'", to_cstring(lock_name)));
+                      "WHERE name = '%s'", helper.convert(lock_name)));
   OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
   OZ (ObTableAccessHelper::read_single_row(tenant_id,

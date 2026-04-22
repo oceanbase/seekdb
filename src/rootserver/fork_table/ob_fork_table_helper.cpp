@@ -148,9 +148,10 @@ int check_fork_table_supported(const ObTableSchema &src_table_schema,
   } else if (!src_table_schema.is_user_table()) {
     if (OB_NOT_NULL(fork_table_arg)) {
       ret = OB_ERR_WRONG_OBJECT;
+      ObCStringHelper helper;
       LOG_USER_ERROR(OB_ERR_WRONG_OBJECT,
-                     to_cstring(fork_table_arg->src_database_name_),
-                     to_cstring(fork_table_arg->src_table_name_), "BASE TABLE");
+                     helper.convert(fork_table_arg->src_database_name_),
+                     helper.convert(fork_table_arg->src_table_name_), "BASE TABLE");
     } else {
       ret = OB_NOT_SUPPORTED;
       LOG_DEBUG("skip non-user table", K(src_table_schema.get_table_name()));

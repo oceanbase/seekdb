@@ -722,10 +722,16 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
     // partial adapter without index configuration
   } else if (OB_FAIL(get_hnsw_param(param))) {
     LOG_WARN("get hnsw param failed.", K(ret));
-  } else if (OB_FAIL(databuff_printf(info.statistics_,
-                 sizeof(info.statistics_), pos,
-                 "param=%s;", to_cstring(*param)))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
+  } else {
+    ObCStringHelper helper;
+    if (OB_FAIL(databuff_printf(info.statistics_,
+                   sizeof(info.statistics_), pos,
+                   "param=%s;", helper.convert(*param)))) {
+      LOG_WARN("failed to fill statistics", K(ret), K(this));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    // do nothing
   } else if (OB_FAIL(databuff_printf(info.statistics_,
                       sizeof(info.statistics_), pos,
                       "snap_index_type=%d;", int(get_snap_index_type())))) {
@@ -738,10 +744,16 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
   } else if (OB_FAIL(databuff_printf(info.statistics_,
              sizeof(info.statistics_), pos, "idle_cnt=%ld;", idle_cnt_))) {
     LOG_WARN("failed to fill statistics", K(ret), K(this));
-  } else if (!index_identity_.empty() && OB_FAIL(databuff_printf(
-             info.statistics_, sizeof(info.statistics_), pos,
-             "index=%s;", to_cstring(index_identity_)))) {
-    LOG_WARN("failed to fill statistic", K(ret), K(this));
+  } else if (!index_identity_.empty()) {
+    ObCStringHelper helper;
+    if (OB_FAIL(databuff_printf(
+               info.statistics_, sizeof(info.statistics_), pos,
+               "index=%s;", helper.convert(index_identity_)))) {
+      LOG_WARN("failed to fill statistic", K(ret), K(this));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    // do nothing
   } else if (nullptr != incr_data_ && OB_FAIL(databuff_printf(
              info.statistics_, sizeof(info.statistics_), pos,
              "incr_data.scn=%lu;", incr_data_->scn_.get_val_for_inner_table_field()))) {

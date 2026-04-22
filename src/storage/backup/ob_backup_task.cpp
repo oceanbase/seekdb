@@ -2302,6 +2302,7 @@ void ObPrefetchBackupInfoTask::record_server_event_(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid backup data type", K(ret), K_(backup_data_type));
   }
+  ObCStringHelper helper;
   SERVER_EVENT_ADD("backup", backup_data_event,
       "tenant_id", param_.tenant_id_,
       "backup_set_id", param_.backup_set_desc_.backup_set_id_,
@@ -2309,7 +2310,7 @@ void ObPrefetchBackupInfoTask::record_server_event_(
       "turn_id", param_.turn_id_,
       "retry_id", param_.retry_id_,
       "task_id", task_id,
-      to_cstring(cost_us));
+      helper.convert(cost_us));
 }
 
 /* ObLSBackupDataTask */
@@ -2980,6 +2981,7 @@ int ObLSBackupDataTask::do_backup_single_macro_block_data_(ObMultiMacroBlockBack
   }
 #ifdef ERRSIM
   if (has_need_copy) {
+    ObCStringHelper helper;
     SERVER_EVENT_SYNC_ADD("backup_data", "first_need_copy_logic_id",
                           "tenant_id", param_.tenant_id_,
                           "backup_set_id", param_.backup_set_desc_.backup_set_id_,
@@ -2987,7 +2989,7 @@ int ObLSBackupDataTask::do_backup_single_macro_block_data_(ObMultiMacroBlockBack
                           "turn_id", param_.turn_id_,
                           "retry_id", param_.retry_id_,
                           "first_logic_id", first_logic_id,
-                          to_cstring(task_id_));
+                          helper.convert(task_id_));
   }
 #endif
   return ret;
@@ -3822,6 +3824,7 @@ bool ObLSBackupDataTask::is_change_turn_error_(const int64_t error_code) const
 void ObLSBackupDataTask::record_server_event_(const int64_t cost_us) const
 {
   int ret = OB_SUCCESS;
+  ObCStringHelper helper;
   const char *backup_data_event = "unknown_backup_event";
   if (backup_data_type_.is_sys_backup()) {
     backup_data_event = "backup_sys_data";
@@ -3838,7 +3841,7 @@ void ObLSBackupDataTask::record_server_event_(const int64_t cost_us) const
       "turn_id", param_.turn_id_,
       "retry_id", param_.retry_id_,
       "file_id", task_id_,
-      to_cstring(cost_us));
+      helper.convert(cost_us));
 }
 
 int ObLSBackupDataTask::get_backup_item_(const storage::ObITable::TableKey &table_key,

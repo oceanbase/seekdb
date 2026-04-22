@@ -2242,7 +2242,8 @@ int ObTenantIOManager::print_io_function_status()
           LOG_WARN("fail to calc func usage", K(ret), K(i), K(j));
         } else if (avg_size < std::numeric_limits<double>::epsilon()) {
         } else {
-          const char *func_name = to_cstring(get_io_function_name(static_cast<share::ObFunctionType>(i)));
+          ObCStringHelper helper;
+          const char *func_name = helper.convert(get_io_function_name(static_cast<share::ObFunctionType>(i)));
           snprintf(io_status, sizeof(io_status), 
                     "function_name:%s, mode:%s, avg_size:%ld, avg_iops:%ld, avg_bw:%ld, [delay/us]: prepare:%ld, schedule:%ld, submit:%ld, device:%ld, total:%ld",
                     func_name,

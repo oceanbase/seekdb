@@ -245,7 +245,7 @@ int ObRestoreDagNet::alloc_restore_helper_()
   ObLSService *ls_service = nullptr;
   if (OB_NOT_NULL(helper_) || OB_ISNULL(ctx_) || !ctx_->is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("restore helper should not be null and ctx should not be null and ctx should be valid",
+    LOG_WARN("restore helper should not be null and ctx should not be null and ctx should be valid", 
                 K(ret), KPC(helper_), KPC(ctx_));
   } else if (OB_ISNULL(ls_service = MTL(ObLSService*))) {
     ret = OB_ERR_UNEXPECTED;
@@ -323,7 +323,7 @@ int ObRestoreDagNet::init_by_param(const share::ObIDagInitParam *param)
 
 bool ObRestoreDagNet::is_valid() const
 {
-  return is_inited_ && nullptr != ctx_ && ctx_->is_valid() && OB_NOT_NULL(helper_)
+  return is_inited_ && nullptr != ctx_ && ctx_->is_valid() && OB_NOT_NULL(helper_) 
             && OB_NOT_NULL(handler_) && OB_NOT_NULL(bandwidth_throttle_);
 }
 
@@ -452,7 +452,7 @@ int ObRestoreDagNet::fill_dag_net_key(char *buf, const int64_t buf_len) const
     ret = databuff_printf(buf, buf_len, pos, "ObRestoreDagNet: task_id=");
     OB_SUCCESS != ret ? : ret = databuff_printf(buf, buf_len, pos, "%s", task_id_str);
     OB_SUCCESS != ret ? : ret = databuff_printf(buf, buf_len, pos, ", task_type=");
-    OB_SUCCESS != ret ? : ret = databuff_printf(buf, buf_len, pos, "%s",
+    OB_SUCCESS != ret ? : ret = databuff_printf(buf, buf_len, pos, "%s", 
         ObRestoreTaskType::get_str(ctx_->task_.type_));
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to fill dag net key", K(ret), KPC(ctx_));
@@ -466,7 +466,7 @@ int ObRestoreDagNet::clear_dag_net_ctx()
   int ret = OB_SUCCESS;
   int32_t result = OB_SUCCESS;
   LOG_INFO("start clear dag net ctx", KPC(ctx_));
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("restore dag net do not init", K(ret));
@@ -522,7 +522,7 @@ int ObRestoreDag::fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObI
     LOG_WARN("restore dag ctx should not be NULL", K(ret), KP(ctx));
   } else {
     ObCStringHelper helper;
-    if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(),
+    if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(), 
                                             share::ObLSID::SYS_LS_ID,
                                             static_cast<int64_t>(ctx->task_.type_),
                                             "task_id", helper.convert(ctx->task_.task_id_)))) {
@@ -573,7 +573,7 @@ bool ObInitialRestoreDag::operator == (const share::ObIDag &other) const
       is_same = false;
     } else if (ctx->task_.task_id_ != other_ctx->task_.task_id_) {
       is_same = false;
-    }
+    } 
   }
   return is_same;
 }
@@ -600,14 +600,14 @@ int ObInitialRestoreDag::fill_dag_key(char *buf, const int64_t buf_len) const
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("restore dag net do not init", K(ret));
-  } else if (OB_ISNULL(ctx)) {
+  } else if (OB_ISNULL(ctx)) { 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("restore dag ctx should not be null", K(ret), KPC(ctx));
   } else if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, "ObInitialRestoreDag task_id=%s, task_type=%s",
-                                        helper.convert(ctx->task_.task_id_),
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, "ObInitialRestoreDag task_id=%s, task_type=%s", 
+                                        helper.convert(ctx->task_.task_id_), 
                                         ObRestoreTaskType::get_str(ctx->task_.type_)))) {
     LOG_WARN("failed to fill dag key", K(ret), KPC(ctx));
   }
@@ -705,7 +705,7 @@ int ObInitialRestoreTask::process()
     LOG_WARN("initial restore task do not init", K(ret));
   } else if (OB_FAIL(generate_restore_dags_())) {
     LOG_WARN("failed to generate restore dags", K(ret), KPC(ctx_));
-  }
+  } 
   if (OB_TMP_FAIL(record_server_event_())) {
     LOG_WARN("failed to record server event", K(tmp_ret), K(ret));
   }
@@ -857,14 +857,14 @@ int ObStartRestoreDag::fill_dag_key(char *buf, const int64_t buf_len) const
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("restore dag net do not init", K(ret));
-  } else if (OB_ISNULL(ctx)) {
+  } else if (OB_ISNULL(ctx)) { 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("restore dag ctx should not be null", K(ret), KPC(ctx));
   } else if (OB_ISNULL(buf) || buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, "ObStartRestoreDag task_id=%s, task_type=%s",
-                                        helper.convert(ctx->task_.task_id_),
+  } else if (OB_FAIL(databuff_printf(buf, buf_len, "ObStartRestoreDag task_id=%s, task_type=%s", 
+                                        helper.convert(ctx->task_.task_id_), 
                                         ObRestoreTaskType::get_str(ctx->task_.type_)))) {
     LOG_WARN("failed to fill dag key", K(ret), KPC(ctx));
   }
@@ -965,7 +965,7 @@ int ObStartRestoreTask::init()
   } else {
     dag_net_ = dag_net;
     is_inited_ = true;
-    LOG_INFO("succeed init start restore task",
+    LOG_INFO("succeed init start restore task", 
         "dag_id", *ObCurTraceId::get_trace_id(), "dag_net_id", ctx_->task_.task_id_);
   }
   return ret;
@@ -990,13 +990,13 @@ int ObStartRestoreTask::process()
   if (OB_TMP_FAIL(record_server_event_())) {
     LOG_WARN("failed to record server event", K(tmp_ret), K(ret));
   }
-
+  
   if (OB_FAIL(ret)) {
     if (OB_TMP_FAIL(ObStorageHADagUtils::deal_with_fo(ret, this->get_dag()))) {
       LOG_WARN("failed to deal with fo", K(ret), K(tmp_ret), KPC(ctx_));
     }
   }
-
+  
   return ret;
 }
 
@@ -1019,11 +1019,11 @@ int ObStartRestoreTask::update_ls_()
   ObLS *ls = nullptr;
   ObLSService *ls_service = nullptr;
   share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("start restore task do not init", K(ret));
-  } else if (OB_ISNULL(ls_service = MTL(ObLSService*))) {
+  } else if (OB_ISNULL(ls_service = MTL(ObLSService*))) { 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get ObLSService from MTL", K(ret));
   } else if (OB_FAIL(ObStorageHADagUtils::get_ls(ls_id, ls_handle))) {
@@ -1092,7 +1092,7 @@ int ObStartRestoreTask::generate_tablets_restore_dag_()
         LOG_WARN("Fail to add task", K(ret));
         ret = OB_EAGAIN;
       }
-
+        
       if (OB_TMP_FAIL(scheduler->cancel_dag(sys_tablets_dag))) {
         LOG_WARN("failed to cancel ha dag", K(tmp_ret), KPC(sys_tablets_dag));
       } else {
@@ -1101,7 +1101,7 @@ int ObStartRestoreTask::generate_tablets_restore_dag_()
     } else {
       LOG_INFO( "succeed to schedule sys and data tablets restore dag");
     }
-
+    
     if (OB_FAIL(ret)) {
       if (OB_NOT_NULL(data_tablets_dag)) {
         scheduler->free_dag(*data_tablets_dag);
@@ -1113,7 +1113,7 @@ int ObStartRestoreTask::generate_tablets_restore_dag_()
       }
     }
   }
-
+  
   return ret;
 }
 
@@ -1156,7 +1156,7 @@ int ObStartRestoreTask::inner_build_ls_()
       ctx_->src_ls_meta_package_ = ls_meta_package;
     }
   }
-
+  
   if (FAILEDx(update_ls_())) {
     LOG_WARN("failed to update ls", K(ret), KPC(ctx_));
   }
@@ -1290,7 +1290,7 @@ int ObStartRestoreTask::create_tablet_(const obrpc::ObCopyTabletInfo &tablet_inf
 int ObStartRestoreTask::record_server_event_()
 {
   int ret = OB_SUCCESS;
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("start restore task do not init", K(ret));
@@ -1494,7 +1494,7 @@ int ObSysTabletsRestoreTask::process()
   } else if (OB_FAIL(generate_sys_tablet_restore_dag_())) {
     LOG_WARN("failed to generate sys tablet restore dag", K(ret), KPC(ctx_));
   }
-
+  
   if (OB_FAIL(ret)) {
     if (OB_TMP_FAIL(ObStorageHADagUtils::deal_with_fo(ret, this->get_dag()))) {
       LOG_WARN("failed to deal with fo", K(ret), K(tmp_ret), KPC(ctx_));
@@ -1521,7 +1521,7 @@ int ObSysTabletsRestoreTask::build_tablets_sstable_info_()
     ObArray<ObTabletID> tablet_id_array;
     if (OB_FAIL(ObStorageHAUtils::append_tablet_list(ctx_->sys_tablet_id_array_, tablet_id_array))) {
       LOG_WARN("failed to append tablet list", K(ret), K(ctx_->sys_tablet_id_array_), KPC(ctx_));
-    } else if (OB_FAIL(ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(tablet_id_array, helper_,
+    } else if (OB_FAIL(ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(tablet_id_array, helper_, 
                                                                   &ctx_->ha_table_info_mgr_, dag_net_, ls))) {
       LOG_WARN("failed to build tablets sstable info with helper", K(ret), KPC(ctx_));
     }
@@ -1797,7 +1797,7 @@ int ObTabletRestoreDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
   int ret = OB_SUCCESS;
   ObRestoreDagNetCtx *ctx = nullptr;
   ObCStringHelper helper;
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet restore dag do not init", K(ret));
@@ -2013,7 +2013,7 @@ ObTabletRestoreTask::~ObTabletRestoreTask()
   if (OB_NOT_NULL(helper_)) {
     helper_->destroy();
     helper_ = nullptr;
-  }
+  } 
 }
 
 int ObTabletRestoreTask::init(ObCopyTabletCtx &ctx)
@@ -2044,7 +2044,7 @@ int ObTabletRestoreTask::init(ObCopyTabletCtx &ctx)
     copy_tablet_ctx_ = &ctx;
     if (OB_ISNULL(ctx_) || OB_ISNULL(proto_helper) || OB_ISNULL(bandwidth_throttle_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ctx or restore helper should not be NULL",
+      LOG_WARN("ctx or restore helper should not be NULL", 
                   K(ret), KP(ctx_), KP(proto_helper), KP(bandwidth_throttle_));
     } else if (OB_FAIL(proto_helper->copy_for_task(allocator_, helper_))) {
       LOG_WARN("failed to copy task helper", K(ret), KP(proto_helper));
@@ -2101,8 +2101,8 @@ int ObTabletRestoreTask::process()
     LOG_WARN("failed to build copy table key info", K(ret), KPC(copy_tablet_ctx_));
   } else if (OB_FAIL(build_copy_sstable_info_mgr_())) {
     LOG_WARN("failed to build copy sstable info mgr", K(ret), KPC(copy_tablet_ctx_));
-  } else if (OB_FAIL(ObStorageHAUtils::build_major_sstable_reuse_info(copy_tablet_ctx_->tablet_handle_,
-                                                                        copy_tablet_ctx_->macro_block_reuse_mgr_,
+  } else if (OB_FAIL(ObStorageHAUtils::build_major_sstable_reuse_info(copy_tablet_ctx_->tablet_handle_, 
+                                                                        copy_tablet_ctx_->macro_block_reuse_mgr_, 
                                                                         false/*is_restore*/))) {
     LOG_WARN("failed to update major sstable reuse info", K(ret), KPC(copy_tablet_ctx_));
   } else if (OB_FAIL(generate_restore_tasks_())) {
@@ -2287,7 +2287,7 @@ int ObTabletRestoreTask::generate_physical_copy_task_(
     LOG_WARN("invalid argument", K(ret), K(copy_table_key), KP(parent_task), KP(child_task));
   } else if (OB_ISNULL(dag = this->get_dag())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dag should not be NULL", K(ret));
+    LOG_WARN("dag should not be NULL", K(ret)); 
   } else if (FALSE_IT(tablet_restore_dag = static_cast<ObTabletRestoreDag *>(dag))) {
   } else if (OB_FAIL(tablet_restore_dag->get_ls(ls))) {
     LOG_WARN("failed to get ls", K(ret), KPC(ctx_));
@@ -2300,7 +2300,7 @@ int ObTabletRestoreTask::generate_physical_copy_task_(
       LOG_WARN("failed to add child task", K(ret), KPC(copy_tablet_ctx_), K(copy_table_key));
     }
   } else {
-    if (OB_FAIL(ctx_->ha_table_info_mgr_.get_table_info(copy_tablet_ctx_->tablet_id_,
+    if (OB_FAIL(ctx_->ha_table_info_mgr_.get_table_info(copy_tablet_ctx_->tablet_id_, 
                                                             copy_table_key, init_param.sstable_param_))) {
       LOG_WARN("failed to get table info", K(ret), KPC(copy_tablet_ctx_), K(copy_table_key));
     } else if (OB_FAIL(ObStorageHATaskUtils::check_need_copy_macro_blocks(*init_param.sstable_param_,
@@ -2316,12 +2316,12 @@ int ObTabletRestoreTask::generate_physical_copy_task_(
       init_param.macro_block_reuse_mgr_ = ObITable::is_major_sstable(copy_table_key.table_type_) ? &copy_tablet_ctx_->macro_block_reuse_mgr_ : nullptr;
       init_param.extra_info_ = &copy_tablet_ctx_->extra_info_;
       init_param.helper_ = helper_;
-
-      if (OB_FAIL(ctx_->ha_table_info_mgr_.get_table_info(copy_tablet_ctx_->tablet_id_,
+      
+      if (OB_FAIL(ctx_->ha_table_info_mgr_.get_table_info(copy_tablet_ctx_->tablet_id_, 
                                                               copy_table_key, init_param.sstable_param_))) {
         LOG_WARN("failed to get table info", K(ret), KPC(copy_tablet_ctx_), K(copy_table_key));
       } else if (!need_copy && FALSE_IT(init_param.sstable_macro_range_info_.copy_table_key_ = copy_table_key)) {
-      } else if (need_copy && OB_FAIL(copy_sstable_info_mgr_.get_copy_sstable_maro_range_info(copy_table_key,
+      } else if (need_copy && OB_FAIL(copy_sstable_info_mgr_.get_copy_sstable_maro_range_info(copy_table_key, 
                                                                           init_param.sstable_macro_range_info_))) {
         LOG_WARN("failed to get copy sstable macro range info", K(ret), K(copy_table_key));
       } else if (!init_param.is_valid()) {
@@ -2351,7 +2351,7 @@ int ObTabletRestoreTask::generate_physical_copy_task_(
           LOG_WARN("failed to add child finish_task for parent", K(ret));
         }
       }
-
+      
       if (OB_SUCC(ret)) {
         if (OB_FAIL(dag->add_task(*finish_task))) {
           LOG_WARN("failed to add finish task to dag", K(ret));
@@ -2409,14 +2409,14 @@ int ObTabletRestoreTask::generate_copy_tasks_(
     share::ObITask *&parent_task)
 {
   int ret = OB_SUCCESS;
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet restore task do not init", K(ret));
   } else if (OB_ISNULL(tablet_copy_finish_task) || OB_ISNULL(parent_task)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("generate copy task get invalid argument", K(ret), KP(parent_task));
-  }
+  } 
   for (int64_t i = 0; OB_SUCC(ret) && i < copy_table_key_array_.count(); ++i) {
     const ObITable::TableKey &copy_table_key = copy_table_key_array_.at(i);
     ObFakeTask *wait_finish_task = nullptr;
@@ -2434,7 +2434,7 @@ int ObTabletRestoreTask::generate_copy_tasks_(
         LOG_INFO("local contains the sstable, no need copy", K(copy_table_key));
       } else if (OB_FAIL(dag_->alloc_task(wait_finish_task))) {
         LOG_WARN("failed to alloc wait finish task", K(ret));
-      } else if (OB_FAIL(generate_physical_copy_task_(copy_table_key, tablet_copy_finish_task,
+      } else if (OB_FAIL(generate_physical_copy_task_(copy_table_key, tablet_copy_finish_task, 
                                                           parent_task, wait_finish_task))) {
         LOG_WARN("failed to generate physical copy task", K(ret), KPC(ctx_), K(copy_table_key));
       } else if (OB_FAIL(dag_->add_task(*wait_finish_task))) {
@@ -2568,11 +2568,11 @@ int ObTabletRestoreTask::try_update_tablet_()
     } else if (OB_ISNULL(helper_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("helper should not be NULL", K(ret), KP(helper_));
-    } else if (copy_tablet_ctx_->tablet_id_.is_ls_inner_tablet()
-                && OB_FAIL(ObRestoreDagNetUtils::create_or_update_tablets_with_helper(tablet_id_array,
+    } else if (copy_tablet_ctx_->tablet_id_.is_ls_inner_tablet() 
+                && OB_FAIL(ObRestoreDagNetUtils::create_or_update_tablets_with_helper(tablet_id_array, 
                                                                                           helper_, dag_net, ls))) {
       LOG_WARN("failed to create or update inner tablet with helper", K(ret), KPC(ctx_));
-    } else if (OB_FAIL(ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(tablet_id_array, helper_,
+    } else if (OB_FAIL(ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(tablet_id_array, helper_, 
                                                                             &ctx_->ha_table_info_mgr_, dag_net, ls))) {
       LOG_WARN("failed to build tablets sstable info with helper", K(ret), KPC(ctx_), KPC(copy_tablet_ctx_));
     } else if (OB_FAIL(ctx_->ha_table_info_mgr_.check_tablet_table_info_exist(copy_tablet_ctx_->tablet_id_, is_exist))) {
@@ -2714,9 +2714,9 @@ ObTabletFinishRestoreTask::~ObTabletFinishRestoreTask()
 }
 
 int ObTabletFinishRestoreTask::init(
-    const int64_t task_gen_time,
+    const int64_t task_gen_time, 
     const int64_t copy_table_count,
-    ObCopyTabletCtx &ctx,
+    ObCopyTabletCtx &ctx, 
     ObLS &ls)
 {
   int ret = OB_SUCCESS;
@@ -2750,7 +2750,7 @@ int ObTabletFinishRestoreTask::process()
 {
   int ret = OB_SUCCESS;
   LOG_INFO("start do tablet finish restore task", KPC(copy_tablet_ctx_));
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet finish restore task do not init", K(ret), KPC(copy_tablet_ctx_));
@@ -3019,7 +3019,7 @@ int ObDataTabletsRestoreTask::process()
   int32_t result = OB_SUCCESS;
   share::ObLSID sys_ls_id(share::ObLSID::SYS_LS_ID);
   LOG_INFO("start do data tablets restore task", K(ret), KPC(ctx_));
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("data tablets restore task do not init", K(ret));
@@ -3048,11 +3048,11 @@ int ObDataTabletsRestoreTask::process()
   } else if (OB_FAIL(generate_tablet_group_dag_())) {
       LOG_WARN("failed to generate tablet group dag", K(ret), KPC(ctx_));
   }
-
+  
   if (OB_TMP_FAIL(record_server_event_())) {
     LOG_WARN("failed to record server event", K(tmp_ret), K(ret));
   }
-
+  
   if (OB_FAIL(ret)) {
     int tmp_ret = OB_SUCCESS;
     bool allow_retry = true;
@@ -3060,7 +3060,7 @@ int ObDataTabletsRestoreTask::process()
       LOG_WARN("failed to try offline ls", K(tmp_ret));
     } else if (FALSE_IT(allow_retry = OB_SUCCESS == tmp_ret)) {
     }
-
+    
     if (OB_TMP_FAIL(ObStorageHADagUtils::deal_with_fo(ret, this->get_dag(), allow_retry))) {
       LOG_WARN("failed to deal with fo", K(ret), K(tmp_ret), KPC(ctx_));
     }
@@ -3155,7 +3155,7 @@ int ObDataTabletsRestoreTask::build_tablet_group_info_()
     const hash::ObHashMap<common::ObTabletID, ObCopyTabletSimpleInfo> &tablet_simple_info_map =
         ctx_->tablet_simple_info_map_;
     const ObHATabletGroupCtx::TabletGroupCtxType type = ObHATabletGroupCtx::TabletGroupCtxType::NORMAL_TYPE;
-
+    
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_->data_tablet_id_array_.count(); ++i) {
       tablet_simple_info.reset();
       const ObLogicTabletID &logic_tablet_id = ctx_->data_tablet_id_array_.at(i);
@@ -3369,9 +3369,10 @@ int ObDataTabletsRestoreTask::record_server_event_()
     LOG_WARN("ctx should not be null", K(ret), KPC_(ctx));
   } else {
     share::ObLSID sys_ls_id(share::ObLSID::SYS_LS_ID);
+    ObCStringHelper helper;
     SERVER_EVENT_ADD("storage_ha", "data_tablets_restore_task",
-        "src", to_cstring(ctx_->task_.src_info_),
-        "task_id", to_cstring(ctx_->task_.task_id_),
+        "src", helper.convert(ctx_->task_.src_info_),
+        "task_id", helper.convert(ctx_->task_.task_id_),
         "is_failed", ctx_->is_failed(),
         "task_type", ObRestoreTaskType::get_str(ctx_->task_.type_));
   }
@@ -3591,7 +3592,7 @@ int ObTabletGroupRestoreDag::fill_info_param(compaction::ObIBasicInfoParam *&out
 {
   int ret = OB_SUCCESS;
   ObRestoreDagNetCtx *ctx = nullptr;
-
+  
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet group restore dag do not init", K(ret));
@@ -3753,7 +3754,7 @@ int ObTabletGroupRestoreTask::build_tablets_sstable_info_()
     LOG_WARN("ls should not be NULL", K(ret), KP(ls), KPC(ctx_));
   } else if (OB_FAIL(ObStorageHAUtils::append_tablet_list(tablet_id_array_, tablet_id_array))) {
     LOG_WARN("failed to append tablet list", K(ret), K(tablet_id_array_), KPC(ctx_));
-  } else if (OB_FAIL(ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(tablet_id_array, helper_,
+  } else if (OB_FAIL(ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(tablet_id_array, helper_, 
                                                                           &ctx_->ha_table_info_mgr_, dag_net, ls))) {
     LOG_WARN("failed to build tablets sstable info with helper", K(ret), KPC(ctx_));
   }
@@ -3899,9 +3900,10 @@ int ObTabletGroupRestoreTask::record_server_event_()
     LOG_WARN("ctx should not be null", K(ret), KPC_(ctx));
   } else {
     share::ObLSID sys_ls_id(share::ObLSID::SYS_LS_ID);
+    ObCStringHelper helper;
     SERVER_EVENT_ADD("storage_ha", "tablet_group_restore_task",
-        "src", to_cstring(ctx_->task_.src_info_),
-        "task_id", to_cstring(ctx_->task_.task_id_),
+        "src", helper.convert(ctx_->task_.src_info_),
+        "task_id", helper.convert(ctx_->task_.task_id_),
         "tablet_count", tablet_id_array_.count(),
         "task_type", ObRestoreTaskType::get_str(ctx_->task_.type_));
   }
@@ -4077,7 +4079,7 @@ int ObRestoreFinishTask::process()
         LOG_WARN("failed to generate initial restore dag", K(ret), KPC(ctx_));
       }
     }
-  }
+  } 
 
   if (OB_TMP_FAIL(record_server_event_())) {
     LOG_WARN("failed to record server event", K(tmp_ret), K(ret));
@@ -4139,9 +4141,10 @@ int ObRestoreFinishTask::record_server_event_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ctx should not be null", K(ret));
   } else {
+    ObCStringHelper helper;
     SERVER_EVENT_ADD("storage_ha", "restore_finish_task",
-      "src", to_cstring(ctx_->task_.src_info_),
-      "task_id", to_cstring(ctx_->task_.task_id_),
+      "src", helper.convert(ctx_->task_.src_info_),
+      "task_id", helper.convert(ctx_->task_.task_id_),
       "restore_type", ObRestoreTaskType::get_str(ctx_->task_.type_));
   }
   return ret;
@@ -4234,7 +4237,7 @@ int ObRestoreDagNetUtils::create_or_update_tablets_with_helper(
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_id_array.count(); ++i) {
       const ObTabletID &tablet_id = tablet_id_array.at(i);
       tablet_info.reset();
-
+      
       if (dag_net->is_cancel()) {
         ret = OB_CANCELED;
         LOG_WARN("task is cancelled", K(ret));
@@ -4251,8 +4254,8 @@ int ObRestoreDagNetUtils::create_or_update_tablets_with_helper(
 }
 
 int ObRestoreDagNetUtils::create_or_update_tablet(
-    const obrpc::ObCopyTabletInfo &tablet_info,
-    const bool need_check_tablet_limit,
+    const obrpc::ObCopyTabletInfo &tablet_info, 
+    const bool need_check_tablet_limit, 
     ObLS *ls)
 {
   int ret = OB_SUCCESS;
@@ -4268,14 +4271,14 @@ int ObRestoreDagNetUtils::create_or_update_tablet(
   } else if (ObCopyTabletStatus::TABLET_NOT_EXIST == tablet_info.status_ && tablet_info.tablet_id_.is_ls_inner_tablet()) {
     ret = OB_TABLET_NOT_EXIST;
     LOG_WARN("src ls inner tablet is not exist, src ls is maybe deleted", K(ret), K(tablet_info));
-  } else if (need_check_tablet_limit
+  } else if (need_check_tablet_limit 
                 && OB_FAIL(ObTabletCreateMdsHelper::check_create_new_tablets(1LL, ObTabletCreateThrottlingLevel::SOFT))) {
     if (OB_TOO_MANY_PARTITIONS_ERROR == ret) {
       LOG_ERROR("too many partitions, failed to check create new tablet", K(ret), K(tablet_info));
     } else {
       LOG_WARN("failed to check create new tablet", K(ret), K(tablet_info));
     }
-  } else if (OB_FAIL(hold_local_reuse_major_sstables_(tablet_info.tablet_id_, ls, local_tablet_hdl, major_tables,
+  } else if (OB_FAIL(hold_local_reuse_major_sstables_(tablet_info.tablet_id_, ls, local_tablet_hdl, major_tables, 
                                                           storage_schema, allocator))) {
     LOG_WARN("failed to hold local reuse major sstable", K(ret), K(tablet_info));
   } else if (OB_FAIL(ls->rebuild_create_tablet(tablet_info.param_, false/*keep old*/))) {
@@ -4285,8 +4288,8 @@ int ObRestoreDagNetUtils::create_or_update_tablet(
   } else {
     if (major_tables.empty()) {
       // do nothing
-    } else if (OB_FAIL(ObStorageHATabletBuilderUtil::build_tablet_with_major_tables(ls, tablet_info.tablet_id_,
-                                                                                    major_tables, major_sstables_param,
+    } else if (OB_FAIL(ObStorageHATabletBuilderUtil::build_tablet_with_major_tables(ls, tablet_info.tablet_id_, 
+                                                                                    major_tables, major_sstables_param, 
                                                                                     false/*is_only_replace_major*/))) {
       LOG_WARN("failed to build tablet with major tables", K(ret), K(tablet_info), K(major_tables));
     } else {
@@ -4405,7 +4408,7 @@ int ObRestoreDagNetUtils::remove_uncomplete_tablet_(const common::ObTabletID &ta
 }
 
 int ObRestoreDagNetUtils::hold_local_reuse_major_sstables_(
-    const common::ObTabletID &tablet_id,
+    const common::ObTabletID &tablet_id,  
     ObLS *ls,
     ObTabletHandle &local_tablet_hdl,
     ObTablesHandleArray &tables_handle,
@@ -4462,7 +4465,7 @@ int ObRestoreDagNetUtils::hold_local_reuse_major_sstables_(
           LOG_WARN("tablet should not be NULL", K(ret), KP(tablet), K(tablet_id));
         }
       }
-    }
+    } 
   }
 
   ObTabletObjLoadHelper::free(arena_allocator, tablet_storage_schema);
