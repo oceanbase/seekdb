@@ -129,7 +129,7 @@ struct DiagnoseInfo
   logservice::RCDiagnoseInfo rc_diagnose_info_;
   logservice::ApplyDiagnoseInfo apply_diagnose_info_;
   logservice::ReplayDiagnoseInfo replay_diagnose_info_;
-  checkpoint::CheckpointDiagnoseInfo checkpoint_diagnose_info_;
+  checkpoint::ObLsClogCheckpointStat ls_clog_checkpoint_stat_;
   char read_only_tx_info_[1024];
   TO_STRING_KV(K(ls_id_),
                K(log_handler_diagnose_info_),
@@ -137,7 +137,7 @@ struct DiagnoseInfo
                K(rc_diagnose_info_),
                K(apply_diagnose_info_),
                K(replay_diagnose_info_),
-               K(checkpoint_diagnose_info_),
+               K(ls_clog_checkpoint_stat_),
                K(read_only_tx_info_));
   void reset() {
     ls_id_ = -1;
@@ -146,7 +146,7 @@ struct DiagnoseInfo
     rc_diagnose_info_.reset();
     apply_diagnose_info_.reset();
     replay_diagnose_info_.reset();
-    checkpoint_diagnose_info_.reset();
+    ls_clog_checkpoint_stat_.reset();
     read_only_tx_info_[0] = '\0';
   }
 };

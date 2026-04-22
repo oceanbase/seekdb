@@ -8194,47 +8194,6 @@ id	field	type	length	precision	nullable
 21	gmt_create	18	0	25	0
 22	gmt_modified	18	0	25	0
 23	is_deleted	5	0	20	0
-table oceanbase.__all_virtual_checkpoint_diagnose_memtable_info column_count 17 table_id 12437
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12437 order by column_id;
-id	field	type	length	precision	nullable
-16	trace_id	5	0	20	0
-17	checkpoint_thread_name	22	16	-1	0
-18	checkpoint_start_time	18	0	25	0
-19	tablet_id	5	0	20	0
-20	ptr	22	128	-1	0
-21	start_scn	10	0	20	0
-22	end_scn	10	0	20	0
-23	rec_scn	10	0	20	0
-24	create_flush_dag_time	18	0	25	0
-25	merge_finish_time	18	0	25	0
-26	release_time	18	0	25	0
-27	frozen_finish_time	18	0	25	0
-28	merge_start_time	18	0	25	0
-29	start_gc_time	18	0	25	0
-30	memtable_occupy_size	5	0	20	0
-31	occupy_size	5	0	20	0
-32	concurrent_cnt	5	0	20	0
-table oceanbase.__all_virtual_checkpoint_diagnose_checkpoint_unit_info column_count 11 table_id 12438
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12438 order by column_id;
-id	field	type	length	precision	nullable
-16	trace_id	5	0	20	0
-17	checkpoint_thread_name	22	16	-1	0
-18	checkpoint_start_time	18	0	25	0
-19	tablet_id	5	0	20	0
-20	ptr	22	128	-1	0
-21	start_scn	10	0	20	0
-22	end_scn	10	0	20	0
-23	rec_scn	10	0	20	0
-24	create_flush_dag_time	18	0	25	0
-25	merge_finish_time	18	0	25	0
-26	start_gc_time	18	0	25	0
-table oceanbase.__all_virtual_checkpoint_diagnose_info column_count 4 table_id 12439
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12439 order by column_id;
-id	field	type	length	precision	nullable
-16	trace_id	5	0	20	0
-17	freeze_clock	9	0	10	0
-18	checkpoint_thread_name	22	16	-1	0
-19	checkpoint_start_time	18	0	25	0
 table oceanbase.__all_virtual_wr_system_event column_count 7 table_id 12440
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12440 order by column_id;
 id	field	type	length	precision	nullable

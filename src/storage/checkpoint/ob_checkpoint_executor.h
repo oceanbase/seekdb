@@ -41,20 +41,21 @@ struct ObCheckpointVTInfo
   );
 };
 
-struct CheckpointDiagnoseInfo
+struct ObLsClogCheckpointStat
 {
-  CheckpointDiagnoseInfo() { reset(); }
-  ~CheckpointDiagnoseInfo() { reset(); }
-  share::SCN checkpoint_;
+  ObLsClogCheckpointStat() { reset(); }
+  ~ObLsClogCheckpointStat() { reset(); }
+  share::SCN clog_checkpoint_scn_;
   share::SCN min_rec_scn_;
-  logservice::ObLogBaseType log_type_;
-  TO_STRING_KV(K(checkpoint_),
+  logservice::ObLogBaseType min_rec_scn_log_type_;
+  TO_STRING_KV(K(clog_checkpoint_scn_),
                K(min_rec_scn_),
-               K(log_type_));
-  void reset() {
-    checkpoint_.reset();
+               K(min_rec_scn_log_type_));
+  void reset()
+  {
+    clog_checkpoint_scn_.reset();
     min_rec_scn_.reset();
-    log_type_ = logservice::ObLogBaseType::INVALID_LOG_BASE_TYPE;
+    min_rec_scn_log_type_ = logservice::ObLogBaseType::INVALID_LOG_BASE_TYPE;
   }
 };
 
@@ -90,7 +91,7 @@ public:
 
   void get_min_rec_scn(int &log_type, share::SCN &min_rec_scn) const;
 
-  int diagnose(CheckpointDiagnoseInfo &diagnose_info) const;
+  int get_clog_checkpoint_stat(ObLsClogCheckpointStat &stat) const;
 
   int traversal_flush() const;
 

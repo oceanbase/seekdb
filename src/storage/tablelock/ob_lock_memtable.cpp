@@ -1236,8 +1236,6 @@ int ObLockMemtable::flush(SCN recycle_scn,
           LOG_WARN("failed to schedule lock_memtable merge dag", K(ret), K(this));
         }
       } else {
-        REPORT_CHECKPOINT_DIAGNOSE_INFO(update_schedule_dag_info, this, get_rec_scn(),
-            get_start_scn(), get_end_scn());
         LOG_INFO("schedule lock_memtable merge_dag successfully", K(ls_id_), K(freeze_scn_));
       }
     }

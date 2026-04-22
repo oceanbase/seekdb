@@ -482,16 +482,16 @@ int ObCheckpointExecutor::get_checkpoint_info(ObIArray<ObCheckpointVTInfo> &chec
 }
 
 
-int ObCheckpointExecutor::diagnose(CheckpointDiagnoseInfo &diagnose_info) const
+int ObCheckpointExecutor::get_clog_checkpoint_stat(ObLsClogCheckpointStat &stat) const
 {
   int ret = OB_SUCCESS;
   RLockGuard guard(rwlock_);
   int log_type_index = 0;
-  diagnose_info.checkpoint_ = ls_->get_clog_checkpoint_scn();
-  diagnose_info.min_rec_scn_.set_max();
-  get_min_rec_scn(log_type_index, diagnose_info.min_rec_scn_);
+  stat.clog_checkpoint_scn_ = ls_->get_clog_checkpoint_scn();
+  stat.min_rec_scn_.set_max();
+  get_min_rec_scn(log_type_index, stat.min_rec_scn_);
   ObLogBaseType log_type = static_cast<ObLogBaseType>(log_type_index);
-  diagnose_info.log_type_ = log_type;
+  stat.min_rec_scn_log_type_ = log_type;
   return ret;
 }
 

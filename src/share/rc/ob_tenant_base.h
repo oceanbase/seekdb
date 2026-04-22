@@ -90,7 +90,6 @@ class ObTenantMdsService;
   namespace checkpoint {
     class ObCheckPointService;
     class ObTabletGCService;
-    class ObCheckpointDiagnoseMgr;
   }
   class ObLobManager;
   class ObTenantRestoreInfoMgr;
@@ -370,7 +369,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       rootserver::ObMViewMaintenanceService*,       \
       PublicBlockGCService                          \
       share::ObResourceLimitCalculator*,            \
-      storage::checkpoint::ObCheckpointDiagnoseMgr*, \
       storage::ObGlobalIteratorPool*,                \
       common::ObRbMemMgr*,                           \
       share::ObPluginVectorIndexService*,            \

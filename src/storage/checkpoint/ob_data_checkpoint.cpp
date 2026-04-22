@@ -940,21 +940,7 @@ int ObDataCheckpoint::freeze_base_on_needs_(const int64_t trace_id,
   return ret;
 }
 
-void ObDataCheckpoint::add_diagnose_info_for_ls_frozen_()
-{
-  ObCheckpointIterator iterator;
-  RLOCK(LS_FROZEN);
-  ls_frozen_list_.get_iterator(iterator);
-  while (iterator.has_next()) {
-    ObITabletMemtable *tablet_memtable = static_cast<ObITabletMemtable *>(iterator.get_next());
-    if (tablet_memtable->is_data_memtable()) {
-      if (!tablet_memtable->is_active_checkpoint()) {
-        (static_cast<memtable::ObMemtable *>(tablet_memtable))
-            ->report_memtable_diagnose_info(memtable::ObMemtable::AddCheckpointDiagnoseInfoForMemtable());
-      }
-    }
-  }
-}
+void ObDataCheckpoint::add_diagnose_info_for_ls_frozen_() {}
 
 }  // namespace checkpoint
 }  // namespace storage

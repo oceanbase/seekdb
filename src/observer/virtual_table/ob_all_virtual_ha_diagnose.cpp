@@ -186,13 +186,13 @@ int ObAllVirtualHADiagnose::insert_stat_(storage::DiagnoseInfo &diagnose_info)
         cur_row_.cells_[i].set_uint64(0);
         break;
       case CHECKPOINT_SCN:
-        cur_row_.cells_[i].set_uint64(diagnose_info.checkpoint_diagnose_info_.checkpoint_.get_val_for_inner_table_field());
+        cur_row_.cells_[i].set_uint64(diagnose_info.ls_clog_checkpoint_stat_.clog_checkpoint_scn_.get_val_for_inner_table_field());
         break;
       case MIN_REC_SCN:
-        cur_row_.cells_[i].set_uint64(diagnose_info.checkpoint_diagnose_info_.min_rec_scn_.get_val_for_inner_table_field());
+        cur_row_.cells_[i].set_uint64(diagnose_info.ls_clog_checkpoint_stat_.min_rec_scn_.get_val_for_inner_table_field());
         break;
       case MIN_REC_SCN_LOG_TYPE:
-        if (OB_FAIL(log_base_type_to_string(diagnose_info.checkpoint_diagnose_info_.log_type_,
+        if (OB_FAIL(log_base_type_to_string(diagnose_info.ls_clog_checkpoint_stat_.min_rec_scn_log_type_,
                                             min_rec_log_scn_log_type_str_,
                                             sizeof(min_rec_log_scn_log_type_str_)))) {
           SERVER_LOG(WARN, "log_base_type_to_string failed", K(ret), K(diagnose_info));

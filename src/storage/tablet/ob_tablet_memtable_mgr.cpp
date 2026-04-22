@@ -776,7 +776,6 @@ int ObTabletMemtableMgr::get_all_memtables(ObTableHdlArray &handle)
   return ret;
 }
 
-DEF_REPORT_CHEKCPOINT_DIAGNOSE_INFO(UpdateReleaseTime, update_release_time)
 int ObTabletMemtableMgr::release_head_memtable_(ObIMemtable *imemtable,
                                                 const bool force)
 {
@@ -811,7 +810,6 @@ int ObTabletMemtableMgr::release_head_memtable_(ObIMemtable *imemtable,
         memtable->set_freeze_state(TabletMemtableFreezeState::RELEASED);
       }
       memtable->set_frozen();
-      memtable->report_memtable_diagnose_info(UpdateReleaseTime());
       release_head_memtable();
       ObITabletMemtable *active_memtable = get_active_memtable_();
       if (OB_NOT_NULL(active_memtable) && !active_memtable->allow_freeze()) {

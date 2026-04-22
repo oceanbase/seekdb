@@ -3558,7 +3558,7 @@ def_table_schema(
   ]
   )
 
-# 473 : __all_tenant_event_history
+# 473 : __all_tenant_event_history 
 
 def_table_schema(
   table_name     = '__all_tenant_scheduler_job_class',
@@ -9808,77 +9808,9 @@ def_table_schema(**gen_iterate_virtual_table_def(
 
 # 12435: __all_virtual_clone_job (abandoned)
 # 12436: __all_virtual_clone_job_history (abandoned)
-
-def_table_schema(
-  owner = 'zk250686',
-  table_name    = '__all_virtual_checkpoint_diagnose_memtable_info',
-  table_id      = '12437',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  gm_columns    = [],
-  rowkey_columns = [
-    ('trace_id', 'int'),
-  ],
-  normal_columns = [
-    ('checkpoint_thread_name', 'varchar:OB_THREAD_NAME_BUF_LEN'),
-    ('checkpoint_start_time', 'timestamp'),
-    ('tablet_id', 'int'),
-    ('ptr', 'varchar:128'),
-    ('start_scn', 'uint'),
-    ('end_scn', 'uint'),
-    ('rec_scn', 'uint'),
-    ('create_flush_dag_time', 'timestamp'),
-    ('merge_finish_time', 'timestamp'),
-    ('release_time', 'timestamp'),
-    ('frozen_finish_time', 'timestamp'),
-    ('merge_start_time', 'timestamp'),
-    ('start_gc_time', 'timestamp'),
-    ('memtable_occupy_size', 'int'),
-    ('occupy_size', 'int'),
-    ('concurrent_cnt', 'int')
-  ],  vtable_route_policy = 'local'
-  )
-
-def_table_schema(
-  owner = 'zk250686',
-  table_name    = '__all_virtual_checkpoint_diagnose_checkpoint_unit_info',
-  table_id      = '12438',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  gm_columns    = [],
-  rowkey_columns = [
-    ('trace_id', 'int'),
-  ],
-  normal_columns = [
-    ('checkpoint_thread_name', 'varchar:OB_THREAD_NAME_BUF_LEN'),
-    ('checkpoint_start_time', 'timestamp'),
-    ('tablet_id', 'int'),
-    ('ptr', 'varchar:128'),
-    ('start_scn', 'uint'),
-    ('end_scn', 'uint'),
-    ('rec_scn', 'uint'),
-    ('create_flush_dag_time', 'timestamp'),
-    ('merge_finish_time', 'timestamp'),
-    ('start_gc_time', 'timestamp')
-  ],  vtable_route_policy = 'local'
-  )
-
-def_table_schema(
-  owner = 'zk250686',
-  table_name    = '__all_virtual_checkpoint_diagnose_info',
-  table_id      = '12439',
-  table_type = 'VIRTUAL_TABLE',
-  in_tenant_space = True,
-  gm_columns    = [],
-  rowkey_columns = [
-  ],
-  normal_columns = [
-    ('trace_id', 'int'),
-    ('freeze_clock', 'uint32'),
-    ('checkpoint_thread_name', 'varchar:OB_THREAD_NAME_BUF_LEN'),
-    ('checkpoint_start_time', 'timestamp')
-  ],  vtable_route_policy = 'local'
-  )
+# 12437: __all_virtual_checkpoint_diagnose_memtable_info (removed)
+# 12438: __all_virtual_checkpoint_diagnose_checkpoint_unit_info (removed)
+# 12439: __all_virtual_checkpoint_diagnose_info (removed)
 
 def_table_schema(**gen_iterate_virtual_table_def(
   table_id = '12440',
@@ -22411,7 +22343,7 @@ def_table_schema(
   normal_columns  = [],
   gm_columns      = [],
   in_tenant_space = True,
-  view_definition = """SELECT
+  view_definition = """SELECT 
     SESSION_ID,
     TX_ID,
     STATE,

@@ -25,7 +25,7 @@
 #include "storage/compaction/ob_medium_compaction_mgr.h"
 #include "storage/multi_data_source/mds_table_handle.h"
 #include "storage/multi_data_source/mds_table_mgr.h"
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+#include "storage/checkpoint/ob_common_checkpoint.h"
 
 namespace oceanbase
 {

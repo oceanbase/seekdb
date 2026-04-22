@@ -142,7 +142,7 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__tenant_virtual_current_tenant;
 Field	Type	Null	Key	Default	Extra
-id	bigint(20)	NO	PRI	NULL
+id	bigint(20)	NO	PRI	NULL	
 tenant_name	varchar(128)	NO		NULL	
 create_stmt	varchar(4096)	NO		NULL	
 desc oceanbase.__tenant_virtual_database_status;
@@ -824,8 +824,8 @@ storage_cache_policy	varchar(1048576)	NO		{"GLOBAL":"AUTO"}
 merge_engine_type	bigint(20)	NO		0	
 semistruct_encoding_type	bigint(20)	NO		0	
 dynamic_partition_policy	varchar(4096)	NO			
-external_location_id	bigint(20)	NO		-1
-external_sub_path	varbinary(1048576)	YES		NULL
+external_location_id	bigint(20)	NO		-1	
+external_sub_path	varbinary(1048576)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_core_all_table;
 IF(count(*) >= 0, 1, 0)
 1
@@ -903,20 +903,20 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_sys_parameter;
 Field	Type	Null	Key	Default	Extra
-name	varchar(256)	NO	PRI	NULL
-gmt_create	bigint(20)	YES		NULL
-gmt_modified	bigint(20)	YES		NULL
-data_type	varchar(256)	YES		NULL
-value	varchar(256)	NO		NULL
-value_strict	varchar(256)	YES		NULL
-info	varchar(256)	YES		NULL
-need_reboot	bigint(20)	YES		NULL
-section	varchar(256)	YES		NULL
-visible_level	varchar(256)	YES		NULL
-config_version	bigint(20) unsigned	NO		NULL
-scope	varchar(256)	YES		NULL
-source	varchar(256)	YES		NULL
-edit_level	varchar(256)	YES		NULL
+name	varchar(256)	NO	PRI	NULL	
+gmt_create	bigint(20)	YES		NULL	
+gmt_modified	bigint(20)	YES		NULL	
+data_type	varchar(256)	YES		NULL	
+value	varchar(256)	NO		NULL	
+value_strict	varchar(256)	YES		NULL	
+info	varchar(256)	YES		NULL	
+need_reboot	bigint(20)	YES		NULL	
+section	varchar(256)	YES		NULL	
+visible_level	varchar(256)	YES		NULL	
+config_version	bigint(20) unsigned	NO		NULL	
+scope	varchar(256)	YES		NULL	
+source	varchar(256)	YES		NULL	
+edit_level	varchar(256)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_sys_parameter;
 IF(count(*) >= 0, 1, 0)
 1
@@ -1251,11 +1251,11 @@ svr_type	varchar(16)	NO		NULL
 name	varchar(128)	NO		NULL	
 data_type	varchar(128)	YES		NULL	
 value	varchar(65536)	NO		NULL	
-value_strict	varchar(4096)	YES		NULL
+value_strict	varchar(4096)	YES		NULL	
 info	varchar(4096)	NO		NULL	
-need_reboot	bigint(20)	NO		NULL
+need_reboot	bigint(20)	NO		NULL	
 section	varchar(128)	NO		NULL	
-visible_level	varchar(64)	NO		NULL
+visible_level	varchar(64)	NO		NULL	
 scope	varchar(64)	NO		NULL	
 source	varchar(64)	NO		NULL	
 edit_level	varchar(128)	NO		NULL	
@@ -2224,8 +2224,8 @@ storage_cache_policy	varchar(1048576)	NO		{"GLOBAL":"AUTO"}
 merge_engine_type	bigint(20)	NO		0	
 semistruct_encoding_type	bigint(20)	NO		0	
 dynamic_partition_policy	varchar(4096)	NO			
-external_location_id	bigint(20)	NO		-1
-external_sub_path	varbinary(1048576)	YES		NULL
+external_location_id	bigint(20)	NO		-1	
+external_sub_path	varbinary(1048576)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_table;
 IF(count(*) >= 0, 1, 0)
 1
@@ -2328,8 +2328,8 @@ storage_cache_policy	varchar(1048576)	YES		{"GLOBAL":"AUTO"}
 merge_engine_type	bigint(20)	YES		0	
 semistruct_encoding_type	bigint(20)	YES		0	
 dynamic_partition_policy	varchar(4096)	YES			
-external_location_id	bigint(20)	YES		-1
-external_sub_path	varbinary(1048576)	YES		NULL
+external_location_id	bigint(20)	YES		-1	
+external_sub_path	varbinary(1048576)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_table_history;
 IF(count(*) >= 0, 1, 0)
 1
@@ -3693,7 +3693,7 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_time_zone;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
+tenant_id	bigint(20)	NO	PRI	NULL	
 time_zone_id	bigint(20)	NO	PRI	NULL	
 use_leap_seconds	varchar(8)	NO		N	
 version	bigint(20)	YES		NULL	
@@ -3702,7 +3702,7 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_time_zone_name;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
+tenant_id	bigint(20)	NO	PRI	NULL	
 name	varchar(64)	NO	PRI	NULL	
 time_zone_id	bigint(20)	NO		NULL	
 version	bigint(20)	YES		NULL	
@@ -3711,7 +3711,7 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_time_zone_transition;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
+tenant_id	bigint(20)	NO	PRI	NULL	
 time_zone_id	bigint(20)	NO	PRI	NULL	
 transition_time	bigint(20)	NO	PRI	NULL	
 transition_type_id	bigint(20)	NO		NULL	
@@ -3721,7 +3721,7 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_time_zone_transition_type;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
+tenant_id	bigint(20)	NO	PRI	NULL	
 time_zone_id	bigint(20)	NO	PRI	NULL	
 transition_type_id	bigint(20)	NO	PRI	NULL	
 offset	bigint(20)	NO		0	
@@ -3861,25 +3861,25 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_deadlock_event_history;
 Field	Type	Null	Key	Default	Extra
-event_id	bigint(20)	NO	PRI	NULL
-detector_id	bigint(20)	NO	PRI	NULL
-report_time	bigint(20)	NO		NULL
+event_id	bigint(20)	NO	PRI	NULL	
+detector_id	bigint(20)	NO	PRI	NULL	
+report_time	bigint(20)	NO		NULL	
 cycle_idx	bigint(20)	NO		NULL	
 cycle_size	bigint(20)	NO		NULL	
-role	varchar(256)	YES		NULL
-priority_level	varchar(256)	YES		NULL
-priority	bigint(20)	NO		NULL
-create_time	bigint(20)	NO		NULL
-start_delay	bigint(20)	NO		NULL
-module	varchar(256)	YES		NULL
-visitor	varchar(256)	YES		NULL
-object	varchar(256)	YES		NULL
-extra_name1	varchar(256)	YES		NULL
-extra_value1	varchar(256)	YES		NULL
-extra_name2	varchar(256)	YES		NULL
-extra_value2	varchar(256)	YES		NULL
-extra_name3	varchar(256)	YES		NULL
-extra_value3	varchar(256)	YES		NULL
+role	varchar(256)	YES		NULL	
+priority_level	varchar(256)	YES		NULL	
+priority	bigint(20)	NO		NULL	
+create_time	bigint(20)	NO		NULL	
+start_delay	bigint(20)	NO		NULL	
+module	varchar(256)	YES		NULL	
+visitor	varchar(256)	YES		NULL	
+object	varchar(256)	YES		NULL	
+extra_name1	varchar(256)	YES		NULL	
+extra_value1	varchar(256)	YES		NULL	
+extra_name2	varchar(256)	YES		NULL	
+extra_value2	varchar(256)	YES		NULL	
+extra_name3	varchar(256)	YES		NULL	
+extra_value3	varchar(256)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_deadlock_event_history;
 IF(count(*) >= 0, 1, 0)
 1
@@ -4256,8 +4256,8 @@ IF(count(*) >= 0, 1, 0)
 desc oceanbase.__all_virtual_tablet_meta_table;
 Field	Type	Null	Key	Default	Extra
 tablet_id	bigint(20)	NO	PRI	NULL	
-gmt_create	bigint(20)	YES		NULL
-gmt_modified	bigint(20)	YES		NULL
+gmt_create	bigint(20)	YES		NULL	
+gmt_modified	bigint(20)	YES		NULL	
 compaction_scn	bigint(20) unsigned	NO		NULL	
 data_size	bigint(20)	NO		NULL	
 required_size	bigint(20)	NO		0	
@@ -4353,10 +4353,10 @@ tablet_id	bigint(20)	NO	PRI	NULL
 compaction_scn	bigint(20) unsigned	NO		NULL	
 row_count	bigint(20)	NO		NULL	
 data_checksum	bigint(20)	NO		NULL	
-column_checksums	varchar(256)	YES		NULL
+column_checksums	varchar(256)	YES		NULL	
 b_column_checksums	varbinary(65536)	YES		NULL	
 data_checksum_type	bigint(20)	NO		0	
-co_base_snapshot_version	bigint(20) unsigned	NO		NULL
+co_base_snapshot_version	bigint(20) unsigned	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_tablet_replica_checksum;
 IF(count(*) >= 0, 1, 0)
 1
@@ -4398,7 +4398,7 @@ IF(count(*) >= 0, 1, 0)
 desc oceanbase.__all_virtual_pending_transaction;
 Field	Type	Null	Key	Default	Extra
 tenant_id	bigint(20)	NO	PRI	NULL	
-trans_id	bigint(20)	NO	PRI	NULL
+trans_id	bigint(20)	NO	PRI	NULL	
 gmt_create	timestamp(6)	NO		NULL	
 gmt_modified	timestamp(6)	NO		NULL	
 gtrid	varbinary(128)	NO		NULL	
@@ -4598,12 +4598,12 @@ ssl_cert_expired_time	bigint(20)	NO		NULL
 memory_limit	bigint(20)	NO		NULL	
 data_disk_allocated	bigint(20)	NO		NULL	
 data_disk_assigned	bigint(20)	YES		NULL	
-start_service_time	bigint(20)	NO		NULL
-create_time	bigint(20)	NO		NULL
-role	varchar(64)	NO		NULL
-log_restore_source	varchar(1024)	NO		NULL
-sync_scn	bigint(20) unsigned	NO		NULL
-readable_scn	bigint(20) unsigned	NO		NULL
+start_service_time	bigint(20)	NO		NULL	
+create_time	bigint(20)	NO		NULL	
+role	varchar(64)	NO		NULL	
+log_restore_source	varchar(1024)	NO		NULL	
+sync_scn	bigint(20) unsigned	NO		NULL	
+readable_scn	bigint(20) unsigned	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_server_stat;
 IF(count(*) >= 0, 1, 0)
 1
@@ -4752,7 +4752,7 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_zone_merge_info;
 Field	Type	Null	Key	Default	Extra
-id	bigint(20)	NO	PRI	NULL
+id	bigint(20)	NO	PRI	NULL	
 all_merged_scn	bigint(20) unsigned	NO		NULL	
 broadcast_scn	bigint(20) unsigned	NO		NULL	
 frozen_scn	bigint(20) unsigned	NO		NULL	
@@ -4766,7 +4766,7 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_merge_info;
 Field	Type	Null	Key	Default	Extra
-id	bigint(20)	NO	PRI	NULL
+id	bigint(20)	NO	PRI	NULL	
 frozen_scn	bigint(20) unsigned	NO		NULL	
 global_broadcast_scn	bigint(20) unsigned	NO		NULL	
 is_merge_error	bigint(20)	NO		NULL	
@@ -5019,8 +5019,8 @@ index_table_id	bigint(20)	NO	PRI	NULL
 data_tablet_id	bigint(20)	NO	PRI	NULL	
 index_tablet_id	bigint(20)	NO	PRI	NULL	
 column_id	bigint(20)	NO		NULL	
-data_column_checksum	bigint(20)	NO		NULL
-index_column_checksum	bigint(20)	NO		NULL
+data_column_checksum	bigint(20)	NO		NULL	
+index_column_checksum	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_column_checksum_error_info;
 IF(count(*) >= 0, 1, 0)
 1
@@ -5191,18 +5191,18 @@ row_id	bigint(20)	NO	PRI	NULL
 column_name	varchar(128)	NO	PRI	NULL	
 gmt_create	timestamp(6)	NO		NULL	
 gmt_modified	timestamp(6)	NO		NULL	
-column_value	varchar(65536)	YES		NULL
+column_value	varchar(65536)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_core_table;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_malloc_sample_info;
 Field	Type	Null	Key	Default	Extra
-ctx_id	bigint(20)	NO		NULL
-mod_name	varchar(256)	NO		NULL
-back_trace	varchar(4096)	NO		NULL
-ctx_name	varchar(256)	NO		NULL
-alloc_count	bigint(20)	NO		NULL
-alloc_bytes	bigint(20)	NO		NULL
+ctx_id	bigint(20)	NO		NULL	
+mod_name	varchar(256)	NO		NULL	
+back_trace	varchar(4096)	NO		NULL	
+ctx_name	varchar(256)	NO		NULL	
+alloc_count	bigint(20)	NO		NULL	
+alloc_bytes	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_malloc_sample_info;
 IF(count(*) >= 0, 1, 0)
 1
@@ -5594,7 +5594,7 @@ IF(count(*) >= 0, 1, 0)
 desc oceanbase.__all_virtual_mview_refresh_stats_sys_defaults;
 Field	Type	Null	Key	Default	Extra
 tenant_id	bigint(20)	NO	PRI	NULL	
-id	bigint(20)	NO	PRI	NULL
+id	bigint(20)	NO	PRI	NULL	
 gmt_create	timestamp(6)	NO		NULL	
 gmt_modified	timestamp(6)	NO		NULL	
 collection_level	bigint(20)	NO		NULL	
@@ -5700,7 +5700,7 @@ IF(count(*) >= 0, 1, 0)
 desc oceanbase.__all_virtual_wr_control;
 Field	Type	Null	Key	Default	Extra
 tenant_id	bigint(20)	NO	PRI	NULL	
-id	bigint(20)	NO	PRI	NULL
+id	bigint(20)	NO	PRI	NULL	
 snap_interval	varchar(64)	NO		NULL	
 snapint_num	bigint(20)	NO		NULL	
 retention	varchar(64)	NO		NULL	
@@ -5801,47 +5801,6 @@ gmt_create	timestamp(6)	NO		NULL
 gmt_modified	timestamp(6)	NO		NULL	
 is_deleted	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_column_group_mapping_history;
-IF(count(*) >= 0, 1, 0)
-1
-desc oceanbase.__all_virtual_checkpoint_diagnose_memtable_info;
-Field	Type	Null	Key	Default	Extra
-trace_id	bigint(20)	NO	PRI	NULL	
-checkpoint_thread_name	varchar(16)	NO		NULL	
-checkpoint_start_time	timestamp(6)	NO		NULL	
-tablet_id	bigint(20)	NO		NULL	
-ptr	varchar(128)	NO		NULL	
-start_scn	bigint(20) unsigned	NO		NULL	
-end_scn	bigint(20) unsigned	NO		NULL	
-rec_scn	bigint(20) unsigned	NO		NULL	
-create_flush_dag_time	timestamp(6)	NO		NULL	
-merge_finish_time	timestamp(6)	NO		NULL	
-release_time	timestamp(6)	NO		NULL	
-frozen_finish_time	timestamp(6)	NO		NULL	
-merge_start_time	timestamp(6)	NO		NULL	
-start_gc_time	timestamp(6)	NO		NULL	
-memtable_occupy_size	bigint(20)	NO		NULL	
-occupy_size	bigint(20)	NO		NULL	
-concurrent_cnt	bigint(20)	NO		NULL	
-desc oceanbase.__all_virtual_checkpoint_diagnose_checkpoint_unit_info;
-Field	Type	Null	Key	Default	Extra
-trace_id	bigint(20)	NO	PRI	NULL	
-checkpoint_thread_name	varchar(16)	NO		NULL	
-checkpoint_start_time	timestamp(6)	NO		NULL	
-tablet_id	bigint(20)	NO		NULL	
-ptr	varchar(128)	NO		NULL	
-start_scn	bigint(20) unsigned	NO		NULL	
-end_scn	bigint(20) unsigned	NO		NULL	
-rec_scn	bigint(20) unsigned	NO		NULL	
-create_flush_dag_time	timestamp(6)	NO		NULL	
-merge_finish_time	timestamp(6)	NO		NULL	
-start_gc_time	timestamp(6)	NO		NULL	
-desc oceanbase.__all_virtual_checkpoint_diagnose_info;
-Field	Type	Null	Key	Default	Extra
-trace_id	bigint(20)	NO		NULL	
-freeze_clock	int(10) unsigned	NO		NULL	
-checkpoint_thread_name	varchar(16)	NO		NULL	
-checkpoint_start_time	timestamp(6)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_checkpoint_diagnose_info;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_wr_system_event;
@@ -6053,7 +6012,7 @@ IF(count(*) >= 0, 1, 0)
 desc oceanbase.__all_virtual_aux_stat;
 Field	Type	Null	Key	Default	Extra
 tenant_id	bigint(20)	NO	PRI	NULL	
-id	bigint(20)	NO	PRI	NULL
+id	bigint(20)	NO	PRI	NULL	
 gmt_create	timestamp(6)	NO		NULL	
 gmt_modified	timestamp(6)	NO		NULL	
 last_analyzed	timestamp(6)	NO		NULL	
@@ -6931,186 +6890,186 @@ IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_ai_model;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
-model_id	bigint(20)	NO	PRI	NULL
-gmt_create	timestamp(6)	NO		NULL
-gmt_modified	timestamp(6)	NO		NULL
-name	varchar(128)	NO		NULL
-type	bigint(20)	NO		NULL
-model_name	varchar(128)	NO		NULL
+tenant_id	bigint(20)	NO	PRI	NULL	
+model_id	bigint(20)	NO	PRI	NULL	
+gmt_create	timestamp(6)	NO		NULL	
+gmt_modified	timestamp(6)	NO		NULL	
+name	varchar(128)	NO		NULL	
+type	bigint(20)	NO		NULL	
+model_name	varchar(128)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_ai_model;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_ai_model_history;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
-model_id	bigint(20)	NO	PRI	NULL
-schema_version	bigint(20)	NO	PRI	NULL
-gmt_create	timestamp(6)	NO		NULL
-gmt_modified	timestamp(6)	NO		NULL
-is_deleted	bigint(20)	NO		NULL
-name	varchar(128)	YES		NULL
-type	bigint(20)	YES		NULL
-model_name	varchar(128)	YES		NULL
+tenant_id	bigint(20)	NO	PRI	NULL	
+model_id	bigint(20)	NO	PRI	NULL	
+schema_version	bigint(20)	NO	PRI	NULL	
+gmt_create	timestamp(6)	NO		NULL	
+gmt_modified	timestamp(6)	NO		NULL	
+is_deleted	bigint(20)	NO		NULL	
+name	varchar(128)	YES		NULL	
+type	bigint(20)	YES		NULL	
+model_name	varchar(128)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_ai_model_history;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_ai_model_endpoint;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
-endpoint_id	bigint(20)	NO	PRI	NULL
-scope	varchar(128)	NO	PRI	NULL
-gmt_create	timestamp(6)	NO		NULL
-gmt_modified	timestamp(6)	NO		NULL
-version	bigint(20)	NO		NULL
-endpoint_name	varchar(128)	NO		NULL
-ai_model_name	varchar(128)	NO		NULL
-url	varchar(2048)	YES		NULL
-access_key	varchar(2048)	YES		NULL
-provider	varchar(128)	YES		NULL
-request_model_name	varchar(128)	YES		NULL
-parameters	varchar(2048)	YES		NULL
-request_transform_fn	varchar(64)	YES		NULL
-response_transform_fn	varchar(64)	YES		NULL
+tenant_id	bigint(20)	NO	PRI	NULL	
+endpoint_id	bigint(20)	NO	PRI	NULL	
+scope	varchar(128)	NO	PRI	NULL	
+gmt_create	timestamp(6)	NO		NULL	
+gmt_modified	timestamp(6)	NO		NULL	
+version	bigint(20)	NO		NULL	
+endpoint_name	varchar(128)	NO		NULL	
+ai_model_name	varchar(128)	NO		NULL	
+url	varchar(2048)	YES		NULL	
+access_key	varchar(2048)	YES		NULL	
+provider	varchar(128)	YES		NULL	
+request_model_name	varchar(128)	YES		NULL	
+parameters	varchar(2048)	YES		NULL	
+request_transform_fn	varchar(64)	YES		NULL	
+response_transform_fn	varchar(64)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_ai_model_endpoint;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_tenant_location;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
-location_id	bigint(20)	NO	PRI	NULL
-gmt_create	timestamp(6)	NO		NULL
-gmt_modified	timestamp(6)	NO		NULL
-location_name	varchar(128)	NO
-location_url	varchar(4000)	NO
-location_access_info	varchar(8000)	NO
+tenant_id	bigint(20)	NO	PRI	NULL	
+location_id	bigint(20)	NO	PRI	NULL	
+gmt_create	timestamp(6)	NO		NULL	
+gmt_modified	timestamp(6)	NO		NULL	
+location_name	varchar(128)	NO			
+location_url	varchar(4000)	NO			
+location_access_info	varchar(8000)	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_tenant_location;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_tenant_location_history;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
-location_id	bigint(20)	NO	PRI	NULL
-schema_version	bigint(20)	NO	PRI	NULL
-gmt_create	timestamp(6)	NO		NULL
-gmt_modified	timestamp(6)	NO		NULL
-is_deleted	bigint(20)	NO		NULL
-location_name	varchar(128)	YES
-location_url	varchar(4000)	YES
-location_access_info	varchar(8000)	YES
+tenant_id	bigint(20)	NO	PRI	NULL	
+location_id	bigint(20)	NO	PRI	NULL	
+schema_version	bigint(20)	NO	PRI	NULL	
+gmt_create	timestamp(6)	NO		NULL	
+gmt_modified	timestamp(6)	NO		NULL	
+is_deleted	bigint(20)	NO		NULL	
+location_name	varchar(128)	YES			
+location_url	varchar(4000)	YES			
+location_access_info	varchar(8000)	YES			
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_tenant_location_history;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_objauth_mysql;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
-user_id	bigint(20)	NO	PRI	NULL
-obj_name	varchar(128)	NO	PRI	NULL
-obj_type	bigint(20)	NO	PRI	NULL
-gmt_create	timestamp(6)	NO		NULL
-gmt_modified	timestamp(6)	NO		NULL
-all_priv	bigint(20)	NO		0
-grantor	varchar(128)	NO
-grantor_host	varchar(128)	NO
+tenant_id	bigint(20)	NO	PRI	NULL	
+user_id	bigint(20)	NO	PRI	NULL	
+obj_name	varchar(128)	NO	PRI	NULL	
+obj_type	bigint(20)	NO	PRI	NULL	
+gmt_create	timestamp(6)	NO		NULL	
+gmt_modified	timestamp(6)	NO		NULL	
+all_priv	bigint(20)	NO		0	
+grantor	varchar(128)	NO			
+grantor_host	varchar(128)	NO			
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_objauth_mysql;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_objauth_mysql_history;
 Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL
-user_id	bigint(20)	NO	PRI	NULL
-obj_name	varchar(128)	NO	PRI	NULL
-obj_type	bigint(20)	NO	PRI	NULL
-schema_version	bigint(20)	NO	PRI	NULL
-gmt_create	timestamp(6)	NO		NULL
-gmt_modified	timestamp(6)	NO		NULL
-is_deleted	bigint(20)	NO		NULL
-all_priv	bigint(20)	YES		0
-grantor	varchar(128)	YES
-grantor_host	varchar(128)	YES
+tenant_id	bigint(20)	NO	PRI	NULL	
+user_id	bigint(20)	NO	PRI	NULL	
+obj_name	varchar(128)	NO	PRI	NULL	
+obj_type	bigint(20)	NO	PRI	NULL	
+schema_version	bigint(20)	NO	PRI	NULL	
+gmt_create	timestamp(6)	NO		NULL	
+gmt_modified	timestamp(6)	NO		NULL	
+is_deleted	bigint(20)	NO		NULL	
+all_priv	bigint(20)	YES		0	
+grantor	varchar(128)	YES			
+grantor_host	varchar(128)	YES			
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_objauth_mysql_history;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__tenant_virtual_show_create_location;
 Field	Type	Null	Key	Default	Extra
-location_id	bigint(20)	NO	PRI	NULL
-location_name	varchar(128)	NO		NULL
-create_location	varchar(8192)	NO		NULL
+location_id	bigint(20)	NO	PRI	NULL	
+location_name	varchar(128)	NO		NULL	
+create_location	varchar(8192)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__tenant_virtual_show_create_location;
 ERROR 0A000: select a table which is used for show clause not supported
 desc oceanbase.__tenant_virtual_list_file;
 Field	Type	Null	Key	Default	Extra
-location_id	bigint(20)	NO	PRI	NULL
-location_sub_path	varchar(128)	NO	PRI	NULL
-pattern	varchar(128)	NO	PRI	NULL
-file_name	varchar(16384)	NO		NULL
-file_size	bigint(20)	NO		NULL
+location_id	bigint(20)	NO	PRI	NULL	
+location_sub_path	varchar(128)	NO	PRI	NULL	
+pattern	varchar(128)	NO	PRI	NULL	
+file_name	varchar(16384)	NO		NULL	
+file_size	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__tenant_virtual_list_file;
 ERROR 0A000: list file error not supported
 desc oceanbase.__all_virtual_reserved_snapshot;
 Field	Type	Null	Key	Default	Extra
-snapshot_type	bigint(20)	NO	PRI	NULL
-create_time	bigint(20)	NO		NULL
-snapshot_version	bigint(20) unsigned	NO		NULL
-status	bigint(20)	NO		NULL
+snapshot_type	bigint(20)	NO	PRI	NULL	
+create_time	bigint(20)	NO		NULL	
+snapshot_version	bigint(20) unsigned	NO		NULL	
+status	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_reserved_snapshot;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_server_event_history;
 Field	Type	Null	Key	Default	Extra
-gmt_create	bigint(20)	NO	PRI	NULL
-event_type	bigint(20)	NO	PRI	NULL
-module	varchar(256)	NO		NULL
-event	varchar(256)	NO		NULL
-name1	varchar(256)	YES		NULL
-value1	varchar(256)	YES		NULL
-name2	varchar(256)	YES		NULL
-value2	varchar(256)	YES		NULL
-name3	varchar(256)	YES		NULL
-value3	varchar(256)	YES		NULL
-name4	varchar(256)	YES		NULL
-value4	varchar(256)	YES		NULL
-name5	varchar(256)	YES		NULL
-value5	varchar(256)	YES		NULL
-name6	varchar(256)	YES		NULL
-value6	varchar(256)	YES		NULL
-extra_info	varchar(256)	YES		NULL
+gmt_create	bigint(20)	NO	PRI	NULL	
+event_type	bigint(20)	NO	PRI	NULL	
+module	varchar(256)	NO		NULL	
+event	varchar(256)	NO		NULL	
+name1	varchar(256)	YES		NULL	
+value1	varchar(256)	YES		NULL	
+name2	varchar(256)	YES		NULL	
+value2	varchar(256)	YES		NULL	
+name3	varchar(256)	YES		NULL	
+value3	varchar(256)	YES		NULL	
+name4	varchar(256)	YES		NULL	
+value4	varchar(256)	YES		NULL	
+name5	varchar(256)	YES		NULL	
+value5	varchar(256)	YES		NULL	
+name6	varchar(256)	YES		NULL	
+value6	varchar(256)	YES		NULL	
+extra_info	varchar(256)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_server_event_history;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_tenant_event_history;
 Field	Type	Null	Key	Default	Extra
-gmt_create	bigint(20)	NO	PRI	NULL
-module	varchar(256)	NO		NULL
-event	varchar(256)	NO		NULL
-name1	varchar(256)	YES		NULL
-value1	varchar(256)	YES		NULL
-name2	varchar(256)	YES		NULL
-value2	varchar(256)	YES		NULL
-name3	varchar(256)	YES		NULL
-value3	varchar(256)	YES		NULL
-name4	varchar(256)	YES		NULL
-value4	varchar(256)	YES		NULL
-name5	varchar(256)	YES		NULL
-value5	varchar(256)	YES		NULL
-name6	varchar(256)	YES		NULL
-value6	varchar(256)	YES		NULL
-extra_info	varchar(256)	YES		NULL
-trace_id	varchar(256)	YES		NULL
-cost_time	bigint(20)	YES		NULL
-ret_code	bigint(20)	YES		NULL
-error_msg	varchar(256)	YES		NULL
+gmt_create	bigint(20)	NO	PRI	NULL	
+module	varchar(256)	NO		NULL	
+event	varchar(256)	NO		NULL	
+name1	varchar(256)	YES		NULL	
+value1	varchar(256)	YES		NULL	
+name2	varchar(256)	YES		NULL	
+value2	varchar(256)	YES		NULL	
+name3	varchar(256)	YES		NULL	
+value3	varchar(256)	YES		NULL	
+name4	varchar(256)	YES		NULL	
+value4	varchar(256)	YES		NULL	
+name5	varchar(256)	YES		NULL	
+value5	varchar(256)	YES		NULL	
+name6	varchar(256)	YES		NULL	
+value6	varchar(256)	YES		NULL	
+extra_info	varchar(256)	YES		NULL	
+trace_id	varchar(256)	YES		NULL	
+cost_time	bigint(20)	YES		NULL	
+ret_code	bigint(20)	YES		NULL	
+error_msg	varchar(256)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_tenant_event_history;
 IF(count(*) >= 0, 1, 0)
 1
 desc oceanbase.__all_virtual_rootservice_job;
 Field	Type	Null	Key	Default	Extra
-job_id	bigint(20)	NO	PRI	NULL
-gmt_create	bigint(20)	YES		NULL
-gmt_modified	bigint(20)	YES		NULL
-job_type	varchar(256)	NO		''
-job_status	varchar(256)	NO		''
-result_code	bigint(20)	YES		NULL
+job_id	bigint(20)	NO	PRI	NULL	
+gmt_create	bigint(20)	YES		NULL	
+gmt_modified	bigint(20)	YES		NULL	
+job_type	varchar(256)	NO		''	
+job_status	varchar(256)	NO		''	
+result_code	bigint(20)	YES		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_rootservice_job;
 IF(count(*) >= 0, 1, 0)
 1

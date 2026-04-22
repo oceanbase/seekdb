@@ -259,7 +259,6 @@ int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_fr
           TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
       }
     } else {
-      REPORT_CHECKPOINT_DIAGNOSE_INFO(update_schedule_dag_info, this, get_rec_scn(), get_start_scn(), get_end_scn());
       TRANS_LOG(INFO, "tx ctx memtable flush successfully", KPC(this), K(ls_id_));
     }
   }

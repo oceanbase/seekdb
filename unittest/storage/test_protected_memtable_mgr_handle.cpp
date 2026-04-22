@@ -127,7 +127,6 @@ TEST_F(TestTabletMemtableMgr, tablet_memtable_mgr) {
 int main(int argc, char **argv)
 {
   int ret = 0;
-  system("rm -f test_checkpoint_diagnose.log*");
   OB_LOGGER.set_file_name("test_tablet_memtable_mgr.log", true);
   OB_LOGGER.set_log_level("INFO");
   signal(49, SIG_IGN);

@@ -961,8 +961,6 @@ int ObTxDataMemtable::flush(const int64_t trace_id)
       STORAGE_LOG(WARN, "failed to schedule tablet merge dag", K(ret));
     }
   } else {
-    REPORT_CHECKPOINT_DIAGNOSE_INFO(update_schedule_dag_info, this, get_rec_scn(), 
-        get_start_scn(), get_end_scn());
     stat_change_ts_.create_flush_dag_time_ = ObTimeUtil::fast_current_time();
     STORAGE_LOG(INFO,
                 "[TX DATA MERGE]schedule flush tx data memtable task done",
