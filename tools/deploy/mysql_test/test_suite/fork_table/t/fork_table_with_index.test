@@ -1,7 +1,7 @@
 ##owner: fankun.fan
 ##owner group: 底层引擎部-轻量版
 ##description: Fork Table索引处理测试
-##tags: fork_table index
+##tags: fork_table index debug_sync vector_index drop_index
 ##author: fankun.fan
 
 --disable_warnings
@@ -239,6 +239,90 @@ connection default;
 show create table t2c_fork;
 
 --echo ============================================
+--echo 2.4 Fork未完成时删除源表向量索引（debug sync）
+--echo ============================================
+
+drop table if exists t2d;
+drop table if exists t2d_fork;
+
+create table t2d (
+    id int primary key,
+    name varchar(50),
+    age int,
+    email varchar(100),
+    emb vector(3)
+);
+
+insert into t2d values (1, 'Alice', 25, 'alice@example.com', '[0.203846,0.205289,0.880265]');
+insert into t2d values (2, 'Bob', 30, 'bob@example.com', '[0.1,0.2,0.3]');
+
+create vector index idx_vec_race on t2d(emb) with (distance=l2, type=hnsw, lib=vsag);
+
+--echo # 获取源表table_id（用于等待fork任务阶段）
+--disable_query_log
+let $table_t2d_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't2d' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_index'), table_id, 1);
+--enable_query_log
+
+--echo # 卡在FORK_TABLE_SUCCESS：RS 侧任务已到 SUCCESS 但未执行完 cleanup（fork 仍未完成）
+connection obsys;
+alter system set debug_sync_timeout = '120s';
+sleep 1;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS wait_for signal_fork_success_resume execute 10000';
+sleep 1;
+connection default;
+
+--echo # fork table 客户端返回后 RS 侧任务继续；此处与 lock 用例一致不使用 --send
+fork table t2d to t2d_fork;
+
+--disable_query_log
+let $table_t2d_fork_id = query_get_value(select table_id from oceanbase.__all_table where table_name = 't2d_fork' and database_id = (select database_id from oceanbase.__all_database where database_name = 'db_fork_index'), table_id, 1);
+--enable_query_log
+
+connect (conn_drop,$OBMYSQL_MS0,root@sys,,db_fork_index,$OBMYSQL_PORT);
+connection conn_drop;
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 100000000;
+use db_fork_index;
+
+connection default;
+let $wait_src_table_id= $table_t2d_id;
+let $wait_dest_table_id= $table_t2d_fork_id;
+let $wait_status= SUCCESS;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+--echo # fork未完成：发起删除源表向量索引（与 fork cleanup 并发；历史问题：可能卡死/泄漏锁）
+--echo # drop index 会等待 fork 在 SUCCESS 卡点之前仍持有的 DDL/表锁；同步执行会与 signal 死锁，故对 drop 使用 --send
+connection conn_drop;
+--send drop index idx_vec_race on t2d;
+
+connection obsys;
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
+set ob_global_debug_sync = 'now signal signal_fork_success_resume';
+connection default;
+
+let $wait_src_table_id= $table_t2d_id;
+let $wait_dest_table_id= $table_t2d_fork_id;
+--source mysql_test/test_suite/fork_table/include/wait_fork_table.inc
+
+connection conn_drop;
+--reap
+
+connection default;
+
+--echo # 验证：源表向量索引已删除；fork表仍保留向量索引定义
+--replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
+show create table t2d;
+show create table t2d_fork;
+
+disconnect conn_drop;
+connection default;
+
+connection obsys;
+set ob_global_debug_sync = 'reset';
+connection default;
+
+--echo ============================================
 --echo 3. Fork Table with Unique Index
 --echo ============================================
 
@@ -352,8 +436,11 @@ drop table if exists t2b;
 drop table if exists t2b_fork;
 drop table if exists t2c;
 drop table if exists t2c_fork;
+drop table if exists t2d;
+drop table if exists t2d_fork;
 drop table if exists t3;
 drop table if exists t3_fork;
 drop table if exists t4;
 drop table if exists t4_fork;
 drop database if exists db_fork_index;
+
