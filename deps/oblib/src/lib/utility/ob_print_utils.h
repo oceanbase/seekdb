@@ -198,15 +198,8 @@ public:
     BufList() : head_(nullptr) {}
     BufNode *head_;
   };
-  CStringBufMgr() : list_(), level_(-1), pos_(0), curr_(NULL) {
-    local_buf_ = (char*)ob_malloc(BUF_SIZE, ObModIds::OB_THREAD_BUFFER);
-  }
-  ~CStringBufMgr() {
-    if (NULL != local_buf_) {
-      ob_free(local_buf_);
-      local_buf_ = NULL;
-    }
-  }
+  CStringBufMgr() : list_(), level_(-1), pos_(0), curr_(NULL) {}
+  ~CStringBufMgr() {}
   static CStringBufMgr &get_thread_local_instance()
   {
     thread_local CStringBufMgr mgr;
@@ -236,12 +229,8 @@ public:
   {
     int64_t buf_len = 0;
     if (0 == level_) {
-      if (OB_UNLIKELY(NULL == local_buf_)) {
-        buffer = NULL;
-      } else {
-        buffer = local_buf_ + pos_;
-        buf_len = BUF_SIZE - pos_;
-      }
+      buffer = local_buf_ + pos_;
+      buf_len = BUF_SIZE - pos_;
     } else {
       BufNode *node = NULL;
       node = list_.head_;
@@ -271,7 +260,7 @@ public:
     }
   }
 private:
-  char *local_buf_;
+  char local_buf_[BUF_SIZE];
   BufList list_;
   int64_t level_;
   int64_t pos_;
