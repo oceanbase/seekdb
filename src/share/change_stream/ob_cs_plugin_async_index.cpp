@@ -26,6 +26,8 @@
 #include "share/vector_index/ob_vector_index_util.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
+#include "share/vector_index/ob_plugin_vector_index_util.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "lib/vector/ob_vector_util.h"
 #include "share/rc/ob_tenant_base.h"
 #include "storage/memtable/ob_memtable_mutator.h"
@@ -1102,6 +1104,54 @@ int ObCSAsyncIndexProcessor::insert_vector_index_log_batch_(
 }
 
 // ---------------------------------------------------------------------------
+// check_vector_memory_limit_(): check whether the tenant vector memory budget
+// can accommodate the estimated memory for the upcoming vsag write.
+// Uses the same estimation factor as the sync path:
+//   VEC_ESTIMATE_MEMORY_FACTOR (2.0) * VEC_MEMORY_HOLD_FACTOR (1.2) = 2.4
+// Returns OB_ALLOCATE_MEMORY_FAILED when the limit would be exceeded.
+// ---------------------------------------------------------------------------
+
+int ObCSAsyncIndexProcessor::check_vector_memory_limit_(
+    const uint64_t tenant_id,
+    const int64_t insert_count,
+    const int64_t dim,
+    const common::ObTabletID &inc_tablet_id)
+{
+  int ret = common::OB_SUCCESS;
+  int64_t mem_limited_size = 0;
+  ObSharedMemAllocMgr *shared_mem_mgr = MTL(ObSharedMemAllocMgr *);
+  if (OB_ISNULL(shared_mem_mgr)) {
+    ret = common::OB_ERR_UNEXPECTED;
+    LOG_WARN("shared_mem_mgr is null", K(ret));
+  } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(tenant_id, mem_limited_size))) {
+    LOG_WARN("failed to get vector memory limit", K(ret), K(tenant_id));
+  } else if (mem_limited_size > 0) {
+    int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
+    // Overflow-safe estimation: insert_count * dim * sizeof(float) * 2.4
+    // Apply 2.4x as (* 12 / 5) to stay in integer arithmetic.
+    int64_t base_mem = 0;
+    int64_t estimate_mem = 0;
+    bool overflowed = __builtin_mul_overflow(insert_count, dim, &base_mem)
+                   || __builtin_mul_overflow(base_mem, static_cast<int64_t>(sizeof(float)), &base_mem);
+    if (!overflowed) {
+      overflowed = __builtin_mul_overflow(base_mem, static_cast<int64_t>(12), &estimate_mem);
+      if (!overflowed) {
+        estimate_mem = estimate_mem / 5;
+        overflowed = __builtin_add_overflow(hold_mem, estimate_mem, &estimate_mem);
+      }
+    }
+    // estimate_mem now equals hold_mem + scaled estimate (if no overflow)
+    if (overflowed || estimate_mem > mem_limited_size) {
+      ret = common::OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("skip write_to_vsag due to vector memory limit",
+               K(ret), K(hold_mem), K(overflowed), K(mem_limited_size),
+               K(insert_count), K(dim), K(inc_tablet_id));
+    }
+  }
+  return ret;
+}
+
+// ---------------------------------------------------------------------------
 // write_to_vsag_(): write vectors into vsag for HNSW indexes
 //
 // Adapter lookup: resolve inc_tablet_id from (data_tablet_id, delta_buffer_table)
@@ -1123,6 +1173,7 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
 
   if (!need_vsag) {
   } else {
+    const uint64_t tenant_id = MTL_ID();
     const common::ObTabletID &data_tablet_id = events.at(0).tablet_id_;
     const share::ObLSID ls_id = share::SYS_LS;
     ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
@@ -1152,7 +1203,6 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
       ret = common::OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid inc_tablet_id from schema", K(ret), K(vec_info.delta_buffer_table_id_));
     } else {
-      const uint64_t tenant_id = MTL_ID();
       const schema::ObTableSchema *delta_buf_schema = nullptr;
       const schema::ObTableSchema *index_id_schema = nullptr;
       ObString vec_idx_param;
@@ -1218,6 +1268,7 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
 
       if (OB_SUCC(ret)) {
         int64_t insert_count = 0;
+        const int64_t dim = vec_info.dim_;
         for (int64_t i = 0; i < events.count(); ++i) {
           if (events.at(i).type_ == ObCSAsyncIndexEventType::INSERT &&
               events.at(i).vec_data_ != nullptr &&
@@ -1225,13 +1276,22 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
             insert_count++;
           }
         }
+
+        if (OB_SUCC(ret) && insert_count > 0) {
+          if (OB_FAIL(check_vector_memory_limit_(tenant_id, insert_count, dim, inc_tablet_id))) {
+            LOG_WARN("vector memory limit check failed", K(ret), K(tenant_id),
+                     K(insert_count), K(dim), K(inc_tablet_id));
+          }
+        }
+
         if (insert_count == 0) {
           // No INSERT events to add, success
+        } else if (OB_FAIL(ret)) {
+          // Memory check or other error, skip allocation
         } else {
           common::ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "CSVsagWrite"));
           int64_t *vids = nullptr;
           float *vectors = nullptr;
-          const int64_t dim = vec_info.dim_;
           const int64_t vector_size = sizeof(float) * dim;
 
           if (OB_ISNULL(vids = static_cast<int64_t *>(tmp_allocator.alloc(sizeof(int64_t) * insert_count)))) {

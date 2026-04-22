@@ -255,6 +255,10 @@ private:
       bool is_insert);
   int write_to_vsag_(const common::ObIArray<ObASyncIndexEvent> &events,
       const ObCSVecIndexInfo &vec_info);
+  int check_vector_memory_limit_(const uint64_t tenant_id,
+      const int64_t insert_count,
+      const int64_t dim,
+      const common::ObTabletID &inc_tablet_id);
 
   int init_schema_guard_();
 
