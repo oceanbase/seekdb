@@ -210,26 +210,9 @@ ob_set_subtarget(ob_logservice logrouteservice
 ob_set_subtarget(ob_logservice archiveservice
   archiveservice/dynamic_buffer.cpp
   archiveservice/large_buffer_pool.cpp
-  archiveservice/ob_archive_allocator.cpp
   archiveservice/ob_archive_define.cpp
-  archiveservice/ob_archive_fetcher.cpp
   archiveservice/ob_archive_file_utils.cpp
-  archiveservice/ob_archive_io.cpp
-  archiveservice/ob_archive_persist_mgr.cpp
-  archiveservice/ob_archive_round_mgr.cpp
-  archiveservice/ob_archive_scheduler.cpp
-  archiveservice/ob_archive_sender.cpp
-  archiveservice/ob_archive_sequencer.cpp
-  archiveservice/ob_archive_service.cpp
-  archiveservice/ob_archive_task_queue.cpp
-  archiveservice/ob_archive_task.cpp
-  archiveservice/ob_archive_timer.cpp
   archiveservice/ob_archive_util.cpp
-  archiveservice/ob_ls_meta_record_task.cpp
-  archiveservice/ob_ls_meta_recorder.cpp
-  archiveservice/ob_ls_mgr.cpp
-  archiveservice/ob_ls_task.cpp
-  archiveservice/ob_start_archive_helper.cpp
 )
 
 ob_server_add_target(ob_logservice)

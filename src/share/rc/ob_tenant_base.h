@@ -147,10 +147,6 @@ namespace datadict
 {
   class ObDataDictService;
 }
-namespace archive
-{
-  class ObArchiveService;
-}
 namespace compaction
 {
   class ObTenantCompactionProgressMgr;
@@ -335,7 +331,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       storage::ObTenantFreezer*,                     \
       storage::checkpoint::ObCheckPointService *,    \
       storage::checkpoint::ObTabletGCService *,      \
-      archive::ObArchiveService*,                    \
       compaction::ObTenantTabletScheduler*,          \
       compaction::ObTenantMediumChecker*,            \
       storage::ObTenantCompactionMemPool*,           \

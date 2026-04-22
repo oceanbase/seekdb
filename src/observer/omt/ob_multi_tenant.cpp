@@ -29,7 +29,6 @@
 #include "share/allocator/ob_shared_memory_allocator_mgr.h"   // ObSharedMemAllocMgr
 #include "share/ob_global_autoinc_service.h"
 #include "ob_tenant_mtl_helper.h"
-#include "logservice/archiveservice/ob_archive_service.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/tx/ob_tx_loop_worker.h"
 #include "storage/tx/ob_timestamp_service.h"
@@ -105,7 +104,6 @@ using namespace oceanbase::concurrency_control;
 using namespace oceanbase::transaction;
 using namespace oceanbase::transaction::tablelock;
 using namespace oceanbase::logservice;
-using namespace oceanbase::archive;
 using namespace oceanbase::observer;
 using namespace oceanbase::rootserver;
 using namespace oceanbase::blocksstable;
@@ -274,7 +272,6 @@ int ObMultiTenant::init(ObAddr myaddr,
     MTL_BIND2(mtl_new_default, ObTenantStorageMetaService::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
 
     // other mtl
-    MTL_BIND2(mtl_new_default, ObArchiveService::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, compaction::ObTenantTabletScheduler::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, compaction::ObTenantMediumChecker::mtl_init, nullptr, nullptr, nullptr, mtl_destroy_default);
     MTL_BIND2(mtl_new_default, ObTabletTableUpdater::mtl_init, nullptr, mtl_stop_default, mtl_wait_default, mtl_destroy_default);

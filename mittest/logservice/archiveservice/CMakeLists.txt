@@ -4,7 +4,6 @@
 #log_unittest(test_archive_file_utils)
 
 set(ARCHIVE_TEST_SRCS
-    basic_archive.cpp
     fake_archive_piece_mgr.cpp)
 
 add_library(archive_test ${ARCHIVE_TEST_SRCS})

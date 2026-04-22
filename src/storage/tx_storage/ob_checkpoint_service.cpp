@@ -20,7 +20,6 @@
 #include "logservice/ob_log_service.h"
 #include "share/ob_global_stat_proxy.h"
 #include "observer/ob_server_struct.h"
-#include "logservice/archiveservice/ob_archive_service.h"
 
 namespace oceanbase
 {
@@ -159,10 +158,6 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
       ObCheckpointExecutor *checkpoint_executor = nullptr;
       ObDataCheckpoint *data_checkpoint = nullptr;
       palf::LSN checkpoint_lsn;
-      palf::LSN archive_lsn;
-      SCN unused_archive_scn;
-      bool archive_force_wait = false;
-      bool archive_ignore = false;
       if (OB_FAIL(ls_svr->get_ls(ls->get_ls_id(), ls_handle, ObLSGetMod::APPLY_MOD))) {
         STORAGE_LOG(WARN, "get log stream failed", K(ret), K(ls->get_ls_id()));
       } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
@@ -181,18 +176,8 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
       } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
               *GCTX.sql_proxy_, MTL_ID(), false/*for_update*/, cs_min_dep_lsn_val))) {
         STORAGE_LOG(WARN, "get_change_stream_min_dep_lsn failed, skip constraint", KR(ret));
-      } else if (OB_FAIL(MTL(archive::ObArchiveService*)->get_ls_archive_progress(ls->get_ls_id(),
-              archive_lsn, unused_archive_scn, archive_force_wait, archive_ignore))) {
-        STORAGE_LOG(WARN, "get ls archive progress failed", K(ret), K(ls->get_ls_id()));
       } else {
         checkpoint_lsn = ls->get_clog_base_lsn();
-        if (! archive_force_wait || archive_ignore || archive_lsn >= checkpoint_lsn) {
-          // do nothing
-        } else {
-          STORAGE_LOG(TRACE, "archive_lsn small than checkpoint_lsn, set base_lsn with archive_lsn",
-              K(archive_lsn), K(checkpoint_lsn), KPC(ls));
-          checkpoint_lsn = archive_lsn;
-        }
 	palf::LSN cs_min_dep_lsn = palf::LSN(cs_min_dep_lsn_val);
 	if (cs_min_dep_lsn < checkpoint_lsn) {
           FLOG_INFO("[CHECKPOINT] constrain base_lsn by change_stream_min_dep_lsn",

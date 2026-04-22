@@ -25,17 +25,6 @@ namespace archive
 {
 using oceanbase::palf::LSN;
 
-#define GET_LS_TASK_CTX(mgr, id)                             \
-    ObArchiveLSGuard guard(mgr);                                \
-    ObLSArchiveTask *ls_archive_task = NULL;                 \
-    if (OB_FAIL(mgr->get_ls_guard(id, guard))) {               \
-      ARCHIVE_LOG(WARN, "get ls guard failed", K(ret), K(id));    \
-    } else if (OB_ISNULL(ls_archive_task = guard.get_ls_task())) {  \
-      ret = OB_ERR_UNEXPECTED;                                              \
-      ARCHIVE_LOG(ERROR, "ls task is NULL", K(ret), K(id));       \
-    }                                                                       \
-    if (OB_SUCC(ret))
-
 int64_t cal_archive_file_id(const LSN &lsn, const int64_t N);
 // Not support concurrent
 struct SimpleQueue
