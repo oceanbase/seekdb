@@ -1,6 +1,6 @@
 # libseekdb package
 
-Portable C library build of libseekdb for Linux (x64/arm64) and macOS (arm64). Output is a zip containing `seekdb.h` and `libseekdb.so` (Linux) or `libseekdb.dylib` (macOS), suitable for standalone use.
+Portable C library build of libseekdb for Linux (x64/arm64), macOS (arm64), and Windows (x64). Output is a zip containing `seekdb.h` and `libseekdb.so` (Linux), `libseekdb.dylib` (macOS), or `seekdb.dll` / `seekdb.lib` (Windows), suitable for standalone use.
 
 ## Build
 
@@ -8,7 +8,14 @@ Portable C library build of libseekdb for Linux (x64/arm64) and macOS (arm64). O
 ./libseekdb-build.sh
 ```
 
-Output: `libseekdb-<os>-<arch>.zip` is created in this directory. Arch is `x64` (for x86_64) or `arm64`, e.g. `libseekdb-linux-x64.zip`, `libseekdb-linux-arm64.zip`, `libseekdb-darwin-arm64.zip`.
+On Windows (after configuring and building target `libseekdb`, e.g. `.\build.ps1 release --ninja --target libseekdb -DBUILD_EMBED_MODE=ON`):
+
+```powershell
+cd package\libseekdb
+.\libseekdb-build.ps1
+```
+
+Output: `libseekdb-<os>-<arch>.zip` is created in this directory. Arch is `x64` (for x86_64) or `arm64`, e.g. `libseekdb-linux-x64.zip`, `libseekdb-linux-arm64.zip`, `libseekdb-darwin-arm64.zip`, `libseekdb-windows-x64.zip`.
 
 ### Reference build environments (CI)
 
@@ -19,6 +26,7 @@ The supported systems and environments are defined by the GitHub Actions workflo
 | Linux x64   | libseekdb-linux-x64.zip    | ubuntu-22.04 + quay.io/pypa/manylinux2014_x86_64     | oceanbase.el7.x86_64.deps |
 | Linux arm64 | libseekdb-linux-arm64.zip  | ubuntu-22.04-arm + quay.io/pypa/manylinux2014_aarch64 | oceanbase.el7.aarch64.deps |
 | macOS arm64 | libseekdb-darwin-arm64.zip | macos-14 (native)                                    | oceanbase.macos.arm64.deps |
+| Windows x64 | libseekdb-windows-x64.zip  | windows-2022 (native)                                | oceanbase.windows.x86_64.deps |
 
 Use these systems and deps as the standard when building or consuming libseekdb.
 
@@ -42,6 +50,8 @@ Zip layout:
 ```
 seekdb.h           # C API header
 libseekdb.dylib    # Main library (macOS) or libseekdb.so (Linux)
+seekdb.dll         # Main library (Windows)
+seekdb.lib         # Import library for MSVC-style linking (Windows)
 libs/              # Dependency dylibs (macOS only; collected by dylibbundler)
   *.dylib
 ```
@@ -72,5 +82,5 @@ libs/              # Dependency dylibs (macOS only; collected by dylibbundler)
 
 ### Notes
 
-- **OS and architecture**: The zip name reflects the build OS and CPU: `darwin-arm64`, `linux-x64`, `linux-arm64` (x64 = x86_64). Use the matching zip for the target environment. On Linux, the prebuilt .so requires glibc ≥ 2.17 (see [Linux glibc compatibility](#linux-glibc-compatibility)), including CentOS 7; on macOS, the prebuilt dylib is built on **macOS 14** with **minimum deployment target 11.0**, so it runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15).
+- **OS and architecture**: The zip name reflects the build OS and CPU: `darwin-arm64`, `linux-x64`, `linux-arm64`, `windows-x64` (x64 = x86_64). Use the matching zip for the target environment. On Linux, the prebuilt .so requires glibc ≥ 2.17 (see [Linux glibc compatibility](#linux-glibc-compatibility)), including CentOS 7; on macOS, the prebuilt dylib is built on **macOS 14** with **minimum deployment target 11.0**, so it runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). On Windows, CI builds on **windows-2022** with the MSVC-compatible Clang toolchain from deps (`deps/init/oceanbase.windows.x86_64.deps`).
 - **Rebuilding**: After changing loader path or dependencies, run `libseekdb-build.sh` again to produce a new zip.

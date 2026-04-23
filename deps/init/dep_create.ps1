@@ -122,20 +122,16 @@ foreach ($sect in $sections.Keys) {
             Write-Log "  cached"
         } else {
             Write-Log "  downloading from $url ..."
+            # Schannel/CI: use --ssl-no-revoke (avoids curl 35 / revocation offline).
             $tmpPath = "$pkgPath.tmp"
-            try {
-                & curl.exe -L -f -s --retry 3 --retry-delay 2 -o $tmpPath $url
-                if ($LASTEXITCODE -ne 0) {
-                    throw "curl exit code $LASTEXITCODE"
-                }
-                Move-Item -Force $tmpPath $pkgPath
-            }
-            catch {
-                if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath }
-                Write-Err "Failed to download: $url"
-                Write-Err "$_"
+            if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath -ErrorAction SilentlyContinue }
+            & curl.exe -L -f -sS --connect-timeout 120 --ssl-no-revoke -o $tmpPath $url
+            if ($LASTEXITCODE -ne 0) {
+                if (Test-Path $tmpPath) { Remove-Item -Force $tmpPath -ErrorAction SilentlyContinue }
+                Write-Err "Failed to download: $url (curl exit $LASTEXITCODE)"
                 exit 4
             }
+            Move-Item -Force $tmpPath $pkgPath
         }
 
         # -- Extract -------------------------------------------------

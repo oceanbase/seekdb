@@ -13,8 +13,12 @@
       "library_dirs": [
         "../../../build_release/src/include"
       ],
-      "ldflags": [
-        "<!@(node -e \"const path = require('path'); const fs = require('fs'); const moduleRoot = '<(module_root_dir)'; const projectRoot = path.resolve(moduleRoot, '../../../'); const libPath = path.resolve(projectRoot, 'build_release/src/include'); console.log('-Wl,-rpath,' + libPath);\")"
+      "conditions": [
+        ["OS!='win'", {
+          "ldflags": [
+            "<!@(node -e \"const path = require('path'); const moduleRoot = '<(module_root_dir)'; const projectRoot = path.resolve(moduleRoot, '../../../'); const libPath = path.resolve(projectRoot, 'build_release/src/include'); console.log('-Wl,-rpath,' + libPath);\")"
+          ]
+        }]
       ],
       "cflags!": [ "-fno-exceptions" ],
       "cflags_cc!": [ "-fno-exceptions" ],

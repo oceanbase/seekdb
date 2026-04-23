@@ -145,6 +145,7 @@ endif()
 
 add_subdirectory(deps/oblib)
 add_subdirectory(src/objit)
+include(${CMAKE_SOURCE_DIR}/cmake/EnsureWindowsDiaGuids.cmake)
 add_subdirectory(src)
 add_subdirectory(sqlite-benchmark)
 

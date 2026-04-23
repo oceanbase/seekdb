@@ -17,6 +17,10 @@ ob_set_subtarget(seekdb_object_list common
 
 ob_add_new_object_target(seekdb_objects seekdb_object_list)
 
+# seekdb.cpp pulls headers that include generated gRPC/protobuf outputs under deps/oblib/src/grpc/.
+# Ensure protoc runs before compiling libseekdb / seekdb_objects (Ninja can otherwise race).
+add_dependencies(seekdb_objects oblib_grpc)
+
 target_include_directories(seekdb_objects
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -34,6 +38,8 @@ add_library(libseekdb
   SHARED
   ${FFI_SOURCES}
 )
+
+add_dependencies(libseekdb oblib_grpc)
 
 target_include_directories(libseekdb
   PUBLIC
@@ -83,6 +89,42 @@ elseif(ANDROID)
       -Wl,--allow-multiple-definition
       -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/seekdb.version
   )
+elseif(WIN32)
+  # Windows (Clang + lld): export C API from seekdb.cpp; pull full static archive like Linux --whole-archive.
+  set_target_properties(libseekdb PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  # Same Itanium ABI stubs as observer_without_bolt — PL/shared code references _Unwind_* (non-functional on Win).
+  target_sources(libseekdb PRIVATE "${CMAKE_SOURCE_DIR}/src/observer/win32_unwind_stubs.c")
+  target_link_options(libseekdb PRIVATE /FORCE:MULTIPLE
+    "/WHOLEARCHIVE:$<TARGET_FILE:oceanbase_static>")
+  # oceanbase_static is EXCLUDE_FROM_ALL and only referenced via LINK_OPTIONS; some generators do not
+  # infer a build dependency, so ninja may link libseekdb before oceanbase_static.lib exists.
+  add_dependencies(libseekdb oceanbase_static)
+  get_filename_component(_seekdb_clang_bin_dir ${CMAKE_CXX_COMPILER} DIRECTORY)
+  get_filename_component(_seekdb_llvm_root ${_seekdb_clang_bin_dir} DIRECTORY)
+  file(GLOB _seekdb_clang_rt "${_seekdb_llvm_root}/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
+  if(_seekdb_clang_rt)
+    list(GET _seekdb_clang_rt 0 _seekdb_clang_rt_lib)
+    target_link_libraries(libseekdb PRIVATE ${_seekdb_clang_rt_lib})
+  endif()
+  # oceanbase_static.lib only carries its own members; CMake does not merge PUBLIC static deps into it
+  # on MSVC. Link the same concrete libs as oceanbase_static PUBLIC (cf. observer_without_bolt), or
+  # symbols such as ObSqlString (~destructor in oblib) stay unresolved.
+  target_link_libraries(libseekdb PRIVATE
+    ob_sql_static
+    ob_storage_static
+    ob_share_static
+    oblib
+    objit
+    ob_malloc
+    synchronization
+    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
+    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd/zstd_objs.lib
+    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/lz4/lz4-all.lib
+  )
+  # oceanbase_static PUBLIC links Hyperscan (see src/observer/CMakeLists.txt); DLL link does not inherit it.
+  if(HYPERSCAN_LIB)
+    target_link_libraries(libseekdb PRIVATE ${HYPERSCAN_LIB})
+  endif()
 else()
   target_link_libraries(libseekdb
     PRIVATE
@@ -138,7 +180,7 @@ if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT CMAKE_BUILD_TYPE STREQUAL "debu
       COMMAND ${CMAKE_STRIP} -Sx $<TARGET_FILE:libseekdb>
       COMMENT "Stripping debug and local symbols from libseekdb (macOS)"
     )
-  else()
+  elseif(UNIX)
     add_custom_command(TARGET libseekdb POST_BUILD
       COMMAND ${CMAKE_STRIP} $<TARGET_FILE:libseekdb>
       COMMENT "Stripping debug symbols from libseekdb to reduce size"

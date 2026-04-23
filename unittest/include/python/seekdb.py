@@ -34,6 +34,7 @@ Example:
 
 import ctypes
 import os
+import sys
 from ctypes import c_int, c_int32, c_int64, c_uint32, c_uint64, c_char_p, c_void_p, c_bool, c_double, c_size_t, POINTER, byref
 from typing import Optional, List, Any, Iterator
 
@@ -382,14 +383,28 @@ class Seekdb:
             lib_path = os.environ.get('SEEKDB_LIB_PATH')
             
             if not lib_path:
-                raise SeekdbError(SEEKDB_ERROR_NOT_INITIALIZED, 
-                    "SEEKDB_LIB_PATH environment variable is not set. Please set it to the absolute path of libseekdb.so")
-            
-            if not os.path.exists(lib_path):
-                raise SeekdbError(SEEKDB_ERROR_NOT_INITIALIZED, 
-                    f"libseekdb.so not found at {lib_path}. Please check SEEKDB_LIB_PATH environment variable.")
-            
-            cls._lib = ctypes.CDLL(lib_path)
+                raise SeekdbError(SEEKDB_ERROR_NOT_INITIALIZED,
+                    "SEEKDB_LIB_PATH environment variable is not set. "
+                    "Set it to the absolute path of seekdb DLL or libseekdb.so.")
+
+            lib_path_abs = os.path.abspath(lib_path)
+            if not os.path.exists(lib_path_abs):
+                raise SeekdbError(SEEKDB_ERROR_NOT_INITIALIZED,
+                    f"SeekDB library not found at {lib_path_abs}. "
+                    "Check SEEKDB_LIB_PATH.")
+
+            # Windows (Python 3.8+): LoadLibraryEx does not use PATH the same way; each directory that
+            # contains a dependent DLL must be registered (seekdb.dll dir, vcpkg\bin, openssl\bin, ...).
+            if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
+                _dll_dirs = [os.path.dirname(lib_path_abs)]
+                for _env in ("SEEKDB_VCPKG_BIN", "SEEKDB_OPENSSL_BIN"):
+                    _p = os.environ.get(_env)
+                    if _p and os.path.isdir(_p):
+                        _dll_dirs.append(os.path.abspath(_p))
+                for _d in _dll_dirs:
+                    os.add_dll_directory(_d)
+
+            cls._lib = ctypes.CDLL(lib_path_abs)
             cls._setup_functions()
         
         return cls._lib

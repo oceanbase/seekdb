@@ -22,9 +22,13 @@ target_include_directories(seekdb_jni PRIVATE
 )
 
 target_link_directories(seekdb_jni PRIVATE ${SEEKDB_BUILD_DIR})
-target_link_libraries(seekdb_jni PRIVATE seekdb)
+if(WIN32)
+  target_link_libraries(seekdb_jni PRIVATE "${SEEKDB_BUILD_DIR}/seekdb.lib")
+else()
+  target_link_libraries(seekdb_jni PRIVATE seekdb)
+endif()
 
-# Set rpath so libseekdb can be found at runtime
+# Set rpath so libseekdb can be found at runtime (Unix; Windows uses PATH / java.library.path)
 if(APPLE)
     set_target_properties(seekdb_jni PROPERTIES
         INSTALL_RPATH "${SEEKDB_BUILD_DIR}"
@@ -34,7 +38,7 @@ if(APPLE)
     set_target_properties(seekdb_jni PROPERTIES
         INSTALL_NAME_DIR "${SEEKDB_BUILD_DIR}"
     )
-else()
+elseif(UNIX)
     set_target_properties(seekdb_jni PROPERTIES
         INSTALL_RPATH "${SEEKDB_BUILD_DIR}"
         BUILD_WITH_INSTALL_RPATH TRUE

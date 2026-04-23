@@ -688,9 +688,25 @@ def run_all_tests():
         
         print(f'Total: {passed}/{total} passed, {failed} failed')
         print('')
-        
+
+        # Absolute path for the *same* data directory: seekdb.cpp merges this via same_embedded_path
+        # while still open. Do NOT seekdb_open a different dir after seekdb_close() in-process —
+        # seekdb_close() intentionally skips OBSERVER.destroy(), so a second full init usually fails (-2).
+        if passed == total:
+            abs_same = os.path.abspath(db_dir)
+            sys.stdout.write('[TEST] Absolute path (same DB directory)               ... ')
+            sys.stdout.flush()
+            try:
+                Seekdb.open(abs_same)
+                print('PASS')
+            except Exception as e:
+                print('FAIL')
+                print(f'::error::Absolute-path same-directory check failed: {e}', file=sys.stderr)
+                Seekdb.close()
+                return 1
+
         Seekdb.close()
-        
+
         if passed == total:
             print('::notice::All tests passed successfully!')
             print('=' * 70)

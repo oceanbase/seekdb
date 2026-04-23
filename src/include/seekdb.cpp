@@ -63,6 +63,17 @@
 #include "lib/signal/ob_signal_struct.h"  // For SIG_STACK_SIZE
 #include "lib/alloc/alloc_assist.h"  // For ACHUNK_PRESERVE_SIZE
 #include "common/ob_smart_call.h"  // For CALL_WITH_NEW_STACK
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+#include <process.h>
+#include <direct.h>
+#include <limits.h>
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+#else
 #include <unistd.h>
 #include <fcntl.h>
 #ifdef __APPLE__
@@ -71,9 +82,48 @@
 #include <sys/statfs.h>
 #endif
 #include <sys/mman.h>  // For mmap/munmap
+#endif
 #include <climits>
 #include <csignal>
 #include <cstdlib>
+#ifndef _WIN32
+#include <signal.h>  // sigaction, SIGBUS (not used on Windows)
+#endif
+
+#ifdef _WIN32
+#define SEEKDB_CHDIR(p) ::_chdir(p)
+#define SEEKDB_GETCWD(buf, sz) ::_getcwd((buf), static_cast<int>(sz))
+#define SEEKDB_GETPID() (static_cast<long>(::_getpid()))
+#define SEEKDB_UNLINK(p) ::_unlink(p)
+#else
+#define SEEKDB_CHDIR(p) ::chdir(p)
+#define SEEKDB_GETCWD(buf, sz) ::getcwd((buf), (sz))
+#define SEEKDB_GETPID() (static_cast<long>(::getpid()))
+#define SEEKDB_UNLINK(p) ::unlink(p)
+#endif
+
+static void *seekdb_mmap_anonymous_stack(size_t stack_size)
+{
+#ifdef _WIN32
+  return ::VirtualAlloc(nullptr, stack_size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+#else
+  void *const p =
+      ::mmap(nullptr, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  return p;
+#endif
+}
+
+static void seekdb_munmap_anonymous_stack(void *addr, size_t stack_size)
+{
+#ifdef _WIN32
+  (void)stack_size;
+  if (addr != nullptr) {
+    ::VirtualFree(addr, 0, MEM_RELEASE);
+  }
+#else
+  (void)::munmap(addr, stack_size);
+#endif
+}
 
 using namespace oceanbase::table;
 using namespace oceanbase::common;
@@ -91,6 +141,16 @@ struct SuppressLogStdoutScope {
     int saved_stdout = -1;
     int saved_stderr = -1;
     SuppressLogStdoutScope() {
+#ifdef _WIN32
+        saved_stdout = ::_dup(::_fileno(stdout));
+        saved_stderr = ::_dup(::_fileno(stderr));
+        const int fd = ::_open("NUL", _O_WRONLY);
+        if (fd >= 0) {
+            ::_dup2(fd, ::_fileno(stdout));
+            ::_dup2(fd, ::_fileno(stderr));
+            ::_close(fd);
+        }
+#else
         saved_stdout = dup(STDOUT_FILENO);
         saved_stderr = dup(STDERR_FILENO);
         int fd = open("/dev/null", O_WRONLY);
@@ -99,10 +159,28 @@ struct SuppressLogStdoutScope {
             dup2(fd, STDERR_FILENO);
             close(fd);
         }
+#endif
     }
     ~SuppressLogStdoutScope() {
-        if (saved_stderr >= 0) { dup2(saved_stderr, STDERR_FILENO); close(saved_stderr); }
-        if (saved_stdout >= 0) { dup2(saved_stdout, STDOUT_FILENO); close(saved_stdout); }
+#ifdef _WIN32
+        if (saved_stderr >= 0) {
+            ::_dup2(saved_stderr, ::_fileno(stderr));
+            ::_close(saved_stderr);
+        }
+        if (saved_stdout >= 0) {
+            ::_dup2(saved_stdout, ::_fileno(stdout));
+            ::_close(saved_stdout);
+        }
+#else
+        if (saved_stderr >= 0) {
+            dup2(saved_stderr, STDERR_FILENO);
+            close(saved_stderr);
+        }
+        if (saved_stdout >= 0) {
+            dup2(saved_stdout, STDOUT_FILENO);
+            close(saved_stdout);
+        }
+#endif
     }
 };
 
@@ -309,11 +387,13 @@ static bool g_embedded_pid_locked = false;
 static char g_embedded_work_dir[PATH_MAX];
 static char g_embedded_base_dir[PATH_MAX] = {0};  // Absolute path: opened db path for same-path reuse
 static bool g_closing = false;  // Flag to indicate we're in closing process
+#ifndef _WIN32
 static struct sigaction g_old_segv_handler;  // Store original SIGSEGV handler
-static bool g_segv_handler_installed = false;
 static struct sigaction g_old_sigabrt_handler;  // Store original SIGABRT handler
-static bool g_sigabrt_handler_installed = false;
 static struct sigaction g_old_sigbus_handler;  // Store original SIGBUS handler
+#endif
+static bool g_segv_handler_installed = false;
+static bool g_sigabrt_handler_installed = false;
 static bool g_sigbus_handler_installed = false;
 
 // Set when embedded DB was ever successfully opened; never cleared.
@@ -321,6 +401,7 @@ static bool g_sigbus_handler_installed = false;
 // g_embedded_opened has already been set to false by seekdb_close() or during destructors.
 static bool g_embedded_ever_opened = false;
 
+#ifndef _WIN32
 // Signal handler for SIGSEGV during cleanup
 // This allows graceful handling of segfaults during static destructors
 // Must be defined before seekdb_library_init() which uses it
@@ -331,7 +412,7 @@ static void segv_handler_during_close(int sig, siginfo_t* info, void* context) {
         // Exit gracefully with success code since cleanup segfault is expected
         _exit(0);
     }
-    
+
     // If not in closing process and database not opened, restore original handler
     if (g_segv_handler_installed) {
         sigaction(SIGSEGV, &g_old_segv_handler, nullptr);
@@ -367,6 +448,7 @@ static void sigbus_handler_during_close(int sig, siginfo_t* info, void* context)
         raise(SIGBUS);
     }
 }
+#endif  // !_WIN32
 
 // Use OBSERVER macro directly like Python embed does
 // No need to cache since ObServer::get_instance() is a singleton
@@ -409,12 +491,21 @@ static bool same_embedded_path(const char* a, const char* b) {
 }
 
 static int read_pid_from_file(const char* pidfile, long& pid_out) {
+#ifdef _WIN32
+    const int fd = ::_open(pidfile, _O_RDONLY);
+    if (fd < 0) return -1;
+    char buf[64];
+    const int n = ::_read(fd, buf, sizeof(buf) - 1);
+    ::_close(fd);
+    if (n <= 0) return -1;
+#else
     int fd = open(pidfile, O_RDONLY);
     if (fd < 0) return -1;
     char buf[64];
     ssize_t n = read(fd, buf, sizeof(buf) - 1);
     close(fd);
     if (n <= 0) return -1;
+#endif
     buf[n] = '\0';
     char* end = nullptr;
     long pid = strtol(buf, &end, 10);
@@ -481,14 +572,15 @@ static void seekdb_library_init() {
     if (global_thread_stack_size <= 0 || global_thread_stack_size < (512L << 10)) {
         global_thread_stack_size = calculated_size;
     }
-    
+
+#ifndef _WIN32
     // Install global SIGSEGV handler to catch segfaults during static destructors
     // This allows graceful handling of OceanBase static destructor issues at program exit
     struct sigaction sa;
     sa.sa_sigaction = segv_handler_during_close;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_SIGINFO;
-    
+
     if (sigaction(SIGSEGV, &sa, &g_old_segv_handler) == 0) {
         g_segv_handler_installed = true;
     }
@@ -500,6 +592,7 @@ static void seekdb_library_init() {
     if (sigaction(SIGBUS, &sa, &g_old_sigbus_handler) == 0) {
         g_sigbus_handler_installed = true;
     }
+#endif
 }
 
 // Internal implementation of seekdb_open, called on a dedicated stack
@@ -512,7 +605,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         bool same_path = false;
         if (g_embedded_base_dir[0] != '\0') {
             char cwd_buf[PATH_MAX];
-            if (getcwd(cwd_buf, sizeof(cwd_buf)) != nullptr) {
+            if (SEEKDB_GETCWD(cwd_buf, sizeof(cwd_buf)) != nullptr) {
                 ObSqlString req_abs;
                 if (req_abs.assign(db_dir) == OB_SUCCESS && to_absolute_path(cwd_buf, req_abs) == OB_SUCCESS &&
                     same_embedded_path(req_abs.ptr(), g_embedded_base_dir)) {
@@ -527,7 +620,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         if (g_embedded_pid_locked) {
             char pid_path[PATH_MAX];
             snprintf(pid_path, sizeof(pid_path), "%s/run/seekdb.pid", g_embedded_base_dir);
-            unlink(pid_path);
+            SEEKDB_UNLINK(pid_path);
             g_embedded_pid_locked = false;
         }
         g_embedded_opened = false;
@@ -706,7 +799,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
     ObWarningBuffer::set_warn_log_on(true);
     
     if (OB_FAIL(ret)) {
-    } else if (getcwd(buffer, sizeof(buffer)) == nullptr) {
+    } else if (SEEKDB_GETCWD(buffer, sizeof(buffer)) == nullptr) {
         ret = OB_ERR_UNEXPECTED;
         set_error(nullptr, "getcwd failed");
     } else {
@@ -752,21 +845,25 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
     }
     
     
+#ifndef _WIN32
     struct statfs fs_info;
 #ifndef TMPFS_MAGIC
     const long TMPFS_MAGIC = 0x01021994;
+#endif
 #endif
     try {
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
             set_error(nullptr, "create base dir failed");
+#ifndef _WIN32
         } else if (statfs(opts.base_dir_.ptr(), &fs_info) != 0) {
             ret = OB_ERR_UNEXPECTED;
             set_error(nullptr, "stat base dir failed");
         } else if (fs_info.f_type == TMPFS_MAGIC) {
             ret = OB_NOT_SUPPORTED;
             set_error(nullptr, "not support tmpfs directory");
-        } else if (-1 == chdir(opts.base_dir_.ptr())) {
+#endif
+        } else if (-1 == SEEKDB_CHDIR(opts.base_dir_.ptr())) {
             ret = OB_ERR_UNEXPECTED;
             set_error(nullptr, "change dir failed");
         } else {
@@ -804,7 +901,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             // used by multiple clients in same process, or race between concurrent open() calls).
             long pid_in_file = 0;
             int read_ret = read_pid_from_file(g_embedded_pid_file.ptr(), pid_in_file);
-            if (read_ret == 0 && pid_in_file == static_cast<long>(getpid())) {
+            if (read_ret == 0 && pid_in_file == SEEKDB_GETPID()) {
                 ret = OB_SUCCESS;
                 g_embedded_opened = true;
                 g_embedded_ever_opened = true;
@@ -921,7 +1018,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             set_error(nullptr, "observer start failed");
             // Clean up partially initialized observer
             OBSERVER.destroy();
-        } else if (-1 == chdir(g_embedded_work_dir)) {
+        } else if (-1 == SEEKDB_CHDIR(g_embedded_work_dir)) {
             ret = OB_ERR_UNEXPECTED;
             set_error(nullptr, "change dir failed");
         } else {
@@ -950,7 +1047,7 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         return SEEKDB_SUCCESS;
     } else {
         if (g_embedded_pid_locked) {
-            unlink(g_embedded_pid_file.ptr());
+            SEEKDB_UNLINK(g_embedded_pid_file.ptr());
             g_embedded_pid_locked = false;
         }
         return SEEKDB_ERROR_CONNECTION_FAILED;
@@ -968,7 +1065,7 @@ int seekdb_open(const char* db_dir) {
         // Absolute path: reuse open if same path.
         if (g_embedded_base_dir[0] != '\0') {
             char cwd_buf[PATH_MAX];
-            if (getcwd(cwd_buf, sizeof(cwd_buf)) != nullptr) {
+            if (SEEKDB_GETCWD(cwd_buf, sizeof(cwd_buf)) != nullptr) {
                 ObSqlString req_abs;
                 if (req_abs.assign(db_dir) == OB_SUCCESS && to_absolute_path(cwd_buf, req_abs) == OB_SUCCESS &&
                     same_embedded_path(req_abs.ptr(), g_embedded_base_dir)) {
@@ -983,9 +1080,12 @@ int seekdb_open(const char* db_dir) {
     // This avoids issues with pthread_getattr_np returning invalid values in FFI environments
     // The dedicated stack has known size and address, so OceanBase's stack overflow checks work correctly
     const size_t stack_size = 1LL << 20;  // 1MB (same as Python embed)
-    void* stack_addr = ::mmap(nullptr, stack_size, PROT_READ | PROT_WRITE, 
-                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* stack_addr = seekdb_mmap_anonymous_stack(stack_size);
+#ifdef _WIN32
+    if (stack_addr == nullptr) {
+#else
     if (MAP_FAILED == stack_addr) {
+#endif
         return SEEKDB_ERROR_MEMORY_ALLOC;
     }
     
@@ -1016,10 +1116,7 @@ int seekdb_open(const char* db_dir) {
     void* default_stack_addr = (void*)((cur_sp - default_stack_size + (1ULL << 20)) & ~((uintptr_t)0xFFF));
     oceanbase::common::set_stackattr(default_stack_addr, default_stack_size);
     
-    if (-1 == ::munmap(stack_addr, stack_size)) {
-        // munmap failed, but we still return the open result
-        // This is non-fatal as the memory will be reclaimed on process exit
-    }
+    seekdb_munmap_anonymous_stack(stack_addr, stack_size);
     
     return result;
 }
@@ -1034,7 +1131,7 @@ int seekdb_open_with_service(const char* db_dir, int port) {
     if (g_embedded_opened) {
         if (g_embedded_base_dir[0] != '\0') {
             char cwd_buf[PATH_MAX];
-            if (getcwd(cwd_buf, sizeof(cwd_buf)) != nullptr) {
+            if (SEEKDB_GETCWD(cwd_buf, sizeof(cwd_buf)) != nullptr) {
                 ObSqlString req_abs;
                 if (req_abs.assign(db_dir) == OB_SUCCESS && to_absolute_path(cwd_buf, req_abs) == OB_SUCCESS &&
                     same_embedded_path(req_abs.ptr(), g_embedded_base_dir)) {
@@ -1049,9 +1146,12 @@ int seekdb_open_with_service(const char* db_dir, int port) {
     // This avoids issues with pthread_getattr_np returning invalid values in FFI environments
     // The dedicated stack has known size and address, so OceanBase's stack overflow checks work correctly
     const size_t stack_size = 1LL << 20;  // 1MB (same as Python embed)
-    void* stack_addr = ::mmap(nullptr, stack_size, PROT_READ | PROT_WRITE, 
-                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* stack_addr = seekdb_mmap_anonymous_stack(stack_size);
+#ifdef _WIN32
+    if (stack_addr == nullptr) {
+#else
     if (MAP_FAILED == stack_addr) {
+#endif
         return SEEKDB_ERROR_MEMORY_ALLOC;
     }
     
@@ -1082,10 +1182,7 @@ int seekdb_open_with_service(const char* db_dir, int port) {
     void* default_stack_addr = (void*)((cur_sp - default_stack_size + (1ULL << 20)) & ~((uintptr_t)0xFFF));
     oceanbase::common::set_stackattr(default_stack_addr, default_stack_size);
     
-    if (-1 == ::munmap(stack_addr, stack_size)) {
-        // munmap failed, but we still return the open result
-        // This is non-fatal as the memory will be reclaimed on process exit
-    }
+    seekdb_munmap_anonymous_stack(stack_addr, stack_size);
     
     return result;
 }
@@ -1096,7 +1193,8 @@ void seekdb_close(void) {
         // Set closing flag to indicate we're in cleanup process
         // This allows the signal handler to recognize cleanup-related segfaults
         g_closing = true;
-        
+
+#ifndef _WIN32
         // Re-install our SIGSEGV, SIGABRT and SIGBUS handlers so they are active during atexit/static destructors.
         // Other runtimes (e.g. Rust, Node) may overwrite the handler; after seekdb_close()
         // the process often exits and C++ destructors can trigger segfaults, ob_abort() or bus errors in worker threads.
@@ -1115,7 +1213,8 @@ void seekdb_close(void) {
             sa.sa_sigaction = sigbus_handler_during_close;
             (void)sigaction(SIGBUS, &sa, &g_old_sigbus_handler);
         }
-        
+#endif
+
         // Note: We skip observer.destroy() because:
         // 1. It may cause segfault/OB_ABORT during cleanup (static destructor ordering issues)
         // 2. The process will exit anyway, and OS will reclaim all resources
@@ -1123,7 +1222,7 @@ void seekdb_close(void) {
         
         // Only clean up the PID file
         if (g_embedded_pid_locked) {
-            unlink(g_embedded_pid_file.ptr());
+            SEEKDB_UNLINK(g_embedded_pid_file.ptr());
             g_embedded_pid_locked = false;
         }
         g_embedded_opened = false;

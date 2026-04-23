@@ -1,16 +1,21 @@
-# Build, pack and upload libseekdb for multiple platforms (linux x64/arm64, macos arm64, android arm64-v8a) to S3
+# Build, pack and upload libseekdb for multiple platforms (linux x64/arm64, macos arm64, windows x64, android arm64-v8a) to S3
 #
 # Reference build environments (use these systems/env as the standard):
 #   linux-x64:   runner ubuntu-22.04, container quay.io/pypa/manylinux2014_x86_64 (glibc 2.17, CentOS 7+), zip libseekdb-linux-x64.zip
 #   linux-arm64: runner ubuntu-22.04-arm, container quay.io/pypa/manylinux2014_aarch64 (glibc 2.17), zip libseekdb-linux-arm64.zip
 #   darwin-arm64: runner macos-14, native, zip libseekdb-darwin-arm64.zip (min macOS 11.0)
-#   android-arm64-v8a: runner ubuntu-22.04, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
+#   windows-x64: runner windows-2022, .\build.ps1 + libseekdb-build.ps1, zip libseekdb-windows-x64.zip
+#   android-arm64-v8a: runner macos-14, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
 #
 # macOS builds use runner macos-14 and set CMAKE_OSX_DEPLOYMENT_TARGET=11.0 so the dylib runs on macOS 11+ (Big Sur and later).
 # On macOS, dylibs are signed in libseekdb-build.sh: ad-hoc when no cert; when repo is oceanbase/seekdb and secrets are set,
 # use Developer ID (secrets: OSX_CODESIGN_BUILD_CERTIFICATE_BASE64, OSX_CODESIGN_P12_PASSWORD, OSX_CODESIGN_KEYCHAIN_PASSWORD, OSX_CODESIGN_IDENTITY).
 # Optional: add notarization step and APPLE_ID/PASSWORD/TEAM_ID secrets to notarize the zip.
 # Artifacts: platform zips including libseekdb-android-arm64-v8a.zip; combined artifact libseekdb-all-platforms; optional S3 upload when DESTINATION_TARGET_PATH or AWS_S3_BUCKET and credentials are set.
+#
+# Job step order: Checkout → caches → compile → setup Node/Rust/Go/Java → FFI binding tests (continue-on-error per language
+# so all languages run; final summary step fails the job if any binding test failed) → pack → upload artifact → save caches (always).
+# Android: compile → setup toolchains → host-skip FFI notice → pack → verify zip → upload → save caches → summary (see job comment).
 name: Build libseekdb
 run-name: Build libseekdb for ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
 
@@ -124,10 +129,8 @@ jobs:
               else
                 PYVER=$(python3 -c "import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")")
               fi
-              bash build.sh release --init $USE_CCACHE -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER
-              cd build_release && make -j$(nproc) libseekdb
+              bash build.sh release --init $USE_CCACHE -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER --make libseekdb
               [ -n "$USE_CCACHE" ] && ccache -s || true
-              cd "$GITHUB_WORKSPACE/package/libseekdb" && bash libseekdb-build.sh "$GITHUB_WORKSPACE/build_release/src/include"
             '
       - name: Fix ownership (container writes as root)
         run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
@@ -154,12 +157,16 @@ jobs:
           java-version: "17"
 
       - name: Test Node.js FFI binding (Linux)
+        id: binding_node_ffi
+        continue-on-error: true
         run: |
           cd unittest/include/nodejs
           npm install
           bash test.sh
 
       - name: Test Node.js N-API binding (Linux)
+        id: binding_node_napi
+        continue-on-error: true
         run: |
           PATH=$(echo "$PATH" | tr ':' '\n' | grep -v 'deps/3rd' | tr '\n' ':' | sed 's/:$//')
           cd unittest/include/nodejs_napi
@@ -167,26 +174,39 @@ jobs:
           bash test.sh
 
       - name: Test Python binding (Linux)
+        id: binding_python
+        continue-on-error: true
         run: |
           cd unittest/include/python
           bash test.sh
 
       - name: Test Rust binding (Linux)
+        id: binding_rust
+        continue-on-error: true
         run: |
           cd unittest/include/rust
           bash test.sh
 
       - name: Test Go binding (Linux)
+        id: binding_go
+        continue-on-error: true
         run: |
           PATH=$(echo "$PATH" | tr ':' '\n' | grep -v 'deps/3rd' | tr '\n' ':' | sed 's/:$//')
           cd unittest/include/go
           bash test.sh
 
       - name: Test Java binding (Linux)
+        id: binding_java
+        continue-on-error: true
         run: |
           PATH=$(echo "$PATH" | tr ':' '\n' | grep -v 'deps/3rd' | tr '\n' ':' | sed 's/:$//')
           cd unittest/include/java
           bash test.sh
+
+      - name: Pack libseekdb (Linux)
+        run: |
+          chmod +x package/libseekdb/libseekdb-build.sh
+          cd package/libseekdb && bash libseekdb-build.sh "${GITHUB_WORKSPACE}/build_release/src/include"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -194,7 +214,6 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: package/libseekdb/libseekdb-*.zip
 
-      # Save caches even on failure so next run can resume (deps/ccache)
       - name: Save Cache deps (Linux)
         if: always()
         uses: actions/cache/save@v4
@@ -207,6 +226,25 @@ jobs:
         with:
           path: .ccache
           key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+
+      - name: Binding tests outcome (Linux)
+        if: always()
+        run: |
+          failed=0
+          for o in \
+            "${{ steps.binding_node_ffi.outcome }}" \
+            "${{ steps.binding_node_napi.outcome }}" \
+            "${{ steps.binding_python.outcome }}" \
+            "${{ steps.binding_rust.outcome }}" \
+            "${{ steps.binding_go.outcome }}" \
+            "${{ steps.binding_java.outcome }}"; do
+            [ "$o" = "failure" ] && failed=1
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::One or more libseekdb binding tests failed on Linux"
+            exit 1
+          fi
+          echo "All binding test steps succeeded (or were skipped)."
 
   # ---------- Build on macOS (no container) ----------
   build-macos:
@@ -265,8 +303,7 @@ jobs:
           ln -sf "$(which ccache)" deps/3rd/usr/local/oceanbase/devtools/bin/ccache
           # Use runner's Python (macOS has 3.x, not 3.8 by default) so embed CMake finds it
           PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          bash build.sh release --init -DOB_USE_CCACHE=ON -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
-          cd build_release && make -j$(sysctl -n hw.ncpu) libseekdb
+          bash build.sh release --init -DOB_USE_CCACHE=ON -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 --make libseekdb
           ccache -s
 
       - name: Setup Node.js (macOS)
@@ -291,12 +328,16 @@ jobs:
           java-version: "17"
 
       - name: Test Node.js FFI binding (macOS)
+        id: binding_node_ffi
+        continue-on-error: true
         run: |
           cd unittest/include/nodejs
           npm install
           bash test.sh
 
       - name: Test Node.js N-API binding (macOS)
+        id: binding_node_napi
+        continue-on-error: true
         run: |
           PATH=$(echo "$PATH" | tr ':' '\n' | grep -v 'deps/3rd' | tr '\n' ':' | sed 's/:$//')
           cd unittest/include/nodejs_napi
@@ -304,22 +345,30 @@ jobs:
           bash test.sh
 
       - name: Test Python binding (macOS)
+        id: binding_python
+        continue-on-error: true
         run: |
           cd unittest/include/python
           bash test.sh
 
       - name: Test Rust binding (macOS)
+        id: binding_rust
+        continue-on-error: true
         run: |
           cd unittest/include/rust
           bash test.sh
 
       - name: Test Go binding (macOS)
+        id: binding_go
+        continue-on-error: true
         run: |
           PATH=$(echo "$PATH" | tr ':' '\n' | grep -v 'deps/3rd' | tr '\n' ':' | sed 's/:$//')
           cd unittest/include/go
           bash test.sh
 
       - name: Test Java binding (macOS)
+        id: binding_java
+        continue-on-error: true
         run: |
           PATH=$(echo "$PATH" | tr ':' '\n' | grep -v 'deps/3rd' | tr '\n' ':' | sed 's/:$//')
           cd unittest/include/java
@@ -366,9 +415,32 @@ jobs:
           path: .ccache
           key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
 
+      - name: Binding tests outcome (macOS)
+        if: always()
+        run: |
+          failed=0
+          for o in \
+            "${{ steps.binding_node_ffi.outcome }}" \
+            "${{ steps.binding_node_napi.outcome }}" \
+            "${{ steps.binding_python.outcome }}" \
+            "${{ steps.binding_rust.outcome }}" \
+            "${{ steps.binding_go.outcome }}" \
+            "${{ steps.binding_java.outcome }}"; do
+            [ "$o" = "failure" ] && failed=1
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::One or more libseekdb binding tests failed on macOS"
+            exit 1
+          fi
+          echo "All binding test steps succeeded (or were skipped)."
+
   # ---------- Android NDK cross-compile (macOS arm64 host; target arm64-v8a) ----------
   # ubuntu-* runners are x86_64 by default. macOS-14 uses Apple silicon + NDK darwin-arm64 prebuilts (see docs).
   # Alternative: runs-on: ubuntu-24.04-arm for Linux ARM64.
+  #
+  # Why no FFI binding tests here: libseekdb.so is Android arm64-v8a / ELF for Bionic — the dynamic linker,
+  # libc, and JNI/NDK ABI differ from macOS dyld. CI cannot dlopen/load that .so on the host like Linux/macOS/Windows jobs.
+  # Running the same unittest/include/*/test.sh would require an Android emulator, rooted device, or adb push + adb shell test.
   build-android:
     name: Build libseekdb (android-arm64-v8a)
     runs-on: macos-14
@@ -419,8 +491,41 @@ jobs:
           bash build.sh release --android -DOB_USE_CCACHE=ON --init --make libseekdb
           ccache -s
 
+      # Same toolchain install order as other jobs (no host FFI below).
+      - name: Setup Node.js (Android)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Setup Rust (Android)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Setup Go (Android)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Setup Java (Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Binding tests (Android)
+        id: android_binding_notice
+        run: |
+          echo "::notice::Skipping native FFI binding tests on this runner: libseekdb.so targets Android arm64-v8a / Bionic and cannot be dlopen()'d on the macOS host."
+          echo "Zip verification runs after pack; device or emulator CI would be required for full FFI tests."
+
       - name: Pack libseekdb (Android)
         run: cd package/libseekdb && bash libseekdb-build.sh --android
+
+      - name: Verify packaged zip (Android)
+        id: android_verify_zip
+        continue-on-error: true
+        run: unzip -t package/libseekdb/libseekdb-android-arm64-v8a.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -442,7 +547,192 @@ jobs:
           path: .ccache
           key: ${{ runner.os }}-ccache-libseekdb-android-arm64-v8a
 
-  # ---------- Collect libseekdb artifacts and upload to S3 (runs only after all build jobs pass, including binding tests) ----------
+      - name: Pack / zip verification outcome (Android)
+        if: always()
+        run: |
+          if [ "${{ steps.android_verify_zip.outcome }}" = "failure" ]; then
+            echo "::error::Packaged zip verification failed (unzip -t)"
+            exit 1
+          fi
+          echo "Android pack and zip verification OK (or verify step skipped)."
+
+  # ---------- Build on Windows x64 (native, embed DLL) ----------
+  build-windows:
+    name: Build libseekdb (windows-x64)
+    runs-on: windows-2022
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache deps (Windows)
+        uses: actions/cache@v4
+        with:
+          path: deps/3rd
+          key: ${{ runner.os }}-libseekdb-deps-windows-x64-${{ hashFiles('deps/init/oceanbase.windows.x86_64.deps') }}
+          restore-keys: |
+            ${{ runner.os }}-libseekdb-deps-windows-x64-
+
+      - name: Cache ccache (Windows)
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ${{ runner.os }}-ccache-libseekdb-windows-x64
+          restore-keys: |
+            ${{ runner.os }}-ccache-libseekdb-windows-x64-
+
+      - name: Install ccache (Windows)
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          function Refresh-Path {
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          }
+          Refresh-Path
+          if (Get-Command ccache -ErrorAction SilentlyContinue) {
+            Write-Host "ccache already on PATH"
+            Get-Command ccache | Out-Host
+            exit 0
+          }
+          choco install ccache -y --no-progress 2>&1 | Out-Host
+          Refresh-Path
+          if ($LASTEXITCODE -ne 0 -or -not (Get-Command ccache -ErrorAction SilentlyContinue)) {
+            Write-Host "::notice::choco install ccache failed or ccache not on PATH; installing from ccache GitHub releases."
+            $ver = "4.13.2"
+            $zipName = "ccache-$ver-windows-x86_64.zip"
+            $url = "https://github.com/ccache/ccache/releases/download/v$ver/$zipName"
+            $tools = Join-Path $env:GITHUB_WORKSPACE ".tools"
+            $dest = Join-Path $tools "ccache-$ver-win64"
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            $zipPath = Join-Path $dest $zipName
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+            Expand-Archive -Path $zipPath -DestinationPath $dest -Force
+            $exe = Get-ChildItem -Path $dest -Filter ccache.exe -Recurse | Select-Object -First 1
+            if (-not $exe) { throw "ccache.exe not found after extracting $zipName under $dest" }
+            $binDir = $exe.Directory.FullName
+            Add-Content -Path $env:GITHUB_PATH -Value $binDir -Encoding utf8
+            $env:PATH = "$binDir;$env:PATH"
+          }
+          Get-Command ccache | Out-Host
+
+      - name: Build libseekdb (Windows)
+        shell: pwsh
+        env:
+          BUILD_TYPE: release
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_COMPILERCHECK: content
+          CCACHE_NOHASHDIR: 1
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          # Pick up Chocolatey / GITHUB_PATH / fallback-installed ccache
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          $py = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+          if (-not (Test-Path "deps/3rd/DONE")) {
+            .\build.ps1 init
+          }
+          # Prepend deps LLVM to PATH; pass lld-link so CMake does not pick GNU ld (MinGW) for clang-cl.
+          $ws = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
+          $llvmRoot = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR } else { Join-Path $ws "deps/3rd/tools/llvm18" }
+          $llvmBin = Join-Path $llvmRoot "bin"
+          $lldLink = Join-Path $llvmBin "lld-link.exe"
+          if (-not (Test-Path $lldLink)) { throw "lld-link.exe not found: $lldLink" }
+          $lldFwd = $lldLink.Replace("\", "/")
+          $env:PATH = "$llvmBin;$env:PATH"
+          $ccacheOpt = "-DOB_USE_CCACHE=OFF"
+          if (Get-Command ccache -ErrorAction SilentlyContinue) {
+            $ccacheOpt = "-DOB_USE_CCACHE=ON"
+          } else {
+            Write-Host "::warning::ccache not found; building without compiler cache."
+          }
+          .\build.ps1 release --ninja --target libseekdb "-DBUILD_EMBED_MODE=ON" "-DPYTHON_VERSION=$py" "-DCMAKE_LINKER=$lldFwd" $ccacheOpt
+          if (Get-Command ccache -ErrorAction SilentlyContinue) { ccache -s }
+
+      - name: Setup Node.js (Windows)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+      - name: Setup Rust (Windows)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Setup Go (Windows)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Setup Java (Windows)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install MinGW and Maven (Go CGO + Java)
+        shell: pwsh
+        run: choco install mingw maven -y --no-progress
+
+      - name: Binding tests (Windows)
+        id: binding_windows_tests
+        continue-on-error: true
+        shell: pwsh
+        env:
+          BUILD_TYPE: release
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          # Refresh PATH after Chocolatey (gcc / mvn)
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          Get-Command gcc | Out-Host
+          Get-Command mvn | Out-Host
+          .\unittest\include\run-libseekdb-binding-tests.ps1 -RepoRoot "$PWD" -ContinueOnError
+
+      - name: Pack libseekdb zip (Windows)
+        shell: pwsh
+        env:
+          BUILD_TYPE: release
+        run: .\package\libseekdb\libseekdb-build.ps1
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libseekdb-windows-x64
+          path: package/libseekdb/libseekdb-windows-x64.zip
+
+      - name: Save Cache deps (Windows)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: deps/3rd
+          key: ${{ runner.os }}-libseekdb-deps-windows-x64-${{ hashFiles('deps/init/oceanbase.windows.x86_64.deps') }}
+
+      - name: Save Cache ccache (Windows)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ${{ runner.os }}-ccache-libseekdb-windows-x64
+
+      - name: Binding tests outcome (Windows)
+        if: always()
+        shell: pwsh
+        run: |
+          if ("${{ steps.binding_windows_tests.outcome }}" -eq "failure") {
+            Write-Host "::error::One or more Windows binding test sections failed (see log above)"
+            exit 1
+          }
+          Write-Host "All Windows binding test sections succeeded."
+
+  # ---------- Collect libseekdb artifacts and upload to S3 (runs only when all needed build jobs succeed, including binding tests) ----------
   release-artifacts:
     name: Collect artifacts and upload to S3
     runs-on: ubuntu-22.04
@@ -450,6 +740,7 @@ jobs:
       - build
       - build-macos
       - build-android
+      - build-windows
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4

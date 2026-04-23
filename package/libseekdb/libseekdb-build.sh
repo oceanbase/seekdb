@@ -2,6 +2,9 @@
 # Build libseekdb, on macOS bundle deps to libs/, then pack lib + libs/ + seekdb.h into a .zip
 # Zip is written to this script's directory (package/libseekdb/).
 #
+# Windows (seekdb.dll): build with .\build.ps1 release --ninja --target libseekdb -DBUILD_EMBED_MODE=ON,
+# then run libseekdb-build.ps1 in this directory (see README.md).
+#
 # Usage:
 #   cd package/libseekdb && ./libseekdb-build.sh
 #   BUILD_TYPE=debug ./libseekdb-build.sh

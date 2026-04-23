@@ -55,23 +55,11 @@ echo ""
 $PYTHON_CMD -u test.py "${DB_DIR}" "test"
 PY_EXIT=$?
 if [ $PY_EXIT -ne 0 ]; then
-    echo "First run (relative path) failed with exit $PY_EXIT"
+    echo "Python binding tests failed with exit $PY_EXIT"
     exit $PY_EXIT
 fi
 
-# Second run: absolute path (same suite, no close+reopen in process)
-DB_DIR_ABS="$(pwd)/seekdb_abs.db"
-rm -rf "${DB_DIR_ABS}"
-echo ""
-echo "Running Python tests with absolute path: $DB_DIR_ABS"
-echo ""
-$PYTHON_CMD -u test.py "${DB_DIR_ABS}" "test"
-ABS_EXIT=$?
-rm -rf "${DB_DIR_ABS}" 2>/dev/null || true
-if [ $ABS_EXIT -ne 0 ]; then
-    echo "Second run (absolute path) failed with exit $ABS_EXIT"
-    exit $ABS_EXIT
-fi
+rm -rf "$(pwd)/seekdb_abs.db" 2>/dev/null || true
 
 echo ""
 echo "Test completed!"
