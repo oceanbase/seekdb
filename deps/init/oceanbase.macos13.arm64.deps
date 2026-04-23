@@ -39,3 +39,4 @@ obdevtools-llvm-17.0.6-20260122.tar.gz
 
 [tools-deps]
 obshell-4.4.0.0-20260120.tgz target=community
+

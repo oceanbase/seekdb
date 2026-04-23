@@ -1,13 +1,13 @@
 [target-default]
 os=7
 arch=x86_64
-repo=http://mirrors.oceanbase.com/oceanbase/community/stable
+repo=http://yum-test.obvos.alibaba-inc.com/oceanbase/development-kit/el/7/x86_64/
 
 
 [target-community]
 os=7
 arch=x86_64
-repo=http://mirrors.oceanbase.com/oceanbase/community/stable
+repo=http://yum-test.obvos.alibaba-inc.com/oceanbase/community/stable/el/7/x86_64/
 
 
 [deps]
@@ -34,6 +34,7 @@ devdeps-s3-cpp-sdk-1.11.156-262026021209.el7.x86_64.rpm
 devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el7.x86_64.rpm
 devdeps-grpc-abiv1-1.46.7-572026031815.el7.x86_64.rpm
 devdeps-roaringbitmap-croaring-3.0.0-42024042816.el7.x86_64.rpm
+devdeps-hyperscan-5.4.2-242024090219.el7.x86_64.rpm
 devdeps-apache-arrow-20.0.0-452026020914.el7.x86_64.rpm
 devdeps-vsag-abiv1-1.1.0-1752026041310.el7.x86_64.rpm
 devdeps-apache-orc-2.1.1-122026020912.el7.x86_64.rpm

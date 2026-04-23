@@ -1,7 +1,7 @@
 [target-default]
 os=7
 arch=aarch64
-repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/7/aarch64/
+repo=http://yum-test.obvos.alibaba-inc.com/oceanbase/development-kit/el/7/aarch64/
 
 [target-community]
 os=7
@@ -51,10 +51,5 @@ obdevtools-llvm-17.0.6-202026032415.el7.aarch64.rpm
 devdeps-oblogmsg-1.1-52024052811.el7.aarch64.rpm
 devdeps-rocksdb-6.22.1-32024123015.el7.aarch64.rpm
 obstack-2.0.4-172024070513.el7.aarch64.rpm
-obshell-4.4.0.1-12026012311.el7.aarch64.rpm target=community
-#obshell-4.4.1.1-32026031914.el7.aarch64.rpm target=community
 
 [test-utils]
-ob-deploy-4.1.0-2.el7.aarch64.rpm target=community
-obclient-2.2.2-1.el7.aarch64.rpm target=community
-libobclient-2.2.2-3.el7.aarch64.rpm target=community
