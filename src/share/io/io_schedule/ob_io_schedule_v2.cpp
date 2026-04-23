@@ -81,7 +81,7 @@ int QSchedCallback::handle(TCRequest* tc_req)
       io_req_finish(req, ObIORetCode(ret));
     }
   }
-  req.dec_ref("phyqueue_dec"); // ref for io queue
+  req.dec_ref(); // ref for io queue
   return ret;
 }
 
@@ -300,7 +300,7 @@ int64_t ObTenantIOSchedulerV2::get_qindex(ObIORequest& req)
   if (is_sys_group(grp_key.group_id_)) { //other
     index = static_cast<int64_t>(grp_key.mode_);
   } else if (!is_valid_group(grp_key.group_id_)) {
-  } else if (OB_FAIL(req.tenant_io_mgr_.get_ptr()->get_group_index(grp_key, (uint64_t&)index))) {
+  } else if (OB_FAIL(req.tenant_io_mgr_->get_group_index(grp_key, (uint64_t&)index))) {
     if (ret == OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
       if (REACH_TIME_INTERVAL(1 * 1000L * 1000L)) {
@@ -345,7 +345,7 @@ int ObTenantIOSchedulerV2::schedule_request(ObIORequest &req)
   int64_t index = get_qindex(req);
   int qid = get_qid(index, req, is_default_q);
   fill_qsched_req(req, qid);
-  req.inc_ref("phyqueue_inc"); //ref for phy_queue
+  req.inc_ref(); //ref for phy_queue
   if (OB_ISNULL(req.io_result_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("io result is null", K(ret), K(req));
@@ -363,7 +363,7 @@ int ObTenantIOSchedulerV2::schedule_request(ObIORequest &req)
   }
 
   if (OB_FAIL(ret)) {
-    req.dec_ref("phyqueue_dec"); //ref for phy_queue
+    req.dec_ref(); //ref for phy_queue
     io_req_finish(req, ObIORetCode(ret));
   }
   return ret;

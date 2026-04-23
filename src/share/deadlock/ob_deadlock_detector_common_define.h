@@ -30,7 +30,7 @@
 #include "share/ob_occam_time_guard.h"
 #include "storage/tx/ob_tx_seq.h"
 
-#define DETECT_TIME_GUARD(threshold) TIMEGUARD_INIT(DETECT, threshold, 10_s)
+#define DETECT_TIME_GUARD(threshold) TIMEGUARD_INIT(DETECT, threshold)
 
 namespace oceanbase
 {

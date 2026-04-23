@@ -36,7 +36,6 @@ class ObReqTransport;
 }
 namespace obrpc
 {
-class ObBatchRpc;
 class ObBlackistReq;
 class ObBlackistResp;
 }
@@ -206,7 +205,6 @@ private:
   common::ObAddr self_;
   DstInfoMap dst_info_map_;
   obrpc::ObBlacklistRpcProxy blacklist_proxy_;
-  obrpc::ObBatchRpc *batch_rpc_;
   DISALLOW_COPY_AND_ASSIGN(ObServerBlacklist);
 };
 

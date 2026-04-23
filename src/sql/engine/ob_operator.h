@@ -20,6 +20,7 @@
 #include "lib/time/ob_tsc_timestamp.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/ash/ob_active_session_guard.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/basic/ob_batch_result_holder.h"
 #include "sql/engine/ob_phy_operator_type.h"
 #include "sql/engine/expr/ob_expr.h"

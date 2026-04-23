@@ -237,7 +237,7 @@ public:
            common::ObILogAllocator *alloc_mgr,
            ILogBlockPool *log_block_pool,
            PalfMonitorCb *monitor,
-           share::ObLocalDevice *log_local_device,
+           common::ObIODevice *log_local_device,
            share::ObResourceManager *resource_manager,
            common::ObIOManager *io_manager);
   // start function contains two meanings:

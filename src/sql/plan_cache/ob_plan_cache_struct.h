@@ -30,7 +30,6 @@
 #include "sql/plan_cache/ob_i_lib_cache_context.h"
 #include "sql/ob_sql_utils.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "sql/udr/ob_udr_struct.h"
 
 namespace oceanbase
 {
@@ -394,12 +393,6 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
       is_original_ps_mode_(false),
       ab_params_(NULL),
       new_raw_sql_(),
-      is_rewrite_sql_(false),
-      rule_name_(),
-      def_name_ctx_(NULL),
-      fixed_param_info_list_(allocator),
-      dynamic_param_info_list_(allocator),
-      tpl_sql_const_cons_(allocator),
       need_retry_add_plan_(true),
       insert_batch_opt_info_(allocator),
       is_max_curr_limit_(false),
@@ -451,9 +444,7 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
   bool is_parameterized_execute() { return is_parameterized_execute_; }
   void set_is_inner_sql(bool v) { is_inner_sql_ = v; };
   bool is_inner_sql() const { return is_inner_sql_; } 
-  void set_is_rewrite_sql(bool v) { is_rewrite_sql_ = v; }
-  bool is_rewrite_sql() const { return is_rewrite_sql_; }
-  void set_need_retry_add_plan(bool v) { need_retry_add_plan_ = v; }
+void set_need_retry_add_plan(bool v) { need_retry_add_plan_ = v; }
   bool need_retry_add_plan() const { return need_retry_add_plan_; }
   void set_pc_key_mode() { fp_result_.pc_key_.mode_ = mode_; }
   TO_STRING_KV(
@@ -472,12 +463,6 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
     K(fixed_param_idx_),
     K(need_add_obj_stat_),
     K(is_inner_sql_),
-    K(is_rewrite_sql_),
-    K(rule_name_),
-    K(def_name_ctx_),
-    K(fixed_param_info_list_),
-    K(dynamic_param_info_list_),
-    K(tpl_sql_const_cons_),
     K(is_original_ps_mode_),
     K(new_raw_sql_),
     K(need_retry_add_plan_),
@@ -532,14 +517,6 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
   ParamStore *ab_params_;  // arraybinding batch parameters,
   ObString new_raw_sql_;  // values clause rebuild raw sql
 
-  // **********  for rewrite rule **********
-  bool is_rewrite_sql_;
-  common::ObString rule_name_;
-  QuestionMarkDefNameCtx *def_name_ctx_;
-  common::ObFixedArray<FixedParamValue, common::ObIAllocator> fixed_param_info_list_;
-  common::ObFixedArray<DynamicParamInfo, common::ObIAllocator> dynamic_param_info_list_;
-  common::ObFixedArray<NotParamInfoList, common::ObIAllocator> tpl_sql_const_cons_;
-  // **********  for rewrite end **********
   // when schema version of cache node is old, whether remove this node and retry add cache obj.
   bool need_retry_add_plan_;
   ObInsertBatchOptInfo insert_batch_opt_info_;

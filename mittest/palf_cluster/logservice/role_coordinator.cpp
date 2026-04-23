@@ -204,7 +204,7 @@ void RoleCoordinator::handle(void *task)
   int ret = OB_SUCCESS;
   // When role chage service hang exceeds 30 seconds, we think there is dead lock in 'handle_role_change_event_',
   // TIMEGUARD will pring lbt().
-  TIMEGUARD_INIT(CLOG, 30_s, 30_s);
+  TIMEGUARD_INIT(CLOG, 30_s);
   RoleChangeEvent *event = reinterpret_cast<RoleChangeEvent*>(task);
   const int64_t ls_id = event->ls_id_.id();
   const int64_t start_ts = ObTimeUtility::current_time();

@@ -155,11 +155,6 @@ public:
   inline uint64_t get_tenant_id() const { return tenant_id_; }
   bool is_never_started() const { return is_never_started_; }
   bool is_stopped() const { return is_stopped_; }
-  static int mtl_new(ObTimerService *&timer_service);
-  static int mtl_start(ObTimerService *&timer_service);
-  static void mtl_stop(ObTimerService *&timer_service);
-  static void mtl_wait(ObTimerService *&timer_service);
-  static void mtl_destroy(ObTimerService *&timer_service);
 private:
   bool has_running_task(const ObTimer *timer, const TaskToken *&running_task_token) const;
   bool find_task_in_set(

@@ -667,10 +667,8 @@ void ObKVGlobalCache::wash()
 {
   if (OB_LIKELY(inited_ && !stopped_)) {
     DEBUG_SYNC(BEFORE_BACKGROUND_WASH);
-    static int64_t wash_count = 0;
-    if (store_.wash() || (++wash_count >= MAP_WASH_CLEAN_INTERNAL)) {
+    if (store_.wash()) {
       map_.clean_garbage_node(map_clean_pos_, map_once_clean_num_);
-      wash_count = 0;
     }
     int sec = -ERRSIM_FLUSH_KVCACHE;
     if (sec != 0 && REACH_TIME_INTERVAL(sec * 1000000)) {

@@ -6607,8 +6607,6 @@ int ObBatchGetTabletSplitArg::init(const uint64_t tenant_id, const share::ObLSID
 
 OB_SERIALIZE_MEMBER(ObBatchGetTabletSplitRes, split_datas_);
 
-OB_SERIALIZE_MEMBER(ObSyncRewriteRuleArg, tenant_id_);
-
 OB_SERIALIZE_MEMBER(ObSessInfoVerifyArg, sess_id_, proxy_sess_id_);
 
 bool ObSessionInfoVeriRes::is_valid() const

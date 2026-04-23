@@ -47,6 +47,10 @@ public:
   void wait();  // wait all running task finish
   void destroy();
   int set_run_wrapper_with_ret(lib::IRunWrapper *run_wrapper);
+  lib::IRunWrapper *get_run_wrapper() const
+  {
+    return run_wrapper_;
+  }
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
     int64_t pos = 0;

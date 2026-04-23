@@ -268,7 +268,7 @@ int ObLogMonitor::record_role_change_event(const int64_t palf_id,
   const int64_t MAX_BUF_LEN = 50;
   char prev_str[MAX_BUF_LEN] = {'\0'};
   char curr_str[MAX_BUF_LEN] = {'\0'};
-  TIMEGUARD_INIT(LOG_MONITOR, 100_ms, 5_s);                                                                         \
+  TIMEGUARD_INIT(LOG_MONITOR, 100_ms);                                                                              \
   if (0 >= (pret = snprintf(prev_str, MAX_BUF_LEN, "%s %s", role_to_string(prev_role),
       replica_state_to_string(prev_state)))) {
     ret = OB_ERR_UNEXPECTED;
@@ -311,7 +311,7 @@ int ObLogMonitor::record_parent_child_change_event(const int64_t palf_id,
   const char *object_str = (is_parent)? "PARENT": "CHILD";
   const int64_t MAX_BUF_LEN = 50;
   char event_str[MAX_BUF_LEN] = {'\0'};
-  TIMEGUARD_INIT(LOG_MONITOR, 100_ms, 5_s);                                                                         \
+  TIMEGUARD_INIT(LOG_MONITOR, 100_ms);                                                                              \
   if (0 >= (pret = snprintf(event_str, MAX_BUF_LEN, "%s %s", action_str, object_str))) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "snprintf failed", KR(ret), K(action_str), K(object_str));

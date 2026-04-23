@@ -1296,8 +1296,6 @@ int ObTenantIOManager::init(const uint64_t tenant_id,
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(io_config));
   } else if (OB_FAIL(init_memory_pool(tenant_id, io_config.param_config_.memory_limit_))) {
     LOG_WARN("init tenant io memory pool failed", K(ret), K(io_config), K(io_memory_limit_), K(request_count_), K(request_count_));
-  } else if (OB_FAIL(io_tracer_.init(tenant_id))) {
-    LOG_WARN("init io tracer failed", K(ret));
   } else if (OB_FAIL(io_func_infos_.init(tenant_id))) {
     LOG_WARN("init io func infos failed", K(ret), K(tenant_id));
   } else if (OB_FAIL(io_usage_.init(tenant_id, io_config.group_configs_.count() / IO_MODE_CNT))) {
@@ -1345,7 +1343,6 @@ void ObTenantIOManager::destroy()
   int ret = OB_SUCCESS;
 
   callback_mgr_.destroy();
-  io_tracer_.destroy();
   io_memory_limit_ = 0;
   request_count_ = 0;
   result_count_ = 0;
@@ -1560,7 +1557,7 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   } else if (OB_FAIL(ObShareUtil::check_data_disk_health_status(is_data_disk_healthy))) {
     LOG_WARN("fail to check data disk status", KR(ret));
   } else if ((SLOG_IO != info.flag_.get_sys_module_id() &&
-              CLOG_READ_IO != info.flag_.get_sys_module_id() &&
+              CLOG_READ_IO != info.flag_.get_sys_module_id() && 
               CLOG_WRITE_IO != info.flag_.get_sys_module_id()) &&
               !info.fd_.device_handle_->is_object_device() &&
               !is_data_disk_healthy) {
@@ -1702,14 +1699,6 @@ int ObTenantIOManager::update_basic_io_param_config(const ObTenantIOConfig::Para
     LOG_WARN("tenant not working", K(ret), K(tenant_id_));
   } else {
     if (OB_FAIL(ret)) {
-    } else if (io_config_.param_config_.enable_io_tracer_ != io_param_config.enable_io_tracer_) {
-      LOG_INFO("update io tracer", K(tenant_id_), K(io_param_config.enable_io_tracer_), K(io_config_.param_config_.enable_io_tracer_));
-      ATOMIC_SET(&io_config_.param_config_.enable_io_tracer_, io_param_config.enable_io_tracer_);
-      if (!io_param_config.enable_io_tracer_) {
-        io_tracer_.reuse();
-      }
-    }
-    if (OB_FAIL(ret)) {
     } else if (io_config_.param_config_.memory_limit_ != io_param_config.memory_limit_) {
       LOG_INFO("update io memory limit", K(tenant_id_), K(io_param_config.memory_limit_), K(io_config_.param_config_.memory_limit_));
       if (OB_FAIL(update_memory_pool(io_param_config.memory_limit_))) {
@@ -1811,7 +1800,7 @@ int ObTenantIOManager::alloc_io_request(ObIORequest *&req)
     LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObSSIORequest)));
   } else {
     req = new (buf) ObSSIORequest;
-    req->tenant_io_mgr_.hold(this);
+    req->tenant_io_mgr_ = this;
   }
 #else
   if (OB_ISNULL(buf = io_allocator_.alloc(sizeof(ObIORequest)))) {
@@ -1819,7 +1808,7 @@ int ObTenantIOManager::alloc_io_request(ObIORequest *&req)
     LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObIORequest)));
   } else {
     req = new (buf) ObIORequest;
-    req->tenant_io_mgr_.hold(this);
+    req->tenant_io_mgr_ = this;
   }
 #endif
   return ret;
@@ -1835,7 +1824,7 @@ int ObTenantIOManager::alloc_io_result(ObIOResult *&result)
     LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObIORequest)));
   } else {
     result = new (buf) ObIOResult;
-    result->tenant_io_mgr_.hold(this);
+    result->tenant_io_mgr_ = this;
   }
   return ret;
 }
@@ -1938,20 +1927,6 @@ int ObTenantIOManager::refresh_group_io_config()
 const ObTenantIOConfig &ObTenantIOManager::get_io_config()
 {
   return io_config_;
-}
-
-int ObTenantIOManager::trace_request_if_need(const ObIORequest *req, const char* msg, ObIOTracer::TraceType trace_type)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_LIKELY(!ATOMIC_LOAD(&io_config_.param_config_.enable_io_tracer_))) {
-    // do nothing
-  } else if (OB_FAIL(io_tracer_.trace_request(req, msg, trace_type))) {
-    LOG_WARN("trace io request failed", K(ret), KP(req), KCSTRING(msg), K(trace_type));
-  }
-  return ret;
 }
 
 int64_t ObTenantIOManager::get_group_num()
@@ -2214,9 +2189,6 @@ int ObTenantIOManager::print_io_status()
           "iops_limit", 0,
           "ibw_limit", 0,
           "obw_limit", 0);
-    }
-    if (ATOMIC_LOAD(&io_config_.param_config_.enable_io_tracer_)) {
-      io_tracer_.print_status();
     }
 
     // print io function status

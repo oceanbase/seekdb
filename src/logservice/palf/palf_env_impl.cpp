@@ -212,7 +212,7 @@ int PalfEnvImpl::init(
     common::ObILogAllocator *log_alloc_mgr,
     ILogBlockPool *log_block_pool,
     PalfMonitorCb *monitor,
-    ObLocalDevice *log_local_device,
+    common::ObIODevice *log_local_device,
     ObResourceManager *resource_manager,
     ObIOManager *io_manager)
 {

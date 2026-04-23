@@ -1,0 +1,46 @@
+alter system set _ob_ash_enable = true;
+select sleep(3);
+sleep(3)
+0
+alter system set _ob_ash_enable = false;
+with reverse_scan_ash(sample_time) as (select /*+ index_desc(__all_virtual_ash all_virtual_ash_i1)*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 0),
+forward_scan_ash(sample_time) as (select /*+ index(__all_virtual_ash all_virtual_ash_i1) NO_FAST_MINMAX*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 1)
+select reverse_scan_ash.sample_time = forward_scan_ash.sample_time as result from reverse_scan_ash join forward_scan_ash on reverse_scan_ash.sample_time = forward_scan_ash.sample_time;
+result
+1
+with reverse_scan_ash(sample_time) as (select /*+ index_desc(__all_virtual_ash all_virtual_ash_i1)*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 0),
+forward_scan_ash(sample_time) as (select /*+ full(__all_virtual_ash) NO_FAST_MINMAX*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 1)
+select reverse_scan_ash.sample_time = forward_scan_ash.sample_time as result from reverse_scan_ash join forward_scan_ash on reverse_scan_ash.sample_time = forward_scan_ash.sample_time;
+result
+1
+with reverse_scan_ash(sample_id) as (select /*+ index_desc(__all_virtual_ash all_virtual_ash_i1)*/ sample_id from oceanbase.__all_virtual_ash where sample_time > 0),
+forward_scan_ash(sample_id) as (select /*+ full(__all_virtual_ash) NO_FAST_MINMAX*/ sample_id from oceanbase.__all_virtual_ash where sample_time > 1)
+select * from reverse_scan_ash left join forward_scan_ash on reverse_scan_ash.sample_id = forward_scan_ash.sample_id where forward_scan_ash.sample_id is null;
+sample_id	sample_id
+check ash index validation 0
+explain select sample_time from oceanbase.__all_virtual_ash where sample_time > usec_to_time(0);
+Query Plan
+=================================================================================
+|ID|OPERATOR        |NAME                                 |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------------------
+|0 |TABLE RANGE SCAN|__all_virtual_ash(all_virtual_ash_i1)|100     |4           |
+=================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([__all_virtual_ash.SAMPLE_TIME]), filter([__all_virtual_ash.SAMPLE_TIME > usec_to_time(0)])
+      access([__all_virtual_ash.SAMPLE_TIME]), partitions(p1)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([__all_virtual_ash.SAMPLE_TIME]), range(1970-01-01 00:00:00.000000 ; MAX)
+explain select sample_time from __all_virtual_ash where sample_time > usec_to_time(0);
+Query Plan
+=================================================================================
+|ID|OPERATOR        |NAME                                 |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------------------------
+|0 |TABLE RANGE SCAN|__all_virtual_ash(all_virtual_ash_i1)|100     |4           |
+=================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([__all_virtual_ash.SAMPLE_TIME]), filter([__all_virtual_ash.SAMPLE_TIME > usec_to_time(0)])
+      access([__all_virtual_ash.SAMPLE_TIME]), partitions(p1)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([__all_virtual_ash.SAMPLE_TIME]), range(1970-01-01 00:00:00.000000 ; MAX)

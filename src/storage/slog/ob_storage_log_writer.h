@@ -59,7 +59,7 @@ public:
   int start_log(const common::ObLogCursor &start_cursor);
 
 private:
-  static const int64_t FLUSH_THREAD_IDLE_INTERVAL_US = 10 * 1000; // 10ms
+  static const int64_t FLUSH_THREAD_IDLE_INTERVAL_US = 1000 * 1000; // 1s
 
 private:
   int fill_nop_log(ObStorageLogItem *log_item, const int64_t occupied_len);

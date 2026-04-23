@@ -1,0 +1,54 @@
+# owner: roland.qk
+# owner group: IMF
+# description: test __all_virtual_ash's index
+
+connect (obsys,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
+connection obsys;
+
+# enable ash and generate some data first.
+alter system set _ob_ash_enable = true;
+select sleep(3);
+sleep 5;
+
+# make sure ash's data is stable.
+alter system set _ob_ash_enable = false;
+sleep 5;
+
+# index forward scan vs reverse scan
+with reverse_scan_ash(sample_time) as (select /*+ index_desc(__all_virtual_ash all_virtual_ash_i1)*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 0),
+forward_scan_ash(sample_time) as (select /*+ index(__all_virtual_ash all_virtual_ash_i1) NO_FAST_MINMAX*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 1)
+select reverse_scan_ash.sample_time = forward_scan_ash.sample_time as result from reverse_scan_ash join forward_scan_ash on reverse_scan_ash.sample_time = forward_scan_ash.sample_time;
+
+# index reverse scan vs full table scan
+with reverse_scan_ash(sample_time) as (select /*+ index_desc(__all_virtual_ash all_virtual_ash_i1)*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 0),
+forward_scan_ash(sample_time) as (select /*+ full(__all_virtual_ash) NO_FAST_MINMAX*/ max(sample_time) from oceanbase.__all_virtual_ash where sample_time > 1)
+select reverse_scan_ash.sample_time = forward_scan_ash.sample_time as result from reverse_scan_ash join forward_scan_ash on reverse_scan_ash.sample_time = forward_scan_ash.sample_time;
+
+# match full record
+with reverse_scan_ash(sample_id) as (select /*+ index_desc(__all_virtual_ash all_virtual_ash_i1)*/ sample_id from oceanbase.__all_virtual_ash where sample_time > 0),
+forward_scan_ash(sample_id) as (select /*+ full(__all_virtual_ash) NO_FAST_MINMAX*/ sample_id from oceanbase.__all_virtual_ash where sample_time > 1)
+select * from reverse_scan_ash left join forward_scan_ash on reverse_scan_ash.sample_id = forward_scan_ash.sample_id where forward_scan_ash.sample_id is null;
+
+let $max_time = query_get_value(select /*+FAST_MINMAX*/ max(sample_time) as result from __all_virtual_ash where sample_time > 0, result, 1);
+let $max_val_usec = query_get_value(select time_to_usec('$max_time') as res from dual, res, 1);
+
+let $min_time = query_get_value(select /*+FAST_MINMAX*/ min(sample_time) as result from __all_virtual_ash where sample_time > 0, result, 1);
+let $min_val_usec = query_get_value(select time_to_usec('$min_time') as res from dual, res, 1);
+
+let $cmp_res = query_get_value(select ($max_val_usec < $min_val_usec) as res from dual, res, 1);
+
+-- echo check ash index validation $cmp_res
+
+if ($cmp_res)
+{
+  --echo ash index error
+  --echo $max_time < $min_time
+  --echo $max_val_usec < $min_val_usec
+  # 打印计划
+ explain select /*+FAST_MINMAX*/ max(sample_time) as result from __all_virtual_ash where sample_time > 0;
+ explain select /*+FAST_MINMAX*/ min(sample_time) as result from __all_virtual_ash where sample_time > 0;
+}
+
+explain select sample_time from oceanbase.__all_virtual_ash where sample_time > usec_to_time(0);
+
+explain select sample_time from __all_virtual_ash where sample_time > usec_to_time(0);

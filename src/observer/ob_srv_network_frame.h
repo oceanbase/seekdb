@@ -62,12 +62,7 @@ public:
   rpc::frame::ObReqTransport *get_batch_rpc_req_transport();
   inline rpc::frame::ObReqTranslator &get_xlator();
   int reload_sql_thread_config();
-  int reload_tenant_sql_thread_config(const uint64_t tenant_id);
 
-  int reload_mysql_login_thread_config() {
-    int cnt = deliver_.get_mysql_login_thread_count_to_set(static_cast<int32_t>(GCONF.sql_login_thread_count));
-    return deliver_.set_mysql_login_thread_count(cnt);
-  }
   static int reload_rpc_auth_method();
 
   rootserver::ObIngressBWAllocService *get_ingress_service();

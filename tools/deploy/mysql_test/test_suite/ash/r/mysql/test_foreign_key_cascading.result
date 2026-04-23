@@ -1,0 +1,12 @@
+alter system set _ob_ash_enable = true;
+drop table if exists t2;
+drop table if exists t1;
+create table t1(a int primary key, b int);
+create table t2(a int, c int , foreign key(a) references t1(a) on delete cascade );
+insert into t1(a, b) select @rn:=@rn+1 as a, @rn as b from table(generator(2000)), (select @rn:=0);
+insert into t2(a, c) select @rn:=@rn+1 as a, @rn as b from table(generator(2000)), (select @rn:=0);
+SET ob_query_timeout = 40000000;
+delete from t1;
+count(*) > 0
+1
+alter system set _ob_ash_enable = false;

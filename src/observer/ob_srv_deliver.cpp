@@ -245,99 +245,37 @@ static void set_sql_sock_mem_pool_tenant_id(ObRequest &req, int64_t tenant_id)
     sess->pool_.set_tenant_id(tenant_id);
   }
 }
-int dispatch_req(const uint64_t tenant_id, ObRequest &req, QueueThread *global_mysql_queue)
+
+int dispatch_req(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-  static const int64_t MAX_QUEUE_LEN = 10000;
-  if (is_meta_tenant(tenant_id)) {
-    // cannot login meta tenant
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cannot login meta tenant", K(ret), K(tenant_id));
-  } else if (is_sys_tenant(tenant_id) || is_user_tenant(tenant_id)) {
-    MTL_SWITCH(tenant_id) {
-      QueueThread *mysql_queue = MTL(QueueThread *);
-      ObTenant *tenant = static_cast<ObTenant *>(MTL_CTX());
-      mysql_queue->queue_.inc_push_worker_count();
-      if (OB_ISNULL(tenant)) {
-        ret = OB_TENANT_NOT_IN_SERVER;
-        LOG_WARN("tenant is NULL", K(ret), K(tenant_id));
-      } else if (tenant->has_stopped()) {
-        ret = OB_TENANT_NOT_IN_SERVER;
-        LOG_WARN("tenant is stopped", K(ret), K(tenant_id));
-      } else if (OB_ISNULL(mysql_queue)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("mysql_queue is NULL", K(ret), K(tenant_id));
-      } else if (FALSE_IT(set_sql_sock_mem_pool_tenant_id(req, tenant_id))) {
-      } else if (!mysql_queue->queue_.push(&req, MAX_QUEUE_LEN)) {  // MAX_QUEUE_LEN = 10000;
-        ret = OB_QUEUE_OVERFLOW;
-        EVENT_INC(MYSQL_DELIVER_FAIL);
-        LOG_ERROR("deliver mysql login request fail", K(ret), K(tenant_id), K(req));
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
+  MTL_SWITCH(tenant_id) {
+    ObTenant *tenant = static_cast<ObTenant *>(MTL_CTX());
+    if (OB_ISNULL(tenant)) {
+      ret = OB_TENANT_NOT_IN_SERVER;
+      LOG_WARN("tenant is NULL", K(ret), K(tenant_id));
+    } else if (tenant->has_stopped()) {
+      ret = OB_TENANT_NOT_IN_SERVER;
+      LOG_WARN("tenant is stopped", K(ret), K(tenant_id));
+    } else if (FALSE_IT(set_sql_sock_mem_pool_tenant_id(req, tenant_id))) {
+    } else if (OB_FAIL(tenant->recv_request(req))) {
+      LOG_WARN("dispatch request fail", K(ret), K(tenant_id), K(req));
+      if (OB_SIZE_OVERFLOW == ret) {
         LOG_DBA_ERROR_V2(OB_TENANT_REQUEST_QUEUE_FULL, ret,
-                "tenant: ", tenant_id, " mysql login request queue is full. ",
-                " [suggestion] check T", tenant_id, "_MysqlQueueTh thread stack to see which"
-                " procedure is taking too long or is blocked.");
-      } else {
-        LOG_INFO("succeed to dispatch to tenant mysql queue", K(tenant_id));
+          "deliver mysql request to tenant: ", tenant->id(), " queue failed, the queue is full. ",
+          "[suggestion] check T", tenant->id(), "_L0_G0 thread stack to see which "
+          "procedure is taking too long or is blocked or check __all_virtual_thread view.");
       }
-      mysql_queue->queue_.dec_push_worker_count();
-      // print queue length per 10s
-      if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-        LOG_INFO("mysql login queue", K(mysql_queue->queue_.size()));
-      }
-
-      // if (0 != MTL(obmysql::ObSqlNioServer *)
-      //              ->get_nio()
-      //              ->regist_sess(req.get_server_handle_context())) {
-      //   ret = OB_ERR_UNEXPECTED;
-      //   LOG_ERROR("regist sess for tenant fail", K(ret), K(tenant_id), K(req));
-      // }
-    } else {
-      LOG_WARN("cannot switch to tenant", K(ret), K(tenant_id));
     }
+  } else {
+    LOG_WARN("cannot switch to tenant", K(ret), K(tenant_id));
   }
 
-  // failed to dispatch, push to global mysql queue
-  if (OB_FAIL(ret)) {
-    if (!global_mysql_queue->queue_.push(&req, MAX_QUEUE_LEN)) {
-      ret = OB_QUEUE_OVERFLOW;
-      EVENT_INC(MYSQL_DELIVER_FAIL);
-      LOG_ERROR("deliver request fail", K(req));
-    } else {
-      LOG_INFO("fail to dispatch to tenant, but push to global mysql queue", K(ret));
-      ret = OB_SUCCESS;
-    }
-  }
   return ret;
 }
 
 } // namespace oceanbase
-
-
-int ObSrvDeliver::get_mysql_login_thread_count_to_set(int cfg_cnt)
-{
-  int set_cnt = 0;
-  if (0 < cfg_cnt) {
-    set_cnt = cfg_cnt;
-  } else {
-    if (!lib::is_mini_mode()) {
-      set_cnt = observer::ObSrvDeliver::MYSQL_TASK_THREAD_CNT;
-    } else {
-      set_cnt = observer::ObSrvDeliver::MINI_MODE_MYSQL_TASK_THREAD_CNT;
-    }
-  }
-  return set_cnt;
-}
-
-int ObSrvDeliver::set_mysql_login_thread_count(int cnt)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(mysql_queue_->set_thread_count(cnt))) {
-    SERVER_LOG(WARN, "set thread count for mysql login failed", K(ret));
-  } else {
-    LOG_INFO("set mysql login thread count success", K(cnt));
-  }
-  return ret;
-}
 
 ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler,
                            ObRpcSessionHandler &session_handler,
@@ -348,7 +286,6 @@ ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler,
       host_(),
       ddl_queue_(NULL),
       ddl_parallel_queue_(NULL),
-      mysql_queue_(NULL),
       diagnose_queue_(NULL),
       session_handler_(session_handler),
       gctx_(gctx)
@@ -370,11 +307,6 @@ int ObSrvDeliver::init()
 void ObSrvDeliver::stop()
 {
   stop_ = true;
-  if (NULL != mysql_queue_) {
-    // stop sql service first
-    mysql_queue_->stop();
-    mysql_queue_->wait();
-  }
   if (NULL != diagnose_queue_) {
     // stop sql service first
     diagnose_queue_->stop();
@@ -415,8 +347,6 @@ int ObSrvDeliver::init_queue_threads()
   // TODO: fufeng, make it configurable
   if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLQueueTh, "DDLQueueTh", ddl_queue_))) {
   } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DDLPQueueTh, PARALLEL_DDL_THREAD_NAME, ddl_parallel_queue_))) {
-  } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::MysqlQueueTh,
-                                         "MysqlQueueTh", mysql_queue_))) {
   } else if (OB_FAIL(create_queue_thread(lib::TGDefIDs::DiagnoseQueueTh,
                                          "DiagnoseQueueTh", diagnose_queue_))) {
   } else {
@@ -655,7 +585,7 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
           EVENT_INC(MYSQL_DELIVER_FAIL);
           LOG_ERROR("deliver request fail", K(req));
         }
-      } else if (OB_NOT_NULL(mysql_queue_)) {
+      } else {
         char user_name_buf[OB_MAX_USER_NAME_BUF_LENGTH] = "";
         char tenant_name_buf[OB_MAX_TENANT_NAME_LENGTH + 1] = "";
         uint64_t tenant_id = OB_INVALID_TENANT_ID;
@@ -694,20 +624,9 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
           req.set_diagnostic_info(conn->get_diagnostic_info());
         }
         ObTenantDiagnosticInfoSummaryGuard g(di == nullptr ? nullptr : di->get_summary_slot());
-        if (GCONF._enable_new_sql_nio && GCONF._enable_tenant_sql_net_thread &&
-            OB_SUCC(ret) && is_valid_tenant_id(tenant_id)) {
-          if (OB_FAIL(dispatch_req(tenant_id, req, mysql_queue_))) {
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(dispatch_req(req))) {
             LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(tenant_id), K(req));
-          }
-        } else {
-          if (OB_SUCC(ret) && !mysql_queue_->queue_.push(&req, MAX_QUEUE_LEN)) {
-            ret = OB_QUEUE_OVERFLOW;
-            EVENT_INC(MYSQL_DELIVER_FAIL);
-            LOG_ERROR("deliver request fail", K(req));
-          }
-          // print queue length per 10s
-          if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-            LOG_INFO("mysql login queue", K(mysql_queue_->queue_.size()));
           }
         }
       }

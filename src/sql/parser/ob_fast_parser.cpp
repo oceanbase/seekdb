@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_PARSER
 #include "ob_fast_parser.h"
-#include "sql/udr/ob_udr_struct.h"
 #include "share/ob_define.h"
 #include "lib/ash/ob_active_session_guard.h"
 #include "lib/worker.h"
@@ -87,7 +86,7 @@ int ObFastParser::parse(const common::ObString &stmt,
 ObFastParserBase::ObFastParserBase(ObIAllocator &allocator, const FPContext fp_ctx) :
   no_param_sql_(nullptr), no_param_sql_len_(0), param_num_(0), is_oracle_mode_(false),
   is_batched_multi_stmt_split_on_(fp_ctx.enable_batched_multi_stmt_),
-  is_udr_mode_(fp_ctx.is_udr_mode_), def_name_ctx_(fp_ctx.def_name_ctx_), cur_token_begin_pos_(0),
+  cur_token_begin_pos_(0),
   copy_begin_pos_(0), copy_end_pos_(0), tmp_buf_(nullptr), tmp_buf_len_(0),
   last_escape_check_pos_(0), try_check_tick_(0), param_node_list_(nullptr),
   tail_param_node_(nullptr), cur_token_type_(INVALID_TOKEN), allocator_(allocator),
@@ -1069,25 +1068,6 @@ int64_t ObFastParserBase::get_question_mark(ObQuestionMarkCtx *ctx,
   return idx;
 }
 
-int64_t ObFastParserBase::get_question_mark_by_defined_name(QuestionMarkDefNameCtx *ctx,
-                                                            const char *name,
-                                                            const int64_t name_len)
-{
-  int64_t idx = -1;
-  if (OB_UNLIKELY(NULL == ctx || NULL == name)) {
-    (void)fprintf(stderr, "ERROR question mark ctx or name is NULL\n");
-  } else if (ctx->name_ != NULL) {
-    for (int64_t i = 0; -1 == idx && i < ctx->count_; ++i) {
-      if (NULL == ctx->name_[i]) {
-        (void)fprintf(stderr, "ERROR name_ in question mark ctx is null\n");
-      } else if (0 == STRNCASECMP(ctx->name_[i], name, name_len)) {
-        idx = i;
-      }
-    }
-  }
-  return idx;
-}
-
 inline char* ObFastParserBase::parse_strndup(const char *str, size_t nbyte, char *buf)
 {
   MEMMOVE(buf, str, nbyte);
@@ -1630,21 +1610,11 @@ int ObFastParserBase::process_ps_statement()
     node->text_len_ = text_len;
     node->raw_text_ = raw_sql_.ptr(cur_token_begin_pos_);
     if (is_num) {
-      if (is_udr_mode_) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "question mark by number");
-        LOG_WARN("question mark by number not supported", K(ret));
-      } else {
-        node->value_ = strtoll(&node->raw_text_[1], NULL, 10);
-      }
+      node->value_ = strtoll(&node->raw_text_[1], NULL, 10);
     } else {
       int64_t ind = -1;
-      if (is_udr_mode_ && nullptr != def_name_ctx_) {
-        ind = get_question_mark_by_defined_name(def_name_ctx_, node->raw_text_, text_len);
-      } else {
-        ind = get_question_mark(&question_mark_ctx_, &allocator_,
-                                node->raw_text_, text_len, buf);
-      }
+      ind = get_question_mark(&question_mark_ctx_, &allocator_,
+                              node->raw_text_, text_len, buf);
       node->value_ = ind;
       // buf points to the beginning of the next available memory
       buf += text_len + 1;

@@ -167,8 +167,7 @@ int ObMySQLRequestManager::record_request(const ObAuditRecordData &audit_record,
                      + audit_record.tenant_name_len_
                      + audit_record.user_name_len_
                      + audit_record.db_name_len_
-                     + audit_record.params_value_len_
-                     + audit_record.rule_name_len_;
+                     + audit_record.params_value_len_;
     if (NULL == (buf = (char*)alloc(total_size))) {
       if (REACH_TIME_INTERVAL(100 * 1000)) {
         SERVER_LOG(WARN, "record concurrent fifoallocator alloc mem failed",
@@ -189,12 +188,6 @@ int ObMySQLRequestManager::record_request(const ObAuditRecordData &audit_record,
         MEMCPY(buf + pos, audit_record.params_value_, audit_record.params_value_len_);
         record->data_.params_value_ = buf + pos;
         pos += audit_record.params_value_len_;
-      }
-      //deep copy rule name
-      if ((audit_record.rule_name_len_ > 0) && (NULL != audit_record.rule_name_)) {
-        MEMCPY(buf + pos, audit_record.rule_name_, audit_record.rule_name_len_);
-        record->data_.rule_name_ = buf + pos;
-        pos += audit_record.rule_name_len_;
       }
       //deep copy tenant_name
       if ((audit_record.tenant_name_len_ > 0) && (NULL != audit_record.tenant_name_)) {
@@ -279,7 +272,7 @@ int ObMySQLRequestManager::get_mem_limit(uint64_t tenant_id,
   if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(tenant_id,
                                                           alloc,
                                                           ObDataTypeCastParams(),
-                                                          ObString(OB_SV_SQL_AUDIT_PERCENTAGE),
+                                                          SYS_VAR_OB_SQL_AUDIT_PERCENTAGE,
                                                           obj_val))) {
     LOG_WARN("failed to get global sys variable", K(ret), K(tenant_id), K(OB_SV_SQL_AUDIT_PERCENTAGE), K(obj_val));
   } else if (OB_FAIL(obj_val.get_int(mem_pct))) {

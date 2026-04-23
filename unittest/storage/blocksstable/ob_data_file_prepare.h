@@ -73,7 +73,6 @@ private:
   int64_t disk_num_;
   ObLogFileHandler clog_file_handler_;
   ObITenantMemLimitGetter *getter_;
-  ObTimerService *timer_service_;
 };
 
 class TestDataFilePrepare : public ::testing::Test
@@ -134,8 +133,7 @@ TestDataFilePrepareUtil::TestDataFilePrepareUtil()
     allocator_(ObModIds::TEST),
     disk_num_(0),
     clog_file_handler_(),
-    getter_(nullptr),
-    timer_service_(nullptr)
+    getter_(nullptr)
 {
 }
 
@@ -268,6 +266,12 @@ int TestDataFilePrepareUtil::open()
   }
 
   if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObTimerService::get_instance().start())) {
+      STORAGE_LOG(WARN, "failed to start timer service", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
     ObTenantIOConfig io_config = ObTenantIOConfig::default_instance();
     const int64_t async_io_thread_count = 8;
     const int64_t sync_io_thread_count = 2;
@@ -275,12 +279,6 @@ int TestDataFilePrepareUtil::open()
 
     static ObTenantBase tenant_ctx(OB_SERVER_TENANT_ID);
     ObTenantEnv::set_tenant(&tenant_ctx);
-    timer_service_ = OB_NEW(ObTimerService, "TimerService", OB_SERVER_TENANT_ID);
-    if (OB_FAIL(timer_service_->start())) {
-      STORAGE_LOG(WARN, "start timer service fail", K(ret), K(storage_env_));
-    } else {
-      tenant_ctx.set(timer_service_);
-    }
 
     bool need_format = false;
     if (OB_FAIL(ret)) {
@@ -353,12 +351,9 @@ void TestDataFilePrepareUtil::destory()
       STORAGE_LOG_RET(ERROR, OB_ERR_SYS, "failed to rm data dir", K(cmd), K(errno), KERRMSG);
     }
   }
-  if (nullptr != timer_service_) {
-    timer_service_->stop();
-    timer_service_->wait();
-    timer_service_->destroy();
-    ob_delete(timer_service_);
-  }
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
   getter_ = nullptr;
   is_inited_ = false;
 }

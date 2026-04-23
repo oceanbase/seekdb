@@ -531,7 +531,6 @@ private:
   MockCkptMap ckpt_map_;
   MockObLocalityManager mock_locality_manager_;
   obrpc::ObBatchRpc batch_rpc_;
-  int batch_rpc_tg_id_;
   omt::ObSharedTimer shared_timer_;
   ObTimerService *timer_service_ = nullptr; // for timer
 };

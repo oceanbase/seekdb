@@ -168,9 +168,7 @@ TestSqlUtils::TestSqlUtils()
     memset(schema_file_path_, '\0', 128);
     exec_ctx_.set_sql_ctx(&sql_ctx_);
 
-    static ObTimerService timer_service(sys_tenant_id_);
     static ObTenantBase tenant_ctx(sys_tenant_id_);
-    tenant_ctx.set(&timer_service);
     ObTenantEnv::set_tenant(&tenant_ctx);
 
     auto& cluster_version = ObClusterVersion::get_instance();
@@ -191,6 +189,7 @@ TestSqlUtils::TestSqlUtils()
 void TestSqlUtils::init()
 {
   int64_t ret = OB_SUCCESS;
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   //common::ObSessionDIBuffer::get_instance().init(OB_MAX_SERVER_SESSION_CNT, 4);
   //common::ObDITenantCache::get_instance().init(100000, 4);
   schema_service_ = new MockSchemaService();
@@ -318,6 +317,9 @@ void TestSqlUtils::destroy()
     delete pc;
   }
   ObKVGlobalCache::get_instance().destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 void TestSqlUtils::load_schema_from_file(const char *file_path) {

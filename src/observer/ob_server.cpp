@@ -425,8 +425,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init server startup task handler failed", KR(ret));
     } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
       LOG_ERROR("init server storage meta handler failed", KR(ret));
-    } else if (OB_FAIL(common::occam::ObThreadHungDetector::get_instance().init())) {
-      LOG_ERROR("init sObThreadHungDetector failed", KR(ret));
     } else if (OB_FAIL(palf::election::GLOBAL_INIT_ELECTION_MODULE())) {
       LOG_ERROR("init election module failed", KR(ret));
     } else if (OB_FAIL(init_multi_tenant())) {
@@ -576,10 +574,6 @@ void ObServer::destroy()
     ObBGThreadMonitor::get_instance().destroy();
     FLOG_INFO("background thread monitor destroyed");
 
-    FLOG_INFO("begin to destroy thread hung detector");
-    common::occam::ObThreadHungDetector::get_instance().destroy();
-    FLOG_INFO("thread hung detector destroyed");
-
     FLOG_INFO("begin to destroy unix domain listener");
     unix_domain_listener_.destroy();
     FLOG_INFO("unix domain listener destroyed");
@@ -587,10 +581,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy table service");
     table_service_.destroy();
     FLOG_INFO("table service destroyed");
-
-    FLOG_INFO("begin to destroy batch rpc");
-    batch_rpc_.destroy();
-    FLOG_INFO("batch rpc destroyed");
 
     FLOG_INFO("begin to destroy schema service");
     schema_service_.destroy();
@@ -717,10 +707,6 @@ void ObServer::destroy()
     SERVER_STORAGE_META_SERVICE.destroy();
     FLOG_INFO("server storage meta service destroyed");
 
-    FLOG_INFO("begin to destroy io device");
-    ObIODeviceWrapper::get_instance().destroy();
-    FLOG_INFO("io device destroyed");
-
     FLOG_INFO("begin to destroy memory dump");
     ObMemoryDump::get_instance().destroy();
     FLOG_INFO("memory dump destroyed");
@@ -822,9 +808,9 @@ void ObServer::destroy()
 
     deinit_plugin();
 
-    FLOG_INFO("begin to destroy log io device wrapper");
-    LOG_IO_DEVICE_WRAPPER.destroy();
-    FLOG_INFO("log io device wrapper destroyed");
+    FLOG_INFO("begin to destroy io device");
+    ObIODeviceWrapper::get_instance().destroy();
+    FLOG_INFO("io device destroyed");
 
     has_destroy_ = true;
     FLOG_INFO("[OBSERVER_NOTICE] destroy observer end");
@@ -1307,10 +1293,6 @@ int ObServer::stop()
     table_service_.stop();
     FLOG_INFO("table service stopped");
 
-    FLOG_INFO("begin to stop batch rpc");
-    batch_rpc_.stop();
-    FLOG_INFO("batch rpc stopped");
-
     FLOG_INFO("begin to stop schema service");
     schema_service_.stop();
     FLOG_INFO("schema service stopped");
@@ -1338,10 +1320,6 @@ int ObServer::stop()
     FLOG_INFO("begin to stop bgthread monitor");
     ObBGThreadMonitor::get_instance().stop();
     FLOG_INFO("bgthread monitor stopped");
-
-    FLOG_INFO("begin to stop thread hung detector");
-    common::occam::ObThreadHungDetector::get_instance().stop();
-    FLOG_INFO("thread hung detector stopped");
 
     FLOG_INFO("begin to stop timer");
     TG_STOP(lib::TGDefIDs::ServerGTimer);
@@ -1566,10 +1544,6 @@ int ObServer::wait()
     table_service_.wait();
     FLOG_INFO("wait table service success");
 
-    FLOG_INFO("begin to wait batch rpc");
-    batch_rpc_.wait();
-    FLOG_INFO("wait batch rpc success");
-
     FLOG_INFO("begin to wait schema service");
     schema_service_.wait();
     FLOG_INFO("wait schema service success");
@@ -1577,11 +1551,6 @@ int ObServer::wait()
     FLOG_INFO("begin to wait bg thread monitor");
     ObBGThreadMonitor::get_instance().wait();
     FLOG_INFO("wait bg thread monitor success");
-
-    FLOG_INFO("begin to wait thread hung detector");
-    common::occam::ObThreadHungDetector::get_instance().wait();
-    FLOG_INFO("wait thread hung detector success");
-
 
 #ifdef ENABLE_IMC
     FLOG_INFO("begin to wait imc tasks");
@@ -2226,12 +2195,6 @@ int ObServer::init_io()
                                                   data_disk_percentage,
                                                   log_disk_percentage))) {
           LOG_ERROR("cal_all_part_disk_size failed", KR(ret));
-        } else if (OB_FAIL(LOG_IO_DEVICE_WRAPPER.init(storage_env_.clog_dir_,
-                                                      io_config.disk_io_thread_count_,
-                                                      max_io_depth,
-                                                      &OB_IO_MANAGER,
-                                                      &ObDeviceManager::get_instance()))) {
-          LOG_ERROR("log_io_device_wrapper init failed", KR(ret));
         }
         if (OB_SUCC(ret)) {
           storage_env_.data_disk_size_ = data_disk_size;
@@ -2373,11 +2336,6 @@ int ObServer::init_network()
     LOG_ERROR("get rpc proxy fail", KR(ret));
   } else if (OB_FAIL(net_frame_.get_proxy(table_rpc_proxy_))) {
     LOG_ERROR("get rpc proxy fail", KR(ret));
-  } else if (OB_FAIL(batch_rpc_.init(net_frame_.get_batch_rpc_req_transport(),
-                                     self_addr_))) {
-    LOG_ERROR("init batch rpc failed", KR(ret));
-  } else if (OB_FAIL(TG_SET_RUNNABLE_AND_START(lib::TGDefIDs::BRPC, batch_rpc_))) {
-    STORAGE_LOG(WARN, "fail to start batch rpc proxy", KR(ret));
   } else {
     srv_rpc_proxy_.set_server(get_self());
   }
@@ -2561,7 +2519,7 @@ int ObServer::init_sql_runner()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(executor_rpc_.init(&executor_proxy_, &batch_rpc_))) {
+  if (OB_FAIL(executor_rpc_.init(&executor_proxy_))) {
     LOG_ERROR("init executor rpc fail", K(ret));
   } else if (OB_FAIL(ObDASTaskResultGCRunner::schedule_timer_task())) {
     LOG_WARN("schedule das result gc runner failed", KR(ret));

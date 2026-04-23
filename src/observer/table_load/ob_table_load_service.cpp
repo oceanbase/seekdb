@@ -38,51 +38,6 @@ using namespace storage;
 using namespace table;
 using namespace omt;
 
-/**
- * ObCheckTenantTask
- */
-
-void ObTableLoadService::ObCheckTenantTask::runTimerTask()
-{
-  int ret = OB_SUCCESS;
-  LOG_DEBUG("table load check tenant");
-  if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check_tenant", KR(ret));
-    // abort all client task
-    service_.abort_all_client_task(ret);
-    // fail all current tasks
-    service_.fail_all_ctx(ret);
-  }
-}
-
-/**
- * ObHeartBeatTask
- */
-
-void ObTableLoadService::ObHeartBeatTask::runTimerTask()
-{
-  int ret = OB_SUCCESS;
-  LOG_DEBUG("table load heart beat");
-  ObTableLoadManager &manager = service_.get_manager();
-  ObArray<ObTableLoadTableCtx *> table_ctx_array;
-  table_ctx_array.set_tenant_id(MTL_ID());
-  if (OB_FAIL(manager.get_all_table_ctx(table_ctx_array))) {
-    LOG_WARN("fail to get all table ctx", KR(ret));
-  }
-  for (int64_t i = 0; i < table_ctx_array.count(); ++i) {
-    ObTableLoadTableCtx *table_ctx = table_ctx_array.at(i);
-    if (nullptr != table_ctx->coordinator_ctx_
-        && table_ctx->coordinator_ctx_->enable_heart_beat()) {
-      ObTableLoadCoordinator coordinator(table_ctx);
-      if (OB_FAIL(coordinator.init())) {
-        LOG_WARN("fail to init coordinator", KR(ret));
-      } else if (OB_FAIL(coordinator.heart_beat())) {
-        LOG_WARN("fail to coordinator heart beat", KR(ret));
-      }
-    }
-    manager.revert_table_ctx(table_ctx);
-  }
-}
 
 /**
  * ObGCTask
@@ -101,7 +56,6 @@ void ObTableLoadService::ObGCTask::runTimerTask()
   for (int64_t i = 0; i < table_ctx_array.count(); ++i) {
     ObTableLoadTableCtx *table_ctx = table_ctx_array.at(i);
     if (gc_mark_delete(table_ctx)) {
-    } else if (gc_heart_beat_expired_ctx(table_ctx)) {
     } else if (gc_table_not_exist_ctx(table_ctx)) {
     }
     manager.revert_table_ctx(table_ctx);
@@ -132,42 +86,6 @@ bool ObTableLoadService::ObGCTask::gc_mark_delete(ObTableLoadTableCtx *table_ctx
         LOG_WARN("fail to remove table ctx", KR(ret), K(table_id), K(task_id), K(dest_table_id));
       }
       is_removed = true; // skip other gc
-    }
-  }
-  return is_removed;
-}
-
-bool ObTableLoadService::ObGCTask::gc_heart_beat_expired_ctx(ObTableLoadTableCtx *table_ctx)
-{
-  int ret = OB_SUCCESS;
-  bool is_removed = false;
-  if (OB_ISNULL(table_ctx)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected table ctx is null", KR(ret));
-    is_removed = true;
-  } else {
-    const uint64_t table_id = table_ctx->param_.table_id_;
-    const int64_t task_id = table_ctx->ddl_param_.task_id_;
-    const uint64_t dest_table_id = table_ctx->ddl_param_.dest_table_id_;
-    // check if table ctx is removed
-    if (!table_ctx->is_in_map()) {
-      LOG_DEBUG("table ctx is removed", K(table_id), K(task_id), K(dest_table_id),
-                "ref_count", table_ctx->get_ref_count());
-      is_removed = true;
-    }
-    // check if heart beat expired, ignore coordinator
-    else if (nullptr == table_ctx->coordinator_ctx_ && nullptr != table_ctx->store_ctx_) {
-      if (OB_UNLIKELY(
-            table_ctx->store_ctx_->check_heart_beat_expired(HEART_BEEAT_EXPIRED_TIME_US))) {
-        FLOG_INFO("store heart beat expired, abort", K(table_id), K(task_id), K(dest_table_id));
-        bool is_stopped = false;
-        ObTableLoadStore::abort_ctx(table_ctx, OB_CANCELED, is_stopped);
-        table_ctx->mark_delete();
-        if (is_stopped && OB_FAIL(ObTableLoadService::remove_ctx(table_ctx))) {
-          LOG_WARN("fail to remove table ctx", KR(ret), K(table_id), K(task_id), K(dest_table_id));
-        }
-        is_removed = true; // skip other gc
-      }
     }
   }
   return is_removed;
@@ -846,9 +764,6 @@ void ObTableLoadService::put_ctx(ObTableLoadTableCtx *table_ctx)
 ObTableLoadService::ObTableLoadService(const uint64_t tenant_id)
   : tenant_id_(tenant_id),
     manager_(tenant_id),
-    tg_id_(INVALID_TG_ID),
-    check_tenant_task_(*this),
-    heart_beat_task_(*this),
     gc_task_(*this),
     release_task_(*this),
     client_task_auto_abort_task_(*this),
@@ -883,18 +798,10 @@ int ObTableLoadService::start()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadService not init", KR(ret), KP(this));
   } else {
-    if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TLD_HTimer, tg_id_))) {
-      LOG_WARN("fail to create tld heart beat timer", KR(ret));
-    } else if (OB_FAIL(TG_START(tg_id_))) {
-      LOG_WARN("fail to start tld heart beat timer", KR(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(tg_id_, heart_beat_task_, HEART_BEEAT_INTERVAL, true))) {
-      LOG_WARN("fail to schedule heart beat task", KR(ret));
-    } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
+    if (OB_FAIL(timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
       LOG_WARN("fail to set gc timer's run wrapper", KR(ret));
     } else if (OB_FAIL(timer_.init("TLD_Timer", ObMemAttr(MTL_ID(), "TLD_TIMER")))) {
       LOG_WARN("fail to init gc timer", KR(ret));
-    } else if (OB_FAIL(timer_.schedule(check_tenant_task_, CHECK_TENANT_INTERVAL, true))) {
-      LOG_WARN("fail to schedule check tenant task", KR(ret));
     } else if (OB_FAIL(timer_.schedule(gc_task_, GC_INTERVAL, true))) {
       LOG_WARN("fail to schedule gc task", KR(ret));
     } else if (OB_FAIL(timer_.schedule(release_task_, RELEASE_INTERVAL, true))) {
@@ -915,18 +822,12 @@ int ObTableLoadService::stop()
   int ret = OB_SUCCESS;
   is_stop_ = true;
   timer_.stop();
-  if (INVALID_TG_ID != tg_id_) {
-    TG_STOP(tg_id_);
-  }
   return ret;
 }
 
 void ObTableLoadService::wait()
 {
   timer_.wait();
-  if (INVALID_TG_ID != tg_id_) {
-    TG_WAIT(tg_id_);
-  }
   release_all_ctx();
 }
 
@@ -934,10 +835,6 @@ void ObTableLoadService::destroy()
 {
   is_inited_ = false;
   timer_.destroy();
-  if (INVALID_TG_ID != tg_id_) {
-    TG_DESTROY(tg_id_);
-    tg_id_ = INVALID_TG_ID;
-  }
 }
 
 void ObTableLoadService::abort_all_client_task(int error_code)

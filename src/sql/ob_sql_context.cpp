@@ -229,7 +229,6 @@ void ObSqlCtx::reset()
   is_execute_call_stmt_ = false;
   is_text_ps_mode_ = false;
   enable_strict_defensive_check_ = false;
-  enable_user_defined_rewrite_ = false;
   is_bulk_ = false;
   ins_opt_ctx_.reset();
   ccl_rule_id_ = 0;

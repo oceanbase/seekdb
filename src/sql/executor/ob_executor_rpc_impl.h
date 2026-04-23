@@ -22,7 +22,6 @@
 #include "lib/allocator/ob_allocator.h"
 #include "rpc/obrpc/ob_rpc_proxy.h"
 #include "share/ob_scanner.h"
-#include "share/rpc/ob_batch_rpc.h"
 #include "sql/executor/ob_task.h"
 #include "sql/executor/ob_task_info.h"
 #include "sql/executor/ob_slice_id.h"
@@ -291,12 +290,12 @@ private:
 class ObExecutorRpcImpl
 {
 public:
-  ObExecutorRpcImpl() : proxy_(NULL), batch_rpc_(nullptr) { }
+  ObExecutorRpcImpl() : proxy_(NULL) { }
   virtual ~ObExecutorRpcImpl() {}
   /*
    * set rpc proxy
    * */
-  int init(obrpc::ObExecutorRpcProxy *rpc_proxy, obrpc::ObBatchRpc *batch_rpc);
+  int init(obrpc::ObExecutorRpcProxy *rpc_proxy);
   /*
    * Send a task and block waiting until the peer returns the execution status
    * Save the execution handle in handler, and subsequently data can be received through handler
@@ -331,7 +330,6 @@ private:
   /* functions */
   /* variables */
   obrpc::ObExecutorRpcProxy *proxy_;
-  obrpc::ObBatchRpc *batch_rpc_;
   /* other */
   DISALLOW_COPY_AND_ASSIGN(ObExecutorRpcImpl);
 };

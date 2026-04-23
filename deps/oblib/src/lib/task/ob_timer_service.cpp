@@ -19,6 +19,7 @@
 #include "lib/task/ob_timer_monitor.h"       // ObTimerMonitor
 #include "lib/thread/thread_mgr.h"           // get_tenant_tg_helper
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/stat/ob_diagnostic_info_util.h"
 
 namespace oceanbase
 {
@@ -89,6 +90,7 @@ TaskToken::~TaskToken()
 
 void ObTimerTaskThreadPool::handle(void *task_token)
 {
+  int ret = OB_SUCCESS;
   TaskToken *token = reinterpret_cast<TaskToken *>(task_token);
   if (nullptr == token) {
     OB_LOG_RET(WARN, OB_ERR_NULL_VALUE, "TaskToken is NULL", K(ret));
@@ -107,7 +109,15 @@ void ObTimerTaskThreadPool::handle(void *task_token)
     ObCurTraceId::reset(); // reset trace_id
     set_ext_tname(token);
     ObDIActionGuard(typeid(*token->task_));
-    token->task_->runTimerTask();
+    // run timer task
+    std::function<void()> fn = [&]() -> void {
+      token->task_->runTimerTask();
+    };
+    if (NULL != token->timer_->get_run_wrapper()) {
+      lib_mtl_switch(token->timer_->get_run_wrapper(), fn);
+    } else {
+      fn();
+    }
     clear_ext_tname(); // reset ext_tname
     const int64_t end_time = ::oceanbase::common::ObTimeUtility::current_time();
     const int64_t end_time_sys = ObSysTime::now().toMicroSeconds();
@@ -196,8 +206,6 @@ int ObTimerService::start()
   lib::ObMutexGuard mutex_guard(mutex_);
   ObMonitor<Mutex>::Lock guard(monitor_);
   if (is_stopped_) {
-    worker_thread_pool_.set_run_wrapper(get_tenant_tg_helper());
-    set_run_wrapper(get_tenant_tg_helper());
     is_stopped_ = false;
     const int64_t reserve_size = INITIAL_ELEMENT_NUM * sizeof(TaskToken *);
     if (OB_FAIL(priority_task_queue_.reserve(reserve_size))) {
@@ -457,13 +465,21 @@ int ObTimerService::schedule_task(TaskToken *token)
               OB_LOG(WARN, "push TaskToken into priority_task_queue failed",
                   KP(token), KPC(token), K_(tenant_id), K(ret));
               delete_token(token);
-            } else {}
+            } else {
+              // Only notify run1() when the newly inserted token becomes the new
+              // earliest-expiring task (i.e. it landed at the head of the queue).
+              // In all other cases run1() is already waiting with the correct
+              // deadline and will wake up on its own timed_wait – an extra notify
+              // would just cause a spurious wakeup and immediate re-sleep.
+              if (pos == priority_task_queue_.begin()) {
+                monitor_.notify_all();
+              }
+            }
           }
         }
       } else {}
     } else {}
   }
-  monitor_.notify_all();
   return ret;
 }
 
@@ -476,55 +492,6 @@ bool ObTimerService::task_exist(const ObTimer *timer, const ObTimerTask &task)
     exist = has_same_task_and_timer(token, timer, &task);
   }
   return exist;
-}
-
-int ObTimerService::mtl_new(ObTimerService *&timer_service)
-{
-  int ret = OB_SUCCESS;
-  timer_service = OB_NEW(ObTimerService, ObMemAttr(mtl_get_id(), "timer_service"), mtl_get_id());
-  if (nullptr == timer_service) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "failed to alloc tenant session manager", K(ret));
-  }
-  return ret;
-}
-
-int ObTimerService::mtl_start(ObTimerService *&timer_service)
-{
-  int ret = OB_SUCCESS;
-  if (nullptr == timer_service) {
-    ret = OB_ERR_NULL_VALUE;
-    OB_LOG(WARN, "timer service is NULL", K(ret));
-  } else if (OB_FAIL(timer_service->start())) {
-    OB_LOG(WARN, "failed to start timer service", K(ret));
-  } else {}
-  return ret;
-}
-
-void ObTimerService::mtl_stop(ObTimerService *&timer_service)
-{
-  if (nullptr != timer_service) {
-    timer_service->stop();
-    OB_LOG(INFO, "success to stop timer service");
-  }
-}
-
-void ObTimerService::mtl_wait(ObTimerService *&timer_service)
-{
-  if (nullptr != timer_service) {
-    timer_service->wait();
-    OB_LOG(INFO, "success to wait timer service");
-  }
-}
-
-void ObTimerService::mtl_destroy(ObTimerService *&timer_service)
-{
-  if (nullptr != timer_service) {
-    timer_service->destroy();
-    OB_LOG(INFO, "success to wait timer service");
-    OB_DELETE(ObTimerService, "timer_service", timer_service);
-    timer_service = nullptr;
-  }
 }
 
 bool ObTimerService::has_running_task(const ObTimer *timer, const TaskToken *&running_task_token) const
@@ -542,6 +509,7 @@ bool ObTimerService::has_running_task(const ObTimer *timer, const TaskToken *&ru
 int ObTimerService::pop_task(int64_t now, TaskToken *&task_token, int64_t &st)
 {
   int ret = OB_SUCCESS;
+  st = INT64_MAX;
   VecIter it = priority_task_queue_.begin();
   bool need_continue = true;
   while(it != priority_task_queue_.end() && OB_SUCC(ret) && need_continue) {
@@ -553,11 +521,12 @@ int ObTimerService::pop_task(int64_t now, TaskToken *&task_token, int64_t &st)
       ret = OB_ERR_NULL_VALUE;
       OB_LOG(WARN, "ObTimer is NULL", KP(token), KPC(token), K_(tenant_id), K(ret));
     } else if (token->scheduled_time_ > now) {
-      st = token->scheduled_time_;
+      st = MIN(st, token->scheduled_time_);
       need_continue = false;
     } else {
       const TaskToken *running_task_token = nullptr;
       if (has_running_task(token->timer_, running_task_token)) {
+        st = MIN(st, token->scheduled_time_);
         ++it;
         const int64_t now = ObSysTime::now().toMicroSeconds();
         const int64_t total_delay = now - token->scheduled_time_;

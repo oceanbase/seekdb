@@ -1,0 +1,3 @@
+alter system set _ob_ash_enable = true;
+program	module	action	thread_id	cnt
+alter system set _ob_ash_enable = false;

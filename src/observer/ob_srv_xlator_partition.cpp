@@ -221,8 +221,6 @@ void oceanbase::observer::init_srv_xlator_for_others(ObSrvRpcXlator *xlator) {
   //standby switchover/failover
   RPC_PROCESSOR(ObRpcGetLSSyncScnP, gctx_);
 
-  RPC_PROCESSOR(ObSyncRewriteRulesP, gctx_);
-
   RPC_PROCESSOR(ObNetEndpointRegisterP, gctx_);
   RPC_PROCESSOR(ObNetEndpointPredictIngressP, gctx_);
   RPC_PROCESSOR(ObNetEndpointSetIngressP, gctx_);

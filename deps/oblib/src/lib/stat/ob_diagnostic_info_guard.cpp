@@ -89,8 +89,11 @@ ObDIActionGuard::ObDIActionGuard(const char *program, const char *module, const 
   : prev_info_(nullptr),
     flags_(0)
 {
-  save_prev_action_info(program != nullptr, module != nullptr, action != nullptr);
-  ObLocalDiagnosticInfo::set_service_action(program, module, action);
+  if (lib::is_ash_enabled()) {
+    is_active_ = 1;
+    save_prev_action_info(program != nullptr, module != nullptr, action != nullptr);
+    ObLocalDiagnosticInfo::set_service_action(program, module, action);
+  }
 }
 
 void ObDIActionGuard::save_prev_action_info(bool has_program, bool has_module, bool has_action)
@@ -139,10 +142,13 @@ ObDIActionGuard::ObDIActionGuard(const ObString &action)
   : prev_info_(nullptr),
     flags_(0)
 {
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (di != nullptr) {
-    save_prev_action_info(false, false, true);
-    snprintf(di->get_ash_stat().action_, ASH_ACTION_STR_LEN, "%.*s", action.length(), action.ptr());
+  if (lib::is_ash_enabled()) {
+    is_active_ = 1;
+    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
+    if (di != nullptr) {
+      save_prev_action_info(false, false, true);
+      snprintf(di->get_ash_stat().action_, ASH_ACTION_STR_LEN, "%.*s", action.length(), action.ptr());
+    }
   }
 }
 
@@ -150,11 +156,14 @@ ObDIActionGuard::ObDIActionGuard(const std::type_info &type_info)
   : prev_info_(nullptr),
     flags_(0)
 {
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (di != nullptr) {
-    save_prev_action_info(false, false, true);
-    int64_t len = ASH_ACTION_STR_LEN;
-    extract_demangled_class_name(type_info.name(), "Ob", di->get_ash_stat().action_, len);
+  if (lib::is_ash_enabled()) {
+    is_active_ = 1;
+    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
+    if (di != nullptr) {
+      save_prev_action_info(false, false, true);
+      int64_t len = ASH_ACTION_STR_LEN;
+      extract_demangled_class_name(type_info.name(), "Ob", di->get_ash_stat().action_, len);
+    }
   }
 }
 
@@ -162,57 +171,62 @@ ObDIActionGuard::ObDIActionGuard(ActionNameSpace action_ns, const char *action_f
   : prev_info_(nullptr),
     flags_(0)
 {
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (action_ns > NS_INVALID && action_ns < NS_MAX && action_format != nullptr && di != nullptr) {
-    save_prev_action_info(NS_PROGRAM == action_ns, NS_MODULE == action_ns, NS_ACTION == action_ns);
-    char *buffer = nullptr;
-    int64_t buffer_len = 0;
-    switch (action_ns) {
-      case NS_PROGRAM:
-        buffer = di->get_ash_stat().program_;
-        buffer_len = ASH_PROGRAM_STR_LEN;
-        break;
-      case NS_MODULE:
-        buffer = di->get_ash_stat().module_;
-        buffer_len = ASH_MODULE_STR_LEN;
-        break;
-      case NS_ACTION:
-        buffer = di->get_ash_stat().action_;
-        buffer_len = ASH_ACTION_STR_LEN;
-        break;
-      default: break;
+  if (lib::is_ash_enabled()) {
+    is_active_ = 1;
+    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
+    if (action_ns > NS_INVALID && action_ns < NS_MAX && action_format != nullptr && di != nullptr) {
+      save_prev_action_info(NS_PROGRAM == action_ns, NS_MODULE == action_ns, NS_ACTION == action_ns);
+      char *buffer = nullptr;
+      int64_t buffer_len = 0;
+      switch (action_ns) {
+        case NS_PROGRAM:
+          buffer = di->get_ash_stat().program_;
+          buffer_len = ASH_PROGRAM_STR_LEN;
+          break;
+        case NS_MODULE:
+          buffer = di->get_ash_stat().module_;
+          buffer_len = ASH_MODULE_STR_LEN;
+          break;
+        case NS_ACTION:
+          buffer = di->get_ash_stat().action_;
+          buffer_len = ASH_ACTION_STR_LEN;
+          break;
+        default: break;
+      }
+      va_list args;
+      va_start(args, action_format);
+      vsnprintf(buffer, buffer_len, action_format, args);
+      va_end(args);
     }
-    va_list args;
-    va_start(args, action_format);
-    vsnprintf(buffer, buffer_len, action_format, args);
-    va_end(args);
   }
 }
 
 ObDIActionGuard::~ObDIActionGuard()
 {
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (di != nullptr) {
-    di->action_guard_ref_ = pre_guard_ref_;
-    if (reset_program_) {
-      di->get_ash_stat().program_[0] = '\0';
-    } else if (save_program_ && prev_info_ != nullptr) {
-      MEMCPY(di->get_ash_stat().program_, prev_info_->program_, ASH_PROGRAM_STR_LEN);
+  if (is_active_) {
+    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
+    if (di != nullptr) {
+      di->action_guard_ref_ = pre_guard_ref_;
+      if (reset_program_) {
+        di->get_ash_stat().program_[0] = '\0';
+      } else if (save_program_ && prev_info_ != nullptr) {
+        MEMCPY(di->get_ash_stat().program_, prev_info_->program_, ASH_PROGRAM_STR_LEN);
+      }
+      if (reset_module_) {
+        di->get_ash_stat().module_[0] = '\0';
+      } else if (save_module_ && prev_info_ != nullptr) {
+        MEMCPY(di->get_ash_stat().module_, prev_info_->module_, ASH_MODULE_STR_LEN);
+      }
+      if (reset_action_) {
+        di->get_ash_stat().action_[0] = '\0';
+      } else if (save_action_ && prev_info_ != nullptr) {
+        MEMCPY(di->get_ash_stat().action_, prev_info_->action_, ASH_ACTION_STR_LEN);
+      }
     }
-    if (reset_module_) {
-      di->get_ash_stat().module_[0] = '\0';
-    } else if (save_module_ && prev_info_ != nullptr) {
-      MEMCPY(di->get_ash_stat().module_, prev_info_->module_, ASH_MODULE_STR_LEN);
+    if (prev_info_ != nullptr) {
+      op_free(prev_info_);
+      prev_info_ = nullptr;
     }
-    if (reset_action_) {
-      di->get_ash_stat().action_[0] = '\0';
-    } else if (save_action_ && prev_info_ != nullptr) {
-      MEMCPY(di->get_ash_stat().action_, prev_info_->action_, ASH_ACTION_STR_LEN);
-    }
-  }
-  if (prev_info_ != nullptr) {
-    op_free(prev_info_);
-    prev_info_ = nullptr;
   }
 }
 

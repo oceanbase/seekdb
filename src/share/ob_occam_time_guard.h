@@ -15,7 +15,7 @@
  */
 
 /**
- * ObOccamTimeGuard/ObOccamTimeGuardDetectHung follows the Occam's razor principle and value semantics.
+ * ObOccamTimeGuard follows the Occam's razor principle and value semantics.
  * It only requires the minimum necessary information, and then things will be done.
  *
  * Occam’s razor, also spelled Ockham’s razor, also called law of economy or law of parsimony,
@@ -30,23 +30,15 @@
 #define OCEANBASE_LIB_TASK_OB_EASY_TIME_GUARD_H
 
 #include "lib/atomic/ob_atomic.h"
-#include "lib/thread_local/ob_tsi_utils.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/literals/ob_literals.h"
 #include "share/ob_define.h"
-#include "share/ob_occam_thread_pool.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 
 namespace oceanbase
 {
 namespace common
 {
-
-namespace occam_thread_pool
-{
-class ObOccamThread;
-}
 
 namespace occam
 {
@@ -61,185 +53,6 @@ inline constexpr const T *get_file_name_without_dir(const T (& str)[S], size_t i
 
 template <typename T>
 inline constexpr const T *get_file_name_without_dir(T (& str)[1]) { return &str[0]; }
-
-class ObOccamTimeGuardDetectHung;
-#define THREAD_HUNG_DETECTOR ObThreadHungDetector::get_instance()
-
-class ObThreadHungDetector
-{
-  friend class ObOccamTimeGuardDetectHung;
-public:
-  static constexpr int64_t POW_OF_2 = 12;
-  static constexpr int64_t MAX_THREAD_NUM = 1LL << POW_OF_2;// 4096
-  static constexpr int64_t MAX_THREAD_NUM_MASK = MAX_THREAD_NUM - 1;
-private:
-  ObThreadHungDetector() : back_thread_(nullptr) {}
-  ~ObThreadHungDetector()
-  {
-    destroy();
-  }
-public:
-  int init() {
-    int ret = OB_SUCCESS;
-    back_thread_ = (occam::ObOccamThread*)ob_malloc(sizeof(occam::ObOccamThread), "OccamTimeGuard");
-    if (back_thread_ == nullptr) {
-      OCCAM_LOG(ERROR, "malloc back thread failed");
-    } else {
-      new(back_thread_) occam::ObOccamThread();
-      for (int64_t idx = 0; idx < MAX_THREAD_NUM; ++idx) {
-        new(&points_[idx]) ClickPoint();
-      }
-      if (OB_FAIL(back_thread_->init_and_start([this]() {
-        while(true) {
-          common::ObDIActionGuard ag("OccamThreadPool", "ThreadHungDetector", "detect task");
-          IGNORE_RETURN lib::Thread::update_loop_ts();
-          if (!back_thread_->is_stopped()) {
-            for (int64_t idx = 0; idx < MAX_THREAD_NUM; ++idx) {
-              ClickPoint point = points_[idx].atomic_copy();
-              int64_t cur_ts = ObTimeUtility::fast_current_time();
-              if (point.timeout_ts_ != 0 && cur_ts > point.timeout_ts_) {
-                int64_t allow_print_ts = ATOMIC_LOAD(&next_print_ts_[idx]);
-                if (cur_ts > allow_print_ts) {
-                  int64_t next_allow_print_ts = point.timeout_ts_ + 30_s;
-                  next_print_ts_[idx] = next_allow_print_ts;// only this thread read it, so no need atomic write
-                  OCCAM_LOG_RET(WARN, OB_ERR_UNEXPECTED, "thread maybe hung!", K(point), K(idx), KTIMERANGE(next_allow_print_ts, HOUR, MSECOND));
-                } else {
-                  OCCAM_LOG(DEBUG, "this thread has been repoted hung, wait for next print time",
-                                K(point), K(idx), KTIME(allow_print_ts));
-                }
-              }
-            }
-            ob_usleep(static_cast<uint32_t>(500_ms), true/*is_idle_sleep*/);
-
-          } else {
-            OCCAM_LOG(INFO, "thread hung detect thread is stopped");
-            break;
-          }
-        }
-      }, false))) {
-        OCCAM_LOG(ERROR, "init back thread failed");
-      }
-    }
-    return ret;
-  }
-  void stop()
-  {
-    if (back_thread_ != nullptr) {
-      back_thread_->stop();
-    }
-  }
-  void wait()
-  {
-    if (back_thread_ != nullptr) {
-      back_thread_->wait();
-    }
-  }
-  void destroy()
-  {
-    stop();
-    wait();
-    if (back_thread_ != nullptr) {
-      back_thread_->destroy();
-      ob_free(back_thread_);
-      back_thread_ = nullptr;
-    }
-  }
-  static ObThreadHungDetector &get_instance() { static ObThreadHungDetector d; return d; }
-  struct ClickPoint
-  {
-    ClickPoint() : thread_id_(-1), timeout_ts_(0), file_(nullptr),
-                   func_name_(nullptr), last_click_ts_(0), version_(0), last_click_line_(0) {}
-    int64_t to_string(char *buf, const int64_t buf_len) const
-    {
-      int64_t pos = 0;
-      common::databuff_printf(buf, buf_len, pos, "[thread id=%ld, ", thread_id_);
-      common::databuff_printf(buf, buf_len, pos, "timeout ts=%s, ", common::ObTime2Str::ob_timestamp_str_range<HOUR, MSECOND>(timeout_ts_));
-      common::databuff_printf(buf, buf_len, pos, "last click point=\"%s:%s:%d\", ",
-                                                 file_, func_name_, last_click_line_);
-      common::databuff_printf(buf, buf_len, pos, "last click ts=%s]", common::ObTime2Str::ob_timestamp_str_range<HOUR, MSECOND>(last_click_ts_));
-      return pos;
-    }
-    void reset()
-    {
-      ++version_;
-      MEM_BARRIER();
-      timeout_ts_ = 0;
-      file_ = nullptr;
-      func_name_ = nullptr;
-      last_click_ts_ = 0;
-      last_click_line_ = 0;
-      MEM_BARRIER();
-      ++version_;
-      version_ = 0;
-      thread_id_ = -1;
-    }
-    ClickPoint atomic_copy()// sequential consistency
-    {
-      int64_t read_version = -1;
-      ClickPoint click_point;
-      do {
-        if (OB_UNLIKELY(read_version != -1)) {// not first time read, there is conflict read/write
-          PAUSE();// avoid busy-while
-        }
-        read_version = version_;
-        MEM_BARRIER();
-        click_point.thread_id_ = thread_id_;
-        click_point.timeout_ts_ = timeout_ts_;
-        click_point.file_ =file_;
-        click_point.func_name_ = func_name_;
-        click_point.last_click_ts_ = last_click_ts_;
-        click_point.last_click_line_ = last_click_line_;
-        MEM_BARRIER();
-      } while ((read_version != version_) || (read_version & 1));// double check to ensure consistency
-      return click_point;
-    }
-    int64_t thread_id_;
-    int64_t timeout_ts_;
-    const char *file_;
-    const char *func_name_;
-    int64_t last_click_ts_;
-    int64_t version_;// sequence lock flag
-    uint16_t last_click_line_;
-  } CACHE_ALIGNED;
-  ClickPoint points_[MAX_THREAD_NUM];// used in both user thread and backgroud scan thread
-  int64_t next_print_ts_[MAX_THREAD_NUM] = { 0 };// used in both user thread and backgroud scan thread
-  occam::ObOccamThread *back_thread_;
-private:
-  class ClickPointIdx// thread local only
-  {
-  public:
-    ClickPointIdx() : idx_(-1) {}
-    ~ClickPointIdx()
-    {
-      if (idx_ != -1) {
-        THREAD_HUNG_DETECTOR.points_[idx_].reset();
-        idx_ = -1;
-      }
-    }
-    int64_t get_idx()
-    {
-      if (OB_UNLIKELY(idx_ == -1)) {
-        int64_t start_idx = (GETTID() & MAX_THREAD_NUM_MASK);
-        for (int64_t idx = start_idx; idx < start_idx + MAX_THREAD_NUM; ++idx) {
-          ClickPoint &point = THREAD_HUNG_DETECTOR.points_[idx & MAX_THREAD_NUM_MASK];
-          if (ATOMIC_LOAD(&point.thread_id_) == -1) {
-            int64_t thread_id = GETTID();
-            if (-1 == ATOMIC_CAS(&point.thread_id_, -1, thread_id)) {
-              idx_ = idx & MAX_THREAD_NUM_MASK;
-              OCCAM_LOG(INFO, "init point thread id with",
-                           KP(&point), K(idx_), K(point), K(thread_id));
-              break;
-            }
-          }
-        }
-      }
-      return idx_;
-    }
-  private:
-    int64_t idx_;
-  };
-  RLOCAL_STATIC(ClickPointIdx, click_point_idx);
-};
 
 class ObOccamTimeGuard
 {
@@ -503,95 +316,6 @@ protected:
   uint32_t click_poinsts_[CAPACITY];
 };
 
-class ObOccamTimeGuardDetectHung : public ObOccamFastTimeGuard
-{
-public:
-  ObOccamTimeGuardDetectHung(const uint32_t warn_threshold,
-                             const uint32_t hung_threshold,
-                             const char *file,
-                             const char *func,
-                             const char *mod,
-                             const uint16_t line) :
-    ObOccamFastTimeGuard(warn_threshold, file, func, mod),
-    g_idx_(-1),
-    saved_timeout_ts_(0),
-    saved_file_(0),
-    saved_func_name_(nullptr),
-    saved_last_click_ts_(0),
-    saved_last_click_line_(0) {
-    g_idx_ = ObThreadHungDetector::click_point_idx.get_idx();
-    if (OB_LIKELY(g_idx_ != -1)) {
-      // copy to stack
-      ObThreadHungDetector::ClickPoint &g_point = THREAD_HUNG_DETECTOR.points_[g_idx_];
-      if (OB_LIKELY(g_point.timeout_ts_ != 0)) {
-        saved_timeout_ts_ = g_point.timeout_ts_;
-        saved_file_ = g_point.file_;
-        saved_func_name_ = g_point.func_name_;
-        saved_last_click_ts_ = g_point.last_click_ts_;
-        saved_last_click_line_ = g_point.last_click_line_;
-      }
-      int64_t cur_ts = common::ObTimeUtility::current_time();
-      int64_t hung_timeout_ts = cur_ts + hung_threshold;
-      // recover global slot
-      ++g_point.version_;
-      MEM_BARRIER();// sequence lock, design for single-thread-write, multi-thread-read
-      g_point.timeout_ts_ = hung_timeout_ts;
-      g_point.file_ = file_;
-      g_point.func_name_ = func_name_;
-      g_point.last_click_ts_ = last_click_ts_;
-      g_point.last_click_line_ = line;
-      MEM_BARRIER();
-      ++g_point.version_;
-    } else {
-      OCCAM_LOG_RET(WARN, OB_ERR_UNEXPECTED, "this time guard will not detect thread hung, cause global slot is not enough",
-                   K(file), K(func), K(line), K(lbt()));
-    }
-  }
-  ~ObOccamTimeGuardDetectHung() {
-    if (OB_LIKELY(g_idx_ != -1)) {
-      ObThreadHungDetector::ClickPoint &g_point = THREAD_HUNG_DETECTOR.points_[g_idx_];
-      if (saved_timeout_ts_ != 0) {
-        ++g_point.version_;
-        MEM_BARRIER();
-        g_point.timeout_ts_ = saved_timeout_ts_;
-        g_point.file_ = saved_file_;
-        g_point.func_name_ = saved_func_name_;
-        g_point.last_click_ts_ = saved_last_click_ts_;
-        g_point.last_click_line_ = saved_last_click_line_;
-        MEM_BARRIER();
-        ++g_point.version_;
-      } else {
-        ++g_point.version_;
-        MEM_BARRIER();
-        g_point.timeout_ts_ = 0;
-        MEM_BARRIER();
-        ++g_point.version_;
-      }
-      ATOMIC_STORE(&THREAD_HUNG_DETECTOR.next_print_ts_[g_idx_], 0);
-    }
-  }
-  bool click(const uint16_t line) {
-    ObOccamFastTimeGuard::click(line);
-    if (OB_LIKELY(g_idx_ != -1)) {
-      ObThreadHungDetector::ClickPoint &g_point = THREAD_HUNG_DETECTOR.points_[g_idx_];
-      ++g_point.version_;
-      MEM_BARRIER();
-      g_point.last_click_ts_ = last_click_ts_;
-      g_point.last_click_line_ = line;
-      MEM_BARRIER();
-      ++g_point.version_;
-    }
-    return true;
-  }
-private:
-  int64_t g_idx_;
-  int64_t saved_timeout_ts_;
-  const char *saved_file_;
-  const char *saved_func_name_;
-  int64_t saved_last_click_ts_;
-  uint16_t saved_last_click_line_;
-};
-
 struct TimeGuardFactory
 {
   static ObOccamTimeGuard make_guard(const int64_t threshold1,
@@ -601,15 +325,6 @@ struct TimeGuardFactory
                                      const char *mod) {
     UNUSED(line);
     return ObOccamTimeGuard(static_cast<uint32_t>(threshold1), file, func, mod);
-  }
-  static ObOccamTimeGuardDetectHung make_guard(const int64_t threshold1,
-                                               const int64_t threshold2,
-                                               const char *file,
-                                               const char *func,
-                                               const int64_t line,
-                                               const char *mod) {
-    return ObOccamTimeGuardDetectHung(static_cast<uint32_t>(threshold1),
-        static_cast<uint32_t>(threshold2), file, func, mod, line);
   }
 };
 

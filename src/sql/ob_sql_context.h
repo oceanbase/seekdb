@@ -641,15 +641,6 @@ public:
     return enable_strict_defensive_check_;
   }
 
-  void set_enable_user_defined_rewrite(bool v)
-  {
-    enable_user_defined_rewrite_ = v;
-  }
-
-  bool get_enable_user_defined_rewrite()
-  {
-    return enable_user_defined_rewrite_;
-  }
   // release dynamic allocated memory
   // 
   void clear();
@@ -725,7 +716,6 @@ public:
   bool is_execute_call_stmt_;
   bool enable_sql_resource_manage_;
   ObPCResourceMapRule resource_map_rule_;
-  uint64_t res_map_rule_version_;
   bool is_text_ps_mode_;
   uint64_t first_plan_hash_;
   common::ObString first_outline_data_;
@@ -739,9 +729,8 @@ public:
     uint32_t flags_;
     struct {
       uint32_t enable_strict_defensive_check_: 1; //TRUE if the _enable_defensive_check is '2'
-      uint32_t enable_user_defined_rewrite_ : 1;//TRUE if enable_user_defined_rewrite_rules is open
       uint32_t is_from_pl_ : 1;
-      uint32_t reserved_ : 29;
+      uint32_t reserved_ : 30;
     };
   };
   common::ObString raw_sql_;

@@ -849,11 +849,7 @@ int ObGvSqlAudit::fill_cells(obmysql::ObMySQLRequestRecord &record)
                                             ObCharset::get_default_charset()));
         } break;
         case RULE_NAME: {
-          if ((record.data_.rule_name_len_ > 0) && (NULL != record.data_.rule_name_)) {
-            cells[cell_idx].set_varchar(record.data_.rule_name_, record.data_.rule_name_len_);
-          } else {
-            cells[cell_idx].set_varchar("");
-          }
+          cells[cell_idx].set_varchar("");
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                               ObCharset::get_default_charset()));
         } break;

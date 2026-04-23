@@ -1,0 +1,24 @@
+# owner: roland.qk
+# owner group: IMF
+# description: test wait event time
+
+connect (obsys1,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys1;
+use oceanbase;
+
+alter system set _ob_ash_enable = true;
+let $begin_time = `select now() from DUAL`;
+let $session_id = `select CONNECTION_ID() from DUAL`;
+select sleep(3) from DUAL;
+let $trace_id = `select last_trace_id() from DUAL`;
+
+sleep 5;
+let $end_time = `select now() from DUAL`;
+
+--disable_query_log
+eval select TIME_WAITED > 90000 from __all_virtual_ash where sample_time between '$begin_time' and '$end_time' and EVENT_ID = 14005 and trace_id='$trace_id' order by TIME_WAITED desc limit 1;
+--enable_query_log
+
+alter system set _ob_ash_enable = false;
+
+disconnect obsys1;

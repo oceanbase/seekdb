@@ -326,6 +326,7 @@ void TestBufferPool::SetUp()
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache", 1));
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
   ObTenantEnv::set_tenant(&tenant_ctx);
   ObTenantIOManager *io_service = nullptr;
@@ -333,11 +334,6 @@ void TestBufferPool::SetUp()
   ASSERT_EQ(OB_SUCCESS, ObTenantIOManager::mtl_init(io_service));
   ASSERT_EQ(OB_SUCCESS, io_service->start());
   tenant_ctx.set(io_service);
-
-  ObTimerService *timer_service = nullptr;
-  EXPECT_EQ(OB_SUCCESS, ObTimerService::mtl_new(timer_service));
-  EXPECT_EQ(OB_SUCCESS, ObTimerService::mtl_start(timer_service));
-  tenant_ctx.set(timer_service);
 
   MockTenantTmpFileManager *tf_mgr = nullptr;
   ASSERT_EQ(OB_SUCCESS, mtl_new_default(tf_mgr));
@@ -366,12 +362,9 @@ void TestBufferPool::TearDown()
   tmp_file::ObTmpPageCache::get_instance().destroy();
   TestDataFilePrepare::TearDown();
   common::ObClockGenerator::destroy();
-
-  ObTimerService *timer_service = MTL(ObTimerService *);
-  ASSERT_NE(nullptr, timer_service);
-  timer_service->stop();
-  timer_service->wait();
-  timer_service->destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 TEST_F(TestBufferPool, test_buffer_pool_basic)

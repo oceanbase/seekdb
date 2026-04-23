@@ -38,13 +38,13 @@ private:
 };
 
 void test1() {
-  TIMEGUARD_INIT(OCCAM, 10_ms, 1_s);
+  TIMEGUARD_INIT(OCCAM, 10_ms);
   this_thread::sleep_for(chrono::seconds(2));
   // OB_LOG(INFO, "", KTIMERANGE(ObClockGenerator::getRealClock(), HOUR, DAY));// compile error
 }
 
 void test0() {
-  TIMEGUARD_INIT(OCCAM, 10_ms, 1_s);
+  TIMEGUARD_INIT(OCCAM, 10_ms);
   CLICK();
   test1();
   this_thread::sleep_for(chrono::seconds(2));
@@ -55,29 +55,12 @@ void test2() {
   this_thread::sleep_for(chrono::seconds(2));
 }
 
-TEST_F(TestObOccamTimeGuard, thread_num_overflow) {
-  auto just_sleep_1s = []() { TIMEGUARD_INIT(99_s, 100_s); this_thread::sleep_for(chrono::seconds(10)); };
-  auto just_sleep_1s_report_timeout_and_hung = []() { TIMEGUARD_INIT(0.5_s, 0.5_s); this_thread::sleep_for(chrono::seconds(2)); };
-  auto just_sleep_10s = []() { TIMEGUARD_INIT(99_s, 100_s); this_thread::sleep_for(chrono::seconds(20)); };
-  int64_t max_num = occam::ObThreadHungDetector::MAX_THREAD_NUM;
-  {
-    vector<thread> v_th;
-    v_th.emplace_back(just_sleep_1s);// the first thread will release quickly
-    for (int64_t idx = 1; idx < max_num - 1; ++idx) {
-      v_th.emplace_back(just_sleep_10s); // all middle thread will realese slowly
-    }
-    v_th.emplace_back(just_sleep_1s);// the last thread will release quickly
-    // now all global slot is full
-    v_th.emplace_back(just_sleep_1s_report_timeout_and_hung);// here will print WARN LOG, say will not detect thread hung, but will still detect function timeout
-    this_thread::sleep_for(chrono::seconds(10)); // wait first slot and last slot realese, now there are two slots free
-    v_th.emplace_back(just_sleep_1s_report_timeout_and_hung);// this thread will use first slot, and report function timeout, thread hung
-    v_th.emplace_back(just_sleep_1s_report_timeout_and_hung);// this thread will use last slot, and report function timeout, thread hung
-    v_th.emplace_back(just_sleep_1s_report_timeout_and_hung);// this thread will print WARN LOG, say will not detect thread hung, but will still detect function timeout
-    for (auto &th : v_th) {
-      th.join();
-    } // now all global slot is release
-  }
-  thread th(just_sleep_1s_report_timeout_and_hung);// this thread will use self's slot, and report function timeout, thread hung
+TEST_F(TestObOccamTimeGuard, double_threshold_guard_fallback) {
+  auto just_sleep = []() {
+    TIMEGUARD_INIT(OCCAM, 10_ms);
+    this_thread::sleep_for(chrono::seconds(2));
+  };
+  thread th(just_sleep);
   th.join();
 }
 

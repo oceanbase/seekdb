@@ -1,0 +1,33 @@
+# owner: zhangyiqiang.zyq
+# owner group: IMF
+# description: 
+# 测试ash是否能记录外键标志
+
+connect (obsys1,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys1;
+
+alter system set _ob_ash_enable = true;
+
+--disable_warnings
+drop table if exists t2;
+drop table if exists t1;
+--enable_warnings
+
+create table t1(a int primary key, b int);
+create table t2(a int, c int , foreign key(a) references t1(a) on delete cascade );
+
+insert into t1(a, b) select @rn:=@rn+1 as a, @rn as b from table(generator(2000)), (select @rn:=0);
+insert into t2(a, c) select @rn:=@rn+1 as a, @rn as b from table(generator(2000)), (select @rn:=0);
+
+SET ob_query_timeout = 40000000;
+
+delete from t1;
+let $trace_id = `select last_trace_id() from DUAL`;
+--disable_query_log
+eval select count(*) > 0 from oceanbase.GV\$ACTIVE_SESSION_HISTORY where trace_id='$trace_id' and time_model & (1 << 23) > 0;
+SET ob_query_timeout = 10000000;
+--enable_query_log
+
+alter system set _ob_ash_enable = false;
+
+disconnect obsys1;

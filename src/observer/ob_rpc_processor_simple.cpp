@@ -33,7 +33,6 @@
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "sql/udr/ob_udr_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "rootserver/ob_split_partition_helper.h"
@@ -1967,30 +1966,6 @@ int ObForceSetLSAsSingleReplicaP::process()
   } else if (OB_FAIL(gctx_.ob_service_->force_set_ls_as_single_replica(arg_))) {
     COMMON_LOG(WARN, "force_set_ls_as_single_replica failed", KR(ret), K(arg_));
   } else {}
-  return ret;
-}
-
-int ObSyncRewriteRulesP::process()
-{
-  int ret = OB_SUCCESS;
-  uint64_t tenant_id = arg_.tenant_id_;
-  MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-  sql::ObUDRMgr *rule_mgr = nullptr;
-
-  if (tenant_id != MTL_ID()) {
-    ret = guard.switch_to(tenant_id);
-  }
-  if (OB_SUCC(ret)) {
-    LOG_INFO("start do sync rewrite rules from inner table", K(arg_));
-
-    rule_mgr = MTL(sql::ObUDRMgr*);
-    if (OB_ISNULL(rule_mgr)) {
-      ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(ERROR, "mtl ObUDRMgr should not be null", K(ret));
-    } else if (OB_FAIL(rule_mgr->sync_rule_from_inner_table())) {
-      LOG_WARN("failed to sync rewrite rules from inner table", K(ret));
-    }
-    }
   return ret;
 }
 

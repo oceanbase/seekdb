@@ -98,7 +98,7 @@ share::ObLocalDevice *LogIODeviceWrapper::get_local_device()
 }
 // ========================= LogIOAdapter=====================
 int LogIOAdapter::init(const int64_t tenant_id, 
-                       ObLocalDevice *log_local_device, 
+                       common::ObIODevice *log_local_device,
                        ObResourceManager *resource_manager,
                        ObIOManager *io_manager)
 {

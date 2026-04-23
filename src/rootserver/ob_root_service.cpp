@@ -2374,13 +2374,13 @@ int ObRootService::drop_table(const obrpc::ObDropTableArg &arg, obrpc::ObDDLRes 
 }
 
 int ObRootService::parallel_drop_table(const ObDropTableArg &arg, ObDropTableRes &res)
-{
+{ 
   int ret = OB_SUCCESS;
 
   LOG_TRACE("receive parallel drop table arg", K(arg));
   int64_t begin_time = ObTimeUtility::current_time();
   const uint64_t tenant_id = arg.exec_tenant_id_;
-
+  
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
@@ -3907,26 +3907,6 @@ int ObRootService::drop_routine(const ObDropRoutineArg &arg)
   return ret;
 }
 
-int ObRootService::admin_sync_rewrite_rules(const obrpc::ObSyncRewriteRuleArg &arg)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else {
-    ObSystemAdminCtx ctx;
-    if (OB_FAIL(init_sys_admin_ctx(ctx))) {
-      LOG_WARN("init_sys_admin_ctx failed", K(ret));
-    } else {
-      ObAdminSyncRewriteRules admin_util(ctx);
-      if (OB_FAIL(admin_util.execute(arg))) {
-        LOG_WARN("dispatch sync rewrite rules failed", K(arg), K(ret));
-      }
-      ROOTSERVICE_EVENT_ADD("root_service", "admin_sync_rewrite_rules", K(ret), K(arg));
-    }
-  }
-  return ret;
-}
 
 int ObRootService::create_package(const obrpc::ObCreatePackageArg &arg)
 {
@@ -5865,7 +5845,7 @@ int ObRootService::create_ai_model(const obrpc::ObCreateAiModelArg &arg)
   }
 
   LOG_TRACE("finish create ai model", K(ret), K(arg));
-
+  
   return ret;
 }
 
@@ -5885,7 +5865,7 @@ int ObRootService::drop_ai_model(const obrpc::ObDropAiModelArg &arg)
   }
 
   LOG_TRACE("finish drop ai model", K(ret), K(arg));
-
+  
   return ret;
 }
 

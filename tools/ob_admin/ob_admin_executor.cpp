@@ -37,7 +37,6 @@ ObAdminExecutor::ObAdminExecutor()
 {
   // Set MTL context
   IGNORE_RETURN ObTimerService::get_instance().start();
-  mock_server_tenant_.set(&ObTimerService::get_instance());
   share::ObTenantEnv::set_tenant(&mock_server_tenant_);
   storage_env_.data_dir_ = data_dir_;
   storage_env_.sstable_dir_ = sstable_dir_;

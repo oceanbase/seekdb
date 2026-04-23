@@ -20,7 +20,6 @@
 #include "sql/engine/ob_exec_context.h"
 #include "storage/tx/ob_trans_define.h"
 #include "lib/allocator/ob_safe_arena.h"
-#include "share/rpc/ob_batch_rpc.h"
 
 namespace oceanbase
 {

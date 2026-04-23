@@ -28,6 +28,7 @@
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "logservice/cdcservice/ob_cdc_service.h"  // ObCdcService
 #include "logservice/restoreservice/ob_log_restore_service.h"  // ObLogRestoreService
+#include "share/ob_io_device_helper.h"
 
 namespace oceanbase
 {
@@ -265,7 +266,7 @@ int ObLogService::init(const PalfOptions &options,
              KP(alloc_mgr), KP(transport), KP(batch_rpc), KP(ls_service), KP(location_service),
              KP(log_block_pool), KP(sql_proxy), KP(net_keepalive_adapter));
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self, transport, batch_rpc,
-                                              alloc_mgr, log_block_pool, &monitor_, LOG_IO_DEVICE_WRAPPER.get_local_device(),
+                                              alloc_mgr, log_block_pool, &monitor_, &LOCAL_DEVICE_INSTANCE,
                                               &G_RES_MGR, &OB_IO_MANAGER, palf_env_))) {
     CLOG_LOG(WARN, "failed to create_palf_env", K(base_dir), K(ret));
   } else if (OB_ISNULL(palf_env_)) {

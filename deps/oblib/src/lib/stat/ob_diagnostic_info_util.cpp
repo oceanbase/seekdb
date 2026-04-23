@@ -46,6 +46,12 @@ void __attribute__((weak, noinline)) lib_mtl_switch(int64_t tenant_id, std::func
   fn(OB_NOT_IMPLEMENT);
 }
 
+void __attribute__((weak, noinline)) lib_mtl_switch(lib::IRunWrapper *run_wrapper, std::function<void()> fn)
+{
+  UNUSED(run_wrapper);
+  fn();
+}
+
 int64_t __attribute__((weak, noinline)) lib_mtl_cpu_count()
 {
   return 1;

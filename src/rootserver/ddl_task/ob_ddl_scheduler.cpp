@@ -1162,7 +1162,7 @@ void ObDDLScheduler::do_work()
     while (!has_set_stop() && !lib::Thread::current().has_set_stop()) {
       LOG_TRACE("[SYS_DDL_SCHEDULER] begin one round", "tenant_id", MTL_ID());
       const bool stop = task_queue_.has_set_stop();
-      bool do_idle = false;
+      int64_t idle_time = 0;
       if (OB_FAIL(task_queue_.get_next_task(task))) {
         if (common::OB_ENTRY_NOT_EXIST == ret) {
           if (stop) {
@@ -1175,7 +1175,7 @@ void ObDDLScheduler::do_work()
         } else {
           LOG_WARN("fail to get next task", K(ret));
         }
-        do_idle = true;
+        idle_time = ObDDLTask::MAX_IDLE_TIME_US;
       } else if (OB_ISNULL(task)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, task must not be NULL", K(ret));
@@ -1190,12 +1190,13 @@ void ObDDLScheduler::do_work()
             }
           }
         }
-        do_idle = true;
+        idle_time = ObDDLTask::DEFAULT_TASK_IDLE_TIME_US;
       } else {
         ObDIActionGuard ag(get_ddl_type(task->get_task_type()));
         ObCurTraceId::set(task->get_trace_id());
         int task_ret = task->process();
         task->calc_next_schedule_ts(task_ret, task_queue_.get_task_cnt() + thread_cnt);
+        const bool need_schedule = task->need_schedule();
         if (task->need_retry() && !stop && !ObIDDLTask::is_ddl_force_no_more_process(task_ret)) {
           if (OB_FAIL(task_queue_.add_task_to_last(task))) {
             if (OB_STATE_NOT_MATCH == ret) {
@@ -1205,15 +1206,17 @@ void ObDDLScheduler::do_work()
                 LOG_WARN("remove ddl task failed", K(ret));
               }
             }
+          } else if (need_schedule) {
+            idler_.wakeup();
           }
           first_retry_task = nullptr == first_retry_task ? task : first_retry_task;
         } else if (OB_FAIL(remove_ddl_task(task))) {
           LOG_WARN("remove ddl task failed", K(ret));
         }
       }
-      if (do_idle) {
+      if (idle_time > 0) {
         first_retry_task = nullptr;
-        idler_.idle(ObDDLTask::DEFAULT_TASK_IDLE_TIME_US);
+        idler_.idle(idle_time);
       }
       LOG_TRACE("[SYS_DDL_SCHEDULER] finish one round", "tenant_id", MTL_ID());
     }

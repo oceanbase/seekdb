@@ -74,7 +74,6 @@ public:
   static int64_t getRealClock();
   static void msleep(const int64_t ms);
   static void usleep(const int64_t us);
-  static void try_advance_cur_ts(const int64_t cur_ts);
 
 private:
   int64_t get_us();
@@ -91,8 +90,11 @@ private:
 
 inline int64_t ObClockGenerator::getClock()
 {
+#ifdef OB_BUILD_EMBED_MODE
+  // No background ClockGenerator thread in embed mode: avoid sleep load;
+  return common::ObTimeUtility::current_time();
+#else
   int64_t ts = 0;
-
   if (OB_UNLIKELY(!clock_generator_.inited_)) {
     TRANS_LOG_RET(WARN, common::OB_NOT_INIT, "clock generator not inited");
     ts = clock_generator_.get_us();
@@ -101,6 +103,7 @@ inline int64_t ObClockGenerator::getClock()
   }
 
   return ts;
+#endif
 }
 
 inline int64_t ObClockGenerator::getRealClock()
@@ -127,19 +130,6 @@ inline void ObClockGenerator::usleep(const int64_t us)
     ObBKGDSessInActiveGuard inactive_guard;
     (void)nanosleep(&ts, nullptr);
   }
-}
-
-inline void ObClockGenerator::try_advance_cur_ts(const int64_t cur_ts)
-{
-  int64_t origin_cur_ts = OB_INVALID_TIMESTAMP;
-  do {
-    origin_cur_ts = ATOMIC_LOAD(&clock_generator_.cur_ts_);
-    if (origin_cur_ts < cur_ts) {
-      break;
-    } else {
-      TRANS_LOG_RET(WARN, common::OB_ERR_SYS, "timestamp rollback, need advance cur ts", K(origin_cur_ts), K(cur_ts));
-    }
-  } while (false == ATOMIC_BCAS(&clock_generator_.cur_ts_, origin_cur_ts, cur_ts));
 }
 
 OB_INLINE int64_t ObClockGenerator::get_us()

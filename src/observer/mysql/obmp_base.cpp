@@ -357,9 +357,8 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     }
     ctx.is_protocol_weak_read_ = false; // never use weak read in lite-mode
     ctx.set_enable_strict_defensive_check(GCONF.enable_strict_defensive_check());
-    ctx.set_enable_user_defined_rewrite(session.enable_udr());
     LOG_DEBUG("protocol flag info", K(ctx.can_reroute_sql_), K(ctx.is_protocol_weak_read_),
-        K(ctx.get_enable_strict_defensive_check()), "enable_udr", session.enable_udr());
+        K(ctx.get_enable_strict_defensive_check()));
   }
   return ret;
 }

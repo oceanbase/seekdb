@@ -308,8 +308,8 @@ TEST_F(TestIOStruct, IORequest)
   // prepare read request
   req.destroy();
   result.destroy();
-  req.tenant_io_mgr_.hold(&tenant_io_mgr);
-  result.tenant_io_mgr_.hold(&tenant_io_mgr);
+  req.tenant_io_mgr_ = &tenant_io_mgr;
+  result.tenant_io_mgr_ = &tenant_io_mgr;
   result.inc_ref();
   req.inc_ref();
 
@@ -348,8 +348,8 @@ TEST_F(TestIOStruct, IORequest)
   ASSERT_EQ(1, result.result_ref_cnt_);
   result.reset();
   ASSERT_EQ(0, result.result_ref_cnt_);
-  req.tenant_io_mgr_.hold(&tenant_io_mgr);
-  result.tenant_io_mgr_.hold(&tenant_io_mgr);
+  req.tenant_io_mgr_ = &tenant_io_mgr;
+  result.tenant_io_mgr_ = &tenant_io_mgr;
   ASSERT_FAIL(result.init(write_info)); // not aligned
   ASSERT_TRUE(req.init(write_info ,&result));
   ASSERT_EQ(1, result.result_ref_cnt_); //inc ref even fail
@@ -357,24 +357,24 @@ TEST_F(TestIOStruct, IORequest)
   write_info.offset_ = DIO_READ_ALIGN_SIZE * 2;
   req.reset();
   result.reset();
-  req.tenant_io_mgr_.hold(&tenant_io_mgr);
-  result.tenant_io_mgr_.hold(&tenant_io_mgr);
+  req.tenant_io_mgr_ = &tenant_io_mgr;
+  result.tenant_io_mgr_ = &tenant_io_mgr;
   ASSERT_FAIL(result.init(write_info)); // only offset aligned, size not aligned
   ASSERT_TRUE(req.init(write_info ,&result));
 
   write_info.size_ = DIO_READ_ALIGN_SIZE * 4;
   req.reset();
   result.reset();
-  req.tenant_io_mgr_.hold(&tenant_io_mgr);
-  result.tenant_io_mgr_.hold(&tenant_io_mgr);
+  req.tenant_io_mgr_ = &tenant_io_mgr;
+  result.tenant_io_mgr_ = &tenant_io_mgr;
   ASSERT_FAIL(result.init(write_info)); // offset and size aligned, but write buf is null
   ASSERT_TRUE(req.init(write_info ,&result));
 
   write_info.buf_ = "test_write";
   req.reset();
   result.reset();
-  req.tenant_io_mgr_.hold(&tenant_io_mgr);
-  result.tenant_io_mgr_.hold(&tenant_io_mgr);
+  req.tenant_io_mgr_ = &tenant_io_mgr;
+  result.tenant_io_mgr_ = &tenant_io_mgr;
   ASSERT_SUCC(result.init(write_info));
   ASSERT_SUCC(req.init(write_info ,&result)); // normal usage
   ASSERT_TRUE(req.is_inited_);
@@ -611,8 +611,8 @@ TEST_F(TestIOStruct, IOResult)
   // prepare test read request
   req->destroy();
   result->destroy();
-  req->tenant_io_mgr_.hold(holder.get_ptr());
-  result->tenant_io_mgr_.hold(holder.get_ptr());
+  req->tenant_io_mgr_ = holder.get_ptr();
+  result->tenant_io_mgr_ = holder.get_ptr();
   result->inc_ref();
   req->inc_ref();
 
@@ -679,7 +679,6 @@ TEST_F(TestIOStruct, IOCallbackManager)
   ASSERT_SUCC(result.basic_init());
   ASSERT_SUCC(result.init(io_info));
   ASSERT_SUCC(req.init(io_info, &result));
-  ASSERT_FAIL(callback_mgr.enqueue_callback(req));
   char buf[32] = "test";
   req.raw_buf_ = buf;
   char callback_buf_[ObIOCallback::CALLBACK_BUF_SIZE] __attribute__ ((aligned (16)));
@@ -2440,7 +2439,6 @@ void IOTracerSwitch::run1()
 int IOTracerSwitch::modify_tenant_io(IOPerfTenant &curr_tenant)
 {
   int ret = OB_SUCCESS;
-  ATOMIC_SET(&curr_tenant.config_.param_config_.enable_io_tracer_, true);
   if (OB_FAIL(OB_IO_MANAGER.refresh_tenant_io_param_config(curr_tenant.tenant_id_, curr_tenant.config_.param_config_))) {
     LOG_WARN("refresh tenant io config failed", K(ret), K(curr_tenant.tenant_id_), K(curr_tenant.config_));
   }

@@ -140,7 +140,6 @@ public:
                                    share::schema::ObMaxConcurrentParam::FixParamStore &fixed_param_store,
                                    bool is_transform_outline,
                                    SQL_EXECUTION_MODE execution_mode = INVALID_MODE,
-                                   const ObIArray<FixedParamValue> *udr_fixed_params = NULL,
                                    bool is_from_pl = false);
   static int raw_fast_parameterize_sql(common::ObIAllocator &allocator,
                                        const ObSQLSessionInfo &session,
@@ -226,7 +225,6 @@ private:
   static int is_fast_parse_const(TransformTreeCtx &ctx);
 
   static bool is_node_not_param(TransformTreeCtx &ctx);
-  static bool is_udr_not_param(TransformTreeCtx &ctx);
   static int transform_tree(TransformTreeCtx &ctx, const ObSQLSessionInfo &session_info);
   static int add_param_flag(const ParseNode *node, SqlInfo &sql_info);
   static int add_not_param_flag(const ParseNode *node, SqlInfo &sql_info);

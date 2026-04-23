@@ -426,13 +426,8 @@ void TestChunkSort::SetUp()
   CHUNK_MGR.set_limit(8LL * 1024 * 1024 * 1024);
   EXPECT_EQ(OB_SUCCESS, init_tenant_mgr());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
-
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
-  ObTimerService *timer_service = nullptr;
-  EXPECT_EQ(OB_SUCCESS, ObTimerService::mtl_new(timer_service));
-  EXPECT_EQ(OB_SUCCESS, ObTimerService::mtl_start(timer_service));
-  tenant_ctx.set(timer_service);
-
   ObTenantEnv::set_tenant(&tenant_ctx);
   SERVER_STORAGE_META_SERVICE.is_started_ = true;
 }
@@ -441,11 +436,9 @@ void TestChunkSort::TearDown()
 {
   common::ObClockGenerator::destroy();
   ObKVGlobalCache::get_instance().destroy();
-  ObTimerService *timer_service = MTL(ObTimerService *);
-  ASSERT_NE(nullptr, timer_service);
-  timer_service->stop();
-  timer_service->wait();
-  timer_service->destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 int TestChunkSort::sort_test(int64_t test_row_num, RandomBase *rand,

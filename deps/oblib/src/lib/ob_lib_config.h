@@ -34,6 +34,8 @@ bool is_diagnose_info_enabled();
 void reload_diagnose_info_config(const bool);
 bool is_trace_log_enabled();
 void reload_trace_log_config(const bool);
+bool is_ash_enabled();
+void reload_ash_config(const bool);
 
 class ObLibConfig
 {
@@ -41,9 +43,12 @@ class ObLibConfig
   friend void reload_diagnose_info_config(const bool);
   friend bool is_trace_log_enabled();
   friend void reload_trace_log_config(const bool);
+  friend bool is_ash_enabled();
+  friend void reload_ash_config(const bool);
 private:
   static bool enable_diagnose_info_ CACHE_ALIGNED;
   static volatile bool enable_trace_log_ CACHE_ALIGNED;
+  static bool enable_ash_ CACHE_ALIGNED;
 };
 
 class ObPerfModeGuard
@@ -119,6 +124,16 @@ inline bool is_trace_log_enabled()
 inline void reload_trace_log_config(const bool enable_trace_log)
 {
   ATOMIC_STORE(&ObLibConfig::enable_trace_log_, enable_trace_log);
+}
+
+inline bool is_ash_enabled()
+{
+  return ObLibConfig::enable_ash_;
+}
+
+inline void reload_ash_config(const bool enable_ash)
+{
+  ATOMIC_STORE(&ObLibConfig::enable_ash_, enable_ash);
 }
 
 } //lib

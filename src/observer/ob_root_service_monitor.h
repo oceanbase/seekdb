@@ -41,7 +41,7 @@ public:
   void stop();
   void wait();
 private:
-  static const int64_t MONITOR_ROOT_SERVICE_INTERVAL_US = 10 * 1000;  //10ms
+  static const int64_t MONITOR_ROOT_SERVICE_INTERVAL_US = 1000 * 1000;  // 1s
 
   int monitor_root_service();
   int try_start_root_service();
