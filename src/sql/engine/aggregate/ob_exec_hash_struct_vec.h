@@ -1289,7 +1289,9 @@ public:
       if (OB_FAIL(bits_.reserve(cnt_))) {
         SQL_ENG_LOG(WARN, "bit set reserve failed", K(ret));
       } else {
-        h2_shift_ = sizeof(cnt_) * CHAR_BIT - __builtin_clzl(cnt_);
+        // see note in ob_exec_hash_struct.h: use clzll for 64-bit cnt_
+        // because Windows LLP64 has 32-bit `unsigned long`.
+        h2_shift_ = sizeof(cnt_) * CHAR_BIT - __builtin_clzll(cnt_);
       }
     }
     return ret;

@@ -90,7 +90,9 @@ int ObFloatToDecimal::float2decimal(double x, const bool is_oracle_mode, ob_gcvt
       binary_cnt = DOUBlE_MANTISSA_BITS;
       real_exponent = exponent - DOUBLE_EXPONENT_BIAS - DOUBlE_MANTISSA_BITS;
     } else { //subnormal double case
-      binary_cnt = mantissa ? 64 - __builtin_clzl(mantissa) : 0;
+      // mantissa is uint64_t; use __builtin_clzll because `unsigned long`
+      // is 32-bit on Windows LLP64 and would truncate the value.
+      binary_cnt = mantissa ? 64 - __builtin_clzll(mantissa) : 0;
       real_exponent = 1 - DOUBLE_EXPONENT_BIAS - DOUBlE_MANTISSA_BITS;
     }
     /* Get the decimal_cnt with binary_cnt and real_exponent,

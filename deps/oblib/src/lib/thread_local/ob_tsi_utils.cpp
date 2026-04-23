@@ -136,7 +136,9 @@ int64_t detect_max_itid()
   for (int i = 1023; i >= 0; i--) {
     uint64_t slot = ATOMIC_LOAD(&itid_slots[i]);
     if (slot != 0) {
-      int pos = __builtin_clzl(slot);
+      // Use __builtin_clzll: slot is uint64_t, and `unsigned long` is only
+      // 32-bit on Windows LLP64 which would make __builtin_clzl truncate.
+      int pos = __builtin_clzll(slot);
       idx = 64 * i + (64 - pos - 1);
       break;
     }
