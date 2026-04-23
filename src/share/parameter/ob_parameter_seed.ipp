@@ -629,9 +629,9 @@ DEF_PARAM(tablet_meta_table_check_interval, TIME, OB_CLUSTER_PARAMETER, "30m", "
          "and make adjustments to ensure the correctness of tablet meta table. Range: [1m,+∞)",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // TODO fixme after remove all other versions
-DEF_PARAM(min_observer_version, STR, OB_CLUSTER_PARAMETER, "1.2.0.0", "the min observer version",
+DEF_PARAM(min_observer_version, STR, OB_CLUSTER_PARAMETER, "1.3.0.0", "the min observer version",
         ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(compatible, VERSION, OB_CLUSTER_PARAMETER, "1.2.0.0", "compatible version for persisted data",
+DEF_PARAM(compatible, VERSION, OB_CLUSTER_PARAMETER, "1.3.0.0", "compatible version for persisted data",
             ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_ddl, BOOL, OB_CLUSTER_PARAMETER, "True", "specifies whether DDL operation is turned on. "
          "Value:  True:turned on;  False: turned off",
