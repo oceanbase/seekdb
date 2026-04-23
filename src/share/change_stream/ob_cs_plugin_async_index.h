@@ -32,6 +32,7 @@
 #include "share/change_stream/ob_change_stream_dispatcher.h"
 #include "share/change_stream/ob_change_stream_plugin.h"
 #include "lib/hash/ob_hashmap.h"
+#include "storage/blocksstable/ob_storage_datum.h"
 
 namespace oceanbase
 {
@@ -78,6 +79,7 @@ struct ObASyncIndexEvent
   char               type_;
   char              *vec_data_;
   int64_t            vec_data_len_;
+  common::ObSEArray<blocksstable::ObStorageDatum, 0> part_key_datums_;
 
   ObASyncIndexEvent()
     : tablet_id_(),
@@ -86,7 +88,8 @@ struct ObASyncIndexEvent
       vid_(0),
       type_(ObCSAsyncIndexEventType::INSERT),
       vec_data_(nullptr),
-      vec_data_len_(0)
+      vec_data_len_(0),
+      part_key_datums_()
   {}
 
   void reset()
@@ -98,6 +101,7 @@ struct ObASyncIndexEvent
     type_ = ObCSAsyncIndexEventType::INSERT;
     vec_data_ = nullptr;
     vec_data_len_ = 0;
+    part_key_datums_.reset();
   }
 
   TO_STRING_KV(K_(tablet_id), K_(table_id), K_(scn), K_(vid), K_(type),
@@ -117,6 +121,8 @@ struct ObCSVecIndexInfo
   int64_t  vec_col_idx_;
   schema::ObIndexType index_type_;
   int64_t  dim_;
+  common::ObSEArray<uint64_t, 4> part_key_col_ids_;
+  common::ObSEArray<int64_t, 4>  part_key_col_idxs_;
 
   ObCSVecIndexInfo()
     : data_table_id_(common::OB_INVALID_ID),
@@ -125,7 +131,9 @@ struct ObCSVecIndexInfo
       vec_column_id_(common::OB_INVALID_ID),
       vec_col_idx_(-1),
       index_type_(schema::INDEX_TYPE_IS_NOT),
-      dim_(0)
+      dim_(0),
+      part_key_col_ids_(),
+      part_key_col_idxs_()
   {}
 
   void reset()
@@ -137,6 +145,8 @@ struct ObCSVecIndexInfo
     vec_col_idx_ = -1;
     index_type_ = schema::INDEX_TYPE_IS_NOT;
     dim_ = 0;
+    part_key_col_ids_.reset();
+    part_key_col_idxs_.reset();
   }
 
   bool is_valid() const
@@ -161,7 +171,7 @@ struct TabletEventGroup
   common::ObTabletID tablet_id_;
   uint64_t table_id_;
   ObCSVecIndexInfo vec_info_;
-  common::ObSEArray<ObASyncIndexEvent, 64> events_;
+  common::ObSEArray<ObASyncIndexEvent, 8> events_;
   TabletEventGroup()
     : tablet_id_(),
       table_id_(common::OB_INVALID_ID),
