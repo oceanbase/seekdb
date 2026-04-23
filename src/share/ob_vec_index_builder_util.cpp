@@ -5875,8 +5875,8 @@ int ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
   if (new_index_schema.is_vec_index()) {
     if (ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
             orig_table_schema, index_table_schema.get_index_type(), index_table_schema.get_index_params())) {
-      new_table_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD);
-      new_index_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD);
+      new_table_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD_FOR_VEC_ASYNC_INDEX);
+      new_index_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD_FOR_VEC_ASYNC_INDEX);
     }
     // rowkey vid index cannot find col_names.
     ObSEArray<ObString, 1> col_names;

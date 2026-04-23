@@ -6906,7 +6906,7 @@ int ObDDLService::generate_aux_index_schema_(
       LOG_WARN("fail to generate schema", K(ret), K(create_index_arg));
     } else if (ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
                    nonconst_data_schema, index_schema.get_index_type(), index_schema.get_index_params())
-               && FALSE_IT(nonconst_data_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD))) {
+               && FALSE_IT(nonconst_data_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD_FOR_VEC_ASYNC_INDEX))) {
     } else if (FALSE_IT(need_alter_data_table_lob_inrow_threshold =
                    nonconst_data_schema.get_lob_inrow_threshold() != data_schema->get_lob_inrow_threshold())) {
     } else if (create_index_arg.is_offline_rebuild_){
@@ -7584,9 +7584,9 @@ int ObDDLService::alter_table_index(obrpc::ObAlterTableArg &alter_table_arg,
                                                                       index_schema,
                                                                       trans))) {
                 LOG_WARN("failed to alter table add index!", K(index_schema), K(ret));
-              } else if (is_only_add_index_on_empty_table
+              } else if (is_only_add_index_on_empty_table 
                          && FALSE_IT(max_schema_version = std::max(max_schema_version, index_schema.get_schema_version()))) {
-                LOG_WARN("fail to build single table write defensive", KR(ret), K(index_schema));
+                LOG_WARN("fail to build single table write defensive", KR(ret), K(index_schema));       
               } else {
                 // The index data is stored separately from the main table,
                 // the partition needs to be built, and insert ori_schema_version in the outer insert
@@ -7889,7 +7889,7 @@ int ObDDLService::alter_table_index(obrpc::ObAlterTableArg &alter_table_arg,
         }
       }
     }
-    if (OB_SUCC(ret) && is_only_add_index_on_empty_table
+    if (OB_SUCC(ret) && is_only_add_index_on_empty_table 
                      && OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(new_table_schema,
                                                                                           max_schema_version,
                                                                                           trans))) {
@@ -14576,7 +14576,7 @@ int ObDDLService::alter_table_in_trans(obrpc::ObAlterTableArg &alter_table_arg,
                                                trans,
                                                alter_table_arg.allocator_,
                                                tenant_data_version,
-                                               is_only_add_index_on_empty_table,
+                                               is_only_add_index_on_empty_table, 
                                                res,
                                                ddl_tasks,
                                                new_fetched_snapshot))) {
@@ -27695,7 +27695,7 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obrpc::ObAlter
 {
   int ret = OB_SUCCESS;
   LOG_INFO("RS start to rebuild vec index", K(arg));
-
+  
   if (OB_FAIL(check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("check_inner_stat error", K(ret), K(is_inited()));
@@ -27749,7 +27749,7 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obrpc::ObAlter
         ret = OB_EAGAIN;
         LOG_WARN("index table not found during rebuild, possibly due to concurrent DDL",
           K(ret), K(arg), K(data_table_id), KPC(table_schema));
-      } else if (arg.is_need_check_based_schema_objects() &&
+      } else if (arg.is_need_check_based_schema_objects() && 
                  OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
         LOG_WARN("index table schema changed since rebuild request, parallel ddl conflict", KR(ret), K(arg));
       } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {

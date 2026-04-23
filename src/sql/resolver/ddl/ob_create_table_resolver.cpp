@@ -2654,7 +2654,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
             } else if (FALSE_IT(create_index_arg.index_schema_.set_index_params(index_params_))) {
             } else if (ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
                            tbl_schema, vec_index_type_, index_params_)
-                       && FALSE_IT(tbl_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD))) {
+                       && FALSE_IT(tbl_schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD_FOR_VEC_ASYNC_INDEX))) {
             } else if (OB_FAIL(ObVecIndexBuilderUtil::append_vec_args(tbl_schema,
                                                                       resolve_result,
                                                                       create_index_arg,
