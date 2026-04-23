@@ -114,42 +114,6 @@ void ObQueryEngine::dump2text(FILE* fd)
   }
 }
 
-int ObQueryEngine::dump_keyhash(FILE *fd) const
-{
-  int ret = OB_SUCCESS;
-  const bool print_bucket_node = true;
-  const bool print_row_value = false; // basic info of ObMvccRow
-  const bool print_row_value_verbose = false; // data part of ObMvccRow
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "not init", "this", this);
-  } else if (OB_ISNULL(fd)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid param", KP(fd));
-  } else {
-    keyhash_.dump_hash(fd,
-                       print_bucket_node,
-                       print_row_value,
-                       print_row_value_verbose);
-  }
-
-  return ret;
-}
-
-
-int64_t ObQueryEngine::hash_size() const
-{
-  int64_t arr_size = keyhash_.get_arr_size();
-  return arr_size;
-}
-
-int64_t ObQueryEngine::hash_alloc_memory() const
-{
-  int64_t alloc_mem = keyhash_.get_alloc_memory();
-  return alloc_mem;
-}
-
 int64_t ObQueryEngine::btree_size() const
 {
   int64_t obj_cnt = keybtree_.size();
@@ -184,7 +148,6 @@ void ObQueryEngine::destroy()
 {
   keybtree_.destroy(true /*is_batch_destroy*/);
   btree_allocator_.reset();
-  keyhash_.destroy();
   is_inited_ = false;
 }
 
@@ -193,39 +156,9 @@ void ObQueryEngine::pre_batch_destroy_keybtree()
   (void)keybtree_.pre_batch_destroy();
 }
 
-// The hashmap is thread safe and only one of concurrency inserts will succeed.
-// While others will get the OB_ENTRY_EXIST error code.
-int ObQueryEngine::set(const ObMemtableKey *key, ObMvccRow *value)
-{
-  int ret = OB_SUCCESS;
-
-  if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", KP(this));
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(key) || OB_ISNULL(value)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid param when query_engine set",
-              KR(ret), KP(key), KP(value));
-  } else {
-    ObStoreRowkeyWrapper key_wrapper(key->get_rowkey());
-    if (OB_FAIL(keyhash_.insert(&key_wrapper, value))) {
-      if (OB_ENTRY_EXIST != ret) {
-        TRANS_LOG(WARN, "put to keyhash fail", K(ret),
-                  KPC(key), KPC(value));
-      }
-    } else {
-      value->set_hash_indexed();
-    }
-  }
-  if (OB_FAIL(ret) && OB_ENTRY_EXIST != ret) {
-    TRANS_LOG(WARN, "query engine set fail", KR(ret), K(ret), KPC(key), KPC(value));
-  }
-  return ret;
-}
-
 int ObQueryEngine::get(const ObMemtableKey *parameter_key,
-                       ObMvccRow *&row,
-                       ObMemtableKey *returned_key)
+                                  ObMvccRow *&row,
+                                  ObMemtableKey *returned_key)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
@@ -238,50 +171,39 @@ int ObQueryEngine::get(const ObMemtableKey *parameter_key,
     TRANS_LOG(WARN, "invalid param", KP(parameter_key));
   } else {
     const ObStoreRowkeyWrapper parameter_key_wrapper(parameter_key->get_rowkey());
-    const ObStoreRowkeyWrapper *copy_inner_key_wrapper = nullptr;
 
-    if (OB_FAIL(keyhash_.get(&parameter_key_wrapper, row, copy_inner_key_wrapper))) {
+    if (OB_FAIL(keybtree_.get(parameter_key_wrapper, row))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        TRANS_LOG(WARN, "get from keyhash fail", KR(ret), KPC(parameter_key));
+        TRANS_LOG(WARN, "get from keybtree fail", KR(ret), KPC(parameter_key));
       }
       row = nullptr;
     } else if (OB_ISNULL(row)) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "get NULL value from keyhash", KR(ret), KPC(parameter_key));
-    } else if (returned_key) {
-      ret = returned_key->encode(copy_inner_key_wrapper->get_rowkey());
+      TRANS_LOG(ERROR, "get NULL value from keybtree", KR(ret), KPC(parameter_key));
     }
   }
-
   return ret;
 }
 
-// The caller need to guarantee the mutual exclusive enforced here, otherwise
-// the concurrent modification will violate the rules of the btree(the ERROR
-// will be reported if two same key is inserted into keybtree successively)
-int ObQueryEngine::ensure(const ObMemtableKey *key, ObMvccRow *value)
+int ObQueryEngine::create_btree_kv(const ObMemtableKey *parameter_key,
+                                   const ObMvccRowCreator &row_creator,
+                                   ObMvccRow *&row)
 {
   int ret = OB_SUCCESS;
 
   if (IS_NOT_INIT) {
-    TRANS_LOG(WARN, "not init", "this", this);
+    TRANS_LOG(WARN, "not init", K(this));
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(key) || OB_ISNULL(value)) {
+  } else if (OB_ISNULL(parameter_key)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "query_engine ensure error, invalid param", KR(ret), KP(key), KP(value));
+    TRANS_LOG(WARN, "invalid param", KP(parameter_key));
+  } else if (OB_UNLIKELY(!row_creator.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    TRANS_LOG(WARN, "invalid row creator", K(row_creator));
   } else {
-    if (!value->is_btree_indexed()) {
-      ObStoreRowkeyWrapper key_wrapper(key->get_rowkey());
-      if (OB_FAIL(keybtree_.insert(key_wrapper, value))) {
-        TRANS_LOG(WARN, "ensure keybtree fail", KR(ret), K(*key));
-        if (OB_ENTRY_EXIST == ret) {
-          TRANS_LOG(ERROR, "ensure keybtree fail", KR(ret), K(*key));
-        } else {
-          TRANS_LOG(WARN, "ensure keybtree fail", KR(ret), K(*key));
-        }
-      } else {
-        value->set_btree_indexed();
-      }
+    const ObStoreRowkeyWrapper parameter_key_wrapper(parameter_key->get_rowkey());
+    if (OB_FAIL(keybtree_.insert_or_get(parameter_key_wrapper, row_creator, row))) {
+      TRANS_LOG(WARN, "fail to insert or get", KR(ret), KPC(parameter_key));
     }
   }
 

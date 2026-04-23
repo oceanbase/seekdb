@@ -268,20 +268,12 @@ int ObAllVirtualMemstoreInfo::process_curr_tenant(ObNewRow *&row)
           cur_row_.cells_[i].set_int(mt->get_occupied_size());
           break;
         case OB_APP_MIN_COLUMN_ID + 10:
-          // hash_item_count
-          if (nullptr != data_memtable) {
-            cur_row_.cells_[i].set_int(data_memtable->get_hash_item_count());
-          } else {
-            cur_row_.cells_[i].set_int(0);
-          }
+          // hash_item_count (removed, always 0)
+          cur_row_.cells_[i].set_int(0);
           break;
         case OB_APP_MIN_COLUMN_ID + 11:
-          // hash_mem_used
-          if (nullptr != data_memtable) {
-            cur_row_.cells_[i].set_int(data_memtable->get_hash_alloc_memory());
-          } else {
-            cur_row_.cells_[i].set_int(0);
-          }
+          // hash_mem_used (removed, always 0)
+          cur_row_.cells_[i].set_int(0);
           break;
         case OB_APP_MIN_COLUMN_ID + 12:
           // btree_item_count
