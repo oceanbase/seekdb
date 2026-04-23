@@ -32,6 +32,7 @@ ob_set_subtarget(oblib_rpc obmysql
   obmysql/ob_poc_sql_request_operator.cpp
   obmysql/ob_sql_nio.cpp
   obmysql/ob_sql_nio_server.cpp
+  obmysql/ob_sql_nio_win_pipe.cpp
   obmysql/ob_sql_sock_handler.cpp
   obmysql/ob_sql_sock_processor.cpp
   obmysql/ob_sql_sock_session.cpp
