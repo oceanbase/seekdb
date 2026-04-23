@@ -16,7 +16,7 @@
 
  #ifndef OCEANBASE_OBSERVER_TABLE_OB_HYBRID_VECTOR_REFRESH_TASK_H_
  #define OCEANBASE_OBSERVER_TABLE_OB_HYBRID_VECTOR_REFRESH_TASK_H_
-
+ 
 #include "lib/string/ob_string.h"
 #include "share/scn.h"
 #include "lib/thread/thread_mgr_interface.h"
@@ -29,7 +29,7 @@
 #include "share/ai_service/ob_ai_service_struct.h"
 #include "storage/ob_value_row_iterator.h"
 #include "src/observer/omt/ob_tenant_ai_service.h"
-
+ 
 namespace oceanbase
 {
 namespace share
@@ -44,14 +44,14 @@ enum ObHybridVectorRefreshTaskStatus
   TASK_FINISH = 4,
 };
 
-class ObVecEmbeddingAsyncTaskExecutor final : public ObVecAsyncTaskExector
+class ObVecEmbeddingAsyncTaskExecutor final : public ObVecAsyncTaskExector 
 {
-public:
+public: 
   ObVecEmbeddingAsyncTaskExecutor() : ObVecAsyncTaskExector()
   {}
   virtual ~ObVecEmbeddingAsyncTaskExecutor() {}
   virtual int load_task(uint64_t &task_trace_base_num) override;
-private:
+private:  
   bool check_operation_allow() override;
 };
 
@@ -104,6 +104,7 @@ public:
   ObSEArray<uint64_t, 4> embedded_table_update_ids_;
   omt::ObAiServiceGuard ai_service_;
   const ObAiModelEndpointInfo *endpoint_;
+  ObString request_model_name_;
   ObPluginVectorIndexAdapterGuard adp_guard_;
   bool task_started_;
   uint32_t part_key_num_; // is part key but rowkey
@@ -123,7 +124,7 @@ public:
     }
   }
   virtual int do_work() override;
-  ObHybridVectorRefreshTaskStatus current_status() {
+  ObHybridVectorRefreshTaskStatus current_status() { 
     ObHybridVectorRefreshTaskStatus status = ObHybridVectorRefreshTaskStatus::INVALID_TASK_STATUS;
     ObHybridVectorRefreshTaskCtx *ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
     if (OB_NOT_NULL(ctx)) {
@@ -146,21 +147,21 @@ private:
   int get_index_id_column_ids(ObPluginVectorIndexAdaptor &adaptor);
   int get_embedded_table_column_ids(ObPluginVectorIndexAdaptor &adaptor);
   int init_dml_param(
-      uint64_t table_id,
-      ObDMLBaseParam &dml_param,
-      share::schema::ObTableDMLParam &table_param,
-      ObIArray<uint64_t> &dml_column_ids,
-      transaction::ObTxDesc *tx_desc,
-      oceanbase::transaction::ObTxReadSnapshot &snapshot,
+      uint64_t table_id, 
+      ObDMLBaseParam &dml_param, 
+      share::schema::ObTableDMLParam &table_param, 
+      ObIArray<uint64_t> &dml_column_ids, 
+      transaction::ObTxDesc *tx_desc, 
+      oceanbase::transaction::ObTxReadSnapshot &snapshot, 
       storage::ObStoreCtxGuard &store_ctx_guard);
   int init_endpoint(ObPluginVectorIndexAdaptor &adaptor);
   int prepare_for_embedding(ObPluginVectorIndexAdaptor &adaptor);
   int prepare_index_id_data(storage::ObValueRowIterator &index_id_iter, storage::ObValueRowIterator &delta_delete_iter);
   int do_refresh_only(
-      ObPluginVectorIndexAdaptor &adaptor,
-      transaction::ObTxDesc *tx_desc,
-      oceanbase::transaction::ObTxReadSnapshot &snapshot,
-      storage::ObStoreCtxGuard &store_ctx_guard,
+      ObPluginVectorIndexAdaptor &adaptor, 
+      transaction::ObTxDesc *tx_desc, 
+      oceanbase::transaction::ObTxReadSnapshot &snapshot, 
+      storage::ObStoreCtxGuard &store_ctx_guard, 
       storage::ObValueRowIterator &index_id_iter,
       storage::ObValueRowIterator &delta_delete_iter);
   int delete_embedded_table(ObPluginVectorIndexAdaptor &adaptor, transaction::ObTxDesc *tx_desc, oceanbase::transaction::ObTxReadSnapshot &snapshot, storage::ObStoreCtxGuard &store_ctx_guard);
