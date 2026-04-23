@@ -97,6 +97,49 @@ TEST(TestSimpleThreadPool, test_dynamic_simple_thread_pool_bind)
   ASSERT_FALSE(pool.has_bind_);
 }
 
+TEST(TestSimpleThreadPool, test_dynamic_simple_thread_pool_reexpand_from_zero_thread)
+{
+  class ObTestSimpleThreadPool : public ObSimpleThreadPool {
+    void handle(void *task) override
+    {
+      int64_t sleep_us = reinterpret_cast<int64_t>(task);
+      if (sleep_us > 0) {
+        ::usleep(sleep_us);
+      }
+      ATOMIC_INC(&handle_cnt_);
+    }
+  public:
+    int64_t handle_cnt_ = 0;
+  };
+
+  int ret = OB_SUCCESS;
+  ObTestSimpleThreadPool pool;
+  ret = pool.set_adaptive_thread(0, 1);
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ret = pool.init(1, 128, "qth_reexpand_zero");
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(0, pool.get_thread_count());
+
+  const int64_t batch_cnt = 8;
+  const int64_t task_sleep_us = 1000;
+
+  // batch 1
+  for (int64_t i = 0; i < batch_cnt; ++i) {
+    ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(task_sleep_us)));
+  }
+  ::usleep(3 * 1000 * 1000);
+  ASSERT_EQ(batch_cnt, pool.handle_cnt_);
+
+  // batch 2
+  for (int64_t i = 0; i < batch_cnt; ++i) {
+    ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(task_sleep_us)));
+  }
+  ::usleep(1 * 1000 * 1000);
+  ASSERT_EQ(2 * batch_cnt, pool.handle_cnt_);
+
+  pool.destroy();
+}
+
 TEST(TestSimpleThreadPool, DISABLED_test_dynamic_simple_thread_pool)
 {
   class ObTestSimpleThreadPool : public ObSimpleThreadPool {

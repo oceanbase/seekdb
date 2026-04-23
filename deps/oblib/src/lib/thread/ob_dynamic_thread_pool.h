@@ -117,6 +117,7 @@ public:
   int64_t get_running_thread_cnt() const { return running_thread_cnt_; }
   int set_thread_count(int64_t n_threads);
   int set_max_thread_count(int64_t max_thread_cnt);
+  virtual void notify_stop() {}
   void inc_ref() { ATOMIC_INC(&ref_cnt_); }
   void dec_ref() { ATOMIC_SAF(&ref_cnt_, 1); }
   int64_t get_ref_cnt() { return ATOMIC_LOAD(&ref_cnt_); }

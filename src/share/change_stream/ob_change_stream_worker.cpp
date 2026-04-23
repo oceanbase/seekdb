@@ -58,7 +58,7 @@ int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_que
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("ObCSExecutor invalid argument", K(ret), K(executor_id), K(thread_num), K(task_queue_limit), KP(name));
   } else if (FALSE_IT(ObThreadPool::set_run_wrapper(MTL_CTX()))) {
-  } else if (OB_FAIL(set_adaptive_thread(1, thread_num))) {
+  } else if (OB_FAIL(set_adaptive_thread(0, thread_num))) {
     LOG_WARN("ObCSExecutor set_adaptive_thread failed", K(ret), K(executor_id));
     // Base pool was already initialized — must clean up to avoid resource leak.
     ObLinkQueueThreadPool::destroy();

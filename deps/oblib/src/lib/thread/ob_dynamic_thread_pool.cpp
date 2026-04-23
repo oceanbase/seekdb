@@ -375,6 +375,8 @@ void ObSimpleDynamicThreadPool::stop()
 {
   IGNORE_RETURN ObSimpleThreadPoolDynamicMgr::get_instance().unbind(this);
   lib::ThreadPool::stop();
+  // Wake all workers blocked in queue pop so they can check the stop flag immediately
+  notify_stop();
 }
 
 void ObSimpleDynamicThreadPool::destroy()
@@ -390,6 +392,7 @@ void ObSimpleDynamicThreadPool::destroy()
     ob_usleep((useconds_t)10L * 1000L);
   }
   lib::ThreadPool::stop();
+  notify_stop();
   lib::ThreadPool::wait();
 }
 
@@ -450,8 +453,13 @@ int ObSimpleDynamicThreadPool::set_max_thread_count(int64_t max_thread_cnt)
 int ObSimpleDynamicThreadPool::set_thread_count_and_try_recycle(int64_t cnt)
 {
   int ret = OB_SUCCESS;
+  const int64_t old_thread_count = get_thread_count();
   ret = Threads::do_set_thread_count(cnt, true/*async_recycle*/);
   if (OB_SUCC(ret)) {
+    // When shrinking, wake up all workers to check stop flags
+    if (cnt < old_thread_count) {
+      notify_stop();
+    }
     ret = Threads::try_thread_recycle();
   }
   return ret;
@@ -467,6 +475,7 @@ void ObSimpleDynamicThreadPool::try_expand_thread_count()
   } else if ((queue_size = get_queue_num()) <= 0) {
     // unneed to expand thread count
   } else if (OB_SUCC(update_threads_lock_.trylock())) {
+    IGNORE_RETURN Threads::try_thread_recycle();
     int64_t cur_thread_count = get_thread_count();
     int inc_cnt = 0;
     if (cur_thread_count > 0) {

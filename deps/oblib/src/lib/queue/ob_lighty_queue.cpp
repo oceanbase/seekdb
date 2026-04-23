@@ -64,6 +64,15 @@ int ObLightyQueue::init(const uint64_t capacity,
   return ret;
 }
 
+void ObLightyQueue::wake_all()
+{
+  if (NULL != cond_) {
+    for (uint64_t i = 0; i < n_cond_; i++) {
+      cond_[i].signal();
+    }
+  }
+}
+
 void ObLightyQueue::destroy()
 {
   if (NULL != data_) {
