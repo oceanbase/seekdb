@@ -24,6 +24,10 @@
 #include "lib/thread/ob_thread_name.h"
 #include "lib/net/ob_net_util.h"
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
+#ifdef _WIN32
+#include "rpc/obmysql/ob_sql_nio_win_pipe.h"
+#include <thread>
+#endif
 #ifdef __linux__
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -95,18 +99,18 @@ static int kqueue_epoll_create1(int flags) {
 static int kqueue_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event) {
   struct kevent kev[2];
   int n = 0;
-
+  
   if (op == EPOLL_CTL_ADD || op == EPOLL_CTL_MOD) {
     uint16_t flags = EV_ADD | EV_ENABLE;
     if (event->events & EPOLLET) flags |= EV_CLEAR;
-
+    
     if (event->events & EPOLLIN) {
       EV_SET(&kev[n++], fd, EVFILT_READ, flags, 0, 0, event->data.ptr);
     }
     if (event->events & EPOLLOUT) {
       EV_SET(&kev[n++], fd, EVFILT_WRITE, flags, 0, 0, event->data.ptr);
     }
-
+    
     if (op == EPOLL_CTL_MOD) {
       // For MOD, we might need to delete existing filters if they are not in the new event
       if (!(event->events & EPOLLIN)) {
@@ -127,7 +131,7 @@ static int kqueue_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
     errno = EINVAL;
     return -1;
   }
-
+  
   if (n > 0) {
     if (kevent(epfd, kev, n, NULL, 0, NULL) < 0) {
       if (op != EPOLL_CTL_DEL) return -1;
@@ -140,16 +144,16 @@ static int kqueue_epoll_wait(int epfd, struct epoll_event *events, int maxevents
   struct kevent *kevs = (struct kevent *)alloca(sizeof(struct kevent) * maxevents);
   struct timespec ts;
   struct timespec *pts = NULL;
-
+  
   if (timeout >= 0) {
     ts.tv_sec = timeout / 1000;
     ts.tv_nsec = (timeout % 1000) * 1000000;
     pts = &ts;
   }
-
+  
   int n = kevent(epfd, NULL, 0, kevs, maxevents, pts);
   if (n < 0) return -1;
-
+  
   for (int i = 0; i < n; i++) {
     events[i].events = 0;
     if (kevs[i].filter == EVFILT_READ) events[i].events |= EPOLLIN;
@@ -1236,7 +1240,11 @@ class ObSqlNioImpl
 public:
   ObSqlNioImpl(ObISqlSockHandler& handler):
     handler_(handler), epfd_(-1), lfd_(-1), unix_lfd_(-1), tcp_keepalive_enabled_(0),
-    tcp_keepidle_(0), tcp_keepintvl_(0), tcp_keepcnt_(0) {
+    tcp_keepidle_(0), tcp_keepintvl_(0), tcp_keepcnt_(0)
+#ifdef _WIN32
+    , pipe_thread_(NULL)
+#endif
+  {
     memset(unix_socket_path_, 0, sizeof(unix_socket_path_));
   }
   ~ObSqlNioImpl() {
@@ -1251,11 +1259,15 @@ public:
       free_sql_sock(s);
     }
 
+#ifdef _WIN32
+    win_pipe_server_.stop();
+#else
     if (unix_lfd_ >= 0) {
       close(unix_lfd_);
       unix_lfd_ = -1;
       unlink(unix_socket_path_);
     }
+#endif
   }
   //use need_monopolize to prevent two observer processes use the same mysql port
   int init(int port, bool need_monopolize, const char* unix_socket_path = NULL) {
@@ -1267,6 +1279,22 @@ public:
     }
     return ret;
   }
+  int inject_accepted_fd(int fd, bool is_unix_socket) {
+    do_accept_one(fd, is_unix_socket);
+    return 0;
+  }
+#ifdef _WIN32
+  void start_pipe_thread() {
+    pipe_thread_ = new std::thread(&ObWinNamedPipeServer::thread_func, &win_pipe_server_);
+  }
+  void join_pipe_thread() {
+    if (NULL != pipe_thread_) {
+      pipe_thread_->join();
+      delete pipe_thread_;
+      pipe_thread_ = NULL;
+    }
+  }
+#endif
   int init_io() {
     int ret = OB_SUCCESS;
     uint32_t epflag = EPOLLIN;
@@ -1303,6 +1331,14 @@ public:
       
       // add Unix domain socket listen
       if (OB_SUCC(ret) && unix_socket_path != NULL) {
+#ifdef _WIN32
+        // Windows: start Named Pipe server instead of AF_UNIX
+        if (OB_FAIL(win_pipe_server_.init("\\\\.\\pipe\\MySQL", this))) {
+          LOG_WARN("named pipe init fail", K(ret));
+          // Does not affect TCP, do not return error
+          ret = OB_SUCCESS;
+        }
+#else
         strncpy(unix_socket_path_, unix_socket_path, sizeof(unix_socket_path_) - 1);
         if ((unix_lfd_ = listen_create_unix(unix_socket_path_, need_monopolize)) < 0) {
           LOG_WARN("unix socket listen create fail", K(unix_socket_path_), K(errno));
@@ -1314,6 +1350,7 @@ public:
         } else {
           LOG_INFO("sql_nio init unix socket listen succ", K(unix_socket_path_), "fd", unix_lfd_);
         }
+#endif
       }
       
       if (OB_SUCCESS != ret && lfd_ >= 0) {
@@ -1684,6 +1721,10 @@ private:
   uint32_t tcp_keepintvl_;
   uint32_t tcp_keepcnt_;
   char unix_socket_path_[256];
+#ifdef _WIN32
+  ObWinNamedPipeServer win_pipe_server_;
+  std::thread* pipe_thread_;
+#endif
 };
 
 int ObSqlNio::start(int port, ObISqlSockHandler *handler, int n_thread,
@@ -1714,6 +1755,10 @@ int ObSqlNio::start(int port, ObISqlSockHandler *handler, int n_thread,
     if (OB_SUCC(ret)) {
       lib::Threads::set_thread_count(n_thread);
       lib::Threads::start();
+#ifdef _WIN32
+      // Start the Named Pipe IOCP thread on the first NIO impl
+      impl_[0].start_pipe_thread();
+#endif
     }
   }
   return ret;
@@ -1734,6 +1779,22 @@ void ObSqlNio::destroy()
   for (int i = 0; i < get_thread_count(); i++) {
     impl_[i].destroy();
   }
+#ifdef _WIN32
+  if (NULL != impl_) {
+    impl_[0].join_pipe_thread();
+  }
+#endif
+}
+
+int ObSqlNio::inject_accepted_fd(int fd, bool is_unix_socket)
+{
+  int ret = OB_SUCCESS;
+  if (NULL != impl_) {
+    ret = impl_[0].inject_accepted_fd(fd, is_unix_socket);
+  } else {
+    ret = OB_NOT_INIT;
+  }
+  return ret;
 }
 
 void ObSqlNio::run(int64_t idx)
