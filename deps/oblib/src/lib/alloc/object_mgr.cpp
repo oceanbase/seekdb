@@ -27,7 +27,7 @@ SubObjectMgr::SubObjectMgr(ObTenantCtxAllocator &ta,
                            IBlockMgr *blk_mgr)
   : IBlockMgr(ta.get_tenant_id(), ta.get_ctx_id()),
     ta_(ta),
-    mutex_(common::ObLatchIds::ALLOC_OBJECT_LOCK),
+    mutex_(),
     normal_locker_(mutex_), no_log_locker_(mutex_),
     locker_(!enable_no_log ? static_cast<ISetLocker&>(normal_locker_) :
             static_cast<ISetLocker&>(no_log_locker_)),
@@ -38,9 +38,6 @@ SubObjectMgr::SubObjectMgr(ObTenantCtxAllocator &ta,
   bs_.set_chunk_mgr(&ta.get_chunk_mgr());
   os_.set_locker(&locker_);
   NULL == blk_mgr ? os_.set_block_mgr(this) : os_.set_block_mgr(blk_mgr);
-#ifndef ENABLE_SANITY
-  mutex_.enable_record_stat(false);
-#endif
 }
 
 void SubObjectMgr::free_object(AObject *object)
@@ -140,7 +137,8 @@ AObject *ObjectMgr::alloc_object(uint64_t size, const ObMemAttr &attr)
     }
     if (OB_ISNULL(obj) && OB_LIKELY(!stop)) {
       uint64_t idx = start;
-      while (OB_ISNULL(obj)) {
+      int64_t try_cnt = 0;
+      while (OB_ISNULL(obj) && try_cnt < ALLOC_MAX_LOCK_TRY_CNT) {
         sub_mgr = ATOMIC_LOAD(&sub_mgrs_[idx++ % parallel_]);
         if (OB_ISNULL(sub_mgr)) {
           continue;
@@ -148,6 +146,8 @@ AObject *ObjectMgr::alloc_object(uint64_t size, const ObMemAttr &attr)
           obj = sub_mgr->alloc_object(size, attr);
           sub_mgr->unlock();
           break;
+        } else {
+          ++try_cnt;
         }
       }
     }
@@ -228,7 +228,8 @@ ABlock *ObjectMgr::alloc_block(uint64_t size, const ObMemAttr &attr)
     }
     if (OB_ISNULL(block) && OB_LIKELY(!stop)) {
       uint64_t idx = start;
-      while (OB_ISNULL(block)) {
+      int64_t try_cnt = 0;
+      while (OB_ISNULL(block) && try_cnt < ALLOC_MAX_LOCK_TRY_CNT) {
         sub_mgr = ATOMIC_LOAD(&sub_mgrs_[idx++ % parallel_]);
         if (OB_ISNULL(sub_mgr)) {
           continue;
@@ -236,6 +237,8 @@ ABlock *ObjectMgr::alloc_block(uint64_t size, const ObMemAttr &attr)
           block = sub_mgr->alloc_block(size, attr);
           sub_mgr->unlock();
           break;
+        } else {
+          ++try_cnt;
         }
       }
     }

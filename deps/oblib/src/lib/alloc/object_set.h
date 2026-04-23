@@ -200,63 +200,9 @@ public:
   void do_free_object(AObject *obj, ABlock *block);
   bool check_has_unfree(char *first_label, char *first_bt);
 
-  class Lock
-  {
-  public:
-    static constexpr int32_t WAIT_MASK = 1<<31;
-    static constexpr int32_t WRITE_MASK = 1<<30;
-    Lock() : v_(0), wait_cnt_(0)
-    {}
-    bool lock(int64_t timeout_us = INT64_MAX)
-    {
-      const int32_t MAX_TRY_CNT = 16;
-      bool locked = false;
-      const int32_t tid = static_cast<uint32_t>(GETTID());
-      for (int i = 0; i < MAX_TRY_CNT; ++i) {
-        if (ATOMIC_BCAS(&v_, 0, tid | WRITE_MASK)) {
-          locked = true;
-          break;
-        }
-        sched_yield();
-      }
-      if (OB_UNLIKELY(!locked)) {
-        locked = wait(tid, timeout_us);
-      }
-      return locked;
-    }
-    void unlock()
-    {
-      int32_t v = ATOMIC_SET(&v_, 0);
-      if (OB_UNLIKELY(WAIT_MASK == (v & WAIT_MASK))) {
-        futex_wake(&v_, 1);
-      }
-    }
-    bool wait(const int32_t tid, int64_t timeout_us)
-    {
-      bool ret = false;
-      static constexpr timespec TIMEOUT = {0, 100 * 1000 * 1000};
-      const int64_t abs_timeout_us = INT64_MAX == timeout_us ? INT64_MAX : ObTimeUtility::current_time() + timeout_us;
-      ATOMIC_INC(&wait_cnt_);
-      while (!ret && abs_timeout_us > ObTimeUtility::current_time()) {
-        const int32_t v = v_;
-        if (WAIT_MASK == (v & WAIT_MASK) || ATOMIC_BCAS(&v_, v | WRITE_MASK, v | WAIT_MASK)) {
-          futex_wait(&v_, v | WRITE_MASK | WAIT_MASK, &TIMEOUT);
-        }
-        ret = ATOMIC_BCAS(&v_, 0, tid | WRITE_MASK | WAIT_MASK);
-      }
-      ATOMIC_DEC(&wait_cnt_);
-      return ret;
-    }
-    bool trylock() { return false; }
-    void enable_record_stat(bool) {}
-    int32_t get_wait_cnt() const { return wait_cnt_; }
-  private:
-    int32_t v_;
-    int32_t wait_cnt_;
-  };
   struct SizeClass
   {
-    Lock lock_;
+    LightMutex lock_;
     AObject *local_free_;
     ABlock *avail_blist_;
     ABlock *full_blist_;
