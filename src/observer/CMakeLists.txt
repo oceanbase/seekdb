@@ -766,6 +766,28 @@ else()
     DEPENDS fake_observer)
 endif()
 
+# ── Bundle third-party runtime DLLs next to seekdb.exe in the build tree ──
+# Without this, running build/.../seekdb.exe directly requires the user's
+# PATH to include ${OB_VCPKG_DIR}/bin etc. After this POST_BUILD step the
+# build tree is self-contained for local smoke tests (--version, unit
+# launches, debugger runs). Install/package bundling is still handled
+# separately by cmake/Pack.cmake at cpack time.
+#
+# Attached to the `seekdb` target (not `observer`) so that:
+#   * `cmake --build . --target seekdb` alone produces a runnable exe
+#   * `observer` (which DEPENDS seekdb) still triggers bundling transitively
+#   * bundling runs only once per build, not once per downstream target
+if(WIN32)
+  add_custom_command(TARGET seekdb POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+      "-DEXE=${CMAKE_BINARY_DIR}/src/observer/seekdb.exe"
+      "-DOUT_DIR=${CMAKE_BINARY_DIR}/src/observer"
+      "-DSEARCH_DIRS=${OB_VCPKG_DIR}/bin;${OB_VSAG_DIR}/bin"
+      -P "${CMAKE_SOURCE_DIR}/cmake/BundleRuntimeDllsWindows.cmake"
+    COMMENT "Bundling runtime DLLs next to seekdb.exe"
+    VERBATIM)
+endif()
+
 if(WIN32)
   add_custom_target(observer ALL
     DEPENDS seekdb
