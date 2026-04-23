@@ -256,6 +256,19 @@ elseif(WIN32)
   ob_define(OB_VCPKG_DIR "C:/VcpkgInstalled/x64-windows")
   ob_define(OB_OPENSSL_DIR "C:/Program Files/OpenSSL-Win64")
   ob_define(OB_LLVM_DIR "C:/Program Files/LLVM18")
+  ob_define(OB_VSAG_DIR "${DEP_3RD_DIR}/vsag")
+  # These paths may arrive from -D... with native Windows backslashes. If we
+  # let them flow unchanged into configure_file()/file(WRITE) outputs, CMake
+  # 3.20+ will reject the resulting scripts with "Invalid character escape"
+  # (\w, \d, \x, ...). Normalize once here so all downstream uses are safe.
+  foreach(_ob_path_var
+          SYS_UM_INCLUDE_DIR SYS_UCRT_INCLUDE_DIR SYS_SHARED_INCLUDE_DIR
+          OB_VCPKG_DIR OB_OPENSSL_DIR OB_LLVM_DIR OB_VSAG_DIR)
+    if(DEFINED ${_ob_path_var})
+      file(TO_CMAKE_PATH "${${_ob_path_var}}" ${_ob_path_var})
+    endif()
+  endforeach()
+  unset(_ob_path_var)
 elseif(UNIX)
   # NO RELERO: -Wl,-znorelro
   # Partial RELRO: -Wl,-z,relro
