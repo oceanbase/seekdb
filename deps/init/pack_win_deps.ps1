@@ -36,6 +36,7 @@ param(
     [string]$VcpkgRoot    = "C:\VcpkgInstalled",
     [string]$OpenSSLDir   = "C:\Program Files\OpenSSL-Win64",
     [string]$LLVMDir      = "C:\Program Files\LLVM18",
+    [string]$VsagDir      = "C:\VsagInstalled",
     [string]$DateStamp    = (Get-Date -Format "yyyyMMdd")
 )
 
@@ -216,6 +217,18 @@ if ($FlexBisonDir -and (Test-Path $FlexBisonDir)) {
         "tools\win_flex_bison" = $FlexBisonDir
     }
     if ($result) { $toolsPackages += $result }
+}
+
+# 7. vsag (vector search library)
+if (Test-Path $VsagDir) {
+    $name = "devdeps-vsag-$DateStamp.tar.gz"
+    Write-Log "Packing vsag from $VsagDir ..."
+    $result = New-DepArchive -ArchiveName $name -TopDirName "devdeps-vsag-$DateStamp" -Mappings @{
+        "vsag" = $VsagDir
+    }
+    if ($result) { $depsPackages += $result }
+} else {
+    Write-Err "vsag not found: $VsagDir"
 }
 
 # -- Generate deps file ----------------------------------------------
