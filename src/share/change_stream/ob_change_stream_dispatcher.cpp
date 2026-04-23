@@ -498,6 +498,12 @@ int ObCSDispatcher::do_dispatch_()
 
   ObMultiVersionSchemaService *schema_service = nullptr;
   bool trans_started = false;
+  // Bump worker timeout to 5 minutes so that ObInnerSQLConnection propagates
+  // the same value to session's ob_query_timeout / ob_trx_timeout when the
+  // batch's inner-SQL statements are executed.
+  static const int64_t CS_DISPATCH_TRANS_TIMEOUT_US = 5L * 60L * 1000L * 1000L;
+  const int64_t saved_worker_timeout_ts = THIS_WORKER.get_timeout_ts();
+  THIS_WORKER.set_timeout_ts(ObTimeUtil::current_time() + CS_DISPATCH_TRANS_TIMEOUT_US);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
     LOG_WARN("init plugins failed", KR(ret));
@@ -509,6 +515,7 @@ int ObCSDispatcher::do_dispatch_()
   } else {
     trans_started = true;
   }
+  THIS_WORKER.set_timeout_ts(saved_worker_timeout_ts);
 
   // ── Phase 2: push subtasks to workers ──
   // task_count_ is set once and NEVER modified afterwards; this avoids a
