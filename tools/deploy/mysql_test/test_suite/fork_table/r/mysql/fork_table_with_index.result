@@ -119,8 +119,8 @@ Outputs & filters:
       force partition granule
   3 - output([t2_fork.id], [t2_fork.name], [t2_fork.age], [t2_fork.email]), filter(nil), rowset=16
       access([t2_fork.id], [t2_fork.name], [t2_fork.age], [t2_fork.email]), partitions(p[0-1])
-      is_index_back=true, is_global_index=false,
-      range_key([t2_fork.name], [t2_fork.id]), range(Alice,MIN ; Alice,MAX),
+      is_index_back=true, is_global_index=false, 
+      range_key([t2_fork.name], [t2_fork.id]), range(Alice,MIN ; Alice,MAX), 
       range_cond([t2_fork.name = 'Alice'])
 explain select * from t2_fork where age = 30;
 Query Plan
@@ -141,8 +141,8 @@ Outputs & filters:
       force partition granule
   3 - output([t2_fork.id], [t2_fork.age], [t2_fork.name], [t2_fork.email]), filter(nil), rowset=16
       access([t2_fork.id], [t2_fork.age], [t2_fork.name], [t2_fork.email]), partitions(p[0-1])
-      is_index_back=true, is_global_index=false,
-      range_key([t2_fork.age], [t2_fork.id]), range(30,MIN ; 30,MAX),
+      is_index_back=true, is_global_index=false, 
+      range_key([t2_fork.age], [t2_fork.id]), range(30,MIN ; 30,MAX), 
       range_cond([t2_fork.age = 30])
 ============================================
 2.1 Fork Table with Index Building
@@ -248,6 +248,63 @@ t2c_fork	CREATE TABLE `t2c_fork` (
   PRIMARY KEY (`id`),
   VECTOR KEY `idx_vec_emb` (`emb`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
 ) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+============================================
+2.4 Fork未完成时删除源表向量索引（debug sync）
+============================================
+drop table if exists t2d;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2d'
+drop table if exists t2d_fork;
+Warnings:
+Note	1051	Unknown table 'db_fork_index.t2d_fork'
+create table t2d (
+id int primary key,
+name varchar(50),
+age int,
+email varchar(100),
+emb vector(3)
+);
+insert into t2d values (1, 'Alice', 25, 'alice@example.com', '[0.203846,0.205289,0.880265]');
+insert into t2d values (2, 'Bob', 30, 'bob@example.com', '[0.1,0.2,0.3]');
+create vector index idx_vec_race on t2d(emb) with (distance=l2, type=hnsw, lib=vsag);
+# 获取源表table_id（用于等待fork任务阶段）
+# 卡在FORK_TABLE_SUCCESS：RS 侧任务已到 SUCCESS 但未执行完 cleanup（fork 仍未完成）
+alter system set debug_sync_timeout = '120s';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS wait_for signal_fork_success_resume execute 10000';
+# fork table 客户端返回后 RS 侧任务继续；此处与 lock 用例一致不使用 --send
+fork table t2d to t2d_fork;
+set ob_trx_timeout = 100000000;
+set ob_query_timeout = 100000000;
+use db_fork_index;
+# fork未完成：发起删除源表向量索引（与 fork cleanup 并发；历史问题：可能卡死/泄漏锁）
+# drop index 会等待 fork 在 SUCCESS 卡点之前仍持有的 DDL/表锁；同步执行会与 signal 死锁，故对 drop 使用 --send
+drop index idx_vec_race on t2d;;
+set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
+set ob_global_debug_sync = 'now signal signal_fork_success_resume';
+# 验证：源表向量索引已删除；fork表仍保留向量索引定义
+show create table t2d;
+Table	Create Table
+t2d	CREATE TABLE `t2d` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `emb` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = replica_num BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show create table t2d_fork;
+Table	Create Table
+t2d_fork	CREATE TABLE `t2d_fork` (
+  `id` int(11) NOT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `emb` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx_vec_race` (`emb`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+set ob_global_debug_sync = 'reset';
 ============================================
 3. Fork Table with Unique Index
 ============================================
@@ -381,6 +438,8 @@ drop table if exists t2b;
 drop table if exists t2b_fork;
 drop table if exists t2c;
 drop table if exists t2c_fork;
+drop table if exists t2d;
+drop table if exists t2d_fork;
 drop table if exists t3;
 drop table if exists t3_fork;
 drop table if exists t4;
