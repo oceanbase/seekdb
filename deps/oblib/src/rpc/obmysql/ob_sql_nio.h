@@ -59,6 +59,7 @@ public:
   SSL* get_ssl_st(void* sess);
   int get_thread_count() { return lib::Threads::get_thread_count(); }
   int set_thread_count(const int n_thread);
+  int inject_accepted_fd(int fd, bool is_unix_socket);
   uint64_t get_dispatch_idx() {
     return ATOMIC_FAA(&dispatch_idx_, 1) % get_thread_count();
   }
