@@ -424,8 +424,6 @@ int ObConfigInfoInPC::load_influence_plan_config()
     enable_var_assign_use_das_ = tenant_config->_enable_var_assign_use_das;
     enable_das_keep_order_ = tenant_config->_enable_das_keep_order;
     enable_index_merge_ = tenant_config->_enable_index_merge;
-    enable_hyperscan_regexp_engine_ =
-        (0 == ObString::make_string("Hyperscan").case_compare(tenant_config->_regex_engine.str()));
     enable_parallel_das_dml_ = tenant_config->_enable_parallel_das_dml;
     direct_load_allow_fallback_ = tenant_config->direct_load_allow_fallback;
     default_load_mode_ = ObDefaultLoadMode::get_type_value(tenant_config->default_load_mode.get_value_string());
@@ -493,9 +491,6 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", bloom_filter_ratio_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(bloom_filter_ratio_));
-  } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                               "%d,", enable_hyperscan_regexp_engine_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_hyperscan_regexp_engine_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", realistic_runtime_bloom_filter_size_))) {
     SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(realistic_runtime_bloom_filter_size_));

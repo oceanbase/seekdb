@@ -7,9 +7,14 @@
 # Under the segmentation lines there are the folders which you need to ignore #
 ##########################################################
 **
+  http://0.0.0.0*
+  https://cmake.org/*
+  http://service.cn-hangzhou.maxcompute.aliyun.com/api
+  http://dt.cn-hangzhou.maxcompute.aliyun.com
   http://license.coscl.org.cn/MulanPubL-2.0*
   http://license.coscl.org.cn/MulanPubL-1.0
   license.coscl.org.cn
+  http://11.166.86.153:8877/*
   https://open.oceanbase.com*
   https://www.oceanbase.com*
   https://github.com/oceanbase/oceanbase*
@@ -51,9 +56,18 @@
   http://software.intel.com/en-us/forums/intel-c-compiler/*
   http://astyle.sourceforge.net
   http://1.taobao.com/
+  vince.rogier@ocilib.net
+  http://www.ocilib.net
+  lexicalunit@lexicalunit.com
+  squarious@gmail.com
+  russell@kliese.id.au
+  http://simpledb.sourceforge.net
+  http://code.google.com/p/*
   www.mysql.com
   www.oceanbase.com
   www.test_url.com/abcdefg/
+  http://www.codeguru.com/*
+  http://code.google.com/p/pyodbc*
   https://www.percona.com/downloads/percona-toolkit/2.2.14/tarball/percona-toolkit-2.2.14.tar.gz
   https://oapi.dingtalk.com/robot/send?access_token=
   http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/*
@@ -114,6 +128,8 @@
   *@taobao.com
   *@alibaba.inc.com
   kaizhan.dkz@antigroup.com
+  vadimb@google.com
+  marcus.boerger@google.com
   bobak@relog.ch
   emily@163.com
   mike@sohu.com
@@ -185,6 +201,7 @@
   http://oceanbase.alibaba-inc.com/*
   https://community.oracle.com/tech/*
   https://docs.docker.com/*
+  https://hub.docker.com/*
   http://helloworld.com/*
   http://1.1.1.1:8080/*
   https://mirrors.aliyun.com/*
@@ -197,6 +214,48 @@
   https://github.com/lz4/lz4
   https://www.contributor-covenant.org/*
   https://github.com/oceanbase/*
+  http://ob-make.oceanbase-dev.com:8000/obbuild/api/v1
+  https://join.slack.com/t/oceanbase/shared_invite/zt-1e25oz3ol-lJ6YNqPHaKwY_mhhioyEuw)
+  Javier.Lewis@VFAxlnZEvOx.org
+  Amy.Moses@Ovk9KjHH.com
+  http://kb.askmonty.org/v/segmented-key-cache
+  BR+no5NoyKqyYEHz6Zvc2w==
+  7LjlyJJCbY+H945i4sFCwQ==
+  googletestframework@googlegroups.com
+  vladl@google.com
+  http://www.parashift.com/c++-faq-lite/misc-technical-issues.html#faq-39.6
+  http://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+  https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html#abi.versioning
+  http://clang.llvm.org/docs/LanguageExtensions.html#__has_include
+  http://gcc.gnu.org/gcc-4.2/changes.html
+  http://gcc.gnu.org/onlinedocs/libstdc++/manual/bk01pt01ch01.html#manual.intro.status.standard.200x
+  http://linux.die.net/man/2/clone.
+  http://code.google.com/p/googlemock/wiki/CookBook
+  http://computer-programming-forum.com/7-vc.net/6fbc30265f860ad1.htm
+  www.xifenfei.com
+  https://fastcompression.blogspot.fr/*
+  http://www.zstd.net
+  https://msdn.microsoft.com/*
+  http://www.cse.wustl.edu/*
+  https://github.com/facebook/zstd/*
+  http://www.quicklz.com/*
+  http://www.w3.org/XML/1998/namespace
+  http://www.w3.org/1999/xhtml
+  http://www.w3.org/TR/html4/
+  http://www.w3.org/1999/XSL/Transform
+  https://join.slack.com/t/oceanbase*
+  https://hub.docker.com/r/oceanbase/oceanbase-ce
+  mheule@google.com
+  keith.ray@gmail.com
+  egnor@google.com
+  eefacm@gmail.com
+  barthelemy@prologique.com
+  http://blogs.msdn.com/b/oldnewthing/archive/2004/02/23/78395.aspx 
+  sesse@google.com
+  http://fastcompression.blogspot.fr*
+  https://www.zstd.net*
+  https://github.com/facebook*
+  https://ob-yum.oceanbase-dev.com*
   https://openwebapi.oceanbase.com*
   https://mirrors.tuna.tsinghua.edu.cn*
   https://lldb.llvm.org*
@@ -208,6 +267,60 @@
   https://api.nuget.org*
   http://timestamp.digicert.com*
   http://wixtoolset.org*
+**/README.md
+  https://img.shields.io*
+  https://en.oceanbase.com*
+  https://lamport.azurewebsites.net/pubs/lamport-paxos.pdf)
+  https://obbusiness-private.oss-cn-shanghai.aliyuncs.com/download-center/opensource/oceanbase-all-in-one/installer.sh*
+  https://discord.gg/*
+  https://oceanbase.ai*
+  https://www.linkedin.com/company/oceanbase*
+  https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff*
+  https://www.youtube.com/@OceanBaseDB*
+  https://pepy.tech/projects/*
+  https://static.pepy.tech/badge/seekdb*
+  https://aws.amazon.com/marketplace/pp/prodview-d2evwth3ztaja?sr=0-1&ref_=beagle&applicationId=AWSMPContessa)*
+  https://huggingface.co*
+  https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase*
+  https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*
+  https://deepwiki.com/oceanbase/seekdb*
+  https://deepwiki.com/badge.svg*
+  https://static.pepy.tech/badge/pylibseekdb*
+**/README_CN.md
+  https://img.shields.io*
+  https://en.oceanbase.com*
+  https://lamport.azurewebsites.net/pubs/lamport-paxos.pdf)
+  https://obbusiness-private.oss-cn-shanghai.aliyuncs.com/download-center/opensource/oceanbase-all-in-one/installer.sh*
+  https://ask.oceanbase.com*
+  https://oceanbase.ai*
+  https://www.linkedin.com/company/oceanbase*
+  https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff*
+  https://www.youtube.com/@OceanBaseDB*
+  https://pepy.tech/projects/*
+  https://static.pepy.tech/badge/seekdb*
+  https://aws.amazon.com/marketplace/pp/prodview-d2evwth3ztaja?sr=0-1&ref_=beagle&applicationId=AWSMPContessa)*
+  https://huggingface.co*
+  https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase*
+  https://space.bilibili.com/3546900567427713*
+  https://console-cn.oceanbase.com/*
+  https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*
+  https://zread.ai/oceanbase/seekdb*
+  https://static.pepy.tech/badge/pylibseekdb*
+**/CONTRIBUTING.md
+  https://github.com/*
+  https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/configuring-a-remote-repository-for-a-fork*
+  https://chris.beams.io/posts/git-commit/*
+**/docs/README.md
+  https://www.oceanbase.ai/*
+**/docs/developer-guide/*/contributing.md
+  https://github.com/*
+  https://cla-assistant.io/oceanbase*
+  https://user-images.githubusercontent.com/*
+  https://discord.gg/74cF8vbNEs*
+**/mkdocs.yml
+  https://oceanbase.github.io/seekdb
+**/images/**
+  http://www.w3.org*
 **/Doxyfile
   www.doxygen.org)
   https://www.gnu.org/software/libiconv/
@@ -231,6 +344,8 @@
   https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.2/.
   https://issues.apache.org/*
   https://www.atatech.org/*
+**/CMakeLists.txt
+  https://www.oceanbase.ai*
 **/*.result
   https://workitem.aone.alibaba-inc.com/*
   http://oracle.chinaitlab.com*
@@ -238,6 +353,8 @@
   https://www.baidu.com/*
   http://maven.apache.org/*
   http://www.w3.org*
+  http://www.w3*
+  http://www.w3z
   www.baidu.com*
   https://dev.mysql.com*
   https://docs.cts.t.taobao.com*
@@ -307,6 +424,18 @@
   xingxing4@163.com
   xingxing5@163.com
   14844887@sina.com
+  xxxxx@qq.com
+  www.xxxxx.com
+  123@cur.com
+  456@cur.com
+  789@cur.com
+  123456@cur.com
+  www.mysql.com.cn
+  https://www.baidu.com
+  http://www.atguigu.com/*
+  sad2547@gmail.com
+  arthur.stygall@achme.com
+  Q3i5we8jVm0V21SrpCiqaQ==
 **/*.test
   http://trade.taobao.com/trade/*
   https://workitem.aone.alibaba-inc.com/*
@@ -315,12 +444,14 @@
   https://www.baidu.com/*
   http://maven.apache.org/*
   http://www.w3.org*
+  http://www.w3
   www.baidu.com*
   https://dev.mysql.com*
   https://docs.cts.t.taobao.com*
   http://www.cmd5.com/*
   https://code.aone.alibaba-inc.com*
   https://127.0.0.1*
+  https://technology.amis.nl/2009/10/13/oracle-rdbms-11gr2-solving-a-sudoku-using-recursive-subquery-factoring/
   www.360.com
   www.wangyi.com
   *@alipaymock.com
@@ -382,6 +513,18 @@
   xingxing4@163.com
   xingxing5@163.com
   14844887@sina.com
+  xxxxx@qq.com
+  www.xxxxx.com
+  123@cur.com
+  456@cur.com
+  789@cur.com
+  123456@cur.com
+  Q3i5we8jVm0V21SrpCiqaQ==
+  www.mysql.com.cn
+  https://www.baidu.com
+  http://www.atguigu.com/*
+  sad2547@gmail.com
+  arthur.stygall@achme.com
 **/*.inc
   http://trade.taobao.com/trade/*
   https://workitem.aone.alibaba-inc.com/*
@@ -457,18 +600,178 @@
   xingxing4@163.com
   xingxing5@163.com
   14844887@sina.com
+**/tools/deploy/deploy.py
+  http://pre-gw.obrde.alibaba-inc.com/cmd-trace/api/v1/audit/add
+**/mittest/logservice/archiveservice/create_restore_tenant.h
+  VjIDX5kAR6DDhGgnL3YuVA==
+**/tools/deploy/h/mysqltest.py
+  http://11.166.86.153:8877/mytest10.jar
+  http://11.166.86.153:8877/mytest_for_oracle.jar
+  http://11.166.86.153:8877/mytest_for_oracle.md5
+**/tools/deploy/mysqltest_config.yaml
+  http://11.166.86.153:8877/mytest10.jar
+**/tools/obtest/copy_for_compat.sh
+  http://11.166.86.153:8877/obproxy*
+  http://11.166.86.153:8877/mytest_workaround_version/mytest40.jar
+  http://11.166.86.153:8877/oceanbase_released/
+  http://11.166.86.153:8877/obproxy.support_4.0
+  http://11.166.86.153:8877/obproxy-ce-4.1.0.0_dev
+  http://11.166.86.153:8877/mytest_latest.jar
+**/tools/deploy/h/obi.py
+  http://ocp-cfg.alibaba.net:8080/services?User_ID=alibaba&UID=test
+  http://11.166.86.153:8877/obproxy
+  http://10.244.4.22:8080/oceanbase_configer/v2/
+  http://10.244.4.22:8080/diamond/cgi/a.py?key=
+  http://11.166.86.153:8877
+  root
+  f0455d5edb4833fa2e91762e71b61bc35d45cf0b
+  D8GVpapRiOtG4Am/rgHexdE7QIdMGxSndRdedotfU2VYuI+gYHDBNDFyaIpoafUE
+**/deps/init/oceanbase.el7.x86_64.deps
+  https://ob-yum.oceanbase-dev.com/7/x86_64/test/corebolt/
+**/deps/init/oceanbase.el7.aarch64.deps
+  https://ob-yum.oceanbase-dev.com/7/aarch64/test/ob-deploy/
+  https://ob-yum.oceanbase-dev.com/7/aarch64/test/corebolt/
+**/deps/init/oceanbase.el7.aarch64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/7/aarch64/test/obshell/
+**/deps/init/oceanbase.el7.x86_64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/7/x86_64/test/obshell/
+**/deps/init/oceanbase.el8.x86_64.deps
+  https://ob-yum.oceanbase-dev.com/7/x86_64/test/corebolt/
+**/deps/init/oceanbase.al8.aarch64.deps
+  https://ob-yum.oceanbase-dev.com/8/aarch64/current
+  https://ob-yum.oceanbase-dev.com/8/aarch64/test
+**/deps/init/oceanbase.al8.x86_64.deps
+  https://ob-yum.oceanbase-dev.com/8/x86_64/current
+  https://ob-yum.oceanbase-dev.com/8/x86_64/test
+**/deps/init/oceanbase.el8.aarch64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/aarch64/test/obshell/
+**/deps/init/oceanbase.el8.x86_64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/x86_64/test/obshell/
+**/deps/init/oceanbase.el9.aarch64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/aarch64/test/obshell/
+**/deps/init/oceanbase.el9.x86_64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/x86_64/test/obshell/
+**/docs/developer-guide/*/coding-standard.md
+  http://en.cppreference.com/w/cpp/memory/shared_ptr*
+**/docs/developer-guide/*/container.md
+  https://www.cs.utoronto.ca/%7Etabrown/debra/fullpaper.pdf*
+**/docs/developer-guide/*/debug.md
+  https://sourceware.org/gdb/current/onlinedocs/gdb.html/)
+**/docs/developer-guide/*/unittest.md
+  https://google.github.io/googletest/)
+**/docs/developer-guide/*/ide-settings.md
+  https://github.com/MaskRay/ccls*
+  https://github.com/jacobdufault/cquery*
+**/docs/developer-guide/assets/favicon.ico
+  http://www.w3.org/1999/02/22-rdf-syntax-ns*
+  http://ns.adobe.com/tiff/1.0/
+**/tools/deploy/mysql_test/test_suite/dblink_write_oracle_sqlqa/t/ob_ob_select_subquery_oracle.test
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**/tools/deploy/mysql_test/test_suite/dblink_write_oracle_sqlqa/r/oracle/ob_ob_select_subquery_oracle.result
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**/tools/deploy/copy.sh
+  http://11.166.86.153:8877/obproxy.support_4.0
+**/.github/**
+  https://ce-farm.oceanbase-dev.com/*
+  https://obfarm-ce.oss-cn-hongkong.aliyuncs.com*
+  https://rust-lang.github.io/*
+  https://sh.rustup.rs*
+**/tools/deploy/mysql_test/test_suite/dblink_write_oracle_sqlqa/r/oracle/ob_ob_insert_supplement_oracle.result
+  stu3_1
+**/tools/deploy/mysql_test/test_suite/xml_ns_oracle_sqlqa/r/oracle/xml_ns_extract_oracle.result
+  http://example.com/ns
+**/tools/obtest/conf/configure_temp.ini
+  http://127.0.0.1:11211
+  http://127.0.0.1:11211&access_id=
+  http://ob-jenkins.alibaba.net:8081/oceanbase_configer/v2/
+  http://ob-jenkins.alibaba.net:8081/diamond/cgi/a.py
+**/tools/obtest/t/compat/download_rpm.sh
+  http://yum.tbsite.net/taobao/7/x86_64/current/oceanbase/
+  http://yum.tbsite.net/taobao/7/x86_64/test/oceanbase/
+**/src/plugin/CHANGELOG.md
+  https://keepachangelog.com/en/1.1.0/*
+  https://semver.org/spec/v2.0.0.html*
+**/tools/deploy/mysql_test/test_suite/dblink_write_ob_to_oracle_all_sqlqa/t/ob_ob_select_subquery_oracle.test
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**/tools/deploy/mysql_test/test_suite/dblink_write_ob_to_oracle_all_sqlqa/r/oracle/ob_ob_select_subquery_oracle.result
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**tools/obtest/upgrade_farm_ss/configure_upgrade_temp.ini
+  http://ob-jenkins.alibaba.net:8081/oceanbase_configer/v2/
+  http://ob-jenkins.alibaba.net:8081/diamond/cgi/a.py
+**package/wheel/build_python.sh
+  https://pypi.tuna.tsinghua.edu.cn/simple
+**package/apk/seekdb-apk-build.sh
+  http://schemas.android.com/apk/*
+  https://www.apache.org/licenses/*
+  https://github.com/gradle/*
+  https://raw.githubusercontent.com/gradle/*
+**/tools/systemd/profile/post_install.sh.template
+  https://www.oceanbase.ai/*
 --------------------------------------------------------
 # Should use GLOB wildcard to config and analysis the ignored folder
 # The root patch should start with '/'
-/tools/deploy/**
-/tools/obtest/**
-/tools/codestyle/**
-/src/objit/deps/googletest/**
 /.git/**
-/deps/oblib/src/lib/compress/**
 --------------------------------------------------------
 # Config the ignored fold to escape the Chinese scan by GLOB wildcard
 --------------------------------------------------------
 # Set md5 of pemFile string to filter
 # This section must be end up with '--------------------------------------------------------'!!!
+**/tools/deploy/wallet/SE.key.pem
+  f97c83f882d68e584b1082fff3cdb957
+**/tools/deploy/wallet/SE.cert.pem
+  1038a03ed5ea43b9402bd83ff5833125
+**/tools/deploy/wallet/SS.key.pem
+  b4c54e42914ea3cda2396ff363909ef9
+**/tools/deploy/wallet/SS.cert.pem
+  bdb9e53d4b0a8f0780497f91d39b7e28
+**/tools/deploy/wallet/client-key_error.pem
+  a46fef5078c11447802b0c493c687563
+**/tools/deploy/wallet/client-cert_error.pem
+  8b765baf7128c3543205894b0e544ec3
+**/tools/deploy/wallet/client-key.pem
+  e900f819ca6be21a04ac6cc7a7f84e33
+**/tools/deploy/wallet/client-cert.pem
+  cf5447ad9eb9638d0e85c8ca59280653
+**/tools/deploy/wallet/server-key.pem
+  c2493a7311ac6f6139e23c6796ec9e66
+**/tools/deploy/wallet/server-cert.pem
+  2e7dd25765e5558f8f781a9f55110f59
+**/tools/deploy/wallet/ca.pem
+  e1e4fd0ed230935d7d50c6cd2330f575
+**/tools/deploy/wallet/ca_error.pem
+  d1c7c13649df2e2d25da97d3a86da45c
+**/tools/deploy/mysql_test/test_suite/online_ddl/r/oracle/change_column_type_varchar_to_longer_varchar_oracle.result
+  5036e88e490a588c0f5813552297cc21
+**/tools/deploy/mysql_test/test_suite/error_code_oracle_sqlqa/t/error_code_pls_oracle.test
+  9c342119ad3480d7a8341a10eb1cdf8f
+**/tools/deploy/mysql_test/test_suite/error_code_oracle_sqlqa/r/oracle/error_code_pls_oracle.result
+  9c342119ad3480d7a8341a10eb1cdf8f
+**/tools/deploy/mysql_test/test_suite/pl/r/oracle/pl_dbms_random_oracle.result
+  be16daebc04e5ea314ab971fa7ee4a54
+**/tools/deploy/mysql_test/test_suite/pl/r/oracle/pl_bugs_14_oracle.result
+  9c342119ad3480d7a8341a10eb1cdf8f
+**/tools/deploy/mysql_test/test_suite/pl/t/pl_bugs_14_oracle.test
+  9c342119ad3480d7a8341a10eb1cdf8f
+**tools/deploy/mysql_test/test_suite/groupby/data/t1.sql
+  0bb6df2b42f9da7d09ae338ca995d286
+**tools/deploy/mysql_test/test_suite/groupby/data/t9.sql
+  113bc4e2278a856f4b6f2689fea9435e
+**close_modules/license/share/ob_license_pub_key.h
+  f6cc9cae9611aad12053729106848755
+**close_modules/license/share/ob_license_pub_key.h
+  8d7517b1640c6ed52b6ec353951c754a
+**unittest/share/test_license_mgr.cpp
+  f6cc9cae9611aad12053729106848755
 --------------------------------------------------------

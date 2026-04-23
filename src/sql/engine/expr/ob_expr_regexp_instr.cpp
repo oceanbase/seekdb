@@ -67,19 +67,11 @@ int ObExprRegexpInstr::calc_result_typeN(ObExprResType &type,
     }
     if (OB_SUCC(ret)) {
       bool need_utf8 = false;
-      bool is_use_hs = type_ctx.get_session()->get_enable_hyperscan_regexp_engine();
       switch (param_num) {
         case 7/*subexpr*/:
-          // hyperscan does not support capturing group yet.
-          if (is_use_hs) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("hyperscan does not support capturing group yet.", K(is_use_hs), K(ret));
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "hyper scan engine, too many arguments");
-          } else {//mysql8.0 only has 6 arguments
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid match param", K(ret));
-            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "too many arguments in regexp_instr");
-          }
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid match param", K(ret));
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "too many arguments in regexp_instr");
         case 6/*match type*/:
           types[5].set_calc_type(ObVarcharType);
           types[5].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -111,7 +103,7 @@ int ObExprRegexpInstr::calc_result_typeN(ObExprResType &type,
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
             LOG_WARN("fail to check need utf8", K(ret));
-          } else if (need_utf8 || is_use_hs) {
+          } else if (need_utf8) {
             types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
           } else {
             types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
@@ -120,7 +112,7 @@ int ObExprRegexpInstr::calc_result_typeN(ObExprResType &type,
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
             LOG_WARN("fail to check need utf8", K(ret));
-          } else if (need_utf8 || is_use_hs) {
+          } else if (need_utf8) {
             types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
           } else {
             types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
@@ -156,8 +148,7 @@ int ObExprRegexpInstr::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
       const bool const_text = text->is_const_expr();
       const bool const_pattern = pattern->is_const_expr();
       rt_expr.extra_ = (!const_text && const_pattern) ? 1 : 0;
-      const bool is_use_hs = op_cg_ctx.session_->get_enable_hyperscan_regexp_engine();
-      rt_expr.eval_func_ = is_use_hs ? eval_hs_regexp_instr : eval_regexp_instr;
+      rt_expr.eval_func_ = eval_regexp_instr;
       LOG_DEBUG("regexp instr expr cg", K(const_text), K(const_pattern), K(rt_expr.extra_));
     }
   }
@@ -182,14 +173,8 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   ObDatum *occurrence = NULL;
   ObDatum *return_opt = NULL;
   ObDatum *match_type = NULL;
-  ObDatum *subexpr= NULL; // not calculated when use hyperscan engine
-  const bool constexpr is_use_hs = std::is_same<RegExpCtx, ObExprHsRegexCtx>::value;
-  if (is_use_hs && OB_UNLIKELY(expr.arg_cnt_ >= 7)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param count", K(ret), K(expr.arg_cnt_));
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(expr.eval_param_value(
+  ObDatum *subexpr = NULL;
+  if (OB_FAIL(expr.eval_param_value(
               ctx, text, pattern, position, occurrence, return_opt, match_type, subexpr))) {
     if (lib::is_mysql_mode() && ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
@@ -299,10 +284,8 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
         expr_datum.set_null();
       } else {
         is_null = false;
-        const ObCollationType constexpr expected_bin_coll =
-          !is_use_hs ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF8MB4_BIN;
-        const ObCollationType constexpr expected_ci_coll =
-          !is_use_hs ? CS_TYPE_UTF16_GENERAL_CI : CS_TYPE_UTF8MB4_GENERAL_CI;
+        const ObCollationType constexpr expected_bin_coll = CS_TYPE_UTF16_BIN;
+        const ObCollationType constexpr expected_ci_coll = CS_TYPE_UTF16_GENERAL_CI;
         res_coll_type = ObCharset::is_bin_sort(expr.args_[0]->datum_meta_.cs_type_) ?
                           expected_bin_coll :
                           expected_ci_coll;
@@ -340,15 +323,6 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
 int ObExprRegexpInstr::eval_regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   return regexp_instr<ObExprRegexContext>(expr, ctx, expr_datum);
-}
-
-int ObExprRegexpInstr::eval_hs_regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-{
-#if defined(__x86_64__)
-  return regexp_instr<ObExprHsRegexCtx>(expr, ctx, expr_datum);
-#else
-  return OB_NOT_IMPLEMENT;
-#endif
 }
 }
 }

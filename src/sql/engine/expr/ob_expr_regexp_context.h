@@ -29,13 +29,6 @@
 #include <icu/i18n/unicode/uregex.h>
 #endif
 #include "sql/engine/expr/ob_expr_operator.h"
-#if defined(__x86_64__)
-#ifdef _WIN32
-#include <hs/hs.h>
-#else
-#include <hyperscan/hs/hs.h>
-#endif
-#endif
 
 // this regex is compatible with mysql 8.0
 
@@ -165,87 +158,6 @@ private:
   ObInplaceAllocator pattern_wc_allocator_;
   URegularExpression *regexp_engine_;
 };
-
-#if defined(__x86_64__)
-class ObExprHsRegexCtx : public ObExprOperatorCtx
-{
-  static const int MAX_PATTERN_LEN = 2000;
-public:
-  ObExprHsRegexCtx();
-  virtual ~ObExprHsRegexCtx();
-public:
-  inline bool is_inited() const { return inited_; }
-  static int get_regexp_flags(const ObString &match_param,
-                              const bool is_case_sensitive,
-                              const bool is_som_leftmost,
-                              const bool is_single_match,
-                              uint32_t &flags);
-  int init(ObExprStringBuf &string_buf,
-           const ObExprRegexpSessionVariables &regex_vars,
-           const ObString &origin_pattern,
-           const uint32_t flags,
-           const bool reusable,
-           const ObCollationType cs_type);
-  int match(ObExprStringBuf &string_buf,
-            const ObString &text,
-            const ObCollationType cs_type,
-            const int64_t start,
-            bool &result) const;
-
-  int find(ObExprStringBuf &string_buf,
-           const ObString &text,
-           const ObCollationType cs_type,
-           const int64_t start,
-           const int64_t occurrence,
-           const int64_t return_option,
-           const int64_t subexpr,
-           int64_t &result) const;
-
-
-  int substr(ObExprStringBuf &string_buf,
-             const ObString &text,
-             const ObCollationType cs_type,
-             const int64_t start,
-             const int64_t occurrence,
-             const int64_t subsexpr,
-             ObString &result) const;
-  int replace(ObExprStringBuf &string_buf,
-              const ObString &text_string,
-              const ObCollationType cs_type,
-              const ObString &replace_string,
-              const int64_t start,
-              const int64_t occurrence,
-              ObString &result) const;
-  void destroy();
-  void reset();
-private:
-  int check_hs_regexp_status(hs_error_t status) const;
-private:
-  struct MatchInfo
-  {
-    int32_t from_;
-    int32_t to_;
-    MatchInfo(int32_t from, int32_t to) : from_(from), to_(to) {}
-    MatchInfo() : from_(-1), to_(-1) {}
-
-    TO_STRING_KV(K_(from), K_(to));
-  };
-  using MatchChain = common::ObSEArray<MatchInfo, 16>;
-  static int match_handler(unsigned int id, unsigned long long from, unsigned long long to,
-                           unsigned int flags, void *ctx);
-
-private:
-  bool inited_;
-  common::ObString pattern_;
-  uint32_t hs_flags_;
-  hs_database_t *hs_db_;
-  hs_scratch_t *hs_scratch_;
-  hs_compile_error_t *hs_compile_err_;
-};
-#else
-  // empty class
-  class ObExprHsRegexCtx {};
-#endif
 }
 }
 
