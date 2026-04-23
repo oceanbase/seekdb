@@ -45,7 +45,7 @@ class ObSimpleThreadPoolBase
 {
   using TaskType = typename QueueTypeMap<T>::TaskType;
   using QElemType = typename QueueTypeMap<T>::QElemType;
-  static const int64_t QUEUE_WAIT_TIME = 100 * 1000;
+  static const int64_t QUEUE_WAIT_TIME = 1000 * 1000;
 public:
   ObSimpleThreadPoolBase();
   virtual ~ObSimpleThreadPoolBase();
@@ -56,6 +56,10 @@ public:
   virtual int64_t get_queue_num() const override
   {
     return queue_.size();
+  }
+  virtual void notify_stop() override
+  {
+    queue_.wake_all();
   }
 private:
   virtual void handle(TaskType *task) = 0;
