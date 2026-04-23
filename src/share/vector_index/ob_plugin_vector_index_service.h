@@ -96,13 +96,13 @@ public:
 struct ObAdapterMapKeyValue
 {
 public:
-  ObAdapterMapKeyValue(ObTabletID tablet_id, ObPluginVectorIndexAdaptor *adapter)
-      : tablet_id_(tablet_id),
-        adapter_(adapter)
+  ObAdapterMapKeyValue(ObTabletID tablet_id, ObPluginVectorIndexAdaptor *adapter) 
+      : tablet_id_(tablet_id), 
+        adapter_(adapter) 
   {}
-  ObAdapterMapKeyValue()
-      : tablet_id_(),
-        adapter_(nullptr)
+  ObAdapterMapKeyValue() 
+      : tablet_id_(), 
+        adapter_(nullptr) 
   {}
   TO_STRING_KV(K_(tablet_id), K_(adapter));
 
@@ -483,7 +483,6 @@ private:
   storage::ObLSService *ls_service_;
   common::ObMySQLProxy *sql_proxy_;
   ObFIFOAllocator allocator_;
-  common::ObArenaAllocator alloc_;
   // do not use this memory context directly
   // use wrapped memory context in ob_tenant_vector_allocator.h and init by this memory context
   lib::MemoryContext memory_context_;

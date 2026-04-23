@@ -542,7 +542,7 @@ int ObPluginVectorIndexMgr::get_adapter_inst_by_ctx(ObVectorIndexAcquireCtx &ctx
                                                       vec_index_param,
                                                       dim,
                                                       allocator))) {
-      LOG_WARN("failed to get vector index adapter", K(ctx.embedded_tablet_id_), KR(ret));
+      LOG_WARN("failed to get vector index adapter", K(ctx.embedded_tablet_id_), KR(ret));    
     } else if (FALSE_IT(adapter = candidate.embedded_adatper_guard_.get_adatper())) {
     } else if (adapter->get_create_type() == CreateTypeFullPartial
                || adapter->get_create_type() == CreateTypeComplete) {
@@ -1041,7 +1041,6 @@ void ObPluginVectorIndexService::destroy()
       DESTROY_CONTEXT(memory_context_);
       memory_context_ = nullptr;
     }
-    alloc_.reset();
 
     // destroy vec async task
     if (OB_NOT_NULL(tenant_vec_async_task_sched_)) {
@@ -1081,8 +1080,7 @@ int ObPluginVectorIndexService::init(const uint64_t tenant_id,
                                               "VecIdxLSMgr",
                                               tenant_id))) {
     LOG_WARN("create ls mgr ", KR(ret), K(tenant_id));
-  } else if (FALSE_IT(alloc_.set_tenant_id(tenant_id))) {
-  } else if (OB_FAIL(allocator_.init(&alloc_, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
+  } else if (OB_FAIL(allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
     LOG_WARN("ObTenantSrs allocator init failed.", K(ret));
   } else {
     ObSharedMemAllocMgr *shared_mem_mgr = MTL(ObSharedMemAllocMgr*);
