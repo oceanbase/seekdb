@@ -408,6 +408,8 @@ int ObExpr::eval_enumset(ObEvalCtx &ctx,
       if (!eval_info->evaluated_) {
         evaluated_flags->reset(ctx.get_batch_size());
         reset_datums_ptr(frame, ctx.get_batch_size());
+        // See `clear_datum_descriptors` below for the rationale.
+        clear_datum_descriptors(frame, ctx.get_batch_size());
         eval_info->evaluated_ = true;
         eval_info->cnt_ = ctx.get_batch_size();
         eval_info->point_to_frame_ = true;
@@ -719,6 +721,33 @@ void ObExpr::reset_datums_ptr(char *frame, const int64_t size) const
   }
 }
 
+// Zero out the datum descriptor part (len_/null_/flag_) on the
+// first-evaluation entry points. The datums array inside the expression frame
+// is intentionally excluded from the zero-init region (see
+// ObStaticEngineExprCG::create_tmp_frameinfo, whose zero_init_pos starts
+// after get_datums_header_size()). Readers such as ObUniformBase::to_rows are
+// expected to gate access on evaluated_flags / skip bits, but some operators
+// (e.g. window function + sort fed by an internal SQL with smaller batches)
+// can end up touching slots that were never written by the current batch. On
+// Linux the arena memory is frequently zero by accident, so a misbehaving
+// reader silently sees (ptr=reserve_buf, len=0); on Windows the same arena
+// returns non-zero garbage and we crash with a huge len_ inside MEMCPY.
+//
+// We clear the descriptor only here (right after reset_datums_ptr, which has
+// already anchored ptr_ to the reserve buffer) on the !info->evaluated_
+// branches. Subsequent writers - including eval_vector_func_ /
+// eval_batch_func_ and cast_to_uniform - will overwrite pack_ with the real
+// length before any reader observes the slot, so later init_vector calls
+// (which may see slots already populated by cast_to_uniform) must NOT clear
+// pack_ themselves.
+void ObExpr::clear_datum_descriptors(char *frame, const int64_t size) const
+{
+  ObDatum *datum = reinterpret_cast<ObDatum *>(frame + datum_off_);
+  for (int64_t i = 0; i < size; i++) {
+    datum[i].pack_ = 0;
+  }
+}
+
 void ObExpr::reset_datum_ptr(char *frame, const int64_t size, const int64_t idx) const
 {
   ObDatum *datum = reinterpret_cast<ObDatum *>(frame + datum_off_);
@@ -761,6 +790,8 @@ int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) con
     need_evaluate = true;
     to_bit_vector(frame + eval_flags_off_)->reset(ctx.get_batch_size());
     reset_datums_ptr(frame, ctx.get_batch_size());
+    // See `clear_datum_descriptors` below for the rationale.
+    clear_datum_descriptors(frame, INNER_BATCH_SIZE());
     reset_attrs_datums(ctx);
     info->evaluated_ = true;
     info->cnt_ = ctx.get_batch_size();
@@ -848,6 +879,8 @@ int ObExpr::do_eval_batch(ObEvalCtx &ctx,
     // FIXME bin.lb: maybe we can optimize this by ObEvalInfo::point_to_frame_
     if (!info->evaluated_) {
       reset_datums_ptr(frame, size);
+      // See `clear_datum_descriptors` below for the rationale.
+      clear_datum_descriptors(frame, size);
       reset_attrs_datums(ctx);
       info->notnull_ = false;
       info->point_to_frame_ = true;
