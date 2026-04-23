@@ -1475,18 +1475,7 @@ bool ObConfigDegradationPolicyChecker::check(const ObConfigItem &t) const
 
 bool ObConfigRegexpEngineChecker::check(const ObConfigItem &t) const
 {
-  bool valid = false;
-  if (0 == ObString::make_string("Hyperscan").case_compare(t.str())) {
-#if defined(__x86_64__)
-    valid = true;
-#else
-    valid = false;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "using hyperscan as regex engine in platforms other than x86");
-#endif
-  } else {
-    valid = (0 == ObString::make_string("ICU").case_compare(t.str()));
-  }
-  return valid;
+  return (0 == ObString::make_string("ICU").case_compare(t.str()));
 }
 
 bool ObConfigReplicaParallelMigrationChecker::check(const ObConfigItem &t) const

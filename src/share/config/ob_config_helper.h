@@ -1017,8 +1017,8 @@ class ObConfigRegexpEngineChecker
   : public ObConfigChecker
 {
 public:
-  ObConfigRegexpEngineChecker(){}
-  virtual ~ObConfigRegexpEngineChecker(){}
+  ObConfigRegexpEngineChecker() {}
+  virtual ~ObConfigRegexpEngineChecker() {}
   bool check(const ObConfigItem &t) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigRegexpEngineChecker);

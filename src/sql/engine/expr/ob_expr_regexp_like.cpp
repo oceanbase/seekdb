@@ -76,7 +76,6 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
       //we need convert it the need collation in advance, and no need to think about in regexp.
       //lob TODO,jiangxiu.wt
       bool need_utf8 = false;
-      bool is_use_hs = type_ctx.get_session()->get_enable_hyperscan_regexp_engine();
       types[1].set_calc_type(ObVarcharType);
       types[1].set_calc_collation_level(CS_LEVEL_IMPLICIT);
       if (!types[0].is_clob()) {
@@ -90,7 +89,7 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
       need_utf8 = false;
       if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
         LOG_WARN("fail to check need utf8", K(ret));
-      } else if (need_utf8 || is_use_hs) {
+      } else if (need_utf8) {
         types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
       } else {
         types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
@@ -99,7 +98,7 @@ int ObExprRegexpLike::calc_result_typeN(ObExprResType &type,
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
         LOG_WARN("fail to check need utf8", K(ret));
-      } else if (need_utf8 || is_use_hs) {
+      } else if (need_utf8) {
         types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
       } else {
         types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI);
@@ -125,8 +124,7 @@ int ObExprRegexpLike::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
       const bool const_text = text->is_const_expr();
       const bool const_pattern = pattern->is_const_expr();
       rt_expr.extra_ = (!const_text && const_pattern) ? 1 : 0;
-      const bool is_use_hs = op_cg_ctx.session_->get_enable_hyperscan_regexp_engine();
-      rt_expr.eval_func_ = is_use_hs ? eval_hs_regexp_like : eval_regexp_like;
+      rt_expr.eval_func_ = eval_regexp_like;
       LOG_DEBUG("regexp like expr cg", K(const_text), K(const_pattern), K(rt_expr.extra_));
     }
   }
@@ -227,12 +225,8 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                (lib::is_mysql_mode() && NULL != match_type && match_type->is_null())) {
       expr_datum.set_null();
     } else {
-      const ObCollationType constexpr expected_bin_coll =
-        std::is_same<RegExpCtx, ObExprRegexContext>::value ? CS_TYPE_UTF16_BIN :
-                                                             CS_TYPE_UTF8MB4_BIN;
-      const ObCollationType constexpr expected_ci_coll =
-        std::is_same<RegExpCtx, ObExprRegexContext>::value ? CS_TYPE_UTF16_GENERAL_CI :
-                                                             CS_TYPE_UTF8MB4_GENERAL_CI;
+      const ObCollationType constexpr expected_bin_coll = CS_TYPE_UTF16_BIN;
+      const ObCollationType constexpr expected_ci_coll = CS_TYPE_UTF16_GENERAL_CI;
       ObCollationType res_coll_type = ObCharset::is_bin_sort(expr.args_[0]->datum_meta_.cs_type_) ?
                                         expected_bin_coll :
                                         expected_ci_coll;
@@ -259,15 +253,6 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
 int ObExprRegexpLike::eval_regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   return regexp_like<ObExprRegexContext>(expr, ctx, expr_datum);
-}
-
-int ObExprRegexpLike::eval_hs_regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
-{
-#if defined(__x86_64__)
-  return regexp_like<ObExprHsRegexCtx>(expr, ctx, expr_datum);
-#else
-  return OB_NOT_IMPLEMENT;
-#endif
 }
 
 }

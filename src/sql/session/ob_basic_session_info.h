@@ -2561,7 +2561,6 @@ private:
   bool has_ccl_rule_;
   int64_t last_ccl_cnt_update_time_;
 public:
-  bool get_enable_hyperscan_regexp_engine() const;
   int8_t get_min_const_integer_precision() const;
 };
 
