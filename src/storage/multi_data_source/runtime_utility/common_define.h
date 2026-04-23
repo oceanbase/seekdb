@@ -17,6 +17,7 @@
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_COMMON_DEFINE_H
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_COMMON_DEFINE_H
 #include "lib/ob_errno.h"
+#include "lib/hash/ob_linear_hash_map.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/ob_define.h"

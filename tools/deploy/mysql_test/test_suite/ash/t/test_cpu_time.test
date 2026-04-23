@@ -1,0 +1,20 @@
+# owner: zhangyiqiang.zyq
+# owner group: IMF
+# description: 
+# 测试的目的是为了检查ash是否多记录了无用的线程记录
+# 如果在observer空载60s时，一个线程有超过30s活跃采样时间，我们就认为这个线程的无用ash记录较多
+# 可以在空闲等待前加上ObBKGDSessInActiveGuard inactive_guard，避免采样没有意义的记录;
+
+alter system set _ob_ash_enable = true;
+
+let $start_time = query_get_value(select now() as time from DUAL, time, 1);
+--sleep 60
+let $end_time = query_get_value(select now() as time from DUAL, time, 1);
+
+
+--disable_query_log
+eval select program, module, action, thread_id, cnt from ( select program, module, action, thread_id, count(*) over (partition by thread_id rows between unbounded preceding and unbounded following) as cnt from oceanbase.__all_virtual_ash where sample_time between '$start_time' and '$end_time' and (module is null or (module not like '%root%' and module not like 'local inner sql exec')) group by program, module, action, thread_id order by cnt desc limit 10) where cnt > 30;
+--enable_query_log
+
+alter system set _ob_ash_enable = false;
+

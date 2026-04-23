@@ -485,7 +485,7 @@ private:
   static const int64_t DEFAULT_BUCKET_NUM = 10243L;
   static const int64_t TOTAL_LIMIT = 15LL * 1024LL * 1024LL * 1024LL;
   static const int64_t HOLD_LIMIT = 8LL * 1024LL * 1024LL;
-  static const int64_t TABLE_GC_INTERVAL_US = 20LL * 1000LL; // 20ms
+  static const int64_t TABLE_GC_INTERVAL_US = 1000LL * 1000LL; // 1s
   static const int64_t REFRESH_CONFIG_INTERVAL_US = 10LL * 1000LL * 1000LL; // 10s
   static const int64_t ONE_ROUND_RECYCLE_COUNT_THRESHOLD = 20000LL;
   static const int64_t ONE_ROUND_TABLET_GC_COUNT_THRESHOLD = 200LL;

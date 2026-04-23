@@ -779,6 +779,7 @@ ObjectSetV2::~ObjectSetV2()
 AObject *ObjectSetV2::alloc_object(const uint64_t size, const ObMemAttr &attr)
 {
   AObject *obj = NULL;
+  const int64_t ALLOC_LOCK_TIMEOUT_US = 1000; // 1ms
   const uint64_t adj_size = MAX(size, MIN_AOBJECT_SIZE);
   const uint64_t meta_size = AOBJECT_META_SIZE + (attr.alloc_extra_info_ ? AOBJECT_EXTRA_INFO_SIZE : 0);
   const uint64_t all_size = align_up2(adj_size + meta_size, 16);
@@ -797,7 +798,9 @@ AObject *ObjectSetV2::alloc_object(const uint64_t size, const ObMemAttr &attr)
     DEBUG_ASSERT(sc_idx < NORMAL_SC_CNT);
     const int bin_size = BIN_SIZE_MAP(sc_idx);
     SizeClass &sc = scs[sc_idx];
-    sc.lock_.lock();
+    if (!sc.lock_.lock(ALLOC_LOCK_TIMEOUT_US)) {
+      return NULL;
+    }
     DEFER(sc.lock_.unlock());
     AObject *&local_free = sc.local_free_;
     if (OB_LIKELY(local_free != NULL)) {

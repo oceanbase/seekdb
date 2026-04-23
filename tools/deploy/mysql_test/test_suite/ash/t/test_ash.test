@@ -1,0 +1,19 @@
+
+# owner: roland.qk
+# owner group: IMF
+# description: test active session history
+
+--result_format 4
+
+alter system set _ob_ash_enable = true;
+-- disable_warnings
+drop table if exists t1, t2;
+create table t1(a int primary key, b int) partition by hash(a) partitions 2;
+create table t2(a int primary key, b int);
+insert into t1 values(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8);
+explain insert /*+query_timeout(3600000000)*/ into t2 select a, sleep(1) + b from t1;
+insert /*+query_timeout(3600000000)*/ into t2 select a, sleep(1) + b from t1;
+select count(1) > 0 from oceanbase.gv$ob_active_session_history where trace_id = (select last_trace_id() from dual) and EVENT = "px loop condition wait" and SQL_PLAN_LINE_ID = 1;
+drop table t1,t2;
+-- enable_warnings
+alter system set _ob_ash_enable = false;

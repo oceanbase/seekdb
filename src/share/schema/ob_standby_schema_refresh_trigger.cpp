@@ -34,7 +34,7 @@ namespace schema
 int ObStandbySchemaRefreshTrigger::init()
 {
   int ret = OB_SUCCESS;
-
+  
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
@@ -47,7 +47,7 @@ int ObStandbySchemaRefreshTrigger::init()
     is_inited_ = true;
     LOG_INFO("ObStandbySchemaRefreshTrigger init success");
   }
-
+  
   return ret;
 }
 
@@ -62,7 +62,7 @@ void ObStandbySchemaRefreshTrigger::do_work()
 {
   LOG_INFO("ObStandbySchemaRefreshTrigger thread start");
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(is_inited));
   } else {
@@ -71,11 +71,11 @@ void ObStandbySchemaRefreshTrigger::do_work()
       if (OB_FAIL(submit_tenant_refresh_schema_task_())) {
         LOG_WARN("submit_tenant_refresh_schema_task_ failed", KR(ret));
       }
-
+      
       idle(DEFAULT_IDLE_TIME);
     }
   }
-
+  
   LOG_INFO("ObStandbySchemaRefreshTrigger thread end");
 }
 
@@ -93,18 +93,9 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
 {
   int ret = OB_SUCCESS;
   ObAllTenantInfo tenant_info;
-
-  // Check if tenant is standby and in normal status
-  if (OB_FAIL(ObAllTenantInfoProxy::load_tenant_info(false, tenant_info))) {
-    LOG_WARN("fail to load tenant info", KR(ret));
-  } else if (!tenant_info.is_standby() || !tenant_info.is_normal_status()) {
-    // Not standby or not normal status, skip schema refresh
-    // Thread keeps running but doesn't do actual work
-    if (REACH_THREAD_TIME_INTERVAL(5 * 1000 * 1000)) {
-      LOG_DEBUG("tenant is not standby or not normal status, skip schema refresh",
-                K(tenant_info.get_tenant_role()), K(tenant_info.get_switchover_status()));
-    }
-  } else {
+  
+  // Check if tenant is standby cluster
+  if (GCTX.is_standby_cluster()) {
     // Tenant is standby and in normal status, proceed with schema refresh
     int64_t schema_version = OB_INVALID_VERSION;
     ObRefreshSchemaStatus schema_status;
@@ -123,7 +114,7 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
                KR(ret), K(schema_version));
     }
   }
-
+  
   return ret;
 }
 

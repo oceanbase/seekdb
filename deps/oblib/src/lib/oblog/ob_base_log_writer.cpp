@@ -138,6 +138,9 @@ void ObBaseLogWriter::stop()
     }
   }
   has_stopped_ = true;
+  if (OB_NOT_NULL(log_flush_cond_)) {
+    log_flush_cond_->signal(UINT32_MAX);
+  }
 }
 
 void ObBaseLogWriter::wait()
@@ -272,7 +275,7 @@ void ObBaseLogWriter::flush_log()
     IGNORE_RETURN lib::Thread::update_loop_ts(ObTimeUtility::fast_current_time());
     pthread_mutex_lock(&thread_mutex_);
     // Each thread executes 16 times before re-preempting, which is beneficial for CPU cache hit
-    for (int64_t i = 0; i < 16; i++) {
+    for (int64_t i = 0; i < 16 && !has_stopped_; i++) {
       do_flush_log();
     }
     pthread_mutex_unlock(&thread_mutex_);
@@ -284,7 +287,7 @@ void ObBaseLogWriter::do_flush_log()
   int64_t process_item_cnt = 0;
   int64_t item_cnt = 0;
   const uint32_t key = log_flush_cond_->get_key();
-  if (!need_flush()) {
+  if (!need_flush() && !has_stopped_) {
     common::ObBKGDSessInActiveGuard inactive_guard;
     log_flush_cond_->wait(key, log_cfg_.group_commit_max_wait_us_);
   }

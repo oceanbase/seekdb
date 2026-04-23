@@ -149,13 +149,10 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
     ASSERT_EQ(common::OB_SUCCESS, ret);
   }
 
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
+
   static ObTenantBase tenant_ctx(OB_SYS_TENANT_ID);
   ObTenantEnv::set_tenant(&tenant_ctx);
-
-  ObTimerService *timer_service = nullptr;
-  ASSERT_EQ(OB_SUCCESS, ObTimerService::mtl_new(timer_service));
-  ASSERT_EQ(OB_SUCCESS, timer_service->start());
-  tenant_ctx.set(timer_service);
 
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache", 1));
@@ -224,6 +221,9 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
   tmp_file::ObTmpPageCache::get_instance().destroy();
   ObKVGlobalCache::get_instance().destroy();
   common::ObClockGenerator::destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 TEST_F(TestBlockManager, test_mark_and_sweep_skip_mark)

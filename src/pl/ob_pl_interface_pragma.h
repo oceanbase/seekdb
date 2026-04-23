@@ -24,7 +24,6 @@
 #include "pl/sys_package/ob_dbms_session.h"
 #include "pl/sys_package/ob_dbms_monitor.h"
 #include "pl/sys_package/ob_dbms_sql.h"
-#include "pl/sys_package/ob_dbms_user_define_rule.h"
 #include "pl/sys_package/ob_dbms_xplan.h"
 #include "pl/sys_package/ob_dbms_session.h"
 #include "pl/sys_package/ob_dbms_space.h"
@@ -177,13 +176,6 @@
 
 #undef DEFINE_DBMS_MVIEW_STATS_MYSQL_INTERFACE
   // end of dbms_mview_stats_mysql
-
-  // start of dbms_udr
-  INTERFACE_DEF(INTERFACE_DBMS_UDR_CREATE_RULE, "CREATE_RULE", (ObDBMSUserDefineRule::create_rule))
-  INTERFACE_DEF(INTERFACE_DBMS_UDR_REMOVE_RULE, "REMOVE_RULE", (ObDBMSUserDefineRule::remove_rule))
-  INTERFACE_DEF(INTERFACE_DBMS_UDR_ENABLE_RULE, "ENABLE_RULE", (ObDBMSUserDefineRule::enable_rule))
-  INTERFACE_DEF(INTERFACE_DBMS_UDR_DISABLE_RULE, "DISABLE_RULE", (ObDBMSUserDefineRule::disable_rule))
-  // end of dbms_udr
 
   // start of dbms_workload_repository
   INTERFACE_DEF(INTERFACE_DBMS_WR_CREATE_SNAPSHOT, "WR_CREATE_SNAPSHOT", (ObDbmsWorkloadRepository::create_snapshot))

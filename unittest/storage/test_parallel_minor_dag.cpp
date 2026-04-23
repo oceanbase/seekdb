@@ -66,23 +66,22 @@ public:
 
 void TestParallelMinorDag::SetUpTestCase()
 {
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
 }
 void TestParallelMinorDag::TearDownTestCase()
 {
   MockTenantModuleEnv::get_instance().destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 void TestParallelMinorDag::SetUp()
 {
   ObTenantMetaMemMgr *t3m = OB_NEW(ObTenantMetaMemMgr, ObModIds::TEST, tenant_id_);
   ASSERT_EQ(OB_SUCCESS, t3m->init());
-
-  ObTimerService *timer_service = OB_NEW(ObTimerService, ObModIds::TEST, tenant_id_);
-  ASSERT_NE(nullptr, timer_service);
-  ASSERT_EQ(OB_SUCCESS, timer_service->start());
-
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   tenant_base_.set(t3m);
-  tenant_base_.set(timer_service);
   ObTenantEnv::set_tenant(&tenant_base_);
   ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
 
@@ -101,11 +100,9 @@ void TestParallelMinorDag::TearDown()
 
   ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr *);
   t3m->destroy();
-  ObTimerService *timer_service = MTL(ObTimerService *);
-  ASSERT_NE(nullptr, timer_service);
-  timer_service->stop();
-  timer_service->wait();
-  timer_service->destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
   ObTenantEnv::set_tenant(nullptr);
 }
 

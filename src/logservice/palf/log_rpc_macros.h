@@ -31,7 +31,7 @@
         PALF_LOG(INFO, "need filter this packet", K(rpc_packet));                                                 \
       } else {                                                                                                    \
         LogRequestHandler handler(palf_env_impl_);                                                                \
-        TIMEGUARD_INIT(PALF, 50_ms, 10_s);                                                                        \
+        TIMEGUARD_INIT(PALF, 50_ms);                                                                             \
         ret = handler.handle_request(palf_id, server, req);                                                       \
         PALF_LOG(TRACE, "Processor handle_request success", K(ret), K(palf_id), K(req), KP(filter_));             \
         EVENT_INC(ObStatEventIds::PALF_HANDLE_RPC_REQUEST_COUNT);                                                   \
@@ -48,7 +48,7 @@
     template <bool FLAG = ELECTION_MSG, typename std::enable_if<FLAG, bool>::type = true>                         \
     int process_impl_()                                                                                           \
     {                                                                                                             \
-      TIMEGUARD_INIT(ELECT, 50_ms, 10_s);                                                                         \
+      TIMEGUARD_INIT(ELECT, 50_ms);                                                                              \
       __RPC_PROCESS_CODE__(REQTYPE)                                                                               \
     }                                                                                                             \
     template <bool FLAG = ELECTION_MSG, typename std::enable_if<!FLAG, bool>::type = true>                        \
@@ -111,7 +111,7 @@
   int LogRpcProxyV2::post_packet(const common::ObAddr &dst, const palf::LogRpcPacketImpl<palf::REQTYPE> &pkt, \
                                  const int64_t tenant_id, const palf::PalfTransportCompressOptions &options)      \
   {                                                                                                           \
-    TIMEGUARD_INIT(ELECT, 50_ms, 10_s);                                                                       \
+    TIMEGUARD_INIT(ELECT, 50_ms);                                                                            \
     int ret = common::OB_SUCCESS;                                                                             \
     static obrpc::LogRpcCB<obrpc::PCODE> cb;                                                                  \
     ret = this->to(dst)                                                                                       \
@@ -170,7 +170,7 @@
     virtual ~CLASS() { filter_ = NULL, palf_env_impl_ = NULL; }                                                   \
     int process()                                                                                                 \
     {                                                                                                             \
-      TIMEGUARD_INIT(PALF, 100_ms, 10_s);                                                                         \
+      TIMEGUARD_INIT(PALF, 100_ms);                                                                              \
       int ret = OB_SUCCESS;                                                                                       \
       LogRpcPacketImpl<REQTYPE> &rpc_packet = arg_;                                                               \
       const REQTYPE &req = rpc_packet.req_;                                                                       \

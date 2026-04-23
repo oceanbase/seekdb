@@ -60,7 +60,6 @@ struct TransformTreeCtx
   SQL_EXECUTION_MODE mode_;
   bool is_project_list_scope_;
   int64_t assign_father_level_;
-  const ObIArray<FixedParamValue> *udr_fixed_params_;
   bool ignore_scale_check_;
   bool is_from_pl_;
   ObItemType parent_type_;
@@ -123,7 +122,6 @@ TransformTreeCtx::TransformTreeCtx() :
  mode_(INVALID_MODE),
  is_project_list_scope_(false),
  assign_father_level_(ObSqlParameterization::NO_VALUES),
- udr_fixed_params_(NULL),
  ignore_scale_check_(false),
  is_from_pl_(false),
  parent_type_(T_INVALID)
@@ -142,7 +140,6 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
                                                  ObMaxConcurrentParam::FixParamStore &fixed_param_store,
                                                  bool is_transform_outline,
                                                  SQL_EXECUTION_MODE execution_mode,
-                                                 const ObIArray<FixedParamValue> *udr_fixed_params,
                                                  bool is_from_pl)
 {
   int ret = OB_SUCCESS;
@@ -178,7 +175,6 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
     ctx.paramlized_questionmask_count_ = 0;//used for outline sql rate limiting,
     ctx.is_transform_outline_ = is_transform_outline;//used for outline sql rate limiting
     ctx.raw_params_ = raw_params;
-    ctx.udr_fixed_params_ = udr_fixed_params;
     ctx.is_project_list_scope_ = false;
     ctx.mode_ = execution_mode;
     ctx.assign_father_level_ = NO_VALUES;
@@ -278,22 +274,6 @@ int ObSqlParameterization::is_fast_parse_const(TransformTreeCtx &ctx)
   return ret;
 }
 
-bool ObSqlParameterization::is_udr_not_param(TransformTreeCtx &ctx)
-{
-  bool b_ret = false;
-  if (OB_ISNULL(ctx.tree_) || (NULL == ctx.udr_fixed_params_)) {
-    b_ret = false;
-  } else {
-    for (int64_t i = 0; !b_ret && i < ctx.udr_fixed_params_->count(); ++i) {
-      const FixedParamValue &fixed_param = ctx.udr_fixed_params_->at(i);
-      if (fixed_param.idx_ == ctx.tree_->raw_param_idx_) {
-        b_ret = true;
-        break;
-      }
-    }
-  }
-  return b_ret;
-}
 // Determine whether this node is a non-parameterizable node
 bool ObSqlParameterization::is_node_not_param(TransformTreeCtx &ctx)
 {
@@ -694,8 +674,6 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
               //do nothing
             } else if (!is_execute_mode(ctx.mode_) && OB_FAIL(ctx.params_->push_back(value))) {
               SQL_PC_LOG(WARN, "fail to push into params", K(ret));
-            } else if (is_udr_not_param(ctx) && OB_FAIL(add_not_param_flag(ctx.tree_, *ctx.sql_info_))) {
-              SQL_PC_LOG(WARN, "fail to add not param flag", K(ret));
             }
           }
         } else if (OB_FAIL(add_not_param_flag(ctx.tree_, *ctx.sql_info_))) { //not param
@@ -1048,8 +1026,6 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
   } else {
     fp_ctx.enable_batched_multi_stmt_ = pc_ctx.sql_ctx_.handle_batched_multi_stmt();
     fp_ctx.sql_mode_ = session->get_sql_mode();
-    fp_ctx.is_udr_mode_ = pc_ctx.is_rewrite_sql_;
-    fp_ctx.def_name_ctx_ = pc_ctx.def_name_ctx_;
     fp_ctx.is_format_ = false;
   }
 
@@ -1093,8 +1069,7 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
                                            is_prepare_mode(mode) ? NULL : &pc_ctx.select_item_param_infos_,
                                            fix_param_store,
                                            is_transform_outline,
-                                           mode,
-                                           &pc_ctx.fixed_param_info_list_))) {
+                                           mode))) {
     if (OB_NOT_SUPPORTED != ret) {
       SQL_PC_LOG(WARN, "fail to normal parameterized parser tree", K(ret));
     }

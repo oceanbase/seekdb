@@ -23,7 +23,6 @@
 #include "sql/parser/ob_parser_utils.h"
 #include "sql/parser/ob_char_type.h"
 #include "sql/parser/parse_malloc.h"
-#include "sql/udr/ob_udr_struct.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
 
 namespace oceanbase
@@ -34,25 +33,19 @@ struct FPContext
 {
 public:
 	bool enable_batched_multi_stmt_;
-	bool is_udr_mode_;
 	ObCharsets4Parser charsets4parser_;
 	ObSQLMode sql_mode_;
-	QuestionMarkDefNameCtx *def_name_ctx_;
   bool is_format_;
 
 	FPContext()
 		: enable_batched_multi_stmt_(false),
-			is_udr_mode_(false),
 			sql_mode_(0),
-			def_name_ctx_(nullptr),
       is_format_(false)
 	{}
 	FPContext(ObCharsets4Parser charsets4parser)
 		: enable_batched_multi_stmt_(false),
-			is_udr_mode_(false),
 			charsets4parser_(charsets4parser),
 			sql_mode_(0),
-			def_name_ctx_(nullptr),
       is_format_(false)
 	{}
 };
@@ -513,9 +506,6 @@ protected:
 														const char *name,
 														const int64_t name_len,
 														char *buf);
-	int64_t get_question_mark_by_defined_name(QuestionMarkDefNameCtx *ctx,
-																						const char *name,
-																						const int64_t name_len);
 	/**
 	 * The hexadecimal number in mysql mode has the following two representations:
 	 * x'([0-9A-F])*' or 0x([0-9A-F])+
@@ -625,8 +615,6 @@ protected:
 	int param_num_;
 	bool is_oracle_mode_;
 	bool is_batched_multi_stmt_split_on_;
-	bool is_udr_mode_;
-	QuestionMarkDefNameCtx *def_name_ctx_;
 	int64_t cur_token_begin_pos_;
 	int64_t copy_begin_pos_;
 	int64_t copy_end_pos_;

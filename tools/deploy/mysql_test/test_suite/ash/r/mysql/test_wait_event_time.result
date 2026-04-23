@@ -1,0 +1,8 @@
+use oceanbase;
+alter system set _ob_ash_enable = true;
+select sleep(3) from DUAL;
+sleep(3)
+0
+TIME_WAITED > 90000
+1
+alter system set _ob_ash_enable = false;

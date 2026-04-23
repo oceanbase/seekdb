@@ -514,7 +514,7 @@ public:
   ObThreadCond &get_cond() { return cond_; }
 
   TO_STRING_KV(K(is_inited_), K(is_finished_), K(is_canceled_), K(has_estimated_), K(complete_size_), K(offset_), K(size_),
-               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), K(tenant_id_), K(tenant_io_mgr_),
+               K(timeout_us_), K(result_ref_cnt_), K(out_ref_cnt_), K(flag_), K(ret_code_), K(tenant_id_), KP(tenant_io_mgr_),
                KP(user_data_buf_), KP(buf_), KP(io_callback_), K_(time_log));
   DISALLOW_COPY_AND_ASSIGN(ObIOResult);
 private:
@@ -542,7 +542,7 @@ private:
   int64_t timeout_us_;
   uint64_t tenant_id_;
   int64_t aligned_size_;
-  ObRefHolder<ObTenantIOManager> tenant_io_mgr_;
+  ObTenantIOManager *tenant_io_mgr_;
   const char *buf_;
   char *user_data_buf_; //actual data buf without cb, allocated by thpe calling layer
   ObIOCallback *io_callback_;
@@ -588,13 +588,13 @@ public:
   int try_alloc_buf_until_timeout(char *&io_buf);
   bool can_callback() const;
   void free_io_buffer();
-  void inc_ref(const char *msg = nullptr);
-  void dec_ref(const char *msg = nullptr);
+  void inc_ref();
+  void dec_ref();
 
   int64_t get_remained_io_timeout_us();
 
   TO_STRING_KV(K(is_inited_), K(tenant_id_), KP(control_block_), K(ref_cnt_), KP(raw_buf_), K(fd_), K(is_object_device_req()),
-               K(trace_id_), K(retry_count_), K(tenant_io_mgr_), K_(storage_accesser),
+               K(trace_id_), K(retry_count_), KP(tenant_io_mgr_), K_(storage_accesser),
                KPC(io_result_), K_(part_id));
 private:
   friend class ObTenantIOSchedulerV2;
@@ -630,7 +630,7 @@ protected:
   int64_t align_offset_;
   ObIOCB *control_block_;
   uint64_t tenant_id_;
-  ObRefHolder<ObTenantIOManager> tenant_io_mgr_;
+  ObTenantIOManager *tenant_io_mgr_;
   ObRefHolder<ObStorageAccesser> storage_accesser_;
   ObIOFd fd_;
   ObCurTraceId::TraceId trace_id_;
@@ -748,12 +748,11 @@ public:
     ParamConfig();
     ~ParamConfig();
     bool is_valid() const;
-    TO_STRING_KV(K_(memory_limit), K_(callback_thread_count), K_(enable_io_tracer), K_(object_storage_io_timeout_ms));
+    TO_STRING_KV(K_(memory_limit), K_(callback_thread_count), K_(object_storage_io_timeout_ms));
 
   public:
     int64_t memory_limit_;
     int64_t callback_thread_count_;
-    bool enable_io_tracer_;
     int64_t object_storage_io_timeout_ms_;
   };
 

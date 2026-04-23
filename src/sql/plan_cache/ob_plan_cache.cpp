@@ -19,7 +19,6 @@
 #include "share/ob_truncated_string.h"
 #include "lib/rc/ob_rc.h"
 #include "sql/plan_cache/ob_plan_cache_callback.h"
-#include "sql/udr/ob_udr_mgr.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 
@@ -353,7 +352,6 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
 {
   int ret = tmp_ret;
   ObPhysicalPlan *plan = NULL;
-  bool enable_udr = false;
   bool need_late_compilation = false;
   ObJITEnableMode jit_mode = ObJITEnableMode::OFF;
   ObPlanCacheCtx &pc_ctx = static_cast<ObPlanCacheCtx&>(ctx);
@@ -367,40 +365,15 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
       LOG_WARN("unexpected null session info", K(ret));
     } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->get_jit_enabled_mode(jit_mode))) {
       LOG_WARN("failed to get jit mode");
-    } else {
-      enable_udr = pc_ctx.sql_ctx_.session_info_->enable_udr();
     }
   }
   if (OB_SUCC(ret) && plan != NULL) {
-    bool is_exists = false;
-    uint64_t pattern_digest = 0;
-    sql::ObUDRMgr *rule_mgr = MTL(sql::ObUDRMgr*);
-    // when the global rule version changes or enable_user_defined_rewrite_rules changes
-    // it is necessary to check whether the physical plan are expired
-    if ((plan->get_rule_version() != rule_mgr->get_rule_version()
-      || plan->is_enable_udr() != enable_udr)) {
-      if (OB_FAIL(get_normalized_pattern_digest(pc_ctx, pattern_digest))) {
-        LOG_WARN("failed to calc normalized pattern digest", K(ret));
-      } else if (OB_FAIL(rule_mgr->fuzzy_check_by_pattern_digest(pattern_digest, is_exists))) {
-        LOG_WARN("failed to fuzzy check by pattern digest", K(ret));
-      } else if (is_exists || plan->is_rewrite_sql()) {
-        ret = OB_OLD_SCHEMA_VERSION;
-        LOG_TRACE("Obsolete user-defined rewrite rules require eviction plan", K(ret),
-        K(is_exists), K(pc_ctx.raw_sql_), K(plan->is_enable_udr()), K(enable_udr),
-        K(plan->is_rewrite_sql()), K(plan->get_rule_version()), K(rule_mgr->get_rule_version()));
-      } else {
-        plan->set_rule_version(rule_mgr->get_rule_version());
-        plan->set_is_enable_udr(enable_udr);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (ObJITEnableMode::AUTO == jit_mode && // only use late compilation when jit_mode is auto
-        OB_FAIL(need_late_compile(plan, need_late_compilation))) {
-        LOG_WARN("failed to check for late compilation", K(ret));
-      } else {
-        // set context's need_late_compile_ for upper layer to proceed
-        pc_ctx.sql_ctx_.need_late_compile_ = need_late_compilation;
-      }
+    if (ObJITEnableMode::AUTO == jit_mode && // only use late compilation when jit_mode is auto
+      OB_FAIL(need_late_compile(plan, need_late_compilation))) {
+      LOG_WARN("failed to check for late compilation", K(ret));
+    } else {
+      // set context's need_late_compile_ for upper layer to proceed
+      pc_ctx.sql_ctx_.need_late_compile_ = need_late_compilation;
     }
   }
   // if schema expired, update pcv set;
@@ -851,7 +824,6 @@ bool ObPlanCache::can_do_insert_batch_opt(ObPlanCacheCtx &pc_ctx)
   if (OB_NOT_NULL(session_info = pc_ctx.sql_ctx_.session_info_)) {
     if (!pc_ctx.sql_ctx_.is_batch_params_execute() &&
         GCONF._sql_insert_multi_values_split_opt &&
-        !pc_ctx.sql_ctx_.get_enable_user_defined_rewrite() &&
         !session_info->is_inner() &&
         OB_BATCHED_MULTI_STMT_ROLLBACK != session_info->get_retry_info().get_last_query_retry_err()) {
       bret = true;
@@ -860,7 +832,6 @@ bool ObPlanCache::can_do_insert_batch_opt(ObPlanCacheCtx &pc_ctx)
           "is_arraybinding", pc_ctx.sql_ctx_.is_batch_params_execute(),
           "is_open_switch", GCONF._sql_insert_multi_values_split_opt,
           "is_inner_sql", session_info->is_inner(),
-          "udr", pc_ctx.sql_ctx_.get_enable_user_defined_rewrite(),
           "last_ret", session_info->get_retry_info().get_last_query_retry_err(),
           "curr_sql", pc_ctx.raw_sql_);
     }
@@ -2047,7 +2018,7 @@ OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
   session.get_database_id(database_id);
   pc_key.db_id_ = (database_id == OB_INVALID_ID) ? OB_MOCK_DEFAULT_DATABASE_ID : database_id;
   pc_key.namespace_ = ns;
-  pc_key.sys_vars_str_ = session.get_sys_var_in_pc_str();
+  OZ (session.get_sys_var_in_pc_str(pc_key.sys_vars_str_));
   pc_key.config_str_ = session.get_config_in_pc_str();
   // here we use `initial_use_rich_format` instead of `use_rich_format` as part of key
   // consider scenario of binding outline:
@@ -2061,7 +2032,7 @@ OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
   // if `use_rich_format()` is used as part of key, added plan's key will be `false + other_info`.
   pc_key.use_rich_vector_format_ = session.initial_use_rich_format();
   pc_key.config_use_rich_format_ = session.config_use_rich_format();
-  pc_key.sys_var_config_hash_val_ = session.get_sys_var_config_hash_val();
+  OZ (session.get_sys_var_config_hash_val(pc_key.sys_var_config_hash_val_));
   pc_key.is_weak_read_ = is_weak;
   pc_key.enable_mysql_compatible_dates_ = session.enable_mysql_compatible_dates();
   return ret;

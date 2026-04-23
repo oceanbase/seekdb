@@ -392,7 +392,7 @@ public:
   ObDTLIntermResultGCTask() : dtl_interm_result_manager_(NULL), is_start_(false) {}
   virtual ~ObDTLIntermResultGCTask() {}
   virtual void runTimerTask() override;
-  const static int64_t REFRESH_INTERVAL = 10 * 1000L * 1000L; // 10 second interval
+  const static int64_t REFRESH_INTERVAL = 60 * 1000L * 1000L; // 10 second interval
   ObDTLIntermResultManager *dtl_interm_result_manager_;
   bool is_start_;
 };

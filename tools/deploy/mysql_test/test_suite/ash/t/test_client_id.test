@@ -1,0 +1,21 @@
+
+# owner: zhangyiqiang.zyq
+# owner group: IMF
+
+connect (obsys1,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys1;
+use oceanbase;
+
+alter system set _ob_ash_enable = true;
+
+call DBMS_SESSION.SET_IDENTIFIER('123456789123456789123456789123456789abc');
+select sleep(3) ;
+let $trace_id = `select last_trace_id() from DUAL`;
+
+--disable_query_log
+eval select count(*) > 0 from GV\$ACTIVE_SESSION_HISTORY where client_id='1234567891234567891234567891234' and trace_id='$trace_id';
+--enable_query_log
+
+alter system set _ob_ash_enable = false;
+
+disconnect obsys1;

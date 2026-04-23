@@ -219,8 +219,8 @@ int ObLogReplayService::init(PalfEnv *palf_env,
     CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env), KP(ls_adapter), KP(allocator));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReplayService, tg_id_))) {
     CLOG_LOG(WARN, "fail to create thread group", K(ret));
-  } else if (OB_FAIL(MTL_REGISTER_THREAD_DYNAMIC(thread_quota, tg_id_))) {
-    CLOG_LOG(WARN, "MTL_REGISTER_THREAD_DYNAMIC failed", K(ret), K(tg_id_));
+  } else if (OB_FAIL(TG_SET_ADAPTIVE_THREAD(tg_id_, 0, thread_quota * MTL_CPU_COUNT()))) {
+    CLOG_LOG(WARN, "set adaptive thread failed", K(ret));
   } else if (OB_FAIL(replay_status_map_.init("REPLAY_STATUS", MAP_TENANT_ID))) {
     CLOG_LOG(WARN, "replay_status_map_ init error", K(ret));
   } else if (OB_FAIL(replay_stat_.init(this))) {
@@ -243,17 +243,11 @@ int ObLogReplayService::init(PalfEnv *palf_env,
 int ObLogReplayService::start()
 {
   int ret = OB_SUCCESS;
-  const ObAdaptiveStrategy adaptive_strategy(LEAST_THREAD_NUM,
-                                             ESTIMATE_TS,
-                                             EXPAND_RATE,
-                                             SHRINK_RATE);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "ObLogReplayService not inited!!!", K(ret));
   } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
     CLOG_LOG(ERROR, "start ObLogReplayService failed", K(ret));
-  } else if (OB_FAIL(TG_SET_ADAPTIVE_STRATEGY(tg_id_, adaptive_strategy))) {
-    CLOG_LOG(WARN, "set adaptive strategy failed", K(ret));
   } else {
     is_running_ = true;
     int tmp_ret = OB_SUCCESS;
@@ -302,7 +296,6 @@ void ObLogReplayService::destroy()
   is_inited_ = false;
   CLOG_LOG(INFO, "replay service destroy");
   if (-1 != tg_id_) {
-    MTL_UNREGISTER_THREAD_DYNAMIC(tg_id_);
     TG_DESTROY(tg_id_);
     tg_id_ = -1;
   }

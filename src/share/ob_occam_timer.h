@@ -80,7 +80,7 @@ class ObOccamTimerTask : public ObTimeWheelTask
     need_delete_(need_delete),
     schedule_time_(schedule_time) {}
     bool operator()() {
-      TIMEGUARD_INIT(OCCAM, 1_s, 30_s);
+      TIMEGUARD_INIT(OCCAM, 1_s);
       bool stop_flag = true;
       {
         ObSharedGuard<ObFunction<bool()>> func_shared_ptr = function_.upgrade();
@@ -323,7 +323,7 @@ public:
       return ret;
     };
     int64_t pos = 0;
-
+    
     common::databuff_printf(buf, buf_len, pos, "caller:%s:%s:%ld, ", find_last_path(file_), function_name_, line_);
     common::databuff_printf(buf, buf_len, pos, "function_type:%s, ", function_class_);
     common::databuff_printf(buf, buf_len, pos, "timer_running_flag:%d, ", ATOMIC_LOAD(timer_running_flag_));

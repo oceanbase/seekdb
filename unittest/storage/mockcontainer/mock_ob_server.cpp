@@ -165,9 +165,6 @@ int MockObServer::init(const char *schema_file,
   if (OB_SUCC(ret)) {
     if (OB_SUCCESS != (ret = net_frame_.init())) {
       STORAGE_LOG(ERROR, "net frame init error", K(ret));
-    } else if (OB_FAIL(batch_rpc_.init(net_frame_.get_batch_rpc_req_transport(),
-                                       self_addr_))) {
-      LOG_WARN("init batch rpc failed", K(ret));
     } else {
       STORAGE_LOG(INFO, "net frame init success");
     }

@@ -602,7 +602,6 @@ DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_DIRECTORY, ObRpcDropDirectoryP, drop_
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DO_CONTEXT_DDL, ObRpcDoContextDDLP, do_context_ddl(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_RECOMPILE_ALL_VIEWS_BATCH, ObRpcRecompileAllViewsBatchP, recompile_all_views_batch(arg_));
 
-DEFINE_RS_RPC_PROCESSOR(obrpc::OB_ADMIN_SYNC_REWRITE_RULES, ObRpcAdminSyncRewriteRulesP, admin_sync_rewrite_rules(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_CCL_RULE, ObRpcCreateCCLRuleDDLP, create_ccl_rule_ddl(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_CCL_RULE, ObRpcDropCCLRuleDDLP, drop_ccl_rule_ddl(arg_));
 //rebuild tablet

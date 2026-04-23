@@ -67,7 +67,7 @@ public:
     destroy();
   }
   int init(const int64_t tenant_id, 
-           share::ObLocalDevice *log_local_device, 
+           common::ObIODevice *log_local_device,
            share::ObResourceManager *resource_manager,
            common::ObIOManager *io_manager);
   void destroy();
@@ -99,7 +99,7 @@ public:
   int truncate(const ObIOFd &fd, const int64_t offset);
 private:
   int64_t tenant_id_;
-  share::ObLocalDevice *log_local_device_;
+  common::ObIODevice *log_local_device_;
   share::ObResourceManager *resource_manager_;
   common::ObIOManager *io_manager_;
   bool is_inited_;

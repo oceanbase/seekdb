@@ -128,8 +128,6 @@ public:
   virtual int deliver(rpc::ObRequest &req);
   void set_host(const common::ObAddr &host) { host_ = host; }
   int create_queue_thread(int tg_id, const char *thread_name, QueueThread *&qthread);
-  int get_mysql_login_thread_count_to_set(int cfg_cnt);
-  int set_mysql_login_thread_count(int cnt);
 private:
   int init_queue_threads();
 
@@ -145,7 +143,6 @@ private:
   common::ObAddr host_;
   QueueThread *ddl_queue_;
   QueueThread *ddl_parallel_queue_;
-  QueueThread *mysql_queue_;
   QueueThread *diagnose_queue_;
   ObRpcSessionHandler &session_handler_;
   ObGlobalContext &gctx_;

@@ -42,8 +42,12 @@ public:
   AObject *alloc_object(uint64_t size, const ObMemAttr &attr)
   {
     static int64_t global_idx = 0;
+    AObject *obj = NULL;
     static thread_local int idx = ATOMIC_FAA(&global_idx, 1);
-    return obj_sets_[idx % parallel_].alloc_object(size, attr);
+    for (int64_t i = 0; NULL == obj && i < parallel_; i++) {
+      obj = obj_sets_[(idx + i) % parallel_].alloc_object(size, attr);
+    }
+    return obj;
   }
   AObject *realloc_object(
       AObject *obj, const uint64_t size, const ObMemAttr &attr);

@@ -20,16 +20,21 @@
 #include "lib/ash/ob_active_session_guard.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/stat/ob_diagnostic_info_util.h"
+#include "lib/ob_lib_config.h"
 
 using namespace oceanbase::common;
 
 ObBKGDSessInActiveGuard::ObBKGDSessInActiveGuard()
 {
-  ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
-  if (OB_NOT_NULL(di)) {
-    need_record_ = true;
-    prev_stat_ = di->get_ash_stat().is_active_session_;
-    di->get_ash_stat().set_sess_inactive();
+  if (lib::is_ash_enabled()) {
+    ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
+    if (OB_NOT_NULL(di)) {
+      need_record_ = true;
+      prev_stat_ = di->get_ash_stat().is_active_session_;
+      di->get_ash_stat().set_sess_inactive();
+    } else {
+      need_record_ = false;
+    }
   } else {
     need_record_ = false;
   }

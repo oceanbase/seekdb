@@ -116,31 +116,10 @@ private:
   void fail_all_ctx(int error_code);
   void release_all_ctx();
 private:
-  static const int64_t CHECK_TENANT_INTERVAL = 1LL * 1000 * 1000; // 1s
-  static const int64_t HEART_BEEAT_INTERVAL = 10LL * 1000 * 1000; // 10s
-  static const int64_t HEART_BEEAT_EXPIRED_TIME_US = 30LL * 1000 * 1000; // 30s
-  static const int64_t GC_INTERVAL = 30LL * 1000 * 1000; // 30s
+  static const int64_t GC_INTERVAL = 300LL * 1000 * 1000; // 300s
   static const int64_t RELEASE_INTERVAL = 1LL * 1000 * 1000; // 1s
-  static const int64_t CLIENT_TASK_AUTO_ABORT_INTERVAL = 1LL * 1000 * 1000; // 1s
-  static const int64_t CLIENT_TASK_PURGE_INTERVAL = 1LL * 1000 * 1000; // 1s
-  class ObCheckTenantTask : public common::ObTimerTask
-  {
-  public:
-    ObCheckTenantTask(ObTableLoadService &service) : service_(service) {}
-    virtual ~ObCheckTenantTask() = default;
-    void runTimerTask() override;
-  private:
-    ObTableLoadService &service_;
-  };
-  class ObHeartBeatTask : public common::ObTimerTask
-  {
-  public:
-    ObHeartBeatTask(ObTableLoadService &service) : service_(service) {}
-    virtual ~ObHeartBeatTask() = default;
-    void runTimerTask() override;
-  private:
-    ObTableLoadService &service_;
-  };
+  static const int64_t CLIENT_TASK_AUTO_ABORT_INTERVAL = 30LL * 1000 * 1000; // 30s
+  static const int64_t CLIENT_TASK_PURGE_INTERVAL = 30LL * 1000 * 1000; // 30s
   class ObGCTask : public common::ObTimerTask
   {
   public:
@@ -149,7 +128,6 @@ private:
     void runTimerTask() override;
   private:
     bool gc_mark_delete(ObTableLoadTableCtx *table_ctx);
-    bool gc_heart_beat_expired_ctx(ObTableLoadTableCtx *table_ctx);
     bool gc_table_not_exist_ctx(ObTableLoadTableCtx *table_ctx);
   private:
     ObTableLoadService &service_;
@@ -188,16 +166,11 @@ private:
     ObTableLoadService &service_;
   };
 private:
-  static const int64_t INVALID_TG_ID = -1;
-private:
   const uint64_t tenant_id_;
   ObTableLoadManager manager_;
   ObTableLoadAssignedMemoryManager assigned_memory_manager_;
   ObTableLoadAssignedTaskManager assigned_task_manager_;
   common::ObTimer timer_;
-  int tg_id_;
-  ObCheckTenantTask check_tenant_task_;
-  ObHeartBeatTask heart_beat_task_;
   ObGCTask gc_task_;
   ObReleaseTask release_task_;
   ObClientTaskAutoAbortTask client_task_auto_abort_task_;

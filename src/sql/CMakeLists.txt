@@ -1440,17 +1440,6 @@ ob_set_subtarget(ob_sql session
   session/ob_local_session_var.cpp
 )
 
-ob_set_subtarget(ob_sql udr
-  udr/ob_udr_struct.cpp
-  udr/ob_udr_sql_service.cpp
-  udr/ob_udr_mgr.cpp
-  udr/ob_udr_item.cpp
-  udr/ob_udr_item_mgr.cpp
-  udr/ob_udr_analyzer.cpp
-  udr/ob_udr_callback.cpp
-  udr/ob_udr_utils.cpp
-)
-
 ob_add_new_object_target(ob_sql ob_sql)
 ob_add_new_object_target(ob_sql_extra ob_sql_extra)
 

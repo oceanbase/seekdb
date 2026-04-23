@@ -1,0 +1,44 @@
+# owner: zhangyiqiang.zyq
+# owner group: IMF
+# description: 
+# 测试ash是否能记录锁冲突
+
+connect (obsys1,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys1;
+
+alter system set _ob_ash_enable = true;
+
+--disable_warnings
+drop table if exists t2;
+drop table if exists t1;
+--enable_warnings
+
+create table t1(a int primary key, b int);
+create table t2(a int, c int , foreign key(a) references t1(a));
+insert into t1(a,b) values(1,1), (2,2); 
+
+begin;
+select * from t1 where a = 1 for update;
+
+connect (obsys2,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection obsys2;
+send insert into t2(a,c) values(1,1);
+
+connection obsys1;
+sleep 5;
+commit;
+
+connection obsys2;
+reap;
+let $trace_id = `select last_trace_id() from DUAL`;
+--disable_query_log
+eval select count(*) > 0 from oceanbase.GV\$ACTIVE_SESSION_HISTORY where trace_id='$trace_id' and event_id=14003;
+--enable_query_log
+disconnect obsys2;
+
+connection obsys1;
+drop table t2, t1;
+
+alter system set _ob_ash_enable = false;
+
+disconnect obsys1;

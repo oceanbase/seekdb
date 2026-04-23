@@ -61,7 +61,7 @@ class ObTableAccessHelper
 public:
   static int split_string_by_char(const ObStringHolder &arg_str, const char character, ObIArray<ObStringHolder> &result)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     ObString str = arg_str.get_ob_string();
     if (OB_UNLIKELY(str.empty())) {
@@ -115,7 +115,7 @@ public:
                                         ObString connect_str,
                                         T &&...strs)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(begin), K(end), K(connect_str)
     int ret = OB_SUCCESS;
     int64_t pos = 0;
@@ -137,7 +137,7 @@ public:
                                               ObString connect_str,
                                               const ObIArray<T> &array)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(begin), K(end), K(connect_str)
     int ret = OB_SUCCESS;
     int64_t pos = 0;
@@ -249,7 +249,7 @@ public:
                         const ObString &table,
                         const ObString &value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(value), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
@@ -281,7 +281,7 @@ public:
                         const char* (&columns)[N],
                         T &&...value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
@@ -321,7 +321,7 @@ public:
                         const ObString &table,
                         const ObString &value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(value), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
@@ -348,7 +348,7 @@ public:
 
   static int set_parameter(const ObString &value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(value), K(sql)
     int ret = OB_SUCCESS;
     ObSqlString sql;
@@ -379,7 +379,7 @@ private:
                                          const ObString &condition,
                                          T &...values)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(condition)
     int ret = common::OB_SUCCESS; 
     if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -427,7 +427,7 @@ private:
                                          const ObString &condition,
                                          common::ObIArray<ObTuple<T...>> &output_array)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(table), K(condition)
     int ret = common::OB_SUCCESS;
     if (OB_ISNULL(GCTX.sql_proxy_)) {
@@ -472,7 +472,7 @@ private:
                                 ObMySQLProxy::MySQLResult &res,
                                 common::sqlclient::ObMySQLResult *&result)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(tenant_id), K(columns), K(table), K(condition), K(sql), K(columns_str)
     int ret = OB_SUCCESS;
     ObSqlString sql;
@@ -518,7 +518,7 @@ private:
                           const ObString &connect_str,
                           T &&str)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(connect_str), K(str)
     int ret = OB_SUCCESS;
     if (CLICK_FAIL(databuff_printf(buffer, len, pos, str))) {
@@ -530,7 +530,7 @@ private:
   template <int N>
   static int join_string_(char *buffer, const int64_t len, int64_t &pos, const ObString &connect_str, const char *(&array)[N])
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = OB_SUCCESS;
     // int64_t pos = 0;
     for (int i = 0; i < N && OB_SUCC(ret); ++i) {
@@ -552,7 +552,7 @@ private:
                           T &&str,
                           Rest &&...strs)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(connect_str), K(str)
     int ret = OB_SUCCESS;
     if (CLICK_FAIL(databuff_printf(buffer, len, pos, str))) {
@@ -572,7 +572,7 @@ private:
                           const ObString &connect_str,
                           const ObIArray<T> &array)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(connect_str), K(array), K(i)
     int ret = OB_SUCCESS;
     for (int i = 0; i < array.count() && OB_SUCC(ret); ++i) {
@@ -591,7 +591,7 @@ private:
                                                 const char *column,
                                                 share::ObLSID &ls_id)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     int64_t value = 0;
     if (CLICK_FAIL(row->get_int(column, value))) {
@@ -606,7 +606,7 @@ private:
                                                 const char *column,
                                                 common::ObTabletID &tablet_id)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     int64_t value = 0;
     if (CLICK_FAIL(row->get_int(column, value))) {
@@ -621,7 +621,7 @@ private:
                                                 const char *column,
                                                 int64_t &value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(row->get_int(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
@@ -634,7 +634,7 @@ private:
                                                 const char *column,
                                                 uint64_t &value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(row->get_uint(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
@@ -647,7 +647,7 @@ private:
                                                 const char *column,
                                                 ObStringHolder &value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     ObString temp_str;
     if (CLICK_FAIL(row->get_varchar(column, temp_str))) {
@@ -661,7 +661,7 @@ private:
                                                 const char *column,
                                                 bool &value)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(row->get_bool(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(MTL_ID()), K(column));
@@ -685,7 +685,7 @@ private:
                                   V &value,
                                   T &...others)
   {
-    TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+    TIMEGUARD_INIT(OCCAM, 1_s);
     int ret = common::OB_SUCCESS;
     if (CLICK_FAIL(get_signle_column_from_signle_row_(row, columns[FLOOR], value))) {
       OB_LOG(WARN, "get value failed", KR(ret), K(MTL_ID()), K(FLOOR), K(columns[FLOOR]));
@@ -707,7 +707,7 @@ private:
                                             const char **columns,
                                             ObTuple<T...> &tuple)
     {
-      TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+      TIMEGUARD_INIT(OCCAM, 1_s);
       static_assert(FLOOR > 0 && FLOOR <= sizeof...(T), "unexpected compile error");
       int ret = common::OB_SUCCESS;
       if (CLICK_FAIL(get_signle_column_from_signle_row_(row, columns[FLOOR], std::get<FLOOR>(tuple.tuple())))) {
@@ -727,7 +727,7 @@ private:
                                             const char **columns,
                                             ObTuple<T...> &tuple)
     {
-      TIMEGUARD_INIT(OCCAM, 1_s, 60_s);
+      TIMEGUARD_INIT(OCCAM, 1_s);
       int ret = common::OB_SUCCESS;
       if (CLICK_FAIL(get_signle_column_from_signle_row_(row, columns[0], std::get<0>(tuple.tuple())))) {
         OB_LOG(WARN, "get value failed", KR(ret), K(MTL_ID()), K(columns[0]));

@@ -869,9 +869,9 @@ DEF_PARAM(__min_full_resource_pool_memory, INT, OB_CLUSTER_PARAMETER, "107374182
 //        "Range: [1, 100] in percentage",
 //        ObParameterAttr(Section::LOAD_BALANCE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(_lcl_op_interval, TIME, OB_CLUSTER_PARAMETER, "30ms", "[0ms, 1s]",
+DEF_PARAM(_lcl_op_interval, TIME, OB_CLUSTER_PARAMETER, "5s", "[0ms, 5s]",
          "Scan interval for every detector node, smaller interval support larger deadlock scale, but cost more system resource. "
-         "0ms means disable deadlock, default value is 30ms. Range:[0ms, 1s]",
+         "0ms means disable deadlock, default value is 5s. Range:[0ms, 5s]",
          ObParameterAttr(Section::TRANS, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(enable_sys_unit_standalone, BOOL, OB_CLUSTER_PARAMETER, "False",
@@ -1064,8 +1064,8 @@ DEF_PARAM(data_disk_usage_limit_percentage, INT, OB_CLUSTER_PARAMETER, "90", "[5
 DEF_PARAM(sys_bkgd_net_percentage, INT, OB_CLUSTER_PARAMETER, "60", "[0,100]",
         "the net percentage of sys background net. Range: [0, 100] in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(disk_io_thread_count, INT_WITH_CHECKER, OB_CLUSTER_PARAMETER, "8", common::ObConfigEvenIntChecker,
-                     "[2,32]",
+DEF_PARAM(disk_io_thread_count, INT_WITH_CHECKER, OB_CLUSTER_PARAMETER, "1", common::ObConfigEvenIntChecker,
+                     "[1,32]",
                      "The number of io threads on each disk. The default value is 8. Range: [2,32] in even integer",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(sync_io_thread_count, INT, OB_CLUSTER_PARAMETER, "0",
@@ -1868,7 +1868,7 @@ DEF_PARAM(_ob_ash_size, CAP, OB_CLUSTER_PARAMETER, "0M", "[0,1G]",
         "to limit the memory size for ash buffer. Range: [0,1G] 0 means using default ash size"
         ", 30MB in normal case, 10M in mini mode",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_ob_ash_enable, BOOL, OB_CLUSTER_PARAMETER, "True",
+DEF_PARAM(_ob_ash_enable, BOOL, OB_CLUSTER_PARAMETER, "False",
          "enable active session history",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_ob_ash_disk_write_enable, BOOL, OB_CLUSTER_PARAMETER, "True",
@@ -1882,7 +1882,7 @@ DEF_PARAM(_ob_sqlstat_enable, BOOL, OB_CLUSTER_PARAMETER, "True", "enable/disabl
 
 DEF_PARAM(_enable_inner_session_mgr, BOOL, OB_CLUSTER_PARAMETER, "True", "enable/disable inner session mgr",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_enable_trace_tablet_leak, BOOL, OB_CLUSTER_PARAMETER, "False",
+DEF_PARAM(_enable_trace_tablet_leak, BOOL, OB_CLUSTER_PARAMETER, "False", 
         "enable t3m tablet leak checker. The default value is False",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
 DEF_PARAM(enable_auto_split, BOOL_WITH_CHECKER, OB_CLUSTER_PARAMETER, "False",
@@ -2031,7 +2031,7 @@ DEF_PARAM(max_partition_num, INT, OB_CLUSTER_PARAMETER, "8192", "[8192, 65536]",
 DEF_PARAM(json_document_max_depth, INT, OB_CLUSTER_PARAMETER, "100", "[100,1024]",
         "maximum nesting depth allowed in a JSON document",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,100)",
+DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,100)", 
         "Multi-mode memory tracking mechanism",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // automatically faststack

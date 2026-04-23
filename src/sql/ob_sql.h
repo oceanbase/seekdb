@@ -29,7 +29,6 @@
 #include "sql/rewrite/ob_transform_rule.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "sql/ob_spi.h"
-#include "sql/udr/ob_udr_item_mgr.h"
 
 namespace test
 {
@@ -262,11 +261,6 @@ private:
   int fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, const PlanCacheMode mode,
                              ObCollationType collation_type, const ObString &type_name,
                              ObStmt &basic_stmt, ObField &field);
-  int pc_add_udr_plan(const ObUDRItemMgr::UDRItemRefGuard &item_guard,
-                      ObPlanCacheCtx &pc_ctx,
-                      ObResultSet &result,
-                      ObOutlineState &outline_state,
-                      bool& plan_added);
   int handle_ps_prepare(const common::ObString &stmt,
                         ObSqlCtx &context,
                         ObResultSet &result,

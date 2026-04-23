@@ -30,11 +30,10 @@ RemoteExecuteStreamHandle::~RemoteExecuteStreamHandle()
 }
 
 
-int ObExecutorRpcImpl::init(obrpc::ObExecutorRpcProxy *rpc_proxy, obrpc::ObBatchRpc *batch_rpc)
+int ObExecutorRpcImpl::init(obrpc::ObExecutorRpcProxy *rpc_proxy)
 {
   int ret = OB_SUCCESS;
   proxy_ = rpc_proxy;
-  batch_rpc_ = batch_rpc;
   return ret;
 }
 

@@ -45,25 +45,27 @@ private:
   const uint64_t tenant_id_;
   ObTenantBase tenant_base_;
   ObTenantTabletStatMgr *stat_mgr_;
-  ObTimerService *timer_service_;
 };
 
 TestTenantTabletStatMgr::TestTenantTabletStatMgr()
   : tenant_id_(1),
     tenant_base_(tenant_id_),
-    stat_mgr_(nullptr),
-    timer_service_(nullptr)
+    stat_mgr_(nullptr)
 {
 }
 
 void TestTenantTabletStatMgr::SetUpTestCase()
 {
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
 }
 
 void TestTenantTabletStatMgr::TearDownTestCase()
 {
   MockTenantModuleEnv::get_instance().destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 void TestTenantTabletStatMgr::SetUp()
@@ -71,10 +73,7 @@ void TestTenantTabletStatMgr::SetUp()
   ASSERT_TRUE(MockTenantModuleEnv::get_instance().is_inited());
   int ret = OB_SUCCESS;
 
-  timer_service_ = OB_NEW(ObTimerService, ObModIds::TEST, tenant_id_);
-  ASSERT_NE(nullptr, timer_service_);
-  ASSERT_EQ(OB_SUCCESS, timer_service_->start());
-  tenant_base_.set(timer_service_);
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   stat_mgr_ = OB_NEW(ObTenantTabletStatMgr, ObModIds::TEST);
   ret = stat_mgr_->init(tenant_id_);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -84,18 +83,14 @@ void TestTenantTabletStatMgr::SetUp()
   ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
   ASSERT_EQ(tenant_id_, MTL_ID());
   ASSERT_EQ(stat_mgr_, MTL(ObTenantTabletStatMgr *));
-  ASSERT_EQ(timer_service_, MTL(ObTimerService *));
 }
 
 void TestTenantTabletStatMgr::TearDown()
 {
   stat_mgr_->destroy();
-  if (nullptr != timer_service_) {
-    timer_service_->stop();
-    timer_service_->wait();
-    timer_service_->destroy();
-    OB_DELETE(ObTimerService, ObModIds::TEST, timer_service_);
-  }
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
   ObTenantEnv::set_tenant(nullptr);
 }
 

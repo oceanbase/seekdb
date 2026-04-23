@@ -90,7 +90,7 @@ int parse_sql(ParseResult *p, const char *buf, size_t input_len)
     p->comment_cnt_ = 0;
     p->stop_add_comment_ = false;
 #endif
-    if (false == p->pl_parse_info_.is_pl_parse_ && !p->is_for_udr_) {//If this interface is called by PLParse, do not reset}
+    if (false == p->pl_parse_info_.is_pl_parse_) {//If this interface is called by PLParse, do not reset}
       p->question_mark_ctx_.count_ = 0;
     }
     // Remove spaces at the end of the SQL statement (outer layer has done)

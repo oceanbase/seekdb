@@ -439,7 +439,7 @@ int LogRequestHandler::handle_request<MsgType>(\
     const ObAddr &server,\
     const MsgType &req)\
 {\
-  TIMEGUARD_INIT(ELECT, 50_ms, 10_s);\
+  TIMEGUARD_INIT(ELECT, 50_ms);\
   int ret = common::OB_SUCCESS;\
   if (false == is_valid_palf_id(palf_id) || false == req.is_valid()) {\
     ret = OB_INVALID_ARGUMENT;\

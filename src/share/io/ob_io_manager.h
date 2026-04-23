@@ -412,7 +412,6 @@ public:
   //Refresh periodically with directive refresh (at most once every 10S)
   int refresh_group_io_config();
   const ObTenantIOConfig &get_io_config();
-  int trace_request_if_need(const ObIORequest *req, const char* msg, ObIOTracer::TraceType trace_type);
   int64_t get_group_num();
   int64_t get_ref_cnt() { return ATOMIC_LOAD(&ref_cnt_); }
   ObIOAllocator *get_tenant_io_allocator() { return &io_allocator_; }
@@ -444,7 +443,6 @@ private:
   ObIOUsage io_sys_usage_;        // sys group usage
   ObIOMemStats io_mem_stats_;     // Group Level: IO memory monitor
   ObIOFuncUsages io_func_infos_;  // Tenant Level: IO function group usage monitor
-  ObIOTracer io_tracer_;
   DRWLock io_config_lock_;                                      // for map and config
   hash::ObHashMap<ObIOGroupKey, uint64_t> group_id_index_map_;  // key:group_id, value:index
   ObTenantIOSchedulerV2 qsched_;

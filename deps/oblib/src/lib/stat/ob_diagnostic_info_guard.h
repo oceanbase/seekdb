@@ -100,6 +100,7 @@ private:
       uint64_t save_module_                   :1;
       uint64_t reset_action_                  :1;
       uint64_t save_action_                   :1;
+      uint64_t is_active_                     :1;
     };
   };
 };

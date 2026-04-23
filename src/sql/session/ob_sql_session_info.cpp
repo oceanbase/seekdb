@@ -2547,7 +2547,6 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
       ATOMIC_STORE(&sort_area_size_, tenant_config->_sort_area_size);
       ATOMIC_STORE(&hash_area_size_, tenant_config->_hash_area_size);
       ATOMIC_STORE(&enable_query_response_time_stats_, tenant_config->query_response_time_stats);
-      ATOMIC_STORE(&enable_user_defined_rewrite_rules_, tenant_config->enable_user_defined_rewrite_rules);
       ATOMIC_STORE(&enable_insertup_replace_gts_opt_, tenant_config->_enable_insertup_replace_gts_opt);
       ATOMIC_STORE(&enable_immediate_row_conflict_check_, tenant_config->_ob_immediate_row_conflict_check);
       ATOMIC_STORE(&range_optimizer_max_mem_size_, tenant_config->range_optimizer_max_mem_size);
@@ -2920,9 +2919,10 @@ int ObErrorSyncSysVarEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf,
   return ret;
 }
 
-int64_t ObErrorSyncSysVarEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObErrorSyncSysVarEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t size = 0;
+  int ret = OB_SUCCESS;
+  size = 0;
   for (int64_t j = 0; j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
     if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_LAST_SCHEMA_VERSION) {
       // need sync sys var
@@ -2931,7 +2931,7 @@ int64_t ObErrorSyncSysVarEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& ses
       // do nothing.
     }
   }
-  return size;
+  return ret;
 }
 
 int ObErrorSyncSysVarEncoder::compare_sess_info(ObSQLSessionInfo &sess,
@@ -3055,9 +3055,12 @@ int ObSysVarEncoder::get_serialize_size(ObSQLSessionInfo& sess, int64_t &len) co
 int ObSysVarEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const int64_t length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
+  ObString sys_var_in_pc_str;
   if (OB_FAIL(sess.get_sys_var_cache_inc_data().serialize(buf, length, pos))) {
     LOG_WARN("failed to serialize", K(length), K(ret));
-  } else if (OB_FAIL(sess.get_sys_var_in_pc_str().serialize(buf, length, pos))) {
+  } else if (OB_FAIL(sess.get_sys_var_in_pc_str(sys_var_in_pc_str))) {
+    LOG_WARN("fail to get sys var in pc str", K(ret));
+  } else if (OB_FAIL(sys_var_in_pc_str.serialize(buf, length, pos))) {
     LOG_WARN("failed to serialize", K(ret), K(length), K(pos));
   } else {
     for (int64_t j = 0; OB_SUCC(ret) && j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
@@ -3081,27 +3084,33 @@ int ObSysVarEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const in
   return ret;
 }
 
-int64_t ObSysVarEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObSysVarEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t size = 0;
+  int ret = OB_SUCCESS;
+  size = 0;
+  ObString sys_var_in_pc_str;
   size = sess.get_sys_var_cache_inc_data().get_serialize_size();
-  size += sess.get_sys_var_in_pc_str().get_serialize_size();
-  for (int64_t j = 0; j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
-      if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_SERVER_UUID ||
-          ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_PROXY_PARTITION_HIT ||
-          ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_STATEMENT_TRACE_ID ||
-          ObSysVariables::get_sys_var_id(j) == SYS_VAR_VERSION_COMMENT ||
-          ObSysVariables::get_sys_var_id(j) == SYS_VAR__OB_PROXY_WEAKREAD_FEEDBACK ||
-          ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_SYSTEM_TIME_ZONE ||
-          ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_PID_FILE ||
-          ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_PORT ||
-          ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_SOCKET) {
-      // no need sync sys var
-      continue;
+  if (OB_FAIL(sess.get_sys_var_in_pc_str(sys_var_in_pc_str))) {
+    LOG_WARN("fail to get sys var in pc str", K(ret));
+  } else {
+    size += sys_var_in_pc_str.get_serialize_size();
+    for (int64_t j = 0; j< share::ObSysVarFactory::ALL_SYS_VARS_COUNT; ++j) {
+        if (ObSysVariables::get_sys_var_id(j) == SYS_VAR_SERVER_UUID ||
+            ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_PROXY_PARTITION_HIT ||
+            ObSysVariables::get_sys_var_id(j) == SYS_VAR_OB_STATEMENT_TRACE_ID ||
+            ObSysVariables::get_sys_var_id(j) == SYS_VAR_VERSION_COMMENT ||
+            ObSysVariables::get_sys_var_id(j) == SYS_VAR__OB_PROXY_WEAKREAD_FEEDBACK ||
+            ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_SYSTEM_TIME_ZONE ||
+            ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_PID_FILE ||
+            ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_PORT ||
+            ObSysVariables::get_sys_var_id(j) ==  SYS_VAR_SOCKET) {
+        // no need sync sys var
+        continue;
+      }
+      size += sess.get_sys_var(j)->get_serialize_size();
     }
-    size += sess.get_sys_var(j)->get_serialize_size();
   }
-  return size;
+  return ret;
 }
 
 int ObSysVarEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char *current_sess_buf,
@@ -3180,12 +3189,15 @@ int ObSysVarEncoder::display_sess_info(ObSQLSessionInfo &sess, const char* curre
         // do nothing
       }
     }
+    ObString current_sys_var_in_pc_str;
     if (OB_FAIL(ret)) {
 
-    } else if (sess.get_sys_var_in_pc_str() != last_sess_sys_var_in_pc_str) {
+    } else if (OB_FAIL(sess.get_sys_var_in_pc_str(current_sys_var_in_pc_str))) {
+      LOG_WARN("fail to get sys var in pc str", K(ret));
+    } else if (current_sys_var_in_pc_str != last_sess_sys_var_in_pc_str) {
       share::ObTaskController::get().allow_next_syslog();
       LOG_WARN("failed to verify sys var in pc str", K(ret), "current_sess_sys_var_in_pc_str",
-            sess.get_sys_var_in_pc_str(),
+            current_sys_var_in_pc_str,
             "last_sess_sys_var_in_pc_str", last_sess_sys_var_in_pc_str);
     } else if (!is_error) {
       share::ObTaskController::get().allow_next_syslog();
@@ -3247,11 +3259,14 @@ int ObAppInfoEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const i
   return ret;
 }
 
-int64_t ObAppInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObAppInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t len = 0;
-  get_serialize_size(sess, len);
-  return len;
+  int ret = OB_SUCCESS;
+  size = 0;
+  if (OB_FAIL(get_serialize_size(sess, size))) {
+    LOG_WARN("fail to get serialize size", K(ret));
+  }
+  return ret;
 }
 
 int ObAppInfoEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char* current_sess_buf, int64_t current_sess_length,
@@ -3385,11 +3400,14 @@ int ObClientIdInfoEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, co
   return ret;
 }
 
-int64_t ObClientIdInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObClientIdInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t len = 0;
-  get_serialize_size(sess, len);
-  return len;
+  int ret = OB_SUCCESS;
+  size = 0;
+  if (OB_FAIL(get_serialize_size(sess, size))) {
+    LOG_WARN("fail to get serialize size", K(ret));
+  }
+  return ret;
 }
 
 int ObClientIdInfoEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char *current_sess_buf,
@@ -3492,11 +3510,14 @@ int ObAppCtxInfoEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, cons
   return ret;
 }
 
-int64_t ObAppCtxInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObAppCtxInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t len = 0;
-  get_serialize_size(sess, len);
-  return len;
+  int ret = OB_SUCCESS;
+  size = 0;
+  if (OB_FAIL(get_serialize_size(sess, size))) {
+    LOG_WARN("fail to get serialize size", K(ret));
+  }
+  return ret;
 }
 
 int ObAppCtxInfoEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char *current_sess_buf,
@@ -3625,11 +3646,14 @@ int ObSequenceCurrvalEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf,
   return ret;
 }
 
-int64_t ObSequenceCurrvalEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObSequenceCurrvalEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t len = 0;
-  get_serialize_size(sess, len);
-  return len;
+  int ret = OB_SUCCESS;
+  size = 0;
+  if (OB_FAIL(get_serialize_size(sess, size))) {
+    LOG_WARN("fail to get serialize size", K(ret));
+  }
+  return ret;
 }
 
 int ObSequenceCurrvalEncoder::compare_sess_info(ObSQLSessionInfo &sess,
@@ -3760,11 +3784,14 @@ int ObQueryInfoEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, const
   return ret;
 }
 
-int64_t ObQueryInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObQueryInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t len = 0;
-  get_serialize_size(sess, len);
-  return len;
+  int ret = OB_SUCCESS;
+  size = 0;
+  if (OB_FAIL(get_serialize_size(sess, size))) {
+    LOG_WARN("fail to get serialize size", K(ret));
+  }
+  return ret;
 }
 
 int ObQueryInfoEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char *current_sess_buf,
@@ -3944,11 +3971,14 @@ int ObControlInfoEncoder::fetch_sess_info(ObSQLSessionInfo &sess, char *buf, con
   return ret;
 }
 
-int64_t ObControlInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess)
+int ObControlInfoEncoder::get_fetch_sess_info_size(ObSQLSessionInfo& sess, int64_t &size)
 {
-  int64_t len = 0;
-  get_serialize_size(sess, len);
-  return len;
+  int ret = OB_SUCCESS;
+  size = 0;
+  if (OB_FAIL(get_serialize_size(sess, size))) {
+    LOG_WARN("fail to get serialize size", K(ret));
+  }
+  return ret;
 }
 
 int ObControlInfoEncoder::compare_sess_info(ObSQLSessionInfo &sess, const char *current_sess_buf,

@@ -22,9 +22,6 @@ namespace common
 {
 namespace occam
 {
-
-TLOCAL(ObThreadHungDetector::ClickPointIdx, ObThreadHungDetector::click_point_idx);
-
 }// namespace occam
 }// namespace common
 }// namespace oceanbase

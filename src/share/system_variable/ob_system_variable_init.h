@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace share
 {
-// The value of ObSysVarFlag must not be arbitrarily added, deleted, or modified; any additions, deletions, or modifications must be synchronized to the flag_value_dict variable in sql/session/gen_ob_sys_variables.py at the same time
+// The value of ObSysVarFlag cannot be added, deleted or modified arbitrarily. Any addition, deletion or modification must be synchronized to the flag_value_dict variable in sql/session/gen_ob_sys_variables.py
 struct ObSysVarFlag
 {
   const static int64_t NONE = 0LL;
@@ -68,6 +68,7 @@ struct ObSysVarFromJson{
 class ObSysVariables
 {
 public:
+  static int64_t get_all_sys_var_count();
   static ObSysVarClassType get_sys_var_id(int64_t i);
   static common::ObString get_name(int64_t i);
   static common::ObObjType get_type(int64_t i);
@@ -77,6 +78,10 @@ public:
   static common::ObString get_max(int64_t i);
   static common::ObString get_info(int64_t i);
   static int64_t get_flags(int64_t i);
+  static bool need_serialize(int64_t i);
+  static bool is_oracle_only(int64_t i);
+  static bool is_mysql_only(int64_t i);
+  static common::ObString get_alias(int64_t i);
   static const common::ObObj &get_default_value(int64_t i);
   static const common::ObObj &get_base_value(int64_t i);
   static int64_t get_amount();
@@ -94,6 +99,11 @@ public:
   static int64_t get_store_idx(int64_t var_id);
   static bool has_invalid_sys_var_id();
 };
+
+// Auto-generated ESSENTIAL_SYS_VARS array for inner session initialization
+// These variables are frequently used in session initialization, tenant processing, schema setting and other critical processes
+extern const ObSysVarClassType ESSENTIAL_SYS_VARS[];
+extern const int64_t ESSENTIAL_SYS_VARS_COUNT;
 
 } // end namespace share
 } // end namespace oceanbase

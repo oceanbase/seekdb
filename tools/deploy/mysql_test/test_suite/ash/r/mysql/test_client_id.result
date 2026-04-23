@@ -1,0 +1,9 @@
+use oceanbase;
+alter system set _ob_ash_enable = true;
+call DBMS_SESSION.SET_IDENTIFIER('123456789123456789123456789123456789abc');
+select sleep(3) ;
+sleep(3)
+0
+count(*) > 0
+1
+alter system set _ob_ash_enable = false;

@@ -346,8 +346,6 @@ int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_for_all_ls_()
         if (OB_ITER_END != ret) {
           LOG_WARN("get next iter failed", K(ret));
         }
-      } else if (OB_TMP_FAIL(ls->check_and_clear_obj_lock(false))) {
-        LOG_WARN("check and clear obj lock failed", K(ret), K(tmp_ret), K(ls->get_ls_id()));
       } else if (ls->is_sys_ls()) {
         if (OB_TMP_FAIL(check_is_leader_(ls, is_leader))) {
           LOG_WARN("can not check whether this ls is leader", K(ret), K(tmp_ret), K(ls->get_ls_id()));

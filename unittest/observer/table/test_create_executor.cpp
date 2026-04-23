@@ -511,12 +511,9 @@ TEST_F(TestCreateExecutor, generate_key_range)
 TEST_F(TestCreateExecutor, test_cache)
 {
   uint64_t tenant_id = 1;
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   ObTenantBase tenant_ctx(tenant_id);
-  ObTimerService *timer_service = OB_NEW(ObTimerService, ObModIds::TEST, tenant_id);
-  ASSERT_NE(nullptr, timer_service);
-  tenant_ctx.set(timer_service);
   ObTenantEnv::set_tenant(&tenant_ctx);
-  ASSERT_EQ(OB_SUCCESS, timer_service->start());
   // init plan cache
   ObPlanCache plan_cache;
   int ret = plan_cache.init(OB_PLAN_CACHE_BUCKET_NUMBER, tenant_id);
@@ -566,13 +563,9 @@ TEST_F(TestCreateExecutor, test_cache)
     ASSERT_TRUE(nullptr != spec);
     ASSERT_EQ(TABLE_API_EXEC_INSERT, spec->type_);
   }
-
-  if (nullptr != timer_service) {
-    timer_service->stop();
-    timer_service->wait();
-    timer_service->destroy();
-    OB_DELETE(ObTimerService, ObModIds::TEST, timer_service);
-  }
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 } // end namespace oceanbase
 

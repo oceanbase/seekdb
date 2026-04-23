@@ -166,6 +166,7 @@ int ObServerReloadConfig::operator()()
 
       (void)reload_diagnose_info_config(GCONF.enable_perf_event);
       (void)reload_trace_log_config(GCONF.enable_record_trace_log);
+      (void)reload_ash_config(GCONF._ob_ash_enable);
 
       reload_tenant_freezer_config_();
       reload_tenant_scheduler_config_();

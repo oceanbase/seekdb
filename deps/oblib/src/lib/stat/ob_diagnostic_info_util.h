@@ -31,6 +31,7 @@ extern int64_t get_mtl_id();
 extern ObDiagnosticInfoContainer *get_di_container();
 extern uint64_t lib_get_cpu_khz();
 extern void lib_mtl_switch(int64_t tenant_id, std::function<void(int)> fn);
+extern void lib_mtl_switch(lib::IRunWrapper *run_wrapper, std::function<void()> fn);
 extern int64_t lib_mtl_cpu_count();
 extern share::ObActiveSessHistList* lib_get_ash_list_instance();
 

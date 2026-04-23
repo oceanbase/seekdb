@@ -203,7 +203,6 @@ int TestFastParser::parse(const ObString &sql)
   ParamList *p_list = NULL; 
   FPContext fp_ctx(charsets4parser);
   fp_ctx.enable_batched_multi_stmt_ = false;
-  fp_ctx.is_udr_mode_ = false;
   int ret2 = ObFastParser::parse(sql, fp_ctx, allocator_,
     no_param_sql_ptr, no_param_sql_len, p_list, param_num);
   if ((OB_SUCCESS == ret1) != (OB_SUCCESS == ret2)) {

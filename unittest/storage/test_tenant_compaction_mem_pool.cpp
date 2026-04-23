@@ -59,37 +59,37 @@ private:
   const uint64_t tenant_id_;
   ObTenantBase tenant_base_;
   ObTenantCompactionMemPool *mem_pool_;
-  ObTimerService *timer_service_;
 };
 
 TestTenantCompactionMemPool::TestTenantCompactionMemPool()
   : tenant_id_(1),
     tenant_base_(tenant_id_),
-    mem_pool_(nullptr),
-    timer_service_(nullptr)
+    mem_pool_(nullptr)
 {
 }
 
 void TestTenantCompactionMemPool::SetUpTestCase()
 {
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   EXPECT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
 }
 
 void TestTenantCompactionMemPool::TearDownTestCase()
 {
   MockTenantModuleEnv::get_instance().destroy();
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
 }
 
 void TestTenantCompactionMemPool::SetUp()
 {
   int ret = OB_SUCCESS;
 
+  ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
   mem_pool_ = OB_NEW(ObTenantCompactionMemPool, ObModIds::TEST);
-  timer_service_ = OB_NEW(ObTimerService, ObModIds::TEST, tenant_id_);
-  ASSERT_EQ(OB_SUCCESS, timer_service_->start());
 
   tenant_base_.set(mem_pool_);
-  tenant_base_.set(timer_service_);
   ObTenantEnv::set_tenant(&tenant_base_);
   ASSERT_EQ(OB_SUCCESS, tenant_base_.init());
   ASSERT_EQ(tenant_id_, MTL_ID());
@@ -97,18 +97,14 @@ void TestTenantCompactionMemPool::SetUp()
   ASSERT_EQ(OB_SUCCESS, ret);
 
   ASSERT_EQ(mem_pool_, MTL(ObTenantCompactionMemPool *));
-  ASSERT_EQ(timer_service_, MTL(ObTimerService *));
 }
 
 void TestTenantCompactionMemPool::TearDown()
 {
   mem_pool_->destroy();
-  if (nullptr != timer_service_) {
-    timer_service_->stop();
-    timer_service_->wait();
-    timer_service_->destroy();
-    ob_delete(timer_service_);
-  }
+  ObTimerService::get_instance().stop();
+  ObTimerService::get_instance().wait();
+  ObTimerService::get_instance().destroy();
   ObTenantEnv::set_tenant(nullptr);
 }
 

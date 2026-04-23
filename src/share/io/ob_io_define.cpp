@@ -663,7 +663,7 @@ ObIOResult::ObIOResult()
     size_(0),
     timeout_us_(DEFAULT_IO_WAIT_TIME_US),
     aligned_size_(DIO_ALIGN_SIZE),
-    tenant_io_mgr_(),
+    tenant_io_mgr_(nullptr),
     buf_(nullptr),
     user_data_buf_(nullptr),
     io_callback_(nullptr),
@@ -767,7 +767,7 @@ void ObIOResult::reset()
   flag_.reset();
   ret_code_.reset();
   time_log_.reset();
-  tenant_io_mgr_.reset();
+  tenant_io_mgr_ = nullptr;
   //do not destroy thread_cond
   is_inited_ = false;
 }
@@ -791,7 +791,7 @@ void ObIOResult::destroy()
   ret_code_.reset();
   time_log_.reset();
   cond_.destroy();
-  tenant_io_mgr_.reset();
+  tenant_io_mgr_ = nullptr;
   is_inited_ = false;
 }
 
@@ -881,19 +881,18 @@ void ObIOResult::inc_ref(const char *msg)
 void ObIOResult::dec_ref(const char *msg)
 {
   int ret = OB_SUCCESS;
-  ObRefHolder<ObTenantIOManager> tenant_holder(tenant_io_mgr_.get_ptr());
   int64_t tmp_ref = ATOMIC_SAF(&result_ref_cnt_, 1);
   if (tmp_ref < 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("bug: result_ref_cnt < 0", K(ret), K(tmp_ref), KCSTRING(lbt()));
     abort();
   } else if (0 == tmp_ref) {
-    if (OB_ISNULL(tenant_holder.get_ptr())) {
+    if (OB_ISNULL(tenant_io_mgr_)) {
       ret = OB_ERR_SYS;
       LOG_ERROR("tenant io manager is null, memory leak", K(ret));
     } else {
       // destroy will be called when free
-      tenant_holder.get_ptr()->io_allocator_.free(this);
+      tenant_io_mgr_->io_allocator_.free(this);
     }
   }
 }
@@ -909,12 +908,12 @@ void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
     if (OB_LIKELY(!is_finished_)) {
       ret_code_ = ret_code;
       ATOMIC_STORE(&is_finished_, true);
-      if (OB_NOT_NULL(tenant_io_mgr_.get_ptr()) && OB_NOT_NULL(req)) {
+      if (OB_NOT_NULL(tenant_io_mgr_) && OB_NOT_NULL(req)) {
         if (is_sys_module()) {
           // sys group accumulate
-          tenant_io_mgr_.get_ptr()->io_sys_usage_.accumulate(*req);
+          tenant_io_mgr_->io_sys_usage_.accumulate(*req);
         } else {
-          tenant_io_mgr_.get_ptr()->io_usage_.accumulate(*req);
+          tenant_io_mgr_->io_usage_.accumulate(*req);
         }
         time_log_.end_ts_ = ObTimeUtility::fast_current_time();
         if (req->fd_.device_handle_->is_object_device()) {
@@ -925,7 +924,7 @@ void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
             OB_IO_MANAGER.get_tc().calc_usage(*req);
           }
         }
-        tenant_io_mgr_.get_ptr()->io_func_infos_.accumulate(*req);
+        tenant_io_mgr_->io_func_infos_.accumulate(*req);
         // do not detect backup io
         if (!req->fd_.is_backup_block_file()) {
           // record io error
@@ -1005,7 +1004,7 @@ int ObIOResult::transform_group_config_index_to_usage_index(const ObIOGroupKey &
     tmp_index = get_sys_module_id() - SYS_MODULE_START_ID;
     usage_index = tmp_index * GROUP_MODE_CNT + offset;
   } else {
-    if (OB_SUCCESS !=  tenant_io_mgr_.get_ptr()->get_group_index(key, tmp_index)) {
+    if (OB_SUCCESS !=  tenant_io_mgr_->get_group_index(key, tmp_index)) {
       tmp_index = 0;
       LOG_WARN("get group index failed", K(ret), K(key));
     }
@@ -1135,12 +1134,11 @@ void ObIORequest::set_result(ObIOResult &io_result)
 void ObIORequest::free()
 {
   int ret = OB_SUCCESS;
-  ObRefHolder<ObTenantIOManager> tenant_holder(tenant_io_mgr_.get_ptr());
-  if (OB_ISNULL(tenant_holder.get_ptr())) {
+  if (OB_ISNULL(tenant_io_mgr_)) {
     //not set yet, do nothing
   } else {
     // destroy will be called when free
-    tenant_holder.get_ptr()->io_allocator_.free(this);
+    tenant_io_mgr_->io_allocator_.free(this);
   }
 }
 
@@ -1164,7 +1162,7 @@ void ObIORequest::reset() //only for test, not dec resut_ref
   trace_id_.reset();
   io_result_ = nullptr;
   fd_.reset();
-  tenant_io_mgr_.reset();
+  tenant_io_mgr_ = nullptr;
   storage_accesser_.reset();
   is_inited_ = false;
   part_id_ = -1;
@@ -1188,7 +1186,7 @@ void ObIORequest::destroy()
     io_result_->dec_ref("request");
     io_result_ = nullptr;
   }
-  tenant_io_mgr_.reset();
+  tenant_io_mgr_ = nullptr;
   storage_accesser_.reset();
   is_inited_ = false;
   part_id_ = -1;
@@ -1395,16 +1393,16 @@ int ObIORequest::alloc_aligned_io_buf(char *&io_buf)
   } else {
     align_offset_size(io_result_->offset_, io_result_->size_, aligned_size, io_offset, io_size);
     const int64_t io_buffer_size = ((1 == aligned_size) ? io_size : (io_size + aligned_size));
-    if (OB_ISNULL(tenant_io_mgr_.get_ptr())) {
+    if (OB_ISNULL(tenant_io_mgr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant io manager is null", K(ret));
-    } else if (OB_ISNULL(raw_buf_ = tenant_io_mgr_.get_ptr()->io_allocator_.alloc(io_buffer_size))) {
+    } else if (OB_ISNULL(raw_buf_ = tenant_io_mgr_->io_allocator_.alloc(io_buffer_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret), K(io_size));
     } else {
       io_buf = reinterpret_cast<char *>(upper_align(reinterpret_cast<int64_t>(raw_buf_), aligned_size));
       buf_size_ = io_buffer_size;
-      tenant_io_mgr_.get_ptr()->io_mem_stats_.inc(*this);
+      tenant_io_mgr_->io_mem_stats_.inc(*this);
     }
   }
   if (OB_SUCC(ret)) {
@@ -1519,10 +1517,10 @@ int ObIORequest::recycle_buffer()
 int ObIORequest::retry_io()
 {
   int ret = OB_SUCCESS;
-  if(OB_ISNULL(tenant_io_mgr_.get_ptr())) {
+  if(OB_ISNULL(tenant_io_mgr_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant io mgr is null", K(ret), K(*this));
-  } else if (OB_FAIL(tenant_io_mgr_.get_ptr()->retry_io(*this))) {
+  } else if (OB_FAIL(tenant_io_mgr_->retry_io(*this))) {
     LOG_WARN("retry io failed", K(ret), K(*this));
   }
   return ret;
@@ -1563,48 +1561,34 @@ bool ObIORequest::can_callback() const
 
 void ObIORequest::free_io_buffer()
 {
-  if (nullptr != raw_buf_ && nullptr != tenant_io_mgr_.get_ptr()) {
-    tenant_io_mgr_.get_ptr()->io_mem_stats_.dec(*this);
-    tenant_io_mgr_.get_ptr()->io_allocator_.free(raw_buf_);
+  if (nullptr != raw_buf_ && nullptr != tenant_io_mgr_) {
+    tenant_io_mgr_->io_mem_stats_.dec(*this);
+    tenant_io_mgr_->io_allocator_.free(raw_buf_);
     raw_buf_ = nullptr;
   }
 }
 
-void ObIORequest::inc_ref(const char *msg)
+void ObIORequest::inc_ref()
 {
   int64_t old_ref_cnt = ATOMIC_FAA(&ref_cnt_, 1);
-  if (nullptr != msg && OB_NOT_NULL(tenant_io_mgr_.get_ptr())) {
-    int tmp_ret = OB_SUCCESS;
-    ObIOTracer::TraceType trace_type = 0 == old_ref_cnt ? ObIOTracer::TraceType::IS_FIRST : ObIOTracer::TraceType::OTHER;
-    if (OB_TMP_FAIL(tenant_io_mgr_.get_ptr()->trace_request_if_need(this, msg, trace_type))) {
-      LOG_WARN_RET(tmp_ret, "add trace for io request failed", K(tmp_ret), KPC(this), K(trace_type));
-    }
-  }
 }
 
-void ObIORequest::dec_ref(const char *msg)
+void ObIORequest::dec_ref()
 {
   int ret = OB_SUCCESS;
-  ObRefHolder<ObTenantIOManager> tenant_holder(tenant_io_mgr_.get_ptr());
   int64_t tmp_ref = ATOMIC_SAF(&ref_cnt_, 1);
   if (tmp_ref < 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("bug: ref_cnt < 0", K(ret), K(tmp_ref), KCSTRING(lbt()), K(*this));
     abort();
-  } else if (nullptr != msg && OB_NOT_NULL(tenant_holder.get_ptr())) {
-    int tmp_ret = OB_SUCCESS;
-    ObIOTracer::TraceType trace_type = 0 == tmp_ref ? ObIOTracer::TraceType::IS_LAST : ObIOTracer::TraceType::OTHER;
-    if (OB_TMP_FAIL(tenant_holder.get_ptr()->trace_request_if_need(this, msg, trace_type))) {
-      LOG_WARN("remove trace for io request failed", K(tmp_ret), KPC(this), K(trace_type));
-    }
   }
   if (0 == tmp_ref) {
-    if (OB_ISNULL(tenant_holder.get_ptr())) {
+    if (OB_ISNULL(tenant_io_mgr_)) {
       ret = OB_ERR_SYS;
       LOG_ERROR("tenant io manager is null, memory leak", K(ret), KCSTRING(lbt()), K(*this));
     } else {
       // destroy will be called when free
-      tenant_holder.get_ptr()->io_allocator_.free(this);
+      tenant_io_mgr_->io_allocator_.free(this);
     }
   }
 }
@@ -2027,7 +2011,6 @@ bool ObTenantIOConfig::GroupConfig::is_valid() const
 ObTenantIOConfig::ParamConfig::ParamConfig()
     : memory_limit_(0),
       callback_thread_count_(0),
-      enable_io_tracer_(false),
       object_storage_io_timeout_ms_(DEFAULT_OBJECT_STORAGE_IO_TIMEOUT_MS)
 {
 
@@ -2086,7 +2069,6 @@ const ObTenantIOConfig &ObTenantIOConfig::default_instance()
   instance.unit_config_.max_net_bandwidth_ = INT64_MAX;
   instance.unit_config_.net_bandwidth_weight_ = 100;
   instance.group_config_change_ = false;
-  instance.param_config_.enable_io_tracer_ = false;
   instance.param_config_.object_storage_io_timeout_ms_ = DEFAULT_OBJECT_STORAGE_IO_TIMEOUT_MS;
   return instance;
 }
