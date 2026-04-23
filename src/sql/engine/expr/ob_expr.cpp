@@ -1056,6 +1056,16 @@ int ObExpr::init_vector(ObEvalCtx &ctx,
     int32_t *lens = get_discrete_vector_lens(ctx);
     ObBitVector &nulls = get_nulls(ctx);
     nulls.reset(size);
+#ifdef _WIN32
+    // TODO(windows-uninit-discrete): frame layout (see ObStaticEngineExprCG::create_tmp_frameinfo)
+    // intentionally excludes ptr_arr/len_arr from zero-init; correct callers must gate access on
+    // (row_idx in valid range && !nulls[row_idx]). On Linux arena memory is frequently zero by
+    // accident, so a misbehaving producer/reader silently reads (ptr=NULL, len=0); on Windows the
+    // same arena returns non-zero garbage and we crash. Temporarily zero-fill on Windows to keep
+    // the build running; remove this once the real offending operator is located.
+    MEMSET(ptrs, 0, sizeof(char *) * size);
+    MEMSET(lens, 0, sizeof(int32_t) * size);
+#endif
     // for collection expr, we need reset ptr to frame, so that we can write collection cells
     if (use_reserve_buf || is_nested_expr()) {
       reset_discretes_ptr(ctx.frames_[frame_idx_], size, get_discrete_vector_ptrs(ctx));
