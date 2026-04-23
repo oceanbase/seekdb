@@ -1,0 +1,1772 @@
+drop table if exists t;
+drop table if exists t1;
+=============================
+=  vector index online ddl  =
+=============================
+alter system ob_vector_memory_limit_percentage=30;
+select sleep(5);
+sleep(5)
+0
+create table t(c1 vector(3), c2 int unsigned auto_increment, c3 json, c4 date, c5 varchar(20), index idx_0(c4), primary key(c2));
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+insert into t values('[1,2,3]', default, '{}', '2024-05-06', 'tom');
+alter table t add c6 vector(3);
+alter table t add c7 vector(3) as (c1 + c6) virtual;
+alter table t add c8 int as (c5 + 'jarry') virtual;
+create vector index idx_2 on t(c6) with (distance=inner_product, type=hnsw);
+select /*+ read_consistency(weak) */ * from t where c4 = '2024-05-06';
+c1	c2	c3	c4	c5	c6	c7	c8
+[1,2,3]	1	{}	2024-05-06	tom	NULL	NULL	0
+Warnings:
+Warning	1292	Truncated incorrect DOUBLE value: 'tom'
+Warning	1292	Truncated incorrect DOUBLE value: 'jarry'
+select count(*) from t order by l2_distance(c1, '[5,6,7]') approx limit 1;
+count(*)
+1
+explain select count(*) from t order by l2_distance(c1, '[5,6,7]') approx limit 1;
+Query Plan
+===================================================
+|ID|OPERATOR           |NAME|EST.ROWS|EST.TIME(us)|
+---------------------------------------------------
+|0 |LIMIT              |    |1       |0|
+|1 |└─SCALAR GROUP BY  |    |1       |0|
+|2 |  └─TABLE FULL SCAN|t   |1       |0|
+===================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=16
+      limit(1), offset(nil)
+  1 - output([T_FUN_COUNT(*)]), filter(nil), rowset=16
+      group(nil), agg_func([T_FUN_COUNT(*)])
+  2 - output(nil), filter(nil), rowset=16
+      access(nil), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      123
+drop table if exists t;
+create table t(c1 vector(3), c2 vector(3), c3 int, primary key(c3));
+alter table t add column c4 vector(3) as (c1 + c2) virtual;
+create vector index idx_1 on t(c4) with (distance=l2, type=hnsw);
+ERROR 0A000: Using generate column as vector index column is not supported
+alter table t add column c5 int as (c3 + 5) virtual;
+create index idx_2 on t(c5);
+alter table t drop column c4;
+alter table t drop column c5;
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t	0	PRIMARY	1	c3	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+insert into t values('[1,2,3]', '[4,5,6]', 1);
+insert into t values('[3,4,5]', '[4,5,7]', 2);
+alter table t add column c4 vector(3) as (c1 + c2) virtual;
+create vector index idx_1 on t(c4) with (distance=l2, type=hnsw);
+ERROR 0A000: Using generate column as vector index column is not supported
+create vector index idx_2 on t(c1) with (distance=l2, type=hnsw);
+alter table t add column c5 int as (c3 + 5) virtual;
+create index idx_3 on t(c5);
+select c1 from t order by l2_distance(c1, '[5,6,7]') approx limit 1;
+c1
+[3,4,5]
+explain select c1 from t order by l2_distance(c1, '[5,6,7]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_2)|1       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1]), filter(nil), rowset=16
+      access([t.c3], [t.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+alter table t drop column c4;
+alter table t drop column c5;
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t	0	PRIMARY	1	c3	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t	1	idx_2	1	c1	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+no data and no vector index
+drop table if exists t;
+create table t(c1 vector(3), c2 vector(3), c3 int, c4 char(10), primary key(c3));
+alter table t modify column c3 int not null;
+alter table t modify column c4 char(10) not null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) NOT NULL,
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create vector index idx_1 on t(c2) with (distance=l2, type=hnsw);
+alter table t modify column c2 vector(3) null;
+alter table t modify column c3 int null;
+ERROR 42000: All parts of a PRIMARY KEY must be NOT NULL; if you need NULL in a key, use UNIQUE instead
+alter table t modify column c4 char(10) null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) DEFAULT NULL,
+  PRIMARY KEY (`c3`),
+  VECTOR KEY `idx_1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t modify column c3 int not null;
+alter table t modify column c4 char(10) not null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) NOT NULL,
+  PRIMARY KEY (`c3`),
+  VECTOR KEY `idx_1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop index idx_1 on t;
+alter table t modify column c2 vector(3) null;
+alter table t modify column c3 int null;
+ERROR 42000: All parts of a PRIMARY KEY must be NOT NULL; if you need NULL in a key, use UNIQUE instead
+alter table t modify column c4 char(10) null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) DEFAULT NULL,
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create vector index idx_1 on t(c2) with (distance=l2, type=hnsw);
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t	0	PRIMARY	1	c3	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t	1	idx_1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t values ('[1,2,3]', '[2,3,4]', 1, 'aa'), ('[1,2,4]', '[2,2,4]', 2, 'bb'), ('[1,1,3]', '[2,3,4]', 3, 'aa');
+drop index idx_1 on t;
+alter table t modify column c3 int not null;
+alter table t modify column c4 char(10) not null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) NOT NULL,
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create vector index idx_1 on t(c2) with (distance=l2, type=hnsw);
+alter table t modify column c2 vector(3) null;
+alter table t modify column c3 int null;
+ERROR 42000: All parts of a PRIMARY KEY must be NOT NULL; if you need NULL in a key, use UNIQUE instead
+alter table t modify column c4 char(10) null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) DEFAULT NULL,
+  PRIMARY KEY (`c3`),
+  VECTOR KEY `idx_1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select distinct(c2) from t order by l2_distance(c2, '[2,3,4]') approx limit 2;
+ERROR 22000: Invalid data type for the operation
+explain select distinct(c2) from t order by l2_distance(c2, '[2,3,4]') approx limit 2;
+Query Plan
+=========================================================
+|ID|OPERATOR             |NAME    |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------
+|0 |TOP-N SORT           |        |1       |0|
+|1 |└─HASH DISTINCT      |        |1       |0|
+|2 |  └─VECTOR INDEX SCAN|t(idx_1)|1       |0|
+=========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c2]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c2, cast('[2,3,4]', ARRAY(18, -1))), ASC]), topn(2)
+  1 - output([l2_distance(t.c2, cast('[2,3,4]', ARRAY(18, -1)))], [t.c2]), filter(nil), rowset=16
+      distinct([t.c2])
+  2 - output([t.c2], [l2_distance(t.c2, cast('[2,3,4]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([t.c3], [t.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+alter table t modify column c3 int not null;
+alter table t modify column c4 char(10) not null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) NOT NULL,
+  PRIMARY KEY (`c3`),
+  VECTOR KEY `idx_1` (`c2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop index idx_1 on t;
+alter table t modify column c2 vector(3) null;
+alter table t modify column c3 int null;
+ERROR 42000: All parts of a PRIMARY KEY must be NOT NULL; if you need NULL in a key, use UNIQUE instead
+alter table t modify column c4 char(10) null;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` VECTOR(3) DEFAULT NULL,
+  `c3` int(11) NOT NULL,
+  `c4` char(10) DEFAULT NULL,
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create vector index idx_1 on t(c2) with (distance=l2, type=hnsw);
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t	0	PRIMARY	1	c3	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t	1	idx_1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+select distinct(c2) from t order by l2_distance(c2, '[2,3,4]') approx limit 2;
+ERROR 22000: Invalid data type for the operation
+explain select distinct(c2) from t order by l2_distance(c2, '[2,3,4]') approx limit 2;
+Query Plan
+=========================================================
+|ID|OPERATOR             |NAME    |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------
+|0 |TOP-N SORT           |        |1       |0|
+|1 |└─HASH DISTINCT      |        |1       |0|
+|2 |  └─VECTOR INDEX SCAN|t(idx_1)|1       |0|
+=========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c2]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c2, cast('[2,3,4]', ARRAY(18, -1))), ASC]), topn(2)
+  1 - output([l2_distance(t.c2, cast('[2,3,4]', ARRAY(18, -1)))], [t.c2]), filter(nil), rowset=16
+      distinct([t.c2])
+  2 - output([t.c2], [l2_distance(t.c2, cast('[2,3,4]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([t.c3], [t.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+set default value and drop default
+drop table if exists t;
+create table t(c1 vector(3), c2 int, c3 char(7), primary key(c3));
+alter table t alter c1 set default '[1,2,3]';
+Got one of the listed errors
+alter table t alter c3 set default 'tom';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` char(7) NOT NULL DEFAULT 'tom',
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+create index idx_2 on t(c3);
+insert into t values ('[1,1,1]',1,default);
+insert into t values ('[1,1,2]',1,'cc');
+select * from t order by l2_distance(c1, '[2,3,4]') approx limit 1;
+c1	c2	c3
+[1,1,2]	1	cc
+explain select * from t order by l2_distance(c1, '[2,3,4]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|2       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3]), filter(nil), rowset=16
+      access([t.c3], [t.c1], [t.c2]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+alter table t alter c3 drop default;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` char(7) NOT NULL,
+  PRIMARY KEY (`c3`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  KEY `idx_2` (`c3`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t alter c1 set default '[1,2,3]';
+Got one of the listed errors
+alter table t alter c3 set default 'aaa';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` char(7) NOT NULL DEFAULT 'aaa',
+  PRIMARY KEY (`c3`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  KEY `idx_2` (`c3`) BLOCK_SIZE 16384 LOCAL
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop index idx_1 on t;
+drop index idx_2 on t;
+alter table t alter c3 drop default;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` char(7) NOT NULL,
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t alter c1 set default '[1,2,3]';
+Got one of the listed errors
+alter table t alter c3 set default 'aaa';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  `c3` char(7) NOT NULL DEFAULT 'aaa',
+  PRIMARY KEY (`c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+create index idx_2 on t(c3);
+truncate table t;
+alter table t alter c1 set default '[1,2,3]';
+Got one of the listed errors
+alter table t alter c3 set default 'aa';
+drop index idx_1 on t;
+drop index idx_2 on t;
+alter table t alter c3 drop default;
+insert into t values ('[1,1,1]',1,default);
+ERROR HY000: Field doesn't have a default value
+alter auto_increment
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2));
+alter table t auto_increment = 10;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX AUTO_INCREMENT = 10 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t values ('[1,2,3]', default);
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+select * from t where c2 = 10 order by l2_distance(c1, '[1,1,1]') approx limit 1;
+c1	c2
+[1,2,3]	10
+explain select * from t where c2 = 10 order by l2_distance(c1, '[1,1,1]') approx limit 1;
+Query Plan
+=======================================================================
+|ID|OPERATOR                               |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t   |1       |0|
+=======================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter([t.c2 = 10]), rowset=16
+      access([t.c2], [t.c1]), partitions(p0)
+      limit(1), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t.c2]), range[10 ; 10]
+alter table t auto_increment = 20;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = 20 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t values ('[2,2,3]', default);
+select * from t where c2 = 20 order by l2_distance(c1, '[1,1,1]') approx limit 1;
+c1	c2
+[2,2,3]	20
+explain select * from t where c2 = 20 order by l2_distance(c1, '[1,1,1]') approx limit 1;
+Query Plan
+=======================================================================
+|ID|OPERATOR                               |NAME|EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t   |1       |0|
+=======================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter([t.c2 = 20]), rowset=16
+      access([t.c2], [t.c1]), partitions(p0)
+      limit(1), offset(nil), is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t.c2]), range[20 ; 20]
+change column
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+alter table t change column c1 c3 vector(3);
+alter table t change column c3 c1 array(float);
+Got one of the listed errors
+alter table t change column c3 c1 vector(4);
+Got one of the listed errors
+insert into t values ('[1,2,3]', default),('[1,2,3]', default);
+alter table t change column c3 c1 vector(3);
+alter table t change column c1 c3 array(float);
+Got one of the listed errors
+alter table t change column c1 c3 vector(4);
+Got one of the listed errors
+drop index idx_1 on t;
+alter table t change column c1 c3 vector(3);
+alter table t change column c3 c1 vector(4);
+ERROR 22000: Invalid dimension for vector.
+insert into t values ('[1,2,3,4]', default);
+ERROR 22000: inconsistent dimension: expected 3 got 4
+alter table t change column c3 c1 array(float);
+insert into t values ('[1,2,3,4]', default),('[1,2,3,4]', default);
+create vector index idx_1 on t(c1) with (distance=l2,type=hnsw);
+ERROR 0A000: Not supported feature or function
+alter table t change column c1 c3 vector(3);
+ERROR 22000: Invalid dimension for vector.
+alter table t change column c1 c3 vector(4);
+ERROR 22000: Invalid dimension for vector.
+delete from t;
+alter table t change column c1 c3 vector(3);
+alter table t change column c3 c1 vector(4);
+insert into t values ('[1,2,3,4]', default),('[1,2,3,5]', default);
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+select * from t order by l2_distance(c1, '[1,1,1,4]') approx limit 1;
+c1	c2
+[1,2,3,4]	5
+explain select * from t order by l2_distance(c1, '[1,1,1,4]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|1       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      access([t.c2], [t.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+modify column
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+alter table t modify c1 vector(4);
+ERROR 0A000: For columns with vector indexes, altering the column type is not supported
+alter table t modify c1 array(float);
+ERROR 0A000: For columns with vector indexes, altering the column type is not supported
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX AUTO_INCREMENT = 1 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t values ('[1,2,3,4]', default);
+ERROR 22000: inconsistent dimension: expected 3 got 4
+insert into t values ('[1,2,3]', default),('[1,2,4]', default);
+alter table t modify c1 vector(4);
+ERROR 0A000: For columns with vector indexes, altering the column type is not supported
+alter table t modify c1 array(float);
+ERROR 0A000: For columns with vector indexes, altering the column type is not supported
+drop index idx_1 on t;
+alter table t modify c1 vector(4);
+ERROR 22000: Invalid dimension for vector.
+insert into t values ('[1,2,3,4]', default);
+ERROR 22000: inconsistent dimension: expected 3 got 4
+alter table t modify c1 array(float);
+insert into t values('[1,2,3,4]', default);
+alter table t modify c1 vector(3);
+ERROR 22000: Invalid dimension for vector.
+alter table t modify c1 vector(4);
+ERROR 22000: Invalid dimension for vector.
+delete from t;
+alter table t modify c1 array(int);
+alter table t modify c1 vector(4);
+insert into t values ('[1,2,3,3]', default),('[1,2,4,4]', default);
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+select * from t order by l2_distance(c1, '[1,2,3,4]') approx limit 1;
+c1	c2
+[1,2,4,4]	5
+explain select * from t order by l2_distance(c1, '[1,2,3,4]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|1       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      access([t.c2], [t.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+multi alter
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, c3 char(10), primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+alter table t modify column c1 vector(4), add column c4 json, drop column c3;
+ERROR 0A000: For columns with vector indexes, altering the column type is not supported
+insert into t values('[1,2,3]', default, '{}');
+alter table t modify column c1 vector(4), add column c5 char(10), drop column c3;
+ERROR 0A000: For columns with vector indexes, altering the column type is not supported
+drop index idx_1 on t;
+alter table t modify column c1 vector(4), add column c4 json, drop column c3;
+ERROR 22000: Invalid dimension for vector.
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL AUTO_INCREMENT,
+  `c3` char(10) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX AUTO_INCREMENT = 2 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+delete from t;
+alter table t modify column c1 vector(4), add column c4 json, drop column c3;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(4) DEFAULT NULL,
+  `c2` int(11) NOT NULL AUTO_INCREMENT,
+  `c4` json DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX AUTO_INCREMENT = 2 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t values('[1,2,3,4]', default, '{}'),('[1,2,4,4]', default, '{}');
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+select * from t order by l2_distance(c1, '[1,2,3,4]') approx limit 1;
+c1	c2	c4
+[1,2,3,4]	2	{}
+explain select * from t order by l2_distance(c1, '[1,2,3,4]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|1       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c4]), filter(nil), rowset=16
+      access([t.c2], [t.c1], [t.c4]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+add index
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+alter table t add vector index idx_2(t) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'index idx_2(t) with (distance=l2, type=hnsw)' at line 1
+alter table t add vector key idx_2(t) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'key idx_2(t) with (distance=l2, type=hnsw)' at line 1
+create vector key idx_2 on t(c1) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'key idx_2 on t(c1) with (distance=l2, type=hnsw)' at line 1
+insert into t values('[1,2,1]',default);
+alter table t add vector index idx_2(t) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'index idx_2(t) with (distance=l2, type=hnsw)' at line 1
+alter table t add vector key idx_2(t) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'key idx_2(t) with (distance=l2, type=hnsw)' at line 1
+create vector key idx_2 on t(c1) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'key idx_2 on t(c1) with (distance=l2, type=hnsw)' at line 1
+create index
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2), vector key idx_1(c1) with (distance=l2, type=hnsw));
+create vector key idx_2 on t(c1) with (distance=l2, type=hnsw);
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'key idx_2 on t(c1) with (distance=l2, type=hnsw)' at line 1
+drop index
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+alter table t drop index idx_1;
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+insert into t values('[1,1,1]', default);
+alter table t drop key idx_1;
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, c3 char(10), primary key(c2), vector key idx_1(c1) with (distance=l2, type=hnsw), index idx_2(c3));
+alter table t drop index idx_1, drop key idx_2;
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, c3 char(10), primary key(c2), vector key idx_1(c1) with (distance=l2, type=hnsw), index idx_2(c3));
+alter table t drop key idx_1, drop key idx_2;
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+insert into t values('[1,1,1]', default, 'a');
+alter table t drop index idx_1;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL AUTO_INCREMENT,
+  `c3` char(10) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX AUTO_INCREMENT = 2 AUTO_INCREMENT_MODE = 'ORDER' DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+rename index
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+alter table t rename index idx_1 to idx_2;
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t	0	PRIMARY	1	c2	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t	1	idx_2	1	c1	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+alter table t rename key idx_2 to idx_1;
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t	0	PRIMARY	1	c2	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t	1	idx_1	1	c1	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+insert into t values('[1,1,1]',default), ('[1,1,2]',default);
+alter table t rename index idx_1 to idx_2;
+select * from t order by l2_distance(c1, '[1,2,3]') approx limit 1;
+c1	c2
+[1,1,2]	2
+explain select * from t order by l2_distance(c1, '[1,2,3]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_2)|2       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      access([t.c2], [t.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+multi index
+drop table if exists t;
+create table t(c1 vector(3), c2 int auto_increment, c3 vector(3), v4 char(10), primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+alter table t add vector index idx_2(c2) with (distance=l2, type=hnsw), rename index idx_1 to idx_3, drop index idx_1;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'index idx_2(c2) with (distance=l2, type=hnsw), rename index idx_1 to idx_3, drop' at line 1
+insert into t values('[1,1,1]',default,'[1,1,2]','tom');
+alter table t add vector index idx_2(c2) with (distance=l2, type=hnsw), rename index idx_1 to idx_3, drop index idx_1;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near 'index idx_2(c2) with (distance=l2, type=hnsw), rename index idx_1 to idx_3, drop' at line 1
+add foreign\check\null constraint
+drop table if exists t;
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'test.t1'
+create table t (c1 vector(3), c2 int);
+create table t1 (c1 vector(3), c2 int, primary key(c2));
+alter table t add constraint fk_1 foreign key(c2) references t1(c2);
+alter table t1 add constraint chk_1 check (c2>5);
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  CONSTRAINT `fk_1` FOREIGN KEY (`c2`) REFERENCES `test`.`t1`(`c2`) ON UPDATE RESTRICT ON DELETE RESTRICT 
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  PRIMARY KEY (`c2`),
+  CONSTRAINT `chk_1` CHECK ((`c2` > 5))
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select * from information_schema.table_constraints where table_name='t';
+CONSTRAINT_CATALOG	CONSTRAINT_SCHEMA	CONSTRAINT_NAME	TABLE_SCHEMA	TABLE_NAME	CONSTRAINT_TYPE	ENFORCED
+def	test	fk_1	test	t	FOREIGN KEY	YES
+insert into t values('[1,2,3]', 1);
+ERROR 23000: Cannot add or update a child row: a foreign key constraint fails
+insert into t1 values('[2,3,4]', 3);
+ERROR HY000: check constraint violated
+insert into t1 values('[2,3,4]', 6);
+insert into t values('[2,3,4]', 6);
+alter table t add constraint fk_2 foreign key(c2) references t1(c2);
+alter table t1 add constraint chk_2 check (c2>3);
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  CONSTRAINT `fk_2` FOREIGN KEY (`c2`) REFERENCES `test`.`t1`(`c2`) ON UPDATE RESTRICT ON DELETE RESTRICT ,
+  CONSTRAINT `fk_1` FOREIGN KEY (`c2`) REFERENCES `test`.`t1`(`c2`) ON UPDATE RESTRICT ON DELETE RESTRICT 
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  PRIMARY KEY (`c2`),
+  CONSTRAINT `chk_1` CHECK ((`c2` > 5)),
+  CONSTRAINT `chk_2` CHECK ((`c2` > 3))
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+drop foreign\check\null constraint
+alter table t drop constraint fk_1;
+alter table t1 drop constraint chk_1;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) DEFAULT NULL,
+  CONSTRAINT `fk_2` FOREIGN KEY (`c2`) REFERENCES `test`.`t1`(`c2`) ON UPDATE RESTRICT ON DELETE RESTRICT 
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  PRIMARY KEY (`c2`),
+  CONSTRAINT `chk_2` CHECK ((`c2` > 3))
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+rename table
+drop table if exists t;
+drop table if exists t1;
+create table t(c1 vector(3), c2 int, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+rename table t to t1;
+insert into t1 values('[1,2,3]', 1), ('[2,3,4]', 2);
+select * from t1 order by l2_distance(c1, '[1,2,1]') approx limit 1;
+c1	c2
+[1,2,3]	1
+explain select * from t1 order by l2_distance(c1, '[1,2,1]') approx limit 1;
+Query Plan
+======================================================
+|ID|OPERATOR         |NAME     |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------
+|0 |VECTOR INDEX SCAN|t1(idx_1)|2       |0|
+======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t1.c1], [t1.c2]), filter(nil), rowset=16
+      access([t1.c2], [t1.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+rename table t1 to t;
+drop index idx_1 on t;
+rename table t to t1;
+truncate table t1;
+create vector index idx_1 on t1(c1) with (distance=l2, type=hnsw);
+rename table t1 to t;
+alter row_format
+drop table if exists t;
+create table t(c1 vector(3), c2 int,c3 array(int), c4 float[], primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=redundant;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = REDUNDANT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compact;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPACT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compressed;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=dynamic;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t values('[1,2,3]', 1, [], [0.12213]), ('[2,3,4]', 2, [1,2,3], array());
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '], [0.12213]), ('[2,3,4]', 2, [1,2,3], array())' at line 1
+insert into t values('[1,2,3]', 1, [1,1,1], [0.12213]), ('[2,3,4]', 2, [1,2,3], [0.12213]);
+alter table t row_format=redundant;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = REDUNDANT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compact;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPACT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compressed;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=dynamic;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+c1	c2	c3	c4
+[1,2,3]	1	[1,1,1]	[0.12213]
+explain select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|2       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3], [t.c4]), filter(nil), rowset=16
+      access([t.c2], [t.c1], [t.c3], [t.c4]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+drop index idx_1 on t;
+alter table t row_format=redundant;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = REDUNDANT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compact;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPACT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compressed;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=dynamic;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+delete from t;
+alter table t row_format=redundant;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = REDUNDANT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compact;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPACT COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=compressed;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = COMPRESSED COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t row_format=dynamic;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter block_size
+drop table if exists t;
+create table t(c1 vector(3), c2 int,c3 array(int), c4 float[], primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t block_size=2408;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 2408
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 2408 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t values('[1,2,3]', 1, [1,1,1], [0.12213]), ('[2,3,4]', 2, [1,2,3], [0.12213]);
+alter table t block_size=4096;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 4096
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 4096 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+c1	c2	c3	c4
+[1,2,3]	1	[1,1,1]	[0.12213]
+explain select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|2       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3], [t.c4]), filter(nil), rowset=16
+      access([t.c2], [t.c1], [t.c3], [t.c4]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+drop index idx_1 on t;
+alter table t block_size=2408;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 2408 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+truncate table t;
+alter table t block_size=1024;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 1024 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter compression
+drop table if exists t;
+create table t(c1 vector(3), c2 int,c3 array(int), c4 float[], primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'none';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'none' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'snappy_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'snappy_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.3.8';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.9.1';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+insert into t values('[1,2,3]', 1, [1,1,1], [0.12213]), ('[2,3,4]', 2, [1,2,3], [0.12213]);
+alter table t compression = 'none';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'none' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'snappy_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'snappy_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.3.8';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.9.1';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+c1	c2	c3	c4
+[1,2,3]	1	[1,1,1]	[0.12213]
+explain select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|2       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3], [t.c4]), filter(nil), rowset=16
+      access([t.c2], [t.c1], [t.c3], [t.c4]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+drop index idx_1 on t;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'snappy_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'snappy_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.3.8';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.9.1';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+truncate table t;
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'snappy_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'snappy_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.0';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'zstd_1.3.8';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+alter table t compression = 'lz4_1.9.1';
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` ARRAY(INT) DEFAULT NULL,
+  `c4` ARRAY(FLOAT) DEFAULT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.9.1' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+optimize table
+drop table if exists t;
+create table t(c1 vector(3), c2 int,c3 array(int), c4 float[], primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+optimize table t;
+insert into t values('[1,2,3]', 1, [1,1,1], [0.12213]), ('[2,3,4]', 2, [1,2,3], [0.12213]);
+optimize table t;
+select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+c1	c2	c3	c4
+[1,2,3]	1	[1,1,1]	[0.12213]
+explain select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+Query Plan
+=====================================================
+|ID|OPERATOR         |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------
+|0 |VECTOR INDEX SCAN|t(idx_1)|2       |0|
+=====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3], [t.c4]), filter(nil), rowset=16
+      access([t.c2], [t.c1], [t.c3], [t.c4]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      123
+drop index idx_1 on t;
+optimize table t;
+truncate table t;
+optimize table t;
+add partition
+drop table if exists t;
+create table t(c1 vector(3), c2 int, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw)) partition by range(c2) (partition p0 values less than (5), partition p1 values less than(10));
+alter table t add partition (partition p2 values less than (15));
+drop index idx_1 on t;
+alter table t add partition (partition p3 values less than (20));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  PRIMARY KEY (`c2`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range(c2)
+(partition `p0` values less than (5),
+partition `p1` values less than (10),
+partition `p2` values less than (15),
+partition `p3` values less than (20))
+insert into t values('[0.122,0.12121,0.53434]', 13);
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+explain select * from t where c2>10 order by l2_distance(c1, '[0,0,0]') approx limit 1;
+Query Plan
+=====================================================================================
+|ID|OPERATOR                                         |NAME    |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------------------
+|0 |LIMIT                                            |        |1       |0|
+|1 |└─PX COORDINATOR MERGE SORT                      |        |1       |0|
+|2 |  └─EXCHANGE OUT DISTR                           |:EX10000|1       |0|
+|3 |    └─TOP-N SORT                                 |        |1       |0|
+|4 |      └─PX PARTITION ITERATOR                    |        |1       |0|
+|5 |        └─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t       |1       |0|
+=====================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      limit(1), offset(nil)
+  1 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC])
+  2 - output([t.c1], [t.c2], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      dop=1
+  3 - output([t.c1], [t.c2], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC]), topn(1)
+  4 - output([t.c2], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      force partition granule
+  5 - output([t.c2], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter([t.c2 > 10]), rowset=16
+      access([t.c2], [t.c1]), partitions(p[2-3])
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t.c2]), range(10 ; MAX)
+select * from t order by l2_distance(c1, '[0,0,0]') approx limit 1;
+c1	c2
+[0.122,0.12121,0.53434]	13
+drop table if exists t;
+create table t(c1 vector(3), c2 int, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw)) partition by list(c2) (partition p0 values in (1,2,3), partition p1 values in (4,5,6));
+alter table t add partition (partition p2 values in (7,8,9));
+drop index idx_1 on t;
+alter table t add partition (partition p3 values in (10,11,12));
+insert into t values('[0.122,0.12121,0.53434]', 8);
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+explain select * from t where c2 in (7,8,9) order by l2_distance(c1, '[0,0,0]') approx limit 1;
+Query Plan
+=========================================================================
+|ID|OPERATOR                                 |NAME|EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------
+|0 |TOP-N SORT                               |    |1       |0|
+|1 |└─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t   |3       |0|
+=========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC]), topn(1)
+  1 - output([t.c2], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter([t.c2 IN (7, 8, 9)]), rowset=16
+      access([t.c2], [t.c1]), partitions(p2)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t.c2]), range[7 ; 7], [8 ; 8], [9 ; 9]
+select * from t where c2 in (7,8,9) order by l2_distance(c1, '[0,0,0]') approx limit 1;
+c1	c2
+[0.122,0.12121,0.53434]	8
+select * from t where c2 in (7,8,9) order by l2_distance(c1, '[0,0,0]') limit 1;
+c1	c2
+[0.122,0.12121,0.53434]	8
+drop table if exists t;
+create table t(c1 vector(3), c2 int, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw)) partition by range columns (c2) (partition p0 values less than (2), partition p1 values less than(4));
+alter table t add partition (partition p2 values less than (15));
+drop index idx_1 on t;
+alter table t add partition (partition p3 values less than (20));
+insert into t values('[0.122,0.12121,0.53434]', 13);
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+explain select * from t where c2>10 order by l2_distance(c1, '[0,0,0]') approx limit 1;
+Query Plan
+=====================================================================================
+|ID|OPERATOR                                         |NAME    |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------------------
+|0 |LIMIT                                            |        |1       |0|
+|1 |└─PX COORDINATOR MERGE SORT                      |        |1       |0|
+|2 |  └─EXCHANGE OUT DISTR                           |:EX10000|1       |0|
+|3 |    └─TOP-N SORT                                 |        |1       |0|
+|4 |      └─PX PARTITION ITERATOR                    |        |1       |0|
+|5 |        └─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t       |1       |0|
+=====================================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      limit(1), offset(nil)
+  1 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC])
+  2 - output([t.c1], [t.c2], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      dop=1
+  3 - output([t.c1], [t.c2], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC]), topn(1)
+  4 - output([t.c2], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      force partition granule
+  5 - output([t.c2], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter([t.c2 > 10]), rowset=16
+      access([t.c2], [t.c1]), partitions(p[2-3])
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t.c2]), range(10 ; MAX)
+select * from t order by l2_distance(c1, '[0,0,0]') approx limit 1;
+c1	c2
+[0.122,0.12121,0.53434]	13
+drop table if exists t;
+create table t(c1 vector(3), c2 int, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw)) partition by list columns (c2) (partition p0 values in (1,2,3), partition p1 values in (4,5,6));
+alter table t add partition (partition p2 values in (7,8,9));
+drop index idx_1 on t;
+alter table t add partition (partition p3 values in (10,11,12));
+insert into t values('[0.122,0.12121,0.53434]', 9);
+create vector index idx_1 on t(c1) with (distance=l2, type=hnsw);
+explain select * from t where c2 in (7,8,9) order by l2_distance(c1, '[0,0,0]') approx limit 1;
+Query Plan
+=========================================================================
+|ID|OPERATOR                                 |NAME|EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------
+|0 |TOP-N SORT                               |    |1       |0|
+|1 |└─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t   |3       |0|
+=========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC]), topn(1)
+  1 - output([t.c2], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter([t.c2 IN (7, 8, 9)]), rowset=16
+      access([t.c2], [t.c1]), partitions(p2)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t.c2]), range[7 ; 7], [8 ; 8], [9 ; 9]
+select * from t where c2 in (7,8,9) order by l2_distance(c1, '[0,0,0]') approx limit 1;
+c1	c2
+[0.122,0.12121,0.53434]	9
+drop table if exists t;
+create table t(c1 vector(3), c2 int, c3 int, primary key(c2, c3), vector index idx_1(c1) with (distance=l2, type=hnsw)) partition by hash (c2 + c3) partitions 4;
+insert into t values('[0.122,0.12121,0.53434]', 13, 15);
+explain select * from t where c2 + c3 =28 order by l2_distance(c1, '[0,0,0]') approx limit 1;
+Query Plan
+=========================================================================
+|ID|OPERATOR                                 |NAME|EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------
+|0 |TOP-N SORT                               |    |1       |0|
+|1 |└─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t   |1       |0|
+=========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC]), topn(1)
+  1 - output([t.c2], [t.c3], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter([t.c2 + t.c3 = 28]), rowset=16
+      access([t.c2], [t.c3], [t.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      123
+select * from t order by l2_distance(c1, '[0,0,0]') approx limit 1;
+c1	c2	c3
+[0.122,0.12121,0.53434]	13	15
+drop table if exists t;
+create table t(c1 vector(3), c2 int, c3 int, primary key(c2, c3), vector index idx_1(c1) with (distance=l2, type=hnsw)) partition by key (c2) partitions 4;
+insert into t values('[0.122,0.12121,0.53434]', 13, 15);
+explain select * from t where c2=13 order by l2_distance(c1, '[0,0,0]') approx limit 1;
+Query Plan
+=========================================================================
+|ID|OPERATOR                                 |NAME|EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------
+|0 |TOP-N SORT                               |    |1       |0|
+|1 |└─VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t   |1       |0|
+=========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1))), ASC]), topn(1)
+  1 - output([t.c2], [t.c3], [t.c1], [l2_distance(t.c1, cast('[0,0,0]', ARRAY(18, -1)))]), filter([t.c2 = 13]), rowset=16
+      access([t.c2], [t.c3], [t.c1]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([t.c2], [t.c3]), range(13,MIN ; 13,MAX)
+select * from t order by l2_distance(c1, '[0,0,0]') approx limit 1;
+c1	c2	c3
+[0.122,0.12121,0.53434]	13	15
+drop table if exists t;
+create table t(c1 vector(3), c2 int, c3 int, vector index idx_1(c1) with (distance=l2, type=hnsw))
+partition by range columns(c2)
+subpartition by range columns(c3)
+subpartition template
+(subpartition mp0 values less than (2),
+subpartition mp1 values less than (4))
+(partition p0 values less than(2),
+partition p1 values less than(4));
+create table t(c1 vector(3), c2 int, c3 int, vector index idx_1(c1) with (distance=l2, type=hnsw), primary key(c2))
+partition by range columns(c2)
+subpartition by range columns(c3)
+subpartition template
+(subpartition mp0 values less than (2),
+subpartition mp1 values less than (4))
+(partition p0 values less than(2),
+partition p1 values less than(4));
+ERROR HY000: A PRIMARY KEY must include all columns in the table's partitioning function
+drop table if exists t;
+create table t(c1 vector(3), c2 int, c3 int, vector index idx_1(c1) with (distance=l2, type=hnsw), primary key(c2, c3))
+partition by range columns(c2)
+subpartition by range columns(c3)
+subpartition template
+(subpartition mp0 values less than (2),
+subpartition mp1 values less than (4))
+(partition p0 values less than(2),
+partition p1 values less than(4));
+alter table t add partition (partition p3 values less than(6), partition p4 values less than (8));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c2`, `c3`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range columns(c2) subpartition by range columns(c3) subpartition template (
+subpartition `mp0` values less than (2),
+subpartition `mp1` values less than (4))
+(partition `p0` values less than (2),
+partition `p1` values less than (4),
+partition `p3` values less than (6),
+partition `p4` values less than (8))
+insert into t values ('[1,1,1]', 1, 1),('[1,1,2]', 3, 1), ('[1,1,3]', 3, 3), ('[1,1,4]', 2, 3);
+select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+c1	c2	c3
+[1,1,1]	1	1
+explain select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+Query Plan
+=================================================================
+|ID|OPERATOR                     |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------
+|0 |LIMIT                        |        |1       |0|
+|1 |└─PX COORDINATOR MERGE SORT  |        |1       |0|
+|2 |  └─EXCHANGE OUT DISTR       |:EX10000|1       |0|
+|3 |    └─TOP-N SORT             |        |1       |0|
+|4 |      └─PX PARTITION ITERATOR|        |4       |0|
+|5 |        └─VECTOR INDEX SCAN  |t(idx_1)|4       |0|
+=================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3]), filter(nil), rowset=16
+      limit(1), offset(nil)
+  1 - output([t.c1], [t.c2], [t.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1))), ASC])
+  2 - output([t.c1], [t.c2], [t.c3], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      dop=1
+  3 - output([t.c1], [t.c2], [t.c3], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1))), ASC]), topn(1)
+  4 - output([t.c2], [t.c3], [t.c1], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      force partition granule
+  5 - output([t.c2], [t.c3], [t.c1], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([t.c2], [t.c3], [t.c1]), partitions(p0sp[0-1], p1sp[0-1], p2sp[0-1], p3sp[0-1])
+      is_index_back=true, is_global_index=false, 
+      123
+drop index idx_1 on t;
+alter table t add partition (partition p5 values less than(10));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c2`, `c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range columns(c2) subpartition by range columns(c3) subpartition template (
+subpartition `mp0` values less than (2),
+subpartition `mp1` values less than (4))
+(partition `p0` values less than (2),
+partition `p1` values less than (4),
+partition `p3` values less than (6),
+partition `p4` values less than (8),
+partition `p5` values less than (10))
+truncate t;
+alter table t add partition (partition p6 values less than(12));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c2`, `c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range columns(c2) subpartition by range columns(c3) subpartition template (
+subpartition `mp0` values less than (2),
+subpartition `mp1` values less than (4))
+(partition `p0` values less than (2),
+partition `p1` values less than (4),
+partition `p3` values less than (6),
+partition `p4` values less than (8),
+partition `p5` values less than (10),
+partition `p6` values less than (12))
+drop table if exists t;
+create table t(c1 vector(3), c2 int, c3 int, vector index idx_1(c1) with (distance=l2, type=hnsw), primary key(c2, c3))
+partition by range columns(c2)
+subpartition by range columns(c3)
+(partition p0 values less than(2)
+(subpartition mp0 values less than (2),
+subpartition mp1 values less than (4)),
+partition p1 values less than(4)
+(subpartition mp2 values less than (2),
+subpartition mp3 values less than (4)));
+alter table t add partition (partition p3 values less than (6) (subpartition mp4 values less than (2), subpartition mp5 values less than(4)));
+insert into t values ('[1,1,1]', 1, 1),('[1,1,2]', 3, 1), ('[1,1,3]', 2, 3);
+alter table t add partition (partition p4 values less than (8) (subpartition mp6 values less than (5), subpartition mp7 values less than(7)));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c2`, `c3`),
+  VECTOR KEY `idx_1` (`c1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range columns(c2) subpartition by range columns(c3)
+(partition `p0` values less than (2) (
+subpartition `mp0` values less than (2),
+subpartition `mp1` values less than (4)),
+partition `p1` values less than (4) (
+subpartition `mp2` values less than (2),
+subpartition `mp3` values less than (4)),
+partition `p3` values less than (6) (
+subpartition `mp4` values less than (2),
+subpartition `mp5` values less than (4)),
+partition `p4` values less than (8) (
+subpartition `mp6` values less than (5),
+subpartition `mp7` values less than (7)))
+select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+c1	c2	c3
+[1,1,1]	1	1
+explain select * from t order by l2_distance(c1, '[1,2,1]') approx limit 1;
+Query Plan
+=================================================================
+|ID|OPERATOR                     |NAME    |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------
+|0 |LIMIT                        |        |1       |0|
+|1 |└─PX COORDINATOR MERGE SORT  |        |1       |0|
+|2 |  └─EXCHANGE OUT DISTR       |:EX10000|1       |0|
+|3 |    └─TOP-N SORT             |        |1       |0|
+|4 |      └─PX PARTITION ITERATOR|        |3       |0|
+|5 |        └─VECTOR INDEX SCAN  |t(idx_1)|3       |0|
+=================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t.c1], [t.c2], [t.c3]), filter(nil), rowset=16
+      limit(1), offset(nil)
+  1 - output([t.c1], [t.c2], [t.c3]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1))), ASC])
+  2 - output([t.c1], [t.c2], [t.c3], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      dop=1
+  3 - output([t.c1], [t.c2], [t.c3], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      sort_keys([l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1))), ASC]), topn(1)
+  4 - output([t.c2], [t.c3], [t.c1], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      force partition granule
+  5 - output([t.c2], [t.c3], [t.c1], [l2_distance(t.c1, cast('[1,2,1]', ARRAY(18, -1)))]), filter(nil), rowset=16
+      access([t.c2], [t.c3], [t.c1]), partitions(p0sp[0-1], p1sp[0-1], p2sp[0-1], p3sp[0-1])
+      is_index_back=true, is_global_index=false, 
+      123
+drop index idx_1 on t;
+alter table t add partition (partition p5 values less than (10) (subpartition mp8 values less than (5), subpartition mp9 values less than(7)));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c2`, `c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range columns(c2) subpartition by range columns(c3)
+(partition `p0` values less than (2) (
+subpartition `mp0` values less than (2),
+subpartition `mp1` values less than (4)),
+partition `p1` values less than (4) (
+subpartition `mp2` values less than (2),
+subpartition `mp3` values less than (4)),
+partition `p3` values less than (6) (
+subpartition `mp4` values less than (2),
+subpartition `mp5` values less than (4)),
+partition `p4` values less than (8) (
+subpartition `mp6` values less than (5),
+subpartition `mp7` values less than (7)),
+partition `p5` values less than (10) (
+subpartition `mp8` values less than (5),
+subpartition `mp9` values less than (7)))
+truncate table t;
+alter table t add partition (partition p6 values less than (12) (subpartition mp10 values less than (5), subpartition mp11 values less than(7)));
+show create table t;
+Table	Create Table
+t	CREATE TABLE `t` (
+  `c1` VECTOR(3) DEFAULT NULL,
+  `c2` int(11) NOT NULL,
+  `c3` int(11) NOT NULL,
+  PRIMARY KEY (`c2`, `c3`)
+) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+ partition by range columns(c2) subpartition by range columns(c3)
+(partition `p0` values less than (2) (
+subpartition `mp0` values less than (2),
+subpartition `mp1` values less than (4)),
+partition `p1` values less than (4) (
+subpartition `mp2` values less than (2),
+subpartition `mp3` values less than (4)),
+partition `p3` values less than (6) (
+subpartition `mp4` values less than (2),
+subpartition `mp5` values less than (4)),
+partition `p4` values less than (8) (
+subpartition `mp6` values less than (5),
+subpartition `mp7` values less than (7)),
+partition `p5` values less than (10) (
+subpartition `mp8` values less than (5),
+subpartition `mp9` values less than (7)),
+partition `p6` values less than (12) (
+subpartition `mp10` values less than (5),
+subpartition `mp11` values less than (7)))
+exchange partition
+drop table if exists t;
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'test.t1'
+create table t (c1 vector(3), c2 int, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw)) partition by range(c2) (partition p0 values less than (10), partition p1 values less than (20), partition p3 values less than (30));
+create table t1 (c1 vector(3), c2 int, primary key(c2), vector index idx_1(c1) with (distance=l2, type=hnsw));
+insert into t1 values('[0.21123123,0.1231231,0.1231421]',1),('[0.21123123,0.1231231,0.1231421]',2),('[0.21123123,0.1231231,0.1231421]',3),('[0.21123123,0.1231231,0.1231421]',4),('[0.21123123,0.1231231,0.1231421]',5),('[0.21123123,0.1231231,0.1231421]',6);
+alter table t exchange partition p0 with table t1 without validation;
+ERROR HY000: Tables have different definitions
+drop table if exists t;
+drop table if exists t1;
+create table t (c1 vector(3), c2 int, primary key(c2)) partition by range(c2) (partition p0 values less than (10), partition p1 values less than (20), partition p3 values less than (30));
+insert into t values('[1,1,1]', 1);
+create table t1 (c1 vector(3), c2 int, primary key(c2));
+insert into t1 values('[0.21123123,0.1231231,0.1231421]',1),('[0.21123123,0.1231231,0.1231421]',2),('[0.21123123,0.1231231,0.1231421]',3),('[0.21123123,0.1231231,0.1231421]',4),('[0.21123123,0.1231231,0.1231421]',5),('[0.21123123,0.1231231,0.1231421]',6);
+alter table t exchange partition p0 with table t1 without validation;
+create vector index idx_1 on t(c1) with(distance=l2,type=hnsw);
+select * from t order by l2_distance(c1,'[1,1,1]') approx limit 1;
+c1	c2
+[0.211231,0.123123,0.123142]	4
+select c1, count(*) over (partition by c2) vector_count from t;
+c1	vector_count
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+drop table if exists t2;
+create table t2 as select c1, count(*) over (partition by c2) vector_count from t;
+select * from t2;
+c1	vector_count
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+[0.211231,0.123123,0.123142]	1
+delete /*+ enable_parallel_dml parallel(10) */ from t;
