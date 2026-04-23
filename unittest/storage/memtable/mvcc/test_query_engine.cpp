@@ -110,10 +110,8 @@ TEST(TestObQueryEngine, smoke_test)
   test_set_and_get(mtk[4], mtv[4]);
   test_set_and_get(mtk[5], mtv[5]);
 
-  // every hashtable will be inited with 128, every set has 1/1024 percent of expanding(1024).
   // keys with different table_id will be inserted into different btree.
-  assert(128 == qe.hash_size() % (1 << 10));
-  assert(R_COUNT >= (qe.hash_size() - 128) / (1 << 10));
+  // hash table has been removed, only btree is used now.
 
   test_ensure(mtk[0], mtv[0]);
   test_ensure(mtk[1], mtv[1]);
