@@ -16,12 +16,6 @@
 
 #define USING_LOG_PREFIX LIB
 
-#ifdef _WIN32
-#ifndef OB_BUILD_CDC_DISABLE_VSAG
-#define OB_BUILD_CDC_DISABLE_VSAG
-#endif
-#endif
-
 #include "ob_vector_util.h"
 #include "lib/string/ob_string.h"
 
@@ -131,7 +125,7 @@ int create_index(obvsag::VectorIndexPtr &index_handler, int index_type, const ch
     INIT_SUCC(ret);
 #ifdef OB_BUILD_CDC_DISABLE_VSAG
   return ret;
-#else
+#else 
   obvsag::set_block_size_limit(2*1024*1024);
   LOG_INFO("vector index create params: ", K(index_type), KCSTRING(dtype), KCSTRING(metric), K(use_reorder), K(doc_prune_ratio), K(window_size), KP(allocator), K(extra_info_size));
   return obvsag::create_index(index_handler, static_cast<obvsag::IndexType>(index_type),
@@ -298,8 +292,8 @@ int knn_search(obvsag::VectorIndexPtr index_handler, uint32_t len, uint32_t *dim
   return ret;
 #else
   return obvsag::knn_search(index_handler, len, dims, vals, topk,
-                                  result_dist, result_ids, extra_info, result_size,
-                                  query_prune_ratio, n_candidate,
+                                  result_dist, result_ids, extra_info, result_size, 
+                                  query_prune_ratio, n_candidate,  
                                   invalid, reverse_filter, is_extra_info_filter,
                                   valid_ratio, allocator, need_extra_info);
 #endif
