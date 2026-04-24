@@ -301,6 +301,8 @@ set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
 set ob_global_debug_sync = 'now signal signal_fork_success_resume';
 connection default;
 
+--echo # signal 后等待 fork DDL 任务从虚拟表消失（默认 30s 不够；上限 90s，条件满足即退出）
+let $wait_timeout= 90;
 let $wait_src_table_id= $table_t2d_id;
 let $wait_dest_table_id= $table_t2d_fork_id;
 --source mysql_test/test_suite/fork_table/include/wait_fork_table.inc

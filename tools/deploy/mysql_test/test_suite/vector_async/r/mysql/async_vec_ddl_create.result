@@ -1,0 +1,560 @@
+alter system set ob_vector_memory_limit_percentage = 30;
+========== setup ==========
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop table if exists t4;
+drop table if exists t5;
+drop table if exists t6;
+drop table if exists t7;
+drop table if exists t8;
+drop table if exists t9;
+drop table if exists t10;
+drop table if exists t11;
+drop table if exists t12;
+drop table if exists t13;
+drop table if exists t14;
+drop table if exists t15;
+drop table if exists t16;
+drop table if exists t17;
+drop table if exists t18;
+drop table if exists t19;
+drop table if exists t20;
+
+========== 1. Basic CREATE TABLE with async index ==========
+
+=== 1.1 Different distance functions ===
+--- L2 distance ---
+create table t1 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx1(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx1` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t1;
+--- Cosine distance ---
+create table t2 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx2(vec) WITH (distance=cosine, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx2` (`vec`) WITH (DISTANCE=COSINE, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t2;
+--- Inner product distance ---
+create table t3 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx3(vec) WITH (distance=inner_product, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t3;
+Table	Create Table
+t3	CREATE TABLE `t3` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx3` (`vec`) WITH (DISTANCE=INNER_PRODUCT, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t3;
+
+=== 1.2 Different dimensions ===
+--- Dimension 3 ---
+create table t4 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx4(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t4;
+Table	Create Table
+t4	CREATE TABLE `t4` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx4` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t4;
+--- Dimension 10 ---
+create table t5 (
+id int primary key,
+vec vector(10),
+VECTOR INDEX idx5(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t5;
+Table	Create Table
+t5	CREATE TABLE `t5` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(10) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx5` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t5;
+--- Dimension 128 ---
+create table t6 (
+id int primary key,
+vec vector(128),
+VECTOR INDEX idx6(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t6;
+Table	Create Table
+t6	CREATE TABLE `t6` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(128) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx6` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t6;
+
+=== 1.3 HNSW parameters ===
+--- With m parameter ---
+create table t7 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx7(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async, m=16)
+) organization heap;
+show create table t7;
+Table	Create Table
+t7	CREATE TABLE `t7` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx7` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t7;
+--- With ef_construction parameter ---
+create table t8 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx8(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async, ef_construction=200)
+) organization heap;
+show create table t8;
+Table	Create Table
+t8	CREATE TABLE `t8` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx8` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, EF_CONSTRUCTION=200, M=16, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t8;
+--- With ef_search parameter ---
+create table t9 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx9(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async, ef_search=100)
+) organization heap;
+show create table t9;
+Table	Create Table
+t9	CREATE TABLE `t9` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx9` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, EF_SEARCH=100, M=16, EF_CONSTRUCTION=200) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t9;
+--- With all HNSW parameters ---
+create table t10 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx10(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async, m=16, ef_construction=200, ef_search=100)
+) organization heap;
+show create table t10;
+Table	Create Table
+t10	CREATE TABLE `t10` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx10` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=100) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t10;
+
+========== 2. CREATE TABLE with constraints ==========
+
+=== 2.1 Vector column with NOT NULL constraint ===
+create table t11 (
+id int primary key,
+vec vector(3) not null,
+VECTOR INDEX idx11(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t11;
+Table	Create Table
+t11	CREATE TABLE `t11` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) NOT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx11` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t11;
+
+=== 2.2 Other columns with DEFAULT constraint ===
+create table t12 (
+id int primary key,
+vec vector(3),
+name varchar(100) default 'unknown',
+score int default 0,
+VECTOR INDEX idx12(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t12;
+Table	Create Table
+t12	CREATE TABLE `t12` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  `name` varchar(100) DEFAULT 'unknown',
+  `score` int(11) DEFAULT '0',
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx12` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t12;
+
+=== 2.3 Column with UNIQUE index ===
+create table t13 (
+id int primary key,
+vec vector(3),
+code varchar(50) unique,
+VECTOR INDEX idx13(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t13;
+Table	Create Table
+t13	CREATE TABLE `t13` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  `code` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`) BLOCK_SIZE 16384 LOCAL,
+  VECTOR KEY `idx13` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t13;
+
+=== 2.4 Multiple regular indexes ===
+create table t14 (
+id int primary key,
+vec vector(3),
+col1 int,
+col2 varchar(100),
+INDEX idx_col1(col1),
+INDEX idx_col2(col2),
+VECTOR INDEX idx14(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t14;
+Table	Create Table
+t14	CREATE TABLE `t14` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  `col1` int(11) DEFAULT NULL,
+  `col2` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_col1` (`col1`) BLOCK_SIZE 16384 LOCAL,
+  KEY `idx_col2` (`col2`) BLOCK_SIZE 16384 LOCAL,
+  VECTOR KEY `idx14` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t14;
+
+=== 2.5 Combined constraints ===
+create table t15 (
+id int primary key,
+vec vector(3) not null,
+name varchar(100) default 'test',
+code varchar(50) unique,
+col1 int,
+INDEX idx_col1(col1),
+VECTOR INDEX idx15(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t15;
+Table	Create Table
+t15	CREATE TABLE `t15` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) NOT NULL,
+  `name` varchar(100) DEFAULT 'test',
+  `code` varchar(50) DEFAULT NULL,
+  `col1` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`) BLOCK_SIZE 16384 LOCAL,
+  KEY `idx_col1` (`col1`) BLOCK_SIZE 16384 LOCAL,
+  VECTOR KEY `idx15` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t15;
+
+========== 3. Partitioned tables ==========
+
+=== 3.1 HASH partition ===
+create table t16 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx16(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap
+partition by hash(id) partitions 4;
+show create table t16;
+Table	Create Table
+t16	CREATE TABLE `t16` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx16` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+ partition by hash(id)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`)
+drop table t16;
+
+=== 3.2 RANGE partition ===
+create table t17 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx17(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap
+partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200),
+partition p2 values less than (300),
+partition p3 values less than maxvalue
+);
+show create table t17;
+Table	Create Table
+t17	CREATE TABLE `t17` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx17` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300),
+partition `p3` values less than (MAXVALUE))
+drop table t17;
+
+=== 3.3 Multiple partitions (2 partitions) ===
+create table t18 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx18(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap
+partition by hash(id) partitions 2;
+show create table t18;
+Table	Create Table
+t18	CREATE TABLE `t18` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx18` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+ partition by hash(id)
+(partition `p0`,
+partition `p1`)
+drop table t18;
+
+=== 3.4 Multiple partitions (3+ partitions) ===
+create table t19 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx19(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap
+partition by hash(id) partitions 8;
+show create table t19;
+Table	Create Table
+t19	CREATE TABLE `t19` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx19` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+ partition by hash(id)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`,
+partition `p4`,
+partition `p5`,
+partition `p6`,
+partition `p7`)
+drop table t19;
+
+=== 3.5 Partition key is primary key ===
+create table t20 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx20(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap
+partition by hash(id) partitions 4;
+show create table t20;
+Table	Create Table
+t20	CREATE TABLE `t20` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx20` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+ partition by hash(id)
+(partition `p0`,
+partition `p1`,
+partition `p2`,
+partition `p3`)
+drop table t20;
+
+========== 4. Multiple vector columns and indexes ==========
+
+=== 4.1 Multiple vector columns with async indexes ===
+create table t22 (
+id int primary key,
+vec1 vector(3),
+vec2 vector(3),
+VECTOR INDEX idx22_1(vec1) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async),
+VECTOR INDEX idx22_2(vec2) WITH (distance=cosine, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t22;
+Table	Create Table
+t22	CREATE TABLE `t22` (
+  `id` int(11) NOT NULL,
+  `vec1` VECTOR(3) DEFAULT NULL,
+  `vec2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx22_1` (`vec1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  VECTOR KEY `idx22_2` (`vec2`) WITH (DISTANCE=COSINE, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t22;
+
+=== 4.2 Mixed async and immediate indexes ===
+create table t23 (
+id int primary key,
+vec1 vector(3),
+vec2 vector(3),
+VECTOR INDEX idx23_1(vec1) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async),
+VECTOR INDEX idx23_2(vec2) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=immediate)
+) organization heap;
+show create table t23;
+Table	Create Table
+t23	CREATE TABLE `t23` (
+  `id` int(11) NOT NULL,
+  `vec1` VECTOR(3) DEFAULT NULL,
+  `vec2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx23_1` (`vec1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384,
+  VECTOR KEY `idx23_2` (`vec2`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=IMMEDIATE, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t23;
+
+========== 5. Error scenarios ==========
+
+=== 5.1 Non-heap table with async index (should error) ===
+create table t24 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx24(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+);
+ERROR 0A000: hnsw vector index on non-heap table setting sync_mode=ASYNC is not supported
+
+=== 5.2 Heap table without primary key with async index ===
+--- Test behavior: should this work or error? ---
+create table t25 (
+id int,
+vec vector(3),
+VECTOR INDEX idx25(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+show create table t25;
+Table	Create Table
+t25	CREATE TABLE `t25` (
+  `id` int(11) DEFAULT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  VECTOR KEY `idx25` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+drop table t25;
+
+========== 6. Functional test: Create table and insert data ==========
+
+create table t28 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx28(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+--- Insert test data ---
+insert into t28 values (1, '[1.0, 1.0, 1.0]');
+insert into t28 values (2, '[2.0, 2.0, 2.0]');
+insert into t28 values (3, '[3.0, 3.0, 3.0]');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify vector search works ---
+explain basic select id, vec from t28 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+Query Plan
+=================================
+|ID|OPERATOR         |NAME      |
+---------------------------------
+|0 |VECTOR INDEX SCAN|t28(idx28)|
+=================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t28.id], [t28.vec]), filter(nil), rowset=16
+      access([t28.__pk_increment], [t28.vec], [t28.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, 
+      range_key([t28.__pk_increment], [t28.__type_0_0]), range(MIN,MIN ; MAX,MAX)always true
+select id, vec from t28 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id	vec
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+
+========== 7. Functional test: Partition table with data ==========
+
+create table t29 (
+id int primary key,
+vec vector(3),
+VECTOR INDEX idx29(vec) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap
+partition by hash(id) partitions 4;
+--- Insert data into different partitions ---
+insert into t29 values (1, '[1.0, 1.0, 1.0]');
+insert into t29 values (101, '[2.0, 2.0, 2.0]');
+insert into t29 values (201, '[3.0, 3.0, 3.0]');
+insert into t29 values (301, '[4.0, 4.0, 4.0]');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify vector search works across partitions ---
+select id, vec from t29 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 4;
+id	vec
+1	[1,1,1]
+101	[2,2,2]
+201	[3,3,3]
+301	[4,4,4]
+
+========== 8. Functional test: Multiple vector columns ==========
+
+create table t30 (
+id int primary key,
+vec1 vector(3),
+vec2 vector(3),
+VECTOR INDEX idx30_1(vec1) WITH (distance=l2, type=hnsw, lib=vsag, sync_mode=async),
+VECTOR INDEX idx30_2(vec2) WITH (distance=cosine, type=hnsw, lib=vsag, sync_mode=async)
+) organization heap;
+--- Insert test data ---
+insert into t30 values (1, '[1.0, 1.0, 1.0]', '[2.0, 2.0, 2.0]');
+insert into t30 values (2, '[3.0, 3.0, 3.0]', '[4.0, 4.0, 4.0]');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify both indexes work ---
+select id, vec1 from t30 order by l2_distance(vec1, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	vec1
+1	[1,1,1]
+2	[3,3,3]
+select id, vec2 from t30 order by cosine_distance(vec2, '[2.0, 2.0, 2.0]') approximate limit 2;
+id	vec2
+1	[2,2,2]
+2	[4,4,4]
+
+========== cleanup ==========
+drop table if exists t28;
+drop table if exists t29;
+drop table if exists t30;
+alter system set ob_vector_memory_limit_percentage = 0;
+PURGE RECYCLEBIN;

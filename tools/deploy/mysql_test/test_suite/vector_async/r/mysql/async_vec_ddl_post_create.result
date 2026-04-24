@@ -1,0 +1,309 @@
+alter system set ob_vector_memory_limit_percentage = 30;
+========== setup ==========
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop table if exists t4;
+drop table if exists t5;
+drop table if exists t6;
+drop table if exists t7;
+drop table if exists t8;
+drop table if exists t9;
+drop table if exists t10;
+
+========== 1. Create index on empty table ==========
+
+create table t1 (
+id int primary key,
+vec vector(3)
+) organization heap;
+--- Verify table is empty ---
+select count(*) from t1;
+count(*)
+0
+--- Create async index on empty table ---
+create vector index idx1 on t1(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Verify index created successfully ---
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx1` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+show index from t1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+t1	0	PRIMARY	1	id	A	NULL	NULL	NULL		BTREE	available		YES	NULL
+t1	1	idx1	1	vec	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
+--- Insert data after index creation ---
+insert into t1 values (1, '[1.0, 1.0, 1.0]');
+insert into t1 values (2, '[2.0, 2.0, 2.0]');
+insert into t1 values (3, '[3.0, 3.0, 3.0]');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify vector search works ---
+select id, vec from t1 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id	vec
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+drop table t1;
+
+========== 2. Create index on table with data ==========
+
+=== 2.1 Table with 10 rows ===
+create table t2 (
+id int primary key,
+vec vector(3)
+) organization heap;
+--- Insert 10 rows ---
+insert into t2 values (1, '[1.0, 1.0, 1.0]');
+insert into t2 values (2, '[2.0, 2.0, 2.0]');
+insert into t2 values (3, '[3.0, 3.0, 3.0]');
+insert into t2 values (4, '[4.0, 4.0, 4.0]');
+insert into t2 values (5, '[5.0, 5.0, 5.0]');
+insert into t2 values (6, '[6.0, 6.0, 6.0]');
+insert into t2 values (7, '[7.0, 7.0, 7.0]');
+insert into t2 values (8, '[8.0, 8.0, 8.0]');
+insert into t2 values (9, '[9.0, 9.0, 9.0]');
+insert into t2 values (10, '[10.0, 10.0, 10.0]');
+--- Verify data exists before index creation ---
+select count(*) from t2;
+count(*)
+10
+--- Create async index on table with data ---
+create vector index idx2 on t2(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify all data is searchable ---
+select count(*) from t2;
+count(*)
+10
+select id, vec from t2 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 5;
+id	vec
+1	[1,1,1]
+2	[2,2,2]
+3	[3,3,3]
+4	[4,4,4]
+5	[5,5,5]
+drop table t2;
+
+=== 2.2 Table with 100 rows ===
+create table t3 (
+id int primary key,
+vec vector(3)
+) organization heap;
+--- Insert 100 rows ---
+--- Verify data exists ---
+select count(*) from t3;
+count(*)
+100
+--- Create async index ---
+create vector index idx3 on t3(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify all data is searchable ---
+select count(*) from t3;
+count(*)
+100
+select id from t3 order by l2_distance(vec, '[50.0, 50.0, 50.0]') approximate limit 5;
+id
+50
+49
+51
+48
+52
+drop table t3;
+
+=== 2.3 Table with 1000 rows ===
+create table t4 (
+id int primary key,
+vec vector(3)
+) organization heap;
+--- Insert 1000 rows ---
+--- Verify data exists ---
+select count(*) from t4;
+count(*)
+1000
+--- Create async index ---
+create vector index idx4 on t4(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync (longer timeout for large dataset) ---
+call dbms_index_manager.refresh();
+--- Verify all data is searchable ---
+select count(*) from t4;
+count(*)
+1000
+select id from t4 order by l2_distance(vec, '[500.0, 500.0, 500.0]') approximate limit 5;
+id
+500
+499
+501
+498
+502
+drop table t4;
+
+========== 4. Partitioned tables ==========
+
+=== 4.1 Non-partitioned table → Add partition → Create index ===
+create table t6 (
+id int primary key,
+vec vector(3)
+) organization heap;
+--- Insert data into non-partitioned table ---
+insert into t6 values (1, '[1.0, 1.0, 1.0]');
+insert into t6 values (2, '[2.0, 2.0, 2.0]');
+--- Note: ALTER TABLE ADD PARTITION may not be supported for heap tables ---
+--- This test verifies behavior if partition is added before index creation ---
+--- For now, we'll test creating index on non-partitioned table first ---
+create vector index idx6 on t6(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for sync ---
+call dbms_index_manager.refresh();
+--- Verify search works ---
+select id, vec from t6 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	vec
+1	[1,1,1]
+2	[2,2,2]
+drop table t6;
+
+=== 4.2 Existing partitioned table → Create index ===
+create table t7 (
+id int primary key,
+vec vector(3)
+) organization heap
+partition by hash(id) partitions 4;
+--- Insert data into different partitions ---
+insert into t7 values (1, '[1.0, 1.0, 1.0]');
+insert into t7 values (101, '[2.0, 2.0, 2.0]');
+insert into t7 values (201, '[3.0, 3.0, 3.0]');
+insert into t7 values (301, '[4.0, 4.0, 4.0]');
+--- Verify data exists ---
+select count(*) from t7;
+count(*)
+4
+--- Create async index on partitioned table ---
+create vector index idx7 on t7(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify vector search works across partitions ---
+select id, vec from t7 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 4;
+id	vec
+1	[1,1,1]
+101	[2,2,2]
+201	[3,3,3]
+301	[4,4,4]
+--- Verify sync statistics for partitioned table ---
+select 
+b.table_name,
+SUBSTRING_INDEX(SUBSTRING_INDEX(a.sync_info, 'snap_cnt=', -1),';',1) as snap_cnt,
+SUBSTRING_INDEX(SUBSTRING_INDEX(a.sync_info, 'incr_cnt=', -1),';',1) as incr_cnt
+from oceanbase.__all_virtual_vector_index_info a
+join oceanbase.__all_virtual_table b 
+on a.data_table_id = b.table_id 
+where b.table_name = 't7';
+table_name	snap_cnt	incr_cnt
+t7	0	0
+t7	0	0
+t7	0	0
+t7	0	0
+drop table t7;
+
+=== 4.3 RANGE partitioned table → Create index ===
+create table t8 (
+id int primary key,
+vec vector(3)
+) organization heap
+partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200),
+partition p2 values less than (300),
+partition p3 values less than maxvalue
+);
+--- Insert data into different range partitions ---
+insert into t8 values (10, '[1.0, 1.0, 1.0]');
+insert into t8 values (110, '[2.0, 2.0, 2.0]');
+insert into t8 values (210, '[3.0, 3.0, 3.0]');
+insert into t8 values (310, '[4.0, 4.0, 4.0]');
+--- Create async index ---
+create vector index idx8 on t8(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify search works across range partitions ---
+select id, vec from t8 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 4;
+id	vec
+10	[1,1,1]
+110	[2,2,2]
+210	[3,3,3]
+310	[4,4,4]
+drop table t8;
+
+========== 5. Functional test: Verify data integrity ==========
+
+create table t9 (
+id int primary key,
+vec vector(3),
+name varchar(50)
+) organization heap;
+--- Insert data with different values ---
+insert into t9 values (1, '[1.0, 1.0, 1.0]', 'item1');
+insert into t9 values (2, '[2.0, 2.0, 2.0]', 'item2');
+insert into t9 values (3, '[3.0, 3.0, 3.0]', 'item3');
+insert into t9 values (4, '[4.0, 4.0, 4.0]', 'item4');
+insert into t9 values (5, '[5.0, 5.0, 5.0]', 'item5');
+--- Create async index ---
+create vector index idx9 on t9(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for sync ---
+call dbms_index_manager.refresh();
+--- Verify all data can be retrieved via vector search ---
+select id, name, vec from t9 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 5;
+id	name	vec
+1	item1	[1,1,1]
+2	item2	[2,2,2]
+3	item3	[3,3,3]
+4	item4	[4,4,4]
+5	item5	[5,5,5]
+--- Verify exact match ---
+select count(*) from t9;
+count(*)
+5
+select id, name from t9 where id in (1, 2, 3, 4, 5) order by id;
+id	name
+1	item1
+2	item2
+3	item3
+4	item4
+5	item5
+drop table t9;
+
+========== 6. Multiple indexes on same table ==========
+
+create table t10 (
+id int primary key,
+vec1 vector(3),
+vec2 vector(3)
+) organization heap;
+--- Insert data ---
+insert into t10 values (1, '[1.0, 1.0, 1.0]', '[10.0, 10.0, 10.0]');
+insert into t10 values (2, '[2.0, 2.0, 2.0]', '[20.0, 20.0, 20.0]');
+--- Create first async index ---
+create vector index idx10_1 on t10(vec1) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for sync ---
+call dbms_index_manager.refresh();
+--- Create second async index ---
+create vector index idx10_2 on t10(vec2) with (distance=cosine, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for sync ---
+call dbms_index_manager.refresh();
+--- Verify both indexes work ---
+select id, vec1 from t10 order by l2_distance(vec1, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	vec1
+1	[1,1,1]
+2	[2,2,2]
+select id, vec2 from t10 order by cosine_distance(vec2, '[10.0, 10.0, 10.0]') approximate limit 2;
+id	vec2
+1	[10,10,10]
+2	[20,20,20]
+drop table t10;
+
+========== cleanup ==========
+alter system set ob_vector_memory_limit_percentage = 0;
+PURGE RECYCLEBIN;

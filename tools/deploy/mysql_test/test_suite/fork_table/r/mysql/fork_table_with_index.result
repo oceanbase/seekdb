@@ -282,6 +282,7 @@ use db_fork_index;
 drop index idx_vec_race on t2d;;
 set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
 set ob_global_debug_sync = 'now signal signal_fork_success_resume';
+# signal 后等待 fork DDL 任务从虚拟表消失（默认 30s 不够；上限 90s，条件满足即退出）
 # 验证：源表向量索引已删除；fork表仍保留向量索引定义
 show create table t2d;
 Table	Create Table

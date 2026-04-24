@@ -1,0 +1,529 @@
+alter system set ob_vector_memory_limit_percentage = 30;
+========== setup ==========
+drop table if exists t1;
+drop table if exists t2;
+drop table if exists t3;
+drop table if exists t4;
+drop table if exists t5;
+drop table if exists t6;
+drop table if exists t7;
+drop table if exists t8;
+drop table if exists t9;
+drop table if exists t10;
+drop table if exists t11;
+drop table if exists t12;
+
+========== 1. Modify table structure ==========
+
+=== 1.1 Add regular column (should not affect async index) ===
+create table t1 (
+id int primary key,
+vec vector(3)
+) organization heap;
+--- Insert test data ---
+insert into t1 values (1, '[1.0, 1.0, 1.0]');
+insert into t1 values (2, '[2.0, 2.0, 2.0]');
+--- Create async index ---
+create vector index idx1 on t1(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works ---
+select id from t1 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id
+1
+2
+--- Add regular column ---
+alter table t1 add column name varchar(50);
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx1` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+--- Update new column ---
+update t1 set name = 'item1' where id = 1;
+update t1 set name = 'item2' where id = 2;
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify async index still works ---
+select id, name from t1 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	name
+1	item1
+2	item2
+--- Insert new data with new column ---
+insert into t1 values (3, '[3.0, 3.0, 3.0]', 'item3');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify all data is searchable ---
+select id, name from t1 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id	name
+1	item1
+2	item2
+3	item3
+drop table t1;
+
+=== 1.2 Drop regular column (should not affect async index) ===
+create table t2 (
+id int primary key,
+vec vector(3),
+name varchar(50),
+score int
+) organization heap;
+--- Insert test data ---
+insert into t2 values (1, '[1.0, 1.0, 1.0]', 'item1', 100);
+insert into t2 values (2, '[2.0, 2.0, 2.0]', 'item2', 200);
+--- Create async index ---
+create vector index idx2 on t2(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works ---
+select id, name, score from t2 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	name	score
+1	item1	100
+2	item2	200
+--- Drop regular column ---
+alter table t2 drop column score;
+show create table t2;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  `name` varchar(50) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx2` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify async index still works ---
+select id, name from t2 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	name
+1	item1
+2	item2
+drop table t2;
+
+=== 1.3 Modify regular column type (should not affect async index) ===
+create table t3 (
+id int primary key,
+vec vector(3),
+name varchar(50)
+) organization heap;
+--- Insert test data ---
+insert into t3 values (1, '[1.0, 1.0, 1.0]', 'item1');
+insert into t3 values (2, '[2.0, 2.0, 2.0]', 'item2');
+--- Create async index ---
+create vector index idx3 on t3(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works ---
+select id, name from t3 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	name
+1	item1
+2	item2
+--- Modify column type ---
+alter table t3 modify column name varchar(100);
+show create table t3;
+Table	Create Table
+t3	CREATE TABLE `t3` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  `name` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx3` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify async index still works ---
+select id, name from t3 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	name
+1	item1
+2	item2
+drop table t3;
+
+=== 1.4 Add second vector column with async index ===
+create table t4 (
+id int primary key,
+vec1 vector(3)
+) organization heap;
+--- Insert test data ---
+insert into t4 values (1, '[1.0, 1.0, 1.0]');
+insert into t4 values (2, '[2.0, 2.0, 2.0]');
+--- Create async index on first vector column ---
+create vector index idx4_1 on t4(vec1) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify first index works ---
+select id from t4 order by l2_distance(vec1, '[1.0, 1.0, 1.0]') approximate limit 2;
+id
+1
+2
+--- Add second vector column ---
+alter table t4 add column vec2 vector(3);
+show create table t4;
+Table	Create Table
+t4	CREATE TABLE `t4` (
+  `id` int(11) NOT NULL,
+  `vec1` VECTOR(3) DEFAULT NULL,
+  `vec2` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx4_1` (`vec1`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+--- Update second vector column ---
+update t4 set vec2 = '[10.0, 10.0, 10.0]' where id = 1;
+update t4 set vec2 = '[20.0, 20.0, 20.0]' where id = 2;
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Create async index on second vector column ---
+create vector index idx4_2 on t4(vec2) with (distance=cosine, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify both indexes work ---
+select id from t4 order by l2_distance(vec1, '[1.0, 1.0, 1.0]') approximate limit 2;
+id
+1
+2
+select id from t4 order by cosine_distance(vec2, '[10.0, 10.0, 10.0]') approximate limit 2;
+id
+1
+2
+drop table t4;
+
+========== 2. Partition operations ==========
+
+=== 2.1 Add partition to RANGE partitioned table ===
+create table t6 (
+id int primary key,
+vec vector(3)
+) organization heap
+partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+--- Insert test data ---
+insert into t6 values (10, '[1.0, 1.0, 1.0]');
+insert into t6 values (110, '[2.0, 2.0, 2.0]');
+--- Create async index ---
+create vector index idx6 on t6(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works ---
+select id from t6 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id
+10
+110
+--- Add new partition ---
+alter table t6 add partition (partition p2 values less than (300));
+show create table t6;
+Table	Create Table
+t6	CREATE TABLE `t6` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx6` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200),
+partition `p2` values less than (300))
+--- Insert data into new partition ---
+insert into t6 values (210, '[3.0, 3.0, 3.0]');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works across all partitions ---
+select count(*) from t6;
+count(*)
+3
+select id from t6 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id
+10
+110
+210
+drop table t6;
+
+=== 2.2 Drop partition from RANGE partitioned table ===
+create table t7 (
+id int primary key,
+vec vector(3)
+) organization heap
+partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200),
+partition p2 values less than (300)
+);
+--- Insert test data ---
+insert into t7 values (10, '[1.0, 1.0, 1.0]');
+insert into t7 values (110, '[2.0, 2.0, 2.0]');
+insert into t7 values (210, '[3.0, 3.0, 3.0]');
+--- Create async index ---
+create vector index idx7 on t7(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works ---
+select count(*) from t7;
+count(*)
+3
+select id from t7 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id
+10
+110
+210
+--- Drop partition p2 ---
+alter table t7 drop partition p2;
+show create table t7;
+Table	Create Table
+t7	CREATE TABLE `t7` (
+  `id` int(11) NOT NULL,
+  `vec` VECTOR(3) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  VECTOR KEY `idx7` (`vec`) WITH (DISTANCE=L2, TYPE=HNSW, LIB=VSAG, SYNC_MODE=ASYNC, M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384
+) ORGANIZATION HEAP DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0 LOB_INROW_THRESHOLD=78643
+ partition by range(id)
+(partition `p0` values less than (100),
+partition `p1` values less than (200))
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify data in dropped partition is gone ---
+select count(*) from t7;
+count(*)
+2
+select id from t7 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id
+10
+110
+--- Insert new data and verify async consumption still works ---
+insert into t7 values (20, '[4.0, 4.0, 4.0]');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify new data is searchable ---
+select count(*) from t7;
+count(*)
+3
+select id from t7 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id
+10
+110
+20
+drop table t7;
+
+=== 2.3 Truncate partition ===
+create table t8 (
+id int primary key,
+vec vector(3),
+name varchar(50)
+) organization heap
+partition by range(id) (
+partition p0 values less than (100),
+partition p1 values less than (200)
+);
+--- Insert test data ---
+insert into t8 values (10, '[1.0, 1.0, 1.0]', 'item1');
+insert into t8 values (20, '[1.5, 1.5, 1.5]', 'item2');
+insert into t8 values (110, '[2.0, 2.0, 2.0]', 'item3');
+--- Create async index ---
+create vector index idx8 on t8(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify all data is searchable ---
+select count(*) from t8;
+count(*)
+3
+select id, name from t8 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id	name
+10	item1
+20	item2
+110	item3
+--- Truncate partition p0 ---
+alter table t8 truncate partition p0;
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify data in p0 is gone, p1 data remains ---
+select count(*) from t8;
+count(*)
+1
+select id, name from t8 order by l2_distance(vec, '[2.0, 2.0, 2.0]') approximate limit 1;
+id	name
+110	item3
+--- Insert new data into truncated partition ---
+insert into t8 values (30, '[3.0, 3.0, 3.0]', 'item4');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify new data is searchable ---
+select count(*) from t8;
+count(*)
+2
+select id, name from t8 order by l2_distance(vec, '[2.0, 2.0, 2.0]') approximate limit 2;
+id	name
+110	item3
+30	item4
+drop table t8;
+
+========== 3. Auto-increment column tests ==========
+
+=== 3.1 Table with AUTO_INCREMENT primary key ===
+create table t9 (
+id int auto_increment primary key,
+vec vector(3),
+name varchar(50)
+) organization heap;
+--- Insert data without specifying id ---
+insert into t9 (vec, name) values ('[1.0, 1.0, 1.0]', 'item1');
+insert into t9 (vec, name) values ('[2.0, 2.0, 2.0]', 'item2');
+insert into t9 (vec, name) values ('[3.0, 3.0, 3.0]', 'item3');
+--- Verify auto-increment values ---
+select id, name from t9 order by id;
+id	name
+1	item1
+2	item2
+3	item3
+--- Create async index ---
+create vector index idx9 on t9(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works with auto-increment ids ---
+select id, name from t9 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id	name
+1	item1
+2	item2
+3	item3
+--- Insert more data ---
+insert into t9 (vec, name) values ('[4.0, 4.0, 4.0]', 'item4');
+insert into t9 (vec, name) values ('[5.0, 5.0, 5.0]', 'item5');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify all data is searchable ---
+select count(*) from t9;
+count(*)
+5
+select id, name from t9 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 5;
+id	name
+1	item1
+2	item2
+3	item3
+4	item4
+5	item5
+drop table t9;
+
+=== 3.2 Modify AUTO_INCREMENT starting value ===
+create table t10 (
+id int auto_increment primary key,
+vec vector(3)
+) organization heap;
+--- Insert initial data ---
+insert into t10 (vec) values ('[1.0, 1.0, 1.0]');
+insert into t10 (vec) values ('[2.0, 2.0, 2.0]');
+--- Create async index ---
+create vector index idx10 on t10(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify current data ---
+select id from t10 order by id;
+id
+1
+2
+--- Modify AUTO_INCREMENT value ---
+alter table t10 auto_increment = 1000;
+--- Insert new data ---
+insert into t10 (vec) values ('[3.0, 3.0, 3.0]');
+insert into t10 (vec) values ('[4.0, 4.0, 4.0]');
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify auto-increment change worked and index still works ---
+select id from t10 order by id;
+id
+1
+2
+1000
+1001
+select count(*) from t10;
+count(*)
+4
+select id from t10 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 4;
+id
+1
+2
+1000
+1001
+drop table t10;
+
+=== 3.3 AUTO_INCREMENT with partitioned table ===
+create table t11 (
+id int auto_increment,
+part_key int,
+vec vector(3),
+primary key(id, part_key)
+) organization heap
+partition by hash(part_key) partitions 4;
+--- Insert data without specifying id ---
+insert into t11 (part_key, vec) values (1, '[1.0, 1.0, 1.0]');
+insert into t11 (part_key, vec) values (2, '[2.0, 2.0, 2.0]');
+insert into t11 (part_key, vec) values (3, '[3.0, 3.0, 3.0]');
+insert into t11 (part_key, vec) values (4, '[4.0, 4.0, 4.0]');
+--- Verify auto-increment values ---
+select id, part_key from t11 order by id;
+id	part_key
+1	1
+2	2
+3	3
+4	4
+--- Create async index ---
+create vector index idx11 on t11(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify index works across partitions ---
+select count(*) from t11;
+count(*)
+4
+select id, part_key from t11 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 4;
+id	part_key
+1	1
+2	2
+3	3
+4	4
+drop table t11;
+
+========== 4. Complex ALTER TABLE scenarios ==========
+
+=== 4.1 Multiple ALTER operations in sequence ===
+create table t12 (
+id int primary key,
+vec vector(3),
+col1 int
+) organization heap;
+--- Insert test data ---
+insert into t12 values (1, '[1.0, 1.0, 1.0]', 10);
+insert into t12 values (2, '[2.0, 2.0, 2.0]', 20);
+--- Create async index ---
+create vector index idx12 on t12(vec) with (distance=l2, type=hnsw, lib=vsag, sync_mode=async);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify initial state ---
+select id, col1 from t12 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 2;
+id	col1
+1	10
+2	20
+--- ALTER 1: Add column ---
+alter table t12 add column col2 varchar(50);
+--- ALTER 2: Modify existing column ---
+alter table t12 modify column col1 bigint;
+--- ALTER 3: Add another column ---
+alter table t12 add column col3 double;
+--- Insert new data ---
+insert into t12 values (3, '[3.0, 3.0, 3.0]', 30, 'test', 3.14);
+--- Wait for CDC sync ---
+call dbms_index_manager.refresh();
+--- Verify async index still works after multiple ALTERs ---
+select count(*) from t12;
+count(*)
+3
+select id, col1, col2, col3 from t12 order by l2_distance(vec, '[1.0, 1.0, 1.0]') approximate limit 3;
+id	col1	col2	col3
+1	10	NULL	NULL
+2	20	NULL	NULL
+3	30	test	3.14
+drop table t12;
+
+========== cleanup ==========
+alter system set ob_vector_memory_limit_percentage = 0;
+PURGE RECYCLEBIN;

@@ -1553,7 +1553,7 @@ int ObIndexBuilder::do_create_local_index(
                                                          table_schema,
                                                          tenant_data_version,
                                                          my_arg,
-                                                         create_index_on_empty_table_opt,
+                                                         create_index_on_empty_table_opt, 
                                                          new_table_schema,
                                                          gen_columns,
                                                          index_schema))) {
@@ -2239,7 +2239,7 @@ int ObIndexBuilder::set_index_table_options(const obrpc::ObCreateIndexArg &arg,
       }
     } else if (share::ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
                    data_schema, schema.get_index_type(), schema.get_index_params())
-               && FALSE_IT(schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD))) {
+               && FALSE_IT(schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD_FOR_VEC_ASYNC_INDEX))) {
     } else if (is_vec_ivf_index(schema.get_index_type()) && FALSE_IT(schema.set_lob_inrow_threshold(OB_MAX_LOB_INROW_THRESHOLD))) {
     }
     else if (OB_FAIL(schema.set_storage_cache_policy(arg.index_option_.storage_cache_policy_))) {
