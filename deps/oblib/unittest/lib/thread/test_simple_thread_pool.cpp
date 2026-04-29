@@ -87,16 +87,56 @@ TEST(TestSimpleThreadPool, test_dynamic_simple_thread_pool_bind)
     void handle(void *) {
     }
   };
+  int ret = ObSimpleThreadPoolDynamicMgr::get_instance().init();
+  ASSERT_EQ(ret, OB_SUCCESS);
   ObTestSimpleThreadPool pool;
-  int ret = pool.set_thread_count(3);
+  ret = pool.set_adaptive_thread(1, 3);
   ASSERT_EQ(ret, OB_SUCCESS);
-  ASSERT_EQ(3, pool.max_thread_cnt_);
-  ret = pool.init(3, 100, "test");
-  ASSERT_EQ(ret, OB_SUCCESS);
-  ASSERT_EQ(0, pool.min_thread_cnt_);
-  ASSERT_EQ(0, pool.get_thread_count());  // lazy creation, no workers yet
+  ASSERT_TRUE(pool.has_bind_);
   pool.stop();
-  pool.wait();
+  ASSERT_FALSE(pool.has_bind_);
+}
+
+TEST(TestSimpleThreadPool, test_dynamic_simple_thread_pool_reexpand_from_zero_thread)
+{
+  class ObTestSimpleThreadPool : public ObSimpleThreadPool {
+    void handle(void *task) override
+    {
+      int64_t sleep_us = reinterpret_cast<int64_t>(task);
+      if (sleep_us > 0) {
+        ::usleep(sleep_us);
+      }
+      ATOMIC_INC(&handle_cnt_);
+    }
+  public:
+    int64_t handle_cnt_ = 0;
+  };
+
+  int ret = OB_SUCCESS;
+  ObTestSimpleThreadPool pool;
+  ret = pool.set_adaptive_thread(0, 1);
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ret = pool.init(1, 128, "qth_reexpand_zero");
+  ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(0, pool.get_thread_count());
+
+  const int64_t batch_cnt = 8;
+  const int64_t task_sleep_us = 1000;
+
+  // batch 1
+  for (int64_t i = 0; i < batch_cnt; ++i) {
+    ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(task_sleep_us)));
+  }
+  ::usleep(3 * 1000 * 1000);
+  ASSERT_EQ(batch_cnt, pool.handle_cnt_);
+
+  // batch 2
+  for (int64_t i = 0; i < batch_cnt; ++i) {
+    ASSERT_EQ(OB_SUCCESS, pool.push(reinterpret_cast<void *>(task_sleep_us)));
+  }
+  ::usleep(1 * 1000 * 1000);
+  ASSERT_EQ(2 * batch_cnt, pool.handle_cnt_);
+
   pool.destroy();
 }
 
@@ -122,11 +162,14 @@ TEST(TestSimpleThreadPool, DISABLED_test_dynamic_simple_thread_pool)
 
 
   ObTestSimpleThreadPool *pool = new ObTestSimpleThreadPool();
+  ret = ObSimpleThreadPoolDynamicMgr::get_instance().init();
+  ASSERT_EQ(ret, OB_SUCCESS);
   ret = pool->set_adaptive_thread(min_thread_cnt, max_thread_cnt);
   ASSERT_EQ(ret, OB_SUCCESS);
+  ASSERT_EQ(ObSimpleThreadPoolDynamicMgr::get_instance().get_pool_num(), 1);
   ret = pool->init(max_thread_cnt, 20000, "qth");
   ASSERT_EQ(ret, OB_SUCCESS);
-  ASSERT_EQ(0, pool->get_thread_count());  // starts with 0 workers (lazy)
+  ASSERT_EQ(min_thread_cnt, pool->get_thread_count());
   int64_t total_push_time = 0;
 
   // start push task
@@ -154,13 +197,13 @@ TEST(TestSimpleThreadPool, DISABLED_test_dynamic_simple_thread_pool)
   total_handle_time = ObTimeUtility::current_time() - total_handle_time;
   ASSERT_EQ(max_thread_cnt, pool->get_thread_count());
 
-  // wait for thread pool shrink to min_thread_cnt
-  // Each worker self-shrinks after SHRINK_TIMEOUT_US (1s) idle
-  int64_t wait_time = 5000000; // 5s: 1s idle + CAS serialization + buffer
+  // wait to thread pool shrink to min_thread_cnt
+  int64_t wait_time = (max_thread_cnt - min_thread_cnt) * ObSimpleThreadPoolDynamicMgr::SHRINK_INTERVAL_US + 2000000;
   ::usleep(wait_time);
   ASSERT_EQ(min_thread_cnt, pool->get_thread_count());
   pool->destroy();
   delete pool;
+  ASSERT_EQ(ObSimpleThreadPoolDynamicMgr::get_instance().get_pool_num(), 0);
 
   // compare to normal thread
   int64_t total_push_time2 = 0;
@@ -206,17 +249,21 @@ TEST(TestSimpleThreadPool, DISABLED_test_dynamic_simple_thread_pool)
       }
     }
   }, push_thread_count).start();
-  ret = pool2->set_thread_count(0);
+  ret = pool2->set_max_thread_count(0);
   ASSERT_EQ(ret, OB_INVALID_ARGUMENT);
-  ret = pool2->set_thread_count(max_thread_cnt + 1);
+  ret = pool2->set_max_thread_count(max_thread_cnt + 1);
   ASSERT_EQ(ret, OB_SUCCESS);
-  ASSERT_EQ(max_thread_cnt + 1, pool2->max_thread_cnt_);
+  ASSERT_EQ(ObSimpleThreadPoolDynamicMgr::get_instance().get_pool_num(), 1);
+  ::usleep(100000);
+  ASSERT_EQ(max_thread_cnt + 1, pool2->get_thread_count());
 
-  ret = pool2->set_thread_count(max_thread_cnt - 1);
+  ret = pool2->set_max_thread_count(max_thread_cnt - 1);
   ASSERT_EQ(ret, OB_SUCCESS);
-  ASSERT_EQ(max_thread_cnt - 1, pool2->max_thread_cnt_);
+  ASSERT_EQ(max_thread_cnt - 1, pool2->get_thread_count());
+  ASSERT_EQ(ObSimpleThreadPoolDynamicMgr::get_instance().get_pool_num(), 0);
   pool2->destroy();
   delete pool2;
+  ObSimpleThreadPoolDynamicMgr::get_instance().destroy();
 }
 
 int main(int argc, char *argv[])

@@ -629,9 +629,9 @@ DEF_PARAM(tablet_meta_table_check_interval, TIME, OB_CLUSTER_PARAMETER, "30m", "
          "and make adjustments to ensure the correctness of tablet meta table. Range: [1m,+∞)",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // TODO fixme after remove all other versions
-DEF_PARAM(min_observer_version, STR, OB_CLUSTER_PARAMETER, "1.2.0.0", "the min observer version",
+DEF_PARAM(min_observer_version, STR, OB_CLUSTER_PARAMETER, "1.3.0.0", "the min observer version",
         ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(compatible, VERSION, OB_CLUSTER_PARAMETER, "1.2.0.0", "compatible version for persisted data",
+DEF_PARAM(compatible, VERSION, OB_CLUSTER_PARAMETER, "1.3.0.0", "compatible version for persisted data",
             ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_ddl, BOOL, OB_CLUSTER_PARAMETER, "True", "specifies whether DDL operation is turned on. "
          "Value:  True:turned on;  False: turned off",
@@ -2148,9 +2148,9 @@ DEF_PARAM(direct_load_allow_fallback, BOOL, OB_CLUSTER_PARAMETER, "True",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // regexp engine
 DEF_PARAM(_regex_engine, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "ICU", common::ObConfigRegexpEngineChecker,
-                     "specifies the regexp engine. Values: ICU(International Components for Unicode), Hyperscan",
-                     ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
-                     "ICU, Hyperscan");
+        "specifies the regexp engine. Values: ICU(International Components for Unicode)",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
+        "ICU");
 
 DEF_PARAM(_preset_runtime_bloom_filter_size, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Whether build runtime bloom filter with row count estimated by optimizor."

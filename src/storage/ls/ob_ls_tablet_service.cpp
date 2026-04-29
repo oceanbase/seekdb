@@ -3482,7 +3482,7 @@ int ObLSTabletService::update_rows(
       */
       const bool use_row_by_row_update = ctx.mvcc_acc_ctx_.write_flag_.is_immediate_row_check() &&
         rowkey_change && (!relative_table.is_storage_index_table() || relative_table.is_unique_index());
-      // delay_new is for oracle compatible, refer to 
+      // delay_new is for oracle compatible, refer to
       //const bool delay_new = check_exist && lib::is_oracle_mode();
       // batch interface can be compatible with the oracle behavior in a batch, so no need delay_new for performance
       const bool delay_new = false;
@@ -3655,7 +3655,7 @@ int ObLSTabletService::update_rows(
   return ret;
 }
 
-// delay_new is for oracle compatible, refer to 
+// delay_new is for oracle compatible, refer to
 int ObLSTabletService::delay_process_new_rows(
     ObDMLRunningCtx &run_ctx,
     const common::ObIArray<int64_t> &update_idx,
@@ -5099,8 +5099,11 @@ int ObLSTabletService::insert_vector_index_rows(
                                                            &vec_idx_param,
                                                            vec_dim);
     if (OB_SUCCESS == tmp_ret) {
-      adaptor_guard.get_adatper()->update_index_id_dml_scn(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_.version_);
-      adaptor_guard.get_adatper()->update_can_skip(NOT_SKIP);
+      const bool is_async_index = share::ObVectorIndexUtil::is_sync_mode_async(vec_idx_param);
+      if (!is_async_index) {
+        adaptor_guard.get_adatper()->update_index_id_dml_scn(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_.version_);
+        adaptor_guard.get_adatper()->update_can_skip(NOT_SKIP);
+      }
     } else {
       LOG_WARN("acquire_adapter_guard for index_id table failed, skip adapter update",
                K(tmp_ret), K(run_ctx.relative_table_.get_tablet_id()));

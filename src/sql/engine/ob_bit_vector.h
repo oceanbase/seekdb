@@ -229,7 +229,7 @@ inline bool ObBitVectorImpl<WordType>::at(const int64_t idx) const
   OB_ASSERT(idx >= 0);
   // The modern compiler is smart enough to optimize this division to bit operations.
   // Do not bother yourself with that.
-  return data_[idx / WORD_BITS] & (static_cast<WordType>(1) << (idx % WORD_BITS));
+  return data_[idx / WORD_BITS] & (1LU << (idx % WORD_BITS));
 }
 
 template<typename WordType>
@@ -243,7 +243,7 @@ template<typename WordType>
 inline void ObBitVectorImpl<WordType>::set(const int64_t idx)
 {
   OB_ASSERT(idx >= 0);
-  data_[idx / WORD_BITS] |= static_cast<WordType>(1) << (idx % WORD_BITS);
+  data_[idx / WORD_BITS] |= 1LU << (idx % WORD_BITS);
 }
 
 template<typename WordType>
@@ -251,10 +251,10 @@ OB_INLINE void ObBitVectorImpl<WordType>::atomic_set(const int64_t idx)
 {
   OB_ASSERT(idx >= 0);
   WordType val = data_[idx / WORD_BITS];
-  WordType new_val = val | (static_cast<WordType>(1) << (idx % WORD_BITS));
+  WordType new_val = val | (1LU << (idx % WORD_BITS));
   while (!ATOMIC_BCAS(&data_[idx / WORD_BITS], val, new_val)) {
     val = ATOMIC_LOAD(&data_[idx / WORD_BITS]);
-    new_val = val | (static_cast<WordType>(1) << (idx % WORD_BITS));
+    new_val = val | (1LU << (idx % WORD_BITS));
   }
 }
 
@@ -262,7 +262,7 @@ template<typename WordType>
 inline void ObBitVectorImpl<WordType>::unset(const int64_t idx)
 {
   OB_ASSERT(idx >= 0);
-  data_[idx / WORD_BITS] &= ~(static_cast<WordType>(1) << (idx % WORD_BITS));
+  data_[idx / WORD_BITS] &= ~(1LU << (idx % WORD_BITS));
 }
 
 template<typename WordType>
@@ -303,8 +303,7 @@ OB_INLINE bool ObBitVectorImpl<WordType>::bit_op_zero(const ObBitVectorImpl<Word
     }
   }
   if (passed && 0 != size % WORD_BITS) {
-    passed = 0 == (op(l.data_[cnt], r.data_[cnt])
-                   & ((static_cast<WordType>(1) << (size % WORD_BITS)) - 1));
+    passed = 0 == (op(l.data_[cnt], r.data_[cnt]) & ((1LU << (size % WORD_BITS)) - 1));
   }
   return passed;
 }
@@ -352,9 +351,8 @@ OB_INLINE void ObBitVectorImpl<WordType>::bit_calculate(const ObBitVectorImpl<Wo
   }
   if (0 != size % WORD_BITS) {
     WordType tmp = data_[cnt];
-    data_[cnt] = ((op(l.data_[cnt], r.data_[cnt])
-                   & ((static_cast<WordType>(1) << (size % WORD_BITS)) - 1))
-                  | (tmp & ~((static_cast<WordType>(1) << (size % WORD_BITS)) - 1)));
+    data_[cnt] = ((op(l.data_[cnt], r.data_[cnt]) & ((1LU << (size % WORD_BITS)) - 1))
+                  | (tmp & ~((1LU << (size % WORD_BITS)) - 1)));
   }
 }
 
@@ -397,9 +395,8 @@ OB_INLINE void ObBitVectorImpl<WordType>::bit_not(const int64_t size)
   }
   if (0 != size % WORD_BITS) {
     WordType tmp = data_[cnt];
-    data_[cnt] = (((~(WordType)(data_[cnt]))
-                   & ((static_cast<WordType>(1) << (size % WORD_BITS)) - 1))
-                  | (tmp & ~((static_cast<WordType>(1) << (size % WORD_BITS)) - 1)));
+    data_[cnt] = (((~(WordType)(data_[cnt])) & ((1LU << (size % WORD_BITS)) - 1))
+                  | (tmp & ~((1LU << (size % WORD_BITS)) - 1)));
   }
 }
 
@@ -412,9 +409,8 @@ OB_INLINE void ObBitVectorImpl<WordType>::bit_not(const ObBitVectorImpl<WordType
   }
   if (0 != size % WORD_BITS) {
     WordType tmp = data_[cnt];
-    data_[cnt] = (((~(WordType)(other.data_[cnt]))
-                   & ((static_cast<WordType>(1) << (size % WORD_BITS)) - 1))
-                  | (tmp & ~((static_cast<WordType>(1) << (size % WORD_BITS)) - 1)));
+    data_[cnt] = (((~(WordType)(other.data_[cnt])) & ((1LU << (size % WORD_BITS)) - 1))
+                  | (tmp & ~((1LU << (size % WORD_BITS)) - 1)));
   }
 }
 
@@ -449,12 +445,14 @@ OB_INLINE int64_t ObBitVectorImpl<WordType>::popcount64(uint64_t v)
 {
   int64_t cnt = 0;
 #if __POPCNT__
+  // v is uint64_t; use popcountll because on Windows LLP64 `unsigned long`
+  // is 32-bit and __builtin_popcountl would drop the high 32 bits.
   cnt = __builtin_popcountll(v);
 #else
   if (0 != v) {
-    v = v - ((v >> 1) & 0x5555555555555555ULL);
-    v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
-    cnt = (((v + (v >> 4)) & 0x0F0F0F0F0F0F0F0FULL) * 0x0101010101010101ULL) >> 56;
+    v = v - ((v >> 1) & 0x5555555555555555UL);
+    v = (v & 0x3333333333333333UL) + ((v >> 2) & 0x3333333333333333UL);
+    cnt = (((v + (v >> 4)) & 0xF0F0F0F0F0F0F0FUL) * 0x101010101010101UL) >> 56;
   }
 #endif
   return cnt;
@@ -471,7 +469,7 @@ inline int64_t ObBitVectorImpl<WordType>::accumulate_bit_cnt(const int64_t size)
     bit_cnt += popcount64(v);
   }
   if (remain > 0) {
-    bit_cnt += popcount64(data_[cnt] & ((static_cast<WordType>(1) << remain) - 1));
+    bit_cnt += popcount64(data_[cnt] & ((1LU << remain) - 1));
   }
   return bit_cnt;
 }
@@ -488,11 +486,11 @@ inline int64_t ObBitVectorImpl<WordType>::accumulate_bit_cnt(const EvalBound &bo
   }
   const int64_t front = bound.start() % WORD_BITS;
   if (front > 0) {
-    bit_cnt -= popcount64(data_[start] & ((static_cast<WordType>(1) << front) - 1));
+    bit_cnt -= popcount64(data_[start] & ((1LU << front) - 1));
   }
   const int64_t back = bound.end() % WORD_BITS;
   if (back > 0) {
-    bit_cnt += popcount64(data_[end] & ((static_cast<WordType>(1) << back) - 1));
+    bit_cnt += popcount64(data_[end] & ((1LU << back) - 1));
   }
   return bit_cnt;
 }
@@ -509,11 +507,11 @@ inline int64_t ObBitVectorImpl<WordType>::accumulate_bit_cnt(const int64_t start
   }
   const int64_t front = start_idx % WORD_BITS;
   if (front > 0) {
-    bit_cnt -= popcount64(data_[start] & ((static_cast<WordType>(1) << front) - 1));
+    bit_cnt -= popcount64(data_[start] & ((1LU << front) - 1));
   }
   const int64_t back = end_idx % WORD_BITS;
   if (back > 0) {
-    bit_cnt += popcount64(data_[end] & ((static_cast<WordType>(1) << back) - 1));
+    bit_cnt += popcount64(data_[end] & ((1LU << back) - 1));
   }
   return bit_cnt;
 }
@@ -523,7 +521,7 @@ inline void ObBitVectorImpl<WordType>::set_all(const int64_t size)
 {
   MEMSET(data_, 0xFF, BYTES_PER_WORD * (size / WORD_BITS));
   if ( 0 != size % WORD_BITS) {
-    data_[size / WORD_BITS] |= (static_cast<WordType>(1) << (size % WORD_BITS)) - 1;
+    data_[size / WORD_BITS] |= (1LU << (size % WORD_BITS)) - 1;
   }
 }
 
@@ -538,7 +536,7 @@ inline bool ObBitVectorImpl<WordType>::is_all_true(const int64_t size) const
     is_all_true = (WordType(-1) == v);
   }
   if (is_all_true && remain > 0) {
-    WordType mask = ((static_cast<WordType>(1) << remain) - 1);
+    WordType mask = ((1LU << remain) - 1);
     is_all_true = ((data_[cnt] & mask) == mask);
   }
   return is_all_true;
@@ -555,7 +553,7 @@ inline bool ObBitVectorImpl<WordType>::is_all_false(const int64_t size) const
     is_all_false = (0 == v);
   }
   if (is_all_false && remain > 0) {
-    WordType mask = ((static_cast<WordType>(1) << remain) - 1);
+    WordType mask = ((1LU << remain) - 1);
     is_all_false = ((data_[cnt] & mask) == 0);
   }
   return is_all_false;
@@ -571,7 +569,7 @@ inline void ObBitVectorImpl<WordType>::get_start_end_mask(const int64_t start_id
   end_cnt = end_idx / WORD_BITS;
   const int64_t end_remain = end_idx % WORD_BITS;
   start_mask = WordType(-1) << start_remain;
-  end_mask = (static_cast<WordType>(1) << end_remain) - 1;
+  end_mask = (1LU << end_remain) - 1;
 }
 
 template<typename WordType>

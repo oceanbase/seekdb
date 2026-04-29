@@ -29,6 +29,7 @@
 #include "logservice/cdcservice/ob_cdc_service.h"  // ObCdcService
 #include "logservice/restoreservice/ob_log_restore_service.h"  // ObLogRestoreService
 #include "share/ob_io_device_helper.h"
+#include "lib/ob_running_mode.h"
 
 namespace oceanbase
 {
@@ -138,15 +139,15 @@ int ObLogService::start()
     CLOG_LOG(WARN, "failed to start apply_service_", K(ret));
   } else if (OB_FAIL(replay_service_.start())) {
     CLOG_LOG(WARN, "failed to start replay_service_", K(ret));
-  } else if (OB_FAIL(role_change_service_.start())) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(role_change_service_.start())) {
     CLOG_LOG(WARN, "failed to start role_change_service_", K(ret));
 #ifdef OB_BUILD_SHARED_STORAGE
   } else if (enable_shared_storage_ && OB_FAIL(shared_log_service_.start())) {
     CLOG_LOG(WARN, "failed to start shared_log_service_");
 #endif
-  } else if (OB_FAIL(restore_service_.start())) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(restore_service_.start())) {
     CLOG_LOG(WARN, "failed to start restore_service_", K(ret));
-  } else if (OB_FAIL(cdc_service_.start())) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(cdc_service_.start())) {
     CLOG_LOG(WARN, "failed to start cdc_service_", K(ret));
   } else {
     is_running_ = true;
@@ -278,7 +279,7 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "failed to init apply_service", K(ret));
   } else if (OB_FAIL(replay_service_.init(palf_env_, &ls_adapter_, alloc_mgr))) {
     CLOG_LOG(WARN, "failed to init replay_service", K(ret));
-  } else if (OB_FAIL(role_change_service_.init(ls_service, &apply_service_, &replay_service_))) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(role_change_service_.init(ls_service, &apply_service_, &replay_service_))) {
     CLOG_LOG(WARN, "failed to init role_change_service_", K(ret));
   } else if (OB_FAIL(location_adapter_.init(location_service))) {
     CLOG_LOG(WARN, "failed to init location_adapter_", K(ret));
@@ -296,9 +297,9 @@ int ObLogService::init(const PalfOptions &options,
     CLOG_LOG(WARN, "failed to init flashback_service_", K(ret));
   } else if (OB_FAIL(locality_adapter_.init(locality_manager))) {
     CLOG_LOG(WARN, "failed to init locality_adapter_", K(ret));
-  } else if (OB_FAIL(restore_service_.init(transport, ls_service, this))) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(restore_service_.init(transport, ls_service, this))) {
     CLOG_LOG(WARN, "failed to init restore_service_", K(ret));
-  } else if (OB_FAIL(cdc_service_.init(tenant_id, ls_service))) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(cdc_service_.init(tenant_id, ls_service))) {
     // Initialize CDC service for log fetcher (standby log sync server side)
     CLOG_LOG(WARN, "init cdc_service_ failed", K(ret), K(tenant_id));
   } else {

@@ -72,8 +72,7 @@ int ObStandbyTimestampService::start()
 {
   int ret = OB_SUCCESS;
 
-  if (lib::is_embed_mode()) {
-  } else if (!inited_) {
+  if (!inited_) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObStandbyTimestampService not init", K(ret), K_(tenant_id));
   } else if (OB_FAIL(TG_START(tg_id_))) {

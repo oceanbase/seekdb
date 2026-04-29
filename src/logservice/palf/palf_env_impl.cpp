@@ -23,6 +23,7 @@
 #include "share/ob_local_device.h"                            // ObLocalDevice
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/io/ob_io_manager.h"                           // ObIOManager
+#include "lib/ob_running_mode.h"
 
 namespace oceanbase
 {
@@ -232,7 +233,7 @@ int PalfEnvImpl::init(
                                                 tenant_id,
                                                 log_io_worker_config_))) {
     PALF_LOG(WARN, "init_log_io_worker_config_ failed", K(options));
-  } else if (OB_FAIL(fetch_log_engine_.init(this, log_alloc_mgr))) {
+  } else if (!lib::is_embed_mode() && OB_FAIL(fetch_log_engine_.init(this, log_alloc_mgr))) {
     PALF_LOG(ERROR, "FetchLogEngine init failed", K(ret));
   } else if (OB_FAIL(log_rpc_.init(self, cluster_id, tenant_id, transport, batch_rpc))) {
     PALF_LOG(ERROR, "LogRpc init failed", K(ret));
@@ -299,7 +300,7 @@ int PalfEnvImpl::start()
     PALF_LOG(ERROR, "LogIOWorker start failed", K(ret));
   } else if (OB_FAIL(block_gc_timer_task_.start())) {
     PALF_LOG(ERROR, "FileCollectTimerTask start failed", K(ret));
-	} else if (OB_FAIL(fetch_log_engine_.start())) {
+	} else if (!lib::is_embed_mode() && OB_FAIL(fetch_log_engine_.start())) {
     PALF_LOG(ERROR, "FetchLogEngine start failed", K(ret));
   } else if (OB_FAIL(log_loop_thread_.start())) {
     PALF_LOG(ERROR, "log_loop_thread_ start failed", K(ret));

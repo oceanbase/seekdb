@@ -299,27 +299,6 @@ connection conn_drop;
 connection obsys;
 set ob_global_debug_sync = 'FORK_TABLE_SUCCESS clear';
 set ob_global_debug_sync = 'now signal signal_fork_success_resume';
---disable_query_log
---disable_result_log
-let $resignal_counter= 900;
-let $fork_task_cnt= 1;
-while ($resignal_counter > 0)
-{
-    connection obsys;
-    set ob_global_debug_sync = 'now signal signal_fork_success_resume';
-    let $fork_task_cnt= `select count(*) from oceanbase.__all_virtual_ddl_task_status where ddl_type = 10009 and object_id = $table_t2d_id and target_object_id = $table_t2d_fork_id`;
-    if ($fork_task_cnt == 0)
-    {
-        let $resignal_counter= 0;
-    }
-    if ($fork_task_cnt != 0)
-    {
-        real_sleep 0.1;
-        dec $resignal_counter;
-    }
-}
---enable_query_log
---enable_result_log
 connection default;
 
 --echo # signal 后等待 fork DDL 任务从虚拟表消失（默认 30s 不够；上限 90s，条件满足即退出）
@@ -466,3 +445,4 @@ drop table if exists t3_fork;
 drop table if exists t4;
 drop table if exists t4_fork;
 drop database if exists db_fork_index;
+

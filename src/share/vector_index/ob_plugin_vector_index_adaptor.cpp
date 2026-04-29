@@ -722,10 +722,16 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
     // partial adapter without index configuration
   } else if (OB_FAIL(get_hnsw_param(param))) {
     LOG_WARN("get hnsw param failed.", K(ret));
-  } else if (OB_FAIL(databuff_printf(info.statistics_,
-                 sizeof(info.statistics_), pos,
-                 "param=%s;", to_cstring(*param)))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
+  } else {
+    ObCStringHelper helper;
+    if (OB_FAIL(databuff_printf(info.statistics_,
+                   sizeof(info.statistics_), pos,
+                   "param=%s;", helper.convert(*param)))) {
+      LOG_WARN("failed to fill statistics", K(ret), K(this));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    // do nothing
   } else if (OB_FAIL(databuff_printf(info.statistics_,
                       sizeof(info.statistics_), pos,
                       "snap_index_type=%d;", int(get_snap_index_type())))) {
@@ -738,10 +744,16 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
   } else if (OB_FAIL(databuff_printf(info.statistics_,
              sizeof(info.statistics_), pos, "idle_cnt=%ld;", idle_cnt_))) {
     LOG_WARN("failed to fill statistics", K(ret), K(this));
-  } else if (!index_identity_.empty() && OB_FAIL(databuff_printf(
-             info.statistics_, sizeof(info.statistics_), pos,
-             "index=%s;", to_cstring(index_identity_)))) {
-    LOG_WARN("failed to fill statistic", K(ret), K(this));
+  } else if (!index_identity_.empty()) {
+    ObCStringHelper helper;
+    if (OB_FAIL(databuff_printf(
+               info.statistics_, sizeof(info.statistics_), pos,
+               "index=%s;", helper.convert(index_identity_)))) {
+      LOG_WARN("failed to fill statistic", K(ret), K(this));
+    }
+  }
+  if (OB_FAIL(ret)) {
+    // do nothing
   } else if (nullptr != incr_data_ && OB_FAIL(databuff_printf(
              info.statistics_, sizeof(info.statistics_), pos,
              "incr_data.scn=%lu;", incr_data_->scn_.get_val_for_inner_table_field()))) {
@@ -3007,8 +3019,11 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
         base_scn.is_valid_and_not_min() &&
         last_dml_scn.is_valid() &&
         base_scn >= last_dml_scn;
+    if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
+      FLOG_INFO("check_scan", K(can_skip_scan_4th_table), K(base_scn), K(last_dml_scn), K(base_scn>=last_dml_scn));
+    }
 
-    if (OB_SUCC(ret) && can_skip_scan_4th_table && !REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+    if (OB_SUCC(ret) && can_skip_scan_4th_table && !REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
       roaring::api::roaring64_bitmap_free(ctx->bitmaps_->insert_bitmap_);
       roaring::api::roaring64_bitmap_free(ctx->bitmaps_->delete_bitmap_);
       ctx->bitmaps_->insert_bitmap_ = ibitmap;
@@ -3346,12 +3361,8 @@ int ObPluginVectorIndexAdaptor::renew_single_snap_index(bool mem_saving_mode)
       LOG_WARN("unexpected nullptr snap_data_", K(ret), KP(snap_data_));
     } else {
       TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
-      if (OB_FAIL(try_free_memdata_resource(VIRT_SNAP, snap_data_, allocator_, tenant_id_))) {
+      if (OB_FAIL(renew_snapdata_in_lock())) {
         LOG_WARN("failed to free snap memdata", K(ret), KPC(this));
-      } else if (OB_FAIL(init_mem(snap_data_))) {
-        LOG_WARN("fail to init snap_data_ mem", K(ret));
-      } else if (OB_FAIL(try_init_snap_data(index_type))) {
-        LOG_WARN("failed to init snap data", K(ret), K(index_type));
       } else if (OB_FAIL(set_snapshot_key_prefix(invalid_prefix))) {
         LOG_WARN("fail to set snapshot key prefix", K(ret));
       }
@@ -3365,6 +3376,23 @@ int ObPluginVectorIndexAdaptor::renew_single_snap_index(bool mem_saving_mode)
   return ret;
 }
 
+int ObPluginVectorIndexAdaptor::renew_snapdata_in_lock()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(snap_data_)) {
+    // do nothing
+  } else if (OB_ISNULL(allocator_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("allocator is null", K(ret), KPC(snap_data_), K(allocator_));
+  } else {
+    ObVectorIndexAlgorithmType index_type = get_snap_index_type();
+    free_memdata_resource(VIRT_SNAP, snap_data_, allocator_, tenant_id_);
+    if (OB_FAIL(try_init_snap_data(index_type))) {
+      LOG_WARN("failed to init snap data", K(ret), K(index_type));
+    }
+  }
+  return ret;
+}
 
 int ObPluginVectorIndexAdaptor::merge_and_generate_bitmap(ObVectorQueryAdaptorResultContext *ctx,
                                                           ObHnswBitmapFilter &iFilter,
