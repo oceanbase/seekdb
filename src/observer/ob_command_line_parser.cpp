@@ -179,6 +179,7 @@ enum ObCommandOption {
   COMMAND_OPTION_LOG_LEVEL,
   COMMAND_OPTION_PARAMETER,
   COMMAND_OPTION_ROLE,
+  COMMAND_OPTION_EMBEDDED,
 #ifdef _WIN32
   COMMAND_OPTION_INSTALL_SERVICE,
   COMMAND_OPTION_REMOVE_SERVICE,
@@ -200,6 +201,7 @@ static struct option long_options[] = {
   {"log-level",  required_argument, 0, COMMAND_OPTION_LOG_LEVEL},
   {"parameter",  required_argument, 0, COMMAND_OPTION_PARAMETER},
   {"role", required_argument, 0, COMMAND_OPTION_ROLE},
+  {"embedded",   no_argument,       0, COMMAND_OPTION_EMBEDDED},
 #ifdef _WIN32
   {"install-service", no_argument, 0, COMMAND_OPTION_INSTALL_SERVICE},
   {"remove-service",  no_argument, 0, COMMAND_OPTION_REMOVE_SERVICE},
@@ -363,6 +365,10 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
       }
       break;
     }
+    case COMMAND_OPTION_EMBEDDED: { // embedded
+      opts.embedded_ = true;
+      break;
+    }
 #ifdef _WIN32
     case COMMAND_OPTION_INSTALL_SERVICE: {
       opts.install_service_ = true;
@@ -510,6 +516,7 @@ void ObCommandLineParser::print_help() const
   MPRINT("  --variable <key=value>          system variables, format: key=value. Note: This takes effect only during the initial startup. Can be specified multiple times.");
   MPRINT("  --parameter <key=value>         system parameters, format: key=value. Can be specified multiple times.");
   MPRINT("  --role <role>                   server role: PRIMARY (default) or STANDBY");
+  MPRINT("  --embedded                      run seekdb in embedded mode (default: off)");
   MPRINT("  --version, -V                   show version message and exit");
   MPRINT("  --help, -h                      show this message and exit");
 #ifdef _WIN32

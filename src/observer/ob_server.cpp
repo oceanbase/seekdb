@@ -18,6 +18,8 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #endif
 #include "observer/ob_server.h"
 #include "lib/alloc/memory_dump.h"
@@ -205,6 +207,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   int ret = OB_SUCCESS;
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
+  embedded_ = opts.embedded_;
 
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
@@ -846,12 +849,7 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to start ts mgr");
     }
-    if (embed_mode) {
-    } else if (FAILEDx(net_frame_.start())) {
-      LOG_ERROR("fail to start net frame", KR(ret));
-    } else {
-      FLOG_INFO("success to start net frame");
-    }
+
 
     // Services are registered once; start() is triggered by reload_config().
     grpc_server_.register_service(&storage_grpc_service_impl_);
@@ -1069,6 +1067,13 @@ int ObServer::start(bool embed_mode)
             "refresh_schema_cost_us", schema_refreshed_ts - start_ts,
             "replay_log_cost_us", ObTimeUtility::current_time() - schema_refreshed_ts);
       }
+    }
+
+    if (embed_mode) {
+    } else if (FAILEDx(net_frame_.start())) {
+      LOG_ERROR("fail to start net frame", KR(ret));
+    } else {
+      FLOG_INFO("success to start net frame");
     }
 
   int64_t start_service_time = ObTimeUtility::current_time();
@@ -1490,6 +1495,23 @@ int ObServer::wait()
   FLOG_INFO("[OBSERVER_NOTICE] wait observer begin");
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_BEGIN, "observer process wait begin.");
   // wait for stop flag
+
+  if (embedded_) {
+    int clients_fd = ::open("./run/seekdb.clients", O_CREAT | O_RDWR, 0644);
+    if (clients_fd < 0) {
+      LOG_ERROR("failed to open seekdb.clients", K(errno));
+    } else {
+      for (;;) {
+        ::sleep(5);
+        if (flock(clients_fd, LOCK_EX | LOCK_NB) == 0) {
+          FLOG_INFO("no clients remaining, shutting down");
+          break;
+        }
+      }
+      ::close(clients_fd);
+      stop_ = true;
+    }
+  }
 
   FLOG_INFO("begin to wait observer setted to stop");
   while (!stop_) {

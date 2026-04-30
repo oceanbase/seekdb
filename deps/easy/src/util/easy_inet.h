@@ -8,8 +8,8 @@
 #ifndef _WIN32
 #include <sys/un.h>
 #endif
-#ifndef UNIX_PATH_MAX
-#define UNIX_PATH_MAX 16
+#ifndef UNIX_PATH_MAX_
+#define UNIX_PATH_MAX_ 16
 #endif
 
 EASY_CPP_START

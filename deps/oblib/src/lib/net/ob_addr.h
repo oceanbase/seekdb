@@ -189,7 +189,7 @@ inline bool ObAddr::is_valid() const
   bool valid = false;
   if (UNIX == version_) {
     size_t len = STRLEN(ip_.unix_path_);
-    if (len > 0 && len < UNIX_PATH_MAX) {
+    if (len > 0 && len < UNIX_PATH_MAX_) {
         valid = true;
     }
   } else if (OB_UNLIKELY(port_ <= 0)) {

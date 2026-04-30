@@ -149,8 +149,8 @@ bool ObAddr::set_unix_addr(const char *unix_path)
   bool ret = false;
   version_ = UNIX;
   if (nullptr != unix_path) {
-    int n = snprintf(ip_.unix_path_, UNIX_PATH_MAX, "%s", unix_path);
-    if (n < UNIX_PATH_MAX && n >= 0) {
+    int n = snprintf(ip_.unix_path_, UNIX_PATH_MAX_, "%s", unix_path);
+    if (n < UNIX_PATH_MAX_ && n >= 0) {
       ret = true;
     }
   }

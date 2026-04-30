@@ -333,6 +333,7 @@ private:
   bool stop_;
   volatile bool has_stopped_;
   bool has_destroy_;
+  bool embedded_ = false;
   // The network framework in OceanBase is all defined at ObServerNetworkFrame.
   ObSrvNetworkFrame net_frame_;
   obrpc::ObBatchRpc batch_rpc_;
