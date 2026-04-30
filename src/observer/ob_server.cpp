@@ -20,6 +20,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/file.h>
+#else
+#include <windows.h>
 #endif
 #include "observer/ob_server.h"
 #include "lib/alloc/memory_dump.h"
@@ -1497,6 +1499,32 @@ int ObServer::wait()
   // wait for stop flag
 
   if (embedded_) {
+#ifdef _WIN32
+    HANDLE clients_h = CreateFileA(
+        "run\\seekdb.clients",
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (clients_h == INVALID_HANDLE_VALUE) {
+      LOG_ERROR("failed to open seekdb.clients", "last_error", (int)GetLastError());
+    } else {
+      for (;;) {
+        ::Sleep(5000);
+        OVERLAPPED ov = {};
+        if (LockFileEx(clients_h,
+                       LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                       0, MAXDWORD, MAXDWORD, &ov)) {
+          FLOG_INFO("no clients remaining, shutting down");
+          break;
+        }
+      }
+      CloseHandle(clients_h);
+      stop_ = true;
+    }
+#else
     int clients_fd = ::open("./run/seekdb.clients", O_CREAT | O_RDWR, 0644);
     if (clients_fd < 0) {
       LOG_ERROR("failed to open seekdb.clients", K(errno));
@@ -1511,6 +1539,7 @@ int ObServer::wait()
       ::close(clients_fd);
       stop_ = true;
     }
+#endif
   }
 
   FLOG_INFO("begin to wait observer setted to stop");
