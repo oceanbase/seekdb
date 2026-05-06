@@ -3,7 +3,7 @@ name: Sync master to develop
 on:
   schedule:
     # UTC 02:00(10:00 in beijing)
-    - cron: '0 2 * * *'
+    - cron: '30 1 * * *'
   workflow_dispatch:
 
 jobs:
