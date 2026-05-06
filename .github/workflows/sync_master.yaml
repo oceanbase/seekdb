@@ -1,0 +1,32 @@
+name: Sync master to develop
+
+on:
+  schedule:
+    # UTC 02:00(10:00 in beijing)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Merge master into develop
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge master into develop
+        run: |
+          git checkout develop
+          git merge origin/master --no-edit --ff-only || git merge origin/master --no-edit
+
+      - name: Push develop
+        run: git push origin develop
