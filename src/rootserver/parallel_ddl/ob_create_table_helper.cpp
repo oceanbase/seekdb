@@ -748,6 +748,50 @@ int ObCreateTableHelper::generate_aux_table_schemas_()
     LOG_WARN("invalid table cnt", KR(ret), K(new_tables_.count()));
   } else if (OB_FAIL(inner_generate_aux_table_schema_(arg_))) {
     LOG_WARN("fail to inner generate aux table schema", KR(ret));
+  } else if (OB_UNLIKELY(new_tables_.count() <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid table cnt after aux schema generation", KR(ret), K(new_tables_.count()));
+  } else {
+    ObTableSchema &data_table = new_tables_.at(0);
+    // After index processing (e.g., hybrid vec index), the data table may have gained
+    // LOB columns that were not present when has_lob_column was checked in
+    // inner_generate_aux_table_schema_. Check again and create LOB aux tables if needed.
+    if (!data_table.is_external_table()
+        && !data_table.has_lob_aux_table()
+        && data_table.has_lob_column(true)) {
+      HEAP_VARS_2((ObTableSchema, lob_meta_schema), (ObTableSchema, lob_piece_schema)) {
+        ObLobMetaBuilder lob_meta_builder(*ddl_service_);
+        ObLobPieceBuilder lob_piece_builder(*ddl_service_);
+        ObIDGenerator id_generator;
+        uint64_t object_id = OB_INVALID_ID;
+        if (OB_FAIL(gen_object_ids_(2, id_generator))) {
+          LOG_WARN("fail to gen object ids for lob aux tables", KR(ret), K_(tenant_id));
+        } else if (OB_FAIL(id_generator.next(object_id))) {
+          LOG_WARN("fail to get next object_id", KR(ret));
+        } else if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(
+                     schema_service_->get_schema_service(), data_table, object_id,
+                     lob_meta_schema, true))) {
+          LOG_WARN("generate lob meta table schema failed", KR(ret), K(data_table));
+        } else if (OB_FAIL(id_generator.next(object_id))) {
+          LOG_WARN("fail to get next object_id", KR(ret));
+        } else if (OB_FAIL(lob_piece_builder.generate_aux_lob_piece_schema(
+                     schema_service_->get_schema_service(), data_table, object_id,
+                     lob_piece_schema, true))) {
+          LOG_WARN("generate lob piece table schema failed", KR(ret), K(data_table));
+        } else if (OB_FAIL(new_tables_.push_back(lob_meta_schema))) {
+          LOG_WARN("push_back lob meta table failed", KR(ret));
+        } else if (OB_FAIL(new_tables_.push_back(lob_piece_schema))) {
+          LOG_WARN("push_back lob piece table failed", KR(ret));
+        } else {
+          data_table.set_aux_lob_meta_tid(lob_meta_schema.get_table_id());
+          data_table.set_aux_lob_piece_tid(lob_piece_schema.get_table_id());
+          LOG_INFO("create lob aux tables for hybrid vector index",
+                   K(data_table.get_table_name_str()),
+                   K(lob_meta_schema.get_table_id()),
+                   K(lob_piece_schema.get_table_id()));
+        }
+      }
+    }
   }
   return ret;
 }
