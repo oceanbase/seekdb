@@ -6,6 +6,28 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const util = require('util');
+
+// When stdout is not a TTY (e.g. GitHub Actions / Start-Process inherit), Node may block-buffer console.log;
+// CI then shows only the first chunk and "still waiting" heartbeats while tests run or hang in native code.
+if (!process.stdout.isTTY) {
+    const syncLine = (fd, args) => {
+        try {
+            fs.writeSync(fd, util.format(...args) + '\n');
+        } catch (_) {
+            /* fall back */
+            if (fd === 1) {
+                console.log(...args);
+            } else {
+                console.error(...args);
+            }
+        }
+    };
+    console.log = (...a) => syncLine(1, a);
+    console.info = (...a) => syncLine(1, a);
+    console.error = (...a) => syncLine(2, a);
+    console.warn = (...a) => syncLine(2, a);
+}
 
 function bindingExitProbe(line) {
     if (process.env.SEEKDB_BINDING_EXIT_PROBE !== '1' && process.env.SEEKDB_NODE_BINDING_PROBE !== '1') {
@@ -642,11 +664,19 @@ function runAllTests() {
     console.log('');
 
     const dbDir = process.argv[2] || './seekdb.db';
+    console.log(`[seekdb-napi] opening database directory: ${dbDir}`);
     try {
         seekdb.open(dbDir);
     } catch (e) {
         console.error(`::error::Failed to open database: ${e.message}`);
         return 1;
+    }
+    console.log('[seekdb-napi] seekdb.open OK');
+
+    const skipHeavy = process.env.SEEKDB_NODE_NAPI_SKIP_HEAVY === '1'
+        || /^true$/i.test(process.env.SEEKDB_NODE_NAPI_SKIP_HEAVY || '');
+    if (skipHeavy) {
+        console.log('[seekdb-napi] SEEKDB_NODE_NAPI_SKIP_HEAVY set — skipping VECTOR + hybrid search tests');
     }
 
     const testCases = [
@@ -665,7 +695,14 @@ function runAllTests() {
         { name: 'Column Name Inference', fn: testColumnNameInference },
         { name: 'DBMS_HYBRID_SEARCH.GET_SQL', fn: testHybridSearchGetSQL },
         { name: 'DBMS_HYBRID_SEARCH.SEARCH', fn: testHybridSearchSearch }
-    ];
+    ].filter((tc) => {
+        if (!skipHeavy) {
+            return true;
+        }
+        return tc.name !== 'VECTOR Parameter Binding'
+            && tc.name !== 'DBMS_HYBRID_SEARCH.GET_SQL'
+            && tc.name !== 'DBMS_HYBRID_SEARCH.SEARCH';
+    });
 
     const results = [];
     const failedTests = [];

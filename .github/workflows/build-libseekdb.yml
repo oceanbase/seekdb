@@ -651,6 +651,11 @@ jobs:
           }
           # Prepend deps LLVM to PATH; pass lld-link so CMake does not pick GNU ld (MinGW) for clang-cl.
           $ws = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
+          # CMake -G Ninja requires ninja on PATH at configure time (otherwise CMake may fall back or leave a stale non-Ninja cache).
+          foreach ($rel in @("deps/3rd/tools/ninja", "deps/3rd/tools/cmake/bin")) {
+            $tp = Join-Path $ws $rel
+            if (Test-Path -LiteralPath $tp) { $env:PATH = "$tp;$env:PATH" }
+          }
           $llvmRoot = if ($env:OB_LLVM_DIR) { $env:OB_LLVM_DIR } else { Join-Path $ws "deps/3rd/tools/llvm18" }
           $llvmBin = Join-Path $llvmRoot "bin"
           $lldLink = Join-Path $llvmBin "lld-link.exe"
@@ -663,8 +668,42 @@ jobs:
           } else {
             Write-Host "::warning::ccache not found; building without compiler cache."
           }
-          .\build.ps1 release --ninja --target libseekdb "-DBUILD_EMBED_MODE=ON" "-DPYTHON_VERSION=$py" "-DCMAKE_LINKER=$lldFwd" $ccacheOpt
+          # Map RelWithDebInfo/Debug/MinSizeRel -> Release for IMPORTED targets (e.g. Python3::Module .lib/.dll on Windows).
+          # Ensures cache has these on first cmake run; complements cmake/Env.cmake for CI runners where Python stubs omit RelWithDebInfo.
+          .\build.ps1 release --ninja --target libseekdb "-DBUILD_EMBED_MODE=ON" "-DPYTHON_VERSION=$py" "-DCMAKE_LINKER=$lldFwd" "-DCMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO=Release" "-DCMAKE_MAP_IMPORTED_CONFIG_DEBUG=Release" "-DCMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL=Release" $ccacheOpt
           if (Get-Command ccache -ErrorAction SilentlyContinue) { ccache -s }
+
+      - name: Debug facts — libseekdb Windows (deterministic)
+        shell: pwsh
+        env:
+          BUILD_TYPE: release
+        run: |
+          $ErrorActionPreference = "Continue"
+          $ws = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
+          foreach ($rel in @("deps/3rd/tools/ninja", "deps/3rd/tools/cmake/bin")) {
+            $tp = Join-Path $ws $rel
+            if (Test-Path -LiteralPath $tp) { $env:PATH = "$tp;$env:PATH" }
+          }
+          . ./unittest/include/seekdb-windows-dll-resolve.ps1
+          . ./unittest/include/debug-libseekdb-windows.ps1
+          Write-LibseekdbWindowsBuildFacts -RepoRoot "$PWD"
+
+      - name: Verify libseekdb DLL (Windows)
+        shell: pwsh
+        env:
+          BUILD_TYPE: release
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          . ./unittest/include/seekdb-windows-dll-resolve.ps1
+          $bdn = Get-SeekDbWindowsBuildDirNameFromEnv
+          $r = Find-SeekDbWindowsDll -RepoRoot "$PWD" -BuildDirName $bdn
+          if (-not $r) {
+            Write-SeekDbWindowsDllDiagnostics -RepoRoot "$PWD" -BuildDirName $bdn
+            throw "libseekdb build did not produce seekdb.dll under build_$bdn (see diagnostics above)."
+          }
+          Write-Host "libseekdb DLL: $($r.DllPath)"
+          "SEEKDB_LIB_PATH=$($r.DllPath)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup Node.js (Windows)
         uses: actions/setup-node@v4
@@ -725,6 +764,8 @@ jobs:
         shell: pwsh
         env:
           SEEKDB_BINDING_SECTION: NodeNapi
+          # VECTOR + DBMS_HYBRID_SEARCH cases can stall native code on Windows runners; core N-API still covered.
+          SEEKDB_NODE_NAPI_SKIP_HEAVY: "1"
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"

@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
   Run libseekdb FFI binding tests on Windows (PowerShell).
-  Requires: seekdb.dll under <repo>/build_release/src/include
+  Resolves seekdb.dll (or libseekdb.dll): env SEEKDB_LIB_PATH if set and valid; else build_<release|debug> via seekdb-windows-dll-resolve.ps1 (include, bin, lib, build.ninja, src recurse, then bounded full-tree on PS 7+).
   Requires for full suite: gcc (MinGW) for Go CGO, mvn for Java JNI.
 
   -ContinueOnError runs every language section even after a failure; exit code is non-zero if any section failed.
@@ -43,10 +43,25 @@ function Get-RepoRoot {
 }
 
 $root = Get-RepoRoot
-$libDir = Join-Path $root "build_release\src\include"
-$dllPath = Join-Path $libDir "seekdb.dll"
-if (-not (Test-Path $dllPath)) {
-  throw "seekdb.dll not found at $dllPath — build libseekdb first."
+
+. (Join-Path $PSScriptRoot "seekdb-windows-dll-resolve.ps1")
+
+$dllPath = ""
+$libDir = ""
+$pre = if ($env:SEEKDB_LIB_PATH) { $env:SEEKDB_LIB_PATH.Trim() } else { "" }
+if ($pre -and (Test-Path -LiteralPath $pre) -and ($pre -match '\.[Dd][Ll][Ll]$')) {
+  $dllPath = (Resolve-Path -LiteralPath $pre).Path
+  $libDir = Split-Path -Parent $dllPath
+}
+if (-not $dllPath) {
+  $bdn = Get-SeekDbWindowsBuildDirNameFromEnv
+  $resolved = Find-SeekDbWindowsDll -RepoRoot $root -BuildDirName $bdn
+  if (-not $resolved) {
+    Write-SeekDbWindowsDllDiagnostics -RepoRoot $root -BuildDirName $bdn
+    throw "seekdb.dll not found under $(Join-Path $root "build_$bdn") — build libseekdb first."
+  }
+  $dllPath = $resolved.DllPath
+  $libDir = $resolved.LibDir
 }
 
 $env:SEEKDB_LIB_PATH = $dllPath
@@ -140,7 +155,8 @@ function Wait-ProcessWithDeadline {
     if ([DateTime]::UtcNow -ge $deadline) {
       $timedOut = $true
       Write-Host "::error::${Label}: exceeded ${TimeoutMs} ms; taskkill /F /T pid=$($Process.Id)"
-      & taskkill.exe /F /T /PID $Process.Id 2>$null
+      # taskkill stdout must not reach the function output stream or callers get an array ($wr['TimedOut'] then fails).
+      $null = & taskkill.exe /F /T /PID $Process.Id 2>$null
       $Process.Refresh()
       if (-not $Process.HasExited) {
         $null = $Process.WaitForExit(45000)
@@ -152,7 +168,7 @@ function Wait-ProcessWithDeadline {
       if (Test-Path -LiteralPath $probePath) {
         $pr = Get-Content -LiteralPath $probePath -Raw -ErrorAction SilentlyContinue
         if ($pr -match 'before_process_exit code=(-?\d+)') {
-          $probeCode = [int]$Matches[1]
+          $probeCode = [int]($Matches[1])
           if ($null -eq $probeFirstUtc) {
             $probeFirstUtc = [DateTime]::UtcNow
             Write-Host "::notice::[seekdb-bind] binding exit probe seen pid=$($Process.Id) code=$probeCode (${BindingExitProbeGraceMs}ms grace, then Stop-Process -Force if still stuck in DLL unload)"
@@ -164,7 +180,7 @@ function Wait-ProcessWithDeadline {
             $Process.Refresh()
             Start-Sleep -Milliseconds 200
             if (-not $Process.HasExited) {
-              & taskkill.exe /F /T /PID $Process.Id 2>$null
+              $null = & taskkill.exe /F /T /PID $Process.Id 2>$null
               $Process.Refresh()
               if (-not $Process.HasExited) {
                 $null = $Process.WaitForExit(8000)
@@ -203,7 +219,12 @@ function Wait-ProcessWithDeadline {
   else {
     $Process.ExitCode
   }
-  return @{ TimedOut = $timedOut; ExitCode = $exitCode; ForcedAfterProbe = $forcedFromProbe }
+  # Set-StrictMode: never use dot notation on hashtables ($r.TimedOut fails). Call sites must use $r['TimedOut'].
+  return @{
+    TimedOut         = $timedOut
+    ExitCode         = $exitCode
+    ForcedAfterProbe = $forcedFromProbe
+  }
 }
 
 # Stream npm lines to CI log (native npm output can appear buffered otherwise).
@@ -241,13 +262,13 @@ function Install-NodeBindingDeps {
     throw "Start-Process npm returned null"
   }
   $r = Wait-ProcessWithDeadline -Process $p -TimeoutMs $npmTimeoutMs -Label "npm ci/install" -HeartbeatSec 120
-  if ($r.TimedOut) {
+  if ($r['TimedOut']) {
     Write-BindLog "npm FAILED: timed out after ${npmTimeoutMs} ms in $(Get-Location)"
     throw "npm ci/install timed out after ${npmTimeoutMs} ms"
   }
-  if ($r.ExitCode -ne 0) {
-    Write-BindLog "npm FAILED exit=$($r.ExitCode) in $(Get-Location)"
-    throw "npm failed in $(Get-Location) (exit $($r.ExitCode))"
+  if ($r['ExitCode'] -ne 0) {
+    Write-BindLog "npm FAILED exit=$($r['ExitCode']) in $(Get-Location)"
+    throw "npm failed in $(Get-Location) (exit $($r['ExitCode']))"
   }
   Write-BindLog "npm: finished OK in $(Get-Location)"
 }
@@ -276,6 +297,7 @@ function Invoke-ExternalTestWithBindingExitProbe {
   Write-BindLog "$Description (wall-clock ${testMs}ms; exit-probe grace ${graceMs}ms)"
   $prevProbe = $env:SEEKDB_BINDING_EXIT_PROBE
   $env:SEEKDB_BINDING_EXIT_PROBE = '1'
+  $nr = $null
   try {
     $p = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory (Get-Location) -PassThru -NoNewWindow
     if ($null -eq $p) {
@@ -291,14 +313,17 @@ function Invoke-ExternalTestWithBindingExitProbe {
       $env:SEEKDB_BINDING_EXIT_PROBE = $prevProbe
     }
   }
-  if ($nr.ForcedAfterProbe) {
-    Write-Host "::notice::[seekdb-bind] $Description — exit code from probe $($nr.ExitCode) (process did not terminate; likely DLL unload hang)"
+  if ($null -eq $nr) {
+    throw "${Description}: internal error — no wait result (Start-Process or Wait-ProcessWithDeadline failed before return)"
   }
-  if ($nr.TimedOut) {
+  if ($nr['ForcedAfterProbe']) {
+    Write-Host "::notice::[seekdb-bind] $Description — exit code from probe $($nr['ExitCode']) (process did not terminate; likely DLL unload hang)"
+  }
+  if ($nr['TimedOut']) {
     throw "$Description timed out after ${testMs} ms"
   }
-  if ($nr.ExitCode -ne 0) {
-    throw "$Description failed (exit $($nr.ExitCode))"
+  if ($nr['ExitCode'] -ne 0) {
+    throw "$Description failed (exit $($nr['ExitCode']))"
   }
 }
 
@@ -357,8 +382,8 @@ Invoke-BindingSection "Python" {
         throw "Start-Process python returned null"
       }
       $wr = Wait-ProcessWithDeadline -Process $p -TimeoutMs $timeoutMs -Label "python test.py" -HeartbeatSec 60
-      $pythonTimedOut = $wr.TimedOut
-      $pyExit = if ($pythonTimedOut) { -1 } else { $wr.ExitCode }
+      $pythonTimedOut = [bool]($wr['TimedOut'])
+      $pyExit = if ($pythonTimedOut) { -1 } else { $wr['ExitCode'] }
       if ($pythonTimedOut) {
         Write-Host "::error::Python binding tests exceeded ${timeoutMs} ms"
       }

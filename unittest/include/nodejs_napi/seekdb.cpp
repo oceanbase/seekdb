@@ -157,8 +157,12 @@ Napi::Value SeekdbConnect(const Napi::CallbackInfo& info) {
   }
   
   std::string database = info[0].As<Napi::String>().Utf8Value();
+  // JS uses seekdb.connect(database, autocommit) — second arg is the boolean (see test.js / index.js).
+  // Legacy call shape connect(database, _, autocommit) kept when a third boolean is provided.
   bool autocommit = false;
-  if (info.Length() >= 3) {
+  if (info.Length() >= 2 && info[1].IsBoolean()) {
+    autocommit = info[1].As<Napi::Boolean>().Value();
+  } else if (info.Length() >= 3 && info[2].IsBoolean()) {
     autocommit = info[2].As<Napi::Boolean>().Value();
   }
   

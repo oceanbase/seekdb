@@ -1044,12 +1044,17 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
             set_error(nullptr, "change dir failed");
         } else {
             FLOG_INFO("observer start finish wait service ", "cost", ObTimeUtility::current_time() - start_time);
-            // Wait for service ready (aligned with Python embed - infinite wait)
+            // Wait for RS usable. Non-Windows: require FULL_SERVICE (timer-driven do_restart).
+            // Windows embed CI: do_restart may not advance to FULL_SERVICE while RS is already IN_SERVICE;
+            // waiting only for is_full_service() then hangs seekdb_open indefinitely.
             while (true) {
                 if (OB_ISNULL(GCTX.root_service_)) {
-                    // root_service_ not ready yet, wait
                     ob_usleep(100 * 1000);  // 100ms
+#ifdef _WIN32
+                } else if (GCTX.root_service_->in_service()) {
+#else
                 } else if (GCTX.root_service_->is_full_service()) {
+#endif
                     break;
                 } else {
                     ob_usleep(100 * 1000);  // 100ms

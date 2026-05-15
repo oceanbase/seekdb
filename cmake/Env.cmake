@@ -147,6 +147,17 @@ else()
   set(CMAKE_CXX_FLAGS "-std=gnu++20")
 endif()
 
+
+# Before the first project(), WIN32 may be unset, so the elseif(WIN32) block below can skip
+# CMAKE_MAP_IMPORTED_CONFIG_*. That breaks Windows RelWithDebInfo with FindPython3 (Python3::Module
+# has no IMPORTED_IMPLIB for that config). CMAKE_HOST_WIN32 is set when cmake runs on Windows; skip
+# for Android NDK cross-builds (OB_ANDROID) so we do not force host mapping onto the NDK tree.
+if(CMAKE_HOST_WIN32 AND NOT OB_ANDROID)
+  set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release CACHE STRING "imported: map Debug -> Release" FORCE)
+  set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release CACHE STRING "imported: map RelWithDebInfo -> Release" FORCE)
+  set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release CACHE STRING "imported: map MinSizeRel -> Release" FORCE)
+endif()
+
 if(OB_DISABLE_PIE)
   message(STATUS "build without pie")
   set(PIE_OPT "-no-pie")
