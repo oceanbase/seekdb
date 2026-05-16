@@ -257,6 +257,93 @@ TEST_F(TestAiService, test_get_increment_ai_model_keys_reversely)
   }
 }
 
+TEST_F(TestAiService, test_minimax_ai_model_endpoint)
+{
+  share::ObTenantSwitchGuard tenant_guard;
+  ASSERT_EQ(OB_SUCCESS, tenant_guard.switch_to(OB_SYS_TENANT_ID));
+  ObTenantAiService *ai_service = MTL(ObTenantAiService*);
+  ObAiServiceGuard ai_service_guard;
+  const ObAiModelEndpointInfo *endpoint_info = nullptr;
+
+  ObString endpoint_name = "minimax_endpoint";
+  ObString ai_model_name = "minimax_ai_model";
+  ObString url = "https://api.minimax.io/v1/chat/completions";
+  ObString access_key = "minimax-test-key-1234567890";
+  ObString provider = "minimax";
+  ObString request_model_name = "MiniMax-M2.7";
+  ObString parameters = "";
+  ObString request_transform_fn = "";
+  ObString response_transform_fn = "";
+  common::ObArenaAllocator allocator;
+  ObSqlString sql;
+
+  // 1. create MiniMax ai model endpoint
+  std::string json_str = R"({"url": ")";
+  json_str += url.ptr();
+  json_str += R"(", "access_key": ")";
+  json_str += access_key.ptr();
+  json_str += R"(", "ai_model_name": ")";
+  json_str += ai_model_name.ptr();
+  json_str += R"(", "provider": ")";
+  json_str += provider.ptr();
+  json_str += R"(", "request_model_name": ")";
+  json_str += request_model_name.ptr();
+  json_str += R"(", "parameters": ")";
+  json_str += parameters.ptr();
+  json_str += R"(", "request_transform_fn": ")";
+  json_str += request_transform_fn.ptr();
+  json_str += R"(", "response_transform_fn": ")";
+  json_str += response_transform_fn.ptr();
+  json_str += R"("})";
+  sql.assign_fmt("call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT ('%s', '%s')", endpoint_name.ptr(), json_str.c_str());
+  int64_t affected_rows = 0;
+  common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy();
+  ASSERT_EQ(OB_SUCCESS, sql_proxy.write(sql.ptr(), affected_rows));
+
+  // 2. get MiniMax ai model endpoint by endpoint name
+  ASSERT_EQ(OB_SUCCESS, ai_service->get_ai_service_guard(ai_service_guard));
+  ASSERT_EQ(OB_SUCCESS, ai_service_guard.get_ai_endpoint(endpoint_name, endpoint_info));
+  ASSERT_TRUE(endpoint_info != nullptr);
+  check_ai_model_endpoint(*endpoint_info, allocator, endpoint_name, ai_model_name, url, access_key,
+                          provider, request_model_name, parameters, request_transform_fn, response_transform_fn);
+
+  // 3. get MiniMax ai model endpoint by ai model name
+  endpoint_info = nullptr;
+  ASSERT_EQ(OB_SUCCESS, ai_service_guard.get_ai_endpoint_by_ai_model_name(ai_model_name, endpoint_info));
+  ASSERT_TRUE(endpoint_info != nullptr);
+  check_ai_model_endpoint(*endpoint_info, allocator, endpoint_name, ai_model_name, url, access_key,
+                          provider, request_model_name, parameters, request_transform_fn, response_transform_fn);
+
+  // 4. alter MiniMax endpoint to use embedding URL
+  url = "https://api.minimax.io/v1/embeddings";
+  request_model_name = "embo-01";
+
+  json_str = R"({"url": ")";
+  json_str += url.ptr();
+  json_str += R"(", "request_model_name": ")";
+  json_str += request_model_name.ptr();
+  json_str += R"(", "request_transform_fn": ")";
+  json_str += request_transform_fn.ptr();
+  json_str += R"(", "response_transform_fn": ")";
+  json_str += response_transform_fn.ptr();
+  json_str += R"("})";
+
+  sql.assign_fmt("call DBMS_AI_SERVICE.ALTER_AI_MODEL_ENDPOINT ('%s', '%s')", endpoint_name.ptr(), json_str.c_str());
+  ASSERT_EQ(OB_SUCCESS, sql_proxy.write(sql.ptr(), affected_rows));
+
+  // 5. verify altered endpoint
+  endpoint_info = nullptr;
+  ASSERT_EQ(OB_SUCCESS, ai_service_guard.get_ai_endpoint(endpoint_name, endpoint_info));
+  ASSERT_TRUE(endpoint_info != nullptr);
+  check_ai_model_endpoint(*endpoint_info, allocator, endpoint_name, ai_model_name, url, access_key,
+                          provider, request_model_name, parameters, request_transform_fn, response_transform_fn);
+
+  // 6. drop MiniMax ai model endpoint
+  sql.assign_fmt("call DBMS_AI_SERVICE.DROP_AI_MODEL_ENDPOINT ('%s')", endpoint_name.ptr());
+  ASSERT_EQ(OB_SUCCESS, sql_proxy.write(sql.ptr(), affected_rows));
+  ASSERT_EQ(OB_AI_FUNC_ENDPOINT_NOT_FOUND, ai_service_guard.get_ai_endpoint(endpoint_name, endpoint_info));
+}
+
 TEST_F(TestAiService, end)
 {
   RunCtx.time_sec_ = 0;

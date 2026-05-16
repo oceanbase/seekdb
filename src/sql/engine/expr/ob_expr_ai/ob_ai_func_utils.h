@@ -230,6 +230,35 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSiliconflowUtils);
 };
+class ObMiniMaxUtils
+{
+public:
+  class ObMiniMaxEmbed : public ObAIFuncIEmbed
+  {
+  public:
+    ObMiniMaxEmbed() {}
+    virtual ~ObMiniMaxEmbed() {}
+    virtual int get_header(common::ObIAllocator &allocator,
+                           common::ObString &api_key,
+                           common::ObArray<ObString> &headers) override;
+    virtual int get_body(common::ObIAllocator &allocator,
+                         common::ObString &model,
+                         common::ObArray<ObString> &contents,
+                         common::ObJsonObject *config,
+                         common::ObJsonObject *&body) override;
+    virtual int parse_output(common::ObIAllocator &allocator,
+                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *&result) override;
+  private:
+    DISALLOW_COPY_AND_ASSIGN(ObMiniMaxEmbed);
+  };
+  static int get_header(common::ObIAllocator &allocator,
+                        common::ObString &api_key,
+                        common::ObArray<ObString> &headers);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObMiniMaxUtils);
+};
+
 class ObAIFuncJsonUtils
 {
 public:
@@ -338,6 +367,7 @@ public:
   static constexpr char COHERE[20] = "COHERE";
   static constexpr char HUNYUAN[20] = "HUNYUAN-OPENAI";
   static constexpr char DEEPSEEK[20] = "DEEPSEEK";
+  static constexpr char MINIMAX[20] = "MINIMAX";
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncProviderUtils);

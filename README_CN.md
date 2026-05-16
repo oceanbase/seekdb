@@ -84,7 +84,7 @@
 seekdb 提供了 Semantic Index 功能，只需写入文本数据，系统即可自动进行 Embedding 并生成向量索引，查询时仅需指定文本搜索条件即可进行语义搜索。该功能对用户屏蔽了向量嵌入和查询结果 Rerank 的复杂流程，显著简化 AI 应用开发对数据库的使用方式。
 
 ### 无缝对接各类模型，内置 AI Function 实现库内实时推理
-seekdb 支持大语言模型和向量嵌入模型接入，通过 DBMS_AI_SERVICE 系统包实现模型注册和管理。内置 AI_COMPLETE、AI_PROMPT、AI_EMBED、AI_RERANK 等 AI Function，支持在标准 SQL 语法下进行数据嵌入和库内实时推理。
+seekdb 支持大语言模型和向量嵌入模型接入，通过 DBMS_AI_SERVICE 系统包实现模型注册和管理。内置 AI_COMPLETE、AI_PROMPT、AI_EMBED、AI_RERANK 等 AI Function，支持在标准 SQL 语法下进行数据嵌入和库内实时推理。支持的 AI 服务提供商包括 OpenAI、DeepSeek、阿里云（DashScope/OpenAI 兼容）、SiliconFlow、混元、以及 [MiniMax](https://www.minimaxi.com)。
 
 ### 基于 JSON 的动态 Schema，支持文档元数据动态存储和高效访问
 seekdb 支持 JSON 数据类型，具备动态 Schema 能力。支持 JSON 的部分更新以降低数据更新成本，提供 JSON 函数索引、多值索引来优化查询性能。实现半结构化编码降低存储成本。在 AI 应用中，JSON 可作为文档元信息的存储类型，并支持与全文、向量的混合搜索。
