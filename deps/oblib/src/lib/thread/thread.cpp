@@ -124,7 +124,7 @@ int Thread::start()
       pret = pthread_attr_setstacksize(&attr, stack_size_);
       if (pret != 0) {
         // Fallback to default if setstacksize fails
-        pret = 0;
+        pret = 0; 
       } else {
         size_t actual_stack_size = 0;
         pthread_attr_getstacksize(&attr, &actual_stack_size);
@@ -207,7 +207,7 @@ void Thread::stop()
 uint64_t Thread::get_tenant_id() const
 {
   uint64_t tenant_id = OB_SERVER_TENANT_ID;
-  IRunWrapper *run_wrapper_ = threads_->get_effective_run_wrapper();
+  IRunWrapper *run_wrapper_ = threads_->get_run_wrapper();
   if (OB_NOT_NULL(run_wrapper_)) {
     tenant_id = run_wrapper_->id();
   }
@@ -219,7 +219,7 @@ void Thread::run()
   if (OB_NUMA_SHARED_INDEX != numa_node_) {
     AFFINITY_CTRL.thread_bind_to_node(numa_node_);
   }
-  IRunWrapper *run_wrapper_ = threads_->get_effective_run_wrapper();
+  IRunWrapper *run_wrapper_ = threads_->get_run_wrapper();
   if (OB_NOT_NULL(run_wrapper_)) {
     {
       ObDisableDiagnoseGuard disable_guard;
@@ -362,17 +362,15 @@ void Thread::destroy()
 
 void Thread::destroy_stack()
 {
-#ifdef _WIN32
-  pth_ = pthread_null();
-#else
-#if !defined(OB_USE_ASAN)
+#if !defined(_WIN32) && !defined(OB_USE_ASAN)
   if (stack_addr_ != nullptr) {
     g_stack_allocer.dealloc(stack_addr_);
     stack_addr_ = nullptr;
   }
 #endif
-  pth_ = 0;
-#endif
+  // pthread_t is a struct on Windows (pthreads4w), an integer elsewhere;
+  // use pthread_null() so the same code compiles on every platform.
+  pth_ = pthread_null();
 }
 
 void* Thread::__th_start(void *arg)
