@@ -127,10 +127,6 @@ int ObCSDispatcher::init_refresh_scn_()
 void ObCSDispatcher::stop()
 {
   ObThreadPool::stop();
-  // Signal dispatch_cond_ so that run1() unblocks from wait immediately
-  // instead of waiting for the full timeout.
-  ObThreadCondGuard guard(dispatch_cond_);
-  dispatch_cond_.signal();
 }
 
 void ObCSDispatcher::wait()
@@ -397,10 +393,10 @@ void ObCSDispatcher::run1()
     // ② Normal dispatch.
     int ret = OB_SUCCESS;
     if (dispatch_sn_ >= tx_ring_.end_sn()) {
-      // Idle: wait for Fetcher to push new data (or 10s timeout as fallback).
+      // Idle: wait for Fetcher to push new data (or 100ms timeout as fallback).
       ObThreadCondGuard cond_guard(dispatch_cond_);
       if (dispatch_sn_ >= tx_ring_.end_sn()) {   // Re-check under lock to avoid missed signal.
-        (void)dispatch_cond_.wait(10000);    // 10s timeout.
+        (void)dispatch_cond_.wait(100);    // 100ms timeout.
       }
       if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
         LOG_INFO("CSDispatcher: idle waiting for new transactions",
