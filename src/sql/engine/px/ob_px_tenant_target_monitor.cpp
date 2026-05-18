@@ -26,6 +26,8 @@ using namespace obutil;
 namespace sql
 {
 
+OB_SERIALIZE_MEMBER(ServerTargetUsage, peer_target_used_, local_target_used_, report_target_used_);
+
 int ObPxTenantTargetMonitor::init(const uint64_t tenant_id, ObAddr &server)
 {
   int ret = OB_SUCCESS;
@@ -36,13 +38,16 @@ int ObPxTenantTargetMonitor::init(const uint64_t tenant_id, ObAddr &server)
              OB_UNLIKELY(!server.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(server));
+  } else if (!global_target_usage_.created() && OB_FAIL(global_target_usage_.create(PX_SERVER_TARGET_BUCKET_NUM, ObModIds::OB_SQL_PX))) {
+    LOG_WARN("global target usage create failed", K(ret));
+  } else if (OB_FAIL(global_target_usage_.set_refactored(server, ServerTargetUsage()))) {
+    LOG_WARN("set refactored failed", K(ret));
   } else {
     tenant_id_ = tenant_id;
     server_ = server;
-    role_ = LEADER;
+    role_ = FOLLOWER;
     parallel_servers_target_ = INT64_MAX;
     version_ = 0;
-    px_target_used_ = 0;
     is_init_ = true;
     parallel_session_count_ = 0;
   }
@@ -56,9 +61,10 @@ void ObPxTenantTargetMonitor::reset()
   server_.reset();
   role_ = FOLLOWER;
   parallel_servers_target_ = INT64_MAX;
-  px_target_used_ = 0;
+  global_target_usage_.clear();
   version_ = UINT64_MAX;
   parallel_session_count_ = 0;
+  print_debug_log_ = false;
 }
 
 void ObPxTenantTargetMonitor::set_parallel_servers_target(int64_t parallel_servers_target)
@@ -76,6 +82,23 @@ int64_t ObPxTenantTargetMonitor::get_parallel_session_count()
   return parallel_session_count_;
 }
 
+int ObPxTenantTargetMonitor::refresh_statistics(bool need_refresh_all)
+{
+  int ret = OB_SUCCESS;
+  if (role_ == FOLLOWER || need_refresh_all) {
+    role_ = LEADER;
+    if (OB_FAIL(reset_leader_statistics())) {
+      LOG_WARN("reset statistics failed", K(ret));
+    }
+    LOG_INFO("refresh global_target_usage_", K(tenant_id_), K(version_), K(server_), K(need_refresh_all));
+  }
+  if (!print_debug_log_ && OB_SUCCESS != OB_E(EventTable::EN_PX_PRINT_TARGET_MONITOR_LOG) OB_SUCCESS) {
+    print_debug_log_ = true;
+  }
+  return ret;
+}
+
+
 bool ObPxTenantTargetMonitor::is_leader()
 {
   return role_ == LEADER;
@@ -88,31 +111,63 @@ uint64_t ObPxTenantTargetMonitor::get_version()
 
 int ObPxTenantTargetMonitor::update_peer_target_used(const ObAddr &server, int64_t peer_used, uint64_t version)
 {
-  // In single-server mode, there are no peer followers to report usage.
-  // Kept for API compatibility; the caller (ObPxTargetMgr) still updates alive_server_set_.
-  UNUSED(server);
-  UNUSED(peer_used);
-  UNUSED(version);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  ServerTargetUsage target_usage;
+  if (print_debug_log_) {
+    LOG_INFO("update_peer_target_used", K(tenant_id_), K(is_leader()), K(version_), K(server), K(peer_used));
+  }
+  auto update_peer_used = [=](hash::HashMapPair<ObAddr, ServerTargetUsage> &entry) -> void {
+    if (is_leader()) {
+      entry.second.update_peer_used(peer_used);
+      if (OB_UNLIKELY(entry.second.get_peer_used() < 0)) {
+        LOG_ERROR("peer used negative", K(tenant_id_), K(version_), K(server), K(entry.second), K(peer_used));
+      }
+    } else {
+      entry.second.set_peer_used(peer_used);
+    }
+  };
+  SpinWLockGuard rlock_guard(spin_lock_);
+  if (OB_UNLIKELY(version != OB_INVALID_ID && version != version_)) {
+    // version mismatch, do nothing.
+  } else if (OB_FAIL(global_target_usage_.get_refactored(server, target_usage))) {
+    LOG_WARN("get refactored failed", K(ret), K(tenant_id_), K(server), K(version_));
+    if (ret != OB_HASH_NOT_EXIST) {
+    } else {
+      target_usage.set_peer_used(peer_used);
+      if (OB_FAIL(global_target_usage_.set_refactored(server, target_usage))) {
+        LOG_WARN("set refactored failed", K(ret));
+        if (OB_HASH_EXIST == ret
+            && OB_FAIL(global_target_usage_.atomic_refactored(server, update_peer_used))) {
+          LOG_WARN("atomic refactored, update_peer_used failed", K(ret));
+        }
+      }
+    }
+  } else if (OB_FAIL(global_target_usage_.atomic_refactored(server, update_peer_used))) {
+    LOG_WARN("atomic refactored, update_peer_used failed", K(ret));
+  }
+  return ret;
 }
 
-int ObPxTenantTargetMonitor::reset_follower_statistics(uint64_t version)
+int ObPxTenantTargetMonitor::get_global_target_usage(const hash::ObHashMap<ObAddr, ServerTargetUsage> *&global_target_usage)
 {
   int ret = OB_SUCCESS;
-  SpinWLockGuard wlock_guard(spin_lock_);
-  px_target_used_ = 0;
-  version_ = version;
-  LOG_INFO("reset follower statistics", K(tenant_id_), K(ret), K(version));
+  global_target_usage = &global_target_usage_;
   return ret;
 }
 
 int ObPxTenantTargetMonitor::reset_leader_statistics()
 {
   int ret = OB_SUCCESS;
+  const uint64_t server_index = GCTX.get_server_index();
+  // write lock before reset map and refresh version.
   SpinWLockGuard wlock_guard(spin_lock_);
-  px_target_used_ = 0;
-  version_ = get_new_version();
-  LOG_INFO("reset leader statistics", K(tenant_id_), K(ret), K(version_));
+  global_target_usage_.clear();
+  if (OB_FAIL(global_target_usage_.set_refactored(server_, ServerTargetUsage()))) {
+    LOG_WARN("set refactored failed", K(ret));
+  } else {
+    version_ = get_new_version();
+  }
+  LOG_INFO("reset leader statistics", K(tenant_id_), K(ret), K(version_), K(server_index));
   return ret;
 }
 
@@ -124,32 +179,90 @@ int ObPxTenantTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &work
   admit_count = 0;
   admit_version = UINT64_MAX;
   bool need_wait = false;
-  {
-    // Serialize on spin_lock_: apply and release both read-modify-write the
-    // single px_target_used_ counter, so they must be mutually exclusive.
-    SpinWLockGuard guard(spin_lock_);
+  if (OB_SUCC(ret)) {
+    // read lock to avoid reset map.
+    SpinRLockGuard rlock_guard(spin_lock_); // Just for avoid multiple SQL applications at the same time
+    // for pmas 
     int64_t target = session_target;
     uint64_t version = version_;
-    int64_t total_use = px_target_used_;
-    int64_t total_req = 0;
+    bool is_first_query = true;
+    bool is_target_enough = true;
     for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
         OB_SUCC(ret) && it != worker_map.end(); it++) {
-      total_req += it->second;
+      const ObAddr &server = it->first;
+      int64_t exp_target_count = it->second;
+      ServerTargetUsage target_usage;
+      if (OB_FAIL(global_target_usage_.get_refactored(server, target_usage))) {
+        if (ret != OB_HASH_NOT_EXIST) {
+          LOG_WARN("get refactored failed", K(ret));
+        } else {
+          // maybe the status is not_ready, because of version++,
+          // but still can use local, so now, rebuild local
+          ret = OB_SUCCESS;
+          if (OB_FAIL(global_target_usage_.set_refactored(server, target_usage))) {
+            if (OB_HASH_EXIST == ret) {
+              // add empty target_usage for server. if hash exist, means others already set just ignore.
+              ret = OB_SUCCESS;
+            } else {
+              LOG_WARN("set refactored failed", K(ret));
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        // Calculate the amount of resources already allocated to the target_usage from the current server's perspective:
+        //  total_user = leader feedback + locally unsynchronized to leader
+        //  (Obviously, this is inaccurate, for example, other followers that have not yet synchronized to the leader are not included)
+        uint64_t total_use = target_usage.get_peer_used() + (target_usage.get_local_used() - target_usage.get_report_used());
+        if (total_use != 0) {
+          is_first_query = false;
+        }
+        if (is_target_enough && (total_use + exp_target_count > target)) {
+          is_target_enough = false;
+        }
+      }
     }
-    if (total_use == 0 || total_use + total_req <= target) {
-      int64_t acquired = std::min(total_req, target);
-      px_target_used_ += acquired;
-      admit_count = acquired;
-      admit_version = version;
-      parallel_session_count_++;
-    } else {
-      need_wait = true;
+    if (OB_SUCC(ret)) {
+      if (is_first_query || is_target_enough) {
+        int64_t total_admit_count = 0;
+        for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
+            OB_SUCC(ret) && it != worker_map.end(); it++) {
+          it->second = std::min(it->second, target);
+          ObAddr &server = it->first;
+          int64_t acquired_cnt = it->second;
+          total_admit_count += acquired_cnt;
+          auto apply_local_target = [=](hash::HashMapPair<ObAddr, ServerTargetUsage> &entry) -> void {
+            entry.second.update_local_used(acquired_cnt);
+            if (is_leader()) {
+              // leader no need report, so set as all reported
+              entry.second.set_report_used(entry.second.get_local_used());
+              entry.second.update_peer_used(acquired_cnt);
+            }
+          };
+          if (OB_FAIL(global_target_usage_.atomic_refactored(server, apply_local_target))) {
+            LOG_WARN("atomic refactored, update_peer_used failed", K(ret));
+          } else if (print_debug_log_) {
+            LOG_INFO("apply target success", K(tenant_id_), K(server), K(acquired_cnt), K(version), K(version_),
+                                              K(parallel_servers_target_));
+          }
+        }
+        admit_count = total_admit_count;
+        admit_version = version;
+        parallel_session_count_++;
+      } else {
+        need_wait = true;
+      }
     }
   }
   if (OB_SUCC(ret) && need_wait) {
+    // when got no resource, wait for next available resource
+    //
+    // NOTE: when any resource returned , ALL waiting threads are waken up
+    //       this is because the returned resource maybe a very big chunk,
+    //       which can feed many waiting threads
     LOG_DEBUG("wait begin", K(wait_time_us), K(session_target), K(req_cnt));
     int64_t wait_us = min(wait_time_us, static_cast<int64_t>(1000000));
-    target_cond_.wait(wait_us);
+    target_cond_.wait(wait_us); // sleep at most 1sec, in order to check interrupt
     LOG_DEBUG("wait finish");
   }
   return ret;
@@ -158,15 +271,44 @@ int ObPxTenantTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &work
 int ObPxTenantTargetMonitor::release_target(hash::ObHashMap<ObAddr, int64_t> &worker_map, uint64_t version)
 {
   int ret = OB_SUCCESS;
-  SpinWLockGuard guard(spin_lock_);
+  SpinRLockGuard rlock_guard(spin_lock_);
   if (version == version_) {
-    int64_t total_rel = 0;
     for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin();
         OB_SUCC(ret) && it != worker_map.end(); it++) {
-      total_rel += it->second;
+      ObAddr &server = it->first;
+      int64_t acquired_cnt = it->second;
+      auto release_local_target = [=](hash::HashMapPair<ObAddr, ServerTargetUsage> &entry) -> void {
+        entry.second.update_local_used(-acquired_cnt);
+        if (is_leader()) {
+          // leader no need report, so set as all reported
+          entry.second.set_report_used(entry.second.get_local_used());
+          entry.second.update_peer_used(-acquired_cnt);
+        }
+      };
+      if (OB_FAIL(global_target_usage_.atomic_refactored(server, release_local_target))) {
+        LOG_WARN("atomic refactored, update_peer_used failed", K(ret));
+      } else if (print_debug_log_) {
+        LOG_INFO("release target success", K(tenant_id_), K(server), K(acquired_cnt), K(version_),
+                 K(role_));
+      }
     }
-    px_target_used_ -= total_rel;
     target_cond_.notifyAll();
+  } else if (print_debug_log_) {
+    int tmp_ret = OB_SUCCESS;
+    for (hash::ObHashMap<ObAddr, int64_t>::iterator it = worker_map.begin(); it != worker_map.end();
+         it++) {
+      ObAddr &server = it->first;
+      int64_t acquired_cnt = it->second;
+      int64_t peer_used = 0;
+      ServerTargetUsage target_usage;
+      if (OB_TMP_FAIL(global_target_usage_.get_refactored(server, target_usage))) {
+        LOG_WARN("failed to get_refactored", K(server), K(tmp_ret));
+      } else {
+        peer_used = target_usage.get_peer_used();
+        LOG_INFO("version changed, print usage: ", K(tenant_id_), K(version_), K(version),
+                 K(server), K(acquired_cnt), K(peer_used));
+      }
+    }
   } else {
     LOG_INFO("version changed", K(tenant_id_), K(version_), K(version));
   }
@@ -178,18 +320,26 @@ int ObPxTenantTargetMonitor::get_all_target_info(common::ObIArray<ObPxTargetInfo
 {
   int ret = OB_SUCCESS;
   target_info_array.reset();
-  ObPxTargetInfo monitor_info;
-  monitor_info.server_ = server_;
-  monitor_info.tenant_id_ = tenant_id_;
-  monitor_info.is_leader_ = true;
-  monitor_info.version_ = version_;
-  monitor_info.parallel_servers_target_ = parallel_servers_target_;
-  monitor_info.peer_server_ = server_;
-  monitor_info.peer_target_used_ = px_target_used_;
-  monitor_info.local_target_used_ = px_target_used_;
-  monitor_info.local_parallel_session_count_ = parallel_session_count_;
-  if (OB_FAIL(target_info_array.push_back(monitor_info))) {
-    LOG_WARN("target_info_array push_back failed", K(ret), K(monitor_info));
+  bool leader = is_leader();
+  auto get_target_info = [&](hash::HashMapPair<ObAddr, ServerTargetUsage> &entry) -> int {
+    int ret = OB_SUCCESS;
+    ObPxTargetInfo monitor_info;
+    monitor_info.server_ = server_;
+    monitor_info.tenant_id_ = tenant_id_;
+    monitor_info.is_leader_ = leader;
+    monitor_info.version_ = version_;
+    monitor_info.parallel_servers_target_ = parallel_servers_target_;
+    monitor_info.peer_server_ = entry.first;
+    monitor_info.peer_target_used_ = entry.second.get_peer_used() + (entry.second.get_local_used() - entry.second.get_report_used());
+    monitor_info.local_target_used_ = entry.second.get_local_used();
+    monitor_info.local_parallel_session_count_ = parallel_session_count_;
+    if (OB_FAIL(target_info_array.push_back(monitor_info))) {
+      LOG_WARN("target_info_array push_back failed", K(ret), K(monitor_info));
+    }
+    return ret;
+  };
+  if (OB_FAIL(global_target_usage_.foreach_refactored(get_target_info))) {
+    LOG_WARN("foreach refactored get_target_info failed", K(ret));
   }
   return ret;
 }

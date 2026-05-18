@@ -19,10 +19,9 @@
 
 #include "lib/net/ob_addr.h"
 #include "share/ob_define.h"
-#include "common/ob_role.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "lib/lock/ob_monitor.h"
 #include "lib/lock/mutex.h"
-#include "lib/lock/ob_spin_rwlock.h"
 
 
 namespace oceanbase
@@ -53,10 +52,44 @@ struct ObPxTargetInfo
                K_(local_parallel_session_count));
 };
 
-// In single-server mode, PX target usage is tracked by a simple counter
-// instead of a per-server hash map. The legacy ServerTargetUsage struct
-// (peer_target_used_ / local_target_used_ / report_target_used_) is removed;
-// the only consumer, apply_target/release_target, now uses px_target_used_.
+struct ServerTargetUsage {
+  OB_UNIS_VERSION(1);
+public:
+  ServerTargetUsage() :
+      peer_target_used_(0),
+      local_target_used_(0),
+      report_target_used_(0) {}
+public:
+  void set_peer_used(int64_t peer_used) { peer_target_used_ = peer_used; }
+  void update_peer_used(int64_t peer_used) { peer_target_used_ += peer_used; }
+  int64_t get_peer_used() const { return peer_target_used_; }
+
+  //void set_local_used(int64_t local_used) { local_target_used_ = local_used; }
+  void update_local_used(int64_t local_used) { local_target_used_ += local_used; }
+  int64_t get_local_used() const { return local_target_used_; }
+
+  void set_report_used(int64_t report_used) { report_target_used_ = report_used; }
+  void update_report_used(int64_t report_used) { report_target_used_ += report_used; }
+  int64_t get_report_used() const { return report_target_used_; }
+
+  TO_STRING_KV(K_(peer_target_used), K_(local_target_used), K_(report_target_used));
+private:
+  // Understanding key points:
+  // Each follower will report to the leader the local target consumption of each machine from its own perspective. leader
+  // Will aggregate these target consumptions from the local perspective to get a global perspective of target consumption, denoted as peer_target_used_
+  //
+  // Each follower reports to the leader the difference between the local report and the last report: "increment"
+  // leader by adding up the "increment" of each follower gets a global view.
+  //
+  // Consideration: Can each follower directly report the local_target_used_ saved on its own machine? Theoretically, it is possible, but on the leader side
+  // Summing up is troublesome, it requires traversing all follower's values and summing them. Reporting "increment" can avoid this summation operation.
+  //
+  int64_t peer_target_used_;     // leader's perspective data: the aggregated target usage reported by followers is summarized as peer_target_used_
+  int64_t local_target_used_;    // follower perspective data: locally recorded resource consumption quantity, this amount may include part that has not yet been reported to leader
+  int64_t report_target_used_;   // follower perspective data: the number already reported to leader, so that leader can have an as accurate as possible global view after aggregation
+  // Note: The source of the resource consumption recorded locally (local_target_used_) is unrelated to any content applied for in ObPxSubAdmission, and is only changed by the following process:
+  //  - Query through ObPxAdmission apply, release
+};
 
 class ObPxTargetCond
 {
@@ -76,6 +109,7 @@ private:
 
 class ObPxTenantTargetMonitor
 {
+#define PX_SERVER_TARGET_BUCKET_NUM (hash::cal_next_prime(100))
 public:
   ObPxTenantTargetMonitor() : spin_lock_(common::ObLatchIds::PX_TENANT_TARGET_LOCK) { reset(); }
   virtual ~ObPxTenantTargetMonitor() {}
@@ -87,11 +121,12 @@ public:
   int64_t get_parallel_servers_target();
   int64_t get_parallel_session_count();
 
+  // for rpc
+  int refresh_statistics(bool need_refresh_all);
   bool is_leader();
   uint64_t get_version();
   int update_peer_target_used(const ObAddr &server, int64_t peer_used, uint64_t version);
-  int64_t get_px_target_used() const { return px_target_used_; }
-  int reset_follower_statistics(uint64_t version);
+  int get_global_target_usage(const hash::ObHashMap<ObAddr, ServerTargetUsage> *&global_target_usage);
   int reset_leader_statistics();
 
   // for px_admission
@@ -104,7 +139,7 @@ public:
   int get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array);
   static uint64_t get_server_index(uint64_t version);
 
-  TO_STRING_KV(K_(is_init), K_(tenant_id), K_(server), K_(role), K_(px_target_used));
+  TO_STRING_KV(K_(is_init), K_(tenant_id), K_(server), K_(role));
 
 private:
   uint64_t get_new_version();
@@ -117,14 +152,11 @@ private:
   ObRole role_;
   int64_t parallel_servers_target_;
   uint64_t version_;
-  int64_t px_target_used_;
-  // Protects px_target_used_ and version_ from concurrent apply/release/reset.
-  // apply_target and release_target serialize on this lock since both read-modify-write
-  // the single px_target_used_ counter (unlike the old hash map where per-server entries
-  // allowed concurrent updates).
+  hash::ObHashMap<ObAddr, ServerTargetUsage> global_target_usage_;
   SpinRWLock spin_lock_;
   int64_t parallel_session_count_;
   ObPxTargetCond target_cond_;
+  bool print_debug_log_;
 };
 
 }
