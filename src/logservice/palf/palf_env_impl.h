@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_MGR_
 #include <sys/types.h>
 #include "common/ob_member_list.h"
-
+#include "lib/hash/ob_link_hashmap.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/ob_define.h"
@@ -77,6 +77,19 @@ public:
   static void free(IPalfHandleImpl *palf_handle_impl);
 };
 
+class PalfHandleImplAlloc
+{
+public:
+  typedef common::LinkHashNode<LSKey> Node;
+
+  static PalfHandleImpl *alloc_value();
+
+  static void free_value(IPalfHandleImpl *palf_handle_impl);
+
+  static Node *alloc_node(IPalfHandleImpl *palf_handle_impl);
+
+  static void free_node(Node *node);
+};
 
 class PalfDiskOptionsWrapper {
 public:
@@ -171,6 +184,7 @@ private:
   mutable ObSpinLock disk_opts_lock_;
 };
 
+typedef common::ObLinkHashMap<LSKey, IPalfHandleImpl, PalfHandleImplAlloc> PalfHandleImplMap;
 
 class IPalfHandleImplGuard;
 class IPalfEnvImpl
@@ -357,7 +371,7 @@ private:
   char tmp_log_dir_[common::MAX_PATH_SIZE];
   common::ObAddr self_;
 
-  IPalfHandleImpl *single_palf_handle_;
+  PalfHandleImplMap palf_handle_impl_map_;
   LogLoopThread log_loop_thread_;
 
   // last_palf_epoch_ is used to assign increasing epoch for each palf instance.

@@ -42,6 +42,28 @@ void PalfHandleImplFactory::free(IPalfHandleImpl *palf_handle_impl)
   MTL_DELETE(IPalfHandleImpl, "palf_env", palf_handle_impl);
 }
 
+PalfHandleImpl *PalfHandleImplAlloc::alloc_value()
+{
+  return NULL;
+}
+
+void PalfHandleImplAlloc::free_value(IPalfHandleImpl *palf_handle_impl)
+{
+  PalfHandleImplFactory::free(palf_handle_impl);
+  palf_handle_impl = NULL;
+}
+
+PalfHandleImplAlloc::Node *PalfHandleImplAlloc::alloc_node(IPalfHandleImpl *palf_handle_impl)
+{
+  UNUSED(palf_handle_impl);
+  return op_reclaim_alloc(Node);
+}
+
+void PalfHandleImplAlloc::free_node(PalfHandleImplAlloc::Node *node)
+{
+  op_reclaim_free(node);
+  node = NULL;
+}
 
 int PalfDiskOptionsWrapper::init(const PalfDiskOptions &disk_opts)
 {
@@ -163,7 +185,7 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              disk_not_enough_print_interval_in_gc_thread_(OB_INVALID_TIMESTAMP),
                              disk_not_enough_print_interval_in_loop_thread_(OB_INVALID_TIMESTAMP),
                              self_(),
-                             single_palf_handle_(nullptr),
+                             palf_handle_impl_map_(64),  // specify min_size=64
                              last_palf_epoch_(0),
                              rebuild_replica_log_lag_threshold_(0),
                              enable_log_cache_(false),
@@ -235,6 +257,8 @@ int PalfEnvImpl::init(
   } else if (pret < 0 || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(ERROR, "construct log path failed", K(ret), K(pret));
+  } else if (OB_FAIL(palf_handle_impl_map_.init("LOG_HASH_MAP", tenant_id))) {
+    PALF_LOG(ERROR, "palf_handle_impl_map_ init failed", K(ret));
   } else if (OB_FAIL(log_loop_thread_.init(this))) {
     PALF_LOG(ERROR, "log_loop_thread_ init failed", K(ret));
   } else if (OB_FAIL(disk_options_wrapper_.init(options.disk_options_))) {
@@ -322,6 +346,7 @@ void PalfEnvImpl::destroy()
   PALF_LOG_RET(WARN, OB_SUCCESS, "PalfEnvImpl destroy", KPC(this));
   is_running_ = false;
   is_inited_ = false;
+  palf_handle_impl_map_.destroy();
   log_io_worker_wrapper_.destroy();
   log_shared_queue_th_.destroy();
   cb_thread_pool_.destroy();
@@ -374,6 +399,7 @@ int PalfEnvImpl::create_palf_handle_impl_(const int64_t palf_id,
   int pret = 0;
   char base_dir[MAX_PATH_SIZE] = {'\0'};
   PalfHandleImpl *palf_handle_impl = NULL;
+  LSKey hash_map_key(palf_id);
   const int64_t palf_epoch = ATOMIC_AAF(&last_palf_epoch_, 1);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -384,7 +410,7 @@ int PalfEnvImpl::create_palf_handle_impl_(const int64_t palf_id,
   } else if (false == is_valid_palf_id(palf_id)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid arguments", K(ret), K(palf_id));
-  } else if (NULL != single_palf_handle_) {
+  } else if (OB_ENTRY_EXIST == palf_handle_impl_map_.contains_key(hash_map_key)) {
     ret = OB_ENTRY_EXIST;
     PALF_LOG(WARN, "palf_handle has exist, ignore this request", K(ret), K(palf_id));
   } else if (false == check_can_create_palf_handle_impl_()) {
@@ -404,17 +430,21 @@ int PalfEnvImpl::create_palf_handle_impl_(const int64_t palf_id,
       log_io_worker_wrapper_.get_log_io_worker(palf_id), &log_shared_queue_th_, this,
       self_, palf_epoch, &io_adapter_))) {
     PALF_LOG(ERROR, "IPalfHandleImpl init failed", K(ret), K(palf_id));
+    // NB: always insert value into hash map finally.
+  } else if (OB_FAIL(palf_handle_impl_map_.insert_and_get(hash_map_key, palf_handle_impl))) {
+    PALF_LOG(WARN, "palf_handle_impl_map_ insert_and_get failed", K(ret), K(palf_id));
   } else {
-    single_palf_handle_ = palf_handle_impl;
     (void) palf_handle_impl->set_monitor_cb(monitor_);
     palf_handle_impl->set_scan_disk_log_finished();
     ipalf_handle_impl = palf_handle_impl;
   }
 
   if (OB_FAIL(ret) && NULL != palf_handle_impl) {
+    // if 'palf_handle_impl' has not been inserted into hash map,
+    // need reclaim manually.
     PalfHandleImplFactory::free(palf_handle_impl);
     palf_handle_impl = NULL;
-    if (NULL == single_palf_handle_) {
+    if (OB_ENTRY_NOT_EXIST == palf_handle_impl_map_.contains_key(hash_map_key)) {
       remove_directory_while_exist_(base_dir);
     }
   }
@@ -434,9 +464,9 @@ int PalfEnvImpl::remove_palf_handle_impl(const int64_t palf_id)
     PALF_LOG(ERROR, "PalfEnvImpl is not inited", K(ret));
   } else if (OB_FAIL(remove_palf_handle_impl_from_map_not_guarded_by_lock_(palf_id))) {
     PALF_LOG(WARN, "palf instance not exist", K(ret), KPC(this), K(palf_id));
+  } else if (OB_FAIL(wait_until_reference_count_to_zero_(palf_id))) {
+    PALF_LOG(WARN, "wait_until_reference_count_to_zero_ failed", K(ret), KPC(this), K(palf_id));
   } else {
-    // sys ls is never removed during normal operation, but handle
-    // error/shutdown paths where the handle has been marked for removal.
   }
   if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
@@ -465,22 +495,30 @@ int PalfEnvImpl::get_palf_handle_impl(const int64_t palf_id,
                                       IPalfHandleImpl *&ipalf_handle_impl)
 {
   int ret = OB_SUCCESS;
+  LSKey hash_map_key(palf_id);
+  IPalfHandleImpl *palf_handle_impl = NULL;
   if (false == is_valid_palf_id(palf_id)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(palf_id));
-  } else if (OB_ISNULL(single_palf_handle_)
-             || false == single_palf_handle_->check_can_be_used()) {
+  } else if (OB_FAIL(palf_handle_impl_map_.get(hash_map_key, palf_handle_impl))) {
+    PALF_LOG(TRACE, "get from map failed", K(ret), K(palf_id), K(palf_handle_impl));
+  } else if (false == palf_handle_impl->check_can_be_used()) {
     ret = OB_ENTRY_NOT_EXIST;
   } else {
-    ipalf_handle_impl = single_palf_handle_;
+    ipalf_handle_impl = palf_handle_impl;
+  }
+
+  if (OB_FAIL(ret) && NULL != palf_handle_impl) {
+    revert_palf_handle_impl(palf_handle_impl);
   }
   return ret;
 }
 
 void PalfEnvImpl::revert_palf_handle_impl(IPalfHandleImpl *ipalf_handle_impl)
 {
-  // handle is never freed during operation (sys ls lifetime == process lifetime)
-  UNUSED(ipalf_handle_impl);
+  if (NULL != ipalf_handle_impl) {
+    palf_handle_impl_map_.revert(ipalf_handle_impl);
+  }
 }
 
 int PalfEnvImpl::scan_all_palf_handle_impl_director_()
@@ -820,32 +858,51 @@ int PalfEnvImpl::get_options(PalfOptions &options)
 
 int PalfEnvImpl::for_each(const common::ObFunction<int (IPalfHandleImpl *)> &func)
 {
+  auto func_impl = [&func](const LSKey &ls_key, IPalfHandleImpl *ipalf_handle_impl) -> bool {
+    bool bool_ret = true;
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(func(ipalf_handle_impl))) {
+      PALF_LOG(WARN, "execute func failed", K(ret), K(ls_key));
+    }
+    if (OB_FAIL(ret)) {
+     bool_ret = false;
+    }
+    return bool_ret;
+  };
   int ret = OB_SUCCESS;
   if (!func.is_valid()) {
+    // ObFunction will be invalid when allocating memory failed.
     ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(palf_handle_impl_map_.for_each(func_impl))) {
+    PALF_LOG(WARN, "iterate palf_handle_impl_map_ failed", K(ret));
   } else {
-    IPalfHandleImpl *handle = nullptr;
-    if (OB_SUCCESS == get_palf_handle_impl(SYS_PALF_ID, handle)) {
-      func(handle);
-      revert_palf_handle_impl(handle);
-    }
   }
   return ret;
 }
 
 int PalfEnvImpl::for_each(const common::ObFunction<int (const PalfHandle &)> &func)
 {
+  auto func_impl = [&func](const LSKey &ls_key, IPalfHandleImpl *ipalf_handle_impl) -> bool {
+    bool bool_ret = true;
+    int ret = OB_SUCCESS;
+    PalfHandle palf_handle;
+    palf_handle.palf_handle_impl_ = ipalf_handle_impl;
+    if (OB_FAIL(func(palf_handle))) {
+      PALF_LOG(WARN, "execute func failed", K(ret), K(ls_key));
+    } else {
+    }
+    if (OB_FAIL(ret)) {
+     bool_ret = false;
+    }
+    return bool_ret;
+  };
   int ret = OB_SUCCESS;
   if (!func.is_valid()) {
+    // ObFunction will be invalid when allocating memory failed.
     ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(palf_handle_impl_map_.for_each(func_impl))) {
+    PALF_LOG(WARN, "iterate palf_handle_impl_map_ failed", K(ret));
   } else {
-    IPalfHandleImpl *handle = nullptr;
-    if (OB_SUCCESS == get_palf_handle_impl(SYS_PALF_ID, handle)) {
-      PalfHandle palf_handle;
-      palf_handle.palf_handle_impl_ = handle;
-      func(palf_handle);
-      revert_palf_handle_impl(handle);
-    }
   }
   return ret;
 }
@@ -908,6 +965,7 @@ int PalfEnvImpl::reload_palf_handle_impl_(const int64_t palf_id)
   PalfHandleImpl *tmp_palf_handle_impl;
   char base_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   int64_t start_ts = ObTimeUtility::current_time();
+  LSKey hash_map_key(palf_id);
   bool is_integrity = true;
   const int64_t palf_epoch = ATOMIC_AAF(&last_palf_epoch_, 1);
   if (0 > (pret = snprintf(base_dir, MAX_PATH_SIZE, "%s/%ld", log_dir_, palf_id))) {
@@ -920,17 +978,22 @@ int PalfEnvImpl::reload_palf_handle_impl_(const int64_t palf_id)
           log_block_pool_, &log_rpc_, log_io_worker_wrapper_.get_log_io_worker(palf_id), &log_shared_queue_th_,
           this, self_, palf_epoch, &io_adapter_, is_integrity))) {
     PALF_LOG(ERROR, "PalfHandleImpl init failed", K(ret), K(palf_id));
+  } else if (OB_FAIL(palf_handle_impl_map_.insert_and_get(hash_map_key, tmp_palf_handle_impl))) {
+    PALF_LOG(WARN, "palf_handle_impl_map_ insert_and_get failed", K(ret), K(palf_id), K(tmp_palf_handle_impl));
   } else {
-    single_palf_handle_ = tmp_palf_handle_impl;
     (void) tmp_palf_handle_impl->set_monitor_cb(monitor_);
     (void) tmp_palf_handle_impl->set_scan_disk_log_finished();
+    palf_handle_impl_map_.revert(tmp_palf_handle_impl);
     int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-    PALF_LOG(INFO, "reload_palf_handle_impl success", K(ret), K(palf_id), K(cost_ts), KP(this));
+    PALF_LOG(INFO, "reload_palf_handle_impl success", K(ret), K(palf_id), K(cost_ts), KP(this),
+        KP(&palf_handle_impl_map_));
   }
 
   if (OB_FAIL(ret) && NULL != tmp_palf_handle_impl) {
+    // if 'tmp_palf_handle_impl' has not been inserted into hash map,
+    // need reclaim manually.
     PALF_LOG(ERROR, "reload_palf_handle_impl_ failed, need free tmp_palf_handle_impl", K(ret), K(tmp_palf_handle_impl));
-    if (NULL == single_palf_handle_) {
+    if (OB_ENTRY_NOT_EXIST == palf_handle_impl_map_.contains_key(hash_map_key)) {
       PalfHandleImplFactory::free(tmp_palf_handle_impl);
       tmp_palf_handle_impl = NULL;
     }
@@ -947,18 +1010,15 @@ int PalfEnvImpl::get_total_used_disk_space_(int64_t &total_used_disk_space,
                                             int64_t &maximum_used_size)
 {
   int ret = OB_SUCCESS;
-  if (NULL == single_palf_handle_) {
-    // GC timer starts before LS is created, handle not ready yet
-    total_used_disk_space = 0;
-    total_unrecyclable_disk_space = 0;
-    palf_id = INVALID_PALF_ID;
-    maximum_used_size = 0;
-  } else if (OB_FAIL(single_palf_handle_->get_total_used_disk_space(
+  IPalfHandleImplGuard guard;
+  if (OB_FAIL(get_palf_handle_impl(ObLSID::SYS_LS_ID, guard))) {
+    PALF_LOG(WARN, "get_palf_handle_impl failed", K(ret));
+  } else if (OB_FAIL(guard.get_palf_handle_impl()->get_total_used_disk_space(
                  total_used_disk_space, total_unrecyclable_disk_space))) {
     PALF_LOG(WARN, "get_total_used_disk_space failed", K(ret));
   } else {
     maximum_used_size = total_used_disk_space;
-    palf_id = SYS_PALF_ID;
+    palf_id = ObLSID::SYS_LS_ID;
   }
   return ret;
 }
@@ -991,10 +1051,11 @@ int PalfEnvImpl::recycle_blocks_(bool &has_recycled)
 {
   int ret = OB_SUCCESS;
   has_recycled = false;
-  if (NULL == single_palf_handle_) {
-    // GC timer starts before LS is created, handle not ready yet
+  IPalfHandleImplGuard guard;
+  if (OB_FAIL(get_palf_handle_impl(ObLSID::SYS_LS_ID, guard))) {
+    PALF_LOG(WARN, "get_palf_handle_impl failed", K(ret));
   } else {
-    const LSN base_lsn = single_palf_handle_->get_base_lsn_used_for_block_gc();
+    const LSN base_lsn = guard.get_palf_handle_impl()->get_base_lsn_used_for_block_gc();
     const block_id_t min_using_block_id = lsn_2_block(base_lsn, PALF_BLOCK_SIZE);
     block_id_t min_block_id = LOG_INVALID_BLOCK_ID;
     auto need_skip_by_ret = [](const int ret) {
@@ -1003,7 +1064,7 @@ int PalfEnvImpl::recycle_blocks_(bool &has_recycled)
     };
     if (false == base_lsn.is_valid()) {
       PALF_LOG(WARN, "base_lsn is invalid", K(base_lsn));
-    } else if (OB_FAIL(single_palf_handle_->get_min_block_id_for_gc(min_block_id))
+    } else if (OB_FAIL(guard.get_palf_handle_impl()->get_min_block_id_for_gc(min_block_id))
                && !need_skip_by_ret(ret)) {
       PALF_LOG(WARN, "get_min_block_id_for_gc failed", K(ret));
     } else if (need_skip_by_ret(ret)
@@ -1011,7 +1072,7 @@ int PalfEnvImpl::recycle_blocks_(bool &has_recycled)
                || min_using_block_id - min_block_id < 2) {
       PALF_LOG(TRACE, "can not recycle blocks, need keep at least two blocks",
                K(ret), K(min_block_id), K(min_using_block_id));
-    } else if (OB_FAIL(single_palf_handle_->delete_block(min_block_id))) {
+    } else if (OB_FAIL(guard.get_palf_handle_impl()->delete_block(min_block_id))) {
       PALF_LOG(WARN, "delete_block failed", K(ret), K(min_block_id));
     } else {
       has_recycled = true;
@@ -1023,15 +1084,40 @@ int PalfEnvImpl::recycle_blocks_(bool &has_recycled)
 
 int PalfEnvImpl::wait_until_reference_count_to_zero_(const int64_t palf_id)
 {
-  // sys ls handle is never freed during operation, no ref counting needed.
-  UNUSED(palf_id);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  int pret = 0;
+  char base_dir[MAX_PATH_SIZE] = {'\0'};
+  char tmp_base_dir[MAX_PATH_SIZE] = {'\0'};
+  if (false == is_valid_palf_id(palf_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    PALF_LOG(ERROR, "invalid arguments", K(ret), K(palf_id));
+  } else if (0 > (pret = snprintf(base_dir, MAX_PATH_SIZE, "%s/%ld", log_dir_, palf_id))) {
+    ret = OB_ERR_UNEXPECTED;
+    PALF_LOG(ERROR, "snprinf failed", K(ret), K(pret), K(palf_id));
+  } else if (0 > (pret = snprintf(tmp_base_dir, MAX_PATH_SIZE, "%s/%ld%s", log_dir_, palf_id, TMP_SUFFIX))) {
+    ret = OB_ERR_UNEXPECTED;
+    PALF_LOG(ERROR, "snprinf failed", K(ret), K(pret), K(palf_id));
+  } else {
+    bool normal_dir_exist = true;
+    bool tmp_dir_exist = true;
+    while (OB_SUCC(FileDirectoryUtils::is_exists(base_dir, normal_dir_exist))
+           && OB_SUCC(FileDirectoryUtils::is_exists(tmp_base_dir, tmp_dir_exist))) {
+      if (!normal_dir_exist && !tmp_dir_exist) {
+        break;
+      }
+      PALF_LOG(INFO, "wait_until_reference_count_to_zero_ failed, may be reference count has leaked", K(palf_id),
+          K(normal_dir_exist), K(tmp_dir_exist), K(base_dir), K(tmp_base_dir));
+      ob_usleep(1000);
+    }
+  }
+  return ret;
 }
 
 bool PalfEnvImpl::check_can_create_palf_handle_impl_() const
 {
   bool bool_ret = true;
-  const int64_t count = (NULL != single_palf_handle_) ? 1 : 0;
+  int64_t count = palf_handle_impl_map_.count();
+  // NB: avoid concurrent with expand and shrink, need guard by palf_meta_lock_.
   const PalfDiskOptions disk_opts = disk_options_wrapper_.get_disk_opts_for_recycling_blocks();
   bool_ret = (count + 1) * MIN_DISK_SIZE_PER_PALF_INSTANCE <= disk_opts.log_disk_usage_limit_size_;
   return bool_ret;
@@ -1040,14 +1126,16 @@ bool PalfEnvImpl::check_can_create_palf_handle_impl_() const
 int PalfEnvImpl::remove_palf_handle_impl_from_map_not_guarded_by_lock_(const int64_t palf_id)
 {
   int ret = OB_SUCCESS;
-  if (false == is_valid_palf_id(palf_id) || palf_id != SYS_PALF_ID) {
-    ret = OB_ENTRY_NOT_EXIST;
-  } else if (NULL == single_palf_handle_) {
-    ret = OB_ENTRY_NOT_EXIST;
+  LSKey hash_map_key(palf_id);
+  auto set_delete_func = [](const LSKey &key, IPalfHandleImpl *value) {
+    UNUSED(key);
+    value->set_deleted();
+  };
+  if (OB_FAIL(palf_handle_impl_map_.operate(hash_map_key, set_delete_func))) {
+    PALF_LOG(WARN, "operate palf_handle_impl_map_ failed", K(ret), K(palf_id), KPC(this));
+  } else if (OB_FAIL(palf_handle_impl_map_.del(hash_map_key))) {
+    PALF_LOG(WARN, "palf_handle_impl_map_ del failed", K(ret), K(palf_id));
   } else {
-    single_palf_handle_->set_deleted();
-    PalfHandleImplFactory::free(single_palf_handle_);
-    single_palf_handle_ = nullptr;
     PALF_LOG(INFO, "remove_palf_handle_impl success", K(ret), K(palf_id));
   }
   return ret;
@@ -1061,13 +1149,12 @@ int PalfEnvImpl::move_incomplete_palf_into_tmp_dir_(const int64_t palf_id)
   char src_log_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   char dest_log_dir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   bool tmp_dir_exist = false;
+  LSKey hash_map_key(palf_id);
   int64_t timestamp = ObTimeUtility::current_time();
-  IPalfHandleImpl *old_handle = single_palf_handle_;
-  single_palf_handle_ = nullptr;
-  if (NULL != old_handle) {
-    PalfHandleImplFactory::free(old_handle);
-  }
-  if (OB_FAIL(check_tmp_log_dir_exist_(tmp_dir_exist))) {
+  if (OB_FAIL(palf_handle_impl_map_.del(hash_map_key))) {
+    PALF_LOG(WARN, "del palf from map failed, unexpected", K(ret),
+        K(palf_id), KPC(this));;
+  } else if (OB_FAIL(check_tmp_log_dir_exist_(tmp_dir_exist))) {
     PALF_LOG(WARN, "check_tmp_log_dir_exist_ failed", K(ret), KPC(this), K(tmp_log_dir_));
 #ifdef _WIN32
   } else if (false == tmp_dir_exist && (-1 == ::_mkdir(tmp_log_dir_))) {
@@ -1242,7 +1329,7 @@ int PalfEnvImpl::init_log_io_worker_config_(const int log_writer_parallelism,
 int PalfEnvImpl::check_can_update_log_disk_options_(const PalfDiskOptions &disk_opts)
 {
   int ret = OB_SUCCESS;
-  const int64_t curr_palf_instance_num = (NULL != single_palf_handle_) ? 1 : 0;
+  const int64_t curr_palf_instance_num = palf_handle_impl_map_.count();
   const int64_t curr_min_log_disk_size = curr_palf_instance_num * MIN_DISK_SIZE_PER_PALF_INSTANCE;
   if (disk_opts.log_disk_usage_limit_size_ < curr_min_log_disk_size) {
     ret = OB_NOT_SUPPORTED;
