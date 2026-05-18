@@ -1189,6 +1189,22 @@ void ObPluginVectorIndexAdaptor::update_index_id_read_scn()
   }
 }
 
+int ObPluginVectorIndexAdaptor::init_vbitmap_scn_after_snapshot_build(const share::SCN &snapshot_scn)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(vbitmap_data_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("vbitmap data is null when init vbitmap scn", K(ret), K(snapshot_scn), KP(this));
+  } else if (!snapshot_scn.is_valid_and_not_min()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid snapshot scn when init vbitmap scn", K(ret), K(snapshot_scn), KP(this));
+  } else {
+    TCWLockGuard lock_guard(vbitmap_data_->mem_data_rwlock_);
+    vbitmap_data_->scn_ = snapshot_scn;
+  }
+  return ret;
+}
+
 
 
 bool ObPluginVectorIndexAdaptor::is_pruned_read_index_id()
@@ -2122,6 +2138,36 @@ int ObPluginVectorIndexAdaptor::copy_meta_info(ObPluginVectorIndexAdaptor &other
   return ret;
 }
 
+int ObPluginVectorIndexAdaptor::inherit_index_id_watermarks_from(ObPluginVectorIndexAdaptor &other)
+{
+  int ret = OB_SUCCESS;
+  ObVectorIndexMemData *old_incr_data = other.get_incr_data();
+  SCN old_last_dml_scn;
+  SCN old_last_read_scn;
+
+  if (OB_ISNULL(old_incr_data) || OB_ISNULL(incr_data_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid adapter memdata when inheriting index id watermarks",
+             K(ret), KP(this), KP(&other), KP(incr_data_), KP(old_incr_data));
+  } else {
+    {
+      TCRLockGuard old_incr_lock_guard(old_incr_data->mem_data_rwlock_);
+      old_last_dml_scn = old_incr_data->last_dml_scn_;
+      old_last_read_scn = old_incr_data->last_read_scn_;
+    }
+    {
+      TCWLockGuard new_incr_lock_guard(incr_data_->mem_data_rwlock_);
+      if (old_last_dml_scn.is_valid() && old_last_dml_scn > incr_data_->last_dml_scn_) {
+        incr_data_->last_dml_scn_.inc_update(old_last_dml_scn);
+      }
+      if (old_last_read_scn.is_valid() && old_last_read_scn > incr_data_->last_read_scn_) {
+        incr_data_->last_read_scn_.atomic_set(old_last_read_scn);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObPluginVectorIndexAdaptor::check_snap_hnswsq_index()
 {
   INIT_SUCC(ret);
@@ -3004,6 +3050,13 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
   }
 
   if (OB_SUCC(ret)) {
+    // Per-call short-lived arena for scan resources (table_param, scan_param,
+    // scan iterator internals). Avoids page fragmentation on the adapter's
+    // long-lived ObFIFOAllocator (tagged VecIdxSrv) under high-frequency
+    // async query path. Must outlive revert_scan_iter() below; declared at the
+    // very top of this scope so it covers the iterator lifecycle.
+    // Declared before the malloc hook guard so its chunks keep their own tag.
+    ObArenaAllocator tmp_allocator("VecIdxQryScan", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id_);
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(tenant_id_, "VIBitmapADPK"));
     const SCN last_dml_scn = OB_NOT_NULL(incr_data_) ? incr_data_->last_dml_scn_ : SCN();
     // 1. Read lock and copy out vbitmap_data_ (scn + bitmap) first, use copy for all subsequent ops
@@ -3023,7 +3076,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       FLOG_INFO("check_scan", K(can_skip_scan_4th_table), K(base_scn), K(last_dml_scn), K(base_scn>=last_dml_scn));
     }
 
-    if (OB_SUCC(ret) && can_skip_scan_4th_table && !REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
+    if (OB_SUCC(ret) && can_skip_scan_4th_table) {
       roaring::api::roaring64_bitmap_free(ctx->bitmaps_->insert_bitmap_);
       roaring::api::roaring64_bitmap_free(ctx->bitmaps_->delete_bitmap_);
       ctx->bitmaps_->insert_bitmap_ = ibitmap;
@@ -3032,14 +3085,14 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
       dbitmap = nullptr;
     } else if (OB_NOT_NULL(ibitmap) && OB_NOT_NULL(dbitmap)) {
       storage::ObTableScanParam scan_param;
-      schema::ObTableParam table_param(*allocator_);
+      schema::ObTableParam table_param(tmp_allocator);
       // Read index_id_table using copied base_scn (thread-safe)
       if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id,
                                                               this,
                                                               query_scn,
                                                               INDEX_TYPE_VEC_INDEX_ID_LOCAL,
-                                                              *allocator_,
-                                                              *allocator_,
+                                                              tmp_allocator,
+                                                              tmp_allocator,
                                                               scan_param,
                                                               table_param,
                                                               incr_iter,

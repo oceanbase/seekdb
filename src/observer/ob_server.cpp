@@ -18,6 +18,10 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/file.h>
+#else
+#include <windows.h>
 #endif
 #include "observer/ob_server.h"
 #include "lib/alloc/memory_dump.h"
@@ -29,7 +33,9 @@
 #include "observer/ob_rpc_extra_payload.h"
 #include "observer/ob_server_options.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
+#ifndef OB_BUILD_EMBED_MODE
 #include "observer/table/ob_table_rpc_processor.h"
+#endif
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "share/object_storage/ob_device_connectivity.h"
 #include "share/ob_bg_thread_monitor.h"
@@ -205,6 +211,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   int ret = OB_SUCCESS;
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
+  embedded_ = opts.embedded_;
 
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
@@ -266,8 +273,10 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init retry ctrl failed", KR(ret));
     } else if (OB_FAIL(ObMdsEventBuffer::init())) {
       LOG_WARN("init MDS event buffer failed", KR(ret));
+#ifndef OB_BUILD_EMBED_MODE
     } else if (OB_FAIL(ObTableApiProcessorBase::init_session())) {
       LOG_ERROR("init static session failed", KR(ret));
+#endif
     } else if (OB_FAIL(init_loaddata_global_stat())) {
       LOG_ERROR("init global load data stat map failed", KR(ret));
     } else if (OB_FAIL(init_pre_setting())) {
@@ -398,9 +407,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     if (OB_FAIL(init_tx_data_cache())) {
       LOG_ERROR("init tx data cache failed", KR(ret));
     } else if (!GCTX.is_shared_storage_mode() &&
-               OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1))) {
+               OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
       LOG_ERROR("init tmp block cache failed", KR(ret));
-    } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache", 1))) {
+    } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
       LOG_ERROR("init tmp page cache failed", KR(ret));
     } else if (OB_FAIL(init_log_kv_cache())) {
       LOG_ERROR("init log kv cache failed", KR(ret));
@@ -846,12 +855,7 @@ int ObServer::start(bool embed_mode)
     } else {
       FLOG_INFO("success to start ts mgr");
     }
-    if (embed_mode) {
-    } else if (FAILEDx(net_frame_.start())) {
-      LOG_ERROR("fail to start net frame", KR(ret));
-    } else {
-      FLOG_INFO("success to start net frame");
-    }
+
 
     // Services are registered once; start() is triggered by reload_config().
     grpc_server_.register_service(&storage_grpc_service_impl_);
@@ -1069,6 +1073,13 @@ int ObServer::start(bool embed_mode)
             "refresh_schema_cost_us", schema_refreshed_ts - start_ts,
             "replay_log_cost_us", ObTimeUtility::current_time() - schema_refreshed_ts);
       }
+    }
+
+    if (embed_mode) {
+    } else if (FAILEDx(net_frame_.start())) {
+      LOG_ERROR("fail to start net frame", KR(ret));
+    } else {
+      FLOG_INFO("success to start net frame");
     }
 
   int64_t start_service_time = ObTimeUtility::current_time();
@@ -1483,6 +1494,59 @@ int ObServer::stop()
   return ret;
 }
 
+int ObServer::wait_client_exit()
+{
+  int ret = OB_SUCCESS;
+  if (embedded_) {
+#ifdef _WIN32
+    HANDLE clients_h = CreateFileA(
+        "run\\seekdb.clients",
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+    if (clients_h == INVALID_HANDLE_VALUE) {
+      ret = OB_ERROR;
+      stop_ = true;
+      LOG_ERROR("failed to open seekdb.clients", "last_error", (int)GetLastError());
+    } else {
+      for (;;) {
+        ::Sleep(5000);
+        OVERLAPPED ov = {};
+        if (LockFileEx(clients_h,
+                       LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                       0, MAXDWORD, MAXDWORD, &ov)) {
+          FLOG_INFO("no clients remaining, shutting down");
+          break;
+        }
+      }
+      CloseHandle(clients_h);
+      stop_ = true;
+    }
+#else
+    int clients_fd = ::open("./run/seekdb.clients", O_CREAT | O_RDWR, 0644);
+    if (clients_fd < 0) {
+      ret = OB_ERROR;
+      stop_ = true;
+      LOG_ERROR("failed to open seekdb.clients", K(errno));
+    } else {
+      for (;;) {
+        ::sleep(5);
+        if (flock(clients_fd, LOCK_EX | LOCK_NB) == 0) {
+          FLOG_INFO("no clients remaining, shutting down");
+          break;
+        }
+      }
+      ::close(clients_fd);
+      stop_ = true;
+    }
+#endif
+  }
+  return ret;
+}
+
 int ObServer::wait()
 {
   int ret = OB_SUCCESS;
@@ -1491,8 +1555,10 @@ int ObServer::wait()
   LOG_DBA_INFO_V2(OB_SERVER_WAIT_BEGIN, "observer process wait begin.");
   // wait for stop flag
 
+  ret = wait_client_exit();
+
   FLOG_INFO("begin to wait observer setted to stop");
-  while (!stop_) {
+  while (OB_SUCC(ret) && !stop_) {
     common::ObBKGDSessInActiveGuard inactive_guard;
     SLEEP(3);
   }
@@ -2167,12 +2233,6 @@ int ObServer::init_io()
         storage_env_.clog_dir_ = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
 
         // cache
-        storage_env_.index_block_cache_priority_ = config_.index_block_cache_priority;
-        storage_env_.user_block_cache_priority_ = config_.user_block_cache_priority;
-        storage_env_.user_row_cache_priority_ = config_.user_row_cache_priority;
-        storage_env_.fuse_row_cache_priority_ = config_.fuse_row_cache_priority;
-        storage_env_.bf_cache_priority_ = config_.bf_cache_priority;
-        storage_env_.storage_meta_cache_priority_ = config_.storage_meta_cache_priority;
         storage_env_.bf_cache_miss_count_threshold_ = config_.bf_cache_miss_count_threshold;
 
         // policy
@@ -2728,13 +2788,7 @@ int ObServer::init_storage()
     storage_env_.ethernet_speed_ = ethernet_speed_;
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(OB_STORE_CACHE.init(storage_env_.index_block_cache_priority_,
-                                    storage_env_.user_block_cache_priority_,
-                                    storage_env_.user_row_cache_priority_,
-                                    storage_env_.fuse_row_cache_priority_,
-                                    storage_env_.bf_cache_priority_,
-                                    storage_env_.bf_cache_miss_count_threshold_,
-                                    storage_env_.storage_meta_cache_priority_))) {
+    if (OB_FAIL(OB_STORE_CACHE.init(storage_env_.bf_cache_miss_count_threshold_))) {
       LOG_WARN("Fail to init OB_STORE_CACHE, ", KR(ret), K(storage_env_.data_dir_));
     } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(
         GCTX.is_shared_storage_mode(), storage_env_.default_block_size_))) {
@@ -2757,7 +2811,7 @@ int ObServer::init_storage()
 int ObServer::init_tx_data_cache()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(OB_TX_DATA_KV_CACHE.init("tx_data_kv_cache", 2 /* cache priority */))) {
+  if (OB_FAIL(OB_TX_DATA_KV_CACHE.init("tx_data_kv_cache"))) {
     LOG_WARN("init OB_TX_DATA_KV_CACHE failed", KR(ret));
   }
   return ret;
@@ -2766,7 +2820,7 @@ int ObServer::init_tx_data_cache()
 int ObServer::init_log_kv_cache()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(OB_LOG_KV_CACHE.init(palf::OB_LOG_KV_CACHE_NAME, 1, palf::LOG_CACHE_MEMORY_LIMIT))) {
+  if (OB_FAIL(OB_LOG_KV_CACHE.init(palf::OB_LOG_KV_CACHE_NAME, palf::LOG_CACHE_MEMORY_LIMIT))) {
     LOG_WARN("init OB_LOG_KV_CACHE failed", KR(ret));
   }
   return ret;
@@ -2935,13 +2989,6 @@ int ObServer::reload_config()
 
   if (OB_FAIL(OB_STORE_CACHE.set_bf_cache_miss_count_threshold(GCONF.bf_cache_miss_count_threshold))) {
     LOG_WARN("set bf_cache_miss_count_threshold fail", KR(ret));
-  } else if (OB_FAIL(OB_STORE_CACHE.reset_priority(GCONF.index_block_cache_priority,
-                                                   GCONF.user_block_cache_priority,
-                                                   GCONF.user_row_cache_priority,
-                                                   GCONF.fuse_row_cache_priority,
-                                                   GCONF.bf_cache_priority,
-                                                   GCONF.storage_meta_cache_priority))) {
-    LOG_WARN("set cache priority fail, ", KR(ret));
   }
 
   // Start the gRPC server when enable_rpc_service is first set to True.

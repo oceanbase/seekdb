@@ -34,11 +34,11 @@
 #include "share/rc/ob_tenant_base.h"
 #include "share/rc/ob_context.h"
 #include "observer/omt/ob_th_worker.h"
-#include "observer/omt/ob_multi_level_queue.h"
 #include "ob_retry_queue.h"
 #include "lib/utility/ob_query_rate_limiter.h"
 #include "share/resource_manager/ob_cgroup_ctrl.h"
 #include "observer/omt/ob_tenant_meta.h"
+#include "lib/thread/ob_adaptive_worker_pool.h"
 #include "lib/lock/ob_tc_rwlock.h"      // TCRWLock
 
 struct lua_State;
@@ -112,7 +112,6 @@ public:
   RunFuncT func_;
 };
 
-
 class ObPxPools
 {
 public:
@@ -171,9 +170,6 @@ private:
   common::hash::ObHashMap<int64_t, ObPxPool *> pool_map_;
 };
 
-
-const int64_t MAX_REQUEST_LEVEL = MULTI_LEVEL_QUEUE_SIZE;
-
 struct ObSqlThrottleMetrics
 {
   int64_t priority_;
@@ -211,170 +207,22 @@ class ObThWorker;
 typedef common::ObDLinkNode<ObThWorker*> WorkerNode;
 typedef common::ObDList<WorkerNode> WorkerList;
 
-class MultiLevelReqCnt {
-public:
-  MultiLevelReqCnt()
-  {
-    for (int i = 0; i < MAX_REQUEST_LEVEL; i++) {
-      cnt_[i] = 0;
-    }
-  }
-  ~MultiLevelReqCnt() {}
-  void atomic_inc(const int32_t level);
-  int64_t to_string(char *buf, const int64_t buf_len) const
-  {
-    int64_t pos = 0;
-    for(int i = 0; i < MAX_REQUEST_LEVEL; i++) {
-      common::databuff_printf(buf, buf_len, pos, "cnt[%d]=%ld ", i, cnt_[i]);
-    }
-    return pos;
-  }
-private:
-  volatile uint64_t cnt_[MAX_REQUEST_LEVEL];
-};
-
-class ObResourceGroupNode : public common::SpHashNode
-{
-public:
-  ObResourceGroupNode(uint64_t group_id):
-    common::SpHashNode(calc_hash(group_id)),
-    group_id_(group_id)
-  {}
-  ~ObResourceGroupNode() {}
-  int64_t calc_hash(uint64_t group_id)
-  {
-    return (common::murmurhash(&group_id, sizeof(group_id), 0)) | 1;
-  }
-  int compare(ObResourceGroupNode* that) {
-    int ret = 0;
-    if (this->hash_ > that->hash_) {
-      ret = 1;
-    } else if (this->hash_ < that->hash_) {
-      ret = -1;
-    } else if (this->is_dummy()) {
-      ret = 0;
-    } else if (this->group_id_ > that->group_id_) {
-      ret = 1;
-    } else if (this->group_id_ < that->group_id_) {
-      ret = -1;
-    } else {
-      ret = 0;
-    }
-    return ret;
-  }
-  uint64_t get_group_id() const { return group_id_; }
-  void set_group_id(const uint64_t &group_id) { group_id_ = group_id; }
-protected:
-  uint64_t group_id_;
-};
-
-class ObResourceGroup : public ObResourceGroupNode // group container, storing thread pool and queue, each group_id corresponds to one{
-{
-  friend class ObTenant;
-  friend class GroupMap;
-public:
-  using WListNode = common::ObDLinkNode<lib::Worker*>;
-  using WList = common::ObDList<WListNode>;
-  static constexpr int64_t PRESERVE_INACTIVE_WORKER_TIME = 10 * 1000L * 1000L;
-
-  ObResourceGroup(uint64_t group_id, ObTenant* tenant, share::ObCgroupCtrl *cgroup_ctrl);
-  ~ObResourceGroup() {}
-
-  bool is_inited() const { return inited_; }
-  bool is_deleted() const { return deleted_; }
-  void set_deleted(bool deleted) { deleted_ = deleted; }
-  void atomic_inc_recv_cnt() { ATOMIC_INC(&recv_req_cnt_); }
-  uint64_t get_recv_req_cnt() const { return recv_req_cnt_; }
-  int64_t min_worker_cnt() const;
-  int64_t max_worker_cnt() const;
-  ObTenant *get_tenant() { return tenant_; }
-  share::ObCgroupCtrl *get_cgroup_ctrl() { return cgroup_ctrl_; }
-
-  int init();
-  void update_queue_size();
-  int acquire_more_worker(int64_t num, int64_t &succ_num, bool force = false);
-  int acquire_level_worker(int32_t level);
-  void check_worker_count();
-  void check_worker_count(ObThWorker &w);
-  int clear_worker();
-  int get_throttled_time(int64_t &throttled_time);
-  common::ObPriorityQueue2<0, 1> &get_req_queue() { return req_queue_; }
-  ObMultiLevelQueue* get_multi_level_queue() { return &multi_level_queue_; }
-  TO_STRING_KV("group_id", group_id_,
-               "queue_size", req_queue_.size(),
-               "recv_req_cnt", recv_req_cnt_,
-               "min_worker_cnt", min_worker_cnt(),
-               "max_worker_cnt", max_worker_cnt(),
-               K(multi_level_queue_),
-               "recv_level_rpc_cnt", recv_level_rpc_cnt_,
-               "worker_cnt", workers_.get_size(),
-               "nesting_worker_cnt", nesting_workers_.get_size(),
-               "token_change", token_change_ts_);
-
-private:
-  lib::ObMutex& workers_lock_;
-  WList workers_;
-  WList nesting_workers_;
-  common::ObPriorityQueue2<0, 1> req_queue_;
-  ObMultiLevelQueue multi_level_queue_;
-  bool inited_;                                  // Mark whether the container has threads and queues allocated
-  bool deleted_;
-  volatile uint64_t recv_req_cnt_ CACHE_ALIGNED; // Statistics requested to enqueue
-  volatile bool shrink_ CACHE_ALIGNED;
-  int64_t token_change_ts_;
-  MultiLevelReqCnt recv_level_rpc_cnt_;
-  int nesting_worker_cnt_;
-  ObTenant *tenant_;
-  share::ObCgroupCtrl *cgroup_ctrl_;
-  int64_t throttled_time_us_;
-};
-
-typedef common::FixedHash2<ObResourceGroupNode> GroupHash;
-class GroupMap : public GroupHash // Store all group containers of the current tenant
-{
-public:
-  GroupMap(void* buf, int64_t size):
-    GroupHash(buf, size)
-  {
-  }
-  ~GroupMap() {}
-	int create_and_insert_group(uint64_t group_id, ObTenant *tenant, share::ObCgroupCtrl *cgroup_ctrl, ObResourceGroup *&group);
-  void wait_group();
-  void destroy_group();
-  int64_t to_string(char *buf, const int64_t buf_len) const
-  {
-	  ObResourceGroupNode* iter = NULL;
-    ObResourceGroup* group = nullptr;
-    int64_t pos = 0;
-    while (NULL != (iter = const_cast<GroupMap*>(this)->GroupHash::quick_next(iter))) {
-      group = static_cast<ObResourceGroup*>(iter);
-      common::databuff_printf(buf, buf_len, pos, group);
-    }
-    return pos;
-  }
-  static int err_code_map(int err);
-};
-
 //================================= ObTenant ====================================//
 // Except for get_new_request wakeup_paused_worker recv_request, all
 // other functions aren't thread safe.
-class ObTenant : public share::ObTenantBase
+class ObTenant : public share::ObTenantBase,
+                 public lib::ObAdaptiveWorkerPool<ObTenant>
 {
   friend class observer::ObAllVirtualDumpTenantInfo;
-  friend class ObResourceGroup;
   friend int ::select_dump_tenant_info(lua_State*);
-  friend int create_worker(ObThWorker* &worker, ObTenant *tenant, uint64_t group_id,
-                           int32_t level, bool force, ObResourceGroup *group, int32_t group_index);
+  friend int create_worker(ObThWorker* &worker, ObTenant *tenant);
   friend int destroy_worker(ObThWorker *worker);
+  friend class ObThWorker;
   using WListNode = common::ObDLinkNode<lib::Worker*>;
   using WList = common::ObDList<WListNode>;
 
-  // How long to preserve inactive worker before free it to worker
-  // pool.
-  static constexpr int64_t PRESERVE_INACTIVE_WORKER_TIME = 10 * 1000L * 1000L;
-
 public:
-  enum { MAX_RESOURCE_GROUP = 8 };
+  static constexpr int64_t KEEP_ALIVE_TIMEOUT = 10 * 1000 * 1000L;  // 10s
 
   ObTenant(const int64_t id,
            const int64_t epoch,
@@ -385,9 +233,7 @@ public:
   ObTenant(const ObTenant &) = delete;
   ObTenant &operator=(const ObTenant &) = delete;
 
-
   int init_ctx();
-  int init_multi_level_queue();
   int init(const ObTenantMeta &meta);
   void stop() { ATOMIC_STORE(&stopped_, ObTimeUtility::current_time()); }
   void start() { ATOMIC_STORE(&stopped_, 0); }
@@ -412,7 +258,6 @@ public:
 
   void set_unit_max_cpu(double cpu);
   void set_unit_min_cpu(double cpu);
-  OB_INLINE int64_t total_worker_cnt() const { return total_worker_cnt_; }
   int64_t cpu_quota_concurrency() const;
   int64_t min_worker_cnt() const;
   int64_t max_worker_cnt() const;
@@ -434,10 +279,8 @@ public:
 
   // receive request from network
   int recv_request(rpc::ObRequest &req);
-  int recv_large_request(rpc::ObRequest &req);
   int push_retry_queue(rpc::ObRequest &req, const uint64_t idx);
   void handle_retry_req(bool need_clear = false);
-  void check_worker_count(ObThWorker &w);
   void update_queue_size();
 
   int timeup();
@@ -447,7 +290,9 @@ public:
 
   TO_STRING_KV(K_(id),
                K_(tenant_meta),
-               K_(unit_min_cpu), K_(unit_max_cpu), K_(total_worker_cnt),
+               K_(unit_min_cpu), K_(unit_max_cpu),
+               "total_worker_cnt", worker_count(),
+               "idle_worker_cnt", idle_count(),
                "min_worker_cnt", min_worker_cnt(),
                "max_worker_cnt", max_worker_cnt(),
                K_(stopped),
@@ -455,14 +300,8 @@ public:
                K_(recv_hp_rpc_cnt), K_(recv_np_rpc_cnt),
                K_(recv_lp_rpc_cnt), K_(recv_mysql_cnt),
                K_(recv_task_cnt),
-               K_(recv_large_req_cnt),
-               K_(tt_large_quries),
                "workers", workers_.get_size(),
-               "nesting workers", nesting_workers_.get_size(),
                K_(req_queue),
-               K_(multi_level_queue),
-               K_(recv_level_rpc_cnt),
-               K_(group_map),
                K_(token_change_ts),
                "tenant_role", get_tenant_role())
 public:
@@ -470,12 +309,6 @@ public:
   {
     return (!OB_ISNULL(t1) && !OB_ISNULL(t2) && t1->id_ == t2->id_);
   }
-
-
-  void lq_end(ObThWorker &w);
-  // called each checkpoint for worker of this tenant.
-  void lq_wait(ObThWorker &w);
-  int lq_yield(ObThWorker &w);
 
   OB_INLINE void disable_user_sched() { disable_user_sched_ = true; }
   OB_INLINE bool user_sched_enabled() const { return !disable_user_sched_; }
@@ -506,11 +339,10 @@ public:
   {
     return 0;
   }
-  GroupMap& get_group_map() { return group_map_;}
   ReqQueue& get_req_queue() { return req_queue_; }
-  ObMultiLevelQueue* get_multi_level_queue() { return multi_level_queue_; }
-  // OB_INLINE bool has_normal_request() const { return req_queue_.size() != 0; }
-  // OB_INLINE bool has_level_request() const { return OB_NOT_NULL(multi_level_queue_) && multi_level_queue_->get_total_size() != 0; }
+  int acquire_more_worker(int64_t num, int64_t &succ_num, bool force = false);
+  bool do_add_worker();
+  int64_t queue_size() const { return req_queue_.size(); }
 private:
   static void sleep_and_warn(ObTenant* tenant);
   static void* wait(void* tenant);
@@ -518,15 +350,6 @@ private:
   void update_token_usage();
   // acquire workers if tenant doesn't have sufficient worker.
   void check_worker_count();
-  void check_group_worker_count();
-  // alloc NUM worker
-  int acquire_level_worker(int64_t num, int64_t &succ_num, int32_t level);
-  int acquire_more_worker(int64_t num, int64_t &succ_num, bool force = false);
-
-  int64_t worker_count() const { return workers_.get_size(); }
-
-  inline void pause_it(ObThWorker &w);
-  inline void resume_it(ObThWorker &w);
 
   OB_INLINE int pop_req(common::ObLink *&req, int64_t timeout) { return req_queue_.pop(req, timeout); }
 
@@ -538,7 +361,6 @@ private:
 
   int construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantModuleInitCtx *&ctx);
 
-  int recv_group_request(rpc::ObRequest &req, int64_t group_id);
 protected:
 
   mutable common::TCRWLock meta_lock_;
@@ -547,8 +369,6 @@ protected:
 protected:
   // number of active workers the tenant has owned. Only active
   // workers can make progress.
-  volatile bool shrink_ CACHE_ALIGNED;
-  int64_t total_worker_cnt_;
   int64_t total_ddl_thread_cnt_;
   void *gc_thread_;
   bool has_created_;
@@ -558,10 +378,6 @@ protected:
   /// tenant task queue,
   // 'hp' for high priority and 'np' for normal priority
   ReqQueue req_queue_;
-
-  //Create a request queue for each level of nested requests
-  ObMultiLevelQueue *multi_level_queue_;
-  MultiLevelReqCnt recv_level_rpc_cnt_;
 
   //Create a timer queue group for retry requests
   ObRetryQueue retry_queue_;
@@ -573,23 +389,15 @@ protected:
   volatile uint64_t recv_task_cnt_;
   volatile uint64_t recv_sql_task_cnt_;
   volatile uint64_t recv_large_req_cnt_;
-  volatile uint64_t pause_cnt_;
-  volatile uint64_t resume_cnt_;
   volatile uint64_t recv_retry_on_lock_rpc_cnt_;
   volatile uint64_t recv_retry_on_lock_mysql_cnt_;
   volatile uint64_t tt_large_quries_;
-
-private:
-  GroupMap group_map_;
-  // for group_map hash node
-  char group_map_buf_[sizeof(common::SpHashNode) * MAX_RESOURCE_GROUP];
 
 public:
   common::ObLatch lock_;
 
   // Variables for V2
   WList workers_;
-  WList nesting_workers_;
   share::ObTenantModuleInitCtx *mtl_init_ctx_;
 
   lib::ObMutex workers_lock_;
@@ -601,6 +409,7 @@ public:
   double token_usage_;
   int64_t token_usage_check_ts_;
   int64_t token_change_ts_ CACHE_ALIGNED;
+  std::atomic<int64_t> completion_cnt_;
 
   share::ObTenantSpace *ctx_;
 
@@ -610,55 +419,6 @@ public:
   int64_t worker_us_;
   int64_t default_group_throttled_time_us_;
 }; // end of class ObTenant
-
-OB_INLINE int64_t ObResourceGroup::min_worker_cnt() const
-{
-  uint64_t worker_concurrency = 0;
-  int64_t cnt = 1;
-  if (is_resource_manager_group(group_id_)) {
-    worker_concurrency = tenant_->cpu_quota_concurrency();
-    cnt = std::max(static_cast<int64_t>(worker_concurrency * (int64_t)ceil(tenant_->unit_min_cpu())), static_cast<int64_t>(1));
-  } else {
-    // worker_concurrency = share::ObCgSet::instance().get_worker_concurrency(group_id_);
-    cnt = std::max(static_cast<int64_t>(share::ObCgSet::instance().get_worker_concurrency(group_id_)), static_cast<int64_t>(1));
-  }
-  if (share::OBCG_CLOG == group_id_ || share::OBCG_LQ == group_id_) {
-    cnt = std::max(cnt, static_cast<int64_t>(8));
-  } else if (share::OBCG_WR == group_id_) {
-    cnt = 2; // one for take snapshot, one for purge
-  } else if (share::OBCG_HB_SERVICE == group_id_) {
-    cnt = 1;
-  }
-  return cnt;
-}
-
-OB_INLINE int64_t ObResourceGroup::max_worker_cnt() const
-{
-  int64_t cnt = 0;
-  if (share::OBCG_CLOG == group_id_) {
-    const int64_t worker_concurrency = share::ObCgSet::instance().get_worker_concurrency(group_id_);
-    cnt = std::max(worker_concurrency * (int64_t)ceil(tenant_->unit_max_cpu()), static_cast<int64_t>(8));
-  } else if (OB_UNLIKELY(share::OBCG_WR == group_id_)) {
-    cnt = 2;
-  } else if (OB_UNLIKELY(share::OBCG_HB_SERVICE == group_id_)) {
-    cnt = 1;
-  } else {
-    cnt = tenant_->max_worker_cnt();
-  }
-  return cnt;
-}
-
-inline void ObTenant::pause_it(ObThWorker &w)
-{
-  pause_cnt_++;
-  w.pause();
-}
-
-inline void ObTenant::resume_it(ObThWorker &w)
-{
-  resume_cnt_++;
-  w.resume();
-}
 
 inline int ObTenant::rdlock()
 {

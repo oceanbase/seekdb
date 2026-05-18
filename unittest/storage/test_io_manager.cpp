@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX COMMON
 
+#include <chrono>
+
 #define private public
 #define protected public
 #include "share/resource_manager/ob_cgroup_ctrl.h"

@@ -24,6 +24,7 @@
 #include "storage/tx/ob_gti_rpc.h"
 #include "storage/tx/wrs/ob_weak_read_service_rpc_define.h"  // weak_read_service
 
+#ifndef OB_BUILD_EMBED_MODE
 #include "observer/table/ob_table_execute_processor.h"
 #include "observer/table/ob_table_batch_execute_processor.h"
 #include "observer/table/ob_table_query_processor.h"
@@ -34,6 +35,7 @@
 #include "observer/table/ob_redis_execute_processor.h"
 #include "observer/table/ob_redis_execute_processor_v2.h"
 #include "observer/table/ob_table_meta_processor.h"
+#endif // OB_BUILD_EMBED_MODE
 
 #include "storage/ob_storage_rpc.h"
 
@@ -150,6 +152,7 @@ void oceanbase::observer::init_srv_xlator_for_others(ObSrvRpcXlator *xlator) {
   // SQL Estimate
   RPC_PROCESSOR(ObEstimatePartitionRowsP, gctx_);
 
+#ifndef OB_BUILD_EMBED_MODE
   // table api
   RPC_PROCESSOR(ObTableLoginP, gctx_);
   RPC_PROCESSOR(ObTableApiExecuteP, gctx_);
@@ -163,6 +166,7 @@ void oceanbase::observer::init_srv_xlator_for_others(ObSrvRpcXlator *xlator) {
   RPC_PROCESSOR(ObRedisExecuteP, gctx_);
   RPC_PROCESSOR(ObRedisExecuteV2P, gctx_);
   RPC_PROCESSOR(ObTableMetaP, gctx_);
+#endif // OB_BUILD_EMBED_MODE
 
   // HA GTS
   RPC_PROCESSOR(ObHaGtsPingRequestP, gctx_);

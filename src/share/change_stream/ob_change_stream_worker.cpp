@@ -57,10 +57,9 @@ int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_que
   } else if (executor_id < 0 || thread_num <= 0 || task_queue_limit <= 0 || OB_ISNULL(name)) {
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("ObCSExecutor invalid argument", K(ret), K(executor_id), K(thread_num), K(task_queue_limit), KP(name));
-  } else if (FALSE_IT(ObThreadPool::set_run_wrapper(MTL_CTX()))) {
-  } else if (OB_FAIL(set_adaptive_thread(0, thread_num))) {
-    LOG_WARN("ObCSExecutor set_adaptive_thread failed", K(ret), K(executor_id));
-    // Base pool was already initialized — must clean up to avoid resource leak.
+  } else if (FALSE_IT(set_run_wrapper(MTL_CTX()))) {
+  } else if (OB_FAIL(set_thread_count(thread_num))) {
+    LOG_WARN("ObCSExecutor set_thread_count failed", K(ret), K(executor_id));
     ObLinkQueueThreadPool::destroy();
   } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_num, task_queue_limit, name, tenant_id))) {
     LOG_WARN("ObCSExecutor base init failed", K(ret), K(executor_id));
@@ -74,8 +73,7 @@ int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_que
 
 int ObCSExecutor::start()
 {
-  // Thread pool is already started in base init() (ObLinkQueueThreadPool::init calls ThreadPool::start).
-  // No-op here for API compatibility with mgr init/start sequence.
+  // Workers are created lazily on first push. No explicit start needed.
   return common::OB_SUCCESS;
 }
 

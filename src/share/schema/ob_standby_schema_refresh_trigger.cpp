@@ -24,6 +24,7 @@
 #include "share/ob_all_tenant_info.h"  // ObAllTenantInfo, ObAllTenantInfoProxy
 #include "observer/ob_service.h"  // ObService
 #include "lib/ob_running_mode.h"
+#include "share/ob_thread_mgr.h"
 
 namespace oceanbase
 {
@@ -42,45 +43,67 @@ int ObStandbySchemaRefreshTrigger::init()
   } else if (lib::is_embed_mode()) {
     is_inited_ = true;
     LOG_INFO("ObStandbySchemaRefreshTrigger skip init in embed mode");
-  } else if (OB_FAIL(ObTenantThreadHelper::create("StandbySchem",
-        lib::TGDefIDs::SimpleLSService, *this))) {
-    LOG_WARN("failed to create STANDBY_SCHEMA_REFRESH_TRIGGER", KR(ret));
-  } else if (OB_FAIL(ObTenantThreadHelper::start())) {
-    LOG_WARN("failed to start STANDBY_SCHEMA_REFRESH_TRIGGER", KR(ret));
+  } else if (OB_FAIL(schedule_())) {
+    LOG_WARN("failed to schedule standby schema refresh trigger", KR(ret));
   } else {
     is_inited_ = true;
+    is_scheduled_ = true;
     LOG_INFO("ObStandbySchemaRefreshTrigger init success");
   }
 
   return ret;
 }
 
+int ObStandbySchemaRefreshTrigger::stop()
+{
+  int ret = OB_SUCCESS;
+  if (is_inited_ && is_scheduled_) {
+    TG_CANCEL_TASK(lib::TGDefIDs::ServerGTimer, *this);
+  }
+  return ret;
+}
+
+int ObStandbySchemaRefreshTrigger::wait()
+{
+  int ret = OB_SUCCESS;
+  if (is_inited_ && is_scheduled_ && !lib::is_embed_mode()) {
+    TG_WAIT_TASK(lib::TGDefIDs::ServerGTimer, *this);
+    is_scheduled_ = false;
+  }
+  return ret;
+}
+
 void ObStandbySchemaRefreshTrigger::destroy()
 {
   LOG_INFO("ObStandbySchemaRefreshTrigger destroy");
-  ObTenantThreadHelper::destroy();
+  stop();
+  wait();
+  is_scheduled_ = false;
   is_inited_ = false;
 }
 
-void ObStandbySchemaRefreshTrigger::do_work()
+int ObStandbySchemaRefreshTrigger::schedule_()
 {
-  LOG_INFO("ObStandbySchemaRefreshTrigger thread start");
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, *this,
+      DEFAULT_IDLE_TIME, true /*schedule repeatly*/))) {
+    LOG_WARN("failed to schedule standby schema refresh trigger task", KR(ret));
+  }
+  return ret;
+}
+
+void ObStandbySchemaRefreshTrigger::runTimerTask()
+{
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(is_inited));
   } else {
-    while (!has_set_stop()) {
-      ObCurTraceId::init(GCONF.self_addr_);
-      if (OB_FAIL(submit_tenant_refresh_schema_task_())) {
-        LOG_WARN("submit_tenant_refresh_schema_task_ failed", KR(ret));
-      }
-      
-      idle(DEFAULT_IDLE_TIME);
+    ObCurTraceId::init(GCONF.self_addr_);
+    if (OB_FAIL(submit_tenant_refresh_schema_task_())) {
+      LOG_WARN("submit_tenant_refresh_schema_task_ failed", KR(ret));
     }
   }
-  
-  LOG_INFO("ObStandbySchemaRefreshTrigger thread end");
 }
 
 int ObStandbySchemaRefreshTrigger::check_inner_stat_()

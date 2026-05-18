@@ -119,12 +119,6 @@ int MockObServer::init(const char *schema_file,
       env.log_spec_.log_dir_ = logdir;
       env.log_spec_.max_log_file_size_ = ObLogConstants::MAX_LOG_FILE_SIZE;
       env.clog_dir_ = clogdir;
-      env.index_block_cache_priority_ = 10;
-      env.user_block_cache_priority_ = 1;
-      env.user_row_cache_priority_ = 1;
-      env.fuse_row_cache_priority_ = 1;
-      env.bf_cache_priority_ = 1;
-      env.tablet_ls_cache_priority_ = 1;
     }
   }
   // init schema service

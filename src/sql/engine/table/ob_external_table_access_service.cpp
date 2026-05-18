@@ -573,15 +573,10 @@ int ObExternalTableAccessService::table_scan(
       }
       break;
     case ObExternalFileFormat::PARQUET_FORMAT:
-#ifndef OB_BUILD_EMBED_MODE
       if (OB_ISNULL(row_iter = OB_NEWx(ObParquetTableRowIterator, (scan_param.allocator_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc memory failed", K(ret));
       }
-#else
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("parquet is not supported in embed mode", K(ret));
-#endif // OB_BUILD_EMBED_MODE
       break;
     case ObExternalFileFormat::ODPS_FORMAT:
       if (!GCONF._use_odps_jni_connector) {

@@ -91,7 +91,7 @@ int check_stack_overflow(bool &is_overflow,
     } else if (OB_UNLIKELY(stack_eof < static_cast<char *>(cur_stack))) {
       is_overflow = true;
       ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(ERROR, "stack incorrect params", K(ret), KP(stack_eof), KP(cur_stack), KCSTRING(lbt()));
+      COMMON_LOG(ERROR, "stack incorrect params", K(ret), KP(stack_eof), KP(cur_stack));
     } else {
       int64_t cur_stack_used = stack_eof - (static_cast<char *>(cur_stack));
       if (used_size != nullptr) {

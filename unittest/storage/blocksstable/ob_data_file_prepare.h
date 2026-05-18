@@ -179,13 +179,6 @@ int TestDataFilePrepareUtil::init(
     storage_env_.clog_dir_ = clog_dir_;
 
     storage_env_.bf_cache_miss_count_threshold_ = 10000;
-    storage_env_.bf_cache_priority_ = 1;
-    storage_env_.index_block_cache_priority_ = 10;
-    storage_env_.user_block_cache_priority_ = 1;
-    storage_env_.user_row_cache_priority_ = 1;
-    storage_env_.fuse_row_cache_priority_ = 1;
-    storage_env_.tablet_ls_cache_priority_ = 1;
-    storage_env_.storage_meta_cache_priority_ = 10;
     storage_env_.ethernet_speed_ = 1000000;
     storage_env_.redundancy_level_ = ObStorageEnv::NORMAL_REDUNDANCY;
 
@@ -304,14 +297,7 @@ int TestDataFilePrepareUtil::open()
       } else if (FALSE_IT(SERVER_STORAGE_META_SERVICE.get_slogger_manager().need_reserved_ = false)) {
       } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(false, storage_env_.default_block_size_))) {
         STORAGE_LOG(WARN, "init block manager fail", K(ret));
-      } else if (OB_FAIL(OB_STORE_CACHE.init(
-          storage_env_.index_block_cache_priority_,
-          storage_env_.user_block_cache_priority_,
-          storage_env_.user_row_cache_priority_,
-          storage_env_.fuse_row_cache_priority_,
-          storage_env_.bf_cache_priority_,
-          storage_env_.bf_cache_miss_count_threshold_,
-          storage_env_.storage_meta_cache_priority_))) {
+      } else if (OB_FAIL(OB_STORE_CACHE.init(storage_env_.bf_cache_miss_count_threshold_))) {
         STORAGE_LOG(WARN, "Fail to init OB_STORE_CACHE, ", K(ret), K(storage_env_.data_dir_));
       } else if (OB_FAIL(ObIOManager::get_instance().start())) {
         STORAGE_LOG(WARN, "Fail to star io mgr", K(ret));

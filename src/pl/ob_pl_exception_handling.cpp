@@ -679,5 +679,235 @@ _Unwind_Reason_Code ObPLEH::eh_personality(int version, _Unwind_Action actions,
   return ret;
 }
 
+} // pl
+} // oceanbase
+
+// ======================================================================
+// Windows SEH personality adapter — ob_pl_seh_personality
+//
+// LLVM encodes the JIT symbol "eh_personality" into UNWIND_INFO.ExceptionHandler
+// for every JIT-compiled PL function that contains a landingpad. On Windows,
+// RtlDispatchException calls that function with the 4-parameter Windows SEH
+// calling convention (not the 5-parameter Itanium ABI). This adapter bridges
+// between the two:
+//
+//   Search phase (no EXCEPTION_UNWINDING in ExceptionFlags):
+//     1. Build ObWin32UnwindCtx from DispatcherContext.
+//     2. Call ObPLEH::eh_personality(... _UA_SEARCH_PHASE ...) to find a handler.
+//     3. If _URC_HANDLER_FOUND: call again with _UA_CLEANUP_PHASE|_UA_HANDLER_FRAME
+//        to obtain the landing-pad address (via _Unwind_SetIP) and data-registers
+//        (via _Unwind_SetGR).
+//     4. Call RtlUnwindEx to initiate stack unwinding to the landing pad.
+//
+//   Target-frame phase (EXCEPTION_TARGET_UNWIND set in ExceptionFlags):
+//     Called by RtlUnwindEx for the frame that claimed the exception.
+//     Call personality with _UA_CLEANUP_PHASE|_UA_HANDLER_FRAME, then install
+//     the exception-data registers (RAX = exc ptr, RDX = selector) into the
+//     CONTEXT so they are restored when execution resumes at the landing pad.
+//
+//   Cleanup/unwind phase (only EXCEPTION_UNWINDING set):
+//     Our JIT frames have no C++ destructors; nothing to do.
+// ======================================================================
+#ifdef _WIN32
+
+#include "observer/win32_pl_seh.h"
+
+// tl_ob_pl_seh_exc_ptr and tl_ob_pl_seh_selector are declared in win32_pl_seh.h
+// (via the extern __declspec(thread) declarations in its extern "C" block)
+// and defined in win32_unwind_stubs.c.
+
+using namespace oceanbase::pl;
+
+// Named namespace (not anonymous) per §3.1.
+namespace detail {
+
+// Helper: call ObPLEH::eh_personality using a fresh ObWin32UnwindCtx built
+// from disp_ctx and return the GR values and target IP in the out-params.
+//
+// NB: Returns _Unwind_Reason_Code (not OB ret) because the Itanium ABI
+// personality contract mandates that return type. §5.2 exemption applies.
+static _Unwind_Reason_Code call_personality_with_ctx(
+    _Unwind_Action          actions,
+    struct _Unwind_Exception *exc,
+    DISPATCHER_CONTEXT      *disp_ctx,
+    CONTEXT                 *ctx_record,
+    EXCEPTION_RECORD        *exc_record,
+    uintptr_t               &out_gr0,
+    uintptr_t               &out_gr1,
+    uintptr_t               &out_ip)
+{
+  _Unwind_Reason_Code rc = _URC_FATAL_PHASE1_ERROR;
+  if (OB_ISNULL(exc) || OB_ISNULL(disp_ctx) || OB_ISNULL(ctx_record) || OB_ISNULL(exc_record)) {
+    // Cannot call personality without a complete context. Return a fatal
+    // reason so the caller aborts the dispatch for this frame.
+    out_gr0 = 0;
+    out_gr1 = 0;
+    out_ip  = 0;
+  } else {
+    ObWin32UnwindCtx wctx;
+    wctx.disp_ctx   = disp_ctx;
+    wctx.ctx_record = ctx_record;
+    wctx.exc_record = exc_record;
+    wctx.gr[0]      = 0;
+    wctx.gr[1]      = 0;
+    wctx.target_ip  = 0;
+
+    rc = ObPLEH::eh_personality(
+        1, actions,
+        exc->exception_class, exc,
+        reinterpret_cast<struct _Unwind_Context *>(&wctx));
+
+    out_gr0 = wctx.gr[0];
+    out_gr1 = wctx.gr[1];
+    out_ip  = wctx.target_ip;
+  }
+  return rc;
 }
+
+} // namespace detail
+
+// Windows SEH personality adapter. Refactored for single-entry single-exit
+// per coding standard §5.1. All control flow funnels into the final return
+// of `disposition`; side-effects (CtxRecord writes, TLS store, RtlUnwindEx)
+// happen only after all branches have settled.
+//
+// NB: Return type EXCEPTION_DISPOSITION is mandated by the Windows SEH
+// personality contract; §5.2 (int ret) exemption applies.
+extern "C" EXCEPTION_DISPOSITION ob_pl_seh_personality(
+    EXCEPTION_RECORD    *exc_record,
+    void                *establisher_frame,
+    CONTEXT             *ctx_record,
+    DISPATCHER_CONTEXT  *disp_ctx)
+{
+  // §7.1 type-choice exemption: uintptr_t is used for gr0/gr1/target_ip
+  // because they hold raw register/IP values passed through the Itanium
+  // _Unwind_SetGR / _Unwind_SetIP ABI (which takes uintptr_t), and must be
+  // width-matched to the CPU word on both x86-64 and ARM64 for later
+  // assignment into CONTEXT::Rax/Rdx/Rip.
+  EXCEPTION_DISPOSITION disposition = ExceptionContinueSearch;
+  struct _Unwind_Exception *exc = NULL;
+  uintptr_t gr0 = 0;
+  uintptr_t gr1 = 0;
+  uintptr_t target_ip = 0;
+  bool dispatchable = true;
+
+  // §5.7: check input parameters. Windows guarantees non-null, but be
+  // defensive so we never dereference a bad pointer.
+  if (OB_ISNULL(exc_record) || OB_ISNULL(establisher_frame)
+      || OB_ISNULL(ctx_record) || OB_ISNULL(disp_ctx)) {
+    dispatchable = false;
+  } else if (OB_PL_SEH_EXCEPTION_CODE != exc_record->ExceptionCode) {
+    // Only intercept OB PL exceptions.
+    dispatchable = false;
+  } else {
+    // Extract _Unwind_Exception* stored in ExceptionInformation[0].
+    if (exc_record->NumberParameters >= OB_PL_SEH_NARGS) {
+      exc = reinterpret_cast<struct _Unwind_Exception *>(
+                exc_record->ExceptionInformation[0]);
+    }
+    if (OB_ISNULL(exc)) {
+      // Fallback to TLS (set by _Unwind_RaiseException).
+      exc = reinterpret_cast<struct _Unwind_Exception *>(tl_ob_pl_seh_exc_ptr);
+    }
+    if (OB_ISNULL(exc)) {
+      dispatchable = false;
+    }
+  }
+
+  if (dispatchable && (0 != (exc_record->ExceptionFlags & EXCEPTION_TARGET_UNWIND))) {
+    // ----------------------------------------------------------------
+    // Target-frame phase: RtlUnwindEx has unwound the stack to this frame.
+    // Call personality with _UA_HANDLER_FRAME|_UA_CLEANUP_PHASE to trigger
+    // _Unwind_SetGR / _Unwind_SetIP, then write the results into ctx_record
+    // so the CPU restores RAX/RDX when it resumes at the landing pad.
+    // ----------------------------------------------------------------
+    _Unwind_Action actions = static_cast<_Unwind_Action>(
+        _UA_CLEANUP_PHASE | _UA_HANDLER_FRAME);
+    detail::call_personality_with_ctx(actions, exc, disp_ctx, ctx_record, exc_record,
+                              gr0, gr1, target_ip);
+    // x86-64: eh_return_data_regno(0) = 0 (RAX), (1) = 1 (RDX).
+    ctx_record->Rax = gr0;  // exception object pointer
+    ctx_record->Rdx = gr1;  // selector
+    // disposition stays ExceptionContinueSearch (return to caller of personality)
+  } else if (dispatchable
+             && 0 != (exc_record->ExceptionFlags
+                      & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND))) {
+    // Cleanup unwind for non-target frames: our JIT frames have no destructors.
+    // disposition stays ExceptionContinueSearch.
+  } else if (dispatchable) {
+    // ----------------------------------------------------------------
+    // Search phase: determine whether this frame has a matching handler.
+    // ----------------------------------------------------------------
+    _Unwind_Reason_Code reason =
+        detail::call_personality_with_ctx(_UA_SEARCH_PHASE, exc, disp_ctx, ctx_record, exc_record,
+                                  gr0, gr1, target_ip);
+
+    bool found_match = (_URC_HANDLER_FOUND == reason);
+    bool cleanup_only = false;
+
+    if (!found_match) {
+      // No matching handler in this frame's LSDA action chain. On Linux,
+      // Itanium phase-2 still drives the unwinder into cleanup-only landing
+      // pads (OB's codegen uses these to chain inner-block handlers to the
+      // parent block via `invoke eh_resume_`). Windows SEH has no phase-2,
+      // so we simulate it: probe with _UA_CLEANUP_PHASE; if the personality
+      // returns a landing pad, treat this frame as the unwind target so
+      // RtlUnwindEx will jump to that landing pad. The landing pad itself
+      // will invoke eh_resume_, which triggers a fresh RaiseException whose
+      // dispatch lands on the parent block's call site (and its action chain
+      // has the outer handler).
+      _Unwind_Action probe_actions = static_cast<_Unwind_Action>(_UA_CLEANUP_PHASE);
+      _Unwind_Reason_Code probe_rc =
+          detail::call_personality_with_ctx(probe_actions, exc, disp_ctx, ctx_record, exc_record,
+                                    gr0, gr1, target_ip);
+      if (_URC_INSTALL_CONTEXT == probe_rc && 0 != target_ip) {
+        cleanup_only = true;
+      }
+    }
+
+    bool ready_to_unwind = false;
+    if (found_match) {
+      // Handler matched. Call personality again with cleanup+handler-frame
+      // flags to obtain the landing-pad address (target_ip) and register values.
+      _Unwind_Action cleanup_actions = static_cast<_Unwind_Action>(
+          _UA_CLEANUP_PHASE | _UA_HANDLER_FRAME);
+      _Unwind_Reason_Code install_rc =
+          detail::call_personality_with_ctx(cleanup_actions, exc, disp_ctx, ctx_record, exc_record,
+                                    gr0, gr1, target_ip);
+      // Personality didn't provide a landing pad → skip unwind.
+      if (_URC_INSTALL_CONTEXT == install_rc && 0 != target_ip) {
+        ready_to_unwind = true;
+      }
+    } else if (cleanup_only) {
+      // target_ip already populated by the probe call above;
+      // gr0/gr1 hold (exc, 0 selector) appropriate for a cleanup landing pad.
+      ready_to_unwind = true;
+    }
+
+    if (ready_to_unwind) {
+      // Save selector in TLS in case EH_TARGET_UNWIND re-derives it differently.
+      tl_ob_pl_seh_selector = gr1;
+
+      // Initiate stack unwind to the landing pad.
+      // RtlUnwindEx will:
+      //   - Unwind all frames between the raise site and establisher_frame.
+      //   - Call ob_pl_seh_personality again with EXCEPTION_TARGET_UNWIND
+      //     for this frame.
+      //   - Place ReturnValue (= exc) into a register (RAX) at the landing pad.
+      //   - Resume execution at target_ip with the restored
+      //     (and EH_TARGET_UNWIND-patched) CONTEXT.
+      // RtlUnwindEx does not return when unwinding succeeds; if it returns,
+      // the unwind failed and we fall through to ExceptionContinueSearch.
+      RtlUnwindEx(establisher_frame,
+                  reinterpret_cast<PVOID>(target_ip),
+                  exc_record,
+                  reinterpret_cast<PVOID>(exc),   // ReturnValue → RAX at landing pad
+                  ctx_record,
+                  disp_ctx->HistoryTable);
+    }
+  }
+
+  return disposition;
 }
+
+#endif /* _WIN32 */

@@ -37,8 +37,10 @@
 #include "share/vector_index/ob_vector_index_util.h"
 #include "share/external_table/ob_external_table_utils.h"
 #include "sql/engine/expr/ob_expr_regexp.h"
-#include "sql/engine/table/ob_orc_table_row_iter.h"
+#ifndef OB_BUILD_EMBED_MODE
 #include "sql/engine/table/ob_parquet_table_row_iter.h"
+#endif
+#include "sql/engine/table/ob_external_table_access_service.h"
 #include "share/external_table/ob_external_table_file_mgr.h"
 #include "share/catalog/ob_catalog_utils.h"
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
@@ -3319,6 +3321,7 @@ int ObDMLResolver::set_basic_column_properties(ObColumnSchemaV2 &column_schema,
   return ret;
 }
 
+#ifndef OB_BUILD_EMBED_MODE
 int ObDMLResolver::build_column_schemas_for_parquet(const parquet::SchemaDescriptor* schema,
                                                     const ColumnIndexType column_index_type,
                                                     ObTableSchema& table_schema)
@@ -3468,6 +3471,7 @@ int ObDMLResolver::build_column_schemas_for_parquet(const parquet::SchemaDescrip
   }
   return ret;
 }
+#endif
 
 
 int ObDMLResolver::build_column_schemas_for_csv(const ObExternalFileFormat &format,
@@ -3758,6 +3762,7 @@ int ObDMLResolver::build_column_schemas(ObTableSchema& table_schema,
     }
     case ObExternalFileFormat::FormatType::PARQUET_FORMAT:
     {
+#ifndef OB_BUILD_EMBED_MODE
       ObSqlString full_file_name;
       ObString sampled_file_name;
       ObExternalDataAccessDriver data_access_driver_;
@@ -3833,6 +3838,9 @@ int ObDMLResolver::build_column_schemas(ObTableSchema& table_schema,
         }
       }
       break;
+#else
+      ret = OB_NOT_SUPPORTED;
+#endif
     }
     case ObExternalFileFormat::FormatType::ORC_FORMAT:
       ret = OB_NOT_SUPPORTED;

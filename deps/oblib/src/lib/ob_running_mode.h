@@ -22,7 +22,6 @@ namespace oceanbase
 {
 namespace lib
 {
-extern bool mtl_is_mini_mode();
 
 struct ObRunningModeConfig
 {
@@ -46,7 +45,7 @@ inline ObRunningModeConfig &ObRunningModeConfig::instance()
 
 inline bool is_mini_mode()
 {
-  return ObRunningModeConfig::instance().mini_mode_ || mtl_is_mini_mode();
+  return ObRunningModeConfig::instance().mini_mode_;
 }
 
 inline bool is_mini_cpu_mode()

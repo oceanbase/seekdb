@@ -1433,8 +1433,24 @@ int ObPluginVectorIndexMgr::replace_old_adapter(ObPluginVectorIndexAdaptor *new_
     LOG_WARN("get null adapter", KR(ret));
   } else {
     int overwrite = 0;
+    ObPluginVectorIndexAdaptor *old_adapter = nullptr;
+    int tmp_ret = complete_index_adpt_map_.get_refactored(new_adapter->get_inc_tablet_id(), old_adapter);
+    if (OB_HASH_NOT_EXIST == tmp_ret) {
+      tmp_ret = OB_SUCCESS;
+      old_adapter = nullptr;
+    }
+    if (OB_FAIL(tmp_ret)) {
+      ret = tmp_ret;
+      LOG_WARN("failed to get old complete vector index adapter before replace",
+               K(ret), K(ls_id_), KPC(new_adapter));
+    } else if (OB_NOT_NULL(old_adapter) && old_adapter != new_adapter &&
+               OB_FAIL(new_adapter->inherit_index_id_watermarks_from(*old_adapter))) {
+      LOG_WARN("failed to inherit adapter index id watermarks before replace",
+               K(ret), K(ls_id_), KPC(old_adapter), KPC(new_adapter));
+    }
     // should not fail in following process
-    if (OB_FAIL(erase_complete_adapter(new_adapter->get_inc_tablet_id()))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_inc_tablet_id()))) {
       LOG_WARN("failed to erase new complete partial adapter", K(new_adapter->get_inc_tablet_id()), KR(ret));
     } else if (OB_FAIL(erase_complete_adapter(new_adapter->get_vbitmap_tablet_id()))) {
       LOG_WARN("failed to erase new complete partial adapter", K(new_adapter->get_vbitmap_tablet_id()), KR(ret));

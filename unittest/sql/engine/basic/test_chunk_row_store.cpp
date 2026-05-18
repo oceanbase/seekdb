@@ -75,8 +75,8 @@ public:
     int ret = OB_SUCCESS;
     ASSERT_EQ(OB_SUCCESS, init_tenant_mgr());
     blocksstable::TestDataFilePrepare::SetUp();
-    ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1));
-    ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache", 1));
+    ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
+    ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
     EXPECT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
     if (!is_server_tenant(tenant_id_)) {
       static ObTenantBase tenant_ctx(tenant_id_);

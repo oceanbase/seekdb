@@ -52,13 +52,6 @@ ObAdminExecutor::ObAdminExecutor()
   storage_env_.clog_dir_ = clog_dir_;
 
   storage_env_.bf_cache_miss_count_threshold_ = 0;
-  storage_env_.bf_cache_priority_ = 1;
-  storage_env_.index_block_cache_priority_ = 10;
-  storage_env_.user_block_cache_priority_ = 1;
-  storage_env_.user_row_cache_priority_ = 1;
-  storage_env_.fuse_row_cache_priority_ = 1;
-  storage_env_.tablet_ls_cache_priority_ = 1;
-  storage_env_.storage_meta_cache_priority_ = 10;
   storage_env_.ethernet_speed_ = 10000;
   storage_env_.data_disk_size_ = 1000 * storage_env_.default_block_size_;
 
@@ -183,9 +176,7 @@ int ObAdminExecutor::set_s3_url_encode_type(const char *type_str) const
   } else if (OB_FAIL(common::ObDeviceManager::get_instance().init_devices_env())) {
     STORAGE_LOG(WARN, "fail to init device env", KR(ret), K(type_str));
   } else if (0 == STRCASECMP("default", type_str)) {
-    Aws::Http::SetCompliantRfc3986Encoding(false);
   } else if (0 == STRCASECMP("compliantRfc3986Encoding", type_str)) {
-    Aws::Http::SetCompliantRfc3986Encoding(true);
   } else {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "type str is invalid, expect 'dafault'/'compliantRfc3986Encoding'",

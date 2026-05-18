@@ -28,6 +28,9 @@
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "sql/dblink/ob_tm_service.h"
 #include "pl/ob_pl_exception_handling.h"
+#ifdef _WIN32
+#include "core/ob_jit_allocator.h"
+#endif
 
 namespace oceanbase
 {
@@ -154,8 +157,27 @@ int ObPL::init(common::ObMySQLProxy &sql_proxy)
                                 (void*)(_Unwind_RaiseException));
   jit::ObLLVMHelper::add_symbol(ObString("_Unwind_Resume"),
                                 (void*)(_Unwind_Resume));
+#ifdef _WIN32
+  // On Windows, LLVM encodes the personality function address in
+  // UNWIND_INFO.ExceptionHandler as a 32-bit RVA relative to RTDyld's
+  // ImageBase (= min loaded JIT section). seekdb.exe loads at addresses
+  // that VirtualAlloc(NULL, ...) cannot match within 4GB, so we cannot
+  // register ob_pl_seh_personality's absolute address directly — the
+  // IMAGE_REL_AMD64_ADDR32NB relocation would overflow.
+  //
+  // Instead, register the address of a process-lifetime trampoline page
+  // that performs `movabs rax, &ob_pl_seh_personality; jmp rax`. The
+  // trampoline lives near where the OS hands out fresh virtual memory, and
+  // the JIT allocator scans downward from it, so every JIT module's
+  // ImageBase stays within 1.5GB of the trampoline and the 32-bit RVA fits.
+  // See ob_jit_get_personality_trampoline() for the full rationale.
+  uintptr_t personality_tramp = oceanbase::jit::core::ob_jit_get_personality_trampoline();
+  jit::ObLLVMHelper::add_symbol(ObString("eh_personality"),
+                                reinterpret_cast<void*>(personality_tramp));
+#else
   jit::ObLLVMHelper::add_symbol(ObString("eh_personality"),
                                 (void*)(ObPLEH::eh_personality));
+#endif
 #if defined(__aarch64__)
   jit::ObLLVMHelper::add_symbol(ObString("DW.ref.eh_personality"),
                                 (void*)(&DW_REF_ObPLEH_eh_personality));
@@ -246,6 +268,53 @@ void ObPL::destory()
 {
 }
 
+#ifdef _WIN32
+static int pl_execute_callee_seh(
+    pl::ObPL &pl,
+    sql::ObExecContext &exec_ctx,
+    common::ObIAllocator &allocator,
+    uint64_t package_id,
+    uint64_t proc_id,
+    const common::ObIArray<int64_t> &subprogram_path,
+    common::ParamStore &params,
+    const common::ObIArray<int64_t> &nocopy_params,
+    common::ObObj &result,
+    int *status,
+    bool in_function,
+    uint64_t loc,
+    uint64_t dblink_id,
+    share::schema::ObSchemaGetterGuard *old_schema_guard)
+{
+  int ret = OB_SUCCESS;
+  pl::ObPLContext *saved_pl_stack_ctx = exec_ctx.get_pl_stack_ctx();
+  __try {
+    ret = pl.execute(exec_ctx,
+                     allocator,
+                     package_id,
+                     proc_id,
+                     subprogram_path,
+                     params,
+                     nocopy_params,
+                     result,
+                     status,
+                     true,
+                     in_function,
+                     loc,
+                     false,
+                     dblink_id);
+  } __finally {
+    // Restore unconditionally — covers normal exit, error-code exit, and
+    // SEH unwind. force_restore_pl_stack_ctx is itself a no-op when the
+    // value already matches the snapshot, so this is safe on the success
+    // path too.
+    pl::LinkPLStackGuard::force_restore_pl_stack_ctx(exec_ctx,
+                                                     saved_pl_stack_ctx);
+    exec_ctx.get_sql_ctx()->schema_guard_ = old_schema_guard;
+  }
+  return ret;
+}
+#endif
+
 int ObPL::execute_proc(ObPLExecCtx &ctx,
                        uint64_t package_id,
                        uint64_t proc_id,
@@ -325,6 +394,25 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
         ObPL pl;
         share::schema::ObSchemaGetterGuard *old_schema_guard = ctx.exec_ctx_->get_sql_ctx()->schema_guard_;
         ctx.exec_ctx_->get_sql_ctx()->schema_guard_ = &schema_guard;
+#ifdef _WIN32
+        // Windows uses an SEH __finally trampoline so that pl_stack_ctx_ and
+        // schema_guard_ are restored on every exit path including SEH unwind
+        // from a callee SIGNAL. See pl_execute_callee_seh comment for the
+        // full rationale; in short, /EHsc cleanup unwind tables are skipped
+        // by RtlUnwindEx, so RAII destructors inside pl.execute() (notably
+        // ~LinkPLStackGuard) cannot be relied on for the cross-procedure
+        // CONTINUE HANDLER recovery path.
+        ret = pl_execute_callee_seh(pl, *ctx.exec_ctx_,
+                                    *ctx.get_top_expr_allocator(),
+                                    package_id, proc_id, path_array,
+                                    proc_params, nocopy_params,
+                                    *ctx.result_, ctx.status_,
+                                    ctx.in_function_, loc, dblink_id,
+                                    old_schema_guard);
+        if (OB_FAIL(ret)) {
+          LOG_WARN("failed to execute pl", K(ret), K(package_id), K(proc_id), K(ctx.in_function_));
+        }
+#else
         try {
           if (OB_FAIL(pl.execute(*ctx.exec_ctx_,
                                  *ctx.get_top_expr_allocator(),
@@ -346,6 +434,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
           ctx.exec_ctx_->get_sql_ctx()->schema_guard_ = old_schema_guard;
           throw;
         }
+#endif
         if (OB_SUCC(ret)) {
           if (NULL != argv && argc > 0) {
             for (int64_t i = 0; OB_SUCC(ret) && i < argc; ++i) {
@@ -1341,8 +1430,24 @@ int ObPL::execute(ObExecContext &ctx,
                     loc,
                     is_called_from_sql);
     OZ (pl.init(params, is_anonymous));
-    OZ (pl.execute());
-    OZ (pl.deep_copy_result_if_need(allocator));
+    // pl.execute() may unwind via _Unwind_RaiseException when a SIGNAL fires
+    // inside the JIT-compiled body. ObPLExecState::~ObPLExecState() is empty
+    // and pl.final(ret) is the only place that restores exec_ctx_bak_ onto the
+    // shared ObExecContext. If the unwind skips final(), the caller's
+    // phy_plan_ctx_ is left dangling at this frame's destroyed local
+    // ObPhysicalPlanCtx and frames_/frame_cnt_/expr_op_ctx_store_ stay zeroed,
+    // which crashes the caller's next SPI call (e.g. CONTINUE HANDLER + IF
+    // evaluating a scalar expression — see ObPLPartitionHitGuard ctor reading
+    // pl_exec_ctx_.exec_ctx_->get_pl_stack_ctx() at ob_spi.cpp:7799). Mirror
+    // the catch(...){...; throw;} pattern already used in ObPL::execute_proc
+    // for schema_guard restoration so that final() always runs.
+    try {
+      OZ (pl.execute());
+      OZ (pl.deep_copy_result_if_need(allocator));
+    } catch (...) {
+      pl.final(OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret);
+      throw;
+    }
     pl.final(ret);
     if (OB_SUCC(ret)) {
       // process out arguments
@@ -4164,6 +4269,21 @@ int ObPL::simple_execute(ObPLExecCtx *ctx, int64_t argc, int64_t *argv)
   return ret;
 }
 
+int ObPL::interface_execute(ObPLExecCtx *ctx, int64_t argc, int64_t *argv)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(argc);
+  UNUSED(argv);
+  ObPLFunction *func = NULL;
+  ObSqlString interface_name;
+  CK (OB_NOT_NULL(ctx));
+  CK (OB_NOT_NULL(func = ctx->func_));
+  CK (!func->get_interface_name().empty());
+  OZ (interface_name.assign(func->get_interface_name()));
+  OZ (ObSPIService::spi_interface_impl(ctx, interface_name.string().ptr()));
+  return ret;
+}
+
 int ObPLExecState::check_pl_execute_priv(ObSchemaGetterGuard &guard,
                                           const uint64_t tenant_id,
                                           const uint64_t user_id,
@@ -4204,6 +4324,28 @@ int ObPLExecState::check_pl_execute_priv(ObSchemaGetterGuard &guard,
   return ret;
 }
 
+
+#ifdef _WIN32
+static int call_pl_jit_with_seh(int(*fp)(ObPLExecCtx*, int64_t, int64_t*),
+                                ObPLExecCtx *ctx, int64_t argc, int64_t *argv,
+                                bool &has_exception)
+{
+  int ret = OB_SUCCESS;
+  has_exception = false;
+  if (OB_ISNULL(fp) || OB_ISNULL(ctx) || argc < 0 || (argc > 0 && OB_ISNULL(argv))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(fp), KP(ctx), K(argc), KP(argv));
+  } else {
+    __try {
+      ret = fp(ctx, argc, argv);
+    } __except (GetExceptionCode() == OB_PL_SEH_EXCEPTION_CODE
+                  ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+      has_exception = true;
+    }
+  }
+  return ret;
+}
+#endif
 
 int ObPLExecState::execute()
 {
@@ -4268,11 +4410,20 @@ int ObPLExecState::execute()
                           int ret = OB_SUCCESS;
                           PL_DYNAMIC_STACK_CHECK();
                           if (OB_SUCC(ret)) {
+#ifdef _WIN32
+                            bool has_seh_exception = false;
+                            ret = call_pl_jit_with_seh(fp, &ctx_, func_.get_arg_count(),
+                                                       argv, has_seh_exception);
+                            if (has_seh_exception) {
+                              eptr = (_Unwind_Exception *)tl_ob_pl_seh_exc_ptr;
+                            }
+#else
                             try {
                               ret = fp(&ctx_, func_.get_arg_count(), argv);
                             } catch(...) {
                               eptr = tl_eptr;
                             }
+#endif
                           }
                           return ret;
                         }());
@@ -4288,11 +4439,16 @@ int ObPLExecState::execute()
                           int ret = OB_SUCCESS;
                           PL_DYNAMIC_STACK_CHECK();
                           if (OB_SUCC(ret)) {
+#ifdef _WIN32
+                            ret = call_pl_jit_with_seh(fp, &ctx_, func_.get_arg_count(),
+                                                       argv, has_exception);
+#else
                             try {
                               ret = fp(&ctx_, func_.get_arg_count(), argv);
                             } catch(...) {
                               has_exception = true;
                             }
+#endif
                           }
                           return ret;
                         }());

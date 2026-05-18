@@ -486,6 +486,7 @@ public:
   uint64_t get_local_auto_increment_offset() const;
   uint64_t get_local_last_insert_id() const;
   void set_local_ob_enable_pl_cache(bool v) { sys_vars_cache_.set_ob_enable_pl_cache(v); }
+  void set_local_ob_enable_plan_cache(bool v) { sys_vars_cache_.set_ob_enable_plan_cache(v); }
   bool get_local_ob_enable_pl_cache() const;
   bool get_local_ob_enable_plan_cache() const;
   bool get_local_ob_enable_sql_audit() const;

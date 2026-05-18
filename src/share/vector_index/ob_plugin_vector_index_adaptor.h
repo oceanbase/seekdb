@@ -645,6 +645,7 @@ public:
 
   void update_index_id_dml_scn(share::SCN &current_scn);
   void update_index_id_read_scn();
+  int init_vbitmap_scn_after_snapshot_build(const share::SCN &snapshot_scn);
   bool is_pruned_read_index_id();
   void update_can_skip(ObCanSkip3rdAnd4thVecIndex can_skip);
   ObCanSkip3rdAnd4thVecIndex get_can_skip();
@@ -799,6 +800,7 @@ public:
   int set_snapshot_key_prefix(const ObString &key_prefix);
   int set_snapshot_key_prefix(uint64_t tablet_id, uint64_t scn, uint64_t max_length);
   int copy_meta_info(ObPluginVectorIndexAdaptor &other);
+  int inherit_index_id_watermarks_from(ObPluginVectorIndexAdaptor &other);
 
   void set_reload_finish(const bool value) { reload_finish_ = value; };
   bool get_reload_finish() { return reload_finish_; };

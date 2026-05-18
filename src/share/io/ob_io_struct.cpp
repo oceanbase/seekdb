@@ -1439,13 +1439,13 @@ int64_t ObSyncIOChannel::get_queue_count() const
 
 int ObSyncIOChannel::set_thread_count(const int64_t conf_thread_count)
 {
-  return ObSimpleThreadPool::set_max_thread_count(cal_thread_count(conf_thread_count));
+  return ObSimpleThreadPool::set_thread_count(cal_thread_count(conf_thread_count));
 }
 
 int ObSyncIOChannel::start_thread(const int64_t thread_num, const int64_t task_num)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSimpleThreadPool::set_adaptive_thread(1, thread_num))) {
+  if (OB_FAIL(ObSimpleThreadPool::set_thread_count(thread_num))) {
     LOG_WARN("simple thread pool set adaptive thread failed", K(ret), K(thread_num));
   } else if (OB_FAIL(ObSimpleThreadPool::init(thread_num, task_num, "IO_SYNC_CH"))) {
     LOG_WARN("simple thread pool init failed", K(ret), K(thread_num), K(task_num));
@@ -1815,8 +1815,8 @@ int ObIOCallbackManager::init(const int64_t tenant_id, const int64_t thread_coun
     LOG_WARN("invalid arguments", K(ret), K(thread_count), K(queue_depth));
   } else {
     config_thread_count_ = thread_count;
-    if (OB_FAIL(ObLinkQueueThreadPool::set_adaptive_thread(1, thread_count))) {
-      LOG_WARN("set adaptive thread failed", K(ret), K(thread_count));
+    if (OB_FAIL(ObLinkQueueThreadPool::set_thread_count(thread_count))) {
+      LOG_WARN("set thread count failed", K(ret), K(thread_count));
     } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_count, queue_depth, "DiskCB", tenant_id))) {
       LOG_WARN("init link thread pool failed", K(ret), K(thread_count), K(queue_depth));
     } else {
@@ -1957,7 +1957,7 @@ int ObIOCallbackManager::update_thread_count(const int64_t thread_count)
       // do nothing
     } else {
       config_thread_count_ = thread_count;
-      if (OB_FAIL(ObLinkQueueThreadPool::set_max_thread_count(thread_count))) {
+      if (OB_FAIL(ObLinkQueueThreadPool::set_thread_count(thread_count))) {
         LOG_WARN("set max thread count failed", K(ret), K(thread_count));
       } else {
         LOG_INFO("update io callback thread count", K(ret), "old_thread_cnt", cur_thread_count, "new_thread_cnt", thread_count);
@@ -2575,7 +2575,7 @@ int64_t ObIOTracer::to_string(char *buf, const int64_t len) const
       const int64_t print_count = min(5, trace_array.count());
       for (int64_t i = 0; OB_SUCC(ret) && i < print_count; ++i) {
         const TraceItem &item = trace_array.at(i);
-        {
+	{
           ObCStringHelper helper;
           databuff_printf(buf, len, pos, "top: %ld, count: %ld, ref_log: %s, backtrace: %s; ", i + 1, item.count_, helper.convert(item.trace_info_.ref_log_), item.trace_info_.bt_str_);
         }

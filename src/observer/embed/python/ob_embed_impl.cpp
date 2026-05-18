@@ -539,16 +539,23 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
     ret = OB_CONNECT_ERROR;
     LOG_WARN("conn is empty", KR(ret), KP(conn_), KP(session_));
   } else {
-    // Check if this is a SELECT query
-    bool is_select = false;
+    // Read-only SQL should go through execute_read so cursor fetch APIs can consume result sets.
+    bool is_read_query = false;
     const char* p = sql;
-    while (*p == ' ') p++;  // skip leading spaces
-    if (strncasecmp(p, "SELECT", 6) == 0) {
-      is_select = true;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+      ++p;
+    }
+    if (strncasecmp(p, "SELECT", 6) == 0 ||
+        strncasecmp(p, "SHOW", 4) == 0 ||
+        strncasecmp(p, "DESC", 4) == 0 ||
+        strncasecmp(p, "DESCRIBE", 8) == 0 ||
+        strncasecmp(p, "EXPLAIN", 7) == 0 ||
+        strncasecmp(p, "WITH", 4) == 0) {
+      is_read_query = true;
     }
 
-    if (is_select) {
-      // Use execute_read for SELECT queries
+    if (is_read_query) {
+      // Use execute_read for statements that produce a result set.
       if (OB_ISNULL(result_ = (common::ObCommonSqlProxy::ReadResult*)ob_malloc(sizeof(common::ObCommonSqlProxy::ReadResult), mem_attr))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc mem failed", KR(ret));

@@ -263,7 +263,7 @@ public:
     return pos;
   }
 
-  int push(ObLink* data, int priority)
+  int push(ObLink* data, int priority,  bool fixed_wakeup_order = false)
   {
     int ret = OB_SUCCESS;
     int to_push_idx = queue_num_ <= 1 ? 0 : AFFINITY_CTRL.get_tls_node() % queue_num_;
@@ -286,11 +286,11 @@ public:
       // do nothing
     } else {
       if (priority < HIGH_PRIOS) {
-        mq_[to_push_idx]->cond.signal(1, 0);
+        mq_[to_push_idx]->cond.signal(1, 0, fixed_wakeup_order);
       } else if (priority < NORMAL_PRIOS + HIGH_PRIOS) {
-        mq_[to_push_idx]->cond.signal(1, 1);
+        mq_[to_push_idx]->cond.signal(1, 1, fixed_wakeup_order);
       } else {
-        mq_[to_push_idx]->cond.signal(1, 2);
+        mq_[to_push_idx]->cond.signal(1, 2, fixed_wakeup_order);
       }
     }
 
@@ -300,9 +300,14 @@ public:
     return ret;
   }
 
-  int pop(ObLink*& data, int64_t timeout_us)
+  void wakeup(int priority = PRIO_CNT - 1) {
+    int to_wake_idx = queue_num_ <= 1 ? 0 : AFFINITY_CTRL.get_tls_node() % queue_num_;
+    mq_[to_wake_idx]->cond.signal(1, priority);
+  }
+
+  int pop(ObLink*& data, int64_t timeout_us, int32_t index = -1)
   {
-    return do_pop(data, PRIO_CNT, timeout_us);
+    return do_pop(data, PRIO_CNT, timeout_us, index);
   }
 
   int pop_normal(ObLink*& data, int64_t timeout_us)
@@ -347,7 +352,7 @@ private:
 
     return ret;
   }
-  inline int do_pop(ObLink*& data, int64_t plimit, int64_t timeout_us)
+  inline int do_pop(ObLink*& data, int64_t plimit, int64_t timeout_us, int32_t index = -1)
   {
     int ret = OB_ENTRY_NOT_EXIST;
     int to_pop_idx = queue_num_ <= 1 ? 0 : AFFINITY_CTRL.get_tls_node() % queue_num_;
@@ -358,11 +363,11 @@ private:
       COMMON_LOG(ERROR, "timeout is invalid", K(ret), K(timeout_us));
     } else {
       if (plimit <= HIGH_PRIOS) {
-        mq_[to_pop_idx]->cond.prepare(0);
+        mq_[to_pop_idx]->cond.prepare(0, index);
       } else if (plimit <= NORMAL_PRIOS + HIGH_PRIOS) {
-        mq_[to_pop_idx]->cond.prepare(1);
+        mq_[to_pop_idx]->cond.prepare(1, index);
       } else {
-        mq_[to_pop_idx]->cond.prepare(2);
+        mq_[to_pop_idx]->cond.prepare(2, index);
       }
       if (OB_SUCC(try_pop(data, plimit, to_pop_idx))) {
         mq_[to_pop_idx]->is_queue_idle = false;

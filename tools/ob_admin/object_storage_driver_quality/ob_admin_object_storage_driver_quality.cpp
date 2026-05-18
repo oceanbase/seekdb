@@ -16,11 +16,7 @@
 
 #include "ob_admin_object_storage_driver_quality.h"
 
-#ifdef __linux__
 #include <malloc.h>
-#else
-#include <stdlib.h>
-#endif
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <chrono>
+
 #define USING_LOG_PREFIX STORAGE
 #define private public
 #define protected public
@@ -325,8 +327,8 @@ void TestBackupIndexMerger::SetUp()
   CHUNK_MGR.set_limit(8LL * 1024 * 1024 * 1024);
 
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
-  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache", 1));
-  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache", 1));
+  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
+  ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
 
 
   EXPECT_EQ(OB_SUCCESS, ObDeviceManager::get_instance().init_devices_env());

@@ -606,7 +606,8 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
            || OB_ERR_SP_WRONG_ARG_NUM == ret
            || OB_ERR_SP_DOES_NOT_EXIST == ret
            || OB_ERR_GET_STACKED_DIAGNOSTICS == ret
-           || OB_ERR_RESIGNAL_WITHOUT_ACTIVE_HANDLER == ret)
+           || OB_ERR_RESIGNAL_WITHOUT_ACTIVE_HANDLER == ret
+           || OB_ERR_BAD_TABLE == ret)
           && lib::is_mysql_mode()) {
         ObPLSignalStmt *signal_stmt = NULL;
         int save_ret = ret;

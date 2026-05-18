@@ -48,7 +48,7 @@ target_include_directories(
   ${DEP_DIR}/include/apr-1/
   ${DEP_DIR}/include/icu
   ${DEP_DIR}/include/icu/common
-  ${DEP_DIR}/include/apache-arrow
+  $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${DEP_DIR}/include/apache-arrow>
   ${DEP_DIR}/include/fast_float
   ${USSL_INCLUDE_DIRS}
 )
@@ -222,7 +222,7 @@ if(APPLE OR ANDROID)
   set(_LIB_PATH "${DEP_DIR}/lib/")
   # macOS and Android don't have libaio
   set(LIBAIO_LINK_OPTION "")
-  # On macOS, arrow/parquet are in lib/, but s2/orc/snappy/protoc/protobuf/lz4/zstd are in lib64/
+  # On macOS, arrow/parquet are in lib/, but s2/protoc/protobuf/lz4/zstd are in lib64/
   if(APPLE)
     set(_LIB_PATH_EXTRA "${DEP_DIR}/lib64/")
   else()
@@ -322,12 +322,7 @@ if(WIN32)
     ${VCPKG_LIB_DIR}/brotlienc.lib
     ${VCPKG_LIB_DIR}/brotlidec.lib
     ${VCPKG_LIB_DIR}/bz2.lib
-    ${VCPKG_LIB_DIR}/orc.lib
-    ${VCPKG_LIB_DIR}/snappy.lib
-    ${VCPKG_LIB_DIR}/libprotoc.lib
-    ${VCPKG_LIB_DIR}/libprotobuf.lib
-    ${VCPKG_LIB_DIR}/lz4.lib
-    ${VCPKG_LIB_DIR}/zstd.lib
+
     ${VCPKG_LIB_DIR}/sqlite3.lib
     ${VCPKG_LIB_DIR}/pthreadVC3.lib
     ws2_32 crypt32 bcrypt userenv wldap32 advapi32
@@ -351,16 +346,10 @@ else()
     ${DEP_DIR}/lib/libicustubdata.a
     ${DEP_DIR}/lib/libicuuc.a
     ${DEP_DIR}/lib/libprotobuf-c.a
-    ${_LIB_PATH}/libarrow.a
-    ${_LIB_PATH}/libparquet.a
-    $<$<NOT:$<PLATFORM_ID:Darwin>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
-    $<$<PLATFORM_ID:Darwin>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2>
-    ${_LIB_PATH_EXTRA}/liborc.a
-    ${_LIB_PATH_EXTRA}/libsnappy.a
-    $<$<NOT:$<BOOL:${ANDROID}>>:${_LIB_PATH_EXTRA}/libprotoc.a>
-    ${_LIB_PATH_EXTRA}/libprotobuf.a
-    ${_LIB_PATH_EXTRA}/liblz4.a
-    ${_LIB_PATH_EXTRA}/libzstd.a
+    $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libarrow.a>
+    $<$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>:${_LIB_PATH}/libparquet.a>
+    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<NOT:$<PLATFORM_ID:Darwin>>>:${_LIB_PATH}/libarrow_bundled_dependencies.a>
+    $<$<AND:$<NOT:$<BOOL:${BUILD_EMBED_MODE}>>,$<PLATFORM_ID:Darwin>>:-L/opt/homebrew/lib -lutf8proc -lthrift -lre2 -lbrotlicommon -lbrotlienc -lbrotlidec -lbz2 -llz4 -lzstd>
     $<$<PLATFORM_ID:Linux>:-L${DEP_DIR}/var/usr/lib64 -L${DEP_DIR}/var/usr/lib -L${DEP_3RD_DIR}/usr/lib -L${DEP_3RD_DIR}/usr/lib64>
     ${LIBAIO_LINK_OPTION} $<$<NOT:$<BOOL:${ANDROID}>>:-lpthread> -ldl
     $<$<BOOL:${ANDROID}>:-llog>

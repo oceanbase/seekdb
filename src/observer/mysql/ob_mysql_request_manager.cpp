@@ -56,7 +56,8 @@ int ObMySQLRequestManager::init(uint64_t tenant_id,
                                 const int64_t queue_size)
 {
   int ret = OB_SUCCESS;
-  if (inited_) {
+  if (!GCONF.enable_sql_audit) {
+  } else if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(queue_.init(ObModIds::OB_MYSQL_REQUEST_RECORD, tenant_id))) {
     SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
@@ -87,9 +88,9 @@ int ObMySQLRequestManager::init(uint64_t tenant_id,
 int ObMySQLRequestManager::start()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "ObMySQLRequestManager is not inited", K(tenant_id_));
+  if (!GCONF.enable_sql_audit) {
+  } else if (OB_UNLIKELY(!inited_)) {
+    SERVER_LOG(INFO, "ObMySQLRequestManager is not inited", K(tenant_id_));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReqMemEvict, tg_id_))) {
     SERVER_LOG(WARN, "create failed", K(ret));
   } else if (OB_FAIL(TG_START(tg_id_))) {
@@ -155,7 +156,8 @@ int ObMySQLRequestManager::record_request(const ObAuditRecordData &audit_record,
                                           bool is_sensitive)
 {
   int ret = OB_SUCCESS;
-  if (!inited_) {
+  if (!GCONF.enable_sql_audit) {
+  } else if (!inited_) {
     ret = OB_NOT_INIT;
   } else {
     ObMySQLRequestRecord *record = NULL;
@@ -341,16 +343,19 @@ int ObMySQLRequestManager::mtl_init(ObMySQLRequestManager* &req_mgr)
     LOG_WARN("ObMySQLRequestManager not alloc yet", K(ret));
   } else {
     uint64_t tenant_id = lib::current_resource_owner_id();
-    int64_t mem_limit = lib::get_tenant_memory_limit(tenant_id);
-    mem_limit = static_cast<int64_t>(static_cast<double>(mem_limit) * SQL_AUDIT_MEM_FACTOR);
-    bool use_mini_queue = lib::is_mini_mode() || MTL_IS_MINI_MODE() || is_meta_tenant(tenant_id);
-    int64_t queue_size = use_mini_queue ? MINI_MODE_MAX_QUEUE_SIZE : MAX_QUEUE_SIZE;
-    if (OB_FAIL(req_mgr->init(tenant_id, mem_limit, queue_size))) {
-      LOG_WARN("failed to init request manager", K(ret));
+    if (!GCONF.enable_sql_audit) {
+      req_mgr->tenant_id_ = tenant_id;
+      LOG_INFO("sql audit disabled, skip init to save memory", K(tenant_id));
     } else {
-      // do nothing
+      int64_t mem_limit = lib::get_tenant_memory_limit(tenant_id);
+      mem_limit = static_cast<int64_t>(static_cast<double>(mem_limit) * SQL_AUDIT_MEM_FACTOR);
+      bool use_mini_queue = lib::is_mini_mode() || MTL_IS_MINI_MODE() || is_meta_tenant(tenant_id);
+      int64_t queue_size = use_mini_queue ? MINI_MODE_MAX_QUEUE_SIZE : MAX_QUEUE_SIZE;
+      if (OB_FAIL(req_mgr->init(tenant_id, mem_limit, queue_size))) {
+        LOG_WARN("failed to init request manager", K(ret));
+      }
+      LOG_INFO("mtl init finish", K(tenant_id), K(mem_limit), K(queue_size), K(ret));
     }
-    LOG_INFO("mtl init finish", K(tenant_id), K(mem_limit), K(queue_size), K(ret));
   }
   if (OB_FAIL(ret) && req_mgr != nullptr) {
     // cleanup

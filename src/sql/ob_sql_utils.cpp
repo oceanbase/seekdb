@@ -27,6 +27,7 @@
 #include "share/schema/ob_schema_printer.h"
 #include "storage/ob_locality_manager.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include <openssl/md5.h>
 #include "share/resource_manager/ob_resource_manager.h"
 #include "observer/omt/ob_tenant_srs.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"

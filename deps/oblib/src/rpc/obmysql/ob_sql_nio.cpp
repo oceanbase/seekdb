@@ -933,7 +933,21 @@ public:
   }
   void set_shutdown() { ATOMIC_STORE(&need_shutdown_, true); }
   bool need_shutdown() const { return ATOMIC_LOAD(&need_shutdown_); }
-  void shutdown() { ::shutdown(fd_, SHUT_RD); }
+  // Windows WSAPoll does NOT wake up on shutdown(fd, SD_RECEIVE), so the
+  // poll thread cannot detect the local close and tear down the connection,
+  // resulting in `KILL <self>` returning OK to the client instead of the
+  // expected 2013 (Lost connection). Use SHUT_RDWR on Windows so that:
+  //   1. a FIN is sent to the peer (client gets 2013 immediately);
+  //   2. the local WSAPoll is woken up by POLLHUP/POLLERR, driving the
+  //      `prepare_destroy -> on_close` path to fully release the session.
+  // Linux keeps SHUT_RD to preserve the existing behavior.
+  void shutdown() {
+#ifdef _WIN32
+    ::shutdown(fd_, SHUT_RDWR);
+#else
+    ::shutdown(fd_, SHUT_RD);
+#endif
+  }
   int set_ssl_enabled();
   SSL* get_ssl_st();
   void set_tls_version_option(uint64_t tls_option) { tls_verion_option_ = tls_option; }

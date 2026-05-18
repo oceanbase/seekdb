@@ -1926,7 +1926,7 @@ DEF_PARAM(kv_ttl_duty_duration, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "", comm
     "ttl background task working time duration"
     "begin_time or end_time in Range, e.g., [23:00:00, 24:00:00]",
     ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(vector_index_optimize_duty_time, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "[00:00:00, 24:00:00]", common::ObVecIndexOptDutyTimeChecker,
+DEF_PARAM(vector_index_optimize_duty_time, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "[24:00:00, 24:00:00]", common::ObVecIndexOptDutyTimeChecker,
     "A runtime range bounded by start time and end time for vector index background task, e.g., [23:00:00, 24:00:00]",
     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(kv_ttl_history_recycle_interval, TIME, OB_CLUSTER_PARAMETER, "7d", "[1d, 180d]",
@@ -2309,7 +2309,7 @@ DEF_PARAM(_enable_auth_switch, BOOL, OB_CLUSTER_PARAMETER, "True",
          "Control whether to use auth_switch.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(_enable_malloc_v2, BOOL, OB_CLUSTER_PARAMETER, "True",
+DEF_PARAM(_enable_malloc_v2, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Enable or disable ob_malloc_v2.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
