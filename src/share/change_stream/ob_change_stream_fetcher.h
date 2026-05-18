@@ -155,7 +155,6 @@ protected:
   void run1() override;
 
 private:
-  int run1_();
   enum RunningMode { IDLE = 0, ACTIVE = 1 };
 
   int init_consumption_position_();

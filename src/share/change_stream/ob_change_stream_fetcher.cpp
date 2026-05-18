@@ -20,7 +20,6 @@
 #include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/serialization.h"
-#include "common/ob_smart_call.h"
 #include "share/change_stream/ob_change_stream_fetcher.h"
 #include "share/change_stream/ob_change_stream_mgr.h"
 #include "share/ob_global_stat_proxy.h"
@@ -749,14 +748,6 @@ int ObCSFetcher::handle_rollback_to_log_(
 
 void ObCSFetcher::run1()
 {
-  int ret = SMART_CALL(run1_());
-  if (OB_FAIL(ret)) {
-    LOG_WARN("CSFetcher: run1 failed", KR(ret));
-  }
-}
-
-int ObCSFetcher::run1_()
-{
   lib::set_thread_name("CSFetcher");
 
   int ret = OB_SUCCESS;
@@ -1048,7 +1039,6 @@ int ObCSFetcher::run1_()
   FLOG_INFO("CSFetcher: stopped",
             "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
             K(current_lsn_), K(current_scn_), K(total_tx_committed_));
-  return ret;
 }
 
 }  // namespace share
