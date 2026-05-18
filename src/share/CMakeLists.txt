@@ -157,6 +157,7 @@ ob_set_subtarget(ob_share cache
 ob_set_subtarget(ob_share common
   ob_autoincrement_param.cpp
   ob_autoincrement_service.cpp
+  ob_bg_thread_monitor.cpp
   ob_cascad_member.cpp
   ob_cascad_member_list.cpp
   ob_cluster_role.cpp

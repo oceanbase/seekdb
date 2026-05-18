@@ -282,12 +282,8 @@ void ObTenantSrs::RetryTimerTask::runTimerTask()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant srs is null in retry timer");
   } else if (OB_FAIL(tenant_srs_->refresh_sys_srs())) {
-    if (ret == OB_ERR_EMPTY_QUERY) {
-      LOG_INFO("[SRS] table not ready, wait for import");
-    } else {
-      LOG_WARN("srs retry refresh failed, rescheduling", K(ret));
-      tenant_srs_->schedule_retry();
-    }
+    LOG_WARN("srs retry refresh failed, rescheduling", K(ret));
+    tenant_srs_->schedule_retry();
   } else {
     LOG_INFO("[SRS] retry timer succeeded");
   }
