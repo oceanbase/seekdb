@@ -81,16 +81,46 @@ add_executable(ob_admin
   )
 
 target_include_directories(ob_admin PRIVATE)
+
+if(WIN32)
+  # Mirrors src/observer/CMakeLists.txt link-side handling for the same
+  # observer_static libs that observer_without_bolt links against. Required
+  # because oblib's OB_WEAK_SYMBOL is empty on Windows (see
+  # deps/oblib/src/lib/utility/ob_macro_utils.h:21), so each weak fallback in
+  # oblib collides with its strong override in ob_share/ob_storage/ob_sql.
+  # /FORCE:MULTIPLE tells link.exe to keep the first definition seen; the
+  # strong override libraries are listed before oblib (which arrives
+  # transitively), so the strong implementation wins.
+  target_link_options(ob_admin PRIVATE /FORCE:MULTIPLE)
+  # Link compiler-rt builtins for __udivti3 (128-bit int div), same as observer.
+  get_filename_component(CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
+  get_filename_component(LLVM_ROOT ${CLANG_BIN_DIR} DIRECTORY)
+  file(GLOB CLANG_RT_BUILTINS "${LLVM_ROOT}/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
+  list(GET CLANG_RT_BUILTINS 0 CLANG_RT_BUILTINS_LIB)
+  if(CLANG_RT_BUILTINS_LIB)
+    target_link_libraries(ob_admin PRIVATE ${CLANG_RT_BUILTINS_LIB})
+  endif()
+  # oblib_add_extra_objects creates separate .lib files not merged into oblib.lib on Windows
+  target_link_libraries(ob_admin PRIVATE
+    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
+    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd/zstd_objs.lib
+    ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/lz4/lz4-all.lib)
+  # Itanium ABI _Unwind_* stubs (Windows uses SEH; PL unwinding non-functional)
+  target_sources(ob_admin PRIVATE ${CMAKE_SOURCE_DIR}/src/observer/win32_unwind_stubs.c)
+endif()
+
 target_link_libraries(ob_admin
   PRIVATE
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--start-group>
+  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--start-group>
   oceanbase_static
   ob_sql_static
   ob_storage_static
   ob_share_static
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--end-group>
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
-  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
+  $<$<PLATFORM_ID:Windows>:ob_malloc>
+  $<$<PLATFORM_ID:Windows>:synchronization>
+  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--end-group>
+  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-static-libgcc>
+  $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-static-libstdc++>
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:malloc_hook>)
 
 if(ENABLE_THIN_LTO AND USE_LTO_CACHE)

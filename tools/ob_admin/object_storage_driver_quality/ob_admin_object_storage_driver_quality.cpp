@@ -197,7 +197,10 @@ int get_time_formatted(char *time_str, const int time_str_len, const char *forma
   struct timeval current_real_time;
   struct tm current_timeinfo;
   gettimeofday(&current_real_time, nullptr);
-  ob_localtime(const_cast<time_t *>(&current_real_time.tv_sec), &current_timeinfo);
+  // timeval.tv_sec is `long` on Windows (winsock2.h) while time_t is 64-bit
+  // there; copy into a local time_t to bridge the type difference portably.
+  const time_t cur_sec = current_real_time.tv_sec;
+  ob_localtime(&cur_sec, &current_timeinfo);
   
   if (OB_ISNULL(time_str) || OB_UNLIKELY(time_str_len <= 0) || OB_ISNULL(format)) {
     ret = OB_INVALID_ARGUMENT;

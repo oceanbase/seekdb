@@ -21,7 +21,12 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#ifndef _WIN32
 #include <unistd.h>
+#else
+#include <process.h>  // for _execv
+#define execv _execv
+#endif
 #include <sstream>
 
 using std::vector;

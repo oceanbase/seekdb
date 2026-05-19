@@ -27,6 +27,14 @@
 #include "deps/oblib/src/lib/alloc/malloc_hook.h"
 #include "tools/ob_admin/sql_tool/ob_admin_uncompress_plan_executor.h"
 
+#ifdef _WIN32
+#include <io.h>
+#define access _access
+#ifndef W_OK
+#define W_OK 2  // POSIX value; matches MSVC <io.h> permission-check mode
+#endif
+#endif
+
 using namespace oceanbase::common;
 using namespace oceanbase::tools;
 

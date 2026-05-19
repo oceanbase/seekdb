@@ -19,9 +19,24 @@
 
 #include "share/backup/ob_backup_struct.h"
 #include "deps/oblib/src/lib/ob_define.h"
+#ifndef _WIN32
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <unistd.h>
+#else
+#include <winsock2.h>  // for struct timeval
+#include <windows.h>   // for Sleep, GetProcessTimes
+#ifdef ERROR
+#undef ERROR
+#endif
+// struct rusage / getrusage / RUSAGE_SELF Windows shim lives in
+// share/io/ob_io_struct.h (header-guarded, safe against repeated inclusion).
+// It must be visible at global scope before the elaborated `struct rusage`
+// references inside namespace oceanbase::tools below, otherwise the compiler
+// implicitly forward-declares an incomplete oceanbase::tools::rusage.
+#include "share/io/ob_io_struct.h"
+// POSIX sleep() shim is provided by tools/ob_admin/ob_admin_executor.h on Windows.
+#endif
 #include <map>
 
 namespace oceanbase

@@ -65,7 +65,7 @@ constexpr int64_t MIN_OBJECT_SIZE = 0;
 constexpr int64_t SMALL_OBJECT_SIZE_LIMIT = 128 * 1024;          // 128 KB
 constexpr int64_t NORMAL_OBJECT_SIZE_LIMIT = 2L * 1024 * 1024;   // 2MB 
 constexpr int64_t LARGE_OBJECT_SIZE_LIMIT = 128L * 1024 * 1024;  // 128MB
-constexpr int64_t MEMORY_LIMITED_SIZE = 16L * 1024 * 1024 * 1024;
+constexpr int64_t MEMORY_LIMITED_SIZE = 16LL * 1024 * 1024 * 1024;
 constexpr int64_t FINAL_OBJECT_STORAGE_MEMORY_LIMIT = 50 * 1024 * 1024;   // 50MB
 
 constexpr double EPS = 1e-6;

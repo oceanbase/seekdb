@@ -28,6 +28,42 @@
 #endif
 #ifdef _WIN32
 #include <fcntl.h>
+#include <io.h>        // _get_osfhandle
+#include <windows.h>
+// Minimal POSIX shims for the read-only mmap/munmap and basename usage below.
+#ifndef MAP_FAILED
+#define MAP_FAILED ((void *)-1)
+#endif
+#ifndef PROT_READ
+#define PROT_READ   0  // mode encoded in PAGE_READONLY below; values unused
+#endif
+#ifndef MAP_PRIVATE
+#define MAP_PRIVATE 0
+#endif
+inline void *mmap(void * /*addr*/, size_t length, int /*prot*/, int /*flags*/,
+                  int fd, long long /*offset*/) {
+  // Read-only mapping of the whole file is the only mode this tool needs.
+  HANDLE hFile = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+  if (hFile == INVALID_HANDLE_VALUE) return MAP_FAILED;
+  HANDLE hMapping = CreateFileMappingA(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+  if (hMapping == NULL) return MAP_FAILED;
+  void *p = MapViewOfFile(hMapping, FILE_MAP_READ, 0, 0, length);
+  // The mapping object persists as long as a view references it, so the
+  // handle can be released immediately; munmap only needs UnmapViewOfFile.
+  CloseHandle(hMapping);
+  return p ? p : MAP_FAILED;
+}
+inline int munmap(void *addr, size_t /*length*/) {
+  return UnmapViewOfFile(addr) ? 0 : -1;
+}
+inline char *basename(char *path) {
+  if (path == NULL) return NULL;
+  char *last = path;
+  for (char *p = path; *p; ++p) {
+    if (*p == '/' || *p == '\\') last = p + 1;
+  }
+  return last;
+}
 #endif
 namespace oceanbase
 {
