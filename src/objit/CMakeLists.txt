@@ -57,13 +57,10 @@ endif()
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
 if(NOT BUILD_EMBED_MODE)
-  # On Windows ${ARCHITECTURE} is taken from $env:PROCESSOR_ARCHITECTURE which
-  # is "amd64" on 64-bit Windows (see cmake/Env.cmake), so treat both
-  # "x86_64" and "amd64" as the X86_64 family.
-  if( ${ARCHITECTURE} STREQUAL "x86_64" OR ${ARCHITECTURE} STREQUAL "amd64" )
-    LLVM_MAP_COMPONENTS_TO_LIBNAMES(llvm_libs Support Core IRReader ExecutionEngine OrcJit McJit X86CodeGen X86AsmParser X86Desc X86Info X86Disassembler runtimedyld bitreader bitwriter object objectyaml target DebugInfoDWARF Symbolize)
+  if( ${ARCHITECTURE} STREQUAL "x86_64" )
+    LLVM_MAP_COMPONENTS_TO_LIBNAMES(llvm_libs Support Core IRReader ExecutionEngine OrcJit McJit X86CodeGen X86AsmParser runtimedyld bitreader bitwriter object objectyaml target DebugInfoDWARF Symbolize)
   else()
-    LLVM_MAP_COMPONENTS_TO_LIBNAMES(llvm_libs Support Core IRReader ExecutionEngine OrcJit McJit AArch64CodeGen AArch64AsmParser AArch64Desc AArch64Info AArch64Disassembler runtimedyld bitreader bitwriter object objectyaml target DebugInfoDWARF Symbolize)
+    LLVM_MAP_COMPONENTS_TO_LIBNAMES(llvm_libs Support Core IRReader ExecutionEngine OrcJit McJit AArch64CodeGen AArch64AsmParser runtimedyld bitreader bitwriter object objectyaml target DebugInfoDWARF Symbolize)
   endif()
   set(CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
   include(${LLVM_CMAKE_DIR}/HandleLLVMOptions.cmake)

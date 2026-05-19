@@ -362,15 +362,15 @@ void Thread::destroy()
 
 void Thread::destroy_stack()
 {
-#if !defined(_WIN32) && !defined(OB_USE_ASAN)
+#ifdef _WIN32
+  pth_ = pthread_null();
+#elif !defined(OB_USE_ASAN)
   if (stack_addr_ != nullptr) {
     g_stack_allocer.dealloc(stack_addr_);
     stack_addr_ = nullptr;
   }
 #endif
-  // pthread_t is a struct on Windows (pthreads4w), an integer elsewhere;
-  // use pthread_null() so the same code compiles on every platform.
-  pth_ = pthread_null();
+  pth_ = 0;
 }
 
 void* Thread::__th_start(void *arg)
