@@ -7644,12 +7644,33 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       } else {
         ObString secure_file_priv_tmp(real_secure_file);
         const int64_t pos = secure_file_priv_tmp.length();
+#ifdef _WIN32
+        // Windows: _fullpath() normalizes to drive-rooted paths using '\' as
+        // the separator (e.g. "C:\", "C:\obdata"). The filesystem is also
+        // case-insensitive by default, so use a case-insensitive prefix match
+        // and accept either '\' or '/' as the boundary separator.
+        const bool is_fs_root =
+            (secure_file_priv_tmp.length() == 3
+             && secure_file_priv_tmp.ptr()[1] == ':'
+             && (secure_file_priv_tmp.ptr()[2] == '\\'
+                 || secure_file_priv_tmp.ptr()[2] == '/'));
+        const bool prefix_ok = full_path.prefix_match_ci(secure_file_priv_tmp);
+        const bool boundary_ok =
+            (full_path.length() > secure_file_priv_tmp.length()
+             && (full_path[pos] == '\\' || full_path[pos] == '/'));
+#else
+        const bool is_fs_root = (secure_file_priv_tmp == "/");
+        const bool prefix_ok = full_path.prefix_match(secure_file_priv_tmp);
+        const bool boundary_ok =
+            (full_path.length() > secure_file_priv_tmp.length()
+             && full_path[pos] == '/');
+#endif
         if (full_path.length() < secure_file_priv_tmp.length()) {
           ret = OB_ERR_NO_PRIVILEGE;
-        } else if (!full_path.prefix_match(secure_file_priv_tmp)) {
+        } else if (!prefix_ok) {
           ret = OB_ERR_NO_PRIVILEGE;
         } else if (full_path.length() > secure_file_priv_tmp.length()
-                   && secure_file_priv_tmp != "/" && full_path[pos] != '/') {
+                   && !is_fs_root && !boundary_ok) {
           ret = OB_ERR_NO_PRIVILEGE;
         }
       }
@@ -7676,12 +7697,30 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
         } else {
           ObString secure_file_path_tmp(real_secure_file);
           const int64_t pos = secure_file_path_tmp.length();
+#ifdef _WIN32
+          // See the symmetric comment in the secure_file_priv branch above.
+          const bool is_fs_root =
+              (secure_file_path_tmp.length() == 3
+               && secure_file_path_tmp.ptr()[1] == ':'
+               && (secure_file_path_tmp.ptr()[2] == '\\'
+                   || secure_file_path_tmp.ptr()[2] == '/'));
+          const bool prefix_ok = full_path.prefix_match_ci(secure_file_path_tmp);
+          const bool boundary_ok =
+              (full_path.length() > secure_file_path_tmp.length()
+               && (full_path[pos] == '\\' || full_path[pos] == '/'));
+#else
+          const bool is_fs_root = (secure_file_path_tmp == "/");
+          const bool prefix_ok = full_path.prefix_match(secure_file_path_tmp);
+          const bool boundary_ok =
+              (full_path.length() > secure_file_path_tmp.length()
+               && full_path[pos] == '/');
+#endif
           if (full_path.length() < secure_file_path_tmp.length()) {
             // continue
-          } else if (!full_path.prefix_match(secure_file_path_tmp)) {
+          } else if (!prefix_ok) {
             // continue
           } else if (full_path.length() > secure_file_path_tmp.length()
-                    && secure_file_path_tmp != "/" && full_path[pos] != '/') {
+                    && !is_fs_root && !boundary_ok) {
             // continue
           } else {
             ret = OB_SUCCESS;
