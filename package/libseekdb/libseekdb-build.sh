@@ -2,6 +2,7 @@
 # Build libseekdb, on macOS bundle deps to libs/, then pack lib + libs/ + seekdb.h into a .zip
 # Zip is written to this script's directory (package/libseekdb/).
 #
+# Invokes build.sh with -DBUILD_EMBED_MODE=ON and --make libseekdb (same as CI), not a full make.
 # Windows (seekdb.dll): build with .\build.ps1 release --ninja --target libseekdb -DBUILD_EMBED_MODE=ON,
 # then run libseekdb-build.ps1 in this directory (see README.md).
 #
@@ -39,6 +40,36 @@ UNAME_M="$(uname -m)"
 
 # --- Helpers ---
 die() { echo "error: $*" >&2; exit 1; }
+
+# CMake flags aligned with .github/workflows/build-libseekdb.yml (embed + libseekdb only).
+build_libseekdb_embed_args() {
+  BUILD_EMBED_ARGS=(-DBUILD_EMBED_MODE=ON)
+  if command -v python3 &>/dev/null; then
+    PYVER="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+    [[ -n "$PYVER" ]] && BUILD_EMBED_ARGS+=(-DPYTHON_VERSION="$PYVER")
+  fi
+  if [[ "$UNAME_S" == "Darwin" ]]; then
+    BUILD_EMBED_ARGS+=(-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0)
+    if [[ -n "${ARCH:-}" ]]; then
+      case "$ARCH" in
+        arm64|aarch64) BUILD_EMBED_ARGS+=(-DCMAKE_OSX_ARCHITECTURES=arm64) ;;
+        x86_64|amd64)  BUILD_EMBED_ARGS+=(-DCMAKE_OSX_ARCHITECTURES=x86_64) ;;
+      esac
+    fi
+  fi
+}
+
+# Build only libseekdb (not the full tree / unittest).
+run_build_libseekdb() {
+  local need_init="$1"
+  build_libseekdb_embed_args
+  local -a args=("$BUILD_TYPE")
+  [[ "$need_init" == true ]] && args+=(--init)
+  [[ "$ANDROID_PACK" == true ]] && args+=(--android)
+  args+=("${BUILD_EMBED_ARGS[@]}" --make libseekdb)
+  echo "[BUILD] ./build.sh ${args[*]}"
+  (cd "$TOP_DIR" && ./build.sh "${args[@]}") || return 1
+}
 
 # List dependency paths from a dylib (one per line, trimmed). Skips first line (the dylib itself).
 get_dylib_deps() {
@@ -88,20 +119,10 @@ if [[ -z "${1:-}" ]]; then
   # --- 2) Build libseekdb if not present (main lib is always next to libs/, not inside) ---
   if [[ ! -f "$WORK_DIR/libseekdb.dylib" && ! -f "$WORK_DIR/libseekdb.so" ]]; then
     echo "[BUILD] Building libseekdb (BUILD_TYPE=$BUILD_TYPE)..."
-    if [[ "$ANDROID_PACK" == true ]]; then
-      if [[ ! -d "$BUILD_DIR" ]]; then
-        (cd "$TOP_DIR" && ./build.sh "$BUILD_TYPE" --android --init -DBUILD_EMBED_MODE=ON --make) || exit 1
-      else
-        (cd "$TOP_DIR" && ./build.sh "$BUILD_TYPE" --android -DBUILD_EMBED_MODE=ON --make) || exit 1
-      fi
-      _j=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-      (cd "$BUILD_DIR" && make libseekdb -j"${_j}") || exit 1
+    if [[ ! -d "$BUILD_DIR" ]]; then
+      run_build_libseekdb true || exit 1
     else
-      if [[ ! -d "$BUILD_DIR" ]]; then
-        (cd "$TOP_DIR" && ./build.sh "$BUILD_TYPE" --init --make) || exit 1
-      else
-        (cd "$TOP_DIR" && ./build.sh "$BUILD_TYPE" --make) || exit 1
-      fi
+      run_build_libseekdb false || exit 1
     fi
   fi
 
@@ -115,7 +136,7 @@ if [[ -z "${1:-}" ]]; then
     if otool -L "$WORK_DIR/libseekdb.dylib" | grep -q '@loader_path/libs/'; then
       echo "[BUILD] libseekdb.dylib was already bundled; rebuilding to get clean dylib for this run..."
       rm -f "$WORK_DIR/libseekdb.dylib"
-      (cd "$TOP_DIR" && ./build.sh "$BUILD_TYPE" -DBUILD_EMBED_MODE=ON --make) || exit 1
+      run_build_libseekdb false || exit 1
     fi
 
     # Save pristine dylib so we can restore after zip (keeps build dir clean; next run won't rebuild)

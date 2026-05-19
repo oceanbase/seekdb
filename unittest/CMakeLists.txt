@@ -32,7 +32,8 @@ function(ob_unittest case)
   elseif(NOT APPLE)
     target_link_libraries(${case} PRIVATE -Wl,--whole-archive mock_di -Wl,--no-whole-archive oceanbase gtest gmock)
   else()
-    target_link_libraries(${case} PRIVATE mock_di oceanbase gtest gmock)
+    # GTest::gmock already pulls in GTest::gtest; linking both duplicates libgtest.a.
+    target_link_libraries(${case} PRIVATE mock_di oceanbase GTest::gmock)
   endif()
   target_include_directories(${case}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/unittest ${CMAKE_SOURCE_DIR}/mittest ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)

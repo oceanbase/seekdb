@@ -7,7 +7,11 @@ endif()
 
 add_library(oblib_testbase INTERFACE)
 target_include_directories(oblib_testbase INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(oblib_testbase INTERFACE -lgmock -lgtest)
+if(APPLE)
+  target_link_libraries(oblib_testbase INTERFACE GTest::gmock)
+else()
+  target_link_libraries(oblib_testbase INTERFACE -lgmock -lgtest)
+endif()
 file(COPY run_tests.sh DESTINATION .)
 enable_testing()
 
