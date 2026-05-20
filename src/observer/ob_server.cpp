@@ -673,10 +673,6 @@ void ObServer::destroy()
     disk_usage_report_task_.destroy();
     FLOG_INFO("tenant disk usage report task destroyed");
 
-    FLOG_INFO("begin to destroy disk usage report task");
-    TG_DESTROY(lib::TGDefIDs::DiskUseReport);
-    FLOG_INFO("disk usage report task destroyed");
-
     FLOG_INFO("begin to destroy store cache");
     OB_STORE_CACHE.destroy();
     FLOG_INFO("store cache destroyed");
@@ -985,13 +981,6 @@ int ObServer::start(bool embed_mode)
       LOG_ERROR("fail to start ObPxTargetMgr", KR(ret));
     } else {
       FLOG_INFO("success to start ObPxTargetMgr");
-    }
-
-    if (FAILEDx(TG_SCHEDULE(lib::TGDefIDs::DiskUseReport,
-        disk_usage_report_task_, DISK_USAGE_REPORT_INTERVAL, true))) {
-      LOG_ERROR("fail to schedule disk_usage_report_task_ task", KR(ret));
-    } else {
-      FLOG_INFO("success to schedule disk_usage_report_task_ task");
     }
 
     if (FAILEDx(ObActiveSessHistTask::get_instance().start())) {
@@ -1328,9 +1317,6 @@ int ObServer::stop()
     schema_service_.stop();
     FLOG_INFO("schema service stopped");
 
-    FLOG_INFO("begin to stop disk usage report task");
-    TG_STOP(lib::TGDefIDs::DiskUseReport);
-    FLOG_INFO("disk usage report task stopped");
 
     FLOG_INFO("begin to stop storage object mgr");
     OB_STORAGE_OBJECT_MGR.stop();
@@ -2537,8 +2523,6 @@ int ObServer::init_storage()
       LOG_ERROR("init storage object mgr fail", KR(ret));
     } else if (OB_FAIL(disk_usage_report_task_.init(sql_proxy_))) {
       LOG_WARN("fail to init disk usage report task", KR(ret));
-    } else if (OB_FAIL(TG_START(lib::TGDefIDs::DiskUseReport))) {
-      LOG_WARN("fail to initialize disk usage report timer", KR(ret));
     }
   }
 
