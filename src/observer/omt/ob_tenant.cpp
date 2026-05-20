@@ -240,7 +240,6 @@ void ObPxPool::set_px_thread_name()
 {
   char buf[32];
   snprintf(buf, 32, "PX_G%ld", group_id_);
-  ob_get_tenant_id() = tenant_id_;
   lib::set_thread_name(buf);
 }
 
@@ -551,7 +550,7 @@ int ObTenant::create_tenant_module()
   int ret = OB_SUCCESS;
   const uint64_t &tenant_id = id_;
   const double max_cpu = static_cast<double>(tenant_meta_.unit_.config_.max_cpu());
-  // set tenant ctx to thread_local
+  // set tenant ctx to global
   ObTenantSwitchGuard guard(this);
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>", K(tenant_id), K(MTL_ID()));
@@ -563,10 +562,10 @@ int ObTenant::create_tenant_module()
     ret = CREATE_MTL_MODULE_FAIL;
     LOG_ERROR("create_tenant_module failed because of tracepoint CREATE_MTL_MODULE_FAIL",
               K(tenant_id), K(ret));
-  } else if (FALSE_IT(ObTenantEnv::set_tenant(this))) {
-    // Above, a new TenantBase thread-local variable is created through ObTenantSwitchGuard, rather than storing a pointer to TenantBase,
-    // The purpose is to reduce one memory jump when accessing via MTL(), but the pointer set for the mtl module is still nullptr, so when the mtl creation is completed
-    // Still needs to be set once.
+  } else if (FALSE_IT(g_tenant_ptr = this)) {
+    // After create_mtl_module(), MTL services are on this.
+    // Point the global pointer at the real ObTenant. MTL_SWITCH's readiness
+    // check (g_tenant_ptr != &g_tenant_ctx) will now pass for all threads.
   } else if (FALSE_IT(mtl_init = true)) {
   } else if (OB_FAIL(ObTenantBase::init_mtl_module())) {
     LOG_ERROR("init mtl module failed", K(tenant_id), K(ret));
@@ -602,7 +601,6 @@ void* ObTenant::wait(void* t)
 {
   int ret = OB_SUCCESS;
   ObTenant* tenant = (ObTenant*)t;
-  ob_get_tenant_id() = tenant->id_;
   lib::set_thread_name("UnitGC");
   lib::Thread::update_loop_ts();
   tenant->handle_retry_req(true);

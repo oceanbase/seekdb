@@ -487,52 +487,22 @@ bool ObTenantBase::is_primary_or_invalid_tenant()
 
 void ObTenantEnv::set_tenant(ObTenantBase *ctx)
 {
-  if (ctx != nullptr && ctx->id_ == OB_INVALID_TENANT_ID) {
-    LOG_ERROR_RET(OB_ERROR, "ObTenantEnv::set_tenant", KP(ctx));
-    ob_abort();
-  }
-  get_tenant() = ctx;
-  if (ctx == nullptr) {
-    ObTenantBase ctx_tmp(OB_INVALID_TENANT_ID, 0/*epoch*/);
-    *get_tenant_local() = ctx_tmp;
-    ob_get_tenant_id() = 0;
-  } else {
-    *get_tenant_local() = *ctx;
-    ob_get_tenant_id() = ctx->id();
-  }
-  lib::set_tenant_tg_helper(ctx);
-  // Skip the system tenant check because the system tenant's startup has special characteristics
-  if (ctx != nullptr && ctx->id() != OB_SYS_TENANT_ID && ctx->enable_tenant_ctx_check_) {
-    lib::Threads::get_expect_run_wrapper() = ctx;
-  } else {
-    lib::Threads::get_expect_run_wrapper() = nullptr;
-  }
+  // Single tenant: all tenant context switching is a no-op.
+  UNUSED(ctx);
 }
 
 ObTenantSwitchGuard::ObTenantSwitchGuard(ObTenantBase *ctx)
 {
-  if (ctx != nullptr && ctx->id() != MTL_ID()) {
-    on_switch_ = true;
-    stash_tenant_ = ObTenantEnv::get_tenant();
-    ObTenantEnv::set_tenant(ctx);
-  } else {
-    on_switch_ = false;
-    stash_tenant_ = nullptr;
-  }
+  // Single tenant: only one tenant exists, no switching needed.
+  UNUSED(ctx);
+  reset();
 }
 
 int ObTenantSwitchGuard::switch_to(ObTenantBase *ctx)
 {
-  int ret = OB_SUCCESS;
-  if (ctx != nullptr && ctx->id() != MTL_ID()) {
-    on_switch_ = true;
-    stash_tenant_ = ObTenantEnv::get_tenant();
-    ObTenantEnv::set_tenant(ctx);
-  } else {
-    on_switch_ = false;
-    stash_tenant_ = nullptr;
-  }
-  return ret;
+  // Single tenant: only one tenant exists, no switching needed.
+  UNUSED(ctx);
+  return OB_SUCCESS;
 }
 
 bool check_allow_switch(uint64_t src_tenant, uint64_t dest_tenant)
@@ -554,58 +524,19 @@ bool check_allow_switch(uint64_t src_tenant, uint64_t dest_tenant)
 
 int ObTenantSwitchGuard::switch_to(uint64_t tenant_id, bool need_check_allow)
 {
-  int ret = OB_SUCCESS;
-
-  if (!common::is_valid_tenant_id(tenant_id)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid tenant id to switch", K(ret), K(tenant_id));
-  } else if (tenant_id == MTL_ID()) {
-    // no need to switch
-  } else if (is_virtual_tenant_id(tenant_id)) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_ERROR("can't switch to virtual tenant", K(ret), K(tenant_id));
-  } else if (on_switch_) {
-    // release current tenant lock
-    if (release_cb_ != nullptr) {
-      release_cb_();
-      release_cb_ = nullptr;
-    }
-    // switch to dest tenant
-    ObTenantBase *switch_tenant = nullptr;
-    if (OB_SUCC(get_tenant_base_with_lock(tenant_id, switch_tenant, release_cb_))) {
-      ObTenantEnv::set_tenant(switch_tenant);
-    }
-  } else if (need_check_allow && !check_allow_switch(MTL_ID(), tenant_id)) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_ERROR("forbid switch in normal tenant", K(tenant_id), K(MTL_ID()), K(ret));
-  } else {
-    on_switch_ = true;
-    ObTenantBase *switch_tenant = nullptr;
-    stash_tenant_ = ObTenantEnv::get_tenant();
-    if (OB_SUCC(get_tenant_base_with_lock(tenant_id, switch_tenant, release_cb_))) {
-      ObTenantEnv::set_tenant(switch_tenant);
-    }
-  }
-  if (OB_FAIL(ret)) { // convert to one error code
-    if (ret == OB_IN_STOP_STATE) {
-      ret = OB_TENANT_NOT_IN_SERVER;
-    }
-    LOG_WARN("switch tenant fail", K(tenant_id), K(ret), K(lbt()));
-  }
-  return ret;
+  UNUSED(tenant_id);
+  UNUSED(need_check_allow);
+  // Single tenant: g_tenant_ptr starts as &g_tenant_ctx (dummy, no MTL services).
+  // It becomes the real ObTenant* after create_mtl_module() completes.
+  // MTL_SWITCH calls switch_to() as a readiness guard: only proceed when the
+  // real tenant is available.
+  return (g_tenant_ptr != &g_tenant_ctx) ? OB_SUCCESS : OB_TENANT_NOT_IN_SERVER;
 }
 
 void ObTenantSwitchGuard::release()
 {
-  if (on_switch_) {
-    if (release_cb_ != nullptr) {
-      release_cb_();
-      release_cb_ = nullptr;
-    }
-    ObTenantEnv::set_tenant(stash_tenant_);
-
-    reset();
-  }
+  // Single tenant: no tenant switching state to restore.
+  reset();
 }
 
 } // end of namespace share

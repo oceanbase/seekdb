@@ -21,6 +21,7 @@
 
 #ifdef __APPLE__
 #include <sys/uio.h>
+// macOS doesn't have process_vm_readv, provide a stub implementation
 static ssize_t process_vm_readv(pid_t pid, const struct iovec *local_iov, unsigned long liovcnt,
                                 const struct iovec *remote_iov, unsigned long riovcnt, unsigned long flags) {
   (void)pid;
@@ -29,6 +30,8 @@ static ssize_t process_vm_readv(pid_t pid, const struct iovec *local_iov, unsign
   (void)remote_iov;
   (void)riovcnt;
   (void)flags;
+  // Stub implementation: return -1 to indicate failure
+  // This functionality is not available on macOS
   return -1;
 }
 #endif
@@ -80,10 +83,15 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
     return ret;
     #endif
     #if defined(__APPLE__) || defined(__ANDROID__)
+    // GET_OTHER_TSI_ADDR macro relies on Linux/glibc-specific pthread/TLS memory layout
+    // where pthread_self() equals the TLS segment base (TCB).
+    // On macOS and Android/Bionic, pthread_self() returns a heap struct pointer,
+    // so the offset calculation produces an invalid address.
     ret = OB_NOT_SUPPORTED;
     return ret;
     #endif
     #ifdef _WIN32
+    // GET_OTHER_TSI_ADDR, /proc, process_vm_readv, and iovec are Linux-specific.
     ret = OB_NOT_SUPPORTED;
     return ret;
     #endif
@@ -99,6 +107,7 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
           char path[64];
           IGNORE_RETURN snprintf(path, 64, "/proc/self/task/%ld", tid);
           if (-1 == access(path, F_OK)) {
+            // thread not exist, may have exited.
             continue;
           }
         }
@@ -108,6 +117,9 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
           continue;
         }
         GET_OTHER_TSI_ADDR(wait_addr, &ObLatch::current_wait);
+        GET_OTHER_TSI_ADDR(join_addr, &Thread::thread_joined_);
+        GET_OTHER_TSI_ADDR(sleep_us, &Thread::sleep_us_);
+        GET_OTHER_TSI_ADDR(blocking_ts, &Thread::blocking_ts_);
         for (int64_t i = 0; i < col_count && OB_SUCC(ret); ++i) {
           const uint64_t col_id = output_column_ids_.at(i);
           ObObj *cells = cur_row_.cells_;
@@ -118,8 +130,74 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
             }
             case TNAME: {
               GET_OTHER_TSI_ADDR(tname, &(ob_get_tname()[0]));
+              // PAY ATTENTION HERE
               MEMCPY(tname_, thread_base + tname_offset, sizeof(tname_));
               cells[i].set_varchar(tname_);
+              cells[i].set_collation_type(
+                  ObCharset::get_default_collation(ObCharset::get_default_charset()));
+              break;
+            }
+            case STATUS: {
+              const char* status_str = nullptr;
+              if (0 != join_addr) {
+                status_str = "Join";
+              } else if (0 != sleep_us) {
+                status_str = "Sleep";
+              } else if (0 != blocking_ts) {
+                status_str = "Wait";
+              } else {
+                status_str = "Run";
+              }
+              cells[i].set_varchar(status_str);
+              cells[i].set_collation_type(
+                  ObCharset::get_default_collation(ObCharset::get_default_charset()));
+              break;
+            }
+            case WAIT_EVENT: {
+              GET_OTHER_TSI_ADDR(rpc_dest_addr, &Thread::rpc_dest_addr_);
+              GET_OTHER_TSI_ADDR(event, &Thread::wait_event_);
+              ObAddr addr;
+              struct iovec local_iov = {&addr, sizeof(ObAddr)};
+              struct iovec remote_iov = {thread_base + rpc_dest_addr_offset, sizeof(ObAddr)};
+              wait_event_[0] = '\0';
+              size_t buf_size = sizeof(wait_event_);
+              if (0 != join_addr) {
+                IGNORE_RETURN snprintf(wait_event_, buf_size, "thread %u", *(uint32_t*)(join_addr + tid_offset));
+              } else if (OB_NOT_NULL(wait_addr)) {
+                uint32_t val = 0;
+                struct iovec local_iov = {&val, sizeof(val)};
+                struct iovec remote_iov = {wait_addr, sizeof(val)};
+                ssize_t n = process_vm_readv(pid, &local_iov, 1, &remote_iov, 1, 0);
+                if (n != sizeof(val)) {
+                } else if (0 != (val & (1<<30))) {
+                  IGNORE_RETURN snprintf(wait_event_, buf_size, "wrlock on %u", val & 0x3fffffff);
+                } else {
+                  IGNORE_RETURN snprintf(wait_event_, buf_size, "%u rdlocks", val & 0x3fffffff);
+                }
+              } else if (sizeof(ObAddr) == process_vm_readv(pid, &local_iov, 1, &remote_iov, 1, 0)
+                         && addr.is_valid()) {
+                GET_OTHER_TSI_ADDR(pcode, &Thread::pcode_);
+                int64_t pos1 = 0;
+                int64_t pos2 = 0;
+                if (((pos1 = snprintf(wait_event_, 37, "rpc 0x%X(%s", pcode, obrpc::ObRpcPacketSet::instance().name_of_idx(obrpc::ObRpcPacketSet::instance().idx_of_pcode(pcode)) + 3)) > 0)
+                    && ((pos2 = snprintf(wait_event_ + std::min(static_cast<int64_t>(36L), pos1), 6, ") to ")) > 0)) {
+                  int64_t pos = std::min(static_cast<int64_t>(36L), pos1) + std::min(static_cast<int64_t>(5L), pos2);
+                  pos += addr.to_string(wait_event_ + pos, buf_size - pos);
+                }
+              } else if (0 != blocking_ts && (0 != (Thread::WAIT_IN_TENANT_QUEUE & event))) {
+                IGNORE_RETURN snprintf(wait_event_, buf_size, "tenant worker requests");
+              } else if (0 != blocking_ts && (0 != (Thread::WAIT_FOR_IO_EVENT & event))) {
+                IGNORE_RETURN snprintf(wait_event_, buf_size, "IO events");
+              } else if (0 != blocking_ts && (0 != (Thread::WAIT_FOR_LOCAL_RETRY & event))) {
+                IGNORE_RETURN snprintf(wait_event_, buf_size, "local retry");
+              } else if (0 != blocking_ts && (0 != (Thread::WAIT_FOR_PX_MSG & event))) {
+                IGNORE_RETURN snprintf(wait_event_, buf_size, "px message");
+              } else if (0 != sleep_us) {
+                IGNORE_RETURN snprintf(wait_event_, buf_size, "%ld us", sleep_us);
+              } else if (0 != blocking_ts) {
+                IGNORE_RETURN snprintf(wait_event_, buf_size, "%ld us", common::ObTimeUtility::fast_current_time() - blocking_ts);
+              }
+              cells[i].set_varchar(wait_event_);
               cells[i].set_collation_type(
                   ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
@@ -167,6 +245,11 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
                   ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
+            case LOOP_TS: {
+              GET_OTHER_TSI_ADDR(loop_ts, &oceanbase::lib::Thread::loop_ts_);
+              cells[i].set_timestamp(loop_ts);
+              break;
+            }
             case CGROUP_PATH: {
               if (!is_config_cgroup_) {
                 cells[i].set_varchar("");
@@ -195,6 +278,7 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
           }
         }
         if (OB_SUCC(ret)) {
+          // scanner maximum supports 64M, therefore overflow is not considered for now
           if (OB_FAIL(scanner_.add_row(cur_row_))) {
             SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
             if (OB_SIZE_OVERFLOW == ret) {
@@ -238,6 +322,15 @@ int ObAllVirtualThread::read_real_cgroup_path()
       if (NULL == file) {
         cells[i].set_varchar("");
       } else {
+        /*
+        file content
+        7:perf_event:/
+        6:cpuset,cpu,cpuacct:/oceanbase/tenant_0001
+        5:blkio:/system.slice/staragentctl.service
+        4:devices:/system.slice/staragentctl.service
+        3:hugetlb:/
+        cgroup_path = /tenant_0001
+        */
         bool is_find = false;
         int min_len = 2;
         int discard_len = 1;
