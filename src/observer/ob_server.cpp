@@ -3134,12 +3134,10 @@ int ObServer::clean_up_invalid_tables_by_tenant(
   int tmp_ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObDatabaseSchema *database_schema = NULL;
-  const int64_t CONNECT_TIMEOUT_VALUE = 50LL * 60 * 60 * 1000 * 1000; //default value is 50hrs
   ObArray<uint64_t> table_ids;
   obrpc::ObDropTableArg drop_table_arg;
   obrpc::ObTableItem table_item;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  char create_host_str[OB_MAX_HOST_NAME_LENGTH];
   if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_ids_in_tenant(tenant_id, table_ids))) {
@@ -3149,18 +3147,17 @@ int ObServer::clean_up_invalid_tables_by_tenant(
     drop_table_arg.if_exist_ = true;
     drop_table_arg.to_recyclebin_ = false;
     common_rpc_proxy = GCTX.rs_rpc_proxy_;
-    MYADDR.ip_port_to_string(create_host_str, OB_MAX_HOST_NAME_LENGTH);
     // only OB_ISNULL(GCTX.session_mgr_) will exit the loop
     for (int64_t i = 0; i < table_ids.count() && OB_SUCC(tmp_ret); i++) {
       bool is_oracle_mode = false;
-      const ObTableSchema *table_schema = NULL;
+      const ObSimpleTableSchemaV2 *table_schema = NULL;
       const uint64_t table_id = table_ids.at(i);
       // schema guard cannot be used repeatedly in iterative logic,
       // otherwise it will cause a memory hike in schema cache
       if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
-        LOG_WARN("get table schema failed", K(ret), KT(table_id));
+      } else if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, table_id, table_schema))) {
+        LOG_WARN("get simple table schema failed", K(ret), KT(table_id));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("got invalid schema", KR(ret), K(i));
@@ -3168,35 +3165,18 @@ int ObServer::clean_up_invalid_tables_by_tenant(
         LOG_WARN("fail to check table if oracle compat mode", KR(ret));
       } else if (0 == table_schema->get_session_id()) {
         //do nothing
-      } else if (0 != table_schema->get_create_host_str().compare(create_host_str)) {
-        LOG_DEBUG("current observer is not the one created the table, just skip", "current session", create_host_str, K(*table_schema));
       } else {
         LOG_DEBUG("table is creating or encountered error or is temporary one", K(*table_schema));
-        if (table_schema->is_obproxy_create_tmp_tab()) { //1, Temporary tables, proxy table creation, cleanup rules see 3.2#
-          LOG_DEBUG("clean_up_invalid_tables::ob proxy created", K(i), K(ObTimeUtility::current_time()),
-                                                                 K(table_schema->get_sess_active_time()), K(CONNECT_TIMEOUT_VALUE));
-          if (ObTimeUtility::current_time() - table_schema->get_sess_active_time() > CONNECT_TIMEOUT_VALUE) {
-            ctas_cleanup.set_drop_flag(true);
-          } else {
-            ctas_cleanup.set_drop_flag(false);
-          }
-          ctas_cleanup.set_cleanup_type(ObCTASCleanUp::TEMP_TAB_PROXY_RULE);
+        ctas_cleanup.set_drop_flag(false);
+        if (table_schema->is_tmp_table()) {
+          ctas_cleanup.set_cleanup_type(ObCTASCleanUp::TEMP_TAB_RULE);
         } else {
-          ctas_cleanup.set_drop_flag(false);
-          if (table_schema->is_tmp_table()) { // 2, Temporary tables, directly connected tables, cleanup rules see 3.1~3.2#
-            ctas_cleanup.set_cleanup_type(ObCTASCleanUp::TEMP_TAB_RULE);
-          } else { //3, Query and build tables, see 2# for cleaning rules
-            ctas_cleanup.set_cleanup_type(ObCTASCleanUp::CTAS_RULE);
-          }
+          ctas_cleanup.set_cleanup_type(ObCTASCleanUp::CTAS_RULE);
         }
         if (false == ctas_cleanup.get_drop_flag()) {
           ctas_cleanup.set_session_id(table_schema->get_session_id());
           ctas_cleanup.set_schema_version(table_schema->get_schema_version());
-          if (ObCTASCleanUp::TEMP_TAB_PROXY_RULE == ctas_cleanup.get_cleanup_type()) { //The proxy connection method is not deleted by default, and it may need to be dropped when the reused session is found.
-            ctas_cleanup.set_drop_flag(false);
-          } else {
-            ctas_cleanup.set_drop_flag(true);
-          }
+          ctas_cleanup.set_drop_flag(true);
           if (OB_ISNULL(GCTX.session_mgr_)) {
             tmp_ret = OB_ERR_UNEXPECTED;
             LOG_ERROR("session mgr is null", KR(ret));
