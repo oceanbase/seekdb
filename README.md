@@ -3,88 +3,157 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*pKqtRILxGioAAAAAQLAAAAgAejCYAQ/original" width="420">
   <source media="(prefers-color-scheme: light)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*6BO4Q6D78GQAAAAAQFAAAAgAejCYAQ/original" width="420">
-  <img alt="示意图" src="light-mode.png">
+  <img alt="seekdb logo" src="images/logo.svg" width="420">
 </picture>
 
-### **🔷 The AI-Native Search Database**
+# **Write. Search. Fork. The State Store for AI Agents.**
 
-**Unifies vector, text, structured and semi-structured data in a single engine, enabling hybrid search and in-database AI workflows.**
-
-</div>
-
----
-<div align="center">
 <p>
-    <a href="https://oceanbase.ai">
-        <img alt="Documentation" height="20" src="https://img.shields.io/badge/OceanBase.ai-4285F4?style=for-the-badge&logo=read-the-docs&logoColor=white" />
+    <a href="https://github.com/oceanbase/seekdb/stargazers">
+        <img alt="GitHub Stars" src="https://img.shields.io/github/stars/oceanbase/seekdb?style=flat-square&logo=github&color=yellow" />
+    </a>
+    <a href="https://github.com/oceanbase/seekdb/releases">
+        <img alt="Latest Release" src="https://img.shields.io/github/v/release/oceanbase/seekdb?style=flat-square&color=blue" />
+    </a>
+    <a href="https://github.com/oceanbase/seekdb/commits">
+        <img alt="Commit Activity" src="https://img.shields.io/github/commit-activity/m/oceanbase/seekdb?style=flat-square&color=green" />
+    </a>
+    <a href="https://github.com/oceanbase/seekdb/graphs/contributors">
+        <img alt="Contributors" src="https://img.shields.io/github/contributors/oceanbase/seekdb?style=flat-square&color=orange" />
+    </a>
+    <a href="https://github.com/oceanbase/seekdb/issues">
+        <img alt="Issues" src="https://img.shields.io/github/issues/oceanbase/seekdb?style=flat-square" />
+    </a>
+    <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
+        <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" />
+    </a>
+    <a href="https://pepy.tech/projects/pyseekdb">
+        <img alt="Downloads" src="https://static.pepy.tech/badge/pyseekdb" />
+    </a>
+    <a href="https://discord.gg/74cF8vbNEs">
+        <img alt="Join Discord" src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&style=flat-square" />
+    </a>
+    <a href="https://seekdb.ai">
+        <img alt="Documentation" src="https://img.shields.io/badge/Docs-seekdb.ai-4285F4?style=flat-square&logo=read-the-docs&logoColor=white" />
+    </a>
+    <a href="https://deepwiki.com/oceanbase/seekdb">
+        <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
     </a>
     <a href="https://www.linkedin.com/company/oceanbase" target="_blank">
         <img src="https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff" alt="follow on LinkedIn">
     </a>
     <a href="https://www.youtube.com/@OceanBaseDB">
-        <img alt="Static Badge" src="https://img.shields.io/badge/YouTube-red?logo=youtube">
-    </a>
-    <a href="https://deepwiki.com/oceanbase/seekdb">
-        <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
-    </a>
-    <a href="https://discord.gg/74cF8vbNEs">
-        <img alt="Join Discord" src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&style=flat-square" />
-    </a>
-    <a href="https://pepy.tech/projects/pylibseekdb">
-        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/pylibseekdb" />
-    </a>
-    <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
-        <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" />
+        <img alt="YouTube" src="https://img.shields.io/badge/YouTube-red?logo=youtube">
     </a>
 </p>
+
+MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · COW Sandbox
+
+⚡ 1,523 QPS streaming write+search (10× Milvus, 3× Elasticsearch)<br>
+🌿 FORK/MERGE sandboxes for safe agent exploration<br>
+🔍 Vector + full-text + scalar in one SQL query<br>
+🐬 Full ACID, MySQL protocol, works with LangChain/LlamaIndex/Dify
+
+**English** | [中文版](README_CN.md) | [日本語](README_JP.md)
+
+[30-Second Try](#%EF%B8%8F-30-second-try) · [Quick Start](#-quick-start) · [Why seekdb](#-why-seekdb-for-agents) · [Ecosystem](#-ecosystem--integrations) · [Contributing](#%EF%B8%8F-development)
+
+<sub>If you find seekdb useful, consider giving it a <a href="https://github.com/oceanbase/seekdb/stargazers">star</a> — it helps others discover the project.</sub>
+
+---
+
 </div>
+
+## ⚡ Performance at a Glance
 
 <div align="center">
-
-**English** | [中文版](README_CN.md)
-
----
-
+  <img src="images/benchmark.svg" alt="seekdb benchmark: 10.7× the QPS of Milvus, 3.2× of Elasticsearch" width="720" />
 </div>
 
-## 🚀 What is OceanBase seekdb?
-
-**OceanBase seekdb** is an AI-native search database that unifies relational, vector, text, JSON and GIS in a single engine, enabling hybrid search and in-database AI workflows.
+> 📖 [Read the launch blog →](#) · 🔁 [Reproduce the benchmark →](https://github.com/oceanbase/vdb-streambench)
 
 ---
 
-## 🔥 Why OceanBase seekdb?
+## ⏱️ 30-Second Try
 
-| **Feature**              | **seekdb** | **OceanBase** | **Chroma** | **Milvus** | **MySQL&nbsp;9.0**           | **PostgreSQL<br/>+pgvector** | **DuckDB** | **Elasticsearch**                   |
-| ------------------------ |:--------------------:|:-------------:|:----------:|:----------:|:-----------------------:|:----------------------------:|:----------:|:-----------------------------------:|
-| **Embedded**    | ✅                    | ❌             | ✅          | ✅          | ❌<sup>[1]</sup> | ❌                            | ✅          | ❌                                   |
-| **Single-Node** | ✅                    | ✅             | ✅          | ✅          | ✅                       | ✅                            | ✅          | ✅                                   |
-| **Distributed** | ❌                    | ✅             | ❌          | ✅          | ❌                       | ❌                            | ❌          | ✅                                   |
-| **MySQL&nbsp;Compatible**   | ✅                    | ✅             | ❌          | ❌          | ✅                       | ❌                            | ✅          | ❌                                   |
-| **Vector&nbsp;Search**     | ✅                    | ✅             | ✅          | ✅          | ❌                       | ✅                            | ✅          | ✅                                   |
-| **Full-Text&nbsp;Search**    | ✅                    | ✅             | ✅          | ⚠️         | ✅                       | ✅                            | ✅          | ✅                                   |
-| **Hybrid&nbsp;Search** | ✅                    | ✅             | ✅          | ✅          | ❌                       | ⚠️                           | ❌          | ✅                                   |
-| **OLTP**                 | ✅                    | ✅             | ❌          | ❌          | ✅                       | ✅                            | ❌          | ❌                                   |
-| **OLAP**                 | ✅                    | ✅             | ❌          | ❌          | ❌                       | ✅                            | ✅          | ⚠️                                  |
-| **License**  | Apache 2.0           | MulanPubL 2.0 | Apache 2.0 | Apache 2.0 | GPL 2.0                 | PostgreSQL License           | MIT        | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 |
-> [1] Embedded capability is removed in MySQL 8.0
-> - ✅ Supported
-> - ❌ Not Supported
-> - ⚠️ Limited
+<div align="center">
+  <img src="images/demo.gif" alt="seekdb 30-second demo" width="720" />
+</div>
 
-## ✨ Key Features
+```bash
+pip install -U pyseekdb   # pyseekdb is the Python SDK for seekdb
+```
 
-### Build fast + Hybrid search + Multi model
-1. **Build fast:** From prototype to production in minutes: create AI apps using Python, run VectorDBBench on 1C2G.
-2. **Hybrid Search:** Combine vector search, full-text search and relational query in a single statement.
-3. **Multi-Model:** Support relational, vector, text, JSON and GIS in a single engine.
+No servers, no schemas, no embedding setup. Embedded mode runs in-process; switch to server / OceanBase mode with one line. [More examples →](#-more-examples)
 
+---
 
-### AI inside + SQL inside
-1. **AI Inside:** Run embedding, reranking, LLM inference and prompt management inside the database, supporting a complete document-in/data-out RAG workflow.
-2. **SQL Inside:** 	Powered by the proven OceanBase engine, delivering real-time writes and queries with full ACID compliance, and seamless MySQL ecosystem compatibility.
+## ✨ Why seekdb for Agents?
 
+### 🔥 Streaming Write + Concurrent Search, Without the P99 Spike
 
+Agent workloads are continuous write + millisecond-later read. seekdb's
+**async index pipeline (Change Stream)** decouples DML from index build,
+and its **two-level HNSW** (incremental + snapshot) makes newly-written
+vectors immediately searchable.
+
+<div align="center">
+  <img src="images/architecture.svg" alt="seekdb async index pipeline architecture" width="720" />
+</div>
+
+The write path commits and returns *without waiting* on index construction.
+The Change Stream pipeline consumes the redo log asynchronously and updates
+the delta HNSW. Queries hit both delta and snapshot indexes with fine-grained
+read locks — **this is why P99 stays flat under concurrency.**
+
+> **The result: 1,523 QPS with 21.7 ms concurrent P99 — 10.7× the QPS of
+> Milvus, and P99 jitter of just 1.1× when concurrency rises (vs ~10×
+> for ES / Milvus on the same workload).**
+
+<sub>Source: [`src/share/change_stream/`](src/share/change_stream/) · [`src/share/vector_index/`](src/share/vector_index/)</sub>
+
+### 🌿 Copy-on-Write Sandboxes for Agent Exploration
+
+`FORK DATABASE` snapshots an entire database in seconds — no data copy.
+Agents experiment freely (write, query, even break tables); then `MERGE TABLE`
+commits the work back, or `DROP DATABASE` discards it. Kernel-level COW,
+not application-layer save/restore.
+
+```sql
+-- Snapshot in seconds, no data copy
+FORK DATABASE agent_state TO agent_sandbox_42;
+
+-- Agent reads/writes freely on the sandbox...
+USE agent_sandbox_42;
+INSERT INTO memory (session_id, embedding, content) VALUES (...);
+
+-- Accept the work back to mainline (strategies: FAIL / THEIRS / OURS)
+MERGE TABLE agent_sandbox_42.memory INTO agent_state.memory STRATEGY THEIRS;
+-- ...or throw it away:
+DROP DATABASE agent_sandbox_42;
+```
+
+<sub>Source: [`tools/deploy/mysql_test/test_suite/fork_table/`](tools/deploy/mysql_test/test_suite/fork_table/)</sub>
+
+### 🔍 Hybrid Search in a Single SQL
+
+Vector + full-text + scalar filter pushed into one execution plan.
+No N+1 client-side merging, no glue code to combine results.
+
+```sql
+SELECT id, title, l2_distance(emb, '[0.12,0.34,...]') AS dist
+FROM docs
+WHERE MATCH(content) AGAINST('quarterly report')
+  AND author_id = 42
+  AND created_at > '2026-01-01'
+ORDER BY dist APPROXIMATE LIMIT 10;
+```
+
+### 🐬 MySQL-Compatible, ACID, Embeddable
+
+Built on the proven OceanBase SQL engine. Works as an embedded library,
+a single-node server, or in the OceanBase distributed cluster. Full ACID,
+real-time writes, and the entire MySQL ecosystem out of the box.
 
 ---
 
@@ -94,7 +163,20 @@
 
 Choose your platform:
 
-<details>
+<details open>
+<summary><b>☁️ Cloud (Zero Install)</b></summary>
+
+One curl, a running database — no signup, no credit card.
+
+```bash
+curl -X POST https://d0.seekdb.ai/api/v1/instances
+```
+
+Free for 7 days. [Learn more →](https://d0.seekdb.ai)
+
+</details>
+
+<details open>
 <summary><b>🐍 Python (Recommended for AI/ML)</b></summary>
 
 ```bash
@@ -122,250 +204,104 @@ Please refer to the [document](https://github.com/oceanbase/docker-images/blob/m
 <summary><b>📦 Binary (Standalone)</b></summary>
 
 ```bash
-# Linux
-rpm -ivh seekdb-1.x.x.x-xxxxxxx.el8.x86_64.rpm
+# Linux (one-line install, may need sudo)
+curl -fsSL https://obportal.s3.ap-southeast-1.amazonaws.com/download-center/opensource/seekdb/seekdb_install.sh | bash
+
+# macOS (Homebrew)
+brew tap oceanbase/seekdb
+brew install seekdb
 ```
-Please replace the version number with the actual RPM package version.
+
+See [deployment docs](https://docs.seekdb.ai/seekdb/deploy-by-systemd/) for DEB/RPM offline install and configuration details.
 
 </details>
 
+### 📝 More Examples
 
-### 🎯 AI Search Example
+For the full Python SDK walkthrough — connection modes, embedding functions, metadata filters — see the [pyseekdb User Guide](https://github.com/oceanbase/pyseekdb).
 
-Build a semantic search system in 5 minutes:
+<details open>
+<summary><b>🤖 Agent Memory Pattern (continuous write + immediate retrieval)</b></summary>
 
-<details>
-<summary><b>🗄️ 🐍 Python SDK</b></summary>
-
-```bash
-# install sdk first
-pip install -U pyseekdb
-```
+The canonical agent loop: write an observation, retrieve relevant context
+milliseconds later, repeat. seekdb's async index pipeline keeps both
+sides fast under sustained concurrency.
 
 ```python
-"""
-this example demonstrates the most common operations with embedding functions:
-1. Create a client connection
-2. Create a collection with embedding function
-3. Add data using documents (embeddings auto-generated)
-4. Query using query texts (embeddings auto-generated)
-5. Print query results
-
-This is a minimal example to get you started quickly with embedding functions.
-"""
-
 import pyseekdb
-from pyseekdb import DefaultEmbeddingFunction
 
-# ==================== Step 1: Create Client Connection ====================
-# You can use embedded mode, server mode, or OceanBase mode
-# For this example, we'll use server mode (you can change to embedded or OceanBase)
+client = pyseekdb.Client(path="./agent_state.db")
+memory = client.get_or_create_collection(name="episodic")
 
-# Embedded mode (local SeekDB)
-client = pyseekdb.Client(
-    path="./seekdb.db",
-    database="test"
-)
-# Alternative: Server mode (connecting to remote SeekDB server)
-# client = pyseekdb.Client(
-#     host="127.0.0.1",
-#     port=2881,
-#     database="test",
-#     user="root",
-#     password=""
-# )
+for step in agent.run():
+    # Persist the observation
+    memory.upsert(ids=[step.id], documents=[step.observation])
 
-# Alternative: Remote server mode (OceanBase Server)
-# client = pyseekdb.Client(
-#     host="127.0.0.1",
-#     port=2881,
-#     tenant="test",  # OceanBase default tenant
-#     database="test",
-#     user="root",
-#     password=""
-# )
+    # Retrieve relevant context — milliseconds after the write,
+    # served by the incremental HNSW (no waiting on a background rebuild)
+    relevant = memory.query(query_texts=step.next_query, n_results=5)
 
-# ==================== Step 2: Create a Collection with Embedding Function ====================
-# A collection is like a table that stores documents with vector embeddings
-collection_name = "my_simple_collection"
-
-# Create collection with default embedding function
-# The embedding function will automatically convert documents to embeddings
-collection = client.create_collection(
-    name=collection_name,
-    #embedding_function=DefaultEmbeddingFunction()  # Uses default model (384 dimensions)
-)
-
-print(f"Created collection '{collection_name}' with dimension: {collection.dimension}")
-print(f"Embedding function: {collection.embedding_function}")
-
-# ==================== Step 3: Add Data to Collection ====================
-# With embedding function, you can add documents directly without providing embeddings
-# The embedding function will automatically generate embeddings from documents
-
-documents = [
-    "Machine learning is a subset of artificial intelligence",
-    "Python is a popular programming language",
-    "Vector databases enable semantic search",
-    "Neural networks are inspired by the human brain",
-    "Natural language processing helps computers understand text"
-]
-
-ids = ["id1", "id2", "id3", "id4", "id5"]
-
-# Add data with documents only - embeddings will be auto-generated by embedding function
-collection.add(
-    ids=ids,
-    documents=documents,  # embeddings will be automatically generated
-    metadatas=[
-        {"category": "AI", "index": 0},
-        {"category": "Programming", "index": 1},
-        {"category": "Database", "index": 2},
-        {"category": "AI", "index": 3},
-        {"category": "NLP", "index": 4}
-    ]
-)
-
-print(f"\nAdded {len(documents)} documents to collection")
-print("Note: Embeddings were automatically generated from documents using the embedding function")
-
-# ==================== Step 4: Query the Collection ====================
-# With embedding function, you can query using text directly
-# The embedding function will automatically convert query text to query vector
-
-# Query using text - query vector will be auto-generated by embedding function
-query_text = "artificial intelligence and machine learning"
-
-results = collection.query(
-    query_texts=query_text,  # Query text - will be embedded automatically
-    n_results=3  # Return top 3 most similar documents
-)
-
-print(f"\nQuery: '{query_text}'")
-print(f"Query results: {len(results['ids'][0])} items found")
-
-# ==================== Step 5: Print Query Results ====================
-for i in range(len(results['ids'][0])):
-    print(f"\nResult {i+1}:")
-    print(f"  ID: {results['ids'][0][i]}")
-    print(f"  Distance: {results['distances'][0][i]:.4f}")
-    if results.get('documents'):
-        print(f"  Document: {results['documents'][0][i]}")
-    if results.get('metadatas'):
-        print(f"  Metadata: {results['metadatas'][0][i]}")
-
-# ==================== Step 6: Cleanup ====================
-# Delete the collection
-client.delete_collection(collection_name)
-print(f"\nDeleted collection '{collection_name}'")
-
+    agent.act(relevant)
 ```
-Please refer to the [User Guide](https://github.com/oceanbase/pyseekdb) for more details.
+
 </details>
 
 <details>
-<summary><b>🗄️ SQL</b></summary>
+<summary><b>🗄️ SQL — Schema + Hybrid Search</b></summary>
 
 ```sql
--- Create table with vector column
+-- Table with vector column, full-text index, and HNSW vector index
 CREATE TABLE articles (
-            id INT PRIMARY KEY,
-            title TEXT,
-            content TEXT,
-            embedding VECTOR(384),
-            FULLTEXT INDEX idx_fts(content) WITH PARSER ik,
-            VECTOR INDEX idx_vec (embedding) WITH(DISTANCE=l2, TYPE=hnsw, LIB=vsag)
-        ) ORGANIZATION = HEAP;
+  id        INT PRIMARY KEY,
+  title     TEXT,
+  content   TEXT,
+  embedding VECTOR(384),
+  FULLTEXT INDEX idx_fts (content) WITH PARSER ik,
+  VECTOR   INDEX idx_vec (embedding) WITH (DISTANCE=l2, TYPE=hnsw, LIB=vsag)
+) ORGANIZATION = HEAP;
 
--- Insert documents with embeddings
--- Note: Embeddings should be pre-computed using your embedding model
-INSERT INTO articles (id, title, content, embedding)
-VALUES
-    (1, 'AI and Machine Learning', 'Artificial intelligence is transforming...', '[0.1, 0.2, ...]'),
-    (2, 'Database Systems', 'Modern databases provide high performance...', '[0.3, 0.4, ...]'),
-    (3, 'Vector Search', 'Vector databases enable semantic search...', '[0.5, 0.6, ...]');
-
--- Example: Hybrid search combining vector and full-text
--- Replace '[query_embedding]' with your actual query embedding vector
-SELECT
-    title,
-    content,
-    l2_distance(embedding, '[query_embedding]') AS vector_distance,
-    MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE) AS text_score
+-- Hybrid search: vector similarity + full-text match in one query
+SELECT id, title,
+       l2_distance(embedding, '[0.12, 0.34, ...]') AS dist
 FROM articles
-WHERE MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE)
-ORDER BY vector_distance APPROXIMATE
+WHERE MATCH(content) AGAINST('quarterly report')
+ORDER BY dist APPROXIMATE
 LIMIT 10;
 ```
-We suggest developers use sqlalchemy to access data by SQL for python developers.
+
+Python developers can access this via SQLAlchemy or any MySQL driver.
+
 </details>
 
 
 ## 📚 Use Cases
 
-<details>
-<summary><b> 📖 RAG & Knowledge Retrieval</b></summary>
+<details open>
+<summary><b>🎯 Agentic AI — Memory, Sandbox & State</b></summary>
 
-Large language models are limited by their training data. RAG introduces timely and trusted external knowledge to improve answer quality and reduce hallucination. seekdb enhances search accuracy through vector search, full-text search, hybrid search, built-in AI functions, and efficient indexing, while multi-level access control safeguards data privacy across heterogeneous knowledge sources.
-1. Enterprise QA
-2. Customer support
-3. Industry insights
-4. Personal knowledge
+Agents need a state store that handles continuous memory writes,
+millisecond-later retrieval, branching for exploration, and rollback when
+things go wrong. seekdb is built for exactly this:
 
-</details>
+- **Streaming-friendly storage** — write a memory, query it in the next ms
+- **COW sandboxes** — `FORK DATABASE` for safe experimentation, `MERGE` to accept, `DROP` to roll back
+- **Hybrid retrieval** — vector + full-text + relational in one SQL
+- **MySQL protocol** — works with LangChain, LlamaIndex, Dify out of the box
 
-<details>
-<summary><b> 🔍 Semantic Search Engine</b></summary>
-
-Traditional keyword search struggles to capture intent. Semantic search leverages embeddings and vector search to understand meaning and connect text, images, and other modalities. seekdb's hybrid search and multi-model querying deliver more precise, context-aware results across complex search scenarios.
-1. Product search
-2. Text-to-image
-3. Image-to-product
+Personal assistants · Enterprise automation · Vertical agents · Agent platforms
 
 </details>
 
 <details>
-<summary><b> 🎯 Agentic AI Applications</b></summary>
+<summary><b>🧩 Other Use Cases</b></summary>
 
-Agentic AI requires memory, planning, perception, and reasoning. seekdb provides a unified foundation for agents through metadata management, vector/text/mixed queries, multimodal data processing, RAG, built-in AI functions and inference, and robust privacy controls—enabling scalable, production-grade agent systems.
-1. Personal assistants
-2. Enterprise automation
-3. Vertical agents
-4. Agent platforms
+seekdb's hybrid retrieval + multi-model engine also fits classic AI workloads:
 
-</details>
-
-<details>
-<summary><b> 💻 AI-Assisted Coding & Development</b></summary>
-
-AI-powered coding combines natural-language understanding and code semantic analysis to enable generation, completion, debugging, testing, and refactoring. seekdb enhances code intelligence with semantic search, multi-model storage for code and documents, isolated multi-project management, and time-travel queries—supporting both local and cloud IDE environments.
-1. IDE plugins
-2. Design-to-web
-3. Local IDEs
-4. Web IDEs
-
-</details>
-
-<details>
-<summary><b> ⬆️ Enterprise Application Intelligence</b></summary>
-
-AI transforms enterprise systems from passive tools into proactive collaborators. seekdb provides a unified AI-ready storage layer, fully compatible with MySQL syntax and views, and accelerates mixed workloads with parallel execution and hybrid row-column storage. Legacy applications gain intelligent capabilities with minimal migration across office, workflow, and business analytics scenarios.
-1. Document intelligence
-2. Business insights
-3. Finance systems
-
-</details>
-
-
-<details>
-<summary><b> 📱 On-Device & Edge AI Applications</b></summary>
-
-Edge devices—from mobile to vehicle and industrial terminals—operate with constrained compute and storage. seekdb's lightweight architecture supports embedded and micro-server modes, delivering full SQL, JSON, and hybrid search under low resource usage. It integrates seamlessly with OceanBase cloud services to enable unified edge-to-cloud intelligent systems.
-1. Personal assistants
-2. In-vehicle systems
-3. AI education
-4. Companion robots
-5. Healthcare devices
+- **📖 RAG & Knowledge Retrieval** — vector + full-text + scalar filters with multi-level access control. *Enterprise QA, customer support, industry insights, personal knowledge bases.*
+- **🔍 Semantic Search** — embedding-based search across text, images, and other modalities. *Product search, text-to-image, image-to-product.*
+- **💻 AI-Assisted Coding** — semantic code search, multi-project isolation, time-travel queries for IDE plugins and code agents. *Local IDEs, web IDEs, design-to-web.*
+- **⬆️ Enterprise Application Intelligence** — MySQL-compatible AI layer for legacy systems, with row/column hybrid storage. *Document intelligence, business insights, finance systems.*
+- **📱 On-Device & Edge AI** — embedded / micro-server modes for resource-constrained devices. *In-vehicle systems, AI education, companion robots, healthcare devices.*
 
 </details>
 
@@ -376,67 +312,38 @@ Edge devices—from mobile to vehicle and industrial terminals—operate with co
 <div align="center">
 
 <p>
-    <a href="https://huggingface.co">
-        <img src="https://img.shields.io/badge/HuggingFace-✅-00A67E?style=flat-square&logo=huggingface" alt="HuggingFace" />
-    </a>
     <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
         <img src="https://img.shields.io/badge/LangChain-✅-00A67E?style=flat-square&logo=langchain" alt="LangChain" />
-    </a>
-    <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
-        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgrap" alt="LangGraph" />
-    </a>
-    <a href="https://github.com/langgenius/dify/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
-        <img src="https://img.shields.io/badge/Dify-✅-00A67E?style=flat-square&logo=dify" alt="Dify" />
-    </a>
-    <a href="https://github.com/coze-dev/coze-studio/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
-        <img src="https://img.shields.io/badge/Coze-✅-00A67E?style=flat-square&logo=coze" alt="Coze" />
     </a>
     <a href="https://github.com/run-llama/llama_index/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
         <img src="https://img.shields.io/badge/LlamaIndex-✅-00A67E?style=flat-square&logo=llama" alt="LlamaIndex" />
     </a>
-    <a href="https://firecrawl.dev">
-        <img src="https://img.shields.io/badge/Firecrawl-✅-00A67E?style=flat-square&logo=firecrawl" alt="Firecrawl" />
+    <a href="https://github.com/langgenius/dify/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
+        <img src="https://img.shields.io/badge/Dify-✅-00A67E?style=flat-square&logo=dify" alt="Dify" />
     </a>
-    <a href="https://github.com/labring/FastGPT/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
-        <img src="https://img.shields.io/badge/FastGPT-✅-00A67E?style=flat-square&logo=FastGPT" alt="FastGPT" />
+    <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
+        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgrap" alt="LangGraph" />
     </a>
-    <a href="https://db-gpt.io">
-        <img src="https://img.shields.io/badge/DB--GPT-✅-00A67E?style=flat-square&logo=db-gpt" alt="DB-GPT" />
+    <a href="https://github.com/coze-dev/coze-studio/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
+        <img src="https://img.shields.io/badge/Coze-✅-00A67E?style=flat-square&logo=coze" alt="Coze" />
     </a>
-    <a href="https://github.com/camel-ai/camel/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
-        <img src="https://img.shields.io/badge/camel-✅-00A67E?style=flat-square&logo=camel" alt="Camel-AI" />
-    </a>
-    <a href="https://github.com/alibaba/spring-ai-alibaba">
-        <img src="https://img.shields.io/badge/spring--ai--alibaba-✅-00A67E?style=flat-square&logo=spring" alt="spring-ai-alibaba" />
-    </a>
-    <a href="https://developers.cloudflare.com/workers-ai">
-        <img src="https://img.shields.io/badge/Cloudflare%20Workers%20AI-✅-00A67E?style=flat-square&logo=cloudflare" alt="Cloudflare Workers AI" />
-    </a>
-    <a href="https://jina.ai">
-        <img src="https://img.shields.io/badge/Jina%20AI-✅-00A67E?style=flat-square&logo=jina" alt="Jina AI" />
-    </a>
-    <a href="https://ragas.io">
-        <img src="https://img.shields.io/badge/Ragas-✅-00A67E?style=flat-square&logo=ragas" alt="Ragas" />
-    </a>
-    <a href="https://jxnl.github.io/instructor">
-        <img src="https://img.shields.io/badge/Instructor-✅-00A67E?style=flat-square&logo=instructor" alt="Instructor" />
-    </a>
-    <a href="https://baseten.co">
-        <img src="https://img.shields.io/badge/Baseten-✅-00A67E?style=flat-square&logo=baseten" alt="Baseten" />
+    <a href="https://huggingface.co">
+        <img src="https://img.shields.io/badge/HuggingFace-✅-00A67E?style=flat-square&logo=huggingface" alt="HuggingFace" />
     </a>
 </p>
 
-<br/>
-
-Please refer to the [User Guide](https://www.oceanbase.ai/docs/seekdb-overview/) for more details.
-
+<sub>+ Camel-AI · DB-GPT · FastGPT · Firecrawl · Spring-AI-Alibaba · Cloudflare Workers AI · Jina AI · Ragas · Instructor · Baseten — see [User Guide](https://docs.seekdb.ai/seekdb/seekdb-overview) for the full list.</sub>
 
 </div>
 
 ---
 
+## 🌐 Next Steps & Community
 
-## 🤝 Community & Support
+- 📖 **[Read the docs →](https://docs.seekdb.ai/)** — Quickstart, API reference, integration guides
+- 📝 **[Launch blog →](#)** — The architecture behind 10.7× the QPS of Milvus
+- 🐛 **[Open an issue →](https://github.com/oceanbase/seekdb/issues)** — Report bugs, request features
+- 🤝 **[Contribute →](CONTRIBUTING.md)** — Help build the agent-era state store
 
 <div align="center">
 
@@ -467,24 +374,36 @@ Before building, please install the required toolchain and dependencies for your
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 bash build.sh debug --init --make
-mkdir ~/seekdb
-mkdir ~/seekdb/bin
+mkdir -p ~/seekdb/bin
 cp build_debug/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
 ./bin/seekdb
 ```
 
-In this example, the working director is $HOME/seekdb, please use a fresh director for testing, Please see the [Developer Guide](docs/developer-guide/en/README.md) for detailed instructions.
+In this example, the working directory is $HOME/seekdb, please use a fresh directory for testing. Please see the [Developer Guide](docs/developer-guide/en/README.md) for detailed instructions.
 
 ### Contributing
 
 We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) to get started.
 
+<a href="https://github.com/oceanbase/seekdb/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=oceanbase/seekdb&max=400" alt="Contributors" />
+</a>
+
 ---
 
+## 📈 Star History
+
+<a href="https://star-history.com/#oceanbase/seekdb&Date">
+  <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=oceanbase/seekdb&type=Date" width="720" />
+</a>
+
+If seekdb is useful to you, **a star helps others find it.** ⭐
+
+---
 
 ## 📄 License
 
-OceanBase seekdb is licensed under the [Apache License, Version 2.0](LICENSE).
+seekdb is built by the [OceanBase](https://en.oceanbase.com/) team — the same database engine running in production at Alipay, Taobao, DiDi, Xiaomi, and more. Fully open-source under the [Apache License, Version 2.0](LICENSE).
 
 
