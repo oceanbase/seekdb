@@ -534,17 +534,18 @@ int ObIOManager::init(const int64_t memory_limit,
   } else if (OB_UNLIKELY(memory_limit <= 0|| schedule_queue_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(memory_limit), K(schedule_queue_count));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "IO_MGR", OB_SYS_TENANT_ID, memory_limit))) {
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "IO_MGR", OB_SERVER_TENANT_ID, memory_limit))) {
     LOG_WARN("init io allocator failed", K(ret));
   } else if (OB_FAIL(channel_map_.create(7, "IO_CHANNEL_MAP"))) {
     LOG_WARN("create channel map failed", K(ret));
   } else if (OB_FAIL(fault_detector_.init())) {
     LOG_WARN("init io fault detector failed", K(ret));
-  } else if (OB_ISNULL(server_io_manager_ = OB_NEW(ObTenantIOManager, ObMemAttr(OB_SYS_TENANT_ID, "IO_MGR")))) {
-  } else if (OB_FAIL(server_io_manager_->init(OB_SYS_TENANT_ID, ObTenantIOConfig::default_instance()))) {
+  } else if (OB_ISNULL(server_io_manager_ = OB_NEW(ObTenantIOManager, "IO_MGR"))) {
+  } else if (OB_FAIL(server_io_manager_->init(OB_SERVER_TENANT_ID, ObTenantIOConfig::default_instance()))) {
     LOG_WARN("init server tenant io mgr failed", K(ret));
   } else {
-    ObMemAttr attr(OB_SYS_TENANT_ID, "IO_MGR");
+    ObMemAttr attr(OB_SERVER_TENANT_ID, "IO_MGR");
+    SET_USE_500(attr);
     allocator_.set_attr(attr);
     io_config_.set_default_value();
     is_inited_ = true;
@@ -1005,12 +1006,20 @@ int ObIOManager::modify_group_io_config(const uint64_t tenant_id,
 int ObIOManager::get_tenant_io_manager(const uint64_t tenant_id, ObRefHolder<ObTenantIOManager> &tenant_holder) const
 {
   int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
-  if (OB_NOT_NULL(server_io_manager_)) {
+  if (OB_SERVER_TENANT_ID == tenant_id) {
     tenant_holder.hold(server_io_manager_);
+  } else if (MTL_ID() == tenant_id) {
+    ObTenantIOManager *tenant_io_mgr = MTL(ObTenantIOManager*);
+    tenant_holder.hold(tenant_io_mgr);
+  } else if (!is_virtual_tenant_id(tenant_id)) {
+    MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
+    if (OB_SUCC(guard.switch_to(tenant_id, false))) {
+      ObTenantIOManager *tenant_io_mgr = MTL(ObTenantIOManager*);
+      tenant_holder.hold(tenant_io_mgr);
+    }
   }
   if (OB_SUCC(ret) && OB_ISNULL(tenant_holder.get_ptr())) {
-    ret = OB_HASH_NOT_EXIST;
+    ret = OB_HASH_NOT_EXIST; // for compatibility
   }
   return ret;
 }
