@@ -1,18 +1,18 @@
-  /*
-  * Copyright (c) 2025 OceanBase.
-  *
-  * Licensed under the Apache License, Version 2.0 (the "License");
-  * you may not use this file except in compliance with the License.
-  * You may obtain a copy of the License at
-  *
-  *     http://www.apache.org/licenses/LICENSE-2.0
-  *
-  * Unless required by applicable law or agreed to in writing, software
-  * distributed under the License is distributed on an "AS IS" BASIS,
-  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  * See the License for the specific language governing permissions and
-  * limitations under the License.
-  */
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #define USING_LOG_PREFIX SQL
 
@@ -173,11 +173,11 @@ class ObLocalFileListArrayOpWithFilter : public ObBaseDirEntryOperator
 {
 public:
   ObLocalFileListArrayOpWithFilter(ObIArray <common::ObString> &name_array,
-                                  ObIArray <int64_t>& file_size,
-                                  const ObString &path,
-                                  const ObString &origin_path,
-                                  ObExternalPathFilter *filter,
-                                  ObIAllocator &array_allocator)
+                                   ObIArray <int64_t>& file_size,
+                                   const ObString &path,
+                                   const ObString &origin_path,
+                                   ObExternalPathFilter *filter,
+                                   ObIAllocator &array_allocator)
     : name_array_(name_array), file_size_(file_size), path_(path), origin_path_(origin_path),
       filter_(filter), allocator_(array_allocator) {}
   virtual bool need_get_file_size() const override { return true; }
@@ -273,7 +273,7 @@ int ObExternalDataAccessDriver::get_file_list(const ObString &path,
       OZ(FileDirectoryUtils::is_directory(path_without_prifix.ptr(), is_dir));
       if (!is_dir) {
         LOG_INFO("external location is not a directory",
-                K(path_without_prifix));
+                 K(path_without_prifix));
       } else {
         OZ(file_dirs.push_back(path_cstring));
       }
@@ -284,7 +284,7 @@ int ObExternalDataAccessDriver::get_file_list(const ObString &path,
       ObString file_dir = file_dirs.at(i);
       ObLocalFileListArrayOpWithFilter dir_op(file_dirs, useless_size, file_dir, path_cstring, NULL, allocator);
       ObLocalFileListArrayOpWithFilter file_op(file_urls, file_sizes, file_dir, path_cstring,
-                                              pattern.empty() ? NULL : &filter, allocator);
+                                               pattern.empty() ? NULL : &filter, allocator);
       dir_op.set_dir_flag();
       if (OB_FAIL(ObBackupIoAdapter::list_files(file_dir, access_info_, file_op))) {
         LOG_WARN("fail to list files", KR(ret), K(file_dir), K_(access_info));
@@ -347,9 +347,9 @@ const char *  ObExternalStreamFileReader::MEMORY_LABEL = "ExternalReader";
 const int64_t ObExternalStreamFileReader::COMPRESSED_DATA_BUFFER_SIZE = 2 * 1024 * 1024;
 
 int ObExternalStreamFileReader::init(const common::ObString &location,
-                            const ObString &access_info,
-                            ObCSVGeneralFormat::ObCSVCompression compression_format,
-                            ObIAllocator &allocator)
+                             const ObString &access_info,
+                             ObCSVGeneralFormat::ObCSVCompression compression_format,
+                             ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(allocator_)) {
@@ -543,7 +543,7 @@ int ObExternalStreamFileReader::create_decompressor(ObCSVGeneralFormat::ObCSVCom
     if (OB_FAIL(ObDecompressor::create(compression_format, *allocator_, decompressor_))) {
       LOG_WARN("failed to create decompressor", K(ret));
     } else if (OB_ISNULL(compressed_data_) &&
-              OB_ISNULL(compressed_data_ = (char *)allocator_->alloc(COMPRESSED_DATA_BUFFER_SIZE))) {
+               OB_ISNULL(compressed_data_ = (char *)allocator_->alloc(COMPRESSED_DATA_BUFFER_SIZE))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory", K(COMPRESSED_DATA_BUFFER_SIZE));
     }
@@ -669,8 +669,8 @@ int ObExternalTableAccessService::revert_scan_iter(ObNewRowIterator *iter)
 
 int ObExternalTableRowIterator::init(const ObTableScanParam *scan_param)
 {
-  scan_param_ = scan_param;
-  return init_exprs(scan_param);
+   scan_param_ = scan_param;
+   return init_exprs(scan_param);
 }
 
 int ObExternalTableRowIterator::gen_ip_port(ObIAllocator &allocator)
@@ -711,7 +711,7 @@ int ObExternalTableRowIterator::init_exprs(const storage::ObTableScanParam *scan
     if (OB_SUCC(ret) && column_exprs_.count() != scan_param->ext_column_convert_exprs_->count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("column expr not equal to convert convert expr", K(ret),
-              K(column_exprs_), KPC(scan_param->ext_column_convert_exprs_));
+               K(column_exprs_), KPC(scan_param->ext_column_convert_exprs_));
     }
   }
   return ret;
@@ -856,11 +856,11 @@ DEF_TO_STRING(ObExternalIteratorState)
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(file_idx),
-      K_(part_id),
-      K_(cur_file_id),
-      K_(cur_line_number),
-      K_(cur_file_url),
-      K_(part_list_val));
+       K_(part_id),
+       K_(cur_file_id),
+       K_(cur_line_number),
+       K_(cur_file_url),
+       K_(part_list_val));
   J_OBJ_END();
   return pos;
 }
