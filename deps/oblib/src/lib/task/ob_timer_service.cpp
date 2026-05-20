@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include <utility>
 #include "lib/task/ob_timer_service.h"
 #include "lib/task/ob_timer_monitor.h"       // ObTimerMonitor
 #include "lib/thread/thread_mgr.h"           // get_tenant_tg_helper
@@ -41,14 +42,33 @@ bool compare_for_queue(const TaskToken *a, const TaskToken *b)
   return a->scheduled_time_ < b->scheduled_time_;
 }
 
-bool compare_for_set(const TaskToken *a, const TaskToken *b)
-{
-  abort_unless(nullptr != a);
-  abort_unless(nullptr != b);
-  abort_unless(nullptr != a->timer_);
-  abort_unless(nullptr != b->timer_);
-  return (a->timer_ < b->timer_) || (a->timer_ == b->timer_ && a->task_ < b->task_);
-}
+struct CompareForSet {
+  using is_transparent = void;
+  bool operator()(const TaskToken *a, const TaskToken *b) const
+  {
+    abort_unless(nullptr != a);
+    abort_unless(nullptr != b);
+    abort_unless(nullptr != a->timer_);
+    abort_unless(nullptr != b->timer_);
+    return (a->timer_ < b->timer_) || (a->timer_ == b->timer_ && a->task_ < b->task_);
+  }
+  bool operator()(const TaskToken *a,
+                  const std::pair<const ObTimer *, const ObTimerTask *> &key) const
+  {
+    abort_unless(nullptr != a);
+    abort_unless(nullptr != a->timer_);
+    return (a->timer_ < key.first)
+        || (a->timer_ == key.first && a->task_ < key.second);
+  }
+  bool operator()(const std::pair<const ObTimer *, const ObTimerTask *> &key,
+                  const TaskToken *b) const
+  {
+    abort_unless(nullptr != b);
+    abort_unless(nullptr != b->timer_);
+    return (key.first < b->timer_)
+        || (key.first == b->timer_ && key.second < b->task_);
+  }
+};
 
 bool token_unique(const TaskToken *a, const TaskToken *b)
 {
@@ -263,7 +283,7 @@ void ObTimerService::stop()
       TaskToken *token = running_task_set_.at(i);
       // if someone fails, still continue
       if (OB_SUCCESS != (ret_tmp = uncanceled_task_set_.insert_unique(
-          token, it, compare_for_set, token_unique))) {
+          token, it, CompareForSet{}, token_unique))) {
         OB_LOG_RET(WARN, ret_tmp, "insert TaskToken into uncanceled_task_set failed",
             KP(token), KPC(token), K_(tenant_id));
         // the token cannot be deleted because the corresponding task is running
@@ -378,12 +398,12 @@ int ObTimerService::cancel_task(const ObTimer *timer, const ObTimerTask *task)
         running_task_set_.begin(),
         running_task_set_.end(),
         &target,
-        compare_for_set);
+        CompareForSet{});
     bool found = true;
     VecIter pos = uncanceled_task_set_.end();
     while(it != running_task_set_.end() && found && OB_SUCC(ret)) {
       if (has_same_task_and_timer(*it, timer, task)) {
-        if (OB_FAIL(uncanceled_task_set_.insert_unique(*it, pos, compare_for_set, token_unique))) {
+        if (OB_FAIL(uncanceled_task_set_.insert_unique(*it, pos, CompareForSet{}, token_unique))) {
           OB_LOG(WARN, "insert TaskToken failed", KPC(task), K_(tenant_id), K(ret));
         } else if (OB_FAIL(running_task_set_.remove(it))) {
           OB_LOG(WARN, "remove TaskToken from running_task_set failed",
@@ -438,7 +458,7 @@ int ObTimerService::schedule_task(TaskToken *token)
     OB_LOG(WARN, "TaskToken is NULL", K(ret));
   } else {
     VecIter it = uncanceled_task_set_.end();
-    int cancel_ret = uncanceled_task_set_.find(token, it, compare_for_set);
+    int cancel_ret = uncanceled_task_set_.find(token, it, CompareForSet{});
     if (OB_SUCCESS != cancel_ret && OB_ENTRY_NOT_EXIST != cancel_ret) { // unexpected
       ret = cancel_ret;
       OB_LOG(WARN, "check if TaskToken exist in uncanceled_task_set failed",
@@ -452,7 +472,7 @@ int ObTimerService::schedule_task(TaskToken *token)
       }
     } else if (OB_ENTRY_NOT_EXIST == cancel_ret) { // find token in running_task_set_
       it = running_task_set_.end();
-      int run_ret = running_task_set_.find(token, it, compare_for_set);
+      int run_ret = running_task_set_.find(token, it, CompareForSet{});
       if (OB_SUCCESS != run_ret && OB_ENTRY_NOT_EXIST != run_ret) {
         ret = run_ret;
         OB_LOG(WARN, "check if Taskoken exist in running_task_set failed",
@@ -610,7 +630,7 @@ void ObTimerService::run1()
           } else {
             VecIter it = nullptr;
             token->pushed_time_ = ObSysTime::now().toMicroSeconds();
-            if (OB_FAIL(running_task_set_.insert_unique(token, it, compare_for_set, token_unique))) {
+            if (OB_FAIL(running_task_set_.insert_unique(token, it, CompareForSet{}, token_unique))) {
               OB_LOG(WARN, "push TaskToken into running_task_set failed",
                   KP(token), KPC(token), K_(tenant_id), K(ret));
               delete_token(token);
@@ -660,12 +680,12 @@ bool ObTimerService::find_task_in_set(
 {
   abort_unless(nullptr != timer);
   bool exist = false;
-  TaskToken target(timer, const_cast<ObTimerTask *>(task_in));
+  std::pair<const ObTimer *, const ObTimerTask *> key(timer, task_in);
   VecIter it = std::lower_bound(
       token_set.begin(),
       token_set.end(),
-      &target,
-      compare_for_set);
+      key,
+      CompareForSet{});
   if (it != token_set.end()) {
     exist = has_same_task_and_timer(*it, timer, task_in);
     if (exist && nullptr != token_out) {
