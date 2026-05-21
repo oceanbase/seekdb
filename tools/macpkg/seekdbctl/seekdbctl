@@ -25,6 +25,9 @@ Commands:
   paths        Print important paths
   config       Print or update the active configuration
   setup        Create directories, enable boot startup, and start SeekDB
+  boot-status  Print whether SeekDB is enabled to start at boot (enabled|disabled|unavailable)
+  enable-boot  Register SeekDB to start automatically at boot
+  disable-boot Unregister SeekDB from starting automatically at boot
   clean-data   Stop the service and remove config/data directories after confirmation
   uninstall    Stop service and remove installed files, config, and data
   help         Show this help
@@ -148,6 +151,24 @@ launchd_loaded() {
   launchctl print "system/${LABEL}" >/dev/null 2>&1
 }
 
+boot_startup_disabled() {
+  local line
+  line="$(launchctl print-disabled system 2>/dev/null | grep "\"${LABEL}\"" || true)"
+  [ -n "$line" ] && echo "$line" | grep -q "=> disabled"
+}
+
+boot_startup_status() {
+  if [ ! -f "$PLIST" ]; then
+    printf "unavailable"
+    return 0
+  fi
+  if boot_startup_disabled; then
+    printf "disabled"
+  else
+    printf "enabled"
+  fi
+}
+
 pid_from_file() {
   refresh_paths
   local pid_file="$BASE_DIR/run/seekdb.pid"
@@ -215,6 +236,24 @@ cmd_restart() {
   cmd_start
 }
 
+cmd_boot_status() {
+  boot_startup_status
+  printf "\n"
+}
+
+cmd_enable_boot() {
+  require_root
+  [ -f "$PLIST" ] || die "LaunchDaemon plist not found: $PLIST"
+  launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+  info "SeekDB is enabled to start at boot."
+}
+
+cmd_disable_boot() {
+  require_root
+  launchctl disable "system/${LABEL}" >/dev/null 2>&1 || true
+  info "SeekDB is disabled from starting at boot."
+}
+
 cmd_status() {
   refresh_paths
   local port
@@ -230,6 +269,8 @@ cmd_status() {
   else
     echo "launchd    : not loaded"
   fi
+
+  echo "boot-startup: $(boot_startup_status)"
 
   local pid=""
   pid="$(pid_from_file || true)"
@@ -462,6 +503,9 @@ case "${1:-help}" in
   paths) shift; cmd_paths "$@" ;;
   config) shift; cmd_config "$@" ;;
   setup) shift; cmd_setup "$@" ;;
+  boot-status) shift; cmd_boot_status "$@" ;;
+  enable-boot) shift; cmd_enable_boot "$@" ;;
+  disable-boot) shift; cmd_disable_boot "$@" ;;
   clean-data) shift; cmd_clean_data "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) usage ;;

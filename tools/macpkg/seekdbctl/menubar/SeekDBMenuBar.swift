@@ -170,18 +170,21 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
     var cpuCountField: NSTextField!
     var memoryField: NSTextField!
     var saveButton: NSButton!
+    var bootStartupSwitch: NSButton!
     var statusLabel: NSTextField!
     var onSaved: (() -> Void)?
+    private var bootStartupApplying = false
 
     func showWindow() {
         if window != nil && window.isVisible {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            loadBootStartupState()
             return
         }
 
         let w: CGFloat = 520
-        let h: CGFloat = 340
+        let h: CGFloat = 370
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable],
@@ -225,6 +228,19 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
             return field
         }
 
+        let bootLbl = NSTextField(labelWithString: "Start at Boot:")
+        bootLbl.frame = NSRect(x: pad, y: y, width: labelW, height: 22)
+        bootLbl.alignment = .right
+        content.addSubview(bootLbl)
+
+        bootStartupSwitch = NSButton(checkboxWithTitle: "Start automatically when macOS boots", target: self, action: #selector(bootStartupToggled))
+        bootStartupSwitch.frame = NSRect(x: pad + labelW + 8, y: y - 2, width: fieldW, height: 22)
+        bootStartupSwitch.setButtonType(.switch)
+        bootStartupSwitch.state = .off
+        bootStartupSwitch.isEnabled = false
+        content.addSubview(bootStartupSwitch)
+        y -= rowH
+
         portField = addRow(label: "Port:", value: readConfigValue("port", fallback: "2881"))
         baseDirField = addRow(label: "Base Dir:", value: readConfigValue("base-dir", fallback: "/opt/homebrew/var/seekdb/data"), withBrowse: true)
         dataDirField = addRow(label: "Data Dir:", value: readConfigValue("data-dir", fallback: ""), withBrowse: true)
@@ -260,6 +276,52 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        loadBootStartupState()
+    }
+
+    func loadBootStartupState() {
+        guard bootStartupSwitch != nil else { return }
+        bootStartupSwitch.isEnabled = false
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let result = runCommand([SEEKDBCTL, "boot-status"])
+            let status = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            DispatchQueue.main.async {
+                guard let self = self, !self.bootStartupApplying else { return }
+                switch status {
+                case "enabled":
+                    self.bootStartupSwitch.state = .on
+                    self.bootStartupSwitch.isEnabled = true
+                case "disabled":
+                    self.bootStartupSwitch.state = .off
+                    self.bootStartupSwitch.isEnabled = true
+                default:
+                    self.bootStartupSwitch.state = .off
+                    self.bootStartupSwitch.isEnabled = false
+                }
+            }
+        }
+    }
+
+    @objc func bootStartupToggled(_ sender: NSButton) {
+        guard !bootStartupApplying else { return }
+        let enable = sender.state == .on
+        bootStartupApplying = true
+        bootStartupSwitch.isEnabled = false
+        statusLabel.stringValue = enable ? "Enabling boot startup..." : "Disabling boot startup..."
+
+        runPrivileged(command: enable ? "enable-boot" : "disable-boot") { [weak self] success, output in
+            guard let self = self else { return }
+            self.bootStartupApplying = false
+            if success {
+                self.bootStartupSwitch.state = enable ? .on : .off
+                self.bootStartupSwitch.isEnabled = true
+                self.statusLabel.stringValue = enable ? "Boot startup enabled." : "Boot startup disabled."
+            } else {
+                self.bootStartupSwitch.state = enable ? .off : .on
+                self.bootStartupSwitch.isEnabled = true
+                self.statusLabel.stringValue = "Error: \(output)"
+            }
+        }
     }
 
     @objc func browseDir(_ sender: NSButton) {
