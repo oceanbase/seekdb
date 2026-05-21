@@ -18,11 +18,10 @@
 #define OCEANBASE_DUMP_MEMORY_H_
 
 #include "lib/alloc/ob_malloc_sample_struct.h"
-#include "lib/queue/ob_lighty_queue.h"
 #include "lib/hash/ob_hashmap.h"
+#include "lib/lock/ob_thread_cond.h"
 #include "lib/rc/context.h"
 #include "lib/thread/thread_mgr_interface.h"
-#include "lib/utility/ob_platform_utils.h"  // ffsl() on Windows
 
 // This file will be placed under lib for a short period of time to facilitate unit testing. After the function is stable, move to ob
 // The corresponding MySimpleThreadPool will also be deleted
@@ -144,7 +143,8 @@ friend class lib::ObTenantCtxAllocator;
 friend class lib::ObTenantCtxAllocatorV2;
 friend class lib::ObMallocAllocator;
 
-static const int64_t TASK_NUM = 8;
+static const int PENDING_STAT_LABEL = 1;
+static const int PENDING_DUMP = 2;
 static const int PRINT_BUF_LEN = 64L << 10;
 static const int64_t MAX_MEMORY = 128L << 30; // 1T
 static const int MAX_CHUNK_CNT = MAX_MEMORY / (2L << 20);
@@ -191,27 +191,7 @@ public:
   void wait();
   void destroy();
   bool is_inited() const { return is_inited_; }
-  int push(void *task);
-  ObMemoryDumpTask *alloc_task()
-  {
-    ObMemoryDumpTask *task = nullptr;
-    lib::ObMutexGuard guard(task_mutex_);
-    int pos = -1;
-    if ((pos = ffsl(avaliable_task_set_))) {
-      pos--;
-      abort_unless(pos >= 0 && pos < TASK_NUM);
-      task = &tasks_[pos];
-      avaliable_task_set_ &= ~(1 << pos);
-    }
-    return task;
-  }
-  void free_task(void *task)
-  {
-    int pos = (ObMemoryDumpTask *)task - &tasks_[0];
-    abort_unless(pos >= 0 && pos < TASK_NUM);
-    lib::ObMutexGuard guard(task_mutex_);
-    avaliable_task_set_ |= (1 << pos);
-  }
+  int request_dump(const ObMemoryDumpTask &task);
   int generate_mod_stat_task();
   int load_malloc_sample_map(lib::ObMallocSampleMap &malloc_sample_map)
   {
@@ -235,10 +215,9 @@ private:
 private:
   AChunk *find_chunk(void *ptr);
 private:
-  ObLightyQueue queue_;
-  lib::ObMutex task_mutex_;
-  ObMemoryDumpTask tasks_[TASK_NUM];
-  int64_t avaliable_task_set_;
+  ObThreadCond cond_;
+  int pending_;
+  ObMemoryDumpTask pending_dump_task_;
   char *print_buf_;
   union {
     void *array_;
