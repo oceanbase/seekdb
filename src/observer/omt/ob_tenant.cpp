@@ -762,7 +762,6 @@ int ObTenant::get_new_request(
 
   req = nullptr;
   w.set_large_query(false);
-  Thread::WaitGuard guard(Thread::WAIT_IN_TENANT_QUEUE);
   ret = req_queue_.pop(task, timeout);
 
   if (OB_SUCC(ret)) {
