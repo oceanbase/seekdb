@@ -46,19 +46,23 @@ struct SeekDBStatus {
     }
 }
 
-func readConfigPort() -> String {
+func readConfigValue(_ key: String, fallback: String = "") -> String {
     guard let content = try? String(contentsOfFile: SEEKDB_CONFIG, encoding: .utf8) else {
-        return DEFAULT_PORT
+        return fallback
     }
     for line in content.components(separatedBy: "\n") {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("#") || trimmed.hasPrefix(";") || trimmed.isEmpty { continue }
         let parts = trimmed.split(separator: "=", maxSplits: 1)
-        if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces) == "port" {
+        if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces) == key {
             return parts[1].trimmingCharacters(in: .whitespaces)
         }
     }
-    return DEFAULT_PORT
+    return fallback
+}
+
+func readConfigPort() -> String {
+    return readConfigValue("port", fallback: DEFAULT_PORT)
 }
 
 // MARK: - Shell Helpers
@@ -107,18 +111,19 @@ func runPrivileged(command: String, args: [String] = [], completion: @escaping (
 }
 
 func openTerminal(_ command: String) {
-    let escaped = command.replacingOccurrences(of: "\\", with: "\\\\")
-                        .replacingOccurrences(of: "\"", with: "\\\"")
-    let script = """
-    tell application "Terminal"
-        activate
-        do script "\(escaped)"
-    end tell
-    """
-    if let appleScript = NSAppleScript(source: script) {
-        var error: NSDictionary?
-        appleScript.executeAndReturnError(&error)
+    let tmp = NSTemporaryDirectory() + "seekdb_cmd.command"
+    let content = "#!/bin/bash\n\(command)\n"
+    try? content.write(toFile: tmp, atomically: true, encoding: .utf8)
+    chmod(tmp, 0o755)
+    NSWorkspace.shared.open(URL(fileURLWithPath: tmp))
+
+    DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+        try? FileManager.default.removeItem(atPath: tmp)
     }
+}
+
+func chmod(_ path: String, _ mode: UInt16) {
+    Darwin.chmod(path, mode_t(mode))
 }
 
 // MARK: - Status Icon
@@ -154,6 +159,156 @@ func makeStatusIcon(_ state: ServiceState) -> NSImage {
     return image
 }
 
+// MARK: - Settings Window
+
+class SettingsWindowController: NSObject, NSWindowDelegate {
+    var window: NSWindow!
+    var portField: NSTextField!
+    var baseDirField: NSTextField!
+    var dataDirField: NSTextField!
+    var redoDirField: NSTextField!
+    var cpuCountField: NSTextField!
+    var memoryField: NSTextField!
+    var saveButton: NSButton!
+    var statusLabel: NSTextField!
+    var onSaved: (() -> Void)?
+
+    func showWindow() {
+        if window != nil && window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let w: CGFloat = 520
+        let h: CGFloat = 340
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: w, height: h),
+            styleMask: [.titled, .closable],
+            backing: .buffered, defer: false)
+        window.title = "SeekDB Settings"
+        window.center()
+        window.delegate = self
+        window.isReleasedWhenClosed = false
+
+        let content = window.contentView!
+        let labelW: CGFloat = 110
+        let fieldW: CGFloat = 280
+        let btnW: CGFloat = 70
+        let rowH: CGFloat = 30
+        let pad: CGFloat = 16
+        var y = h - 50
+
+        func addRow(label: String, value: String, withBrowse: Bool = false) -> NSTextField {
+            let lbl = NSTextField(labelWithString: label)
+            lbl.frame = NSRect(x: pad, y: y, width: labelW, height: 22)
+            lbl.alignment = .right
+            content.addSubview(lbl)
+
+            let fw = withBrowse ? fieldW - btnW - 4 : fieldW
+            let field = NSTextField(string: value)
+            field.frame = NSRect(x: pad + labelW + 8, y: y, width: fw, height: 22)
+            field.isEditable = true
+            field.isBezeled = true
+            field.bezelStyle = .roundedBezel
+            content.addSubview(field)
+
+            if withBrowse {
+                let btn = NSButton(title: "Browse", target: self, action: #selector(browseDir(_:)))
+                btn.frame = NSRect(x: pad + labelW + 8 + fw + 4, y: y - 1, width: btnW, height: 24)
+                btn.tag = y.hashValue
+                content.addSubview(btn)
+                objc_setAssociatedObject(btn, "field", field, .OBJC_ASSOCIATION_RETAIN)
+            }
+
+            y -= rowH
+            return field
+        }
+
+        portField = addRow(label: "Port:", value: readConfigValue("port", fallback: "2881"))
+        baseDirField = addRow(label: "Base Dir:", value: readConfigValue("base-dir", fallback: "/opt/homebrew/var/seekdb/data"), withBrowse: true)
+        dataDirField = addRow(label: "Data Dir:", value: readConfigValue("data-dir", fallback: ""), withBrowse: true)
+        redoDirField = addRow(label: "Redo Dir:", value: readConfigValue("redo-dir", fallback: ""), withBrowse: true)
+        cpuCountField = addRow(label: "CPU Count:", value: readConfigValue("cpu_count", fallback: "4"))
+        memoryField = addRow(label: "Memory Limit:", value: readConfigValue("memory_limit", fallback: "2G"))
+
+        y -= 8
+
+        let hint = NSTextField(wrappingLabelWithString: "CPU Count and Memory Limit only take effect during initial setup.")
+        hint.frame = NSRect(x: pad + labelW + 8, y: y - 10, width: fieldW, height: 32)
+        hint.font = NSFont.systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        content.addSubview(hint)
+        y -= 40
+
+        statusLabel = NSTextField(labelWithString: "")
+        statusLabel.frame = NSRect(x: pad, y: pad, width: 300, height: 22)
+        statusLabel.textColor = .secondaryLabelColor
+        content.addSubview(statusLabel)
+
+        saveButton = NSButton(title: "Save & Restart", target: self, action: #selector(saveSettings))
+        saveButton.frame = NSRect(x: w - 140 - pad, y: pad, width: 140, height: 32)
+        saveButton.bezelStyle = .rounded
+        saveButton.keyEquivalent = "\r"
+        content.addSubview(saveButton)
+
+        let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelSettings))
+        cancelButton.frame = NSRect(x: w - 140 - pad - 90, y: pad, width: 80, height: 32)
+        cancelButton.bezelStyle = .rounded
+        cancelButton.keyEquivalent = "\u{1b}"
+        content.addSubview(cancelButton)
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func browseDir(_ sender: NSButton) {
+        guard let field = objc_getAssociatedObject(sender, "field") as? NSTextField else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.directoryURL = URL(fileURLWithPath: field.stringValue)
+        if panel.runModal() == .OK, let url = panel.url {
+            field.stringValue = url.path
+        }
+    }
+
+    @objc func saveSettings() {
+        saveButton.isEnabled = false
+        statusLabel.stringValue = "Saving..."
+
+        var args: [String] = []
+        let port = portField.stringValue.trimmingCharacters(in: .whitespaces)
+        let baseDir = baseDirField.stringValue.trimmingCharacters(in: .whitespaces)
+        let dataDir = dataDirField.stringValue.trimmingCharacters(in: .whitespaces)
+        let redoDir = redoDirField.stringValue.trimmingCharacters(in: .whitespaces)
+
+        if !port.isEmpty { args += ["--port", port] }
+        if !baseDir.isEmpty { args += ["--base-dir", baseDir] }
+        if !dataDir.isEmpty { args += ["--data-dir", dataDir] }
+        if !redoDir.isEmpty { args += ["--redo-dir", redoDir] }
+        args += ["--restart"]
+
+        runPrivileged(command: "config", args: args) { [weak self] success, output in
+            self?.saveButton.isEnabled = true
+            if success {
+                self?.statusLabel.stringValue = "Saved and restarted."
+                self?.onSaved?()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    self?.window.close()
+                }
+            } else {
+                self?.statusLabel.stringValue = "Error: \(output)"
+            }
+        }
+    }
+
+    @objc func cancelSettings() {
+        window.close()
+    }
+}
+
 // MARK: - App Delegate
 
 class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
@@ -161,6 +316,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     var menu: NSMenu!
     var statusTimer: Timer?
     var currentStatus = SeekDBStatus()
+    let settingsController = SettingsWindowController()
 
     // menu items that update dynamically
     var statusMenuItem: NSMenuItem!
@@ -219,46 +375,13 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        // Configuration submenu
-        let configSub = NSMenu()
-        let showConfig = NSMenuItem(title: "Show Current Config", action: #selector(showConfig), keyEquivalent: "")
-        showConfig.target = self
-        configSub.addItem(showConfig)
-        configSub.addItem(.separator())
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
-        let portChange = NSMenuItem(title: "Change Port...", action: #selector(changePort), keyEquivalent: "")
-        portChange.target = self
-        configSub.addItem(portChange)
-
-        let baseDirChange = NSMenuItem(title: "Change Base Dir...", action: #selector(changeBaseDir), keyEquivalent: "")
-        baseDirChange.target = self
-        configSub.addItem(baseDirChange)
-
-        let dataDirChange = NSMenuItem(title: "Change Data Dir...", action: #selector(changeDataDir), keyEquivalent: "")
-        dataDirChange.target = self
-        configSub.addItem(dataDirChange)
-
-        let redoDirChange = NSMenuItem(title: "Change Redo Dir...", action: #selector(changeRedoDir), keyEquivalent: "")
-        redoDirChange.target = self
-        configSub.addItem(redoDirChange)
-
-        let configItem = NSMenuItem(title: "Configuration", action: nil, keyEquivalent: "")
-        configItem.submenu = configSub
-        menu.addItem(configItem)
-
-        // Diagnostics submenu
-        let diagSub = NSMenu()
         let doctorItem = NSMenuItem(title: "Run Doctor", action: #selector(runDoctor), keyEquivalent: "")
         doctorItem.target = self
-        diagSub.addItem(doctorItem)
-
-        let pathsItem = NSMenuItem(title: "Show Paths", action: #selector(showPaths), keyEquivalent: "")
-        pathsItem.target = self
-        diagSub.addItem(pathsItem)
-
-        let diagItem = NSMenuItem(title: "Diagnostics", action: nil, keyEquivalent: "")
-        diagItem.submenu = diagSub
-        menu.addItem(diagItem)
+        menu.addItem(doctorItem)
 
         menu.addItem(.separator())
 
@@ -348,84 +471,45 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     // MARK: - Logs
 
     @objc func viewLogs() {
-        openTerminal("\(SEEKDBCTL) logs")
+        let logDir = readConfigValue("base-dir", fallback: "/opt/homebrew/var/seekdb/data") + "/log"
+        openTerminal("tail -n 200 \(logDir)/seekdb.log \(logDir)/launchd.out.log \(logDir)/launchd.err.log 2>/dev/null; echo '\\nPress any key to close'; read -n1")
     }
 
     @objc func followLogs() {
-        openTerminal("\(SEEKDBCTL) logs -f")
+        let logDir = readConfigValue("base-dir", fallback: "/opt/homebrew/var/seekdb/data") + "/log"
+        openTerminal("tail -n 50 -F \(logDir)/seekdb.log \(logDir)/launchd.out.log \(logDir)/launchd.err.log 2>/dev/null")
     }
 
-    // MARK: - Configuration
+    // MARK: - Settings
 
-    @objc func showConfig() {
-        openTerminal("\(SEEKDBCTL) config")
-    }
-
-    @objc func changePort() {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Change SeekDB Port"
-        alert.informativeText = "Enter new port number (requires restart):"
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
-        input.stringValue = currentStatus.port.isEmpty ? "2881" : currentStatus.port
-        alert.accessoryView = input
-        alert.addButton(withTitle: "Update & Restart")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = input
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let newPort = input.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !newPort.isEmpty else { return }
-        statusItem.button?.image = makeStatusIcon(.transitioning)
-        runPrivileged(command: "config", args: ["--port", newPort, "--restart"]) { [weak self] success, output in
-            self?.showResult(success: success, output: output, title: "Change Port")
+    @objc func openSettings() {
+        settingsController.onSaved = { [weak self] in
             self?.refreshStatus()
         }
-    }
-
-    func changeDirWithPanel(title: String, flag: String) {
-        NSApp.activate(ignoringOtherApps: true)
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.prompt = "Select"
-        panel.title = title
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        let confirmAlert = NSAlert()
-        confirmAlert.messageText = title
-        confirmAlert.informativeText = "New path: \(url.path)\nService will restart."
-        confirmAlert.addButton(withTitle: "Update & Restart")
-        confirmAlert.addButton(withTitle: "Cancel")
-        guard confirmAlert.runModal() == .alertFirstButtonReturn else { return }
-
-        statusItem.button?.image = makeStatusIcon(.transitioning)
-        runPrivileged(command: "config", args: [flag, url.path, "--restart"]) { [weak self] success, output in
-            self?.showResult(success: success, output: output, title: title)
-            self?.refreshStatus()
-        }
-    }
-
-    @objc func changeBaseDir() {
-        changeDirWithPanel(title: "Change Base Directory", flag: "--base-dir")
-    }
-
-    @objc func changeDataDir() {
-        changeDirWithPanel(title: "Change Data Directory", flag: "--data-dir")
-    }
-
-    @objc func changeRedoDir() {
-        changeDirWithPanel(title: "Change Redo Directory", flag: "--redo-dir")
+        settingsController.showWindow()
     }
 
     // MARK: - Diagnostics
 
     @objc func runDoctor() {
-        openTerminal("\(SEEKDBCTL) doctor")
-    }
-
-    @objc func showPaths() {
-        openTerminal("\(SEEKDBCTL) paths")
+        let baseDir = readConfigValue("base-dir", fallback: "/opt/homebrew/var/seekdb/data")
+        let logDir = baseDir + "/log"
+        let port = readConfigValue("port", fallback: "2881")
+        let script = """
+        echo 'SeekDB diagnostics'
+        echo '------------------'
+        test -x /opt/homebrew/bin/seekdb && echo 'binary     : ok' || echo 'binary     : missing'
+        test -f \(SEEKDB_CONFIG) && echo 'config     : ok' || echo 'config     : missing'
+        test -d \(baseDir) && echo 'base dir   : ok' || echo 'base dir   : missing'
+        test -d \(logDir) && echo 'log dir    : ok' || echo 'log dir    : missing'
+        nc -z 127.0.0.1 \(port) 2>/dev/null && echo 'port       : open (\(port))' || echo 'port       : closed (\(port))'
+        pgrep -f /opt/homebrew/bin/seekdb >/dev/null && echo 'process    : running' || echo 'process    : not running'
+        echo 'disk       :'
+        df -h \(baseDir) 2>/dev/null || df -h /opt/homebrew 2>/dev/null
+        echo 'memory     :' $(( $(sysctl -n hw.memsize 2>/dev/null) / 1024 / 1024 )) MB
+        echo '\\nPress any key to close'; read -n1
+        """
+        openTerminal(script)
     }
 
     // MARK: - Setup / Dangerous Actions
