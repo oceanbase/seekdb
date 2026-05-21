@@ -43,9 +43,6 @@ read_config() {
       port)
         ADDITIONAL_ARGS+=("--port=$value")
         ;;
-      plugin-dir)
-        ADDITIONAL_ARGS+=("--variable" "plugin_dir=$value")
-        ;;
       *)
         ADDITIONAL_ARGS+=("--parameter" "$key=$value")
         ;;
@@ -80,7 +77,10 @@ fi
 mkdir -p "$BASE_DIR" "$DATA_DIR" "$REDO_DIR" "$BASE_DIR/run" "$LOG_DIR"
 
 ARGS=("--base-dir=$BASE_DIR" "--nodaemon")
-if [ "${#ADDITIONAL_ARGS[@]}" -gt 0 ]; then
+if [ "${FORCE_START_WITH_ARGS:-}" = "1" ] || [ "${FORCE_START_WITH_ARGS:-}" = "true" ] || \
+   { { [ ! -d "$DATA_DIR" ] || [ -z "$(ls -A "$DATA_DIR" 2>/dev/null)" ]; } && \
+     { [ ! -d "$REDO_DIR" ] || [ -z "$(ls -A "$REDO_DIR" 2>/dev/null)" ]; } && \
+     [ ! -f "$BASE_DIR/.meta" ]; }; then
   ARGS+=("${ADDITIONAL_ARGS[@]}")
 fi
 

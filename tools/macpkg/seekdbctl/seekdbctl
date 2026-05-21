@@ -24,11 +24,7 @@ Commands:
   doctor       Run local diagnostics
   paths        Print important paths
   config       Print or update the active configuration
-  setup        Alias for `initialize` (kept for backward compat)
-  initialize   Wipe data and bootstrap a fresh database
-  boot-status  Print whether SeekDB is enabled to start at boot (enabled|disabled|unavailable)
-  enable-boot  Register SeekDB to start automatically at boot
-  disable-boot Unregister SeekDB from starting automatically at boot
+  setup        Create directories, enable boot startup, and start SeekDB
   clean-data   Stop the service and remove config/data directories after confirmation
   uninstall    Stop service and remove installed files, config, and data
   help         Show this help
@@ -100,10 +96,8 @@ redo-dir=$BASE_DIR/store/redo
 port=$DEFAULT_PORT
 cpu_count=4
 memory_limit=2G
-plugin-dir=$BASE_DIR/plugin_dir
 EOF
   fi
-  chmod 644 "$CONFIG_FILE" 2>/dev/null || true
 }
 
 write_config_value() {
@@ -139,7 +133,6 @@ write_config_value() {
   fi
 
   mv "$tmp_file" "$CONFIG_FILE"
-  chmod 644 "$CONFIG_FILE" 2>/dev/null || true
 }
 
 refresh_paths() {
@@ -153,24 +146,6 @@ get_port() {
 
 launchd_loaded() {
   launchctl print "system/${LABEL}" >/dev/null 2>&1
-}
-
-boot_startup_disabled() {
-  local line
-  line="$(launchctl print-disabled system 2>/dev/null | grep "\"${LABEL}\"" || true)"
-  [ -n "$line" ] && echo "$line" | grep -q "=> disabled"
-}
-
-boot_startup_status() {
-  if [ ! -f "$PLIST" ]; then
-    printf "unavailable"
-    return 0
-  fi
-  if boot_startup_disabled; then
-    printf "disabled"
-  else
-    printf "enabled"
-  fi
 }
 
 pid_from_file() {
@@ -209,39 +184,16 @@ cmd_start() {
   fi
 }
 
-cmd_initialize() {
+cmd_setup() {
   require_root
   ensure_config_file
   refresh_paths
-
-  local data_dir
-  local redo_dir
-  data_dir="$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
-  redo_dir="$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
-
-  # Stop the service if it's loaded — must release files before wiping.
-  if launchd_loaded; then
-    info "Stopping ${LABEL} before initialization"
-    if [ -x "$STOP_SCRIPT" ]; then
-      "$STOP_SCRIPT" || true
-    fi
-    launchctl bootout "system/${LABEL}" >/dev/null 2>&1 || true
-  fi
-
-  info "Wiping database state"
-  rm -rf "$data_dir" "$redo_dir" "$LOG_DIR" "$BASE_DIR/run" "$BASE_DIR/etc" "$BASE_DIR/.meta" 2>/dev/null || true
-
-  mkdir -p "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR"
+  mkdir -p "$BASE_DIR" "$BASE_DIR/run" "$BASE_DIR/store" "$BASE_DIR/store/redo" "$LOG_DIR"
   chown -R root:wheel "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")" 2>/dev/null || true
-  chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR" 2>/dev/null || true
-
+  chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$BASE_DIR/store" "$BASE_DIR/store/redo" "$LOG_DIR" 2>/dev/null || true
   launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
   cmd_start
-  info "Database initialized fresh and started."
-}
-
-cmd_setup() {
-  cmd_initialize "$@"
+  info "SeekDB is configured to start at boot and has been started."
 }
 
 cmd_stop() {
@@ -263,24 +215,6 @@ cmd_restart() {
   cmd_start
 }
 
-cmd_boot_status() {
-  boot_startup_status
-  printf "\n"
-}
-
-cmd_enable_boot() {
-  require_root
-  [ -f "$PLIST" ] || die "LaunchDaemon plist not found: $PLIST"
-  launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
-  info "SeekDB is enabled to start at boot."
-}
-
-cmd_disable_boot() {
-  require_root
-  launchctl disable "system/${LABEL}" >/dev/null 2>&1 || true
-  info "SeekDB is disabled from starting at boot."
-}
-
 cmd_status() {
   refresh_paths
   local port
@@ -296,8 +230,6 @@ cmd_status() {
   else
     echo "launchd    : not loaded"
   fi
-
-  echo "boot-startup: $(boot_startup_status)"
 
   local pid=""
   pid="$(pid_from_file || true)"
@@ -410,7 +342,7 @@ cmd_config() {
 Usage:
   seekdb-config
   sudo seekdb-config --base-dir <path> [--restart]
-  sudo seekdb-config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--plugin-dir <path>] [--restart]
+  sudo seekdb-config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--restart]
 EOF
     return 0
   fi
@@ -422,9 +354,6 @@ EOF
   local new_data=""
   local new_redo=""
   local new_port=""
-  local new_plugin=""
-  local new_cpu=""
-  local new_memory=""
   local restart=0
 
   while [ "$#" -gt 0 ]; do
@@ -449,21 +378,6 @@ EOF
         new_port="$2"
         shift 2
         ;;
-      --plugin-dir)
-        [ "$#" -ge 2 ] || die "--plugin-dir requires a path"
-        new_plugin="$2"
-        shift 2
-        ;;
-      --cpu-count)
-        [ "$#" -ge 2 ] || die "--cpu-count requires a value"
-        new_cpu="$2"
-        shift 2
-        ;;
-      --memory-limit)
-        [ "$#" -ge 2 ] || die "--memory-limit requires a value"
-        new_memory="$2"
-        shift 2
-        ;;
       --restart)
         restart=1
         shift
@@ -486,9 +400,6 @@ EOF
   [ -n "$new_data" ] && write_config_value "data-dir" "$new_data"
   [ -n "$new_redo" ] && write_config_value "redo-dir" "$new_redo"
   [ -n "$new_port" ] && write_config_value "port" "$new_port"
-  [ -n "$new_plugin" ] && write_config_value "plugin-dir" "$new_plugin"
-  [ -n "$new_cpu" ] && write_config_value "cpu_count" "$new_cpu"
-  [ -n "$new_memory" ] && write_config_value "memory_limit" "$new_memory"
 
   refresh_paths
   mkdir -p "$BASE_DIR" "$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")" "$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")" "$BASE_DIR/run" "$LOG_DIR"
@@ -550,11 +461,7 @@ case "${1:-help}" in
   doctor) shift; cmd_doctor "$@" ;;
   paths) shift; cmd_paths "$@" ;;
   config) shift; cmd_config "$@" ;;
-  initialize|init) shift; cmd_initialize "$@" ;;
   setup) shift; cmd_setup "$@" ;;
-  boot-status) shift; cmd_boot_status "$@" ;;
-  enable-boot) shift; cmd_enable_boot "$@" ;;
-  disable-boot) shift; cmd_disable_boot "$@" ;;
   clean-data) shift; cmd_clean_data "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) usage ;;
