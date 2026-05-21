@@ -18,7 +18,7 @@
 
 #include "ob_vsag_adaptor.h"
 #include <map>
-#ifndef OB_BUILD_CDC_DISABLE_VSAG
+#if !defined(OB_BUILD_CDC_DISABLE_VSAG) || defined(OB_BUILD_EMBED_MODE)
 #include "vsag/vsag.h"
 #include "vsag/errors.h"
 #include "vsag/dataset.h"
@@ -31,7 +31,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"
 
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
 
 #else
 

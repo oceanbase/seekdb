@@ -1061,6 +1061,13 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
                 }
             }
             FLOG_INFO("seekdb start success ", "cost", ObTimeUtility::current_time() - start_time);
+#ifdef OB_BUILD_EMBED_MODE
+            // Ensure Change Stream threads leave bootstrap wait (embed may stop at IN_SERVICE).
+            if (GCTX.start_service_time_ <= 0) {
+              GCTX.start_service_time_ = ObTimeUtility::current_time();
+            }
+            GCTX.in_bootstrap_ = false;
+#endif
             // Handle tenant node balancer (aligned with Python embed)
             ObTenantNodeBalancer::get_instance().handle();
         }
@@ -2212,40 +2219,23 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
                         }
                         row_null.push_back(false);
                     } else if (ob_is_string_type(obj_type) || ob_is_text_tc(obj_type)) {
-                        // String/TEXT types: full content via get_string; LOB use read_lob_data when get_string fails.
+                        // String/TEXT: get_string first; then read_lob_data (100KB+ docs); then print_sql_literal.
                         ObString str_val;
                         int get_ret = obj.get_string(str_val);
-                        if (OB_SUCCESS == get_ret) {
-                            if (str_val.length() > 0 && str_val.ptr()) {
-                                row.push_back(std::string(str_val.ptr(), str_val.length()));
-                            } else {
-                                pos = 0;
-                                if (OB_SUCCESS == obj.print_sql_literal(buf, sizeof(buf), pos) && pos > 0) {
-                                    std::string sql_literal(buf, static_cast<size_t>(pos));
-                                    if (sql_literal.length() >= 2 && sql_literal.front() == '\'' && sql_literal.back() == '\'') {
-                                        sql_literal = sql_literal.substr(1, sql_literal.length() - 2);
-                                        for (size_t q = 0; (q = sql_literal.find("''", q)) != std::string::npos; q += 1)
-                                            sql_literal.replace(q, 2, "'");
-                                    }
-                                    row.push_back(sql_literal);
-                                } else {
-                                    row.push_back("");
-                                }
-                            }
-                            row_null.push_back(false);
-                        } else if ((ob_is_text_tc(obj_type)) && obj.is_lob_storage()) {
+                        bool filled = false;
+                        if (OB_SUCCESS == get_ret && str_val.length() > 0 && str_val.ptr()) {
+                            row.push_back(std::string(str_val.ptr(), str_val.length()));
+                            filled = true;
+                        }
+                        if (!filled) {
                             ObString lob_str;
-                            if (OB_SUCCESS == obj.read_lob_data(row_lob_allocator, lob_str)) {
-                                if (lob_str.ptr() && lob_str.length() > 0) {
-                                    row.push_back(std::string(lob_str.ptr(), lob_str.length()));
-                                } else {
-                                    row.push_back("");
-                                }
-                            } else {
-                                row.push_back("");
+                            if (OB_SUCCESS == obj.read_lob_data(row_lob_allocator, lob_str)
+                                && lob_str.ptr() && lob_str.length() > 0) {
+                                row.push_back(std::string(lob_str.ptr(), lob_str.length()));
+                                filled = true;
                             }
-                            row_null.push_back(false);
-                        } else {
+                        }
+                        if (!filled) {
                             pos = 0;
                             if (OB_SUCCESS == obj.print_sql_literal(buf, sizeof(buf), pos) && pos > 0) {
                                 std::string sql_literal(buf, static_cast<size_t>(pos));
@@ -2256,10 +2246,22 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
                                 }
                                 row.push_back(sql_literal);
                             } else {
-                                row.push_back("");
+                                std::vector<char> large_buf(2 * 1024 * 1024, 0);
+                                pos = 0;
+                                if (OB_SUCCESS == obj.print_sql_literal(large_buf.data(), large_buf.size(), pos) && pos > 0) {
+                                    std::string sql_literal(large_buf.data(), static_cast<size_t>(pos));
+                                    if (sql_literal.length() >= 2 && sql_literal.front() == '\'' && sql_literal.back() == '\'') {
+                                        sql_literal = sql_literal.substr(1, sql_literal.length() - 2);
+                                        for (size_t q = 0; (q = sql_literal.find("''", q)) != std::string::npos; q += 1)
+                                            sql_literal.replace(q, 2, "'");
+                                    }
+                                    row.push_back(sql_literal);
+                                } else {
+                                    row.push_back("");
+                                }
                             }
-                            row_null.push_back(false);
                         }
+                        row_null.push_back(false);
                     } else if (ob_is_float_tc(obj_type)) {
                         // Float types
                         float float_val = 0;
@@ -4502,6 +4504,40 @@ int seekdb_stmt_prepare(SeekdbStmt stmt, const char* query, unsigned long length
     return SEEKDB_SUCCESS;
 }
 
+// Format STRING bind for SQL substitution with MySQL-compatible escaping (\\n, \\', etc.).
+static std::string format_stmt_string_param(
+    SeekdbConnection* conn,
+    const SeekdbBind& bind,
+    oceanbase::common::ObObjType col_type = oceanbase::common::ObNullType)
+{
+    if (bind.is_null && *bind.is_null) {
+        return "NULL";
+    }
+    if (!bind.buffer || !bind.length) {
+        return "NULL";
+    }
+    const char* raw = static_cast<const char*>(bind.buffer);
+    unsigned long raw_len = static_cast<unsigned long>(*bind.length);
+    if (raw_len == 0) {
+        return "''";
+    }
+    std::vector<char> escaped_buf(raw_len * 2 + 1);
+    unsigned long escaped_len = seekdb_real_escape_string(
+        static_cast<SeekdbHandle>(conn),
+        escaped_buf.data(),
+        static_cast<unsigned long>(escaped_buf.size()),
+        raw,
+        raw_len);
+    if (escaped_len == static_cast<unsigned long>(-1)) {
+        return "NULL";
+    }
+    std::string quoted = "'" + std::string(escaped_buf.data(), escaped_len) + "'";
+    if (col_type == oceanbase::common::ObJsonType) {
+        return "CAST(" + quoted + " AS JSON)";
+    }
+    return quoted;
+}
+
 int seekdb_stmt_bind_param(SeekdbStmt stmt, SeekdbBind* bind) {
     if (!stmt || !bind) {
         return SEEKDB_ERROR_INVALID_PARAM;
@@ -4594,23 +4630,15 @@ int seekdb_stmt_execute(SeekdbStmt stmt) {
                             param_value = std::to_string(val);
                         }
                         break;
-                    case SEEKDB_TYPE_STRING:
-                        // STRING type: use quoted string format (aligned with MySQL MYSQL_TYPE_STRING)
-                        // For binary data comparisons, use SEEKDB_TYPE_BLOB instead
-                        if (bind.buffer && bind.length) {
-                            std::string str_val(static_cast<const char*>(bind.buffer), *bind.length);
-                            // Escape single quotes
-                            std::string escaped;
-                            for (char c : str_val) {
-                                if (c == '\'') {
-                                    escaped += "''";
-                                } else {
-                                    escaped += c;
-                                }
-                            }
-                            param_value = "'" + escaped + "'";
+                    case SEEKDB_TYPE_STRING: {
+                        oceanbase::common::ObObjType col_type = oceanbase::common::ObNullType;
+                        const size_t column_count = stmt_data->param_column_types.size();
+                        if (column_count > 0) {
+                            col_type = stmt_data->param_column_types[param_idx % column_count];
                         }
+                        param_value = format_stmt_string_param(conn, bind, col_type);
                         break;
+                    }
                     case SEEKDB_TYPE_BLOB:
                         // BLOB type: use hexadecimal format (aligned with MySQL MYSQL_TYPE_BLOB)
                         // BLOB type indicates binary data that should not undergo charset conversion

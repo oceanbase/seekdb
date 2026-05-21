@@ -2435,8 +2435,14 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
       const ObTableSchema *index_schema = nullptr;
       if (OB_FAIL(guard->get_table_schema(tenant_id, index_infos.at(i).table_id_, index_schema))) {
         LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_infos.at(i).table_id_));
+      } else if (OB_NOT_NULL(index_schema)
+                 && schema::is_vec_index_id_type(index_schema->get_index_type())
+                 && share::ObVectorIndexUtil::is_sync_mode_async(
+                        index_schema->get_index_params(), true /* is_hnsw_heap_table */)) {
+        das_dml_ctdef.table_param_.get_data_table_ref().set_has_async_index(true);
+        break;
       } else if (OB_NOT_NULL(index_schema) && !index_schema->get_index_params().empty()
-                 && (index_schema->is_vec_delta_buffer_type())) {
+                 && index_schema->is_vec_delta_buffer_type()) {
         share::ObVectorIndexParam vec_param;
         if (OB_SUCC(share::ObVectorIndexUtil::parser_params_from_string(
                 index_schema->get_index_params(),

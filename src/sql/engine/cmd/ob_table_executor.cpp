@@ -30,6 +30,7 @@
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
+#include "rootserver/ob_root_service.h"
 
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "observer/ob_server_event_history_table_operator.h"
@@ -2418,6 +2419,24 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
+#ifdef OB_BUILD_EMBED_MODE
+    if (OB_ISNULL(GCTX.root_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("root service is null in embed mode", K(ret));
+    } else if (OB_FAIL(GCTX.root_service_->fork_table(fork_table_arg, res))) {
+      LOG_WARN("local root service fork table failed", K(ret), K(res), K(fork_table_arg));
+    } else if (0 != res.task_id_ && OB_ISNULL(GCTX.rs_rpc_proxy_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("rs rpc proxy is null, cannot wait fork ddl", K(ret), K(res));
+    } else if (0 != res.task_id_
+               && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
+                      res.tenant_id_, res.task_id_, false /* ddl_need_retry_at_executor */,
+                      my_session, GCTX.rs_rpc_proxy_))) {
+      LOG_WARN("wait fork ddl finish failed", K(ret), K(res));
+    } else {
+      LOG_INFO("fork table executor finished (embed local)", K(fork_table_arg), K(res));
+    }
+#else
     ObTaskExecutorCtx *task_exec_ctx = NULL;
     obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -2433,6 +2452,7 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
     } else {
       LOG_INFO("fork table executor finished", K(fork_table_arg));
     }
+#endif
   }
   return ret;
 }

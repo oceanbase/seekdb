@@ -69,7 +69,7 @@ int init_vasg_logger(void* logger)
     if (!check_vsag_init()) {
         return -4016;
     } else {
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
 #else
         obvsag::set_logger(logger);
         obvsag::set_log_level(static_cast<vsag::Logger::Level>(OB_LOGGER.get_log_level()));
@@ -82,7 +82,7 @@ int init_vasg_logger(void* logger)
 bool check_vsag_init()
 {  
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return true;
 #else
     return obvsag::is_init();
@@ -98,7 +98,7 @@ int create_index(obvsag::VectorIndexPtr& index_handler, int index_type,
                  bool bq_use_fht /*= false*/)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   return ret;
 #else 
   obvsag::set_block_size_limit(2*1024*1024);
@@ -123,7 +123,7 @@ int create_index(obvsag::VectorIndexPtr &index_handler, int index_type, const ch
     bool use_reorder, float doc_prune_ratio, int window_size, void *allocator, int extra_info_size /* 0 */)
 {
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   return ret;
 #else
   obvsag::set_block_size_limit(2*1024*1024);
@@ -137,7 +137,7 @@ int create_index(obvsag::VectorIndexPtr &index_handler, int index_type, const ch
 int build_index(obvsag::VectorIndexPtr index_handler, float* vector_list, int64_t* ids, int dim, int size, char* extra_info /*= nullptr*/)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
   return obvsag::build_index(index_handler, vector_list, ids, dim, size, extra_info);
@@ -149,7 +149,7 @@ int build_index(obvsag::VectorIndexPtr &index_handler, uint32_t *lens, uint32_t 
     int size, char *extra_infos /*= nullptr*/)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
   return obvsag::build_index(index_handler, lens, dims, vals, ids, size, extra_infos);
@@ -159,7 +159,7 @@ int build_index(obvsag::VectorIndexPtr &index_handler, uint32_t *lens, uint32_t 
 int add_index(obvsag::VectorIndexPtr index_handler, float* vector_list, int64_t* ids, int dim, char *extra_info, int size)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   return ret;
 #else
   return obvsag::add_index(index_handler, vector_list, ids, dim, size, extra_info);
@@ -170,7 +170,7 @@ int add_index(obvsag::VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *d
     char *extra_infos)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   return ret;
 #else
   return obvsag::add_index(index_handler, lens, dims, vals, ids, size, extra_infos);
@@ -180,7 +180,7 @@ int add_index(obvsag::VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *d
 int get_index_number(obvsag::VectorIndexPtr index_handler, int64_t &size)
 {
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::get_index_number(index_handler, size);
@@ -190,7 +190,7 @@ int get_index_number(obvsag::VectorIndexPtr index_handler, int64_t &size)
 int get_index_type(obvsag::VectorIndexPtr index_handler)
 {
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::get_index_type(index_handler);
@@ -204,7 +204,7 @@ int cal_distance_by_id(obvsag::VectorIndexPtr index_handler,
                        const float *&distances)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::cal_distance_by_id(index_handler, vector, ids, count, distances);
@@ -218,7 +218,7 @@ int cal_distance_by_id(obvsag::VectorIndexPtr index_handler,
                        const float *&distances)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::cal_distance_by_id(index_handler, len, dims, vals, ids, count, distances);
@@ -228,7 +228,7 @@ int cal_distance_by_id(obvsag::VectorIndexPtr index_handler,
 int get_vid_bound(obvsag::VectorIndexPtr index_handler, int64_t &min_vid, int64_t &max_vid)
 {
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::get_vid_bound(index_handler, min_vid, max_vid);
@@ -240,7 +240,7 @@ int get_extra_info_by_ids(obvsag::VectorIndexPtr& index_handler,
                           int64_t count, 
                           char *extra_infos) {
 INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::get_extra_info_by_ids(index_handler, ids, count, extra_infos);
@@ -254,7 +254,7 @@ int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim
                float distance_threshold)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   return ret;
 #else
   return obvsag::knn_search(index_handler, query_vector, dim, topk,
@@ -271,7 +271,7 @@ int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim
                bool need_extra_info, void *&iter_ctx, bool is_last_search)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   return ret;
 #else
   return obvsag::knn_search(index_handler, query_vector, dim, topk,
@@ -288,7 +288,7 @@ int knn_search(obvsag::VectorIndexPtr index_handler, uint32_t len, uint32_t *dim
     bool is_extra_info_filter, float valid_ratio, void *allocator, bool need_extra_info)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
   return ret;
 #else
   return obvsag::knn_search(index_handler, len, dims, vals, topk,
@@ -302,7 +302,7 @@ int knn_search(obvsag::VectorIndexPtr index_handler, uint32_t len, uint32_t *dim
 int fserialize(obvsag::VectorIndexPtr index_handler, std::ostream& out_stream)
 {
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::fserialize(index_handler, out_stream);
@@ -312,7 +312,7 @@ int fserialize(obvsag::VectorIndexPtr index_handler, std::ostream& out_stream)
 int fdeserialize(obvsag::VectorIndexPtr& index_handler, std::istream& in_stream)
 {
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::fdeserialize(index_handler,in_stream);
@@ -322,7 +322,7 @@ int fdeserialize(obvsag::VectorIndexPtr& index_handler, std::istream& in_stream)
 int delete_index(obvsag::VectorIndexPtr& index_handler)
 {
     INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
     return obvsag::delete_index(index_handler);
@@ -331,7 +331,7 @@ int delete_index(obvsag::VectorIndexPtr& index_handler)
 
 void delete_iter_ctx(void *iter_ctx)
 {
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
 #else
     obvsag::delete_iter_ctx(iter_ctx);
 #endif
@@ -341,7 +341,7 @@ void delete_iter_ctx(void *iter_ctx)
 uint64_t estimate_memory(obvsag::VectorIndexPtr& index_handler, const uint64_t row_count, const bool is_build)
 {
   INIT_SUCC(ret);
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
   return obvsag::estimate_memory(index_handler, row_count, is_build);
@@ -352,7 +352,7 @@ uint64_t estimate_memory(obvsag::VectorIndexPtr& index_handler, const uint64_t r
 int immutable_optimize(obvsag::VectorIndexPtr& index_handler)
 {
   int ret = OB_SUCCESS;
-#ifdef OB_BUILD_CDC_DISABLE_VSAG
+#if defined(OB_BUILD_CDC_DISABLE_VSAG) && !defined(OB_BUILD_EMBED_MODE)
     return ret;
 #else
   return obvsag::immutable_optimize(index_handler);

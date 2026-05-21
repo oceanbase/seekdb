@@ -22,11 +22,45 @@
 #include "share/ob_thread_define.h"
 #include "share/ob_global_stat_proxy.h"
 #include "storage/tx/ob_ts_mgr.h"
+#ifdef OB_BUILD_EMBED_MODE
+#include "storage/ls/ob_ls.h"
+#include "storage/tx_storage/ob_ls_service.h"
+#include "storage/tx_storage/ob_ls_handle.h"
+#include "logservice/ob_log_handler.h"
+#endif
 
 namespace oceanbase
 {
 namespace share
 {
+
+#ifdef OB_BUILD_EMBED_MODE
+// True when Fetcher has consumed to log tail and has no in-flight tx (real CS catch-up).
+static int embed_fetcher_tail_caught_up(ObCSFetcher &fetcher, bool &caught_up)
+{
+  int ret = OB_SUCCESS;
+  caught_up = false;
+  if (fetcher.get_current_processing_tx_count() > 0) {
+    // still draining
+  } else {
+    palf::LSN max_lsn;
+    storage::ObLSHandle tmp_handle;
+    storage::ObLS *ls = nullptr;
+    logservice::ObLogHandler *log_handler = nullptr;
+    const share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
+    if (OB_FAIL(MTL(storage::ObLSService*)->get_ls(ls_id, tmp_handle, storage::ObLSGetMod::LOG_MOD))
+        || OB_ISNULL(ls = tmp_handle.get_ls())
+        || OB_ISNULL(log_handler = ls->get_log_handler())
+        || OB_FAIL(log_handler->get_max_lsn(max_lsn))) {
+      LOG_WARN("embed_fetcher_tail_caught_up: get_max_lsn failed", KR(ret));
+    } else {
+      const palf::LSN cur_lsn = fetcher.get_current_lsn();
+      caught_up = cur_lsn.is_valid() && max_lsn.is_valid() && cur_lsn >= max_lsn;
+    }
+  }
+  return ret;
+}
+#endif
 
 ObChangeStreamMgr::ObChangeStreamMgr()
   : is_inited_(false),
@@ -135,25 +169,64 @@ int ObChangeStreamMgr::wait_refresh_scn(
   const int64_t SLEEP_INTERVAL_US = 100 * 1000; // 100ms
   const int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
 
-  if (OB_FAIL(OB_TS_MGR.get_ts_sync(tenant_id, abs_timeout_us - ObTimeUtility::current_time(),
-                                     safe_visible_scn))) {
-    LOG_WARN("get gts for safe visible scn failed", KR(ret), K(tenant_id));
-  } else {
-    bool is_satisfied = false;
-    while (OB_SUCC(ret) && !is_satisfied) {
-      const int64_t now = ObTimeUtility::current_time();
-      if (now >= abs_timeout_us) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("wait change stream refresh scn timeout", KR(ret),
-                 K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
-      } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
-                     sql_client, tenant_id, false, current_refresh_scn))) {
-        LOG_WARN("get change stream refresh scn failed", KR(ret), K(tenant_id));
-      } else if (current_refresh_scn >= safe_visible_scn) {
+  bool is_satisfied = false;
+#ifdef OB_BUILD_EMBED_MODE
+  // Pin target GTS at refresh start — avoid chasing a moving GTS in single-process embed.
+  bool embed_target_pinned = false;
+#endif
+  while (OB_SUCC(ret) && !is_satisfied) {
+    const int64_t now = ObTimeUtility::current_time();
+    const int64_t remain_us = abs_timeout_us - now;
+    if (remain_us <= 0) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("wait change stream refresh scn timeout", KR(ret),
+               K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
+#ifdef OB_BUILD_EMBED_MODE
+    } else if (!embed_target_pinned
+               && OB_FAIL(OB_TS_MGR.get_ts_sync(tenant_id, remain_us, safe_visible_scn))) {
+      LOG_WARN("get gts for safe visible scn failed", KR(ret), K(tenant_id));
+    } else if (!embed_target_pinned) {
+      embed_target_pinned = true;
+#else
+    } else if (OB_FAIL(OB_TS_MGR.get_ts_sync(tenant_id, remain_us, safe_visible_scn))) {
+      LOG_WARN("get gts for safe visible scn failed", KR(ret), K(tenant_id));
+#endif
+    } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
+                   sql_client, tenant_id, false, current_refresh_scn))) {
+      LOG_WARN("get change stream refresh scn failed", KR(ret), K(tenant_id));
+    } else if (current_refresh_scn >= safe_visible_scn) {
+      is_satisfied = true;
+      LOG_INFO("change stream refresh scn caught up",
+               K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
+    } else {
+#ifdef OB_BUILD_EMBED_MODE
+      // Embed: publish fetcher candidate or current GTS each round (CS may lag vs server).
+      MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
+      if (OB_SUCC(guard.switch_to(tenant_id, false))) {
+        ObChangeStreamMgr *cs_mgr = MTL(ObChangeStreamMgr *);
+        SCN candidate_scn;
+        int64_t affected_rows = 0;
+        bool tail_caught_up = false;
+        if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
+          ObCSFetcher &fetcher = cs_mgr->get_fetcher();
+          (void)embed_fetcher_tail_caught_up(fetcher, tail_caught_up);
+          if (tail_caught_up
+              && OB_SUCC(fetcher.get_refresh_scn(candidate_scn))
+              && candidate_scn.is_valid()) {
+            (void)ObGlobalStatProxy::advance_change_stream_refresh_scn(
+                sql_client, tenant_id, candidate_scn, affected_rows);
+          }
+        }
+      }
+      if (OB_SUCC(ObGlobalStatProxy::get_change_stream_refresh_scn(
+              sql_client, tenant_id, false, current_refresh_scn))
+          && current_refresh_scn >= safe_visible_scn) {
         is_satisfied = true;
-        LOG_INFO("change stream refresh scn caught up",
+        LOG_INFO("change stream refresh scn caught up (embed)",
                  K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
-      } else {
+      }
+#endif
+      if (!is_satisfied) {
         LOG_INFO("waiting for change stream refresh scn",
                  K(tenant_id), K(safe_visible_scn), K(current_refresh_scn));
         ob_usleep(SLEEP_INTERVAL_US);
