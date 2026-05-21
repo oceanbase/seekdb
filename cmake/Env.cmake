@@ -183,7 +183,7 @@ if (OB_BUILD_SYS_VEC_IDX)
 endif()
  
 # should not use initial-exec for tls-model if building OBCDC.
-if(BUILD_CDC_ONLY OR BUILD_EMBED_MODE)
+if(BUILD_CDC_ONLY)
   add_definitions(-DOB_BUILD_CDC_DISABLE_VSAG)
 else()
   if(NOT BUILD_EMBED_MODE)
