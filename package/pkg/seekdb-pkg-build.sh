@@ -102,6 +102,8 @@ SEEKDB_BIN="$SEEKDB_BUILD/src/observer/seekdb"
 MENUBAR_SRC="$MACPKG_DIR/seekdbctl/menubar"
 MENUBAR_BIN="$SEEKDB_BUILD/SeekDBMenuBar"
 
+HELPER_BIN="$SEEKDB_BUILD/SeekDBHelper"
+
 if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
   info "Compiling SeekDB menu bar app ..."
   swiftc \
@@ -112,6 +114,16 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
     "$MENUBAR_SRC/SeekDBMenuBar.swift"
   codesign --force --sign - "$MENUBAR_BIN"
   info "Menu bar app compiled: $MENUBAR_BIN"
+
+  info "Compiling privileged helper ..."
+  swiftc \
+    -o "$HELPER_BIN" \
+    -framework Foundation \
+    -target arm64-apple-macosx13.0 \
+    -O \
+    "$MENUBAR_SRC/SeekDBHelper.swift"
+  codesign --force --sign - "$HELPER_BIN"
+  info "Helper compiled: $HELPER_BIN"
 fi
 
 # ---------------------------------------------------------------------------
@@ -129,19 +141,29 @@ install -m 755 "$SEEKDB_BIN" "$STAGING/opt/homebrew/bin/seekdb"
 for script in seekdbctl seekdb_start seekdb_stop seekdb_status seekdb_config \
               seekdb_setup seekdb_cleanup seekdb_paths seekdb_uninstall; do
   src="$MACPKG_DIR/seekdbctl/$script"
-  [[ -f "$src" ]] && install -m 755 "$src" "$STAGING/opt/homebrew/bin/$script"
+  if [[ -f "$src" ]]; then install -m 755 "$src" "$STAGING/opt/homebrew/bin/$script"; fi
 done
 
 # --- ob_admin / ob_error (optional) ---
-[[ -x "$SEEKDB_BUILD/tools/ob_admin/ob_admin" ]] && \
+if [[ -x "$SEEKDB_BUILD/tools/ob_admin/ob_admin" ]]; then
   install -m 755 "$SEEKDB_BUILD/tools/ob_admin/ob_admin" "$STAGING/opt/homebrew/bin/"
-[[ -x "$SEEKDB_BUILD/tools/ob_error/src/ob_error" ]] && \
+fi
+if [[ -x "$SEEKDB_BUILD/tools/ob_error/src/ob_error" ]]; then
   install -m 755 "$SEEKDB_BUILD/tools/ob_error/src/ob_error" "$STAGING/opt/homebrew/bin/"
+fi
 
-# --- LaunchDaemon plist ---
+# --- LaunchDaemon plists ---
 install -d "$STAGING/Library/LaunchDaemons"
 install -m 644 "$MACPKG_DIR/launchd/profile/com.seekdb.server.plist.in" \
   "$STAGING/Library/LaunchDaemons/com.seekdb.server.plist"
+
+# --- Privileged helper ---
+if [[ -x "$HELPER_BIN" ]]; then
+  install -d "$STAGING/Library/PrivilegedHelperTools"
+  install -m 755 "$HELPER_BIN" "$STAGING/Library/PrivilegedHelperTools/com.seekdb.helper"
+  install -m 644 "$MENUBAR_SRC/com.seekdb.helper.plist" \
+    "$STAGING/Library/LaunchDaemons/com.seekdb.helper.plist"
+fi
 
 # --- helper scripts ---
 install -d "$STAGING/opt/homebrew/libexec/seekdb/scripts"
@@ -150,8 +172,9 @@ install -m 755 "$MACPKG_DIR/launchd/profile/seekdb_launchd_start" \
 install -m 755 "$MACPKG_DIR/launchd/profile/seekdb_launchd_stop" \
   "$STAGING/opt/homebrew/libexec/seekdb/scripts/"
 for py in import_time_zone_info.py import_srs_data.py; do
-  [[ -f "$TOPDIR/tools/$py" ]] && install -m 755 "$TOPDIR/tools/$py" \
-    "$STAGING/opt/homebrew/libexec/seekdb/"
+  if [[ -f "$TOPDIR/tools/$py" ]]; then
+    install -m 755 "$TOPDIR/tools/$py" "$STAGING/opt/homebrew/libexec/seekdb/"
+  fi
 done
 
 # --- config ---
@@ -159,42 +182,54 @@ install -d "$STAGING/opt/homebrew/etc/seekdb"
 install -m 644 "$MACPKG_DIR/launchd/profile/seekdb.cnf" "$STAGING/opt/homebrew/etc/seekdb/"
 for f in default_parameter.json default_system_variable.json; do
   src="$TOPDIR/src/share/parameter/$f"
-  [[ -f "$src" ]] || src="$TOPDIR/src/share/system_variable/$f"
-  [[ -f "$src" ]] && install -m 644 "$src" "$STAGING/opt/homebrew/etc/seekdb/"
+  if [[ ! -f "$src" ]]; then src="$TOPDIR/src/share/system_variable/$f"; fi
+  if [[ -f "$src" ]]; then install -m 644 "$src" "$STAGING/opt/homebrew/etc/seekdb/"; fi
 done
 # ob_system_variable_init.json (generated at build time)
-[[ -f "$SEEKDB_BUILD/src/share/ob_system_variable_init.json" ]] && \
+if [[ -f "$SEEKDB_BUILD/src/share/ob_system_variable_init.json" ]]; then
   install -m 644 "$SEEKDB_BUILD/src/share/ob_system_variable_init.json" "$STAGING/opt/homebrew/etc/seekdb/"
+fi
 for f in oceanbase_upgrade_dep.yml deps_compat.yml; do
-  [[ -f "$TOPDIR/tools/upgrade/$f" ]] && install -m 644 "$TOPDIR/tools/upgrade/$f" "$STAGING/opt/homebrew/etc/seekdb/"
+  if [[ -f "$TOPDIR/tools/upgrade/$f" ]]; then
+    install -m 644 "$TOPDIR/tools/upgrade/$f" "$STAGING/opt/homebrew/etc/seekdb/"
+  fi
 done
 
 # --- share: admin SQL ---
 install -d "$STAGING/opt/homebrew/share/seekdb/admin"
 SYS_PACK_DIR="$SEEKDB_BUILD/syspack_release"
-[[ -d "$SYS_PACK_DIR" ]] && cp -R "$SYS_PACK_DIR/"* "$STAGING/opt/homebrew/share/seekdb/admin/" 2>/dev/null || true
+if [[ -d "$SYS_PACK_DIR" ]]; then
+  cp -R "$SYS_PACK_DIR/"* "$STAGING/opt/homebrew/share/seekdb/admin/" 2>/dev/null || true
+fi
 
 # --- share: help ---
 install -d "$STAGING/opt/homebrew/share/seekdb/help"
-[[ -f "$TOPDIR/src/sql/fill_help_tables-ob.sql" ]] && \
+if [[ -f "$TOPDIR/src/sql/fill_help_tables-ob.sql" ]]; then
   install -m 644 "$TOPDIR/src/sql/fill_help_tables-ob.sql" "$STAGING/opt/homebrew/share/seekdb/help/"
+fi
 
 # --- share: timezone ---
 install -d "$STAGING/opt/homebrew/share/seekdb/timezone"
 for f in timezone_V1.log timezone.data timezone_name.data timezone_trans.data timezone_trans_type.data; do
-  [[ -f "$TOPDIR/tools/$f" ]] && install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/homebrew/share/seekdb/timezone/"
+  if [[ -f "$TOPDIR/tools/$f" ]]; then
+    install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/homebrew/share/seekdb/timezone/"
+  fi
 done
 
 # --- share: srs ---
 install -d "$STAGING/opt/homebrew/share/seekdb/srs"
 for f in spatial_reference_systems.data default_srs_data_mysql.sql; do
-  [[ -f "$TOPDIR/tools/$f" ]] && install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/homebrew/share/seekdb/srs/"
+  if [[ -f "$TOPDIR/tools/$f" ]]; then
+    install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/homebrew/share/seekdb/srs/"
+  fi
 done
 
 # --- share: upgrade ---
 install -d "$STAGING/opt/homebrew/share/seekdb/upgrade"
 for f in upgrade_pre.py upgrade_post.py upgrade_checker.py upgrade_health_checker.py; do
-  [[ -f "$TOPDIR/tools/upgrade/$f" ]] && install -m 644 "$TOPDIR/tools/upgrade/$f" "$STAGING/opt/homebrew/share/seekdb/upgrade/"
+  if [[ -f "$TOPDIR/tools/upgrade/$f" ]]; then
+    install -m 644 "$TOPDIR/tools/upgrade/$f" "$STAGING/opt/homebrew/share/seekdb/upgrade/"
+  fi
 done
 
 # --- SeekDB Monitor .app bundle ---
@@ -218,11 +253,33 @@ COMPONENT_PKG="$SEEKDB_BUILD/_pkg_component.pkg"
 OUTPUT_PKG="$SCRIPT_DIR/${PKG_NAME}.pkg"
 
 info "Building component package ..."
+# Disable relocation for the .app bundle so it installs to /Applications
+COMPONENT_PLIST="$SEEKDB_BUILD/_pkg_component.plist"
+cat > "$COMPONENT_PLIST" <<'CPEOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>BundleIsRelocatable</key>
+    <false/>
+    <key>BundleIsVersionChecked</key>
+    <false/>
+    <key>BundleOverwriteAction</key>
+    <string>upgrade</string>
+    <key>RootRelativeBundlePath</key>
+    <string>Applications/SeekDB Monitor.app</string>
+  </dict>
+</array>
+</plist>
+CPEOF
+
 pkgbuild \
   --root "$STAGING" \
   --identifier "com.seekdb.server" \
   --version "$VERSION" \
   --scripts "$MACPKG_DIR/launchd/profile" \
+  --component-plist "$COMPONENT_PLIST" \
   "$COMPONENT_PKG"
 
 info "Building product archive ..."
@@ -232,6 +289,7 @@ cat > "$DIST_XML" <<DISTEOF
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
     <title>SeekDB ${VERSION}</title>
+    <license file="LICENSE"/>
     <options customize="never" require-scripts="false"/>
     <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
     <pkg-ref id="com.seekdb.server"/>
@@ -244,12 +302,19 @@ cat > "$DIST_XML" <<DISTEOF
     <choice id="com.seekdb.server" visible="false">
         <pkg-ref id="com.seekdb.server"/>
     </choice>
-    <pkg-ref id="com.seekdb.server" version="${VERSION}" onConclusion="none">component.pkg</pkg-ref>
+    <pkg-ref id="com.seekdb.server" version="${VERSION}" onConclusion="none">_pkg_component.pkg</pkg-ref>
 </installer-gui-script>
 DISTEOF
 
+# Prepare resources directory with license
+RESOURCES_DIR="$SEEKDB_BUILD/_pkg_resources"
+rm -rf "$RESOURCES_DIR"
+mkdir -p "$RESOURCES_DIR"
+cp "$TOPDIR/LICENSE" "$RESOURCES_DIR/LICENSE"
+
 productbuild \
   --distribution "$DIST_XML" \
+  --resources "$RESOURCES_DIR" \
   --package-path "$(dirname "$COMPONENT_PKG")" \
   "$OUTPUT_PKG"
 
@@ -257,7 +322,7 @@ info "Package created: $OUTPUT_PKG"
 ls -lh "$OUTPUT_PKG"
 
 # Cleanup temp files
-rm -f "$COMPONENT_PKG" "$DIST_XML"
-rm -rf "$STAGING"
+rm -f "$COMPONENT_PKG" "$DIST_XML" "$COMPONENT_PLIST"
+rm -rf "$STAGING" "$RESOURCES_DIR"
 
 info "Done."

@@ -7,56 +7,58 @@ let STATUS_INTERVAL: TimeInterval = 10.0
 
 // MARK: - Status Model
 
+let SEEKDB_CONFIG = "/opt/homebrew/etc/seekdb/seekdb.cnf"
+let SEEKDB_BIN = "/opt/homebrew/bin/seekdb"
+let DEFAULT_PORT = "2881"
+
 enum ServiceState { case running, stopped, transitioning }
 
 struct SeekDBStatus {
-    var configPath = ""
-    var baseDir = ""
-    var logDir = ""
     var port = ""
-    var launchdLoaded = false
     var processRunning = false
     var pid = ""
     var portOpen = false
-    var sqlStatus = ""
 
     var state: ServiceState {
         if processRunning && portOpen { return .running }
-        if !launchdLoaded && !processRunning { return .stopped }
+        if !processRunning && !portOpen { return .stopped }
         return .transitioning
     }
 
     var summary: String {
         if processRunning { return "Running (PID \(pid))" }
-        if launchdLoaded { return "Starting..." }
+        if portOpen { return "Starting..." }
         return "Stopped"
     }
 
-    static func parse(_ output: String) -> SeekDBStatus {
+    static func detect() -> SeekDBStatus {
         var s = SeekDBStatus()
-        for line in output.components(separatedBy: "\n") {
-            let parts = line.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2 else { continue }
-            let key = parts[0].trimmingCharacters(in: .whitespaces)
-            let val = parts[1].trimmingCharacters(in: .whitespaces)
-            switch key {
-            case "Config":     s.configPath = val
-            case "Base dir":   s.baseDir = val
-            case "Log dir":    s.logDir = val
-            case "Port":       s.port = val
-            case "launchd":    s.launchdLoaded = val == "loaded"
-            case "process":
-                s.processRunning = val.hasPrefix("running")
-                if let range = val.range(of: "pid ") {
-                    s.pid = String(val[range.upperBound...].prefix(while: { $0.isNumber }))
-                }
-            case "port":       s.portOpen = val == "open"
-            case "sql":        s.sqlStatus = val
-            default: break
-            }
+        s.port = readConfigPort()
+        let pgrepResult = runCommand(["/usr/bin/pgrep", "-f", SEEKDB_BIN])
+        let pids = pgrepResult.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if pgrepResult.exitCode == 0 && !pids.isEmpty {
+            s.processRunning = true
+            s.pid = pids.components(separatedBy: "\n").first ?? ""
         }
+        let ncResult = runCommand(["/usr/bin/nc", "-z", "127.0.0.1", s.port])
+        s.portOpen = ncResult.exitCode == 0
         return s
     }
+}
+
+func readConfigPort() -> String {
+    guard let content = try? String(contentsOfFile: SEEKDB_CONFIG, encoding: .utf8) else {
+        return DEFAULT_PORT
+    }
+    for line in content.components(separatedBy: "\n") {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("#") || trimmed.hasPrefix(";") || trimmed.isEmpty { continue }
+        let parts = trimmed.split(separator: "=", maxSplits: 1)
+        if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces) == "port" {
+            return parts[1].trimmingCharacters(in: .whitespaces)
+        }
+    }
+    return DEFAULT_PORT
 }
 
 // MARK: - Shell Helpers
@@ -78,26 +80,29 @@ func runCommand(_ args: [String]) -> (output: String, exitCode: Int32) {
     }
 }
 
-func runPrivileged(_ command: String, completion: @escaping (Bool, String) -> Void) {
-    DispatchQueue.global(qos: .userInitiated).async {
-        let escaped = command.replacingOccurrences(of: "\\", with: "\\\\")
-                            .replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "do shell script \"\(escaped)\" with administrator privileges"
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        proc.arguments = ["-e", script]
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = pipe
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            DispatchQueue.main.async { completion(proc.terminationStatus == 0, output) }
-        } catch {
-            DispatchQueue.main.async { completion(false, error.localizedDescription) }
-        }
+// MARK: - XPC Helper Protocol
+
+@objc(SeekDBHelperProtocol)
+protocol SeekDBHelperProtocol {
+    func execute(command: String, args: [String], withReply reply: @escaping (Bool, String) -> Void)
+}
+
+func helperProxy() -> SeekDBHelperProtocol? {
+    let conn = NSXPCConnection(machServiceName: "com.seekdb.helper", options: .privileged)
+    conn.remoteObjectInterface = NSXPCInterface(with: SeekDBHelperProtocol.self)
+    conn.resume()
+    return conn.remoteObjectProxyWithErrorHandler { error in
+        NSLog("XPC error: %@", error.localizedDescription)
+    } as? SeekDBHelperProtocol
+}
+
+func runPrivileged(command: String, args: [String] = [], completion: @escaping (Bool, String) -> Void) {
+    guard let helper = helperProxy() else {
+        DispatchQueue.main.async { completion(false, "Cannot connect to helper service") }
+        return
+    }
+    helper.execute(command: command, args: args) { success, output in
+        DispatchQueue.main.async { completion(success, output) }
     }
 }
 
@@ -278,8 +283,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
 
     func refreshStatus() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let result = runCommand([SEEKDBCTL, "status"])
-            let status = SeekDBStatus.parse(result.output)
+            let status = SeekDBStatus.detect()
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.currentStatus = status
@@ -287,8 +291,8 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
                 self.statusMenuItem.title = "SeekDB: \(status.summary)"
                 self.portMenuItem.title = "Port: \(status.port.isEmpty ? "--" : status.port)"
                 self.startItem.isEnabled = !status.processRunning
-                self.stopItem.isEnabled = status.launchdLoaded || status.processRunning
-                self.restartItem.isEnabled = status.launchdLoaded || status.processRunning
+                self.stopItem.isEnabled = status.processRunning
+                self.restartItem.isEnabled = status.processRunning
             }
         }
     }
@@ -317,7 +321,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     @objc func startService() {
         statusItem.button?.image = makeStatusIcon(.transitioning)
         statusMenuItem.title = "SeekDB: Starting..."
-        runPrivileged("\(SEEKDBCTL) start") { [weak self] success, output in
+        runPrivileged(command: "start") { [weak self] success, output in
             if !success { self?.showResult(success: false, output: output, title: "Start Failed") }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.refreshStatus() }
         }
@@ -326,7 +330,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     @objc func stopService() {
         statusItem.button?.image = makeStatusIcon(.transitioning)
         statusMenuItem.title = "SeekDB: Stopping..."
-        runPrivileged("\(SEEKDBCTL) stop") { [weak self] success, output in
+        runPrivileged(command: "stop") { [weak self] success, output in
             if !success { self?.showResult(success: false, output: output, title: "Stop Failed") }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self?.refreshStatus() }
         }
@@ -335,7 +339,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     @objc func restartService() {
         statusItem.button?.image = makeStatusIcon(.transitioning)
         statusMenuItem.title = "SeekDB: Restarting..."
-        runPrivileged("\(SEEKDBCTL) restart") { [weak self] success, output in
+        runPrivileged(command: "restart") { [weak self] success, output in
             if !success { self?.showResult(success: false, output: output, title: "Restart Failed") }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.refreshStatus() }
         }
@@ -372,7 +376,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         let newPort = input.stringValue.trimmingCharacters(in: .whitespaces)
         guard !newPort.isEmpty else { return }
         statusItem.button?.image = makeStatusIcon(.transitioning)
-        runPrivileged("\(SEEKDBCTL) config --port \(newPort) --restart") { [weak self] success, output in
+        runPrivileged(command: "config", args: ["--port", newPort, "--restart"]) { [weak self] success, output in
             self?.showResult(success: success, output: output, title: "Change Port")
             self?.refreshStatus()
         }
@@ -396,7 +400,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         guard confirmAlert.runModal() == .alertFirstButtonReturn else { return }
 
         statusItem.button?.image = makeStatusIcon(.transitioning)
-        runPrivileged("\(SEEKDBCTL) config \(flag) \(url.path) --restart") { [weak self] success, output in
+        runPrivileged(command: "config", args: [flag, url.path, "--restart"]) { [weak self] success, output in
             self?.showResult(success: success, output: output, title: title)
             self?.refreshStatus()
         }
@@ -432,7 +436,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
             info: "This will create directories, enable boot startup, and start SeekDB."
         ) else { return }
         statusItem.button?.image = makeStatusIcon(.transitioning)
-        runPrivileged("\(SEEKDBCTL) setup") { [weak self] success, output in
+        runPrivileged(command: "setup") { [weak self] success, output in
             self?.showResult(success: success, output: output, title: "Setup")
             self?.refreshStatus()
         }
@@ -444,7 +448,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
             info: "This will stop SeekDB and remove all config and data directories.\nThis cannot be undone."
         ) else { return }
         statusItem.button?.image = makeStatusIcon(.transitioning)
-        runPrivileged("\(SEEKDBCTL) clean-data --force") { [weak self] success, output in
+        runPrivileged(command: "clean-data", args: ["--force"]) { [weak self] success, output in
             self?.showResult(success: success, output: output, title: "Clean Data")
             self?.refreshStatus()
         }
@@ -455,7 +459,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
             message: "Uninstall SeekDB?",
             info: "This will stop the service and remove all installed files, config, and data.\nThis cannot be undone."
         ) else { return }
-        runPrivileged("\(SEEKDBCTL) uninstall") { [weak self] success, output in
+        runPrivileged(command: "uninstall") { [weak self] success, output in
             self?.showResult(success: success, output: output, title: "Uninstall")
             if success {
                 NSApp.terminate(nil)

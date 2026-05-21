@@ -1,1 +1,469 @@
-s
+#!/bin/bash
+set -u
+
+LABEL="com.seekdb.server"
+PLIST="/Library/LaunchDaemons/${LABEL}.plist"
+CONFIG_FILE="${SEEKDB_CONFIG_FILE:-/opt/homebrew/etc/seekdb/seekdb.cnf}"
+BASE_DIR="/opt/homebrew/var/seekdb/data"
+LOG_DIR="${BASE_DIR}/log"
+START_SCRIPT="/opt/homebrew/libexec/seekdb/scripts/seekdb_launchd_start"
+STOP_SCRIPT="/opt/homebrew/libexec/seekdb/scripts/seekdb_launchd_stop"
+SEEKDB_BIN="/opt/homebrew/bin/seekdb"
+DEFAULT_PORT="2881"
+
+usage() {
+  cat <<EOF
+Usage: seekdbctl <command> [options]
+
+Commands:
+  start        Load and start the launchd service
+  stop         Stop the service and unload it from launchd
+  restart      Restart the service
+  status       Show launchd, process, port, and SQL status
+  logs [-f]    Show seekdb logs, optionally following them
+  doctor       Run local diagnostics
+  paths        Print important paths
+  config       Print or update the active configuration
+  setup        Create directories, enable boot startup, and start SeekDB
+  clean-data   Stop the service and remove config/data directories after confirmation
+  uninstall    Stop service and remove installed files, config, and data
+  help         Show this help
+
+Recommended shortcuts:
+  seekdb-start    Start SeekDB daemon
+  seekdb-stop     Stop SeekDB daemon
+  seekdb-status   Check SeekDB status
+  seekdb-cleanup  Remove config and data directories
+  seekdb-paths    Show paths
+  seekdb-config   Show or update path configuration
+  seekdb-setup    Initialize, enable boot startup, and start
+  seekdb-uninstall Remove SeekDB completely
+
+Examples:
+  seekdb-paths
+  sudo seekdb-config --base-dir /opt/seekdb/data --restart
+  sudo seekdb-setup
+  sudo seekdb-uninstall
+EOF
+}
+
+info() { printf '[seekdbctl] %s\n' "$*"; }
+warn() { printf '[seekdbctl][WARN] %s\n' "$*" >&2; }
+die() { printf '[seekdbctl][ERROR] %s\n' "$*" >&2; exit 1; }
+
+require_root() {
+  [ "$(id -u)" -eq 0 ] || die "This command requires root privileges. Please run with sudo."
+}
+
+trim() {
+  local value="$*"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf "%s" "$value"
+}
+
+read_config_value() {
+  local wanted="$1"
+  [ -f "$CONFIG_FILE" ] || return 1
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="$(trim "$line")"
+    [ -z "$line" ] && continue
+    case "$line" in
+      \#*|\;*) continue ;;
+    esac
+    key="$(trim "${line%%=*}")"
+    value="$(trim "${line#*=}")"
+    if [ "$key" = "$wanted" ]; then
+      printf "%s" "$value"
+      return 0
+    fi
+  done < "$CONFIG_FILE"
+  return 1
+}
+
+ensure_config_file() {
+  require_root
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+  if [ ! -f "$CONFIG_FILE" ]; then
+    cat > "$CONFIG_FILE" <<EOF
+# These parameters are permanently valid
+base-dir=$BASE_DIR
+data-dir=$BASE_DIR/store
+redo-dir=$BASE_DIR/store/redo
+
+# These parameters are valid only during initialization
+port=$DEFAULT_PORT
+cpu_count=4
+memory_limit=2G
+EOF
+  fi
+}
+
+write_config_value() {
+  local key="$1"
+  local value="$2"
+  local tmp_file
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/seekdb.cnf.XXXXXX")"
+
+  if [ -f "$CONFIG_FILE" ] && awk -F= -v key="$key" '
+    /^[[:space:]]*[#;]/ { next }
+    {
+      k=$1
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      if (k == key) found=1
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$CONFIG_FILE"; then
+    awk -F= -v key="$key" -v value="$value" '
+      /^[[:space:]]*[#;]/ { print; next }
+      {
+        k=$1
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+        if (k == key) {
+          print key "=" value
+          next
+        }
+        print
+      }
+    ' "$CONFIG_FILE" > "$tmp_file"
+  else
+    [ -f "$CONFIG_FILE" ] && cp "$CONFIG_FILE" "$tmp_file" || : > "$tmp_file"
+    printf "%s=%s\n" "$key" "$value" >> "$tmp_file"
+  fi
+
+  mv "$tmp_file" "$CONFIG_FILE"
+}
+
+refresh_paths() {
+  BASE_DIR="$(read_config_value "base-dir" || printf "%s" "$BASE_DIR")"
+  LOG_DIR="$BASE_DIR/log"
+}
+
+get_port() {
+  read_config_value "port" || printf "%s" "$DEFAULT_PORT"
+}
+
+launchd_loaded() {
+  launchctl print "system/${LABEL}" >/dev/null 2>&1
+}
+
+pid_from_file() {
+  refresh_paths
+  local pid_file="$BASE_DIR/run/seekdb.pid"
+  [ -f "$pid_file" ] || return 1
+  local pid
+  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  [ -n "$pid" ] || return 1
+  printf "%s" "$pid"
+}
+
+pid_alive() {
+  local pid="$1"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+port_open() {
+  local port="$1"
+  nc -z 127.0.0.1 "$port" >/dev/null 2>&1
+}
+
+cmd_start() {
+  require_root
+  [ -f "$PLIST" ] || die "LaunchDaemon plist not found: $PLIST"
+  [ -x "$START_SCRIPT" ] || die "Start script not found or not executable: $START_SCRIPT"
+
+  if launchd_loaded; then
+    info "Service is already loaded; kickstarting ${LABEL}"
+    launchctl kickstart -k "system/${LABEL}"
+  else
+    info "Loading ${PLIST}"
+    launchctl bootstrap system "$PLIST"
+    launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+    launchctl kickstart -k "system/${LABEL}" >/dev/null 2>&1 || true
+  fi
+}
+
+cmd_setup() {
+  require_root
+  ensure_config_file
+  refresh_paths
+  mkdir -p "$BASE_DIR" "$BASE_DIR/run" "$BASE_DIR/store" "$BASE_DIR/store/redo" "$LOG_DIR"
+  chown -R root:wheel "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")" 2>/dev/null || true
+  chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$BASE_DIR/store" "$BASE_DIR/store/redo" "$LOG_DIR" 2>/dev/null || true
+  launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+  cmd_start
+  info "SeekDB is configured to start at boot and has been started."
+}
+
+cmd_stop() {
+  require_root
+  if [ -x "$STOP_SCRIPT" ]; then
+    "$STOP_SCRIPT" || true
+  fi
+
+  if launchd_loaded; then
+    info "Unloading ${LABEL}"
+    launchctl bootout "system/${LABEL}" >/dev/null 2>&1 || true
+  else
+    info "Service is not loaded"
+  fi
+}
+
+cmd_restart() {
+  cmd_stop
+  cmd_start
+}
+
+cmd_status() {
+  refresh_paths
+  local port
+  port="$(get_port)"
+
+  echo "Config     : $CONFIG_FILE"
+  echo "Base dir   : $BASE_DIR"
+  echo "Log dir    : $LOG_DIR"
+  echo "Port       : $port"
+
+  if launchd_loaded; then
+    echo "launchd    : loaded"
+  else
+    echo "launchd    : not loaded"
+  fi
+
+  local pid=""
+  pid="$(pid_from_file || true)"
+  if pid_alive "$pid"; then
+    echo "process    : running (pid $pid)"
+  else
+    echo "process    : not running"
+  fi
+
+  if port_open "$port"; then
+    echo "port       : open"
+  else
+    echo "port       : closed"
+  fi
+
+  if command -v mysql >/dev/null 2>&1 && port_open "$port"; then
+    if mysql --protocol=TCP -h127.0.0.1 -P"$port" -uroot -e "select 1" >/dev/null 2>&1; then
+      echo "sql        : ok"
+    else
+      echo "sql        : mysql client found, query failed"
+    fi
+  else
+    echo "sql        : skipped"
+  fi
+}
+
+cmd_paths() {
+  refresh_paths
+  local port
+  port="$(get_port)"
+  echo "Config: $CONFIG_FILE"
+  echo "Base:   $BASE_DIR"
+  echo "Data:   $(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
+  echo "Redo:   $(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
+  echo "PID:    $BASE_DIR/run/seekdb.pid"
+  echo "Log:    $LOG_DIR/seekdb.log"
+  echo "Share:  /opt/homebrew/share/seekdb"
+  echo "Port:   $port"
+}
+
+cmd_logs() {
+  refresh_paths
+  local follow=0
+  if [ "${1:-}" = "-f" ] || [ "${1:-}" = "--follow" ]; then
+    follow=1
+  fi
+
+  local files=()
+  [ -f "$LOG_DIR/seekdb.log" ] && files+=("$LOG_DIR/seekdb.log")
+  [ -f "$LOG_DIR/launchd.out.log" ] && files+=("$LOG_DIR/launchd.out.log")
+  [ -f "$LOG_DIR/launchd.err.log" ] && files+=("$LOG_DIR/launchd.err.log")
+
+  [ "${#files[@]}" -gt 0 ] || die "No log files found under $LOG_DIR"
+
+  if [ "$follow" -eq 1 ]; then
+    tail -n 200 -F "${files[@]}"
+  else
+    tail -n 200 "${files[@]}"
+  fi
+}
+
+cmd_doctor() {
+  refresh_paths
+  local port
+  port="$(get_port)"
+
+  echo "SeekDB diagnostics"
+  echo "------------------"
+  [ -x "$SEEKDB_BIN" ] && echo "binary     : ok ($SEEKDB_BIN)" || echo "binary     : missing ($SEEKDB_BIN)"
+  [ -f "$CONFIG_FILE" ] && echo "config     : ok ($CONFIG_FILE)" || echo "config     : missing ($CONFIG_FILE)"
+  [ -d "$BASE_DIR" ] && echo "base dir   : ok ($BASE_DIR)" || echo "base dir   : missing ($BASE_DIR)"
+  [ -d "$LOG_DIR" ] && echo "log dir    : ok ($LOG_DIR)" || echo "log dir    : missing ($LOG_DIR)"
+
+  if port_open "$port"; then
+    echo "port       : open ($port)"
+  elif command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "port       : occupied by another process ($port)"
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN
+  else
+    echo "port       : closed ($port)"
+  fi
+
+  if command -v df >/dev/null 2>&1; then
+    echo "disk       :"
+    df -h "$BASE_DIR" 2>/dev/null || df -h /opt/homebrew 2>/dev/null || true
+  fi
+
+  if command -v sysctl >/dev/null 2>&1; then
+    local mem_bytes
+    mem_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+    [ -n "$mem_bytes" ] && echo "memory     : $((mem_bytes / 1024 / 1024)) MB"
+  fi
+
+  if command -v otool >/dev/null 2>&1 && [ -x "$SEEKDB_BIN" ]; then
+    echo "deps       :"
+    otool -L "$SEEKDB_BIN" | sed 's/^/  /'
+  fi
+}
+
+cmd_config() {
+  if [ "$#" -eq 0 ]; then
+    [ -f "$CONFIG_FILE" ] || die "Config file not found: $CONFIG_FILE"
+    echo "# $CONFIG_FILE"
+    sed -n '1,200p' "$CONFIG_FILE"
+    return 0
+  fi
+
+  if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    cat <<EOF
+Usage:
+  seekdb-config
+  sudo seekdb-config --base-dir <path> [--restart]
+  sudo seekdb-config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--restart]
+EOF
+    return 0
+  fi
+
+  require_root
+  ensure_config_file
+
+  local new_base=""
+  local new_data=""
+  local new_redo=""
+  local new_port=""
+  local restart=0
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --base-dir)
+        [ "$#" -ge 2 ] || die "--base-dir requires a path"
+        new_base="$2"
+        shift 2
+        ;;
+      --data-dir)
+        [ "$#" -ge 2 ] || die "--data-dir requires a path"
+        new_data="$2"
+        shift 2
+        ;;
+      --redo-dir)
+        [ "$#" -ge 2 ] || die "--redo-dir requires a path"
+        new_redo="$2"
+        shift 2
+        ;;
+      --port)
+        [ "$#" -ge 2 ] || die "--port requires a value"
+        new_port="$2"
+        shift 2
+        ;;
+      --restart)
+        restart=1
+        shift
+        ;;
+      *)
+        die "Unknown config option: $1"
+        ;;
+    esac
+  done
+
+  if [ -n "$new_base" ]; then
+    write_config_value "base-dir" "$new_base"
+    if [ -z "$new_data" ]; then
+      new_data="$new_base/store"
+    fi
+    if [ -z "$new_redo" ]; then
+      new_redo="$new_base/store/redo"
+    fi
+  fi
+  [ -n "$new_data" ] && write_config_value "data-dir" "$new_data"
+  [ -n "$new_redo" ] && write_config_value "redo-dir" "$new_redo"
+  [ -n "$new_port" ] && write_config_value "port" "$new_port"
+
+  refresh_paths
+  mkdir -p "$BASE_DIR" "$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")" "$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")" "$BASE_DIR/run" "$LOG_DIR"
+  info "Configuration updated: $CONFIG_FILE"
+  cmd_paths
+
+  if [ "$restart" -eq 1 ]; then
+    cmd_restart
+  fi
+}
+
+cmd_clean_data() {
+  require_root
+  refresh_paths
+
+  if [ "${1:-}" != "--force" ]; then
+    printf "This will remove %s and %s. Type DELETE to continue: " "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")"
+    local answer
+    read -r answer
+    [ "$answer" = "DELETE" ] || die "Cancelled"
+  fi
+
+  cmd_stop
+  rm -rf "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")"
+  info "Config, data, and logs removed"
+}
+
+cmd_uninstall() {
+  require_root
+  cmd_stop || true
+  rm -f "$PLIST"
+  rm -rf \
+    /opt/homebrew/bin/seekdb \
+    /opt/homebrew/bin/obshell \
+    /opt/homebrew/bin/seekdbctl \
+    /opt/homebrew/bin/seekdb-start \
+    /opt/homebrew/bin/seekdb-stop \
+    /opt/homebrew/bin/seekdb-status \
+    /opt/homebrew/bin/seekdb-cleanup \
+    /opt/homebrew/bin/seekdb-paths \
+    /opt/homebrew/bin/seekdb-config \
+    /opt/homebrew/bin/seekdb-setup \
+    /opt/homebrew/bin/seekdb-uninstall \
+    /opt/homebrew/libexec/seekdb \
+    /opt/homebrew/etc/seekdb \
+    /opt/homebrew/var/seekdb \
+    /opt/homebrew/share/seekdb
+  pkgutil --forget com.seekdb.server >/dev/null 2>&1 || true
+  pkgutil --forget com.seekdb.server.server >/dev/null 2>&1 || true
+  info "SeekDB has been completely removed."
+}
+
+case "${1:-help}" in
+  start) shift; cmd_start "$@" ;;
+  stop) shift; cmd_stop "$@" ;;
+  restart) shift; cmd_restart "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  logs) shift; cmd_logs "$@" ;;
+  doctor) shift; cmd_doctor "$@" ;;
+  paths) shift; cmd_paths "$@" ;;
+  config) shift; cmd_config "$@" ;;
+  setup) shift; cmd_setup "$@" ;;
+  clean-data) shift; cmd_clean_data "$@" ;;
+  uninstall) shift; cmd_uninstall "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage; exit 1 ;;
+esac

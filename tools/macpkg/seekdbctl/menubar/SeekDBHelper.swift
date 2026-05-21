@@ -24,7 +24,7 @@ class Helper: NSObject, SeekDBHelperProtocol, NSXPCListenerDelegate {
     }
 
     func execute(command: String, args: [String], withReply reply: @escaping (Bool, String) -> Void) {
-        let allowed = ["start", "stop", "restart", "setup", "initialize", "config", "enable-boot", "disable-boot", "clean-data", "uninstall"]
+        let allowed = ["start", "stop", "restart", "setup", "config", "clean-data", "uninstall"]
         guard allowed.contains(command) else {
             reply(false, "Command not allowed: \(command)")
             return

@@ -46,6 +46,24 @@ if command -v launchctl >/dev/null 2>&1 && [ -f "$PLIST" ]; then
   fi
 fi
 
+# Start privileged helper for menu bar app
+HELPER_LABEL="com.seekdb.helper"
+HELPER_PLIST="/Library/LaunchDaemons/${HELPER_LABEL}.plist"
+if [ -f "$HELPER_PLIST" ]; then
+  chown root:wheel "$HELPER_PLIST" 2>/dev/null || true
+  chmod 644 "$HELPER_PLIST" 2>/dev/null || true
+  chmod 755 /Library/PrivilegedHelperTools/com.seekdb.helper 2>/dev/null || true
+  launchctl bootout "system/${HELPER_LABEL}" >/dev/null 2>&1 || true
+  launchctl bootstrap system "$HELPER_PLIST" >/dev/null 2>&1 || true
+  echo "Privileged helper loaded: ${HELPER_LABEL}"
+fi
+
+# Launch menu bar app for current user
+CONSOLE_USER=$(stat -f "%Su" /dev/console 2>/dev/null || echo "")
+if [ -n "$CONSOLE_USER" ] && [ -d "/Applications/SeekDB Monitor.app" ]; then
+  su "$CONSOLE_USER" -c 'open "/Applications/SeekDB Monitor.app"' 2>/dev/null || true
+fi
+
 echo "Manual control commands:"
 echo "  seekdb-start    # Start SeekDB daemon"
 echo "  seekdb-stop     # Stop SeekDB daemon"
