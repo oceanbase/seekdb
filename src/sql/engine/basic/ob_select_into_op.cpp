@@ -1181,7 +1181,7 @@ int ObSelectIntoOp::write_single_char_to_file(const char *wchar, ObCsvFileWriter
       data_writer.set_curr_pos(pos + 1);
     } else if (OB_FAIL(use_shared_buf(data_writer, buf, buf_len, pos))) {
       LOG_WARN("failed to use shared buffer", K(ret));
-    } 
+    }
   }
   if (OB_SUCC(ret) && use_shared_buf_) {
     if (pos < buf_len) {
@@ -2350,15 +2350,17 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
     }
     case ObExternalFileFormat::FormatType::PARQUET_FORMAT:
     {
-      if (lib::is_embed_mode()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("parquet not supported in embed mode", K(ret));
-      } else if (OB_ISNULL(ptr = ctx_.get_allocator().alloc(sizeof(ObParquetFileWriter)))) {
+#ifndef OB_BUILD_EMBED_MODE
+      if (OB_ISNULL(ptr = ctx_.get_allocator().alloc(sizeof(ObParquetFileWriter)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate data writer", K(ret), K(sizeof(ObParquetFileWriter)));
       } else {
         data_writer = new(ptr) ObParquetFileWriter(access_info_, file_location_, parquet_writer_schema_);
       }
+#else
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("parquet is not supported in embed mode", K(ret));
+#endif // OB_BUILD_EMBED_MODE
       break;
     }
     case ObExternalFileFormat::FormatType::ORC_FORMAT:
