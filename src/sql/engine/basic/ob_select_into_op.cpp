@@ -2350,10 +2350,6 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
     }
     case ObExternalFileFormat::FormatType::PARQUET_FORMAT:
     {
-#ifdef OB_BUILD_EMBED_MODE
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("parquet not supported in embed mode", K(ret));
-#else
       if (lib::is_embed_mode()) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("parquet not supported in embed mode", K(ret));
@@ -2363,7 +2359,6 @@ int ObSelectIntoOp::new_data_writer(ObExternalFileWriter *&data_writer)
       } else {
         data_writer = new(ptr) ObParquetFileWriter(access_info_, file_location_, parquet_writer_schema_);
       }
-#endif
       break;
     }
     case ObExternalFileFormat::FormatType::ORC_FORMAT:
