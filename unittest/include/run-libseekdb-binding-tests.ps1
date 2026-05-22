@@ -241,6 +241,39 @@ function Wait-ProcessWithDeadline {
   }
 }
 
+# Start-Process requires a Win32 .exe/.cmd — not npm.ps1 or extensionless shims (GHA Node 22 → "%1 is not a valid Win32 application").
+function Start-NpmProcess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]]$NpmArguments,
+    [Parameter(Mandatory = $true)]
+    [string]$WorkingDirectory
+  )
+  $npmPath = $null
+  foreach ($name in @('npm.cmd', 'npm.exe')) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd -and (Test-Path -LiteralPath $cmd.Source)) {
+      $npmPath = $cmd.Source
+      break
+    }
+  }
+  if (-not $npmPath) {
+    $nodeDir = Split-Path -Parent (Get-Command node -ErrorAction Stop).Source
+    $candidate = Join-Path $nodeDir 'npm.cmd'
+    if (Test-Path -LiteralPath $candidate) {
+      $npmPath = $candidate
+    }
+  }
+  if ($npmPath) {
+    Write-BindLog "npm: Start-Process $npmPath"
+    return Start-Process -FilePath $npmPath -ArgumentList $NpmArguments -WorkingDirectory $WorkingDirectory -PassThru -NoNewWindow
+  }
+  $comspec = if ($env:ComSpec -and (Test-Path -LiteralPath $env:ComSpec)) { $env:ComSpec } else { 'cmd.exe' }
+  $wrapped = @('/c', 'npm') + $NpmArguments
+  Write-BindLog "npm: Start-Process $comspec /c npm (fallback for npm.ps1 or non-Win32 shim)"
+  return Start-Process -FilePath $comspec -ArgumentList $wrapped -WorkingDirectory $WorkingDirectory -PassThru -NoNewWindow
+}
+
 # Stream npm lines to CI log (native npm output can appear buffered otherwise).
 function Install-NodeBindingDeps {
   Write-BindLog "npm: preparing in $(Get-Location)"
@@ -262,7 +295,6 @@ function Install-NodeBindingDeps {
   }
   Write-BindLog "npm: wall-clock timeout ${npmTimeoutMs}ms"
 
-  $npmCmd = (Get-Command npm).Source
   if (Test-Path "package-lock.json") {
     Write-BindLog "npm: starting npm ci (verbose; Start-Process + deadline)"
     $argList = @('ci', '--no-audit', '--no-fund', '--foreground-scripts', '--loglevel', 'verbose')
@@ -271,7 +303,7 @@ function Install-NodeBindingDeps {
     Write-BindLog "npm: starting npm install (verbose; Start-Process + deadline)"
     $argList = @('install', '--no-audit', '--no-fund', '--foreground-scripts', '--loglevel', 'verbose')
   }
-  $p = Start-Process -FilePath $npmCmd -ArgumentList $argList -WorkingDirectory (Get-Location) -PassThru -NoNewWindow
+  $p = Start-NpmProcess -NpmArguments $argList -WorkingDirectory (Get-Location).Path
   if ($null -eq $p) {
     throw "Start-Process npm returned null"
   }
