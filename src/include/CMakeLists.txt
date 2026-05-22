@@ -125,6 +125,17 @@ elseif(WIN32)
   if(HYPERSCAN_LIB)
     target_link_libraries(libseekdb PRIVATE ${HYPERSCAN_LIB})
   endif()
+  # Bundle third-party runtime DLLs next to seekdb.dll (mirrors seekdb.exe POST_BUILD in
+  # src/observer/CMakeLists.txt). Binding tests load seekdb.dll from src/include via ctypes;
+  # without colocated DLLs, Python 3.8+ LoadLibrary search does not use PATH for dependencies.
+  add_custom_command(TARGET libseekdb POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+      "-DEXE=$<TARGET_FILE:libseekdb>"
+      "-DOUT_DIR=$<TARGET_FILE_DIR:libseekdb>"
+      "-DSEARCH_DIRS=${OB_VCPKG_DIR}/bin;${OB_VSAG_DIR}/bin;${OB_OPENSSL_DIR}/bin"
+      -P "${CMAKE_SOURCE_DIR}/cmake/BundleRuntimeDllsWindows.cmake"
+    COMMENT "Bundling runtime DLLs next to seekdb.dll"
+    VERBATIM)
 else()
   target_link_libraries(libseekdb
     PRIVATE

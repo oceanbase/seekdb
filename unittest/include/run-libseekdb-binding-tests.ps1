@@ -86,6 +86,15 @@ $opensslRoot = if ($env:OB_OPENSSL_DIR -and $env:OB_OPENSSL_DIR.Trim().Length -g
 }
 $opensslBin = Join-Path $opensslRoot "bin"
 
+$vsagRoot = if ($env:OB_VSAG_DIR -and $env:OB_VSAG_DIR.Trim().Length -gt 0) {
+  $env:OB_VSAG_DIR.TrimEnd('\', '/')
+} elseif ($depsDone) {
+  (Join-Path $root "deps\3rd\vsag")
+} else {
+  ""
+}
+$vsagBin = if ($vsagRoot) { Join-Path $vsagRoot "bin" } else { "" }
+
 # ctypes on Python 3.8+ needs os.add_dll_directory (see unittest/include/python/seekdb.py), not only PATH.
 if (Test-Path $vcpkgBin) {
   $env:SEEKDB_VCPKG_BIN = $vcpkgBin
@@ -93,8 +102,12 @@ if (Test-Path $vcpkgBin) {
 if (Test-Path $opensslBin) {
   $env:SEEKDB_OPENSSL_BIN = $opensslBin
 }
+if ($vsagBin -and (Test-Path $vsagBin)) {
+  $env:SEEKDB_VSAG_BIN = $vsagBin
+}
 
 $pathLead = @($libDir)
+if ($vsagBin -and (Test-Path $vsagBin)) { $pathLead = @($vsagBin) + $pathLead }
 if (Test-Path $opensslBin) { $pathLead = @($opensslBin) + $pathLead }
 if (Test-Path $vcpkgBin) { $pathLead = @($vcpkgBin) + $pathLead }
 $env:PATH = (($pathLead -join ';') + ';' + $env:PATH)
@@ -105,6 +118,7 @@ Write-Host "Repo: $root"
 Write-Host "SEEKDB_LIB_PATH=$($env:SEEKDB_LIB_PATH)"
 if ($env:SEEKDB_VCPKG_BIN) { Write-Host "SEEKDB_VCPKG_BIN=$($env:SEEKDB_VCPKG_BIN)" }
 if ($env:SEEKDB_OPENSSL_BIN) { Write-Host "SEEKDB_OPENSSL_BIN=$($env:SEEKDB_OPENSSL_BIN)" }
+if ($env:SEEKDB_VSAG_BIN) { Write-Host "SEEKDB_VSAG_BIN=$($env:SEEKDB_VSAG_BIN)" }
 Write-Host ""
 
 $bindingFailures = New-Object System.Collections.ArrayList
@@ -377,7 +391,10 @@ Invoke-BindingSection "Python" {
       # If python.exe never returns, the whole CI step never finishes. Use Start-Process + wall-clock deadline, then taskkill /T; exit 1 stops the script (do not continue to Node).
       $timeoutMs = 600000
       Write-BindLog "Python: wall-clock timeout ${timeoutMs}ms"
-      $p = Start-Process -FilePath $pyExe -ArgumentList @('-u', 'test.py', '.\seekdb.db', 'test') -WorkingDirectory (Get-Location) -PassThru -NoNewWindow
+      # Pass full process environment explicitly — GHA + Start-Process can drop session env (SEEKDB_* / PATH).
+      $childEnv = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+      Get-ChildItem -Path Env: | ForEach-Object { $childEnv[$_.Name] = [string]$_.Value }
+      $p = Start-Process -FilePath $pyExe -ArgumentList @('-u', 'test.py', '.\seekdb.db', 'test') -WorkingDirectory (Get-Location) -PassThru -NoNewWindow -Environment $childEnv
       if ($null -eq $p) {
         throw "Start-Process python returned null"
       }
