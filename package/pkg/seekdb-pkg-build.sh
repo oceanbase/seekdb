@@ -137,20 +137,96 @@ info "Assembling staging directory ..."
 
 # --- binaries ---
 install -d "$STAGING/opt/homebrew/bin"
+install -d "$STAGING/opt/homebrew/lib/seekdb"
 install -m 755 "$SEEKDB_BIN" "$STAGING/opt/homebrew/bin/seekdb"
+
+# --- bundle non-system dylibs (recursive) ---
+info "Bundling dynamic libraries ..."
+DYLIB_DIR="$STAGING/opt/homebrew/lib/seekdb"
+
+collect_non_system_deps() {
+  otool -L "$1" 2>/dev/null | awk '/^\t/ {print $1}' | while read -r dep; do
+    case "$dep" in
+      /usr/lib/*|/System/*|*:) ;;
+      *) echo "$dep" ;;
+    esac
+  done
+}
+
+# seed with seekdb's direct deps
+for dep in $(collect_non_system_deps "$SEEKDB_BIN"); do
+  dep_name="$(basename "$dep")"
+  if [[ -f "$dep" && ! -f "$DYLIB_DIR/$dep_name" ]]; then
+    cp "$dep" "$DYLIB_DIR/$dep_name"
+    chmod 644 "$DYLIB_DIR/$dep_name"
+  fi
+done
+
+# recursively resolve transitive deps
+changed=1
+while [[ "$changed" -eq 1 ]]; do
+  changed=0
+  for lib in "$DYLIB_DIR"/*.dylib; do
+    for dep in $(collect_non_system_deps "$lib"); do
+      dep_name="$(basename "$dep")"
+      if [[ -f "$dep" && ! -f "$DYLIB_DIR/$dep_name" ]]; then
+        cp "$dep" "$DYLIB_DIR/$dep_name"
+        chmod 644 "$DYLIB_DIR/$dep_name"
+        changed=1
+      fi
+    done
+  done
+done
+
+BUNDLED_COUNT=$(ls "$DYLIB_DIR"/*.dylib 2>/dev/null | wc -l | tr -d ' ')
+info "  bundled $BUNDLED_COUNT dylibs"
+
+# rewrite paths: seekdb binary
+for dep in $(collect_non_system_deps "$STAGING/opt/homebrew/bin/seekdb"); do
+  dep_name="$(basename "$dep")"
+  install_name_tool -change "$dep" "@executable_path/../lib/seekdb/$dep_name" \
+    "$STAGING/opt/homebrew/bin/seekdb" 2>/dev/null
+done
+
+# rewrite paths: each dylib's deps + id
+for lib in "$DYLIB_DIR"/*.dylib; do
+  lib_name="$(basename "$lib")"
+  install_name_tool -id "@loader_path/$lib_name" "$lib" 2>/dev/null || true
+  for dep in $(collect_non_system_deps "$lib"); do
+    dep_name="$(basename "$dep")"
+    install_name_tool -change "$dep" "@loader_path/$dep_name" "$lib" 2>/dev/null
+  done
+done
+
+# re-sign everything
+info "Re-signing binaries ..."
+for lib in "$DYLIB_DIR"/*.dylib; do
+  codesign --force --sign - "$lib" 2>/dev/null || true
+done
+codesign --force --sign - "$STAGING/opt/homebrew/bin/seekdb" 2>/dev/null || true
 for script in seekdbctl seekdb_start seekdb_stop seekdb_status seekdb_config \
               seekdb_setup seekdb_cleanup seekdb_paths seekdb_uninstall; do
   src="$MACPKG_DIR/seekdbctl/$script"
   if [[ -f "$src" ]]; then install -m 755 "$src" "$STAGING/opt/homebrew/bin/$script"; fi
 done
 
-# --- ob_admin / ob_error (optional) ---
-if [[ -x "$SEEKDB_BUILD/tools/ob_admin/ob_admin" ]]; then
-  install -m 755 "$SEEKDB_BUILD/tools/ob_admin/ob_admin" "$STAGING/opt/homebrew/bin/"
-fi
-if [[ -x "$SEEKDB_BUILD/tools/ob_error/src/ob_error" ]]; then
-  install -m 755 "$SEEKDB_BUILD/tools/ob_error/src/ob_error" "$STAGING/opt/homebrew/bin/"
-fi
+# --- ob_admin / ob_error (optional, relink dylibs) ---
+for tool_bin in "$SEEKDB_BUILD/tools/ob_admin/ob_admin" "$SEEKDB_BUILD/tools/ob_error/src/ob_error"; do
+  if [[ -x "$tool_bin" ]]; then
+    tool_name="$(basename "$tool_bin")"
+    install -m 755 "$tool_bin" "$STAGING/opt/homebrew/bin/$tool_name"
+    for dep in $(collect_non_system_deps "$tool_bin"); do
+      dep_name="$(basename "$dep")"
+      if [[ -f "$dep" && ! -f "$DYLIB_DIR/$dep_name" ]]; then
+        cp "$dep" "$DYLIB_DIR/$dep_name"
+        chmod 644 "$DYLIB_DIR/$dep_name"
+      fi
+      install_name_tool -change "$dep" "@executable_path/../lib/seekdb/$dep_name" \
+        "$STAGING/opt/homebrew/bin/$tool_name" 2>/dev/null
+    done
+    codesign --force --sign - "$STAGING/opt/homebrew/bin/$tool_name" 2>/dev/null || true
+  fi
+done
 
 # --- LaunchDaemon plists ---
 install -d "$STAGING/Library/LaunchDaemons"
