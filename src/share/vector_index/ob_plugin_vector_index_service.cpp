@@ -542,7 +542,7 @@ int ObPluginVectorIndexMgr::get_adapter_inst_by_ctx(ObVectorIndexAcquireCtx &ctx
                                                       vec_index_param,
                                                       dim,
                                                       allocator))) {
-      LOG_WARN("failed to get vector index adapter", K(ctx.embedded_tablet_id_), KR(ret));    
+      LOG_WARN("failed to get vector index adapter", K(ctx.embedded_tablet_id_), KR(ret));
     } else if (FALSE_IT(adapter = candidate.embedded_adatper_guard_.get_adatper())) {
     } else if (adapter->get_create_type() == CreateTypeFullPartial
                || adapter->get_create_type() == CreateTypeComplete) {

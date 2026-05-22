@@ -50,7 +50,7 @@ const ObSysVarClassType ESSENTIAL_SYS_VARS[] = {
   SYS_VAR_OB_COMPATIBILITY_MODE,
   SYS_VAR_OB_CHECK_SYS_VARIABLE,
   SYS_VAR_OB_COMPATIBILITY_VERSION,
-  
+
   // all system vars with INFLUENCE_PLAN flag - affect execution plan generation
   SYS_VAR_CHARACTER_SET_RESULTS,        // character_set_results
   SYS_VAR_TIME_ZONE,        // time_zone

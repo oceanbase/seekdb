@@ -496,7 +496,7 @@ int MockTenantModuleEnv::init_dir()
 #else
   curr_dir_ = getcwd(NULL, 0);
 #endif
-  
+
   int ret = OB_SUCCESS;
   sstable_dir_ = env_dir_ + "/sstable";
   clog_dir_ = env_dir_ + "/clog";

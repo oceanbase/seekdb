@@ -95,7 +95,7 @@ int ObStandbySchemaRefreshTrigger::schedule_()
 void ObStandbySchemaRefreshTrigger::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  
+
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(is_inited));
   } else {
@@ -120,7 +120,7 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
 {
   int ret = OB_SUCCESS;
   ObAllTenantInfo tenant_info;
-  
+
   // Check if tenant is standby cluster
   if (GCTX.is_standby_cluster()) {
     // Tenant is standby and in normal status, proceed with schema refresh
@@ -141,7 +141,7 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
                KR(ret), K(schema_version));
     }
   }
-  
+
   return ret;
 }
 

@@ -1557,7 +1557,7 @@ int ObTenantIOManager::inner_aio(const ObIOInfo &info, ObIOHandle &handle)
   } else if (OB_FAIL(ObShareUtil::check_data_disk_health_status(is_data_disk_healthy))) {
     LOG_WARN("fail to check data disk status", KR(ret));
   } else if ((SLOG_IO != info.flag_.get_sys_module_id() &&
-              CLOG_READ_IO != info.flag_.get_sys_module_id() && 
+              CLOG_READ_IO != info.flag_.get_sys_module_id() &&
               CLOG_WRITE_IO != info.flag_.get_sys_module_id()) &&
               !info.fd_.device_handle_->is_object_device() &&
               !is_data_disk_healthy) {

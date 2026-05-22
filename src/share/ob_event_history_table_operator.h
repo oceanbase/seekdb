@@ -366,13 +366,13 @@ int ObEventHistoryTableOperator::async_add_tenant_event(
       entry.name6_ = temp_entry.name6_;
       entry.value6_ = temp_entry.value6_;
       entry.extra_info_ = temp_entry.extra_info_;
-      
+
       if (OB_FAIL(tenant_storage_.insert(entry))) {
         SHARE_LOG(WARN, "failed to insert tenant event", K(ret));
       }
     }
   }
-  
+
   ObTaskController::get().allow_next_syslog();
   SHARE_LOG(INFO, "event table async add tenant event", K(ret), K(event_type_));
   return ret;
@@ -504,7 +504,7 @@ int ObEventHistoryTableOperator::build_entry_helper_(ObServerEventHistoryEntry &
       name_ptr = cstr;
     }
   }
-  
+
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(name_ptr)) {
       name_str.reset();

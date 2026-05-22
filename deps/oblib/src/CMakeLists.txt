@@ -100,7 +100,7 @@ if (OB_USE_CLANG)
       -Wno-ambiguous-reversed-operator -Wno-invalid-partial-specialization
       -Wno-string-concatenation
       /EHsc -Wno-missing-noreturn -Wno-undefined-func-template
-      -Wno-undef -Wno-sign-conversion -Wno-strict-prototypes -Wno-switch-default -Wno-language-extension-token  
+      -Wno-undef -Wno-sign-conversion -Wno-strict-prototypes -Wno-switch-default -Wno-language-extension-token
       -Wno-missing-prototypes -Wno-extra-semi-stmt -Wno-unused-macros -Wno-unsafe-buffer-usage -Wno-c++98-compat -Wno-c++98-compat-pedantic
       -Wno-reserved-identifier -Wno-padded -Wno-variadic-macros -Wno-global-constructors -Wno-undefined-reinterpret-cast
       -Wno-tautological-unsigned-zero-compare -Wno-integer-overflow -Wno-shift-count-overflow -Wno-cast-function-type -Wno-cast-function-type-strict
@@ -110,8 +110,8 @@ if (OB_USE_CLANG)
       -Wno-exit-time-destructors -Wno-inconsistent-missing-destructor-override -Wno-shadow -Wno-unreachable-code
       -Wno-switch-enum -Wno-atomic-implicit-seq-cst -Wno-documentation-unknown-command
       -Wno-implicit-int-conversion -Wno-gnu-conditional-omitted-operand -Wno-cast-align -Wno-comma -Wno-tautological-type-limit-compare
-      -Wno-disabled-macro-expansion -Wno-unreachable-code-break -Wno-missing-variable-declarations 
-      -Wno-nonportable-system-include-path -Wno-c99-extensions -Wno-flexible-array-extensions 
+      -Wno-disabled-macro-expansion -Wno-unreachable-code-break -Wno-missing-variable-declarations
+      -Wno-nonportable-system-include-path -Wno-c99-extensions -Wno-flexible-array-extensions
       -Wno-compound-token-split-by-space -Wno-newline-eof -Wno-shadow-field -Wno-microsoft-unqualified-friend -Wno-float-equal
       -Wno-used-but-marked-unused -Wno-unreachable-code-return -Wno-float-conversion -Wno-conditional-uninitialized
       -Wno-signed-enum-bitfield -Wno-bitfield-enum-conversion -Wno-redundant-parens -Wno-gnu-statement-expression
