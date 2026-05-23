@@ -43,6 +43,29 @@ To check your system: `ldd --version` or `getconf GNU_LIBC_VERSION`.
 
 CI macOS builds use **macOS 14** runners and set **CMAKE_OSX_DEPLOYMENT_TARGET=11.0**, so the prebuilt `libseekdb.dylib` runs on **macOS 11 (Big Sur) and later** (12, 13, 14, 15). Setting the deployment target to 11.0 allows use on most current and recent macOS versions.
 
+### CI validation (packed zip smoke)
+
+After `libseekdb-build.sh`, CI runs `test-packed-artifact-smoke.sh` on the zip. It unpacks the artifact and runs `unittest/include/nodejs_napi` against the **packaged** `libseekdb.dylib` (with `libs/` on macOS). This catches issues that **pre-pack** FFI binding tests miss (they load the unbundled `build_release` dylib).
+
+Locally:
+
+```bash
+cd package/libseekdb
+./test-packed-artifact-smoke.sh libseekdb-darwin-arm64.zip
+```
+
+### macOS CI vs local dev builds
+
+| Stage | What runs | Notes |
+| ----- | --------- | ----- |
+| Pre-pack binding tests | `build_release/.../libseekdb.dylib` (Homebrew/`@rpath` on dev Mac) | Same as a normal `build.sh` tree |
+| Pack | `dylibbundler` → `@loader_path/libs/` | Produces the S3 / release zip layout |
+| Post-pack smoke | Packaged zip only | Matches seekdb-js embedded load path |
+
+**ccache:** macOS/Linux CI ccache keys include `COMMIT_SHA` so object files from other commits are not restored into the same cache slot (avoids stale `.o` when only the Actions cache key was platform-scoped).
+
+**seekdb-js:** [embedded CI](https://github.com/oceanbase/seekdb-js/actions) passes on **Linux** (`libseekdb-linux-*.zip` from manylinux). A bad **darwin-arm64** S3 zip can still fail macOS embedded tests while Linux stays green—always verify the macOS zip with the smoke script or a local pack of your own `build_release` dylib.
+
 ## Package contents and standalone distribution
 
 Zip layout:

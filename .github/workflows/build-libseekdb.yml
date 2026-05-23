@@ -14,7 +14,9 @@
 # Artifacts: platform zips including libseekdb-android-arm64-v8a.zip; combined artifact libseekdb-all-platforms; optional S3 upload when DESTINATION_TARGET_PATH or AWS_S3_BUCKET and credentials are set.
 #
 # Job step order: Checkout → caches → compile → setup Node/Rust/Go/Java → FFI binding tests (continue-on-error per language
-# so all languages run; final summary step fails the job if any binding test failed) → pack → upload artifact → save caches (always).
+# so all languages run; final summary step fails the job if any binding test failed) → pack → packed-zip smoke (nodejs_napi)
+# → upload artifact → save caches (always).
+# macOS ccache keys include COMMIT_SHA so object files from other commits are not reused (see package/libseekdb/README.md).
 # Android: compile → setup toolchains → host-skip FFI notice → pack → verify zip → upload → save caches → summary (see job comment).
 name: Build libseekdb
 run-name: Build libseekdb for ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
@@ -99,10 +101,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          # Static key per platform so second run always hits; ccache content is keyed by source hash internally
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
 
       # Run build inside manylinux2014 so Node/actions run on host (glibc 2.28+), build runs in CentOS 7 (glibc 2.17) for compatibility
       - name: Build libseekdb (Linux, manylinux2014)
@@ -218,6 +219,11 @@ jobs:
           chmod +x package/libseekdb/libseekdb-build.sh
           cd package/libseekdb && bash libseekdb-build.sh "${GITHUB_WORKSPACE}/build_release/src/include"
 
+      - name: Smoke test packed artifact (Linux)
+        run: |
+          chmod +x package/libseekdb/test-packed-artifact-smoke.sh
+          package/libseekdb/test-packed-artifact-smoke.sh "package/libseekdb/libseekdb-${{ matrix.platform }}.zip"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -235,7 +241,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
 
       - name: Binding tests outcome (Linux)
         if: always()
@@ -291,10 +297,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .ccache
-          # Static key per platform so second run always hits
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
           restore-keys: |
-            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+            ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
 
       - name: Build init (macOS)
         run: bash build.sh init
@@ -405,6 +410,11 @@ jobs:
           CODESIGN_ENTITLEMENTS: ${{ github.workspace }}/package/libseekdb/entitlements.plist
         run: cd package/libseekdb && bash libseekdb-build.sh
 
+      - name: Smoke test packed artifact (macOS)
+        run: |
+          chmod +x package/libseekdb/test-packed-artifact-smoke.sh
+          package/libseekdb/test-packed-artifact-smoke.sh package/libseekdb/libseekdb-darwin-arm64.zip
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -423,7 +433,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ccache
-          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}
+          key: ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-${{ env.COMMIT_SHA }}
 
       - name: Binding tests outcome (macOS)
         if: always()
