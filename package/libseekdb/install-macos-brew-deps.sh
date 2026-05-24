@@ -6,7 +6,7 @@ set -euo pipefail
 export HOMEBREW_NO_ENV_HINTS=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TAP_DIR="$SCRIPT_DIR/homebrew-local"
+THRIFT_FORMULA="$SCRIPT_DIR/homebrew-local/Formula/thrift@0.22.rb"
 
 echo "[brew] installing build tools (thrift 0.22 pinned separately)"
 brew update
@@ -15,10 +15,6 @@ brew install cmake dylibbundler googletest ccache pybind11 utf8proc re2 brotli b
 install_thrift_0_22() {
   if brew list thrift@0.22 &>/dev/null; then
     brew link --force --overwrite thrift@0.22
-    return 0
-  fi
-  if brew list seekdb/local/thrift@0.22 &>/dev/null; then
-    brew link --force --overwrite seekdb/local/thrift@0.22
     return 0
   fi
 
@@ -37,19 +33,22 @@ install_thrift_0_22() {
     return 0
   fi
 
-  # GHA macos-14: core often has only unversioned thrift; use vendored formula tap.
-  echo "[brew] core thrift@0.22 unavailable; using vendored seekdb/local tap"
-  brew untap seekdb/local 2>/dev/null || true
-  brew tap "seekdb/local" "$TAP_DIR"
-  brew install seekdb/local/thrift@0.22
-  brew link --force --overwrite seekdb/local/thrift@0.22
+  # GHA macos-14: core has no thrift@0.22. Install vendored formula file directly
+  # (brew tap <local-dir> fails on CI because it tries git clone the path).
+  echo "[brew] core thrift@0.22 unavailable; brew install --formula vendored recipe"
+  if [[ ! -f "$THRIFT_FORMULA" ]]; then
+    echo "[brew] error: missing $THRIFT_FORMULA" >&2
+    exit 1
+  fi
+  brew install bison boost openssl@3
+  brew install --formula "$THRIFT_FORMULA"
+  brew link --force --overwrite thrift@0.22
 }
 
 install_thrift_0_22
 
 echo "[brew] macOS libseekdb dependency versions:"
-brew list --versions cmake dylibbundler re2 brotli utf8proc 2>/dev/null || true
-brew list --versions thrift thrift@0.22 seekdb/local/thrift@0.22 2>/dev/null || true
+brew list --versions cmake dylibbundler re2 brotli utf8proc thrift@0.22 2>/dev/null || true
 
 if command -v thrift &>/dev/null; then
   echo "[brew] active thrift: $(thrift -version 2>&1 || true)"
