@@ -466,7 +466,7 @@ bool ObKVCacheStore::wash()
       K(reclaim_time),
       K(reclaimed_size));
 
-  return true;
+  return reclaimed_size > 0;
 }
 
 int ObKVCacheStore::get_washable_size(const uint64_t tenant_id, int64_t &washable_size)
