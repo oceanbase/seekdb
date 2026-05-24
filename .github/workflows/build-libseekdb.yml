@@ -282,8 +282,10 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || (github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha) }}
 
-      - name: Install macOS dependencies
-        run: brew install cmake dylibbundler googletest ccache pybind11 utf8proc thrift re2 brotli bzip2 || true
+      - name: Install macOS dependencies (pinned Homebrew)
+        run: |
+          chmod +x package/libseekdb/install-macos-brew-deps.sh
+          package/libseekdb/install-macos-brew-deps.sh
 
       - name: Cache deps (macOS)
         uses: actions/cache@v4
@@ -410,9 +412,28 @@ jobs:
           CODESIGN_ENTITLEMENTS: ${{ github.workspace }}/package/libseekdb/entitlements.plist
         run: cd package/libseekdb && bash libseekdb-build.sh
 
+      - name: Checkout seekdb-js (macOS JS smoke)
+        uses: actions/checkout@v4
+        with:
+          repository: oceanbase/seekdb-js
+          path: seekdb-js
+          fetch-depth: 1
+
+      - name: Setup Node/pnpm (macOS JS smoke)
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install seekdb-js deps (macOS JS smoke)
+        working-directory: seekdb-js
+        run: pnpm install --filter seekdb --filter @seekdb/js-bindings-build
+
       - name: Smoke test packed artifact (macOS)
+        env:
+          SEEKDB_JS_ROOT: ${{ github.workspace }}/seekdb-js
         run: |
-          chmod +x package/libseekdb/test-packed-artifact-smoke.sh
+          chmod +x package/libseekdb/test-packed-artifact-smoke.sh \
+            package/libseekdb/test-packed-artifact-smoke-js.sh
           package/libseekdb/test-packed-artifact-smoke.sh package/libseekdb/libseekdb-darwin-arm64.zip
 
       - name: Upload artifact

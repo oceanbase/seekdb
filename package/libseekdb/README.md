@@ -45,26 +45,55 @@ CI macOS builds use **macOS 14** runners and set **CMAKE_OSX_DEPLOYMENT_TARGET=1
 
 ### CI validation (packed zip smoke)
 
-After `libseekdb-build.sh`, CI runs `test-packed-artifact-smoke.sh` on the zip. It unpacks the artifact and runs `unittest/include/nodejs_napi` against the **packaged** `libseekdb.dylib` (with `libs/` on macOS). This catches issues that **pre-pack** FFI binding tests miss (they load the unbundled `build_release` dylib).
+After `libseekdb-build.sh`, CI runs `test-packed-artifact-smoke.sh` on the zip. It:
+
+1. Unpacks the zip into a temp directory (`libseekdb.dylib` + `libs/` on macOS).
+2. Ad-hoc signs dylibs (same as seekdb-js `build:package`).
+3. Builds `seekdb.node` **into that directory** with `@loader_path` (`smoke-loader/binding.gyp`).
+4. Runs `smoke-loader/smoke-vsag.js` (VECTOR INDEX `lib=vsag` + `DBMS_HYBRID_SEARCH.SEARCH`).
+
+Layout matches **seekdb-js** (`pkgs/js-bindings/seekdb.node` + `@loader_path/libseekdb.dylib` + `libs/`).  
+The old smoke used `nodejs_napi` linked to `build_release` via `@rpath`, which could pass while seekdb-js failed.
+
+On **macOS CI**, when `SEEKDB_JS_ROOT` is set, the same script also runs `test-packed-artifact-smoke-js.sh` (checks out [seekdb-js](https://github.com/oceanbase/seekdb-js), rebuilds bindings, runs embedded vitest `sparseEmbedding`). That path reproduces `vsag::VsagException` on bad darwin zips; the N-API-only smoke can still pass.
 
 Locally:
 
 ```bash
 cd package/libseekdb
 ./test-packed-artifact-smoke.sh libseekdb-darwin-arm64.zip
+
+# Full seekdb-js reproduction (requires pnpm install in seekdb-js once):
+SEEKDB_JS_ROOT=../seekdb-js ./test-packed-artifact-smoke-js.sh libseekdb-darwin-arm64.zip
 ```
 
-### macOS CI vs local dev builds
+### Pack debugging (local vs CI / S3)
 
-| Stage | What runs | Notes |
-| ----- | --------- | ----- |
-| Pre-pack binding tests | `build_release/.../libseekdb.dylib` (Homebrew/`@rpath` on dev Mac) | Same as a normal `build.sh` tree |
-| Pack | `dylibbundler` → `@loader_path/libs/` | Produces the S3 / release zip layout |
-| Post-pack smoke | Packaged zip only | Matches seekdb-js embedded load path |
+Each zip may include `pack-metadata.json` (uname, sha256, `otool -L`, CI env).
 
-**ccache:** macOS/Linux CI ccache keys include `COMMIT_SHA` so object files from other commits are not restored into the same cache slot (avoids stale `.o` when only the Actions cache key was platform-scoped).
+Compare two artifacts:
 
-**seekdb-js:** [embedded CI](https://github.com/oceanbase/seekdb-js/actions) passes on **Linux** (`libseekdb-linux-*.zip` from manylinux). A bad **darwin-arm64** S3 zip can still fail macOS embedded tests while Linux stays green—always verify the macOS zip with the smoke script or a local pack of your own `build_release` dylib.
+```bash
+./diagnose-packed-artifact.sh \
+  package/libseekdb/libseekdb-darwin-arm64.zip \
+  'https://oceanbase-seekdb-builds.s3.ap-southeast-1.amazonaws.com/libseekdb/all_commits/<sha>/libseekdb-darwin-arm64.zip'
+```
+
+### macOS CI vs local dev builds (likely causes of divergent zips)
+
+| Factor | GitHub Actions (macos-14) | Typical local Mac |
+| ------ | ------------------------- | ----------------- |
+| Runner / OS | `macos-14`, `CMAKE_OSX_DEPLOYMENT_TARGET=11.0` | Host SDK, often no deployment target |
+| Dependencies | `install-macos-brew-deps.sh` (`thrift@0.22`, …) | `brew install thrift` may pull 0.23+ |
+| Compile | `-DOB_USE_CCACHE=ON`, cached `deps/3rd` | Local ccache / incremental `build.sh` |
+| Pack input | Bundled dylib from CI `build_release` | Bundled from local `build_release` |
+| Codesign | Optional Developer ID + entitlements (repo secrets) | Often ad-hoc only |
+
+If `diagnose-packed-artifact.sh` shows a **different main library sha256** for the same source commit, the bug is in the **CI compile**, not dylibbundler. If only `libs/*` differ, check **dylibbundler / brew** versions. If smoke fails only on the CI zip, use metadata + diagnose output in the seekdb issue.
+
+**ccache:** macOS/Linux CI ccache keys include `COMMIT_SHA` so object files from other commits are not restored into the same cache slot.
+
+**seekdb-js:** [embedded CI](https://github.com/oceanbase/seekdb-js/actions) passes on **Linux** (`libseekdb-linux-*.zip`). A bad **darwin-arm64** S3 zip can fail macOS embedded tests while Linux stays green—use the smoke script on the macOS zip before publishing.
 
 ## Package contents and standalone distribution
 
