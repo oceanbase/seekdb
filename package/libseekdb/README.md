@@ -84,7 +84,7 @@ Compare two artifacts:
 | Factor | GitHub Actions (macos-14) | Typical local Mac |
 | ------ | ------------------------- | ----------------- |
 | Runner / OS | `macos-14`, `CMAKE_OSX_DEPLOYMENT_TARGET=11.0` | Host SDK, often no deployment target |
-| Dependencies | `install-macos-brew-deps.sh` (`thrift@0.22`, …) | `brew install thrift` may pull 0.23+ |
+| Dependencies | `install-macos-brew-deps.sh` (thrift **0.22** via formula or `brew extract`) | `brew install thrift` may pull 0.23+ |
 | Compile | `-DOB_USE_CCACHE=ON`, cached `deps/3rd` | Local ccache / incremental `build.sh` |
 | Pack input | Bundled dylib from CI `build_release` | Bundled from local `build_release` |
 | Codesign | Optional Developer ID + entitlements (repo secrets) | Often ad-hoc only |

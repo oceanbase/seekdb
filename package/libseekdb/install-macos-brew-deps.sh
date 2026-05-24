@@ -5,26 +5,46 @@ set -euo pipefail
 
 export HOMEBREW_NO_ENV_HINTS=1
 
-echo "[brew] installing build tools (thrift installed separately as thrift@0.22)"
+echo "[brew] installing build tools (thrift pinned separately)"
 brew install cmake dylibbundler googletest ccache pybind11 utf8proc re2 brotli bzip2
 
-# GHA macos-14 images may ship unversioned thrift (0.23+). Unlink so thrift@0.22 is on PATH.
-if brew list thrift &>/dev/null; then
-  echo "[brew] unlinking unversioned thrift before pinning thrift@0.22"
-  brew unlink thrift || true
-fi
+install_thrift_0_22() {
+  # macOS dev laptops often have thrift@0.22; GHA Homebrew core may only ship unversioned thrift (0.23+).
+  if brew list thrift &>/dev/null; then
+    echo "[brew] unlinking unversioned thrift before pin"
+    brew unlink thrift || true
+  fi
 
-if ! brew list thrift@0.22 &>/dev/null; then
-  brew install thrift@0.22
-fi
+  if brew list thrift@0.22 &>/dev/null; then
+    brew link --force --overwrite thrift@0.22
+    return 0
+  fi
 
-brew link --force --overwrite thrift@0.22
+  if brew install thrift@0.22 2>/dev/null; then
+    brew link --force --overwrite thrift@0.22
+    return 0
+  fi
+
+  echo "[brew] thrift@0.22 not in core tap; extracting apache thrift 0.22.0"
+  brew tap-new seekdb/local --no-git 2>/dev/null || true
+  if ! brew list "seekdb/local/thrift@0.22" &>/dev/null 2>&1; then
+    brew extract --version=0.22.0 thrift seekdb/local
+    brew install "seekdb/local/thrift@0.22"
+  fi
+  brew link --force --overwrite "seekdb/local/thrift@0.22" 2>/dev/null \
+    || brew link --force --overwrite thrift@0.22
+}
+
+install_thrift_0_22
 
 echo "[brew] macOS libseekdb dependency versions:"
-brew list --versions cmake dylibbundler re2 brotli utf8proc thrift@0.22 2>/dev/null || true
+brew list --versions cmake dylibbundler re2 brotli utf8proc 2>/dev/null || true
+brew list --versions thrift thrift@0.22 2>/dev/null || true
+brew list --versions seekdb/local/thrift@0.22 2>/dev/null || true
+
 if command -v thrift &>/dev/null; then
   echo "[brew] active thrift: $(thrift -version 2>&1 || true)"
 else
-  echo "[brew] warning: thrift not on PATH after link" >&2
+  echo "[brew] error: thrift not on PATH after install" >&2
   exit 1
 fi
