@@ -5,42 +5,51 @@ set -euo pipefail
 
 export HOMEBREW_NO_ENV_HINTS=1
 
-echo "[brew] installing build tools (thrift pinned separately)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TAP_DIR="$SCRIPT_DIR/homebrew-local"
+
+echo "[brew] installing build tools (thrift 0.22 pinned separately)"
+brew update
 brew install cmake dylibbundler googletest ccache pybind11 utf8proc re2 brotli bzip2
 
 install_thrift_0_22() {
-  # macOS dev laptops often have thrift@0.22; GHA Homebrew core may only ship unversioned thrift (0.23+).
-  if brew list thrift &>/dev/null; then
-    echo "[brew] unlinking unversioned thrift before pin"
-    brew unlink thrift || true
-  fi
-
   if brew list thrift@0.22 &>/dev/null; then
     brew link --force --overwrite thrift@0.22
     return 0
   fi
+  if brew list seekdb/local/thrift@0.22 &>/dev/null; then
+    brew link --force --overwrite seekdb/local/thrift@0.22
+    return 0
+  fi
 
-  if brew install thrift@0.22 2>/dev/null; then
+  if brew list thrift &>/dev/null; then
+    echo "[brew] unlinking unversioned thrift (0.23+) before pin"
+    brew unlink thrift || true
+  fi
+
+  # Fast path: core tap still exposes thrift@0.22 (common on dev Macs).
+  set +e
+  brew install thrift@0.22
+  core_rc=$?
+  set -e
+  if [[ "$core_rc" -eq 0 ]]; then
     brew link --force --overwrite thrift@0.22
     return 0
   fi
 
-  echo "[brew] thrift@0.22 not in core tap; extracting apache thrift 0.22.0"
-  brew tap-new seekdb/local --no-git 2>/dev/null || true
-  if ! brew list "seekdb/local/thrift@0.22" &>/dev/null 2>&1; then
-    brew extract --version=0.22.0 thrift seekdb/local
-    brew install "seekdb/local/thrift@0.22"
-  fi
-  brew link --force --overwrite "seekdb/local/thrift@0.22" 2>/dev/null \
-    || brew link --force --overwrite thrift@0.22
+  # GHA macos-14: core often has only unversioned thrift; use vendored formula tap.
+  echo "[brew] core thrift@0.22 unavailable; using vendored seekdb/local tap"
+  brew untap seekdb/local 2>/dev/null || true
+  brew tap "seekdb/local" "$TAP_DIR"
+  brew install seekdb/local/thrift@0.22
+  brew link --force --overwrite seekdb/local/thrift@0.22
 }
 
 install_thrift_0_22
 
 echo "[brew] macOS libseekdb dependency versions:"
 brew list --versions cmake dylibbundler re2 brotli utf8proc 2>/dev/null || true
-brew list --versions thrift thrift@0.22 2>/dev/null || true
-brew list --versions seekdb/local/thrift@0.22 2>/dev/null || true
+brew list --versions thrift thrift@0.22 seekdb/local/thrift@0.22 2>/dev/null || true
 
 if command -v thrift &>/dev/null; then
   echo "[brew] active thrift: $(thrift -version 2>&1 || true)"
