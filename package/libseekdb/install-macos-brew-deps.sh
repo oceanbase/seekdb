@@ -23,7 +23,6 @@ install_thrift_0_22() {
     brew unlink thrift || true
   fi
 
-  # Fast path: core tap still exposes thrift@0.22 (common on dev Macs).
   set +e
   brew install thrift@0.22
   core_rc=$?
@@ -33,15 +32,23 @@ install_thrift_0_22() {
     return 0
   fi
 
-  # GHA macos-14: core has no thrift@0.22. Install vendored formula file directly
-  # (brew tap <local-dir> fails on CI because it tries git clone the path).
-  echo "[brew] core thrift@0.22 unavailable; brew install --formula vendored recipe"
+  echo "[brew] core thrift@0.22 unavailable; installing via seekdb/local tap (tap-new)"
   if [[ ! -f "$THRIFT_FORMULA" ]]; then
     echo "[brew] error: missing $THRIFT_FORMULA" >&2
     exit 1
   fi
+
   brew install bison boost openssl@3
-  brew install --formula "$THRIFT_FORMULA"
+  export PATH="/opt/homebrew/opt/bison/bin:${PATH:-}"
+
+  brew untap seekdb/local 2>/dev/null || true
+  brew tap-new seekdb/local --no-git
+  local tap_formula
+  tap_formula="$(brew --repository seekdb/local)/Formula/thrift@0.22.rb"
+  mkdir -p "$(dirname "$tap_formula")"
+  cp "$THRIFT_FORMULA" "$tap_formula"
+
+  brew install seekdb/local/thrift@0.22
   brew link --force --overwrite thrift@0.22
 }
 
