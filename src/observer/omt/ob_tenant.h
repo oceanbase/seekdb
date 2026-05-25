@@ -272,6 +272,7 @@ public:
   int try_rdlock();
   int try_wrlock();
   virtual int unlock() override;
+  virtual void on_schema_publish() override;
 
   // get request from request queue, waiting at most TIMEOUT us.
   // if IN_HIGH_PRIORITY is set, get request from hp queue.

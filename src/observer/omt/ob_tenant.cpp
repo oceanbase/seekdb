@@ -34,6 +34,7 @@
 #include "sql/engine/px/ob_px_worker.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -1238,5 +1239,14 @@ void ObTenant::check_px_thread_recycle()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to switch to tenant", K(id_), K(ret));
     }
+  }
+}
+
+void ObTenant::on_schema_publish()
+{
+  int ret = OB_SUCCESS;
+  ObChangeStreamMgr *mgr = get<ObChangeStreamMgr *>();
+  if (OB_NOT_NULL(mgr) && mgr->is_inited()) {
+    mgr->get_fetcher().notify_schema_changed();
   }
 }

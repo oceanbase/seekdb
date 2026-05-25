@@ -617,6 +617,10 @@ public:
     return ATOMIC_LOAD(&switchover_epoch_);
   }
 
+  /// Called after publish_schema() for this tenant. Modules override in
+  /// ObTenant to hook schema publish events (e.g., wake CSFetcher from IDLE).
+  virtual void on_schema_publish() {}
+
   template<class T>
   T get() { return inner_get(Identity<T>()); }
 
