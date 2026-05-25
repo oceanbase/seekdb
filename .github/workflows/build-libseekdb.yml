@@ -3,11 +3,11 @@
 # Reference build environments (use these systems/env as the standard):
 #   linux-x64:   runner ubuntu-22.04, container quay.io/pypa/manylinux2014_x86_64 (glibc 2.17, CentOS 7+), zip libseekdb-linux-x64.zip
 #   linux-arm64: runner ubuntu-22.04-arm, container quay.io/pypa/manylinux2014_aarch64 (glibc 2.17), zip libseekdb-linux-arm64.zip
-#   darwin-arm64: runner macos-14, native, zip libseekdb-darwin-arm64.zip (min macOS 11.0)
+#   darwin-arm64: runner macos-15, native, zip libseekdb-darwin-arm64.zip (min macOS 11.0)
 #   windows-x64: runner windows-2022, .\build.ps1 + libseekdb-build.ps1, zip libseekdb-windows-x64.zip
-#   android-arm64-v8a: runner macos-14, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
+#   android-arm64-v8a: runner macos-15, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
 #
-# macOS builds use runner macos-14 and set CMAKE_OSX_DEPLOYMENT_TARGET=11.0 so the dylib runs on macOS 11+ (Big Sur and later).
+# macOS builds use runner macos-15 and set CMAKE_OSX_DEPLOYMENT_TARGET=11.0 so the dylib runs on macOS 11+ (Big Sur and later).
 # On macOS, dylibs are signed in libseekdb-build.sh: ad-hoc when no cert; when repo is oceanbase/seekdb and secrets are set,
 # use Developer ID (secrets: OSX_CODESIGN_BUILD_CERTIFICATE_BASE64, OSX_CODESIGN_P12_PASSWORD, OSX_CODESIGN_KEYCHAIN_PASSWORD, OSX_CODESIGN_IDENTITY).
 # Optional: add notarization step and APPLE_ID/PASSWORD/TEAM_ID secrets to notarize the zip.
@@ -271,7 +271,7 @@ jobs:
       matrix:
         include:
           - platform: darwin-arm64
-            runner: macos-14
+            runner: macos-15
             artifact_name: libseekdb-darwin-arm64
             arch: arm64
             cmake_arch: arm64
@@ -476,7 +476,7 @@ jobs:
           echo "All binding test steps succeeded (or were skipped)."
 
   # ---------- Android NDK cross-compile (macOS arm64 host; target arm64-v8a) ----------
-  # ubuntu-* runners are x86_64 by default. macOS-14 uses Apple silicon + NDK darwin-arm64 prebuilts (see docs).
+  # ubuntu-* runners are x86_64 by default. macOS-15 uses Apple silicon + NDK darwin-arm64 prebuilts (see docs).
   # Alternative: runs-on: ubuntu-24.04-arm for Linux ARM64.
   #
   # Why no FFI binding tests here: libseekdb.so is Android arm64-v8a / ELF for Bionic — the dynamic linker,
@@ -484,7 +484,7 @@ jobs:
   # Running the same unittest/include/*/test.sh would require an Android emulator, rooted device, or adb push + adb shell test.
   build-android:
     name: Build libseekdb (android-arm64-v8a)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     steps:
       - name: Checkout
