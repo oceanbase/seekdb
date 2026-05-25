@@ -24,7 +24,7 @@
     <a href="https://github.com/oceanbase/seekdb/issues">
         <img alt="Issues" src="https://img.shields.io/github/issues/oceanbase/seekdb?style=flat-square" />
     </a>
-    <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
+    <a href="https://github.com/oceanbase/seekdb/blob/HEAD/LICENSE">
         <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" />
     </a>
     <a href="https://pepy.tech/projects/pyseekdb">
@@ -39,7 +39,7 @@
     <a href="https://deepwiki.com/oceanbase/seekdb">
         <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
     </a>
-    <a href="https://www.linkedin.com/company/oceanbase" target="_blank">
+    <a href="https://www.linkedin.com/company/oceanbase" target="_blank" rel="noopener noreferrer">
         <img src="https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff" alt="follow on LinkedIn">
     </a>
     <a href="https://www.youtube.com/@OceanBaseDB">
@@ -56,7 +56,7 @@ MySQL 兼容 · 嵌入式 / 服务器双模式 · 向量 + 全文混合搜索 ·
 
 [English](README.md) | **中文版** | [日本語](README_JP.md)
 
-[30 秒体验](#%EF%B8%8F-30-秒体验) · [快速开始](#-快速开始) · [为什么选择 seekdb](#-为什么-ai-agent-要选择-seekdb) · [生态系统](#-生态系统与集成) · [开发](#%EF%B8%8F-开发)
+[30 秒体验](#30-秒体验) · [快速开始](#快速开始) · [为什么选择 seekdb](#为什么-ai-agent-要选择-seekdb) · [生态系统](#生态系统与集成) · [开发](#开发)
 
 <sub>如果你觉得 seekdb 有用，请给一个 <a href="https://github.com/oceanbase/seekdb/stargazers">star</a> — 让更多人发现这个项目。</sub>
 
@@ -70,9 +70,11 @@ MySQL 兼容 · 嵌入式 / 服务器双模式 · 向量 + 全文混合搜索 ·
   <img src="images/benchmark.svg" alt="seekdb 基准测试：QPS 是 Milvus 的 10.7 倍，Elasticsearch 的 3.2 倍" width="720" />
 </div>
 
-> 📖 [阅读发布博客 →](#) · 🔁 [复现基准测试 →](https://github.com/oceanbase/vdb-streambench)
+> 📖 [阅读发布博客 →](docs/blog/launch_blog_zh.md) · 🔁 [复现基准测试 →](https://github.com/oceanbase/vdb-streambench)
 
 ---
+
+<a id="30-秒体验"></a>
 
 ## ⏱️ 30 秒体验
 
@@ -84,9 +86,11 @@ MySQL 兼容 · 嵌入式 / 服务器双模式 · 向量 + 全文混合搜索 ·
 pip install -U pyseekdb   # pyseekdb 是 seekdb 的 Python SDK
 ```
 
-无需服务器、无需定义 Schema、无需配置 Embedding。嵌入式模式直接在进程内运行；一行代码切换到服务器模式或 OceanBase 分布式模式。[更多示例 →](#-更多示例)
+无需服务器、无需定义 Schema、无需配置 Embedding。嵌入式模式直接在进程内运行；一行代码切换到服务器模式或 OceanBase 分布式模式。[更多示例 →](#更多示例)
 
 ---
+
+<a id="为什么-ai-agent-要选择-seekdb"></a>
 
 ## ✨ 为什么 AI Agent 要选择 seekdb？
 
@@ -142,6 +146,8 @@ ORDER BY dist APPROXIMATE LIMIT 10;
 基于成熟的 OceanBase SQL 引擎构建。可作为嵌入式库、单节点服务器或 OceanBase 分布式集群运行。完整 ACID，实时写入，开箱即用的 MySQL 生态。
 
 ---
+
+<a id="快速开始"></a>
 
 ## 🎬 快速开始
 
@@ -201,6 +207,8 @@ brew install seekdb
 DEB/RPM 离线安装和配置详情请参见[部署文档](https://docs.seekdb.ai/seekdb/deploy-by-systemd/)。
 
 </details>
+
+<a id="更多示例"></a>
 
 ### 📝 更多示例
 
@@ -289,6 +297,8 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 
 ---
 
+<a id="生态系统与集成"></a>
+
 ## 🌟 生态系统与集成
 
 <div align="center">
@@ -304,7 +314,7 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
         <img src="https://img.shields.io/badge/Dify-✅-00A67E?style=flat-square&logo=dify" alt="Dify" />
     </a>
     <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
-        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgrap" alt="LangGraph" />
+        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgraph" alt="LangGraph" />
     </a>
     <a href="https://github.com/coze-dev/coze-studio/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
         <img src="https://img.shields.io/badge/Coze-✅-00A67E?style=flat-square&logo=coze" alt="Coze" />
@@ -323,7 +333,7 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 ## 🌐 下一步与社区
 
 - 📖 **[阅读文档 →](https://docs.seekdb.ai/)** — 快速开始、API 参考、集成指南
-- 📝 **[发布博客 →](#)** — Milvus 10.7 倍 QPS 背后的架构
+- 📝 **[发布博客 →](docs/blog/launch_blog_zh.md)** — Milvus 10.7 倍 QPS 背后的架构
 - 🐛 **[提交 Issue →](https://github.com/oceanbase/seekdb/issues)** — 报告 Bug、请求功能
 - 🤝 **[参与贡献 →](CONTRIBUTING.md)** — 共建 Agent 时代的状态存储
 
@@ -345,11 +355,13 @@ seekdb 的混合检索 + 多模引擎同样适用于经典 AI 工作负载：
 
 ---
 
+<a id="开发"></a>
+
 ## 🛠️ 开发
 
 ### 从源码构建
 
-构建之前，请先根据操作系统安装所需的工具链和依赖。详见[安装工具链](docs/developer-guide/en/toolchain.md)。
+构建之前，请先根据操作系统安装所需的工具链和依赖。详见[安装工具链](docs/developer-guide/zh/toolchain.md)。
 
 ```bash
 # 克隆仓库
@@ -362,7 +374,7 @@ cd ~/seekdb
 ./bin/seekdb
 ```
 
-本例中工作目录为 $HOME/seekdb，请使用一个全新的空目录进行测试。详细说明请参见[开发者指南](docs/developer-guide/en/README.md)。
+本例中工作目录为 $HOME/seekdb，请使用一个全新的空目录进行测试。详细说明请参见[开发者指南](docs/developer-guide/zh/README.md)。
 
 ### 贡献
 

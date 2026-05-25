@@ -24,7 +24,7 @@
     <a href="https://github.com/oceanbase/seekdb/issues">
         <img alt="Issues" src="https://img.shields.io/github/issues/oceanbase/seekdb?style=flat-square" />
     </a>
-    <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
+    <a href="https://github.com/oceanbase/seekdb/blob/HEAD/LICENSE">
         <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" />
     </a>
     <a href="https://pepy.tech/projects/pyseekdb">
@@ -39,7 +39,7 @@
     <a href="https://deepwiki.com/oceanbase/seekdb">
         <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
     </a>
-    <a href="https://www.linkedin.com/company/oceanbase" target="_blank">
+    <a href="https://www.linkedin.com/company/oceanbase" target="_blank" rel="noopener noreferrer">
         <img src="https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff" alt="follow on LinkedIn">
     </a>
     <a href="https://www.youtube.com/@OceanBaseDB">
@@ -56,7 +56,7 @@ MySQL 互換 · 組み込み / サーバー両対応 · ベクトル + 全文ハ
 
 [English](README.md) | [中文版](README_CN.md) | **日本語**
 
-[30 秒で試す](#%EF%B8%8F-30-秒で試す) · [クイックスタート](#-クイックスタート) · [なぜ seekdb か](#-なぜ-ai-エージェントに-seekdb-なのか) · [エコシステム](#-エコシステムと統合) · [開発](#%EF%B8%8F-開発)
+[30 秒で試す](#30-秒で試す) · [クイックスタート](#クイックスタート) · [なぜ seekdb か](#なぜ-ai-エージェントに-seekdb-なのか) · [エコシステム](#エコシステムと統合) · [開発](#開発)
 
 <sub>seekdb が役立つと思ったら、<a href="https://github.com/oceanbase/seekdb/stargazers">star</a> をお願いします — より多くの人にプロジェクトを届けられます。</sub>
 
@@ -70,9 +70,11 @@ MySQL 互換 · 組み込み / サーバー両対応 · ベクトル + 全文ハ
   <img src="images/benchmark.svg" alt="seekdb ベンチマーク：Milvus の 10.7 倍、Elasticsearch の 3.2 倍の QPS" width="720" />
 </div>
 
-> 📖 [ローンチブログを読む →](#) · 🔁 [ベンチマークを再現する →](https://github.com/oceanbase/vdb-streambench)
+> 📖 [ローンチブログを読む →](docs/blog/launch_blog_jp.md) · 🔁 [ベンチマークを再現する →](https://github.com/oceanbase/vdb-streambench)
 
 ---
+
+<a id="30-秒で試す"></a>
 
 ## ⏱️ 30 秒で試す
 
@@ -84,9 +86,11 @@ MySQL 互換 · 組み込み / サーバー両対応 · ベクトル + 全文ハ
 pip install -U pyseekdb   # pyseekdb は seekdb の Python SDK です
 ```
 
-サーバー不要、スキーマ定義不要、エンベディング設定不要。組み込みモードならプロセス内でそのまま動作し、たった 1 行でサーバーモードや OceanBase 分散モードに切り替えられます。[その他の例 →](#-その他の例)
+サーバー不要、スキーマ定義不要、エンベディング設定不要。組み込みモードならプロセス内でそのまま動作し、たった 1 行でサーバーモードや OceanBase 分散モードに切り替えられます。[その他の例 →](#その他の例)
 
 ---
+
+<a id="なぜ-ai-エージェントに-seekdb-なのか"></a>
 
 ## ✨ なぜ AI エージェントに seekdb なのか？
 
@@ -142,6 +146,8 @@ ORDER BY dist APPROXIMATE LIMIT 10;
 実績ある OceanBase SQL エンジン上に構築。組み込みライブラリ、単一ノードサーバー、または OceanBase 分散クラスターとして動作します。完全な ACID、リアルタイム書き込み、MySQL エコシステムをそのまま活用できます。
 
 ---
+
+<a id="クイックスタート"></a>
 
 ## 🎬 クイックスタート
 
@@ -201,6 +207,8 @@ brew install seekdb
 DEB/RPM オフラインインストールと設定の詳細は[デプロイメントドキュメント](https://docs.seekdb.ai/seekdb/deploy-by-systemd/)を参照してください。
 
 </details>
+
+<a id="その他の例"></a>
 
 ### 📝 その他の例
 
@@ -289,6 +297,8 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
 
 ---
 
+<a id="エコシステムと統合"></a>
+
 ## 🌟 エコシステムと統合
 
 <div align="center">
@@ -304,7 +314,7 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
         <img src="https://img.shields.io/badge/Dify-✅-00A67E?style=flat-square&logo=dify" alt="Dify" />
     </a>
     <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
-        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgrap" alt="LangGraph" />
+        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgraph" alt="LangGraph" />
     </a>
     <a href="https://github.com/coze-dev/coze-studio/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
         <img src="https://img.shields.io/badge/Coze-✅-00A67E?style=flat-square&logo=coze" alt="Coze" />
@@ -323,7 +333,7 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
 ## 🌐 次のステップとコミュニティ
 
 - 📖 **[ドキュメントを読む →](https://docs.seekdb.ai/)** — クイックスタート、API リファレンス、統合ガイド
-- 📝 **[ローンチブログ →](#)** — Milvus の 10.7 倍の QPS を実現したアーキテクチャ
+- 📝 **[ローンチブログ →](docs/blog/launch_blog_jp.md)** — Milvus の 10.7 倍の QPS を実現したアーキテクチャ
 - 🐛 **[Issue を開く →](https://github.com/oceanbase/seekdb/issues)** — バグ報告、機能リクエスト
 - 🤝 **[コントリビュート →](CONTRIBUTING.md)** — エージェント時代のステートストアを一緒に作ろう
 
@@ -344,6 +354,8 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
 </div>
 
 ---
+
+<a id="開発"></a>
 
 ## 🛠️ 開発
 

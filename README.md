@@ -24,7 +24,7 @@
     <a href="https://github.com/oceanbase/seekdb/issues">
         <img alt="Issues" src="https://img.shields.io/github/issues/oceanbase/seekdb?style=flat-square" />
     </a>
-    <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
+    <a href="https://github.com/oceanbase/seekdb/blob/HEAD/LICENSE">
         <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" />
     </a>
     <a href="https://pepy.tech/projects/pyseekdb">
@@ -39,7 +39,7 @@
     <a href="https://deepwiki.com/oceanbase/seekdb">
         <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
     </a>
-    <a href="https://www.linkedin.com/company/oceanbase" target="_blank">
+    <a href="https://www.linkedin.com/company/oceanbase" target="_blank" rel="noopener noreferrer">
         <img src="https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff" alt="follow on LinkedIn">
     </a>
     <a href="https://www.youtube.com/@OceanBaseDB">
@@ -56,7 +56,7 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
 
 **English** | [中文版](README_CN.md) | [日本語](README_JP.md)
 
-[30-Second Try](#%EF%B8%8F-30-second-try) · [Quick Start](#-quick-start) · [Why seekdb](#-why-seekdb-for-agents) · [Ecosystem](#-ecosystem--integrations) · [Contributing](#%EF%B8%8F-development)
+[30-Second Try](#30-second-try) · [Quick Start](#quick-start) · [Why seekdb](#why-seekdb-for-agents) · [Ecosystem](#ecosystem--integrations) · [Contributing](#development)
 
 <sub>If you find seekdb useful, consider giving it a <a href="https://github.com/oceanbase/seekdb/stargazers">star</a> — it helps others discover the project.</sub>
 
@@ -70,9 +70,11 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
   <img src="images/benchmark.svg" alt="seekdb benchmark: 10.7× the QPS of Milvus, 3.2× of Elasticsearch" width="720" />
 </div>
 
-> 📖 [Read the launch blog →](#) · 🔁 [Reproduce the benchmark →](https://github.com/oceanbase/vdb-streambench)
+> 📖 [Read the launch blog →](docs/blog/launch_blog_en.md) · 🔁 [Reproduce the benchmark →](https://github.com/oceanbase/vdb-streambench)
 
 ---
+
+<a id="30-second-try"></a>
 
 ## ⏱️ 30-Second Try
 
@@ -84,9 +86,11 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
 pip install -U pyseekdb   # pyseekdb is the Python SDK for seekdb
 ```
 
-No servers, no schemas, no embedding setup. Embedded mode runs in-process; switch to server / OceanBase mode with one line. [More examples →](#-more-examples)
+No servers, no schemas, no embedding setup. Embedded mode runs in-process; switch to server / OceanBase mode with one line. [More examples →](#more-examples)
 
 ---
+
+<a id="why-seekdb-for-agents"></a>
 
 ## ✨ Why seekdb for Agents?
 
@@ -157,6 +161,8 @@ real-time writes, and the entire MySQL ecosystem out of the box.
 
 ---
 
+<a id="quick-start"></a>
+
 ## 🎬 Quick Start
 
 ### Installation
@@ -215,6 +221,8 @@ brew install seekdb
 See [deployment docs](https://docs.seekdb.ai/seekdb/deploy-by-systemd/) for DEB/RPM offline install and configuration details.
 
 </details>
+
+<a id="more-examples"></a>
 
 ### 📝 More Examples
 
@@ -307,6 +315,8 @@ seekdb's hybrid retrieval + multi-model engine also fits classic AI workloads:
 
 ---
 
+<a id="ecosystem--integrations"></a>
+
 ## 🌟 Ecosystem & Integrations
 
 <div align="center">
@@ -322,7 +332,7 @@ seekdb's hybrid retrieval + multi-model engine also fits classic AI workloads:
         <img src="https://img.shields.io/badge/Dify-✅-00A67E?style=flat-square&logo=dify" alt="Dify" />
     </a>
     <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
-        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgrap" alt="LangGraph" />
+        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgraph" alt="LangGraph" />
     </a>
     <a href="https://github.com/coze-dev/coze-studio/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
         <img src="https://img.shields.io/badge/Coze-✅-00A67E?style=flat-square&logo=coze" alt="Coze" />
@@ -341,7 +351,7 @@ seekdb's hybrid retrieval + multi-model engine also fits classic AI workloads:
 ## 🌐 Next Steps & Community
 
 - 📖 **[Read the docs →](https://docs.seekdb.ai/)** — Quickstart, API reference, integration guides
-- 📝 **[Launch blog →](#)** — The architecture behind 10.7× the QPS of Milvus
+- 📝 **[Launch blog →](docs/blog/launch_blog_en.md)** — The architecture behind 10.7× the QPS of Milvus
 - 🐛 **[Open an issue →](https://github.com/oceanbase/seekdb/issues)** — Report bugs, request features
 - 🤝 **[Contribute →](CONTRIBUTING.md)** — Help build the agent-era state store
 
@@ -362,6 +372,8 @@ seekdb's hybrid retrieval + multi-model engine also fits classic AI workloads:
 </div>
 
 ---
+
+<a id="development"></a>
 
 ## 🛠️ Development
 
