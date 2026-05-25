@@ -14,12 +14,12 @@ Sleep 300ms
 Enter
 Sleep 3s
 
-Type "cat demo.py"
+Type "cat images/demo.py"
 Sleep 200ms
 Enter
 Sleep 3s
 
-Type "python3 demo.py"
+Type "python3 images/demo.py"
 Sleep 300ms
 Enter
 Sleep 5s
