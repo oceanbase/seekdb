@@ -52,12 +52,13 @@ seekdb.h           # C API header
 libseekdb.dylib    # Main library (macOS) or libseekdb.so (Linux)
 seekdb.dll         # Main library (Windows)
 seekdb.lib         # Import library for MSVC-style linking (Windows)
-libs/              # Dependency dylibs (macOS only; collected by dylibbundler)
-  *.dylib
+libs/              # Runtime dependencies (macOS: dylibbundler; Windows: vcpkg/OpenSSL/etc.)
+  *.dylib / *.dll
 ```
 
 - **Standalone distribution**: After extraction, the package can be used by other projects without this repo or the build environment.
 - **macOS**: The main library and its dependencies use relative paths (`@loader_path/libs`). Unzip to any directory and keep the main library and `libs/` at the same level so they load correctly.
+- **Windows**: `libseekdb-build.ps1` runs `cmake/BundleRuntimeDllsWindows.cmake` to copy third-party DLLs into `libs/` (same dependency set as CI binding tests). Consumers should prepend the extract directory and `libs/` to `PATH`, or load `seekdb.dll` from a directory that includes `libs/` on the DLL search path.
 - **Linux**: Usually has no extra dependencies or relies on system libraries; unzip and use as-is.
 
 ### How to use (standalone)

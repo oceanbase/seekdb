@@ -4,7 +4,7 @@
 #   linux-x64:   runner ubuntu-22.04, container quay.io/pypa/manylinux2014_x86_64 (glibc 2.17, CentOS 7+), zip libseekdb-linux-x64.zip
 #   linux-arm64: runner ubuntu-22.04-arm, container quay.io/pypa/manylinux2014_aarch64 (glibc 2.17), zip libseekdb-linux-arm64.zip
 #   darwin-arm64: runner macos-15, native, zip libseekdb-darwin-arm64.zip (min macOS 11.0)
-#   windows-x64: runner windows-2022, .\build.ps1 + libseekdb-build.ps1, zip libseekdb-windows-x64.zip
+#   windows-x64: runner windows-2022, .\build.ps1 + libseekdb-build.ps1, zip libseekdb-windows-x64.zip (seekdb.dll + libs/*.dll)
 #   android-arm64-v8a: runner macos-15, NDK + ./build.sh --android, zip libseekdb-android-arm64-v8a.zip
 #
 # macOS builds use runner macos-15 and set CMAKE_OSX_DEPLOYMENT_TARGET=11.0 so the dylib runs on macOS 11+ (Big Sur and later).
@@ -813,6 +813,24 @@ jobs:
         env:
           BUILD_TYPE: release
         run: .\package\libseekdb\libseekdb-build.ps1
+
+      - name: Verify libseekdb Windows zip layout
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $zip = "package/libseekdb/libseekdb-windows-x64.zip"
+          if (-not (Test-Path $zip)) { throw "Missing $zip" }
+          $tmp = Join-Path $env:TEMP ("libseekdb-verify-" + [guid]::NewGuid().ToString())
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          foreach ($f in @("seekdb.h", "seekdb.dll")) {
+            if (-not (Test-Path (Join-Path $tmp $f))) { throw "Zip missing $f" }
+          }
+          $libs = Join-Path $tmp "libs"
+          if (-not (Test-Path $libs)) { throw "Zip missing libs/ (runtime DLLs required for standalone load)" }
+          $n = @(Get-ChildItem $libs -Filter *.dll -File).Count
+          if ($n -lt 1) { throw "libs/ has no .dll files ($n)" }
+          Write-Host "libseekdb-windows-x64.zip OK: seekdb.dll + libs/ ($n DLLs)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
