@@ -16,7 +16,6 @@
 
 #include "storage/fts/ob_fts_literal.h"
 #define USING_LOG_PREFIX STORAGE_FTS
-#include <regex>
 #include "ob_fts_index_builder_util.h"
 #include "ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
@@ -37,6 +36,65 @@ using namespace share::schema;
 
 namespace share
 {
+namespace
+{
+bool get_function_args(const ObString &expr_string,
+                       const ObString &func_name,
+                       ObString &args)
+{
+  bool matched = false;
+  const ObString trim_expr = expr_string.trim();
+  const int64_t func_len = func_name.length();
+  if (trim_expr.empty() || func_name.empty() || trim_expr.length() <= func_len) {
+  } else if (!trim_expr.prefix_match_ci(func_name)) {
+  } else {
+    ObString tail(trim_expr.length() - func_len, trim_expr.ptr() + func_len);
+    tail = tail.trim();
+    if (tail.length() >= 2 && '(' == tail[0] && ')' == tail[tail.length() - 1]) {
+      args.assign_ptr(tail.ptr() + 1, tail.length() - 2);
+      matched = true;
+    }
+  }
+  return matched;
+}
+
+bool contains_keyword_ci(const ObString &str, const ObString &keyword)
+{
+  bool found = false;
+  const int64_t keyword_len = keyword.length();
+  if (str.empty() || keyword.empty() || str.length() < keyword_len) {
+  } else {
+    for (int64_t i = 0; !found && i + keyword_len <= str.length(); ++i) {
+      found = 0 == ObString(keyword_len, str.ptr() + i).case_compare(keyword);
+    }
+  }
+  return found;
+}
+
+bool is_json_query_asis_expr(const ObString &expr_string)
+{
+  ObString args;
+  return get_function_args(expr_string, ObString::make_string("json_query"), args)
+      && contains_keyword_ci(args, ObString::make_string("asis"));
+}
+
+bool is_json_query_asis_multivalue_expr(const ObString &expr_string)
+{
+  ObString args;
+  return get_function_args(expr_string, ObString::make_string("json_query"), args)
+      && contains_keyword_ci(args, ObString::make_string("asis"))
+      && args.trim().suffix_match_ci(ObString::make_string("multivalue"));
+}
+
+bool is_cast_as_array_expr(const ObString &expr_string)
+{
+  ObString args;
+  return get_function_args(expr_string, ObString::make_string("cast"), args)
+      && contains_keyword_ci(args, ObString::make_string("as"))
+      && args.trim().suffix_match_ci(ObString::make_string("array"));
+}
+} // namespace
+
 int ObFtsIndexBuilderUtil::determine_docid_type(const ObTableSchema &table_schema, ObDocIDType &doc_id_type)
 {
   int ret = OB_SUCCESS;
@@ -2708,24 +2766,10 @@ int ObMulValueIndexBuilderUtil::is_multivalue_index_type(
 {
   INIT_SUCC(ret);
 
-  char* buf = nullptr;
   if (column_string.length() == 0 || column_string.length() > OB_MAX_COLUMN_NAMES_LENGTH) {
+    is_multi_value_index = false;
   } else {
-    SMART_VAR(char[OB_MAX_COLUMN_NAMES_LENGTH * 2], buf) {
-      MEMCPY(buf, column_string.ptr(), column_string.length());
-      buf[column_string.length()] = 0;
-
-      std::regex pattern(R"(CAST\s*\(\s*.*\s*as\s*.*\s*array\s*\))", std::regex_constants::icase);
-      if (std::regex_match(buf, pattern)) {
-        is_multi_value_index = true;
-      } else {
-        is_multi_value_index = false;
-        std::regex pattern1(R"(JSON_QUERY\s*\(\s*.*\s*ASIS\s*.*\s*\))", std::regex_constants::icase);
-        if (std::regex_match(buf, pattern1)) {
-          is_multi_value_index = true;
-        }
-      }
-    }
+    is_multi_value_index = is_cast_as_array_expr(column_string) || is_json_query_asis_expr(column_string);
   }
 
   return ret;
@@ -3172,16 +3216,7 @@ bool ObMulValueIndexBuilderUtil::is_multivalue_index_column(const ObString& expr
   bool bool_ret = false;
   if (expr_string.length() == 0 || expr_string.length() > OB_MAX_COLUMN_NAMES_LENGTH) {
   } else {
-    INIT_SUCC(ret);
-    SMART_VAR(char[OB_MAX_COLUMN_NAMES_LENGTH], buf) {
-      MEMCPY(buf, expr_string.ptr(), expr_string.length());
-      buf[expr_string.length()] = 0;
-
-      static const std::regex pattern(R"(JSON_QUERY\s*\(\s*.*\s*ASIS\s*.*\s*\))", std::regex_constants::icase);
-      if (std::regex_match(buf, pattern)) {
-        bool_ret = true;
-      }
-    }
+    bool_ret = is_json_query_asis_expr(expr_string);
   }
 
   return bool_ret;
@@ -3192,16 +3227,7 @@ bool ObMulValueIndexBuilderUtil::is_multivalue_array_column(const ObString& expr
   bool bool_ret = false;
   if (expr_string.length() == 0 || expr_string.length() > OB_MAX_COLUMN_NAMES_LENGTH) {
   } else {
-    INIT_SUCC(ret);
-    SMART_VAR(char[OB_MAX_COLUMN_NAMES_LENGTH], buf) {
-      MEMCPY(buf, expr_string.ptr(), expr_string.length());
-      buf[expr_string.length()] = 0;
-
-      static const std::regex pattern(R"(JSON_QUERY\s*\(\s*.*\s*ASIS\s*.*\s*\s*multivalue\))", std::regex_constants::icase);
-      if (std::regex_match(buf, pattern)) {
-        bool_ret = true;
-      }
-    }
+    bool_ret = is_json_query_asis_multivalue_expr(expr_string);
   }
 
   return bool_ret;
