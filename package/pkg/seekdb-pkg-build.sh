@@ -109,6 +109,7 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
   swiftc \
     -o "$MENUBAR_BIN" \
     -framework AppKit \
+    -framework Security \
     -target arm64-apple-macosx13.0 \
     -O \
     "$MENUBAR_SRC/SeekDBMenuBar.swift"

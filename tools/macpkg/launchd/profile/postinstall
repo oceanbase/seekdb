@@ -17,6 +17,7 @@ fi
 
 chown -R root:wheel "$CONFIG_DIR" "$BASE_DIR" "$LOG_DIR" 2>/dev/null || true
 chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$BASE_DIR/store" "$BASE_DIR/store/redo" "$LOG_DIR" 2>/dev/null || true
+[ -f "$CONFIG_FILE" ] && chmod 644 "$CONFIG_FILE" 2>/dev/null || true
 
 if [ -f "$PLIST" ]; then
   chown root:wheel "$PLIST" 2>/dev/null || true
