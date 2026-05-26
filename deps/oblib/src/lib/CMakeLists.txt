@@ -340,6 +340,7 @@ ob_set_subtarget(oblib_lib oblog
   oblog/ob_async_log_struct.cpp
   oblog/ob_base_log_buffer.cpp
   oblog/ob_base_log_writer.cpp
+  oblog/ob_ringbuf_log_writer.cpp
   oblog/ob_log.cpp
   oblog/ob_log_compressor.cpp
   oblog/ob_log_dba_event.cpp
