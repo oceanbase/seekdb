@@ -54,6 +54,7 @@ struct WinPipeBridge {
   char read_buf[32768];         // pipe -> sockB read buffer
   char* write_buf;              // pending write buffer (freed on write completion)
   bool closing;
+  int pending_io;
 };
 
 class ObWinNamedPipeServer
@@ -73,6 +74,8 @@ private:
   void on_pipe_write(WinPipeBridge* bridge, DWORD bytes);
   void check_sockb_readable();
   void destroy_bridge(WinPipeBridge* bridge);
+  void reap_bridge(WinPipeBridge* bridge);
+  void reap_pending();
 
   HANDLE iocp_;
   char pipe_name_[256];
@@ -80,6 +83,7 @@ private:
   WinPipeOverlapped accept_ov_; // overlapped for accept
   ObSqlNioImpl* nio_impl_;     // for inject_accepted_fd
   std::vector<WinPipeBridge*> bridges_;
+  std::vector<WinPipeBridge*> pending_reaps_;
   bool stopped_;
 };
 

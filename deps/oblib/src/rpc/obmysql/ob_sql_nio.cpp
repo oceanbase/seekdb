@@ -1270,12 +1270,12 @@ public:
 #endif
   }
   //use need_monopolize to prevent two observer processes use the same mysql port
-  int init(int port, bool need_monopolize, const char* unix_socket_path = NULL) {
+  int init(int port, bool need_monopolize, const char* unix_socket_path, bool disable_tcp) {
     int ret = OB_SUCCESS;
     if (port == -1) {
       ret = init_io();
     } else {
-      ret = init_listen(port, need_monopolize, unix_socket_path);
+      ret = init_listen(port, need_monopolize, unix_socket_path, disable_tcp);
     }
     return ret;
   }
@@ -1308,15 +1308,16 @@ public:
     }
     return ret;
   }
-  int init_listen(int port, bool need_monopolize, const char* unix_socket_path) {
+  int init_listen(int port, bool need_monopolize, const char* unix_socket_path, bool disable_tcp) {
     int ret = OB_SUCCESS;
     uint32_t epflag = EPOLLIN;
     if ((epfd_ = epoll_create1(EPOLL_CLOEXEC)) < 0) {
       ret = OB_IO_ERROR;
       LOG_WARN("epoll_create fail", K(ret), K(errno));
     } else {
-      // add tcp socket listen
-      if ((lfd_ = listen_create(!oceanbase::lib::use_ipv6() ? AF_INET : AF_INET6, port, need_monopolize)) < 0) {
+      if (disable_tcp) {
+        LOG_INFO("embedded mode: skipping tcp listen", K(port));
+      } else if ((lfd_ = listen_create(!oceanbase::lib::use_ipv6() ? AF_INET : AF_INET6, port, need_monopolize)) < 0) {
         ret = OB_SERVER_LISTEN_ERROR;
         LOG_ERROR("listen create fail", K(ret), K(port), K(errno), KERRNOMSG(errno));
         LOG_DBA_ERROR_V2(OB_SERVER_LISTEN_FAIL, ret,
@@ -1333,7 +1334,20 @@ public:
       if (OB_SUCC(ret) && unix_socket_path != NULL) {
 #ifdef _WIN32
         // Windows: start Named Pipe server instead of AF_UNIX
-        if (OB_FAIL(win_pipe_server_.init("\\\\.\\pipe\\MySQL", this))) {
+        char pipe_name[256] = {0};
+        snprintf(pipe_name, sizeof(pipe_name), "%lu-%lld",
+                 (unsigned long)GetCurrentProcessId(),
+                 (long long)time(NULL));
+        FILE *out_fp = fopen("run/sql.pipe", "w");
+        if (NULL != out_fp) {
+          fputs(pipe_name, out_fp);
+          fclose(out_fp);
+        } else {
+          LOG_WARN("failed to write run/sql.pipe", K(errno));
+        }
+        char pipe_full_path[300] = {0};
+        snprintf(pipe_full_path, sizeof(pipe_full_path), "\\\\.\\pipe\\%s", pipe_name);
+        if (OB_FAIL(win_pipe_server_.init(pipe_full_path, this))) {
           LOG_WARN("named pipe init fail", K(ret));
           // Does not affect TCP, do not return error
           ret = OB_SUCCESS;
@@ -1728,7 +1742,7 @@ private:
 };
 
 int ObSqlNio::start(int port, ObISqlSockHandler *handler, int n_thread,
-                    const uint64_t tenant_id)
+                    const uint64_t tenant_id, bool disable_tcp)
 {
   int ret = OB_SUCCESS;
   port_ = port;
@@ -1748,7 +1762,7 @@ int ObSqlNio::start(int port, ObISqlSockHandler *handler, int n_thread,
       }
       bool need_monopolize = ((i == 0) ? true : false);
       new (impl_ + i) ObSqlNioImpl(*handler);
-      if (OB_FAIL(impl_[i].init(port, need_monopolize, unix_socket_path))) {
+      if (OB_FAIL(impl_[i].init(port, need_monopolize, unix_socket_path, disable_tcp))) {
         LOG_WARN("impl init fail", K(ret));
       }
     }
@@ -1914,7 +1928,7 @@ int ObSqlNio::set_thread_count(const int n_thread)
     if (n_thread > cur_thread) {
       for (int i = cur_thread; OB_SUCCESS == ret && i < n_thread; i++) {
         new (impl_ + i) ObSqlNioImpl(*handler_);
-        if (OB_FAIL(impl_[i].init(port_, need_monopolize))) {
+        if (OB_FAIL(impl_[i].init(port_, need_monopolize, NULL, false))) {
           LOG_WARN("impl init fail");
         }
       }

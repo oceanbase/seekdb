@@ -71,15 +71,36 @@ void ObWinNamedPipeServer::stop()
     // Cancel I/O on all bridge pipes
     for (auto* bridge : bridges_) {
       bridge->closing = true;
-      CancelIoEx(bridge->pipe_handle, &bridge->ov_read.ov);
-      CancelIoEx(bridge->pipe_handle, &bridge->ov_write.ov);
+      if (INVALID_HANDLE_VALUE != bridge->pipe_handle) {
+        CancelIoEx(bridge->pipe_handle, NULL);
+      }
     }
-    // Wait briefly for IOCP to drain, then clean up
-    Sleep(200);
+    for (auto* bridge : pending_reaps_) {
+      if (INVALID_HANDLE_VALUE != bridge->pipe_handle) {
+        CancelIoEx(bridge->pipe_handle, NULL);
+      }
+    }
+    // Drain IOCP so pending_io decrements settle on cancelled completions
+    const ULONGLONG deadline = GetTickCount64() + 1000;
+    while (GetTickCount64() < deadline) {
+      DWORD bytes = 0;
+      ULONG_PTR key = 0;
+      OVERLAPPED* ov = NULL;
+      GetQueuedCompletionStatus(iocp_, &bytes, &key, &ov, 50);
+      if (ov == NULL) break;
+      auto* pov = reinterpret_cast<WinPipeOverlapped*>(ov);
+      if (pov->op_type != OP_ACCEPT && pov->bridge != NULL) {
+        pov->bridge->pending_io--;
+      }
+    }
     for (auto* bridge : bridges_) {
-      destroy_bridge(bridge);
+      reap_bridge(bridge);
     }
     bridges_.clear();
+    for (auto* bridge : pending_reaps_) {
+      reap_bridge(bridge);
+    }
+    pending_reaps_.clear();
     if (pending_pipe_ != INVALID_HANDLE_VALUE) {
       CloseHandle(pending_pipe_);
       pending_pipe_ = INVALID_HANDLE_VALUE;
@@ -104,25 +125,34 @@ void ObWinNamedPipeServer::thread_func()
     ULONG_PTR key = 0;
     OVERLAPPED* ov = NULL;
     BOOL ok = GetQueuedCompletionStatus(iocp_, &bytes, &key, &ov, 100);
-    if (!ok && ov != NULL) {
-      // Failed I/O completion
-      auto* pov = reinterpret_cast<WinPipeOverlapped*>(ov);
-      DWORD err = GetLastError();
-      LOG_WARN("IOCP completion error", K(err), K(pov->op_type));
-      if (pov->op_type == OP_PIPE_READ && pov->bridge != NULL) {
-        destroy_bridge(pov->bridge);
-      }
-      continue;
-    }
     if (ov != NULL) {
       auto* pov = reinterpret_cast<WinPipeOverlapped*>(ov);
-      switch (pov->op_type) {
-        case OP_ACCEPT:     on_accept(pov); break;
-        case OP_PIPE_READ:  on_pipe_read(pov->bridge, bytes); break;
-        case OP_PIPE_WRITE: on_pipe_write(pov->bridge, bytes); break;
+      if (pov->op_type == OP_ACCEPT) {
+        if (ok) {
+          on_accept(pov);
+        } else {
+          LOG_WARN("IOCP completion error on accept", K(GetLastError()));
+        }
+      } else if (pov->bridge != NULL) {
+        WinPipeBridge* bridge = pov->bridge;
+        bridge->pending_io--;
+        if (!ok) {
+          LOG_WARN("IOCP completion error", K(GetLastError()), K(pov->op_type));
+          if (!bridge->closing) {
+            bridges_.erase(std::remove(bridges_.begin(), bridges_.end(), bridge), bridges_.end());
+            destroy_bridge(bridge);
+          }
+        } else if (!bridge->closing) {
+          switch (pov->op_type) {
+            case OP_PIPE_READ:  on_pipe_read(bridge, bytes); break;
+            case OP_PIPE_WRITE: on_pipe_write(bridge, bytes); break;
+            default: break;
+          }
+        }
       }
     }
     check_sockb_readable();
+    reap_pending();
   }
 }
 
@@ -254,6 +284,7 @@ void ObWinNamedPipeServer::on_accept(WinPipeOverlapped* ov)
   bridge->sock_b = sock_b;
   bridge->closing = false;
   bridge->write_buf = NULL;
+  bridge->pending_io = 0;
   memset(&bridge->ov_read, 0, sizeof(bridge->ov_read));
   bridge->ov_read.op_type = OP_PIPE_READ;
   bridge->ov_read.bridge = bridge;
@@ -270,13 +301,13 @@ void ObWinNamedPipeServer::on_accept(WinPipeOverlapped* ov)
 
   // Start overlapped read on the pipe
   BOOL ok = ReadFile(bridge->pipe_handle, bridge->read_buf, sizeof(bridge->read_buf), NULL, &bridge->ov_read.ov);
-  if (!ok) {
-    DWORD err = GetLastError();
-    if (ERROR_IO_PENDING != err) {
-      LOG_WARN("ReadFile fail on pipe", K(err));
-      bridges_.erase(std::remove(bridges_.begin(), bridges_.end(), bridge), bridges_.end());
-      destroy_bridge(bridge);
-    }
+  DWORD err = ok ? 0 : GetLastError();
+  if (ok || ERROR_IO_PENDING == err) {
+    bridge->pending_io++;
+  } else {
+    LOG_WARN("ReadFile fail on pipe", K(err));
+    bridges_.erase(std::remove(bridges_.begin(), bridges_.end(), bridge), bridges_.end());
+    destroy_bridge(bridge);
   }
 
   // Create next pipe instance for the next client
@@ -312,13 +343,13 @@ void ObWinNamedPipeServer::on_pipe_read(WinPipeBridge* bridge, DWORD bytes)
   memset(&bridge->ov_read.ov, 0, sizeof(OVERLAPPED));
   bridge->ov_read.op_type = OP_PIPE_READ;
   BOOL ok = ReadFile(bridge->pipe_handle, bridge->read_buf, sizeof(bridge->read_buf), NULL, &bridge->ov_read.ov);
-  if (!ok) {
-    DWORD err = GetLastError();
-    if (ERROR_IO_PENDING != err) {
-      LOG_WARN("ReadFile fail on pipe", K(err));
-      bridges_.erase(std::remove(bridges_.begin(), bridges_.end(), bridge), bridges_.end());
-      destroy_bridge(bridge);
-    }
+  DWORD err = ok ? 0 : GetLastError();
+  if (ok || ERROR_IO_PENDING == err) {
+    bridge->pending_io++;
+  } else {
+    LOG_WARN("ReadFile fail on pipe", K(err));
+    bridges_.erase(std::remove(bridges_.begin(), bridges_.end(), bridge), bridges_.end());
+    destroy_bridge(bridge);
   }
 }
 
@@ -356,16 +387,16 @@ void ObWinNamedPipeServer::check_sockb_readable()
       if (NULL != bridge->write_buf) {
         memcpy(bridge->write_buf, buf, n);
         BOOL ok = WriteFile(bridge->pipe_handle, bridge->write_buf, n, NULL, &bridge->ov_write.ov);
-        if (!ok) {
-          DWORD err = GetLastError();
-          if (ERROR_IO_PENDING != err) {
-            LOG_WARN("WriteFile fail on pipe", K(err));
-            ob_free(bridge->write_buf);
-            bridge->write_buf = NULL;
-            destroy_bridge(bridge);
-            it = bridges_.erase(it);
-            continue;
-          }
+        DWORD err = ok ? 0 : GetLastError();
+        if (ok || ERROR_IO_PENDING == err) {
+          bridge->pending_io++;
+        } else {
+          LOG_WARN("WriteFile fail on pipe", K(err));
+          ob_free(bridge->write_buf);
+          bridge->write_buf = NULL;
+          destroy_bridge(bridge);
+          it = bridges_.erase(it);
+          continue;
         }
       }
     } else if (n == 0) {
@@ -388,6 +419,28 @@ void ObWinNamedPipeServer::check_sockb_readable()
 }
 
 void ObWinNamedPipeServer::destroy_bridge(WinPipeBridge* bridge)
+{
+  if (NULL == bridge || bridge->closing) return;
+  bridge->closing = true;
+  if (INVALID_HANDLE_VALUE != bridge->pipe_handle) {
+    CancelIoEx(bridge->pipe_handle, NULL);
+  }
+  pending_reaps_.push_back(bridge);
+}
+
+void ObWinNamedPipeServer::reap_pending()
+{
+  for (auto it = pending_reaps_.begin(); it != pending_reaps_.end(); ) {
+    if ((*it)->pending_io == 0) {
+      reap_bridge(*it);
+      it = pending_reaps_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
+
+void ObWinNamedPipeServer::reap_bridge(WinPipeBridge* bridge)
 {
   if (NULL == bridge) return;
   if (NULL != bridge->write_buf) {
