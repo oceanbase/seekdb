@@ -1356,6 +1356,7 @@ public:
         if (NULL != out_fp) {
           fputs(pipe_name, out_fp);
           fclose(out_fp);
+          LOG_INFO("wrote run/sql.pipe", K(pipe_name));
         } else {
           LOG_WARN("failed to write run/sql.pipe", K(errno));
         }
