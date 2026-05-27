@@ -497,8 +497,8 @@ if [[ "$DO_MAKE" == true ]]; then
   cd "$TOPDIR"
   echo "[seekdb-apk-build] ./build.sh clean"
   ./build.sh clean
-  echo "[seekdb-apk-build] ./build.sh release --android --init"
-  ./build.sh release --android --init
+  echo "[seekdb-apk-build] ./build.sh release --android --init -DBUILD_EMBED_MODE=ON"
+  ./build.sh release --android --init -DBUILD_EMBED_MODE=ON
   cd "$TOPDIR"
   _jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
   if [[ "$WITH_JNI" == true ]]; then
@@ -614,3 +614,4 @@ if [[ "$DO_INSTALL" == true ]]; then
 fi
 
 echo "[package_embedded_apk] done"
+
