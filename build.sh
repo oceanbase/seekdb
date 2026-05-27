@@ -22,7 +22,6 @@ BUILD_ARGS=()
 MAKE_ARGS=(-j $CPU_CORES)
 NEED_MAKE=false
 NEED_INIT=false
-NEED_PACKAGE=false
 ANDROID_BUILD=false
 LLD_OPTION=ON
 ASAN_OPTION=ON
@@ -49,7 +48,7 @@ function usage
     echo -e "\t./build.sh [BuildType] [--init] [--ob-make [MakeOptions]]"
 
     echo -e "\nOPTIONS:"
-    echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm, deb, tgz, pkg [debug|release]"
+    echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
     echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
     echo -e "\tMakeOptions => Options to make command, default: -j N"
 
@@ -108,9 +107,6 @@ function try_make
     if [[ $NEED_MAKE != false ]]
     then
         $NEED_MAKE "${MAKE_ARGS[@]}"
-        if [[ $? -eq 0 && $NEED_PACKAGE == true ]]; then
-            $NEED_MAKE package
-        fi
     fi
 }
 
@@ -232,18 +228,6 @@ function build_package_tgz
     do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
 }
 
-function build_package_pkg
-{
-    build_package_tgz "$@" -DCMAKE_BUILD_PKG=ON
-}
-
-function build_package_pkg_debug
-{
-    STATIC_LINK_LGPL_DEPS_OPTION=ON
-    ENABLE_BOLT_OPTION=OFF
-    do_build "$1" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=OFF -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DCMAKE_BUILD_PKG=ON
-}
-
 # build - configurate project and prepare to compile, by calling make
 function build
 {
@@ -291,14 +275,6 @@ function build
         ;;
       xtgz)
         build_package_tgz "$@" -DCMAKE_BUILD_TGZ=ON
-        ;;
-      xmacpkg|xpkg)
-        NEED_PACKAGE=true
-        if [[ "$2" == "debug" ]]; then
-          build_package_pkg_debug pkg_debug
-        else
-          build_package_pkg "$1"
-        fi
         ;;
       xdeb) 
         build_package "$@" -DCMAKE_BUILD_DEB=ON

@@ -1,530 +1,351 @@
-# Detect Android early (before project()). ANDROID_ABI is a cache variable
-# passed via -D when cross-compiling with the NDK toolchain.
-if(ANDROID_ABI)
-  set(OB_ANDROID ON)
-  message(STATUS "Android NDK cross-compilation detected (ABI: ${ANDROID_ABI})")
-else()
-  set(OB_ANDROID OFF)
-endif()
+ob_define(CPACK_PACKAGING_INSTALL_PREFIX /)
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OceanBase is a distributed relational database")
+set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
+set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
+set(CPACK_COMPONENTS_ALL server)
 
-ob_define(DEBUG_PREFIX "-fdebug-prefix-map=${CMAKE_SOURCE_DIR}=.")
-ob_define(FILE_PREFIX "-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.")
-ob_define(OB_LD_BIN ld)
-ob_define(ASAN_IGNORE_LIST "${CMAKE_SOURCE_DIR}/asan_ignore_list.txt")
+set(CPACK_PACKAGE_NAME "seekdb")
+set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
+set(CPACK_PACKAGE_VERSION_MAJOR "${OceanBase_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${OceanBase_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${OceanBase_VERSION_PATCH}")
 
-ob_define(DEP_3RD_DIR "${CMAKE_SOURCE_DIR}/deps/3rd")
-ob_define(DEVTOOLS_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/devtools")
-ob_define(DEP_DIR "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase/deps/devel")
+## TIPS
+#
+# - PATH is relative to the **ROOT directory** of project other than the cmake directory.
 
-ob_define(BUILD_CDC_ONLY OFF)
-ob_define(BUILD_EMBED_MODE OFF)
-ob_define(OB_USE_CLANG ON)
-ob_define(OB_ERRSIM OFF)
-ob_define(BUILD_NUMBER 1)
-ob_define(OB_GPERF_MODE OFF)
-ob_define(ENABLE_OBJ_LEAK_CHECK OFF)
-ob_define(ENABLE_FATAL_ERROR_HANG ON)
-ob_define(DETECT_RECURSION OFF)
-ob_define(ENABLE_COMPILE_DLL_MODE OFF)
-ob_define(OB_CMAKE_RULES_CHECK ON)
-ob_define(OB_STATIC_LINK_LGPL_DEPS ON)
-ob_define(OB_BUILD_CCLS OFF)
-ob_define(LTO_JOBS all)
-ob_define(LTO_CACHE_DIR "${CMAKE_BINARY_DIR}/cache")
-ob_define(LTO_CACHE_POLICY cache_size=100%:cache_size_bytes=0k:cache_size_files=0:prune_after=0s:prune_interval=72h)
-ob_define(NEED_PARSER_CACHE ON)
-# get compiler from build.sh
-ob_define(OB_CC "")
-ob_define(OB_CXX "")
-ob_define(OB_BUILD_STANDALONE OFF)
-ob_define(OB_BUILD_LITE ON)
-ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_WARN)
-ob_define(DEFAULT_LOG_FILE_SIZE_MB 256)
+set(BITCODE_TO_ELF_LIST "")
 
-# 'ENABLE_PERF_MODE' use for offline system insight performance test
-# PERF_MODE macro controls many special code path in system
-# we can open this to benchmark our system partial/layered
-ob_define(ENABLE_PERF_MODE OFF)
-
-# begin of unity build config
-ob_define(OB_MAX_UNITY_BATCH_SIZE 30)
-# the global switch of unity build, default is 'ON'
-ob_define(OB_ENABLE_UNITY ON)
-
-ob_define(OB_DISABLE_LSE OFF)
-
-ob_define(OB_DISABLE_PIE OFF)
-
-ob_define(OB_ENABLE_MCMODEL OFF)
-
-ob_define(USE_LTO_CACHE OFF)
-
-ob_define(ASAN_DISABLE_STACK ON)
-
-# 开源模式默认支持系统租户使用向量索引
-ob_define(OB_BUILD_SYS_VEC_IDX ON)
+# Process system variable init JSON (shared across platforms)
+set(INSTALL_EXTRA_FILES "")
+file(READ "${CMAKE_SOURCE_DIR}/src/share/system_variable/ob_system_variable_init.json" SYS_VAR_INIT_JSON)
+string(REGEX REPLACE "\"ref_url\"[^\"]*\"[^\"]*\"" "\"ref_url\": \"\"" SYS_VAR_INIT_JSON "${SYS_VAR_INIT_JSON}")
+file(WRITE "${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json" "${SYS_VAR_INIT_JSON}")
 
 if(WIN32)
-  EXECUTE_PROCESS(COMMAND powershell -NoProfile -Command "$env:PROCESSOR_ARCHITECTURE"
-    OUTPUT_VARIABLE ARCHITECTURE)
-  STRING(TOLOWER "${ARCHITECTURE}" ARCHITECTURE)
-  STRING(STRIP "${ARCHITECTURE}" ARCHITECTURE)
-elseif(OB_ANDROID)
-  set(ARCHITECTURE "aarch64")
-else()
-  EXECUTE_PROCESS(COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE)
-endif()
-message(STATUS "ARCHITECTURE: ${ARCHITECTURE}")
+  ##############################################################################
+  # Windows install layout:
+  #   bin/     - seekdb.exe, observer.exe, ob_admin.exe, runtime DLLs
+  #   etc/     - seekdb.cnf, JSON configs
+  #   share/   - admin SQL, timezone, srs, upgrade, help
+  ##############################################################################
 
-if(WITH_COVERAGE)
-  # -ftest-coverage to generate .gcno file
-  # -fprofile-arcs to generate .gcda file
-  # -DDBUILD_COVERAGE marco use to mark 'coverage build type' and to handle some special case
-  set(CMAKE_COVERAGE_COMPILE_OPTIONS -ftest-coverage -fprofile-arcs -Xclang -coverage-version=408R -DBUILD_COVERAGE)
-  set(CMAKE_COVERAGE_EXE_LINKER_OPTIONS "-ftest-coverage -fprofile-arcs")
+  # ── VC++ runtime redistributable (MSVCP140.dll, VCRUNTIME140.dll, etc.) ──
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION bin)
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT server)
+  include(InstallRequiredSystemLibraries)
 
-  add_compile_options(${CMAKE_COVERAGE_COMPILE_OPTIONS})
-  set(DEBUG_PREFIX "")
-  set(FILE_PREFIX "")
-endif()
+  # Binaries -> bin/
+  install(PROGRAMS
+    ${CMAKE_BINARY_DIR}/src/observer/seekdb.exe
+    DESTINATION bin
+    COMPONENT server)
 
-ob_define(AUTO_FDO_OPT "")
-if(ENABLE_AUTO_FDO)
-  if( ${ARCHITECTURE} STREQUAL "x86_64" )
-    set(AUTO_FDO_PATH "${CMAKE_SOURCE_DIR}/profile/observer-x86_64.prof")
-  elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
-    set(AUTO_FDO_PATH "${CMAKE_SOURCE_DIR}/profile/observer-aarch64.prof")
-  endif()
-  set(AUTO_FDO_OPT "-finline-functions -fprofile-sample-use=${AUTO_FDO_PATH}")
-  message(STATUS "auto fdo path: " ${AUTO_FDO_PATH})
-endif()
+  # ── Bundle third-party runtime DLLs (vcpkg, OpenSSL, etc.) ───────────────
+  # Uses file(GET_RUNTIME_DEPENDENCIES) at install time to recursively resolve
+  # all DLL dependencies of the built executables — similar to how MySQL bundles
+  # its runtime libraries into the MSI package.
+  # OB_VCPKG_DIR / OB_VSAG_DIR are normalized to forward slashes in Env.cmake;
+  # the TO_CMAKE_PATH calls below are defensive (idempotent) in case a future
+  # caller injects backslashes — configure_file() would otherwise bake them
+  # verbatim into _bundle_dlls.cmake and trigger CMake 3.20+'s "Invalid
+  # character escape" error (\w, \d, \x, ...).
+  file(TO_CMAKE_PATH "${CMAKE_BINARY_DIR}/src/observer/seekdb.exe" _SEEKDB_EXE)
+  file(TO_CMAKE_PATH "${OB_VCPKG_DIR}/bin" _VCPKG_BIN_DIR)
+  file(TO_CMAKE_PATH "${OB_VSAG_DIR}/bin" _VSAG_BIN_DIR)
 
-ob_define(THIN_LTO_OPT "")
-ob_define(THIN_LTO_CONCURRENCY_LINK "")
+  file(WRITE "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake.in" [=[
+file(GET_RUNTIME_DEPENDENCIES
+  EXECUTABLES
+    "@_SEEKDB_EXE@"
+  RESOLVED_DEPENDENCIES_VAR _resolved
+  UNRESOLVED_DEPENDENCIES_VAR _unresolved
+  CONFLICTING_DEPENDENCIES_PREFIX _conflicts
+  DIRECTORIES
+    "@_VCPKG_BIN_DIR@"
+    "@_VSAG_BIN_DIR@"
+  PRE_EXCLUDE_REGEXES
+    "^api-ms-"
+    "^ext-ms-"
+)
 
-if(ENABLE_THIN_LTO)
-  set(THIN_LTO_OPT "-flto=thin")
-  if(APPLE)
-    set(THIN_LTO_CONCURRENCY_LINK "-flto-jobs=${LTO_JOBS}")
-  else()
-    set(THIN_LTO_CONCURRENCY_LINK "-Wl,--thinlto-jobs=${LTO_JOBS}")
-    if(USE_LTO_CACHE)
-      set(THIN_LTO_CONCURRENCY_LINK "${THIN_LTO_CONCURRENCY_LINK},--thinlto-cache-dir=${LTO_CACHE_DIR},--thinlto-cache-policy=${LTO_CACHE_POLICY}")
+set(_search_dirs "@_VCPKG_BIN_DIR@;@_VSAG_BIN_DIR@")
+set(_bundled 0)
+
+# Install resolved dependencies that live in vcpkg or vsag directories.
+# System-only DLLs (KERNEL32, ADVAPI32, ...) are absent from these dirs
+# and therefore skipped — they ship with every Windows installation.
+foreach(_file ${_resolved})
+  get_filename_component(_name "${_file}" NAME)
+  set(_found FALSE)
+  foreach(_dir ${_search_dirs})
+    if(EXISTS "${_dir}/${_name}")
+      message(STATUS "  ${_name}")
+      file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+        TYPE SHARED_LIBRARY FILES "${_dir}/${_name}")
+      math(EXPR _bundled "${_bundled} + 1")
+      set(_found TRUE)
+      break()
     endif()
+  endforeach()
+endforeach()
+
+# Conflicting dependencies (same DLL in multiple dirs AND System32).
+foreach(_name ${_conflicts_FILENAMES})
+  foreach(_dir ${_search_dirs})
+    if(EXISTS "${_dir}/${_name}")
+      message(STATUS "  ${_name} (conflict resolved -> ${_dir})")
+      file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+        TYPE SHARED_LIBRARY FILES "${_dir}/${_name}")
+      math(EXPR _bundled "${_bundled} + 1")
+      break()
+    endif()
+  endforeach()
+endforeach()
+
+message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
+]=])
+
+  configure_file(
+    "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake.in"
+    "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake"
+    @ONLY)
+
+  install(SCRIPT "${CMAKE_BINARY_DIR}/_bundle_dlls.cmake"
+    COMPONENT server)
+
+  # Configuration -> etc/
+  install(FILES
+    tools/systemd/profile/seekdb_win.cnf
+    DESTINATION etc
+    RENAME seekdb.cnf
+    COMPONENT server)
+
+  install(FILES
+    src/share/parameter/default_parameter.json
+    src/share/system_variable/default_system_variable.json
+    tools/upgrade/oceanbase_upgrade_dep.yml
+    tools/upgrade/deps_compat.yml
+    ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
+    ${INSTALL_EXTRA_FILES}
+    DESTINATION etc
+    COMPONENT server)
+
+  # Admin SQL -> share/admin/
+  message(STATUS "system package release directory: " ${SYS_PACK_RELEASE_DIR})
+  install(
+    DIRECTORY ${SYS_PACK_RELEASE_DIR}/
+    DESTINATION share/admin
+    COMPONENT server)
+
+  # Help -> share/help/
+  install(FILES
+    src/sql/fill_help_tables-ob.sql
+    DESTINATION share/help
+    COMPONENT server)
+
+  # Timezone -> share/timezone/
+  install(FILES
+    tools/timezone_V1.log
+    tools/timezone.data
+    tools/timezone_name.data
+    tools/timezone_trans.data
+    tools/timezone_trans_type.data
+    DESTINATION share/timezone
+    COMPONENT server)
+
+  # SRS -> share/srs/
+  install(FILES
+    tools/spatial_reference_systems.data
+    tools/default_srs_data_mysql.sql
+    DESTINATION share/srs
+    COMPONENT server)
+
+  # Upgrade -> share/upgrade/
+  install(FILES
+    tools/upgrade/upgrade_pre.py
+    tools/upgrade/upgrade_post.py
+    tools/upgrade/upgrade_checker.py
+    tools/upgrade/upgrade_health_checker.py
+    DESTINATION share/upgrade
+    COMPONENT server)
+
+  # Management script -> bin/
+  if(EXISTS "${CMAKE_SOURCE_DIR}/tools/windows/seekdb_manage.ps1")
+    install(PROGRAMS
+      tools/windows/seekdb_manage.ps1
+      DESTINATION bin
+      COMPONENT server)
   endif()
-endif()
 
-set(HOTFUNC_OPT "")
-if(ENABLE_HOTFUNC)
-  if( ${ARCHITECTURE} STREQUAL "x86_64" )
-    set(HOTFUNC_PATH "${CMAKE_SOURCE_DIR}/profile/hotfuncs-x86_64.txt")
-  elseif( ${ARCHITECTURE} STREQUAL "aarch64" )
-    set(HOTFUNC_PATH "${CMAKE_SOURCE_DIR}/profile/hotfuncs-aarch64.txt")
-  endif()
-  set(HOTFUNC_OPT "-Wl,--no-warn-symbol-ordering,--symbol-ordering-file,${HOTFUNC_PATH}")
-  message(STATUS "hotfunc path: " ${HOTFUNC_PATH})
-endif()
-
-set(BOLT_OPT "")
-if((NOT APPLE) AND (ENABLE_BOLT OR (NOT DEFINED ENABLE_BOLT AND ENABLE_BOLT_AUTO)) AND NOT OB_BUILD_OPENSOURCE)
-  if( ${ARCHITECTURE} STREQUAL "x86_64" )
-    message(STATUS "build with bolt opt (x86_64)")
-    set(BOLT_OPT "-Wl,--emit-relocs")
-    ob_define(OB_ENABLE_BOLT ON)
-  endif()
-endif()
-
-message(STATUS "Using C++20 standard")
-if(WIN32)
-  set(CMAKE_CXX_FLAGS "/std:c++20")
-  set(DEBUG_PREFIX "")
-  set(FILE_PREFIX "")
-elseif(OB_ANDROID)
-  set(CMAKE_CXX_STANDARD 20)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_CXX_EXTENSIONS ON)
-else()
-  set(CMAKE_CXX_FLAGS "-std=gnu++20")
-endif()
-
-if(OB_DISABLE_PIE)
-  message(STATUS "build without pie")
-  set(PIE_OPT "-no-pie")
-else()
-  message(STATUS "build with pie")
-  set(PIE_OPT "-pie")
-endif()
-
-set(ob_close_deps_static_name "")
-
-set(OB_BUILD_CLOSE_MODULES OFF)
-
-# observer lite
-ob_define(OB_BUILD_OBSERVER_LITE ON)
-
-if(OB_BUILD_STANDALONE)
-  add_definitions(-DOB_BUILD_STANDALONE)
-endif()
-
-if (OB_USE_TEST_PUBKEY)
-  add_definitions(-DOB_USE_TEST_PUBKEY)
-endif()
-
-if(OB_BUILD_LITE)
-  add_definitions(-DOB_BUILD_LITE)
-endif()
-
-if(OB_BUILD_OBSERVER_LITE)
-  add_definitions(-DOB_BUILD_OBSERVER_LITE)
-endif()
-
-if (OB_BUILD_SYS_VEC_IDX)
- add_definitions(-DOB_BUILD_SYS_VEC_IDX)
-endif()
- 
-# should not use initial-exec for tls-model if building OBCDC.
-if(BUILD_CDC_ONLY OR BUILD_EMBED_MODE)
-  add_definitions(-DOB_BUILD_CDC_DISABLE_VSAG)
-else()
-  if(NOT BUILD_EMBED_MODE)
-    add_definitions(-DENABLE_INITIAL_EXEC_TLS_MODEL)
-  endif()
-endif()
-
-if(BUILD_EMBED_MODE)
-  add_definitions(-DOB_BUILD_EMBED_MODE)
-endif()
-
-# Find objcopy - on macOS it may be installed via Homebrew or available as llvm-objcopy
-set(OB_CLANG_BIN "clang-17")
-set(OB_CLANGXX_BIN "clang++-17")
-
-add_definitions(-DDEFAULT_LOG_LEVEL=${DEFAULT_LOG_LEVEL})
-add_definitions(-DDEFAULT_LOG_FILE_SIZE_MB=${DEFAULT_LOG_FILE_SIZE_MB})
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
-
-set(OB_OBJCOPY_BIN "${DEVTOOLS_DIR}/bin/objcopy")
-set(CMAKE_TOOLCHAIN_PATH "${DEVTOOLS_DIR}")
-set(GCC_DEVTOOL_PATH "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase")
-set(COMPACT_UNWIND_FLAG "")
-if(OB_ANDROID)
-  # Android NDK: compilers set by toolchain file, no RELRO, no devtools.
-  # Must be checked before APPLE since APPLE is true on macOS host even during cross-compile,
-  # and Env.cmake runs before project() which would set ANDROID.
-  set(OB_CLANG_BIN "clang")
-  set(OB_CLANGXX_BIN "clang++")
-  # NDK toolchain bin dir (derive from ANDROID_NDK_HOME or CMAKE_TOOLCHAIN_FILE)
-  if(DEFINED ENV{ANDROID_NDK_HOME})
-    set(_NDK_TOOLCHAIN_BIN "$ENV{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/darwin-x86_64/bin")
+  # seekdb Configurator -> bin/
+  # Built by 'dotnet publish' (self-contained single-file) before cpack runs.
+  # build.ps1 places the output under tools/windows/seekdbConfigurator/publish/.
+  set(_CONFIGURATOR_EXE
+    "${CMAKE_SOURCE_DIR}/tools/windows/seekdbConfigurator/publish/seekdbConfigurator.exe")
+  if(EXISTS "${_CONFIGURATOR_EXE}")
+    install(PROGRAMS "${_CONFIGURATOR_EXE}"
+      DESTINATION bin
+      COMPONENT server)
   else()
-    # Derive from toolchain file path: .../build/cmake/android.toolchain.cmake -> .../toolchains/llvm/prebuilt/*/bin
-    get_filename_component(_NDK_ROOT "${CMAKE_TOOLCHAIN_FILE}" DIRECTORY)
-    get_filename_component(_NDK_ROOT "${_NDK_ROOT}" DIRECTORY)
-    get_filename_component(_NDK_ROOT "${_NDK_ROOT}" DIRECTORY)
-    file(GLOB _NDK_TOOLCHAIN_BIN "${_NDK_ROOT}/toolchains/llvm/prebuilt/*/bin")
-    list(GET _NDK_TOOLCHAIN_BIN 0 _NDK_TOOLCHAIN_BIN)
+    message(WARNING
+      "seekdbConfigurator.exe not found at ${_CONFIGURATOR_EXE}. "
+      "The MSI will not include the post-install Configurator wizard. "
+      "Run 'dotnet publish' on seekdbConfigurator.csproj first, or use "
+      "'build.ps1 package' which does this automatically.")
   endif()
-  set(OB_CC "${_NDK_TOOLCHAIN_BIN}/clang")
-  set(OB_CXX "${_NDK_TOOLCHAIN_BIN}/clang++")
-  set(OB_LD_BIN "${_NDK_TOOLCHAIN_BIN}/ld.lld")
-  set(OB_OBJCOPY_BIN "${_NDK_TOOLCHAIN_BIN}/llvm-objcopy")
-  message(STATUS "NDK toolchain bin: ${_NDK_TOOLCHAIN_BIN}")
-elseif(APPLE)
-  ob_define(SYS_INCLUDE_DIR "/usr")
-  add_definitions(-D_DARWIN_C_SOURCE)
-  set(OB_CLANG_BIN "clang")
-  set(OB_CLANGXX_BIN "clang++")
-  set(CMAKE_TOOLCHAIN_PATH "/usr")
-  set(GCC_DEVTOOL_PATH "/usr/lib/")
-  # Set macOS deployment target to match the current system version
-  # This eliminates linker warnings when linking with Homebrew libraries
-  execute_process(
-    COMMAND sw_vers -productVersion
-    OUTPUT_VARIABLE MACOS_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
+
+  # TODO: Utils (ob_admin/ob_error) — uncomment when Windows tool builds are ready
+  # if(OB_BUILD_OBADMIN)
+  #   list(APPEND CPACK_COMPONENTS_ALL utils)
+  #   install(PROGRAMS
+  #     ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin.exe
+  #     ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error.exe
+  #     DESTINATION bin
+  #     COMPONENT utils)
+  # endif()
+
+else()
+  ##############################################################################
+  # Linux/macOS install layout (original):
+  #   usr/bin/                      - seekdb, obshell
+  #   usr/lib/systemd/system/       - seekdb.service
+  #   usr/libexec/seekdb/           - python scripts
+  #   etc/seekdb/                   - configs
+  #   usr/share/seekdb/             - admin, timezone, srs, upgrade, help
+  ##############################################################################
+
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh.template
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh
+  @ONLY)
+
+  set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+      "/usr" "/usr/lib" "/usr/lib/systemd" "/usr/lib/systemd/system" "/usr/libexec" "/etc"
   )
-  set(CMAKE_OSX_DEPLOYMENT_TARGET "${MACOS_VERSION}" CACHE STRING "Minimum macOS deployment version")
-  # extract major version like 15.6.1 -> 15
-  string(REPLACE "." ";" MACOS_VERSION_LISTS "${MACOS_VERSION}")
-  list(GET MACOS_VERSION_LISTS 0 MACOS_MAJOR)
-  if(MACOS_MAJOR LESS 15)
-    set(COMPACT_UNWIND_FLAG "-Wl,-no_compact_unwind")
-  endif()
-elseif(WIN32)
-  set(OB_CC "clang-cl")
-  set(OB_CXX "clang-cl")
-  add_definitions(-DWIN32_LEAN_AND_MEAN -DNOMINMAX)
 
-  # All bundled / vcpkg-provided vendor libraries (s2.lib, sqlite3.lib,
-  # zlib.lib, ...) are built against the Release MSVC runtime. Using /MDd
-  # in a Debug build makes MSVC STL set _ITERATOR_DEBUG_LEVEL=2, which
-  # then trips #pragma detect_mismatch at link time against those
-  # vendor .obj files built with _ITERATOR_DEBUG_LEVEL=0. Force the
-  # Release runtime (MultiThreadedDLL) for all configs on Windows and
-  # pin _ITERATOR_DEBUG_LEVEL=0 to match vendor libs.
-  cmake_policy(SET CMP0091 NEW)
-  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
-      CACHE STRING "MSVC runtime library (must match vendor libs)" FORCE)
-  add_definitions(-D_ITERATOR_DEBUG_LEVEL=0)
-  # vcpkg ships both Release (lib/) and Debug (debug/lib/) variants of
-  # several libraries (gRPC, protobuf, abseil, ...). In a Debug build CMake
-  # would otherwise resolve imported targets from find_package(... CONFIG)
-  # to the /MDd + _ITERATOR_DEBUG_LEVEL=2 Debug variant and trip
-  # #pragma detect_mismatch at link time. Map every non-Release config to
-  # Release so imported targets always resolve to the Release .lib that
-  # matches our CRT. These must be set at top-level (Env.cmake is included
-  # before project() in root CMakeLists.txt) so the mapping is in scope of
-  # every target that links against such imported libs.
-  set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release)
-  set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
-  set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release)
-  # /RTC1 requires the debug CRT; strip it so Debug builds can use /MD.
-  foreach(_flag_var
-          CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG
-          CMAKE_C_FLAGS_RELWITHDEBINFO CMAKE_CXX_FLAGS_RELWITHDEBINFO)
-    if(DEFINED ${_flag_var})
-      string(REGEX REPLACE "[ \t]*/RTC[^ \t]*" "" ${_flag_var} "${${_flag_var}}")
-    endif()
-  endforeach()
-  unset(_flag_var)
-  ob_define(SYS_UM_INCLUDE_DIR "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/um")
-  ob_define(SYS_UCRT_INCLUDE_DIR "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/ucrt")
-  ob_define(SYS_SHARED_INCLUDE_DIR "C:/Program Files (x86)/Windows Kits/10/Include/10.0.26100.0/shared")
-  ob_define(OB_VCPKG_DIR "C:/VcpkgInstalled/x64-windows")
-  ob_define(OB_OPENSSL_DIR "C:/Program Files/OpenSSL-Win64")
-  ob_define(OB_LLVM_DIR "C:/Program Files/LLVM18")
-  ob_define(OB_VSAG_DIR "${DEP_3RD_DIR}/vsag")
-  # These paths may arrive from -D... with native Windows backslashes. If we
-  # let them flow unchanged into configure_file()/file(WRITE) outputs, CMake
-  # 3.20+ will reject the resulting scripts with "Invalid character escape"
-  # (\w, \d, \x, ...). Normalize once here so all downstream uses are safe.
-  foreach(_ob_path_var
-          SYS_UM_INCLUDE_DIR SYS_UCRT_INCLUDE_DIR SYS_SHARED_INCLUDE_DIR
-          OB_VCPKG_DIR OB_OPENSSL_DIR OB_LLVM_DIR OB_VSAG_DIR)
-    if(DEFINED ${_ob_path_var})
-      file(TO_CMAKE_PATH "${${_ob_path_var}}" ${_ob_path_var})
-    endif()
-  endforeach()
-  unset(_ob_path_var)
-elseif(UNIX)
-  # NO RELERO: -Wl,-znorelro
-  # Partial RELRO: -Wl,-z,relro
-  # Full RELRO: -Wl,-z,relro,-z,now
-  # macOS doesn't support RELRO flags
-  ob_define(OB_RELRO_FLAG "-Wl,-z,relro,-z,now")
-endif()
+  # Install binaries to /usr/bin
+  install(PROGRAMS
+    ${CMAKE_BINARY_DIR}/src/observer/seekdb
+    deps/3rd/home/admin/oceanbase/bin/obshell
+    DESTINATION usr/bin
+    COMPONENT server)
 
-ob_define(OB_USE_CCACHE OFF)
-if(APPLE AND NOT OB_USE_CCACHE)
-  find_program(OB_CCACHE ccache)
-  if(OB_CCACHE)
-    set(OB_USE_CCACHE ON)
-  endif()
-endif()
-if (OB_USE_CCACHE)
-  if(NOT OB_CCACHE)
-    find_program(OB_CCACHE ccache PATHS "${DEVTOOLS_DIR}/bin" NO_DEFAULT_PATH)
-  endif()
-  if (NOT OB_CCACHE)
-    message(FATAL_ERROR "cannot find ccache.")
-  else()
-    message(STATUS "Using ccache: ${OB_CCACHE}")
-    set(CMAKE_C_COMPILER_LAUNCHER ${OB_CCACHE})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${OB_CCACHE})
-  endif()
-endif(OB_USE_CCACHE)
-
-if (OB_USE_CLANG)
-
-  if (OB_CC)
-    message(STATUS "Using OB_CC compiler: ${OB_CC}")
-  else()
-    find_program(OB_CC ${OB_CLANG_BIN}
-    "${DEVTOOLS_DIR}/bin"
-      NO_DEFAULT_PATH)
+  if (OB_BUILD_STANDALONE)
+    install(PROGRAMS
+    deps/3rd/home/admin/oceanbase/bin/obshell
+    DESTINATION usr/bin
+    COMPONENT server)
   endif()
 
-  if (OB_CXX)
-    message(STATUS "Using OB_CXX compiler: ${OB_CXX}")
-  else()
-    find_program(OB_CXX ${OB_CLANGXX_BIN}
-    "${DEVTOOLS_DIR}/bin"
-      NO_DEFAULT_PATH)
-  endif()
+  # Install systemd service to /usr/lib/systemd/system
+  install(FILES
+    tools/systemd/profile/seekdb.service
+    DESTINATION usr/lib/systemd/system
+    COMPONENT server)
 
-  if(NOT OB_ANDROID)
-    set(OB_OBJCOPY_BIN "${DEVTOOLS_DIR}/bin/llvm-objcopy")
-  endif()
+  # Install python scripts to /usr/libexec/oceanbase
+  install(PROGRAMS
+    tools/import_time_zone_info.py
+    tools/import_srs_data.py
+    DESTINATION usr/libexec/seekdb
+    COMPONENT server)
 
-  find_file(GCC9 devtools
-    PATH ${GCC_DEVTOOL_PATH}
-    NO_DEFAULT_PATH)
-  set(_CMAKE_TOOLCHAIN_PREFIX llvm-)
-  set(_CMAKE_TOOLCHAIN_LOCATION "${CMAKE_TOOLCHAIN_PATH}/bin")
+  install(PROGRAMS
+    tools/systemd/profile/seekdb_systemd_start
+    tools/systemd/profile/seekdb_systemd_stop
+    tools/systemd/profile/telemetry.sh
+    DESTINATION usr/libexec/seekdb/scripts
+    COMPONENT server)
 
-  if (OB_USE_ASAN)
-    if (ASAN_DISABLE_STACK)
-      ob_define(CMAKE_ASAN_FLAG "-mllvm -asan-stack=0 -fsanitize=address -fno-optimize-sibling-calls -fsanitize-blacklist=${ASAN_IGNORE_LIST}")
+  # Install configuration files to /etc/seekdb
+  install(FILES
+    src/share/parameter/default_parameter.json
+    src/share/system_variable/default_system_variable.json
+    tools/upgrade/oceanbase_upgrade_dep.yml
+    tools/upgrade/deps_compat.yml
+    ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
+    ${INSTALL_EXTRA_FILES}
+    tools/systemd/profile/seekdb.cnf
+    tools/systemd/profile/oceanbase-pre.json
+    tools/systemd/profile/telemetry-pre.json
+    DESTINATION etc/seekdb
+    COMPONENT server)
+
+  # Install admin SQL files to /usr/share/seekdb/admin
+  message(STATUS "system package release directory: " ${SYS_PACK_RELEASE_DIR})
+  install(
+    DIRECTORY ${SYS_PACK_RELEASE_DIR}/
+    DESTINATION usr/share/seekdb/admin
+    COMPONENT server)
+
+  # Install help files to /usr/share/seekdb/help
+  install(FILES
+    src/sql/fill_help_tables-ob.sql
+    DESTINATION usr/share/seekdb/help
+    COMPONENT server)
+
+  # Install timezone files to /usr/share/seekdb/timezone
+  install(FILES
+    tools/timezone_V1.log
+    tools/timezone.data
+    tools/timezone_name.data
+    tools/timezone_trans.data
+    tools/timezone_trans_type.data
+    DESTINATION usr/share/seekdb/timezone
+    COMPONENT server)
+
+  # Install SRS files to /usr/share/seekdb/srs
+  install(FILES
+    tools/spatial_reference_systems.data
+    tools/default_srs_data_mysql.sql
+    DESTINATION usr/share/seekdb/srs
+    COMPONENT server)
+
+  # Install upgrade scripts to /usr/share/seekdb/upgrade
+  install(FILES
+    tools/upgrade/upgrade_pre.py
+    tools/upgrade/upgrade_post.py
+    tools/upgrade/upgrade_checker.py
+    tools/upgrade/upgrade_health_checker.py
+    DESTINATION usr/share/seekdb/upgrade
+    COMPONENT server)
+
+  # Install ocp configuration to /usr/share/seekdb/software_package
+  install(DIRECTORY
+    DESTINATION usr/share/seekdb/software_package
+    COMPONENT server)
+
+  if(OB_BUILD_OBADMIN)
+    if(NOT APPLE)
+      list(APPEND CPACK_COMPONENTS_ALL utils)
+      install(PROGRAMS
+        ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
+        ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
+        ${DEVTOOLS_DIR}/bin/obstack
+        DESTINATION usr/bin
+        COMPONENT utils
+      )
     else()
-      ob_define(CMAKE_ASAN_FLAG "-fstack-protector-strong -fsanitize=address -fno-optimize-sibling-calls -fsanitize-blacklist=${ASAN_IGNORE_LIST}")
+      list(APPEND CPACK_COMPONENTS_ALL utils)
+      install(PROGRAMS
+        ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
+        ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
+        DESTINATION usr/bin
+        COMPONENT utils
+      )
     endif()
   endif()
 
-  if (OB_USE_LLD)
-    if(OB_ANDROID)
-      # Android: OB_LD_BIN already set in platform block above
-    elseif(APPLE)
-      set(LD_OPT "-Wl,-dead_strip")
-      set(REORDER_COMP_OPT "-ffunction-sections -fdata-sections")
-      set(REORDER_LINK_OPT "-Wl,-dead_strip")
-      set(OB_LD_BIN "ld")
-    elseif(WIN32)
-      set(LD_OPT "/INCREMENTAL:NO")
-      set(REORDER_COMP_OPT "")
-      set(REORDER_LINK_OPT "/OPT:REF /OPT:ICF ${HOTFUNC_OPT}")
-      set(OB_LD_BIN "lld-link")
-      set(OB_LIB_BIN "llvm-lib")
-    elseif(UNIX)
-      set(LD_OPT "-fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld -Wno-unused-command-line-argument")
-      set(REORDER_COMP_OPT "-ffunction-sections -fdata-sections -fdebug-info-for-profiling")
-      set(REORDER_LINK_OPT "-Wl,--no-rosegment,--build-id=sha1,--gc-sections,--icf=safe ${HOTFUNC_OPT}")
-      set(OB_LD_BIN "${DEVTOOLS_DIR}/bin/ld.lld")
-    endif()
-  endif()
-
-  if(OB_ANDROID)
-    # Android NDK: no --gcc-toolchain, no macOS frameworks
-    # -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION: Boost headers use std::unary_function removed in C++17
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG} -D_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
-    set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
-    set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
-  elseif(APPLE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
-    set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${COMPACT_UNWIND_FLAG}")
-    set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS} ${COMPACT_UNWIND_FLAG}")
-  elseif(WIN32)
-    set(OB_OBJCOPY_BIN "llvm-objcopy")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT} ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} ${REORDER_COMP_OPT} ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
-    set(CMAKE_SHARED_LINKER_FLAGS "/INCREMENTAL:NO ${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${COMPACT_UNWIND_FLAG}")
-    set(CMAKE_EXE_LINKER_FLAGS "/INCREMENTAL:NO ${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS} ${COMPACT_UNWIND_FLAG}")
-  elseif(OB_ANDROID)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
-    set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
-    set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
-  else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_C_FLAGS "--gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-    set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} --gcc-toolchain=${GCC9} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
-    set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
-    set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
-  endif()
-
-else() # not clang, use gcc
-  message("gcc9 not support currently, please set OB_USE_CLANG ON and we will finish it as soon as possible")
 endif()
 
-if (OB_BUILD_CCLS)
-  # ccls场景采用更大的unity的联合编译单元，ccls是非完整编译，调用clang AST接口，单元的size和耗时成指数衰减
-  set(OB_MAX_UNITY_BATCH_SIZE 200)
-  # -DCCLS_LASY_ENABLE 给全局设置上，将采用ccls懒加载模式，主要针对单测case，当添加上-DCCLS_LASY_OFF，首次将会进行检索
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCCLS_LASY_ENABLE")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCCLS_LASY_ENABLE")
-endif()
-
-if (OB_CC AND OB_CXX)
-  set(CMAKE_C_COMPILER ${OB_CC})
-  set(CMAKE_CXX_COMPILER ${OB_CXX})
-else()
-  message(FATAL_ERROR "can't find suitable compiler")
-endif()
-
-find_program(OB_COMPILE_EXECUTABLE ob-compile)
-if (NOT OB_COMPILE_EXECUTABLE)
-  message(STATUS "ob-compile not found, compile locally.")
-else()
-  set(CMAKE_C_COMPILER_LAUNCHER ${OB_COMPILE_EXECUTABLE})
-  set(CMAKE_CXX_COMPILER_LAUNCHER ${OB_COMPILE_EXECUTABLE})
-  set(CMAKE_C_LINKER_LAUNCHER ${OB_COMPILE_EXECUTABLE})
-  set(CMAKE_CXX_LINKER_LAUNCHER ${OB_COMPILE_EXECUTABLE})
-endif()
-
-option(OB_ENABLE_AVX2 "enable AVX2 and related instruction set support for x86_64" OFF)
-
-include(CMakeFindBinUtils)
-
-if(${ARCHITECTURE} STREQUAL "amd64")
-  set(MARCH_CFLAGS "")
-  set(MTUNE_CFLAGS "-mtune=generic")
-  set(ARCH_LDFLAGS "")
-elseif(${ARCHITECTURE} STREQUAL "x86_64")
-  set(MTUNE_CFLAGS -mtune=core2)
-  set(ARCH_LDFLAGS "")
-  set(OCI_DEVEL_INC "${DEP_3RD_DIR}/usr/include/oracle/12.2/client64")
-else()
-  if (${OB_DISABLE_LSE})
-    message(STATUS "build with no-lse")
-    set(MARCH_CFLAGS "-march=armv8-a+crc")
-  else()
-    message(STATUS "build with lse")
-    set(MARCH_CFLAGS "-march=armv8-a+crc+lse")
-  endif()
-  set(MTUNE_CFLAGS "-mtune=generic" )
-  if(OB_ANDROID)
-    set(ARCH_LDFLAGS "-latomic")
-  elseif(APPLE)
-    find_library(ATOMIC_LIB atomic)
-    if(ATOMIC_LIB)
-      set(ARCH_LDFLAGS "${ATOMIC_LIB}")
-    endif()
-  else()
-    set(ARCH_LDFLAGS "-l:libatomic.a")
-  endif()
-  set(OCI_DEVEL_INC "${DEP_3RD_DIR}/usr/include/oracle/19.10/client64")
-endif()
-
-# AIO library detection for Ubuntu >= 24.04 and Debian >= 13
-# Set OB_AIO_LINK_OPTION for linking and OB_AIO_PACKAGE_DEPENDENCY for package dependencies
-set(OB_AIO "libaio")
-find_program(LSB_RELEASE_EXEC lsb_release)
-if(LSB_RELEASE_EXEC)
-  execute_process(
-    COMMAND ${LSB_RELEASE_EXEC} -is
-    OUTPUT_VARIABLE DEBIAN_NAME
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
+if(NOT APPLE AND NOT WIN32)
+  ## oceanbase-libs (Linux only; Windows does not ship libaio.so)
+  list(APPEND CPACK_COMPONENTS_ALL libs)
+  install(PROGRAMS
+    deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so.1
+    deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so.1.0.1
+    deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so
+    DESTINATION usr/libexec/seekdb/lib
+    COMPONENT libs
   )
-  if(DEBIAN_NAME)
-    string(TOLOWER "${DEBIAN_NAME}" DEBIAN_NAME)
-    execute_process(
-      COMMAND ${LSB_RELEASE_EXEC} -rs
-      OUTPUT_VARIABLE DEBIAN_VERSION
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      ERROR_QUIET
-    )
-    if(DEBIAN_VERSION)
-      # Check for Ubuntu >= 24.04
-      if(DEBIAN_NAME STREQUAL "ubuntu")
-        if(DEBIAN_VERSION VERSION_GREATER_EQUAL "24.04")
-          set(OB_AIO "libaio1t64")
-          message(STATUS "Ubuntu ${DEBIAN_VERSION} detected, using ${OB_AIO}")
-        endif()
-      # Check for Debian >= 13
-      elseif(DEBIAN_NAME STREQUAL "debian")
-        if(DEBIAN_VERSION VERSION_GREATER_EQUAL "13")
-          set(OB_AIO "libaio1t64")
-          message(STATUS "Debian ${DEBIAN_VERSION} detected, using ${OB_AIO}")
-        endif()
-      endif()
-    endif()
-  endif()
 endif()
-
-EXECUTE_PROCESS(COMMAND grep -Po "release [0-9]{1}" /etc/redhat-release COMMAND awk "{print $2}" COMMAND tr -d '\n' OUTPUT_VARIABLE KERNEL_RELEASE ERROR_QUIET)
