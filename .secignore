@@ -269,6 +269,7 @@
   http://wixtoolset.org*
   https://www.python.org*
   https://visualstudio.microsoft.com*
+  http://www.w3.org*
 **/README.md
   https://img.shields.io*
   https://en.oceanbase.com*
@@ -288,8 +289,6 @@
   https://deepwiki.com/oceanbase/seekdb*
   https://deepwiki.com/badge.svg*
   https://static.pepy.tech/badge/pylibseekdb*
-  https://static.pepy.tech/badge/pyseekdb*
-  https://seekdb.ai*
 **/README_CN.md
   https://img.shields.io*
   https://en.oceanbase.com*
@@ -310,19 +309,6 @@
   https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*
   https://zread.ai/oceanbase/seekdb*
   https://static.pepy.tech/badge/pylibseekdb*
-  https://static.pepy.tech/badge/pyseekdb*
-  https://seekdb.ai*
-  https://discord.gg/*
-**/README_JP.md
-  https://seekdb.ai*
-  https://img.shields.io*
-  https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*
-  https://pepy.tech/projects/*
-  https://static.pepy.tech/badge/seekdb*
-  https://static.pepy.tech/badge/pyseekdb*
-  https://static.pepy.tech/badge/pylibseekdb*
-  https://discord.gg/*
-  https://img.shields.io*
 **/CONTRIBUTING.md
   https://github.com/*
   https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/configuring-a-remote-repository-for-a-fork*
@@ -334,11 +320,6 @@
   https://cla-assistant.io/oceanbase*
   https://user-images.githubusercontent.com/*
   https://discord.gg/74cF8vbNEs*
-**/docs/blog/*.md
-  https://github.com/zilliztech/VectorDBBench)*
-  https://d0.seekdb.ai)*
-  https://en.oceanbase.com/)*
-  https://jp.oceanbase.com/)*
 **/mkdocs.yml
   https://oceanbase.github.io/seekdb
 **/images/**
