@@ -3,7 +3,7 @@
 # Completely independent of cmake install / cpack — mirrors the APK workflow.
 #
 # Prerequisites:
-#   - A completed build: ./build.sh pkg debug --make -j24
+#   - A completed build: ./build.sh release --make -j24
 #   - Xcode Command Line Tools (swiftc, pkgbuild, productbuild)
 #
 # Usage:
@@ -14,7 +14,7 @@
 #   # produces: package/pkg/seekdb-1.3.0-1-macos15-arm64.pkg
 #
 # Env:
-#   SEEKDB_BUILD   Build directory (default: <repo>/build_pkg_debug)
+#   SEEKDB_BUILD   Build directory (default: <repo>/build_release)
 
 set -euo pipefail
 
