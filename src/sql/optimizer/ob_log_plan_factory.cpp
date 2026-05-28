@@ -22,6 +22,7 @@
 #include "sql/optimizer/ob_update_log_plan.h"
 #include "sql/optimizer/ob_explain_log_plan.h"
 #include "sql/optimizer/ob_help_log_plan.h"
+#include "sql/optimizer/ob_diff_table_log_plan.h"
 using namespace oceanbase;
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -93,6 +94,13 @@ ObLogPlan *ObLogPlanFactory::create(ObOptimizerContext &ctx, const ObDMLStmt &st
     if (NULL != ptr) {
       ret = new (ptr) ObHelpLogPlan(ctx, &stmt);
     } else {
+    }
+    break;
+  }
+  case stmt::T_DIFF_TABLE: {
+    void *ptr = allocator_.alloc(sizeof(ObDiffTableLogPlan));
+    if (NULL != ptr) {
+      ret = new (ptr) ObDiffTableLogPlan(ctx, &stmt);
     }
     break;
   }

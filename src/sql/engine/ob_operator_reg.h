@@ -711,6 +711,12 @@ class ObFunctionTableOp;
 REGISTER_OPERATOR(ObLogFunctionTable, PHY_FUNCTION_TABLE, ObFunctionTableSpec,
                   ObFunctionTableOp, NOINPUT);
 
+class ObLogDiffTable;
+class ObDiffTableSpec;
+class ObDiffTableOp;
+REGISTER_OPERATOR(ObLogDiffTable, PHY_DIFF_TABLE, ObDiffTableSpec,
+                  ObDiffTableOp, NOINPUT);
+
 class ObLogStatCollector;
 class ObStatCollectorSpec;
 class ObStatCollectorOp;

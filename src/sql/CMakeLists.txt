@@ -204,6 +204,8 @@ ob_set_subtarget(ob_sql engine_basic
   engine/basic/ob_temp_column_store.cpp
   engine/basic/ob_chunk_datum_store.cpp
   engine/basic/ob_chunk_row_store.cpp
+  engine/basic/ob_diff_table_op.cpp
+  engine/basic/ob_diff_table_op_compute.cpp
   engine/basic/ob_expr_values_op.cpp
   engine/basic/ob_function_table_op.cpp
   engine/basic/ob_group_join_buffer.cpp
@@ -1040,6 +1042,7 @@ ob_set_subtarget(ob_sql optimizer
   optimizer/ob_conflict_detector.cpp
   optimizer/ob_del_upd_log_plan.cpp
   optimizer/ob_delete_log_plan.cpp
+  optimizer/ob_diff_table_log_plan.cpp
   optimizer/ob_explain_log_plan.cpp
   optimizer/ob_fd_item.cpp
   optimizer/ob_help_log_plan.cpp

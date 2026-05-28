@@ -11146,7 +11146,7 @@ int ObLogPlan::generate_plan()
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(generate_raw_plan())) {
     LOG_WARN("fail to generate raw plan", K(ret));
-  } else if (stmt->is_explain_stmt() || stmt->is_help_stmt()) {
+  } else if (stmt->is_explain_stmt() || stmt->is_help_stmt() || stmt->is_diff_table_stmt()) {
     /*do nothing*/
   } else if (OB_FAIL(do_post_plan_processing())) {
     LOG_WARN("failed to post plan processing", K(ret));

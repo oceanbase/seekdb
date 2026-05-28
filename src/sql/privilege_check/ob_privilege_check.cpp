@@ -54,6 +54,7 @@
 #include "sql/resolver/cmd/ob_event_stmt.h"
 #include "sql/resolver/cmd/ob_location_utils_stmt.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
+#include "sql/resolver/cmd/ob_diff_table_stmt.h"
 
 namespace oceanbase {
 using namespace share;
@@ -439,7 +440,7 @@ int get_dml_stmt_need_privs(
               }
             }
             
-            if (OB_SUCC(ret)
+            if (OB_SUCC(ret) 
                && ObTableType::EXTERNAL_TABLE == table_item->table_type_
                && common::OB_INVALID_ID != table_item->external_location_id_) {
               ObSchemaGetterGuard schema_guard;
@@ -728,7 +729,7 @@ int get_create_table_stmt_need_privs(
         const ObLocationSchema *location_schema = NULL;
         CK(GCTX.schema_service_ != NULL);
         OZ(GCTX.schema_service_->get_tenant_schema_guard(session_priv.tenant_id_, schema_guard));
-        if (OB_FAIL(schema_guard.get_location_schema_by_id(session_priv.tenant_id_,
+        if (OB_FAIL(schema_guard.get_location_schema_by_id(session_priv.tenant_id_, 
                                                            stmt->get_external_location_id(),
                                                            location_schema))) {
           LOG_WARN("failed to get location schema");
@@ -2401,6 +2402,35 @@ int get_drop_ccl_priv(
     need_priv.priv_set_ = OB_PRIV_DROP;
     need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
     ADD_NEED_PRIV(need_priv);
+  }
+  return ret;
+}
+
+int get_diff_table_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv,
+    const ObStmt *basic_stmt,
+    ObIArray<ObNeedPriv> &need_privs)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(session_priv);
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (stmt::T_DIFF_TABLE != basic_stmt->get_stmt_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const ObDiffTableStmt *diff_stmt = static_cast<const ObDiffTableStmt *>(basic_stmt);
+    ObNeedPriv need_priv;
+    need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+    need_priv.is_sys_table_ = false;
+    need_priv.priv_set_ = OB_PRIV_SELECT;
+    need_priv.db_ = diff_stmt->get_cur_db();
+    need_priv.table_ = diff_stmt->get_cur_table();
+    ADD_NEED_PRIV(need_priv);
+    if (OB_SUCC(ret)) {
+      need_priv.db_ = diff_stmt->get_inc_db();
+      need_priv.table_ = diff_stmt->get_inc_table();
+      ADD_NEED_PRIV(need_priv);
+    }
   }
   return ret;
 }

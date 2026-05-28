@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/cmd/ob_diff_table_resolver.h"
+#include "sql/resolver/cmd/ob_diff_table_stmt.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/ob_schema_checker.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "sql/parser/ob_parser.h"
 #include "share/schema/ob_column_schema.h"
+#include "lib/utility/ob_macro_utils.h"
 
 namespace oceanbase
 {
@@ -33,341 +34,204 @@ int ObDiffTableResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(session_info_) ||
-      OB_ISNULL(schema_checker_) ||
-      OB_ISNULL(params_.allocator_) ||
-      T_DIFF_TABLE != parse_tree.type_ ||
-      DIFF_TABLE_NODE_COUNT != parse_tree.num_child_ ||
-      OB_ISNULL(parse_tree.children_)) {
+  if (OB_ISNULL(session_info_) || OB_ISNULL(schema_checker_)
+      || OB_ISNULL(params_.allocator_)
+      || T_DIFF_TABLE != parse_tree.type_
+      || DIFF_TABLE_NODE_COUNT != parse_tree.num_child_
+      || OB_ISNULL(parse_tree.children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree for DIFF TABLE", K(ret));
   }
 
-  ObString cur_table_name, cur_db_name, inc_table_name, inc_db_name;
+  ObDiffTableStmt *diff_stmt = NULL;
+  if (OB_SUCC(ret)) {
+    diff_stmt = create_stmt<ObDiffTableStmt>();
+    if (OB_ISNULL(diff_stmt)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc diff table stmt failed", K(ret));
+    } else {
+      stmt_ = diff_stmt;
+      diff_stmt->set_tenant_id(session_info_->get_effective_tenant_id());
+    }
+  }
+
+  ObString cur_table, cur_db, inc_table, inc_db;
   const ObTableSchema *cur_schema = NULL;
   const ObTableSchema *inc_schema = NULL;
-  ObSEArray<ObString, 8> pk_cols;
-  ObSEArray<ObString, 16> val_cols;
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(resolve_table_names_(parse_tree, cur_table_name, cur_db_name,
-                                           inc_table_name, inc_db_name))) {
-    LOG_WARN("failed to resolve table names", K(ret));
-  } else if (OB_FAIL(get_table_schemas_(session_info_->get_effective_tenant_id(),
-                                         cur_db_name, cur_table_name,
-                                         inc_db_name, inc_table_name,
-                                         cur_schema, inc_schema))) {
-    LOG_WARN("failed to get table schemas", K(ret));
-  } else if (OB_FAIL(collect_and_validate_columns_(cur_schema, inc_schema, pk_cols, val_cols))) {
-    LOG_WARN("failed to collect and validate columns", K(ret));
-  }
-
-  ObSqlString diff_sql;
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(build_diff_sql_(cur_db_name, cur_table_name,
-                                inc_db_name, inc_table_name,
-                                pk_cols, val_cols, diff_sql))) {
-      LOG_WARN("failed to build diff sql", K(ret));
+    if (OB_FAIL(resolve_table_names_(parse_tree, cur_table, cur_db, inc_table, inc_db))) {
+      LOG_WARN("resolve table names failed", K(ret));
+    } else if (OB_FAIL(get_schemas_(diff_stmt->get_tenant_id(), cur_db, cur_table,
+                                     inc_db, inc_table, cur_schema, inc_schema))) {
+      LOG_WARN("get table schemas failed", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
-    LOG_INFO("DIFF TABLE generated SQL", "sql", diff_sql.string());
-    if (OB_FAIL(parse_and_resolve_select_sql(diff_sql.string()))) {
-      LOG_WARN("failed to parse and resolve diff sql", K(ret), K(diff_sql));
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(stmt_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt is null after resolve", K(ret));
-    } else if (OB_UNLIKELY(stmt::T_SELECT != stmt_->get_stmt_type())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected stmt type after diff resolve", K(ret), K(stmt_->get_stmt_type()));
+    ObString cur_db_copy, cur_tbl_copy, inc_db_copy, inc_tbl_copy;
+    if (OB_FAIL(ob_write_string(*params_.allocator_, cur_db, cur_db_copy))) {
+    } else if (OB_FAIL(ob_write_string(*params_.allocator_, cur_table, cur_tbl_copy))) {
+    } else if (OB_FAIL(ob_write_string(*params_.allocator_, inc_db, inc_db_copy))) {
+    } else if (OB_FAIL(ob_write_string(*params_.allocator_, inc_table, inc_tbl_copy))) {
     } else {
-      ObSelectStmt *select_stmt = static_cast<ObSelectStmt*>(stmt_);
-      if (OB_ISNULL(select_stmt->get_query_ctx())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("query ctx is null after diff resolve", K(ret));
-      } else {
-        select_stmt->get_query_ctx()->set_literal_stmt_type(stmt::T_DIFF_TABLE);
-      }
+      diff_stmt->set_cur_db(cur_db_copy);
+      diff_stmt->set_cur_table(cur_tbl_copy);
+      diff_stmt->set_inc_db(inc_db_copy);
+      diff_stmt->set_inc_table(inc_tbl_copy);
+      diff_stmt->set_cur_db_id(cur_schema->get_database_id());
+      diff_stmt->set_inc_db_id(inc_schema->get_database_id());
+      diff_stmt->set_cur_table_id(cur_schema->get_table_id());
+      diff_stmt->set_inc_table_id(inc_schema->get_table_id());
     }
   }
 
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(collect_columns_(*cur_schema, *inc_schema, *diff_stmt))) {
+      LOG_WARN("collect columns failed", K(ret));
+    } else if (diff_stmt->pk_cols().empty()) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "DIFF TABLE on table without primary key");
+    } else if (OB_FAIL(build_output_cols_(*cur_schema, *diff_stmt))) {
+      LOG_WARN("build output cols failed", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    LOG_INFO("DIFF TABLE resolved",
+             "cur", diff_stmt->get_cur_table(),
+             "inc", diff_stmt->get_inc_table(),
+             "pk_cnt", diff_stmt->pk_cols().count(),
+             "val_cnt", diff_stmt->val_cols().count(),
+             "out_cnt", diff_stmt->out_cols().count());
+  }
   return ret;
 }
 
 int ObDiffTableResolver::resolve_table_names_(const ParseNode &parse_tree,
-                                               ObString &cur_table_name, ObString &cur_db_name,
-                                               ObString &inc_table_name, ObString &inc_db_name)
+    ObString &cur_table, ObString &cur_db,
+    ObString &inc_table, ObString &inc_db)
 {
   int ret = OB_SUCCESS;
   ParseNode *cur_node = parse_tree.children_[CURRENT_TABLE_NODE];
   ParseNode *inc_node = parse_tree.children_[INCOMING_TABLE_NODE];
   if (OB_ISNULL(cur_node) || OB_ISNULL(inc_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table node is NULL", K(ret));
-  } else if (OB_FAIL(resolve_table_relation_node(cur_node, cur_table_name, cur_db_name))) {
-    LOG_WARN("failed to resolve current table", K(ret));
-  } else if (OB_FAIL(resolve_table_relation_node(inc_node, inc_table_name, inc_db_name))) {
-    LOG_WARN("failed to resolve incoming table", K(ret));
+  } else if (OB_FAIL(resolve_table_relation_node(cur_node, cur_table, cur_db))) {
+    LOG_WARN("resolve cur failed", K(ret));
+  } else if (OB_FAIL(resolve_table_relation_node(inc_node, inc_table, inc_db))) {
+    LOG_WARN("resolve inc failed", K(ret));
   }
   return ret;
 }
 
-int ObDiffTableResolver::get_table_schemas_(const uint64_t tenant_id,
-                                             const ObString &cur_db_name, const ObString &cur_table_name,
-                                             const ObString &inc_db_name, const ObString &inc_table_name,
-                                             const ObTableSchema *&cur_schema,
-                                             const ObTableSchema *&inc_schema)
+int ObDiffTableResolver::get_schemas_(uint64_t tenant_id,
+    const ObString &cur_db, const ObString &cur_table,
+    const ObString &inc_db, const ObString &inc_table,
+    const ObTableSchema *&cur_schema, const ObTableSchema *&inc_schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(schema_checker_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_checker_ is null", K(ret));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, cur_db_name, cur_table_name,
-                                                 false, cur_schema))) {
-    LOG_WARN("failed to get current table schema", K(ret), K(cur_db_name), K(cur_table_name));
+  if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, cur_db, cur_table, false, cur_schema))) {
+    LOG_WARN("get cur schema failed", K(ret), K(cur_db), K(cur_table));
   } else if (OB_ISNULL(cur_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("current table not exist", K(ret), K(cur_db_name), K(cur_table_name));
-  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, inc_db_name, inc_table_name,
-                                                        false, inc_schema))) {
-    LOG_WARN("failed to get incoming table schema", K(ret), K(inc_db_name), K(inc_table_name));
+  } else if (OB_FAIL(schema_checker_->get_table_schema(tenant_id, inc_db, inc_table, false, inc_schema))) {
+    LOG_WARN("get inc schema failed", K(ret), K(inc_db), K(inc_table));
   } else if (OB_ISNULL(inc_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("incoming table not exist", K(ret), K(inc_db_name), K(inc_table_name));
   }
   return ret;
 }
 
-int ObDiffTableResolver::collect_and_validate_columns_(const ObTableSchema *cur_schema,
-                                                        const ObTableSchema *inc_schema,
-                                                        ObIArray<ObString> &pk_cols,
-                                                        ObIArray<ObString> &val_cols)
-{
-  return ObResolverUtils::collect_and_validate_columns(cur_schema, inc_schema,
-                                                       pk_cols, val_cols, "DIFF TABLE");
-}
-
-int ObDiffTableResolver::build_diff_sql_(const ObString &cur_db_name, const ObString &cur_table_name,
-                                          const ObString &inc_db_name, const ObString &inc_table_name,
-                                          const ObIArray<ObString> &pk_cols,
-                                          const ObIArray<ObString> &val_cols,
-                                          ObSqlString &diff_sql)
+int ObDiffTableResolver::collect_columns_(const ObTableSchema &cur_schema,
+    const ObTableSchema &inc_schema, ObDiffTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(pk_cols.empty())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pk_cols should not be empty", K(ret));
-    return ret;
-  }
-  const bool has_val_cols = (val_cols.count() > 0);
-  const ObString &pk1 = pk_cols.at(0);
-
-  ObSqlString pk_eq;
-  ObSqlString val_cmp;
-  if (OB_FAIL(ObResolverUtils::append_binary_cond(pk_eq, pk_cols, "="))) {
-    LOG_WARN("failed to build pk join condition", K(ret));
-  } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_binary_cond(val_cmp, val_cols, "<=>"))) {
-    LOG_WARN("failed to build value comparison", K(ret));
-  }
-
-  // SELECT header
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(diff_sql.append("SELECT `__table`, `__flag`, "))) {
-      LOG_WARN("failed to append select header", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, pk_cols, ""))) {
-      LOG_WARN("failed to append pk cols to header", K(ret));
-    } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_col_list(diff_sql, val_cols, "", true))) {
-      LOG_WARN("failed to append val cols to header", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" FROM ("))) {
-      LOG_WARN("failed to append FROM clause", K(ret));
+  ObSEArray<ObString, 8> pk_cols;
+  ObSEArray<ObString, 16> val_cols;
+  if (OB_FAIL(ObResolverUtils::collect_and_validate_columns(&cur_schema, &inc_schema,
+                                                            pk_cols, val_cols, "DIFF TABLE"))) {
+    LOG_WARN("collect_and_validate_columns failed", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < pk_cols.count(); ++i) {
+      ObString copy;
+      if (OB_FAIL(ob_write_string(*params_.allocator_, pk_cols.at(i), copy))) {
+      } else if (OB_FAIL(stmt.pk_cols().push_back(copy))) {
+      }
     }
-  }
-
-  // Branch 1: current-only rows (LEFT JOIN, WHERE incoming IS NULL)
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(diff_sql.append("SELECT "))) {
-      LOG_WARN("failed to append branch1 select prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_name_literal(
-                   diff_sql, cur_db_name, cur_table_name))) {
-      LOG_WARN("failed to append branch1 table literal", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" AS `__table`, 'INSERT' AS `__flag`, "))) {
-      LOG_WARN("failed to append branch1 select", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, pk_cols, "c."))) {
-      LOG_WARN("failed to append branch1 pk cols", K(ret));
-    } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_col_list(diff_sql, val_cols, "c.", true))) {
-      LOG_WARN("failed to append branch1 val cols", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" FROM "))) {
-      LOG_WARN("failed to append branch1 from prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                   diff_sql, cur_db_name, cur_table_name))) {
-      LOG_WARN("failed to append branch1 current table", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" c LEFT JOIN "))) {
-      LOG_WARN("failed to append branch1 join prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                   diff_sql, inc_db_name, inc_table_name))) {
-      LOG_WARN("failed to append branch1 incoming table", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" i ON "))) {
-      LOG_WARN("failed to append branch1 join condition prefix", K(ret));
-    } else if (OB_FAIL(diff_sql.append(pk_eq.ptr(), pk_eq.length()))) {
-      LOG_WARN("failed to append branch1 join condition", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" WHERE i."))) {
-      LOG_WARN("failed to append branch1 null-check prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_escaped_identifier(diff_sql, pk1))) {
-      LOG_WARN("failed to append branch1 pk identifier", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" IS NULL"))) {
-      LOG_WARN("failed to append branch1 from clause", K(ret));
-    }
-  }
-
-  // Branch 2: incoming-only rows (LEFT JOIN, WHERE current IS NULL)
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(diff_sql.append(" UNION ALL SELECT "))) {
-      LOG_WARN("failed to append branch2 select prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_name_literal(
-                   diff_sql, inc_db_name, inc_table_name))) {
-      LOG_WARN("failed to append branch2 table literal", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" AS `__table`, 'INSERT' AS `__flag`, "))) {
-      LOG_WARN("failed to append branch2 select", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, pk_cols, "i."))) {
-      LOG_WARN("failed to append branch2 pk cols", K(ret));
-    } else if (has_val_cols && OB_FAIL(ObResolverUtils::append_col_list(diff_sql, val_cols, "i.", true))) {
-      LOG_WARN("failed to append branch2 val cols", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" FROM "))) {
-      LOG_WARN("failed to append branch2 from prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                   diff_sql, inc_db_name, inc_table_name))) {
-      LOG_WARN("failed to append branch2 incoming table", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" i LEFT JOIN "))) {
-      LOG_WARN("failed to append branch2 join prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                   diff_sql, cur_db_name, cur_table_name))) {
-      LOG_WARN("failed to append branch2 current table", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" c ON "))) {
-      LOG_WARN("failed to append branch2 join condition prefix", K(ret));
-    } else if (OB_FAIL(diff_sql.append(pk_eq.ptr(), pk_eq.length()))) {
-      LOG_WARN("failed to append branch2 join condition", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" WHERE c."))) {
-      LOG_WARN("failed to append branch2 null-check prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_escaped_identifier(diff_sql, pk1))) {
-      LOG_WARN("failed to append branch2 pk identifier", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" IS NULL"))) {
-      LOG_WARN("failed to append branch2 from clause", K(ret));
-    }
-  }
-
-  // Branch 3 & 4: conflict rows (INNER JOIN, WHERE values differ)
-  if (OB_SUCC(ret) && has_val_cols) {
-    // current version of conflict rows
-    if (OB_FAIL(diff_sql.append(" UNION ALL SELECT "))) {
-      LOG_WARN("failed to append branch3 select prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_name_literal(
-                   diff_sql, cur_db_name, cur_table_name))) {
-      LOG_WARN("failed to append branch3 table literal", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" AS `__table`, 'INSERT' AS `__flag`, "))) {
-      LOG_WARN("failed to append branch3 select", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, pk_cols, "c."))) {
-      LOG_WARN("failed to append branch3 pk cols", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, val_cols, "c.", true))) {
-      LOG_WARN("failed to append branch3 val cols", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" FROM "))) {
-      LOG_WARN("failed to append branch3 from prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                   diff_sql, cur_db_name, cur_table_name))) {
-      LOG_WARN("failed to append branch3 current table", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" c JOIN "))) {
-      LOG_WARN("failed to append branch3 join prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                   diff_sql, inc_db_name, inc_table_name))) {
-      LOG_WARN("failed to append branch3 incoming table", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" i ON "))) {
-      LOG_WARN("failed to append branch3 join condition prefix", K(ret));
-    } else if (OB_FAIL(diff_sql.append(pk_eq.ptr(), pk_eq.length()))) {
-      LOG_WARN("failed to append branch3 join condition", K(ret));
-    } else if (OB_FAIL(diff_sql.append(" WHERE NOT ("))) {
-      LOG_WARN("failed to append branch3 diff predicate prefix", K(ret));
-    } else if (OB_FAIL(diff_sql.append(val_cmp.ptr(), val_cmp.length()))) {
-      LOG_WARN("failed to append branch3 diff predicate", K(ret));
-    } else if (OB_FAIL(diff_sql.append(")"))) {
-      LOG_WARN("failed to append branch3 from clause", K(ret));
-    }
-
-    // incoming version of conflict rows
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(diff_sql.append(" UNION ALL SELECT "))) {
-        LOG_WARN("failed to append branch4 select prefix", K(ret));
-      } else if (OB_FAIL(ObResolverUtils::append_qualified_name_literal(
-                     diff_sql, inc_db_name, inc_table_name))) {
-        LOG_WARN("failed to append branch4 table literal", K(ret));
-      } else if (OB_FAIL(diff_sql.append(" AS `__table`, 'INSERT' AS `__flag`, "))) {
-        LOG_WARN("failed to append branch4 select", K(ret));
-      } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, pk_cols, "i."))) {
-        LOG_WARN("failed to append branch4 pk cols", K(ret));
-      } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, val_cols, "i.", true))) {
-        LOG_WARN("failed to append branch4 val cols", K(ret));
-      } else if (OB_FAIL(diff_sql.append(" FROM "))) {
-        LOG_WARN("failed to append branch4 from prefix", K(ret));
-      } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                     diff_sql, cur_db_name, cur_table_name))) {
-        LOG_WARN("failed to append branch4 current table", K(ret));
-      } else if (OB_FAIL(diff_sql.append(" c JOIN "))) {
-        LOG_WARN("failed to append branch4 join prefix", K(ret));
-      } else if (OB_FAIL(ObResolverUtils::append_qualified_identifier(
-                     diff_sql, inc_db_name, inc_table_name))) {
-        LOG_WARN("failed to append branch4 incoming table", K(ret));
-      } else if (OB_FAIL(diff_sql.append(" i ON "))) {
-        LOG_WARN("failed to append branch4 join condition prefix", K(ret));
-      } else if (OB_FAIL(diff_sql.append(pk_eq.ptr(), pk_eq.length()))) {
-        LOG_WARN("failed to append branch4 join condition", K(ret));
-      } else if (OB_FAIL(diff_sql.append(" WHERE NOT ("))) {
-        LOG_WARN("failed to append branch4 diff predicate prefix", K(ret));
-      } else if (OB_FAIL(diff_sql.append(val_cmp.ptr(), val_cmp.length()))) {
-        LOG_WARN("failed to append branch4 diff predicate", K(ret));
-      } else if (OB_FAIL(diff_sql.append(")"))) {
-        LOG_WARN("failed to append branch4 from clause", K(ret));
+    for (int64_t i = 0; OB_SUCC(ret) && i < val_cols.count(); ++i) {
+      ObString copy;
+      if (OB_FAIL(ob_write_string(*params_.allocator_, val_cols.at(i), copy))) {
+      } else if (OB_FAIL(stmt.val_cols().push_back(copy))) {
       }
     }
   }
-
-  // Close subquery and ORDER BY
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(diff_sql.append(") diff_result ORDER BY "))) {
-      LOG_WARN("failed to append order by prefix", K(ret));
-    } else if (OB_FAIL(ObResolverUtils::append_col_list(diff_sql, pk_cols, ""))) {
-      LOG_WARN("failed to append order by cols", K(ret));
-    } else if (OB_FAIL(diff_sql.append(", `__table`"))) {
-      LOG_WARN("failed to append order by table", K(ret));
-    }
-  }
-
   return ret;
 }
 
-int ObDiffTableResolver::parse_and_resolve_select_sql(const ObString &select_sql)
+int ObDiffTableResolver::build_output_cols_(const ObTableSchema &src,
+    ObDiffTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(session_info_) || OB_ISNULL(params_.allocator_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data member is not init", K(ret), K(session_info_), K(params_.allocator_));
-  } else {
-    ParseResult select_result;
-    ObParser parser(*params_.allocator_, session_info_->get_sql_mode());
-    if (OB_FAIL(parser.parse(select_sql, select_result))) {
-      LOG_WARN("parse select sql failed", K(select_sql), K(ret));
-    } else if (OB_ISNULL(select_result.result_tree_) ||
-               select_result.result_tree_->num_child_ != 1 ||
-               OB_ISNULL(select_result.result_tree_->children_) ||
-               OB_ISNULL(select_result.result_tree_->children_[0])) {
+  const ObCollationType default_cs = ObCharset::get_default_collation(
+      ObCharset::get_default_charset());
+
+  // __table
+  {
+    ObDiffOutputCol c;
+    c.name_ = ObString::make_string("__table");
+    c.obj_type_ = ObVarcharType;
+    c.collation_type_ = default_cs;
+    c.length_ = OB_MAX_TABLE_NAME_LENGTH * 2 + 2;
+    c.is_synth_ = true;
+    if (OB_FAIL(stmt.out_cols().push_back(c))) {}
+  }
+  // __flag
+  if (OB_SUCC(ret)) {
+    ObDiffOutputCol c;
+    c.name_ = ObString::make_string("__flag");
+    c.obj_type_ = ObVarcharType;
+    c.collation_type_ = default_cs;
+    c.length_ = 8;
+    c.is_synth_ = true;
+    if (OB_FAIL(stmt.out_cols().push_back(c))) {}
+  }
+
+  // PK columns
+  for (int64_t i = 0; OB_SUCC(ret) && i < stmt.pk_cols().count(); ++i) {
+    const ObColumnSchemaV2 *col = src.get_column_schema(stmt.pk_cols().at(i));
+    if (OB_ISNULL(col)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("parse result tree is invalid", K(ret));
     } else {
-      ParseNode *select_stmt_node = select_result.result_tree_->children_[0];
-      if (OB_FAIL(ObSelectResolver::resolve(*select_stmt_node))) {
-        LOG_WARN("resolve generated diff select failed", K(ret));
+      ObDiffOutputCol c;
+      ObString name_copy;
+      if (OB_FAIL(ob_write_string(*params_.allocator_, col->get_column_name_str(), name_copy))) {
+      } else {
+        c.name_ = name_copy;
+        c.obj_type_ = col->get_data_type();
+        c.collation_type_ = col->get_collation_type();
+        c.length_ = col->get_data_length();
+        c.is_pk_ = true;
+        c.col_id_ = col->get_column_id();
+        if (OB_FAIL(stmt.out_cols().push_back(c))) {}
+      }
+    }
+  }
+  // Value columns
+  for (int64_t i = 0; OB_SUCC(ret) && i < stmt.val_cols().count(); ++i) {
+    const ObColumnSchemaV2 *col = src.get_column_schema(stmt.val_cols().at(i));
+    if (OB_ISNULL(col)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ObDiffOutputCol c;
+      ObString name_copy;
+      if (OB_FAIL(ob_write_string(*params_.allocator_, col->get_column_name_str(), name_copy))) {
+      } else {
+        c.name_ = name_copy;
+        c.obj_type_ = col->get_data_type();
+        c.collation_type_ = col->get_collation_type();
+        c.length_ = col->get_data_length();
+        c.col_id_ = col->get_column_id();
+        if (OB_FAIL(stmt.out_cols().push_back(c))) {}
       }
     }
   }

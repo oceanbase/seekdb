@@ -29,6 +29,7 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_expr_values.h"
 #include "sql/optimizer/ob_log_function_table.h"
+#include "sql/optimizer/ob_log_diff_table.h"
 #include "sql/optimizer/ob_log_json_table.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_log_subplan_filter.h"
@@ -107,6 +108,8 @@
 #include "sql/engine/dml/ob_err_log_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/engine/basic/ob_function_table_op.h"
+#include "sql/engine/basic/ob_diff_table_op.h"
+#include "sql/resolver/cmd/ob_diff_table_stmt.h"
 #include "sql/engine/basic/ob_json_table_op.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
@@ -8022,6 +8025,83 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   return ret;
 }
 
+int ObStaticEngineCG::generate_spec(ObLogDiffTable &op, ObDiffTableSpec &spec,
+    const bool in_root_job)
+{
+  UNUSED(in_root_job);
+  int ret = OB_SUCCESS;
+  ObIAllocator &alloc = phy_plan_->get_allocator();
+  const ObDiffTableStmt *stmt = static_cast<const ObDiffTableStmt *>(op.get_stmt());
+  if (OB_ISNULL(stmt) || OB_UNLIKELY(stmt::T_DIFF_TABLE != stmt->get_stmt_type())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expected diff table stmt", K(ret), KP(stmt));
+  } else {
+    spec.tenant_id_ = stmt->get_tenant_id();
+    spec.cur_table_id_ = stmt->get_cur_table_id();
+    spec.inc_table_id_ = stmt->get_inc_table_id();
+    if (OB_FAIL(ob_write_string(alloc, stmt->get_cur_db(), spec.cur_db_name_))) {
+    } else if (OB_FAIL(ob_write_string(alloc, stmt->get_cur_table(), spec.cur_table_name_))) {
+    } else if (OB_FAIL(ob_write_string(alloc, stmt->get_inc_db(), spec.inc_db_name_))) {
+    } else if (OB_FAIL(ob_write_string(alloc, stmt->get_inc_table(), spec.inc_table_name_))) {
+    }
+    // Translate pk/val column names back to column ids by inspecting
+    // out_cols (which already have col_id_ set for non-synth cols).
+    if (OB_SUCC(ret) && OB_FAIL(spec.pk_col_ids_.init(stmt->pk_cols().count()))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(spec.val_col_ids_.init(stmt->val_cols().count()))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(spec.out_col_metas_.init(stmt->out_cols().count()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < stmt->out_cols().count(); ++i) {
+      const ObDiffOutputCol &c = stmt->out_cols().at(i);
+      ObDiffOutColMeta m;
+      if (c.is_synth_) {
+        m.kind_ = (i == 0) ? ObDiffOutColMeta::K_TABLE : ObDiffOutColMeta::K_FLAG;
+      } else if (c.is_pk_) {
+        m.kind_ = ObDiffOutColMeta::K_PK;
+        OZ (spec.pk_col_ids_.push_back(c.col_id_));
+      } else {
+        m.kind_ = ObDiffOutColMeta::K_VAL;
+        OZ (spec.val_col_ids_.push_back(c.col_id_));
+      }
+      m.col_id_ = c.col_id_;
+      m.obj_type_ = c.obj_type_;
+      m.collation_type_ = c.collation_type_;
+      m.length_ = c.length_;
+      // Resolve subschema id for collection cols. The lookup registers
+      // the subschema into the current exec_ctx's plan_ctx, and the CG
+      // postprocess (assgin subschema ctx, ob_static_engine_cg.cpp:8528)
+      // transfers that into phy_plan.subschema_ctx_ — which means at
+      // execute time the same id is resolvable from plan_ctx, and the
+      // protocol UDT helper can render the cell.
+      if (ob_is_collection_sql_type(m.obj_type_)
+          && c.col_id_ != common::OB_INVALID_ID
+          && OB_NOT_NULL(opt_ctx_) && OB_NOT_NULL(opt_ctx_->get_exec_ctx())) {
+        const ObTableSchema *src = nullptr;
+        const ObColumnSchemaV2 *col_schema = nullptr;
+        ObSchemaGetterGuard *guard = opt_ctx_->get_schema_guard();
+        if (OB_NOT_NULL(guard)
+            && OB_SUCCESS == guard->get_table_schema(stmt->get_tenant_id(),
+                                                     stmt->get_cur_table_id(), src)
+            && OB_NOT_NULL(src)
+            && OB_NOT_NULL(col_schema = src->get_column_schema(c.col_id_))
+            && col_schema->get_extended_type_info().count() == 1) {
+          uint16_t sid = UINT16_MAX;
+          if (OB_FAIL(opt_ctx_->get_exec_ctx()->get_subschema_id_by_type_string(
+                  col_schema->get_extended_type_info().at(0), sid))) {
+            LOG_WARN("get subschema id by type string failed", K(ret), K(c));
+          } else {
+            m.subschema_id_ = sid;
+          }
+        }
+      }
+      OZ (spec.out_col_metas_.push_back(m));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
+      OZ (mark_expr_self_produced(op.get_output_exprs().at(i)));
+    }
+  }
+  return ret;
+}
+
 int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
     const bool in_root_job)
 {
@@ -8972,6 +9052,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_FUNCTION_TABLE: {
       type = PHY_FUNCTION_TABLE;
+      break;
+    }
+    case log_op_def::LOG_DIFF_TABLE: {
+      type = PHY_DIFF_TABLE;
       break;
     }
     case log_op_def::LOG_JSON_TABLE: {

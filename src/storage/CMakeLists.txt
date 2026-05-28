@@ -670,6 +670,8 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_group_write_macro_block_task.cpp
   ddl/ob_ddl_merge_schedule.cpp
   ddl/ob_hnsw_embedmgr.cpp
+  diff/ob_diff_tablet_scanner.cpp
+  diff/ob_tablet_point_getter.cpp
 )
 
 ob_set_subtarget(ob_storage common
