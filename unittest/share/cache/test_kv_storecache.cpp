@@ -106,19 +106,22 @@ TEST(ObKVCacheInstMap, normal)
   int ret = OB_SUCCESS;
   ObKVCacheInstMap inst_map;
   ObKVCacheConfig config;
+  ObLfFIFOAllocator node_allocator;
+  ASSERT_EQ(OB_SUCCESS, node_allocator.init(OB_MALLOC_MIDDLE_BLOCK_SIZE,
+      ObMemAttr(OB_SYS_TENANT_ID, "CACHE_MAP_NODE"), 1));
 
   //invalid argument
-  ret = inst_map.init(0, &config, getter);
+  ret = inst_map.init(0, &config, getter, &node_allocator);
   ASSERT_NE(OB_SUCCESS, ret);
-  ret = inst_map.init(1000, NULL, getter);
+  ret = inst_map.init(1000, NULL, getter, &node_allocator);
   ASSERT_NE(OB_SUCCESS, ret);
 
   //normal argument
-  ret = inst_map.init(1000, &config, getter);
+  ret = inst_map.init(1000, &config, getter, &node_allocator);
   ASSERT_EQ(OB_SUCCESS, ret);
 
   //repeat init
-  ret = inst_map.init(1000, &config, getter);
+  ret = inst_map.init(1000, &config, getter, &node_allocator);
   ASSERT_NE(OB_SUCCESS, ret);
 
   inst_map.destroy();
@@ -132,11 +135,14 @@ TEST(ObKVCacheInstMap, memory)
   ObKVCacheConfig configs[MAX_CACHE_NUM];
   ObKVCacheInstKey inst_key;
   ObKVCacheInstHandle inst_handle;
+  ObLfFIFOAllocator node_allocator;
+  ASSERT_EQ(OB_SUCCESS, node_allocator.init(OB_MALLOC_MIDDLE_BLOCK_SIZE,
+      ObMemAttr(OB_SYS_TENANT_ID, "CACHE_MAP_NODE"), 1));
   inst_key.cache_id_ = 0;
   inst_key.tenant_id_ = 1;
 
   //normal argument
-  ret = inst_map.init(cache_inst_cnt, configs, getter);
+  ret = inst_map.init(cache_inst_cnt, configs, getter, &node_allocator);
   COMMON_LOG(INFO, "InstMap init ret, ", K(ret));
   ASSERT_EQ(OB_SUCCESS, ret);
 

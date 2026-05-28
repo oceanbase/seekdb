@@ -68,14 +68,14 @@ struct ObKVCacheInst
 {
   int64_t cache_id_;
   ObKVCacheStatus status_;
-  ObLfFIFOAllocator node_allocator_;
+  ObLfFIFOAllocator *node_allocator_;
   bool is_delete_;
   bool is_block_cache_;
   int64_t ref_cnt_;
   ObKVCacheInst()
     : cache_id_(0),
       status_(),
-      node_allocator_(),
+      node_allocator_(nullptr),
       is_delete_(false),
       is_block_cache_(false),
       ref_cnt_(0) {}
@@ -83,7 +83,7 @@ struct ObKVCacheInst
   void reset() {
     cache_id_ = 0;
     status_.reset();
-    node_allocator_.reset();
+    node_allocator_ = nullptr;
     is_delete_ = false;
     is_block_cache_ = false;
     ref_cnt_ = 0;
@@ -118,7 +118,8 @@ public:
   ObKVCacheInstMap();
   virtual ~ObKVCacheInstMap();
   int init(const int64_t max_entry_cnt, const ObKVCacheConfig *configs,
-           const ObITenantMemLimitGetter &mem_limit_getter);
+           const ObITenantMemLimitGetter &mem_limit_getter,
+           ObLfFIFOAllocator *node_allocator);
   void destroy();
   int get_cache_inst(
       const ObKVCacheInstKey &inst_key,
@@ -141,6 +142,7 @@ private:
   const ObKVCacheConfig *configs_;
 
   const ObITenantMemLimitGetter *mem_limit_getter_;
+  ObLfFIFOAllocator *node_allocator_;
 
   // used by erase tenant cache inst
   bool is_inited_;
