@@ -33,7 +33,7 @@ public:
         io_handler_(conn_cb, thread_processor_, nio_), tenant_id_(tenant_id) {}
   virtual ~ObSqlNioServer() {}
   ObSqlNio *get_nio() { return &nio_; }
-  int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread, bool enable_numa_aware);
+  int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread, bool enable_numa_aware, bool disable_tcp);
   void revert_sock(void* sess);
   int peek_data(void* sess, int64_t limit, const char*& buf, int64_t& sz);
   int consume_data(void* sess, int64_t sz);
