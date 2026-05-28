@@ -223,6 +223,7 @@ static inline int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen,
 // ============================================================
 #include <synchapi.h>   // WaitOnAddress / WakeByAddressSingle
 #include <afunix.h>     // AF_UNIX / sockaddr_un (Windows 10+)
+#include <map>          // eventfd emulation table (legacy + wepoll paths)
 
 #ifdef OB_USE_WEPOLL
 // ---- Real epoll via wepoll (AFD/IOCP) ----
@@ -235,7 +236,6 @@ extern "C" int ob_win32_epoll_wait_impl(int epfd, struct epoll_event *events,
 }
 #else  // !OB_USE_WEPOLL — legacy WSAPoll-based emulation
 #include <vector>
-#include <map>
 
 // ---- epoll flags ----
 #define EPOLLIN    0x001
