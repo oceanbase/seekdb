@@ -151,6 +151,7 @@ public:
 private:
   const static int MAX_READY_JOBS_CAPACITY = 1024 * 1024;
   const static int MIN_SCHEDULER_INTERVAL = 1 * 1000 * 1000;
+  const static int CHECK_NEW_INTERVAL = 20 * 1000 * 1000;
   const static int FILTER_ZONE_SIZE = 1;
   const static int DEFALUT_SERVER_SIZE = 16;
 #ifdef _WIN32

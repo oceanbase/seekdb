@@ -240,24 +240,15 @@ public:
   ObSleepEventGuard(
       const int64_t sleep_us,
       const uint64_t timeout_ms = 0
-  ) : ObWaitEventGuard(EVENT_ID, timeout_ms, sleep_us, 0, 0)
-  {
-    lib::Thread::sleep_us_ = sleep_us;
-  }
+  ) : ObWaitEventGuard(EVENT_ID, timeout_ms, sleep_us, 0, 0) {}
   ObSleepEventGuard(
       const int64_t sleep_us,
       const int64_t p1,
       const int64_t p2,
       const int64_t p3,
       const uint64_t timeout_ms = 0
-  ) : ObWaitEventGuard(EVENT_ID, timeout_ms, p1, p2, p3)
-  {
-    lib::Thread::sleep_us_ = sleep_us;
-  }
-  ~ObSleepEventGuard()
-  {
-    lib::Thread::sleep_us_ = 0;
-  }
+  ) : ObWaitEventGuard(EVENT_ID, timeout_ms, p1, p2, p3) {}
+  ~ObSleepEventGuard() = default;
 };
 
 class ObMaxWaitGuard

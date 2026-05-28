@@ -209,6 +209,7 @@ public:
 
 private:
   void run1() override;
+  void signal_stop() override;
   void handle(void *task);
 
   void print_malloc_sample_info();

@@ -339,6 +339,12 @@ void ObMemoryDump::print_malloc_sample_info()
   }
 }
 
+void ObMemoryDump::signal_stop()
+{
+  ObThreadCondGuard guard(cond_);
+  cond_.signal();
+}
+
 void ObMemoryDump::run1()
 {
   SANITY_DISABLE_CHECK_RANGE();

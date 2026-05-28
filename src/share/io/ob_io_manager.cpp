@@ -1518,21 +1518,6 @@ int ObTenantIOManager::enqueue_callback(ObIORequest &req)
   }
   return ret;
 }
-int ObTenantIOManager::retry_io(ObIORequest &req)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!is_working())) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("tenant not working", K(ret), K(tenant_id_));
-  } else if (OB_FAIL(qsched_.schedule_request(req))) {
-    LOG_WARN("retry io request into sender failed", K(ret), K(req));
-  }
-  return ret;
-}
-
 int ObTenantIOManager::update_basic_io_unit_config(const ObTenantIOConfig::UnitConfig &io_unit_config)
 {
   int ret = OB_SUCCESS;

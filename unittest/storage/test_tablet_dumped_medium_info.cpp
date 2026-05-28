@@ -75,6 +75,10 @@ int TestTabletDumpedMediumInfo::create_medium_info(
     info->last_medium_snapshot_ = last_medium_snapshot;
     info->data_version_ = 100;
     info->cluster_id_ = from_cur_cluster ? GCONF.cluster_id : 9527;
+    // seekdb is single-sys-tenant: MTL_ID() is a constant (OB_SYS_TENANT_ID).
+    // from_cur_cluster() also checks tenant_id_ == MTL_ID(), so set tenant_id_
+    // accordingly (mismatch it for the non-current-cluster case).
+    info->tenant_id_ = from_cur_cluster ? MTL_ID() : (MTL_ID() + 1);
 
     // storage schema
     const uint64_t table_id = 1234567;

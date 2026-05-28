@@ -112,7 +112,6 @@ public:
   }
   OB_INLINE static void set_doing_ddl(const bool v) { is_doing_ddl_ = v; }
 public:
-  static thread_local int64_t sleep_us_;
   static thread_local bool is_doing_ddl_;
 private:
   static void* __th_start(void *th);

@@ -323,6 +323,7 @@ public:
     if (nullptr != th_) {
       th_->stop();
       th_->runnable_->set_stop(true);
+      th_->runnable_->signal_stop();
     }
   }
   void wait() override
@@ -410,6 +411,7 @@ public:
   {
     if (th_ != nullptr) {
       th_->runnable_->set_stop(true);
+      th_->runnable_->signal_stop();
       th_->stop();
     }
   }

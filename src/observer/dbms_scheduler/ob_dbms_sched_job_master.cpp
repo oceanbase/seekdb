@@ -161,6 +161,8 @@ int ObDBMSSchedJobMaster::scheduler()
     bool first_iter = true;
     while (OB_SUCC(ret) && !stoped_) {
       int64_t deadline_us;
+      int64_t now = ObTimeUtility::current_time();
+      int64_t max_deadline = now + CHECK_NEW_INTERVAL;
       if (is_leader_) {
         schedule_due_jobs();
         if (wait_vector_.count() > 0) {
@@ -170,19 +172,19 @@ int ObDBMSSchedJobMaster::scheduler()
             LOG_ERROR("unexpected error, invalid job key in ready queue!", K(ret), KPC(job_key));
             break;
           }
-          deadline_us = job_key->get_execute_at();
+          deadline_us = std::min(job_key->get_execute_at(), static_cast<uint64_t>(max_deadline));
         } else {
-          deadline_us = 0;
+          deadline_us = max_deadline;
         }
       } else {
         clear_wait_vector();
         alive_jobs_.clear();
-        deadline_us = 0;
+        deadline_us = max_deadline;
       }
 
-      bool woken = idle(deadline_us);
+      idle(deadline_us);
 
-      if (first_iter || (woken && is_leader_)) {
+      if (is_leader_ && (first_iter || TC_REACH_TIME_INTERVAL(CHECK_NEW_INTERVAL))) {
         check_tenant();
       }
       first_iter = false;
@@ -449,8 +451,22 @@ int ObDBMSSchedJobMaster::register_new_jobs(uint64_t tenant_id, bool is_oracle_t
     if (job_info.valid() && mysql_event_check_databse_exist(job_info) && !job_info.is_disabled() && !job_info.is_broken() && !mysql_event_scheduler_is_off(job_info)) {
       int tmp = alive_jobs_.exist_refactored(job_info.get_job_id());
       if (OB_HASH_EXIST == tmp) {
-        // do nothing ...
-        LOG_DEBUG("job exist", K(alive_jobs_));
+        // Job exists in memory, but its NEXT_DATE may have changed (e.g. via set_attribute).
+        // Find the existing key in wait_vector_, remove it, update execute_at, and re-insert.
+        int64_t new_next_date = job_info.get_next_date();
+        common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter;
+        for (iter = wait_vector_.begin(); iter != wait_vector_.end(); ++iter) {
+          ObDBMSSchedJobKey *exist_key = *iter;
+          if (exist_key->get_job_id() == job_info.get_job_id()
+              && exist_key->get_tenant_id() == job_info.get_tenant_id()) {
+            wait_vector_.remove(iter);
+            if (OB_FAIL(register_job(exist_key, new_next_date))) {
+              LOG_WARN("failed to update existing job next_date", K(ret), K(job_info));
+              free_job_key(exist_key);
+            }
+            break;
+          }
+        }
       } else if (OB_HASH_NOT_EXIST == tmp) {
         ObDBMSSchedJobKey *job_key = NULL;
         if (OB_FAIL(alloc_job_key(

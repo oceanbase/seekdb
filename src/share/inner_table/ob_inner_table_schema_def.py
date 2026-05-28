@@ -22922,7 +22922,6 @@ def_table_schema(
 SELECT
     TID,
     TNAME,
-    STATUS,
     LATCH_WAIT,
     LATCH_HOLD,
     TRACE_ID,

@@ -274,7 +274,7 @@ function build
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ERRSIM=ON -DOB_USE_LLD=$LLD_OPTION
         ;;
       xrpm)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DCMAKE_BUILD_RPM=ON
+        build_package "$@" -DCMAKE_BUILD_RPM=ON
         ;;
       xtgz)
         build_package_tgz "$@" -DCMAKE_BUILD_TGZ=ON

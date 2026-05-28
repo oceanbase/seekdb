@@ -183,7 +183,10 @@ TEST_F(TestTenantResource, basic)
   ASSERT_EQ(TEST_TENANT_ID, MTL_ID());
 }
 
-TEST_F(TestTenantResource, start_thread)
+// Single-tenant mode: MTL_ID() is constant and ObTenantSwitchGuard /
+// MTL_SWITCH no longer switch tenant context, so the following
+// multi-tenant isolation/switching cases no longer apply.
+TEST_F(TestTenantResource, DISABLED_start_thread)
 {
   MockObTenant tenant(TEST_TENANT_ID);
   ASSERT_EQ(OB_SUCCESS, tenant.init());
@@ -212,7 +215,10 @@ TEST_F(TestTenantResource, start_thread)
   TG_DESTROY(tg_id);
 }
 
-TEST_F(TestTenantResource, switch_tenant_guard)
+// Single-tenant mode: MTL_ID() is constant and ObTenantSwitchGuard /
+// MTL_SWITCH no longer switch tenant context, so the following
+// multi-tenant isolation/switching cases no longer apply.
+TEST_F(TestTenantResource, DISABLED_switch_tenant_guard)
 {
   int ret = OB_SUCCESS;
   MockObTenant tenant(TEST_TENANT_ID);
@@ -252,7 +258,10 @@ TEST_F(TestTenantResource, switch_tenant_guard)
   }
 }
 
-TEST_F(TestTenantResource, mtl_switch)
+// Single-tenant mode: MTL_ID() is constant and ObTenantSwitchGuard /
+// MTL_SWITCH no longer switch tenant context, so the following
+// multi-tenant isolation/switching cases no longer apply.
+TEST_F(TestTenantResource, DISABLED_mtl_switch)
 {
   ObTenantEnv::set_tenant(nullptr);
   int ret = OB_SUCCESS;

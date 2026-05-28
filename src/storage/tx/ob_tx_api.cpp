@@ -150,11 +150,10 @@ int ObTransService::release_tx(ObTxDesc &tx, const bool is_from_xa)
    */
   int ret = OB_SUCCESS;
   TRANS_LOG(TRACE, "release tx", KPC(this), K(tx));
-  if (tx.tenant_id_ != MTL_ID()) {
-    MTL_SWITCH(tx.tenant_id_) {
-      return MTL(ObTransService*)->release_tx(tx);
-    }
-  } else {
+  // Single-tenant: MTL_ID() is constant and there is a single ObTransService.
+  // The historical cross-tenant switch-and-retry now recurses forever because
+  // MTL_SWITCH no longer changes MTL_ID(); release directly on this service.
+  {
     ObTransTraceLog &tlog = tx.get_tlog();
     REC_TRANS_TRACE_EXT(&tlog, release, OB_Y(ret),
                         OB_ID(ref), tx.get_ref(),

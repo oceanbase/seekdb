@@ -720,7 +720,7 @@ extern int get_tenant_base_with_lock(uint64_t tenant_id, ObTenantBase *&ctx, Rel
 // g_tenant_ctx is a dummy to avoid nullptr deref before create_tenant_module().
 // Once g_tenant_ptr = this (after create_mtl_module), all MTL reads go directly
 // to the real ObTenant — no copies, no dual objects.
-inline ObTenantBase g_tenant_ctx(OB_INVALID_TENANT_ID, 0);
+extern ObTenantBase g_tenant_ctx;
 inline ObTenantBase *g_tenant_ptr = &g_tenant_ctx;
 
 class ObTenantEnv

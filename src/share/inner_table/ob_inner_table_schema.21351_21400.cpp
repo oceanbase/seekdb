@@ -982,7 +982,7 @@ int ObInnerTableSchema::v_ob_thread_schema(ObTableSchema &table_schema)
   table_schema.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_schema.set_view_definition(R"__( SELECT     TID,     TNAME,     STATUS,     LATCH_WAIT,     LATCH_HOLD,     TRACE_ID,     CGROUP_PATH FROM oceanbase.GV$OB_THREAD )__"))) {
+    if (OB_FAIL(table_schema.set_view_definition(R"__( SELECT     TID,     TNAME,     LATCH_WAIT,     LATCH_HOLD,     TRACE_ID,     CGROUP_PATH FROM oceanbase.GV$OB_THREAD )__"))) {
       LOG_ERROR("fail to set view_definition", K(ret));
     }
   }

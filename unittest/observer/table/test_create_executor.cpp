@@ -188,7 +188,7 @@ void TestCreateExecutor::SetUp()
 
 void TestCreateExecutor::TearDown()
 {
-  MTL_CTX()=nullptr;
+  share::ObTenantEnv::set_tenant(nullptr);
 }
 
 

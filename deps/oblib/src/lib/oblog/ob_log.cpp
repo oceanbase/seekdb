@@ -577,6 +577,8 @@ ObLogger::ObLogger()
 
 ObLogger::~ObLogger()
 {
+  stop();
+  wait();
   destroy();
   (void)pthread_mutex_destroy(&file_size_mutex_);
   (void)pthread_mutex_destroy(&file_index_mutex_);

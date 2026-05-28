@@ -155,7 +155,7 @@ private:
   ObRingBuf  ringbuf_;
   char      *ringbuf_buf_;
   SimpleCond *flush_cond_ CACHE_ALIGNED;
-  void      *flush_tid_;
+  void *flush_tid_;
 };
 
 }

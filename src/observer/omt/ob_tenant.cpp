@@ -556,6 +556,10 @@ int ObTenant::create_tenant_module()
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>", K(tenant_id), K(MTL_ID()));
 
+  // Point g_tenant_ptr at this before create_mtl_module() so that
+  // module constructors can access get_tenant() without nullptr deref.
+  g_tenant_ptr = this;
+
   bool mtl_init = false;
   if (OB_FAIL(ObTenantBase::create_mtl_module())) {
     LOG_ERROR("create mtl module failed", K(tenant_id), K(ret));
@@ -563,10 +567,6 @@ int ObTenant::create_tenant_module()
     ret = CREATE_MTL_MODULE_FAIL;
     LOG_ERROR("create_tenant_module failed because of tracepoint CREATE_MTL_MODULE_FAIL",
               K(tenant_id), K(ret));
-  } else if (FALSE_IT(g_tenant_ptr = this)) {
-    // After create_mtl_module(), MTL services are on this.
-    // Point the global pointer at the real ObTenant. MTL_SWITCH's readiness
-    // check (g_tenant_ptr != &g_tenant_ctx) will now pass for all threads.
   } else if (FALSE_IT(mtl_init = true)) {
   } else if (OB_FAIL(ObTenantBase::init_mtl_module())) {
     LOG_ERROR("init mtl module failed", K(tenant_id), K(ret));

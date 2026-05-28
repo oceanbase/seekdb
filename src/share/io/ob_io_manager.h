@@ -369,7 +369,6 @@ public:
   int inner_aio(const ObIOInfo &info, ObIOHandle &handle);
   int detect_aio(const ObIOInfo &info, ObIOHandle &handle);
   int enqueue_callback(ObIORequest &req);
-  int retry_io(ObIORequest &req);
   ObIOUsage &get_io_usage()
   {
     return io_usage_;
