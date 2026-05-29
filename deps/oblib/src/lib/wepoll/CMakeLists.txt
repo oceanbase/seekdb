@@ -9,7 +9,7 @@ if(NOT EXISTS "${_wepoll_src}" OR NOT EXISTS "${_wepoll_hdr}")
     "wepoll source not found.\n"
     "  Drop wepoll.h and wepoll.c (BSD-2-Clause) from\n"
     "  https://github.com/piscisaureus/wepoll into ${CMAKE_CURRENT_SOURCE_DIR}/\n"
-    "  See deps/wepoll/README.md.")
+    "  See deps/oblib/src/lib/wepoll/README.md.")
 endif()
 
 add_library(wepoll STATIC "${_wepoll_src}")

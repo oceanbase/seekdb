@@ -43,7 +43,7 @@ target_include_directories(
   $<$<PLATFORM_ID:Windows>:${VCPKG_INCLUDE_DIR}/mysql/mysql>
   $<$<PLATFORM_ID:Windows>:${SQLITE_COMPAT_DIR}>
   $<$<PLATFORM_ID:Windows>:${OB_VSAG_DIR}/include>
-  $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OB_USE_WEPOLL}>>:${CMAKE_SOURCE_DIR}/deps/wepoll>
+  $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OB_USE_WEPOLL}>>:${CMAKE_SOURCE_DIR}/deps/oblib/src/lib/wepoll>
   ${DEVTOOLS_DIR}
   ${DEVTOOLS_DIR}/include
   ${DEP_DIR}/include/apr-1/

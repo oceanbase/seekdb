@@ -130,7 +130,7 @@ endif()
 
 option(OB_USE_WEPOLL "Windows: use wepoll (AFD/IOCP) instead of the legacy WSAPoll-based epoll shim" ON)
 if(WIN32)
-  add_subdirectory(deps/wepoll)
+  add_subdirectory(deps/oblib/src/lib/wepoll)
   if(OB_USE_WEPOLL)
     add_compile_definitions(OB_USE_WEPOLL=1)
   endif()
