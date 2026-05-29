@@ -164,7 +164,7 @@ struct ObVectorIndexParam
 {
   static constexpr float DEFAULT_REFINE_K = 4.0;
   static constexpr int DEFAULT_BQ_BITS_QUERY = 32;
-  static constexpr int DEFAULT_WINDOW_SIZE = 100000;
+  static constexpr int DEFAULT_WINDOW_SIZE = 60000;
 
   ObVectorIndexParam() :
     type_(VIAT_MAX), lib_(VIAL_MAX), dim_(0), m_(0), ef_construction_(0), ef_search_(0),
@@ -266,7 +266,7 @@ struct ObVectorIndexParam
   float similarity_threshold_;
   OB_UNIS_VERSION(1);
 public:
-  TO_STRING_KV(K_(type), K_(lib), K_(dist_algorithm), K_(dim), K_(m), K_(ef_construction), K_(ef_search),
+  TO_STRING_KV(K_(type), K_(lib), K_(dist_algorithm), K_(dim), K_(m), K_(ef_construction), K_(ef_search), 
     K_(nlist), K_(sample_per_nlist), K_(extra_info_max_size), K_(extra_info_actual_size),
     K_(refine_type), K_(bq_bits_query), K_(refine_k), K_(bq_use_fht), K_(sync_interval_type), K_(sync_interval_value),
     K_(sync_mode_async), K_(endpoint), K_(nbits), K_(prune), K_(refine), K_(ob_sparse_drop_ratio_build),K_(window_size), K_(ob_sparse_drop_ratio_search),
@@ -434,7 +434,7 @@ public:
       const ObTableSchema &table_schema,
       ObDocIDType &vid_type);
   static int check_need_vid(
-      const ObTableSchema &table_schema,
+      const ObTableSchema &table_schema, 
       bool &need_vid);
   static int construct_rebuild_index_param(
       const ObTableSchema &data_table_schema,
@@ -517,8 +517,8 @@ public:
       bool &has_fts_index,
       bool &has_vec_index);
   static int check_table_has_vector_index(
-      const ObTableSchema &data_table_schema,
-      ObSchemaGetterGuard &schema_guard,
+      const ObTableSchema &data_table_schema, 
+      ObSchemaGetterGuard &schema_guard, 
       bool &has_vec_index);
   static int check_column_has_vector_index(
       const ObTableSchema &data_table_schema,
@@ -732,10 +732,10 @@ public:
       int64_t &rowkey_cid_ith, int64_t &sq_meta_ith,
       int64_t &pq_centroid_ith, int64_t &pq_code_ith);
   static int check_rename_rebuild_confilt(
-      share::schema::ObSchemaGetterGuard &schema_guard,
+      share::schema::ObSchemaGetterGuard &schema_guard, 
       common::ObMySQLTransaction &trans,
       rootserver::ObDDLService &ddl_service,
-      const ObTableSchema &origin_table_schema,
+      const ObTableSchema &origin_table_schema, 
       const ObString &ori_index_name);
   static int add_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
                                   const uint64_t vidx_table_id,
@@ -800,7 +800,7 @@ public:
   );
   static int estimate_sparse_memory(
       uint64_t num_vectors,
-      const ObVectorIndexParam &param,
+      const ObVectorIndexParam &param, 
       uint64_t &est_mem
   );
   static int estimate_ivf_memory(uint64_t num_vectors,
