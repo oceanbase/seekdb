@@ -1924,6 +1924,10 @@ static int do_seekdb_execute_inner(ExecuteParams* params) {
         if (errmsg.empty()) {
             errmsg = "Query execution failed";
         }
+        // Append OB error code so logs always carry numeric ret even when the message is non-empty.
+        char code_suffix[32];
+        snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
+        errmsg += code_suffix;
         set_error(conn, errmsg.c_str());
         if (conn->embed_result) {
             conn->embed_result->close();
@@ -3326,7 +3330,33 @@ static int do_seekdb_execute_update_inner(ExecuteUpdateParams* params) {
         *affected_rows = rows;
         params->ret_code = SEEKDB_SUCCESS;
     } else {
-        set_error(conn, "Update execution failed");
+        // Get detailed error message (aligned with do_seekdb_execute_inner / Python embed)
+        // Surface the real OB error/warning so callers can diagnose failures instead of
+        // seeing only a generic "Update execution failed".
+        std::string errmsg;
+        const oceanbase::common::ObWarningBuffer *wb = oceanbase::common::ob_get_tsi_warning_buffer();
+        if (nullptr != wb) {
+            if (wb->get_err_code() == ret ||
+                (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
+                if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
+                    errmsg = std::string(wb->get_err_msg());
+                }
+            }
+        }
+        if (errmsg.empty()) {
+            const char *err_str = ob_errpkt_strerror(ret, false);
+            if (nullptr != err_str && err_str[0] != '\0') {
+                errmsg = std::string(err_str);
+            }
+        }
+        if (errmsg.empty()) {
+            errmsg = "Update execution failed";
+        }
+        // Append OB error code so logs always carry numeric ret even when the message is non-empty.
+        char code_suffix[32];
+        snprintf(code_suffix, sizeof(code_suffix), " (ret=%d)", ret);
+        errmsg += code_suffix;
+        set_error(conn, errmsg.c_str());
         params->ret_code = SEEKDB_ERROR_QUERY_FAILED;
     }
     return OB_SUCCESS;
