@@ -155,7 +155,6 @@ ObKVCacheStore::ObKVCacheStore()
       active_mb_handles_{NULL},
       global_status_(),
       wash_out_lock_(common::ObLatchIds::WASH_OUT_LOCK),
-      mb_ptr_pool_(),
       washable_size_allocator_(),
       washbale_size_info_(),
       tmp_washbale_size_info_(),
@@ -422,7 +421,6 @@ bool ObKVCacheStore::wash()
     wash_itid_ = get_itid();
   }
   lib::ObMutexGuard guard(wash_out_lock_);
-  reuse_wash_structs();
 
   //compute the wash size of each tenant
   start_time = ObTimeUtility::current_time();
@@ -1278,8 +1276,10 @@ int ObKVCacheStore::init_wash_heap(WashHeap &heap, const int64_t heap_size)
   heap.mb_cnt_ = 0;
   if (heap_size > 0) {
     heap.heap_size_ = heap_size;
-    if (OB_FAIL(mb_ptr_pool_.alloc(heap_size, heap.heap_))) {
-      COMMON_LOG(WARN, "mb_ptr_free_heap_ sbrk failed", K(ret), K(heap_size));
+    heap.heap_ = static_cast<ObKVMemBlockHandle **>(ob_malloc(heap_size * sizeof(ObKVMemBlockHandle *), ObModIds::OB_KVSTORE_CACHE_WASH_STRUCT));
+    if (NULL == heap.heap_) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      COMMON_LOG(WARN, "init_wash_heap ob_malloc failed", K(ret), K(heap_size));
     }
   } else {
     heap.heap_size_ = 0;
@@ -1301,23 +1301,13 @@ int ObKVCacheStore::prepare_wash_structs()
     COMMON_LOG(WARN, "Fail to init washable size info", K(ret));
   } else if (OB_FAIL(tmp_washbale_size_info_.init(1/*tenant_node_size*/, bucket_num, washable_size_allocator_))) {
     COMMON_LOG(WARN, "Fail to init tmp washable size info", K(ret));
-  } else if (OB_FAIL(mb_ptr_pool_.init(2 * mb_handle_array_.get_max_mb_num(), label))) {
-    COMMON_LOG(WARN, "mb_ptr_pool_ init failed", K(ret), "max_mb_num", mb_handle_array_.get_max_mb_num());
   }
 
   return ret;
 }
 
-void ObKVCacheStore::reuse_wash_structs()
-{
-  int ret = OB_SUCCESS;
-  mb_ptr_pool_.reuse();
-}
-
 void ObKVCacheStore::destroy_wash_structs()
 {
-  int ret = OB_SUCCESS;
-  mb_ptr_pool_.destroy();
   washbale_size_info_.destroy();
   tmp_washbale_size_info_.destroy();
   washable_size_allocator_.reset();
@@ -1475,6 +1465,7 @@ ObKVCacheStore::WashHeap::WashHeap()
 
 ObKVCacheStore::WashHeap::~WashHeap()
 {
+  reset();
 }
 
 ObKVMemBlockHandle *ObKVCacheStore::WashHeap::add(ObKVMemBlockHandle *mb_handle)
@@ -1496,82 +1487,12 @@ ObKVMemBlockHandle *ObKVCacheStore::WashHeap::add(ObKVMemBlockHandle *mb_handle)
 
 void ObKVCacheStore::WashHeap::reset()
 {
-  heap_ = NULL;
+  if (NULL != heap_) {
+    ob_free(heap_);
+    heap_ = NULL;
+  }
   heap_size_ = 0;
   mb_cnt_ = 0;
-}
-
-ObKVCacheStore::MBHandlePointerWashPool::MBHandlePointerWashPool()
-  : inited_(false), 
-    total_count_(0),
-    free_count_(0),
-    buf_(nullptr),
-    allocator_(ObModIds::OB_KVSTORE_CACHE_WASH_STRUCT)
-{
-}
-
-int ObKVCacheStore::MBHandlePointerWashPool::init(const int64_t count, const char *label)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(inited_)) {
-    ret = OB_INIT_TWICE;
-    COMMON_LOG(WARN, "init twice!", K(ret));
-  } else if (count <= 0 || nullptr == label) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid argument", K(ret));
-  } else {
-    allocator_.set_label(label);
-    buf_ = static_cast<ObKVMemBlockHandle **>(allocator_.alloc(sizeof(ObKVMemBlockHandle *) * count));
-    if (nullptr == buf_) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(WARN, "alloc memory failed", K(ret));
-    } else {
-      MEMSET(buf_, 0, sizeof(ObKVMemBlockHandle *) * count);
-      total_count_ = count;
-      free_count_ = count;
-      inited_ = true;
-    }
-  }
-
-  return ret;
-}
-
-int ObKVCacheStore::MBHandlePointerWashPool::alloc(const int64_t count, ObKVMemBlockHandle **&heap)
-{
-  int ret = OB_SUCCESS;
-  if(OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "not init", K(ret));
-  } else if (count <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid argument", K(ret));
-  } else if (count > free_count_) {
-    ret = OB_BUF_NOT_ENOUGH;
-  } else {
-    free_count_ -= count;
-    heap = buf_ + free_count_;
-  }
-
-  return ret;
-}
-
-void ObKVCacheStore::MBHandlePointerWashPool::reuse()
-{
-  free_count_ = total_count_;
-}
-
-int ObKVCacheStore::MBHandlePointerWashPool::destroy()
-{
-  int ret = OB_SUCCESS;
-  if (OB_LIKELY(inited_)) {
-    free_count_ = 0;
-    total_count_ = 0;
-    allocator_.free(buf_);
-    buf_ = nullptr;
-    inited_ = false;
-  }
-
-  return ret;
 }
 
 }//end namespace common

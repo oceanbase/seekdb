@@ -213,21 +213,6 @@ struct StoreMBHandleCmp {
     int64_t heap_size_;
     int64_t mb_cnt_;
   };
-  class MBHandlePointerWashPool {
-  public:
-    MBHandlePointerWashPool();
-    int init(const int64_t count, const char *label);
-    int alloc(const int64_t count, ObKVMemBlockHandle **&heap);
-    void reuse();
-    int destroy();
-  private:
-    bool inited_;
-    int64_t total_count_;
-    int64_t free_count_;
-    ObKVMemBlockHandle **buf_;
-    common::ObArenaAllocator allocator_;
-
-  };
 private:
   int alloc_mbhandle(
     const enum ObKVCachePolicy policy,
@@ -241,7 +226,6 @@ private:
   int do_wash_mb(ObKVMemBlockHandle *mb_handle, void *&buf, int64_t &mb_size);
   int init_wash_heap(WashHeap &heap, const int64_t heap_size);
   int prepare_wash_structs();
-  void reuse_wash_structs();
   void destroy_wash_structs();
 
   void *alloc_mb(lib::ObTenantResourceMgrHandle &resource_handle,
@@ -281,7 +265,6 @@ private:
 
   //data structures for wash
   lib::ObMutex wash_out_lock_;
-  MBHandlePointerWashPool mb_ptr_pool_;
   ObArenaAllocator washable_size_allocator_;
   ObWashableSizeInfo washbale_size_info_;
   ObWashableSizeInfo tmp_washbale_size_info_;
