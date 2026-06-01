@@ -89,7 +89,9 @@ private:
   static const int64_t EMPTY_MVCC_ROW_PERCENTAGE = 50;
   static const int64_t TOMBSTONE_MAX_ROW_COUNT = 500000;
   static const int64_t TOMBSTONE_STEP_ROW_COUNT = 50000;
-  static const int64_t FAST_FREEZE_TABLET_STAT_KEY_BUCKET_NUM = OB_MAX_LS_NUM_PER_TENANT_PER_SERVER * 1024;
+  // entry is a subset of ObTenantTabletStatMgr::stream_map_ (capped at 20000),
+  // align bucket count with stream_map_ to share the same prime sizing.
+  static const int64_t FAST_FREEZE_TABLET_STAT_KEY_BUCKET_NUM = 1543;
   common::hash::ObHashMap<ObTabletStatKey, int64_t> store_map_;
   bool enable_fast_freeze_;
 };
