@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 310" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#6B7280"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#2563EB"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#059669"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#7C3AED"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#D97706"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="780" height="310" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- ==================== Write Path (top row) ==================== -->
+  <text x="28" y="28" font-size="11" font-weight="700" fill="#2563EB" letter-spacing="0.5">WRITE PATH</text>
+  <rect x="590" y="50" width="50" height="22" rx="11" fill="#D1FAE5"/>
+  <text x="615" y="65" text-anchor="middle" font-size="10" font-weight="700" fill="#059669">FAST</text>
+
+  <!-- User DML -->
+  <rect x="28" y="42" width="100" height="40" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.5"/>
+  <text x="78" y="66" text-anchor="middle" font-size="12" font-weight="600" fill="#1E40AF">User DML</text>
+
+  <line x1="128" y1="62" x2="158" y2="62" stroke="#2563EB" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Transaction Commit -->
+  <rect x="166" y="42" width="120" height="40" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.5"/>
+  <text x="226" y="66" text-anchor="middle" font-size="12" font-weight="600" fill="#1E40AF">TX Commit</text>
+
+  <line x1="286" y1="62" x2="316" y2="62" stroke="#2563EB" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Redo Log -->
+  <rect x="324" y="42" width="110" height="40" rx="6" fill="#DBEAFE" stroke="#93C5FD" stroke-width="1.5"/>
+  <text x="379" y="66" text-anchor="middle" font-size="12" font-weight="700" fill="#1E40AF">Redo Log</text>
+
+  <line x1="434" y1="62" x2="464" y2="62" stroke="#2563EB" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Return -->
+  <rect x="472" y="42" width="100" height="40" rx="20" fill="#D1FAE5" stroke="#6EE7B7" stroke-width="1.5"/>
+  <text x="522" y="66" text-anchor="middle" font-size="12" font-weight="700" fill="#065F46">Return ✓</text>
+
+  <!-- ==================== Async Pipeline (middle row) ==================== -->
+
+  <!-- Dashed arrow from Redo Log down to Fetcher — routed to avoid text -->
+  <line x1="379" y1="82" x2="379" y2="100" stroke="#D97706" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="379" y1="100" x2="78" y2="100" stroke="#D97706" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="78" y1="100" x2="78" y2="126" stroke="#D97706" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-amber)"/>
+  <text x="225" y="96" text-anchor="middle" font-size="9" fill="#D97706" font-style="italic">async — Change Stream</text>
+
+  <!-- Fetcher -->
+  <rect x="34" y="130" width="88" height="38" rx="6" fill="#FEF3C7" stroke="#FCD34D" stroke-width="1.5"/>
+  <text x="78" y="153" text-anchor="middle" font-size="11" font-weight="600" fill="#92400E">Fetcher</text>
+
+  <line x1="122" y1="149" x2="152" y2="149" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Dispatcher -->
+  <rect x="160" y="130" width="100" height="38" rx="6" fill="#FEF3C7" stroke="#FCD34D" stroke-width="1.5"/>
+  <text x="210" y="153" text-anchor="middle" font-size="11" font-weight="600" fill="#92400E">Dispatcher</text>
+
+  <line x1="260" y1="149" x2="290" y2="149" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Worker Pool -->
+  <rect x="298" y="130" width="108" height="38" rx="6" fill="#FEF3C7" stroke="#FCD34D" stroke-width="1.5"/>
+  <text x="352" y="153" text-anchor="middle" font-size="11" font-weight="600" fill="#92400E">Worker Pool</text>
+
+  <line x1="406" y1="149" x2="446" y2="149" stroke="#6B7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ==================== Two-level Index (right side) ==================== -->
+
+  <!-- Dashed grouping box -->
+  <rect x="450" y="112" width="155" height="162" rx="8" fill="none" stroke="#C4B5FD" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="528" y="126" text-anchor="middle" font-size="9" font-weight="600" fill="#7C3AED">TWO-LEVEL INDEX</text>
+
+  <!-- Delta HNSW -->
+  <rect x="462" y="132" width="130" height="44" rx="8" fill="#EDE9FE" stroke="#C4B5FD" stroke-width="2"/>
+  <text x="527" y="151" text-anchor="middle" font-size="12" font-weight="700" fill="#5B21B6">Delta HNSW</text>
+  <text x="527" y="166" text-anchor="middle" font-size="9" fill="#7C3AED">incremental</text>
+
+  <!-- Async drain arrow -->
+  <line x1="527" y1="176" x2="527" y2="210" stroke="#7C3AED" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrow-purple)"/>
+  <text x="555" y="197" font-size="9" fill="#7C3AED" font-style="italic">drain</text>
+
+  <!-- Snapshot HNSW -->
+  <rect x="462" y="214" width="130" height="44" rx="8" fill="#EDE9FE" stroke="#C4B5FD" stroke-width="2"/>
+  <text x="527" y="233" text-anchor="middle" font-size="12" font-weight="700" fill="#5B21B6">Snapshot HNSW</text>
+  <text x="527" y="248" text-anchor="middle" font-size="9" fill="#7C3AED">main store</text>
+
+  <!-- ==================== Query Path (right of index) ==================== -->
+
+  <!-- Query node -->
+  <rect x="660" y="174" width="88" height="42" rx="20" fill="#D1FAE5" stroke="#6EE7B7" stroke-width="1.5"/>
+  <text x="704" y="192" text-anchor="middle" font-size="11" font-weight="700" fill="#065F46">Query</text>
+  <text x="704" y="204" text-anchor="middle" font-size="9" fill="#059669">reads both</text>
+
+  <!-- Arrow from Query to Delta HNSW -->
+  <line x1="660" y1="186" x2="596" y2="154" stroke="#059669" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- Arrow from Query to Snapshot HNSW -->
+  <line x1="660" y1="204" x2="596" y2="236" stroke="#059669" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+  <!-- ==================== Bottom note ==================== -->
+  <line x1="28" y1="280" x2="752" y2="280" stroke="#F3F4F6" stroke-width="1"/>
+  <text x="390" y="300" text-anchor="middle" font-size="11" font-weight="600" fill="#374151">Writers, readers, and async drain never serialize on index construction → P99 stays flat</text>
+</svg>

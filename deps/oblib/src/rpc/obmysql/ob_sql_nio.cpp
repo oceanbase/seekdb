@@ -99,18 +99,18 @@ static int kqueue_epoll_create1(int flags) {
 static int kqueue_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event) {
   struct kevent kev[2];
   int n = 0;
-
+  
   if (op == EPOLL_CTL_ADD || op == EPOLL_CTL_MOD) {
     uint16_t flags = EV_ADD | EV_ENABLE;
     if (event->events & EPOLLET) flags |= EV_CLEAR;
-
+    
     if (event->events & EPOLLIN) {
       EV_SET(&kev[n++], fd, EVFILT_READ, flags, 0, 0, event->data.ptr);
     }
     if (event->events & EPOLLOUT) {
       EV_SET(&kev[n++], fd, EVFILT_WRITE, flags, 0, 0, event->data.ptr);
     }
-
+    
     if (op == EPOLL_CTL_MOD) {
       // For MOD, we might need to delete existing filters if they are not in the new event
       if (!(event->events & EPOLLIN)) {
@@ -131,7 +131,7 @@ static int kqueue_epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
     errno = EINVAL;
     return -1;
   }
-
+  
   if (n > 0) {
     if (kevent(epfd, kev, n, NULL, 0, NULL) < 0) {
       if (op != EPOLL_CTL_DEL) return -1;
@@ -144,16 +144,16 @@ static int kqueue_epoll_wait(int epfd, struct epoll_event *events, int maxevents
   struct kevent *kevs = (struct kevent *)alloca(sizeof(struct kevent) * maxevents);
   struct timespec ts;
   struct timespec *pts = NULL;
-
+  
   if (timeout >= 0) {
     ts.tv_sec = timeout / 1000;
     ts.tv_nsec = (timeout % 1000) * 1000000;
     pts = &ts;
   }
-
+  
   int n = kevent(epfd, NULL, 0, kevs, maxevents, pts);
   if (n < 0) return -1;
-
+  
   for (int i = 0; i < n; i++) {
     events[i].events = 0;
     if (kevs[i].filter == EVFILT_READ) events[i].events |= EPOLLIN;
