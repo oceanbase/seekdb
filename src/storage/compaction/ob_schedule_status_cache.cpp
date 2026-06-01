@@ -155,7 +155,6 @@ const static char * ObTabletScheduleNewRoundStateStr[] = {
     "DURING_SPLIT",
     "NEED_CHECK_LAST_MEDIUM_CKM",
     "EXIST_UNFINISH_MEDIUM",
-    "SCHEDULE_CONFLICT",
     "NONE",
     "STATE_MAX"
 };
@@ -327,15 +326,6 @@ void ObTabletStatusCache::inner_init_could_schedule_new_round(
 void ObTabletStatusCache::inner_destroy()
 {
   is_inited_ = false;
-  int ret = OB_SUCCESS;
-  if (inner_check_new_round_state()) {
-    // careful!!! need clear flag in ObProhibitScheduleMediumMap
-    if (OB_FAIL(MTL(ObTenantTabletScheduler*)->clear_prohibit_medium_flag(
-      tablet_id_, ObProhibitScheduleMediumMap::ProhibitFlag::MEDIUM))) {
-      LOG_WARN("failed to clear prohibit_medium_flag", K(ret), K_(tablet_id));
-      ob_abort();
-    }
-  }
   if (OB_NOT_NULL(medium_list_)) {
     medium_list_->~ObMediumCompactionInfoList();
     allocator_.free((void *)medium_list_);
@@ -380,36 +370,16 @@ int ObTabletStatusCache::register_map(
   const ObTablet &tablet)
 {
   int ret = OB_SUCCESS;
-  const ObTabletID &tablet_id = tablet.get_tablet_id();
-  ObTenantTabletScheduler *tenant_tablet_scheduler = MTL(ObTenantTabletScheduler*);
-  bool could_schedule_merge = false;
-  bool need_clear_flag = false;
   ObTabletCreateDeleteMdsUserData user_data;
   mds::MdsWriter writer;
   mds::TwoPhaseCommitState trans_stat;
   share::SCN trans_version;
-  if (OB_FAIL(tenant_tablet_scheduler->tablet_start_schedule_medium(
-      tablet_id, could_schedule_merge))) {
-    if (OB_ENTRY_EXIST == ret) {
-      new_round_state_ = SCHEDULE_CONFLICT;
-      ret = OB_SUCCESS;
-    } else {
-      LOG_WARN("failed to add tablet", K(ret), K(tablet_id));
-    }
-  } else if (OB_FAIL(tablet.ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
-    need_clear_flag = true;
+  if (OB_FAIL(tablet.ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
     LOG_WARN("failed to get tablet status", K(ret), K(tablet), K(user_data));
   } else if (ObTabletStatus::SPLIT_SRC == user_data.tablet_status_) {
-    need_clear_flag = true;
     new_round_state_ = DURING_SPLIT;
   } else {
     new_round_state_ = CAN_SCHEDULE_NEW_ROUND;
-  }
-
-  if (need_clear_flag) {
-    if (OB_SUCCESS != tenant_tablet_scheduler->clear_prohibit_medium_flag(tablet_id, ObProhibitScheduleMediumMap::ProhibitFlag::MEDIUM)) {
-      ob_abort();
-    }
   }
   return ret;
 }

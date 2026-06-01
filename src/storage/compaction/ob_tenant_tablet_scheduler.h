@@ -94,37 +94,6 @@ private:
   bool enable_fast_freeze_;
 };
 
-struct ObProhibitScheduleMediumMap
-{
-public:
-
-  enum class ProhibitFlag : int32_t
-  {
-    MEDIUM = 0,
-    FLAG_MAX
-  };
-
-  static const char *ProhibitFlagStr[];
-  static bool is_valid_flag(const ProhibitFlag &flag)
-  {
-    return flag >= ProhibitFlag::MEDIUM && flag < ProhibitFlag::FLAG_MAX;
-  }
-  ObProhibitScheduleMediumMap();
-  ~ObProhibitScheduleMediumMap() { destroy(); }
-  int init();
-  void destroy();
-  int clear_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag);
-  int add_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag);
-  int64_t to_string(char *buf, const int64_t buf_len) const;
-private:
-  static const int64_t PRINT_LOG_INTERVAL = 2 * 60 * 1000 * 1000L; // 2m
-  static const int64_t TABLET_ID_MAP_BUCKET_NUM = OB_MAX_LS_NUM_PER_TENANT_PER_SERVER * 1024;
-
-  int inner_clear_flag_(const ObTabletID &tablet_id, const ProhibitFlag &input_flag); // hold lock outside !!
-  mutable obsys::ObRWLock lock_;
-  common::hash::ObHashMap<ObTabletID, ProhibitFlag> tablet_id_map_;
-};
-
 
 struct ObCSReplicaChecksumHelper
 {
@@ -156,14 +125,6 @@ public:
     return OB_ITER_END == ret
       || OB_STATE_NOT_MATCH == ret
       || OB_LS_NOT_EXIST == ret;
-  }
-  int clear_prohibit_medium_flag(const ObTabletID &tablet_id, const ObProhibitScheduleMediumMap::ProhibitFlag &input_flag)
-  {
-    return prohibit_medium_map_.clear_flag(tablet_id, input_flag);
-  }
-  int tablet_start_schedule_medium(const ObTabletID &tablet_id, bool &tablet_could_schedule_medium);
-  const ObProhibitScheduleMediumMap& get_prohibit_medium_ls_map() const {
-    return prohibit_medium_map_;
   }
   int64_t get_bf_queue_size() const { return bf_queue_.task_count(); }
   virtual int schedule_merge(const int64_t broadcast_version) override;
@@ -291,7 +252,6 @@ private:
   ObFastFreezeChecker fast_freeze_checker_;
   ObCompactionScheduleIterator minor_ls_tablet_iter_;
   ObCompactionScheduleIterator gc_sst_tablet_iter_;
-  ObProhibitScheduleMediumMap prohibit_medium_map_;
   ObTenantTabletSchedulerTaskMgr timer_task_mgr_;
   ObScheduleBatchSizeMgr batch_size_mgr_;
   ObMediumLoop medium_loop_;

@@ -302,7 +302,6 @@ ObTenantTabletScheduler::ObTenantTabletScheduler()
    fast_freeze_checker_(),
    minor_ls_tablet_iter_(false/*is_major*/),
    gc_sst_tablet_iter_(false/*is_major*/),
-   prohibit_medium_map_(),
    timer_task_mgr_(),
    batch_size_mgr_(),
    mview_validation_()
@@ -331,7 +330,6 @@ void ObTenantTabletScheduler::reset()
   bf_queue_.destroy();
   minor_ls_tablet_iter_.reset();
   gc_sst_tablet_iter_.reset();
-  prohibit_medium_map_.destroy();
   LOG_INFO("The ObTenantTabletScheduler destroy");
 }
 
@@ -372,8 +370,6 @@ int ObTenantTabletScheduler::init()
     LOG_WARN("Fail to init bloom filter queue", K(ret));
   } else if (OB_FAIL(fast_freeze_checker_.init())) {
     LOG_WARN("Fail to create fast freeze checker", K(ret));
-  } else if (OB_FAIL(prohibit_medium_map_.init())) {
-    LOG_WARN("Fail to create prohibit medium ls id map", K(ret));
   } else {
     IGNORE_RETURN tenant_status_.refresh_tenant_config(enable_adaptive_compaction, enable_adaptive_merge_schedule);
     timer_task_mgr_.set_scheduler_interval(schedule_interval);
@@ -685,140 +681,6 @@ int ObTenantTabletScheduler::schedule_merge(const int64_t broadcast_version)
     MTL(ObTenantMediumChecker*)->clear_error_tablet_cnt();
 
     medium_loop_.start_merge(broadcast_version); // set all statistics
-  }
-  return ret;
-}
-
-const char *ObProhibitScheduleMediumMap::ProhibitFlagStr[] = {
-  "MEDIUM",
-};
-ObProhibitScheduleMediumMap::ObProhibitScheduleMediumMap()
-  : lock_(),
-    tablet_id_map_()
-{
-  STATIC_ASSERT(static_cast<int64_t>(ProhibitFlag::FLAG_MAX) == ARRAYSIZEOF(ProhibitFlagStr), "flag str len is mismatch");
-}
-
-int ObProhibitScheduleMediumMap::init()
-{
-  int ret = OB_SUCCESS;
-  obsys::ObWLockGuard lock_guard(lock_);
-  if (OB_FAIL(tablet_id_map_.create(TABLET_ID_MAP_BUCKET_NUM, "MediumTabletMap", "MediumTabletMap", MTL_ID()))) {
-    LOG_WARN("Fail to create prohibit medium tablet id map", K(ret));
-  }
-  return ret;
-}
-
-int ObProhibitScheduleMediumMap::add_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag)
-{
-  int ret = OB_SUCCESS;
-  ProhibitFlag tmp_flag = ProhibitFlag::FLAG_MAX;
-  if (OB_UNLIKELY(!tablet_id.is_valid() || !is_valid_flag(input_flag))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(input_flag));
-  } else {
-    obsys::ObWLockGuard lock_guard(lock_);
-    if (OB_FAIL(tablet_id_map_.get_refactored(tablet_id, tmp_flag))) {
-      if (OB_HASH_NOT_EXIST == ret) {
-        if (OB_FAIL(tablet_id_map_.set_refactored(tablet_id, input_flag))) {
-          LOG_WARN("failed to stop tablet schedule medium", K(ret), K(tablet_id), K(input_flag));
-        }
-      } else {
-        LOG_WARN("failed to get map", K(ret), K(tablet_id), K(tmp_flag));
-      }
-    } else if (tmp_flag != input_flag) {
-      ret = OB_EAGAIN;
-      if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INTERVAL)) {
-        LOG_INFO("flag in conflict", K(ret), K(tablet_id), K(tmp_flag), K(input_flag));
-      }
-    } else { // tmp_flag == input_flag
-      ret = OB_ENTRY_EXIST;
-      LOG_WARN("flag in already exist", K(ret), K(tablet_id), K(tmp_flag), K(input_flag));
-    }
-  }
-  return ret;
-}
-
-int ObProhibitScheduleMediumMap::clear_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!tablet_id.is_valid() || !is_valid_flag(input_flag))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(input_flag));
-  } else {
-    obsys::ObWLockGuard lock_guard(lock_);
-    if (OB_FAIL(inner_clear_flag_(tablet_id, input_flag))) {
-      LOG_WARN("failed to inner clear flag", K(ret), K(tablet_id), K(input_flag));
-    }
-  }
-  return ret;
-}
-
-void ObProhibitScheduleMediumMap::destroy()
-{
-  obsys::ObWLockGuard lock_guard(lock_);
-  if (tablet_id_map_.created()) {
-    tablet_id_map_.destroy();
-  }
-}
-
-int64_t ObProhibitScheduleMediumMap::to_string(char *buf, const int64_t buf_len) const
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  obsys::ObRLockGuard lock_guard(lock_);
-  if (OB_ISNULL(buf) || buf_len <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
-  } else if (0 == tablet_id_map_.size()) {
-    // do nothing
-  } else {
-    J_ARRAY_START();
-    int64_t idx = 0;
-    FOREACH_X(it, tablet_id_map_, OB_SUCC(ret)) {
-      const ObTabletID &tablet_id = it->first;
-      if (OB_UNLIKELY(!is_valid_flag(it->second))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("prihibit medium flag is not expected", K(ret), "flag", it->second);
-      } else {
-        J_OBJ_START();
-        J_KV(K(idx), "tablet_id", tablet_id.id(), "flag", ProhibitFlagStr[static_cast<int64_t>(it->second)]);
-        J_OBJ_END();
-        ++idx;
-      }
-    }
-    J_ARRAY_END();
-  }
-  return pos;
-}
-
-// ATTENTION: hold lock outside !!
-int ObProhibitScheduleMediumMap::inner_clear_flag_(const ObTabletID &tablet_id, const ProhibitFlag &input_flag)
-{
-  int ret = OB_SUCCESS;
-  ProhibitFlag tmp_flag = ProhibitFlag::FLAG_MAX;
-  if (OB_FAIL(tablet_id_map_.get_refactored(tablet_id, tmp_flag))) {
-    LOG_ERROR("failed to get from map", K(ret), K(tablet_id), K(tmp_flag));
-  } else if (OB_UNLIKELY(tmp_flag != input_flag)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("task do not match", K(ret), K(tablet_id), K(tmp_flag), K(input_flag));
-  } else if (OB_FAIL(tablet_id_map_.erase_refactored(tablet_id))) {
-    LOG_ERROR("failed to resume tablet schedule medium", K(ret), K(tablet_id), K(input_flag));
-  }
-  return ret;
-}
-
-// When executing the medium task, set the flag in the normal task process of the log stream
-int ObTenantTabletScheduler::tablet_start_schedule_medium(const ObTabletID &tablet_id, bool &tablet_could_schedule_medium)
-{
-  int ret = OB_SUCCESS;
-  tablet_could_schedule_medium = false;
-  if (OB_FAIL(prohibit_medium_map_.add_flag(tablet_id, ObProhibitScheduleMediumMap::ProhibitFlag::MEDIUM))) {
-    if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("failed to add flag for tablet schedule medium", K(ret), K(tablet_id));
-    }
-  } else {
-    tablet_could_schedule_medium = true;
   }
   return ret;
 }

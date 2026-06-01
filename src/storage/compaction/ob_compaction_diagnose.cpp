@@ -798,8 +798,7 @@ int ObCompactionDiagnoseMgr::diagnose_tenant( //TODO(mingqiao): check tenant res
                                ObTimeUtility::fast_current_time(),
                                "info", "major or medium may be paused",
                                "could_major_merge", MERGE_SCHEDULER_PTR->could_major_merge_start(),
-                               "tenant_status", MERGE_SCHEDULER_PTR->get_tenant_status(),
-                               "prohibit_medium_ls_info", MTL(ObTenantTabletScheduler *)->get_prohibit_medium_ls_map());
+                               "tenant_status", MERGE_SCHEDULER_PTR->get_tenant_status());
     }
 
     // step 3: get next freeze info
