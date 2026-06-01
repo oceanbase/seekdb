@@ -57,7 +57,7 @@ public:
   void reset();
   int64_t to_string(char *buf, const int64_t buf_len) const;
 private:
-  const static int64_t ACK_LIST_SERVER_NUM = common::OB_MAX_MEMBER_NUMBER / 2;
+  const static int64_t ACK_LIST_SERVER_NUM = MAX(1, common::OB_MAX_MEMBER_NUMBER / 2);
   common::ObAddr server_[ACK_LIST_SERVER_NUM];
 };
 } // namespace palf

@@ -181,7 +181,7 @@ const int64_t OB_MAX_CLUSTER_ID = 4294901759;
 const int64_t OB_INVALID_CLUSTER_ID = -1;
 const int64_t OB_INVALID_ORG_CLUSTER_ID = 0;
 const int64_t OB_MAX_ITERATOR = 16;
-const int64_t MAX_IP_ADDR_LENGTH = 46; //Adapting for Windows 
+const int64_t MAX_IP_ADDR_LENGTH = INET6_ADDRSTRLEN;
 const int64_t MAX_IP_PORT_LENGTH = MAX_IP_ADDR_LENGTH + 6;
 const int64_t MAX_IP_PORT_SQL_LENGTH = MAX_IP_ADDR_LENGTH + 12;
 const uint64_t MAX_IFNAME_LENGTH = 128;
@@ -239,12 +239,12 @@ const int64_t MAX_DISKGROUP_NAME = 128;
 const int64_t DEFAULT_BUF_LENGTH = 4096;
 const int64_t MAX_SINGLE_MEMBER_LENGTH = (MAX_IP_PORT_LENGTH + 17 /* timestamp length*/  + 1);
 const int64_t MAX_MEMBER_LIST_LENGTH = MAX_ZONE_NUM * (MAX_IP_PORT_LENGTH + 17 /* timestamp length*/  + 1);
-const int64_t OB_MAX_MEMBER_NUMBER = 7;
+const int64_t OB_MAX_MEMBER_NUMBER = 1;
 const int64_t OB_MAX_GLOBAL_LEARNER_NUMBER = 2000;
 const int64_t MAX_LEARNER_LIST_LENGTH = OB_MAX_GLOBAL_LEARNER_NUMBER * (MAX_IP_PORT_LENGTH + 17 /* timestamp length*/  + 1);
 const int64_t OB_MAX_CHILD_MEMBER_NUMBER = 15;
 const int64_t OB_MAX_CHILD_MEMBER_NUMBER_IN_FOLLOWER = 5;
-const int64_t OB_DEFAULT_MEMBER_NUMBER = 3;
+const int64_t OB_DEFAULT_MEMBER_NUMBER = 1;
 const int64_t MAX_VALUE_LENGTH = 4096;
 const int64_t MAX_LLC_BITMAP_LENGTH = 4096;
 const int64_t MAX_CLUSTER_EVENT_NAME_LENGTH = 256;
@@ -595,11 +595,11 @@ const int64_t OB_MAX_SERVER_TENANT_CNT = 5; // for sys,500,508,509
 const int64_t OB_RECYCLE_MACRO_BLOCK_DURATION = 10 * 60 * 1000 * 1000LL; // 10 minutes
 const int64_t OB_MINOR_FREEZE_TEAM_UP_INTERVAL = 2LL * 60 * 60 * 1000 * 1000; // 2 hours
 // for define
-const int64_t OB_MAX_SPECIAL_LS_NUM = 1 + 1; // 1 for broadcast ls and 1 for sys ls
+const int64_t OB_MAX_SPECIAL_LS_NUM = 1; // 1 for sys ls
 const int64_t OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET = 1024; // the maximum of _max_ls_cnt_per_server
 const int64_t OB_MAX_LS_NUM_PER_TENANT_PER_SERVER = (10 * (OB_MAX_SPECIAL_LS_NUM + OB_MAX_MEMBER_NUMBER) > OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET ?
                                                      OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_CAN_BE_SET : 10 * (OB_MAX_SPECIAL_LS_NUM + OB_MAX_MEMBER_NUMBER)); // magnification is 10x
-const int64_t OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_FOR_SMALL_TENANT = 8;   // the tenant that smaller than 4G will be limit to 8
+const int64_t OB_MAX_LS_NUM_PER_TENANT_PER_SERVER_FOR_SMALL_TENANT = 1;   // the tenant that smaller than 4G will be limit to 1
 const int64_t OB_MAX_TIME = 3020399000000;
 // Max add partition member timeout.
 // Used to make sure no member added after lease expired + %OB_MAX_ADD_MEMBER_TIMEOUT
