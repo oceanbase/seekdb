@@ -644,7 +644,7 @@ public:
   bool check_finished_and_set_stop();
   // independent dag process() exit loop when dag is final status
   bool is_final_status() const { return is_dag_failed()
-                                     || is_finish_status(dag_status_)
+                                     || is_finish_status(dag_status_) 
                                      || is_stop_; }
   virtual int report_result()
   {
@@ -1096,10 +1096,14 @@ public:
   int init(
       const uint64_t tenant_id,
       const int64_t dag_limit,
-      const int64_t priority, 
+      const int64_t priority,
       ObIAllocator &allocator,
       ObIAllocator &ha_allocator,
       ObTenantDagScheduler &scheduler);
+  // Sets only the priority field. Used by ObTenantDagScheduler::init to keep
+  // OB_DAG_PRIOS[priority_] indexing in-range for unused-priority slots whose
+  // full init is skipped (see OB_BUILD_OBSERVER_LITE path).
+  void set_priority_only(const int64_t priority) { priority_ = priority; }
   bool is_empty() const
   {
     bool bret = true;
@@ -1431,6 +1435,11 @@ public:
   template<typename T>
   static int alloc_dag(ObIAllocator &allocator, const bool is_ha_dag, T *&dag);
   static void inner_free_dag(ObIAllocator &allocator, ObIDag &dag);
+  // Bucket pre-allocation for DagMap / DagNetMap / DagNetIdMap. Decoupled from
+  // DEFAULT_MAX_DAG_NUM so the hashmap doesn't reserve ~117 KB per priority just
+  // to track a few hundred concurrent dags. Hash chains absorb overflow because
+  // ObHashMap is instantiated with EXTEND_RATIO=1 (no rehash).
+  static const int64_t DAG_MAP_BUCKET_NUM = 2048;
 private:
   static const int64_t SCHEDULER_WAIT_TIME_MS = 1000; // 1s
   static const int64_t DAG_SIZE_LIMIT = 10 << 12;

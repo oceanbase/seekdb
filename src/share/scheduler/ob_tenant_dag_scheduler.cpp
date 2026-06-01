@@ -46,6 +46,14 @@ namespace share
 {
 ERRSIM_POINT_DEF(EN_SKIP_LOOP_BLOCKING_DAG);
 ERRSIM_POINT_DEF(EN_FINISH_DAG_FAILURE);
+
+static inline bool is_ha_priority(const int64_t prio)
+{
+  return ObDagPrio::DAG_PRIO_HA_HIGH == prio
+      || ObDagPrio::DAG_PRIO_HA_MID  == prio
+      || ObDagPrio::DAG_PRIO_HA_LOW  == prio;
+}
+
 #define DEFINE_TASK_ADD_KV(n)                                                               \
   template <LOG_TYPENAME_TN##n>                                                                  \
   int ADD_TASK_INFO_PARAM(char *buf, const int64_t buf_size, LOG_PARAMETER_KV##n)                  \
@@ -394,16 +402,16 @@ const char *ObITask::ObITaskTypeStr[] = {
   "DIRECT_LOAD_WRITE_CHANNEL_FLUSH",
   "DIRECT_LOAD_WRITE_CHANNEL_FINISH",
   "DIRECT_LOAD_WRITE_CLOSE",
-  "DDL_WRITE_PIPELINE",
-  "DDL_WRITE_USING_TMP_FILE_PIPELINE",
-  "DDL_VECTOR_INDEX_APPEND_PIPELINE",
-  "DDL_VECTOR_INDEX_BUILD_AND_WRITE_PIPELINE",
+  "DDL_WRITE_PIPELINE", 
+  "DDL_WRITE_USING_TMP_FILE_PIPELINE", 
+  "DDL_VECTOR_INDEX_APPEND_PIPELINE", 
+  "DDL_VECTOR_INDEX_BUILD_AND_WRITE_PIPELINE", 
   "DIRECT_LOAD_START_MERGE",
-  "DDL_MERGE_PREPARE",
-  "DDL_MERGE_CG_SLICE",
-  "DDL_MERGE_ASSEMBLE",
-  "DDL_MERGE_GUARD",
-  "DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE",
+  "DDL_MERGE_PREPARE", 
+  "DDL_MERGE_CG_SLICE", 
+  "DDL_MERGE_ASSEMBLE", 
+  "DDL_MERGE_GUARD", 
+  "DIRECT_LOAD_WRITE_MACRO_BLOCK_PIPELINE", 
   "DDL_GROUP_WRITE_TASK",
   "DDL_CG_GROUP_WRITE_TASK",
   "DIRECT_LOAD_FINISH_OP",
@@ -760,7 +768,7 @@ void ObIDag::inner_clear_task_list(TaskList &task_list)
 }
 
 bool ObIDag::inner_add_task_into_list(ObITask *task)
-{
+{ 
   task->set_list_idx(ObITask::READY_TASK_LIST);
   return task_list_.add_last(task);
 }
@@ -820,7 +828,7 @@ int ObIDag::check_task_status()
   } else if (OB_FAIL(check_cycle())) {
     COMMON_LOG(WARN, "check_cycle failed, set dag stop", K(ret), K_(id), K_(is_stop));
     int tmp_ret = OB_SUCCESS;
-    // set dag stop and do not allow new task to add
+    // set dag stop and do not allow new task to add 
     if (OB_TMP_FAIL(set_stop_without_lock())) {
       LOG_WARN("failed to set stop", K(tmp_ret), K_(id));
     }
@@ -2234,7 +2242,7 @@ int ObDagPrioScheduler::init(
   if (OB_INVALID_ID == tenant_id || 0 >= dag_limit) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "init ObDagPrioScheduler with invalid arguments", K(ret), K(tenant_id), K(dag_limit));
-  } else if (OB_FAIL(dag_map_.create(dag_limit, "DagMap", "DagNode", tenant_id))) {
+  } else if (OB_FAIL(dag_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagMap", "DagNode", tenant_id))) {
     COMMON_LOG(WARN, "failed to create dap map", K(ret), K(dag_limit));
   } else {
     allocator_ = &allocator;
@@ -3828,9 +3836,9 @@ int ObDagNetScheduler::init(
   if (OB_INVALID_ID == tenant_id || 0 >= dag_limit) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "init ObDagNetScheduler with invalid arguments", K(ret), K(tenant_id), K(dag_limit));
-  } else if (OB_FAIL(dag_net_map_.create(dag_limit, "DagNetMap", "DagNetNode", tenant_id))) {
+  } else if (OB_FAIL(dag_net_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagNetMap", "DagNetNode", tenant_id))) {
     COMMON_LOG(WARN, "failed to create running dap net map", K(ret), K(dag_limit));
-  } else if (OB_FAIL(dag_net_id_map_.create(dag_limit, "DagNetIdMap", "DagNetIdNode", tenant_id))) {
+  } else if (OB_FAIL(dag_net_id_map_.create(ObTenantDagScheduler::DAG_MAP_BUCKET_NUM, "DagNetIdMap", "DagNetIdNode", tenant_id))) {
     COMMON_LOG(WARN, "failed to create dap net id map", K(ret), K(dag_limit));
   } else {
     allocator_ = &allocator;
@@ -4369,9 +4377,11 @@ void ObTenantDagScheduler::reload_config()
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_HIGH, tenant_config->compaction_high_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, tenant_config->compaction_mid_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_LOW, tenant_config->compaction_low_thread_score);
+#ifndef OB_BUILD_OBSERVER_LITE
     set_thread_score(ObDagPrio::DAG_PRIO_HA_HIGH, tenant_config->ha_high_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_HA_MID, tenant_config->ha_mid_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_HA_LOW, tenant_config->ha_low_thread_score);
+#endif
     set_thread_score(ObDagPrio::DAG_PRIO_DDL, tenant_config->ddl_thread_score);
     set_thread_score(ObDagPrio::DAG_PRIO_TTL, tenant_config->ttl_thread_score);
     set_compaction_dag_limit(tenant_config->compaction_dag_cnt_limit);
@@ -4440,6 +4450,16 @@ int ObTenantDagScheduler::init(
 
   // init prio schedulers
   for (int64_t i = 0; OB_SUCC(ret) && i < ObDagPrio::DAG_PRIO_MAX; ++i) {
+#ifdef OB_BUILD_OBSERVER_LITE
+    if (is_ha_priority(i)) {
+      // HA dags are not scheduled in observer-lite (seekdb) builds. Skip the
+      // heavy init (hashmap + workers) but still record the priority so that
+      // OB_DAG_PRIOS[priority_] derefs in dump / virtual-table paths stay
+      // in-range. add_dag/check_dag_exist/cancel_dag reject HA dags defensively.
+      prio_sche_[i].set_priority_only(i);
+      continue;
+    }
+#endif
     if (OB_FAIL(prio_sche_[i].init(
         tenant_id, dag_limit, i, get_allocator(false/*is_ha*/), get_allocator(true/*is_ha*/), *this))) {
       COMMON_LOG(WARN, "failed to init prio_sche_", K(ret), K(dag_limit));
@@ -4608,6 +4628,11 @@ int ObTenantDagScheduler::add_dag(
   } else if (OB_UNLIKELY(!dag->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", K(ret), KPC(dag));
+#ifdef OB_BUILD_OBSERVER_LITE
+  } else if (is_ha_priority(dag->get_priority())) {
+    ret = OB_NOT_SUPPORTED;
+    COMMON_LOG(WARN, "HA dag is not supported in observer lite", K(ret), KPC(dag));
+#endif
   } else if (FALSE_IT(dag->set_dag_emergency(emergency))) {
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].inner_add_dag(check_size_overflow, dag))) {
     if (OB_EAGAIN != ret) {
@@ -5443,6 +5468,10 @@ int ObTenantDagScheduler::check_dag_exist(const ObIDag *dag, bool &exist)
   } else if (OB_ISNULL(dag)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arugment", KP(dag));
+#ifdef OB_BUILD_OBSERVER_LITE
+  } else if (is_ha_priority(dag->get_priority())) {
+    exist = false;
+#endif
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].check_dag_exist(*dag, exist))) {
     COMMON_LOG(WARN, "fail to check dag exist", K(ret));
   }
@@ -5462,6 +5491,10 @@ int ObTenantDagScheduler::cancel_dag(const ObIDag *dag, const bool force_cancel)
   } else if (OB_ISNULL(dag)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arugment", KP(dag));
+#ifdef OB_BUILD_OBSERVER_LITE
+  } else if (is_ha_priority(dag->get_priority())) {
+    // No-op: HA scheduler is not initialized in observer-lite builds.
+#endif
   } else if (OB_FAIL(prio_sche_[dag->get_priority()].cancel_dag(*dag, force_cancel))) {
     COMMON_LOG(WARN, "fail to cancel dag", K(ret), KPC(dag));
   }
