@@ -219,6 +219,10 @@ void ObKVCacheStore::destroy()
 {
   int ret = OB_SUCCESS;
 
+  if (!inited_) {
+    return;
+  }
+
   for (int64_t i = 0; i < cur_mb_num_; ++i) {
     ObKVMemBlockHandle &handle = mb_handle_array_.get_mb_handle(i);
     if (FREE != handle.status_) {
@@ -236,6 +240,7 @@ void ObKVCacheStore::destroy()
   block_payload_size_ = 0;
 
   destroy_wash_structs();
+  cur_mb_num_ = 0;
   inited_ = false;
 }
 

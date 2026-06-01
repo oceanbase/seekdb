@@ -51,8 +51,10 @@ public:
   }
   void TearDown()
   {
-    mgr_.stop();
-    mgr_.destroy();
+    if (mgr_.is_inited_) {
+      mgr_.stop();
+      mgr_.destroy();
+    }
   }
   int64_t check_size() {
     int64_t i = 0;
