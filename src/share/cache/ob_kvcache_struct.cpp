@@ -257,7 +257,8 @@ ObKVMemBlockHandle::ObKVMemBlockHandle()
       kv_cnt_(0),
       ref_cnt_(0),
       seq_num_(0),
-      status_(FREE)
+      status_(FREE),
+      handle_idx_(0)
 {
 }
 

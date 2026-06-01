@@ -75,15 +75,15 @@ int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       COMMON_LOG(WARN, "failed to allocate bucket array", K(ret), K(bucket_cnt));
     } else {
-      Node **nodes = NULL;
       MEMSET(buckets_, 0, sizeof(Bucket) * bucket_cnt);
-      for (int64_t i = 0; OB_SUCC(ret) && i < bucket_cnt; ++i) {
-        if (OB_ISNULL(nodes = static_cast<Node **>(bucket_allocator_.alloc(sizeof(Node *) * bucket_size_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          COMMON_LOG(WARN, "failed to allocate bucket", K(ret), K(i), K(bucket_cnt));
-        } else {
-          memset(nodes, 0, sizeof(Node *) * bucket_size_);
-          buckets_[i].nodes_ = nodes;
+      Node **all_nodes = static_cast<Node **>(bucket_allocator_.alloc(sizeof(Node *) * bucket_num));
+      if (OB_ISNULL(all_nodes)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        COMMON_LOG(WARN, "failed to allocate all nodes", K(ret), K(bucket_num));
+      } else {
+        memset(all_nodes, 0, sizeof(Node *) * bucket_num);
+        for (int64_t i = 0; i < bucket_cnt; ++i) {
+          buckets_[i].nodes_ = all_nodes + i * bucket_size_;
         }
       }
     }
@@ -125,13 +125,11 @@ void ObKVCacheMap::destroy()
         _OB_LOG(WARN, "Fail to retire hazard nodes before destroy, ret=%d", tmp_ret);
       }
     }
-    const int64_t bucket_cnt = bucket_num_ % bucket_size_ == 0 ?
-      bucket_num_ / bucket_size_ : bucket_num_ / bucket_size_ + 1;
-    for (int64_t i = 0; i < bucket_cnt; ++i) {
-      if (NULL != buckets_[i].nodes_) {
-        bucket_allocator_.free(buckets_[i].nodes_);
-        buckets_[i].nodes_ = NULL;
-      }
+    const int64_t bucket_cnt = bucket_size_ == 0 ? 0 : (bucket_num_ % bucket_size_ == 0 ?
+      bucket_num_ / bucket_size_ : bucket_num_ / bucket_size_ + 1);
+    if (bucket_cnt > 0 && NULL != buckets_[0].nodes_) {
+      bucket_allocator_.free(buckets_[0].nodes_);
+      buckets_[0].nodes_ = NULL;
     }
     bucket_allocator_.free(buckets_);
     buckets_ = NULL;
