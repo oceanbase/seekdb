@@ -792,9 +792,7 @@ int ObCompactionDiagnoseMgr::diagnose_tenant( //TODO(mingqiao): check tenant res
     (void) get_and_set_suspect_info(MEDIUM_MERGE, UNKNOW_LS_ID, UNKNOW_TABLET_ID);
 
     // step 2: check if major compaction is paused
-    if (!MERGE_SCHEDULER_PTR->could_major_merge_start() ||
-        MTL(ObTenantTabletScheduler *)->get_prohibit_medium_ls_map().get_transfer_flag_cnt() > 0 ||
-        MTL(ObTenantTabletScheduler *)->get_prohibit_medium_ls_map().get_split_flag_cnt() > 0) {
+    if (!MERGE_SCHEDULER_PTR->could_major_merge_start()) {
       ADD_COMMON_DIAGNOSE_INFO(!MERGE_SCHEDULER_PTR->could_major_merge_start() ? MAJOR_MERGE : MEDIUM_MERGE,
                                ObCompactionDiagnoseInfo::DIA_STATUS_NOT_SCHEDULE,
                                ObTimeUtility::fast_current_time(),

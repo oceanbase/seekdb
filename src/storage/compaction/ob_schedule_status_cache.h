@@ -101,7 +101,6 @@ public:
     EXIST_UNFINISH_MEDIUM,
     SCHEDULE_CONFLICT,
     DIAGNOSE_NORMAL, // for diagnose
-    LOCKED_BY_TRANSFER_OR_SPLIT,
     NEW_ROUND_STATE_MAX,
   };
   static const char *new_round_state_to_str(const TabletScheduleNewRoundState &state);

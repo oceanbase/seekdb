@@ -100,16 +100,14 @@ public:
 
   enum class ProhibitFlag : int32_t
   {
-    TRANSFER = 0,
-    MEDIUM = 1,
-    SPLIT = 2,
+    MEDIUM = 0,
     FLAG_MAX
   };
 
   static const char *ProhibitFlagStr[];
   static bool is_valid_flag(const ProhibitFlag &flag)
   {
-    return flag >= ProhibitFlag::TRANSFER && flag < ProhibitFlag::FLAG_MAX;
+    return flag >= ProhibitFlag::MEDIUM && flag < ProhibitFlag::FLAG_MAX;
   }
   ObProhibitScheduleMediumMap();
   ~ObProhibitScheduleMediumMap() { destroy(); }
@@ -117,22 +115,14 @@ public:
   void destroy();
   int clear_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag);
   int add_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag);
-  int batch_clear_flags(const ObIArray<ObTabletID> &tablet_ids, const ProhibitFlag &input_flag);
-  int batch_add_flags(const ObIArray<ObTabletID> &tablet_ids, const ProhibitFlag &input_flag);
   int64_t to_string(char *buf, const int64_t buf_len) const;
-  int64_t get_transfer_flag_cnt() const;
-  int64_t get_split_flag_cnt() const;
 private:
   static const int64_t PRINT_LOG_INTERVAL = 2 * 60 * 1000 * 1000L; // 2m
   static const int64_t TABLET_ID_MAP_BUCKET_NUM = OB_MAX_LS_NUM_PER_TENANT_PER_SERVER * 1024;
 
-  int inner_batch_check_tablets_not_prohibited_(const ObIArray<ObTabletID> &tablet_ids); // hold lock outside !!
-  int inner_batch_add_tablets_prohibit_flags_(const ObIArray<ObTabletID> &tablet_ids, const ProhibitFlag &input_flag); // hold lock outside !!
   int inner_clear_flag_(const ObTabletID &tablet_id, const ProhibitFlag &input_flag); // hold lock outside !!
-  int64_t transfer_flag_cnt_;
-  int64_t split_flag_cnt_;
   mutable obsys::ObRWLock lock_;
-  common::hash::ObHashMap<ObTabletID, ProhibitFlag> tablet_id_map_; // tablet is used for transfer of medium compaction
+  common::hash::ObHashMap<ObTabletID, ProhibitFlag> tablet_id_map_;
 };
 
 
@@ -167,9 +157,6 @@ public:
       || OB_STATE_NOT_MATCH == ret
       || OB_LS_NOT_EXIST == ret;
   }
-  // The transfer task sets the flag that prohibits the scheduling of medium when the log stream is src_ls of transfer
-  int stop_tablets_schedule_medium(const ObIArray<ObTabletID> &tablet_ids, const ObProhibitScheduleMediumMap::ProhibitFlag &input_flag);
-  int clear_tablets_prohibit_medium_flag(const ObIArray<ObTabletID> &tablet_ids, const ObProhibitScheduleMediumMap::ProhibitFlag &input_flag);
   int clear_prohibit_medium_flag(const ObTabletID &tablet_id, const ObProhibitScheduleMediumMap::ProhibitFlag &input_flag)
   {
     return prohibit_medium_map_.clear_flag(tablet_id, input_flag);

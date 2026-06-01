@@ -215,12 +215,6 @@ int ObSplitPartitionHelper::freeze_split_src_tablet(const ObFreezeSplitSrcTablet
 
       // the followings are workarounds, still INCORRECT in some leader switch corner cases
       // 1. wait write end for medium
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(tenant_tablet_scheduler->stop_tablets_schedule_medium(tablet_ids, compaction::ObProhibitScheduleMediumMap::ProhibitFlag::SPLIT))) {
-        LOG_WARN("failed to stop tablets schedule medium", K(ret), K(arg));
-      } else if (OB_FAIL(tenant_tablet_scheduler->clear_tablets_prohibit_medium_flag(tablet_ids, compaction::ObProhibitScheduleMediumMap::ProhibitFlag::SPLIT))) {
-        LOG_WARN("failed to clear prohibit schedule medium flag", K(ret), K(arg));
-      }
       // 2. wait write end for table autoinc seq will be done in batch_get_tablet_autoinc_seq
 
       if (OB_FAIL(ret)) {

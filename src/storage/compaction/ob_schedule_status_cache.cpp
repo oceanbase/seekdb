@@ -157,7 +157,6 @@ const static char * ObTabletScheduleNewRoundStateStr[] = {
     "EXIST_UNFINISH_MEDIUM",
     "SCHEDULE_CONFLICT",
     "NONE",
-    "LOCKED_BY_TRANSFER_OR_SPLIT",
     "STATE_MAX"
 };
 
@@ -397,8 +396,6 @@ int ObTabletStatusCache::register_map(
     } else {
       LOG_WARN("failed to add tablet", K(ret), K(tablet_id));
     }
-  } else if (!could_schedule_merge) {
-    new_round_state_ = LOCKED_BY_TRANSFER_OR_SPLIT;
   } else if (OB_FAIL(tablet.ObITabletMdsInterface::get_latest_tablet_status(user_data, writer, trans_stat, trans_version))) {
     need_clear_flag = true;
     LOG_WARN("failed to get tablet status", K(ret), K(tablet), K(user_data));
