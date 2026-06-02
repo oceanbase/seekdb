@@ -333,7 +333,9 @@ int ObSQLSessionMgr::init()
                                            SET_USE_500("KillSessMapNode")))) {
     LOG_WARN("failed to init client_sess_map", K(ret));
   }
-  next_sessid_ = 0;
+  // Start from 1 so first allocated sessid is 2, avoiding collision with
+  // INNER_SQL_SESS_ID (== 1) which is reserved for non-managed inner sessions.
+  next_sessid_ = 1;
   return ret;
 }
 
@@ -367,10 +369,10 @@ int ObSQLSessionMgr::create_sessid(uint32_t &sessid)
   bool found = false;
 
   while (OB_SUCC(ret) && !found) {
-    // Take next candidate, skip 0
+    // Take next candidate, skip 0 and INNER_SQL_SESS_ID (1)
     do {
       candidate = ATOMIC_AAF(&next_sessid_, 1);
-    } while (OB_UNLIKELY(0 == candidate));
+    } while (OB_UNLIKELY(candidate <= 1));
 
     // Probe sessinfo_map_ to check if sessid is already in use
     ObSQLSessionInfo *probe = nullptr;
