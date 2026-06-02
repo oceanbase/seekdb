@@ -73,17 +73,16 @@ public:
     mock_state_mgr_->state_ = state;
     mock_state_mgr_->leader_ = (LEADER == role)? self: ObAddr();
     const int64_t init_pid = 1;
+    const int64_t init_replica_num = 1;
     LogConfigInfo config_info;
     LogConfigMeta config_meta;
     LogConfigInfoV2 default_config_info;
     ObMemberList init_member_list;
     GlobalLearnerList learner_list;
     LogConfigVersion init_config_version;
-    init_config_version.generate(init_pid, 1);
-    init_member_list.add_server(addr1);
-    init_member_list.add_server(addr2);
-    init_member_list.add_server(addr3);
-    EXPECT_EQ(OB_SUCCESS, default_config_info.generate(init_member_list, 3, learner_list, init_config_version));
+    EXPECT_EQ(OB_SUCCESS, init_config_version.generate(init_pid, 1));
+    EXPECT_EQ(OB_SUCCESS, init_member_list.add_server(self));
+    EXPECT_EQ(OB_SUCCESS, default_config_info.generate(init_member_list, init_replica_num, learner_list, init_config_version));
     EXPECT_EQ(OB_SUCCESS, config_meta.generate(init_pid, default_config_info, default_config_info, init_pid, LSN(0), init_pid));
     mock_config_mgr_->destroy();
     mock_config_mgr_->log_ms_meta_ = config_meta;
@@ -269,11 +268,17 @@ TEST_F(TestLogModeMgr, test_can_change_access_mode)
     // test see newer log
     LogModeMgr mode_mgr;
     init_test_mode_mgr_env(addr1, valid_meta, mode_mgr, LEADER, ACTIVE);
-    // switch to prepare state
-    EXPECT_EQ(OB_EAGAIN, mode_mgr.change_access_mode(mode_version, AccessMode::RAW_WRITE, share::SCN::base_scn()));
-    EXPECT_EQ(MODE_PREPARE, mode_mgr.state_);
-    // accept_log_propopsal_id is 2
-    EXPECT_EQ(OB_SUCCESS, mode_mgr.handle_prepare_response(addr2, 2, 2, LSN(0), valid_meta));
+    mode_mgr.state_ = MODE_PREPARE;
+    mode_mgr.new_proposal_id_ = 2;
+    mode_mgr.leader_epoch_ = mock_state_mgr_->get_leader_epoch();
+    mode_mgr.local_max_log_pid_ = 1;
+    mode_mgr.local_max_lsn_ = LSN(PALF_INITIAL_LSN_VAL);
+    mode_mgr.majority_cnt_ = 2;
+    mode_mgr.max_majority_accepted_pid_ = 1;
+    mode_mgr.max_majority_lsn_ = LSN(PALF_INITIAL_LSN_VAL);
+    mode_mgr.ack_list_.reset();
+    EXPECT_EQ(OB_SUCCESS, mode_mgr.follower_list_.add_server(addr2));
+    EXPECT_EQ(OB_SUCCESS, mode_mgr.handle_prepare_response(addr2, 2, 2, LSN(PALF_INITIAL_LSN_VAL + 1), valid_meta));
     EXPECT_EQ(OB_NOT_MASTER, mode_mgr.change_access_mode(mode_version, AccessMode::RAW_WRITE, share::SCN::base_scn()));
     EXPECT_EQ(MODE_PREPARE, mode_mgr.state_);
   }
@@ -351,17 +356,13 @@ TEST_F(TestLogModeMgr, test_change_access_mode)
   {
     LogModeMgr mode_mgr;
     init_test_mode_mgr_env(addr1, valid_meta, mode_mgr, LEADER, ACTIVE);
-    // switch to prepare
-    EXPECT_EQ(OB_EAGAIN, mode_mgr.change_access_mode(mode_version, AccessMode::RAW_WRITE, share::SCN::base_scn()));
-    EXPECT_EQ(MODE_PREPARE, mode_mgr.state_);
-    // handle prepare resp
-    EXPECT_EQ(OB_SUCCESS, mode_mgr.handle_prepare_response(addr2, 2, 1, LSN(0), valid_meta));
-    // switch to accept
+    // single replica reaches prepare majority immediately and switches to accept
     EXPECT_EQ(OB_EAGAIN, mode_mgr.change_access_mode(mode_version, AccessMode::RAW_WRITE, share::SCN::base_scn()));
     EXPECT_EQ(MODE_ACCEPT, mode_mgr.state_);
     // switch to accept
+    EXPECT_EQ(OB_EAGAIN, mode_mgr.change_access_mode(mode_version, AccessMode::RAW_WRITE, share::SCN::base_scn()));
+    EXPECT_EQ(MODE_ACCEPT, mode_mgr.state_);
     EXPECT_EQ(OB_SUCCESS, mode_mgr.ack_mode_meta(addr1, 2));
-    EXPECT_EQ(OB_SUCCESS, mode_mgr.ack_mode_meta(addr2, 2));
     // should not reach majority before leader's AccessMode is flushed
     EXPECT_EQ(OB_EAGAIN, mode_mgr.change_access_mode(mode_version, AccessMode::RAW_WRITE, share::SCN::base_scn()));
     // self is flushed

@@ -331,6 +331,13 @@ public:
     int ret = OB_SUCCESS;
     return ret;
   }
+  bool is_all_committed_log_slided_out(LSN &prev_lsn, int64_t &prev_log_id, LSN &committed_end_lsn) const
+  {
+    prev_lsn = LSN(PALF_INITIAL_LSN_VAL);
+    prev_log_id = OB_INVALID_LOG_ID;
+    committed_end_lsn = LSN(PALF_INITIAL_LSN_VAL + 1000);
+    return true;
+  }
   // location cache will be removed TODO by yunlong
   int set_location_cache_cb(PalfLocationCacheCb *lc_cb)
   {
