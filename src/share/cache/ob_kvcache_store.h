@@ -263,7 +263,9 @@ private:
   ObKVCacheStatus global_status_; // TODO rename me to status_
   ObTenantMBList mb_list_;
 
+  static constexpr int64_t WASH_HEAP_SIZE = 64;
   //data structures for wash
+  WashHeap wash_heap_;
   lib::ObMutex wash_out_lock_;
   ObArenaAllocator washable_size_allocator_;
   ObWashableSizeInfo washbale_size_info_;

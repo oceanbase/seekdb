@@ -443,13 +443,9 @@ bool ObKVCacheStore::wash()
   start_time = current_time;
   tmp_washbale_size_info_.reuse();
 
-  WashHeap global_wash_heap;
+  wash_heap_.mb_cnt_ = 0;
   int64_t heap_size = global_wash_size / block_size_;
-  if (heap_size > 0) {
-    if (OB_FAIL(init_wash_heap(global_wash_heap, heap_size))) {
-      COMMON_LOG(WARN, "init_wash_heap failed", K(ret), K(heap_size));
-    }
-  }
+  wash_heap_.heap_size_ = std::min(heap_size, WASH_HEAP_SIZE);
 
   //sort mb_handles to wash
   HazptrHolder hazptr_holder;
@@ -469,8 +465,8 @@ bool ObKVCacheStore::wash()
         if (handle.score_ <= WASH_OUT_SCORE_THRESHOLD) {
           wash_mb(&handle);
           washed = true;
-          if (global_wash_heap.heap_size_ > 0) {
-            global_wash_heap.heap_size_--;
+          if (wash_heap_.heap_size_ > 0) {
+            wash_heap_.heap_size_--;
           }
         }
         if (!washed) {
@@ -482,7 +478,7 @@ bool ObKVCacheStore::wash()
                       K(tmp_ret),
                       K(OB_SERVER_TENANT_ID));
           }
-          global_wash_heap.add(&handle);
+          wash_heap_.add(&handle);
         }
       }
       //any error should not break washing, so reset ret to OB_SUCCESS
@@ -495,11 +491,11 @@ bool ObKVCacheStore::wash()
   }
 
   //wash memory in tenant wash heap
-  if (global_wash_heap.mb_cnt_ > 0) {
-    wash_mbs(global_wash_heap);
+  if (wash_heap_.mb_cnt_ > 0) {
+    wash_mbs(wash_heap_);
     COMMON_LOG(INFO, "Wash memory globally, ",
         K(global_wash_size),
-        "wash_heap_cnt", global_wash_heap.mb_cnt_);
+        "wash_heap_cnt", wash_heap_.mb_cnt_);
   }
   wash_time = ObTimeUtility::current_time() - start_time;
   WashCallBack callback(*this, reclaimed_size);
@@ -1306,6 +1302,8 @@ int ObKVCacheStore::prepare_wash_structs()
     COMMON_LOG(WARN, "Fail to init washable size info", K(ret));
   } else if (OB_FAIL(tmp_washbale_size_info_.init(1/*tenant_node_size*/, bucket_num, washable_size_allocator_))) {
     COMMON_LOG(WARN, "Fail to init tmp washable size info", K(ret));
+  } else if (OB_FAIL(init_wash_heap(wash_heap_, WASH_HEAP_SIZE))) {
+    COMMON_LOG(WARN, "Fail to pre-allocate wash heap", K(ret));
   }
 
   return ret;
@@ -1313,6 +1311,7 @@ int ObKVCacheStore::prepare_wash_structs()
 
 void ObKVCacheStore::destroy_wash_structs()
 {
+  wash_heap_.reset();
   washbale_size_info_.destroy();
   tmp_washbale_size_info_.destroy();
   washable_size_allocator_.reset();
