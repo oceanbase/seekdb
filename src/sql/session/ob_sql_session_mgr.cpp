@@ -375,13 +375,12 @@ int ObSQLSessionMgr::create_sessid(uint32_t &sessid)
     } while (OB_UNLIKELY(candidate <= 1));
 
     // Probe sessinfo_map_ to check if sessid is already in use
-    ObSQLSessionInfo *probe = nullptr;
-    int probe_ret = sessinfo_map_.get(Key(candidate), probe);
+    int probe_ret = sessinfo_map_.contains_key(Key(candidate));
     if (OB_ENTRY_NOT_EXIST == probe_ret) {
       sessid = candidate;
       found = true;
-    } else if (OB_SUCCESS == probe_ret) {
-      sessinfo_map_.revert(probe);
+    } else if (OB_HASH_EXIST == probe_ret) {
+      // sessid in use, try next
     } else {
       ret = probe_ret;
       LOG_WARN("probe sessid failed", K(ret), K(candidate));
