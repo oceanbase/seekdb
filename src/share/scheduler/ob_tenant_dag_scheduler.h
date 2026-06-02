@@ -1102,8 +1102,9 @@ public:
       ObTenantDagScheduler &scheduler);
   // Sets only the priority field. Used by ObTenantDagScheduler::init to keep
   // OB_DAG_PRIOS[priority_] indexing in-range for unused-priority slots whose
-  // full init is skipped (see OB_BUILD_OBSERVER_LITE path).
+  // full init is skipped.
   void set_priority_only(const int64_t priority) { priority_ = priority; }
+  bool is_inited() const { return OB_NOT_NULL(scheduler_); }
   bool is_empty() const
   {
     bool bret = true;

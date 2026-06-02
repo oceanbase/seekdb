@@ -207,22 +207,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(TestLPDag);
 };
 
-class TestMPDag : public TestDag
-{
-public:
-  TestMPDag() : TestDag(ObDagType::DAG_TYPE_FAST_MIGRATE) {}
-private:
-  DISALLOW_COPY_AND_ASSIGN(TestMPDag);
-};
-
-class TestHALowDag : public TestDag
-{
-public:
-  TestHALowDag() : TestDag(ObDagType::DAG_TYPE_BACKUP_PREPARE) {}
-private:
-  DISALLOW_COPY_AND_ASSIGN(TestHALowDag);
-};
-
 class TestCompMidDag : public TestDag
 {
 public:
@@ -567,7 +551,7 @@ public:
         break;
       }
       case ObDagPrio::DAG_PRIO_COMPACTION_LOW: {
-        TestMPDag *mp_dag= NULL;
+        TestCompLowDag *mp_dag= NULL;
         if (OB_SUCCESS != (tmp_ret = scheduler_->alloc_dag(mp_dag))) {
           if (OB_ALLOCATE_MEMORY_FAILED != tmp_ret) {
             ret = tmp_ret;
@@ -581,7 +565,7 @@ public:
         break;
       }
       default : {
-        TestMPDag *hp_dag= NULL;
+        TestMemRelatedDag *hp_dag= NULL;
         if (OB_SUCCESS != (tmp_ret = scheduler_->alloc_dag(hp_dag))) {
           if (OB_ALLOCATE_MEMORY_FAILED != tmp_ret) {
             ret = tmp_ret;
@@ -850,105 +834,6 @@ TEST_F(TestDagScheduler, test_cycle)
   EXPECT_EQ(0, op.value());
 }
 
-TEST_F(TestDagScheduler, test_priority)
-{
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
-  ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
-
-  AtomicOperator op(0);
-
-  int32_t thread_cnt = scheduler->get_work_thread_num();
-
-  int32_t concurrency = 60;
-  bool finish_flag[5] = {false, false, false, false, false};
-
-  TestDDLDag *dag1 = NULL;
-  LoopWaitTask *inc_task = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag1));
-  EXPECT_EQ(OB_SUCCESS, dag1->init(1));
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag1, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, concurrency, finish_flag[0]));
-  EXPECT_EQ(OB_SUCCESS, dag1->add_task(*inc_task));
-  TestHALowDag *dag2 = NULL;
-  LoopWaitTask *mul_task = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag2));
-  EXPECT_EQ(OB_SUCCESS, dag2->init(2));
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag2, mul_task));
-  EXPECT_EQ(OB_SUCCESS, mul_task->init(1, concurrency, finish_flag[1]));
-  EXPECT_EQ(OB_SUCCESS, dag2->add_task(*mul_task));
-  TestCompLowDag *dag3 = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag3));
-  EXPECT_EQ(OB_SUCCESS, dag3->init(3));
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag3, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, concurrency, finish_flag[2]));
-  EXPECT_EQ(OB_SUCCESS, dag3->add_task(*inc_task));
-  TestMemRelatedDag *dag4 = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag4));
-  EXPECT_EQ(OB_SUCCESS, dag4->init(4));
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag4, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, concurrency, finish_flag[3]));
-  EXPECT_EQ(OB_SUCCESS, dag4->add_task(*inc_task));
-  TestCompMidDag *dag5 = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag5));
-  EXPECT_EQ(OB_SUCCESS, dag5->init(5));
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag5, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, concurrency, finish_flag[4]));
-  EXPECT_EQ(OB_SUCCESS, dag5->add_task(*inc_task));
-
-  const int64_t uplimit = 10;
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_DDL, uplimit));
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_HA_LOW, uplimit));
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_MID, uplimit));
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_HA_HIGH, uplimit));
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(ObDagPrio::DAG_PRIO_COMPACTION_HIGH, uplimit));
-
-  // 13 threads in total
-  int64_t max_uplimit = uplimit;
-  int64_t threads_sum = 0;
-  int64_t work_thread_num = 0;
-  for (int64_t i = 0; i < ObDagPrio::DAG_PRIO_MAX; ++i) { // calc sum of default_low_limit
-    threads_sum += scheduler->prio_sche_[i].limits_;
-  }
-  work_thread_num = threads_sum;
-
-  EXPECT_EQ(work_thread_num, scheduler->get_work_thread_num());
-  scheduler->dump_dag_status();
-
-  // low priority run at max speed
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag1));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_DDL));
-
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag2));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_LOW));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_DDL));
-
-  dag3->set_priority(ObDagPrio::DAG_PRIO_HA_HIGH);
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag3));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_HIGH));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_LOW));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_DDL));
-
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag4));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_COMPACTION_HIGH));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_HIGH));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_LOW));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_DDL));
-
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag5));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_COMPACTION_HIGH));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_HIGH));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_COMPACTION_MID));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_LOW));
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_DDL));
-
-  for (int i = 0; i < 5; ++i) {
-    finish_flag[i] = true;
-  }
-
-  wait_scheduler();
-}
-
 // TEST_F(TestDagScheduler, test_error_handling)
 // {
 //   ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
@@ -1012,69 +897,6 @@ TEST_F(TestDagScheduler, test_priority)
 //   EXPECT_EQ(0, op.value());
 // }
 
-void print_state(int64_t idx)
-{
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
-  ASSERT_TRUE(nullptr != scheduler);
-  COMMON_LOG(INFO, "scheduler state: ", K(scheduler->get_total_running_task_cnt()), K(scheduler->work_thread_num_),
-      K(scheduler->total_worker_cnt_), K(scheduler->prio_sche_[idx].limits_),
-      K(scheduler->prio_sche_[idx].running_task_cnts_));
-}
-
-TEST_F(TestDagScheduler, test_set_concurrency)
-{
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
-  ASSERT_TRUE(nullptr != scheduler);
-
-  int64_t prio = ObDagPrio::DAG_PRIO_HA_MID;
-  int32_t uplimit = OB_DAG_PRIOS[prio].score_;
-  EXPECT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
-
-  int cnt = 30;
-
-  scheduler->dump_dag_status();
-  TestMPDag *dag = NULL;
-  AtomicIncTask *inc_task = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag));
-  EXPECT_EQ(OB_SUCCESS, dag->init(1));
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, cnt, dag->get_op(), 10 * sleep_slice));
-  EXPECT_EQ(OB_SUCCESS, dag->add_task(*inc_task));
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag));
-
-  CHECK_EQ_UTIL_TIMEOUT(OB_DAG_PRIOS[prio].score_, scheduler->prio_sche_[prio].limits_);
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->prio_sche_[prio].limits_);
-  CHECK_EQ_UTIL_TIMEOUT(uplimit, scheduler->get_total_running_task_cnt());
-  EXPECT_TRUE(uplimit <= scheduler->work_thread_num_);
-  // set max to 20
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(prio, 20));
-  EXPECT_EQ(20, scheduler->prio_sche_[prio].limits_);
-  //EXPECT_EQ(41, scheduler->work_thread_num_);
-  // set to 1
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(prio, 1));
-  print_state(prio);
-  EXPECT_EQ(1, scheduler->prio_sche_[prio].limits_);
-  CHECK_EQ_UTIL_TIMEOUT(1, scheduler->get_total_running_task_cnt());
-  EXPECT_TRUE(1 <= scheduler->work_thread_num_);
-  // set to 2
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(prio, 2));
-  print_state(prio);
-  EXPECT_EQ(2, scheduler->prio_sche_[prio].limits_);
-  CHECK_EQ_UTIL_TIMEOUT(2, scheduler->get_total_running_task_cnt());
-  EXPECT_TRUE(2 <= scheduler->work_thread_num_);
-  // set to 5
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(prio, 5));
-  print_state(prio);
-  EXPECT_EQ(5, scheduler->prio_sche_[prio].limits_);
-  EXPECT_TRUE(5 <= scheduler->work_thread_num_);
-  // set to 0
-  EXPECT_EQ(OB_SUCCESS, scheduler->set_thread_score(prio, 0));
-  print_state(prio);
-  EXPECT_EQ(uplimit, scheduler->prio_sche_[prio].limits_);
-  EXPECT_TRUE(uplimit <= scheduler->work_thread_num_);
-  wait_scheduler();
-}
-
 TEST_F(TestDagScheduler, stress_test)
 {
 
@@ -1096,14 +918,14 @@ TEST_F(TestDagScheduler, test_get_dag_count)
   ASSERT_TRUE(nullptr != scheduler);
   ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
 
-  TestMPDag *dag = NULL;
-  TestMPDag *dag2 = NULL;
+  TestCompMidDag *dag = NULL;
+  TestCompMidDag *dag2 = NULL;
   TestMulTask *mul_task = NULL;
   TestMulTask *mul_task2 = NULL;
   int64_t counter = 1;
 
-  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_FAST_MIGRATE));
   EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MERGE_EXECUTE));
+  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MINI_MERGE));
   EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_DDL));
   EXPECT_EQ(-1, scheduler->get_dag_count(ObDagType::DAG_TYPE_MAX));
 
@@ -1114,8 +936,8 @@ TEST_F(TestDagScheduler, test_get_dag_count)
   EXPECT_EQ(OB_SUCCESS, dag->add_task(*mul_task));
   EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag));
   sleep(10);
-  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MERGE_EXECUTE));
-  CHECK_EQ_UTIL_TIMEOUT(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_FAST_MIGRATE));
+  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MINI_MERGE));
+  CHECK_EQ_UTIL_TIMEOUT(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MERGE_EXECUTE));
   EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_DDL));
   EXPECT_EQ(-1, scheduler->get_dag_count(ObDagType::DAG_TYPE_MAX));
   scheduler->stop();
@@ -1125,8 +947,8 @@ TEST_F(TestDagScheduler, test_get_dag_count)
   EXPECT_EQ(OB_SUCCESS, mul_task->init(&counter));
   EXPECT_EQ(OB_SUCCESS, dag->add_task(*mul_task));
   EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag));
-  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MERGE_EXECUTE));
-  EXPECT_EQ(1, scheduler->get_dag_count(ObDagType::DAG_TYPE_FAST_MIGRATE));
+  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MINI_MERGE));
+  EXPECT_EQ(1, scheduler->get_dag_count(ObDagType::DAG_TYPE_MERGE_EXECUTE));
   EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_DDL));
   EXPECT_EQ(-1, scheduler->get_dag_count(ObDagType::DAG_TYPE_MAX));
   EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag2));
@@ -1135,8 +957,8 @@ TEST_F(TestDagScheduler, test_get_dag_count)
   EXPECT_EQ(OB_SUCCESS, mul_task2->init(&counter));
   EXPECT_EQ(OB_SUCCESS, dag2->add_task(*mul_task2));
   EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag2));
-  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MERGE_EXECUTE));
-  EXPECT_EQ(2, scheduler->get_dag_count(ObDagType::DAG_TYPE_FAST_MIGRATE));
+  EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_MINI_MERGE));
+  EXPECT_EQ(2, scheduler->get_dag_count(ObDagType::DAG_TYPE_MERGE_EXECUTE));
   EXPECT_EQ(0, scheduler->get_dag_count(ObDagType::DAG_TYPE_DDL));
   EXPECT_EQ(-1, scheduler->get_dag_count(ObDagType::DAG_TYPE_MAX));
 }
@@ -1162,7 +984,7 @@ TEST_F(TestDagScheduler, test_destroy_when_running)
   EXPECT_EQ(OB_SUCCESS, alloc_task(*dag1, inc_task));
   EXPECT_EQ(OB_SUCCESS, inc_task->init(1, thread_cnt * 3, *op, 2*sleep_slice));
   EXPECT_EQ(OB_SUCCESS, dag1->add_task(*inc_task));
-  TestMPDag *dag2 = NULL;
+  TestCompMidDag *dag2 = NULL;
   AtomicMulTask *mul_task = NULL;
   EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag2));
   EXPECT_EQ(OB_SUCCESS, dag2->init(2));
@@ -1179,59 +1001,6 @@ TEST_F(TestDagScheduler, test_destroy_when_running)
   // CHECK_EQ_UTIL_TIMEOUT(hp_max, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_COMPACTION_MID));
   CHECK_EQ_UTIL_TIMEOUT(lp_max, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_DDL));
   #endif
-}
-
-TEST_F(TestDagScheduler, test_up_limit)
-{
-  ObTenantDagScheduler *scheduler = MTL(ObTenantDagScheduler*);
-  ASSERT_TRUE(nullptr != scheduler);
-  ASSERT_EQ(OB_SUCCESS, scheduler->init(MTL_ID(), time_slice));
-
-  AtomicOperator op(0);
-
-  TestLPDag *dag1 = NULL;
-  AtomicIncTask *inc_task = NULL;
-  const int32_t lp_max = scheduler->prio_sche_[ObDagPrio::DAG_PRIO_HA_LOW].limits_;
-  const int32_t mp_max = scheduler->prio_sche_[ObDagPrio::DAG_PRIO_HA_MID].limits_;
-  const int32_t hp_max = scheduler->prio_sche_[ObDagPrio::DAG_PRIO_HA_HIGH].limits_;
-  const int64_t cnt = 64;
-  scheduler->dump_dag_status();
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag1));
-  EXPECT_EQ(OB_SUCCESS, dag1->init(1));
-  dag1->set_priority(ObDagPrio::DAG_PRIO_HA_LOW);
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag1, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, cnt, op, 2*sleep_slice));
-  EXPECT_EQ(OB_SUCCESS, dag1->add_task(*inc_task));
-
-  TestMPDag *dag2 = NULL;
-  AtomicMulTask *mul_task = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag2));
-  EXPECT_EQ(OB_SUCCESS, dag2->init(2));
-  dag2->set_priority(ObDagPrio::DAG_PRIO_HA_HIGH);
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag2, mul_task));
-  EXPECT_EQ(OB_SUCCESS, mul_task->init(1, cnt, op, 4*sleep_slice));
-  EXPECT_EQ(OB_SUCCESS, dag2->add_task(*mul_task));
-
-  TestMPDag *dag3 = NULL;
-  EXPECT_EQ(OB_SUCCESS, scheduler->alloc_dag(dag3));
-  EXPECT_EQ(OB_SUCCESS, dag3->init(3));
-  dag3->set_priority(ObDagPrio::DAG_PRIO_HA_MID);
-  EXPECT_EQ(OB_SUCCESS, alloc_task(*dag3, inc_task));
-  EXPECT_EQ(OB_SUCCESS, inc_task->init(1, cnt, op, 3*sleep_slice));
-  EXPECT_EQ(OB_SUCCESS, dag3->add_task(*inc_task));
-
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag1));
-  CHECK_EQ_UTIL_TIMEOUT(lp_max, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_LOW));
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag2));
-  // high priority preempt quotas from low priority, low priority run at min thread
-  CHECK_EQ_UTIL_TIMEOUT(hp_max, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_HIGH));
-  CHECK_EQ_UTIL_TIMEOUT(MIN(scheduler->work_thread_num_ - hp_max, lp_max), scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_LOW));
-
-  EXPECT_EQ(OB_SUCCESS, scheduler->add_dag(dag3));
-  CHECK_EQ_UTIL_TIMEOUT(hp_max, scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_HIGH));
-  CHECK_EQ_UTIL_TIMEOUT(MIN(scheduler->work_thread_num_ - hp_max, mp_max), scheduler->get_running_task_cnt(ObDagPrio::DAG_PRIO_HA_MID));
-
-  wait_scheduler();
 }
 
 TEST_F(TestDagScheduler, test_emergency_task)
