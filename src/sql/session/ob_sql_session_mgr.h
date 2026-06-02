@@ -66,7 +66,7 @@ public:
   explicit ObSQLSessionMgr():
       //null_callback_(),
       sessinfo_map_(),
-      next_sessid_(1),
+      next_sessid_(0),
       traverse_times_(NON_DURABLE_VALUE)
       // CLEAN_KILL_CLIENT_SESSION_TIME(28800000000)
   {
