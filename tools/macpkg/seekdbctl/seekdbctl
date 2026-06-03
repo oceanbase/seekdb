@@ -34,20 +34,20 @@ Commands:
   help         Show this help
 
 Recommended shortcuts:
-  seekdb-start    Start seekdb daemon
-  seekdb-stop     Stop seekdb daemon
-  seekdb-status   Check seekdb status
-  seekdb-cleanup  Remove config and data directories
-  seekdb-paths    Show paths
-  seekdb-config   Show or update path configuration
-  seekdb-setup    Initialize, enable boot startup, and start
-  seekdb-uninstall Remove seekdb completely
+  seekdb_start    Start seekdb daemon
+  seekdb_stop     Stop seekdb daemon
+  seekdb_status   Check seekdb status
+  seekdb_cleanup  Remove config and data directories
+  seekdb_paths    Show paths
+  seekdb_config   Show or update path configuration
+  seekdb_setup    Initialize, enable boot startup, and start
+  seekdb_uninstall Remove seekdb completely
 
 Examples:
-  seekdb-paths
-  sudo seekdb-config --base-dir /opt/seekdb/data --restart
-  sudo seekdb-setup
-  sudo seekdb-uninstall
+  seekdb_paths
+  sudo seekdb_config --base-dir /opt/seekdb/data --restart
+  sudo seekdb_setup
+  sudo seekdb_uninstall
 EOF
 }
 
@@ -408,9 +408,9 @@ cmd_config() {
   if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     cat <<EOF
 Usage:
-  seekdb-config
-  sudo seekdb-config --base-dir <path> [--restart]
-  sudo seekdb-config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--plugin-dir <path>] [--restart]
+  seekdb_config
+  sudo seekdb_config --base-dir <path> [--restart]
+  sudo seekdb_config --base-dir <path> --data-dir <path> --redo-dir <path> [--port <port>] [--plugin-dir <path>] [--restart]
 EOF
     return 0
   fi
