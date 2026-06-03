@@ -951,8 +951,14 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     func showResult(success: Bool, output: String, title: String = "seekdb") {
         let alert = NSAlert()
         alert.messageText = title
-        alert.informativeText = output.isEmpty ? (success ? "Done" : "Failed") : output
-        alert.alertStyle = success ? .informational : .critical
+        if success {
+            alert.informativeText = "Done."
+            alert.alertStyle = .informational
+        } else {
+            let logDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data") + "/log"
+            alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
+            alert.alertStyle = .critical
+        }
         alert.runModal()
     }
 
