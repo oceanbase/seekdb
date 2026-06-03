@@ -23,7 +23,7 @@
 using namespace oceanbase::obsys;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
-using namespace oceanbase::common::zstd;
+using namespace oceanbase::common::zstd_1_3_8;
 
 namespace oceanbase
 {
@@ -197,7 +197,7 @@ void TestCompressorStress::run1()
 class ObCompressorTest : public testing::Test
 {
 public:
-  ObCompressorTest() : zstd_compressor(alloc) {}
+  ObCompressorTest() : alloc(), zstd_compressor_(alloc) {}
   static void SetUpTestCase()
   {
     memset(const_cast<char *>(compress_buffer), '\0', 100);
@@ -216,7 +216,7 @@ public:
   static int64_t dst_data_size;
   ObMalloc alloc;
   ObNoneCompressor none_compressor;
-  ObZstdCompressor zstd_compressor;
+  ObZstdCompressor_1_3_8 zstd_compressor_;
 };
 
 const char *ObCompressorTest::src_data =
@@ -337,13 +337,13 @@ TEST_F(ObCompressorTest, test_none)
 TEST_F(ObCompressorTest, test_zstd)
 {
   //test invalid argument
-  test_invalid_argument(zstd_compressor);
+  test_invalid_argument(zstd_compressor_);
 
   //test overflow size
-  test_overflow_size(zstd_compressor);
+  test_overflow_size(zstd_compressor_);
 
   //test normal
-  test_normal(zstd_compressor);
+  test_normal(zstd_compressor_);
 }
 
 TEST(ObCompressorStress, compress_stable)
@@ -352,7 +352,7 @@ TEST(ObCompressorStress, compress_stable)
   const int64_t sleep_sec = 1;
   TestCompressorStress cmp_stress;
   ObMalloc alloc;
-  ObZstdCompressor zstd_compressor(alloc);
+  ObZstdCompressor_1_3_8 zstd_compressor(alloc);
 
   ret = cmp_stress.init(30000, 100000, &zstd_compressor);
   ASSERT_EQ(OB_SUCCESS, ret);
