@@ -18,8 +18,8 @@
 #define OCEANBASE_SHARE_TABLE_OB_TABLE_TTL_UTIL_
 
 #include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "rpc/frame/ob_req_transport.h"
-#include "share/ob_rpc_struct.h"
+#include "share/ob_srv_rpc_proxy.h"
+#include "rootserver/ob_rs_async_rpc_proxy.h"
 
 namespace oceanbase
 {
@@ -241,27 +241,29 @@ struct ObTTLParam
 {
 public:
   ObTTLParam()
-    : ttl_info_array_(), ttl_all_(false)
+    : ttl_info_array_(), ttl_all_(false), transport_(nullptr)
   {}
 
   void reset()
   {
     ttl_info_array_.reset();
     ttl_all_ = false;
+    transport_ = nullptr;
   }
 
   bool is_valid() const
   {
-    return true;
+    return (nullptr != transport_);
   }
 
   int add_ttl_info(const uint64_t tenant_id);
 
-  TO_STRING_KV(K_(ttl_info_array), K_(ttl_all));
+  TO_STRING_KV(K_(ttl_info_array), K_(ttl_all), KP_(transport));
 
   common::ObArray<ObSimpleTTLInfo> ttl_info_array_;
   bool ttl_all_;
-  obcall::ObTTLRequestArg::TTLRequestType type_;
+  rpc::frame::ObReqTransport *transport_;
+  obrpc::ObTTLRequestArg::TTLRequestType type_;
 };
 
 class ObKVAttr
@@ -396,7 +398,8 @@ private:
   static bool extract_val(const char* ptr, uint64_t len, int& val);
   static bool valid_digit(const char* ptr, uint64_t len);
   static int parse_ttl_daytime(ObString& in, ObTTLDayTime& daytime);
-  static int dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType type,
+  static int dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType type,
+                                     const rpc::frame::ObReqTransport &transport,
                                      const ObSimpleTTLInfo &ttl_info);
   static int get_all_user_tenant_ttl(common::ObIArray<ObSimpleTTLInfo> &ttl_info_array);
   static int parse_kv_attributes_table(json::Value *ast);

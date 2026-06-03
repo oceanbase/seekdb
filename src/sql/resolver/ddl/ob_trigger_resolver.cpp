@@ -27,7 +27,7 @@ namespace oceanbase
 namespace sql
 {
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share::schema;
 using namespace pl;
 
@@ -71,7 +71,7 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("drop trigger stmt is NULL", K(ret));
   } else {
-    const obcall::ObDropTriggerArg &arg = stmt->get_trigger_arg();
+    const obrpc::ObDropTriggerArg &arg = stmt->get_trigger_arg();
     uint64_t tenant_id = arg.tenant_id_;
     const ObString &trigger_database = arg.trigger_database_;
     const ObString &trigger_name = arg.trigger_name_;

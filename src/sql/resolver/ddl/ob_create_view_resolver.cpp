@@ -28,7 +28,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share::schema;
 using namespace omt;
 namespace sql

@@ -7773,16 +7773,19 @@ id	field	type	length	precision	nullable
 26	running_table_duration_time	5	0	20	0
 27	spare1	5	0	20	1
 28	spare2	22	4096	-1	1
-table oceanbase.__all_virtual_thread column_count 7 table_id 12384
+table oceanbase.__all_virtual_thread column_count 10 table_id 12384
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12384 order by column_id;
 id	field	type	length	precision	nullable
 16	tid	5	0	20	0
 17	tname	22	16	-1	0
-18	latch_wait	22	16	-1	0
-19	latch_hold	22	256	-1	0
-20	trace_id	22	40	-1	0
-21	cgroup_path	22	256	-1	0
-22	numa_node	5	0	20	0
+18	status	22	32	-1	0
+19	wait_event	22	96	-1	0
+20	latch_wait	22	16	-1	0
+21	latch_hold	22	256	-1	0
+22	trace_id	22	40	-1	0
+23	loop_ts	18	0	25	0
+24	cgroup_path	22	256	-1	0
+25	numa_node	5	0	20	0
 table oceanbase.__all_virtual_server_storage column_count 15 table_id 12386
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12386 order by column_id;
 id	field	type	length	precision	nullable
@@ -8510,6 +8513,15 @@ id	field	type	length	precision	nullable
 24	table_name	22	1024	-1	1
 25	column_name	22	1024	-1	1
 26	all_priv	5	0	20	1
+table oceanbase.__all_virtual_shared_storage_quota column_count 6 table_id 12465
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12465 order by column_id;
+id	field	type	length	precision	nullable
+16	module	22	32	-1	0
+17	class_id	5	0	20	0
+18	storage_id	5	0	20	0
+19	type	22	32	-1	0
+20	requirement	5	0	20	0
+21	assign	5	0	20	0
 table information_schema.ENABLED_ROLES column_count 4 table_id 12466
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12466 order by column_id;
 id	field	type	length	precision	nullable
@@ -9017,6 +9029,27 @@ select column_id id, column_name field, data_type type, data_length length, data
 id	field	type	length	precision	nullable
 16	catalog_id	5	0	20	0
 17	database_name	22	256	-1	0
+table oceanbase.__all_virtual_storage_cache_task column_count 7 table_id 12529
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12529 order by column_id;
+id	field	type	length	precision	nullable
+16	tablet_id	5	0	20	0
+17	status	22	64	-1	0
+18	speed	22	29	-1	0
+19	start_time	18	0	25	0
+20	complete_time	18	0	25	0
+21	result	5	0	20	0
+22	comment	22	4096	-1	0
+table oceanbase.__all_virtual_tablet_local_cache column_count 8 table_id 12530
+select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12530 order by column_id;
+id	field	type	length	precision	nullable
+16	tablet_id	5	0	20	0
+17	storage_cache_policy	22	64	-1	0
+18	cached_data_size	5	0	20	0
+19	cache_hit_count	5	0	20	0
+20	cache_miss_count	5	0	20	0
+21	cache_hit_size	5	0	20	0
+22	cache_miss_size	5	0	20	0
+23	info	22	4096	-1	0
 table oceanbase.__all_virtual_ccl_rule column_count 15 table_id 12533
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_virtual_column where tenant_id=1 and table_id=12533 order by column_id;
 id	field	type	length	precision	nullable

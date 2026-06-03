@@ -33,7 +33,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace common::sqlclient;
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 using namespace share::schema;
 using namespace sql;
@@ -52,7 +52,7 @@ ObIndexBuilder::~ObIndexBuilder()
 
 int ObIndexBuilder::create_index(
     const ObCreateIndexArg &arg,
-    obcall::ObAlterTableRes &res)
+    obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("start create index", K(arg));
@@ -78,7 +78,7 @@ int ObIndexBuilder::create_index(
   return ret;
 }
 
-int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDropIndexRes &res)
+int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obrpc::ObDropIndexRes &res)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = arg.tenant_id_;
@@ -195,7 +195,7 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
   return ret;
 }
 
-int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIndexRes &res)
+int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obrpc::ObDropIndexRes &res)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = const_arg.tenant_id_;
@@ -208,7 +208,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
   bool need_rename_index = true;
   ObTableType drop_table_type = USER_INDEX;
   ObDropIndexArg arg;
-  const bool is_mlog = (obcall::ObIndexArg::DROP_MLOG == const_arg.index_action_type_);
+  const bool is_mlog = (obrpc::ObIndexArg::DROP_MLOG == const_arg.index_action_type_);
   if (is_mlog) {
     need_rename_index = false;
     drop_table_type = MATERIALIZED_VIEW_LOG;
@@ -537,8 +537,8 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
       table_item.table_name_ = index_table_schema->get_table_name();
       table_item.is_hidden_ = index_table_schema->is_user_hidden_table();
       table_item.table_id_ = arg.index_table_id_;
-      obcall::ObDDLRes ddl_res;
-      obcall::ObDropTableArg drop_table_arg;
+      obrpc::ObDDLRes ddl_res;
+      obrpc::ObDropTableArg drop_table_arg;
       drop_table_arg.tenant_id_ = tenant_id;
       drop_table_arg.if_exist_ = false;
       drop_table_arg.table_type_ = drop_table_type;
@@ -569,9 +569,9 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
 
 int ObIndexBuilder::do_create_global_index(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const obcall::ObCreateIndexArg &arg,
+    const obrpc::ObCreateIndexArg &arg,
     const share::schema::ObTableSchema &table_schema,
-    obcall::ObAlterTableRes &res)
+    obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_data_version = 0;
@@ -580,7 +580,7 @@ int ObIndexBuilder::do_create_global_index(
   ObDDLTaskRecord task_record;
   ObArenaAllocator allocator(lib::ObLabel("DdlTaskTmp"));
   HEAP_VARS_2((ObTableSchema, new_table_schema),
-              (obcall::ObCreateIndexArg, new_arg)) {
+              (obrpc::ObCreateIndexArg, new_arg)) {
     ObTableSchema &index_schema = new_arg.index_schema_;
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
     int64_t refreshed_schema_version = 0;
@@ -693,7 +693,7 @@ int ObIndexBuilder::do_create_global_index(
 
 int ObIndexBuilder::submit_build_index_task(
     ObMySQLTransaction &trans,
-    const obcall::ObCreateIndexArg &create_index_arg,
+    const obrpc::ObCreateIndexArg &create_index_arg,
     const ObTableSchema *data_schema,
     const ObIArray<ObTabletID> *inc_data_tablet_ids,
     const ObIArray<ObTabletID> *del_data_tablet_ids,
@@ -950,7 +950,7 @@ int ObIndexBuilder::recognize_vec_hnsw_index_schemas(
 
 int ObIndexBuilder::submit_rebuild_index_task(
     ObMySQLTransaction &trans,
-    const obcall::ObRebuildIndexArg &rebuild_index_arg,
+    const obrpc::ObRebuildIndexArg &rebuild_index_arg,
     const ObTableSchema *data_schema,
     const ObIArray<ObTabletID> *inc_data_tablet_ids,
     const ObIArray<ObTabletID> *del_data_tablet_ids,
@@ -1096,7 +1096,7 @@ bool ObIndexBuilder::rowkey_doc_index_valid(const bool has_docid_col,
 }
 
 int ObIndexBuilder::check_drop_with_docid_indexs_ith_valid(
-    const obcall::ObDropIndexArg &arg,
+    const obrpc::ObDropIndexArg &arg,
     const share::schema::ObTableSchema &index_schema,
     const int64_t schema_count,
     int64_t &aux_rowkey_doc_ith,
@@ -1141,7 +1141,7 @@ int ObIndexBuilder::check_drop_with_docid_indexs_ith_valid(
   return ret;
 }
 
-bool ObIndexBuilder::is_drop_dense_vec_index_task(const obcall::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema)
+bool ObIndexBuilder::is_drop_dense_vec_index_task(const obrpc::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema)
 {
   const bool is_drop_vec_spiv_task = (!arg.is_inner_ && index_schema.is_vec_spiv_index_aux());
   const bool is_drop_vec_task = ((!arg.is_inner_ && index_schema.is_vec_domain_index()) || arg.is_vec_inner_drop_);  // inner drop or user drop
@@ -1149,7 +1149,7 @@ bool ObIndexBuilder::is_drop_dense_vec_index_task(const obcall::ObDropIndexArg &
 }
 
 // both fts\multivalue\spiv use rowkey-docid/docid-rowkey, use same drop task
-bool ObIndexBuilder::is_drop_with_docid_index_task(const obcall::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema)
+bool ObIndexBuilder::is_drop_with_docid_index_task(const obrpc::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema)
 {
   const bool is_drop_vec_spiv_task = (!arg.is_inner_ && index_schema.is_vec_spiv_index_aux()) || arg.is_parent_task_dropping_spiv_index_;
   const bool is_drop_fts_task = (!arg.is_inner_ && index_schema.is_fts_index_aux()) || arg.is_parent_task_dropping_fts_index_;
@@ -1160,7 +1160,7 @@ bool ObIndexBuilder::is_drop_with_docid_index_task(const obcall::ObDropIndexArg 
 int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
                                            const ObTableSchema &data_schema,
                                            const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
-                                           const obcall::ObDropIndexArg &arg,
+                                           const obrpc::ObDropIndexArg &arg,
                                            const common::ObIArray<common::ObTabletID> *inc_data_tablet_ids,
                                            const common::ObIArray<common::ObTabletID> *del_data_tablet_ids,
                                            common::ObIAllocator &allocator,
@@ -1374,9 +1374,9 @@ int ObIndexBuilder::submit_drop_index_task(ObMySQLTransaction &trans,
 
 int ObIndexBuilder::do_create_local_index(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const obcall::ObCreateIndexArg &create_index_arg,
+    const obrpc::ObCreateIndexArg &create_index_arg,
     const share::schema::ObTableSchema &table_schema,
-    obcall::ObAlterTableRes &res)
+    obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObColumnSchemaV2 *, 1> gen_columns;
@@ -1384,8 +1384,8 @@ int ObIndexBuilder::do_create_local_index(
   ObArenaAllocator allocator(lib::ObLabel("DdlTaskTmp"));
   HEAP_VARS_4((ObTableSchema, index_schema),
               (ObTableSchema, new_table_schema),
-              (obcall::ObCreateIndexArg, my_arg),
-              (obcall::ObCreateIndexArg, tmp_arg)) {
+              (obrpc::ObCreateIndexArg, my_arg),
+              (obrpc::ObCreateIndexArg, tmp_arg)) {
     ObDDLSQLTransaction trans(&ddl_service_.get_schema_service());
     int64_t refreshed_schema_version = 0;
     const uint64_t tenant_id = table_schema.get_tenant_id();
@@ -1636,7 +1636,7 @@ int ObIndexBuilder::do_create_local_index(
 // and table_name, which will used for getting data table schema in generate_schema
 int ObIndexBuilder::do_create_index(
     const ObCreateIndexArg &arg,
-    obcall::ObAlterTableRes &res)
+    obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
@@ -1971,7 +1971,7 @@ int ObIndexBuilder::generate_schema(
   return ret;
 }
 
-int ObIndexBuilder::create_index_column_group(const obcall::ObCreateIndexArg &arg, ObTableSchema &index_table_schema)
+int ObIndexBuilder::create_index_column_group(const obrpc::ObCreateIndexArg &arg, ObTableSchema &index_table_schema)
 {
   int ret = OB_SUCCESS;
   uint64_t compat_version = 0;
@@ -1982,7 +1982,7 @@ int ObIndexBuilder::create_index_column_group(const obcall::ObCreateIndexArg &ar
   ObColumnGroupSchema tmp_cg;
   /* check exist column group*/
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.index_cgs_.count(); ++i) {
-      const obcall::ObCreateIndexArg::ObIndexColumnGroupItem &cur_item = arg.index_cgs_.at(i);
+      const obrpc::ObCreateIndexArg::ObIndexColumnGroupItem &cur_item = arg.index_cgs_.at(i);
     if (!cur_item.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid cg item", K(ret), K(cur_item));
@@ -2203,7 +2203,7 @@ int ObIndexBuilder::set_index_table_columns(const ObCreateIndexArg &arg,
   return ret;
 }
 
-int ObIndexBuilder::set_index_table_options(const obcall::ObCreateIndexArg &arg,
+int ObIndexBuilder::set_index_table_options(const obrpc::ObCreateIndexArg &arg,
                                             const share::schema::ObTableSchema &data_schema,
                                             share::schema::ObTableSchema &schema)
 {
@@ -2342,7 +2342,7 @@ int ObIndexBuilder::check_has_none_shared_index_tables_for_vector_index_(
 
 bool ObIndexBuilder::ignore_error_code_for_domain_index(
     const int ret,
-    const obcall::ObDropIndexArg &arg,
+    const obrpc::ObDropIndexArg &arg,
     const share::schema::ObTableSchema *index_schema/*= nullptr*/)
 {
   const bool is_domain_index = nullptr == index_schema ?

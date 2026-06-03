@@ -17,14 +17,13 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_binding_helper.h"
-#include "observer/ob_ex_rpc.h"
 #include "storage/tablet/ob_tablet_binding_replay_executor.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "rootserver/ob_ddl_service.h"
 
-using namespace oceanbase::obcall;
+using namespace oceanbase::obrpc;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -214,7 +213,7 @@ int ObTabletBindingHelper::get_tablet_for_new_mds(const ObLS &ls, const ObTablet
   return ret;
 }
 
-int ObTabletBindingHelper::has_lob_tablets(const obcall::ObBatchCreateTabletArg &arg, const obcall::ObCreateTabletInfo &info, bool &has_lob)
+int ObTabletBindingHelper::has_lob_tablets(const obrpc::ObBatchCreateTabletArg &arg, const obrpc::ObCreateTabletInfo &info, bool &has_lob)
 {
   int ret = OB_SUCCESS;
   has_lob = false;
@@ -702,26 +701,57 @@ int ObTabletBindingMdsHelper::get_tablet_binding_mds_by_rpc(
     ObIArray<ObTabletBindingMdsUserData> &datas)
 {
   int ret = OB_SUCCESS;
-  obcall::ObBatchGetTabletBindingArg arg;
-  obcall::ObBatchGetTabletBindingRes res;
-  if (OB_FAIL(arg.init(tenant_id, ls_id, tablet_ids, true/*check_committed*/))) {
-    LOG_WARN("failed to init arg", K(ret), K(tenant_id), K(ls_id));
-  } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return batch_get_tablet_binding(abs_timeout_us, arg, res);
-  }))) {
-    LOG_WARN("fail to batch get tablet binding", K(ret), K(abs_timeout_us));
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(datas.assign(res.binding_datas_))) {
-      LOG_WARN("failed to assign", K(ret));
+  const int64_t cluster_id = GCONF.cluster_id;
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
+  share::ObLocationService *location_service = nullptr;
+  ObAddr leader_addr;
+  obrpc::ObBatchGetTabletBindingArg arg;
+  obrpc::ObBatchGetTabletBindingRes res;
+  if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)
+      || OB_ISNULL(location_service = GCTX.location_service_)) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("root service or location_cache is null", K(ret), KP(srv_rpc_proxy), KP(location_service));
+  } else if (OB_FAIL(arg.init(tenant_id, ls_id, tablet_ids, true/*check_committed*/))) {
+    LOG_WARN("failed to init arg", K(ret), K(tenant_id), K(ls_id), K(ls_id));
+  } else {
+    bool force_renew = false;
+    bool finish = false;
+    for (int64_t retry_times = 0; OB_SUCC(ret) && !finish; retry_times++) {
+      if (OB_FAIL(location_service->get_leader(cluster_id, tenant_id, ls_id, force_renew, leader_addr))) {
+        LOG_WARN("fail to get ls locaiton leader", KR(ret), K(tenant_id), K(ls_id));
+      } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr).timeout(abs_timeout_us - ObTimeUtility::current_time()).batch_get_tablet_binding(arg, res))) {
+        LOG_WARN("fail to batch get tablet binding", K(ret), K(retry_times), K(abs_timeout_us));
+      } else {
+        finish = true;
+      }
+      if (OB_FAIL(ret)) {
+        force_renew = true;
+        if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_GET_LOCATION_TIME_OUT == ret || OB_NOT_MASTER == ret
+            || OB_ERR_SHARED_LOCK_CONFLICT == ret || OB_LS_OFFLINE == ret
+            || OB_NOT_INIT == ret || OB_LS_NOT_EXIST == ret || OB_TABLET_NOT_EXIST == ret || OB_TENANT_NOT_IN_SERVER == ret || OB_LS_LOCATION_NOT_EXIST == ret) {
+          // overwrite ret
+          if (OB_UNLIKELY(ObTimeUtility::current_time() > abs_timeout_us)) {
+            ret = OB_TIMEOUT;
+            LOG_WARN("timeout", K(ret), K(abs_timeout_us));
+          } else if (OB_FAIL(THIS_WORKER.check_status())) {
+            LOG_WARN("failed to check status", K(ret), K(abs_timeout_us));
+          } else if (retry_times >= 3) {
+            ob_usleep<common::ObWaitEventIds::STORAGE_AUTOINC_FETCH_RETRY_SLEEP>(100 * 1000L); // 100ms
+          }
+        }
+      }
     }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(datas.assign(res.binding_datas_))) {
+    LOG_WARN("failed to assign", K(ret));
   }
   return ret;
 }
 
 int ObTabletBindingMdsHelper::modify_tablet_binding_for_create(
     const uint64_t tenant_id,
-    const obcall::ObBatchCreateTabletArg &arg,
+    const obrpc::ObBatchCreateTabletArg &arg,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans)
 {

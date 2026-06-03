@@ -6166,6 +6166,17 @@ all_priv	bigint(20)	YES		0
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_column_privilege_history;
 IF(count(*) >= 0, 1, 0)
 1
+desc oceanbase.__all_virtual_shared_storage_quota;
+Field	Type	Null	Key	Default	Extra
+module	varchar(32)	NO	PRI	NULL	
+class_id	bigint(20)	NO	PRI	NULL	
+storage_id	bigint(20)	NO	PRI	NULL	
+type	varchar(32)	NO	PRI	NULL	
+requirement	bigint(20)	NO		NULL	
+assign	bigint(20)	NO		NULL	
+select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_shared_storage_quota;
+IF(count(*) >= 0, 1, 0)
+1
 desc information_schema.ENABLED_ROLES;
 Field	Type	Null	Key	Default	Extra
 ROLE_NAME	varchar(128)	YES		NULL	
@@ -6757,6 +6768,31 @@ catalog_id	bigint(20)	NO	PRI	NULL
 database_name	varchar(256)	NO	PRI	NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__tenant_virtual_show_catalog_databases;
 ERROR 0A000: show tables from non external catalog not supported
+desc oceanbase.__all_virtual_storage_cache_task;
+Field	Type	Null	Key	Default	Extra
+tablet_id	bigint(20)	NO	PRI	NULL	
+status	varchar(64)	NO		NULL	
+speed	varchar(29)	NO		NULL	
+start_time	timestamp(6)	NO		NULL	
+complete_time	timestamp(6)	NO		NULL	
+result	bigint(20)	NO		NULL	
+comment	varchar(4096)	NO		NULL	
+select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_storage_cache_task;
+IF(count(*) >= 0, 1, 0)
+1
+desc oceanbase.__all_virtual_tablet_local_cache;
+Field	Type	Null	Key	Default	Extra
+tablet_id	bigint(20)	NO	PRI	NULL	
+storage_cache_policy	varchar(64)	NO		NULL	
+cached_data_size	bigint(20)	NO		NULL	
+cache_hit_count	bigint(20)	NO		NULL	
+cache_miss_count	bigint(20)	NO		NULL	
+cache_hit_size	bigint(20)	NO		NULL	
+cache_miss_size	bigint(20)	NO		NULL	
+info	varchar(4096)	NO		NULL	
+select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_tablet_local_cache;
+IF(count(*) >= 0, 1, 0)
+1
 desc oceanbase.__all_virtual_ccl_rule;
 Field	Type	Null	Key	Default	Extra
 tenant_id	bigint(20)	NO	PRI	NULL	

@@ -846,7 +846,7 @@ int ObTTLUtil::dispatch_ttl_cmd(const ObTTLParam &param)
     const int64_t ttl_info_count = ttl_info_array.count();
     for (int i = 0; i < ttl_info_count && OB_SUCC(ret); ++i) {
       const uint64_t tenant_id = ttl_info_array.at(i).tenant_id_;
-      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, ttl_info_array.at(i)))) {
+      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, *param.transport_, ttl_info_array.at(i)))) {
         LOG_WARN("fail dispatch one tenant ttl", KR(ret), K(ttl_info_count), "ttl_info", ttl_info_array.at(i));
       }
     }
@@ -1104,14 +1104,78 @@ int ObTTLUtil::get_ttl_info(const ObTTLParam &param, ObIArray<ObSimpleTTLInfo> &
   return ret;
 }
 
-int ObTTLUtil::dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType type,
+int ObTTLUtil::dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType type,
+                                       const rpc::frame::ObReqTransport &transport,
                                        const ObSimpleTTLInfo &ttl_info)
 {
-  // Table-API TTL service removed (feature decommissioned); no backend to dispatch to.
-  int ret = OB_NOT_SUPPORTED;
-  UNUSEDx(type, ttl_info);
-  LOG_WARN("tenant ttl is not supported", KR(ret), K(ttl_info));
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant ttl");
+  int ret = OB_SUCCESS;
+  if (!ttl_info.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(ttl_info));
+  } else {
+    const int64_t launch_start_time = ObTimeUtility::current_time();
+    obrpc::ObSrvRpcProxy proxy;
+    ObAddr leader;
+    obrpc::ObTTLRequestArg req;
+    obrpc::ObTTLResponseArg resp;
+    uint64_t tenant_id = ttl_info.tenant_id_;
+    req.tenant_id_ = tenant_id;
+    req.cmd_code_ = type;
+    req.trigger_type_ = TRIGGER_TYPE::USER_TRIGGER;
+    if (OB_ISNULL(GCTX.location_service_)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid GCTX", KR(ret));
+    } else if (OB_FAIL(proxy.init(&transport))) {
+      LOG_WARN("fail to init", KR(ret));
+    } else {
+      const int64_t MAX_RETRY_COUNT = 5;
+      bool ttl_done = false;
+      static const int64_t MAX_PROCESS_TIME_US = 10 * 1000 * 1000L;
+      for (int64_t i = 0; OB_SUCC(ret) && (!ttl_done) && (i < MAX_RETRY_COUNT); ++i) {
+        if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(GCONF.cluster_id, 
+                    tenant_id, share::SYS_LS, leader))) {
+          LOG_WARN("fail to get ls locaiton leader", KR(ret), K(tenant_id));
+        } else if (OB_FAIL(proxy.to(leader)
+                                .trace_time(true)
+                                .max_process_handler_time(MAX_PROCESS_TIME_US)
+                                .by(tenant_id)
+                                .dst_cluster_id(GCONF.cluster_id)
+                                .dispatch_ttl(req, resp))) {
+          LOG_WARN("tenant ttl rpc failed", KR(ret), K(tenant_id), K(leader), K(ttl_info));
+        } else {
+          ret = resp.err_code_;
+        }
+        
+        if (OB_FAIL(ret)) {
+          if (OB_LEADER_NOT_EXIST == ret || OB_EAGAIN == ret) {
+            const int64_t RESERVED_TIME_US = 600 * 1000; // 600 ms
+            const int64_t timeout_remain_us = THIS_WORKER.get_timeout_remain();
+            const int64_t idle_time_us = 200 * 1000 * (i + 1);
+            if (timeout_remain_us - idle_time_us > RESERVED_TIME_US) {
+              LOG_WARN("leader may switch or ddl confilict, will retry", KR(ret), K(tenant_id), K(ttl_info),
+                "ori_leader", leader, K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
+              ob_throttle_usleep((const useconds_t)idle_time_us, ret, (int64_t)tenant_id);
+              ret = OB_SUCCESS;
+            } else {
+              LOG_WARN("leader may switch or ddl confilict, will not retry cuz timeout_remain is "
+                "not enough", KR(ret), K(tenant_id), K(ttl_info), "ori_leader", leader,
+                K(timeout_remain_us), K(idle_time_us), K(RESERVED_TIME_US));
+            }
+          }
+        } else {
+          ttl_done = true;
+        }
+      }
+
+      if (OB_SUCC(ret) && !ttl_done) {
+        ret = OB_EAGAIN;
+        LOG_WARN("fail to retry ttl cuz switching role", KR(ret), K(MAX_RETRY_COUNT));
+      }
+    }
+    
+    const int64_t launch_cost_time = ObTimeUtility::current_time() - launch_start_time;
+    LOG_INFO("do tenant ttl", KR(ret), K(tenant_id), K(leader), K(ttl_info), K(launch_cost_time));
+  }
   return ret;
 }
 

@@ -30,7 +30,7 @@ namespace oceanbase
 using namespace share;
 using namespace sql;
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 namespace table
 {
 
