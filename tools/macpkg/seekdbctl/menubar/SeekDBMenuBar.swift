@@ -1109,4 +1109,18 @@ let app = NSApplication.shared
 let delegate = SeekDBMenuBarApp()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
+
+let mainMenu = NSMenu()
+let editMenuItem = NSMenuItem()
+editMenuItem.submenu = {
+    let menu = NSMenu(title: "Edit")
+    menu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+    menu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+    menu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+    menu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+    return menu
+}()
+mainMenu.addItem(editMenuItem)
+app.mainMenu = mainMenu
+
 app.run()
