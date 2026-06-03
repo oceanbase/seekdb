@@ -612,6 +612,8 @@ class MainWindowController: NSObject, NSWindowDelegate {
     var startButton: NSButton!
     var stopButton: NSButton!
     var restartButton: NSButton!
+    var settingsButton: NSButton!
+    var initializeButton: NSButton!
 
     func showWindow() {
         if window == nil { buildWindow() }
@@ -713,14 +715,16 @@ class MainWindowController: NSObject, NSWindowDelegate {
         ])
 
         addSectionLabel("Configuration")
+        settingsButton = makeButton("Settings…", #selector(SeekDBMenuBarApp.openSettings))
         addRow([
-            makeButton("Settings…", #selector(SeekDBMenuBarApp.openSettings)),
+            settingsButton,
             makeButton("Run Doctor", #selector(SeekDBMenuBarApp.runDoctor))
         ])
 
         addSectionLabel("Maintenance")
+        initializeButton = makeButton("Initialize Database", #selector(SeekDBMenuBarApp.setupService))
         addRow([
-            makeButton("Initialize Database", #selector(SeekDBMenuBarApp.setupService)),
+            initializeButton,
             makeButton("Uninstall…", #selector(SeekDBMenuBarApp.uninstallService))
         ])
 
@@ -752,10 +756,14 @@ class MainWindowController: NSObject, NSWindowDelegate {
             startButton.isEnabled = false
             stopButton.isEnabled = false
             restartButton.isEnabled = false
+            settingsButton.isEnabled = false
+            initializeButton.isEnabled = false
         } else {
             startButton.isEnabled = (status.state == .stopped)
             stopButton.isEnabled = (status.state == .active)
             restartButton.isEnabled = (status.state == .active)
+            settingsButton.isEnabled = true
+            initializeButton.isEnabled = true
         }
     }
 }
@@ -780,6 +788,8 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     var startItem: NSMenuItem!
     var stopItem: NSMenuItem!
     var restartItem: NSMenuItem!
+    var settingsItem: NSMenuItem!
+    var setupItem: NSMenuItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -865,7 +875,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
 
@@ -875,7 +885,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        let setupItem = NSMenuItem(title: "Initialize Database", action: #selector(setupService), keyEquivalent: "")
+        setupItem = NSMenuItem(title: "Initialize Database", action: #selector(setupService), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
 
@@ -903,10 +913,14 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
                     self.startItem.isEnabled = false
                     self.stopItem.isEnabled = false
                     self.restartItem.isEnabled = false
+                    self.settingsItem.isEnabled = false
+                    self.setupItem.isEnabled = false
                 } else {
                     self.startItem.isEnabled = (status.state == .stopped)
                     self.stopItem.isEnabled = (status.state == .active)
                     self.restartItem.isEnabled = (status.state == .active)
+                    self.settingsItem.isEnabled = true
+                    self.setupItem.isEnabled = true
                 }
                 self.mainWindowController.update(status, locked: self.serviceOperationInProgress)
                 self.scheduleNextPoll()
