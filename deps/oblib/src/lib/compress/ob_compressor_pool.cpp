@@ -83,6 +83,15 @@ int ObCompressorPool::get_compressor_type(const char *compressor_name,
     compressor_type = ZSTD_1_3_8_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "stream_zstd_1.3.8")) {
     compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
+  } else if (!STRCASECMP(compressor_name, "lz4_1.0")
+             || !STRCASECMP(compressor_name, "lz4_1.9.1")
+             || !STRCASECMP(compressor_name, "snappy_1.0")
+             || !STRCASECMP(compressor_name, "zlib_1.0")
+             || !STRCASECMP(compressor_name, "zstd_1.0")) {
+    compressor_type = ZSTD_1_3_8_COMPRESSOR;
+  } else if (!STRCASECMP(compressor_name, "stream_lz4_1.0")
+             || !STRCASECMP(compressor_name, "stream_zstd_1.0")) {
+    compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
   } else {
     ret = OB_NOT_SUPPORTED;
     LIB_LOG(WARN, "no support compressor type, ", K(ret), KCSTRING(compressor_name));

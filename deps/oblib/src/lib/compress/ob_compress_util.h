@@ -48,7 +48,12 @@ STATIC_ASSERT(ARRAYSIZEOF(all_compressor_name) == ObCompressorType::MAX_COMPRESS
 const char *const compress_funcs[] =
 {
   "none",
+  "lz4_1.0",
+  "snappy_1.0",
+  "zlib_1.0",
+  "zstd_1.0",
   "zstd_1.3.8",
+  "lz4_1.9.1",
 };
 
 const char *const perf_compress_funcs[] =
