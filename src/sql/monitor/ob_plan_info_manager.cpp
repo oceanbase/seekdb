@@ -265,7 +265,7 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
     }
   }
   //step 2: compress data
-  common::ObCompressorType compressor_type = LZ4_COMPRESSOR;
+  common::ObCompressorType compressor_type = ZSTD_1_3_8_COMPRESSOR;
   common::ObCompressor *compressor = NULL;
   char *compress_buf = NULL;
   int64_t compress_size = total_size * 2;
@@ -311,7 +311,7 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   //step 1: uncompress data
-  common::ObCompressorType compressor_type = LZ4_COMPRESSOR;
+  common::ObCompressorType compressor_type = ZSTD_1_3_8_COMPRESSOR;
   common::ObCompressor *compressor = NULL;
   char *uncompress_buf = NULL;
   int64_t uncompress_size = uncompress_len_;

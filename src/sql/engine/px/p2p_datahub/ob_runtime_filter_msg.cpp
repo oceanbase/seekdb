@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_rpc_process.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
 
@@ -359,7 +360,10 @@ int ObRFBloomFilterMsg::process_receive_count(ObP2PDatahubMsgBase &rf_msg)
     if (OB_FAIL(process_first_phase(bf_msg))) {
       LOG_WARN("fail to process first phase", K(ret));
     } else if (first_phase_end && !bf_msg.get_next_phase_addrs().empty()) {
+      obrpc::ObP2PDhRpcProxy &rpc_proxy = PX_P2P_DH.get_proxy();
+      ObPxP2PDatahubArg arg;
       ObRFBloomFilterMsg second_phase_msg;
+      arg.msg_ = &second_phase_msg;
       if (OB_FAIL(second_phase_msg.shadow_copy(*this))) {
         LOG_WARN("fail to shadow copy second phase msg", K(ret));
       } else {
@@ -368,12 +372,14 @@ int ObRFBloomFilterMsg::process_receive_count(ObP2PDatahubMsgBase &rf_msg)
         second_phase_msg.bloom_filter_.set_begin_idx(bf_msg.bloom_filter_.get_begin_idx());
         second_phase_msg.bloom_filter_.set_end_idx(bf_msg.bloom_filter_.get_end_idx());
       }
-      // Single-replica seekdb: next_phase_addrs that are not self are unreachable
-      // dead targets; deliver the (loopback) ones in-process via process_msg.
       for (int i = 0; OB_SUCC(ret) && i < bf_msg.get_next_phase_addrs().count(); ++i) {
         if (bf_msg.get_next_phase_addrs().at(i) != GCTX.self_addr()) {
-          if (OB_FAIL(PX_P2P_DH.process_msg(second_phase_msg))) {
-            LOG_WARN("fail to process bloom filter locally", K(ret));
+          if (OB_FAIL(rpc_proxy.to(bf_msg.get_next_phase_addrs().at(i))
+              .by(bf_msg.get_tenant_id())
+              .timeout(bf_msg.get_timeout_ts())
+              .compressed(ObCompressorType::ZSTD_1_3_8_COMPRESSOR)
+              .send_p2p_dh_message(arg, NULL))) {
+            LOG_WARN("fail to send bloom filter", K(ret));
           }
         }
       }
@@ -977,11 +983,21 @@ int ObRFBloomFilterMsg::calc_hash_value(
   return ret;
 }
 
-int ObRFBloomFilterMsg::broadcast(ObIArray<ObAddr> &target_addrs)
+int ObRFBloomFilterMsg::broadcast(ObIArray<ObAddr> &target_addrs,
+    obrpc::ObP2PDhRpcProxy &p2p_dh_proxy)
 {
   int ret = OB_SUCCESS;
+  int64_t start_time = ObTimeUtility::current_time();
   int64_t cur_idx = 0;
   ObRFBloomFilterMsg msg;
+  ObPxP2pDhMsgCB msg_cb(GCTX.self_addr(),
+      *ObCurTraceId::get_trace_id(),
+      ObTimeUtility::current_time(),
+      timeout_ts_,
+      p2p_datahub_id_);
+  ObPxP2PDatahubArg arg;
+
+  arg.msg_ = &msg;
   while (!create_finish_ && OB_SUCC(ret)) {
     if (OB_FAIL(THIS_WORKER.check_status())) {
       LOG_WARN("fail to check status", K(ret));
@@ -1012,9 +1028,12 @@ int ObRFBloomFilterMsg::broadcast(ObIArray<ObAddr> &target_addrs)
         } else if (addr_filter_idx.channel_id_ >= target_addrs.count()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected channel id", K(addr_filter_idx.channel_id_), K(target_addrs.count()));
-        } else if (OB_FAIL(PX_P2P_DH.process_msg(msg))) {
-          // Single-replica seekdb: target is loopback, deliver in-process.
-          LOG_WARN("fail to process bloom filter locally", K(ret));
+        } else if (OB_FAIL(p2p_dh_proxy.to(target_addrs.at(addr_filter_idx.channel_id_))
+                  .by(tenant_id_)
+                  .timeout(timeout_ts_)
+                  .compressed(ObCompressorType::ZSTD_1_3_8_COMPRESSOR)
+                  .send_p2p_dh_message(arg, &msg_cb))) {
+          LOG_WARN("fail to send bloom filter", K(ret));
         }
       }
     }

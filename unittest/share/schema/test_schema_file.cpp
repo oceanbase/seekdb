@@ -393,7 +393,7 @@ TEST_F(TestSchemaFile, schema_ini2)
   table_schema.set_tablegroup_id(1);
   table_schema.set_database_id(1);
   table_schema.set_table_type(static_cast<ObTableType>(1));
-  table_schema.set_compress_func_name(ObString::make_string("snappy_1.0"));
+  table_schema.set_compress_func_name(ObString::make_string("zstd_1.3.8"));
   table_schema.set_block_size(2097152);
   table_schema.get_part_expr().set_part_num(1);
   table_schema.set_max_used_column_id(100);

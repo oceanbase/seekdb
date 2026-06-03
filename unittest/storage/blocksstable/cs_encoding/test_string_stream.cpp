@@ -352,16 +352,16 @@ TEST_F(TestStringStream, test_datums_encoding)
     if (0 == j) {
       compress_type = NONE_COMPRESSOR;
     } else if (1 == j) {
-      compress_type = LZ4_COMPRESSOR;
+      compress_type = ZSTD_1_3_8_COMPRESSOR;
     } else if (2 == j) {
-      compress_type = SNAPPY_COMPRESSOR;
+      compress_type = ZSTD_1_3_8_COMPRESSOR;
       has_null = true;
       use_zero_len_as_null = true;
     } else if (3 == j) {
       compress_type = ZSTD_1_3_8_COMPRESSOR;
       is_fix_len = true;
     } else if (4 == j) {
-      compress_type = SNAPPY_COMPRESSOR;
+      compress_type = ZSTD_1_3_8_COMPRESSOR;
       is_fix_len = true;
       use_nullbitmap = true;
       has_null = true;
@@ -385,16 +385,16 @@ TEST_F(TestStringStream, test_datums_encoding)
       use_nullbitmap = true;
     } else if (10 == j) {
       // null replace row id
-      compress_type = SNAPPY_COMPRESSOR;
+      compress_type = ZSTD_1_3_8_COMPRESSOR;
       use_null_replaced_ref = true;
     } else if (11 == j) {
       // null replace row id
-      compress_type = SNAPPY_COMPRESSOR;
+      compress_type = ZSTD_1_3_8_COMPRESSOR;
       use_null_replaced_ref = true;
       has_null = true;
     } else if (12 == j) {
       // null replace row id
-      compress_type = SNAPPY_COMPRESSOR;
+      compress_type = ZSTD_1_3_8_COMPRESSOR;
       use_null_replaced_ref = true;
       all_null = true;
     }

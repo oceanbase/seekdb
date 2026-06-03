@@ -8,14 +8,8 @@ oblib_add_library(compress
   ob_stream_compressor.h
   none/ob_none_compressor.cpp
   none/ob_none_compressor.h
-  snappy/ob_snappy_compressor.cpp
-  snappy/ob_snappy_compressor.h
   zlib/ob_zlib_compressor.cpp
   zlib/ob_zlib_compressor.h
-  zstd/ob_zstd_compressor.cpp
-  zstd/ob_zstd_compressor.h
-  zstd/ob_zstd_stream_compressor.cpp
-  zstd/ob_zstd_stream_compressor.h
   zstd_1_3_8/ob_zstd_compressor_1_3_8.cpp
   zstd_1_3_8/ob_zstd_compressor_1_3_8.h
   zstd_1_3_8/ob_zstd_stream_compressor_1_3_8.cpp
@@ -35,9 +29,6 @@ if(APPLE)
   set(OB_DEPLOY -platform_version macos ${CMAKE_OSX_DEPLOYMENT_TARGET} ${CMAKE_OSX_DEPLOYMENT_TARGET})
 endif()
 
-add_subdirectory(zstd)
 add_subdirectory(zstd_1_3_8)
-add_subdirectory(lz4)
-add_subdirectory(snappy)
 
-target_link_libraries(compress PUBLIC lz4 snappy zstd zstd_1_3_8)
+target_link_libraries(compress PUBLIC oblib_base zstd_1_3_8)

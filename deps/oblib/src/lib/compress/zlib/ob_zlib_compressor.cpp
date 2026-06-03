@@ -206,12 +206,12 @@ int ObZlibCompressor::set_compress_level(const int64_t compress_level)
 }
 const char *ObZlibCompressor::get_compressor_name() const
 {
-  return all_compressor_name[ObCompressorType::ZLIB_COMPRESSOR];
+  return "zlib";
 }
 
 ObCompressorType ObZlibCompressor::get_compressor_type() const
 {
-  return ObCompressorType::ZLIB_COMPRESSOR;
+  return ObCompressorType::NONE_COMPRESSOR;
 }
 
 int ObZlibCompressor::get_max_overflow_size(const int64_t src_data_size,

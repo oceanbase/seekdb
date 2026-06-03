@@ -21,12 +21,6 @@
 #include "lib/compress/ob_stream_compressor.h"
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "none/ob_none_compressor.h"
-#include "lz4/ob_lz4_compressor.h"
-#include "snappy/ob_snappy_compressor.h"
-#include "zlib/ob_zlib_compressor.h"
-#include "lz4/ob_lz4_stream_compressor.h"
-#include "zstd/ob_zstd_compressor.h"
-#include "zstd/ob_zstd_stream_compressor.h"
 #include "zstd_1_3_8/ob_zstd_compressor_1_3_8.h"
 #include "zstd_1_3_8/ob_zstd_stream_compressor_1_3_8.h"
 
@@ -52,9 +46,7 @@ public:
   }
   static bool need_stream_compress(const ObCompressorType &compressor_type)
   {
-    return (STREAM_LZ4_COMPRESSOR == compressor_type
-        || STREAM_ZSTD_COMPRESSOR == compressor_type
-        || STREAM_ZSTD_1_3_8_COMPRESSOR == compressor_type);
+    return (STREAM_ZSTD_1_3_8_COMPRESSOR == compressor_type);
   }
 
   static bool need_compress(const ObCompressorType &compressor_type)
@@ -67,16 +59,7 @@ private:
 
   ObVSliceAlloc allocator_;
   ObNoneCompressor none_compressor;
-  ObLZ4Compressor lz4_compressor;
-  ObLZ4Compressor191 lz4_compressor_1_9_1;
-  ObSnappyCompressor snappy_compressor;
-  ObZlibCompressor zlib_compressor;
-  zstd::ObZstdCompressor zstd_compressor;
   zstd_1_3_8::ObZstdCompressor_1_3_8 zstd_compressor_1_3_8;
-
-  //stream compressor
-  ObLZ4StreamCompressor lz4_stream_compressor;
-  zstd::ObZstdStreamCompressor zstd_stream_compressor;
   zstd_1_3_8::ObZstdStreamCompressor_1_3_8 zstd_stream_compressor_1_3_8;
 };
 

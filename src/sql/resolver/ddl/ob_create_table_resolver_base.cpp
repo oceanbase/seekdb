@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 using namespace share::schema;
 using namespace omt;
@@ -175,14 +175,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
           }
         }
       }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (compress_method_ == all_compressor_name[ZLIB_COMPRESSOR]) {
-        ret = OB_NOT_SUPPORTED;
-        SQL_RESV_LOG(WARN, "Not allowed to use zlib compressor!", K(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "zlib compressor");
-      } 
     }
 
     if (OB_SUCC(ret)) {

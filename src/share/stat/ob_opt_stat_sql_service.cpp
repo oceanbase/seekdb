@@ -1372,7 +1372,7 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           char *bitmap_buf = NULL;
           if (OB_SUCC(ret) && llc_bitmap_size > 0) {
             int64_t compress_type = ObOptStatCompressType::MAX_COMPRESS;
-            EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZLIB_COMPRESS);
+            EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "compress_type", compress_type, int64_t, true, false, ObOptStatCompressType::ZSTD_1_3_8_COMPRESS);
             if (OB_SUCC(ret)) {
               if (OB_UNLIKELY(compress_type < 0 || compress_type >= ObOptStatCompressType::MAX_COMPRESS)) {
                 ret = OB_ERR_UNEXPECTED;

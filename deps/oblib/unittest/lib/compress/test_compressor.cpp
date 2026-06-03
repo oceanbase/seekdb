@@ -216,9 +216,6 @@ public:
   static int64_t dst_data_size;
   ObMalloc alloc;
   ObNoneCompressor none_compressor;
-  ObLZ4Compressor lz4_compressor;
-  ObSnappyCompressor snappy_compressor;
-  ObZlibCompressor zlib_compressor;
   ObZstdCompressor zstd_compressor;
 };
 
@@ -335,35 +332,6 @@ TEST_F(ObCompressorTest, test_none)
                                    dst_data_size);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(static_cast<int64_t>(strlen(compress_buffer)), dst_data_size);
-}
-
-TEST_F(ObCompressorTest, test_zlib)
-{
-  //test invalid argument
-  test_invalid_argument(zlib_compressor);
-
-  //test overflow size
-  test_overflow_size(zlib_compressor);
-
-  //test normal
-  test_normal(zlib_compressor);
-}
-
-TEST_F(ObCompressorTest, test_snappy)
-{
-  //test invalid argument
-  test_invalid_argument(snappy_compressor);
-
-  //test overflow size
-  test_overflow_size(snappy_compressor);
-
-  //test normal
-  test_normal(snappy_compressor);
-}
-
-TEST_F(ObCompressorTest, test_lz4)
-{
-  test_normal(lz4_compressor);
 }
 
 TEST_F(ObCompressorTest, test_zstd)

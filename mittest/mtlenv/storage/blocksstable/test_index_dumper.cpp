@@ -239,7 +239,7 @@ TEST_F(TestIndexDumper, append_single_meta)
   val.block_size_ = 128;
   val.row_count_ = 1;
   val.max_merged_trans_version_ = 198;
-  val.compressor_type_ = ObCompressorType::LZ4_191_COMPRESSOR;
+  val.compressor_type_ = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
   val.row_store_type_ = ObRowStoreType::ENCODING_ROW_STORE;
   val.logic_id_.data_seq_ = 190;
   val.logic_id_.logic_version_ = 1;

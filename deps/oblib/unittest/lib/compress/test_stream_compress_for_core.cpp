@@ -23,8 +23,8 @@
 #include "lib/compress/ob_compressor_pool.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/ob_define.h"
-#include "lib/compress/zlib/zlib.h"
-#include "lib/compress/zstd/ob_zstd_stream_compressor.h"
+#include "lib/compress/ob_compress_util.h"
+#include "lib/compress/zstd_1_3_8/ob_zstd_stream_compressor_1_3_8.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/coro/testing.h"
 
@@ -46,8 +46,7 @@ int main(int argc, char **argv)
   const int64_t RING_BUFFER_BYTES = 128 KB;
   const int64_t BLOCK_SIZE = 20 KB;
   int ret = OB_SUCCESS;
-  ObZstdStreamCompressor zstd_compressor;
-  ObLZ4StreamCompressor lz4_compressor;
+  zstd_1_3_8::ObZstdStreamCompressor_1_3_8 zstd_compressor;
   void *cctx = NULL;
   void *dctx = NULL;
   struct stat stat_buf;
@@ -69,11 +68,11 @@ int main(int argc, char **argv)
     char method[256] = {0};
     snprintf(method, 256, "%s", argv[1]);
     snprintf(path, 256, "%s", argv[2]);
-    if (0 != strcmp("zstd", method) && 0 != strcmp("lz4", method)) {
+    if (0 != strcmp("zstd", method)) {
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "invalid argument", K(method), K(ret));
     } else {
-      ObStreamCompressor &compressor = (0 == strcmp("zstd", method)) ? static_cast<ObStreamCompressor &>(zstd_compressor) : static_cast<ObStreamCompressor &>(lz4_compressor);
+      ObStreamCompressor &compressor = static_cast<ObStreamCompressor &>(zstd_compressor);
       COMMON_LOG(INFO, "start", "compressor_name", compressor.get_compressor_name());
       if (OB_FAIL(compressor.create_compress_ctx(cctx))) {
         COMMON_LOG(WARN, "failed to create compress ctx, ", K(ret));

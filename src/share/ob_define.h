@@ -218,9 +218,7 @@ const char *const OB_ORACLE_RECYCLE_PREFIX = "RECYCLE_$_";
 OB_INLINE bool is_valid_log_compressor_type(common::ObCompressorType compressor_type)
 {
    bool b_ret = false;
-   if (common::ObCompressorType::LZ4_COMPRESSOR == compressor_type
-   || common::ObCompressorType::ZSTD_COMPRESSOR == compressor_type
-   || common::ObCompressorType::ZSTD_1_3_8_COMPRESSOR == compressor_type) {
+   if (common::ObCompressorType::ZSTD_1_3_8_COMPRESSOR == compressor_type) {
     b_ret = true;
    }
    return b_ret;
@@ -593,6 +591,8 @@ const char *const ARBITRATION_MODE_STR = "arbitration";
 const char *const FLASHBACK_VERIFY_MODE_STR = "physical_flashback_verify";
 const char *const DISABLED_CLUSTER_MODE_STR = "disabled_cluster";
 const char *const DISABLED_WITH_READONLY_CLUSTER_MODE_STR = "disabled_with_readonly_cluster";
+const char *const SHARED_STORAGE_MODE_STR = "shared_storage";
+
 static const int64_t MODIFY_GC_SNAPSHOT_INTERVAL = 2 * 1000 * 1000; //2s
 
 //reserved table id for information schema

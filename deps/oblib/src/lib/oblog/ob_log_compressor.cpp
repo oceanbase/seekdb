@@ -192,9 +192,7 @@ int ObLogCompressor::set_compress_func(const char *compress_func_ptr)
   } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor_type(compress_func_ptr, new_compress_func))) {
     // do nothing
   } else if (new_compress_func == NONE_COMPRESSOR
-             || new_compress_func == ZSTD_COMPRESSOR
              || new_compress_func == ZSTD_1_3_8_COMPRESSOR) {
-    // to do: support ZLIB_COMPRESSOR
     if (new_compress_func != compress_func_) {
       LOG_INFO("modify log compress func", K(compress_func_), K(new_compress_func));
       if (OB_FAIL(set_next_compressor_(new_compress_func))) {

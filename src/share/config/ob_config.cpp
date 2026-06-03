@@ -38,7 +38,6 @@ const char *log_archive_compression_values[] =
 {
   "disable",
   "enable",
-  "lz4_1.0",
   "zstd_1.3.8",
 };
 
@@ -1022,13 +1021,11 @@ void ObConfigLogArchiveOptionsItem::process_kv_option_(const int64_t key_idx,
     false,
     true,
     true,
-    true,
   };
   static common::ObCompressorType compressor_type_map[] =
   {
     common::INVALID_COMPRESSOR,
-    common::LZ4_COMPRESSOR,
-    common::LZ4_COMPRESSOR,
+    common::ZSTD_1_3_8_COMPRESSOR,
     common::ZSTD_1_3_8_COMPRESSOR,
   };
 

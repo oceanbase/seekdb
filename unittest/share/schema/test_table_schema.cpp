@@ -96,7 +96,7 @@ void fill_table_schema(ObTableSchema &table)
   table.set_index_column_num(0);
   table.set_rowkey_split_pos(11);
   table.set_progressive_merge_num(11);
-  table.set_compress_func_name(ObString::make_string("snappy_1.0"));
+  table.set_compress_func_name(ObString::make_string("zstd_1.3.8"));
   table.set_autoinc_column_id(0);
   table.set_auto_increment(1);
   table.set_load_type(TABLE_LOAD_TYPE_IN_DISK);
@@ -161,7 +161,7 @@ void test_ob_table_schema_get_methods(void)
   ASSERT_EQ(100 * 666, table.get_all_part_num());
   ASSERT_STREQ("table_xxx", table.get_table_name());
   ASSERT_STREQ("table_xxx", table.get_table_name_str().ptr());
-  ASSERT_STREQ("snappy_1.0", table.get_compress_func_name());
+  ASSERT_STREQ("zstd_1.3.8", table.get_compress_func_name());
   ASSERT_TRUE(table.is_compressed());
   ASSERT_EQ(CHARSET_UTF8MB4, table.get_charset_type());
   ASSERT_EQ(CS_TYPE_UTF8MB4_BIN, table.get_collation_type());

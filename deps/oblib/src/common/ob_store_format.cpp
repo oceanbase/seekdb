@@ -47,11 +47,11 @@ const ObStoreFormatItem ObStoreFormat::store_format_items[OB_STORE_FORMAT_MAX] =
   {"", "", "", MAX_ROW_STORE},   //reserved for mysql furture
   //oracle mode
   {"NOCOMPRESS", "NOCOMPRESS", "none", FLAT_ROW_STORE},
-  {"BASIC", "COMPRESS BASIC", "lz4_1.0", FLAT_ROW_STORE},
+  {"BASIC", "COMPRESS BASIC", "zstd_1.3.8", FLAT_ROW_STORE},
   {"OLTP", "COMPRESS FOR OLTP", "zstd_1.3.8", FLAT_ROW_STORE},
-  {"QUERY", "COMPRESS FOR QUERY", "lz4_1.0", ENCODING_ROW_STORE}, // default query is high in oracle mode
+  {"QUERY", "COMPRESS FOR QUERY", "zstd_1.3.8", ENCODING_ROW_STORE}, // default query is high in oracle mode
   {"ARCHIVE", "COMPRESS FOR ARCHIVE", "zstd_1.3.8", ENCODING_ROW_STORE}, // default archive is low in oracle mode
-  {"QUERY LOW", "COMPRESS FOR QUERY LOW", "lz4_1.0", SELECTIVE_ENCODING_ROW_STORE},
+  {"QUERY LOW", "COMPRESS FOR QUERY LOW", "zstd_1.3.8", SELECTIVE_ENCODING_ROW_STORE},
   {"ARCHIVE HIGH", "COMPRESS FOR ARCHIVE HIGH", "zstd_1.3.8", CS_ENCODING_ROW_STORE},
 };
 

@@ -16,9 +16,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_config_helper.h"
-#include "rpc/frame/ob_req_packet_code.h"  // rpc::frame::ObReqCheckSumCheckLevel (relocated)
 #include "share/ob_resource_limit.h"
-#include "share/table/ob_ttl_util.h"
 #include "src/observer/ob_server.h"
 #include "share/config/ob_config_mode_name_def.h"
 #include "share/backup/ob_archive_persist_helper.h"
@@ -29,7 +27,7 @@
 namespace oceanbase
 {
 using namespace share;
-using namespace obcall;
+using namespace obrpc;
 using namespace plugin;
 
 namespace common
@@ -170,7 +168,7 @@ bool less_or_equal_tx_share_limit(const uint64_t tenant_id, const int64_t value)
   return bool_ret;
 }
 
-bool ObConfigMemstoreLimitChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
+bool ObConfigMemstoreLimitChecker::check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
@@ -182,7 +180,7 @@ bool ObConfigMemstoreLimitChecker::check(const uint64_t tenant_id, const obcall:
   return is_valid;
 }
 
-bool ObConfigTxDataLimitChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
+bool ObConfigTxDataLimitChecker::check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
@@ -194,7 +192,7 @@ bool ObConfigTxDataLimitChecker::check(const uint64_t tenant_id, const obcall::O
   return is_valid;
 }
 
-bool ObConfigMdsLimitChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
+bool ObConfigMdsLimitChecker::check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
@@ -259,7 +257,7 @@ int64_t ObConfigLogDiskLimitThresholdIntChecker::get_log_disk_throttling_percent
   return percent;
 }
 
-bool ObConfigLogDiskThrottlingPercentageIntChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
+bool ObConfigLogDiskThrottlingPercentageIntChecker::check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   const int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
@@ -314,9 +312,7 @@ bool ObConfigCompressFuncChecker::check(const ObConfigItem &t) const
   bool is_valid = false;
   for (int i = 0; i < ARRAYSIZEOF(common::compress_funcs); ++i) {
     if (0 == ObString::make_string(compress_funcs[i]).case_compare(t.str())) {
-      if (i != DISABLED_ZLIB_1_COMPRESS_IDX) {
-        is_valid = true;
-      }
+      is_valid = true;
       break;
     }
   }
@@ -590,7 +586,7 @@ bool ObConfigLogArchiveOptionsChecker::check(const ObConfigItem &t) const
 bool ObConfigRpcChecksumChecker::check(const ObConfigItem &t) const
 {
   common::ObString tmp_string(t.str());
-  return rpc::frame::get_rpc_checksum_check_level_from_string(tmp_string) != rpc::frame::ObReqCheckSumCheckLevel::INVALID ;
+  return obrpc::get_rpc_checksum_check_level_from_string(tmp_string) != obrpc::ObRpcCheckSumCheckLevel::INVALID ;
 }
 
 bool ObTTLDutyDurationChecker::check(const ObConfigItem& t) const
@@ -647,7 +643,7 @@ bool ObConfigTenantDataDiskChecker::check(const ObConfigItem &t) const
   return is_valid;
 }
 
-bool ObConfigVectorMemoryChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t)
+bool ObConfigVectorMemoryChecker::check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
@@ -835,9 +831,9 @@ int64_t ObConfigTimeParser::get(const char *str, bool &valid)
 
 bool ObConfigUpgradeStageChecker::check(const ObConfigItem &t) const
 {
-  obcall::ObUpgradeStage stage = obcall::get_upgrade_stage(t.str());
-  return obcall::OB_UPGRADE_STAGE_INVALID < stage
-         && obcall::OB_UPGRADE_STAGE_MAX > stage;
+  obrpc::ObUpgradeStage stage = obrpc::get_upgrade_stage(t.str());
+  return obrpc::OB_UPGRADE_STAGE_INVALID < stage
+         && obrpc::OB_UPGRADE_STAGE_MAX > stage;
 }
 
 bool ObConfigPlanCacheGCChecker::check(const ObConfigItem &t) const
@@ -1008,7 +1004,7 @@ bool ObAutoIncrementModeChecker::check(const ObConfigItem &t) const
   return is_valid;
 }
 
-bool ObCallClientAuthMethodChecker::check(const ObConfigItem &t) const
+bool ObRpcClientAuthMethodChecker::check(const ObConfigItem &t) const
 {
   ObString v_str(t.str());
   return 0 == v_str.case_compare("NONE") ||
@@ -1016,7 +1012,7 @@ bool ObCallClientAuthMethodChecker::check(const ObConfigItem &t) const
          0 == v_str.case_compare("SSL_IO");
 }
 
-bool ObCallServerAuthMethodChecker::is_valid_server_auth_method(const ObString &str) const
+bool ObRpcServerAuthMethodChecker::is_valid_server_auth_method(const ObString &str) const
 {
   return 0 == str.case_compare("NONE") ||
          0 == str.case_compare("SSL_NO_ENCRYPT") ||
@@ -1024,7 +1020,7 @@ bool ObCallServerAuthMethodChecker::is_valid_server_auth_method(const ObString &
          0 == str.case_compare("ALL");
 }
 
-bool ObCallServerAuthMethodChecker::check(const ObConfigItem &t) const
+bool ObRpcServerAuthMethodChecker::check(const ObConfigItem &t) const
 {
   bool bret = true;
   int MAX_METHOD_LENGTH = 256;
@@ -1314,13 +1310,13 @@ bool ObConfigTableStoreFormatChecker::check(const ObConfigItem &t) const {
   return bret;
 }
 
-bool ObConfigDDLNoLoggingChecker::check(const uint64_t tenant_id, const obcall::ObAdminSetConfigItem &t) {
+bool ObConfigDDLNoLoggingChecker::check(const uint64_t tenant_id, const obrpc::ObAdminSetConfigItem &t) {
   int ret = OB_SUCCESS;
   bool is_valid = true;
   const bool value = ObConfigBoolParser::get(t.value_.ptr(), is_valid);
 
   if (!is_valid) {
-  } else {
+  } else if (!GCTX.is_shared_storage_mode()) {
     is_valid = false;
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "it's not allowded to set no logging in shared nothing mode");
   }
@@ -1504,7 +1500,7 @@ bool ObConfigS3URLEncodeTypeChecker::check(const ObConfigItem &t) const
   return bret;
 }
 
-bool ObConfigDefaultTableOrganizationChecker::check(const obcall::ObAdminSetConfigItem &t)
+bool ObConfigDefaultTableOrganizationChecker::check(const obrpc::ObAdminSetConfigItem &t)
 {
   const ObString tmp_str(t.value_.size(), t.value_.ptr());
   return 0 == tmp_str.case_compare("INDEX")
@@ -1598,14 +1594,14 @@ bool ObConfigEnableAutoSplitChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = false;
   bool enable_auto_split = ObConfigBoolParser::get(t.str(), is_valid);
-  return is_valid && !(enable_auto_split);
+  return is_valid && !(GCTX.is_shared_storage_mode() && enable_auto_split);
 }
 
 bool ObConfigAutoSplitTabletSizeChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = false;
   int64_t value = ObConfigCapacityParser::get(t.str(), is_valid);
-  return is_valid;
+  return is_valid && !GCTX.is_shared_storage_mode();
 }
 
 bool ObConfigGlobalIndexAutoSplitPolicyChecker::check(const ObConfigItem &t) const

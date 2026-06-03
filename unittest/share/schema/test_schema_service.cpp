@@ -92,7 +92,7 @@ TEST_F(TestSchemaService, TableSchema_test)
   table_schema.set_rowkey_column_num(20);
   table_schema.set_max_used_column_id(100);
   table_schema.set_rowkey_split_pos(11);
-  table_schema.set_compress_func_name(ObString::make_string("snappy_1.0"));
+  table_schema.set_compress_func_name(ObString::make_string("zstd_1.3.8"));
   table_schema.set_expire_info(ObString::make_string("expire: modify_time > 3000s"));
   table_schema.set_is_use_bloomfilter(true);
   table_schema.set_comment("I want to use it search light!");
@@ -158,7 +158,7 @@ TEST_F(TestSchemaService, other_test)
   table_schema.set_rowkey_column_num(20);
   table_schema.set_max_used_column_id(100);
   table_schema.set_rowkey_split_pos(11);
-  table_schema.set_compress_func_name(ObString::make_string("snappy_1.0"));
+  table_schema.set_compress_func_name(ObString::make_string("zstd_1.3.8"));
   table_schema.set_expire_info(ObString::make_string("expire: modify_time > 3000s"));
   table_schema.set_is_use_bloomfilter(true);
   table_schema.set_comment("I want to use it search light!");

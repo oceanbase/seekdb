@@ -246,7 +246,7 @@ TEST_F(TestStorageSchema, test_update_tablet_store_schema)
   storage_schema1.progressive_merge_round_ = 3;
   storage_schema2.progressive_merge_round_ = 2;
   storage_schema1.compressor_type_ = ObCompressorType::NONE_COMPRESSOR;
-  storage_schema2.compressor_type_ = ObCompressorType::LZ4_COMPRESSOR;
+  storage_schema2.compressor_type_ = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
 
   // schema 2 have large store column cnt
   ObStorageSchema *result_storage_schema = NULL;

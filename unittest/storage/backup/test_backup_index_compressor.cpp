@@ -38,7 +38,7 @@ TEST(ObBackupIndexBlockCompressorTest, Compress)
 
   ObBackupIndexBlockCompressor compressor;
   const int64_t block_size = 16 * 1024;
-  const ObCompressorType compressor_type = ObCompressorType::ZSTD_COMPRESSOR;
+  const ObCompressorType compressor_type = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
 
   ret = compressor.init(block_size, compressor_type);
   EXPECT_EQ(OB_SUCCESS, ret);
