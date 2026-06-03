@@ -24,7 +24,8 @@ ObCompressorPool::ObCompressorPool()
     :allocator_(ObMemAttr(OB_SERVER_TENANT_ID, "Compressor"), OB_MALLOC_BIG_BLOCK_SIZE),
      none_compressor(),
      zstd_compressor_1_3_8(allocator_),
-     zstd_stream_compressor_1_3_8(allocator_)
+     zstd_stream_compressor_1_3_8(allocator_),
+     zlib_compressor()
 {
   allocator_.set_nway(32);
 }
@@ -62,6 +63,9 @@ int ObCompressorPool::get_compressor(const ObCompressorType &compressor_type,
     case ZSTD_1_3_8_COMPRESSOR:
       compressor = &zstd_compressor_1_3_8;
       break;
+    case ZLIB_COMPRESSOR:
+      compressor = &zlib_compressor;
+      break;
     default:
       compressor = NULL;
       ret = OB_NOT_SUPPORTED;
@@ -83,10 +87,11 @@ int ObCompressorPool::get_compressor_type(const char *compressor_name,
     compressor_type = ZSTD_1_3_8_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "stream_zstd_1.3.8")) {
     compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
+  } else if (!STRCASECMP(compressor_name, "zlib_1.0")) {
+    compressor_type = ZLIB_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "lz4_1.0")
              || !STRCASECMP(compressor_name, "lz4_1.9.1")
              || !STRCASECMP(compressor_name, "snappy_1.0")
-             || !STRCASECMP(compressor_name, "zlib_1.0")
              || !STRCASECMP(compressor_name, "zstd_1.0")) {
     compressor_type = ZSTD_1_3_8_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "stream_lz4_1.0")

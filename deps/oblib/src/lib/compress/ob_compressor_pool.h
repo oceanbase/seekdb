@@ -23,6 +23,7 @@
 #include "none/ob_none_compressor.h"
 #include "zstd_1_3_8/ob_zstd_compressor_1_3_8.h"
 #include "zstd_1_3_8/ob_zstd_stream_compressor_1_3_8.h"
+#include "zlib/ob_zlib_compressor.h"
 
 namespace oceanbase
 {
@@ -61,6 +62,7 @@ private:
   ObNoneCompressor none_compressor;
   zstd_1_3_8::ObZstdCompressor_1_3_8 zstd_compressor_1_3_8;
   zstd_1_3_8::ObZstdStreamCompressor_1_3_8 zstd_stream_compressor_1_3_8;
+  ObZlibCompressor zlib_compressor;
 };
 
 } /* namespace common */
