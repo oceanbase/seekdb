@@ -197,6 +197,7 @@ cmd_start() {
   require_root
   [ -f "$PLIST" ] || die "LaunchDaemon plist not found: $PLIST"
   [ -x "$START_SCRIPT" ] || die "Start script not found or not executable: $START_SCRIPT"
+  [ -f "$CONFIG_FILE" ] || die "Config file not found: $CONFIG_FILE. Run 'sudo seekdbctl initialize' first."
 
   if launchd_loaded; then
     info "Service is already loaded; kickstarting ${LABEL}"
@@ -504,16 +505,30 @@ cmd_clean_data() {
   require_root
   refresh_paths
 
+  local data_dir
+  local redo_dir
+  data_dir="$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
+  redo_dir="$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
+
   if [ "${1:-}" != "--force" ]; then
-    printf "This will remove %s and %s. Type DELETE to continue: " "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")"
+    printf "This will erase all database data and reinitialize. Type DELETE to continue: "
     local answer
     read -r answer
     [ "$answer" = "DELETE" ] || die "Cancelled"
   fi
 
   cmd_stop
-  rm -rf "$(dirname "$CONFIG_FILE")" "$(dirname "$BASE_DIR")"
-  info "Config, data, and logs removed"
+
+  info "Removing database data"
+  rm -rf "$data_dir" "$redo_dir" "$LOG_DIR" "$BASE_DIR/run" "$BASE_DIR/.meta" 2>/dev/null || true
+
+  mkdir -p "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR"
+  chown -R root:wheel "$(dirname "$BASE_DIR")" 2>/dev/null || true
+  chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR" 2>/dev/null || true
+
+  launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
+  cmd_start
+  info "Database cleaned and restarted."
 }
 
 remove_seekdb_link() {

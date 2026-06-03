@@ -1067,9 +1067,9 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     @objc func cleanData() {
         guard confirmAction(
             message: "Clean All Data?",
-            info: "This will stop seekdb and remove all config and data directories.\nThis cannot be undone."
+            info: "This will erase all database data and reinitialize a fresh instance.\nConfiguration will be preserved.\n\nThis cannot be undone."
         ) else { return }
-        guard authorizeAdmin(prompt: "seekdb Monitor needs your password to remove all configuration and data. This cannot be undone.") else { return }
+        guard authorizeAdmin(prompt: "seekdb Monitor needs your password to erase database data. This cannot be undone.") else { return }
         statusItem.button?.image = makeStatusIcon(.stopping)
         runPrivileged(command: "clean-data", args: ["--force"]) { [weak self] success, output in
             self?.showResult(success: success, output: output, title: "Clean Data")
