@@ -10,6 +10,7 @@ START_SCRIPT="/opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_start"
 STOP_SCRIPT="/opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_stop"
 SEEKDB_BIN="/opt/seekdb/bin/seekdb"
 DEFAULT_PORT="2881"
+LOCK_FILE="/tmp/seekdbctl.lock.d"
 
 usage() {
   cat <<EOF
@@ -55,6 +56,30 @@ die() { printf '[seekdbctl][ERROR] %s\n' "$*" >&2; exit 1; }
 
 require_root() {
   [ "$(id -u)" -eq 0 ] || die "This command requires root privileges. Please run with sudo."
+}
+
+acquire_lock() {
+  if mkdir "$LOCK_FILE" 2>/dev/null; then
+    echo $$ > "$LOCK_FILE/pid"
+    trap release_lock EXIT
+    return
+  fi
+  # Check if the holding process is still alive
+  local holder
+  holder="$(cat "$LOCK_FILE/pid" 2>/dev/null || true)"
+  if [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; then
+    rmdir "$LOCK_FILE" 2>/dev/null || rm -rf "$LOCK_FILE"
+    if mkdir "$LOCK_FILE" 2>/dev/null; then
+      echo $$ > "$LOCK_FILE/pid"
+      trap release_lock EXIT
+      return
+    fi
+  fi
+  die "Another seekdbctl operation is in progress. Please wait."
+}
+
+release_lock() {
+  rm -rf "$LOCK_FILE" 2>/dev/null || true
 }
 
 trim() {
@@ -415,6 +440,7 @@ EOF
   fi
 
   require_root
+  acquire_lock
   ensure_config_file
 
   local new_base=""
@@ -532,20 +558,20 @@ cmd_uninstall() {
 }
 
 case "${1:-help}" in
-  start) shift; cmd_start "$@" ;;
-  stop) shift; cmd_stop "$@" ;;
-  restart) shift; cmd_restart "$@" ;;
+  start) shift; acquire_lock; cmd_start "$@" ;;
+  stop) shift; acquire_lock; cmd_stop "$@" ;;
+  restart) shift; acquire_lock; cmd_restart "$@" ;;
   status) shift; cmd_status "$@" ;;
   logs) shift; cmd_logs "$@" ;;
   doctor) shift; cmd_doctor "$@" ;;
   paths) shift; cmd_paths "$@" ;;
   config) shift; cmd_config "$@" ;;
-  initialize|init) shift; cmd_initialize "$@" ;;
-  setup) shift; cmd_setup "$@" ;;
+  initialize|init) shift; acquire_lock; cmd_initialize "$@" ;;
+  setup) shift; acquire_lock; cmd_setup "$@" ;;
   boot-status) shift; cmd_boot_status "$@" ;;
-  enable-boot) shift; cmd_enable_boot "$@" ;;
-  disable-boot) shift; cmd_disable_boot "$@" ;;
-  uninstall) shift; cmd_uninstall "$@" ;;
+  enable-boot) shift; acquire_lock; cmd_enable_boot "$@" ;;
+  disable-boot) shift; acquire_lock; cmd_disable_boot "$@" ;;
+  uninstall) shift; acquire_lock; cmd_uninstall "$@" ;;
   help|-h|--help) usage ;;
   *) usage; exit 1 ;;
 esac
