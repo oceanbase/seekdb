@@ -156,7 +156,7 @@ ALTER TABLE fts_table_3 BLOCK_SIZE=2048;
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;
 
-ALTER TABLE fts_table_3 COMPRESSION='lz4_1.0';
+ALTER TABLE fts_table_3 COMPRESSION='zstd_1.3.8';
 --replace_regex /REPLICA_NUM = [0-9]*/REPLICA_NUM = replica_num/g
 SHOW CREATE TABLE fts_table_3;
 SELECT name FROM fts_table_3 WHERE MATCH (titles) AGAINST ("title") order by name;

@@ -80,7 +80,7 @@ drop table test;
 --disable_warnings
 drop table if exists test_36;
 --enable_warnings
-create table test_36(pk1 int, pk2 int, first_name varchar(100), last_name varchar(100), primary key(pk1, pk2)) COMPRESSION='zstd_1.0';
+create table test_36(pk1 int, pk2 int, first_name varchar(100), last_name varchar(100), primary key(pk1, pk2)) COMPRESSION='zstd_1.3.8';
 create index test_36_index ON test_36(first_name(10));
 insert into test_36 values(1,1, 'first                     1', 'last                    1');
 Replace into test_36(pk1,pk2,first_name,last_name) values (1, 1, 'first                     1', 'last                    2');
