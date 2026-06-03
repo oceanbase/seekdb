@@ -717,7 +717,6 @@ class MainWindowController: NSObject, NSWindowDelegate {
         addSectionLabel("Maintenance")
         addRow([
             makeButton("Initialize Database", #selector(SeekDBMenuBarApp.setupService)),
-            makeButton("Clean Data…", #selector(SeekDBMenuBarApp.cleanData)),
             makeButton("Uninstall…", #selector(SeekDBMenuBarApp.uninstallService))
         ])
 
@@ -868,10 +867,6 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         let setupItem = NSMenuItem(title: "Initialize Database", action: #selector(setupService), keyEquivalent: "")
         setupItem.target = self
         menu.addItem(setupItem)
-
-        let cleanItem = NSMenuItem(title: "Clean Data...", action: #selector(cleanData), keyEquivalent: "")
-        cleanItem.target = self
-        menu.addItem(cleanItem)
 
         let uninstallItem = NSMenuItem(title: "Uninstall...", action: #selector(uninstallService), keyEquivalent: "")
         uninstallItem.target = self
@@ -1060,19 +1055,6 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         statusItem.button?.image = makeStatusIcon(.starting)
         runPrivileged(command: "initialize") { [weak self] success, output in
             self?.showResult(success: success, output: output, title: "Initialize Database")
-            self?.refreshStatus()
-        }
-    }
-
-    @objc func cleanData() {
-        guard confirmAction(
-            message: "Clean All Data?",
-            info: "This will erase all database data and reinitialize a fresh instance.\nConfiguration will be preserved.\n\nThis cannot be undone."
-        ) else { return }
-        guard authorizeAdmin(prompt: "seekdb Monitor needs your password to erase database data. This cannot be undone.") else { return }
-        statusItem.button?.image = makeStatusIcon(.stopping)
-        runPrivileged(command: "clean-data", args: ["--force"]) { [weak self] success, output in
-            self?.showResult(success: success, output: output, title: "Clean Data")
             self?.refreshStatus()
         }
     }

@@ -30,7 +30,6 @@ chmod 755 /opt/seekdb/bin/seekdbctl 2>/dev/null || true
 chmod 755 /opt/seekdb/bin/seekdb_start 2>/dev/null || true
 chmod 755 /opt/seekdb/bin/seekdb_stop 2>/dev/null || true
 chmod 755 /opt/seekdb/bin/seekdb_status 2>/dev/null || true
-chmod 755 /opt/seekdb/bin/seekdb_cleanup 2>/dev/null || true
 chmod 755 /opt/seekdb/bin/seekdb_paths 2>/dev/null || true
 chmod 755 /opt/seekdb/bin/seekdb_config 2>/dev/null || true
 chmod 755 /opt/seekdb/bin/seekdb_setup 2>/dev/null || true
@@ -40,7 +39,7 @@ chmod 755 /opt/seekdb/bin/seekdb_uninstall 2>/dev/null || true
 # under /opt/seekdb.
 mkdir -p /usr/local/bin 2>/dev/null || true
 for cmd in seekdb seekdbctl seekdb_start seekdb_stop seekdb_status \
-           seekdb_cleanup seekdb_paths seekdb_config seekdb_setup seekdb_uninstall; do
+           seekdb_paths seekdb_config seekdb_setup seekdb_uninstall; do
   if [ -x "/opt/seekdb/bin/${cmd}" ]; then
     ln -sf "/opt/seekdb/bin/${cmd}" "/usr/local/bin/${cmd}" 2>/dev/null || true
   fi
@@ -79,7 +78,6 @@ echo "Manual control commands:"
 echo "  seekdb_start    # Start seekdb daemon"
 echo "  seekdb_stop     # Stop seekdb daemon"
 echo "  seekdb_status   # Check seekdb status"
-echo "  seekdb_cleanup  # Remove config and data directories"
 echo "  seekdb_paths    # Show config, data, pid, log, and share paths"
 echo "  seekdb_config   # Show or update path configuration"
 echo "  seekdb_setup    # Initialize, enable boot startup, and start"

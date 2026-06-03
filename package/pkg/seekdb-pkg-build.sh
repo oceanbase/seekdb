@@ -212,7 +212,7 @@ for lib in "$DYLIB_DIR"/*.dylib; do
 done
 codesign --force --sign - "$STAGING/opt/seekdb/bin/seekdb" 2>/dev/null || true
 for script in seekdbctl seekdb_start seekdb_stop seekdb_status seekdb_config \
-              seekdb_setup seekdb_cleanup seekdb_paths seekdb_uninstall; do
+              seekdb_setup seekdb_paths seekdb_uninstall; do
   src="$MACPKG_DIR/seekdbctl/$script"
   if [[ -f "$src" ]]; then install -m 755 "$src" "$STAGING/opt/seekdb/bin/$script"; fi
 done

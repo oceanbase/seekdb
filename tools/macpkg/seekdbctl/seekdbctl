@@ -29,7 +29,6 @@ Commands:
   boot-status  Print whether seekdb is enabled to start at boot (enabled|disabled|unavailable)
   enable-boot  Register seekdb to start automatically at boot
   disable-boot Unregister seekdb from starting automatically at boot
-  clean-data   Stop the service and remove config/data directories after confirmation
   uninstall    Stop service and remove installed files, config, and data
   help         Show this help
 
@@ -37,7 +36,6 @@ Recommended shortcuts:
   seekdb_start    Start seekdb daemon
   seekdb_stop     Stop seekdb daemon
   seekdb_status   Check seekdb status
-  seekdb_cleanup  Remove config and data directories
   seekdb_paths    Show paths
   seekdb_config   Show or update path configuration
   seekdb_setup    Initialize, enable boot startup, and start
@@ -501,36 +499,6 @@ EOF
   fi
 }
 
-cmd_clean_data() {
-  require_root
-  refresh_paths
-
-  local data_dir
-  local redo_dir
-  data_dir="$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
-  redo_dir="$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
-
-  if [ "${1:-}" != "--force" ]; then
-    printf "This will erase all database data and reinitialize. Type DELETE to continue: "
-    local answer
-    read -r answer
-    [ "$answer" = "DELETE" ] || die "Cancelled"
-  fi
-
-  cmd_stop
-
-  info "Removing database data"
-  rm -rf "$data_dir" "$redo_dir" "$LOG_DIR" "$BASE_DIR/run" "$BASE_DIR/.meta" 2>/dev/null || true
-
-  mkdir -p "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR"
-  chown -R root:wheel "$(dirname "$BASE_DIR")" 2>/dev/null || true
-  chmod 755 "$BASE_DIR" "$BASE_DIR/run" "$data_dir" "$redo_dir" "$LOG_DIR" 2>/dev/null || true
-
-  launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
-  cmd_start
-  info "Database cleaned and restarted."
-}
-
 remove_seekdb_link() {
   local link="$1"
   local target=""
@@ -547,9 +515,9 @@ cmd_uninstall() {
   rm -f "$PLIST"
   for cmd in seekdb seekdbctl ob_admin ob_error \
              seekdb_start seekdb_stop seekdb_status seekdb_config \
-             seekdb_setup seekdb_cleanup seekdb_paths seekdb_uninstall \
+             seekdb_setup seekdb_paths seekdb_uninstall \
              seekdb-start seekdb-stop seekdb-status seekdb-config \
-             seekdb-setup seekdb-cleanup seekdb-paths seekdb-uninstall; do
+             seekdb-setup seekdb-paths seekdb-uninstall; do
     remove_seekdb_link "/usr/local/bin/${cmd}"
   done
   rm -rf \
@@ -577,7 +545,6 @@ case "${1:-help}" in
   boot-status) shift; cmd_boot_status "$@" ;;
   enable-boot) shift; cmd_enable_boot "$@" ;;
   disable-boot) shift; cmd_disable_boot "$@" ;;
-  clean-data) shift; cmd_clean_data "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   help|-h|--help) usage ;;
   *) usage; exit 1 ;;
