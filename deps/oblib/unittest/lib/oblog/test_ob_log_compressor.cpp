@@ -276,8 +276,8 @@ TEST(ObLogCompressor, syslog_compressor_base_test)
   ASSERT_EQ(0, std::system(compare_command.c_str()));
 
   // error test
-  ASSERT_EQ(OB_INVALID_ARGUMENT, OB_LOG_COMPRESSOR.set_compress_func("invalid_compressor"));
-  ASSERT_EQ(OB_INVALID_ARGUMENT, OB_LOG_COMPRESSOR.set_compress_func("unknown"));
+  ASSERT_EQ(OB_NOT_SUPPORTED, OB_LOG_COMPRESSOR.set_compress_func("invalid_compressor"));
+  ASSERT_EQ(OB_NOT_SUPPORTED, OB_LOG_COMPRESSOR.set_compress_func("unknown"));
   ASSERT_EQ(OB_SUCCESS, OB_LOG_COMPRESSOR.set_compress_func("none"));
 
   // clear
