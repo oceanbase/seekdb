@@ -469,7 +469,14 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
             } else {
                 self.bootStartupSwitch.state = enable ? .off : .on
                 self.bootStartupSwitch.isEnabled = true
-                self.statusLabel.stringValue = "Error: \(output)"
+                self.statusLabel.stringValue = "Failed to change boot startup."
+                let logDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data") + "/log"
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.messageText = "Failed to change boot startup"
+                alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
+                alert.alertStyle = .warning
+                alert.runModal()
             }
         }
     }
@@ -538,16 +545,22 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
         if !pluginDir.isEmpty { args += ["--plugin-dir", pluginDir] }
         args += ["--restart"]
 
+        let logDir = (baseDir.isEmpty ? "/opt/seekdb/var/seekdb/data" : baseDir) + "/log"
         runPrivileged(command: "config", args: args) { [weak self] success, output in
             guard let self = self else { return }
             if !success {
                 self.saveButton.isEnabled = true
-                self.statusLabel.stringValue = "Error: \(output)"
+                self.statusLabel.stringValue = "Failed to apply settings."
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.messageText = "Failed to apply settings"
+                alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
+                alert.alertStyle = .warning
+                alert.runModal()
                 return
             }
             // 3. Wait for the new port to actually accept connections.
             self.statusLabel.stringValue = "Restarting (waiting for service)…"
-            let logDir = (baseDir.isEmpty ? "/opt/seekdb/var/seekdb/data" : baseDir) + "/log"
             waitForPort(port, timeout: 30) { ok in
                 self.saveButton.isEnabled = true
                 if ok {
