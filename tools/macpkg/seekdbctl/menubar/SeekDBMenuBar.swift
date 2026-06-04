@@ -587,6 +587,7 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func showValidationError(_ message: String) {
+        statusLabel.stringValue = ""
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Invalid setting"
