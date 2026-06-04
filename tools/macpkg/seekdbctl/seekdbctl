@@ -549,8 +549,6 @@ cmd_uninstall() {
   rm -rf \
     "/Applications/seekdb Monitor.app" \
     "/Applications/SeekDB Monitor.app" \
-    /Library/LaunchDaemons/com.seekdb.helper.plist \
-    /Library/PrivilegedHelperTools/com.seekdb.helper \
     /opt/seekdb
   pkgutil --forget com.seekdb.server >/dev/null 2>&1 || true
   pkgutil --forget com.seekdb.server.server >/dev/null 2>&1 || true
