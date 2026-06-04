@@ -1,5 +1,4 @@
 import AppKit
-import Carbon
 import Darwin
 import Security
 
@@ -138,39 +137,6 @@ func runCommand(_ args: [String]) -> (output: String, exitCode: Int32) {
         return (String(data: data, encoding: .utf8) ?? "", proc.terminationStatus)
     } catch {
         return (error.localizedDescription, -1)
-    }
-}
-
-// MARK: - Port helpers
-
-struct PortHolder {
-    var command: String
-    var pid: String
-    var description: String { return "\(command) (PID \(pid))" }
-}
-
-func portInUse(_ port: Int) -> PortHolder? {
-    let r = runCommand(["/usr/sbin/lsof", "-nP", "-iTCP:\(port)", "-sTCP:LISTEN"])
-    if r.exitCode != 0 || r.output.isEmpty { return nil }
-    let lines = r.output.components(separatedBy: "\n").filter { !$0.isEmpty }
-    guard lines.count >= 2 else { return nil }
-    let cols = lines[1].split(whereSeparator: { $0 == " " || $0 == "\t" }).filter { !$0.isEmpty }
-    guard cols.count >= 2 else { return nil }
-    return PortHolder(command: String(cols[0]), pid: String(cols[1]))
-}
-
-func waitForPort(_ port: String, timeout: TimeInterval, completion: @escaping (Bool) -> Void) {
-    DispatchQueue.global(qos: .utility).async {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            let r = runCommand(["/usr/bin/nc", "-z", "127.0.0.1", port])
-            if r.exitCode == 0 {
-                DispatchQueue.main.async { completion(true) }
-                return
-            }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        DispatchQueue.main.async { completion(false) }
     }
 }
 
