@@ -23,12 +23,16 @@ struct SeekDBStatus {
     var processRunning = false
     var pid = ""
     var portOpen = false
+    var launchdLoaded = false
 
     var state: ServiceState {
-        if processRunning && portOpen { return .active }
-        if processRunning && !portOpen { return .starting }
-        if !processRunning && portOpen { return .stopping }
-        return .stopped
+        if launchdLoaded {
+            if processRunning && portOpen { return .active }
+            return .starting
+        } else {
+            if processRunning || portOpen { return .stopping }
+            return .stopped
+        }
     }
 
     var summary: String {
@@ -66,6 +70,8 @@ struct SeekDBStatus {
                         .replacingOccurrences(of: "(pid ", with: "")
                         .replacingOccurrences(of: ")", with: "")
                 }
+            } else if lower.hasPrefix("launchd") {
+                s.launchdLoaded = value == "loaded"
             }
         }
         return s
@@ -713,6 +719,15 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applyButtonState() {
+        startItem.isEnabled = false
+        stopItem.isEnabled = false
+        restartItem.isEnabled = false
+        settingsItem.isEnabled = false
+        setupItem.isEnabled = false
+        mainWindowController.update(currentStatus, locked: true)
+    }
+
     func applyStatus(_ status: SeekDBStatus) {
         currentStatus = status
         statusItem.button?.image = makeStatusIcon(status.state)
@@ -820,33 +835,48 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     @objc func startService() {
         guard !serviceOperationInProgress else { return }
         guard authorizeAdmin(prompt: "seekdb Monitor needs your password to start the database service.") else { return }
+        serviceOperationInProgress = true
+        statusTimer?.invalidate()
         statusItem.button?.image = makeStatusIcon(.starting)
         statusMenuItem.title = "seekdb: Starting…"
+        applyButtonState()
         runPrivileged(command: "start") { [weak self] success, output in
-            if !success { self?.showResult(success: false, output: output, title: "Start Failed") }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.refreshStatus() }
+            guard let self = self else { return }
+            self.serviceOperationInProgress = false
+            if !success { self.showResult(success: false, output: output, title: "Start Failed") }
+            self.refreshStatus()
         }
     }
 
     @objc func stopService() {
         guard !serviceOperationInProgress else { return }
         guard authorizeAdmin(prompt: "seekdb Monitor needs your password to stop the database service.") else { return }
+        serviceOperationInProgress = true
+        statusTimer?.invalidate()
         statusItem.button?.image = makeStatusIcon(.stopping)
         statusMenuItem.title = "seekdb: Stopping…"
+        applyButtonState()
         runPrivileged(command: "stop") { [weak self] success, output in
-            if !success { self?.showResult(success: false, output: output, title: "Stop Failed") }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.refreshStatus() }
+            guard let self = self else { return }
+            self.serviceOperationInProgress = false
+            if !success { self.showResult(success: false, output: output, title: "Stop Failed") }
+            self.refreshStatus()
         }
     }
 
     @objc func restartService() {
         guard !serviceOperationInProgress else { return }
         guard authorizeAdmin(prompt: "seekdb Monitor needs your password to restart the database service.") else { return }
+        serviceOperationInProgress = true
+        statusTimer?.invalidate()
         statusItem.button?.image = makeStatusIcon(.starting)
         statusMenuItem.title = "seekdb: Restarting…"
+        applyButtonState()
         runPrivileged(command: "restart") { [weak self] success, output in
-            if !success { self?.showResult(success: false, output: output, title: "Restart Failed") }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self?.refreshStatus() }
+            guard let self = self else { return }
+            self.serviceOperationInProgress = false
+            if !success { self.showResult(success: false, output: output, title: "Restart Failed") }
+            self.refreshStatus()
         }
     }
 
