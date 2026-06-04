@@ -11,6 +11,14 @@ STOP_SCRIPT="/opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_stop"
 SEEKDB_BIN="/opt/seekdb/bin/seekdb"
 DEFAULT_PORT="2881"
 LOCK_FILE="/tmp/seekdbctl.lock.d"
+UNINSTALL_MARKER_NAME="uninstalling"
+MONITOR_BUNDLE_ID="com.seekdb.monitor"
+MONITOR_APP="/Applications/seekdb Monitor.app"
+MONITOR_APP_LEGACY="/Applications/SeekDB Monitor.app"
+MONITOR_EXECUTABLE="seekdb-menubar"
+HELPER_LABEL="com.seekdb.helper"
+HELPER_PLIST="/Library/LaunchDaemons/${HELPER_LABEL}.plist"
+HELPER_TOOL="/Library/PrivilegedHelperTools/${HELPER_LABEL}"
 
 usage() {
   cat <<EOF
@@ -535,9 +543,74 @@ remove_seekdb_link() {
   esac
 }
 
+uninstall_marker() {
+  refresh_paths
+  printf "%s/run/%s" "$BASE_DIR" "$UNINSTALL_MARKER_NAME"
+}
+
+mark_uninstalling() {
+  local marker
+  marker="$(uninstall_marker)"
+  mkdir -p "$(dirname "$marker")" 2>/dev/null || true
+  : > "$marker" 2>/dev/null || true
+  info "Marked seekdb for uninstall: $marker"
+}
+
+safe_rm_rf() {
+  local path="$1"
+  [ -n "$path" ] || return 0
+  case "$path" in
+    /*) ;;
+    *)
+      warn "Skipping non-absolute removal path: $path"
+      return 0
+      ;;
+  esac
+  [ "$path" != "/" ] || return 0
+  case "$path" in
+    /Applications|/Library|/System|/Users|/opt|/usr|/var|/tmp|/private)
+      warn "Skipping unsafe removal path: $path"
+      return 0
+      ;;
+  esac
+  rm -rf "$path"
+}
+
+quit_monitor_app() {
+  info "Quitting seekdb Monitor"
+  if command -v osascript >/dev/null 2>&1; then
+    osascript -e "tell application id \"$MONITOR_BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+  fi
+
+  local elapsed=0
+  while pgrep -x "$MONITOR_EXECUTABLE" >/dev/null 2>&1 && [ "$elapsed" -lt 5 ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  pkill -x "$MONITOR_EXECUTABLE" >/dev/null 2>&1 || true
+}
+
+schedule_helper_self_removal() {
+  info "Scheduling privileged helper self-removal"
+  (
+    sleep 2
+    launchctl bootout "system/${HELPER_LABEL}" >/dev/null 2>&1 || true
+    rm -f "$HELPER_PLIST" "$HELPER_TOOL"
+  ) >/dev/null 2>&1 &
+}
+
 cmd_uninstall() {
   require_root
+  refresh_paths
+  local data_dir
+  local redo_dir
+  data_dir="$(read_config_value "data-dir" || printf "%s/store" "$BASE_DIR")"
+  redo_dir="$(read_config_value "redo-dir" || printf "%s/store/redo" "$BASE_DIR")"
+
+  mark_uninstalling
   cmd_stop || true
+  quit_monitor_app
   rm -f "$PLIST"
   for cmd in seekdb seekdbctl ob_admin ob_error \
              seekdb_start seekdb_stop seekdb_status seekdb_config \
@@ -546,12 +619,15 @@ cmd_uninstall() {
              seekdb-setup seekdb-paths seekdb-uninstall; do
     remove_seekdb_link "/usr/local/bin/${cmd}"
   done
-  rm -rf \
-    "/Applications/seekdb Monitor.app" \
-    "/Applications/SeekDB Monitor.app" \
-    /opt/seekdb
+  safe_rm_rf "$data_dir"
+  safe_rm_rf "$redo_dir"
+  safe_rm_rf "$BASE_DIR"
+  safe_rm_rf "$MONITOR_APP"
+  safe_rm_rf "$MONITOR_APP_LEGACY"
+  safe_rm_rf /opt/seekdb
   pkgutil --forget com.seekdb.server >/dev/null 2>&1 || true
   pkgutil --forget com.seekdb.server.server >/dev/null 2>&1 || true
+  schedule_helper_self_removal
   info "seekdb has been completely removed."
 }
 

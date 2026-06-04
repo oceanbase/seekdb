@@ -15,6 +15,8 @@ let SEEKDB_CONFIG = "/opt/seekdb/etc/seekdb/seekdb.cnf"
 let SEEKDB_BIN = "/opt/seekdb/bin/seekdb"
 let MONITOR_APP_PATH = "/Applications/seekdb Monitor.app"
 let DEFAULT_PORT = "2881"
+let SEEKDBCTL_LOCK_PID = "/tmp/seekdbctl.lock.d/pid"
+let UNINSTALL_MARKER_NAME = "uninstalling"
 
 enum ServiceState { case active, starting, stopping, stopped }
 
@@ -260,6 +262,25 @@ func pathIsInTrash(_ path: String) -> Bool {
     }
 }
 
+func seekdbctlOperationInProgress() -> Bool {
+    guard let pidText = try? String(contentsOfFile: SEEKDBCTL_LOCK_PID, encoding: .utf8),
+          let pid = Int32(pidText.trimmingCharacters(in: .whitespacesAndNewlines)),
+          pid > 0 else {
+        return false
+    }
+    return kill(pid, 0) == 0 || errno == EPERM
+}
+
+func seekdbCoreInstallMissing() -> Bool {
+    return !FileManager.default.fileExists(atPath: SEEKDBCTL)
+        && !FileManager.default.fileExists(atPath: "/opt/seekdb")
+}
+
+func uninstallMarkerExists() -> Bool {
+    let baseDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data")
+    return FileManager.default.fileExists(atPath: "\(baseDir)/run/\(UNINSTALL_MARKER_NAME)")
+}
+
 // MARK: - Status Icon
 
 func makeStatusIcon(_ state: ServiceState) -> NSImage {
@@ -315,16 +336,8 @@ func makeStatusIcon(_ state: ServiceState) -> NSImage {
 
 class SettingsWindowController: NSObject, NSWindowDelegate {
     var window: NSWindow!
-    var portField: NSTextField!
-    var baseDirField: NSTextField!
-    var dataDirField: NSTextField!
-    var redoDirField: NSTextField!
-    var pluginDirField: NSTextField!
-    var saveButton: NSButton!
     var bootStartupSwitch: NSButton!
     var statusLabel: NSTextField!
-    var onSaved: (() -> Void)?
-    var onLockService: ((Bool) -> Void)?
     private var bootStartupApplying = false
 
     func showWindow() {
@@ -335,8 +348,8 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
             return
         }
 
-        let w: CGFloat = 520
-        let h: CGFloat = 340
+        let w: CGFloat = 460
+        let h: CGFloat = 150
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: w, height: h),
             styleMask: [.titled, .closable],
@@ -347,83 +360,30 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
 
         let content = window.contentView!
-        let labelW: CGFloat = 110
-        let fieldW: CGFloat = 280
-        let btnW: CGFloat = 70
-        let rowH: CGFloat = 30
         let pad: CGFloat = 16
-        var y = h - 50
 
-        func addRow(label: String, value: String, withBrowse: Bool = false) -> NSTextField {
-            let lbl = NSTextField(labelWithString: label)
-            lbl.frame = NSRect(x: pad, y: y, width: labelW, height: 22)
-            lbl.alignment = .right
-            content.addSubview(lbl)
-
-            let fw = withBrowse ? fieldW - btnW - 4 : fieldW
-            let field = NSTextField(string: value)
-            field.frame = NSRect(x: pad + labelW + 8, y: y, width: fw, height: 22)
-            field.isEditable = true
-            field.isBezeled = true
-            field.bezelStyle = .roundedBezel
-            content.addSubview(field)
-
-            if withBrowse {
-                let btn = NSButton(title: "Browse", target: self, action: #selector(browseDir(_:)))
-                btn.frame = NSRect(x: pad + labelW + 8 + fw + 4, y: y - 1, width: btnW, height: 24)
-                btn.tag = y.hashValue
-                content.addSubview(btn)
-                objc_setAssociatedObject(btn, "field", field, .OBJC_ASSOCIATION_RETAIN)
-            }
-
-            y -= rowH
-            return field
-        }
-
-        let bootLbl = NSTextField(labelWithString: "Start at Boot:")
-        bootLbl.frame = NSRect(x: pad, y: y, width: labelW, height: 22)
-        bootLbl.alignment = .right
+        let bootLbl = NSTextField(labelWithString: "Start at Boot")
+        bootLbl.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        bootLbl.frame = NSRect(x: pad, y: h - 50, width: w - 2 * pad, height: 22)
         content.addSubview(bootLbl)
 
         bootStartupSwitch = NSButton(checkboxWithTitle: "Start automatically when macOS boots", target: self, action: #selector(bootStartupToggled))
-        bootStartupSwitch.frame = NSRect(x: pad + labelW + 8, y: y - 2, width: fieldW, height: 22)
+        bootStartupSwitch.frame = NSRect(x: pad, y: h - 82, width: w - 2 * pad, height: 22)
         bootStartupSwitch.setButtonType(.switch)
         bootStartupSwitch.state = .off
         bootStartupSwitch.isEnabled = false
         content.addSubview(bootStartupSwitch)
-        y -= rowH
-
-        portField = addRow(label: "Port:", value: readConfigValue("port", fallback: "2881"))
-        baseDirField = addRow(label: "Base Dir:", value: readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data"), withBrowse: true)
-        dataDirField = addRow(label: "Data Dir:", value: readConfigValue("data-dir", fallback: ""), withBrowse: true)
-        redoDirField = addRow(label: "Redo Dir:", value: readConfigValue("redo-dir", fallback: ""), withBrowse: true)
-        pluginDirField = addRow(label: "Plugin Dir:", value: readConfigValue("plugin-dir", fallback: ""), withBrowse: true)
-
-        y -= 8
-
-        let hint = NSTextField(wrappingLabelWithString: "Save & Restart applies all settings on restart.")
-        hint.frame = NSRect(x: pad + labelW + 8, y: y - 10, width: fieldW, height: 32)
-        hint.font = NSFont.systemFont(ofSize: 11)
-        hint.textColor = .secondaryLabelColor
-        content.addSubview(hint)
-        y -= 40
 
         statusLabel = NSTextField(labelWithString: "")
-        statusLabel.frame = NSRect(x: pad, y: pad, width: 300, height: 22)
+        statusLabel.frame = NSRect(x: pad, y: pad + 5, width: 270, height: 22)
         statusLabel.textColor = .secondaryLabelColor
         content.addSubview(statusLabel)
 
-        saveButton = NSButton(title: "Save & Restart", target: self, action: #selector(saveSettings))
-        saveButton.frame = NSRect(x: w - 140 - pad, y: pad, width: 140, height: 32)
-        saveButton.bezelStyle = .rounded
-        saveButton.keyEquivalent = "\r"
-        content.addSubview(saveButton)
-
-        let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancelSettings))
-        cancelButton.frame = NSRect(x: w - 140 - pad - 90, y: pad, width: 80, height: 32)
-        cancelButton.bezelStyle = .rounded
-        cancelButton.keyEquivalent = "\u{1b}"
-        content.addSubview(cancelButton)
+        let closeButton = NSButton(title: "Close", target: self, action: #selector(closeSettings))
+        closeButton.frame = NSRect(x: w - 96 - pad, y: pad, width: 96, height: 32)
+        closeButton.bezelStyle = .rounded
+        closeButton.keyEquivalent = "\r"
+        content.addSubview(closeButton)
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -482,121 +442,7 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    @objc func browseDir(_ sender: NSButton) {
-        guard let field = objc_getAssociatedObject(sender, "field") as? NSTextField else { return }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.directoryURL = URL(fileURLWithPath: field.stringValue)
-        if panel.runModal() == .OK, let url = panel.url {
-            field.stringValue = url.path
-        }
-    }
-
-    @objc func saveSettings() {
-        let port = portField.stringValue.trimmingCharacters(in: .whitespaces)
-        let baseDir = baseDirField.stringValue.trimmingCharacters(in: .whitespaces)
-        let dataDir = dataDirField.stringValue.trimmingCharacters(in: .whitespaces)
-        let redoDir = redoDirField.stringValue.trimmingCharacters(in: .whitespaces)
-        let pluginDir = pluginDirField.stringValue.trimmingCharacters(in: .whitespaces)
-
-        // 1a. Validate port
-        guard !port.isEmpty, let portNum = Int(port), portNum >= 1024, portNum <= 65535 else {
-            return showValidationError("Port must be a number between 1024 and 65535.")
-        }
-
-        // 1b. Validate paths (must be absolute when provided)
-        for (label, value) in [("Base Dir", baseDir), ("Data Dir", dataDir),
-                                ("Redo Dir", redoDir), ("Plugin Dir", pluginDir)] {
-            if !value.isEmpty && !value.hasPrefix("/") {
-                return showValidationError("\(label) must be an absolute path (start with `/`).")
-            }
-        }
-
-        // 2. Occupancy precheck (only when port is changing)
-        let oldPort = readConfigValue("port", fallback: DEFAULT_PORT)
-        if port != oldPort, let holder = portInUse(portNum), holder.command != "seekdb" {
-            NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = "Port \(port) is already in use"
-            alert.informativeText = "It is held by \(holder.description). seekdb will not be able to bind to this port. Save anyway?"
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Cancel")
-            alert.addButton(withTitle: "Save Anyway")
-            if alert.runModal() != .alertSecondButtonReturn {
-                statusLabel.stringValue = "Cancelled."
-                return
-            }
-        }
-
-        // 3. Admin password gate
-        guard authorizeAdmin(prompt: "seekdb Monitor needs your password to apply new settings and restart the database service.") else {
-            statusLabel.stringValue = "Cancelled."
-            return
-        }
-
-        saveButton.isEnabled = false
-        statusLabel.stringValue = "Saving…"
-        onLockService?(true)
-
-        var args: [String] = ["--port", port]
-        if !baseDir.isEmpty { args += ["--base-dir", baseDir] }
-        if !dataDir.isEmpty { args += ["--data-dir", dataDir] }
-        if !redoDir.isEmpty { args += ["--redo-dir", redoDir] }
-        if !pluginDir.isEmpty { args += ["--plugin-dir", pluginDir] }
-        args += ["--restart"]
-
-        let logDir = (baseDir.isEmpty ? "/opt/seekdb/var/seekdb/data" : baseDir) + "/log"
-        runPrivileged(command: "config", args: args) { [weak self] success, output in
-            guard let self = self else { return }
-            if !success {
-                self.saveButton.isEnabled = true
-                self.onLockService?(false)
-                self.statusLabel.stringValue = "Failed to apply settings."
-                NSApp.activate(ignoringOtherApps: true)
-                let alert = NSAlert()
-                alert.messageText = "Failed to apply settings"
-                alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
-                alert.alertStyle = .warning
-                alert.runModal()
-                return
-            }
-            // 3. Wait for the new port to actually accept connections.
-            self.statusLabel.stringValue = "Restarting (waiting for service)…"
-            waitForPort(port, timeout: 30) { ok in
-                self.saveButton.isEnabled = true
-                self.onLockService?(false)
-                if ok {
-                    self.statusLabel.stringValue = "Saved and restarted."
-                    self.onSaved?()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        self.window.close()
-                    }
-                } else {
-                    self.statusLabel.stringValue = "Service did not come up on port \(port)."
-                    NSApp.activate(ignoringOtherApps: true)
-                    let alert = NSAlert()
-                    alert.messageText = "seekdb did not come up on port \(port)"
-                    alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
-                    alert.alertStyle = .warning
-                    alert.runModal()
-                }
-            }
-        }
-    }
-
-    private func showValidationError(_ message: String) {
-        statusLabel.stringValue = ""
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Invalid setting"
-        alert.informativeText = message
-        alert.alertStyle = .warning
-        alert.runModal()
-    }
-
-    @objc func cancelSettings() {
+    @objc func closeSettings() {
         window.close()
     }
 }
@@ -958,7 +804,17 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         let installedBundleMissing = launchedFromInstalledApp
             && !FileManager.default.fileExists(atPath: MONITOR_APP_PATH)
 
-        guard currentBundleInTrash || installedBundleMissing else { return }
+        let uninstallPending = uninstallMarkerExists()
+
+        guard currentBundleInTrash || installedBundleMissing || uninstallPending else { return }
+
+        if uninstallPending || (installedBundleMissing && !currentBundleInTrash
+            && (seekdbctlOperationInProgress() || seekdbCoreInstallMissing())) {
+            appRemovalTimer?.invalidate()
+            statusTimer?.invalidate()
+            NSApp.terminate(nil)
+            return
+        }
 
         uninstallingAfterAppRemoval = true
         appRemovalTimer?.invalidate()
@@ -1050,13 +906,6 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
 
     @objc func openSettings() {
         guard !serviceOperationInProgress else { return }
-        settingsController.onSaved = { [weak self] in
-            self?.refreshStatus()
-        }
-        settingsController.onLockService = { [weak self] locked in
-            self?.serviceOperationInProgress = locked
-            self?.refreshStatus()
-        }
         settingsController.showWindow()
     }
 

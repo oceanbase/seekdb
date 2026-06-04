@@ -8,9 +8,6 @@
 import Foundation
 
 let SEEKDBCTL = "/opt/seekdb/bin/seekdbctl"
-let HELPER_LABEL = "com.seekdb.helper"
-let HELPER_PLIST = "/Library/LaunchDaemons/com.seekdb.helper.plist"
-let HELPER_TOOL = "/Library/PrivilegedHelperTools/com.seekdb.helper"
 
 @objc(SeekDBHelperProtocol)
 protocol SeekDBHelperProtocol {
@@ -46,30 +43,8 @@ class Helper: NSObject, SeekDBHelperProtocol, NSXPCListenerDelegate {
             let output = String(data: data, encoding: .utf8) ?? ""
             let success = proc.terminationStatus == 0
             reply(success, output)
-            if success && command == "uninstall" {
-                scheduleSelfRemoval()
-            }
         } catch {
             reply(false, error.localizedDescription)
-        }
-    }
-
-    private func scheduleSelfRemoval() {
-        let script = """
-        (
-          /bin/sleep 2
-          /bin/rm -f '\(HELPER_PLIST)' '\(HELPER_TOOL)'
-          /bin/launchctl bootout system/\(HELPER_LABEL) >/dev/null 2>&1 || true
-        ) >/dev/null 2>&1 &
-        """
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
-        proc.arguments = ["-c", script]
-        do {
-            try proc.run()
-        } catch {
-            NSLog("Failed to schedule helper self-removal: %@", error.localizedDescription)
         }
     }
 }
