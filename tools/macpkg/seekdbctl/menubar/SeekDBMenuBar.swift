@@ -593,7 +593,6 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()
-        statusLabel.stringValue = message
     }
 
     @objc func cancelSettings() {
