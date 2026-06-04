@@ -260,20 +260,17 @@ TEST(TestLogMetaInfos, test_log_config_meta)
 
 TEST(TestLogMetaInfos, test_log_config_info_convert)
 {
-  static const int64_t BUFSIZE = 1 << 21;
-  char buf[BUFSIZE];
   ObAddr addr1(ObAddr::IPV4, "127.0.0.1", 4096);
   ObAddr addr2(ObAddr::IPV4, "127.0.0.1", 4097);
   ObAddr addr3(ObAddr::IPV4, "127.0.0.1", 4098);
   ObAddr addr4(ObAddr::IPV4, "127.0.0.1", 4099);
   ObAddr addr5(ObAddr::IPV4, "127.0.0.1", 4100);
   ObAddr addr6(ObAddr::IPV4, "127.0.0.1", 4101);
-  ObAddr addr7(ObAddr::IPV4, "127.0.0.1", 4102);
-  ObAddr addr8(ObAddr::IPV4, "127.0.0.1", 4103);
   int64_t curr_config_seq = 1;
   LogConfigVersion curr_config_version;
   int64_t curr_log_proposal_id = INVALID_PROPOSAL_ID; curr_log_proposal_id = 1;
   EXPECT_EQ(OB_SUCCESS, curr_config_version.generate(curr_log_proposal_id, curr_config_seq));
+#if OB_MAX_MEMBER_NUMBER > 1
   // 2F1A, 2 degraded learners
   {
     LogConfigInfoV2 curr_config_info_v2;
@@ -295,7 +292,7 @@ TEST(TestLogMetaInfos, test_log_config_info_convert)
     GlobalLearnerList expected_learner_list;
     expected_learner_list.append(curr_learner_list);
     expected_learner_list.append(curr_config_info.degraded_learnerlist_);
-    
+
     EXPECT_EQ(OB_SUCCESS, curr_config_info.generate(log_sync_member_list, log_sync_replica_num, curr_learner_list, curr_config_version));
     curr_config_info.arbitration_member_ = arb_replica;
 
@@ -309,6 +306,35 @@ TEST(TestLogMetaInfos, test_log_config_info_convert)
     EXPECT_TRUE(result_learners.learner_addr_equal(expected_learner_list));
     EXPECT_EQ(3, result_learners.get_member_number());
   }
+#else
+  // single-member mode: verify convert_to_complete_config with sync member and learners
+  {
+    LogConfigInfoV2 curr_config_info_v2;
+    LogConfigInfo &curr_config_info = curr_config_info_v2.config_;
+    const int64_t log_sync_replica_num = 1;
+    ObMemberList log_sync_member_list;
+    log_sync_member_list.add_member(ObMember(addr1, 1));
+    common::GlobalLearnerList curr_learner_list;
+    curr_learner_list.add_learner(ObMember(addr4, 1));
+    curr_config_info.degraded_learnerlist_.add_learner(ObMember(addr5, 1));
+    GlobalLearnerList expected_learner_list;
+    expected_learner_list.append(curr_learner_list);
+    expected_learner_list.append(curr_config_info.degraded_learnerlist_);
+
+    EXPECT_EQ(OB_SUCCESS, curr_config_info.generate(log_sync_member_list, log_sync_replica_num,
+                                                    curr_learner_list, curr_config_version));
+
+    common::ObMemberList result_memberlist;
+    int64_t result_replica_num = 0;
+    GlobalLearnerList result_learners;
+    EXPECT_EQ(OB_SUCCESS, curr_config_info_v2.convert_to_complete_config(result_memberlist, result_replica_num, result_learners));
+    EXPECT_EQ(log_sync_replica_num, result_replica_num);
+    EXPECT_TRUE(result_memberlist.member_addr_equal(log_sync_member_list));
+    EXPECT_EQ(1, result_memberlist.get_member_number());
+    EXPECT_TRUE(result_learners.learner_addr_equal(expected_learner_list));
+    EXPECT_EQ(2, result_learners.get_member_number());
+  }
+#endif
 }
 
 TEST(TestLogMetaInfos, test_log_mode_meta)
