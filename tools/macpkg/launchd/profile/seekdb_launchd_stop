@@ -44,8 +44,7 @@ read_key_value() {
 
 is_alive() {
   local pid="$1"
-  [ -n "$pid" ] || return 1
-  ps -p "$pid" >/dev/null 2>&1
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 
 stop_pid_file() {
@@ -55,18 +54,6 @@ stop_pid_file() {
   local pid
   pid="$(cat "$pid_file" 2>/dev/null || true)"
   is_alive "$pid" || return 0
-
-  # Guard against PID recycling: verify the process executable is under /opt/seekdb/
-  local proc_cmd
-  proc_cmd="$(ps -p "$pid" -ww -o args= 2>/dev/null | head -1 || true)"
-  case "$proc_cmd" in
-    /opt/seekdb/*)  ;;
-    *)
-      echo "Skipping PID $pid from $pid_file: not a seekdb process (stale PID file)"
-      rm -f "$pid_file" 2>/dev/null || true
-      return 0
-      ;;
-  esac
 
   echo "Stopping process $pid from $pid_file"
   kill "$pid" 2>/dev/null || true

@@ -7,6 +7,9 @@ BASE_DIR="/opt/seekdb/var/seekdb/data"
 DATA_DIR=""
 REDO_DIR=""
 LOG_DIR=""
+PORT="2881"
+RUNTIME_DIR="/opt/seekdb/var/seekdb/run"
+ACTIVE_PATHS_FILE="${RUNTIME_DIR}/active_paths"
 ADDITIONAL_ARGS=()
 
 trim() {
@@ -41,6 +44,7 @@ read_config() {
         ADDITIONAL_ARGS+=("--redo-dir=$value")
         ;;
       port)
+        PORT="$value"
         ADDITIONAL_ARGS+=("--port=$value")
         ;;
       plugin-dir)
@@ -84,6 +88,18 @@ if [ -f "$UNINSTALL_MARKER" ]; then
 fi
 
 mkdir -p "$BASE_DIR" "$DATA_DIR" "$REDO_DIR" "$BASE_DIR/run" "$LOG_DIR"
+mkdir -p "$RUNTIME_DIR"
+
+tmp_active="$(mktemp "${RUNTIME_DIR}/active_paths.XXXXXX")"
+{
+  printf "base-dir=%s\n" "$BASE_DIR"
+  printf "data-dir=%s\n" "$DATA_DIR"
+  printf "redo-dir=%s\n" "$REDO_DIR"
+  printf "log-dir=%s\n" "$LOG_DIR"
+  printf "pid-dir=%s\n" "$BASE_DIR/run"
+  printf "port=%s\n" "$PORT"
+} > "$tmp_active"
+mv "$tmp_active" "$ACTIVE_PATHS_FILE"
 
 ARGS=("--base-dir=$BASE_DIR" "--nodaemon")
 if [ "${#ADDITIONAL_ARGS[@]}" -gt 0 ]; then

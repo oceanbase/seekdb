@@ -11,6 +11,8 @@ STOP_SCRIPT="/opt/seekdb/libexec/seekdb/scripts/seekdb_launchd_stop"
 SEEKDB_BIN="/opt/seekdb/bin/seekdb"
 DEFAULT_PORT="2881"
 LOCK_FILE="/tmp/seekdbctl.lock.d"
+RUNTIME_DIR="/opt/seekdb/var/seekdb/run"
+ACTIVE_PATHS_FILE="${RUNTIME_DIR}/active_paths"
 UNINSTALL_MARKER_NAME="uninstalling"
 MONITOR_BUNDLE_ID="com.seekdb.monitor"
 MONITOR_APP="/Applications/seekdb Monitor.app"
@@ -101,6 +103,19 @@ read_config_value() {
   local wanted="$1"
   [ -f "$CONFIG_FILE" ] || return 1
 
+  read_key_value "$CONFIG_FILE" "$wanted"
+}
+
+read_active_path_value() {
+  local wanted="$1"
+  [ -f "$ACTIVE_PATHS_FILE" ] || return 1
+
+  read_key_value "$ACTIVE_PATHS_FILE" "$wanted"
+}
+
+read_key_value() {
+  local file="$1"
+  local wanted="$2"
   while IFS= read -r line || [ -n "$line" ]; do
     line="$(trim "$line")"
     [ -z "$line" ] && continue
@@ -113,7 +128,7 @@ read_config_value() {
       printf "%s" "$value"
       return 0
     fi
-  done < "$CONFIG_FILE"
+  done < "$file"
   return 1
 }
 
@@ -178,8 +193,20 @@ refresh_paths() {
   LOG_DIR="$BASE_DIR/log"
 }
 
+refresh_active_paths() {
+  local active_base
+  active_base="$(read_active_path_value "base-dir" || true)"
+  [ -n "$active_base" ] || return 1
+  BASE_DIR="$active_base"
+  LOG_DIR="$(read_active_path_value "log-dir" || printf "%s/log" "$BASE_DIR")"
+}
+
 get_port() {
   read_config_value "port" || printf "%s" "$DEFAULT_PORT"
+}
+
+get_active_port() {
+  read_active_path_value "port" || get_port
 }
 
 launchd_loaded() {
@@ -205,7 +232,7 @@ boot_startup_status() {
 }
 
 pid_from_file() {
-  refresh_paths
+  refresh_active_paths || refresh_paths
   local pid_file="$BASE_DIR/run/seekdb.pid"
   [ -f "$pid_file" ] || return 1
   local pid
@@ -314,12 +341,30 @@ cmd_disable_boot() {
 }
 
 cmd_status() {
-  refresh_paths
+  local config_base
+  local use_active=0
+  config_base="$(read_config_value "base-dir" || printf "%s" "$BASE_DIR")"
+  if launchd_loaded; then
+    if refresh_active_paths; then
+      use_active=1
+    else
+      refresh_paths
+    fi
+  else
+    refresh_paths
+  fi
   local port
-  port="$(get_port)"
+  if [ "$use_active" -eq 1 ]; then
+    port="$(get_active_port)"
+  else
+    port="$(get_port)"
+  fi
 
   echo "Config     : $CONFIG_FILE"
   echo "Base dir   : $BASE_DIR"
+  if [ "$BASE_DIR" != "$config_base" ]; then
+    echo "Config base: $config_base"
+  fi
   echo "Log dir    : $LOG_DIR"
   echo "Port       : $port"
 
@@ -371,7 +416,11 @@ cmd_paths() {
 }
 
 cmd_logs() {
-  refresh_paths
+  if launchd_loaded; then
+    refresh_active_paths || refresh_paths
+  else
+    refresh_paths
+  fi
   local follow=0
   if [ "${1:-}" = "-f" ] || [ "${1:-}" = "--follow" ]; then
     follow=1
@@ -392,9 +441,22 @@ cmd_logs() {
 }
 
 cmd_doctor() {
-  refresh_paths
+  local use_active=0
+  if launchd_loaded; then
+    if refresh_active_paths; then
+      use_active=1
+    else
+      refresh_paths
+    fi
+  else
+    refresh_paths
+  fi
   local port
-  port="$(get_port)"
+  if [ "$use_active" -eq 1 ]; then
+    port="$(get_active_port)"
+  else
+    port="$(get_port)"
+  fi
 
   echo "seekdb diagnostics"
   echo "------------------"
@@ -602,6 +664,13 @@ schedule_helper_self_removal() {
 
 cmd_uninstall() {
   require_root
+  local active_base=""
+  local active_data=""
+  local active_redo=""
+  active_base="$(read_active_path_value "base-dir" || true)"
+  active_data="$(read_active_path_value "data-dir" || true)"
+  active_redo="$(read_active_path_value "redo-dir" || true)"
+
   refresh_paths
   local data_dir
   local redo_dir
@@ -622,6 +691,9 @@ cmd_uninstall() {
   safe_rm_rf "$data_dir"
   safe_rm_rf "$redo_dir"
   safe_rm_rf "$BASE_DIR"
+  [ -n "$active_data" ] && safe_rm_rf "$active_data"
+  [ -n "$active_redo" ] && safe_rm_rf "$active_redo"
+  [ -n "$active_base" ] && safe_rm_rf "$active_base"
   safe_rm_rf "$MONITOR_APP"
   safe_rm_rf "$MONITOR_APP_LEGACY"
   safe_rm_rf /opt/seekdb

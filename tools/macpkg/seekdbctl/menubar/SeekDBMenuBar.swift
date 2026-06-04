@@ -15,6 +15,7 @@ let SEEKDB_BIN = "/opt/seekdb/bin/seekdb"
 let MONITOR_APP_PATH = "/Applications/seekdb Monitor.app"
 let DEFAULT_PORT = "2881"
 let SEEKDBCTL_LOCK_PID = "/tmp/seekdbctl.lock.d/pid"
+let ACTIVE_PATHS_FILE = "/opt/seekdb/var/seekdb/run/active_paths"
 let UNINSTALL_MARKER_NAME = "uninstalling"
 
 enum ServiceState { case active, starting, stopping, stopped }
@@ -43,18 +44,28 @@ struct SeekDBStatus {
 
     static func detect() -> SeekDBStatus {
         var s = SeekDBStatus()
-        s.port = readConfigPort()
         if let pid = installedSeekDBPid() {
             s.processRunning = true
             s.pid = pid
+            s.port = readActivePathValue("port", fallback: readConfigPort())
             s.portOpen = portIsListeningByPid(s.port, pid: pid)
+        } else {
+            s.port = readConfigPort()
         }
         return s
     }
 }
 
 func readConfigValue(_ key: String, fallback: String = "") -> String {
-    guard let content = try? String(contentsOfFile: SEEKDB_CONFIG, encoding: .utf8) else {
+    return readKeyValue(from: SEEKDB_CONFIG, key: key, fallback: fallback)
+}
+
+func readActivePathValue(_ key: String, fallback: String = "") -> String {
+    return readKeyValue(from: ACTIVE_PATHS_FILE, key: key, fallback: fallback)
+}
+
+func readKeyValue(from file: String, key: String, fallback: String = "") -> String {
+    guard let content = try? String(contentsOfFile: file, encoding: .utf8) else {
         return fallback
     }
     for line in content.components(separatedBy: "\n") {
@@ -70,6 +81,12 @@ func readConfigValue(_ key: String, fallback: String = "") -> String {
 
 func readConfigPort() -> String {
     return readConfigValue("port", fallback: DEFAULT_PORT)
+}
+
+func readRuntimeBaseDir() -> String {
+    let activeBaseDir = readActivePathValue("base-dir")
+    if !activeBaseDir.isEmpty { return activeBaseDir }
+    return readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data")
 }
 
 func canonicalPath(_ path: String) -> String {
@@ -243,7 +260,7 @@ func seekdbCoreInstallMissing() -> Bool {
 }
 
 func uninstallMarkerExists() -> Bool {
-    let baseDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data")
+    let baseDir = readRuntimeBaseDir()
     return FileManager.default.fileExists(atPath: "\(baseDir)/run/\(UNINSTALL_MARKER_NAME)")
 }
 
@@ -397,7 +414,7 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
                 self.bootStartupSwitch.state = enable ? .off : .on
                 self.bootStartupSwitch.isEnabled = true
                 self.statusLabel.stringValue = "Failed to change boot startup."
-                let logDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data") + "/log"
+                let logDir = readRuntimeBaseDir() + "/log"
                 NSApp.activate(ignoringOtherApps: true)
                 let alert = NSAlert()
                 alert.messageText = "Failed to change boot startup"
@@ -803,7 +820,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
             alert.informativeText = "Done."
             alert.alertStyle = .informational
         } else {
-            let logDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data") + "/log"
+            let logDir = readRuntimeBaseDir() + "/log"
             alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
             alert.alertStyle = .critical
         }
@@ -859,12 +876,12 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     // MARK: - Logs
 
     @objc func viewLogs() {
-        let logDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data") + "/log"
+        let logDir = readRuntimeBaseDir() + "/log"
         openTerminal("tail -n 200 \(logDir)/seekdb.log \(logDir)/launchd.out.log \(logDir)/launchd.err.log 2>/dev/null; echo '\\nPress any key to close'; read -n1")
     }
 
     @objc func followLogs() {
-        let logDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data") + "/log"
+        let logDir = readRuntimeBaseDir() + "/log"
         openTerminal("tail -n 50 -F \(logDir)/seekdb.log \(logDir)/launchd.out.log \(logDir)/launchd.err.log 2>/dev/null")
     }
 
@@ -878,9 +895,9 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     // MARK: - Diagnostics
 
     @objc func runDoctor() {
-        let baseDir = readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data")
+        let baseDir = readRuntimeBaseDir()
         let logDir = baseDir + "/log"
-        let port = readConfigValue("port", fallback: "2881")
+        let port = readActivePathValue("port", fallback: readConfigValue("port", fallback: "2881"))
         let script = """
         echo 'seekdb diagnostics'
         echo '------------------'
