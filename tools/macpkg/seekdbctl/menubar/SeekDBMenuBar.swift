@@ -59,7 +59,8 @@ struct SeekDBStatus {
                     s.port = value
                 }
             } else if lower.hasPrefix("process") {
-                s.processRunning = lower.contains("running")
+                let lowerValue = value.lowercased()
+                s.processRunning = lowerValue.hasPrefix("running")
                 if let range = line.range(of: #"\(pid [0-9]+\)"#, options: .regularExpression) {
                     s.pid = String(line[range])
                         .replacingOccurrences(of: "(pid ", with: "")

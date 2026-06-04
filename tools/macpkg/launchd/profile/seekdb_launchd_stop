@@ -44,7 +44,8 @@ read_key_value() {
 
 is_alive() {
   local pid="$1"
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  [ -n "$pid" ] || return 1
+  ps -p "$pid" >/dev/null 2>&1
 }
 
 stop_pid_file() {

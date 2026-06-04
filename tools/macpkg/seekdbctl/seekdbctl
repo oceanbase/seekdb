@@ -243,7 +243,10 @@ pid_from_file() {
 
 pid_alive() {
   local pid="$1"
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+  [ -n "$pid" ] || return 1
+  # Use ps instead of kill -0: kill -0 returns EPERM for root-owned processes
+  # when run as non-root, making status unreliable without sudo.
+  ps -p "$pid" >/dev/null 2>&1
 }
 
 port_open() {
