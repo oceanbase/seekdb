@@ -11,9 +11,7 @@ let STATUS_INTERVAL_TRANSIENT: TimeInterval = 1.0
 // MARK: - Status Model
 
 let SEEKDB_CONFIG = "/opt/seekdb/etc/seekdb/seekdb.cnf"
-let SEEKDB_BIN = "/opt/seekdb/bin/seekdb"
 let MONITOR_APP_PATH = "/Applications/seekdb Monitor.app"
-let DEFAULT_PORT = "2881"
 let SEEKDBCTL_LOCK_PID = "/tmp/seekdbctl.lock.d/pid"
 let ACTIVE_PATHS_FILE = "/opt/seekdb/var/seekdb/run/active_paths"
 let UNINSTALL_MARKER_NAME = "uninstalling"
@@ -42,15 +40,32 @@ struct SeekDBStatus {
         }
     }
 
-    static func detect() -> SeekDBStatus {
+    static func parse(output: String) -> SeekDBStatus {
         var s = SeekDBStatus()
-        if let pid = installedSeekDBPid() {
-            s.processRunning = true
-            s.pid = pid
-            s.port = readActivePathValue("port", fallback: readConfigPort())
-            s.portOpen = portIsListeningByPid(s.port, pid: pid)
-        } else {
-            s.port = readConfigPort()
+        for rawLine in output.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lower = line.lowercased()
+            let value = line.split(separator: ":", maxSplits: 1)
+                .dropFirst()
+                .first?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            if lower.hasPrefix("port") {
+                if value == "open" {
+                    s.portOpen = true
+                } else if value == "closed" {
+                    s.portOpen = false
+                } else if !value.isEmpty {
+                    s.port = value
+                }
+            } else if lower.hasPrefix("process") {
+                s.processRunning = lower.contains("running")
+                if let range = line.range(of: #"\(pid [0-9]+\)"#, options: .regularExpression) {
+                    s.pid = String(line[range])
+                        .replacingOccurrences(of: "(pid ", with: "")
+                        .replacingOccurrences(of: ")", with: "")
+                }
+            }
         }
         return s
     }
@@ -79,63 +94,15 @@ func readKeyValue(from file: String, key: String, fallback: String = "") -> Stri
     return fallback
 }
 
-func readConfigPort() -> String {
-    return readConfigValue("port", fallback: DEFAULT_PORT)
-}
-
 func readRuntimeBaseDir() -> String {
     let activeBaseDir = readActivePathValue("base-dir")
     if !activeBaseDir.isEmpty { return activeBaseDir }
     return readConfigValue("base-dir", fallback: "/opt/seekdb/var/seekdb/data")
 }
 
-func canonicalPath(_ path: String) -> String {
-    return URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
-}
-
-func processExecutablePath(pid: String) -> String? {
-    guard let pidValue = Int32(pid), pidValue > 0 else { return nil }
-    var buffer = [CChar](repeating: 0, count: 4096)
-    let result = proc_pidpath(pid_t(pidValue), &buffer, UInt32(buffer.count))
-    guard result > 0 else { return nil }
-    return String(cString: buffer)
-}
-
-func installedSeekDBPid() -> String? {
-    let installedPath = SEEKDB_BIN
-    let installedCanonicalPath = canonicalPath(installedPath)
-    let pgrepResult = runCommand(["/usr/bin/pgrep", "-x", "seekdb"])
-    guard pgrepResult.exitCode == 0 else { return nil }
-
-    let pids = pgrepResult.output
-        .components(separatedBy: .newlines)
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-
-    for pid in pids {
-        guard let executablePath = processExecutablePath(pid: pid) else { continue }
-        if executablePath == installedPath || canonicalPath(executablePath) == installedCanonicalPath {
-            return pid
-        }
-    }
-    return nil
-}
-
-func portIsListeningByPid(_ port: String, pid: String) -> Bool {
-    let result = runCommand(["/usr/sbin/lsof", "-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"])
-    let owners = result.output
-        .components(separatedBy: .newlines)
-        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-    if result.exitCode == 0 && !owners.isEmpty {
-        return owners.contains(pid)
-    }
-
-    // Non-root monitor processes may not be able to inspect a root LaunchDaemon
-    // with lsof. Once the installed seekdb PID is confirmed, nc is the fallback
-    // for detecting that the configured SQL port is reachable.
-    let ncResult = runCommand(["/usr/bin/nc", "-z", "127.0.0.1", port])
-    return ncResult.exitCode == 0
+func logDetailsText() -> String {
+    let logDir = readRuntimeBaseDir() + "/log"
+    return "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.out.log\n\(logDir)/launchd.err.log"
 }
 
 // MARK: - Shell Helpers
@@ -233,6 +200,10 @@ func openTerminal(_ command: String) {
     DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
         try? FileManager.default.removeItem(atPath: tmp)
     }
+}
+
+func shellQuote(_ value: String) -> String {
+    return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
 }
 
 func chmod(_ path: String, _ mode: UInt16) {
@@ -414,11 +385,10 @@ class SettingsWindowController: NSObject, NSWindowDelegate {
                 self.bootStartupSwitch.state = enable ? .off : .on
                 self.bootStartupSwitch.isEnabled = true
                 self.statusLabel.stringValue = "Failed to change boot startup."
-                let logDir = readRuntimeBaseDir() + "/log"
                 NSApp.activate(ignoringOtherApps: true)
                 let alert = NSAlert()
                 alert.messageText = "Failed to change boot startup"
-                alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
+                alert.informativeText = logDetailsText()
                 alert.alertStyle = .warning
                 alert.runModal()
             }
@@ -729,32 +699,39 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
     }
 
+    var statusRefreshInFlight = false
+
     func refreshStatus() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            let status = SeekDBStatus.detect()
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                self.currentStatus = status
-                self.statusItem.button?.image = makeStatusIcon(status.state)
-                self.statusMenuItem.title = "seekdb: \(status.summary)"
-                self.portMenuItem.title = "Port: \(status.port.isEmpty ? "--" : status.port)"
-                if self.serviceOperationInProgress {
-                    self.startItem.isEnabled = false
-                    self.stopItem.isEnabled = false
-                    self.restartItem.isEnabled = false
-                    self.settingsItem.isEnabled = false
-                    self.setupItem.isEnabled = false
-                } else {
-                    self.startItem.isEnabled = (status.state == .stopped)
-                    self.stopItem.isEnabled = (status.state == .active)
-                    self.restartItem.isEnabled = (status.state == .active)
-                    self.settingsItem.isEnabled = true
-                    self.setupItem.isEnabled = true
-                }
-                self.mainWindowController.update(status, locked: self.serviceOperationInProgress)
-                self.scheduleNextPoll()
-            }
+        guard !statusRefreshInFlight else { return }
+        statusRefreshInFlight = true
+        runPrivileged(command: "status") { [weak self] success, output in
+            guard let self = self else { return }
+            self.statusRefreshInFlight = false
+            let status = success ? SeekDBStatus.parse(output: output) : SeekDBStatus()
+            self.applyStatus(status)
         }
+    }
+
+    func applyStatus(_ status: SeekDBStatus) {
+        currentStatus = status
+        statusItem.button?.image = makeStatusIcon(status.state)
+        statusMenuItem.title = "seekdb: \(status.summary)"
+        portMenuItem.title = "Port: \(status.port.isEmpty ? "--" : status.port)"
+        if serviceOperationInProgress {
+            startItem.isEnabled = false
+            stopItem.isEnabled = false
+            restartItem.isEnabled = false
+            settingsItem.isEnabled = false
+            setupItem.isEnabled = false
+        } else {
+            startItem.isEnabled = (status.state == .stopped)
+            stopItem.isEnabled = (status.state == .active)
+            restartItem.isEnabled = (status.state == .active)
+            settingsItem.isEnabled = true
+            setupItem.isEnabled = true
+        }
+        mainWindowController.update(status, locked: serviceOperationInProgress)
+        scheduleNextPoll()
     }
 
     func scheduleNextPoll() {
@@ -820,8 +797,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
             alert.informativeText = "Done."
             alert.alertStyle = .informational
         } else {
-            let logDir = readRuntimeBaseDir() + "/log"
-            alert.informativeText = "Check logs for details:\n\n\(logDir)/seekdb.log\n\(logDir)/launchd.err.log"
+            alert.informativeText = logDetailsText()
             alert.alertStyle = .critical
         }
         alert.runModal()
@@ -876,13 +852,11 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     // MARK: - Logs
 
     @objc func viewLogs() {
-        let logDir = readRuntimeBaseDir() + "/log"
-        openTerminal("tail -n 200 \(logDir)/seekdb.log \(logDir)/launchd.out.log \(logDir)/launchd.err.log 2>/dev/null; echo '\\nPress any key to close'; read -n1")
+        openTerminal("\(shellQuote(SEEKDBCTL)) logs; echo '\\nPress any key to close'; read -n1")
     }
 
     @objc func followLogs() {
-        let logDir = readRuntimeBaseDir() + "/log"
-        openTerminal("tail -n 50 -F \(logDir)/seekdb.log \(logDir)/launchd.out.log \(logDir)/launchd.err.log 2>/dev/null")
+        openTerminal("\(shellQuote(SEEKDBCTL)) logs -f")
     }
 
     // MARK: - Settings
@@ -895,24 +869,7 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     // MARK: - Diagnostics
 
     @objc func runDoctor() {
-        let baseDir = readRuntimeBaseDir()
-        let logDir = baseDir + "/log"
-        let port = readActivePathValue("port", fallback: readConfigValue("port", fallback: "2881"))
-        let script = """
-        echo 'seekdb diagnostics'
-        echo '------------------'
-        test -x /opt/seekdb/bin/seekdb && echo 'binary     : ok' || echo 'binary     : missing'
-        test -f \(SEEKDB_CONFIG) && echo 'config     : ok' || echo 'config     : missing'
-        test -d \(baseDir) && echo 'base dir   : ok' || echo 'base dir   : missing'
-        test -d \(logDir) && echo 'log dir    : ok' || echo 'log dir    : missing'
-        nc -z 127.0.0.1 \(port) 2>/dev/null && echo 'port       : open (\(port))' || echo 'port       : closed (\(port))'
-        pgrep -f /opt/seekdb/bin/seekdb >/dev/null && echo 'process    : running' || echo 'process    : not running'
-        echo 'disk       :'
-        df -h \(baseDir) 2>/dev/null || df -h /opt/seekdb 2>/dev/null
-        echo 'memory     :' $(( $(sysctl -n hw.memsize 2>/dev/null) / 1024 / 1024 )) MB
-        echo '\\nPress any key to close'; read -n1
-        """
-        openTerminal(script)
+        openTerminal("\(shellQuote(SEEKDBCTL)) doctor; echo '\\nPress any key to close'; read -n1")
     }
 
     // MARK: - Initialize / Dangerous Actions
