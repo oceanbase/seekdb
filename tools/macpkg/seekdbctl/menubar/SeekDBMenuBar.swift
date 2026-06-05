@@ -805,12 +805,14 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         let installedBundleMissing = launchedFromInstalledApp
             && !FileManager.default.fileExists(atPath: MONITOR_APP_PATH)
 
-        let uninstallPending = uninstallMarkerExists()
+        // Only react to the app being moved to trash or its installed location disappearing.
+        // Do NOT check uninstall markers in the data directory — the path may be under
+        // a TCC-protected directory (~/Downloads, ~/Documents, etc.), and accessing it
+        // causes macOS to terminate the monitor process.
+        guard currentBundleInTrash || installedBundleMissing else { return }
 
-        guard currentBundleInTrash || installedBundleMissing || uninstallPending else { return }
-
-        if uninstallPending || (installedBundleMissing && !currentBundleInTrash
-            && (seekdbctlOperationInProgress() || seekdbCoreInstallMissing())) {
+        if installedBundleMissing && !currentBundleInTrash
+            && (seekdbctlOperationInProgress() || seekdbCoreInstallMissing()) {
             appRemovalTimer?.invalidate()
             statusTimer?.invalidate()
             NSApp.terminate(nil)
@@ -853,9 +855,12 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Stop Service")
         alert.addButton(withTitle: "View Logs and Stop")
         let response = alert.runModal()
-        stopService()
         if response == .alertSecondButtonReturn {
             viewLogs()
+        }
+        // Stop directly via XPC without requiring password — the service already failed
+        runPrivileged(command: "stop") { [weak self] _, _ in
+            self?.refreshStatus()
         }
     }
 
