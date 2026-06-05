@@ -1,4 +1,3 @@
-#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -26,11 +25,10 @@
 #include "storage/ddl/ob_ddl_lock.h"
 #include "src/rootserver/ob_root_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 
 namespace oceanbase
 {
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
@@ -162,13 +160,6 @@ int ObSplitPartitionHelper::check_allow_split(
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "spliting of a table in a group with multiple tables");
   }
 
-  if (OB_FAIL(ret)) {
-  } else if (OB_UNLIKELY(GCTX.is_shared_storage_mode())) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("split in shared storage mode not supported", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "split in shared storage mode");
-  }
-
   return ret;
 }
 
@@ -217,6 +208,12 @@ int ObSplitPartitionHelper::freeze_split_src_tablet(const ObFreezeSplitSrcTablet
 
       // the followings are workarounds, still INCORRECT in some leader switch corner cases
       // 1. wait write end for medium
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(tenant_tablet_scheduler->stop_tablets_schedule_medium(tablet_ids, compaction::ObProhibitScheduleMediumMap::ProhibitFlag::SPLIT))) {
+        LOG_WARN("failed to stop tablets schedule medium", K(ret), K(arg));
+      } else if (OB_FAIL(tenant_tablet_scheduler->clear_tablets_prohibit_medium_flag(tablet_ids, compaction::ObProhibitScheduleMediumMap::ProhibitFlag::SPLIT))) {
+        LOG_WARN("failed to clear prohibit schedule medium flag", K(ret), K(arg));
+      }
       // 2. wait write end for table autoinc seq will be done in batch_get_tablet_autoinc_seq
 
       if (OB_FAIL(ret)) {
@@ -271,7 +268,7 @@ int ObSplitPartitionHelper::check_enable_global_index_auto_split(
   int ret = OB_SUCCESS;
   enable_auto_split = false;
   auto_part_size = -1;
-  if (data_table_schema.is_mysql_tmp_table() || data_table_schema.is_sys_table() || GCTX.is_shared_storage_mode()) {
+  if (data_table_schema.is_mysql_tmp_table() || data_table_schema.is_sys_table()) {
     // not supported table type
   } else if (data_table_schema.is_auto_partitioned_table()) {
     enable_auto_split = true;
@@ -413,6 +410,7 @@ int ObSplitPartitionHelper::prepare_dst_tablet_creator_(
   int ret = OB_SUCCESS;
   ObArray<int64_t> create_commit_versions;
   void *buf = nullptr;
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
   if (OB_UNLIKELY(dst_tablet_ids.empty() || dst_tablet_ids.count() != inc_table_schemas.count() || nullptr != tablet_creator) || OB_ISNULL(inc_table_schemas.at(0))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), KP(tablet_creator), K(dst_tablet_ids), K(inc_table_schemas.count()));
@@ -432,12 +430,16 @@ int ObSplitPartitionHelper::prepare_dst_tablet_creator_(
     // FIXME: timeout ctx
     const int64_t timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : GCONF.rpc_timeout;
     int64_t data_tablet_size = OB_INVALID_SIZE;
-    obcall::ObFetchSplitTabletInfoArg arg;
-    obcall::ObFetchSplitTabletInfoRes res;
+    obrpc::ObFetchSplitTabletInfoArg arg;
+    obrpc::ObFetchSplitTabletInfoRes res;
     arg.tenant_id_ = tenant_id;
     arg.ls_id_ = ls_id;
-    if (OB_FAIL(arg.tablet_ids_.assign(src_tablet_ids))) {
-    } else if (OB_FAIL(ex_rpc::sync_call([&]{ return GCTX.ob_service_->fetch_split_tablet_info(arg, res, 30000000); }))) {
+    if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
+      ret = OB_ERR_SYS;
+      LOG_WARN("srv_rpc_proxy is null", KR(ret), KP(srv_rpc_proxy));
+    } else if (OB_FAIL(arg.tablet_ids_.assign(src_tablet_ids))) {
+      LOG_WARN("failed to assign", KR(ret));
+    } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr).timeout(timeout_us).fetch_split_tablet_info(arg, res))) {
       LOG_WARN("failed to freeze src tablet", KR(ret), K(leader_addr));
     } else if (OB_FAIL(create_commit_versions.assign(res.create_commit_versions_))) {
       LOG_WARN("failed to assign", K(ret));
@@ -733,6 +735,7 @@ int ObSplitPartitionHelper::start_src_(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
   int64_t finish_time = ObTimeUtility::current_time();
   int64_t start_time = finish_time;
   data_end_scn.reset();
@@ -745,7 +748,10 @@ int ObSplitPartitionHelper::start_src_(
 
   // start src
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObTabletSplitMdsHelper::register_mds(start_src_arg, false/*need_flush_redo*/, trans))) {
+    if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
+      ret = OB_ERR_SYS;
+      LOG_WARN("srv_rpc_proxy is null", KR(ret), KP(srv_rpc_proxy));
+    } else if (OB_FAIL(ObTabletSplitMdsHelper::register_mds(start_src_arg, false/*need_flush_redo*/, trans))) {
       LOG_WARN("failed to register mds", KR(ret));
     }
     finish_time = ObTimeUtility::current_time();
@@ -757,12 +763,13 @@ int ObSplitPartitionHelper::start_src_(
   if (OB_SUCC(ret)) {
     // FIXME: timeout ctx
     const int64_t timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : GCONF.rpc_timeout;
-    obcall::ObFreezeSplitSrcTabletArg arg;
-    obcall::ObFreezeSplitSrcTabletRes res;
+    obrpc::ObFreezeSplitSrcTabletArg arg;
+    obrpc::ObFreezeSplitSrcTabletRes res;
     arg.tenant_id_ = tenant_id;
     arg.ls_id_ = ls_id;
     if (OB_FAIL(arg.tablet_ids_.assign(src_tablet_ids))) {
-    } else if (OB_FAIL(ex_rpc::sync_call([&]{ return rootserver::ObSplitPartitionHelper::freeze_split_src_tablet(arg, res, 30000000); }))) {
+      LOG_WARN("failed to assign", KR(ret));
+    } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr).timeout(timeout_us).freeze_split_src_tablet(arg, res))) {
       LOG_WARN("failed to freeze src tablet", KR(ret), K(leader_addr));
     } else {
       // data_end_scn = res.data_end_scn_;
@@ -788,25 +795,35 @@ int ObSplitPartitionHelper::start_src_(
 
   // get src tablet's non-empty autoinc_seq that are needed to sync to dst tablet
   if (OB_SUCC(ret)) {
-    obcall::ObBatchGetTabletAutoincSeqArg arg;
-    obcall::ObBatchGetTabletAutoincSeqRes result;
+    const int64_t timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : GCONF.rpc_timeout;
+    ObBatchGetTabletAutoincSeqProxy proxy(*srv_rpc_proxy, &obrpc::ObSrvRpcProxy::batch_get_tablet_autoinc_seq);
+    obrpc::ObBatchGetTabletAutoincSeqArg arg;
     arg.tenant_id_ = tenant_id;
     arg.ls_id_ = ls_id;
     if (OB_FAIL(arg.src_tablet_ids_.assign(src_tablet_ids))) {
       LOG_WARN("failed to assign", KR(ret));
     } else if (OB_FAIL(arg.dest_tablet_ids_.assign(src_tablet_ids))) {
       LOG_WARN("failed to assign", KR(ret));
-    } else {
-      ObTabletAutoincSeqRpcHandler &autoinc_handler = ObTabletAutoincSeqRpcHandler::get_instance();
-      if (OB_FAIL(autoinc_handler.batch_get_tablet_autoinc_seq(arg, result))) {
-        LOG_WARN("batch_get_tablet_autoinc_seq failed", KR(ret), K(arg));
+    } else if (OB_FAIL(proxy.call(leader_addr, timeout_us, tenant_id, arg))) {
+      LOG_WARN("send rpc failed", KR(ret), K(arg), K(leader_addr));
+    }
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = proxy.wait())) {
+      LOG_WARN("rpc proxy wait failed", K(tmp_ret));
+      ret = OB_SUCCESS == ret ? tmp_ret : ret;
+    } else if (OB_SUCC(ret)) {
+      const auto &result_array = proxy.get_results();
+      if (OB_UNLIKELY(1 != result_array.count()) || OB_ISNULL(result_array.at(0))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("result count not match", KR(ret), K(result_array.count()));
       } else {
-        for (int64_t j = 0; OB_SUCC(ret) && j < result.autoinc_params_.count(); j++) {
-          const ObMigrateTabletAutoincSeqParam &autoinc_param = result.autoinc_params_.at(j);
+        const auto *cur_result = result_array.at(0);
+        for (int64_t j = 0; OB_SUCC(ret) && j < cur_result->autoinc_params_.count(); j++) {
+          const ObMigrateTabletAutoincSeqParam &autoinc_param = cur_result->autoinc_params_.at(j);
           const int64_t table_idx = j;
           if (OB_FAIL(autoinc_param.ret_code_)) {
             LOG_WARN("failed to get autoinc", KR(ret));
-          } else if (1 < autoinc_param.autoinc_seq_) {
+          } else if (1 < autoinc_param.autoinc_seq_) { // only non-empty autoinc_seqs are needed to sync to dst
             if (OB_FAIL(end_autoinc_seqs.push_back(std::make_pair(table_idx, autoinc_param.autoinc_seq_)))) {
               LOG_WARN("failed to push back", KR(ret));
             }
@@ -822,13 +839,13 @@ int ObSplitPartitionHelper::start_src_(
   // get data end scn finally to guarantee both mds_checkpoint_scn and clog_checkpoint_scn are less than data_end_scn
   if (OB_SUCC(ret)) {
     const int64_t timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : GCONF.rpc_timeout;
-    obcall::ObFreezeSplitSrcTabletArg arg;
-    obcall::ObFreezeSplitSrcTabletRes res;
+    obrpc::ObFreezeSplitSrcTabletArg arg;
+    obrpc::ObFreezeSplitSrcTabletRes res;
     arg.tenant_id_ = tenant_id;
     arg.ls_id_ = ls_id;
     if (OB_FAIL(arg.tablet_ids_.assign(src_tablet_ids))) {
       LOG_WARN("failed to assign", KR(ret));
-    } else if (OB_FAIL(ex_rpc::sync_call([&]{ return rootserver::ObSplitPartitionHelper::freeze_split_src_tablet(arg, res, 30000000); }))) {
+    } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr).timeout(timeout_us).freeze_split_src_tablet(arg, res))) {
       LOG_WARN("failed to freeze src tablet", KR(ret), K(leader_addr));
     } else {
       data_end_scn = res.data_end_scn_;
@@ -890,9 +907,14 @@ int ObSplitPartitionHelper::start_dst_(
   start_time = finish_time;
 
   // sync dst tablet autoinc seq
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
   if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
+    ret = OB_ERR_SYS;
+    LOG_WARN("srv_rpc_proxy is null", KR(ret), KP(srv_rpc_proxy));
   } else if (!end_autoinc_seqs.empty()) {
-    obcall::ObBatchSetTabletAutoincSeqArg arg;
+    ObBatchSetTabletAutoincSeqProxy proxy(*srv_rpc_proxy, &obrpc::ObSrvRpcProxy::batch_set_tablet_autoinc_seq);
+    obrpc::ObBatchSetTabletAutoincSeqArg arg;
     arg.tenant_id_ = tenant_id;
     arg.ls_id_ = ls_id;
     arg.is_tablet_creating_ = true;
@@ -954,7 +976,7 @@ int ObSplitPartitionHelper::check_mem_usage_for_split_(
 }
 
 int ObSplitPartitionHelper::clean_split_src_and_dst_tablet(
-    const obcall::ObCleanSplittedTabletArg &arg,
+    const obrpc::ObCleanSplittedTabletArg &arg,
     const int64_t auto_part_size,
     const int64_t new_schema_version,
     ObMySQLTransaction &trans)

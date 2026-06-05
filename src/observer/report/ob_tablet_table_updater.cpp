@@ -615,8 +615,7 @@ int ObTabletTableUpdater::generate_tasks_(
   if (OB_FAIL(ret)) {
   } else if (update_tablet_tasks.count() != update_tablet_replicas.count()
           || update_tablet_tasks.count() != update_tablet_checksums.count()
-          || (!GCTX.is_shared_storage_mode() &&
-              (update_tablet_tasks.count() + remove_tablet_tasks.count() + retry_tablet_replica_count != batch_tasks.count()))) {
+          || ((update_tablet_tasks.count() + remove_tablet_tasks.count() + retry_tablet_replica_count != batch_tasks.count()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet task count and replica count not match", KR(ret),
              "tablet_update_tasks count", update_tablet_tasks.count(),

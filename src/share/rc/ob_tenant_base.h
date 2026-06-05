@@ -100,15 +100,6 @@ class ObTenantMdsService;
   class ObTenantDirectLoadMgr;
   class ObEmptyReadBucket;
   class ObTabletMemtableMgrPool;
-#ifdef OB_BUILD_SHARED_STORAGE
-  class ObTenantDiskSpaceManager;
-  class ObTenantFileManager;
-  class ObSSMicroCachePrewarmService;
-  class ObSSMicroCache;
-  class ObPublicBlockGCService;
-  class ObStorageCachePolicyService;
-#else
-#endif
 
   class ObGlobalIteratorPool;
 } // namespace storage
@@ -236,17 +227,6 @@ namespace detector
 #define TenantErrsimEvent
 #endif
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#define TenantDiskSpaceManager storage::ObTenantDiskSpaceManager*,
-#define TenantFileManager storage::ObTenantFileManager*,
-#define SSMicroCachePrewarmService storage::ObSSMicroCachePrewarmService*,
-#define SSMicroCache storage::ObSSMicroCache*,
-#define TenantCompactionObjMgr compaction::ObTenantCompactionObjMgr*,
-#define TenantLSMergeScheduler compaction::ObTenantLSMergeScheduler*,
-#define TenantLSMergeChecker compaction::ObTenantLSMergeChecker*,
-#define PublicBlockGCService storage::ObPublicBlockGCService*,
-#define StorageCachePolicyService storage::ObStorageCachePolicyService*,
-#else
 #define TenantDiskSpaceManager
 #define TenantFileManager
 #define SSMicroCachePrewarmService
@@ -256,7 +236,6 @@ namespace detector
 #define TenantLSMergeChecker
 #define PublicBlockGCService
 #define StorageCachePolicyService
-#endif
 // List the types of tenant-local variables that need to be added here, the tenant will create an instance for each type.
 // The initialization and destruction logic of the instance is specified by the MTL_BIND interface.
 // Use the MTL interface to obtain an instance.
@@ -383,7 +362,7 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       share::ObChangeStreamMgr*                        \
   )
 // Get tenant ID
-#define MTL_ID() (oceanbase::OB_SYS_TENANT_ID)
+#define MTL_ID() share::ObTenantEnv::get_tenant_local()->id()
 // Get tenant epoch id
 #define MTL_EPOCH_ID() share::ObTenantEnv::get_tenant_local()->get_epoch()
 // tenant switchover epoch
@@ -617,10 +596,6 @@ public:
     return ATOMIC_LOAD(&switchover_epoch_);
   }
 
-  /// Called after publish_schema() for this tenant. Modules override in
-  /// ObTenant to hook schema publish events (e.g., wake CSFetcher from IDLE).
-  virtual void on_schema_publish() {}
-
   template<class T>
   T get() { return inner_get(Identity<T>()); }
 
@@ -717,23 +692,27 @@ private:
 using ReleaseCbFunc = std::function<int ()>;
 extern int get_tenant_base_with_lock(uint64_t tenant_id, ObTenantBase *&ctx, ReleaseCbFunc &release_cb);
 
-// g_tenant_ctx is a dummy to avoid nullptr deref before create_tenant_module().
-// Once g_tenant_ptr = this (after create_mtl_module), all MTL reads go directly
-// to the real ObTenant — no copies, no dual objects.
-extern ObTenantBase g_tenant_ctx;
-inline ObTenantBase *g_tenant_ptr = &g_tenant_ctx;
-
 class ObTenantEnv
 {
 public:
   static void set_tenant(ObTenantBase *ctx);
-  static inline ObTenantBase *get_tenant()
+  static inline ObTenantBase *&get_tenant()
   {
-    return g_tenant_ptr;
+#ifdef ENABLE_INITIAL_EXEC_TLS_MODEL
+    static thread_local ObTenantBase* __attribute__((tls_model("initial-exec"))) ctx = nullptr;
+#else
+    static thread_local ObTenantBase* __attribute__((tls_model("local-dynamic"))) ctx = nullptr;
+#endif
+    return ctx;
   }
   static inline ObTenantBase *get_tenant_local()
   {
-    return g_tenant_ptr;
+#ifdef ENABLE_INITIAL_EXEC_TLS_MODEL
+    static thread_local ObTenantBase __attribute__((tls_model("initial-exec"))) ctx(OB_INVALID_TENANT_ID, 0);
+#else
+    static thread_local ObTenantBase __attribute__((tls_model("local-dynamic"))) ctx(OB_INVALID_TENANT_ID);
+#endif
+    return &ctx;
   }
   template<class T>
   static inline T mtl()

@@ -504,12 +504,6 @@ int ObMediumCompactionInfo::gene_parallel_info(
 bool ObMediumCompactionInfo::contain_storage_schema() const
 {
   bool contain_schema = true;
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode() &&
-      ObAdaptiveMergePolicy::is_skip_merge_reason((ObAdaptiveMergePolicy::AdaptiveMergeReason)medium_merge_reason_)) {
-    contain_schema = false;
-  }
-#endif
   return contain_schema;
 }
 

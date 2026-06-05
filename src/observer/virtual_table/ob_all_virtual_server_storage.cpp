@@ -42,40 +42,6 @@ void ObAllVirtualServerStorage::reset()
 int ObAllVirtualServerStorage::inner_open()
 {
   int ret = OB_SUCCESS;
-  ObAddr addr = GCTX.self_addr();
-#ifdef OB_BUILD_SHARED_STORAGE
-  SMART_VAR(ObArray<ObDeviceConfig>, device_configs) {
-    if (GCTX.is_shared_storage_mode() &&
-        OB_FAIL(ObDeviceConfigMgr::get_instance().get_all_device_configs(device_configs))) {
-      SERVER_LOG(WARN, "fail to get all device configs", K(ret));
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < device_configs.count(); ++i) {
-        SMART_VAR(ObServerStorageInfo, item) {
-          ObDeviceConfig &tmp_device_config = device_configs.at(i);
-          item.addr_ = addr;
-          STRCPY(item.path_, tmp_device_config.path_);
-          STRCPY(item.endpoint_, tmp_device_config.endpoint_);
-          STRCPY(item.used_for_, tmp_device_config.used_for_);
-          item.storage_id_ = tmp_device_config.storage_id_;
-          item.max_iops_ = tmp_device_config.max_iops_;
-          item.max_bandwidth_ = tmp_device_config.max_bandwidth_;
-          item.create_time_ = tmp_device_config.create_timestamp_;
-          item.op_id_ = tmp_device_config.op_id_;
-          item.sub_op_id_ = tmp_device_config.sub_op_id_;
-          STRCPY(item.authorization_, tmp_device_config.access_info_);
-          STRCPY(item.encrypt_info_, tmp_device_config.encrypt_info_);
-          STRCPY(item.state_, tmp_device_config.state_);
-          STRCPY(item.state_info_, tmp_device_config.state_info_);
-          item.last_check_timestamp_ = tmp_device_config.last_check_timestamp_;
-          STRCPY(item.extension_, tmp_device_config.extension_);
-          if (OB_FAIL(server_storage_info_array_.push_back(item))) {
-            SERVER_LOG(WARN, "push back storage item failed", KR(ret), K(item));
-          }
-        }
-      }
-    }
-  }
-#endif
   return ret;
 }
 

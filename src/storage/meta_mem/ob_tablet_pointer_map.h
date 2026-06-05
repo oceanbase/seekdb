@@ -81,12 +81,6 @@ public:
   OB_INLINE int64_t max_count() const { return ATOMIC_LOAD(&max_count_); }
 
 private:
-  #ifdef OB_BUILD_SHARED_STORAGE
-  int check_and_get_latest_addr(
-      const ObTabletMapKey &key,
-      ObTabletPointer &meta_pointer,
-      ObMetaDiskAddr &disk_addr) const;
-  #endif
   static int read_from_disk(
       const bool is_full_load,
       const int64_t ls_epoch,

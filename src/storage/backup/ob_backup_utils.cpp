@@ -1,5 +1,3 @@
-#include "observer/ob_service.h"
-#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -376,7 +374,7 @@ int ObBackupUtils::report_task_result(const int64_t job_id, const int64_t task_i
 {
   int ret = OB_SUCCESS;
   common::ObAddr leader_addr;
-  obcall::ObBackupTaskRes backup_ls_res;
+  obrpc::ObBackupTaskRes backup_ls_res;
   backup_ls_res.job_id_ = job_id;
   backup_ls_res.task_id_ = task_id;
   backup_ls_res.tenant_id_ = tenant_id;
@@ -403,7 +401,7 @@ int ObBackupUtils::report_task_result(const int64_t job_id, const int64_t task_i
   } else if (OB_FAIL(report_ctx.location_service_->get_leader_with_retry_until_timeout(
       cluster_id, meta_tenant_id, ObLSID(ObLSID::SYS_LS_ID), leader_addr))) {
     LOG_WARN("failed to get leader address", K(ret));
-  } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int { return GCTX.ob_service_->report_backup_over(backup_ls_res); }))) {
+  } else if (OB_FAIL(report_ctx.rpc_proxy_->to(leader_addr).report_backup_over(backup_ls_res))) {
     LOG_WARN("failed to post backup ls data res", K(ret), K(backup_ls_res));
   } else {
     SERVER_EVENT_ADD("backup_data", "report_result",
@@ -730,16 +728,6 @@ int ObBackupTabletStat::prepare_tablet_sstables(const uint64_t tenant_id, const 
     } else if (!sstable_ptr->is_sstable()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table is not sstable", K(ret), KPC(sstable_ptr));
-    } else {
-      const ObITable::TableKey &table_key = sstable_ptr->get_key();
-      if (OB_SUCC(ret)) {
-        if (GCTX.is_shared_storage_mode() && sstable_ptr->is_ddl_dump_sstable()) {
-          ObBackupOtherBlocksMgr &other_block_mgr = stat->other_block_mgr_;
-          if (OB_FAIL(other_block_mgr.init(tenant_id, tablet_id, table_key, *sstable_ptr))) {
-            LOG_WARN("failed to init backup other blocks mgr", K(ret), K(tenant_id), K(tablet_id), K(table_key), KPC(sstable_ptr));
-          }
-        }
-      }
     }
   }
   return ret;
@@ -2048,19 +2036,10 @@ int ObBackupTabletProvider::prepare_tablet_(const uint64_t tenant_id, const shar
         LOG_WARN("table should not be null", K(ret));
       } else {
         const ObITable::TableKey &table_key = sstable_ptr->get_key();
-        if (GCTX.is_shared_storage_mode() && table_key.is_ddl_dump_sstable()) {
-          if (OB_FAIL(fetch_ddl_macro_id_in_ss_mode_(tablet_id, tablet_ref->tablet_handle_, table_key, *sstable_ptr, total_count))) {
-            LOG_WARN("failed to fetch ddl macro id in ss mode", K(ret));
-          } else {
-            has_ss_ddl = true;
-            ss_ddl_table_key = table_key;
-          }
+        if (OB_FAIL(fetch_all_logic_macro_block_id_(tablet_id, tablet_ref->tablet_handle_, table_key, *sstable_ptr, count))) {
+          LOG_WARN("failed to fetch all logic macro block id", K(ret), K(tablet_id), KPC(tablet_ref), K(table_key));
         } else {
-          if (OB_FAIL(fetch_all_logic_macro_block_id_(tablet_id, tablet_ref->tablet_handle_, table_key, *sstable_ptr, count))) {
-            LOG_WARN("failed to fetch all logic macro block id", K(ret), K(tablet_id), KPC(tablet_ref), K(table_key));
-          } else {
-            total_count += count;
-          }
+          total_count += count;
         }
       }
     }
@@ -2459,7 +2438,7 @@ int ObBackupTabletProvider::fetch_ddl_macro_id_in_ss_mode_(const common::ObTable
 {
   int ret = OB_SUCCESS;
   ObBackupOtherBlockIdIterator other_block_iter;
-  if (!GCTX.is_shared_storage_mode() && !table_key.is_ddl_dump_sstable()) {
+  if (!table_key.is_ddl_dump_sstable()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table key is not ddl dump sstable", K(ret), K(table_key));
   } else if (OB_FAIL(other_block_iter.init(tablet_id, sstable))) {

@@ -23,7 +23,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share::schema;
 namespace sql
 {
@@ -354,13 +354,6 @@ int ObCreateIndexResolver::resolve_index_option_node(
       }
     }
   }
-  // Set default storage cache policy for index, cause the index_scope_ only be set after resolve_table_options
-  if (OB_FAIL(ret)) {
-  } else if (GCTX.is_shared_storage_mode() && is_mysql_mode() && storage_cache_policy_.empty()) {
-    if (OB_FAIL(set_default_storage_cache_policy(true/*is_create_index*/))) {
-      SQL_RESV_LOG(WARN, "failed to check and set default storage cache policy", K(ret));
-    }
-  }
 
   // storing column
   if (OB_SUCC(ret)) {
@@ -645,15 +638,6 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
       } else {
         index_arg.vidx_refresh_info_.exec_env_.assign_ptr(buf, pos);
       }
-    }
-  }
-  // Check storage cache policy for index
-  if (OB_FAIL(ret)) {
-  } else if (GCTX.is_shared_storage_mode() && is_mysql_mode()) {
-    ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
-    // Version validation is included in check_and_set_default_storage_cache_policy
-    if (OB_FAIL(check_create_stmt_storage_cache_policy(storage_cache_policy_, &index_schema))) {
-      LOG_WARN("fail to check storage cache policy", K(ret), K(storage_cache_policy_));;
     }
   }
 

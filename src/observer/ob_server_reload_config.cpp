@@ -26,10 +26,6 @@
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "share/ash/ob_active_sess_hist_list.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_tenant_ls_merge_scheduler.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
 #include "lib/stat/ob_diagnostic_info_container.h"
 #include "rpc/obrpc/ob_rpc_net_handler.h"
 
@@ -125,13 +121,6 @@ int ObServerReloadConfig::operator()()
         GCONF._enable_di_experimental_feature_flags);
   }
   {
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      OB_SERVER_DISK_SPACE_MGR.reload_hidden_sys_data_disk_config(GCONF);
-      OB_SERVER_DISK_SPACE_MGR.reload_ss_cache_max_percentage_config(GCONF);
-      OB_SERVER_DISK_SPACE_MGR.reload_ss_cache_maxsize_percpu_config(GCONF);
-    }
-#endif
     enable_malloc_v2(GCONF._enable_malloc_v2);
     GMEMCONF.reload_config(GCONF);
     OB_LOGGER.set_info_as_wdiag(false);
@@ -170,9 +159,6 @@ int ObServerReloadConfig::operator()()
 
       reload_tenant_freezer_config_();
       reload_tenant_scheduler_config_();
-      if (OB_NOT_NULL(GCTX.omt_)) {
-        GCTX.omt_->reload_tenant_task_queue_size();
-      }
   }
 
   int64_t cache_size = GCONF.memory_chunk_cache_size;
@@ -313,11 +299,6 @@ void ObServerReloadConfig::reload_tenant_scheduler_config_()
     auto f = [] () {
       (void) MTL(ObTenantDagScheduler *)->reload_config();
       (void) MTL(compaction::ObTenantTabletScheduler *)->reload_tenant_config();
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      (void) MTL(compaction::ObTenantLSMergeScheduler *)->reload_tenant_config();
-    }
-#endif
 
       return OB_SUCCESS;
     };

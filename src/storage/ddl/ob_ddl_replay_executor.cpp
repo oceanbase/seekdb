@@ -24,9 +24,6 @@
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "close_modules/shared_storage/storage/compaction/ob_refresh_tablet_util.h"
-#endif
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
 using namespace oceanbase::blocksstable;
@@ -639,35 +636,12 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
     write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, GCONF._data_storage_io_timeout / 1000L);
     write_info.mtl_tenant_id_ = MTL_ID();
 
-    #ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()){
-      /* write gc occupy file*/
-      if (ObDDLMacroBlockType::DDL_MB_SS_EMPTY_DATA_TYPE == macro_block.block_type_) {
-        /* skip write gc flag and upload block*/
-      } else if (OB_FAIL(ObDDLRedoLogWriter::write_gc_flag(tablet_handle, 
-                                                    redo_info.table_key_, 
-                                                    redo_info.parallel_cnt_, 
-                                                    redo_info.cg_cnt_))) {
-        LOG_WARN("failed to write tablet gc flag file", K(ret));
-      } else if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {        
-      } else if (OB_FAIL(write_ss_block(write_info, macro_handle))) {
-        LOG_WARN("failed to write shared storage block", K(ret));
-      } 
-      
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(macro_block.block_handle_.set_block_id(log_->get_redo_info().macro_block_id_))) {
-        LOG_WARN("set macro block id failed", K(ret), K(log_->get_redo_info().macro_block_id_));
-      } 
-    } else
-    #endif
-    if (!GCTX.is_shared_storage_mode()) {
-      if (OB_FAIL(ObObjectManager::async_write_object(opt, write_info, macro_handle))) {
-        LOG_WARN("fail to async write block", K(ret), K(write_info), K(macro_handle));
-      } else if (OB_FAIL(macro_handle.wait())) {
-        LOG_WARN("fail to wait macro block io finish", K(ret), K(write_info));
-      } else if (OB_FAIL(macro_block.block_handle_.set_block_id(macro_handle.get_macro_id()))) {
-        LOG_WARN("set macro block id failed", K(ret), K(macro_handle.get_macro_id()));
-      } 
+    if (OB_FAIL(ObObjectManager::async_write_object(opt, write_info, macro_handle))) {
+      LOG_WARN("fail to async write block", K(ret), K(write_info), K(macro_handle));
+    } else if (OB_FAIL(macro_handle.wait())) {
+      LOG_WARN("fail to wait macro block io finish", K(ret), K(write_info));
+    } else if (OB_FAIL(macro_block.block_handle_.set_block_id(macro_handle.get_macro_id()))) {
+      LOG_WARN("set macro block id failed", K(ret), K(macro_handle.get_macro_id()));
     } 
 
     if (OB_FAIL(ret)) {
@@ -723,26 +697,6 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
   FLOG_INFO("[DDL_REPLAY] finish replay ddl full redo log", K(ret), K(need_replay), K(checksum), KPC_(log), K(macro_block), "ddl_event_info", ObDDLEventInfo());
   return ret;
 }
-
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObDDLRedoReplayExecutor::write_ss_block(blocksstable::ObStorageObjectWriteInfo &write_info, blocksstable::ObStorageObjectHandle &macro_handle)
-{
-  int ret = OB_SUCCESS;
-  bool is_object_exist = false;
-  if (OB_FAIL(ObObjectManager::ss_is_exist_object(log_->get_redo_info().macro_block_id_, 0 /* ls epoch, not use on share object */, is_object_exist))) {
-    LOG_WARN("failed to check is object exist", K(ret), K(log_->get_redo_info().macro_block_id_));
-  } else if (is_object_exist) {
-    // already exist, do nothing
-  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.async_write_object(log_->get_redo_info().macro_block_id_,
-                                                              write_info,
-                                                              macro_handle))) {
-    LOG_WARN("fail to async write block", K(ret), K(log_->get_redo_info().macro_block_id_), K(write_info), K(macro_handle));
-  } else if (OB_FAIL(macro_handle.wait())) {
-    LOG_WARN("fail to wait", K(ret), K(write_info));
-  }
-  return ret;
-}
-#endif
 
 int ObDDLRedoReplayExecutor::filter_redo_log_(
     const ObDDLMacroBlockRedoInfo &redo_info,
@@ -1543,160 +1497,6 @@ int ObTabletForkFinishReplayExecutor::do_replay_(ObTabletHandle &handle)
   return ret;
 }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-// ObDDLFinishReplayExecutor
-ObDDLFinishReplayExecutor::ObDDLFinishReplayExecutor()
- : ObDDLReplayExecutor(), log_(nullptr)
-{
-}
-
-int ObDDLFinishReplayExecutor::init(
-    ObLS *ls,
-    const ObDDLFinishLog &log,
-    const SCN &scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret), K_(is_inited));
-  } else if (OB_ISNULL(ls)
-          || OB_UNLIKELY(!log.is_valid())
-          || OB_UNLIKELY(!scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ls), K(log), K(scn));
-  } else {
-    ls_ = ls;
-    log_ = &log;
-    scn_ = scn;
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-int ObDDLFinishReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
-  } else if (OB_UNLIKELY(!log_->is_valid() || !tablet_handle.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K_(log), K(tablet_handle));
-  } else if (OB_FAIL(replay_ddl_finish(tablet_handle))) {
-    LOG_WARN("replay ddl finish for data tablet failed", K(ret));
-  }
-  return ret;
-}
-
-/*
- * replay ddl finish log, 
- * upload tablet metat to oss & clean ddl kv & update tablet local
- */
-int ObDDLFinishReplayExecutor::replay_ddl_finish(ObTabletHandle &tablet_handle)
-{
-  int ret = OB_SUCCESS;
-  ObTabletID tablet_id;
-  share::SCN mock_start_scn;
-  bool is_major_exist = false;
-  bool is_object_exist = false;
-  bool need_replay = true;
-  ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "DDLRepFinish"));
-  char *buf = nullptr;
-  int64_t buf_len = 0;
-  share::SCN consistent_scn;
-  ObLSRestoreHandler *restore_handler = nullptr;
-  int64_t pre_meta_version = OB_INVALID_TIMESTAMP;
-  const compaction::ObUpdateTabletMetaParam update_tablet_meta_param(
-                                            0/*pre_warm_snapshot_version*/,
-                                            true/*allow_dup_major*/,
-                                            false/*init_major_ckm_info*/);
-  bool ha_restore_full = false;
-  /* check pararm & need skip for transfer & need skip for exist major */
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
-  } else if (OB_ISNULL(log_)) {
-    LOG_WARN("log should not be null", K(ret));
-  } else if (OB_UNLIKELY(!log_->is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K_(log));
-  } else if (OB_ISNULL(ls_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls should not be null", K(ret));
-  } else if (OB_FAIL(check_need_replay_ddl_log_(ls_, tablet_handle, mock_start_scn, scn_, need_replay))) {
-    if (OB_EAGAIN != ret) {
-      LOG_WARN("fail to check need replay ddl log", K(ret), K_(scn), K_(log), "tablet", PC(tablet_handle.get_obj()));
-    }
-  } else if (!need_replay) {
-    // do nothing
-  } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("need replay but tablet handle is invalid", K(ret), K(tablet_handle), K_(log), K_(scn));
-  } else if (OB_FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_id())) {
-  } else if (OB_FAIL(ObDDLUtil::is_major_exist(log_->get_ls_id(), 
-                                               log_->get_table_key().get_tablet_id(), 
-                                               is_major_exist))) {
-    LOG_WARN("failed to check whether need repaly log", K(ret), K(log_));
-  } else {
-    need_replay = !is_major_exist;
-  }
-  
-  /* write object to oss*/
-  if (OB_FAIL(ret) || !need_replay) {
-  } else if (OB_FAIL(ObObjectManager::ss_is_exist_object(log_->get_macro_block_id(), 0 /*mock ls epoch*/, is_object_exist))) {
-    LOG_WARN("failed to check is object exist", K(ret), K(log_->get_macro_block_id()));
-  } else if (is_object_exist) {
-  } else if (OB_FAIL(ObDDLUtil::upload_block_for_ss(log_->get_data_buffer().ptr(), 
-                                                    log_->get_data_buffer().length(),
-                                                    log_->get_macro_block_id()))) {
-    LOG_WARN("failed to upload tablet meta", K(ret), K(log_));
-  } else if (FALSE_IT(pre_meta_version = tablet_handle.get_obj()->get_tablet_meta().snapshot_version_)) {
-  }
-
-  /* update tablet table store*/
-  if (OB_FAIL(ret) || !need_replay) {
-  } else {
-    int64_t pos = 0;
-    ObTablet new_tablet;
-    storage::ObMetaDiskAddr disk_addr;
-    const ObString &data_buf = log_->get_data_buffer();
-    const int64_t tablet_meta_size = OB_DEFAULT_MACRO_BLOCK_SIZE;
-    if (OB_FAIL(disk_addr.set_block_addr(log_->get_macro_block_id(), sizeof(ObMacroBlockCommonHeader), 
-                                         tablet_meta_size, ObMetaDiskAddr::DiskType::RAW_BLOCK))) {
-      LOG_WARN("failed to sed disk addr", K(ret));
-    } else if (OB_FAIL(ObSharedObjectReadHandle::get_data(disk_addr, 
-                                                        log_->get_data_buffer().ptr(), 
-                                                        log_->get_data_buffer().length(),
-                                                        buf, buf_len))) {
-      LOG_WARN("failed to read from serialize info", K(ret));
-    } else if (FALSE_IT(new_tablet.set_tablet_addr(disk_addr))) {
-    } else if (OB_FAIL(new_tablet.deserialize_for_replay(allocator, buf, buf_len, pos))) {
-      LOG_WARN("failed to deserialize tablet meat", K(ret));
-    } else if (OB_FAIL(compaction::ObRefreshTabletUtil::update_tablet_meta(*ls_,
-                                                                           new_tablet,
-                                                                           update_tablet_meta_param,
-                                                                           log_->get_table_key().get_snapshot_version()))) {
-      LOG_WARN("failed to update tablet meta", K(ret));
-    } 
- 
-    /* update tablet meta gc info*/
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObDDLUtil::update_tablet_gc_info(tablet_id, pre_meta_version, new_tablet.get_tablet_meta().snapshot_version_))) {
-      LOG_WARN("failed to update tablet gc info", K(ret), K(tablet_id));
-    }
-  }
-  
-  /* release ddl kv */
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDDLMergeScheduler::finish_log_freeze_ddl_kv(log_->get_ls_id(), tablet_handle))) {
-    LOG_WARN("failed to freeze ddl kv", K(ret), K(tablet_id));
-  }
-  
-  FLOG_INFO("[DDL REPLAY] finish replay ddl finish log", K(ret), K(tablet_id), KPC_(log), K_(scn), K(consistent_scn), K(ha_restore_full), "ddl_event_info", ObDDLEventInfo());
-  return ret;
-}
-#endif
-
 // ObDDLIncMinorStartReplayExecutor
 ObDDLIncMinorStartReplayExecutor::ObDDLIncMinorStartReplayExecutor()
   : ObDDLReplayExecutor(), tablet_id_()
@@ -1790,7 +1590,6 @@ int ObDDLIncMinorCommitReplayExecutor::init(
 
   return ret;
 }
-
 
 int ObDDLIncMinorCommitReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
 {

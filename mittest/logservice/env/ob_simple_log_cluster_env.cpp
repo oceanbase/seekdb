@@ -17,9 +17,6 @@
 #define private public
 #include "ob_simple_log_cluster_env.h"
 #include "share/backup/ob_backup_io_adapter.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "log/ob_shared_log_utils.h"
-#endif
 #undef private
 
 namespace oceanbase
@@ -239,11 +236,6 @@ int ObSimpleLogClusterTestEnv::create_paxos_group(const int64_t id,
       } else if (OB_FAIL(svr->create_ls(id, palf::AccessMode::APPEND, palf_base_info, handle))) {
         CLOG_LOG(WARN, "create ls failed", K(ret), K(id), KPC(svr));
         break;
-      #ifdef OB_BUILD_SHARED_STORAGE
-      } else if (GCTX.is_shared_storage_mode() && OB_FAIL(server->log_service_.shared_log_service_.add_ls(ObLSID(id)))) {
-        CLOG_LOG(WARN, "failed to add_ls to shared_log_service", K(ret), K(id), KPC(svr));
-        break;
-      #endif
       } else {
         if (with_mock_election) {
           if (OB_FAIL(svr->create_mock_election(id, mock_election))) {

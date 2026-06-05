@@ -30,7 +30,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 using namespace share::schema;
 using namespace observer;
@@ -149,11 +149,6 @@ int ObAlterSystemResolverUtil::check_compatibility_for_replica_type(const ObRepl
 {
   int ret = OB_SUCCESS;
   if (ObReplicaTypeCheck::is_columnstore_replica(replica_type)) {
-    if (GCTX.is_shared_storage_mode()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("column-store replica not supported in shared-storage mode", KR(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "In shared-storage mode, C-replica is");
-    }
   }
   return ret;
 }
@@ -510,10 +505,7 @@ int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support to specify ls to major freeze", K(ret), "ls_id", freeze_stmt->get_ls_id());
   } else if (freeze_stmt->get_tablet_id().is_valid()) { // tablet major freeze
-    if (GCTX.is_shared_storage_mode()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not allowed to schedule tablet major for shared storage mode", KR(ret));
-    } else if (T_TABLET_ID == opt_tenant_list_or_tablet_id->type_) {
+    if (T_TABLET_ID == opt_tenant_list_or_tablet_id->type_) {
       if (OB_UNLIKELY(0 != freeze_stmt->get_tenant_ids().count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tenant ids should be empty for type T_TABLET_ID", K(ret));
@@ -1539,7 +1531,7 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObRefreshIOCalibraitonStmt *stmt = nullptr;
-  obcall::ObAdminRefreshIOCalibrationArg *arg = nullptr;
+  obrpc::ObAdminRefreshIOCalibrationArg *arg = nullptr;
   if (OB_UNLIKELY(T_REFRESH_IO_CALIBRATION != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("type is not T_REFRESH_IO_CALIBRATION", "type", get_type_name(parse_tree.type_));
@@ -1604,7 +1596,7 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-static int alter_system_set_reset_constraint_check_and_add_item_mysql_mode(obcall::ObAdminSetConfigArg &rpc_arg, ObAdminSetConfigItem &item, ObSQLSessionInfo *& session_info)
+static int alter_system_set_reset_constraint_check_and_add_item_mysql_mode(obrpc::ObAdminSetConfigArg &rpc_arg, ObAdminSetConfigItem &item, ObSQLSessionInfo *& session_info)
 {
   int ret = OB_SUCCESS;
   bool is_backup_config = false;
@@ -1651,7 +1643,7 @@ static int alter_system_set_reset_constraint_check_and_add_item_mysql_mode(obcal
   return ret;
 }
 
-static int alter_system_set_reset_constraint_check_and_add_item_oracle_mode(obcall::ObAdminSetConfigArg &rpc_arg, ObAdminSetConfigItem &item,
+static int alter_system_set_reset_constraint_check_and_add_item_oracle_mode(obrpc::ObAdminSetConfigArg &rpc_arg, ObAdminSetConfigItem &item,
           uint64_t tenant_id, ObSchemaChecker *& schema_checker)
 {
   int ret = OB_SUCCESS;
@@ -2405,40 +2397,40 @@ int ObRunUpgradeJobResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("resolve string failed", KR(ret));
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_BEGIN))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_BEGIN;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_BEGIN;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_SYSTEM_VARIABLE))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_SYSTEM_VARIABLE;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_SYSTEM_VARIABLE;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_SYSTEM_TABLE))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_SYSTEM_TABLE;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_SYSTEM_TABLE;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_VIRTUAL_SCHEMA))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_VIRTUAL_SCHEMA;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_VIRTUAL_SCHEMA;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_SYSTEM_PACKAGE))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_SYSTEM_PACKAGE;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_SYSTEM_PACKAGE;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_ALL_POST_ACTION))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_ALL_POST_ACTION;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_ALL_POST_ACTION;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_INSPECTION))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_INSPECTION;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_INSPECTION;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_END))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_END;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_END;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_ALL))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_ALL;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_ALL;
       } else if (0 == str.case_compare(rootserver::ObRsJobTableOperator::get_job_type_str(
                  rootserver::JOB_TYPE_UPGRADE_FINISH))) {
-        stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_FINISH;
+        stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_FINISH;
       } else {
         // UPGRADE_POST_ACTION
         if (OB_FAIL(ObClusterVersion::get_version(str, version))) {
           LOG_WARN("fail to get version", KR(ret), K(str));
         } else {
-          stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::UPGRADE_POST_ACTION;
+          stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::UPGRADE_POST_ACTION;
           stmt->get_rpc_arg().version_ = static_cast<int64_t>(version);
         }
       }
@@ -2473,7 +2465,7 @@ int ObRunUpgradeJobResolver::resolve(const ParseNode &parse_tree)
         } else if (affect_all && 0 != tenant_ids.count()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("tenant_ids should be empty when specify tenant = all", KR(ret));
-        } else if (obcall::ObUpgradeJobArg::UPGRADE_SYSTEM_PACKAGE == stmt->get_rpc_arg().action_) {
+        } else if (obrpc::ObUpgradeJobArg::UPGRADE_SYSTEM_PACKAGE == stmt->get_rpc_arg().action_) {
           if ((tenant_ids.count() > 1)
                || (1 == tenant_ids.count() && !is_sys_tenant(tenant_ids.at(0)))) {
             ret = OB_NOT_SUPPORTED;
@@ -2504,7 +2496,7 @@ int ObStopUpgradeJobResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("create ObStopUpgradeJobStmt failed", KR(ret));
     } else {
       stmt_ = stmt;
-      stmt->get_rpc_arg().action_ = obcall::ObUpgradeJobArg::STOP_UPGRADE_JOB;
+      stmt->get_rpc_arg().action_ = obrpc::ObUpgradeJobArg::STOP_UPGRADE_JOB;
     }
   }
   return ret;
@@ -2778,7 +2770,7 @@ int ObDropTempTableResolver::resolve(const ParseNode &parse_tree)
       LOG_ERROR("create ObDropTableStmt failed");
     } else {
       stmt_ = stmt;
-      obcall::ObDropTableArg &drop_table_arg = stmt->get_drop_table_arg();
+      obrpc::ObDropTableArg &drop_table_arg = stmt->get_drop_table_arg();
       drop_table_arg.if_exist_ = true;
       drop_table_arg.to_recyclebin_ = false;
       drop_table_arg.tenant_id_ = session_info_->get_login_tenant_id();
@@ -2816,7 +2808,7 @@ int ObRefreshTempTableResolver::resolve(const ParseNode &parse_tree)
     } else {
       stmt_ = stmt;
       stmt->set_is_alter_system(true);
-      obcall::ObAlterTableArg &alter_table_arg = stmt->get_alter_table_arg();
+      obrpc::ObAlterTableArg &alter_table_arg = stmt->get_alter_table_arg();
       alter_table_arg.session_id_ = static_cast<uint64_t>(parse_tree.children_[0]->value_);
       alter_table_arg.alter_table_schema_.alter_type_ = OB_DDL_ALTER_TABLE;
       //compat for old server
@@ -2828,7 +2820,7 @@ int ObRefreshTempTableResolver::resolve(const ParseNode &parse_tree)
           session_info_->get_local_nls_timestamp_format(),
           session_info_->get_local_nls_timestamp_tz_format()))) {
         LOG_WARN("failed to set_nls_formats", K(ret));
-      } else if (OB_FAIL(alter_table_arg.alter_table_schema_.alter_option_bitset_.add_member(obcall::ObAlterTableArg::SESSION_ACTIVE_TIME))) {
+      } else if (OB_FAIL(alter_table_arg.alter_table_schema_.alter_option_bitset_.add_member(obrpc::ObAlterTableArg::SESSION_ACTIVE_TIME))) {
         LOG_WARN("failed to add member SESSION_ACTIVE_TIME for alter table schema", K(ret), K(alter_table_arg));
       }
     }
@@ -4351,7 +4343,7 @@ int ObRecoverTableResolver::resolve_recover_tables_(
 }
 
 int ObRecoverTableResolver::resolve_scn_(
-    const ParseNode *node, obcall::ObPhysicalRestoreTenantArg &arg)
+    const ParseNode *node, obrpc::ObPhysicalRestoreTenantArg &arg)
 {
   int ret = OB_SUCCESS;
   const ParseNode *time_node = nullptr;
@@ -4444,7 +4436,7 @@ int ObRecoverTableResolver::resolve_tenant_(
   return ret;
 }
 
-int ObRecoverTableResolver::resolve_restore_with_config_item_(const ParseNode *node, obcall::ObRecoverTableArg &arg)
+int ObRecoverTableResolver::resolve_restore_with_config_item_(const ParseNode *node, obrpc::ObRecoverTableArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node)) {

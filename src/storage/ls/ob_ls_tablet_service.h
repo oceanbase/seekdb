@@ -98,7 +98,6 @@ class ObTabletCreateDeleteMdsUserData;
 class ObBlockStatScanParam;
 class ObBlockStatIterator;
 
-
 class ObLSTabletService : public logservice::ObIReplaySubHandler,
                           public logservice::ObIRoleChangeSubHandler,
                           public logservice::ObICheckpointSubHandler
@@ -258,23 +257,6 @@ public:
   int update_tablet_ha_expected_status(
       const common::ObTabletID &tablet_id,
       const ObTabletExpectedStatus::STATUS &expected_status);
-#ifdef OB_BUILD_SHARED_STORAGE
-  int upload_major_compaction_tablet_meta(
-    const common::ObTabletID &tablet_id,
-    const ObUpdateTableStoreParam &param,
-    const int64_t start_macro_seq);
-  int ss_replay_create_tablet(const ObMetaDiskAddr &disk_addr, const ObTabletID &tablet_id);
-  int write_tablet_id_set_to_pending_free();
-  int ss_replay_create_tablet_for_trans_info_tmp(
-    const ObMetaDiskAddr &current_disk_addr,
-    const ObLSHandle &ls_handle,
-    const ObTabletID &tablet_id);
-  int update_tablet_ss_change_version(
-     const share::SCN &reorg_scn,
-     const common::ObTabletID &tablet_id,
-     const share::SCN &ss_change_version,
-     const bool &fully_applied);
-#endif
   // Get tablet handle but ignore empty shell. Return OB_TABLET_NOT_EXIST if it is empty shell.
   int ha_get_tablet(
       const common::ObTabletID &tablet_id,
@@ -469,7 +451,7 @@ public:
   int is_tablet_exist(const common::ObTabletID &tablet_id, bool &is_exist);
 
   // migration section
-  typedef common::ObFunction<int(const obcall::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)> HandleTabletMetaFunc;
+  typedef common::ObFunction<int(const obrpc::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)> HandleTabletMetaFunc;
   int ha_scan_all_tablets(
       const HandleTabletMetaFunc &handle_tablet_meta_f,
       const bool need_sorted_tablet_id);

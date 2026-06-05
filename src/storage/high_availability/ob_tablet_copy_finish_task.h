@@ -19,6 +19,8 @@
 
 #include "lib/thread/ob_work_queue.h"
 #include "lib/thread/ob_dynamic_thread_pool.h"
+#include "share/ob_common_rpc_proxy.h" // ObCommonRpcProxy
+#include "share/ob_srv_rpc_proxy.h" // ObPartitionServiceRpcProxy
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ob_storage_rpc.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
@@ -94,13 +96,6 @@ private:
   int classify_major_sstables_(
       ObTablesHandleArray &shared_major_sstables,
       ObTablesHandleArray &local_major_sstables);
-  int deal_with_shared_majors_(ObTablesHandleArray &major_tables_handle);
-#ifdef OB_BUILD_SHARED_STORAGE
-  int check_local_sstable_exist_(
-      const ObITable::TableKey &table_key,
-      ObTabletMemberWrapper<ObTabletTableStore> &table_store_wrapper,
-      bool &is_exist);
-#endif
 
 private:
   bool is_inited_;

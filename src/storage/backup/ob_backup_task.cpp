@@ -2850,10 +2850,7 @@ int ObLSBackupDataTask::do_wait_index_builder_ready_(const common::ObTabletID &t
   bool exist = false;
   static const int64_t DEFAULT_SLEEP_US = 10_ms;
   while (OB_SUCC(ret)) {
-    if (GCTX.is_shared_storage_mode() && table_key.is_ddl_dump_sstable()) {
-      // ddl sstable in shared storage mode has no index builder
-      break;
-    } else if (OB_ISNULL(ls_backup_ctx_)) {
+    if (OB_ISNULL(ls_backup_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls back ctx should not be null", K(ret));
     } else if (OB_SUCCESS != ls_backup_ctx_->get_result_code()) {
@@ -3127,43 +3124,7 @@ int ObLSBackupDataTask::add_item_to_other_block_mgr_(const blocksstable::MacroBl
 int ObLSBackupDataTask::deal_with_sstable_other_block_root_blocks_(
     const common::ObTabletID &tablet_id, const storage::ObITable::TableKey &table_key)
 {
-  int ret = OB_SUCCESS;
-  ObBackupOtherBlocksMgr *other_block_mgr = NULL;
-  ObBackupLinkedBlockItemWriter *linked_writer = NULL;
-  if (!GCTX.is_shared_storage_mode()) {
-    // do nothing
-  } else if (!table_key.is_ddl_dump_sstable()) {
-    // do nothing
-  } else if (OB_FAIL(get_other_block_mgr_for_tablet_(tablet_id, other_block_mgr, linked_writer))) {
-    LOG_WARN("failed to get other block mgr for tablet", K(ret), K(tablet_id), K(table_key));
-  } else if (OB_FAIL(linked_writer->init(param_, tablet_id, table_key, task_id_,
-      backup_data_ctx_.file_write_ctx_, backup_data_ctx_.file_offset_))) {
-    LOG_WARN("failed to init backup linked block item writer", K(ret), K(tablet_id), K(table_key));
-  } else if (OB_FAIL(other_block_mgr->wait(ls_backup_ctx_))) {
-    LOG_WARN("failed to wait other block mgr", K(ret), KP_(ls_backup_ctx));
-  } else {
-    ObBackupLinkedItem link_item;
-    while (OB_SUCC(ret)) {
-      link_item.reset();
-      if (OB_FAIL(other_block_mgr->get_next_item(link_item))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          break;
-        } else {
-          LOG_WARN("failed to get next item", K(ret));
-        }
-      } else if (OB_FAIL(linked_writer->write(link_item))) {
-        LOG_WARN("failed to write link item", K(ret));
-      } else {
-        LOG_INFO("write link item", K(tablet_id), K(table_key), K(link_item));
-      }
-    }
-    if (FAILEDx(linked_writer->close())) {
-      LOG_WARN("failed to close item writer", K(ret));
-    }
-    LOG_INFO("deal with ddl sstable root blocks", K(tablet_id), K(table_key));
-  }
-  return ret;
+  return OB_SUCCESS;
 }
 
 int ObLSBackupDataTask::get_sstable_meta_item_list_(common::ObIArray<ObBackupProviderItem> &list)
@@ -4392,7 +4353,7 @@ int ObLSBackupMetaTask::backup_ls_meta_and_tablet_metas_(const uint64_t tenant_i
 
   // persist tablet meta
   auto backup_tablet_meta_f = [&writer, &backup_tablet_count, &max_tablet_checkpoint_scn, &backup_macro_block_count, &calc_macro_block_count_time]
-      (const obcall::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)->int {
+      (const obrpc::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)->int {
     int ret = OB_SUCCESS;
     blocksstable::ObSelfBufferWriter buffer_writer("LSBackupMetaTask");
     blocksstable::ObBufferReader buffer_reader;

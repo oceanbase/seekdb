@@ -26,14 +26,11 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/profile/ob_trace_id.h"
 #include "lib/restore/ob_storage.h"
+#include "lib/tc/ob_tc.h"
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/worker.h"
 #include "share/resource_manager/ob_resource_plan_info.h"
 #include "storage/ob_storage_checked_object_base.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/micro_cache/ob_ss_micro_cache_common_meta.h"
-#include "storage/shared_storage/ob_ss_fd_cache_struct.h"
-#endif
 
 namespace oceanbase
 {
@@ -302,30 +299,8 @@ public:
   int64_t part_id_;      // multipart upload's part id
 };
 
-#ifdef OB_BUILD_SHARED_STORAGE
-struct ObSSIOInfo : public ObSNIOInfo
-{
-public:
-  ObSSIOInfo();
-  ObSSIOInfo(const ObSSIOInfo &other);
-  virtual ~ObSSIOInfo();
-  virtual void reset() override;
-  ObSSIOInfo &operator=(const ObSSIOInfo &other);
 
-public:
-  storage::ObSSPhysicalBlockHandle phy_block_handle_;  // hold ref_cnt
-  storage::ObSSFdCacheHandle fd_cache_handle_;
-  int64_t tmp_file_valid_length_;
-
-  INHERIT_TO_STRING_KV("SNIOInfo", ObSNIOInfo, K_(phy_block_handle), K_(fd_cache_handle),  K_(tmp_file_valid_length));
-};
-#endif
-
-#ifdef OB_BUILD_SHARED_STORAGE
-#define ObIOInfo ObSSIOInfo
-#else
 #define ObIOInfo ObSNIOInfo
-#endif
 
 template <typename T>
 class ObRefHolder final
@@ -517,9 +492,6 @@ public:
                KP(user_data_buf_), KP(buf_), KP(io_callback_), K_(time_log));
   DISALLOW_COPY_AND_ASSIGN(ObIOResult);
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  friend class ObSSIORequest;
-#endif
   friend class ObIORequest;
   friend class ObIOHandle;
   friend class ObIOFaultDetector;
@@ -583,6 +555,7 @@ public:
   int64_t get_align_offset() const;
   int prepare(char *next_buffer = nullptr, int64_t next_size = 0, int64_t next_offset = 0);
   int recycle_buffer();
+  int retry_io();
   int try_alloc_buf_until_timeout(char *&io_buf);
   bool can_callback() const;
   void free_io_buffer();
@@ -617,6 +590,7 @@ private:
 public:
   common::LinkTask req_node_;
   ObIOResult *io_result_;
+  TCRequest qsched_req_;
 protected:
   bool is_inited_;
   int8_t retry_count_;

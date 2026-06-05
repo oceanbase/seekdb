@@ -153,14 +153,6 @@ int ObAllVirtualResMgrSysStat::update_all_stats_(const int64_t tenant_id, ObStat
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_schema_log_dropped_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_FORCE_ALLOW_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_force_allow_log_dropped_count() : 0;
-    stat_events.get(ObStatEventIds::RINGBUF_ALLOC_WAIT_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_alloc_wait_count() : 0;
-    stat_events.get(ObStatEventIds::RINGBUF_ALLOC_DROP_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_alloc_drop_count() : 0;
-    stat_events.get(ObStatEventIds::RINGBUF_ALLOC_SUCCESS_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_alloc_success_count() : 0;
-    stat_events.get(ObStatEventIds::RINGBUF_QUEUE_DEPTH - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_queue_depth() : 0;
     stat_events.get(ObStatEventIds::ASYNC_ERROR_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
       (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_dropped_error_log_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_WARN_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
@@ -187,12 +179,6 @@ int ObAllVirtualResMgrSysStat::update_all_stats_(const int64_t tenant_id, ObStat
         (OB_SYS_TENANT_ID == tenant_id) ? GMEMCONF.get_server_memory_limit() : 0;
     stat_events.get(ObStatEventIds::SYSTEM_MEMORY - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? GMEMCONF.get_reserved_server_memory() : 0;
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      stat_events.get(ObStatEventIds::HIDDEN_SYS_DATA_DISK_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_SERVER_DISK_SPACE_MGR.get_hidden_sys_data_disk_config_size() : 0;
-    }
-#endif
 
     int ret_bk = ret;
     if (NULL != GCTX.omt_) {

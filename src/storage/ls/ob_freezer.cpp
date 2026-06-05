@@ -1157,7 +1157,7 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     } else if (OB_FAIL(tablet->get_protected_memtable_mgr_handle(protected_handle))) {
       LOG_WARN("failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet));
     } else if (protected_handle->get_max_saved_version_from_medium_info_recorder() >=
-               freeze_snapshot_version.get_val_for_tx() && !GCTX.is_shared_storage_mode()) {
+               freeze_snapshot_version.get_val_for_tx()) {
       int tmp_ret = OB_SUCCESS;
       ObCOMajorMergePolicy::ObCOMajorMergeType co_major_merge_type;
       if (OB_FAIL(ObTenantTabletScheduler::get_co_merge_type_for_compaction(freeze_snapshot_version.get_val_for_tx(), *tablet, co_major_merge_type))) {

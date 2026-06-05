@@ -50,10 +50,7 @@ int ObDDLMergeTaskUtils::check_idempodency(const ObIArray<ObDDLBlockMeta> &input
     write_stat->reset();
   } 
 
-  if (GCTX.is_shared_storage_mode()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("shared storage mode do not need idempodency checker", K(ret), K(lbt()));
-  } else if (input_metas.count() > 0 && OB_FAIL(id_checksum_map.create(input_metas.count(), ObMemAttr(MTL_ID(), "DDL_MER_IDEM")))) {
+  if (input_metas.count() > 0 && OB_FAIL(id_checksum_map.create(input_metas.count(), ObMemAttr(MTL_ID(), "DDL_MER_IDEM")))) {
     LOG_WARN("failed to create checksum map", K(ret), K(input_metas.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < input_metas.count(); ++i) {

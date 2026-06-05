@@ -740,16 +740,11 @@ int ObSharedObjectReaderWriter::init(
     hanging_ = false;
     need_align_ = need_align;
     need_cross_ = need_cross;
-    if (GCTX.is_shared_storage_mode()) {
-      hanging_ = false;
-      is_inited_ = true;
-    } else {
-      if (OB_FAIL(reserve_header())) {
+    if (OB_FAIL(reserve_header())) {
         LOG_WARN("fail to reserve header when init", K(ret));
       } else {
         is_inited_ = true;
       }
-    }
   }
   return ret;
 }
@@ -810,8 +805,6 @@ int ObSharedObjectReaderWriter::async_write(
     } else if (OB_UNLIKELY(!write_info.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arg", K(ret), K(write_info));
-    } else if (GCTX.is_shared_storage_mode() && OB_FAIL(do_switch(write_args.object_opt_))) {
-      LOG_WARN("fail to switch object for shared storage", K(ret), K(write_args));
     }
     if (FAILEDx(inner_write_block(
         header,
@@ -842,11 +835,6 @@ int ObSharedObjectReaderWriter::async_batch_write(
     lib::ObMutexGuard guard(mutex_);
     ObSharedObjectWriteArgs write_args;
     ObSharedObjectsWriteCtx write_ctx;
-    if (GCTX.is_shared_storage_mode()
-        && write_infos.count() >= 1
-        && OB_FAIL(do_switch(curr_opt))) {
-      LOG_WARN("fail to switch object for shared storage", K(ret), K(write_infos.at(0)));
-    }
     for (int64_t i = 0; OB_SUCC(ret) && i < write_infos.count(); ++i) {
       // only the last need flush and align
       write_args.need_flush_ = (i == write_infos.count() - 1);
@@ -887,10 +875,8 @@ int ObSharedObjectReaderWriter::async_link_write(
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
       LOG_WARN("Not init", K(ret));
-    } else if (OB_FAIL(shared_obj_handle.wait())) {    
+    } else if (OB_FAIL(shared_obj_handle.wait())) {
       LOG_WARN("Fail to wait other blocks finish", K(ret), K(shared_obj_handle));
-    } else if (GCTX.is_shared_storage_mode() && OB_FAIL(do_switch(write_args.object_opt_))) {
-      LOG_WARN("fail to switch object for shared storage", K(ret), K(write_args));
     }
 
     if (FAILEDx(inner_async_write(write_info, write_args, shared_obj_handle, write_ctx))) {
@@ -995,8 +981,6 @@ int ObSharedObjectReaderWriter::do_switch(const ObStorageObjectOpt &opt)
     LOG_WARN("fail to alloc object", K(ret));
   } else if (OB_FAIL(data_.clean())) {
     LOG_WARN("fail to memset 0 data_", KR(ret));
-  } else if (GCTX.is_shared_storage_mode()) {
-    hanging_ = false;
   } else {
     if (OB_FAIL(reserve_header())) {
       LOG_WARN("fail to reserve header when init", K(ret));
@@ -1020,7 +1004,7 @@ int ObSharedObjectReaderWriter::calc_store_size(
   if (need_align) {
     store_size = next_align_offset - offset_;
   }
-  if (!GCTX.is_shared_storage_mode() && OB_UNLIKELY(store_size > DEFAULT_MACRO_BLOCK_SIZE)) {
+  if (OB_UNLIKELY(store_size > DEFAULT_MACRO_BLOCK_SIZE)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported object size", K(ret), K_(offset), K_(align_offset), K(store_size));
   }

@@ -708,40 +708,23 @@ int ObSSTableMetaBackupReader::get_meta_data(blocksstable::ObBufferReader &buffe
         backup_sstable_meta.tablet_id_ = tablet_id_;
         backup_sstable_meta.is_major_compaction_mview_dep_ = is_major_compaction_mview_dep_;
         blocksstable::ObSSTableMergeRes *merge_res = NULL;
-        if (GCTX.is_shared_storage_mode() && table_key.is_ddl_dump_sstable()) {
-          if (FAILEDx(get_macro_block_id_list_(*sstable_ptr, backup_sstable_meta))) {
-            LOG_WARN("failed to get macro block id list", K(ret), KPC(sstable_ptr));
-          } else if (OB_FAIL(tablet->build_migration_sstable_param(table_key, backup_sstable_meta.sstable_meta_, false/*is_fork_table*/))) {
-            LOG_WARN("failed to build migration sstable param", K(ret), K(table_key));
-          } else if (OB_FAIL(deal_with_ddl_sstable_(table_key, linked_writer_, backup_sstable_meta))) {
-            LOG_WARN("failed to deal with ddl sstable", K(ret), K(table_key));
-          } else if (!backup_sstable_meta.sstable_meta_.is_valid()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("backup sstable meta is not valid", K(backup_sstable_meta), KPC(tablet), KPC(sstable_ptr), K(table_key));
-          } else if (OB_FAIL(buffer_writer_.write_serialize(backup_sstable_meta))) {
-            LOG_WARN("failed to write serialize", K(ret), K(table_key), K(backup_sstable_meta));
-          } else {
-            LOG_INFO("backup sstable meta", K(i), K(table_key), K_(tablet_id), K_(sstable_array), K(backup_sstable_meta));
-          }
+        if (OB_FAIL(close_sstable_index_builder_(table_key))) {
+          LOG_WARN("failed to close sstable index builder", K(ret), K(table_key));
+        } else if (OB_FAIL(get_macro_block_id_list_(*sstable_ptr, backup_sstable_meta))) {
+          LOG_WARN("failed to get macro block id list", K(ret), KPC(sstable_ptr));
+        } else if (OB_FAIL(get_sstable_merge_results_(tablet_id_, table_key, merge_res))) {
+          LOG_WARN("failed to get sstable merge results", K(ret), K_(tablet_id), K(table_key));
+        } else if (OB_FAIL(tablet->build_migration_sstable_param(table_key, *merge_res, backup_sstable_meta.sstable_meta_))) {
+          LOG_WARN("failed to build migration sstable param", K(ret), K(table_key));
+        } else if (!backup_sstable_meta.sstable_meta_.is_valid()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("backup sstable meta is not valid", K(backup_sstable_meta), KPC(tablet), KPC(sstable_ptr), K(table_key));
+        } else if (OB_FAIL(buffer_writer_.write_serialize(backup_sstable_meta))) {
+          LOG_WARN("failed to write serialize", K(ret), K(table_key), K(backup_sstable_meta));
+        } else if (OB_FAIL(free_sstable_index_builder_(table_key))) {
+          LOG_WARN("failed to free sstable index builder", K(ret), K(table_key));
         } else {
-          if (OB_FAIL(close_sstable_index_builder_(table_key))) {
-            LOG_WARN("failed to close sstable index builder", K(ret), K(table_key));
-          } else if (OB_FAIL(get_macro_block_id_list_(*sstable_ptr, backup_sstable_meta))) {
-            LOG_WARN("failed to get macro block id list", K(ret), KPC(sstable_ptr));
-          } else if (OB_FAIL(get_sstable_merge_results_(tablet_id_, table_key, merge_res))) {
-            LOG_WARN("failed to get sstable merge results", K(ret), K_(tablet_id), K(table_key));
-          } else if (OB_FAIL(tablet->build_migration_sstable_param(table_key, *merge_res, backup_sstable_meta.sstable_meta_))) {
-            LOG_WARN("failed to build migration sstable param", K(ret), K(table_key));
-          } else if (!backup_sstable_meta.sstable_meta_.is_valid()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("backup sstable meta is not valid", K(backup_sstable_meta), KPC(tablet), KPC(sstable_ptr), K(table_key));
-          } else if (OB_FAIL(buffer_writer_.write_serialize(backup_sstable_meta))) {
-            LOG_WARN("failed to write serialize", K(ret), K(table_key), K(backup_sstable_meta));
-          } else if (OB_FAIL(free_sstable_index_builder_(table_key))) {
-            LOG_WARN("failed to free sstable index builder", K(ret), K(table_key));
-          } else {
-            LOG_INFO("backup sstable meta", K(i), K(table_key), K_(tablet_id), K_(sstable_array), K(backup_sstable_meta));
-          }
+          LOG_INFO("backup sstable meta", K(i), K(table_key), K_(tablet_id), K_(sstable_array), K(backup_sstable_meta));
         }
       }
     }
@@ -796,22 +779,7 @@ int ObSSTableMetaBackupReader::deal_with_ddl_sstable_(
     ObBackupLinkedBlockItemWriter *linked_writer,
     ObBackupSSTableMeta &backup_sstable_meta)
 {
-  int ret = OB_SUCCESS;
-  if (!GCTX.is_shared_storage_mode()) {
-    // do nothing
-  } else if (!table_key.is_ddl_dump_sstable()) {
-    // do nothing
-  } else if (OB_ISNULL(linked_writer)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("linked writer should not be null", K(ret), K(table_key));
-  } else if (OB_FAIL(linked_writer->get_root_block_id(
-      backup_sstable_meta.entry_block_addr_for_other_block_,
-      backup_sstable_meta.total_other_block_count_))) {
-    LOG_WARN("failed to get root block id", K(ret));
-  } else {
-    LOG_INFO("get root block id", K(table_key), K(backup_sstable_meta));
-  }
-  return ret;
+  return OB_SUCCESS;
 }
 
 int ObSSTableMetaBackupReader::inner_check_all_sstable_macro_block_ready_(bool &finished)

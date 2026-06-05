@@ -531,7 +531,7 @@ int ObMicroBlockHandleMgr::prefetch_multi_data_block(
     LOG_WARN("Unexpected io params", K(ret), K(multi_io_params));
   } else {
     const MacroBlockId &macro_id = micro_data_infos[multi_io_params.prefetch_idx_[0] % max_micro_handle_cnt].get_macro_id();
-    const bool is_major_macro_preread = GCTX.is_shared_storage_mode();
+    const bool is_major_macro_preread = false;
     if (1 == multi_io_params.count()) {
       for (int64_t i = 0; OB_SUCC(ret) && i < multi_io_params.count(); i++) {
         const ObMicroIndexInfo &index_info = micro_data_infos[multi_io_params.prefetch_idx_[i] % max_micro_handle_cnt];

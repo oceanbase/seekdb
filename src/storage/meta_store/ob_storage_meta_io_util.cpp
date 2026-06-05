@@ -20,21 +20,6 @@ namespace oceanbase
 {
 namespace storage
 {
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObStorageMetaIOUtil::check_meta_existence(
-    const blocksstable::ObStorageObjectOpt &opt, const int64_t ls_epoch, bool &is_exist)
-{
-  int ret = OB_SUCCESS;
-  blocksstable::MacroBlockId object_id;
-  if (OB_FAIL(OB_STORAGE_OBJECT_MGR.ss_get_object_id(opt, object_id))) {
-    LOG_WARN("fail to get object id", K(ret), K(opt));
-  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.ss_is_exist_object(object_id, ls_epoch, is_exist))) {
-    LOG_WARN("fail to check existence", K(ret), K(object_id));
-  }
-  return ret;
-}
-
-#endif
 
 } // namespace storage
 } // namespace oceanbase

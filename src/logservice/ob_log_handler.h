@@ -25,19 +25,13 @@
 #include "palf/palf_handle.h"
 #include "palf/palf_base_info.h"
 #include "palf/palf_iterator.h"
-#include "logrpc/ob_log_service_rpc_shell.h"
+#include "logrpc/ob_log_rpc_proxy.h"
 #include "logrpc/ob_log_request_handler.h"
 #include "ob_log_handler_base.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "log/ob_log_iterator_storage.h"
-#include "log/ob_log_rebuild_cb_adapter.h"
-#include "log/ob_shared_log_interface.h"
-#endif
 
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
 #include "logservice/ob_log_compression.h"
 #endif
-
 
 namespace oceanbase
 {
@@ -181,7 +175,7 @@ public:
   virtual int disable_sync() = 0;
   virtual bool is_sync_enabled() const = 0;
   virtual int advance_base_info(const palf::PalfBaseInfo &palf_base_info, const bool is_rebuild) = 0;
-  virtual int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const = 0;
+  virtual int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obrpc::LogMemberGCStat &stat) const = 0;
   virtual void wait_append_sync() = 0;
   virtual int enable_replay(const palf::LSN &initial_lsn, const share::SCN &initial_scn) = 0;
   virtual int disable_replay() = 0;
@@ -212,7 +206,7 @@ public:
            ObRoleChangeService *rc_service,
            palf::PalfEnv *palf_env,
            palf::PalfLocationCacheCb *lc_cb,
-           obcall::ObLogServiceRpcProxy *rpc_proxy,
+           obrpc::ObLogServiceRpcProxy *rpc_proxy,
            common::ObILogAllocator *alloc_mgr);
   bool is_valid() const;
   int stop();
@@ -711,8 +705,8 @@ public:
   // @breif, check request server is in self member list
   // @param[in] const common::ObAddr, request server.
   // @param[out] is_valid_member&, whether in member list or  learner list.
-  // @param[out] obcall::LogMemberGCStat&, gc stat like learner in migrating.
-  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const override final;
+  // @param[out] obrpc::LogMemberGCStat&, gc stat like learner in migrating.
+  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obrpc::LogMemberGCStat &stat) const override final;
   // @breif, wait cb append onto apply service Qsync
   // protect submit log and push cb in Qsync guard
   void wait_append_sync() override final;
@@ -766,10 +760,6 @@ public:
   // OB_NOT_RUNNING: in stop state
   // OB_EAGAIN: try lock failed, need retry.
   int is_replay_fatal_error(bool &has_fatal_error);
-#ifdef OB_BUILD_SHARED_STORAGE
-  int init_log_fast_rebuild_engine(ObLogFastRebuildEngine *log_fast_rebuild_engine);
-  int handle_acquire_log_rebuild_info_msg(const LogAcquireRebuildInfoMsg &msg);
-#endif
   template<class LogEntryType, class StartPoint>
   friend int init_log_iterator(
     ObLogHandler *log_handler,
@@ -802,10 +792,6 @@ private:
                                   IteratorType &iterator);
 
   int advance_base_lsn_impl_(const palf::LSN &lsn);
-#ifdef OB_BUILD_SHARED_STORAGE
-  bool need_get_palf_base_info_on_shared_stoarge_(const int ret,
-                                                  const palf::LSN base_lsn) const;
-#endif
   DISALLOW_COPY_AND_ASSIGN(ObLogHandler);
 private:
   common::ObAddr self_;
@@ -817,7 +803,7 @@ private:
   // Note: using TCRWLock for using WLockGuardWithTimeout
   common::TCRWLock deps_lock_;
   mutable palf::PalfLocationCacheCb *lc_cb_;
-  mutable obcall::ObLogServiceRpcProxy *rpc_proxy_;
+  mutable obrpc::ObLogServiceRpcProxy *rpc_proxy_;
   common::ObQSync ls_qs_;
   ObMiniStat::ObStatItem append_cost_stat_;
   bool is_offline_;
@@ -825,10 +811,6 @@ private:
   ObLogCompressorWrapper compressor_wrapper_;
 #endif
   mutable int64_t get_max_decided_scn_debug_time_;
-#ifdef OB_BUILD_SHARED_STORAGE
-  ObLogRebuildCbAdapter rebuild_cb_adapter_;
-  ObMiniStat::ObStatItem locate_by_scn_stat_;
-#endif
 };
 
 struct ObLogStat
@@ -846,7 +828,6 @@ public:
   bool in_sync_;
   TO_STRING_KV(K_(palf_stat), K_(in_sync))
 };
-
 
 // =============================== Iterator begin ===========================
 struct LogDestroyIteratorStorageFunctor {
@@ -931,15 +912,7 @@ int ObLogHandler::seek_log_iterator_dispatch_(const StartPoint &start_point,
 {
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (!GCTX.is_shared_storage_mode()) {
-    ret = seek_log_iterator_no_shared_storage(palf_env_, id_, start_point, iterator);
-  } else {
-    ret = ObSharedLogInterface::seek(ObLSID(id_), start_point, suggested_read_buf_size, iterator);
-  }
-#else
   ret = seek_log_iterator_no_shared_storage(palf_env_, id_, start_point, iterator);
-#endif
   return ret;
 }
 

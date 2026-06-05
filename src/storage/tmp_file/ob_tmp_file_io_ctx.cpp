@@ -332,9 +332,6 @@ int ObTmpFileIOCtx::do_read_wait_()
       if (OB_ISNULL(block_buf)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("data buf is null", KR(ret), K(fd_), K(block_cache_handle));
-      } else if (GCTX.is_shared_storage_mode()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support read from block cache in shared storage mode", KR(ret), KPC(this));
       } else if (OB_UNLIKELY(!check_buf_range_valid(read_buf, read_size))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid range", KR(ret), K(fd_), KP(read_buf), KP(buf_), K(read_size), K(buf_size_), KPC(this));
@@ -460,13 +457,7 @@ bool ObTmpFileIOCtx::ObIOReadHandle::is_valid()
               handle_.is_valid();
 
   if (bret) {
-    if (!GCTX.is_shared_storage_mode()) {
-      bret = read_size_ <= ObTmpFileGlobal::SN_BLOCK_SIZE && block_handle_.is_inited();
-    #ifdef OB_BUILD_SHARED_STORAGE
-    } else {
-      bret = read_size_ <= ObTmpFileGlobal::SS_BLOCK_SIZE;
-    #endif
-    }
+    bret = read_size_ <= ObTmpFileGlobal::SN_BLOCK_SIZE && block_handle_.is_inited();
   }
 
   return bret;
@@ -489,8 +480,7 @@ ObTmpFileIOCtx::ObBlockCacheHandle::~ObBlockCacheHandle()
 bool ObTmpFileIOCtx::ObBlockCacheHandle::is_valid()
 {
   bool bret = false;
-  if (!GCTX.is_shared_storage_mode() &&
-      OB_NOT_NULL(dest_user_read_buf_) && offset_in_src_data_buf_ >= 0 &&
+  if (OB_NOT_NULL(dest_user_read_buf_) && offset_in_src_data_buf_ >= 0 &&
       read_size_ >= 0 &&
       read_size_ <= ObTmpFileGlobal::SN_BLOCK_SIZE &&
       OB_NOT_NULL(block_handle_.value_) &&

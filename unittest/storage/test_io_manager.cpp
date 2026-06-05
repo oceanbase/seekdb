@@ -24,8 +24,6 @@
 #include "mittest/mtlenv/mock_tenant_module_env.h"
 #undef private
 #undef protected
-#ifdef OB_BUILD_SHARED_STORAGE
-#endif
 #ifdef _WIN32
 #include <fcntl.h>
 #endif
@@ -1234,7 +1232,7 @@ TEST_F(TestIOStruct, tenant)
   load.start_delay_ts_ = 0;
   load.stop_delay_ts_ = 3L * 1000L * 1000L; // 3s
   load.tenant_id_ = 1001;
-  load.thread_count_ = 4;
+  load.thread_count_ = 16;
   IOPerfRunner runner;
   ASSERT_SUCC(runner.init(current_ts, load));
   usleep(2L * 1000L * 1000L); // 2s
@@ -1772,11 +1770,11 @@ void write_group_perf_config()
       "500        1000        50000        1000      1000000000      100      12345: testgroup1: 50, 50, 50; 0: OTHER_GROUPS: 50, 50, 50;\n"
       "\n"
       "tenant_id   device_id     group    io_mode     io_size_byte    io_depth    perf_mode     target_iops     thread_count    is_sequence     start_s    stop_s\n"
-      "1        1             0        r           16384           4           rolling       0               4               0               0          3\n"
-      "1        1             10001        r           16384           4           rolling       0               4               0               1          3\n"
-      "1        1             10002        r           16384           4           rolling       0               4               0               0          3\n"
-      "500        1             0        r           16384           16          rolling       0               4               0               0          3\n"
-      "500        1             12345        r           16384           16          rolling       0               4               0               0          3\n"
+      "1        1             0        r           16384           10          rolling       0               16              0               0          8\n"
+      "1        1             10001        r           16384           10          rolling       0               16              0               2          7\n"
+      "1        1             10002        r           16384           10          rolling       0               16              0               0          6\n"
+      "500        1             0        r           16384           100          rolling       0               16              0               0          10\n"
+      "500        1             12345        r           16384           100          rolling       0               16              0               0          10\n"
       ;
     const int64_t file_len = strlen(file_buf);
     int write_ret = ::write(fd, file_buf, file_len);

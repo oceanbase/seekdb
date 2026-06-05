@@ -49,14 +49,9 @@ int ObTabletGCService::mtl_init(ObTabletGCService* &m)
 int ObTabletGCService::init()
 {
   int ret = OB_SUCCESS;
-  const bool is_shared_storage = GCTX.is_shared_storage_mode();
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObTabletGCService init twice.", KR(ret));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (is_shared_storage && OB_FAIL(private_block_gc_thread_.init())) {
-    LOG_WARN("failed to init private_block_gc_thread", K_(private_block_gc_thread));
-#endif
   } else {
     is_inited_ = true;
   }
@@ -66,7 +61,6 @@ int ObTabletGCService::init()
 int ObTabletGCService::start()
 {
   int ret = OB_SUCCESS;
-  bool is_shared_storage = GCTX.is_shared_storage_mode();
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(timer_for_tablet_change_.set_run_wrapper_with_ret(MTL_CTX()))) {
     STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
@@ -76,23 +70,10 @@ int ObTabletGCService::start()
     STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_shell_.init("TabletShell", ObMemAttr(MTL_ID(), "TabletShell")))) {
     STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (is_shared_storage && OB_FAIL(timer_for_private_block_gc_.set_run_wrapper_with_ret(MTL_CTX()))) {
-    STORAGE_LOG(ERROR, "fail to set timer's run wrapper", KR(ret));
-  } else if (is_shared_storage && OB_FAIL(timer_for_private_block_gc_.init("PvtBlkGCTimer", ObMemAttr(MTL_ID(), "PvtBlkGCTimer")))) {
-    STORAGE_LOG(ERROR, "fail to init timer", KR(ret));
-#endif
   } else if (OB_FAIL(timer_for_tablet_change_.schedule(tablet_change_task_, GC_CHECK_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule task", KR(ret));
   } else if (OB_FAIL(timer_for_tablet_shell_.schedule(tablet_shell_task_, ObEmptyShellTask::GC_EMPTY_TABLET_SHELL_INTERVAL, true))) {
     STORAGE_LOG(ERROR, "fail to schedule task", KR(ret));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (is_shared_storage && FALSE_IT(private_block_gc_task_.clear_is_stopped())) {
-  } else if (is_shared_storage && OB_FAIL(timer_for_private_block_gc_.schedule(private_block_gc_task_, GC_CHECK_INTERVAL, true))) {
-    STORAGE_LOG(ERROR, "fail to schedule task", KR(ret));
-  } else if (is_shared_storage && OB_FAIL(private_block_gc_thread_.start())) {
-    STORAGE_LOG(ERROR, "fail to start private block gc thread", KR(ret), K_(private_block_gc_task));
-#endif
   }
   return ret;
 }
@@ -106,15 +87,6 @@ int ObTabletGCService::stop()
   } else {
     timer_for_tablet_change_.stop();
     timer_for_tablet_shell_.stop();
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      if (OB_FAIL(private_block_gc_thread_.stop())) {
-        STORAGE_LOG(WARN, "failed to stop private block gc thread", K(ret), K_(private_block_gc_thread));
-      }
-      private_block_gc_task_.set_is_stopped();
-      timer_for_private_block_gc_.stop();
-    }
-#endif
   }
   if (OB_SUCC(ret)) {
     STORAGE_LOG(INFO, "ObTabletGCService stoped", KR(ret));
@@ -126,12 +98,6 @@ void ObTabletGCService::wait()
 {
   timer_for_tablet_change_.wait();
   timer_for_tablet_shell_.wait();
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode()) {
-    timer_for_private_block_gc_.wait();
-    private_block_gc_thread_.wait();
-  }
-#endif
 }
 
 void ObTabletGCService::destroy()
@@ -139,12 +105,6 @@ void ObTabletGCService::destroy()
   is_inited_ = false;
   timer_for_tablet_change_.destroy();
   timer_for_tablet_shell_.destroy();
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode()) {
-    timer_for_private_block_gc_.destroy();
-    private_block_gc_thread_.destroy();
-  }
-#endif
 }
 
 void ObTabletGCService::ObTabletChangeTask::runTimerTask()
@@ -386,7 +346,6 @@ int ObTabletGCHandler::set_tablet_change_checkpoint_scn(const share::SCN &scn)
   return ret;
 }
 
-
 int ObTabletGCHandler::check_tablet_need_persist_(
     ObTabletHandle &tablet_handle,
     const SCN &decided_scn,
@@ -575,7 +534,6 @@ int ObTabletGCHandler::get_unpersist_tablet_ids(common::ObIArray<ObTabletHandle>
   STORAGE_LOG(INFO, "[tabletgc] get unpersist_tablet_ids", KR(ret), K(deleted_tablets.count()), K(unpersist_tablet_ids.count()), K(decided_scn));
   return ret;
 }
-
 
 int ObTabletGCHandler::freeze_unpersist_tablet_ids(const common::ObTabletIDArray &unpersist_tablet_ids,
                                                    const SCN &decided_scn)

@@ -114,7 +114,7 @@ int ObAdminExecutor::prepare_io()
     LOG_WARN("fail to init file system router", K(ret));
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     LOG_WARN("fail to init storage meta service", K(ret));
-  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(false/*is_shared_storage*/, storage_env_.default_block_size_))) {
+  } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(storage_env_.default_block_size_))) {
     LOG_WARN("fail to init block manager, ", K(ret));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.start(0/*reserved_size*/))) {
     LOG_WARN("fail to start block manager, ", K(ret));

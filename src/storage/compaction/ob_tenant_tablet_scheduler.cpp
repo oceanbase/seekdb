@@ -225,7 +225,6 @@ void ObFastFreezeChecker::try_update_tablet_threshold(
   }
 }
 
-
 /*******************************************ObCSReplicaChecksumHelper impl*****************************************/
 int ObCSReplicaChecksumHelper::check_column_type(
     const common::ObTabletID &tablet_id,
@@ -291,7 +290,6 @@ int ObCSReplicaChecksumHelper::check_column_type(
   return ret;
 }
 
-
 /********************************************ObTenantTabletScheduler impl******************************************/
 constexpr ObMergeType ObTenantTabletScheduler::MERGE_TYPES[];
 
@@ -302,6 +300,7 @@ ObTenantTabletScheduler::ObTenantTabletScheduler()
    fast_freeze_checker_(),
    minor_ls_tablet_iter_(false/*is_major*/),
    gc_sst_tablet_iter_(false/*is_major*/),
+   prohibit_medium_map_(),
    timer_task_mgr_(),
    batch_size_mgr_(),
    mview_validation_()
@@ -330,6 +329,7 @@ void ObTenantTabletScheduler::reset()
   bf_queue_.destroy();
   minor_ls_tablet_iter_.reset();
   gc_sst_tablet_iter_.reset();
+  prohibit_medium_map_.destroy();
   LOG_INFO("The ObTenantTabletScheduler destroy");
 }
 
@@ -370,6 +370,8 @@ int ObTenantTabletScheduler::init()
     LOG_WARN("Fail to init bloom filter queue", K(ret));
   } else if (OB_FAIL(fast_freeze_checker_.init())) {
     LOG_WARN("Fail to create fast freeze checker", K(ret));
+  } else if (OB_FAIL(prohibit_medium_map_.init())) {
+    LOG_WARN("Fail to create prohibit medium ls id map", K(ret));
   } else {
     IGNORE_RETURN tenant_status_.refresh_tenant_config(enable_adaptive_compaction, enable_adaptive_merge_schedule);
     timer_task_mgr_.set_scheduler_interval(schedule_interval);
@@ -449,8 +451,6 @@ int ObTenantTabletScheduler::update_upper_trans_version_and_gc_sstable()
     LOG_WARN("ObTenantTabletScheduler not init", K(ret));
   } else if (OB_FAIL(gc_sst_tablet_iter_.build_iter(get_schedule_batch_size()))) {
     LOG_WARN("failed to init iterator", K(ret));
-  } else {
-    gc_sst_tablet_iter_.set_tablet_get_mode(storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK);
   }
 
   ObLSHandle ls_handle;
@@ -486,60 +486,57 @@ int ObTenantTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
   common::ObTabletID tablet_id;
   bool ls_is_migration = false;
   int64_t rebuild_seq = 0;
-  if (OB_FAIL(ls.check_ls_migration_status(ls_is_migration, rebuild_seq))) {
-    LOG_WARN("failed to check ls migration status", K(ret), K(ls_id));
-  } else if (ls_is_migration) {
-    // skip ls in migration, no need to iterate tablets
-  } else {
-    while (OB_SUCC(ret)) {
-      if (OB_FAIL(iter.get_next_tablet(tablet_handle))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          break;
-        } else {
-          LOG_WARN("failed to get tablet", K(ret), K(tablet_handle));
-        }
-      } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
-      } else if (FALSE_IT(tablet = tablet_handle.get_obj())) {
-      } else if (FALSE_IT(tablet_id = tablet->get_tablet_meta().tablet_id_)) {
-      } else if (tablet_id.is_special_merge_tablet()) {
-      } else if (!tablet->get_tablet_meta().ha_status_.check_allow_read()) {
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(iter.get_next_tablet(tablet_handle))) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        break;
       } else {
-        int64_t multi_version_start = 0;
-        int tmp_ret = OB_SUCCESS;
-        bool need_update = false; // need update table store
-        /*
-         * 1. upper_trans_version calculated from ls is invalid when ls is rebuilding, use rebuild_seq to prevent concurrency bug.
-         * 2. new_upper_trans array comes from old table store, use end_scn of last minor to check if table store is updated by other thread.
-         */
-        ObSEArray<int64_t, 8> new_upper_trans;
-        new_upper_trans.set_attr(ObMemAttr(MTL_ID(), "NewUpTxnVer"));
-        UpdateUpperTransParam upper_trans_param;
-        upper_trans_param.new_upper_trans_ = &new_upper_trans;
-        if (OB_TMP_FAIL(ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(ls, *tablet, multi_version_start, upper_trans_param, need_update))) {
-          LOG_WARN("faild to check need gc or update", K(tmp_ret), K(ls_id), K(tablet_id));
-        } else if (need_update) {
-          ObArenaAllocator tmp_arena("RmOldTblTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-          ObStorageSchema *storage_schema = nullptr;
-          if (OB_TMP_FAIL(tablet->load_storage_schema(tmp_arena, storage_schema))) {
-            LOG_WARN("failed to load storage schema", K(tmp_ret), K(tablet));
-          } else {
-            ObUpdateTableStoreParam param(tablet->get_snapshot_version(), multi_version_start, storage_schema, rebuild_seq, upper_trans_param);
-            ObTabletHandle new_tablet_handle; // no use here
-            if (OB_TMP_FAIL(ls.update_tablet_table_store(tablet_id, param, new_tablet_handle))) {
-              LOG_WARN("failed to update table store", K(tmp_ret), K(param), K(ls_id), K(tablet_id));
-            } else {
-              FLOG_INFO("success to remove old table in table store", K(tmp_ret), K(ls_id),
-                  K(tablet_id), K(multi_version_start), KPC(tablet));
-            }
-          }
-          ObTabletObjLoadHelper::free(tmp_arena, storage_schema);
-        }
+        LOG_WARN("failed to get tablet", K(ret), K(tablet_handle));
       }
-    } // end while
-  }
+    } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
+    } else if (FALSE_IT(tablet = tablet_handle.get_obj())) {
+    } else if (FALSE_IT(tablet_id = tablet->get_tablet_meta().tablet_id_)) {
+    } else if (tablet_id.is_special_merge_tablet()) {
+    } else if (!tablet->get_tablet_meta().ha_status_.check_allow_read()) {
+    } else if (OB_FAIL(ls.check_ls_migration_status(ls_is_migration, rebuild_seq))) {
+      LOG_WARN("failed to check ls migration status", K(ret), K(ls_id));
+    } else if (ls_is_migration) {
+    } else {
+      int64_t multi_version_start = 0;
+      int tmp_ret = OB_SUCCESS;
+      bool need_update = false; // need update table store
+      /*
+       * 1. upper_trans_version calculated from ls is invalid when ls is rebuilding, use rebuild_seq to prevent concurrency bug.
+       * 2. new_upper_trans array comes from old table store, use end_scn of last minor to check if table store is updated by other thread.
+       */
+      ObSEArray<int64_t, 8> new_upper_trans;
+      new_upper_trans.set_attr(ObMemAttr(MTL_ID(), "NewUpTxnVer"));
+      UpdateUpperTransParam upper_trans_param;
+      upper_trans_param.new_upper_trans_ = &new_upper_trans;
+      if (OB_TMP_FAIL(ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(ls, *tablet, multi_version_start, upper_trans_param, need_update))) {
+        LOG_WARN("faild to check need gc or update", K(tmp_ret), K(ls_id), K(tablet_id));
+      } else if (need_update) {
+        ObArenaAllocator tmp_arena("RmOldTblTmp", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+        ObStorageSchema *storage_schema = nullptr;
+        if (OB_TMP_FAIL(tablet->load_storage_schema(tmp_arena, storage_schema))) {
+          LOG_WARN("failed to load storage schema", K(tmp_ret), K(tablet));
+        } else {
+          ObUpdateTableStoreParam param(tablet->get_snapshot_version(), multi_version_start, storage_schema, rebuild_seq, upper_trans_param);
+          ObTabletHandle new_tablet_handle; // no use here
+          if (OB_TMP_FAIL(ls.update_tablet_table_store(tablet_id, param, new_tablet_handle))) {
+            LOG_WARN("failed to update table store", K(tmp_ret), K(param), K(ls_id), K(tablet_id));
+          } else {
+            FLOG_INFO("success to remove old table in table store", K(tmp_ret), K(ls_id),
+                K(tablet_id), K(multi_version_start), KPC(tablet));
+          }
+        }
+        ObTabletObjLoadHelper::free(tmp_arena, storage_schema);
+      }
+    }
+  } // end while
   return ret;
 }
 
@@ -686,6 +683,281 @@ int ObTenantTabletScheduler::schedule_merge(const int64_t broadcast_version)
     MTL(ObTenantMediumChecker*)->clear_error_tablet_cnt();
 
     medium_loop_.start_merge(broadcast_version); // set all statistics
+  }
+  return ret;
+}
+
+const char *ObProhibitScheduleMediumMap::ProhibitFlagStr[] = {
+  "TRANSFER",
+  "MEDIUM",
+  "SPLIT",
+};
+ObProhibitScheduleMediumMap::ObProhibitScheduleMediumMap()
+  : transfer_flag_cnt_(0),
+    split_flag_cnt_(0),
+    lock_(),
+    tablet_id_map_()
+{
+  STATIC_ASSERT(static_cast<int64_t>(ProhibitFlag::FLAG_MAX) == ARRAYSIZEOF(ProhibitFlagStr), "flag str len is mismatch");
+}
+
+int ObProhibitScheduleMediumMap::init()
+{
+  int ret = OB_SUCCESS;
+  obsys::ObWLockGuard lock_guard(lock_);
+  if (OB_FAIL(tablet_id_map_.create(TABLET_ID_MAP_BUCKET_NUM, "MediumTabletMap", "MediumTabletMap", MTL_ID()))) {
+    LOG_WARN("Fail to create prohibit medium tablet id map", K(ret));
+  }
+  return ret;
+}
+
+int ObProhibitScheduleMediumMap::add_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  ProhibitFlag tmp_flag = ProhibitFlag::FLAG_MAX;
+  if (OB_UNLIKELY(!tablet_id.is_valid() || !is_valid_flag(input_flag))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(input_flag));
+  } else {
+    obsys::ObWLockGuard lock_guard(lock_);
+    if (OB_FAIL(tablet_id_map_.get_refactored(tablet_id, tmp_flag))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        if (OB_FAIL(tablet_id_map_.set_refactored(tablet_id, input_flag))) {
+          LOG_WARN("failed to stop tablet schedule medium", K(ret), K(tablet_id), K(input_flag));
+        }
+      } else {
+        LOG_WARN("failed to get map", K(ret), K(tablet_id), K(tmp_flag));
+      }
+    } else if (tmp_flag != input_flag) {
+      ret = OB_EAGAIN;
+      if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INTERVAL)) {
+        LOG_INFO("flag in conflict", K(ret), K(tablet_id), K(tmp_flag), K(input_flag));
+      }
+    } else { // tmp_flag == input_flag
+      ret = OB_ENTRY_EXIST;
+      LOG_WARN("flag in already exist", K(ret), K(tablet_id), K(tmp_flag), K(input_flag));
+    }
+  }
+  return ret;
+}
+
+int ObProhibitScheduleMediumMap::clear_flag(const ObTabletID &tablet_id, const ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!tablet_id.is_valid() || !is_valid_flag(input_flag))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(input_flag));
+  } else {
+    obsys::ObWLockGuard lock_guard(lock_);
+    if (OB_FAIL(inner_clear_flag_(tablet_id, input_flag))) {
+      LOG_WARN("failed to inner clear flag", K(ret), K(tablet_id), K(input_flag));
+    }
+  }
+  return ret;
+}
+
+int ObProhibitScheduleMediumMap::batch_add_flags(const ObIArray<ObTabletID> &tablet_ids, const ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  obsys::ObWLockGuard lock_guard(lock_);
+  if (OB_UNLIKELY(ProhibitFlag::TRANSFER != input_flag && ProhibitFlag::SPLIT != input_flag)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument, batch_add_flags only support TRANSFER or SPLIT now", K(ret), K(input_flag));
+  } else if (OB_FAIL(inner_batch_check_tablets_not_prohibited_(tablet_ids))) {
+    LOG_WARN("failed to check all tablets not prohibited", K(ret), K(tablet_ids));
+  } else if (OB_FAIL(inner_batch_add_tablets_prohibit_flags_(tablet_ids, input_flag))){
+    LOG_WARN("failed to add tablets prohibit_flags", K(ret), K(tablet_ids), K(input_flag));
+  } else if (ProhibitFlag::TRANSFER == input_flag){
+    ++transfer_flag_cnt_;
+  } else if (ProhibitFlag::SPLIT == input_flag) {
+    ++split_flag_cnt_;
+  }
+  return ret;
+}
+
+int ObProhibitScheduleMediumMap::batch_clear_flags(const ObIArray<ObTabletID> &tablet_ids, const ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(ProhibitFlag::TRANSFER != input_flag && ProhibitFlag::SPLIT != input_flag)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument, batch_clear_flags only support TRANSFER or SPLIT now", K(ret), K(input_flag));
+  } else {
+    const int64_t tablets_cnt = tablet_ids.count();
+    obsys::ObWLockGuard lock_guard(lock_);
+    for (int64_t idx = 0; OB_SUCC(ret) && idx < tablets_cnt; idx++) {
+      const ObTabletID &tablet_id = tablet_ids.at(idx);
+      if (OB_FAIL(inner_clear_flag_(tablet_id, input_flag))) {
+        LOG_WARN("failed to clear transfer flag", K(ret), K(tablet_id), K(input_flag));
+      }
+    }
+    if (OB_SUCC(ret) && ProhibitFlag::TRANSFER == input_flag) {
+      --transfer_flag_cnt_;
+    }
+    if (OB_SUCC(ret) && ProhibitFlag::SPLIT == input_flag) {
+      --split_flag_cnt_;
+    }
+  }
+  return ret;
+}
+
+void ObProhibitScheduleMediumMap::destroy()
+{
+  obsys::ObWLockGuard lock_guard(lock_);
+  transfer_flag_cnt_ = 0;
+  split_flag_cnt_ = 0;
+  if (tablet_id_map_.created()) {
+    tablet_id_map_.destroy();
+  }
+}
+
+int64_t ObProhibitScheduleMediumMap::to_string(char *buf, const int64_t buf_len) const
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  obsys::ObRLockGuard lock_guard(lock_);
+  if (OB_ISNULL(buf) || buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));
+  } else if (0 == tablet_id_map_.size()) {
+    // do nothing
+  } else {
+    J_ARRAY_START();
+    int64_t idx = 0;
+    FOREACH_X(it, tablet_id_map_, OB_SUCC(ret)) {
+      const ObTabletID &tablet_id = it->first;
+      if (OB_UNLIKELY(!is_valid_flag(it->second))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("prihibit medium flag is not expected", K(ret), "flag", it->second);
+      } else {
+        J_OBJ_START();
+        J_KV(K(idx), "tablet_id", tablet_id.id(), "flag", ProhibitFlagStr[static_cast<int64_t>(it->second)]);
+        J_OBJ_END();
+        ++idx;
+      }
+    }
+    J_ARRAY_END();
+  }
+  return pos;
+}
+
+// ATTENTION: hold lock outside !!
+int ObProhibitScheduleMediumMap::inner_batch_check_tablets_not_prohibited_(const ObIArray<ObTabletID> &tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  const int64_t tablets_cnt = tablet_ids.count();
+  ProhibitFlag tmp_flag = ProhibitFlag::FLAG_MAX;
+  for (int64_t idx = 0; OB_SUCC(ret) && idx < tablets_cnt; idx++) {
+    const ObTabletID &tablet_id = tablet_ids.at(idx);
+    if (OB_UNLIKELY(!tablet_id.is_valid())) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
+    } else if (OB_FAIL(tablet_id_map_.get_refactored(tablet_id, tmp_flag))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("failed to get flag from tablet_id_map", K(ret), K(tablet_id), K(tmp_flag));
+      }
+    } else {
+      ret = OB_EAGAIN;
+      LOG_WARN("tablet is already set flag", K(ret), K(tablet_id), K(tmp_flag));
+    }
+  }
+  return ret;
+}
+
+// ATTENTION: hold lock outside !!
+int ObProhibitScheduleMediumMap::inner_batch_add_tablets_prohibit_flags_(const ObIArray<ObTabletID> &tablet_ids, const ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  const int64_t tablets_cnt = tablet_ids.count();
+  int64_t idx = 0;
+  for (idx = 0; OB_SUCC(ret) && idx < tablets_cnt; idx++) {
+    const ObTabletID &tablet_id = tablet_ids.at(idx);
+    if (OB_UNLIKELY(!tablet_id.is_valid())) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
+    } else if (OB_FAIL(tablet_id_map_.set_refactored(tablet_id, input_flag))) {
+      LOG_WARN("failed to add flag for tablet", K(ret), K(tablet_id), K(input_flag));
+      // set partially, rollback. suppose tablet_ids.at(idx) not set input_flag
+      for (idx--; idx >= 0; idx--) {
+        const ObTabletID &tmp_tablet_id = tablet_ids.at(idx); // checked valid before
+        if (OB_TMP_FAIL(inner_clear_flag_(tmp_tablet_id, input_flag))) {
+          LOG_ERROR("failed clear transfer flag", K(tmp_ret), K(tmp_tablet_id), K(input_flag));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// ATTENTION: hold lock outside !!
+int ObProhibitScheduleMediumMap::inner_clear_flag_(const ObTabletID &tablet_id, const ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  ProhibitFlag tmp_flag = ProhibitFlag::FLAG_MAX;
+  if (OB_FAIL(tablet_id_map_.get_refactored(tablet_id, tmp_flag))) {
+    LOG_ERROR("failed to get from map", K(ret), K(tablet_id), K(tmp_flag));
+  } else if (OB_UNLIKELY(tmp_flag != input_flag)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("task do not match", K(ret), K(tablet_id), K(tmp_flag), K(input_flag));
+  } else if (OB_FAIL(tablet_id_map_.erase_refactored(tablet_id))) {
+    LOG_ERROR("failed to resume tablet schedule medium", K(ret), K(tablet_id), K(input_flag));
+  }
+  return ret;
+}
+
+int64_t ObProhibitScheduleMediumMap::get_transfer_flag_cnt() const
+{
+  obsys::ObRLockGuard lock_guard(lock_);
+  return transfer_flag_cnt_;
+}
+
+int64_t ObProhibitScheduleMediumMap::get_split_flag_cnt() const
+{
+  obsys::ObRLockGuard lock_guard(lock_);
+  return split_flag_cnt_;
+}
+
+int ObTenantTabletScheduler::stop_tablets_schedule_medium(const ObIArray<ObTabletID> &tablet_ids, const ObProhibitScheduleMediumMap::ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(ObProhibitScheduleMediumMap::ProhibitFlag::MEDIUM == input_flag)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument, input flag could not be MEDIUM", K(ret), K(input_flag));
+  } else if (OB_FAIL(prohibit_medium_map_.batch_add_flags(tablet_ids, input_flag))) {
+    LOG_WARN("failed to add flag for stopping medium", K(ret), K(tablet_ids), K(input_flag));
+  } else {
+    LOG_INFO("stopped tablets schedule medium", K(ret), K(tablet_ids), K(input_flag));
+  }
+  return ret;
+}
+
+// When executing the medium task, set the flag in the normal task process of the log stream
+int ObTenantTabletScheduler::tablet_start_schedule_medium(const ObTabletID &tablet_id, bool &tablet_could_schedule_medium)
+{
+  int ret = OB_SUCCESS;
+  tablet_could_schedule_medium = false;
+  if (OB_FAIL(prohibit_medium_map_.add_flag(tablet_id, ObProhibitScheduleMediumMap::ProhibitFlag::MEDIUM))) {
+    if (OB_EAGAIN == ret) {
+      tablet_could_schedule_medium = false;
+      ret = OB_SUCCESS;
+    } else if (OB_ENTRY_EXIST != ret) {
+      LOG_WARN("failed to add flag for tablet schedule medium", K(ret), K(tablet_id));
+    }
+  } else {
+    tablet_could_schedule_medium = true;
+  }
+  return ret;
+}
+
+int ObTenantTabletScheduler::clear_tablets_prohibit_medium_flag(const ObIArray<ObTabletID> &tablet_ids, const ObProhibitScheduleMediumMap::ProhibitFlag &input_flag)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(prohibit_medium_map_.batch_clear_flags(tablet_ids, input_flag))) {
+    LOG_WARN("failed to clear tablets prohibit medium flag", K(ret), K(tablet_ids), K(input_flag));
+  } else {
+    LOG_INFO("allow tablets schedule medium", K(ret), K(input_flag));
   }
   return ret;
 }
@@ -918,18 +1190,6 @@ int ObTenantTabletScheduler::schedule_tablet_meta_merge(
                 dag_param, ls_handle, tablet_handle, result))) {
           if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
             LOG_WARN("failed to schedule tablet meta merge dag", K(ret), K(dag_param));
-          }
-        } else {
-          has_created_dag = true;
-        }
-      } else if (GCTX.is_shared_storage_mode()) {
-        ObCOMergeDagParam dag_param;
-        if (OB_FAIL(ObDagParamFunc::fill_param(
-          ls_id, *tablet, META_MAJOR_MERGE, result.merge_version_, EXEC_MODE_LOCAL, nullptr/*ObDagId*/, dag_param))) {
-          LOG_WARN("failed to fill param", KR(ret));
-        } else if (OB_FAIL(ObScheduleDagFunc::schedule_tablet_co_merge_dag_net(dag_param))) {
-          if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-            LOG_WARN("failed to schedule tablet merge dag", K(ret), K(dag_param));
           }
         } else {
           has_created_dag = true;
@@ -1311,16 +1571,6 @@ int ObTenantTabletScheduler::schedule_ddl_tablet_merge(
     } else {
       LOG_WARN("get ddl kv mgr failed", K(ret), K(ls_id), K(tablet_id));
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(ObTabletDDLUtil::schedule_ddl_minor_merge_on_demand(false/*need_freeze*/, ls_id, ddl_kv_mgr_handle))) {
-      if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
-        LOG_WARN("failed to schedule tablet ddl merge", K(ret), K(ls_id), K(tablet_id));
-      } else {
-        LOG_TRACE("schedule ddl minor merge failed", K(ret), K(ls_id), K(tablet_id));
-      }
-    }
-#endif
   } else {
     if (OB_FAIL(schedule_tablet_ddl_major_merge(ls_handle, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
@@ -1357,6 +1607,10 @@ int ObTenantTabletScheduler::schedule_all_tablets_medium()
       if (OB_FAIL(medium_loop_.loop())) {
         LOG_WARN("failed to medium loop", K(ret));
       }
+    }
+    if (REACH_THREAD_TIME_INTERVAL(PRINT_LOG_INTERVAL) &&
+        (prohibit_medium_map_.get_transfer_flag_cnt() > 0 || prohibit_medium_map_.get_split_flag_cnt() > 0)) {
+      LOG_INFO("tenant is blocking schedule medium", KR(ret), K_(prohibit_medium_map));
     }
   }
   return ret;
@@ -1480,7 +1734,7 @@ int ObTenantTabletScheduler::try_schedule_adaptive_merge(
     const ObTablet *tablet = tablet_handle.get_obj();
     const ObLSID &ls_id = tablet->get_ls_id();
     const ObTabletID &tablet_id = tablet->get_tablet_id();
-    bool medium_is_cooling_down = GCTX.is_shared_storage_mode() || tablet->get_last_major_snapshot_version() + ObAdaptiveMergePolicy::MEDIUM_COOLING_TIME_THRESHOLD_NS > ObTimeUtility::current_time_ns();
+    bool medium_is_cooling_down = tablet->get_last_major_snapshot_version() + ObAdaptiveMergePolicy::MEDIUM_COOLING_TIME_THRESHOLD_NS > ObTimeUtility::current_time_ns();
     if (OB_FAIL(ObAdaptiveMergePolicy::check_adaptive_merge_reason_for_event(
         *ls_handle.get_ls(),
         *tablet,

@@ -338,11 +338,11 @@ inline int ObIndexTreePrefetcher::check_bloom_filter(
       read_handle.has_macro_block_bf_ = true;
     }
     bool is_contain = true;
-    const MacroBlockId macro_id = GCTX.is_shared_storage_mode() && index_info.has_valid_shared_macro_id() ? 
+    const MacroBlockId macro_id = false && index_info.has_valid_shared_macro_id() ? 
       index_info.get_shared_data_macro_id() : index_info.get_macro_id();
     if (OB_UNLIKELY(!macro_id.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid macro id", K(ret), "is_shared_storage_mode", GCTX.is_shared_storage_mode(), K(macro_id), K(index_info));
+      LOG_WARN("get invalid macro id", K(ret), K(macro_id), K(index_info));
     } else if (is_multi_check) {
       // If a rowkey happens to be the endkey of the microblock, the rowkey idx must also be included in the rowkey idx range of next index row,
       // because there may be multiple versions of one row across the microblock. Otherwise, some multi-version rows may be missed when do check_rows_lock.
@@ -1879,11 +1879,6 @@ inline int ObIndexTreeMultiPassPrefetcher<DATA_PREFETCH_DEPTH, INDEX_PREFETCH_DE
           } else {
             prefetch_idx_++;
             parent.current_block_read_handle().end_prefetched_row_idx_++;
-#ifdef OB_BUILD_SHARED_STORAGE
-            if (OB_TMP_FAIL(try_prefetch_data_macro_block(level, prefetcher, index_info))) {
-              LOG_WARN("fail to run try prefetch data macro index block", K(ret), K(level), K(index_info));
-            }
-#endif
           }
         } else if (prefetcher.is_multi_check()) {
           read_handle.row_state_ = ObSSTableRowState::IN_BLOCK;

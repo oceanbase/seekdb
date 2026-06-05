@@ -187,7 +187,6 @@
 #include "observer/virtual_table/ob_all_virtual_tablet_buffer_info.h"
 #include "observer/virtual_table/ob_all_virtual_cgroup_config.h"
 #include "observer/virtual_table/ob_virtual_flt_config.h"
-#include "observer/virtual_table/ob_all_virtual_shared_storage_quota.h"
 #include "observer/virtual_table/ob_all_virtual_activity_metrics.h"
 #include "observer/virtual_table/ob_all_virtual_checkpoint_diagnose_info.h"
 #include "observer/virtual_table/ob_all_virtual_checkpoint_diagnose_memtable_info.h"
@@ -215,8 +214,6 @@
 #include "observer/virtual_table/ob_all_virtual_cs_replica_tablet_stats.h"
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
 #include "observer/virtual_table/ob_all_virtual_dynamic_partition_table.h"
-#include "observer/virtual_table/ob_all_virtual_storage_cache_task.h"
-#include "observer/virtual_table/ob_all_virtual_tablet_local_cache.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_mview_running_job.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_vector_mem_info.h"
 #include "observer/virtual_table/ob_all_virtual_ccl_status.h"
@@ -1802,7 +1799,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualMacroBlockMarkerStatus, all_virtual_marker_status))) {
               blocksstable::ObMacroBlockMarkerStatus marker_status;
               // no ref_cnt in shared_storage, return a empty iter;
-              if (!GCTX.is_shared_storage_mode() && OB_FAIL(OB_SERVER_BLOCK_MGR.get_marker_status(marker_status))) {
+              if (OB_FAIL(OB_SERVER_BLOCK_MGR.get_marker_status(marker_status))) {
                 SERVER_LOG(WARN, "failed to get marker info", K(ret));
               } else if (OB_FAIL(all_virtual_marker_status->init(marker_status))) {
                 SERVER_LOG(WARN, "fail to init marker_status", K(ret));
@@ -2424,13 +2421,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             }
             break;
           }
-          case OB_ALL_VIRTUAL_SHARED_STORAGE_QUOTA_TID:{
-            ObVirtualSharedStorageQuota *all_virtual_shared_storage_quota = NULL;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObVirtualSharedStorageQuota, all_virtual_shared_storage_quota))) {
-              vt_iter = static_cast<ObVirtualTableIterator *>(all_virtual_shared_storage_quota);
-            }
-            break;
-          }
           case OB_ALL_VIRTUAL_OPT_STAT_GATHER_MONITOR_TID: {
             ObAllVirtualOptStatGatherMonitor *opt_stats_gather_stat = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualOptStatGatherMonitor, opt_stats_gather_stat))) {
@@ -2700,24 +2690,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "ObAllVirtualChangeStreamRefreshStat construct failed", K(ret));
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(change_stream_refresh_stat);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_STORAGE_CACHE_TASK_TID: {
-            ObAllVirtualStorageCacheTask *storage_cache_task = nullptr;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualStorageCacheTask, storage_cache_task))) {
-              SERVER_LOG(ERROR, "failed to init ObAllVirtualStorageCacheTask", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(storage_cache_task);
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_TABLET_LOCAL_CACHE_TID: {
-            ObAllVirtualTabletLocalCache *tablet_local_cache = nullptr;
-            if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualTabletLocalCache, tablet_local_cache))) {
-              SERVER_LOG(ERROR, "failed to init ObAllVirtualTabletLocalCache", K(ret));
-            } else {
-              vt_iter = static_cast<ObVirtualTableIterator *>(tablet_local_cache);
             }
             break;
           }

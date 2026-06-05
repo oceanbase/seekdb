@@ -16,17 +16,11 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
-
 #include "ob_zone_merge_manager.h"
 #include "rootserver/ob_rs_event_history_table_operator.h" // for ROOTSERVICE_EVENT_ADD
 #include "share/ob_zone_merge_table_operator.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_tablet_meta_table_compaction_operator.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_compaction_util.h"
-#include "storage/compaction/ob_ls_compaction_status.h"
-#include "share/ob_tablet_replica_checksum_operator.h"
-#endif
 #include "rootserver/freeze/ob_major_freeze_util.h"
 #include "share/ob_freeze_info_proxy.h"
 
@@ -165,7 +159,6 @@ int ObZoneMergeManagerBase::check_inner_stat() const
   }
   return ret;
 }
-
 
 int ObZoneMergeManagerBase::get_zone_merge_info(ObZoneMergeInfo &info) const
 {
@@ -734,13 +727,7 @@ int ObZoneMergeManagerBase::adjust_global_merge_info()
   // 1. get min{compaction_scn} of all tablets in __all_tablet_meta_table
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("fail to check inner stat", KR(ret), K_(tenant_id));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()
-          && OB_FAIL(ObTabletReplicaChecksumOperator::get_min_compaction_scn(tenant_id_, min_compaction_scn))) {
-    LOG_WARN("fail to get min_compaction_scn", KR(ret), K_(tenant_id));
-#endif
-  } else if (!GCTX.is_shared_storage_mode()
-          && OB_FAIL(ObTabletMetaTableCompactionOperator::get_min_compaction_scn(tenant_id_, min_compaction_scn))) {
+  } else if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_min_compaction_scn(tenant_id_, min_compaction_scn))) {
     LOG_WARN("fail to get min_compaction_scn", KR(ret), K_(tenant_id));
   } else if (OB_UNLIKELY(min_compaction_scn < SCN::base_scn())) {
     ret = OB_ERR_UNEXPECTED;

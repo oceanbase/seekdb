@@ -126,7 +126,6 @@ public:
   virtual int modify_tablet_meta(ObTabletMeta &meta) = 0;
 };
 
-
 class ObMultiTimeStats
 {
 public:
@@ -266,12 +265,6 @@ public:
       const ObTabletPersisterParam &param,
       const ObTablet &old_tablet,
       ObTabletHandle &new_handle);
-#ifdef OB_BUILD_SHARED_STORAGE
-  static int persist_and_transform_shared_tablet(
-    const ObTabletPersisterParam &param,
-    const ObTablet &old_tablet,
-    ObTabletHandle &new_handle);
-#endif
   static int persist_and_transform_only_tablet_meta(
       const ObTabletPersisterParam &param,
       const ObTablet &old_tablet,
@@ -305,13 +298,6 @@ public:
       ObBlockInfoSet &block_info_set);
   static int transform_empty_shell(const ObTabletPersisterParam &param, const ObTablet &old_tablet, ObTabletHandle &new_handle);
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  int delete_blocks_(
-    const common::ObIArray<ObSharedObjectsWriteCtx> &total_write_ctxs);
-  static int check_macro_seq_isolation_(
-        const ObTabletPersisterParam &param,
-        const ObTablet &old_tablet);
-#endif
   void build_async_write_start_opt_(blocksstable::ObStorageObjectOpt &start_opt) const;
   void sync_cur_macro_seq_from_opt_(const blocksstable::ObStorageObjectOpt &curr_opt);
   static int inner_persist_and_transform_shared_tablet(

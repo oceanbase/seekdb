@@ -270,15 +270,6 @@ int ObPartitionMerger::inner_open_macro_writer(
       macro_writer_ = alloc_helper<ObDataMacroBlockMergeWriter>(merger_arena_);
     }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (is_validate_exec_mode(merge_ctx_->get_exec_mode())) {
-      ObTabletMajorValidateMergeCtx *validate_ctx = static_cast<ObTabletMajorValidateMergeCtx *>(merge_ctx_);
-      if (OB_FAIL(validate_ctx->alloc_validator(merge_param, merger_arena_.get_arena_allocator(), validator_))) {
-        LOG_WARN("failed to alloc verifyer", KR(ret));
-      }
-    }
-#endif
-
     ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
     if (OB_ISNULL(macro_writer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1146,7 +1137,6 @@ int ObPartitionMinorMerger::merge_single_iter(ObPartitionMergeIter &merge_iter)
       }
     }
   }
-
 
   return ret;
 }

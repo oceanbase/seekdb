@@ -3528,14 +3528,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(
     ObString tmp_storage_cache_policy;
     EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
       result, "storage_cache_policy", tmp_storage_cache_policy, true/*skip null*/, true/*ignore column error*/, OB_DEFAULT_STORAGE_CACHE_POLICY_STR);
-    if (OB_SUCC(ret) && GCTX.is_shared_storage_mode()) {
-      ObStorageCachePolicyType policy_type = ObStorageCachePolicyType::MAX_POLICY;
-      if (OB_FAIL(get_storage_cache_policy_type_from_str(tmp_storage_cache_policy, policy_type))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to get storage cache policy type", K(ret), K(tmp_storage_cache_policy));
-      } else {
-        table_schema.set_storage_cache_policy_type(policy_type);
-      }
-    }
 
     ObString dynamic_partition_policy;
     EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
@@ -3935,17 +3927,9 @@ int ObSchemaRetrieveUtils::fill_base_part_info(
     }
     if (OB_SUCC(ret)) {
       ObStorageCachePolicyType part_storage_cache_policy_type = ObStorageCachePolicyType::MAX_POLICY;
-      ObString tmp_part_storage_cache_policy; 
+      ObString tmp_part_storage_cache_policy;
       EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
         result, "storage_cache_policy", tmp_part_storage_cache_policy, true, /* skip null error*/ true,/*skip column error*/ OB_DEFAULT_PART_STORAGE_CACHE_POLICY_STR);
-
-      if (OB_SUCC(ret) && GCTX.is_shared_storage_mode()) {
-        if (OB_FAIL(storage::get_storage_cache_policy_type_from_part_str(tmp_part_storage_cache_policy, part_storage_cache_policy_type))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to get storage cache policy type from str", K(ret));
-        } else {
-          partition.set_part_storage_cache_policy_type(part_storage_cache_policy_type);
-        }
-      }
     }
   } else { }//do nothing
   return ret;

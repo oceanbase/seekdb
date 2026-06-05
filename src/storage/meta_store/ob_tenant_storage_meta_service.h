@@ -70,36 +70,6 @@ public:
       int64_t &buf_len);
   const ObTenantCheckpointSlogHandler& get_ckpt_slog_hdl() const { return ckpt_slog_handler_; };
 
-#ifdef OB_BUILD_SHARED_STORAGE
-  int get_private_blocks_for_tablet(
-      const share::ObLSID &id, 
-      const int64_t ls_epoch, 
-      const ObTabletID &tablet_id, 
-      const int64_t tablet_version, 
-      const int64_t tablet_transfer_seq,
-      ObIArray<blocksstable::MacroBlockId> &block_ids);
-  int get_shared_blocks_for_tablet(
-      const ObTabletID &tablet_id,
-      const int64_t tablet_version,
-      ObIArray<blocksstable::MacroBlockId> &block_ids);
-  int get_next_major_shared_blocks_for_tablet(
-      const ObTabletID &tablet_id,
-      const int64_t last_tablet_version,// last major snapshot
-      ObIArray<blocksstable::MacroBlockId> &block_ids);
-  int get_gc_tablet_scn_arr(
-      const ObTabletID &tablet_id,
-      const blocksstable::ObStorageObjectType obj_type,
-      ObGCTabletMetaInfoList &tablet_scn_arr);
-  int write_gc_tablet_scn_arr(
-    const ObTabletID &tablet_id,
-    const blocksstable::ObStorageObjectType obj_type,
-    const ObGCTabletMetaInfoList &tablet_scn_arr);
-  static int ss_is_meta_list_exist(const ObTabletID tablet_id, bool &is_exist);
-  int update_shared_tablet_meta_list(
-    const ObTabletID &tablet_id,
-    const int64_t tablet_meta_version);
-
-#endif
   ObSharedObjectReaderWriter &get_shared_object_reader_writer() { return shared_object_rwriter_; }
   ObSharedObjectReaderWriter &get_shared_object_raw_reader_writer() { return shared_object_raw_rwriter_; }
   storage::ObStorageLogger &get_slogger() { return slogger_; }
@@ -123,28 +93,9 @@ public:
     const storage::ObLSItemStatus status,
     ObIArray<storage::ObLSItem> &ls_items);
 private:
-#ifdef OB_BUILD_SHARED_STORAGE
-  int inner_get_blocks_for_tablet_(
-    const ObMetaDiskAddr &tablet_addr,
-    const int64_t ls_epoch,
-    const bool is_shared,
-    ObIArray<blocksstable::MacroBlockId> &block_ids/*OUT*/) const;
-  int inner_get_gc_tablet_scn_arr_(
-    const blocksstable::ObStorageObjectOpt &opt,
-    ObGCTabletMetaInfoList &gc_tablet_scn_arr) const;
-  int ss_write_gc_info_(
-     const ObTabletID tablet_id, const ObGCTabletMetaInfoList &gc_info_scn_arr);
-  int ss_write_meta_list_(
-     const ObTabletID tablet_id, const ObGCTabletMetaInfoList &meta_list_scn_arr);
-  int force_write_gc_tablet_scn_arr_(
-    const ObTabletID &tablet_id,
-    const blocksstable::ObStorageObjectType obj_type,
-    const ObGCTabletMetaInfoList &tablet_scn_arr);
-#endif
 private:
   bool is_inited_;
   bool is_started_;
-  bool is_shared_storage_;
   ObTenantCheckpointSlogHandler ckpt_slog_handler_;
   storage::ObStorageLogger slogger_;
   ObTenantSeqGenerator seq_generator_;
@@ -157,7 +108,6 @@ private:
 
 #define TENANT_STORAGE_META_PERSISTER (MTL(ObTenantStorageMetaService*)->get_persister())
 #define TENANT_SEQ_GENERATOR (MTL(ObTenantStorageMetaService*)->get_seq_generator())
-
 
 } // namespace storage
 } // namespace oceanbase

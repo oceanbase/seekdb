@@ -631,8 +631,7 @@ int ObDirectLoadInsertDataTableContext::init(
     }
 
     ddl_ctrl_.direct_load_type_ = ObDirectLoadMgrAgent::load_data_get_direct_load_type(param.is_incremental_,
-                                                                                       param.data_version_ ,
-                                                                                       GCTX.is_shared_storage_mode());
+                                                                                       param.data_version_);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(MTL(ObTenantDirectLoadMgr *)->alloc_execution_context_id(ddl_ctrl_.context_id_))) {
       LOG_WARN("alloc execution context id failed", K(ret));

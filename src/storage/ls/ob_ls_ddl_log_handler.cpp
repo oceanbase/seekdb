@@ -323,12 +323,6 @@ int ObLSDDLLogHandler::replay(const void *buffer,
         ret = replay_table_fork_finish_log_(log_buf, buf_size, tmp_pos, log_scn);
         break;
       }
-      #ifdef OB_BUILD_SHARED_STORAGE
-      case ObDDLClogType::DDL_FINISH_LOG: {
-        ret = replay_ddl_finish_log_(log_buf, buf_size, tmp_pos, log_scn);
-        break;
-      }
-      #endif
       default: {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("Unknown ddl log type", K(ddl_header.get_ddl_clog_type()), K(ret));
@@ -419,13 +413,6 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           LOG_WARN("get freezed ddl kv failed", K(tmp_ret), "tablet_id", ddl_kv_mgr_handle.get_obj()->get_tablet_id());
         } else if (ddl_kvs_handle.empty()) {
           LOG_TRACE("empty ddl kv", "tablet_id", ddl_kv_mgr_handle.get_obj()->get_tablet_id());
-      #ifdef OB_BUILD_SHARED_STORAGE
-        } else if (GCTX.is_shared_storage_mode()) {
-          DEBUG_SYNC(BEFORE_DDL_CHECKPOINT);
-          if (OB_TMP_FAIL(ObDDLMergeScheduler::schedule_ddl_minor_merge_on_demand(true/*need_freeze*/, ls_->get_ls_id(), ddl_kv_mgr_handle))) {
-            LOG_WARN("schdule ddl minor merge failed", K(tmp_ret), "ls_id", ls_->get_ls_id(), "tablet_id", ddl_kv_mgr_handle.get_obj()->get_tablet_id());
-          }
-      #endif
         } else if (!ddl_kvs_handle.at(0).is_valid()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("ddl kv handle should not be empty here", K(ret));
@@ -579,25 +566,6 @@ int ObLSDDLLogHandler::replay_ddl_commit_log_(const char *log_buf,
   }
   return ret;
 }
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObLSDDLLogHandler::replay_ddl_finish_log_(const char *log_buf,
-                                              const int64_t buf_size,
-                                              int64_t pos,
-                                              const SCN &log_scn)
-{
-  int ret = OB_SUCCESS;
-  ObDDLFinishLog log;
-  if (OB_FAIL(log.deserialize(log_buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize ddl finish log", K(ret));
-  } else if (OB_FAIL(ddl_log_replayer_.replay_finish(log, log_scn))) {
-    if (OB_TABLET_NOT_EXIST != ret && OB_EAGAIN != ret) {
-      LOG_WARN("fail to replay ddl finish log", K(ret), K(log));
-      ret = OB_EAGAIN;
-    }
-  }
-  return ret;
-}
-#endif
 
 int ObLSDDLLogHandler::replay_ddl_tablet_schema_version_change_log_(const char *log_buf,
                                                                     const int64_t buf_size,
@@ -704,7 +672,6 @@ int ObLSDDLLogHandler::del_tablets(const common::ObIArray<ObTabletID> &tablet_id
   }
   return ret;
 }
-
 
 int ObLSDDLLogHandler::replay_tablet_freeze_log_(const char *log_buf,
                                                  const int64_t buf_size,

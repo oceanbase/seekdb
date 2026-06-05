@@ -1088,9 +1088,6 @@ int64_t ObTmpWriteBufferPool::get_swap_size()
   return swap_size;
 }
 
-
-
-
 bool ObTmpWriteBufferPool::is_cached(
      const int64_t fd,
      const uint32_t page_id,
@@ -1467,13 +1464,7 @@ int64_t ObTmpWriteBufferPool::get_free_data_page_num()
 
   int64_t total_free_page_cnt = max_page_num - data_page_cnt - meta_page_cnt;
   int64_t data_free_page_cnt = get_max_data_page_num() - data_page_cnt;
-  if (!GCTX.is_shared_storage_mode()) {
-    free_data_page_num = MIN(total_free_page_cnt, data_free_page_cnt);
-  #ifdef OB_BUILD_SHARED_STORAGE
-  } else {
-    free_data_page_num = MAX(max_page_num, fat_.size()) - data_page_cnt;
-  #endif
-  }
+  free_data_page_num = MIN(total_free_page_cnt, data_free_page_cnt);
   return free_data_page_num;
 }
 
@@ -1484,22 +1475,16 @@ bool ObTmpWriteBufferPool::has_free_page_(PageEntryType type)
   int ret = OB_SUCCESS;
   bool b_ret = true;
   if (PageEntryType::DATA == type) {
-    if(!GCTX.is_shared_storage_mode()) {
-      if (shrink_ctx_.is_valid()) {
-        b_ret = get_data_page_num() < fat_.size() * MAX_DATA_PAGE_USAGE_RATIO - shrink_ctx_.get_not_alloc_page_num();
-      } else {
-        if (fat_.size() >= get_max_page_num()) {
-          // shrinking may not be invoked immediately when memory limit changes,
-          // use current fat_ size to prevent no data pages can be allocated
-          b_ret = get_data_page_num() < fat_.size() * MAX_DATA_PAGE_USAGE_RATIO;
-        } else {
-          b_ret = get_data_page_num() < get_max_data_page_num();
-        }
-      }
-    #ifdef OB_BUILD_SHARED_STORAGE
+    if (shrink_ctx_.is_valid()) {
+      b_ret = get_data_page_num() < fat_.size() * MAX_DATA_PAGE_USAGE_RATIO - shrink_ctx_.get_not_alloc_page_num();
     } else {
-      b_ret = true;
-    #endif
+      if (fat_.size() >= get_max_page_num()) {
+        // shrinking may not be invoked immediately when memory limit changes,
+        // use current fat_ size to prevent no data pages can be allocated
+        b_ret = get_data_page_num() < fat_.size() * MAX_DATA_PAGE_USAGE_RATIO;
+      } else {
+        b_ret = get_data_page_num() < get_max_data_page_num();
+      }
     }
   } else if (PageEntryType::META == type) {
     b_ret = true; // no limit for meta page

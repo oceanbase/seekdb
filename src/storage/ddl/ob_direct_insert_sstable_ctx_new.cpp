@@ -2303,9 +2303,6 @@ int ObTabletDirectLoadMgr::prepare_index_builder_if_need(const ObTableSchema &ta
   } else if (FALSE_IT(index_block_desc.get_static_desc().schema_version_ = sqc_build_ctx_.build_param_.runtime_only_param_.schema_version_)) {
     /* set as a fixed schema version */
   } else {
-    if (GCTX.is_shared_storage_mode() && !is_incremental_direct_load(direct_load_type_)) {
-      index_block_desc.get_static_desc().exec_mode_ = compaction::EXEC_MODE_OUTPUT;
-    }
     void *builder_buf = nullptr;
 
     if (OB_ISNULL(builder_buf = sqc_build_ctx_.allocator_.alloc(sizeof(ObSSTableIndexBuilder)))) {
@@ -2327,9 +2324,6 @@ int ObTabletDirectLoadMgr::prepare_index_builder_if_need(const ObTableSchema &ta
     } else {
       sqc_build_ctx_.data_block_desc_.get_static_desc().schema_version_ = sqc_build_ctx_.build_param_.runtime_only_param_.schema_version_;
       sqc_build_ctx_.data_block_desc_.get_desc().sstable_index_builder_ = sqc_build_ctx_.index_builder_; // for build the tail index block in macro block
-      if (GCTX.is_shared_storage_mode() && !is_incremental_direct_load(direct_load_type_)) {
-        sqc_build_ctx_.data_block_desc_.get_static_desc().exec_mode_ = compaction::EXEC_MODE_OUTPUT;
-      }
     }
 
 
@@ -3601,18 +3595,6 @@ int ObTabletIncDirectLoadMgr::prepare_index_builder_if_need(const ObTableSchema 
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTabletDirectLoadMgr::prepare_index_builder_if_need(table_schema))) {
     LOG_WARN("fail to prepare builder", K(ret));
-  } else {
-    if (GCTX.is_shared_storage_mode()) {
-      ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
-      if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(sqc_build_ctx_.data_block_desc_.get_desc(), object_cleaner))) {
-        LOG_WARN("failed to get cleaner from data store desc", K(ret));
-      } else if (OB_ISNULL(object_cleaner)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
-      } else {
-        object_cleaner->mark_succeed();
-      }
-    }
   }
   return ret;
 }

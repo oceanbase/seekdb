@@ -81,9 +81,6 @@ int ObLinkedMacroBlockWriter::write_block(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObLinkedMacroBlockWriter has not been inited", K(ret));
-  } else if (GCTX.is_shared_storage_mode() && 0 == tablet_id_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("in shared_storage_mode, tablet_id should not be 0 (0 is default)", K(ret));
   } else if (OB_UNLIKELY(nullptr == buf || buf_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_len));

@@ -20,9 +20,6 @@
 #include "src/share/io/ob_io_manager.h"
 #include "observer/ob_server_struct.h"
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_file_manager.h"
-#endif
 
 namespace oceanbase {
 namespace common {
@@ -106,28 +103,6 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator, const uint64_t 
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || is_virtual_tenant_id(tenant_id))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant id invalid", KR(ret), K(tenant_id));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()) {
-    MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-    if (OB_FAIL(guard.switch_to(tenant_id, false/*need_check_allow*/))) {
-      LOG_WARN("fail to switch tenant", KR(ret), K(tenant_id));
-    } else {
-      ObTenantFileManager *tnt_file_manager = MTL(ObTenantFileManager*);
-      ObTenantDiskSpaceManager *tnt_disk_space_manager = MTL(ObTenantDiskSpaceManager*);
-      ss_second_id = tnt_file_manager->get_micro_cache_file_fd();
-      if (OB_UNLIKELY(OB_INVALID_FD == ss_second_id)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("micro cache file is not exist, cannot do benchmark",
-            KR(ret), K(tenant_id), K(ss_second_id));
-      } else {
-        const int64_t free_disk_size = tnt_disk_space_manager->get_micro_cache_reserved_size();
-        free_block_count = free_disk_size / OB_DEFAULT_MACRO_BLOCK_SIZE;
-        total_block_count = free_block_count;
-        max_rnd_read_offset = free_disk_size - load_size;
-        ss_second_id = tnt_file_manager->get_micro_cache_file_fd();
-      }
-    }
-#endif
   }
 
   if (OB_FAIL(ret)) {
@@ -144,7 +119,7 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator, const uint64_t 
     io_info.user_data_buf_ = read_buf;
   }
   // prepare macro blocks
-  if (OB_SUCC(ret) && !GCTX.is_shared_storage_mode()) {
+  if (OB_SUCC(ret)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < benchmark_block_count; ++i) {
       blocksstable::ObStorageObjectOpt obj_opt;
       obj_opt.set_private_object_opt();
@@ -160,13 +135,8 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator, const uint64_t 
   while (OB_SUCC(ret) && io_count < 100) {
     io_handle.reset();
     int64_t block_idx = ObRandom::rand(benchmark_block_count / 2, benchmark_block_count - 1);
-    if (!GCTX.is_shared_storage_mode()) {
-      io_info.fd_.first_id_ = block_handles[block_idx].get_macro_id().first_id();
-      io_info.fd_.second_id_ = block_handles[block_idx].get_macro_id().second_id();
-    } else {
-      io_info.fd_.first_id_ = ss_first_id;
-      io_info.fd_.second_id_ = ss_second_id;
-    }
+    io_info.fd_.first_id_ = block_handles[block_idx].get_macro_id().first_id();
+    io_info.fd_.second_id_ = block_handles[block_idx].get_macro_id().second_id();
     io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
     io_info.offset_ = ObRandom::rand(0, max_rnd_read_offset);
     io_info.size_ = load_size;
@@ -192,15 +162,9 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator, const uint64_t 
   while (OB_SUCC(ret) && io_count < 100 && io_count < benchmark_block_count / 2) {
     io_handle.reset();
     int64_t block_idx = io_count;
-    if (!GCTX.is_shared_storage_mode()) {
-      io_info.fd_.first_id_ = block_handles[block_idx].get_macro_id().first_id();
-      io_info.fd_.second_id_ = block_handles[block_idx].get_macro_id().second_id();
-      io_info.offset_ = 0;
-    } else {
-      io_info.fd_.first_id_ = ss_first_id;
-      io_info.fd_.second_id_ = ss_second_id;
-      io_info.offset_ += OB_DEFAULT_MACRO_BLOCK_SIZE;
-    }
+    io_info.fd_.first_id_ = block_handles[block_idx].get_macro_id().first_id();
+    io_info.fd_.second_id_ = block_handles[block_idx].get_macro_id().second_id();
+    io_info.offset_ = 0;
     io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
     io_info.size_ = OB_DEFAULT_MACRO_BLOCK_SIZE;
     const int64_t begin_ts = ObTimeUtility::fast_current_time();

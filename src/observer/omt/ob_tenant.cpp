@@ -34,7 +34,6 @@
 #include "sql/engine/px/ob_px_worker.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/resource/ob_affinity_ctrl.h"
-#include "share/change_stream/ob_change_stream_mgr.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -241,6 +240,7 @@ void ObPxPool::set_px_thread_name()
 {
   char buf[32];
   snprintf(buf, 32, "PX_G%ld", group_id_);
+  ob_get_tenant_id() = tenant_id_;
   lib::set_thread_name(buf);
 }
 
@@ -359,12 +359,16 @@ ObTenant::ObTenant(const int64_t id,
       workers_lock_(common::ObLatchIds::TENANT_WORKER_LOCK),
       cgroup_ctrl_(cgroup_ctrl),
       disable_user_sched_(false),
+      token_usage_(.0),
+      token_usage_check_ts_(0),
       token_change_ts_(0),
       completion_cnt_(0),
       ctx_(nullptr),
       st_metrics_(),
-      sql_limiter_()
+      sql_limiter_(),
+      worker_us_(0)
 {
+  token_usage_check_ts_ = ObTimeUtility::current_time();
 }
 
 ObTenant::~ObTenant() {}
@@ -438,9 +442,6 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_tenant_clog_dir(id_, mtl_init_ctx_->tenant_clog_dir_))) {
     LOG_ERROR("get_tenant_clog_dir failed", K(ret));
   } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-    mtl_init_ctx_->init_data_disk_size_ = meta.unit_.get_effective_actual_data_disk_size();
-#endif
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_usage_limit_size_ = meta.unit_.config_.log_disk_size();
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_threshold_ = 80;
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_limit_threshold_ = 95;
@@ -455,9 +456,6 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
       mtl_init_ctx_->palf_options_.enable_log_cache_ = tenant_config->_enable_log_cache;
     }
     LOG_INFO("construct_mtl_init_ctx success", "palf_options", mtl_init_ctx_->palf_options_.disk_options_
-#ifdef OB_BUILD_SHARED_STORAGE
-             , "init_data_disk_size", mtl_init_ctx_->init_data_disk_size_
-#endif
              );
   }
   return ret;
@@ -551,14 +549,10 @@ int ObTenant::create_tenant_module()
   int ret = OB_SUCCESS;
   const uint64_t &tenant_id = id_;
   const double max_cpu = static_cast<double>(tenant_meta_.unit_.config_.max_cpu());
-  // set tenant ctx to global
+  // set tenant ctx to thread_local
   ObTenantSwitchGuard guard(this);
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>", K(tenant_id), K(MTL_ID()));
-
-  // Point g_tenant_ptr at this before create_mtl_module() so that
-  // module constructors can access get_tenant() without nullptr deref.
-  g_tenant_ptr = this;
 
   bool mtl_init = false;
   if (OB_FAIL(ObTenantBase::create_mtl_module())) {
@@ -567,6 +561,10 @@ int ObTenant::create_tenant_module()
     ret = CREATE_MTL_MODULE_FAIL;
     LOG_ERROR("create_tenant_module failed because of tracepoint CREATE_MTL_MODULE_FAIL",
               K(tenant_id), K(ret));
+  } else if (FALSE_IT(ObTenantEnv::set_tenant(this))) {
+    // Above, a new TenantBase thread-local variable is created through ObTenantSwitchGuard, rather than storing a pointer to TenantBase,
+    // The purpose is to reduce one memory jump when accessing via MTL(), but the pointer set for the mtl module is still nullptr, so when the mtl creation is completed
+    // Still needs to be set once.
   } else if (FALSE_IT(mtl_init = true)) {
   } else if (OB_FAIL(ObTenantBase::init_mtl_module())) {
     LOG_ERROR("init mtl module failed", K(tenant_id), K(ret));
@@ -602,6 +600,7 @@ void* ObTenant::wait(void* t)
 {
   int ret = OB_SUCCESS;
   ObTenant* tenant = (ObTenant*)t;
+  ob_get_tenant_id() = tenant->id_;
   lib::set_thread_name("UnitGC");
   lib::Thread::update_loop_ts();
   tenant->handle_retry_req(true);
@@ -763,6 +762,7 @@ int ObTenant::get_new_request(
 
   req = nullptr;
   w.set_large_query(false);
+  Thread::WaitGuard guard(Thread::WAIT_IN_TENANT_QUEUE);
   ret = req_queue_.pop(task, timeout);
 
   if (OB_SUCC(ret)) {
@@ -952,6 +952,7 @@ int ObTenant::timeup()
     // it may fail during drop tenant, try next time.
     if (!has_stopped()) {
       check_worker_count();
+      update_token_usage();
       // Rescue expansion: if request completion stalls for 3s while
       // queue is non-empty and workers are at min_worker_cnt, workers
       // may be deadlocked — expand up to max_worker_cnt.
@@ -965,6 +966,7 @@ int ObTenant::timeup()
         last_completion_cnt = completion_cnt;
       }
       handle_retry_req();
+      update_queue_size();
     }
     IGNORE_RETURN unlock();
   }
@@ -1108,6 +1110,11 @@ void ObTenant::handle_retry_req(bool need_clear)
   }
 }
 
+void ObTenant::update_queue_size()
+{
+  req_queue_.set_limit(common::ObServerConfig::get_instance().tenant_task_queue_size);
+}
+
 void ObTenant::check_worker_count()
 {
   int ret = OB_SUCCESS;
@@ -1156,6 +1163,26 @@ bool ObTenant::do_add_worker()
              "max_worker_cnt", max_worker_cnt());
   }
   return OB_SUCCESS == ret && succ_num == 1;
+}
+
+// thread unsafe
+void ObTenant::update_token_usage()
+{
+  int ret = OB_SUCCESS;
+  const auto now = ObTimeUtility::current_time();
+  const auto duration = static_cast<double>(now - token_usage_check_ts_);
+  if (duration >= 1000 * 1000 && OB_SUCC(workers_lock_.trylock())) {  // every second
+    int64_t idle_us = 0;
+    token_usage_check_ts_ = now;
+    DLIST_FOREACH_REMOVESAFE(wnode, workers_) {
+      const auto w = static_cast<ObThWorker*>(wnode->get_data());
+      idle_us += ATOMIC_SET(&w->idle_us_, 0);
+    }
+    workers_lock_.unlock();
+    const auto total_us = duration * worker_count();
+    token_usage_ = std::max(.0, 1.0 * (total_us - idle_us) / total_us);
+    IGNORE_RETURN ATOMIC_FAA(&worker_us_, total_us - idle_us);
+  }
 }
 
 int64_t ObTenant::get_cpu_time() const
@@ -1239,14 +1266,5 @@ void ObTenant::check_px_thread_recycle()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to switch to tenant", K(id_), K(ret));
     }
-  }
-}
-
-void ObTenant::on_schema_publish()
-{
-  int ret = OB_SUCCESS;
-  ObChangeStreamMgr *mgr = get<ObChangeStreamMgr *>();
-  if (OB_NOT_NULL(mgr) && mgr->is_inited()) {
-    mgr->get_fetcher().notify_schema_changed();
   }
 }

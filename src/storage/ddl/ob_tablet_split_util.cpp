@@ -23,18 +23,9 @@
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
 #include "storage/truncate_info/ob_tablet_truncate_info_reader.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "close_modules/shared_storage/meta_store/ob_shared_storage_obj_meta.h"
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
-#include "close_modules/shared_storage/storage/incremental/ob_ss_minor_compaction.h"
-#include "storage/incremental/ob_shared_meta_service.h"
-#include "storage/compaction_v2/ob_ss_compact_helper.h"
-#endif
 
 using namespace oceanbase::common;
-using namespace oceanbase::obcall;
+using namespace oceanbase::obrpc;
 using namespace oceanbase::share;
 using namespace oceanbase::storage;
 using namespace oceanbase::compaction;

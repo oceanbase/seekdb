@@ -500,28 +500,16 @@ int ObAllVirtualTabletSSTableMacroInfo::gen_row(
       case BLOCK_TYPE: {
         //block type
         blocksstable::ObMacroDataSeq macro_data_seq(macro_info.data_seq_);
-        if (GCTX.is_shared_storage_mode()) {
-          // Shared Storage
-          if (macro_info.macro_block_id_.is_data()) {
-            cur_row_.cells_[i].set_varchar(ObString::make_string("data_block"));
-          } else if (macro_info.macro_block_id_.is_meta()) {
-            cur_row_.cells_[i].set_varchar(ObString::make_string("meta_block"));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "unexpected block type, ", K(ret), K(macro_data_seq), K(macro_info));
-          }
+        // Shared Nothing
+        if (macro_data_seq.is_data_block()) {
+          cur_row_.cells_[i].set_varchar(ObString::make_string("data_block"));
+        } else if (macro_data_seq.is_index_block()) {
+          cur_row_.cells_[i].set_varchar(ObString::make_string("index_block"));
+        } else if (macro_data_seq.is_meta_block()) {
+          cur_row_.cells_[i].set_varchar(ObString::make_string("meta_block"));
         } else {
-          // Shared Nothing
-          if (macro_data_seq.is_data_block()) {
-            cur_row_.cells_[i].set_varchar(ObString::make_string("data_block"));
-          } else if (macro_data_seq.is_index_block()) {
-            cur_row_.cells_[i].set_varchar(ObString::make_string("index_block"));
-          } else if (macro_data_seq.is_meta_block()) {
-            cur_row_.cells_[i].set_varchar(ObString::make_string("meta_block"));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "unexpected block type, ", K(ret), K(macro_data_seq));
-          }
+          ret = OB_ERR_UNEXPECTED;
+          SERVER_LOG(WARN, "unexpected block type, ", K(ret), K(macro_data_seq));
         }
         break;
       }

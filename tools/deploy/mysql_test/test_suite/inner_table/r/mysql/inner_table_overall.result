@@ -494,7 +494,6 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 12459	__all_virtual_index_usage_info	2	201001	1
 12462	__all_virtual_column_privilege	2	201001	1
 12463	__all_virtual_column_privilege_history	2	201001	1
-12465	__all_virtual_shared_storage_quota	2	201001	1
 12466	ENABLED_ROLES	2	201002	1
 12468	__all_virtual_session_ps_info	2	201001	1
 12469	__all_virtual_tracepoint_info	2	201001	1
@@ -533,8 +532,6 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 12525	__all_virtual_vector_index_task_history	2	201001	1
 12526	__tenant_virtual_show_create_catalog	2	201001	1
 12527	__tenant_virtual_show_catalog_databases	2	201001	1
-12529	__all_virtual_storage_cache_task	2	201001	1
-12530	__all_virtual_tablet_local_cache	2	201001	1
 12533	__all_virtual_ccl_rule	2	201001	1
 12534	__all_virtual_ccl_status	2	201001	1
 12535	__all_virtual_mview_running_job	2	201001	1
@@ -949,10 +946,6 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 21641	CDB_OB_VECTOR_INDEX_TASKS	1	201001	1
 21642	DBA_OB_VECTOR_INDEX_TASK_HISTORY	1	201001	1
 21643	CDB_OB_VECTOR_INDEX_TASK_HISTORY	1	201001	1
-21644	GV$OB_STORAGE_CACHE_TASKS	1	201001	1
-21645	V$OB_STORAGE_CACHE_TASKS	1	201001	1
-21646	GV$OB_TABLET_LOCAL_CACHE	1	201001	1
-21647	V$OB_TABLET_LOCAL_CACHE	1	201001	1
 21648	DBA_OB_CCL_RULES	1	201001	1
 21649	CDB_OB_CCL_RULES	1	201001	1
 21650	GV$OB_SQL_CCL_STATUS	1	201001	1

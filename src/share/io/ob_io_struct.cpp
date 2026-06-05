@@ -21,9 +21,6 @@
 #include "observer/ob_server.h"
 #include "common/storage/ob_fd_simulator.h"
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_file_manager.h"
-#endif
 
 #ifdef _WIN32
 
@@ -805,7 +802,7 @@ void ObIOTuner::run1()
     // print interval must <= 1s, for ensuring real_iops >= 1 in gv$ob_io_quota.
     if (REACH_TIME_INTERVAL(1000L * 1000L * 1L)) {
       OB_IO_MANAGER.print_status();
-      if (!GCTX.is_shared_storage_mode() && OB_FAIL(send_detect_task())) {
+      if (OB_FAIL(send_detect_task())) {
         LOG_WARN("fail to send detect task", K(ret));
       }
     }
@@ -912,6 +909,7 @@ static inline int check_io_hang_errsim()
       LOG_WARN("errsim: EN_IO_HANG_ERROR is ignored", K(ret), K(tmp_ret), K(hang_ms));
     }
     while (hang_ms > 0 && 0 == ATOMIC_LOAD(&clear_io_hang_errsim) % 2) {
+      oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT_FOR_LOCAL_RETRY);
       ObClockGenerator::msleep(10);
       hang_ms = hang_ms - 10;
     }
@@ -2238,34 +2236,6 @@ bool ObIOFaultDetector::is_supported_detect_read_(const uint64_t tenant_id, cons
 {
   bool bret = true;
   int ret = OB_SUCCESS;
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode()) {
-    if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-      bret = false;
-    } else if (is_virtual_tenant_id(tenant_id)) {
-      // In SS mode, server tenant does not have micro cache file,
-      // thus it's unnecessary to execute detect tasks
-      bret = false;
-    } else {
-      MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-      if (OB_SUCC(guard.switch_to(tenant_id, false/*need_check_allow*/))) {
-        ObTenantFileManager *tenant_file_mgr = MTL(ObTenantFileManager*);
-        const int micro_cache_file_fd = tenant_file_mgr->get_micro_cache_file_fd();
-        if (micro_cache_file_fd == OB_INVALID_FD) {
-          // micro cache file not exist
-          bret = false;
-        } else if (micro_cache_file_fd != fd.second_id_) {
-          ret = OB_NOT_SUPPORTED;
-          bret = false;
-          LOG_INFO("in shared_storage mode, only micro_cache_file reads are supported for detection",
-              KR(ret), K(tenant_id), K(fd), K(micro_cache_file_fd));
-        }
-      } else {
-        bret = false;
-      }
-    }
-  }
-#endif
   return bret;
 }
 

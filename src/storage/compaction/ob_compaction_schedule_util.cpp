@@ -19,10 +19,6 @@
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/compaction/ob_tenant_compaction_progress.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/compaction/ob_tenant_ls_merge_scheduler.h"
-#include "share/compaction/ob_shared_storage_compaction_util.h"
-#endif
 
 namespace oceanbase
 {
@@ -61,12 +57,6 @@ ObBasicMergeScheduler* ObBasicMergeScheduler::get_merge_scheduler()
 {
   ObBasicMergeScheduler *scheduler = nullptr;
   scheduler = MTL(ObTenantTabletScheduler *);
-
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode()) {
-    scheduler = MTL(ObTenantLSMergeScheduler *);
-  }
-#endif
 
   return scheduler;
 }

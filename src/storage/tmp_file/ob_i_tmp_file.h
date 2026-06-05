@@ -330,13 +330,7 @@ protected:
   OB_INLINE int64_t get_offset_in_block_(int64_t file_offset) const
   {
     int64_t ret = 0;
-    if(!GCTX.is_shared_storage_mode()) {
-      ret = file_offset % ObTmpFileGlobal::SN_BLOCK_SIZE;
-    #ifdef OB_BUILD_SHARED_STORAGE
-    } else {
-      ret = file_offset % ObTmpFileGlobal::SS_BLOCK_SIZE;
-    #endif
-    }
+    ret = file_offset % ObTmpFileGlobal::SN_BLOCK_SIZE;
     return ret;
   }
 

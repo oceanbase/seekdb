@@ -19,6 +19,8 @@
 
 #include "lib/thread/ob_work_queue.h"
 #include "lib/thread/ob_dynamic_thread_pool.h"
+#include "share/ob_common_rpc_proxy.h" // ObCommonRpcProxy
+#include "share/ob_srv_rpc_proxy.h" // ObPartitionServiceRpcProxy
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ob_storage_rpc.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
@@ -147,40 +149,6 @@ private:
 };
 
 
-#ifdef OB_BUILD_SHARED_STORAGE
-// Create non empty shared SSTable in shared storage mode, only during leader restore.
-class ObRestoredSharedSSTableCreator final : public ObCopiedSSTableCreatorImpl
-{
-public:
-  ObRestoredSharedSSTableCreator() : ObCopiedSSTableCreatorImpl() {}
-
-  virtual int create_sstable() override;
-
-private:
-  virtual int check_sstable_param_for_init_(const ObMigrationSSTableParam *src_sstable_param) const override;
-
-  DISALLOW_COPY_AND_ASSIGN(ObRestoredSharedSSTableCreator);
-};
-
-
-// Create shared-only-macro-blocks SSTable, currently only ddl sstable in shared storage mode. This kind of SSTable
-// does not own an index, but should record the macro ids on meta. Macro blocks are required to copy only during 
-// leader restore, otherwise, are not.
-class ObCopiedSharedMacroBlocksSSTableCreator final : public ObCopiedSSTableCreatorImpl
-{
-public:
-  ObCopiedSharedMacroBlocksSSTableCreator() : ObCopiedSSTableCreatorImpl() {}
-
-  virtual int create_sstable() override;
-
-private:
-  virtual int check_sstable_param_for_init_(const ObMigrationSSTableParam *src_sstable_param) const override;
-
-  int get_shared_macro_id_list_(common::ObIArray<MacroBlockId> &macro_block_id_array);
-
-  DISALLOW_COPY_AND_ASSIGN(ObCopiedSharedMacroBlocksSSTableCreator);
-};
-#endif
 
 
 // Create shared SSTable which is not empty. Shared SSTable is the SSTable whose macro blocks, including data and 

@@ -233,12 +233,10 @@ LogConfigChangeCmdResp::LogConfigChangeCmdResp()
   reset();
 }
 
-
 LogConfigChangeCmdResp::~LogConfigChangeCmdResp()
 {
   reset();
 }
-
 
 void LogConfigChangeCmdResp::reset()
 {
@@ -287,7 +285,6 @@ LogGetPalfStatResp::~LogGetPalfStatResp()
   reset();
 }
 
-
 void LogGetPalfStatResp::reset()
 {
   palf_stat_.reset();
@@ -303,7 +300,6 @@ LogChangeAccessModeCmd::LogChangeAccessModeCmd()
       mode_version_(palf::INVALID_PROPOSAL_ID),
       access_mode_(palf::AccessMode::INVALID_ACCESS_MODE),
       ref_scn_() { }
-
 
 LogChangeAccessModeCmd::LogChangeAccessModeCmd(
     const common::ObAddr &src,
@@ -424,7 +420,6 @@ LogGetCkptResp::~LogGetCkptResp()
   reset();
 }
 
-
 void LogGetCkptResp::reset()
 {
   ckpt_scn_.reset();
@@ -467,69 +462,5 @@ void LogSyncBaseLSNReq::reset()
 OB_SERIALIZE_MEMBER(LogSyncBaseLSNReq, src_, ls_id_, base_lsn_);
 
 // ================= LogSyncBaseLSNReq end ================
-#ifdef OB_BUILD_SHARED_STORAGE
-// ============= LogAcquireRebuildInfoMsg begin =============
-LogAcquireRebuildInfoMsg::LogAcquireRebuildInfoMsg()
-    : src_(),
-      palf_id_(palf::INVALID_PALF_ID),
-      is_req_(false),
-      rebuild_replica_end_lsn_(),
-      base_info_(),
-      type_(FULL_REBUILD)
-{
-}
-
-LogAcquireRebuildInfoMsg::LogAcquireRebuildInfoMsg(
-    const common::ObAddr &src,
-    const int64_t palf_id,
-    const palf::LSN &lsn)
-    : src_(src),
-      palf_id_(palf_id),
-      is_req_(true),
-      rebuild_replica_end_lsn_(lsn),
-      base_info_(),
-      type_(LogRebuildType::FULL_REBUILD)
-{
-}
-
-LogAcquireRebuildInfoMsg::LogAcquireRebuildInfoMsg(
-    const common::ObAddr &src,
-    const int64_t palf_id,
-    const palf::LSN &rebuild_replica_end_lsn,
-    const palf::PalfBaseInfo &base_info,
-    const LogRebuildType &type)
-    : src_(src),
-      palf_id_(palf_id),
-      is_req_(false),
-      rebuild_replica_end_lsn_(rebuild_replica_end_lsn),
-      base_info_(base_info),
-      type_(type)
-{
-}
-
-LogAcquireRebuildInfoMsg::~LogAcquireRebuildInfoMsg()
-{
-  reset();
-}
-
-bool LogAcquireRebuildInfoMsg::is_valid() const
-{
-  return palf_id_ != palf::INVALID_PALF_ID && src_.is_valid() && true == rebuild_replica_end_lsn_.is_valid();
-}
-
-void LogAcquireRebuildInfoMsg::reset()
-{
-  src_.reset();
-  palf_id_ = palf::INVALID_PALF_ID;
-  is_req_ = false;
-  rebuild_replica_end_lsn_.reset();
-  base_info_.reset();
-  type_ = FULL_REBUILD;
-}
-
-OB_SERIALIZE_MEMBER(LogAcquireRebuildInfoMsg, src_, palf_id_, is_req_,
-    rebuild_replica_end_lsn_, base_info_, type_);
-// ============= LogAcquireRebuildInfoMsg end =============
-#endif
 } // end namespace logservice
 }// end namespace oceanbase

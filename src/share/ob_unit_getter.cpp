@@ -185,11 +185,6 @@ int64_t ObUnitInfoGetter::ObTenantConfig::gen_init_actual_data_disk_size(
     const share::ObUnitConfig &config) const
 {
   int64_t init_data_disk_size = 0;
-  if (!GCTX.is_shared_storage_mode() || config.data_disk_size() != 0) {
-    init_data_disk_size = 0;
-  } else {
-    init_data_disk_size = static_cast<int64_t>(config.min_cpu()) * (2LL * ObUnitResource::GB);
-  }
   return init_data_disk_size;
 }
 
@@ -248,11 +243,6 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
     const bool has_memstore = true;
     int64_t hidden_sys_data_disk_config_size = 0;
 
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      hidden_sys_data_disk_config_size = OB_SERVER_DISK_SPACE_MGR.get_hidden_sys_data_disk_config_size();
-    }
-#endif
 
     // Generate default sys tenant unit config
     int64_t log_disk_size = 0;

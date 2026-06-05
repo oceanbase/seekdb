@@ -3891,14 +3891,12 @@ int64_t ObBackupSetFileDesc::to_string(char *min_restore_scn_str_buf,  char *buf
 
 bool ObBackupSetFileDesc::is_allow_quick_restore(const Compatible &compatible)
 {
-  const bool is_shared_storage_mode = GCTX.is_shared_storage_mode();
-  return !is_shared_storage_mode && is_backup_set_support_quick_restore(compatible);
+  return is_backup_set_support_quick_restore(compatible);
 }
 
 bool ObBackupSetFileDesc::is_not_allow_quick_restore(const Compatible &compatible)
 {
-  const bool is_shared_storage_mode = GCTX.is_shared_storage_mode();
-  return is_shared_storage_mode || is_backup_set_not_support_quick_restore(compatible);
+  return is_backup_set_not_support_quick_restore(compatible);
 }
 
 

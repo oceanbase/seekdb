@@ -740,7 +740,7 @@ int ObSSTableMeta::init(
     LOG_WARN("sstable state is not match.", K(ret), K(basic_meta_.status_));
   } else if (OB_FAIL(macro_info_.init_macro_info(allocator, param))) {
     LOG_WARN("fail to init macro info", K(ret), K(param));
-  } else if (!GCTX.is_shared_storage_mode() && OB_FAIL(fsync_block(param))) {
+  } else if (OB_FAIL(fsync_block(param))) {
     LOG_WARN("fail to fsync block", K(ret));
   } else if (OB_FAIL(load_root_block_data(allocator))) {
     LOG_WARN("fail to load root block data", K(ret), K(param));

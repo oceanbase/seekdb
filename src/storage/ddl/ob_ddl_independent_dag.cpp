@@ -420,7 +420,6 @@ int ObDDLIndependentDag::alloc_vector_index_write_and_build_pipeline(
   return ret;
 }
 
-
 template<typename T>
 int ObDDLIndependentDag::add_pipeline(ObDDLTabletContext *tablet_context, ObDDLSlice *ddl_slice, T *&pipeline)
 {
@@ -496,7 +495,6 @@ int ObDDLIndependentDag::check_is_first_ddl_kv(bool &is_first)
   return ret;
 }
 
-
 int ObDDLIndependentDag::check_is_first_ddl_kv(ObTabletDDLKvMgr &ddl_kv_mgr,
                                               bool &is_first)
 {
@@ -559,7 +557,6 @@ int ObDDLIndependentDag::inc_generate_write_macro_block_tasks(ObIArray<ObITask *
   } else if (OB_FAIL(group_write_task->add_child(*inc_commit_task))) {
     LOG_WARN("fail to add child", KR(ret));
   }
-
 
   bool wait_dump = false;
   if (OB_SUCC(ret)) {
@@ -771,7 +768,7 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
   } else if (OB_FAIL(write_macro_block_tasks.push_back(scan_task))) {
     LOG_WARN("fail to push back", KR(ret));
   } else if (is_incremental_direct_load(direct_load_type_)) { // 增量
-    const bool for_major = GCTX.is_shared_storage_mode();
+    const bool for_major = false;
     ObGroupWriteMacroBlockTask *group_write_task = nullptr;
     ObDDLIncCommitTask *inc_commit_task = nullptr;
     ObITask *data_merge_task = nullptr;
@@ -809,7 +806,7 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
     // 依赖关系
     else if (OB_FAIL(scan_task->add_child(*group_write_task))) {
       LOG_WARN("fail to add child", KR(ret));
-    } else if (!GCTX.is_shared_storage_mode()) {
+    } else {
       // scan_task -> group_write_task -> inc_commit_task -> [merge_tasks] -> [next_task]
       if (OB_FAIL(group_write_task->add_child(*inc_commit_task))) {
         LOG_WARN("fail to add child", KR(ret));
@@ -829,47 +826,6 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
         }
       }
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-    else {
-      // scan_task -> group_write_task -> [wait_dump_task] -> [merge_tasks] -> inc_commit_task -> [next_task]
-      if (OB_NOT_NULL(data_merge_task)) {
-        ObDDLIncWaitDumpTask *wait_dump_task = nullptr;
-        ObDDLIncWaitDumpTask *lob_wait_dump_task = nullptr;
-        transaction::ObTxSEQ seq_no = transaction::ObTxSEQ::cast_from_int(tx_info_.seq_no_);
-        if (OB_FAIL(alloc_task(wait_dump_task, tablet_context->ls_id_, tablet_id, tx_info_.trans_id_, seq_no))) {
-          LOG_WARN("fail to alloc wait dump task", KR(ret), K(tx_info_));
-        } else if (OB_FAIL(write_macro_block_tasks.push_back(wait_dump_task))) {
-          LOG_WARN("fail to push back", KR(ret));
-        } else if (OB_FAIL(group_write_task->add_child(*wait_dump_task))) {
-          LOG_WARN("fail to add child", KR(ret));
-        } else if (OB_FAIL(wait_dump_task->add_child(*data_merge_task))) {
-          LOG_WARN("fail to add child", KR(ret));
-        } else if (OB_FAIL(data_merge_task->add_child(*inc_commit_task))) {
-          LOG_WARN("fail to add child", KR(ret));
-        } else if (OB_NOT_NULL(next_task) && OB_FAIL(inc_commit_task->add_child(*next_task))) {
-          LOG_WARN("fail to add child", KR(ret));
-        } else if (OB_NOT_NULL(lob_merge_task)) {
-          if (OB_FAIL(alloc_task(lob_wait_dump_task, tablet_context->ls_id_, tablet_context->lob_meta_tablet_id_, tx_info_.trans_id_, seq_no))) {
-            LOG_WARN("fail to alloc lob wait dump task", KR(ret), K(tx_info_));
-          } else if (OB_FAIL(write_macro_block_tasks.push_back(lob_wait_dump_task))) {
-            LOG_WARN("fail to push back", KR(ret));
-          } else if (OB_FAIL(group_write_task->add_child(*lob_wait_dump_task))) {
-            LOG_WARN("fail to add child", KR(ret));
-          } else if (OB_FAIL(lob_wait_dump_task->add_child(*lob_merge_task))) {
-            LOG_WARN("fail to add child", KR(ret));
-          } else if (OB_FAIL(lob_merge_task->add_child(*inc_commit_task))) {
-            LOG_WARN("fail to add child", KR(ret));
-          }
-        }
-      } else {
-        if (OB_FAIL(group_write_task->add_child(*inc_commit_task))) {
-          LOG_WARN("fail to add child", KR(ret));
-        } else if (OB_NOT_NULL(next_task) && OB_FAIL(inc_commit_task->add_child(*next_task))) {
-          LOG_WARN("fail to add child", KR(ret));
-        }
-      }
-    }
-#endif
   } else { // 全量
     // scan_task -> group_write_task -> merge_tasks -> [next_task]
     ObGroupWriteMacroBlockTask *group_write_task = nullptr;

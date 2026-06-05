@@ -39,6 +39,7 @@
 #endif
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "share/object_storage/ob_device_connectivity.h"
+#include "share/ob_bg_thread_monitor.h"
 #include "share/resource_manager/ob_resource_manager.h"
 #include "share/sequence/ob_sequence_cache.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
@@ -67,9 +68,6 @@
 #include "observer/ob_server_utils.h"
 #include "share/ob_device_credential_task.h"
 #include "lib/xml/ob_libxml2_sax_handler.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/prewarm/ob_replica_prewarm_struct.h"
-#endif
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/backup/ob_backup_meta_cache.h"
@@ -349,13 +347,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init global kvcache failed", KR(ret));
     }
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (OB_SUCC(ret) && GCTX.is_shared_storage_mode()) {
-    if (OB_FAIL(OB_LS_PREWARM_MGR.init())) {
-      LOG_ERROR("init ls prewarm manager failed", KR(ret));
-    }
-    }
-#endif
     if (OB_SUCC(ret)) {
     if (OB_FAIL(schema_status_proxy_.init())) {
       LOG_ERROR("fail to init schema status proxy", KR(ret));
@@ -433,8 +424,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     if (OB_SUCC(ret)) {
     if (OB_FAIL(init_tx_data_cache())) {
       LOG_ERROR("init tx data cache failed", KR(ret));
-    } else if (!GCTX.is_shared_storage_mode() &&
-               OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
+    } else if (OB_FAIL(tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"))) {
       LOG_ERROR("init tmp block cache failed", KR(ret));
     } else if (OB_FAIL(tmp_file::ObTmpPageCache::get_instance().init("tmp_page_cache"))) {
       LOG_ERROR("init tmp page cache failed", KR(ret));
@@ -483,6 +473,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init table service failed", KR(ret));
     } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
       LOG_ERROR("init timer monitor failed", KR(ret));
+    } else if (OB_FAIL(ObBGThreadMonitor::get_instance().init())) {
+      LOG_ERROR("init bg thread monitor failed", KR(ret));
     } else if (OB_FAIL(PX_P2P_DH.init())) {
       LOG_ERROR("init px p2p datahub failed", KR(ret));
     } else if (OB_FAIL(G_RES_MGR.init())) {
@@ -597,6 +589,10 @@ void ObServer::destroy()
     ObTimerMonitor::get_instance().destroy();
     FLOG_INFO("timer monitor destroyed");
 
+    FLOG_INFO("begin to destroy background thread monitor");
+    ObBGThreadMonitor::get_instance().destroy();
+    FLOG_INFO("background thread monitor destroyed");
+
     FLOG_INFO("begin to destroy unix domain listener");
     unix_domain_listener_.destroy();
     FLOG_INFO("unix domain listener destroyed");
@@ -616,14 +612,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy server gtimer");
     TG_DESTROY(lib::TGDefIDs::ServerGTimer);
     FLOG_INFO("server gtimer destroyed");
-
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      FLOG_INFO("begin to destroy server gtimer");
-      TG_DESTROY(lib::TGDefIDs::TenantDirGCTimer);
-      FLOG_INFO("server gtimer destroyed");
-    }
-#endif
 
     FLOG_INFO("begin to destroy freeze timer");
     TG_DESTROY(lib::TGDefIDs::FreezeTimer);
@@ -673,6 +661,10 @@ void ObServer::destroy()
     disk_usage_report_task_.destroy();
     FLOG_INFO("tenant disk usage report task destroyed");
 
+    FLOG_INFO("begin to destroy disk usage report task");
+    TG_DESTROY(lib::TGDefIDs::DiskUseReport);
+    FLOG_INFO("disk usage report task destroyed");
+
     FLOG_INFO("begin to destroy store cache");
     OB_STORE_CACHE.destroy();
     FLOG_INFO("store cache destroyed");
@@ -681,11 +673,10 @@ void ObServer::destroy()
     OB_TX_DATA_KV_CACHE.destroy();
     FLOG_INFO("tx data kv cache destroyed");
 
-    if (!GCTX.is_shared_storage_mode()) {
-      FLOG_INFO("begin to destroy tmp block cache");
-      tmp_file::ObTmpBlockCache::get_instance().destroy();
-      FLOG_INFO("tmp block cache destroyed");
-    }
+    FLOG_INFO("begin to destroy tmp block cache");
+    tmp_file::ObTmpBlockCache::get_instance().destroy();
+    FLOG_INFO("tmp block cache destroyed");
+
     FLOG_INFO("begin to destroy tmp page cache");
     tmp_file::ObTmpPageCache::get_instance().destroy();
     FLOG_INFO("tmp page cache destroyed");
@@ -784,14 +775,6 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy rootservice event history");
     ROOTSERVICE_EVENT_INSTANCE.destroy();
     FLOG_INFO("rootservice event history destroyed");
-
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      FLOG_INFO("begin to destory ls prewarm manager");
-      OB_LS_PREWARM_MGR.destroy();
-      FLOG_INFO("ls prewarm manager destoryed");
-    }
-#endif
 
     FLOG_INFO("begin to destroy kv global cache");
     ObKVGlobalCache::get_instance().destroy();
@@ -963,6 +946,11 @@ int ObServer::start(bool embed_mode)
       FLOG_INFO("success to start timer monitor");
     }
 
+    if (FAILEDx(ObBGThreadMonitor::get_instance().start())) {
+      LOG_ERROR("fail to start bg thread monitor", KR(ret));
+    } else {
+      FLOG_INFO("success to start bg thread monitor");
+    }
 #ifdef ENABLE_IMC
     if (FAILEDx(imc_tasks_.start())) {
       LOG_ERROR("fail to start imc tasks", KR(ret));
@@ -981,6 +969,13 @@ int ObServer::start(bool embed_mode)
       LOG_ERROR("fail to start ObPxTargetMgr", KR(ret));
     } else {
       FLOG_INFO("success to start ObPxTargetMgr");
+    }
+
+    if (FAILEDx(TG_SCHEDULE(lib::TGDefIDs::DiskUseReport,
+        disk_usage_report_task_, DISK_USAGE_REPORT_INTERVAL, true))) {
+      LOG_ERROR("fail to schedule disk_usage_report_task_ task", KR(ret));
+    } else {
+      FLOG_INFO("success to schedule disk_usage_report_task_ task");
     }
 
     if (FAILEDx(ObActiveSessHistTask::get_instance().start())) {
@@ -1317,6 +1312,9 @@ int ObServer::stop()
     schema_service_.stop();
     FLOG_INFO("schema service stopped");
 
+    FLOG_INFO("begin to stop disk usage report task");
+    TG_STOP(lib::TGDefIDs::DiskUseReport);
+    FLOG_INFO("disk usage report task stopped");
 
     FLOG_INFO("begin to stop storage object mgr");
     OB_STORAGE_OBJECT_MGR.stop();
@@ -1330,17 +1328,14 @@ int ObServer::stop()
     ObTimerMonitor::get_instance().stop();
     FLOG_INFO("timer monitor stopped");
 
+    FLOG_INFO("begin to stop bgthread monitor");
+    ObBGThreadMonitor::get_instance().stop();
+    FLOG_INFO("bgthread monitor stopped");
+
     FLOG_INFO("begin to stop timer");
     TG_STOP(lib::TGDefIDs::ServerGTimer);
     FLOG_INFO("timer stopped");
 
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (GCTX.is_shared_storage_mode()) {
-      FLOG_INFO("begin to stop timer");
-      TG_STOP(lib::TGDefIDs::TenantDirGCTimer);
-      FLOG_INFO("timer stopped");
-    }
-#endif
     FLOG_INFO("begin to stop freeze timer");
     TG_STOP(lib::TGDefIDs::FreezeTimer);
     FLOG_INFO("freeze timer stopped");
@@ -1523,7 +1518,6 @@ int ObServer::wait()
     SLEEP(3);
   }
   _Exit(0);
-  return ret;
 }
 
 int ObServer::init_tz_info_mgr()
@@ -1788,11 +1782,6 @@ int ObServer::init_config_module(const char *optstr)
     LOG_ERROR("local address isn't valid", K(self_addr_), KR(ret));
   } else if (OB_FAIL(TG_START(lib::TGDefIDs::ServerGTimer))) {
     LOG_ERROR("init timer fail", KR(ret));
-#ifdef OB_BUILD_SHARED_STORAGE
-  } else if (GCTX.is_shared_storage_mode()
-      && OB_FAIL(TG_START(lib::TGDefIDs::TenantDirGCTimer))) {
-    LOG_ERROR("init timer fail", KR(ret));
-#endif
   } else if (OB_FAIL(TG_START(lib::TGDefIDs::FreezeTimer))) {
     LOG_ERROR("init freeze timer fail", KR(ret));
   } else if (OB_FAIL(TG_START(lib::TGDefIDs::SqlMemTimer))) {
@@ -2519,10 +2508,12 @@ int ObServer::init_storage()
     if (OB_FAIL(OB_STORE_CACHE.init(storage_env_.bf_cache_miss_count_threshold_))) {
       LOG_WARN("Fail to init OB_STORE_CACHE, ", KR(ret), K(storage_env_.data_dir_));
     } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(
-        GCTX.is_shared_storage_mode(), storage_env_.default_block_size_))) {
+        storage_env_.default_block_size_))) {
       LOG_ERROR("init storage object mgr fail", KR(ret));
     } else if (OB_FAIL(disk_usage_report_task_.init(sql_proxy_))) {
       LOG_WARN("fail to init disk usage report task", KR(ret));
+    } else if (OB_FAIL(TG_START(lib::TGDefIDs::DiskUseReport))) {
+      LOG_WARN("fail to initialize disk usage report timer", KR(ret));
     }
   }
 
@@ -3134,10 +3125,12 @@ int ObServer::clean_up_invalid_tables_by_tenant(
   int tmp_ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObDatabaseSchema *database_schema = NULL;
+  const int64_t CONNECT_TIMEOUT_VALUE = 50LL * 60 * 60 * 1000 * 1000; //default value is 50hrs
   ObArray<uint64_t> table_ids;
   obrpc::ObDropTableArg drop_table_arg;
   obrpc::ObTableItem table_item;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
+  char create_host_str[OB_MAX_HOST_NAME_LENGTH];
   if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_ids_in_tenant(tenant_id, table_ids))) {
@@ -3147,17 +3140,18 @@ int ObServer::clean_up_invalid_tables_by_tenant(
     drop_table_arg.if_exist_ = true;
     drop_table_arg.to_recyclebin_ = false;
     common_rpc_proxy = GCTX.rs_rpc_proxy_;
+    MYADDR.ip_port_to_string(create_host_str, OB_MAX_HOST_NAME_LENGTH);
     // only OB_ISNULL(GCTX.session_mgr_) will exit the loop
     for (int64_t i = 0; i < table_ids.count() && OB_SUCC(tmp_ret); i++) {
       bool is_oracle_mode = false;
-      const ObSimpleTableSchemaV2 *table_schema = NULL;
+      const ObTableSchema *table_schema = NULL;
       const uint64_t table_id = table_ids.at(i);
       // schema guard cannot be used repeatedly in iterative logic,
       // otherwise it will cause a memory hike in schema cache
       if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret), K(tenant_id));
-      } else if (OB_FAIL(schema_guard.get_simple_table_schema(tenant_id, table_id, table_schema))) {
-        LOG_WARN("get simple table schema failed", K(ret), KT(table_id));
+      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, table_id, table_schema))) {
+        LOG_WARN("get table schema failed", K(ret), KT(table_id));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("got invalid schema", KR(ret), K(i));
@@ -3165,18 +3159,35 @@ int ObServer::clean_up_invalid_tables_by_tenant(
         LOG_WARN("fail to check table if oracle compat mode", KR(ret));
       } else if (0 == table_schema->get_session_id()) {
         //do nothing
+      } else if (0 != table_schema->get_create_host_str().compare(create_host_str)) {
+        LOG_DEBUG("current observer is not the one created the table, just skip", "current session", create_host_str, K(*table_schema));
       } else {
         LOG_DEBUG("table is creating or encountered error or is temporary one", K(*table_schema));
-        ctas_cleanup.set_drop_flag(false);
-        if (table_schema->is_tmp_table()) {
-          ctas_cleanup.set_cleanup_type(ObCTASCleanUp::TEMP_TAB_RULE);
+        if (table_schema->is_obproxy_create_tmp_tab()) { //1, Temporary tables, proxy table creation, cleanup rules see 3.2#
+          LOG_DEBUG("clean_up_invalid_tables::ob proxy created", K(i), K(ObTimeUtility::current_time()),
+                                                                 K(table_schema->get_sess_active_time()), K(CONNECT_TIMEOUT_VALUE));
+          if (ObTimeUtility::current_time() - table_schema->get_sess_active_time() > CONNECT_TIMEOUT_VALUE) {
+            ctas_cleanup.set_drop_flag(true);
+          } else {
+            ctas_cleanup.set_drop_flag(false);
+          }
+          ctas_cleanup.set_cleanup_type(ObCTASCleanUp::TEMP_TAB_PROXY_RULE);
         } else {
-          ctas_cleanup.set_cleanup_type(ObCTASCleanUp::CTAS_RULE);
+          ctas_cleanup.set_drop_flag(false);
+          if (table_schema->is_tmp_table()) { // 2, Temporary tables, directly connected tables, cleanup rules see 3.1~3.2#
+            ctas_cleanup.set_cleanup_type(ObCTASCleanUp::TEMP_TAB_RULE);
+          } else { //3, Query and build tables, see 2# for cleaning rules
+            ctas_cleanup.set_cleanup_type(ObCTASCleanUp::CTAS_RULE);
+          }
         }
         if (false == ctas_cleanup.get_drop_flag()) {
           ctas_cleanup.set_session_id(table_schema->get_session_id());
           ctas_cleanup.set_schema_version(table_schema->get_schema_version());
-          ctas_cleanup.set_drop_flag(true);
+          if (ObCTASCleanUp::TEMP_TAB_PROXY_RULE == ctas_cleanup.get_cleanup_type()) { //The proxy connection method is not deleted by default, and it may need to be dropped when the reused session is found.
+            ctas_cleanup.set_drop_flag(false);
+          } else {
+            ctas_cleanup.set_drop_flag(true);
+          }
           if (OB_ISNULL(GCTX.session_mgr_)) {
             tmp_ret = OB_ERR_UNEXPECTED;
             LOG_ERROR("session mgr is null", KR(ret));

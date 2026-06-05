@@ -37,9 +37,17 @@ class ObITabletScan;
 class ObMysqlRandom;
 } // end of namespace common
 
-namespace obcall
+namespace obrpc
 {
+class ObSrvRpcProxy;
 class ObStorageRpcProxy;
+class ObCommonRpcProxy;
+class ObLoadDataRpcProxy;
+class ObDBMSJobRpcProxy;
+class ObBatchRpc;
+class ObInnerSQLRpcProxy;
+class ObDBMSSchedJobRpcProxy;
+class ObExtenralTableRpcProxy;
 } // end of namespace rpc
 
 namespace rootserver
@@ -137,7 +145,13 @@ struct ObGlobalContext
   common::ObConfigManager *config_mgr_;
   share::ObTabletTableOperator *tablet_operator_;
   share::ObSQLiteConnectionPool *meta_db_pool_;
-  obcall::ObStorageRpcProxy *storage_rpc_proxy_;
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy_;
+  obrpc::ObStorageRpcProxy *storage_rpc_proxy_;
+  obrpc::ObDBMSJobRpcProxy *dbms_job_rpc_proxy_;
+  obrpc::ObInnerSQLRpcProxy *inner_sql_rpc_proxy_;
+  obrpc::ObDBMSSchedJobRpcProxy *dbms_sched_job_rpc_proxy_;
+  obrpc::ObCommonRpcProxy *rs_rpc_proxy_;
+  obrpc::ObLoadDataRpcProxy *load_data_proxy_;
   sql::ObExecutorRpcImpl *executor_rpc_;
   common::ObMySQLProxy *sql_proxy_;
   common::ObMySQLProxy *ddl_sql_proxy_;
@@ -165,6 +179,7 @@ struct ObGlobalContext
   observer::ObSrvNetworkFrame *net_frame_;
   obgrpc::ObGrpcServer *grpc_server_;
 
+  obrpc::ObBatchRpc *batch_rpc_;
   observer::ObIDiskReport *disk_reporter_;
   logservice::ObServerLogBlockMgr *log_block_mgr_;
 
@@ -174,6 +189,7 @@ struct ObGlobalContext
   int64_t flashback_scn_;
   int64_t ssl_key_expired_time_;
   sql::ObConnectResourceMgr* conn_res_mgr_;
+  obrpc::ObExtenralTableRpcProxy *external_table_proxy_;
   share::ObWorkloadRepositoryService *wr_service_;
   observer::ObStartupAccelTaskHandler* startup_accel_handler_;
   bool in_bootstrap_;
@@ -211,27 +227,19 @@ struct ObGlobalContext
   In such cases, you need to carefully consider how to resolve this problem by yourself.
   */
   uint64_t get_server_index() const;
-  void set_upgrade_stage(obcall::ObUpgradeStage upgrade_stage) { upgrade_stage_ = upgrade_stage; }
-  obcall::ObUpgradeStage get_upgrade_stage() { return upgrade_stage_; }
+  void set_upgrade_stage(obrpc::ObUpgradeStage upgrade_stage) { upgrade_stage_ = upgrade_stage; }
+  obrpc::ObUpgradeStage get_upgrade_stage() { return upgrade_stage_; }
   DECLARE_TO_STRING;
   // instead of self_addr_
   const ObAddr &self_addr() const { return self_addr_seq_.get_addr(); }
   const int64_t &self_seq() const { return self_addr_seq_.get_seq(); }
-  bool is_shared_storage_mode() const
-  {
-#ifdef OB_BUILD_SHARED_STORAGE
-    return (ObServerMode::SHARED_STORAGE_MODE == startup_mode_);
-#else
-    return false;
-#endif
-  }
 private:
   ObGlobalContext() { MEMSET(this, 0, sizeof(*this)); init(); }
   ObGlobalContext(const ObGlobalContext &other);
   volatile int64_t server_status_;
   bool has_start_service() const { return 0 < start_service_time_; }
 
-  obcall::ObUpgradeStage upgrade_stage_;
+  obrpc::ObUpgradeStage upgrade_stage_;
   uint64_t server_id_;
 };
 

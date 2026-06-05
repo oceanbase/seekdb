@@ -29,21 +29,18 @@ class ObStorageLogger;
 class ObTenantMonotonicIncSeqs;
 class ObTenantCheckpointSlogHandler;
 
-
 class ObTenantStorageMetaPersister
 {
 public:
   ObTenantStorageMetaPersister()
-    : is_inited_(false), is_shared_storage_(false),
+    : is_inited_(false),
       slogger_() {}
   ObTenantStorageMetaPersister(const ObTenantStorageMetaPersister &) = delete;
   ObTenantStorageMetaPersister &operator=(const ObTenantStorageMetaPersister &) = delete;
       
-  int init(const bool is_share_storage,
-           ObStorageLogger &slogger,
+  int init(ObStorageLogger &slogger,
            ObTenantCheckpointSlogHandler &ckpt_slog_handler);
   void destroy();
-
 
   int prepare_create_ls(const ObLSMeta &meta, int64_t &ls_epoch);
   int commit_create_ls(const share::ObLSID &ls_id, const int64_t ls_epoch);
@@ -74,38 +71,6 @@ public:
       const ObLSID &ls_id, 
       const int64_t ls_epoch, 
       const ObIArray<ObPendingFreeTabletItem> &items);
-#ifdef OB_BUILD_SHARED_STORAGE
-  // recover pending_free_tablet_arr_map during reboot
-  int ss_replay_ls_pending_free_arr(
-    ObArenaAllocator &allocator,
-    const ObLSID &ls_id,
-    const uint64_t ls_epoch);
-
-  // for ls replica gc
-  int ss_delete_tablet_current_version(
-    const ObTabletID &tablet_id,
-    const ObLSID &ls_id,
-    const uint64_t ls_epoch)
-  { return ss_delete_tablet_current_version_(tablet_id, ls_id, ls_epoch); }
-  int ss_batch_remove_ls_tablets(
-    const share::ObLSID &ls_id, 
-    const int64_t ls_epoch,
-    const ObIArray<common::ObTabletID> &tablet_id_arr, 
-    const ObIArray<ObMetaDiskAddr> &tablet_addr_arr,
-    const bool delete_current_version);
-  int ss_check_and_delete_tablet_current_version(
-    const ObTabletID &tablet_id,
-    const ObLSID &ls_id,
-    const uint64_t ls_epoch,
-    const int64_t deleted_tablet_version,
-    const int64_t deleted_tablet_transfer_seq,
-    ObArenaAllocator &allocator);
-  int ss_delete_tenant_ls_item(
-    const share::ObLSID ls_id, const int64_t ls_epoch)
-  {
-    return delete_tenant_ls_item_(ls_id, ls_epoch);
-  }
-#endif
 private:
   int write_prepare_create_ls_slog_(const ObLSMeta &ls_meta);
   int write_commit_create_ls_slog_(const share::ObLSID &ls_id);
@@ -119,35 +84,6 @@ private:
       const ObLSID &ls_id, const common::ObIArray<ObTabletID> &tablet_ids);
   int safe_batch_write_remove_tablets_slog_(
       const ObLSID &ls_id, const common::ObIArray<ObTabletID> &tablet_ids);
-
-#ifdef OB_BUILD_SHARED_STORAGE
-  int ss_prepare_create_ls_(const ObLSMeta &meta, int64_t &ls_epoch);
-  int ss_commit_create_ls_(const share::ObLSID &ls_id, const int64_t ls_epoch);
-  int ss_abort_create_ls_(const share::ObLSID &ls_id, const int64_t ls_epoch);
-  int ss_delete_ls_(const share::ObLSID &ls_id, const int64_t ls_epoch);
-  int ss_update_tablet_(
-    const ObLSID ls_id, const int64_t ls_epoch,
-    const common::ObTabletID &tablet_id, const ObMetaDiskAddr &tablet_addr);
-  int ss_remove_tablet_(
-    const ObLSID ls_id, const int64_t ls_epoch,
-    const ObTabletHandle &tablet_handle);
-  int ss_remove_tablets_();
-  int create_tenant_ls_item_(const share::ObLSID ls_id, int64_t &ls_epoch);
-  int update_tenant_ls_item_(
-    const share::ObLSID ls_id, const int64_t ls_epoch, const ObLSItemStatus status);
-  int delete_tenant_ls_item_(
-    const share::ObLSID ls_id, const int64_t ls_epoch);
-  int ss_write_tenant_super_block_(const ObTenantSuperBlock &tenant_super_block);
-  int ss_write_ls_meta_(const int64_t ls_epoch, const ObLSMeta &meta);
-  int ss_write_active_tablet_array_(
-    const ObLSID ls_id, const int64_t ls_epoch, const ObLSActiveTabletArray &active_tablet_array);
-  int ss_write_pending_free_tablet_array_(
-     const ObLSID ls_id, const int64_t ls_epoch, const ObLSPendingFreeTabletArray &pending_free_arry);
-  int ss_delete_tablet_current_version_(
-    const ObTabletID &tablet_id,
-    const ObLSID &ls_id,
-    const uint64_t ls_epoch);
-#endif 
 
 private:
   struct PendingFreeTabletArrayKey
@@ -203,7 +139,6 @@ private:
 
 private:
   bool is_inited_;
-  bool is_shared_storage_;
   storage::ObStorageLogger *slogger_;
   common::ObConcurrentFIFOAllocator allocator_;
   lib::ObMutex super_block_lock_; // protect tenant super block

@@ -133,7 +133,6 @@ int ObTabletPointerMap::exist(const ObTabletMapKey &key, bool &is_exist)
   return ret;
 }
 
-
 int ObTabletPointerMap::try_get_in_memory_meta_obj(
     const ObTabletMapKey &key,
     bool &success,
@@ -312,31 +311,6 @@ int ObTabletPointerMap::get_meta_obj_with_filter(
   return ret;
 }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObTabletPointerMap::check_and_get_latest_addr(
-    const ObTabletMapKey &key,
-    ObTabletPointer &meta_pointer,
-    ObMetaDiskAddr &disk_addr) const
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator allocator;
-  ObPrivateTabletCurrentVersion latest_addr;
-  ObStorageObjectOpt opt;
-  opt.set_ss_private_tablet_meta_current_verison_object_opt(key.ls_id_.id(), key.tablet_id_.id());
-  const ObMetaDiskAddr &cur_addr = meta_pointer.get_addr();
-
-  if (!ObStorageObjectOpt::is_inaccurate_tablet_addr(cur_addr)) {
-    disk_addr = cur_addr;
-  } else if (OB_FAIL(ObStorageMetaIOUtil::read_storage_meta_object(
-      opt, allocator, MTL_ID(), meta_pointer.get_ls()->get_ls_epoch(), latest_addr))) {
-    STORAGE_LOG(WARN, "fail to read cur version", K(ret));
-  } else {
-    disk_addr = latest_addr.tablet_addr_;
-  }
-  return ret;
-}
-#endif
-
 int ObTabletPointerMap::load_and_hook_meta_obj(
     const ObTabletMapKey &key,
     ObTabletPointerHandle &ptr_hdl,
@@ -410,9 +384,6 @@ int ObTabletPointerMap::load_and_hook_meta_obj(
 bool ObTabletPointerMap::addr_not_match(const ObMetaDiskAddr &orig_addr, const ObMetaDiskAddr &cur_addr)
 {
   bool is_accurate_tablet_meta_version = true;
-  #ifdef OB_BUILD_SHARED_STORAGE
-  is_accurate_tablet_meta_version = !ObStorageObjectOpt::is_inaccurate_tablet_addr(cur_addr);
-  #endif
   return is_accurate_tablet_meta_version && orig_addr != cur_addr;
 }
 
@@ -446,11 +417,6 @@ int ObTabletPointerMap::load_meta_obj(
           STORAGE_LOG(INFO, "the tablet has been deleted", K(ret), K(key));
         }
       }
-      #ifdef OB_BUILD_SHARED_STORAGE
-      if (FAILEDx(check_and_get_latest_addr(key, *meta_pointer, load_addr))) {
-        STORAGE_LOG(WARN, "fail to check and get latest addr", K(ret), K(key), KPC(meta_pointer));
-      }
-      #endif
       if (FAILEDx(read_from_disk(true/*is_full_load*/, meta_pointer->get_ls()->get_ls_epoch(), load_addr, arena_allocator, buf, buf_len))) {
         STORAGE_LOG(WARN, "fail to read from disk", K(ret), KPC(meta_pointer), K(meta_pointer->get_ls()->get_ls_epoch()));
       } else if (OB_FAIL(t->assign_pointer_handle(tmp_ptr_hdl))) {
@@ -526,11 +492,6 @@ int ObTabletPointerMap::load_meta_obj(
           STORAGE_LOG(INFO, "the tablet has been deleted", K(ret), K(key));
         }
       }
-      #ifdef OB_BUILD_SHARED_STORAGE
-      if (FAILEDx(check_and_get_latest_addr(key, *meta_pointer, load_addr))) {
-        STORAGE_LOG(WARN, "fail to check and get latest addr", K(ret), K(key), KPC(meta_pointer));
-      }
-      #endif
       if (FAILEDx(read_from_disk(false/*is_full_load*/, meta_pointer->get_ls()->get_ls_epoch(), load_addr, arena_allocator, buf, buf_len))) {
         STORAGE_LOG(WARN, "fail to read from disk", K(ret), KPC(meta_pointer), K(meta_pointer->get_ls()->get_ls_epoch()));
       } else if (OB_FAIL(t->assign_pointer_handle(tmp_ptr_hdl))) {
@@ -685,17 +646,9 @@ int ObTabletPointerMap::get_meta_addr(const ObTabletMapKey &key, ObMetaDiskAddr 
     } else {
       addr = t_ptr->get_addr();
     }
-    #ifdef OB_BUILD_SHARED_STORAGE
-    if (OB_FAIL(ret)) {
-      // error occurred
-    } else if (OB_FAIL(check_and_get_latest_addr(key, *t_ptr, addr))) {
-      STORAGE_LOG(WARN, "fail to check and get latest addr", K(ret), K(key), KPC(t_ptr));
-    }
-    #endif
   }
   return ret;
 }
-
 
 int ObTabletPointerMap::get_attr_for_obj(const ObTabletMapKey &key, ObMetaObjGuard<ObTablet> &guard)
 {

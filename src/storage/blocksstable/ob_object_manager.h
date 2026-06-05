@@ -22,7 +22,6 @@
 #include "storage/blocksstable/ob_super_block_buffer_holder.h"
 #include "storage/ob_super_block_struct.h"
 
-
 namespace oceanbase
 {
 namespace blocksstable
@@ -334,12 +333,11 @@ public:
 
 };
 
-
 // ================================== ObObjectManager =====================================//
 class ObObjectManager final
 {
 public:
-  int init(const bool is_shared_storage, const int64_t macro_object_size);
+  int init(const int64_t macro_object_size);
   int start(const int64_t reserved_size);
   void stop();
   void wait();
@@ -404,40 +402,12 @@ public:
   }
   int read_or_format_super_block_(const bool need_format);
 
-#ifdef OB_BUILD_SHARED_STORAGE
-  int create_super_block_tenant_item(const uint64_t tenant_id, int64_t &tenant_epoch);
-  int update_super_block_tenant_item(
-      const uint64_t tenant_id, const int64_t tenant_epoch,
-      const storage::ObTenantCreateStatus status);
-  int delete_super_block_tenant_item(
-      const uint64_t tenant_id, const int64_t tenant_epoch);
-  static int ss_get_object_id(const ObStorageObjectOpt &opt, MacroBlockId &object_id);
-  static int ss_is_exist_object(const MacroBlockId &object_id, const int64_t ls_epoch, bool &is_exist);
-  static int seal_object(const MacroBlockId &object_id, const int64_t ls_epoch_id);
-  static int async_write_object(
-    const blocksstable::MacroBlockId &macro_block_id,
-    const ObStorageObjectWriteInfo &write_info,
-    ObStorageObjectHandle &object_handle);
-#endif
-
 private:
   ObObjectManager();
   ~ObObjectManager();
 
-#ifdef OB_BUILD_SHARED_STORAGE
-  static void set_ss_object_first_id_(
-      const uint64_t object_type, const uint64_t incarnation_id,
-      const uint64_t column_group_id, MacroBlockId &object_id);
-  static MacroBlockId ss_get_super_block_object_id_();
-  int ss_read_or_format_super_block_();
-  int ss_read_super_block_(const MacroBlockId &macro_id, storage::ObServerSuperBlock &super_block);
-  int ss_write_super_block_(const storage::ObServerSuperBlock &super_block);
-
-#endif
-
 private:
   bool is_inited_;
-  bool is_shared_storage_;
   int64_t macro_object_size_;
 
   common::SpinRWLock lock_;

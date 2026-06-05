@@ -390,9 +390,7 @@ int ObBackupTabletIndexBlockBuilderMgr::open_sstable_index_builders_without_lock
           LOG_WARN("table should not be null", K(ret));
         } else {
           const ObITable::TableKey &table_key = sstable_ptr->get_key();
-          if (GCTX.is_shared_storage_mode() && table_key.is_ddl_dump_sstable()) {
-            // do nothing
-          } else if (OB_FAIL(mgr->add_sstable_index_builder(ls_id_, tablet_handle, table_key, sstable_ptr))) {
+          if (OB_FAIL(mgr->add_sstable_index_builder(ls_id_, tablet_handle, table_key, sstable_ptr))) {
             LOG_WARN("failed to add sstable index builder", K(ret), K(tablet_id), K(table_key), KPC(sstable_ptr));
           } else {
             LOG_INFO("[INDEX_BUILDER_MGR] open sstable index builder", K(tablet_id), K(table_key));

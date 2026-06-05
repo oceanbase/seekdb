@@ -138,38 +138,22 @@ public:
   // @param [in] arg, all the create parameters needed.
   // @param [out] result, the return code and trans result of the op.
   int create_tablets_in_trans(transaction::ObTxDesc &tx_desc,
-                              const obcall::ObBatchCreateTabletArg &batch_arg,
-                              obcall::ObCreateTabletBatchInTransRes &result);
+                              const obrpc::ObBatchCreateTabletArg &batch_arg,
+                              obrpc::ObCreateTabletBatchInTransRes &result);
 
   // remove tablets from a ls
   // @param [in] tx_desc, trans descriptor
   // @param [in] arg, all the remove parameters needed.
   // @param [out] result, the return code of the remove op.
   int remove_tablets_in_trans(transaction::ObTxDesc &tx_desc,
-                              const obcall::ObBatchRemoveTabletArg &batch_arg,
-                              obcall::ObRemoveTabletsInTransRes &result);
+                              const obrpc::ObBatchRemoveTabletArg &batch_arg,
+                              obrpc::ObRemoveTabletsInTransRes &result);
 
-  obcall::ObStorageRpcProxy *get_storage_rpc_proxy() { return &storage_svr_rpc_proxy_; }
+  obrpc::ObStorageRpcProxy *get_storage_rpc_proxy() { return &storage_svr_rpc_proxy_; }
   storage::ObStorageRpc *get_storage_rpc() { return &storage_rpc_; }
   ObLSMap *get_ls_map() { return &ls_map_; }
   int64_t get_ls_count() const { return ls_map_.get_ls_count(); }
   int dump_ls_info();
-
-#ifdef OB_BUILD_SHARED_STORAGE
-  void report_tablet_id_for_tablet_version_gc(
-      const share::ObLSID &ls_id, 
-      const common::ObTabletID &tablet_id)
-  {
-    int ret = OB_SUCCESS;
-    ObLSHandle ls_handle;
-    ObTabletGCInfo tablet_info(tablet_id);
-    if (OB_FAIL(get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-      STORAGE_LOG(WARN, "failed to get ls", K(ret), K(ls_id), K(tablet_id));
-    } else {
-      ls_handle.get_ls()->get_ls_private_block_gc_handler().report_tablet_id_for_gc_service(tablet_info);
-    }
-  }
-#endif
 
   TO_STRING_KV(K_(tenant_id), K_(is_inited));
 private:
@@ -238,7 +222,7 @@ private:
   lib::ObMutex change_lock_;
 
   //TOD(muwei.ym) src rpc framework should be tenant level
-  obcall::ObStorageRpcProxy storage_svr_rpc_proxy_;
+  obrpc::ObStorageRpcProxy storage_svr_rpc_proxy_;
   storage::ObStorageRpc storage_rpc_;
 
   // for safe destroy

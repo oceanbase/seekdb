@@ -26,9 +26,6 @@
 #include <unistd.h>
 #endif
 
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_file_manager.h"
-#endif
 #include "share/ob_io_device_helper.h"
 
 using namespace oceanbase::lib;
@@ -321,15 +318,13 @@ int ObIOBenchRunner::init(const int64_t block_count)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate read memory failed", K(ret));
   } else {
-    if (!GCTX.is_shared_storage_mode()) {
-      // prepare macro blocks
-      for (int64_t i = 0; OB_SUCC(ret) && i < block_count; ++i) {
-        blocksstable::ObMacroBlockHandle block_handle;
-        if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_block(block_handle))) {
-          LOG_WARN("alloc macro block failed", K(ret), K(block_count), K(i));
-        } else if (OB_FAIL(block_handles_.push_back(block_handle))) {
-          LOG_WARN("push back block handle failed", K(ret), K(block_count), K(i), K(block_handle));
-        }
+    // prepare macro blocks
+    for (int64_t i = 0; OB_SUCC(ret) && i < block_count; ++i) {
+      blocksstable::ObMacroBlockHandle block_handle;
+      if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_block(block_handle))) {
+        LOG_WARN("alloc macro block failed", K(ret), K(block_count), K(i));
+      } else if (OB_FAIL(block_handles_.push_back(block_handle))) {
+        LOG_WARN("push back block handle failed", K(ret), K(block_count), K(i), K(block_handle));
       }
     }
     if (OB_SUCC(ret)) {
@@ -443,19 +438,8 @@ void ObIOBenchRunner::run1()
       io_info.fd_.device_handle_ = &LOCAL_DEVICE_INSTANCE;
       io_info.offset_ = ObRandom::rand(0, OB_DEFAULT_MACRO_BLOCK_SIZE - load_.size_);
       io_info.timeout_us_ = MAX_IO_WAIT_TIME_MS * 1000;
-#ifdef OB_BUILD_SHARED_STORAGE
-      if (GCTX.is_shared_storage_mode()) {
-        io_info.fd_.first_id_ = ObIOFd::NORMAL_FILE_ID; // first_id is not used in shared storage mode;
-        io_info.fd_.second_id_ = OB_SERVER_FILE_MGR.get_io_calibration_fd();
-        io_info.offset_ += block_idx * OB_DEFAULT_MACRO_BLOCK_SIZE;
-      } else {
-        io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
-        io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
-      } 
-#else
       io_info.fd_.first_id_ = block_handles_[block_idx].get_macro_id().first_id();
       io_info.fd_.second_id_ = block_handles_[block_idx].get_macro_id().second_id();
-#endif
 
       if (ObIOMode::WRITE == load_.mode_) {
         io_info.offset_ = lower_align(io_info.offset_, DIO_READ_ALIGN_SIZE);
@@ -542,13 +526,6 @@ void ObIOBenchController::run1()
   const int64_t MAX_CALIBRATION_BLOCK_COUNT = 20LL * 1024LL * 1024LL * 1024LL / OB_DEFAULT_MACRO_BLOCK_SIZE;
   int64_t free_block_count = OB_STORAGE_OBJECT_MGR.get_free_macro_block_count();
   int64_t total_block_count = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count();
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (GCTX.is_shared_storage_mode()) {
-    const int64_t free_disk_size = OB_SERVER_DISK_SPACE_MGR.get_free_disk_size();
-    free_block_count = free_disk_size / OB_DEFAULT_MACRO_BLOCK_SIZE;
-    total_block_count = free_block_count;
-  }
-#endif
 
   if (free_block_count <= MIN_CALIBRATION_BLOCK_COUNT
       || 1.0 * free_block_count / total_block_count < MIN_FREE_SPACE_PERCENTAGE) {
@@ -561,14 +538,6 @@ void ObIOBenchController::run1()
     if (OB_FAIL(runner.init(benchmark_block_count))) {
       LOG_WARN("init benchmark runner failed", K(ret), K(benchmark_block_count));
     }
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (OB_SUCC(ret)) {
-      if (GCTX.is_shared_storage_mode() && OB_FAIL(OB_SERVER_FILE_MGR.create_io_calibration_file(
-          benchmark_block_count))) {
-        LOG_WARN("fail to create io calibration file", KR(ret), K(benchmark_block_count));
-      }
-    }
-#endif
   }
 
   // execute io benchmark
@@ -608,12 +577,6 @@ void ObIOBenchController::run1()
     }
   }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-  int tmp_ret = OB_SUCCESS;
-  if (GCTX.is_shared_storage_mode() && OB_TMP_FAIL(OB_SERVER_FILE_MGR.delete_io_calibration_file())) {
-    LOG_ERROR("fail to delete io calibration file", KR(tmp_ret));
-  }
-#endif
 
   ret_code_ = ret;
   finish_ts_ = ObTimeUtility::fast_current_time();

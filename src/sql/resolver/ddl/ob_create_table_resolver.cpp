@@ -26,11 +26,10 @@
 #include "share/vector_index/ob_vector_index_util.h"
 #include "share/ob_vec_index_builder_util.h"
 
-
 namespace oceanbase
 {
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 using namespace share::schema;
 using namespace omt;
@@ -204,8 +203,6 @@ int ObCreateTableResolver::set_default_micro_index_clustered_(share::schema::ObT
   // set default value. If user_specified, it is modifed in resolve_table_option.
   if (OB_FAIL(ret)) {
     // error occurred
-  } else if (GCTX.is_shared_storage_mode()) {
-    table_schema.set_micro_index_clustered(true);
   } else { // shared_nothing
     table_schema.set_micro_index_clustered(false);
   }
@@ -626,15 +623,6 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
                                *create_table_stmt,
                                create_table_stmt->get_create_table_arg().schema_))) {
         LOG_WARN("fail to resolve hint", K(ret));
-      }
-    }
-
-    // check storage cache policy for partitioned table
-    // because we only know the if the table is partitioned table after resolve_table_options
-    if (OB_SUCC(ret) && GCTX.is_shared_storage_mode() && is_mysql_mode) {
-      ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
-      if (OB_FAIL(check_create_stmt_storage_cache_policy(table_schema.get_storage_cache_policy(), &table_schema))) {
-        LOG_WARN("fail to check storage cache policy", K(ret), K(table_schema.get_storage_cache_policy()));;
       }
     }
 
@@ -1499,7 +1487,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       }
     }
 
-
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(get_primary_key_size() > 0 && NULL != primary_node)) {
         ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
@@ -2041,7 +2028,6 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
   return ret;
 }
 
-
 int ObCreateTableResolver::set_index_name()
 {
   int ret = OB_SUCCESS;
@@ -2240,12 +2226,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("multi column of vector index is not support yet", K(ret), K(index_column_list_node->num_child_));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "multi vector index column is");
-#ifdef OB_BUILD_SHARED_STORAGE
-        } else if (GCTX.is_shared_storage_mode() && is_vec_index) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("vector index search index isn't supported in shared storage mode", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index search index in shared storage mode is");
-#endif
         }
         for (int32_t i = 0; OB_SUCC(ret) && i < index_column_list_node->num_child_; ++i) {
           ObString &column_name = sort_item.column_name_;
@@ -2540,7 +2520,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
           ParseNode *attrs_node = node->children_[2];
           bool has_pk = false;
           HEAP_VAR(ObCreateIndexStmt, create_index_stmt) {
-            ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+            ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
             for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.size(); ++i) {
               ObCreateIndexArg &create_index_arg = index_arg_list.at(i);
               has_pk |= INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == create_index_arg.index_type_;
@@ -2629,7 +2609,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
       HEAP_VARS_2((ObCreateIndexStmt, create_index_stmt), (ObPartitionResolveResult, resolve_result))  {
         ObCreateIndexArg &create_index_arg = create_index_stmt.get_create_index_arg();
         ObSArray<ObPartitionResolveResult> &resolve_results = create_table_stmt->get_index_partition_resolve_results();
-        ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+        ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
         index_arg_.index_key_ = static_cast<int64_t>(index_keyname_);
         if (OB_FAIL(create_index_arg.assign(index_arg_))) {
           LOG_WARN("fail to assign create index arg", K(ret));
@@ -2884,7 +2864,6 @@ int ObCreateTableResolver::resolve_table_charset_info(const ParseNode *node) {
   return ret;
 }
 
-
 int ObCreateTableResolver::check_max_row_data_length(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -2953,9 +2932,9 @@ int ObCreateTableResolver::check_building_domain_index_legal()
     LOG_WARN("fail to init index aux name set", K(ret));
   } else {
     ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-    const ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+    const ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); ++i) {
-      const obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
+      const obrpc::ObCreateIndexArg &index_arg = index_arg_list.at(i);
       ObIndexNameHashWrapper index_name_key(index_arg.index_name_);
       if (OB_FAIL(index_aux_name_set_.exist_refactored(index_name_key))) {
         if (OB_HASH_EXIST == ret) {

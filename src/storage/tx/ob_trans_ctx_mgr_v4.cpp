@@ -2533,9 +2533,6 @@ int ObLSTxCtxMgr::transfer_out_tx_op(const ObTransferOutTxParam &param,
           ret = OB_SUCCESS;
         }
       } else if (FALSE_IT(ctx = static_cast<ObPartTransCtx*>(tmp_ctx))) {
-      } else if (false) {
-        ret = OB_NOT_SUPPORTED;
-        TRANS_LOG(WARN, "transfer out tx failed", KR(ret), K(param));
       } else if (is_operated) {
         op_tx_count++;
       }
@@ -2602,9 +2599,6 @@ int ObLSTxCtxMgr::collect_tx_ctx(const ObLSID dest_ls_id,
           ret = OB_SUCCESS;
         }
       } else if (FALSE_IT(ctx = static_cast<ObPartTransCtx*>(tmp_ctx))) {
-      } else if (false) {
-        ret = OB_NOT_SUPPORTED;
-        TRANS_LOG(WARN, "collect tx ctx failed", KR(ret), K(move_tx_ids->at(idx)));
       } else if (!is_collected) {
       } else if (OB_FAIL(final_move_tx_ids.push_back(move_tx_ids->at(idx)))) {
         TRANS_LOG(WARN, "collect tx ctx failed", KR(ret), K(move_tx_ids->at(idx)));
@@ -2714,9 +2708,6 @@ int ObLSTxCtxMgr::move_tx_op(const ObTransferMoveTxParam &move_tx_param,
     } else if (!is_exist || OB_ISNULL(ctx)) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "ctx not found", KR(ret), K(is_exist), KP(ctx));
-    } else if (false) {
-      ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "move tx op failed", KR(ret), K(move_tx_param), K(arg));
     }
     if (OB_NOT_NULL(ctx)) {
       revert_tx_ctx(ctx);
