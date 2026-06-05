@@ -116,6 +116,7 @@ read_active_path_value() {
 read_key_value() {
   local file="$1"
   local wanted="$2"
+  [ -r "$file" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     line="$(trim "$line")"
     [ -z "$line" ] && continue
@@ -210,7 +211,9 @@ get_active_port() {
 }
 
 launchd_loaded() {
-  launchctl print "system/${LABEL}" >/dev/null 2>&1
+  launchctl print "system/${LABEL}" >/dev/null 2>&1 && return 0
+  # Fallback for non-root: active_paths is created at start, removed at stop
+  [ -r "$ACTIVE_PATHS_FILE" ]
 }
 
 boot_startup_disabled() {
@@ -234,9 +237,14 @@ boot_startup_status() {
 pid_from_file() {
   refresh_active_paths || refresh_paths
   local pid_file="$BASE_DIR/run/seekdb.pid"
-  [ -f "$pid_file" ] || return 1
-  local pid
-  pid="$(cat "$pid_file" 2>/dev/null || true)"
+  local pid=""
+  if [ -r "$pid_file" ]; then
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+  fi
+  if [ -z "$pid" ]; then
+    # Fallback when PID file is not readable (root-owned, 0600)
+    pid="$(pgrep -f "$SEEKDB_BIN" 2>/dev/null | head -1 || true)"
+  fi
   [ -n "$pid" ] || return 1
   printf "%s" "$pid"
 }
