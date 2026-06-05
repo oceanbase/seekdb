@@ -517,7 +517,7 @@ class MainWindowController: NSObject, NSWindowDelegate {
         addSectionLabel("Logs")
         addRow([
             makeButton("View Logs", #selector(SeekDBMenuBarApp.viewLogs)),
-            makeButton("Follow Logs", #selector(SeekDBMenuBarApp.followLogs))
+            makeButton("Save Logs to…", #selector(SeekDBMenuBarApp.saveLogs))
         ])
 
         addSectionLabel("Configuration")
@@ -675,9 +675,9 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         logsItem.target = self
         menu.addItem(logsItem)
 
-        let followItem = NSMenuItem(title: "Follow Logs...", action: #selector(followLogs), keyEquivalent: "")
-        followItem.target = self
-        menu.addItem(followItem)
+        let saveLogsItem = NSMenuItem(title: "Save Logs to…", action: #selector(saveLogs), keyEquivalent: "")
+        saveLogsItem.target = self
+        menu.addItem(saveLogsItem)
 
         menu.addItem(.separator())
 
@@ -886,8 +886,30 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         openTerminal("\(shellQuote(SEEKDBCTL)) logs; echo '\\nPress any key to close'; read -n1")
     }
 
-    @objc func followLogs() {
-        openTerminal("\(shellQuote(SEEKDBCTL)) logs -f")
+    @objc func saveLogs() {
+        let panel = NSSavePanel()
+        panel.title = "Save seekdb Logs"
+        panel.nameFieldStringValue = "seekdb-logs"
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = []
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let dest = panel.url else { return }
+
+        let logDir = readRuntimeBaseDir() + "/log"
+        let src = URL(fileURLWithPath: logDir)
+        do {
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
+            try FileManager.default.copyItem(at: src, to: dest)
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: dest.path)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Failed to save logs"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
     }
 
     // MARK: - Settings
