@@ -1405,26 +1405,6 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
   if (row_dimension > 3) {
     fallback = true;
   }
-  // For columns whose binary representation can diverge between left and right
-  // (e.g. JSON extract result vs string literal, vector vs collection literal),
-  // the build-side and probe-side hashes are not guaranteed to be identical,
-  // especially on platforms sensitive to alignment or with lob outrow storage.
-  // Fall back to per-datum compare to avoid hashset misses producing wrong
-  // results for NOT IN.
-  for (int64_t j = 0; !fallback && j < row_dimension; ++j) {
-    if (OB_ISNULL(LEFT_ROW_ELE(j)) || OB_ISNULL(RIGHT_ROW_ELE(0, j))) {
-      continue;
-    }
-    const ObObjType l_type = LEFT_ROW_ELE(j)->datum_meta_.type_;
-    const ObObjType r_type = RIGHT_ROW_ELE(0, j)->datum_meta_.type_;
-    if (ob_is_json(l_type) || ob_is_json(r_type)
-        || ob_is_collection_sql_type(l_type) || ob_is_collection_sql_type(r_type)
-        || ob_is_geometry(l_type) || ob_is_geometry(r_type)
-        || ObUserDefinedSQLType == l_type || ObUserDefinedSQLType == r_type
-        || ob_is_roaringbitmap(l_type) || ob_is_roaringbitmap(r_type)) {
-      fallback = true;
-    }
-  }
   if (!fallback &&
       OB_SUCC(ret) &&
       NULL == (in_ctx = static_cast<ObExprInCtx *> (exec_ctx->get_expr_op_ctx(in_id)))) {
