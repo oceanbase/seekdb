@@ -242,8 +242,9 @@ pid_from_file() {
     pid="$(cat "$pid_file" 2>/dev/null || true)"
   fi
   if [ -z "$pid" ]; then
-    # Fallback when PID file is not readable (root-owned, 0600)
-    pid="$(pgrep -f "$SEEKDB_BIN" 2>/dev/null | head -1 || true)"
+    # Fallback when PID file is not readable (root-owned, 0600).
+    # Use -x for exact process name match to avoid matching seekdbctl, seekdb-menubar, etc.
+    pid="$(pgrep -x seekdb 2>/dev/null | head -1 || true)"
   fi
   [ -n "$pid" ] || return 1
   printf "%s" "$pid"
@@ -275,7 +276,6 @@ cmd_start() {
     info "Loading ${PLIST}"
     launchctl bootstrap system "$PLIST"
     launchctl enable "system/${LABEL}" >/dev/null 2>&1 || true
-    launchctl kickstart -k "system/${LABEL}" >/dev/null 2>&1 || true
   fi
 }
 

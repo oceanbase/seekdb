@@ -588,7 +588,6 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     var uninstallingAfterAppRemoval = false
     var serviceOperationInProgress = false
     var startingStateStartTime: Date? = nil
-    var processEverSeenRunning = false
     var startupFailureShown = false
     let STARTUP_FAILURE_TIMEOUT: TimeInterval = 30.0
 
@@ -735,15 +734,17 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
     func applyStatus(_ status: SeekDBStatus) {
         currentStatus = status
 
-        // Detect startup failure: launchd loaded but process never stays running
+        // Detect startup failure: launchd loaded but process keeps crashing.
+        // Process running → reset timer (normal startup in progress).
+        // Process not running → timer accumulates (crash loop).
         if status.state == .starting && !serviceOperationInProgress {
-            if startingStateStartTime == nil {
+            if status.processRunning {
                 startingStateStartTime = Date()
-                processEverSeenRunning = false
                 startupFailureShown = false
+            } else if startingStateStartTime == nil {
+                startingStateStartTime = Date()
             }
-            if status.processRunning { processEverSeenRunning = true }
-            if !processEverSeenRunning && !startupFailureShown,
+            if !startupFailureShown,
                let since = startingStateStartTime,
                Date().timeIntervalSince(since) > STARTUP_FAILURE_TIMEOUT {
                 startupFailureShown = true
@@ -751,7 +752,6 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
             }
         } else {
             startingStateStartTime = nil
-            processEverSeenRunning = false
             startupFailureShown = false
         }
 
@@ -851,12 +851,10 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         alert.informativeText = "The service has not started after \(Int(STARTUP_FAILURE_TIMEOUT)) seconds. The process may be crashing on startup.\n\n\(logDetailsText())"
         alert.alertStyle = .critical
         alert.addButton(withTitle: "Stop Service")
-        alert.addButton(withTitle: "View Logs")
-        alert.addButton(withTitle: "Dismiss")
+        alert.addButton(withTitle: "View Logs and Stop")
         let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            stopService()
-        } else if response == .alertSecondButtonReturn {
+        stopService()
+        if response == .alertSecondButtonReturn {
             viewLogs()
         }
     }
@@ -878,8 +876,6 @@ class SeekDBMenuBarApp: NSObject, NSApplicationDelegate {
         guard !serviceOperationInProgress else { return }
         guard authorizeAdmin(prompt: "seekdb Monitor needs your password to start the database service.") else { return }
         serviceOperationInProgress = true
-        startingStateStartTime = nil
-        startupFailureShown = false
         statusTimer?.invalidate()
         statusItem.button?.image = makeStatusIcon(.starting)
         statusMenuItem.title = "seekdb: Starting…"

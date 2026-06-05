@@ -109,6 +109,12 @@ if [ "${#ADDITIONAL_ARGS[@]}" -gt 0 ]; then
   ARGS+=("${ADDITIONAL_ARGS[@]}")
 fi
 
+# Ensure working directory matches base-dir (plist WorkingDirectory is hardcoded)
+cd "$BASE_DIR" || exit 0
+
+# Redirect launchd logs to the actual log dir
+exec > "$LOG_DIR/launchd.out.log" 2> "$LOG_DIR/launchd.err.log"
+
 echo "Starting seekdb with command: $SEEKDB_BIN ${ARGS[*]}"
 echo "Configuration loaded from: $CONFIG_FILE"
 exec "$SEEKDB_BIN" "${ARGS[@]}"
