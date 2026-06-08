@@ -96,7 +96,8 @@ void ObKVCacheHazardSlot::retire(const uint64_t version, const uint64_t tenant_i
       while (head != nullptr) {
         temp_node = head;
         head = head->get_next();
-        if (temp_node->get_version() < version || tenant_id == temp_node->tenant_id_) {
+        if (temp_node->get_version() < version ||
+            (tenant_id != OB_INVALID_TENANT_ID && tenant_id == temp_node->tenant_id_)) {
           temp_node->retire();
           temp_node = nullptr;
           ++retire_count;
