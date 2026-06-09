@@ -30,7 +30,6 @@ struct SeekDBStatus {
             if processRunning && portOpen { return .active }
             return .starting
         } else {
-            if processRunning || portOpen { return .stopping }
             return .stopped
         }
     }
