@@ -31,9 +31,12 @@ using namespace lib;
 namespace common
 {
 
+ObKVMemBlockHandle* mb_handles;
+
+
 uint32_t handle_index_of(ObKVMemBlockHandle* mb_handle)
 {
-  return mb_handle->handle_idx_;
+  return mb_handle - mb_handles;
 }
 
 int ObIKVCacheStore::store(
@@ -84,73 +87,13 @@ int ObIKVCacheStore::alloc_kvpair(
   return ret;
 }
 
-int ObKVMBHandleArray::init(int64_t max_mb_num)
-{
-  int ret = OB_SUCCESS;
-  max_mb_num_ = max_mb_num;
-  max_block_num_ = (max_mb_num_ + HANDLE_BLOCK_SIZE - 1) / HANDLE_BLOCK_SIZE;
-  if (NULL == (mb_handle_blocks_ = static_cast<ObKVMemBlockHandle**>(
-                        ob_malloc(sizeof(ObKVMemBlockHandle*) * max_block_num_,
-                            ObMemAttr(OB_SERVER_TENANT_ID, "CACHE_MB_HANDLE", ObCtxIds::DEFAULT_CTX_ID))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    COMMON_LOG(ERROR, "Fail to allocate memory for mb_handle_blocks_, ", K_(max_block_num), K(ret));
-  } else {
-    MEMSET(mb_handle_blocks_, 0, sizeof(ObKVMemBlockHandle*) * max_block_num_);
-  }
-  return ret;
-}
-
-void ObKVMBHandleArray::destroy()
-{
-  if (NULL != mb_handle_blocks_) {
-    for (int64_t i = 0; i < max_block_num_; ++i) {
-      if (NULL != mb_handle_blocks_[i]) {
-        ob_free(mb_handle_blocks_[i]);
-        mb_handle_blocks_[i] = NULL;
-      }
-    }
-    ob_free(mb_handle_blocks_);
-    mb_handle_blocks_ = NULL;
-  }
-  max_mb_num_ = 0;
-  max_block_num_ = 0;
-}
-
-bool ObKVMBHandleArray::ensure_blocks(int64_t start_idx, int64_t end_idx)
-{
-  int ret = OB_ALLOCATE_MEMORY_FAILED;
-  if (start_idx >= end_idx) return true;
-  int64_t start_block = start_idx / HANDLE_BLOCK_SIZE;
-  int64_t end_block = (end_idx - 1) / HANDLE_BLOCK_SIZE;
-
-  for (int64_t b = start_block; b <= end_block; ++b) {
-    if (ATOMIC_LOAD(&mb_handle_blocks_[b]) == NULL) {
-      void *new_block = ob_malloc(sizeof(ObKVMemBlockHandle) * HANDLE_BLOCK_SIZE,
-                                  ObMemAttr(OB_SERVER_TENANT_ID, "CACHE_MB_HANDLE", ObCtxIds::DEFAULT_CTX_ID));
-      if (NULL == new_block) {
-        COMMON_LOG(ERROR, "Fail to allocate memory for mb_handle_block", K(b));
-        return false;
-      }
-      MEMSET(new_block, 0, sizeof(ObKVMemBlockHandle) * HANDLE_BLOCK_SIZE);
-      ObKVMemBlockHandle *handles = static_cast<ObKVMemBlockHandle*>(new_block);
-      for (int64_t i = 0; i < HANDLE_BLOCK_SIZE; ++i) {
-        handles[i].handle_idx_ = b * HANDLE_BLOCK_SIZE + i;
-      }
-
-      if (!ATOMIC_BCAS(&mb_handle_blocks_[b], NULL, static_cast<ObKVMemBlockHandle*>(new_block))) {
-        ob_free(new_block);
-      }
-    }
-  }
-  return true;
-}
-
 ObKVCacheStore::ObKVCacheStore()
     : inited_(false),
+      cur_mb_num_(0),
+      max_mb_num_(0),
       block_size_(0),
       block_payload_size_(0),
-      cur_mb_num_(0),
-      mb_handle_array_(),
+      mb_handles_(NULL),
       mb_handles_pool_(),
       active_mb_handles_{NULL},
       global_status_(),
@@ -174,6 +117,7 @@ int ObKVCacheStore::init(const int64_t max_cache_size,
                          const ObITenantMemLimitGetter &mem_limit_getter)
 {
   int ret = OB_SUCCESS;
+  void *buf = NULL;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVCacheStore has been inited, ", K(ret));
@@ -183,13 +127,17 @@ int ObKVCacheStore::init(const int64_t max_cache_size,
     COMMON_LOG(WARN, "Invalid arguments, ", K(max_cache_size),
       K(block_size), K(ret));
   } else {
-    int64_t max_mb_num = compute_mb_handle_num(max_cache_size, block_size);
-    if (OB_FAIL(mb_handle_array_.init(max_mb_num))) {
-      COMMON_LOG(WARN, "Fail to init mb_handle_array_", K(ret));
-    } else if (OB_FAIL(mb_handles_pool_.init(max_mb_num, lib::ObMallocAllocator::get_instance(),
-        ObMemAttr(OB_SERVER_TENANT_ID, "CACHE_MB_HANDLE", ObCtxIds::DEFAULT_CTX_ID)))) {
+    max_mb_num_ = compute_mb_handle_num(max_cache_size, block_size);
+    if (NULL == (mb_handles_ = static_cast<ObKVMemBlockHandle*>(
+                            buf = ob_malloc((sizeof(ObKVMemBlockHandle) + sizeof(ObKVMemBlockHandle*)) * max_mb_num_,
+                                ObMemAttr(OB_SERVER_TENANT_ID, "CACHE_MB_HANDLE", ObCtxIds::DEFAULT_CTX_ID))))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      COMMON_LOG(ERROR, "Fail to allocate memory for mb_handles_, ", K_(max_mb_num), K(ret));
+    } else if (FALSE_IT(mb_handles = mb_handles_)) {
+    } else if (OB_FAIL(mb_handles_pool_.init(max_mb_num_, (char*)(buf) + sizeof(ObKVMemBlockHandle) * max_mb_num_))) {
       COMMON_LOG(WARN, "Fail to init mb_handles_pool_, ", K(ret));
     } else {
+      MEMSET(buf, 0, sizeof(ObKVMemBlockHandle) * max_mb_num_);
       block_size_ = block_size;
       block_payload_size_ = block_size - sizeof(ObKVStoreMemBlock);
       // prepare memory block handle
@@ -223,17 +171,19 @@ void ObKVCacheStore::destroy()
     return;
   }
 
-  for (int64_t i = 0; i < cur_mb_num_; ++i) {
-    ObKVMemBlockHandle &handle = mb_handle_array_.get_mb_handle(i);
-    if (FREE != handle.status_) {
-      free_mb(mb_list_.resource_mgr_, OB_SYS_TENANT_ID, handle.mem_block_);
+  if (NULL != mb_handles_) {
+    for (int64_t i = 0; i < max_mb_num_; ++i) {
+      if (FREE != mb_handles_[i].status_) {
+        free_mb(mb_list_.resource_mgr_, OB_SYS_TENANT_ID, mb_handles_[i].mem_block_);
+      }
     }
-  }
-  // free all mb handles cached by threads
-  purge_mb_handle_retire_station();
+    // free all mb handles cached by threads
+    purge_mb_handle_retire_station();
 
-  mb_handle_array_.destroy();
-  mb_list_.reset();
+    ob_free(mb_handles_);
+    mb_handles_ = NULL;
+    mb_list_.reset();
+  }
 
   mb_handles_pool_.destroy();
   block_size_ = 0;
@@ -387,13 +337,12 @@ int ObKVCacheStore::refresh_score()
   HazptrHolder hazptr_holder;
   bool protect_success;
   for (i = 0; OB_SUCC(ret) && i < cur_mb_num_; i++) {
-    ObKVMemBlockHandle &handle = mb_handle_array_.get_mb_handle(i);
-    if (OB_FAIL(hazptr_holder.protect(protect_success, &handle))) {
+    if (OB_FAIL(hazptr_holder.protect(protect_success, &mb_handles_[i]))) {
       COMMON_LOG(WARN, "failed to protect mb_handle");
     } else if (protect_success) {
-      score = handle.score_ * CACHE_SCORE_DECAY_FACTOR + (double)(handle.recent_get_cnt_);
-      handle.score_ = score;
-      ATOMIC_STORE(&handle.recent_get_cnt_, 0);
+      score = mb_handles_[i].score_ * CACHE_SCORE_DECAY_FACTOR + (double)(mb_handles_[i].recent_get_cnt_);
+      mb_handles_[i].score_ = score;
+      ATOMIC_STORE(&mb_handles_[i].recent_get_cnt_, 0);
       hazptr_holder.release();
     }
   }
@@ -451,19 +400,18 @@ bool ObKVCacheStore::wash()
   HazptrHolder hazptr_holder;
   bool protect_success = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < cur_mb_num_; ++i) {
-    ObKVMemBlockHandle &handle = mb_handle_array_.get_mb_handle(i);
     do {
-      ret = hazptr_holder.protect(protect_success, &handle);
+      ret = hazptr_holder.protect(protect_success, &mb_handles_[i]);
     } while (OB_UNLIKELY(OB_ALLOCATE_MEMORY_FAILED == ret));
     if (OB_FAIL(ret)) {
       COMMON_LOG(WARN, "failed to protect mb_handle");
     } else if (protect_success) {
-      enum ObKVMBHandleStatus status = handle.get_status();
+      enum ObKVMBHandleStatus status = mb_handles_[i].get_status();
       if (FULL == status) {
         bool washed = false;
         // wash out all blocks with 0 score
-        if (handle.score_ <= WASH_OUT_SCORE_THRESHOLD) {
-          wash_mb(&handle);
+        if (mb_handles_[i].score_ <= WASH_OUT_SCORE_THRESHOLD) {
+          wash_mb(&mb_handles_[i]);
           washed = true;
           if (wash_heap_.heap_size_ > 0) {
             wash_heap_.heap_size_--;
@@ -472,13 +420,13 @@ bool ObKVCacheStore::wash()
         if (!washed) {
           if (OB_TMP_FAIL(tmp_washbale_size_info_.add_washable_size(
                   OB_SERVER_TENANT_ID,
-                  handle.mem_block_->get_hold_size()))) {
+                  mb_handles_[i].mem_block_->get_hold_size()))) {
             COMMON_LOG(WARN,
                       "Fail to add tenant washable size",
                       K(tmp_ret),
                       K(OB_SERVER_TENANT_ID));
           }
-          wash_heap_.add(&handle);
+          wash_heap_.add(&mb_handles_[i]);
         }
       }
       //any error should not break washing, so reset ret to OB_SUCCESS
@@ -941,7 +889,7 @@ int ObKVCacheStore::get_memblock_info(const uint64_t tenant_id, ObIArray<ObKVCac
     bool protect_success;
     HazptrHolder hazptr_holder;
     for (int i = 0; OB_SUCC(ret) && i < cur_mb_num_; ++i) {
-      ObKVMemBlockHandle& handle = mb_handle_array_.get_mb_handle(i);
+      ObKVMemBlockHandle& handle = mb_handles_[i];
       if (OB_FAIL(hazptr_holder.protect(protect_success, &handle))) {
         COMMON_LOG(WARN, "Failed to protect memblock", K(ret));
       } else if (!protect_success) {
@@ -1430,17 +1378,13 @@ bool ObKVCacheStore::try_supply_mb(const int64_t mb_count)
   int ret = OB_SUCCESS;
   bool bool_ret = true;
   const int64_t old_num = ATOMIC_LOAD(&cur_mb_num_);
-  const int64_t max_mb_num = mb_handle_array_.get_max_mb_num();
-  if (old_num >= max_mb_num) {
+  if (old_num >= max_mb_num_) {
     bool_ret = false;
   } else {
-    const int64_t new_num = (old_num + mb_count <= max_mb_num ? old_num + mb_count : max_mb_num);
-    
-    if (!mb_handle_array_.ensure_blocks(old_num, new_num)) {
-      bool_ret = false;
-    } else if (ATOMIC_BCAS(&cur_mb_num_, old_num, new_num)) {
+    const int64_t new_num = (old_num + mb_count <= max_mb_num_ ? old_num + mb_count : max_mb_num_);
+    if (ATOMIC_BCAS(&cur_mb_num_, old_num, new_num)) {
       for (int64_t i = old_num; OB_SUCCESS == ret && i < new_num; i++) {
-        if (OB_FAIL(mb_handles_pool_.push(&(mb_handle_array_.get_mb_handle(i))))) {
+        if (OB_FAIL(mb_handles_pool_.push(&(mb_handles_[i])))) {
           COMMON_LOG(ERROR, "supply mb failed", K(ret));
         }
       }

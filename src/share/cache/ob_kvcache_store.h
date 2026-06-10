@@ -63,33 +63,6 @@ protected:
       const enum ObKVCachePolicy policy) = 0;
 };
 
-class ObKVMBHandleArray
-{
-public:
-  static const int64_t HANDLE_BLOCK_SIZE = OB_MALLOC_NORMAL_BLOCK_SIZE / sizeof(ObKVMemBlockHandle);
-  static const int64_t HANDLE_BLOCK_MASK = HANDLE_BLOCK_SIZE - 1;
-
-  ObKVMBHandleArray() : mb_handle_blocks_(NULL), max_mb_num_(0), max_block_num_(0) {}
-  ~ObKVMBHandleArray() { destroy(); }
-
-  int init(int64_t max_mb_num);
-  void destroy();
-
-  inline ObKVMemBlockHandle &get_mb_handle(int64_t idx) {
-    return mb_handle_blocks_[idx / HANDLE_BLOCK_SIZE][idx % HANDLE_BLOCK_SIZE];
-  }
-
-  bool ensure_blocks(int64_t start_idx, int64_t end_idx);
-
-  int64_t get_max_mb_num() const { return max_mb_num_; }
-  int64_t get_max_block_num() const { return max_block_num_; }
-
-private:
-  ObKVMemBlockHandle **mb_handle_blocks_;
-  int64_t max_mb_num_;
-  int64_t max_block_num_;
-};
-
 class ObKVCacheStore final : public ObIKVCacheStore,
     public ObIMBHandleAllocator
 {
@@ -148,8 +121,8 @@ private:
       const enum ObKVCachePolicy policy);
 
   static const int64_t SYNC_WASH_MB_TIMEOUT_US = 100 * 1000; // 100ms
-  static const int64_t RETIRE_LIMIT = 8;
-  static const int64_t WASH_THREAD_RETIRE_LIMIT = 1024;
+  static const int64_t RETIRE_LIMIT = 2;
+  static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
   static const int64_t SAFE_COUNT = 5;
   static const int64_t MAX_SKIP_REFRESH_TIMES = 100; // max skip refresh_score times during free time
@@ -254,10 +227,11 @@ private:
 private:
   bool inited_;
   //data structures for store
+  int64_t cur_mb_num_;
+  int64_t max_mb_num_;
   int64_t block_size_;
   int64_t block_payload_size_;
-  int64_t cur_mb_num_;
-  ObKVMBHandleArray mb_handle_array_;
+  ObKVMemBlockHandle *mb_handles_;
   ObFixedQueue<ObKVMemBlockHandle> mb_handles_pool_;
   ObKVMemBlockHandle *active_mb_handles_[MAX_POLICY];
   ObKVCacheStatus global_status_; // TODO rename me to status_

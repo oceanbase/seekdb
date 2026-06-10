@@ -123,7 +123,6 @@ struct ObKVMemBlockHandle : public common::ObDLink
   int64_t seq_num_;
   int64_t last_modified_time_us_;
   ObKVMBHandleStatus status_;
-  uint32_t handle_idx_;
   common::ObLink retire_link_;
 
   ObKVMemBlockHandle();
