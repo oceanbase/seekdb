@@ -1712,6 +1712,10 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
     // fast path for +8:00 (which is the default value), its offset value is 28800
     // TODO: when OceanBase is internationalized, we could make more fastpath for timezone
     value = 28800;
+  } else if (0 == tmp_str.case_compare("UTC")) {
+    // fast path for UTC, which has offset 0 with no DST transitions.
+    // This avoids dependency on timezone system tables being populated.
+    value = 0;
   } else if (OB_ISNULL(tmp_str.ptr()) || OB_UNLIKELY(tmp_str.length() <= 0)) {
     ret = OB_ERR_UNKNOWN_TIME_ZONE;
     LOG_WARN("invalid time zone offset", K(ret), K(str), K(tmp_str));
