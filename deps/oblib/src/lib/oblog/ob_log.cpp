@@ -54,6 +54,7 @@ static inline ssize_t ob_writev(int fd, const struct iovec *iov, int iovcnt) {
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/list/ob_list.h"
 #include "lib/utility/ob_fast_convert.h"
+#include "lib/allocator/ob_vslice_alloc.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "common/ob_smart_var.h"
 #include "lib/oblog/ob_log_compressor.h"
@@ -100,6 +101,15 @@ const char *ObLogger::PERF_LEVEL = "PERF";
 static const int64_t MAX_BUFFER_ITEM_CNT = 64 << 10;
 
 static const int64_t POP_COMPENSATED_TIME[5] = {0, 1, 2, 3, 4};//for pop timeout
+
+static ObVSliceAlloc &get_allocator()
+{
+  static ObBlockAllocMgr log_mem_limiter(ObBaseLogWriterCfg::DEFAULT_MAX_BUFFER_ITEM_CNT * OB_MALLOC_BIG_BLOCK_SIZE / 8);
+  static ObVSliceAlloc allocator(
+      SET_USE_500(ObMemAttr(OB_SERVER_TENANT_ID, "Logger", ObCtxIds::LOGGER_CTX_ID, OB_HIGH_ALLOC)),
+      OB_MALLOC_BIG_BLOCK_SIZE, log_mem_limiter, 8);
+  return allocator;
+}
 
 ObPLogFDType get_fd_type(const char *mod_name)
 {
@@ -553,12 +563,12 @@ void ObLogger::print_trace_buffer(const char* mod_name,
 
 
 ObLogger::ObLogger()
-  : ObRingBufLogWriter(), log_file_(), max_file_size_(DEFAULT_MAX_FILE_SIZE), max_file_index_(0),
+  : ObBaseLogWriter(), log_file_(), max_file_size_(DEFAULT_MAX_FILE_SIZE), max_file_index_(0),
     name_id_map_(), id_level_map_(), alert_log_level_(OB_LOG_LEVEL_DBA_INFO), level_version_(0),
     disable_thread_log_level_(false), force_check_(false), redirect_flag_(false),
     can_print_(true),
     enable_async_log_(true), use_multi_flush_(false), stop_append_log_(false), enable_perf_mode_(false),
-    last_async_flush_count_per_sec_(0), log_compressor_(nullptr), enable_log_limit_(true),
+    last_async_flush_count_per_sec_(0), log_allocator_(&get_allocator()), log_compressor_(nullptr), enable_log_limit_(true),
     is_arb_replica_(false), new_file_info_(nullptr), info_as_wdiag_(true)
 {
   id_level_map_.set_level(OB_LOG_LEVEL_DBA_ERROR);
@@ -570,15 +580,10 @@ ObLogger::ObLogger()
   memset(written_count_, 0, sizeof(written_count_));
   memset(dropped_count_, 0, sizeof(dropped_count_));
   memset(current_written_count_, 0, sizeof(current_written_count_));
-  alloc_wait_count_ = 0;
-  alloc_drop_count_ = 0;
-  alloc_success_count_ = 0;
 }
 
 ObLogger::~ObLogger()
 {
-  stop();
-  wait();
   destroy();
   (void)pthread_mutex_destroy(&file_size_mutex_);
   (void)pthread_mutex_destroy(&file_index_mutex_);
@@ -586,18 +591,27 @@ ObLogger::~ObLogger()
 void ObLogger::stop()
 {
   OB_LOGGER.set_enable_async_log(false);
-  ObRingBufLogWriter::stop();
+  ObBaseLogWriter::stop();
 }
 void ObLogger::wait()
 {
-  ObRingBufLogWriter::wait();
+  ObBaseLogWriter::wait();
 }
 void ObLogger::destroy()
 {
   stop_append_log_ = true;
   enable_async_log_ = false;
   enable_log_limit_ = false;
-  ObRingBufLogWriter::destroy();
+  ObBaseLogWriter::destroy();
+}
+
+void ObLogger::drop_log_items(ObIBaseLogItem **items, const int64_t item_cnt)
+{
+  ObPLogItem **log_item = reinterpret_cast<ObPLogItem **>(items);
+  for (int64_t i = 0; i < item_cnt; ++i) {
+    free_log_item(log_item[i]);
+    items[i] = NULL;
+  }
 }
 
 void ObLogger::set_trace_mode(bool trace_mode)
@@ -1473,8 +1487,12 @@ int ObLogger::init(const ObBaseLogWriterCfg &log_cfg,
     LOG_STDERR("log_cfg is not valid");
   } else {
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObRingBufLogWriter::init(log_cfg.group_commit_max_wait_us_, thread_name))) {
-        LOG_STDERR("init ringbuf writer error. ret=%d\n", ret);
+      if (OB_FAIL(ObBaseLogWriter::init(log_cfg, thread_name))) {
+        LOG_STDERR("init ObBaseLogWriter error. ret=%d\n", ret);
+      } else {
+        if (OB_FAIL(ObBaseLogWriter::start())) {
+          LOG_STDERR("start ObBaseLogWriter error ret=%d\n", ret);
+        }
       }
       is_arb_replica_ = is_arb_replica;
     }
@@ -1494,17 +1512,22 @@ int ObLogger::init(const ObBaseLogWriterCfg &log_cfg,
   return ret;
 }
 
-void ObLogger::process_batch(char **entries, int64_t *lens, int64_t count)
+void ObLogger::process_log_items(ObIBaseLogItem **items, const int64_t item_cnt, int64_t &finish_cnt)
 {
-  if (OB_NOT_NULL(entries) && OB_LIKELY(count > 0)) {
+  finish_cnt = 0;
+  if (OB_NOT_NULL(items) && OB_LIKELY(item_cnt > 0)) {
     static int64_t last_async_flush_ts = 0;
     static int64_t async_flush_log_count = 0;
-    ObPLogItem **log_item = reinterpret_cast<ObPLogItem **>(entries);
-    UNUSED(lens);
+    ObPLogItem **log_item = reinterpret_cast<ObPLogItem **>(items);
 
-    flush_logs_to_file(log_item, count);
-    async_flush_log_count += count;
-    if (log_item[count - 1]->get_timestamp() > (last_async_flush_ts + FLUSH_SAMPLE_TIME)) {
+    if (item_cnt >= GROUP_COMMIT_MAX_ITEM_COUNT) {
+      finish_cnt = GROUP_COMMIT_MAX_ITEM_COUNT - 1;
+    } else {
+      finish_cnt = item_cnt;
+    }
+    flush_logs_to_file(log_item, finish_cnt);
+    async_flush_log_count += finish_cnt;
+    if (log_item[finish_cnt - 1]->get_timestamp() > (last_async_flush_ts + FLUSH_SAMPLE_TIME)) {
       int64_t curr_ts = ObTimeUtility::current_time();
       if (curr_ts != last_async_flush_ts) {
         last_async_flush_count_per_sec_ = static_cast<int64_t>((double)(async_flush_log_count * 1000000) / (double)(curr_ts - last_async_flush_ts));
@@ -1512,11 +1535,12 @@ void ObLogger::process_batch(char **entries, int64_t *lens, int64_t count)
         async_flush_log_count = 0;
       }
     }
+    // free_log_item adds the log allocator lock, if you log in the allocator again, it will deadlock
     bool old_val = set_disable_logging(true);
     DEFER(set_disable_logging(old_val));
-    for (int64_t i = 0; i < count; ++i) {
-      log_item[i]->~ObPLogItem();
-      entries[i] = NULL;
+    for (int64_t i = 0; i < finish_cnt; ++i) {
+      free_log_item(log_item[i]);
+      items[i] = NULL;
     }
   }
 }
@@ -1525,7 +1549,7 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
 {
   if (OB_NOT_NULL(log_item)
       && OB_LIKELY(count > 0)
-      && OB_LIKELY(count <= GROUP_COMMIT_MAX_ITEM_COUNT)
+      && OB_LIKELY(count < GROUP_COMMIT_MAX_ITEM_COUNT)
       && OB_NOT_NULL(log_item[0])) {
     if (log_item[0]->get_timestamp() > (last_check_disk_ts + DISK_SAMPLE_TIME)) {
       last_check_disk_ts = log_item[0]->get_timestamp();
@@ -1745,35 +1769,27 @@ int ObLogger::alloc_log_item(const int32_t level, const int64_t size, ObPLogItem
   int ret = OB_SUCCESS;
   log_item = NULL;
   if (!stop_append_log_) {
-    if (OB_UNLIKELY(!is_inited())) {
-      ret = OB_NOT_INIT;
-    } else {
-      int64_t total_len = ENTRY_HEADER_SIZE + size;
-      int64_t ring_offset = alloc(total_len);
-      if (ring_offset < 0) {
-        ATOMIC_AAF(&alloc_wait_count_, 1);
-        int64_t wait_us = get_wait_us(level);
-        const int64_t per_us = MIN(wait_us, 10);
-        while (wait_us > 0) {
+    char *buf = nullptr;
+    if (OB_UNLIKELY(nullptr == (buf = (char*)log_allocator_->alloc(size)))) {
+      int64_t wait_us = get_wait_us(level);
+      const int64_t per_us = MIN(wait_us, 10);
+      while (wait_us > 0) {
+        if (nullptr != (buf = (char*)log_allocator_->alloc(size))) {
+          break;
+        } else {
           usleep(per_us);
           wait_us -= per_us;
-          if (!stop_append_log_ && (ring_offset = alloc(total_len)) >= 0) {
-            break;
-          }
-        }
-        if (ring_offset < 0) {
-          ATOMIC_AAF(&alloc_drop_count_, 1);
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_STDERR("alloc_log_item error, ret=%d level=%d\n", ret, level);
         }
       }
-      if (OB_SUCC(ret)) {
-        ATOMIC_AAF(&alloc_success_count_, 1);
-        log_item = new (data_of(ring_offset)) ObPLogItem();
-        log_item->set_ring_offset(ring_offset);
-        log_item->set_buf_size(size - LOG_ITEM_SIZE);
-        log_item->set_log_level(level);
+      if (nullptr == buf) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_STDERR("alloc_log_item error, ret=%d level=%d\n", ret, level);
       }
+    }
+    if (OB_SUCC(ret)) {
+      log_item = new (buf) ObPLogItem();
+      log_item->set_buf_size(size - LOG_ITEM_SIZE);
+      log_item->set_log_level(level);
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1787,7 +1803,7 @@ void ObLogger::free_log_item(ObPLogItem *log_item)
   ObDisableDiagnoseGuard disable_diagnose_guard;
   if (NULL != log_item) {
     log_item->~ObPLogItem();
-    rollback(log_item->get_ring_offset());
+    log_allocator_->free(log_item);
   }
 }
 

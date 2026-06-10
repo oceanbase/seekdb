@@ -18,7 +18,6 @@
 
 #include "ob_dbms_sched_job_utils.h"
 #include "ob_dbms_sched_table_operator.h"
-#include "ob_dbms_sched_service.h"
 #include "ob_dbms_sched_job_executor.h"
 
 #include "lib/oblog/ob_log.h"
@@ -392,7 +391,6 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       CK (OB_NOT_NULL(pool = static_cast<ObInnerSQLConnectionPool *>(sql_proxy_->get_pool())));
       OX (session_info->set_job_info(&job_info));
       OZ (table_operator_.update_for_start_execute(tenant_id, job_info));
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
       OZ (pool->acquire_spi_conn(session_info, conn));
       if (OB_NOT_NULL(conn) && OB_NOT_NULL(session_info) && !is_ora_sys_user(session_info->get_user_id()) && !is_root_user(session_info->get_user_id())) {
         conn->set_check_priv(true);
@@ -452,7 +450,6 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t tenant_id, bool is_oracl
   if (OB_SUCC(ret)) {
     if (job_info.is_killed()) { //Intercept user cancellation requests before the actual execution of the job
       OZ(table_operator_.update_for_kill(job_info));
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
     } else {
       OZ (run_dbms_sched_job(tenant_id, job_info));
       bool job_is_user_stop = false;
@@ -470,7 +467,6 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t tenant_id, bool is_oracl
         if ((OB_TMP_FAIL(table_operator_.update_for_kill(job_info)))) {
           LOG_WARN("update user stop dbms sched job failed", K(tmp_ret), K(ret));
         }
-        rootserver::ObDBMSSchedService::wakeup_scheduler();
       } else {
         ObString errmsg = common::ob_get_tsi_err_msg(ret);
         if (errmsg.empty() && ret != OB_SUCCESS) {
@@ -480,7 +476,6 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t tenant_id, bool is_oracl
         if ((OB_TMP_FAIL(table_operator_.update_for_end(job_info, ret, errmsg)))) {
           LOG_WARN("update dbms sched job failed", K(tmp_ret), K(ret));
         }
-        rootserver::ObDBMSSchedService::wakeup_scheduler();
       }
       ret = OB_SUCCESS == ret ? tmp_ret : ret;
     }

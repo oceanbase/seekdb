@@ -257,6 +257,7 @@ int ObKVCacheMap::put(
         } else {
           new_node = new (buf) Node();
           // set new node
+          new_node->tenant_id_ = OB_SYS_TENANT_ID;
           new_node->inst_ = &inst;
           new_node->hash_code_ = hash_code;
           new_node->mb_handle_ = hazptr_holder.get_mb_handle();
