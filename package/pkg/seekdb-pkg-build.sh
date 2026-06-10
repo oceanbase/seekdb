@@ -14,7 +14,9 @@
 #   # produces: package/pkg/seekdb-1.3.0-1-macos15-arm64.pkg
 #
 # Env:
-#   SEEKDB_BUILD   Build directory (default: <repo>/build_release)
+#   SEEKDB_BUILD        Build directory (default: <repo>/build_release)
+#   APP_SIGN_IDENTITY   codesign identity for apps/binaries (default: "-" / ad-hoc)
+#   PKG_SIGN_IDENTITY   productsign identity for the final .pkg (optional)
 
 set -euo pipefail
 
@@ -29,6 +31,10 @@ MACOS_VERSION_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 DO_BUILD=false
 DO_PKG=false
 DO_MENUBAR=true
+DO_NOTARIZE=false
+DO_STAPLE=true
+APP_SIGN_IDENTITY="${APP_SIGN_IDENTITY:-${CODESIGN_IDENTITY:--}}"
+PKG_SIGN_IDENTITY="${PKG_SIGN_IDENTITY:-}"
 
 usage() {
   cat <<'EOF'
@@ -42,26 +48,51 @@ Options:
   --build         Run make in SEEKDB_BUILD before packaging
   --pkg           Assemble the .pkg installer
   --no-menubar    Skip building the menu bar app
+  --app-sign-identity ID
+                  codesign identity for apps/binaries (default: ad-hoc)
+  --pkg-sign-identity ID
+                  Developer ID Installer identity for the final .pkg
+  --notarize      Submit the signed .pkg to Apple notary service
+  --no-staple     Do not staple the notarization ticket
   -h, --help      Show this help
 
 Environment:
-  SEEKDB_BUILD    CMake build directory (default: <repo>/build_release)
+  SEEKDB_BUILD        CMake build directory (default: <repo>/build_release)
+  APP_SIGN_IDENTITY   codesign identity for apps/binaries (default: "-" / ad-hoc)
+  PKG_SIGN_IDENTITY   productsign identity for the final .pkg (optional)
+  APPLE_ID            Apple ID for --notarize
+  APPLE_APP_SPECIFIC_PASSWORD or APPLE_ID_PASSWORD
+                      App-specific password for --notarize
+  APPLE_TEAM_ID       Apple Developer Team ID for --notarize
 
 Typical workflow:
   cd <oceanbase-lite>
   ./build.sh release --make -j24
   ./package/pkg/seekdb-pkg-build.sh --pkg seekdb 1.3.0 1
+
+Distribution workflow:
+  APP_SIGN_IDENTITY="Developer ID Application: ..." \
+  PKG_SIGN_IDENTITY="Developer ID Installer: ..." \
+  ./package/pkg/seekdb-pkg-build.sh --pkg --notarize seekdb 1.3.0 1
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --build)      DO_BUILD=true;   shift ;;
-    --pkg)        DO_PKG=true;     shift ;;
+    --build) DO_BUILD=true; shift ;;
+    --pkg) DO_PKG=true; shift ;;
     --no-menubar) DO_MENUBAR=false; shift ;;
-    -h|--help)    usage; exit 0 ;;
-    -*)           echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
-    *)            break ;;
+    --app-sign-identity)
+      [[ $# -ge 2 ]] || { echo "Missing value for --app-sign-identity" >&2; exit 1; }
+      APP_SIGN_IDENTITY="$2"; shift 2 ;;
+    --pkg-sign-identity)
+      [[ $# -ge 2 ]] || { echo "Missing value for --pkg-sign-identity" >&2; exit 1; }
+      PKG_SIGN_IDENTITY="$2"; shift 2 ;;
+    --notarize) DO_NOTARIZE=true; shift ;;
+    --no-staple) DO_STAPLE=false; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    *) break ;;
   esac
 done
 
@@ -80,6 +111,37 @@ fi
 info() { printf '[seekdb-pkg-build] %s\n' "$*"; }
 die()  { printf '[seekdb-pkg-build][ERROR] %s\n' "$*" >&2; exit 1; }
 
+codesign_file() {
+  local target="$1"
+  local -a args=(--force --sign "$APP_SIGN_IDENTITY")
+
+  if [[ "$APP_SIGN_IDENTITY" != "-" ]]; then
+    args+=(--timestamp --options runtime)
+  fi
+
+  codesign "${args[@]}" "$target"
+}
+
+codesign_file_best_effort() {
+  local target="$1"
+
+  [[ -e "$target" ]] || return 0
+
+  if codesign_file "$target" 2>/dev/null; then
+    return 0
+  fi
+
+  if [[ "$APP_SIGN_IDENTITY" != "-" ]]; then
+    codesign_file "$target" || die "codesign failed: $target"
+  fi
+
+  info "  skipped codesign for $target"
+}
+
+notary_password() {
+  printf '%s' "${APPLE_APP_SPECIFIC_PASSWORD:-${APPLE_ID_PASSWORD:-}}"
+}
+
 # ---------------------------------------------------------------------------
 # Step 1: Optional make
 # ---------------------------------------------------------------------------
@@ -95,6 +157,32 @@ fi
 # ---------------------------------------------------------------------------
 SEEKDB_BIN="$SEEKDB_BUILD/src/observer/seekdb"
 [[ -x "$SEEKDB_BIN" ]] || die "seekdb binary not found: $SEEKDB_BIN (run build first)"
+
+if [[ "$APP_SIGN_IDENTITY" != "-" ]]; then
+  security find-identity -v -p codesigning | grep -F "$APP_SIGN_IDENTITY" >/dev/null \
+    || die "Application signing identity not found: $APP_SIGN_IDENTITY"
+  info "Application signing identity: $APP_SIGN_IDENTITY"
+else
+  info "Application signing identity: ad-hoc"
+fi
+
+if [[ -n "$PKG_SIGN_IDENTITY" ]]; then
+  security find-identity -v -p basic | grep -F "$PKG_SIGN_IDENTITY" >/dev/null \
+    || die "Installer signing identity not found: $PKG_SIGN_IDENTITY"
+  info "Installer signing identity: $PKG_SIGN_IDENTITY"
+
+  if [[ "$APP_SIGN_IDENTITY" == "-" ]]; then
+    info "WARNING: pkg will be signed, but contained binaries remain ad-hoc. Set APP_SIGN_IDENTITY for distribution."
+  fi
+fi
+
+if [[ "$DO_NOTARIZE" == true ]]; then
+  [[ -n "$PKG_SIGN_IDENTITY" ]] || die "--notarize requires --pkg-sign-identity or PKG_SIGN_IDENTITY"
+  [[ "$APP_SIGN_IDENTITY" != "-" ]] || die "--notarize requires APP_SIGN_IDENTITY"
+  [[ -n "${APPLE_ID:-}" ]] || die "--notarize requires APPLE_ID"
+  [[ -n "$(notary_password)" ]] || die "--notarize requires APPLE_APP_SPECIFIC_PASSWORD or APPLE_ID_PASSWORD"
+  [[ -n "${APPLE_TEAM_ID:-}" ]] || die "--notarize requires APPLE_TEAM_ID"
+fi
 
 # ---------------------------------------------------------------------------
 # Step 2: Build menu bar app
@@ -117,7 +205,7 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
     -target arm64-apple-macosx13.0 \
     -O \
     "$MENUBAR_SRC/SeekDBMenuBar.swift"
-  codesign --force --sign - "$MENUBAR_BIN"
+  codesign_file "$MENUBAR_BIN"
   info "Menu bar app compiled: $MENUBAR_BIN"
 
   info "Compiling privileged helper ..."
@@ -127,7 +215,7 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
     -target arm64-apple-macosx13.0 \
     -O \
     "$MENUBAR_SRC/SeekDBHelper.swift"
-  codesign --force --sign - "$HELPER_BIN"
+  codesign_file "$HELPER_BIN"
   info "Helper compiled: $HELPER_BIN"
 fi
 
@@ -208,9 +296,9 @@ done
 # re-sign everything
 info "Re-signing binaries ..."
 for lib in "$DYLIB_DIR"/*.dylib; do
-  codesign --force --sign - "$lib" 2>/dev/null || true
+  codesign_file_best_effort "$lib"
 done
-codesign --force --sign - "$STAGING/opt/seekdb/bin/seekdb" 2>/dev/null || true
+codesign_file_best_effort "$STAGING/opt/seekdb/bin/seekdb"
 for script in seekdbctl seekdb_start seekdb_stop seekdb_status seekdb_config \
               seekdb_setup seekdb_paths seekdb_uninstall; do
   src="$MACPKG_DIR/seekdbctl/$script"
@@ -231,7 +319,7 @@ for tool_bin in "$SEEKDB_BUILD/tools/ob_admin/ob_admin" "$SEEKDB_BUILD/tools/ob_
       install_name_tool -change "$dep" "@executable_path/../lib/seekdb/$dep_name" \
         "$STAGING/opt/seekdb/bin/$tool_name" 2>/dev/null
     done
-    codesign --force --sign - "$STAGING/opt/seekdb/bin/$tool_name" 2>/dev/null || true
+    codesign_file_best_effort "$STAGING/opt/seekdb/bin/$tool_name"
   fi
 done
 
@@ -352,8 +440,9 @@ if [[ "$DO_MENUBAR" == true && -x "$MENUBAR_BIN" ]]; then
 
   # Generate Info.plist from template
   sed "s/@OceanBase_VERSION@/${VERSION}/g" "$MENUBAR_SRC/info.plist.in" > "$APP_DIR/Info.plist"
-  codesign --force --sign - "$APP_DIR/MacOS/$APP_EXECUTABLE"
-  codesign --force --sign - "$APP_BUNDLE"
+  codesign_file "$APP_DIR/MacOS/$APP_EXECUTABLE"
+  codesign_file "$APP_BUNDLE"
+  codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
   info "Menu bar app bundled"
 fi
 
@@ -363,6 +452,7 @@ info "Staging complete: $(find "$STAGING" -type f | wc -l | tr -d ' ') files"
 # Step 4: Build .pkg with pkgbuild + productbuild
 # ---------------------------------------------------------------------------
 COMPONENT_PKG="$SEEKDB_BUILD/_pkg_component.pkg"
+UNSIGNED_PRODUCT_PKG="$SEEKDB_BUILD/_pkg_product_unsigned.pkg"
 OUTPUT_PKG="$SCRIPT_DIR/${PKG_NAME}.pkg"
 
 info "Building component package ..."
@@ -424,17 +514,48 @@ rm -rf "$RESOURCES_DIR"
 mkdir -p "$RESOURCES_DIR"
 cp "$TOPDIR/LICENSE" "$RESOURCES_DIR/LICENSE"
 
+rm -f "$OUTPUT_PKG" "$UNSIGNED_PRODUCT_PKG"
+
+PRODUCTBUILD_OUTPUT="$OUTPUT_PKG"
+if [[ -n "$PKG_SIGN_IDENTITY" ]]; then
+  PRODUCTBUILD_OUTPUT="$UNSIGNED_PRODUCT_PKG"
+fi
+
 productbuild \
   --distribution "$DIST_XML" \
   --resources "$RESOURCES_DIR" \
   --package-path "$(dirname "$COMPONENT_PKG")" \
-  "$OUTPUT_PKG"
+  "$PRODUCTBUILD_OUTPUT"
+
+if [[ -n "$PKG_SIGN_IDENTITY" ]]; then
+  info "Signing product archive ..."
+  productsign \
+    --sign "$PKG_SIGN_IDENTITY" \
+    "$UNSIGNED_PRODUCT_PKG" \
+    "$OUTPUT_PKG"
+  pkgutil --check-signature "$OUTPUT_PKG"
+fi
+
+if [[ "$DO_NOTARIZE" == true ]]; then
+  info "Submitting package for notarization ..."
+  xcrun notarytool submit "$OUTPUT_PKG" \
+    --apple-id "$APPLE_ID" \
+    --password "$(notary_password)" \
+    --team-id "$APPLE_TEAM_ID" \
+    --wait
+
+  if [[ "$DO_STAPLE" == true ]]; then
+    info "Stapling notarization ticket ..."
+    xcrun stapler staple "$OUTPUT_PKG"
+    xcrun stapler validate "$OUTPUT_PKG"
+  fi
+fi
 
 info "Package created: $OUTPUT_PKG"
 ls -lh "$OUTPUT_PKG"
 
 # Cleanup temp files
-rm -f "$COMPONENT_PKG" "$DIST_XML" "$COMPONENT_PLIST" "$SVG2PNG_BIN" "$APP_ICON_ICNS"
+rm -f "$COMPONENT_PKG" "$UNSIGNED_PRODUCT_PKG" "$DIST_XML" "$COMPONENT_PLIST" "$SVG2PNG_BIN" "$APP_ICON_ICNS"
 rm -rf "$STAGING" "$RESOURCES_DIR" "$APP_ICONSET"
 
 info "Done."
