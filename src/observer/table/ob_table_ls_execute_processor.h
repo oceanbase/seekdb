@@ -16,9 +16,7 @@
 
 #ifndef _OB_TABLE_LS_EXECUTE_PROCESSOR_H
 #define _OB_TABLE_LS_EXECUTE_PROCESSOR_H
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "ob_table_context.h"
 #include "ob_table_batch_service.h"
@@ -39,10 +37,10 @@ struct ObTableHbaseMutationInfo : public table::ObTableInfoBase
 };
 
 
-/// @see RPC_S(PR5 ls_op_execute, obrpc::OB_TABLE_API_LS_EXECUTE, (table::ObTableLSOpRequest), table::ObTableLSOpResult);
-class ObTableLSExecuteP: public ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_LS_EXECUTE> >
+/// @see CALL_S(PR5 ls_op_execute, obcall::OB_TABLE_API_LS_EXECUTE, (table::ObTableLSOpRequest), table::ObTableLSOpResult);
+class ObTableLSExecuteP: public ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_LS_EXECUTE> >
 {
-  typedef ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_LS_EXECUTE> > ParentType;
+  typedef ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_LS_EXECUTE> > ParentType;
   class LSExecuteIter;
   class HTableLSExecuteIter;
 

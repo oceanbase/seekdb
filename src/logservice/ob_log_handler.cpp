@@ -29,7 +29,7 @@ namespace oceanbase
 {
 using namespace share;
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 namespace logservice
 {
 using namespace palf;
@@ -67,7 +67,7 @@ int ObLogHandler::init(const int64_t id,
                        ObRoleChangeService *rc_service,
                        PalfEnv *palf_env,
                        PalfLocationCacheCb *lc_cb,
-                       obrpc::ObLogServiceRpcProxy *rpc_proxy,
+                       obcall::ObLogServiceRpcProxy *rpc_proxy,
                        common::ObILogAllocator *alloc_mgr)
 {
   int ret = OB_SUCCESS;
@@ -1171,15 +1171,13 @@ int ObLogHandler::submit_config_change_cmd_(const LogConfigChangeCmd &req,
     CLOG_LOG(WARN, "invalid argument", KR(ret), K_(id), K(req));
   } else {
     constexpr int64_t RENEW_LEADER_INTERVAL_US = 500 * 1000L;        // 500ms
-    const int64_t timeout_us = req.timeout_us_;
-    const int64_t conn_timeout_us = MIN(timeout_us, MIN_CONN_TIMEOUT_US);
     const int64_t start_time_us = common::ObClockGenerator::getClock();
     int64_t last_renew_leader_time_us = OB_INVALID_TIMESTAMP;
     FLOG_INFO("config_change start", K_(id), K(req));
 
     while(OB_SUCCESS == ret || OB_NOT_MASTER == ret) {
       // judge init status to avoiding log_handler destoring gets stuck
-      if (IS_NOT_INIT || OB_ISNULL(lc_cb_) || OB_ISNULL(rpc_proxy_)) {
+      if (IS_NOT_INIT || OB_ISNULL(lc_cb_)) {
         ret = OB_NOT_INIT;
         CLOG_LOG(WARN, "PalfHandleImpl not init", KR(ret), K_(id));
         break;
@@ -1199,15 +1197,8 @@ int ObLogHandler::submit_config_change_cmd_(const LogConfigChangeCmd &req,
       if (OB_FAIL(lc_cb_->get_leader(id_, leader))) {
         need_renew_leader = true;
         ret = OB_SUCCESS;
-      } else if (leader == self_ && FALSE_IT(cmd_handler.handle_config_change_cmd(req, resp))) {
+      } else if (FALSE_IT(cmd_handler.handle_config_change_cmd(req, resp))) {
         CLOG_LOG(WARN, "failed to handle_config_change_cmd", KR(ret), K_(id), K(req));
-      } else if (leader != self_  && OB_FAIL(rpc_proxy_->to(leader).timeout(conn_timeout_us).trace_time(true).
-                         max_process_handler_time(timeout_us).by(MTL_ID()).send_log_config_change_cmd(req, resp))) {
-        // if RPC fails, try again
-        ret = OB_SUCCESS;
-        if (common::is_server_down_error(ret)) {
-          need_renew_leader = true;
-        }
       } else if (OB_SUCC(resp.ret_)) {
         FLOG_INFO("config_change finish", KR(ret), KPC(this), K(req),
             "cost time(ns)", common::ObTimeUtility::current_time() - start_time_us);

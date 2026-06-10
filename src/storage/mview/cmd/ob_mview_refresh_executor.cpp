@@ -420,12 +420,12 @@ int ObMViewRefreshExecutor::sync_check_nested_mview_mds(
                             const share::SCN &target_data_sync_scn)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCheckNestedMViewMdsArg arg;
+  obcall::ObCheckNestedMViewMdsArg arg;
   arg.tenant_id_ = tenant_id_;
   arg.mview_id_ = mview_id;
   arg.refresh_id_ = refresh_id;
   arg.target_data_sync_scn_ = target_data_sync_scn;
-  obrpc::ObCheckNestedMViewMdsRes res;
+  obcall::ObCheckNestedMViewMdsRes res;
   int64_t start_ts = ObTimeUtility::fast_current_time();
   const int64_t timeout_ts = 30 * 1000 * 1000; // 30s
   if (mview_id == OB_INVALID_ID || refresh_id == OB_INVALID_ID) {

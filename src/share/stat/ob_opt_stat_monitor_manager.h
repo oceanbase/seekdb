@@ -119,7 +119,7 @@ public:
                                             const bool is_flush_col_usage = true,
                                             const bool is_flush_dml_stat = true,
                                             const bool ignore_failed = true);
-  int update_opt_stat_monitoring_info(const obrpc::ObFlushOptStatArg &arg);
+  int update_opt_stat_monitoring_info(const obcall::ObFlushOptStatArg &arg);
   int update_local_cache(common::ObIArray<ColumnUsageArg> &args);
   int update_local_cache(ObOptDmlStat &dml_stat);
   int update_column_usage_info(const bool with_check);

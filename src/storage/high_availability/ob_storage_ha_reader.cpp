@@ -26,7 +26,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 using namespace blocksstable;
 
 namespace storage
@@ -1025,7 +1025,7 @@ int ObCopyTabletInfoRestoreReader::init(
   return ret;
 }
 
-int ObCopyTabletInfoRestoreReader::fetch_tablet_info(obrpc::ObCopyTabletInfo &tablet_info)
+int ObCopyTabletInfoRestoreReader::fetch_tablet_info(obcall::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
@@ -1168,7 +1168,7 @@ int ObCopyTabletInfoObProducer::init(
   return ret;
 }
 
-int ObCopyTabletInfoObProducer::get_next_tablet_info(obrpc::ObCopyTabletInfo &tablet_info)
+int ObCopyTabletInfoObProducer::get_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
@@ -1278,7 +1278,7 @@ int ObCopySSTableInfoRestoreReader::init(
 
 int ObCopySSTableInfoRestoreReader::fetch_sstable_meta_(
     const backup::ObBackupSSTableMeta &backup_sstable_meta,
-    obrpc::ObCopyTabletSSTableInfo &sstable_info)
+    obcall::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
 
@@ -1303,7 +1303,7 @@ int ObCopySSTableInfoRestoreReader::fetch_sstable_meta_(
 }
 
 int ObCopySSTableInfoRestoreReader::get_next_sstable_info(
-    obrpc::ObCopyTabletSSTableInfo &sstable_info)
+    obcall::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   sstable_info.reset();
@@ -1326,7 +1326,7 @@ int ObCopySSTableInfoRestoreReader::get_next_sstable_info(
 
 int ObCopySSTableInfoRestoreReader::get_tablet_sstable_header_from_backup_(
     const common::ObTabletID &tablet_id,
-    obrpc::ObCopyTabletSSTableHeader &copy_header)
+    obcall::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   copy_header.tablet_id_ = tablet_id;
@@ -1355,7 +1355,7 @@ int ObCopySSTableInfoRestoreReader::get_tablet_sstable_header_from_backup_(
 
 int ObCopySSTableInfoRestoreReader::get_tablet_sstable_header_from_local_(
     const common::ObTabletID &tablet_id,
-    obrpc::ObCopyTabletSSTableHeader &copy_header)
+    obcall::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   remote_sstable_producer_.reset();
@@ -1374,7 +1374,7 @@ int ObCopySSTableInfoRestoreReader::get_tablet_sstable_header_from_local_(
 }
 
 int ObCopySSTableInfoRestoreReader::get_next_sstable_info_from_backup_(
-    obrpc::ObCopyTabletSSTableInfo &sstable_info)
+    obcall::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   const backup::ObBackupSSTableMeta &backup_sstable_meta = backup_sstable_meta_array_.at(sstable_index_);
@@ -1391,7 +1391,7 @@ int ObCopySSTableInfoRestoreReader::get_next_sstable_info_from_backup_(
 }
 
 int ObCopySSTableInfoRestoreReader::get_next_sstable_info_from_local_(
-    obrpc::ObCopyTabletSSTableInfo &sstable_info)
+    obcall::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(remote_sstable_producer_.get_next_sstable_info(sstable_info))) {
@@ -1573,7 +1573,7 @@ int ObCopySSTableInfoRestoreReader::set_backup_sstable_meta_array_(
 }
 
 int ObCopySSTableInfoRestoreReader::get_next_tablet_sstable_header(
-    obrpc::ObCopyTabletSSTableHeader &copy_header)
+    obcall::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   ObTabletID tablet_id;
@@ -1601,7 +1601,7 @@ int ObCopySSTableInfoRestoreReader::get_next_tablet_sstable_header(
 
 int ObCopySSTableInfoRestoreReader::get_backup_tablet_meta_(
     const common::ObTabletID &tablet_id,
-    obrpc::ObCopyTabletSSTableHeader &copy_header)
+    obcall::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -1751,7 +1751,7 @@ ObCopyTabletsSSTableInfoObProducer::~ObCopyTabletsSSTableInfoObProducer()
 int ObCopyTabletsSSTableInfoObProducer::init(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,
-    const common::ObIArray<obrpc::ObCopyTabletSSTableInfoArg> &tablet_sstable_info_array)
+    const common::ObIArray<obcall::ObCopyTabletSSTableInfoArg> &tablet_sstable_info_array)
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = nullptr;
@@ -1782,7 +1782,7 @@ int ObCopyTabletsSSTableInfoObProducer::init(
 }
 
 int ObCopyTabletsSSTableInfoObProducer::get_next_tablet_sstable_info(
-    obrpc::ObCopyTabletSSTableInfoArg &arg)
+    obcall::ObCopyTabletSSTableInfoArg &arg)
 {
   int ret = OB_SUCCESS;
   arg.reset();
@@ -1852,7 +1852,7 @@ void errsim_copy_new_sstable_array(const ObTabletID &tablet_id, ObTableStoreIter
 #endif
 
 int ObCopySSTableInfoObProducer::init(
-    const obrpc::ObCopyTabletSSTableInfoArg &tablet_sstable_info,
+    const obcall::ObCopyTabletSSTableInfoArg &tablet_sstable_info,
     ObLS *ls)
 {
   int ret = OB_SUCCESS;
@@ -1907,7 +1907,7 @@ int ObCopySSTableInfoObProducer::init(
 }
 
 int ObCopySSTableInfoObProducer::get_next_sstable_info(
-    obrpc::ObCopyTabletSSTableInfo &sstable_info)
+    obcall::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   sstable_info.reset();
@@ -1949,7 +1949,7 @@ int ObCopySSTableInfoObProducer::get_next_sstable_info(
 }
 
 int ObCopySSTableInfoObProducer::get_copy_tablet_sstable_header(
-    obrpc::ObCopyTabletSSTableHeader &copy_header)
+    obcall::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   copy_header.reset();
@@ -2114,7 +2114,7 @@ ObCopySSTableMacroRestoreReader::ObCopySSTableMacroRestoreReader()
 }
 
 int ObCopySSTableMacroRestoreReader::init(
-    const obrpc::ObCopySSTableMacroRangeInfoArg &rpc_arg,
+    const obcall::ObCopySSTableMacroRangeInfoArg &rpc_arg,
     const ObRestoreBaseInfo &restore_base_info,
     const ObTabletRestoreAction::ACTION &restore_action,
     backup::ObBackupMetaIndexStoreWrapper &meta_index_store,
@@ -2422,7 +2422,7 @@ int ObCopyLSViewInfoRestoreReader::get_ls_meta(
 }
 
 int ObCopyLSViewInfoRestoreReader::get_next_tablet_info(
-    obrpc::ObCopyTabletInfo &tablet_info)
+    obcall::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
@@ -2519,7 +2519,7 @@ int ObCopyRemoteSSTableInfoObProducer::init(
 }
 
 int ObCopyRemoteSSTableInfoObProducer::get_next_sstable_info(
-    obrpc::ObCopyTabletSSTableInfo &sstable_info)
+    obcall::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   sstable_info.reset();
@@ -2631,7 +2631,7 @@ int ObCopyRemoteSSTableInfoObProducer::get_copy_sstable_count_(int64_t &sstable_
 }
 
 int ObCopyRemoteSSTableInfoObProducer::get_copy_tablet_sstable_header(
-    obrpc::ObCopyTabletSSTableHeader &copy_header)
+    obcall::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   copy_header.reset();
@@ -3075,7 +3075,7 @@ int ObCopySSTableMacroObProducer::init(
 }
 
 int ObCopySSTableMacroObProducer::get_next_sstable_macro_range_info(
-    obrpc::ObCopySSTableMacroRangeInfoHeader &macro_range_info_header)
+    obcall::ObCopySSTableMacroRangeInfoHeader &macro_range_info_header)
 {
   int ret = OB_SUCCESS;
   macro_range_info_header.reset();
@@ -3094,7 +3094,7 @@ int ObCopySSTableMacroObProducer::get_next_sstable_macro_range_info(
 }
 
 int ObCopySSTableMacroObProducer::get_next_sstable_macro_range_info_(
-    obrpc::ObCopySSTableMacroRangeInfoHeader &macro_range_info_header)
+    obcall::ObCopySSTableMacroRangeInfoHeader &macro_range_info_header)
 {
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
@@ -3161,7 +3161,7 @@ int ObCopySSTableMacroRangeObProducer::init(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
-    const obrpc::ObCopySSTableMacroRangeInfoHeader &header,
+    const obcall::ObCopySSTableMacroRangeInfoHeader &header,
     const int64_t macro_range_max_marco_count)
 {
   int ret = OB_SUCCESS;

@@ -16,9 +16,7 @@
 
 #ifndef _OB_TABLE_QUERY_AND_MUTATE_HELPER_H
 #define _OB_TABLE_QUERY_AND_MUTATE_HELPER_H
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "ob_table_context.h"
 #include "ob_table_scan_executor.h"

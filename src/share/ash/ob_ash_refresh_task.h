@@ -36,7 +36,6 @@ public:
 private:
   bool require_snapshot_ahead();
   bool check_tenant_can_do_wr_task(uint64_t tenant_id);
-  obrpc::ObWrRpcProxy wr_proxy_;
   bool is_inited_;
   int64_t last_scheduled_snapshot_time_;
   int64_t prev_write_pos_;

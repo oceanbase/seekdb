@@ -47,7 +47,7 @@ public:
                                 const uint64_t& data_table_id,
                                 const uint64_t& tenant_id,
                                 const int64_t& task_id,
-                                obrpc::ObCreateIndexArg& index_arg,
+                                obcall::ObCreateIndexArg& index_arg,
                                 rootserver::ObRootService *root_service,
                                 common::hash::ObHashMap<uint64_t, ObDomainDependTaskStatus> &map,
                                 const oceanbase::common::ObAddr &addr,

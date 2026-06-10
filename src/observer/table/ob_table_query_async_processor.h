@@ -16,9 +16,7 @@
 
 #ifndef _OB_TABLE_QUERY_ASYNC_PROCESSOR_H
 #define _OB_TABLE_QUERY_ASYNC_PROCESSOR_H 1
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "ob_table_context.h"
 #include "ob_table_cache.h"
@@ -68,9 +66,9 @@ namespace observer
  * -------------------------------------- ObTableQueryAsyncP ----------------------------------------
 */
 class ObTableQueryAsyncP :
-  public ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_EXECUTE_QUERY_ASYNC> >
+  public ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_EXECUTE_QUERY_ASYNC> >
 {
-  typedef ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_EXECUTE_QUERY_ASYNC>>
+  typedef ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_EXECUTE_QUERY_ASYNC>>
     ParentType;
   using ResultMergeIterator = table::ObOldMergeTableQueryResultIterator<common::ObNewRow, table::ObTableMergeFilterCompare>;
 public:

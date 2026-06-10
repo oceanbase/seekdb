@@ -21,6 +21,7 @@
 #include "share/backup/ob_tenant_archive_mgr.h"
 #include "share/backup/ob_archive_store.h"
 #include "share/backup/ob_backup_connectivity.h"
+#include "observer/ob_service.h"
 
 using namespace oceanbase;
 using namespace rootserver;
@@ -391,7 +392,7 @@ static int round_checkpoint_cb(
  * ------------------------------ObArchiveHandler---------------------
  */
 ObArchiveHandler::ObArchiveHandler()
-  : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID), rpc_proxy_(nullptr),
+  : is_inited_(false), tenant_id_(OB_INVALID_TENANT_ID),
     sql_proxy_(nullptr), schema_service_(nullptr), round_handler_(),
     archive_table_op_()
 {
@@ -401,7 +402,6 @@ ObArchiveHandler::ObArchiveHandler()
 int ObArchiveHandler::init(
     const uint64_t tenant_id,
     share::schema::ObMultiVersionSchemaService *schema_service,
-    obrpc::ObSrvRpcProxy &rpc_proxy,
     common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
@@ -419,7 +419,6 @@ int ObArchiveHandler::init(
   } else {
     tenant_id_ = tenant_id;
     schema_service_ = schema_service;
-    rpc_proxy_ = &rpc_proxy;
     sql_proxy_ = &sql_proxy;
     is_inited_ = true;
   }
@@ -504,7 +503,7 @@ int ObArchiveHandler::check_archive_dest_validity_(const int64_t dest_no)
     LOG_WARN("fail to get archive path", K(ret), K(tenant_id_));
   } else if (OB_FAIL(dest_mgr.init(tenant_id_, dest_type, dest_str,  *sql_proxy_))) {
     LOG_WARN("fail to init dest manager", K(ret), K(tenant_id_), K(dest_str));
-  } else if (OB_FAIL(dest_mgr.check_dest_validity(*rpc_proxy_, true/*need_format_file*/))) {
+  } else if (OB_FAIL(dest_mgr.check_dest_validity(true/*need_format_file*/))) {
     LOG_WARN("fail to check archive dest validity", K(ret), K(tenant_id_), K(dest_str));
   }
 
@@ -802,7 +801,7 @@ int ObArchiveHandler::notify_(const ObTenantArchiveRoundAttr &round)
   share::ObLocationService *location_service = GCTX.location_service_;
   const bool force_renew = true;
   common::ObAddr leader_addr;
-  obrpc::ObNotifyArchiveArg arg;
+  obcall::ObNotifyArchiveArg arg;
   arg.tenant_id_ = tenant_id_;
 
   if (OB_FAIL(notify_addr_set.create(1))) {
@@ -815,7 +814,7 @@ int ObArchiveHandler::notify_(const ObTenantArchiveRoundAttr &round)
     }
     LOG_INFO("leader_addr_set to be notified archive:", K(notify_addr_set));
     for (hash::ObHashSet<ObAddr>::const_iterator it = notify_addr_set.begin(); it != notify_addr_set.end(); it++) {
-      if (OB_TMP_FAIL(rpc_proxy_->to(it->first).notify_archive(arg))) {
+      if (OB_TMP_FAIL(GCTX.ob_service_->notify_archive(arg))) {
         LOG_WARN("failed to notify ls leader archive", K(tmp_ret), K(arg));
       } else {
         LOG_INFO("succeed to notify ls leader archive", K(arg), K(it->first));

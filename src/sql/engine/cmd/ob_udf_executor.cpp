@@ -30,27 +30,13 @@ namespace sql
 int ObCreateFuncExecutor::execute(ObExecContext &ctx, ObCreateFuncStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  const obrpc::ObCreateUserDefinedFunctionArg &create_udf_arg = stmt.get_create_func_arg();
   ObString first_stmt;
+  UNUSED(ctx);
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
-    const_cast<obrpc::ObCreateUserDefinedFunctionArg&>(create_udf_arg).ddl_stmt_str_ = first_stmt;
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("get common rpc proxy failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->create_udf(create_udf_arg))) {
-    LOG_WARN("rpc proxy create udf failed", K(ret),
-                "dst", common_rpc_proxy->get_server());
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("create_udf not supported in seekdb", K(ret));
   }
   return ret;
 }
@@ -58,27 +44,13 @@ int ObCreateFuncExecutor::execute(ObExecContext &ctx, ObCreateFuncStmt &stmt)
 int ObDropFuncExecutor::execute(ObExecContext &ctx, ObDropFuncStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  const obrpc::ObDropUserDefinedFunctionArg &drop_func_arg = stmt.get_drop_func_arg();
   ObString first_stmt;
+  UNUSED(ctx);
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
-    const_cast<obrpc::ObDropUserDefinedFunctionArg&>(drop_func_arg).ddl_stmt_str_ = first_stmt;
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("get common rpc proxy failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->drop_udf(drop_func_arg))) {
-    LOG_WARN("rpc proxy create udf failed", K(ret),
-                "dst", common_rpc_proxy->get_server());
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("drop_udf not supported in seekdb", K(ret));
   }
   return ret;
 }

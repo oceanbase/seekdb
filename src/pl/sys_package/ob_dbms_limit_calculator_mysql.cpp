@@ -1,3 +1,4 @@
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -104,16 +105,14 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_unit(
   } else if (OB_ISNULL(ptr = static_cast<char *>(ctx.get_allocator().alloc(MAX_RES_LEN)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), K(MAX_RES_LEN));
-  } else if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rpc_proxy or session is null", K(ret), K(GCTX.srv_rpc_proxy_));
   } else if (0 >= (timeout = THIS_WORKER.get_timeout_remain())) {
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
-  } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(addr)
-                     .timeout(timeout)
-                     .by(tenant_id)
-                     .phy_res_calculate_by_unit(tenant_id, res))) {
+  } else if (OB_FAIL(ex_rpc::sync_call([&]{
+    int r = OB_SUCCESS;
+    MTL_SWITCH(tenant_id) { r = MTL(ObResourceLimitCalculator*)->get_tenant_min_phy_resource_value(res); }
+    return r;
+  }))) {
     LOG_WARN("failed to update local stat cache caused by unknow error",
              K(ret), K(addr), K(timeout), K(tenant_id));
     // rewrite the error code to make user recheck the argument and retry.

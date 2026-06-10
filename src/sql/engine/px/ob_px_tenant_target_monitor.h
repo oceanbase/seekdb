@@ -18,6 +18,7 @@
 #define __SQL_ENG_PX_TENANT_TARGET_MONITOR_H__
 
 #include "lib/net/ob_addr.h"
+#include "sql/engine/px/ob_px_target_monitor_rpc.h"
 #include "share/ob_define.h"
 #include "common/ob_role.h"
 #include "lib/lock/ob_monitor.h"
@@ -103,6 +104,8 @@ public:
   // for virtual_table iter
   int get_all_target_info(common::ObIArray<ObPxTargetInfo> &target_info_array);
   static uint64_t get_server_index(uint64_t version);
+  // in-process handler for OB_PX_TARGET_REQUEST (single-replica, self target)
+  static int handle_target_request(ObPxRpcFetchStatArgs &arg, ObPxRpcFetchStatResponse &result);
 
   TO_STRING_KV(K_(is_init), K_(tenant_id), K_(server), K_(role), K_(px_target_used));
 

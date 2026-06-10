@@ -22,7 +22,6 @@
 #include "rpc/frame/ob_req_processor.h"
 
 using namespace oceanbase::rpc;
-using namespace oceanbase::obrpc;
 using namespace oceanbase::rpc::frame;
 using namespace oceanbase::common;
 

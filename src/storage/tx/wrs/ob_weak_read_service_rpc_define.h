@@ -19,14 +19,12 @@
 
 #include "lib/utility/ob_unify_serialize.h"     // OB_UNIS_VERSION
 #include "lib/net/ob_addr.h"                    // ObAddr
-#include "rpc/obrpc/ob_rpc_proxy.h"             // ObRpcProxy
-#include "rpc/obrpc/ob_rpc_proxy_macros.h"      // RPC_*
 #include "share/config/ob_server_config.h"
 #include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 
 struct ObWrsGetClusterVersionRequest
@@ -111,46 +109,7 @@ struct ObWrsClusterHeartbeatResponse
   OB_UNIS_VERSION(1);
 };
 
-class ObWrsRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObWrsRpcProxy);
-
-  // get CLUSTER level weak read version
-  RPC_S(PR1 get_weak_read_cluster_version, OB_WRS_GET_CLUSTER_VERSION,
-      (ObWrsGetClusterVersionRequest), ObWrsGetClusterVersionResponse);
-
-  // post Cluster level heartbeat request info, AP RPC
-  RPC_AP(PR5 post_weak_read_cluster_heartbeat, OB_WRS_CLUSTER_HEARTBEAT,
-      (ObWrsClusterHeartbeatRequest), ObWrsClusterHeartbeatResponse);
-};
-
-///////////////////////////////// RPC process functions /////////////////////////////////////
-class ObWrsGetClusterVersionP : public ObWrsRpcProxy::Processor<OB_WRS_GET_CLUSTER_VERSION>
-{
-public:
-  explicit ObWrsGetClusterVersionP(transaction::ObIWeakReadService *wrs) : wrs_(wrs)
-  {}
-  virtual ~ObWrsGetClusterVersionP() {}
-protected:
-  int process();
-private:
-  transaction::ObIWeakReadService *wrs_;
-};
-
-class ObWrsClusterHeartbeatP : public ObWrsRpcProxy::Processor<OB_WRS_CLUSTER_HEARTBEAT>
-{
-public:
-  explicit ObWrsClusterHeartbeatP(transaction::ObIWeakReadService *wrs) : wrs_(wrs)
-  {}
-  virtual ~ObWrsClusterHeartbeatP() {}
-protected:
-  int process();
-private:
-  transaction::ObIWeakReadService *wrs_;
-};
-
-} // obrpc
+} // obcall
 } // oceanbase
 
 #endif

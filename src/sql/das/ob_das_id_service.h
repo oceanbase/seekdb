@@ -31,7 +31,7 @@ public:
   static int mtl_init(ObDASIDService *&das_id_service);
   void destroy() { reset(); }
   static const int64_t DAS_ID_PREALLOCATED_RANGE = 1000000; // 1 million
-  int handle_request(const ObDASIDRequest &request, obrpc::ObDASIDRpcResult &result);
+  int handle_request(const ObDASIDRequest &request, obcall::ObDASIDRpcResult &result);
 };
 } // namespace sql
 } // namespace oceanbase

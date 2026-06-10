@@ -19,7 +19,7 @@
 #include "ob_table.h"
 #include "ob_table_service_client.h"
 #include "share/table/ob_table_rpc_struct.h"
-#include "share/table/ob_table_rpc_proxy.h"               // ObTableRpcProxy
+#include "share/table/ob_table_rpc_binding.h"             // ObTableRpcBinding (Table-API RPC removed)
 namespace oceanbase
 {
 namespace table
@@ -45,7 +45,8 @@ private:
   typedef common::hash::ObHashMap<int64_t, std::pair<int64_t, int64_t>, common::hash::NoPthreadDefendMode> BatchResultIdxMap;
   class GetServersTabletsFunc;
   class FreeIdxArrayFunc;
-  typedef typename obrpc::ObTableRpcProxy::SSHandle<obrpc::OB_TABLE_API_EXECUTE_QUERY> QueryHandle;
+  // Table-API RPC removed (feature decommissioned); keep handle type for struct layout only.
+  typedef obcall::SSHandle<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_EXECUTE_QUERY> > QueryHandle;
   class QueryMultiResult: public ObTableEntityIterator
   {
   public:
@@ -120,7 +121,6 @@ private:
   ObTableEntityFactory<ObTableEntity> default_entity_factory_;
   ObITableEntityFactory *entity_factory_;
   common::ObArenaAllocator arena_;
-  obrpc::ObTableRpcProxy *rpc_proxy_;
   QueryMultiResult query_multi_result_;
   QueryAsyncMultiResult query_async_multi_result_;
   // disallow copy

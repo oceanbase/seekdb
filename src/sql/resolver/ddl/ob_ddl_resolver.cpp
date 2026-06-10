@@ -35,7 +35,7 @@ namespace oceanbase
 using namespace common;
 using namespace share::schema;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 #define LOG_USER_WARN_ONCE(ret_code, args...) \
@@ -127,7 +127,7 @@ ObDDLResolver::~ObDDLResolver()
 
 int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_schema,
                                    const ObPartitionResolveResult &resolve_result,
-                                   const obrpc::ObCreateIndexArg &index_arg,
+                                   const obcall::ObCreateIndexArg &index_arg,
                                    bool &fts_common_aux_table_exist,
                                    ObIArray<ObPartitionResolveResult> &resolve_results,
                                    ObIArray<ObCreateIndexArg> &index_arg_list,
@@ -196,7 +196,7 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
 int ObDDLResolver::append_multivalue_args(
     const share::schema::ObTableSchema &data_schema,
     const ObPartitionResolveResult &resolve_result,
-    const obrpc::ObCreateIndexArg &index_arg,
+    const obcall::ObCreateIndexArg &index_arg,
     bool &common_aux_table_exist,
     ObIArray<ObPartitionResolveResult> &resolve_results,
     ObIArray<ObCreateIndexArg> &index_arg_list,
@@ -2007,7 +2007,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             SQL_RESV_LOG(WARN, "unknown read only options", K(ret));
           }
           if (OB_SUCCESS == ret && stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
-            if (OB_FAIL(alter_table_bitset_.add_member( obrpc::ObAlterTableArg::READ_ONLY))) {
+            if (OB_FAIL(alter_table_bitset_.add_member( obcall::ObAlterTableArg::READ_ONLY))) {
               SQL_RESV_LOG(WARN, "failed to add member to bitset!", K(ret));
             }
           }
@@ -2318,7 +2318,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             ret = common::OB_ERR_UNEXPECTED;
             SQL_RESV_LOG(ERROR, "invalid node", K(ret));
           } else if (OB_FAIL(alter_table_bitset_.add_member(
-                  obrpc::ObAlterTableArg::FORCE_LOCALITY))) {
+                  obcall::ObAlterTableArg::FORCE_LOCALITY))) {
             SQL_RESV_LOG(WARN, "fail to add force locality member to bitset", K(ret));
           }
         }
@@ -5927,7 +5927,7 @@ int ObDDLResolver::ob_add_ddl_dependency(const uint64_t schema_id,
                                          const ObSchemaType schema_type,
                                          const int64_t schema_version,
                                          const uint64_t schema_tenant_id,
-                                         obrpc::ObDDLArg &ddl_arg)
+                                         obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
   if (schema_id == OB_INVALID_ID || schema_version == OB_INVALID_VERSION) { // do nothing
@@ -5968,7 +5968,7 @@ int ObDDLResolver::ob_add_ddl_dependency(const uint64_t schema_id,
 }
 
 int ObDDLResolver::ob_add_ddl_dependency(const pl::ObPLDependencyTable & dependency_table,
-                                                               obrpc::ObDDLArg &ddl_arg)
+                                                               obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < dependency_table.count(); i++) {
@@ -5985,7 +5985,7 @@ int ObDDLResolver::ob_add_ddl_dependency(const pl::ObPLDependencyTable & depende
 
 int ObDDLResolver::add_udt_default_dependency(ObRawExpr *expr,
                                               ObSchemaChecker *schema_checker,
-                                              obrpc::ObDDLArg &ddl_arg)
+                                              obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
@@ -6074,7 +6074,7 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
                                                  ObSQLSessionInfo *session_info,
                                                  ObSchemaChecker *schema_checker,
                                                  ObObj &extend_result,
-                                                 obrpc::ObDDLArg &ddl_arg)
+                                                 obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
   const ObObj input_default_value = default_value;
@@ -8026,7 +8026,7 @@ int ObDDLResolver::resolve_foreign_key(const ParseNode *node,
   return ret;
 }
 
-// int resolve_foreign_key_node(const ParseNode *node, obrpc::ObCreateForeignKeyArg &arg);
+// int resolve_foreign_key_node(const ParseNode *node, obcall::ObCreateForeignKeyArg &arg);
 // description: parse the sub-nodes related to foreign keys in the table_element_list node
 //
 // @param [in] node  table_element_list node related to foreign key sub-nodes
@@ -8034,7 +8034,7 @@ int ObDDLResolver::resolve_foreign_key(const ParseNode *node,
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObDDLResolver::resolve_foreign_key_node(const ParseNode *node,
-                                            obrpc::ObCreateForeignKeyArg &arg,
+                                            obcall::ObCreateForeignKeyArg &arg,
                                             bool is_alter_table,
                                             const ObColumnSchemaV2 *column)
 {
@@ -8288,7 +8288,7 @@ int ObDDLResolver::resolve_foreign_key_name(const ParseNode *constraint_node,
 // @param [in] arg  already contains foreign key information of ObCreateForeignKeyArg
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObDDLResolver::check_foreign_key_reference(
-    obrpc::ObCreateForeignKeyArg &arg,
+    obcall::ObCreateForeignKeyArg &arg,
     bool is_alter_table,
     const ObColumnSchemaV2 *column)
 {
@@ -8593,14 +8593,14 @@ int ObDDLResolver::drop_not_null_constraint(const ObColumnSchemaV2 &column)
           LOG_WARN("push back cst failed", K(ret));
         } else if (OB_UNLIKELY(
                   alter_table_stmt->get_alter_table_arg().alter_constraint_type_
-                    != obrpc::ObAlterTableArg::DROP_CONSTRAINT
+                    != obcall::ObAlterTableArg::DROP_CONSTRAINT
                   && alter_table_stmt->get_alter_table_arg().alter_constraint_type_
-                    != obrpc::ObAlterTableArg::CONSTRAINT_NO_OPERATION)) {
+                    != obcall::ObAlterTableArg::CONSTRAINT_NO_OPERATION)) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "Add/modify not null constraint together with other DDLs");
         } else {
           alter_table_stmt->get_alter_table_arg().alter_constraint_type_ =
-                            obrpc::ObAlterTableArg::DROP_CONSTRAINT;
+                            obcall::ObAlterTableArg::DROP_CONSTRAINT;
         }
       }
     }
@@ -8769,7 +8769,7 @@ int ObDDLResolver::add_not_null_constraint(ObColumnSchemaV2 &column,
       LOG_WARN("push back cst failed", K(ret));
     } else {
       alter_table_stmt->get_alter_table_arg().alter_constraint_type_ =
-                          obrpc::ObAlterTableArg::ADD_CONSTRAINT;
+                          obcall::ObAlterTableArg::ADD_CONSTRAINT;
     }
     LOG_DEBUG("alter, add not null constraint", K(cst), K(alter_table_schema));
   } else {
@@ -9750,9 +9750,9 @@ int ObDDLResolver::resolve_auto_partition_with_tenant_config(ObCreateTableStmt *
     LOG_WARN("fail to resolve auto partition", KR(ret), K(table_schema), KPC(stmt));
   } else if (stmt->use_auto_partition_clause()) {
     // check if all index support auto split
-    const common::ObIArray<obrpc::ObCreateIndexArg> &index_arg_list = stmt->get_index_arg_list();
+    const common::ObIArray<obcall::ObCreateIndexArg> &index_arg_list = stmt->get_index_arg_list();
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); ++i) {
-      const obrpc::ObCreateIndexArg &index_arg = index_arg_list.at(i);
+      const obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
       if (!is_support_split_index_type(index_arg.index_type_)) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("there are the index types that are not supported by auto-partition", K(ret));
@@ -10083,7 +10083,7 @@ int ObDDLResolver::resolve_presetting_partition_key(ParseNode *node, ObTableSche
 // enable auto-partition for the table;
 // otherwise, do nothing
 int ObDDLResolver::try_set_auto_partition_by_config(const ParseNode *node,
-                                                    common::ObIArray<obrpc::ObCreateIndexArg> &index_arg_list,
+                                                    common::ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
                                                     ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
@@ -10162,7 +10162,7 @@ int ObDDLResolver::try_set_auto_partition_by_config(const ParseNode *node,
         // the index infos of table_schema have not been set in resolver,
         // thus we need to check index with index_arg
         for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); i++) {
-          obrpc::ObCreateIndexArg &index_arg = index_arg_list.at(i);
+          obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
           if (!index_arg.is_index_scope_specified_ && is_support_split_index_type(index_arg.index_type_) && lib::is_mysql_mode()) {
             bool is_prefix = false;
             if (OB_FAIL(check_primary_key_prefix_of_index_columns(table_schema, index_arg, is_prefix))) {
@@ -11598,7 +11598,7 @@ int ObDDLResolver::parse_column_group(const ParseNode *column_group_node,
   return ret;
 }
 
-int ObDDLResolver::parse_cg_node(const ParseNode &cg_node, obrpc::ObCreateIndexArg &create_index_arg) const
+int ObDDLResolver::parse_cg_node(const ParseNode &cg_node, obcall::ObCreateIndexArg &create_index_arg) const
 {
   int ret = OB_SUCCESS;
   bool is_all_cg_exist = false;
@@ -11643,7 +11643,7 @@ int ObDDLResolver::parse_cg_node(const ParseNode &cg_node, obrpc::ObCreateIndexA
     }
     if (OB_FAIL(ret)) {
     } else if (is_each_cg_exist) {
-      obrpc::ObCreateIndexArg::ObIndexColumnGroupItem each_cg_item;
+      obcall::ObCreateIndexArg::ObIndexColumnGroupItem each_cg_item;
       each_cg_item.is_each_cg_ = true;
       each_cg_item.cg_type_ = ObColumnGroupType::SINGLE_COLUMN_GROUP;
       if (OB_FAIL(create_index_arg.index_cgs_.push_back(each_cg_item))) {
@@ -11653,7 +11653,7 @@ int ObDDLResolver::parse_cg_node(const ParseNode &cg_node, obrpc::ObCreateIndexA
 
     if (OB_FAIL(ret)) {
     } else if (is_all_cg_exist) {
-      obrpc::ObCreateIndexArg::ObIndexColumnGroupItem all_cg_item;
+      obcall::ObCreateIndexArg::ObIndexColumnGroupItem all_cg_item;
       all_cg_item.is_each_cg_ = false;
       all_cg_item.cg_type_ = ObColumnGroupType::ALL_COLUMN_GROUP;
       if (OB_FAIL(create_index_arg.index_cgs_.push_back(all_cg_item))) {
@@ -11737,7 +11737,7 @@ int ObDDLResolver::check_column_is_first_part_key(const ObPartitionKeyInfo &part
   return ret;
 }
 
-int ObDDLResolver::resolve_index_column_group(const ParseNode *cg_node, obrpc::ObCreateIndexArg &create_index_arg)
+int ObDDLResolver::resolve_index_column_group(const ParseNode *cg_node, obcall::ObCreateIndexArg &create_index_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cg_node) || cg_node->num_child_ <= 0) {

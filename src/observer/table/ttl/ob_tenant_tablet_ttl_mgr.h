@@ -188,7 +188,7 @@ private:
                         need_check_(false),
                         is_dirty_(false),
                         ttl_continue_(true),
-                        cmd_type_(obrpc::ObTTLRequestArg::TTL_INVALID_TYPE),
+                        cmd_type_(obcall::ObTTLRequestArg::TTL_INVALID_TYPE),
                         rsp_time_(OB_INVALID_ID),
                         state_(common::ObTTLTaskStatus::OB_TTL_TASK_INVALID),
                         is_reused_(false),
@@ -231,7 +231,7 @@ private:
       bool                              need_check_; /*need scan partition & check*/
       bool                              is_dirty_;  /*need check the current ctx task*/
       bool                              ttl_continue_;
-      obrpc::ObTTLRequestArg::TTLRequestType         cmd_type_; // deprecated @dazhi
+      obcall::ObTTLRequestArg::TTLRequestType         cmd_type_; // deprecated @dazhi
       int64_t                           rsp_time_; // OB_INVALID_ID means no need response
       common::ObTTLTaskStatus           state_;
       bool                              is_reused_; // all delete task is finished (or canceled)

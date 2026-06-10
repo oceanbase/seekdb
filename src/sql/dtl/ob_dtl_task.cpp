@@ -141,7 +141,7 @@ int ObDtlExecServer::add_exec_addr(const common::ObAddr &exec_addr)
 //       }
 //     } else {
 //       auto proxy = DTL.get_rpc_proxy().to(GCTX.self_addr());
-//       obrpc::ObDtlRpcChanArgs args;
+//       obcall::ObDtlRpcChanArgs args;
 //       args.chid_ = ci.chid_;
 //       args.peer_ = ci.peer_;
 //       if (OB_FAIL(proxy.create_channel(args))) {

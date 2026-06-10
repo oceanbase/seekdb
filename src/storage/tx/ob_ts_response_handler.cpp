@@ -22,7 +22,7 @@
 using namespace oceanbase::transaction;
 using namespace oceanbase::observer;
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 int64_t ObTsResponseTaskFactory::alloc_count_;
 int64_t ObTsResponseTaskFactory::free_count_;

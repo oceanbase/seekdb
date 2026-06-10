@@ -20,19 +20,18 @@
 
 #include "util/easy_mod_stat.h"
 #include "lib/vtoa/ob_vtoa_util.h"
-#include "rpc/obrpc/ob_rpc_session_handler.h"
+#include "rpc/frame/ob_req_session_handler.h"
 #include "rpc/obmysql/packet/ompk_handshake_response.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "rpc/frame/ob_net_easy.h"
 #include "observer/omt/ob_tenant.h"
-#include "rootserver/ob_rs_rpc_processor.h"
 #include "lib/stat/ob_diagnostic_info_container.h"
 
 using namespace oceanbase::common;
 
 using namespace oceanbase::rpc;
 using namespace oceanbase::rpc::frame;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::observer;
 using namespace oceanbase::omt;
 using namespace oceanbase::memtable;
@@ -278,7 +277,7 @@ int dispatch_req(ObRequest &req)
 } // namespace oceanbase
 
 ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler,
-                           ObRpcSessionHandler &session_handler,
+                           ObReqSessionHandler &session_handler,
                            ObGlobalContext &gctx)
     : ObReqQDeliver(qhandler),
       is_inited_(false),
@@ -379,171 +378,6 @@ int ObSrvDeliver::acquire_diagnostic_info_object(int64_t tenant_id, int64_t grou
   } else {
     ret = OB_ERROR;
   }
-  return ret;
-}
-
-int ObSrvDeliver::deliver_rpc_request(ObRequest &req)
-{
-  int ret = OB_SUCCESS;
-  ObReqQueue *queue = NULL;
-  ObTenant *tenant = NULL;
-  const obrpc::ObRpcPacket &pkt
-      = reinterpret_cast<const obrpc::ObRpcPacket &>(req.get_packet());
-
-  if (is_virtual_tenant_id(pkt.get_tenant_id()) && is_resource_manager_group(pkt.get_group_id())) {
-    if(REACH_TIME_INTERVAL(10 * 1000 * 1000L)) { // 10s
-      LOG_WARN("unexpected group id of virtual tenant", K(pkt.get_group_id()), K(pkt.get_tenant_id()));
-    }
-    req.set_group_id(OBCG_DEFAULT);
-  } else {
-    req.set_group_id(pkt.get_group_id());
-  }
-
-  const int64_t now = ObTimeUtility::current_time();
-  int64_t rpc_net_delay = req.get_receive_timestamp() - req.get_send_timestamp();
-  if (rpc_net_delay < 0) {
-    rpc_net_delay = 0;
-  }
-
-  const bool need_update_stat =
-      !req.is_retry_on_lock() && oceanbase::lib::is_diagnose_info_enabled();
-  const bool is_stream = pkt.is_stream();
-  const uint64_t tenant_id = pkt.get_tenant_id();
-  const uint64_t group_id = pkt.get_group_id();
-
-  if (stop_
-      || SS_STOPPING == GCTX.status_
-      || SS_STOPPED == GCTX.status_) {
-    ret = OB_SERVER_IS_STOPPING;
-    LOG_WARN("receive request when server is stopping",
-             K(req),
-             K(ret));
-  }
-
-  req.set_trace_point(ObRequest::OB_EASY_REQUEST_RPC_DELIVER);
-  if (!OB_SUCC(ret)) {
-
-  } else if (is_stream) {
-    if (!session_handler_.wakeup_next_thread(req)) {
-      ret = OB_SESSION_NOT_FOUND;
-      LOG_WARN("receive stream rpc packet but session not found",
-               K(pkt), K(req));
-    }
-  } else if (10 == pkt.get_priority()) {
-    if (rootserver::is_parallel_ddl(pkt.get_pcode())) {
-      queue = &ddl_parallel_queue_->queue_;
-    } else {
-      queue = &ddl_queue_->queue_;
-    }
-  } else {
-    const uint64_t priv_tenant_id = pkt.get_priv_tenant_id();
-    if (NULL != gctx_.omt_) {
-      tenant = NULL;
-      if (OB_FAIL(gctx_.omt_->get_tenant(tenant_id, tenant)) || NULL == tenant) {
-        if (OB_FAIL(gctx_.omt_->get_tenant(priv_tenant_id, tenant)) || NULL == tenant) {
-          ret = OB_TENANT_NOT_IN_SERVER;
-        }
-      }
-    } else {
-      ret = OB_NOT_INIT;
-      LOG_ERROR("gctx_.omt_ is NULL", K(gctx_));
-    }
-  }
-
-  if (!OB_SUCC(ret)) {
-
-  } else if (NULL != queue) {
-    SERVER_LOG(DEBUG, "deliver packet", K(queue));
-    if (need_update_stat) {
-      ObTenantDiagnosticInfoSummaryGuard guard(tenant_id, group_id);
-      EVENT_INC(RPC_PACKET_IN);
-      EVENT_ADD(RPC_PACKET_IN_BYTES,
-                pkt.get_encoded_size() + OB_NET_HEADER_LENGTH);
-      EVENT_ADD(RPC_NET_DELAY, rpc_net_delay);
-      EVENT_ADD(RPC_NET_FRAME_DELAY,
-                now - req.get_receive_timestamp());
-    }
-    // TODO(roland.qk): pass ObDiagnosticInfo to each queue.
-    if (!queue->push(&req, MAX_QUEUE_LEN)) {
-      ret = OB_QUEUE_OVERFLOW;
-    }
-  } else if (NULL != tenant) {
-    ObDiagnosticInfo *di = nullptr;
-    if (OB_UNLIKELY(req.get_diagnostic_info())) {
-      // possible repost
-      req.get_diagnostic_info()->inner_begin_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, 0, pkt.get_pcode(), pkt.get_request_level(), 0);
-    } else if (need_update_stat) {  // simplest way to check is_diagnose_info_enabled
-      // using_cache = true means session_id = 0
-      const bool using_cache =
-          ObDiagnosticInfoContainer::get_di_experimental_feature_flag().di_rpc_cache();
-      int64_t session_id = 0;
-      if (!using_cache) {
-        session_id = ObBackgroundSessionIdGenerator::get_instance().get_next_rpc_session_id();
-      }
-      if (OB_SUCCESS != acquire_diagnostic_info_object(tenant_id, group_id, session_id, di,
-                            using_cache)) {
-        // ignore diagnostic info error
-      } else {
-        di->get_ash_stat().pcode_ = pkt.get_pcode();
-        di->get_ash_stat().session_type_ = ObActiveSessionStatItem::SessionType::BACKGROUND;
-        snprintf(di->get_ash_stat().program_, ASH_PROGRAM_STR_LEN, "T%ld_RPC_REQUEST", tenant_id);
-        di->get_ash_stat().module_[0] = '\0';
-        di->get_ash_stat().action_[0] = '\0';
-        di->get_ash_stat().trace_id_ = req.generate_trace_id(GCTX.self_addr());
-        di->get_ash_stat().clear_basic_query_identifier(); //clear the last query identifier
-        if (OB_NOT_NULL(req.get_diagnostic_info())) {
-          LOG_ERROR("reuse diagnostic info wrongly.", K(&req), K(req.get_diagnostic_info()), K(di));
-        }
-        req.set_diagnostic_info(di);
-        di->inner_begin_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, 0, pkt.get_pcode(), pkt.get_request_level(), 0);
-      }
-    }
-    ObTenantDiagnosticInfoSummaryGuard g(nullptr == di ? nullptr : di->get_summary_slot());
-    if (need_update_stat) {
-      EVENT_INC(RPC_PACKET_IN);
-      EVENT_ADD(RPC_PACKET_IN_BYTES,
-                pkt.get_encoded_size() + OB_NET_HEADER_LENGTH);
-      EVENT_ADD(RPC_NET_DELAY, rpc_net_delay);
-      EVENT_ADD(RPC_NET_FRAME_DELAY,
-                now - req.get_receive_timestamp());
-    }
-
-    SERVER_LOG(DEBUG, "deliver tenant packet", K(queue), K(tenant->id()));
-    if (tenant->has_stopped()) {
-      ret = OB_TENANT_NOT_IN_SERVER;
-      LOG_WARN("tenant is stopped", K(ret), K(tenant->id()));
-      if (OB_NOT_NULL(di)) {
-        di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-        // no need to process di ref in obrequest. it would be processed in
-        // ObRpcRequestOperator::response_result
-      }
-    } else if (OB_FAIL(tenant->recv_request(req))) {
-      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        LOG_WARN("tenant receive request fail", K(*tenant), K(req));
-      }
-      if (OB_NOT_NULL(di)) {
-        di->end_wait_event(ObWaitEventIds::NETWORK_QUEUE_WAIT, false);
-      }
-    }
-  } else if (!is_stream) {
-    LOG_WARN("not stream packet, should not reach here.");
-    ret = OB_ERR_UNEXPECTED;
-  }
-
-  // maybe tenant hasn't synced right now.
-  if (OB_TENANT_NOT_IN_SERVER == ret && SS_INIT == GCTX.status_) {
-    ret = OB_SERVER_IS_INIT;
-    LOG_WARN("server is initializing", K(pkt), K(ret));
-  }
-
-  if (!OB_SUCC(ret)) {
-    EVENT_INC(RPC_DELIVER_FAIL);
-    if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-      SERVER_LOG(WARN, "can't deliver request", K(req), K(ret));
-    }
-    on_translate_fail(&req, ret);
-  }
-
   return ret;
 }
 
@@ -717,12 +551,12 @@ int ObSrvDeliver::deliver(rpc::ObRequest &req)
   }
   LOG_DEBUG("deliver ob_request:", K(req));
   if (ObRequest::OB_RPC == req.get_type()) {
-    if (OB_FAIL(deliver_rpc_request(req))) {
-      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-        LOG_WARN("deliver rpc request fail", KP(&req), K(ret));
-      }
+    // obcall RPC transport removed (single-replica): no OB_RPC request path.
+    ret = OB_NOT_SUPPORTED;
+    if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
+      LOG_WARN("OB_RPC request after rpc removal, dropping", KP(&req), K(ret));
     }
-    //LOG_INFO("yzfdebug deliver rpc", K(ret), "pkt", req.get_packet());
+    on_translate_fail(&req, ret);
   } else if (ObRequest::OB_MYSQL == req.get_type()) {
     if (OB_FAIL(deliver_mysql_request(req))) {
       LOG_WARN("deliver mysql request fail", K(req), K(ret));

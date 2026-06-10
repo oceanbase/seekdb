@@ -21,7 +21,7 @@
 
 using namespace oceanbase::observer;
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 void ObSqlTaskHandler::reset()
 {

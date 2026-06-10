@@ -26,10 +26,6 @@ namespace common
 {
 class ObMySQLProxy;
 }
-namespace obrpc
-{
-class ObTableRpcProxy;
-}
 namespace sql
 {
 typedef common::ObSEArray<int64_t, 1> RowkeyArray;
@@ -103,7 +99,6 @@ public:
   int get_table_id(const ObString &table_name, uint64_t &table_id);
 
   common::ObMySQLProxy &get_user_sql_client();
-  obrpc::ObTableRpcProxy &get_table_rpc_proxy();
   const ObString &get_credential() const;
 public:
   // for debug purpose only

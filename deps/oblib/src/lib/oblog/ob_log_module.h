@@ -657,10 +657,10 @@ LOG_MOD_END(PL)
 #define _RPC_FRAME_LOG(level, _fmt_, args...)   \
   _OB_SUB_MOD_LOG(RPC, FRAME, level, _fmt_, ##args)
 
-#define RPC_OBRPC_LOG(level, _fmt_, args...)    \
+#define RPC_OBCALL_LOG(level, _fmt_, args...)    \
   OB_SUB_MOD_LOG(RPC, OBRPC, level, _fmt_, ##args)
 
-#define _RPC_OBRPC_LOG(level, _fmt_, args...)   \
+#define _RPC_OBCALL_LOG(level, _fmt_, args...)   \
   _OB_SUB_MOD_LOG(RPC, OBRPC, level, _fmt_, ##args)
 
 #define RPC_OBMYSQL_LOG(level, _fmt_, args...)  \
@@ -1059,8 +1059,8 @@ LOG_MOD_END(PL)
 #define _PL_CACHE_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _PL_CACHE_LOG(level, ##args); }
 #define RPC_FRAME_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_FRAME_LOG(level, ##args); }
 #define _RPC_FRAME_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_FRAME_LOG(level, ##args); }
-#define RPC_OBRPC_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_OBRPC_LOG(level, ##args); }
-#define _RPC_OBRPC_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_OBRPC_LOG(level, ##args); }
+#define RPC_OBCALL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_OBCALL_LOG(level, ##args); }
+#define _RPC_OBCALL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_OBCALL_LOG(level, ##args); }
 #define RPC_OBMYSQL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_OBMYSQL_LOG(level, ##args); }
 #define _RPC_OBMYSQL_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; _RPC_OBMYSQL_LOG(level, ##args); }
 #define RPC_TEST_LOG_RET(level, errcode, args...) { int __ret__ = errcode; int ret = __ret__; RPC_TEST_LOG(level, ##args); }
@@ -1275,7 +1275,7 @@ LOG_MOD_END(PL)
 //   The rpc initiator needs to faithfully return the rcode content to the client, and cannot rebuild it based on errcode.
 // That is to say: LOG_USER_* is used for the error record of the initial error point, and FORWARD_USER_* is used to pass the error record
 //
-// For details, refer to deps/oblib/src/rpc/obrpc/ob_rpc_proxy.cpp: log_user_error_and_warn() usage
+// For details, refer to the former obcall ob_call_proxy log_user_error_and_warn() usage (RPC transport removed)
 //
 #define FORWARD_USER_ERROR(errcode, args...)                       \
     _LOG_USER_MSG(::oceanbase::common::ObLogger::USER_ERROR, errcode, "%s", ##args)

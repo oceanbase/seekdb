@@ -126,8 +126,7 @@ int ObDDLTransController::broadcast_consensus_version(const int64_t tenant_id,
                                                       const ObArray<ObAddr> &server_list)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObBroadcastConsensusVersionArg arg;
-  rootserver::ObBroadcstConsensusVersionProxy proxy(*GCTX.srv_rpc_proxy_, &obrpc::ObSrvRpcProxy::broadcast_consensus_version);
+  obcall::ObBroadcastConsensusVersionArg arg;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLTransController", KR(ret));
@@ -148,28 +147,20 @@ int ObDDLTransController::broadcast_consensus_version(const int64_t tenant_id,
   } else {
     arg.set_tenant_id(tenant_id);
     arg.set_consensus_version(schema_version);
-    const int64_t rpc_timeout = GCONF.rpc_timeout;
+    obcall::ObBroadcastConsensusVersionRes result;
     FOREACH_X(s, server_list, OB_SUCC(ret)) {
       if (OB_ISNULL(s)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("s is null", KR(ret));
       } else {
-        // overwrite ret
-        if (OB_FAIL(proxy.call(*s, rpc_timeout, arg))) {
-          LOG_WARN("send broadcast consensus version rpc failed", KR(ret),
-              K(rpc_timeout), K(schema_version), K(arg), "server", *s);
-          ret = OB_SUCCESS;
+        // Direct call — seekdb has no remote servers.
+        UNUSED(*s);
+        int tmp_ret = GCTX.ob_service_->broadcast_consensus_version(arg, result);
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("broadcast consensus version failed", KR(tmp_ret),
+              K(schema_version), K(arg));
         }
       }
-    }
-    int tmp_ret = OB_SUCCESS;
-    ObArray<int> return_code_array;
-    if (OB_TMP_FAIL(proxy.wait_all(return_code_array))) {
-      LOG_WARN("wait result failed", KR(tmp_ret), K(ret));
-      ret = OB_SUCC(ret) ? tmp_ret : ret;
-    } else if (OB_FAIL(ret)) {
-    } else {
-      // don't use arg/dest here beacause call() may has failure.
     }
   }
   LOG_INFO("broadcast consensus version finished", KR(ret), K(schema_version), K(arg), K(server_list));

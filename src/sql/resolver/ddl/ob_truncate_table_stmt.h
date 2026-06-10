@@ -39,13 +39,13 @@ public:
   const common::ObString& get_database_name() const { return truncate_table_arg_.database_name_; }
   const common::ObString& get_table_name() const { return truncate_table_arg_.table_name_; }
 
-  inline const obrpc::ObTruncateTableArg &get_truncate_table_arg() const;
-  obrpc::ObTruncateTableArg &get_truncate_table_arg() { return truncate_table_arg_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return truncate_table_arg_; }
+  inline const obcall::ObTruncateTableArg &get_truncate_table_arg() const;
+  obcall::ObTruncateTableArg &get_truncate_table_arg() { return truncate_table_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return truncate_table_arg_; }
   
   TO_STRING_KV(K_(stmt_type),K_(truncate_table_arg));
 private:
-  obrpc::ObTruncateTableArg truncate_table_arg_;
+  obcall::ObTruncateTableArg truncate_table_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObTruncateTableStmt);
 };
 
@@ -54,7 +54,7 @@ inline void ObTruncateTableStmt::set_tenant_id(const uint64_t tenant_id)
   truncate_table_arg_.tenant_id_ = tenant_id;
 }
 
-inline const obrpc::ObTruncateTableArg &ObTruncateTableStmt::get_truncate_table_arg() const
+inline const obcall::ObTruncateTableArg &ObTruncateTableStmt::get_truncate_table_arg() const
 {
   return truncate_table_arg_;
 }

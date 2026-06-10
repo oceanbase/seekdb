@@ -31,7 +31,7 @@ using namespace storage;
 using namespace transaction;
 using namespace transaction::tablelock;
 using namespace table;
-namespace obrpc
+namespace obcall
 {
 OB_SERIALIZE_MEMBER(Bool, v_);
 OB_SERIALIZE_MEMBER(Int64, v_);
@@ -5938,7 +5938,7 @@ OB_DEF_DESERIALIZE(ObBatchCreateTabletArg)
       LOG_WARN("invalid arg", K(ret), K(schemas_count), K(table_schemas_), K(create_tablet_schemas_));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < schemas_count; i++) {
-        obrpc::ObCreateTabletExtraInfo create_tablet_extra_info; // placeholder.
+        obcall::ObCreateTabletExtraInfo create_tablet_extra_info; // placeholder.
         if (OB_FAIL(tablet_extra_infos_.push_back(create_tablet_extra_info))) {
           LOG_WARN("failed to push back create tablet extra info", K(ret));
         }
@@ -5990,11 +5990,11 @@ DEF_TO_STRING(ObFetchTabletSeqRes)
 
 OB_SERIALIZE_MEMBER(ObFetchTabletSeqRes, tenant_id_, cache_interval_);
 
-ObRpcRemoteWriteDDLRedoLogArg::ObRpcRemoteWriteDDLRedoLogArg()
+ObCallRemoteWriteDDLRedoLogArg::ObCallRemoteWriteDDLRedoLogArg()
   : tenant_id_(OB_INVALID_ID), ls_id_(), redo_info_(), task_id_(0)
 {}
 
-int ObRpcRemoteWriteDDLRedoLogArg::init(const uint64_t tenant_id,
+int ObCallRemoteWriteDDLRedoLogArg::init(const uint64_t tenant_id,
                                         const share::ObLSID &ls_id,
                                         const storage::ObDDLMacroBlockRedoInfo &redo_info,
                                         const int64_t task_id)
@@ -6012,14 +6012,14 @@ int ObRpcRemoteWriteDDLRedoLogArg::init(const uint64_t tenant_id,
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObRpcRemoteWriteDDLRedoLogArg, tenant_id_, ls_id_, redo_info_, task_id_);
+OB_SERIALIZE_MEMBER(ObCallRemoteWriteDDLRedoLogArg, tenant_id_, ls_id_, redo_info_, task_id_);
 
-ObRpcRemoteWriteDDLCommitLogArg::ObRpcRemoteWriteDDLCommitLogArg()
+ObCallRemoteWriteDDLCommitLogArg::ObCallRemoteWriteDDLCommitLogArg()
   : tenant_id_(OB_INVALID_ID), ls_id_(), table_key_(), start_scn_(SCN::min_scn()),
     table_id_(0), execution_id_(-1), ddl_task_id_(0)
 {}
 
-int ObRpcRemoteWriteDDLCommitLogArg::init(const uint64_t tenant_id,
+int ObCallRemoteWriteDDLCommitLogArg::init(const uint64_t tenant_id,
                                           const share::ObLSID &ls_id,
                                           const storage::ObITable::TableKey &table_key,
                                           const SCN &start_scn)
@@ -6037,15 +6037,15 @@ int ObRpcRemoteWriteDDLCommitLogArg::init(const uint64_t tenant_id,
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObRpcRemoteWriteDDLCommitLogArg, tenant_id_, ls_id_, table_key_, start_scn_,
+OB_SERIALIZE_MEMBER(ObCallRemoteWriteDDLCommitLogArg, tenant_id_, ls_id_, table_key_, start_scn_,
                     table_id_, execution_id_, ddl_task_id_);
 
 #ifdef OB_BUILD_SHARED_STORAGE
-ObRpcRemoteWriteDDLFinishLogArg::ObRpcRemoteWriteDDLFinishLogArg()
+ObCallRemoteWriteDDLFinishLogArg::ObCallRemoteWriteDDLFinishLogArg()
   : tenant_id_(OB_INVALID_TENANT_ID), log_info_()
 {}
 
-int ObRpcRemoteWriteDDLFinishLogArg::init(const uint64_t tenant_id, const storage::ObDDLFinishLogInfo &log)
+int ObCallRemoteWriteDDLFinishLogArg::init(const uint64_t tenant_id, const storage::ObDDLFinishLogInfo &log)
 {
   int ret = OB_SUCCESS;
   if (OB_INVALID_TENANT_ID == tenant_id || !log.is_valid()) {
@@ -6059,7 +6059,7 @@ int ObRpcRemoteWriteDDLFinishLogArg::init(const uint64_t tenant_id, const storag
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObRpcRemoteWriteDDLFinishLogArg, tenant_id_, log_info_);
+OB_SERIALIZE_MEMBER(ObCallRemoteWriteDDLFinishLogArg, tenant_id_, log_info_);
 
 OB_SERIALIZE_MEMBER(ObGetSSMacroBlockArg, tenant_id_, macro_id_, offset_, size_);
 OB_DEF_SERIALIZE(ObGetSSMacroBlockResult)
@@ -6142,11 +6142,11 @@ OB_SERIALIZE_MEMBER(ObSetSSCkptCompressorArg, tenant_id_, block_type_, compresso
 OB_SERIALIZE_MEMBER(ObSetSSCacheSizeRatioArg, tenant_id_, micro_cache_size_ratio_, macro_cache_size_ratio_);
 #endif
 
-ObRpcRemoteWriteDDLIncCommitLogArg::ObRpcRemoteWriteDDLIncCommitLogArg()
+ObCallRemoteWriteDDLIncCommitLogArg::ObCallRemoteWriteDDLIncCommitLogArg()
   : tenant_id_(OB_INVALID_ID), ls_id_(), tablet_id_(), lob_meta_tablet_id_(), tx_desc_(nullptr), need_release_(false)
 {}
 
-ObRpcRemoteWriteDDLIncCommitLogArg::~ObRpcRemoteWriteDDLIncCommitLogArg()
+ObCallRemoteWriteDDLIncCommitLogArg::~ObCallRemoteWriteDDLIncCommitLogArg()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(release())) {
@@ -6154,7 +6154,7 @@ ObRpcRemoteWriteDDLIncCommitLogArg::~ObRpcRemoteWriteDDLIncCommitLogArg()
   }
 }
 
-int ObRpcRemoteWriteDDLIncCommitLogArg::init(const uint64_t tenant_id,
+int ObCallRemoteWriteDDLIncCommitLogArg::init(const uint64_t tenant_id,
                                              const share::ObLSID &ls_id,
                                              const common::ObTabletID tablet_id,
                                              const common::ObTabletID lob_meta_tablet_id,
@@ -6177,7 +6177,7 @@ int ObRpcRemoteWriteDDLIncCommitLogArg::init(const uint64_t tenant_id,
   return ret;
 }
 
-int ObRpcRemoteWriteDDLIncCommitLogArg::release()
+int ObCallRemoteWriteDDLIncCommitLogArg::release()
 {
   int ret = OB_SUCCESS;
   if (tx_desc_ != nullptr && need_release_) {
@@ -6196,7 +6196,7 @@ int ObRpcRemoteWriteDDLIncCommitLogArg::release()
   return ret;
 }
 
-OB_DEF_SERIALIZE(ObRpcRemoteWriteDDLIncCommitLogArg)
+OB_DEF_SERIALIZE(ObCallRemoteWriteDDLIncCommitLogArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, tenant_id_, ls_id_, tablet_id_, lob_meta_tablet_id_);
@@ -6211,7 +6211,7 @@ OB_DEF_SERIALIZE(ObRpcRemoteWriteDDLIncCommitLogArg)
   return ret;
 }
 
-OB_DEF_DESERIALIZE(ObRpcRemoteWriteDDLIncCommitLogArg)
+OB_DEF_DESERIALIZE(ObCallRemoteWriteDDLIncCommitLogArg)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, tenant_id_, ls_id_, tablet_id_, lob_meta_tablet_id_);
@@ -6231,7 +6231,7 @@ OB_DEF_DESERIALIZE(ObRpcRemoteWriteDDLIncCommitLogArg)
   return ret;
 }
 
-OB_DEF_SERIALIZE_SIZE(ObRpcRemoteWriteDDLIncCommitLogArg)
+OB_DEF_SERIALIZE_SIZE(ObCallRemoteWriteDDLIncCommitLogArg)
 {
   int64_t len = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, tenant_id_, ls_id_, tablet_id_, lob_meta_tablet_id_);
@@ -6241,7 +6241,7 @@ OB_DEF_SERIALIZE_SIZE(ObRpcRemoteWriteDDLIncCommitLogArg)
   return len;
 }
 
-OB_SERIALIZE_MEMBER(ObRpcRemoteWriteDDLIncCommitLogRes, tx_result_);
+OB_SERIALIZE_MEMBER(ObCallRemoteWriteDDLIncCommitLogRes, tx_result_);
 
 ObRegisterTxDataArg::ObRegisterTxDataArg()
   : tenant_id_(OB_INVALID_TENANT_ID),
@@ -7307,5 +7307,5 @@ bool ObLSAccessModeInfo::is_valid() const
 OB_SERIALIZE_MEMBER(ObLSAccessModeInfo, tenant_id_, ls_id_, mode_version_,
                      access_mode_, ref_scn_, addr_, sys_ls_end_scn_);
 
-}//end namespace obrpc
+}//end namespace obcall
 }//end namespace oceanbase

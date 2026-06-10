@@ -19,10 +19,6 @@
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObDASIDRpcProxy;
-}
 namespace rpc
 {
 namespace frame
@@ -45,7 +41,7 @@ class ObDASIDCache
 public:
   ObDASIDCache() { reset(); }
   ~ObDASIDCache() { destroy(); }
-  int init(const common::ObAddr &server, rpc::frame::ObReqTransport *req_transport);
+  int init(const common::ObAddr &server);
   void destroy();
   void reset();
   int update_das_id(const int64_t start_id, const int64_t end_id);
@@ -71,7 +67,6 @@ private:
   int64_t cur_idx_;
   int64_t cache_idx_;
   common::ObAddr server_;
-  obrpc::ObDASIDRpcProxy *id_rpc_proxy_;
   ObDASIDRequestRpc *id_request_rpc_;
   common::ObAddr id_service_leader_;
   int64_t retry_request_cnt_;

@@ -28,7 +28,7 @@ namespace schema
 class ObTableSchema;
 }
 }
-namespace obrpc
+namespace obcall
 {
 struct ObUpdateStatCacheArg;
 }

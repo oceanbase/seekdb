@@ -28,7 +28,6 @@
 #include "lib/queue/ob_link.h"
 #include "lib/hash/ob_fixed_hash2.h"
 #include "rpc/ob_packet.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
 #include "rpc/ob_lock_wait_node.h"
 #include "rpc/ob_reusable_mem.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -390,10 +389,8 @@ inline void ObRequest::set_retry_times(const int32_t retry_times)
 }
 inline int64_t ObRequest::get_send_timestamp() const
 {
+  // RPC transport removed; OB_RPC send-timestamp unavailable
   int64_t ts = 0;
-  if (type_ == OB_RPC && NULL != pkt_) {
-    ts = reinterpret_cast<const obrpc::ObRpcPacket*>(pkt_)->get_timestamp();
-  }
   return ts;
 }
 
@@ -405,11 +402,7 @@ inline easy_request_t *ObRequest::get_ez_req() const
 inline TraceId ObRequest::generate_trace_id(const ObAddr &addr)
 {
   if (trace_id_.is_invalid()) {
-    if (OB_RPC == type_ && !OB_ISNULL(pkt_)) {
-      const obrpc::ObRpcPacket *packet = static_cast<const obrpc::ObRpcPacket*>(pkt_);
-      const uint64_t *trace_id = packet->get_trace_id();
-      trace_id_.set(trace_id);
-    }
+    // RPC transport removed; no OB_RPC trace-id extraction
     if (trace_id_.is_invalid()) {
       trace_id_.init(addr);
     }
@@ -433,6 +426,6 @@ void on_translate_fail(ObRequest* req, int ret);
 } // end of namespace rp
 } // end of namespace oceanbase
 #include "ob_sql_request_operator.h"
-#include "ob_rpc_request_operator.h"
+#include "ob_req_operator.h"
 
 #endif /* _OCEABASE_RPC_OB_REQUEST_H_ */

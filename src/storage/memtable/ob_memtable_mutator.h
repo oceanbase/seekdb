@@ -36,7 +36,7 @@ namespace common
 {
 class ObTabletID;
 };
-// namespace obrpc
+// namespace obcall
 // {
 // class ObBatchCreateTabletArg;
 // class ObBatchRemoveTabletArg;

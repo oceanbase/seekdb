@@ -20,7 +20,7 @@
 #include "share/ob_rpc_struct.h"
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObCreateIndexArg;
 }
@@ -59,7 +59,7 @@ protected:
       ObCreateIndexStmt *crt_idx_stmt);
   int check_generated_partition_column(
       share::schema::ObTableSchema &index_schema);
-  int add_sort_column(const obrpc::ObColumnSortItem &sort_column);
+  int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   int set_table_option_to_stmt(
       const share::schema::ObTableSchema &tbl_schema,
       const uint64_t data_table_id,

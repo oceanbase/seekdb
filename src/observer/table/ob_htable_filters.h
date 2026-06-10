@@ -19,6 +19,7 @@
 #include "utils/ob_htable_utils.h"
 #include "share/table/ob_table_rpc_struct.h"
 #include "deps/oblib/src/lib/container/ob_heap.h"
+#include "lib/hash/ob_hash.h"  // common::compare(int64_t, int64_t)
 namespace oceanbase
 {
 namespace table

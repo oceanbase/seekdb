@@ -196,21 +196,11 @@ int MockObServer::init(const char *schema_file,
     }
   }
 
-  // init gts response rpc
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(gts_response_rpc_.init(net_frame_.get_req_transport(), self_addr_))) {
-      LOG_ERROR("gts response rpc init failed", K(ret));
-    } else {
-      LOG_INFO("gts response rpc init success");
-    }
-  }
-
   //init gts local cache mgr
   if (OB_SUCC(ret)) {
     if (OB_SUCCESS != (ret = OB_TS_MGR.init(self_addr_,
          *GCTX.schema_service_,
-         *GCTX.location_service_,
-         net_frame_.get_req_transport()))) {
+         *GCTX.location_service_))) {
       STORAGE_LOG(WARN, "init gts local cache mgr failed", K(ret));
     } else {
       STORAGE_LOG(INFO, "init gts local cache mgr success");
@@ -258,7 +248,6 @@ int MockObServer::init_tenant_mgr()
   static const int64_t SERVER_TENANT_MEM_MAX = 16LL << 30;
   static const int64_t SERVER_MEM_MAX = 16LL << 30;
   ObVirtualTenantManager &omti = ObVirtualTenantManager::get_instance();
-  obrpc::ObCommonRpcProxy common_rpc;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObVirtualTenantManager::get_instance().init())) {
       LOG_ERROR("Fail to init ObVirtualTenantManager, ", K(ret));

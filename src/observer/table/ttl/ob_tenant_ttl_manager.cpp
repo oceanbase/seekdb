@@ -420,7 +420,7 @@ void ObTTLTaskScheduler::runTimerTask()
   LOG_DEBUG("runTimerTask", KR(ret), K_(tenant_id), K(current));  
 }
 
-int ObTenantTTLManager::handle_user_ttl(const obrpc::ObTTLRequestArg& arg)
+int ObTenantTTLManager::handle_user_ttl(const obcall::ObTTLRequestArg& arg)
 {
   int ret = OB_SUCCESS;
   bool enable_ttl = ObTTLUtil::is_enable_ttl(tenant_id_);
@@ -501,7 +501,7 @@ int ObTTLTaskScheduler::move_tenant_task_to_history_table(uint64_t tenant_id, ui
   return ret;
 }
 
-int ObTTLTaskScheduler::handle_user_ttl(const obrpc::ObTTLRequestArg& arg)
+int ObTTLTaskScheduler::handle_user_ttl(const obcall::ObTTLRequestArg& arg)
 {
   int ret = OB_SUCCESS;
   ObTTLTaskType user_ttl_req_type = static_cast<ObTTLTaskType>(arg.cmd_code_);
@@ -736,7 +736,7 @@ void ObTTLAllTaskScheduler::runTimerTask()
   }
 }
 
-int ObTTLAllTaskScheduler::handle_user_ttl(const obrpc::ObTTLRequestArg& arg)
+int ObTTLAllTaskScheduler::handle_user_ttl(const obcall::ObTTLRequestArg& arg)
 {
   int ret = OB_SUCCESS;
   for (int i = 0; OB_SUCC(ret) && i < task_schedulers_.count(); i++) {
@@ -776,7 +776,7 @@ int ObTTLHRowkeyTaskScheduler::try_add_periodic_task()
   return ret;
 }
 
-int ObTTLHRowkeyTaskScheduler::handle_user_ttl(const obrpc::ObTTLRequestArg& arg)
+int ObTTLHRowkeyTaskScheduler::handle_user_ttl(const obcall::ObTTLRequestArg& arg)
 {
   return OB_SUCCESS;
 }

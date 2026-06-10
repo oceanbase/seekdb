@@ -38,7 +38,7 @@ public:
       const int64_t schema_version,
       const int64_t parallelism,
       const int64_t consumer_group_id,
-      const obrpc::ObCreateIndexArg &create_index_arg,
+      const obcall::ObCreateIndexArg &create_index_arg,
       const uint64_t tenant_data_version,
       const int64_t parent_task_id = 0,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
@@ -137,13 +137,13 @@ private:
   int prepare_aux_index_tables();
   int construct_create_index_arg(
       const ObIndexType index_type,
-      obrpc::ObCreateIndexArg &arg);
-  int construct_rowkey_doc_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_doc_rowkey_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_domain_index_aux_arg(obrpc::ObCreateIndexArg &arg);
-  int construct_fts_doc_word_arg(obrpc::ObCreateIndexArg &arg);
+      obcall::ObCreateIndexArg &arg);
+  int construct_rowkey_doc_arg(obcall::ObCreateIndexArg &arg);
+  int construct_doc_rowkey_arg(obcall::ObCreateIndexArg &arg);
+  int construct_domain_index_aux_arg(obcall::ObCreateIndexArg &arg);
+  int construct_fts_doc_word_arg(obcall::ObCreateIndexArg &arg);
   int get_index_table_id(
-      const obrpc::ObCreateIndexArg *create_index_arg,
+      const obcall::ObCreateIndexArg *create_index_arg,
       uint64_t &index_table_id);
   int prepare();
   int load_dictionary();
@@ -157,8 +157,8 @@ private:
   int check_aux_table_schemas_exist(bool &is_all_exist);
   int deep_copy_index_arg(
       common::ObIAllocator &allocator,
-      const obrpc::ObCreateIndexArg &source_arg,
-      obrpc::ObCreateIndexArg &dest_arg);
+      const obcall::ObCreateIndexArg &source_arg,
+      obcall::ObCreateIndexArg &dest_arg);
   int get_task_status();
   int get_task_status(int64_t task_id, uint64_t aux_table_id, bool& is_succ);
   int wait_schema_refresh_and_trans_end();
@@ -225,7 +225,7 @@ private:
   bool is_fts_doc_word_succ_;
   bool fts_index_aux_is_trans_end_;
   bool fts_doc_word_aux_is_trans_end_;
-  obrpc::ObCreateIndexArg create_index_arg_;
+  obcall::ObCreateIndexArg create_index_arg_;
   common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;
   bool is_retryable_ddl_;
   bool use_doc_id_;

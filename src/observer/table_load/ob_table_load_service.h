@@ -17,14 +17,14 @@
 #pragma once
 
 #include "lib/task/ob_timer.h"
-#include "observer/table_load/control/ob_table_load_control_rpc_proxy.h"
+#include "observer/table_load/control/ob_table_load_control_rpc.h"
 #include "observer/table_load/ob_table_load_assigned_memory_manager.h"
 #include "observer/table_load/ob_table_load_assigned_task_manager.h"
 #include "observer/table_load/ob_table_load_client_service.h"
 #include "observer/table_load/ob_table_load_coordinator.h"
 #include "observer/table_load/ob_table_load_manager.h"
 #include "observer/table_load/ob_table_load_struct.h"
-#include "observer/table_load/resource/ob_table_load_resource_rpc_proxy.h"
+#include "observer/table_load/resource/ob_table_load_resource_rpc.h"
 #include "observer/table_load/resource/ob_table_load_resource_service.h"
 #include "storage/direct_load/ob_direct_load_struct.h"
 #include "src/observer/table_load/ob_table_load_assigned_memory_manager.h"

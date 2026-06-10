@@ -35,7 +35,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace common::sqlclient;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace sql;
@@ -216,7 +216,7 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam(const uint64_t tenant_id,
                                            const int64_t parallelism,
                                            const int64_t consumer_group_id,
                                            ObIAllocator *allocator,
-                                           const obrpc::ObDDLArg *ddl_arg,
+                                           const obcall::ObDDLArg *ddl_arg,
                                            const int64_t parent_task_id,
                                            const int64_t task_id,
                                            const bool ddl_need_retry_at_executor)
@@ -1889,121 +1889,81 @@ int group_tablets_leader_addr(const uint64_t tenant_id, const ObIArray<ObTabletI
   return ret;
 }
 
-template<typename Proxy, typename Arg, typename Res>
+template<typename Arg, typename Res, typename Fn>
 int check_trans_end(const ObArray<SendItem> &send_array,
-                    Proxy &proxy,
                     Arg &arg,
-                    Res *res,
+                    Fn &&fn, // int(const Arg&, Res&) — direct handler
                     ObIArray<int> &ret_array,
                     ObIArray<int64_t> &snapshot_array,
                     transaction::ObTransID &pending_tx_id)
 {
   int ret = OB_SUCCESS;
-  int64_t rpc_timeout = 0;
   ret_array.reuse();
   snapshot_array.reuse();
-  hash::ObHashMap<obrpc::ObLSTabletPair, obrpc::ObCheckTransElapsedResult> result_map;
-  ObArray<SendItem> tmp_send_array;
+  hash::ObHashMap<obcall::ObLSTabletPair, obcall::ObCheckTransElapsedResult> result_map;
   pending_tx_id.reset();
   if (OB_UNLIKELY(send_array.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(tmp_send_array.assign(send_array))) {
-    LOG_WARN("copy send array failed", K(ret), K(send_array.count()));
   } else if (OB_FAIL(result_map.create(send_array.count(), "check_trans_map"))) {
     LOG_WARN("create return code map failed", K(ret));
   } else {
-    // group by leader addr and send batch rpc
-    lib::ob_sort(tmp_send_array.begin(), tmp_send_array.end());
-    ObAddr last_addr;
-    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_send_array.count(); ++i) {
-      const SendItem &send_item = tmp_send_array.at(i);
-      if (send_item.leader_addr_ != last_addr) {
-        if (arg.tablets_.count() > 0) {
-          if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(arg.tablets_.count(), rpc_timeout))) {
-            LOG_WARN("get_ddl_rpc_timeout_failed", K(ret));
-          } else if (OB_FAIL(proxy.call(last_addr, rpc_timeout, arg.tenant_id_, arg))) {
-            LOG_WARN("send rpc failed", K(ret), K(arg), K(last_addr), K(arg.tenant_id_), K(rpc_timeout));
-          }
-        }
-        if (OB_SUCC(ret)) {
-          arg.tablets_.reuse();
-          last_addr = send_item.leader_addr_;
-        }
-      }
-      if (OB_SUCC(ret)) {
-        ObLSTabletPair ls_tablet_pair;
-        ls_tablet_pair.ls_id_ = send_item.ls_id_;
-        ls_tablet_pair.tablet_id_ = send_item.tablet_id_;
-        if (OB_FAIL(arg.tablets_.push_back(ls_tablet_pair))) {
-          LOG_WARN("push back send item failed", K(ret), K(i), K(send_item));
-        }
+    // seekdb: all tablets are local, call handler directly in one batch.
+    arg.tablets_.reuse();
+    for (int64_t i = 0; OB_SUCC(ret) && i < send_array.count(); ++i) {
+      const SendItem &send_item = send_array.at(i);
+      ObLSTabletPair ls_tablet_pair;
+      ls_tablet_pair.ls_id_ = send_item.ls_id_;
+      ls_tablet_pair.tablet_id_ = send_item.tablet_id_;
+      if (OB_FAIL(arg.tablets_.push_back(ls_tablet_pair))) {
+        LOG_WARN("push back send item failed", K(ret), K(i), K(send_item));
       }
     }
     if (OB_SUCC(ret) && arg.tablets_.count() > 0) {
-      if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(arg.tablets_.count(), rpc_timeout))) {
-        LOG_WARN("get_ddl_rpc_timeout_failed", K(ret));
-      } else if (OB_FAIL(proxy.call(last_addr, rpc_timeout, arg.tenant_id_, arg))) {
-        LOG_WARN("send rpc failed", K(ret), K(arg), K(last_addr), K(arg.tenant_id_));
-      }
-    }
-
-    // collect result
-    int tmp_ret = OB_SUCCESS;
-    common::ObArray<int> tmp_ret_array;
-    if (OB_TMP_FAIL(proxy.wait_all(tmp_ret_array))) {
-      LOG_WARN("rpc proxy wait failed", KR(ret), KR(tmp_ret));
-      ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    } else if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(proxy.check_return_cnt(tmp_ret_array.count()))) {
-      LOG_WARN("return cnt not match", KR(ret), "return_cnt", tmp_ret_array.count());
-    } else {
-      const ObIArray<const Res *> &result_array = proxy.get_results();
-      const ObIArray<Arg> &arg_array = proxy.get_args();
-      const ObIArray<ObAddr> &dest_array = proxy.get_dests();
-      for (int64_t i = 0; OB_SUCC(ret) && i < result_array.count(); ++i) {
-        const Res *cur_result = result_array.at(i);
-        const Arg &cur_arg = arg_array.at(i);
-        const ObAddr &cur_dest_addr = dest_array.at(i);
-        if (OB_ISNULL(cur_result)) {
+      Res result;
+      int call_ret = fn(arg, result);
+      if (OB_SUCCESS == call_ret) {
+        if (OB_UNLIKELY(arg.tablets_.count() != result.results_.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("result it null", K(ret), K(i), KP(cur_result));
-        } else if (OB_FAIL(tmp_ret_array.at(i))) {
-          LOG_WARN("check shema trans elapsed failed", K(ret), K(i), K(cur_dest_addr), K(cur_arg), KPC(cur_result));
-        } else if (cur_arg.tablets_.count() != cur_result->results_.count()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("the result count does not match the argument", K(ret), K(cur_arg), KPC(cur_result));
+          LOG_WARN("result count mismatch", K(ret), K(arg.tablets_.count()), K(result.results_.count()));
         } else {
-          for (int64_t j = 0; OB_SUCC(ret) && j < cur_result->results_.count(); ++j) {
-            const obrpc::ObLSTabletPair &send_item = cur_arg.tablets_.at(j);
-            const obrpc::ObCheckTransElapsedResult &result_item = cur_result->results_.at(j);
+          for (int64_t j = 0; OB_SUCC(ret) && j < result.results_.count(); ++j) {
+            const ObLSTabletPair &send_item = arg.tablets_.at(j);
+            const ObCheckTransElapsedResult &result_item = result.results_.at(j);
             if (OB_FAIL(result_map.set_refactored(send_item, result_item))) {
               LOG_WARN("insert into result map failed", K(ret));
             }
           }
         }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(ret_array.reserve(send_array.count()))) {
-          LOG_WARN("reserve return code array failed", K(ret), K(send_array.count()));
-        } else if (OB_FAIL(snapshot_array.reserve(send_array.count()))) {
-          LOG_WARN("reserve snapshot array failed", K(ret), K(send_array.count()));
+      } else {
+        // Fill all results with error code.
+        ObCheckTransElapsedResult error_item;
+        error_item.ret_code_ = call_ret;
+        for (int64_t j = 0; j < arg.tablets_.count(); ++j) {
+          result_map.set_refactored(arg.tablets_.at(j), error_item);
         }
-        for (int64_t i = 0; OB_SUCC(ret) && i < send_array.count(); ++i) {
-          const SendItem &send_item = send_array.at(i);
-          ObLSTabletPair ls_tablet_pair;
-          ls_tablet_pair.ls_id_ = send_item.ls_id_;
-          ls_tablet_pair.tablet_id_ = send_item.tablet_id_;
-          obrpc::ObCheckTransElapsedResult result_item;
-          if (OB_FAIL(result_map.get_refactored(ls_tablet_pair, result_item))) {
-            LOG_WARN("get result failed", K(ret), K(send_item));
-          } else if (OB_FAIL(ret_array.push_back(result_item.ret_code_))) {
-            LOG_WARN("push back return code failed", K(ret), K(send_item), K(result_item));
-          } else if (OB_FAIL(snapshot_array.push_back(result_item.snapshot_))) {
-            LOG_WARN("push back snapshot failed", K(ret), K(send_item), K(result_item));
-          } else if (result_item.pending_tx_id_.is_valid() && !pending_tx_id.is_valid()) {
-            pending_tx_id = result_item.pending_tx_id_;
-          }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(ret_array.reserve(send_array.count()))) {
+        LOG_WARN("reserve return code array failed", K(ret));
+      } else if (OB_FAIL(snapshot_array.reserve(send_array.count()))) {
+        LOG_WARN("reserve snapshot array failed", K(ret));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < send_array.count(); ++i) {
+        const SendItem &send_item = send_array.at(i);
+        ObLSTabletPair ls_tablet_pair;
+        ls_tablet_pair.ls_id_ = send_item.ls_id_;
+        ls_tablet_pair.tablet_id_ = send_item.tablet_id_;
+        ObCheckTransElapsedResult result_item;
+        if (OB_FAIL(result_map.get_refactored(ls_tablet_pair, result_item))) {
+          LOG_WARN("get result failed", K(ret), K(send_item));
+        } else if (OB_FAIL(ret_array.push_back(result_item.ret_code_))) {
+          LOG_WARN("push back return code failed", K(ret), K(send_item), K(result_item));
+        } else if (OB_FAIL(snapshot_array.push_back(result_item.snapshot_))) {
+          LOG_WARN("push back snapshot failed", K(ret), K(send_item), K(result_item));
+        } else if (result_item.pending_tx_id_.is_valid() && !pending_tx_id.is_valid()) {
+          pending_tx_id = result_item.pending_tx_id_;
         }
       }
     }
@@ -2017,7 +1977,6 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
     common::ObIArray<int> &ret_array,
     common::ObIArray<int64_t> &snapshot_array,
     const uint64_t tenant_id,
-    obrpc::ObSrvRpcProxy *rpc_proxy,
     ObLocationService *location_service,
     const bool need_wait_trans_end,
     const bool need_write_defensive)
@@ -2027,9 +1986,9 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
   snapshot_array.reset();
   ObArray<SendItem> send_array;
   if (OB_UNLIKELY(schema_version <= 0 || tablet_ids.count() <= 0 || OB_INVALID_ID == tenant_id
-      || nullptr == rpc_proxy || nullptr == location_service)) {
+      || nullptr == location_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema_version), K(tablet_ids.count()), K(tenant_id), KP(rpc_proxy), KP(location_service));
+    LOG_WARN("invalid argument", K(ret), K(schema_version), K(tablet_ids.count()), K(tenant_id), KP(location_service));
   } else if (OB_FAIL(group_tablets_leader_addr(tenant_id, tablet_ids, location_service, send_array))) {
     LOG_WARN("group tablet by leader addr failed", K(ret), K(tenant_id), K(tablet_ids.count()));
   } else if (need_write_defensive && !is_write_defensive_done_) {
@@ -2040,14 +1999,18 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
     }
   }
   if (OB_SUCC(ret)) {
-    ObCheckSchemaVersionElapsedProxy proxy(*rpc_proxy, &obrpc::ObSrvRpcProxy::check_schema_version_elapsed);
-    obrpc::ObCheckSchemaVersionElapsedArg arg;
-    obrpc::ObCheckSchemaVersionElapsedResult *res = nullptr;
+    obcall::ObCheckSchemaVersionElapsedArg arg;
     arg.tenant_id_ = tenant_id;
     arg.schema_version_ = schema_version;
     arg.need_wait_trans_end_ = need_wait_trans_end;
     arg.ddl_task_id_ = ddl_task_id_;
-    if (OB_FAIL(check_trans_end(send_array, proxy, arg, res, ret_array, snapshot_array, pending_tx_id_))) {
+    auto schema_fn = [](const obcall::ObCheckSchemaVersionElapsedArg &a,
+                        obcall::ObCheckSchemaVersionElapsedResult &r) -> int {
+      return GCTX.ob_service_->check_schema_version_elapsed(a, r);
+    };
+    if (OB_FAIL((check_trans_end<obcall::ObCheckSchemaVersionElapsedArg,
+                    obcall::ObCheckSchemaVersionElapsedResult>(
+                    send_array, arg, schema_fn, ret_array, snapshot_array, pending_tx_id_)))) {
       LOG_WARN("check trans end failed", K(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id_, ddl_task_id_, CHECK_TRANS_END_FAILED))) {
       LOG_WARN("ddl sim failure: check trans end failed", K(ret), K(tenant_id_), K(ddl_task_id_));
@@ -2103,7 +2066,6 @@ int ObDDLWaitTransEndCtx::check_sstable_trans_end(
     const uint64_t tenant_id,
     const int64_t sstable_exist_ts,
     const common::ObIArray<common::ObTabletID> &tablet_ids,
-    obrpc::ObSrvRpcProxy *rpc_proxy,
     ObLocationService *location_service,
     common::ObIArray<int> &ret_array,
     common::ObIArray<int64_t> &snapshot_array)
@@ -2113,20 +2075,24 @@ int ObDDLWaitTransEndCtx::check_sstable_trans_end(
   snapshot_array.reset();
   ObArray<SendItem> send_array;
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || sstable_exist_ts <= 0 || tablet_ids.count() <= 0
-      || nullptr == rpc_proxy || nullptr == location_service)) {
+      || nullptr == location_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(sstable_exist_ts), K(tablet_ids.count()),
-        KP(rpc_proxy), KP(location_service));
+        KP(location_service));
   } else if (OB_FAIL(group_tablets_leader_addr(tenant_id, tablet_ids, location_service, send_array))) {
     LOG_WARN("group tablet by leader addr failed", K(ret), K(tenant_id), K(tablet_ids.count()));
   } else {
-    ObCheckCtxCreateTimestampElapsedProxy proxy(*rpc_proxy, &obrpc::ObSrvRpcProxy::check_modify_time_elapsed);
-    obrpc::ObCheckModifyTimeElapsedArg arg;
-    obrpc::ObCheckModifyTimeElapsedResult *res = nullptr;
+    obcall::ObCheckModifyTimeElapsedArg arg;
     arg.tenant_id_ = tenant_id;
     arg.sstable_exist_ts_ = sstable_exist_ts;
     arg.ddl_task_id_ = ddl_task_id_;
-    if (OB_FAIL(check_trans_end(send_array, proxy, arg, res, ret_array, snapshot_array, pending_tx_id_))) {
+    auto modify_fn = [](const obcall::ObCheckModifyTimeElapsedArg &a,
+                        obcall::ObCheckModifyTimeElapsedResult &r) -> int {
+      return GCTX.ob_service_->check_modify_time_elapsed(a, r);
+    };
+    if (OB_FAIL((check_trans_end<obcall::ObCheckModifyTimeElapsedArg,
+                    obcall::ObCheckModifyTimeElapsedResult>(
+                    send_array, arg, modify_fn, ret_array, snapshot_array, pending_tx_id_)))) {
       LOG_WARN("check trans end failed", K(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id_, ddl_task_id_, CHECK_TRANS_END_FAILED))) {
       LOG_WARN("ddl sim failure: check trans end failed", K(ret), K(tenant_id_), K(ddl_task_id_));
@@ -2163,7 +2129,7 @@ int ObDDLWaitTransEndCtx::try_wait(bool &is_trans_end, int64_t &snapshot_version
         case WaitTransType::WAIT_SCHEMA_TRANS: {
           if (OB_FAIL(check_schema_trans_end(
               wait_version_, need_check_tablets, ret_codes, tmp_snapshots, tenant_id_,
-              GCTX.srv_rpc_proxy_, GCTX.location_service_, need_wait_trans_end, true/*need_write_defensive*/))) {
+              GCTX.location_service_, need_wait_trans_end, true/*need_write_defensive*/))) {
             LOG_WARN("check schema transactions elapsed failed", K(ret), K(wait_type_), K(wait_version_));
           }
           break;
@@ -2171,14 +2137,14 @@ int ObDDLWaitTransEndCtx::try_wait(bool &is_trans_end, int64_t &snapshot_version
         case WaitTransType::WAIT_SCHEMA_TRANS_WITHOUT_WRITE_DEFENSIVE: {
           if (OB_FAIL(check_schema_trans_end(
               wait_version_, need_check_tablets, ret_codes, tmp_snapshots, tenant_id_,
-              GCTX.srv_rpc_proxy_, GCTX.location_service_, need_wait_trans_end, false/*need_write_defensive*/))) {
+              GCTX.location_service_, need_wait_trans_end, false/*need_write_defensive*/))) {
             LOG_WARN("check schema transactions elapsed failed", K(ret), K(wait_type_), K(wait_version_));
           }
           break;
         }
         case WaitTransType::WAIT_SSTABLE_TRANS: {
           if (OB_FAIL(check_sstable_trans_end(
-              tenant_id_, wait_version_, need_check_tablets, GCTX.srv_rpc_proxy_,
+              tenant_id_, wait_version_, need_check_tablets,
               GCTX.location_service_, ret_codes, tmp_snapshots))) {
             LOG_WARN("check sstable transactions elapsed failed", K(ret), K(wait_type_), K(wait_version_));
           }
@@ -2549,8 +2515,7 @@ int ObDDLWaitColumnChecksumCtx::refresh_zombie_task()
   return ret;
 }
 
-int send_batch_calc_rpc(obrpc::ObSrvRpcProxy &rpc_proxy,
-                        const ObAddr &leader_addr,
+int send_batch_calc_rpc(const ObAddr &leader_addr,
                         const ObCalcColumnChecksumRequestArg &arg,
                         ObCalcColumnChecksumRequestRes &res,
                         ObIArray<SendItem> &send_array,
@@ -2564,10 +2529,7 @@ int send_batch_calc_rpc(obrpc::ObSrvRpcProxy &rpc_proxy,
   const int64_t tablet_count = arg.calc_items_.count();
   if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_count, rpc_timeout))) {
     LOG_WARN("get ddl rpc timeout failed", K(ret));
-  } else if (OB_FAIL(rpc_proxy.to(leader_addr)
-                       .by(arg.tenant_id_)
-                       .timeout(rpc_timeout)
-                       .calc_column_checksum_request(arg, res))) {
+  } else if (OB_FAIL(GCTX.ob_service_->calc_column_checksum_request(arg, res))) {
     LOG_WARN("send rpc failed", K(ret), K(arg), K(leader_addr), K(arg.tenant_id_));
   } else if (res.ret_codes_.count() != arg.calc_items_.count() || res.ret_codes_.count() != (group_end_idx - group_start_idx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2602,10 +2564,9 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(GCTX.srv_rpc_proxy_)
-      || OB_ISNULL(location_service = GCTX.location_service_)) {
+  } else if (OB_ISNULL(location_service = GCTX.location_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(GCTX.srv_rpc_proxy_), KP(location_service));
+    LOG_WARN("invalid argument", K(ret), KP(location_service));
   } else {
     ObLSID ls_id;
     int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
@@ -2653,7 +2614,7 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
         const SendItem &send_item = send_array.at(i);
         if (send_item.leader_addr_ != last_addr) {
           if (arg.calc_items_.count() > 0) {
-            if (OB_FAIL(send_batch_calc_rpc(*GCTX.srv_rpc_proxy_, last_addr,
+            if (OB_FAIL(send_batch_calc_rpc(last_addr,
                     arg, res, send_array, group_start_idx, i, lock_, send_succ_count))) {
               LOG_WARN("send batch calc rpc failed", K(ret));
             }
@@ -2676,7 +2637,7 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
         }
       }
       if (OB_SUCC(ret) && arg.calc_items_.count() > 0) {
-        if (OB_FAIL(send_batch_calc_rpc(*GCTX.srv_rpc_proxy_, last_addr,
+        if (OB_FAIL(send_batch_calc_rpc(last_addr,
                 arg, res, send_array, group_start_idx, send_array.count(), lock_, send_succ_count))) {
           LOG_WARN("send batch calc rpc failed", K(ret));
         }

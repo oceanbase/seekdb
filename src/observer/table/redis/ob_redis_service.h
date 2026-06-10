@@ -60,7 +60,7 @@ public:
 private:
   common::ObArenaAllocator allocator_;
   ObITableResult *result_;
-  obrpc::ObTableRpcResponseSender response_sender_;
+  obcall::ObTableRpcResponseSender response_sender_;
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObTableRedisEndTransCb);

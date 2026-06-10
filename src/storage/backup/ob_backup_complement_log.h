@@ -21,7 +21,6 @@
 #include "lib/utility/ob_tracepoint.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "share/backup/ob_archive_struct.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "share/scheduler/ob_dag_scheduler_config.h"
 #include "storage/backup/ob_backup_factory.h"

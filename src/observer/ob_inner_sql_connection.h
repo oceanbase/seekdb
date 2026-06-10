@@ -25,7 +25,7 @@
 #include "sql/monitor/ob_exec_stat.h"
 #include "observer/ob_restore_sql_modifier.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
-#include "observer/ob_inner_sql_rpc_proxy.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
 #include "lib/mysqlclient/ob_isql_client.h"
 #include "share/location_cache/ob_location_service.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
@@ -33,10 +33,6 @@
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObInnerSqlRpcP;
-}
 namespace common
 {
 class ObString;
@@ -100,7 +96,6 @@ class ObInnerSQLConnection
     : public common::sqlclient::ObISQLConnection,
       public common::ObDLinkBase<ObInnerSQLConnection>
 {
-  friend class obrpc::ObInnerSqlRpcP;
 public:
   static constexpr const char LABEL[] = "RPInnerSqlConn";
   class SavedValue

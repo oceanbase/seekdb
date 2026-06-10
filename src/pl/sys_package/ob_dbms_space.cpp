@@ -201,7 +201,7 @@ int ObDbmsSpace::extract_info_from_stmt(ObExecContext &ctx,
 }
 
 int ObDbmsSpace::get_index_column_ids(const share::schema::ObTableSchema *table_schema,
-                                      const obrpc::ObCreateIndexArg &arg,
+                                      const obcall::ObCreateIndexArg &arg,
                                       IndexCostInfo &info)
 
 {

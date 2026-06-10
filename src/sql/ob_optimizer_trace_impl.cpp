@@ -898,8 +898,8 @@ int ObOptimizerTraceImpl::append(const ObCandiTabletLoc& candi_tablet_loc)
 int ObOptimizerTraceImpl::append(const ObBatchEstTasks& task)
 {
   int ret = OB_SUCCESS;
-  const ObIArray<obrpc::ObEstPartArgElement> &params = task.arg_.index_params_;
-  const ObIArray<obrpc::ObEstPartResElement> &res = task.res_.index_param_res_;
+  const ObIArray<obcall::ObEstPartArgElement> &params = task.arg_.index_params_;
+  const ObIArray<obcall::ObEstPartResElement> &res = task.res_.index_param_res_;
   int64_t cnt = MIN(params.count(), res.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; i ++) {
     const ObIArray<ObEstRowCountRecord> &est_records = res.at(i).est_records_;

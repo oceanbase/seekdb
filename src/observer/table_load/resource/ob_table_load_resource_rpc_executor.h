@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "observer/table_load/resource/ob_table_load_resource_rpc_proxy.h"
+#include "observer/table_load/resource/ob_table_load_resource_rpc.h"
 #include "observer/table_load/resource/ob_table_load_resource_service.h"
 
 namespace oceanbase

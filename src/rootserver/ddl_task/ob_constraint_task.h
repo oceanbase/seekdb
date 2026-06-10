@@ -36,7 +36,7 @@ public:
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t task_id,
       const bool check_table_empty,
-      const obrpc::ObAlterTableArg::AlterConstraintType alter_constraint_type);
+      const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type);
   virtual ~ObCheckConstraintValidationTask() = default;
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
@@ -50,7 +50,7 @@ private:
   common::ObCurTraceId::TraceId trace_id_;
   int64_t task_id_;
   const bool check_table_empty_;
-  obrpc::ObAlterTableArg::AlterConstraintType alter_constraint_type_;
+  obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type_;
 };
 
 class ObForeignKeyConstraintValidationTask : public share::ObAsyncTask
@@ -100,7 +100,7 @@ public:
       const int64_t object_id,
       const share::ObDDLType ddl_type,
       const int64_t schema_version,
-      const obrpc::ObAlterTableArg &alter_table_arg,
+      const obcall::ObAlterTableArg &alter_table_arg,
       const int64_t consumer_group_id,
       const int32_t sub_task_trace_id,
       const int64_t parent_task_id = 0,
@@ -136,13 +136,13 @@ private:
   int rollback_failed_foregin_key();
   int rollback_failed_add_not_null_columns();
   int set_drop_constraint_ddl_stmt_str(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       common::ObIAllocator &allocator);
   int set_alter_constraint_ddl_stmt_str_for_check(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       common::ObIAllocator &allocator);
   int set_alter_constraint_ddl_stmt_str_for_fk(
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       common::ObIAllocator &allocator);
   int check_replica_end(bool &is_end);
   int check_health();
@@ -150,7 +150,7 @@ private:
 private:
   static const int64_t OB_CONSTRAINT_TASK_VERSION = 1;
   common::TCRWLock lock_;
-  obrpc::ObAlterTableArg alter_table_arg_;
+  obcall::ObAlterTableArg alter_table_arg_;
   common::ObArenaAllocator allocator_;
   ObRootService *root_service_;
   int64_t check_job_ret_code_;

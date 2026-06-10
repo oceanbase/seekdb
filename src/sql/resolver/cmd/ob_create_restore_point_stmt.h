@@ -40,7 +40,7 @@ public:
        restore_point_name_()
        {}
   virtual ~ObCreateRestorePointStmt() {}
-  inline obrpc::ObCreateRestorePointArg &get_create_restore_point_arg()
+  inline obcall::ObCreateRestorePointArg &get_create_restore_point_arg()
   {
     return create_restore_point_arg_;
   }
@@ -56,7 +56,7 @@ public:
   }
   ObString get_restore_point_name() { return restore_point_name_; }
 private:
-  obrpc::ObCreateRestorePointArg create_restore_point_arg_;
+  obcall::ObCreateRestorePointArg create_restore_point_arg_;
   ObString restore_point_name_;
   DISALLOW_COPY_AND_ASSIGN(ObCreateRestorePointStmt);
 };

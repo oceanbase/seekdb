@@ -29,7 +29,7 @@ namespace common
 class ObString;
 class ObRowDesc;
 };
-namespace obrpc
+namespace obcall
 {
 struct ObColumnSortItem;
 struct ObCreateIndexArg;
@@ -52,7 +52,7 @@ class ObIndexBuilderUtil
 public:
   static bool is_do_create_dense_vec_index(const ObIndexType index_type);
   static int adjust_expr_index_args(
-      obrpc::ObCreateIndexArg &arg,
+      obcall::ObCreateIndexArg &arg,
       share::schema::ObTableSchema &data_schema,
       common::ObIAllocator &allocator,
       common::ObIArray<share::schema::ObColumnSchemaV2*> &gen_columns);
@@ -64,7 +64,7 @@ public:
       share::schema::ObSchemaGetterGuard *schema_guard,
       const uint64_t index_id = OB_INVALID_ID);
   static int set_index_table_columns(
-      const obrpc::ObCreateIndexArg &arg,
+      const obcall::ObCreateIndexArg &arg,
       const share::schema::ObTableSchema &data_schema,
       share::schema::ObTableSchema &index_schema,
       bool check_data_schema = true);
@@ -85,12 +85,12 @@ public:
 private:
   static const int SPATIAL_MBR_COLUMN_MAX_LENGTH = 32;
   static int generate_prefix_column(
-      const obrpc::ObColumnSortItem &sort_item,
+      const obcall::ObColumnSortItem &sort_item,
       const ObSQLMode sql_mode,
       share::schema::ObTableSchema &data_schema,
       share::schema::ObColumnSchemaV2 *&prefix_col);
   static int adjust_ordinary_index_column_args(
-      obrpc::ObCreateIndexArg &arg,
+      obcall::ObCreateIndexArg &arg,
       share::schema::ObTableSchema &data_schema,
       common::ObIAllocator &allocator,
       common::ObIArray<share::schema::ObColumnSchemaV2*> &gen_columns);
@@ -104,7 +104,7 @@ private:
       common::ObRowDesc &row_desc,
       share::schema::ObTableSchema &schema);
   static int adjust_spatial_args(
-      obrpc::ObCreateIndexArg &arg,
+      obcall::ObCreateIndexArg &arg,
       share::schema::ObTableSchema &data_schema,
       common::ObIAllocator &allocator,
       common::ObIArray<share::schema::ObColumnSchemaV2*> &spatial_cols);

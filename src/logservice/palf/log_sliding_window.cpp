@@ -1939,16 +1939,12 @@ bool LogSlidingWindow::need_execute_fetch_(const FetchTriggerType &fetch_trigger
 bool LogSlidingWindow::need_use_batch_rpc_(const int64_t buf_size,
                                            const bool is_fetch_log) const
 {
-  constexpr int64_t BATCH_PUSH_LOG_THRESHOLD = 4 * 1024;
-  // only use batch rpc when access mode is raw write and log size is smaller than BATCH_PUSH_LOG_THRESHOLD
-  // NB: BATCH_PUSH_LOG_THRESHOLD must be smaller than 256 * 1024 because of the buffer size of ObBatchRpc is 256 * 1024.
-  const bool need_batch_push_for_raw_write =
-    (mode_mgr_->can_raw_write()
-    && buf_size < BATCH_PUSH_LOG_THRESHOLD)
-    ? true : false;
-  const bool need_batch_push_for_fetch_log =
-    (is_fetch_log) ? true : false;
-  return need_batch_push_for_raw_write || need_batch_push_for_fetch_log;
+  UNUSED(buf_size);
+  UNUSED(is_fetch_log);
+  // Single-replica: the batched log push transport (obcall::ObBatchRpc) has
+  // been removed. Always take the direct push path (already neutered /
+  // self-excluded on a single member), so palf never relies on batch RPC.
+  return false;
 }
 
 int LogSlidingWindow::try_fetch_log(const FetchTriggerType &fetch_log_type,

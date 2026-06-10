@@ -1,3 +1,5 @@
+#include "observer/ob_service.h"
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -16,6 +18,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_complement_data_task.h"
+#include "rootserver/ob_root_service.h"
 #include "logservice/ob_log_service.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
@@ -385,9 +388,8 @@ int ObComplementDataParam::split_task_ranges_remote(
   } else {
     common::ObAddr src_leader_addr;
     share::ObLocationService *location_service = nullptr;
-    obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
-    obrpc::ObPrepareSplitRangesArg arg;
-    obrpc::ObPrepareSplitRangesRes result;
+    obcall::ObPrepareSplitRangesArg arg;
+    obcall::ObPrepareSplitRangesRes result;
     arg.ls_id_ = src_ls_id;
     arg.tablet_id_ = src_tablet_id;
     arg.user_parallelism_ = MIN(MIN(MAX(hint_parallelism, 1), MAX_RPC_STREAM_WAIT_THREAD_COUNT),
@@ -414,13 +416,12 @@ int ObComplementDataParam::split_task_ranges_remote(
       }
     }
     if (OB_SUCC(ret)){
-      if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
-        ret = OB_ERR_SYS;
-        LOG_WARN("storage_rpc_proxy is null", K(ret), KP(location_service));
-      } else if (OB_FAIL(srv_rpc_proxy->to(src_leader_addr)
-                                      .by(src_tenant_id)
-                                      .timeout(GCONF._ob_ddl_timeout)
-                                      .prepare_tablet_split_task_ranges(arg, result))) {
+      if (OB_ISNULL(GCTX.ob_service_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ob_service is null", K(ret));
+      } else if (OB_FAIL(ex_rpc::sync_call(rpc_timeout, [&]{
+        return GCTX.ob_service_->prepare_tablet_split_task_ranges(arg, result);
+      }))) {
         LOG_WARN("failed to prepare tablet split task ranges", K(ret), K(arg));
       } else if (OB_FAIL(ObTabletSplitUtil::convert_datum_rowkey_to_range(
         allocator_, result.parallel_datum_rowkey_list_, ranges_))) {
@@ -861,7 +862,7 @@ int ObComplementDataDag::report_replica_build_status()
       LOG_INFO("report replica build status errsim", K(ret));
     }
 #endif
-    obrpc::ObDDLBuildSingleReplicaResponseArg arg;
+    obcall::ObDDLBuildSingleReplicaResponseArg arg;
     ObAddr rs_addr = GCTX.self_addr();
     arg.tenant_id_ = param_.orig_tenant_id_;
     arg.dest_tenant_id_ = param_.dest_tenant_id_;
@@ -881,10 +882,7 @@ int ObComplementDataDag::report_replica_build_status()
     arg.server_addr_ = GCTX.self_addr();
     FLOG_INFO("send replica build status response to RS", K(ret), K(context_), K(arg));
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-      ret = OB_ERR_SYS;
-      LOG_WARN("innner system error, rootserver rpc proxy or rs mgr must not be NULL", K(ret), K(GCTX));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).build_ddl_single_replica_response(arg))) {
+    } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl single replica response", K(ret), K(arg));
     }
   }

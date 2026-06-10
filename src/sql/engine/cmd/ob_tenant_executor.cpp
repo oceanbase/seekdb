@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_tenant_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 
 #include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
@@ -37,25 +38,21 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
   int ret = OB_SUCCESS;
   //use to test purge recyclebin objects
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  const obrpc::ObPurgeRecycleBinArg &purge_recyclebin_arg = stmt.get_purge_recyclebin_arg();
+  const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg = stmt.get_purge_recyclebin_arg();
 
 //  int64_t current_time = ObTimeUtility::current_time();
-//  obrpc::Int64 expire_time = current_time - GCONF.schema_history_expire_time;
-  obrpc::Int64 affected_rows = 0;
+//  obcall::Int64 expire_time = current_time - GCONF.schema_history_expire_time;
+  obcall::Int64 affected_rows = 0;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
   } else {
-    const_cast<obrpc::ObPurgeRecycleBinArg&>(purge_recyclebin_arg).ddl_stmt_str_ = first_stmt;
+    const_cast<obcall::ObPurgeRecycleBinArg&>(purge_recyclebin_arg).ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed");
   } else {
     bool is_tenant_finish = false;
     int64_t total_purge_count = 0;
@@ -69,12 +66,12 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
         LOG_WARN("fail to cal purge time out", KR(ret), K(tenant_id));
       } else if (0 == cal_timeout) {
         is_tenant_finish = true;
-      } else if (OB_FAIL(common_rpc_proxy->timeout(cal_timeout).purge_expire_recycle_objects(purge_recyclebin_arg, affected_rows))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->purge_expire_recycle_objects(purge_recyclebin_arg, affected_rows); }))) {
         LOG_WARN("purge reyclebin objects failed", K(ret), K(affected_rows), K(purge_recyclebin_arg));
         // If failure occurs, there is no need to continue
         is_tenant_finish = false;
       } else {
-        is_tenant_finish = obrpc::ObPurgeRecycleBinArg::DEFAULT_PURGE_EACH_TIME == affected_rows ? false : true;
+        is_tenant_finish = obcall::ObPurgeRecycleBinArg::DEFAULT_PURGE_EACH_TIME == affected_rows ? false : true;
         total_purge_count += affected_rows;
       }
       int64_t cost_time = ObTimeUtility::current_time() - start_time;
@@ -90,18 +87,14 @@ int ObCreateRestorePointExecutor::execute(ObExecContext &ctx, ObCreateRestorePoi
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const int64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
   stmt.set_tenant_id(tenant_id);
-  const obrpc::ObCreateRestorePointArg &create_restore_point_arg = stmt.get_create_restore_point_arg();
+  const obcall::ObCreateRestorePointArg &create_restore_point_arg = stmt.get_create_restore_point_arg();
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed");
-  } else if (OB_FAIL(common_rpc_proxy->create_restore_point(create_restore_point_arg))) {
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_restore_point(create_restore_point_arg); }))) {
     LOG_WARN("rpc proxy create restore point failed", K(ret));
   }
   return ret;
@@ -110,19 +103,15 @@ int ObDropRestorePointExecutor::execute(ObExecContext &ctx, ObDropRestorePointSt
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const int64_t tenant_id = ctx.get_my_session()->get_effective_tenant_id();
   stmt.set_tenant_id(tenant_id);
 
-  const obrpc::ObDropRestorePointArg &drop_restore_point_arg = stmt.get_drop_restore_point_arg();
+  const obcall::ObDropRestorePointArg &drop_restore_point_arg = stmt.get_drop_restore_point_arg();
 
   if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed");
-  } else if (OB_FAIL(common_rpc_proxy->drop_restore_point(drop_restore_point_arg))) {
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_restore_point(drop_restore_point_arg); }))) {
     LOG_WARN("rpc proxy drop restore point failed", K(ret));
   }
   return ret;

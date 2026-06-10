@@ -28,11 +28,11 @@ class ObCatalogStmt : public ObDDLStmt
 public:
   ObCatalogStmt();
   virtual ~ObCatalogStmt();
-  virtual obrpc::ObCatalogDDLArg &get_ddl_arg() { return catalog_arg_; }
+  virtual obcall::ObCatalogDDLArg &get_ddl_arg() { return catalog_arg_; }
 
   TO_STRING_KV(K_(catalog_arg));
 private:
-  obrpc::ObCatalogDDLArg catalog_arg_;
+  obcall::ObCatalogDDLArg catalog_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObCatalogStmt);
 };
 

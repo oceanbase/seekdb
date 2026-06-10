@@ -88,7 +88,7 @@ common::ObCharsetType ObAlterDatabaseStmt::get_charset_type() const
   return alter_database_arg_.database_schema_.get_charset_type();
 }
 
-obrpc::ObAlterDatabaseArg& ObAlterDatabaseStmt::get_alter_database_arg()
+obcall::ObAlterDatabaseArg& ObAlterDatabaseStmt::get_alter_database_arg()
 {
   return alter_database_arg_;
 }

@@ -16,41 +16,23 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 #include "sql/executor/ob_maintain_dependency_info_task.h"
-#include "share/ob_common_rpc_proxy.h"
+#include "rootserver/ob_rs_serial_call.h"
+#include "rootserver/ob_root_service.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace observer;
 namespace sql
 {
 ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask (const uint64_t tenant_id)
   : tenant_id_(tenant_id),
     gctx_(GCTX),
-    rs_rpc_proxy_(*GCTX.rs_rpc_proxy_),
     view_schema_(&alloc_),
     reset_view_column_infos_(false)
 {
   set_retry_times(0);
 }
 
-ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask (
-  uint64_t tenant_id,
-  obrpc::ObCommonRpcProxy &rs_rpc_proxy,
-  const DepObjKeyItemList &insert_dep_objs,
-  const DepObjKeyItemList &update_dep_objs,
-  const DepObjKeyItemList &delete_dep_objs)
-  : tenant_id_(tenant_id),
-    gctx_(GCTX),
-    rs_rpc_proxy_(rs_rpc_proxy),
-    view_schema_(&alloc_),
-    reset_view_column_infos_(false)
-{
-  set_retry_times(0);
-  insert_dep_objs_.assign(insert_dep_objs);
-  update_dep_objs_.assign(update_dep_objs);
-  delete_dep_objs_.assign(delete_dep_objs);
-}
 
 int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
     const share::schema::ObReferenceObjTable::ObDependencyObjKey &dep_obj_key,
@@ -86,7 +68,7 @@ int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
 
 int ObMaintainObjDepInfoTask::check_and_build_dep_info_arg(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    obrpc::ObDependencyObjDDLArg &dep_obj_info_arg,
+    obcall::ObDependencyObjDDLArg &dep_obj_info_arg,
     const common::ObIArray<DepObjKeyItem> &dep_objs,
     share::schema::ObReferenceObjTable::ObSchemaRefObjOp op)
 {
@@ -140,11 +122,10 @@ share::ObAsyncTask *ObMaintainObjDepInfoTask::deep_copy(char *buf, const int64_t
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("buffer size is not enough", K(ret), K(buf_size), K(need_size));
   } else {
-    task = new (buf) ObMaintainObjDepInfoTask(tenant_id_,
-                                              rs_rpc_proxy_,
-                                              insert_dep_objs_,
-                                              update_dep_objs_,
-                                              delete_dep_objs_);
+    task = new (buf) ObMaintainObjDepInfoTask(tenant_id_);
+    OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_insert_dep_objs().assign(insert_dep_objs_));
+    OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_update_dep_objs().assign(update_dep_objs_));
+    OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_delete_dep_objs().assign(delete_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->assign_view_schema(view_schema_));
     OX ((static_cast<ObMaintainObjDepInfoTask *> (task))->reset_view_column_infos_ = reset_view_column_infos_);
   }
@@ -156,7 +137,7 @@ int ObMaintainObjDepInfoTask::process()
   int ret = OB_SUCCESS;
   int64_t last_version = 0;
   share::schema::ObSchemaGetterGuard schema_guard;
-  SMART_VAR(obrpc::ObDependencyObjDDLArg, dep_obj_info_arg) {
+  SMART_VAR(obcall::ObDependencyObjDDLArg, dep_obj_info_arg) {
     dep_obj_info_arg.tenant_id_ = tenant_id_;
     dep_obj_info_arg.exec_tenant_id_ = tenant_id_;
     dep_obj_info_arg.reset_view_column_infos_ = reset_view_column_infos_;
@@ -176,7 +157,7 @@ int ObMaintainObjDepInfoTask::process()
               && dep_obj_info_arg.delete_dep_objs_.empty()
               && !dep_obj_info_arg.schema_.is_valid()) {
       // do nothing
-    } else if (OB_FAIL(rs_rpc_proxy_.maintain_obj_dependency_info(dep_obj_info_arg))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->maintain_obj_dependency_info(dep_obj_info_arg); }))) {
       LOG_WARN("failed to maintain_obj_dependency_info", K(ret), K(dep_obj_info_arg));
     }
   }

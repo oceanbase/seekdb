@@ -32,7 +32,7 @@ class ObReqTransport;
 }
 }
 
-namespace obrpc
+namespace obcall
 {
 class ObGtsRpcResult;
 }
@@ -46,20 +46,19 @@ class ObTimestampService : public ObIDService
 public:
   ObTimestampService() {}
   ~ObTimestampService() {}
-  int init(rpc::frame::ObReqTransport *req_transport);
+  int init();
   static int mtl_init(ObTimestampService *&timestamp_service);
-  int start() { return rpc_.start(); }
-  void stop() { rpc_.stop(); }
-  void wait() { rpc_.wait(); }
+  int start() { return common::OB_SUCCESS; }
+  void stop() {}
+  void wait() {}
   void destroy()
   {
     reset();
-    rpc_.destroy();
   }
   // nano second
   static const int64_t TIMESTAMP_PREALLOCATED_RANGE = palf::election::MAX_LEASE_TIME * 1000;
   static const int64_t PREALLOCATE_RANGE_FOR_SWITHOVER =  2 * TIMESTAMP_PREALLOCATED_RANGE;
-  int handle_request(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result);
+  int handle_request(const ObGtsRequest &request, obcall::ObGtsRpcResult &result);
   int get_timestamp(int64_t &gts);
   int switch_to_follower_gracefully();
   void switch_to_follower_forcedly();
@@ -70,7 +69,6 @@ public:
   { return SCN::plus(max_sys_ls_scn, PREALLOCATE_RANGE_FOR_SWITHOVER); };
   void get_virtual_info(int64_t &ts_value, common::ObRole &role, int64_t &proposal_id);
 private:
-  ObGtsResponseRpc rpc_;
   // last timestamp retrieved from gts leader, updated periodically, nanosecond
   int64_t last_gts_;
   // the time of last request, updated periodically, nanosecond 
@@ -78,7 +76,7 @@ private:
   // the lock of checking the gts service's advancing speed, used in get_timestamp to avoid 
   // concurrent threads all pushing the gts ahead
   int64_t check_gts_speed_lock_;
-  int handle_local_request_(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result);
+  int handle_local_request_(const ObGtsRequest &request, obcall::ObGtsRpcResult &result);
 };
 
 }

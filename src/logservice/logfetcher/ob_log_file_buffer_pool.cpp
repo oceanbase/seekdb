@@ -129,10 +129,10 @@ int LogFileDataBuffer::write_data(const int32_t seq_no,
     const palf::LSN data_start_lsn,
     const palf::LSN next_req_lsn,
     const share::SCN replayable_point,
-    const obrpc::ObCdcFetchRawStatus &fetch_status,
-    const obrpc::FeedbackType feed_back,
+    const obcall::ObCdcFetchRawStatus &fetch_status,
+    const obcall::FeedbackType feed_back,
     const int err,
-    const obrpc::ObRpcResultCode &rcode,
+    const rpc::frame::ObResultCode &rcode,
     const int64_t rpc_cb_start_time,
     const int64_t sub_rpc_send_time)
 {
@@ -218,7 +218,7 @@ int LogFileDataBuffer::get_data(const char *&data,
     int32_t &valid_rpc_cnt,
     bool &is_readable,
     bool &is_active,
-    obrpc::ObCdcFetchRawSource &data_end_source,
+    obcall::ObCdcFetchRawSource &data_end_source,
     share::SCN &replayable_point,
     ObIArray<RawLogDataRpcStatus> &sub_rpc_status_arr)
 {
@@ -330,7 +330,7 @@ int LogFileDataBuffer::prepare_write_buffer_()
 
   char *tmp_buffer = nullptr;
   const int64_t tmp_buf_size = is_dynamic_ ?
-      max_write_cnt_ * obrpc::ObCdcFetchRawLogResp::FETCH_BUF_LEN : palf::PALF_PHY_BLOCK_SIZE;
+      max_write_cnt_ * obcall::ObCdcFetchRawLogResp::FETCH_BUF_LEN : palf::PALF_PHY_BLOCK_SIZE;
   if (OB_ISNULL(tmp_buffer = static_cast<char*>(ob_malloc(tmp_buf_size,
     lib::ObMemAttr(tenant_id_, "LogFileWrtBuf"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_agent_table_base.h"
-#include "src/share/interrupt/ob_interrupt_rpc_proxy.h"
+#include "share/interrupt/ob_interrupt_message.h"
 
 namespace oceanbase
 {

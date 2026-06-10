@@ -40,7 +40,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace rpc::frame;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace pl;
@@ -52,26 +52,22 @@ const int64_t ObSql::max_error_length = 80;
 const int64_t ObSql::SQL_MEM_SIZE_LIMIT = 1024 * 1024 * 64;
 
 int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
-                ObReqTransport *transport,
                 common::ObITabletScan *vt_partition_service,
                 common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(opt_stat_mgr)
-      || OB_ISNULL(transport)
       || OB_ISNULL(vt_partition_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args",
              K(ret),
              KP(opt_stat_mgr),
-             KP(transport),
              KP(vt_partition_service));
   } else {
     if (OB_FAIL(queue_.init(1, 512))) {
       LOG_WARN("queue init failed", K(ret));
     } else {
       opt_stat_mgr_ = opt_stat_mgr;
-      transport_ = transport;
       vt_partition_service_ = vt_partition_service;
       self_addr_ = addr;
       inited_ = true;
@@ -3151,7 +3147,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
                               result.get_mem_pool(),
                               &pctx->get_param_store(),
                               self_addr_,
-                              GCTX.srv_rpc_proxy_,
                               global_hint,
                               *result.get_exec_context().get_expr_factory(),
                               stmt,

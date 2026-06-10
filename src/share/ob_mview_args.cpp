@@ -20,7 +20,7 @@
 namespace oceanbase
 {
 using namespace share::schema;
-namespace obrpc
+namespace obcall
 {
 
 bool ObMViewCompleteRefreshArg::is_valid() const
@@ -333,5 +333,5 @@ OB_SERIALIZE_MEMBER(ObCreateMLogRes,
                     mlog_table_id_,
                     schema_version_,
                     task_id_);
-} // namespace obrpc
+} // namespace obcall
 } // namespace oceanbase

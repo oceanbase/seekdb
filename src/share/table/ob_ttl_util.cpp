@@ -22,6 +22,10 @@
 #include "share/table/ob_table_config_util.h"
 #include "observer/table/utils/ob_htable_utils.h"
 #include "share/schema/ob_dependency_info.h"
+#include "observer/ob_ex_rpc.h"
+#include "observer/ob_server_struct.h"
+#include "observer/table/ttl/ob_ttl_service.h"
+#include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::table;
@@ -883,7 +887,7 @@ int ObTTLUtil::dispatch_ttl_cmd(const ObTTLParam &param)
     const int64_t ttl_info_count = ttl_info_array.count();
     for (int i = 0; i < ttl_info_count && OB_SUCC(ret); ++i) {
       const uint64_t tenant_id = ttl_info_array.at(i).tenant_id_;
-      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, *param.transport_, ttl_info_array.at(i)))) {
+      if (OB_FAIL(dispatch_one_tenant_ttl(param.type_, ttl_info_array.at(i)))) {
         LOG_WARN("fail dispatch one tenant ttl", KR(ret), K(ttl_info_count), "ttl_info", ttl_info_array.at(i));
       }
     }
@@ -1141,8 +1145,7 @@ int ObTTLUtil::get_ttl_info(const ObTTLParam &param, ObIArray<ObSimpleTTLInfo> &
   return ret;
 }
 
-int ObTTLUtil::dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType type,
-                                       const rpc::frame::ObReqTransport &transport,
+int ObTTLUtil::dispatch_one_tenant_ttl(obcall::ObTTLRequestArg::TTLRequestType type,
                                        const ObSimpleTTLInfo &ttl_info)
 {
   int ret = OB_SUCCESS;
@@ -1151,10 +1154,9 @@ int ObTTLUtil::dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType ty
     LOG_WARN("invalid argument", KR(ret), K(ttl_info));
   } else {
     const int64_t launch_start_time = ObTimeUtility::current_time();
-    obrpc::ObSrvRpcProxy proxy;
     ObAddr leader;
-    obrpc::ObTTLRequestArg req;
-    obrpc::ObTTLResponseArg resp;
+    obcall::ObTTLRequestArg req;
+    obcall::ObTTLResponseArg resp;
     uint64_t tenant_id = ttl_info.tenant_id_;
     req.tenant_id_ = tenant_id;
     req.cmd_code_ = type;
@@ -1162,8 +1164,6 @@ int ObTTLUtil::dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType ty
     if (OB_ISNULL(GCTX.location_service_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid GCTX", KR(ret));
-    } else if (OB_FAIL(proxy.init(&transport))) {
-      LOG_WARN("fail to init", KR(ret));
     } else {
       const int64_t MAX_RETRY_COUNT = 5;
       bool ttl_done = false;
@@ -1172,12 +1172,16 @@ int ObTTLUtil::dispatch_one_tenant_ttl(obrpc::ObTTLRequestArg::TTLRequestType ty
         if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(GCONF.cluster_id, 
                     tenant_id, share::SYS_LS, leader))) {
           LOG_WARN("fail to get ls locaiton leader", KR(ret), K(tenant_id));
-        } else if (OB_FAIL(proxy.to(leader)
-                                .trace_time(true)
-                                .max_process_handler_time(MAX_PROCESS_TIME_US)
-                                .by(tenant_id)
-                                .dst_cluster_id(GCONF.cluster_id)
-                                .dispatch_ttl(req, resp))) {
+        } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
+          int ret = OB_SUCCESS;
+          MTL_SWITCH(tenant_id) {
+            table::ObTTLService *ttl_service = MTL(table::ObTTLService*);
+            if (OB_ISNULL(ttl_service)) { ret = OB_ERR_UNEXPECTED; }
+            else if (OB_FAIL(ttl_service->launch_ttl_task(req))) {}
+          }
+          resp.err_code_ = ret;
+          return ret;
+        }))) {
           LOG_WARN("tenant ttl rpc failed", KR(ret), K(tenant_id), K(leader), K(ttl_info));
         } else {
           ret = resp.err_code_;
@@ -1454,7 +1458,7 @@ int ObTTLUtil::check_htable_ddl_supported_(const ObKVAttr &attr, bool by_admin)
 
 int ObTTLUtil::check_htable_ddl_supported(const schema::ObTableSchema &table_schema,
                                           bool by_admin,
-                                          obrpc::ObHTableDDLType ddl_type,
+                                          obcall::ObHTableDDLType ddl_type,
                                           const ObString &table_name)
 {
   int ret = OB_SUCCESS;
@@ -1465,7 +1469,7 @@ int ObTTLUtil::check_htable_ddl_supported(const schema::ObTableSchema &table_sch
   } else if (OB_FAIL(check_htable_ddl_supported_(attr, by_admin))) {
     LOG_WARN("failed to check htable ddl supported", K(ret));
   } else {
-    if (ddl_type == obrpc::ObHTableDDLType::DROP_TABLE) {
+    if (ddl_type == obcall::ObHTableDDLType::DROP_TABLE) {
       if (!attr.is_disable_) {
         ret = OB_KV_TABLE_NOT_DISABLED;
         LOG_WARN("table is not disabled, can't drop", K(ret), K(attr));

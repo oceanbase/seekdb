@@ -24,10 +24,6 @@ namespace common
 {
 class ObAddr;
 }
-namespace obrpc
-{
-class ObNetKeepAlive;
-}
 namespace logservice 
 {
 class IObNetKeepAliveAdapter {
@@ -42,7 +38,7 @@ public:
 
 class ObNetKeepAliveAdapter : public IObNetKeepAliveAdapter {
 public:
-  ObNetKeepAliveAdapter(obrpc::ObNetKeepAlive *net_keepalive);
+  ObNetKeepAliveAdapter();
   ~ObNetKeepAliveAdapter() override;
   bool in_black_or_stopped(const common::ObAddr &server) override final;
   bool is_server_stopped(const common::ObAddr &server) override final;
@@ -52,7 +48,6 @@ private:
   int in_black_or_stopped_(const common::ObAddr &server,
                            bool &in_black,
                            bool &server_is_stopped);
-  obrpc::ObNetKeepAlive *net_keepalive_;
 };
 
 } // end namespace logservice

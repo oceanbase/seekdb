@@ -81,13 +81,13 @@ public:
 
   const common::ObIArray<VariableSetNode> &get_variable_nodes() const
   { return variable_nodes_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return modify_sysvar_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return modify_sysvar_arg_; }
   TO_STRING_KV(K_(actual_tenant_id), K_(variable_nodes));
 private:
   uint64_t actual_tenant_id_;
   common::ObArray<VariableSetNode, common::ModulePageAllocator, true> variable_nodes_;
   bool has_global_variable_;
-  obrpc::ObModifySysVarArg modify_sysvar_arg_; // used to return exec_tenant_id_
+  obcall::ObModifySysVarArg modify_sysvar_arg_; // used to return exec_tenant_id_
   DISALLOW_COPY_AND_ASSIGN(ObVariableSetStmt);
 };
 

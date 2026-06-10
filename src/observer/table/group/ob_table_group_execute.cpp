@@ -571,7 +571,7 @@ int ObTableGroupExecuteService::response(ObTableGroup &group,
         LOG_WARN("fail to get result", K(ret));
       } else {
         int ret_code = res->get_errno();
-        const ObRpcPacket *rpc_pkt = &reinterpret_cast<const ObRpcPacket&>(req->get_packet());
+        const ObCallPacket *rpc_pkt = &reinterpret_cast<const ObCallPacket&>(req->get_packet());
         if (observer::ObTableRpcProcessorUtil::need_do_move_response(ret_code, *rpc_pkt)) { // rerouting pkg
           observer::ObTableMoveResponseSender move_sender(req, ret_code);
           if (OB_ISNULL(GCTX.schema_service_)) {

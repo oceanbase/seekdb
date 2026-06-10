@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_HELPER_H_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_HELPER_H_
-#include "rpc/frame/ob_req_transport.h"
 #include "rootserver/freeze/ob_major_freeze_rpc_define.h"
 #include "share/scn.h"
 #include "rootserver/freeze/ob_major_freeze_util.h"
@@ -36,7 +35,7 @@ public:
   ObMajorFreezeParam()
     : freeze_info_array_(), freeze_all_(false), 
       freeze_all_user_(false), freeze_all_meta_(false),
-      freeze_reason_(MF_REASON_MAX), transport_(nullptr)
+      freeze_reason_(MF_REASON_MAX)
   {}
 
   void reset()
@@ -46,26 +45,24 @@ public:
     freeze_all_user_ = false;
     freeze_all_meta_ = false;
     freeze_reason_ = MF_REASON_MAX;
-    transport_ = nullptr;
   }
 
   bool is_valid() const
   {
-    return (nullptr != transport_);
+    return true;
   }
 
   int add_freeze_info(const uint64_t tenant_id);
 
   TO_STRING_KV(K_(freeze_info_array), K_(freeze_all), 
                K_(freeze_all_user), K_(freeze_all_meta),
-               "freeze_reason", major_freeze_reason_to_str(freeze_reason_), KP_(transport));
+               "freeze_reason", major_freeze_reason_to_str(freeze_reason_));
 
-  common::ObArray<obrpc::ObSimpleFreezeInfo> freeze_info_array_;
+  common::ObArray<obcall::ObSimpleFreezeInfo> freeze_info_array_;
   bool freeze_all_;
   bool freeze_all_user_;
   bool freeze_all_meta_;
   ObMajorFreezeReason freeze_reason_;
-  rpc::frame::ObReqTransport *transport_;
 };
 
 struct ObTenantAdminMergeParam
@@ -73,7 +70,7 @@ struct ObTenantAdminMergeParam
 public:
   ObTenantAdminMergeParam()
     : tenant_array_(), need_all_(false), 
-      need_all_user_(false), need_all_meta_(false), transport_(nullptr)
+      need_all_user_(false), need_all_meta_(false)
   {}
 
   void reset()
@@ -82,22 +79,20 @@ public:
     need_all_ = false;
     need_all_user_ = false;
     need_all_meta_ = false;
-    transport_ = nullptr;
   }
 
   bool is_valid() const
   {
-    return (nullptr != transport_) && (!tenant_array_.empty() || 
-                                       (need_all_ || need_all_user_ || need_all_meta_));
+    return (!tenant_array_.empty() || 
+            (need_all_ || need_all_user_ || need_all_meta_));
   }
 
-  TO_STRING_KV(K_(tenant_array), K_(need_all), K_(need_all_user), K_(need_all_meta), KP_(transport));
+  TO_STRING_KV(K_(tenant_array), K_(need_all), K_(need_all_user), K_(need_all_meta));
 
   common::ObArray<uint64_t> tenant_array_;
   bool need_all_;
   bool need_all_user_;
   bool need_all_meta_;
-  rpc::frame::ObReqTransport *transport_;
 };
 
 struct ObTabletMajorFreezeParam
@@ -153,33 +148,30 @@ public:
 private:
   static int get_freeze_info(
       const ObMajorFreezeParam &param,
-      common::ObIArray<obrpc::ObSimpleFreezeInfo> &freeze_info_array);
+      common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array);
   static int get_all_tenant_freeze_info(
-      common::ObIArray<obrpc::ObSimpleFreezeInfo> &freeze_info_array);
+      common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array);
   static int get_specific_tenant_freeze_info( 
       bool freeze_all, 
       bool freeze_all_user, 
       bool freeze_all_meta, 
-      common::ObIArray<obrpc::ObSimpleFreezeInfo> &freeze_info_array);
+      common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array);
   static int check_tenant_is_restore(const uint64_t tenant_id, bool &is_restore);
 
   static int do_major_freeze(
-      const rpc::frame::ObReqTransport &transport,
       const ObMajorFreezeReason freeze_reason,
-      const common::ObIArray<obrpc::ObSimpleFreezeInfo> &freeze_info_array,
+      const common::ObIArray<obcall::ObSimpleFreezeInfo> &freeze_info_array,
       common::ObIArray<int> &merge_results);
   static int do_one_tenant_major_freeze(
-      const rpc::frame::ObReqTransport &transport,
       const ObMajorFreezeReason freeze_reason,
-      const obrpc::ObSimpleFreezeInfo &freeze_info);
+      const obcall::ObSimpleFreezeInfo &freeze_info);
 
   static int do_tenant_admin_merge(
       const ObTenantAdminMergeParam &param,
-      const obrpc::ObTenantAdminMergeType &admin_type);
+      const obcall::ObTenantAdminMergeType &admin_type);
   static int do_one_tenant_admin_merge(
-      const rpc::frame::ObReqTransport &transport,
       const uint64_t tenant_id,
-      const obrpc::ObTenantAdminMergeType &admin_type);
+      const obcall::ObTenantAdminMergeType &admin_type);
   static int add_user_warning(
       const uint64_t tenant_id,
       const char *buf);

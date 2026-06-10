@@ -25,10 +25,8 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
-class ObGtsRpcProxy;
-class ObGtiRpcProxy;
 }
 namespace transaction
 {
@@ -181,9 +179,7 @@ MAKE_FACTORY_CLASS_DEFINE(ObTransTraceLog)
 MAKE_FACTORY_CLASS_DEFINE(ObPartitionAuditInfo)
 MAKE_FACTORY_CLASS_DEFINE(ObCoreLocalPartitionAuditInfo)
 MAKE_FACTORY_CLASS_DEFINE(ObGtsRequestRpc)
-MAKE_FACTORY_CLASS_DEFINE_V2(ObGtsRpcProxy, obrpc::ObGtsRpcProxy)
 MAKE_FACTORY_CLASS_DEFINE(ObGtiRequestRpc)
-MAKE_FACTORY_CLASS_DEFINE_V2(ObGtiRpcProxy, obrpc::ObGtiRpcProxy)
 MAKE_FACTORY_CLASS_DEFINE(ObTxCommitCallbackTask)
 
 class MultiTxDataFactory

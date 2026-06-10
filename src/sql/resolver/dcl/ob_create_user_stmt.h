@@ -48,7 +48,7 @@ public:
   const common::ObStrings &get_users() const { return users_; }
   const common::ObString &get_masked_sql() const { return masked_sql_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_user_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_user_arg_; }
   void set_profile_id(const uint64_t profile_id) { profile_id_ = profile_id; }
   uint64_t get_profile_id() const { return profile_id_; }
   common::ObString &get_primary_zone() { return create_user_arg_.primary_zone_;}
@@ -72,7 +72,7 @@ private:
   common::ObString masked_sql_;
   bool if_not_exist_;
   uint64_t profile_id_; //only used in oracle mode
-  obrpc::ObCreateUserArg create_user_arg_; // used to return exec_tenant_id_
+  obcall::ObCreateUserArg create_user_arg_; // used to return exec_tenant_id_
   uint64_t max_connections_per_hour_;
   uint64_t max_user_connections_;
 private:

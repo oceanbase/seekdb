@@ -37,8 +37,8 @@
 ObCreateViewHelper::ObCreateViewHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObCreateTableArg &arg_,
-    obrpc::ObCreateTableRes &res,
+    const obcall::ObCreateTableArg &arg_,
+    obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans,
     bool enable_ddl_parallel)
   : ObDDLHelper(schema_service, tenant_id, "[parallel create view]", external_trans, enable_ddl_parallel),

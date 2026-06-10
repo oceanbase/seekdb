@@ -241,7 +241,7 @@ int TestOpEngine::do_optimize(ObStmt *stmt, ObLogPlan *&plan, ObPhyPlanType dist
     &sql_schema_guard_,
     //&stat_manager_, // statistics manager
     NULL, // statistics manager
-    static_cast<ObIAllocator &>(allocator_), &param_store_, addr_, NULL, dml_stmt->get_query_ctx()->get_global_hint(),
+    static_cast<ObIAllocator &>(allocator_), &param_store_, addr_, dml_stmt->get_query_ctx()->get_global_hint(),
     expr_factory_, dml_stmt, false, stmt_factory_.get_query_ctx());
   opt_ctx->set_opt_stat_manager(&opt_stat_manager_);
   opt_ctx->disable_batch_rpc();

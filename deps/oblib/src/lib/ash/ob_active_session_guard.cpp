@@ -19,7 +19,6 @@
 #include "lib/ash/ob_active_session_guard.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "lib/stat/ob_session_stat.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/stat/ob_diagnostic_info_container.h"
 #include "lib/time/ob_tsc_timestamp.h"
@@ -349,11 +348,7 @@ int64_t ObAshBuffer::append(const ObActiveSessionStat &stat)
           sizeof(stat.action_) - 1);
       buffer_[idx].action_[sizeof(stat.action_) - 1] = '\0';
     } else if (stat.pcode_ != 0) {
-      MEMCCPY(buffer_[idx].action_,
-          obrpc::ObRpcPacketSet::instance().name_of_pcode(
-              static_cast<oceanbase::obrpc::ObRpcPacketCode>(stat.pcode_)),
-          '\0',
-          sizeof(stat.action_) - 1);
+      MEMCCPY(buffer_[idx].action_, "rpc", '\0', sizeof(stat.action_) - 1);
       buffer_[idx].action_[sizeof(stat.action_) - 1] = '\0';
     }
   }

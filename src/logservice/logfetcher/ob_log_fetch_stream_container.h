@@ -59,7 +59,7 @@ public:
   // print stat info
   void do_stat(int64_t &traffic);
 
-  void update_fetch_stream_proto(const obrpc::ObCdcFetchLogProtocolType proto);
+  void update_fetch_stream_proto(const obcall::ObCdcFetchLogProtocolType proto);
 
 public:
   TO_STRING_KV("stype", print_fetch_stream_type(stype_),
@@ -77,7 +77,7 @@ private:
 
 private:
   FetchStreamType           stype_;
-  obrpc::ObCdcFetchLogProtocolType proto_type_;
+  obcall::ObCdcFetchLogProtocolType proto_type_;
   uint64_t                  self_tenant_id_;
   IObLogRpc                 *rpc_;                    // RPC Processor
   IFetchStreamPool          *fs_pool_;                // Fetch log stream task object pool

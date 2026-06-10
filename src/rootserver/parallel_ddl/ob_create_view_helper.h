@@ -27,7 +27,7 @@ namespace schema
 class ObMultiVersionSchemaService;
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObCreateTableArg;
 class ObCreateTableRes;
@@ -40,8 +40,8 @@ public:
   ObCreateViewHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObCreateTableArg &arg,
-    obrpc::ObCreateTableRes &res,
+    const obcall::ObCreateTableArg &arg,
+    obcall::ObCreateTableRes &res,
     ObDDLSQLTransaction *external_trans = nullptr,
     bool enable_ddl_parallel = true);
   virtual ~ObCreateViewHelper();
@@ -77,8 +77,8 @@ protected:
   virtual int operation_before_commit_() override;
   virtual int construct_and_adjust_result_(int &return_ret) override;
 protected:
-  const obrpc::ObCreateTableArg &arg_;
-  obrpc::ObCreateTableRes &res_;
+  const obcall::ObCreateTableArg &arg_;
+  obcall::ObCreateTableRes &res_;
   ObTableSchema* new_view_schema_;
   ObString ddl_stmt_str_;
   const ObDatabaseSchema* database_schema_;

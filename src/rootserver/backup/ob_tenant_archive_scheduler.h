@@ -26,8 +26,7 @@
 namespace oceanbase
 {
 
-namespace obrpc {
-  class ObSrvRpcProxy;
+namespace obcall {
 }
 
 namespace common {
@@ -46,7 +45,6 @@ public:
   int init(
       const uint64_t tenant_id,
       share::schema::ObMultiVersionSchemaService *schema_service,
-      obrpc::ObSrvRpcProxy &rpc_proxy,
       common::ObMySQLProxy &sql_proxy);
 
   int open_archive_mode();
@@ -77,7 +75,6 @@ private:
   static const int64_t ALLOW_FORCE_STOP_THRESHOLD = 10_min;
   bool is_inited_;
   uint64_t tenant_id_; // user tenant id
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   share::ObArchiveRoundHandler round_handler_;

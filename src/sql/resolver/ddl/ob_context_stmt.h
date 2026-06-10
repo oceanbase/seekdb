@@ -74,10 +74,10 @@ public:
   {
     arg_.set_package_name(package_name);
   }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return arg_; }
-  obrpc::ObContextDDLArg &get_arg() { return arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return arg_; }
+  obcall::ObContextDDLArg &get_arg() { return arg_; }
 private:
-  obrpc::ObContextDDLArg arg_;
+  obcall::ObContextDDLArg arg_;
   DISALLOW_COPY_AND_ASSIGN(ObContextDDLStmt);
 };
 

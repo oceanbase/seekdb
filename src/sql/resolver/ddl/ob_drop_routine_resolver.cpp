@@ -50,7 +50,7 @@ int ObDropProcedureResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("create drop procedure stmt failed");
   }
   else {
-    obrpc::ObDropRoutineArg &routine_arg = proc_stmt->get_routine_arg();
+    obcall::ObDropRoutineArg &routine_arg = proc_stmt->get_routine_arg();
     routine_arg.tenant_id_ = session_info_->get_effective_tenant_id();
     routine_arg.db_name_ = db_name;
     routine_arg.routine_name_ = sp_name;
@@ -125,7 +125,7 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
         ObDropFuncStmt *drop_func_stmt = NULL;
         CK (OB_NOT_NULL(drop_func_stmt = create_stmt<ObDropFuncStmt>()));
         if (OB_SUCC(ret)) {
-          obrpc::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
+          obcall::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
           drop_func_arg.tenant_id_ = session_info_->get_effective_tenant_id();
           drop_func_arg.name_ = lower_name;
           drop_func_arg.if_exist_ =  if_exist;
@@ -140,7 +140,7 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("create drop function stmt failed");
     } else {
-      obrpc::ObDropRoutineArg &routine_arg = routine_stmt->get_routine_arg();
+      obcall::ObDropRoutineArg &routine_arg = routine_stmt->get_routine_arg();
       routine_arg.tenant_id_ = session_info_->get_effective_tenant_id();
       routine_arg.db_name_ = pl_y ? db_name : session_info_->get_database_name();
       routine_arg.routine_name_ = sp_name;

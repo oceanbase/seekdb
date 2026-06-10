@@ -33,8 +33,8 @@ using namespace oceanbase::rootserver;
 ObSetCommentHelper::ObSetCommentHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
   const uint64_t tenant_id,
-  const obrpc::ObSetCommentArg &arg,
-  obrpc::ObParallelDDLRes &res)
+  const obcall::ObSetCommentArg &arg,
+  obcall::ObParallelDDLRes &res)
   : ObDDLHelper(schema_service, tenant_id, "[paralle set comment]"),
   arg_(arg),
   res_(res),
@@ -277,11 +277,11 @@ int ObSetCommentHelper::generate_schemas_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new table schema is nullptr", KR(ret));
   } else {
-    if (obrpc::ObSetCommentArg::COMMENT_TABLE == arg_.op_type_) {
+    if (obcall::ObSetCommentArg::COMMENT_TABLE == arg_.op_type_) {
       if (OB_FAIL(new_table_schema_->set_comment(arg_.table_comment_))) {
         LOG_WARN("fail to set table comment", KR(ret));
       }
-    } else if (obrpc::ObSetCommentArg::COMMENT_COLUMN == arg_.op_type_) {
+    } else if (obcall::ObSetCommentArg::COMMENT_COLUMN == arg_.op_type_) {
       for (uint64_t column_idx = 0; OB_SUCC(ret) && column_idx < arg_.column_name_list_.size(); column_idx++) {
         const ObString &orig_column_name = arg_.column_name_list_.at(column_idx);
         ObColumnSchemaV2 *new_column_schema = nullptr;

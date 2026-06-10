@@ -24,14 +24,14 @@ namespace oceanbase
 {
 namespace common { class ObAddr; }
 
-namespace obrpc
+namespace obcall
 {
 class ObWrsGetClusterVersionRequest;
 class ObWrsGetClusterVersionResponse;
 class ObWrsClusterHeartbeatRequest;
 class ObWrsClusterHeartbeatResponse;
-struct ObRpcResultCode;
 }
+namespace rpc { namespace frame { struct ObResultCode; } }
 
 namespace transaction
 {
@@ -91,18 +91,18 @@ public:
 
   /// process get cluster version RPC
   virtual void process_get_cluster_version_rpc(const uint64_t tenant_id,
-      const obrpc::ObWrsGetClusterVersionRequest &req,
-      obrpc::ObWrsGetClusterVersionResponse &res) = 0;
+      const obcall::ObWrsGetClusterVersionRequest &req,
+      obcall::ObWrsGetClusterVersionResponse &res) = 0;
 
   /// process cluster heartbeat RPC
   virtual void process_cluster_heartbeat_rpc(const uint64_t tenant_id,
-      const obrpc::ObWrsClusterHeartbeatRequest &req,
-      obrpc::ObWrsClusterHeartbeatResponse &res) = 0;
+      const obcall::ObWrsClusterHeartbeatRequest &req,
+      obcall::ObWrsClusterHeartbeatResponse &res) = 0;
 
   /// process cluster heartbeat RPC callback
   virtual void process_cluster_heartbeat_rpc_cb(const uint64_t tenant_id,
-      const obrpc::ObRpcResultCode &rcode,
-      const obrpc::ObWrsClusterHeartbeatResponse &res,
+      const rpc::frame::ObResultCode &rcode,
+      const obcall::ObWrsClusterHeartbeatResponse &res,
       const common::ObAddr &dst) = 0;
 
 public:

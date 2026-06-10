@@ -27,7 +27,7 @@ namespace schema
 class ObMultiVersionSchemaService;
 }
 }
-namespace obrpc
+namespace obcall
 {
 class ObDropTablegroupArg;
 }
@@ -39,8 +39,8 @@ public:
   ObDropTablegroupHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
-    const obrpc::ObDropTablegroupArg &arg,
-    obrpc::ObParallelDDLRes &res,
+    const obcall::ObDropTablegroupArg &arg,
+    obcall::ObParallelDDLRes &res,
     ObDDLSQLTransaction *external_trans = nullptr);
   virtual ~ObDropTablegroupHelper();
 private:
@@ -56,8 +56,8 @@ private:
 private:
   int lock_tablegroup_by_obj_id_();
 private:
-  const obrpc::ObDropTablegroupArg &arg_;
-  obrpc::ObParallelDDLRes &res_;
+  const obcall::ObDropTablegroupArg &arg_;
+  obcall::ObParallelDDLRes &res_;
   const ObTablegroupSchema* tablegroup_schema_;
   uint64_t tablegroup_id_;
 private:

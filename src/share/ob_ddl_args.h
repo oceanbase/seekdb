@@ -22,7 +22,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObDDLArg
 {
@@ -81,6 +81,6 @@ public:
   bool is_parallel_;
 };
 
-} // namespace obrpc
+} // namespace obcall
 } // namespace oceanbase
 #endif

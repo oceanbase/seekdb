@@ -20,6 +20,7 @@
 #include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "share/schema/ob_table_schema.h"
 #include "observer/ob_inner_sql_connection.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
 namespace oceanbase
 {

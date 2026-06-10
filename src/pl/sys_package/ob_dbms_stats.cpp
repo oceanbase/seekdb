@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "pl/sys_package/ob_dbms_stats.h"
+#include "observer/ob_ex_rpc.h"
 #include "share/stat/ob_dbms_stats_executor.h"
 #include "sql/parser/ob_parser.h"
 #include "share/stat/ob_dbms_stats_utils.h"
@@ -3318,7 +3319,7 @@ int ObDbmsStats::update_stat_cache(const uint64_t rpc_tenant_id,
                                    ObOptStatRunningMonitor *running_monitor/*default null*/)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObUpdateStatCacheArg stat_arg;
+  obcall::ObUpdateStatCacheArg stat_arg;
   stat_arg.tenant_id_ = param.tenant_id_;
   stat_arg.table_id_ = param.table_id_;
   stat_arg.no_invalidate_ = param.no_invalidate_;
@@ -3357,27 +3358,21 @@ int ObDbmsStats::update_stat_cache(const uint64_t rpc_tenant_id,
 }
 
 int ObDbmsStats::update_stat_cache(const uint64_t tenant_id,
-                                   obrpc::ObUpdateStatCacheArg &stat_arg,
+                                   obcall::ObUpdateStatCacheArg &stat_arg,
                                    ObOptStatRunningMonitor *running_monitor/*default null*/)
 {
   int ret = OB_SUCCESS;
   LOG_TRACE("update stat cache", K(stat_arg));
-  int64_t timeout = -1;
-  if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rpc_proxy or session is null", K(ret), K(GCTX.srv_rpc_proxy_));
-  } else {
-    int64_t failed_count = 0;
-    timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
-    if (0 >= GCTX.start_service_time_) {
-      //server may not serving
-    } else if (0 >=(timeout)) {
-      ret = OB_TIMEOUT;
-      LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(GCTX.self_addr())
-                                              .timeout(timeout)
-                                              .by(tenant_id)
-                                              .update_local_stat_cache(stat_arg))) {
+  int64_t timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
+  int64_t failed_count = 0;
+  if (0 >= GCTX.start_service_time_) {
+    //server may not serving
+  } else if (0 >= timeout) {
+    ret = OB_TIMEOUT;
+    LOG_WARN("query timeout is reached", K(ret), K(timeout));
+  } else if (OB_FAIL(ex_rpc::sync_call([&]{
+    return ObOptStatManager::get_instance().add_refresh_stat_task(stat_arg);
+  }))) {
       LOG_WARN("failed to update local stat cache caused by unknow error",
                                         K(ret), K(stat_arg));
       ret = OB_SUCCESS;
@@ -3408,7 +3403,6 @@ int ObDbmsStats::update_stat_cache(const uint64_t tenant_id,
                                                           running_monitor->opt_stat_gather_stat_);
       }
     }
-  }
   return ret;
 }
 
@@ -6921,23 +6915,19 @@ int ObDbmsStats::update_system_stats_cache(const uint64_t rpc_tenant_id,
                                           const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObUpdateStatCacheArg stat_arg;
+  obcall::ObUpdateStatCacheArg stat_arg;
   stat_arg.tenant_id_ = tenant_id;
   stat_arg.update_system_stats_only_ = true;
   int64_t timeout = -1;
   LOG_TRACE("update system stat cache", K(stat_arg));
-  if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rpc_proxy or session is null", K(ret), K(GCTX.srv_rpc_proxy_));
-  } else if (0 >= GCTX.start_service_time_) {
+  if (0 >= GCTX.start_service_time_) {
     //server may not serving
   } else if (0 >= (timeout = THIS_WORKER.get_timeout_remain())) {
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
-  } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(GCTX.self_addr())
-                                            .timeout(timeout)
-                                            .by(rpc_tenant_id)
-                                            .update_local_stat_cache(stat_arg))) {
+  } else if (OB_FAIL(ex_rpc::sync_call([&]{
+    return ObOptStatManager::get_instance().add_refresh_stat_task(stat_arg);
+  }))) {
     LOG_WARN("failed to update local stat cache caused by unknow error",
                                       K(ret), K(stat_arg));
     ret = OB_SUCCESS; // ignore ret

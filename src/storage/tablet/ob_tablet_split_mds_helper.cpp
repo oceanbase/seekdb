@@ -18,12 +18,13 @@
 
 
 #include "ob_tablet_split_mds_helper.h"
+#include "observer/ob_ex_rpc.h"
 #include "storage/tablet/ob_tablet_split_replay_executor.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "observer/ob_inner_sql_connection.h"
 
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -347,7 +348,7 @@ int ObTabletSplitMdsArg::init_split_start_dst(
   return ret;
 }
 
-int ObTabletSplitMdsArg::set_autoinc_seq_arg(const obrpc::ObBatchSetTabletAutoincSeqArg &arg)
+int ObTabletSplitMdsArg::set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(autoinc_seq_arg_.assign(arg))) {
@@ -808,60 +809,26 @@ int ObTabletSplitMdsHelper::get_tablet_split_mds_by_rpc(
     ObIArray<ObTabletSplitMdsUserData> &datas)
 {
   int ret = OB_SUCCESS;
-  const int64_t cluster_id = GCONF.cluster_id;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
-  share::ObLocationService *location_service = nullptr;
-  ObAddr leader_addr;
-  obrpc::ObBatchGetTabletSplitArg arg;
-  obrpc::ObBatchGetTabletSplitRes res;
-  if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)
-      || OB_ISNULL(location_service = GCTX.location_service_)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("root service or location_cache is null", K(ret), KP(srv_rpc_proxy), KP(location_service));
-  } else if (OB_FAIL(arg.init(tenant_id, ls_id, tablet_ids, true/*check_committed*/))) {
-    LOG_WARN("failed to init arg", K(ret), K(tenant_id), K(ls_id), K(ls_id));
-  } else {
-    bool force_renew = false;
-    bool finish = false;
-    for (int64_t retry_times = 0; OB_SUCC(ret) && !finish; retry_times++) {
-      int64_t timeout_us = 0;
-      if (OB_FAIL(location_service->get_leader(cluster_id, tenant_id, ls_id, force_renew, leader_addr))) {
-        LOG_WARN("fail to get ls locaiton leader", KR(ret), K(tenant_id), K(ls_id));
-      } else if (OB_FAIL(get_valid_timeout(abs_timeout_us, timeout_us))) {
-        LOG_WARN("failed to get valid timeout", K(ret), K(abs_timeout_us));
-      } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr).timeout(timeout_us).batch_get_tablet_split(arg, res))) {
-        LOG_WARN("fail to batch get tablet split", K(ret), K(retry_times), K(abs_timeout_us));
-      } else {
-        finish = true;
-      }
-      if (OB_FAIL(ret)) {
-        force_renew = true;
-        if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_GET_LOCATION_TIME_OUT == ret || OB_NOT_MASTER == ret
-            || OB_ERR_SHARED_LOCK_CONFLICT == ret || OB_LS_OFFLINE == ret
-            || OB_NOT_INIT == ret || OB_LS_NOT_EXIST == ret || OB_TABLET_NOT_EXIST == ret || OB_TENANT_NOT_IN_SERVER == ret || OB_LS_LOCATION_NOT_EXIST == ret) {
-          // overwrite ret
-          if (OB_UNLIKELY(ObTimeUtility::current_time() > abs_timeout_us)) {
-            ret = OB_TIMEOUT;
-            LOG_WARN("timeout", K(ret), K(abs_timeout_us));
-          } else if (OB_FAIL(THIS_WORKER.check_status())) {
-            LOG_WARN("failed to check status", K(ret), K(abs_timeout_us));
-          } else if (retry_times >= 3) {
-            ob_usleep<common::ObWaitEventIds::STORAGE_AUTOINC_FETCH_RETRY_SLEEP>(100 * 1000L); // 100ms
-          }
-        }
-      }
-    }
+  obcall::ObBatchGetTabletSplitArg arg;
+  obcall::ObBatchGetTabletSplitRes res;
+  if (OB_FAIL(arg.init(tenant_id, ls_id, tablet_ids, true/*check_committed*/))) {
+    LOG_WARN("failed to init arg", K(ret), K(tenant_id), K(ls_id));
+  } else if (OB_FAIL(ex_rpc::sync_call([&]{
+    return batch_get_tablet_split(abs_timeout_us, arg, res);
+  }))) {
+    LOG_WARN("fail to batch get tablet split", K(ret), K(abs_timeout_us));
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(datas.assign(res.split_datas_))) {
-    LOG_WARN("failed to assign", K(ret));
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(datas.assign(res.split_datas_))) {
+      LOG_WARN("failed to assign", K(ret));
+    }
   }
   return ret;
 }
 
 int ObTabletSplitMdsHelper::set_auto_part_size_for_create(
     const uint64_t tenant_id,
-    const obrpc::ObBatchCreateTabletArg &create_arg,
+    const obcall::ObBatchCreateTabletArg &create_arg,
     const ObIArray<int64_t> &auto_part_size_arr,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans)

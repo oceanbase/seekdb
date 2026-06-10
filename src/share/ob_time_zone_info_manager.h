@@ -36,10 +36,6 @@ class ObMySQLResult;
 }
 class ObMySQLProxy;
 }
-namespace obrpc
-{
-class ObCommonRpcProxy;
-}
 namespace common
 {
 

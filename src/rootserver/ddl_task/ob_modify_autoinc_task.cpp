@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_modify_autoinc_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_root_service.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
@@ -173,7 +174,7 @@ int ObModifyAutoincTask::init(const uint64_t tenant_id,
                               const int64_t schema_version,
                               const int64_t consumer_group_id,
                               const int32_t sub_task_trace_id,
-                              const obrpc::ObAlterTableArg &alter_table_arg,
+                              const obcall::ObAlterTableArg &alter_table_arg,
                               const int64_t task_status,
                               const int64_t snapshot_version)
 {
@@ -472,9 +473,7 @@ int ObModifyAutoincTask::set_schema_available()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
   } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
   } else {
@@ -483,8 +482,7 @@ int ObModifyAutoincTask::set_schema_available()
     alter_table_arg_.alter_table_schema_.set_tenant_id(tenant_id_);
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_, object_id_, rpc_timeout))) {
       LOG_WARN("get rpc timeout failed", K(ret));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_).timeout(rpc_timeout).
-        execute_ddl_task(alter_table_arg_, unused_ids))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
       LOG_WARN("alter table failed", K(ret));
     }
   }
@@ -499,12 +497,10 @@ int ObModifyAutoincTask::rollback_schema()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
   } else {
     ObArenaAllocator allocator;
-    SMART_VAR(obrpc::ObAlterTableArg, alter_table_arg) {
+    SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
       if (OB_FAIL(deep_copy_table_arg(allocator, alter_table_arg_, alter_table_arg))) {
         LOG_WARN("deep copy table arg failed", K(ret));
       } else {
@@ -514,8 +510,7 @@ int ObModifyAutoincTask::rollback_schema()
         alter_table_arg.alter_table_schema_.reset_column_info();
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_, object_id_, rpc_timeout))) {
           LOG_WARN("get rpc timeout failed", K(ret));
-        } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_).timeout(rpc_timeout).
-            execute_ddl_task(alter_table_arg, unused_ids))) {
+        } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
           LOG_WARN("alter table failed", K(ret));
         }
       }
@@ -651,7 +646,7 @@ int ObModifyAutoincTask::serialize_params_to_message(char *buf, const int64_t bu
 int ObModifyAutoincTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObAlterTableArg tmp_arg;
+  obcall::ObAlterTableArg tmp_arg;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(data_len));

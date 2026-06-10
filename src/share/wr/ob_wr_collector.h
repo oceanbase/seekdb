@@ -18,6 +18,8 @@
 #define OCEANBASE_WR_OB_WORKLOAD_REPOSITORY_COLLECTOR_H_
 #include "share/wr/ob_wr_snapshot_rpc_processor.h"
 #include "sql/plan_cache/ob_i_lib_cache_object.h"
+#include "sql/monitor/ob_sql_stat_record.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
 
 namespace oceanbase
 {

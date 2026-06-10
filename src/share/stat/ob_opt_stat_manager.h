@@ -180,13 +180,13 @@ public:
   virtual int get_table_stat(const uint64_t tenant_id,
                              const ObOptTableStat::Key &key,
                              ObOptTableStat &tstat);
-  virtual int add_refresh_stat_task(const obrpc::ObUpdateStatCacheArg &analyze_arg);
+  virtual int add_refresh_stat_task(const obcall::ObUpdateStatCacheArg &analyze_arg);
 
   int invalidate_plan(const uint64_t tenant_id, const uint64_t table_id);
 
-  int handle_refresh_stat_task(const obrpc::ObUpdateStatCacheArg &arg);
+  int handle_refresh_stat_task(const obcall::ObUpdateStatCacheArg &arg);
 
-  int handle_refresh_system_stat_task(const obrpc::ObUpdateStatCacheArg &arg);
+  int handle_refresh_system_stat_task(const obcall::ObUpdateStatCacheArg &arg);
 
   int get_table_rowcnt(const uint64_t tenant_id,
                        const uint64_t table_id,

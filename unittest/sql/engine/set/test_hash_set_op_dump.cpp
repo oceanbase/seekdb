@@ -619,9 +619,6 @@ int ObHashSetDumpTest::init_tenant_mgr()
   int ret = OB_SUCCESS;
   ObTenantManager &tm = ObTenantManager::get_instance();
   ObAddr self;
-  oceanbase::rpc::frame::ObReqTransport req_transport(NULL, NULL);
-  oceanbase::obrpc::ObSrvRpcProxy rpc_proxy;
-  oceanbase::obrpc::ObCommonRpcProxy rs_rpc_proxy;
   uint64_t cluster_version = CLUSTER_VERSION_1_0_0_0;
   common::ObClusterVersion::get_instance().update_cluster_version(cluster_version);
   EXPECT_EQ(cluster_version, common::ObClusterVersion::get_instance().get_cluster_version());

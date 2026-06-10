@@ -29,7 +29,8 @@
 #include "lib/net/ob_addr.h"
 #include "common/ob_common_types.h"
 #include "common/ob_range.h"
-#include "rpc/obrpc/ob_poc_rpc_server.h"
+// obcall transport header removed; the max packet length is taken directly
+// from the OB_MAX_RPC_PACKET_LENGTH constant (lib/ob_define.h) below.
 
 #include "share/table/ob_table_ttl_common.h"
 #include "common/rowkey/ob_rowkey.h"
@@ -1478,7 +1479,7 @@ public:
   bool reach_batch_size_or_result_size(const int32_t batch_count,
                                        const int64_t max_result_size);
   const common::ObIArray<common::ObString>& get_select_columns() const { return properties_names_; };
-  static int64_t get_max_packet_buffer_length() { return obrpc::get_max_rpc_packet_size() - (1<<20); }
+  static int64_t get_max_packet_buffer_length() { return static_cast<int64_t>(OB_MAX_RPC_PACKET_LENGTH) - (1<<20); }
   static int64_t get_max_buf_block_size() { return get_max_packet_buffer_length() - (1024*1024LL); }
   TO_STRING_KV(K(properties_names_), K(row_count_), K(buf_.get_position()));
 private:

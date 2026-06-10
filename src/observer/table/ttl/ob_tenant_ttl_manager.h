@@ -97,7 +97,7 @@ public:
   virtual uint64_t get_tenant_task_table_id() { return common::ObTTLUtil::TTL_TENNAT_TASK_TABLE_ID; }
   virtual uint64_t get_tenant_task_tablet_id() { return common::ObTTLUtil::TTL_TENNAT_TASK_TABLET_ID; }
   virtual common::ObTTLType get_ttl_task_type() { return common::ObTTLType::NORMAL; }
-  virtual int handle_user_ttl(const obrpc::ObTTLRequestArg& arg);
+  virtual int handle_user_ttl(const obcall::ObTTLRequestArg& arg);
   virtual int check_task_need_move(bool &need_move);
 private:
   virtual int delete_task(const uint64_t tenant_id, const uint64_t task_id);
@@ -161,7 +161,7 @@ public:
   ~ObTTLAllTaskScheduler() {}
   int init(const uint64_t tenant_id, ObMySQLProxy &sql_proxy);
 
-  int handle_user_ttl(const obrpc::ObTTLRequestArg& arg);
+  int handle_user_ttl(const obcall::ObTTLRequestArg& arg);
 
   int resume();
   int pause();
@@ -185,7 +185,7 @@ public:
   virtual uint64_t get_tenant_task_table_id() override { return common::ObTTLUtil::TTL_ROWKEY_TASK_TABLET_ID; }
   virtual uint64_t get_tenant_task_tablet_id() override { return common::ObTTLUtil::TTL_ROWKEY_TASK_TABLE_ID; }
   virtual int try_add_periodic_task() override;
-  virtual int handle_user_ttl(const obrpc::ObTTLRequestArg& arg) override;
+  virtual int handle_user_ttl(const obcall::ObTTLRequestArg& arg) override;
   virtual int check_task_need_move(bool &need_move) override;
   virtual common::ObTTLType get_ttl_task_type() { return common::ObTTLType::HBASE_ROWKEY; }
 };
@@ -207,7 +207,7 @@ public:
   void wait();
   void stop();
   void destroy();
-  int handle_user_ttl(const obrpc::ObTTLRequestArg& arg);
+  int handle_user_ttl(const obcall::ObTTLRequestArg& arg);
   void resume();
   void pause();
 private:

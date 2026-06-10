@@ -60,7 +60,7 @@ int ObTriggerStorageCacheResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("session info should not be null", K(ret));
   } else {
     stmt_ = stmt;
-    obrpc::ObTriggerStorageCacheArg::ObStorageCacheOp op = static_cast<obrpc::ObTriggerStorageCacheArg::ObStorageCacheOp>(parse_tree.children_[0]->value_);
+    obcall::ObTriggerStorageCacheArg::ObStorageCacheOp op = static_cast<obcall::ObTriggerStorageCacheArg::ObStorageCacheOp>(parse_tree.children_[0]->value_);
     stmt->set_storage_cache_op(op);
     ParseNode *name = parse_tree.children_[1];
     const uint64_t tenant_id = session_info_->get_login_tenant_id();

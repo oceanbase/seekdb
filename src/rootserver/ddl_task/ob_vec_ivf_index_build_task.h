@@ -39,7 +39,7 @@ public:
       const int64_t parallelism,
       const int64_t consumer_group_id,
       const share::ObDDLType task_type,
-      const obrpc::ObCreateIndexArg &create_index_arg,
+      const obcall::ObCreateIndexArg &create_index_arg,
       const uint64_t tenant_data_version,
       const int64_t parent_task_id = 0,
       const int64_t task_status = share::ObDDLTaskStatus::PREPARE,
@@ -107,7 +107,7 @@ public:
 private:
   int get_next_status(share::ObDDLTaskStatus &next_status);
   int prepare_aux_table(const ObIndexType index_type, bool &task_submitted, uint64_t &aux_table_id, int64_t &task_id);
-  int construct_create_index_arg(const ObIndexType index_type, obrpc::ObCreateIndexArg &arg);
+  int construct_create_index_arg(const ObIndexType index_type, obcall::ObCreateIndexArg &arg);
 
   int prepare_sq_meta_table();
   int prepare_centroid_table();
@@ -138,8 +138,8 @@ private:
   int check_aux_table_schemas_exist(bool &is_all_exist);
   int deep_copy_index_arg(
       common::ObIAllocator &allocator,
-      const obrpc::ObCreateIndexArg &source_arg,
-      obrpc::ObCreateIndexArg &dest_arg);
+      const obcall::ObCreateIndexArg &source_arg,
+      obcall::ObCreateIndexArg &dest_arg);
 
 private:
   struct ChangeTaskStatusFn final
@@ -226,7 +226,7 @@ private:
   bool is_rebuild_index_;
   ObRootService *root_service_;
   ObDDLWaitTransEndCtx wait_trans_ctx_;
-  obrpc::ObCreateIndexArg create_index_arg_;
+  obcall::ObCreateIndexArg create_index_arg_;
   common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;
 };
 

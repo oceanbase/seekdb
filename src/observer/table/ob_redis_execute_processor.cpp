@@ -228,7 +228,7 @@ int ObRedisExecuteP::response(const int retcode)
   int ret = OB_SUCCESS;
   if (!need_retry_in_queue_ && !had_do_response()) {
     // return the package
-    const ObRpcPacket *rpc_pkt = &reinterpret_cast<const ObRpcPacket &>(req_->get_packet());
+    const ObCallPacket *rpc_pkt = &reinterpret_cast<const ObCallPacket &>(req_->get_packet());
     if (ObTableRpcProcessorUtil::need_do_move_response(retcode, *rpc_pkt)) {
       // response rerouting packet
       ObTableMoveResponseSender sender(req_, retcode);
@@ -238,14 +238,14 @@ int ObRedisExecuteP::response(const int retcode)
         LOG_WARN("fail to do move response", K(ret));
       }
       if (OB_FAIL(ret)) {
-        ret = ObRpcProcessor::response(retcode);  // do common response when do move response failed
+        ret = obcall::ObTableDeadProcessorBase::response(retcode);  // do common response when do move response failed
       }
     } else {
       if (OB_ISNULL(result_.get_entity())) {
         result_.set_entity(result_entity_);
       }
       redis_result_.convert_to_table_op_result(result_); // ignore ret
-      ret = ObRpcProcessor::response(retcode);
+      ret = obcall::ObTableDeadProcessorBase::response(retcode);
     }
   }
   return ret;

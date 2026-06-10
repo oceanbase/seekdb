@@ -21,7 +21,6 @@
 
 #include "common/ob_tablet_id.h"
 #include "storage/tablelock/ob_table_lock_common.h"
-#include "storage/tablelock/ob_table_lock_rpc_proxy.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
 namespace oceanbase
@@ -42,11 +41,10 @@ public:
 private:
   // TODO: yanyuan.cxf use parallel rpc and modify this to 5s
   static const int64_t DEFAULT_TIMEOUT_US = 15L * 1000L * 1000L; // 15s
-  ObTableLockRpcClient() : table_lock_rpc_proxy_() {}
+  ObTableLockRpcClient() {}
   ~ObTableLockRpcClient() {}
-
-private:
-  obrpc::ObTableLockRpcProxy table_lock_rpc_proxy_;
+  // The table-lock RPC proxy was removed (single-replica; locking goes through the local
+  // ObTableLockService). This client is now a vestigial no-op kept only for its init() call site.
 };
 
 }

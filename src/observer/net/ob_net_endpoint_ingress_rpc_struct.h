@@ -30,7 +30,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 
 class ObNetEndpointKey
@@ -245,6 +245,6 @@ public:
   int res_;
 };
 
-}  // namespace obrpc
+}  // namespace obcall
 }  // namespace oceanbase
 #endif /* OCEANBASE_ENDPOINY_INGRESS_RPC_STRUCT_H_ */

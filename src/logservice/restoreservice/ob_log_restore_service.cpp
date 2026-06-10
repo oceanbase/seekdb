@@ -30,7 +30,6 @@ using namespace oceanbase::palf;
 ObLogRestoreService::ObLogRestoreService() :
   inited_(false),
   ls_svr_(NULL),
-  proxy_(),
   location_adaptor_(),
   archive_driver_(),
   net_driver_(),
@@ -49,8 +48,7 @@ ObLogRestoreService::~ObLogRestoreService()
   destroy();
 }
 
-int ObLogRestoreService::init(rpc::frame::ObReqTransport *transport,
-    ObLSService *ls_svr,
+int ObLogRestoreService::init(ObLSService *ls_svr,
     ObLogService *log_service)
 {
   int ret = OB_SUCCESS;
@@ -58,11 +56,9 @@ int ObLogRestoreService::init(rpc::frame::ObReqTransport *transport,
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLogRestoreService init twice", K(ret), K(inited_));
-  } else if (OB_ISNULL(transport) || OB_ISNULL(ls_svr) || OB_ISNULL(log_service)) {
+  } else if (OB_ISNULL(ls_svr) || OB_ISNULL(log_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(transport), K(ls_svr), K(log_service));
-  } else if (OB_FAIL(proxy_.init(transport))) {
-    LOG_WARN("proxy_ init failed", K(ret));
+    LOG_WARN("invalid argument", K(ret), K(ls_svr), K(log_service));
   } else if (OB_FAIL(net_driver_.init(tenant_id, ls_svr, log_service))) {
     LOG_WARN("net_driver_ init failed");
   } else if (OB_FAIL(location_adaptor_.init(tenant_id, ls_svr, &net_driver_))) {
@@ -101,7 +97,6 @@ void ObLogRestoreService::destroy()
   net_driver_.destroy();
   fetch_log_impl_.destroy();
   error_reporter_.destroy();
-  proxy_.destroy();
   allocator_.destroy();
   scheduler_.destroy();
   ls_svr_ = NULL;

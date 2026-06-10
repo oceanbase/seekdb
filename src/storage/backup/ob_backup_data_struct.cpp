@@ -1617,7 +1617,7 @@ bool ObBackupSkippedTablet::is_valid() const
 
 /* ObBackupReportCtx */
 
-ObBackupReportCtx::ObBackupReportCtx() : location_service_(NULL), sql_proxy_(NULL), rpc_proxy_(NULL)
+ObBackupReportCtx::ObBackupReportCtx() : location_service_(NULL), sql_proxy_(NULL)
 {}
 
 ObBackupReportCtx::~ObBackupReportCtx()
@@ -1625,7 +1625,7 @@ ObBackupReportCtx::~ObBackupReportCtx()
 
 bool ObBackupReportCtx::is_valid() const
 {
-  return OB_NOT_NULL(location_service_) && OB_NOT_NULL(sql_proxy_) && OB_NOT_NULL(rpc_proxy_);
+  return OB_NOT_NULL(location_service_) && OB_NOT_NULL(sql_proxy_);
 }
 
 /* ObBackupDeviceMacroBlockId */

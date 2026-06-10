@@ -18,7 +18,7 @@
 #define OBDEV_SRC_SQL_DAS_OB_DAS_EXTRA_DATA_H_
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_task.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
+#include "rpc/frame/ob_req_transport.h"
 namespace oceanbase
 {
 namespace sql
@@ -31,7 +31,6 @@ public:
   int init(const int64_t task_id,
            const int64_t timeout_ts,
            const common::ObAddr &result_addr,
-           rpc::frame::ObReqTransport *transport,
            const bool enable_rich_format);
   void set_output_info(const ExprFixedArray *output_exprs, ObEvalCtx *eval_ctx)
   {

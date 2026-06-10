@@ -21,7 +21,7 @@
 #include "sql/resolver/ddl/ob_trigger_stmt.h"
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObCreateTriggerArg;
 }
@@ -56,37 +56,37 @@ public:
                                     share::schema::ObTriggerInfo &trigger_info);       
 private:
   int resolve_create_trigger_stmt(const ParseNode &parse_node,
-                                  obrpc::ObCreateTriggerArg &trigger_arg);
+                                  obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_drop_trigger_stmt(const ParseNode &parse_node,
-                                obrpc::ObDropTriggerArg &trigger_arg);
+                                obcall::ObDropTriggerArg &trigger_arg);
   int resolve_alter_trigger_stmt(const ParseNode &parse_node,
-                                 obrpc::ObAlterTriggerArg &trigger_arg);
+                                 obcall::ObAlterTriggerArg &trigger_arg);
   int resolve_trigger_source(const ParseNode &parse_node,
-                             obrpc::ObCreateTriggerArg &trigger_arg);
+                             obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_simple_dml_trigger(const ParseNode &parse_node,
-                                 obrpc::ObCreateTriggerArg &trigger_arg);
+                                 obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_instead_dml_trigger(const ParseNode &parse_node,
-                                  obrpc::ObCreateTriggerArg &trigger_arg);
+                                  obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_compound_dml_trigger(const ParseNode &parse_node,
-                                   obrpc::ObCreateTriggerArg &trigger_arg);
+                                   obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_compound_timing_point(const ParseNode &parse_node,
-                                    obrpc::ObCreateTriggerArg &trigger_arg);
+                                    obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_dml_event_option(const ParseNode &parse_node,
-                               obrpc::ObCreateTriggerArg &trigger_arg);
+                               obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_reference_names(const ParseNode *parse_node,
-                              obrpc::ObCreateTriggerArg &trigger_arg);
+                              obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_trigger_status(int16_t enable_or_disable,
-                             obrpc::ObCreateTriggerArg &trigger_arg);
+                             obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_when_condition(const ParseNode *parse_node,
-                             obrpc::ObCreateTriggerArg &trigger_arg);
+                             obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_trigger_body(const ParseNode &parse_node,
-                           obrpc::ObCreateTriggerArg &trigger_arg);
+                           obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_compound_trigger_body(const ParseNode &parse_node,
-                                    obrpc::ObCreateTriggerArg &trigger_arg);
+                                    obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_dml_event_list(const ParseNode &parse_node,
-                             obrpc::ObCreateTriggerArg &trigger_arg);
+                             obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_sp_definer(const ParseNode *parse_node,
-                         obrpc::ObCreateTriggerArg &trigger_arg);
+                         obcall::ObCreateTriggerArg &trigger_arg);
   int resolve_schema_name(const ParseNode &parse_node,
                           common::ObString &database_name,
                           common::ObString &schema_name);
@@ -97,8 +97,8 @@ private:
                            bool &is_alter_compile);
   int fill_package_info(share::schema::ObTriggerInfo &trigger_info);
 
-  int resolve_base_object(obrpc::ObCreateTriggerArg &trigger_arg, bool search_public_schema);
-  int resolve_order_clause(const ParseNode *parse_node, obrpc::ObCreateTriggerArg &trigger_arg);
+  int resolve_base_object(obcall::ObCreateTriggerArg &trigger_arg, bool search_public_schema);
+  int resolve_order_clause(const ParseNode *parse_node, obcall::ObCreateTriggerArg &trigger_arg);
   int get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt);
 
 private:

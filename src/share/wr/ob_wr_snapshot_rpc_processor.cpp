@@ -99,50 +99,10 @@ DEF_TO_STRING(ObWrUserModifySettingsArg)
 OB_SERIALIZE_MEMBER(
     (ObWrUserModifySettingsArg, ObWrSnapshotArg), tenant_id_, retention_, interval_, topnsql_);
 
-template <obrpc::ObRpcPacketCode pcode>
-int ObWrBaseSnapshotTaskP<pcode>::init()
-{
-  return OB_SUCCESS;
-}
-template <obrpc::ObRpcPacketCode pcode>
-int ObWrBaseSnapshotTaskP<pcode>::before_process()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(RpcProcessor::before_process())) {
-    LOG_WARN("do rpc processor before_process failed", K(ret));
-  }
-  // TODO:set memory ctx if needed.
-  return ret;
-}
-
-#define SLOW_WR_SNAPSHOT_WATERMARK 60 * 1000 * 1000  // 1min
-template <obrpc::ObRpcPacketCode pcode>
-int ObWrBaseSnapshotTaskP<pcode>::after_process(int error_code)
-{
-  int ret = OB_SUCCESS;
-  const int64_t elapsed_time =
-      common::ObTimeUtility::current_time() - RpcProcessor::get_receive_timestamp();
-  if (OB_FAIL(RpcProcessor::after_process(error_code))) {
-    LOG_WARN("do after_process failed", K(ret));
-  } else if (elapsed_time >= SLOW_WR_SNAPSHOT_WATERMARK) {
-    // TODO: define wr slow snapshot config.
-    // slow wr snapshot task, print trace info
-    FORCE_PRINT_TRACE(THE_TRACE, "[slow wr snapshot rpc process]");
-  }
-  return OB_SUCCESS;
-}
-
-template <obrpc::ObRpcPacketCode pcode>
-void ObWrBaseSnapshotTaskP<pcode>::cleanup()
-{
-  RpcProcessor::cleanup();
-}
-
-int ObWrAsyncSnapshotTaskP::process()
+int ObWrSnapshotTaskExecutor::do_async_snapshot(ObWrCreateSnapshotArg &arg)
 {
   int ret = OB_SUCCESS;
   WR_STAT_GUARD(WR_SNAPSHOT);
-  ObWrSnapshotArg &arg = ObWrAsyncSnapshotTaskP::arg_;
   LOG_DEBUG("wr snapshot task", K(MTL_ID()), K(arg));
   // gather inner table data
   bool tenant_need_upgrade = false;
@@ -252,11 +212,10 @@ int ObWrAsyncSnapshotTaskP::process()
 
   return ret;
 }
-int ObWrAsyncPurgeSnapshotTaskP::process()
+int ObWrSnapshotTaskExecutor::do_async_purge_snapshot(ObWrPurgeSnapshotArg &arg)
 {
   int ret = OB_SUCCESS;
   WR_STAT_GUARD(WR_PURGE);
-  ObWrSnapshotArg &arg = ObWrAsyncPurgeSnapshotTaskP::arg_;
   LOG_DEBUG("wr snapshot task", K(MTL_ID()), K(arg));
   // gather inner table data
   bool tenant_need_upgrade = false;
@@ -286,12 +245,10 @@ int ObWrAsyncPurgeSnapshotTaskP::process()
   return ret;
 }
 
-int ObWrSyncUserSubmitSnapshotTaskP::process()
+int ObWrSnapshotTaskExecutor::do_user_submit_snapshot(ObWrUserSubmitSnapArg &arg, ObWrUserSubmitSnapResp &resp)
 {
   int ret = OB_SUCCESS;
   WR_STAT_GUARD(WR_SNAPSHOT);
-  ObWrSnapshotArg &arg = ObWrSyncUserSubmitSnapshotTaskP::arg_;
-  ObWrUserSubmitSnapResp &resp = ObWrSyncUserSubmitSnapshotTaskP::result_;
   bool tenant_need_upgrade = false;
   if (OB_ISNULL(GCTX.wr_service_) || OB_ISNULL(GCTX.net_frame_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -311,7 +268,6 @@ int ObWrSyncUserSubmitSnapshotTaskP::process()
     THIS_WORKER.set_timeout_ts(user_submit_arg.get_timeout_ts());
     bool is_all_finished = false;
     int64_t snap_id = 0;
-    obrpc::ObWrRpcProxy wr_proxy;
     int64_t timeout_ts = user_submit_arg.get_timeout_ts();
     int64_t next_wr_task_ts = common::ObTimeUtility::current_time() +
                               GCTX.wr_service_->get_snapshot_interval(false/*is_laze_load*/) * 60 * 1000L * 1000L;
@@ -323,11 +279,8 @@ int ObWrSyncUserSubmitSnapshotTaskP::process()
       LOG_WARN("now, timer task is running, need to retry", K(ret));
     } else if (OB_FAIL(GCTX.wr_service_->cancel_current_task())) {
       LOG_WARN("failed to cancel current task", K(ret));
-    } else if (OB_FAIL(wr_proxy.init(GCTX.net_frame_->get_req_transport()))) {
-      int tmp_ret = schedule_next_wr_task(next_wr_task_ts);
-      LOG_WARN("failed to init wr proxy", KR(ret), KR(tmp_ret));
     } else if (OB_FAIL(GCTX.wr_service_->get_wr_timer_task().do_snapshot(
-                   true /*is_user_submit*/, wr_proxy, snap_id))) {
+                   true /*is_user_submit*/, snap_id))) {
       int tmp_ret = schedule_next_wr_task(next_wr_task_ts);
       LOG_WARN("failed to take snapshot", KR(ret), KR(tmp_ret));
     } else if (OB_FAIL(schedule_next_wr_task(next_wr_task_ts))) {
@@ -343,7 +296,7 @@ int ObWrSyncUserSubmitSnapshotTaskP::process()
   return ret;
 }
 
-int ObWrSyncUserSubmitSnapshotTaskP::schedule_next_wr_task(int64_t next_wr_task_ts)
+int ObWrSnapshotTaskExecutor::schedule_next_wr_task(int64_t next_wr_task_ts)
 {
   int ret = OB_SUCCESS;
   // dispatch next wr snapshot task(not repeat).
@@ -365,11 +318,10 @@ const char *INTERVAL_NUM_COLUMN_NAME = "snapint_num";
 const char *INTERVAL_COLUMN_NAME = "snap_interval";
 const char *TOPN_SQL_COLUMN_NAME = "topnsql";
 
-int ObWrSyncUserModifySettingsTaskP::process()
+int ObWrSnapshotTaskExecutor::do_user_modify_settings(ObWrUserModifySettingsArg &arg)
 {
   int ret = OB_SUCCESS;
   int64_t tmp_interval = 0;
-  ObWrUserModifySettingsArg &arg = ObWrSyncUserModifySettingsTaskP::arg_;
   LOG_DEBUG("user submit modify snapshot settings task", K(MTL_ID()), K(arg));
   bool tenant_need_upgrade = false;
   if (OB_ISNULL(GCTX.wr_service_)) {
@@ -430,13 +382,6 @@ int ObWrSyncUserModifySettingsTaskP::process()
   }
   return ret;
 }
-
-// Explicit template instantiations for Windows/clang - prevents undefined symbols
-// when template methods are only referenced from other TUs (e.g. ob_srv_xlator_partition.cpp)
-template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_ASYNC_SNAPSHOT_TASK>;
-template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_ASYNC_PURGE_SNAPSHOT_TASK>;
-template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_SYNC_USER_SUBMIT_SNAPSHOT_TASK>;
-template class ObWrBaseSnapshotTaskP<obrpc::OB_WR_SYNC_USER_MODIFY_SETTINGS_TASK>;
 
 }  // end of namespace share
 }  // end of namespace oceanbase

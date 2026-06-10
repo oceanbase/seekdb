@@ -1172,7 +1172,7 @@ int ObStartRestoreTask::create_all_tablets_()
   ObLS *ls = nullptr;
   ObArray<ObTabletID> tablet_id_array;
   ObIDagNet *dag_net = nullptr;
-  obrpc::ObCopyTabletInfo tablet_info;
+  obcall::ObCopyTabletInfo tablet_info;
   ObCopyTabletSimpleInfo tablet_simple_info;
   const int overwrite = 1;
   ObLogicTabletID logic_tablet_id;
@@ -1240,7 +1240,7 @@ int ObStartRestoreTask::create_all_tablets_()
   return ret;
 }
 
-int ObStartRestoreTask::fetch_next_tablet_info_(obrpc::ObCopyTabletInfo &tablet_info)
+int ObStartRestoreTask::fetch_next_tablet_info_(obcall::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   tablet_info.reset();
@@ -1263,7 +1263,7 @@ int ObStartRestoreTask::fetch_next_tablet_info_(obrpc::ObCopyTabletInfo &tablet_
   return ret;
 }
 
-int ObStartRestoreTask::create_tablet_(const obrpc::ObCopyTabletInfo &tablet_info, ObLS *ls)
+int ObStartRestoreTask::create_tablet_(const obcall::ObCopyTabletInfo &tablet_info, ObLS *ls)
 {
   int ret = OB_SUCCESS;
 
@@ -4159,8 +4159,8 @@ int ObRestoreDagNetUtils::build_tablets_sstable_info_with_helper(
   ObLS *ls)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCopyTabletSSTableInfo sstable_info;
-  obrpc::ObCopyTabletSSTableHeader copy_header;
+  obcall::ObCopyTabletSSTableInfo sstable_info;
+  obcall::ObCopyTabletSSTableHeader copy_header;
   common::ObArray<ObTabletHandle> tablet_handle_array;
 
   if (OB_ISNULL(helper) || OB_ISNULL(ha_table_info_mgr) || OB_ISNULL(dag_net) || OB_ISNULL(ls) || tablet_id_array.empty()) {
@@ -4222,7 +4222,7 @@ int ObRestoreDagNetUtils::create_or_update_tablets_with_helper(
     ObLS *ls)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCopyTabletInfo tablet_info;
+  obcall::ObCopyTabletInfo tablet_info;
   ObIRestoreHelper *new_helper = nullptr;
   common::ObArenaAllocator allocator("RestoreTablets");
 
@@ -4254,7 +4254,7 @@ int ObRestoreDagNetUtils::create_or_update_tablets_with_helper(
 }
 
 int ObRestoreDagNetUtils::create_or_update_tablet(
-    const obrpc::ObCopyTabletInfo &tablet_info, 
+    const obcall::ObCopyTabletInfo &tablet_info, 
     const bool need_check_tablet_limit, 
     ObLS *ls)
 {
@@ -4327,7 +4327,7 @@ int ObRestoreDagNetUtils::hold_local_tablet_(
   return ret;
 }
 
-int ObRestoreDagNetUtils::modified_tablet_info_(obrpc::ObCopyTabletInfo &tablet_info)
+int ObRestoreDagNetUtils::modified_tablet_info_(obcall::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   if (!tablet_info.is_valid()) {

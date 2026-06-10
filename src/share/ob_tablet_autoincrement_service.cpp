@@ -174,20 +174,18 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
                                         ObTabletCacheNode &node)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
   share::ObLocationService *location_service = nullptr;
   ObAddr leader_addr;
   bool is_cache_hit = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet auto increment service is not inited", K(ret), K(param), K(tablet_id));
-  } else if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)
-      || OB_ISNULL(location_service = GCTX.location_service_)) {
+  } else if (OB_ISNULL(location_service = GCTX.location_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("root service or location_cache is null", K(ret), KP(srv_rpc_proxy), KP(location_service));
+    LOG_WARN("location_cache is null", K(ret), KP(location_service));
   } else {
-    obrpc::ObFetchTabletSeqArg arg;
-    obrpc::ObFetchTabletSeqRes res;
+    obcall::ObFetchTabletSeqArg arg;
+    obcall::ObFetchTabletSeqRes res;
     arg.cache_size_ = MAX(cache_size_, param.auto_increment_cache_size_); // TODO(shuangcan): confirm this
     arg.tenant_id_ = param.tenant_id_;
     arg.tablet_id_ = tablet_id;
@@ -195,7 +193,7 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
 
     bool finish = false;
     for (int64_t retry_times = 0; OB_SUCC(ret) && !finish; retry_times++) {
-      const int64_t rpc_timeout = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : obrpc::ObRpcProxy::MAX_RPC_TIMEOUT;
+      const int64_t rpc_timeout = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : OB_DEFAULT_RPC_TIMEOUT;
       if (OB_FAIL(location_service->get(param.tenant_id_, tablet_id, 0/*expire_renew_time*/, is_cache_hit, arg.ls_id_))) {
         LOG_WARN("fail to get log stream id", K(ret), K(tablet_id));
       } else if (OB_FAIL(location_service->get_leader(GCONF.cluster_id,
@@ -204,11 +202,7 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
                                                       false,/*force_renew*/
                                                       leader_addr))) {
         LOG_WARN("get leader failed", K(ret), K(arg.ls_id_));
-      } else if (GCTX.self_addr() == leader_addr) {
-        if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().fetch_tablet_autoinc_seq_cache(arg, res))) {
-          LOG_WARN("fail to fetch autoinc cache for tablets", K(ret), K(retry_times), K(arg), K(rpc_timeout));
-        }
-      } else if (OB_FAIL(srv_rpc_proxy->to(leader_addr).by(param.tenant_id_).timeout(rpc_timeout).fetch_tablet_autoinc_seq_cache(arg, res))) {
+      } else if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().fetch_tablet_autoinc_seq_cache(arg, res))) {
         LOG_WARN("fail to fetch autoinc cache for tablets", K(ret), K(retry_times), K(arg), K(rpc_timeout));
       }
       if (OB_SUCC(ret)) {
@@ -589,7 +583,7 @@ int ObTabletAutoincCacheCleaner::commit(const int64_t timeout_us)
   common::ObZone zone;
   common::ObSEArray<common::ObAddr, 8> server_list;
   ObUnitInfoGetter ui_getter;
-  obrpc::ObClearTabletAutoincSeqCacheArg arg;
+  obcall::ObClearTabletAutoincSeqCacheArg arg;
   const ObLSID unused_ls_id = SYS_LS;
   int64_t abs_timeout_us = ObTimeUtility::current_time() + timeout_us;
   const ObTimeoutCtx &ctx = ObTimeoutCtx::get_ctx();
@@ -603,9 +597,9 @@ int ObTabletAutoincCacheCleaner::commit(const int64_t timeout_us)
     abs_timeout_us = std::min(abs_timeout_us, ObTimeUtility::current_time() + ctx.get_trx_timeout_us());
   }
 
-  if (OB_ISNULL(GCTX.srv_rpc_proxy_) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("srv_rpc_proxy or sql_proxy in GCTX is null", K(ret), K(GCTX.srv_rpc_proxy_), K(GCTX.sql_proxy_));
+    LOG_WARN("sql_proxy in GCTX is null", K(ret), K(GCTX.sql_proxy_));
   } else if (OB_FAIL(ui_getter.init(*GCTX.sql_proxy_, &GCONF))) {
     LOG_WARN("init unit info getter failed", K(ret));
   } else if (OB_FAIL(ui_getter.get_tenant_servers(tenant_id_, server_list))) {
@@ -613,32 +607,9 @@ int ObTabletAutoincCacheCleaner::commit(const int64_t timeout_us)
   } else if (OB_FAIL(arg.init(tablet_ids_, unused_ls_id))) {
     LOG_WARN("failed to init clear tablet autoinc arg", K(ret));
   } else {
-    bool need_clean_self = false;
-    rootserver::ObClearTabletAutoincSeqCacheProxy proxy(*GCTX.srv_rpc_proxy_, &obrpc::ObSrvRpcProxy::clear_tablet_autoinc_seq_cache);
-    for (int64_t i = 0; i < server_list.count(); i++) { // overwrite ret
-      const common::ObAddr &addr = server_list.at(i);
-      const int64_t cur_timeout_us = abs_timeout_us - ObTimeUtility::current_time();
-      if (cur_timeout_us <= 0) {
-        ret = OB_TIMEOUT;
-        break;
-      } else if (GCTX.self_addr() == addr) {
-        need_clean_self = true;
-      } else {
-        if (OB_FAIL(proxy.call(addr, cur_timeout_us, tenant_id_, arg))) {
-          LOG_WARN("failed to send rpc call", K(ret), K(addr), K(timeout_us), K(tenant_id_));
-        }
-      }
-    }
-    if (need_clean_self) { // overwrite ret
-      if (OB_FAIL(tablet_autoinc_service.clear_tablet_autoinc_seq_cache(tenant_id_, tablet_ids_, abs_timeout_us))) {
-        LOG_WARN("failed to clear tablet autoinc", K(ret));
-      }
-    }
-
-    int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(proxy.wait())) {
-      LOG_WARN("wait batch result failed", K(tmp_ret), K(ret));
-      ret = OB_SUCC(ret) ? tmp_ret : ret;
+    // seekdb: all servers are local, call handler directly.
+    if (OB_FAIL(tablet_autoinc_service.clear_tablet_autoinc_seq_cache(tenant_id_, tablet_ids_, abs_timeout_us))) {
+      LOG_WARN("failed to clear tablet autoinc", K(ret));
     }
   }
   return ret;

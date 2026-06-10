@@ -23,11 +23,6 @@
 namespace oceanbase
 {
 
-namespace obrpc
-{
-class ObGtiRpcProxy;
-}
-
 namespace rpc
 {
 namespace frame
@@ -64,7 +59,7 @@ class ObGtiSource : public ObIGtiSource
 public:
   ObGtiSource() { reset(); }
   ~ObGtiSource() { destroy(); }
-  int init(const common::ObAddr &server, rpc::frame::ObReqTransport *req_transport);
+  int init(const common::ObAddr &server);
   virtual int start();
   virtual void stop();
   virtual void wait();
@@ -97,7 +92,6 @@ private:
   int64_t cur_idx_;
   int64_t cache_idx_;
   common::ObAddr server_;
-  obrpc::ObGtiRpcProxy *gti_request_rpc_proxy_;
   ObGtiRequestRpc *gti_request_rpc_;
   common::ObAddr gti_cache_leader_;
   int64_t retry_request_cnt_;

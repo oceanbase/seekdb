@@ -137,7 +137,6 @@ public:
                int(const ObFrozenStatus &frozen_status,
                    const bool &force));
   MOCK_METHOD0(garbage_clean, void());
-  MOCK_METHOD0(get_rs_rpc_proxy, obrpc::ObCommonRpcProxy & ());
   MOCK_METHOD2(get_frozen_status,
                int(const int64_t major_version, ObFrozenStatus &frozen_status));
   MOCK_METHOD1(insert_frozen_status, int(const ObFrozenStatus &src));

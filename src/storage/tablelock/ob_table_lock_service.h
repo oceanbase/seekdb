@@ -24,8 +24,8 @@
 #include "share/ob_ls_id.h"
 #include "sql/ob_sql_trans_control.h"
 #include "storage/tablelock/ob_table_lock_common.h"
-#include "storage/tablelock/ob_table_lock_rpc_proxy.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
+#include "storage/tablelock/ob_table_lock_local_executor.h"
 
 namespace oceanbase
 {
@@ -422,7 +422,7 @@ private:
                          const ObAddr &addr,
                          ObRetryCtx &retry_ctx);
   template<>
-  int pack_and_call_rpc_(obrpc::ObBatchReplaceLockProxy &proxy_batch,
+  int pack_and_call_rpc_(observer::ObLocalBatchLockProxy<transaction::tablelock::ObLockTaskBatchRequest<transaction::tablelock::ObReplaceLockParam>> &proxy_batch,
                          ObTableLockCtx &ctx,
                          const share::ObLSID &ls_id,
                          const ObLockIDArray &lock_ids,

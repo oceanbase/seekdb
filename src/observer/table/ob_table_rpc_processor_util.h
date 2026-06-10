@@ -21,6 +21,7 @@
 #include "sql/monitor/ob_exec_stat.h"
 #include "share/table/ob_table_config_util.h"
 #include "observer/table/ob_table_process_type.h"
+#include "share/table/ob_table_rpc_binding.h"  // obcall::ObCallPacket stand-in (require_rerouting on dead path)
 
 namespace oceanbase
 {
@@ -92,7 +93,7 @@ public:
       || is_snapshot_discarded_err(err);
   }
 
-  OB_INLINE static bool need_do_move_response(const int err, const obrpc::ObRpcPacket &rpc_pkt)
+  OB_INLINE static bool need_do_move_response(const int err, const obcall::ObCallPacket &rpc_pkt)
   {
     return is_require_rerouting_err(err) 
       && ObKVFeatureModeUitl::is_rerouting_enable()

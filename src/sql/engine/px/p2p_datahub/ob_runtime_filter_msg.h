@@ -48,8 +48,7 @@ public:
   ~ObRFBloomFilterMsg() { destroy(); }
   virtual int assign(const ObP2PDatahubMsgBase &) final;
   virtual int merge(ObP2PDatahubMsgBase &) final;
-  virtual int broadcast(ObIArray<ObAddr> &target_addrs,
-      obrpc::ObP2PDhRpcProxy &p2p_dh_proxy) final;
+  virtual int broadcast(ObIArray<ObAddr> &target_addrs) final;
   bool is_first_phase() { return FIRST_LEVEL == phase_; }
   virtual int might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,

@@ -104,20 +104,20 @@ private:
   int fill_high_bound_val_for_split_partition(const AlterTableSchema &alter_table_schema, ObPartition& split_part);
   int check_dup_foreign_keys_exist(
       share::schema::ObSchemaGetterGuard *schema_guard,
-      const obrpc::ObCreateForeignKeyArg &foreign_key_arg);
+      const obcall::ObCreateForeignKeyArg &foreign_key_arg);
   int resolve_alter_table_option_list(const ParseNode &node);
   int check_drop_column_is_partition_key(const ObTableSchema &table_schema, 
                                          const ObString &column_name);
 
   int set_column_collation(share::schema::AlterColumnSchema &alter_column_schema);
   int resolve_index_column_list(const ParseNode &node,
-                                obrpc::ObCreateIndexArg &index_arg,
+                                obcall::ObCreateIndexArg &index_arg,
                                 const int64_t index_name_value,
                                 ObIArray<ObString> &input_index_columns_name,
                                 bool &cnt_func_index);
 
-  int add_sort_column(const obrpc::ObColumnSortItem &sort_column,
-                      obrpc::ObCreateIndexArg &index_arg);
+  int add_sort_column(const obcall::ObColumnSortItem &sort_column,
+                      obcall::ObCreateIndexArg &index_arg);
 
   int process_timestamp_column(ObColumnResolveStat &stat, share::schema::AlterColumnSchema &alter_column_schema);
   int resolve_add_index(const ParseNode &node);
@@ -132,7 +132,7 @@ private:
   int resolve_drop_primary(const ParseNode &action_node_list);
   int resolve_add_primary(const ParseNode &node);
   int resolve_alter_primary(const ParseNode &action_node_list, const ParseNode &node);
-  int generate_index_arg(obrpc::ObCreateIndexArg &index_arg, const bool is_unique_key);
+  int generate_index_arg(obcall::ObCreateIndexArg &index_arg, const bool is_unique_key);
   int resolve_alter_table_column_definition(share::schema::AlterColumnSchema &column,
                                             ParseNode *node, ObColumnResolveStat &stat,
                                             bool &is_modify_column_visibility,

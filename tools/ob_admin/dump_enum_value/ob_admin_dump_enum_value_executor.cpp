@@ -48,9 +48,7 @@ int ObAdminDumpEnumValueExecutor::execute(int argc, char *argv[])
 
 void ObAdminDumpEnumValueExecutor::print_rpc_code()
 {
-#define PCODE_DEF(name, id) printf("RPC_CODE %d %s\n", id, #name);
-#include "rpc/obrpc/ob_rpc_packet_list.h"
-#undef PCODE_DEF
+  // RPC pcode list (rpc/obrpc/ob_rpc_packet_list.h) removed with the obrpc framework.
 }
 
 }

@@ -18,7 +18,6 @@
 #define _OB_SQL_PX_SUB_CORRD_H_
 
 #include "sql/engine/px/ob_dfo.h"
-#include "sql/engine/px/ob_px_rpc_proxy.h"
 #include "sql/engine/px/ob_px_coord_msg_proc.h"
 #include "sql/engine/px/ob_px_data_ch_provider.h"
 #include "sql/engine/px/ob_granule_pump.h"

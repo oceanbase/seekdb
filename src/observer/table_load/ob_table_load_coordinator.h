@@ -26,7 +26,7 @@
 #include "share/table/ob_table_load_sql_statistics.h"
 #include "share/table/ob_table_load_row_array.h"
 #include "observer/table_load/resource/ob_table_load_resource_rpc_struct.h"
-#include "observer/table_load/resource/ob_table_load_resource_rpc_proxy.h"
+#include "observer/table_load/resource/ob_table_load_resource_rpc.h"
 #include "observer/table_load/resource/ob_table_load_resource_service.h"
 #include "observer/table_load/ob_table_load_assigned_memory_manager.h"
 #include "observer/table_load/ob_table_load_partition_location.h"

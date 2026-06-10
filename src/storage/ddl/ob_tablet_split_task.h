@@ -45,8 +45,8 @@ public:
   virtual ~ObTabletSplitParam();
   bool is_valid() const;
   int init(const ObTabletSplitParam &param);
-  int init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg);
-  int init(const obrpc::ObTabletSplitArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
+  int init(const obcall::ObTabletSplitArg &arg);
   TO_STRING_KV(K_(is_inited), K_(tenant_id), K_(ls_id), K_(table_id), K_(schema_version), 
                K_(task_id), K_(source_tablet_id), K_(dest_tablets_id), K_(compaction_scn), K_(user_parallelism), 
                K_(compat_mode), K_(data_format_version), K_(consumer_group_id),
@@ -423,8 +423,8 @@ public:
       ObIArray<ObTabletID> &dest_tablets_id,
       lib::Worker::CompatMode &compat_mode);
   static int check_medium_compaction_info_list_cnt(
-      const obrpc::ObCheckMediumCompactionInfoListArg &arg,
-      obrpc::ObCheckMediumCompactionInfoListResult &result);
+      const obcall::ObCheckMediumCompactionInfoListArg &arg,
+      obcall::ObCheckMediumCompactionInfoListResult &result);
   static int check_tablet_restore_status(
       const ObIArray<ObTabletID> &dest_tablets_id,
       const ObLSHandle &ls_handle, 

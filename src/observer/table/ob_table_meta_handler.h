@@ -17,9 +17,7 @@
 #ifndef OBSERVER_TABLE_OB_TABLE_META_HANDLER_H_
 #define OBSERVER_TABLE_OB_TABLE_META_HANDLER_H_
 
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "utils/ob_table_json_utils.h"
 

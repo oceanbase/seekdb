@@ -33,9 +33,8 @@ class ObServerConfig;
 class ObISQLClient;
 }
 
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
 }
 
 namespace share
@@ -58,18 +57,15 @@ class ObTableCreator;
 class ObBaseBootstrap
 {
 public:
-  explicit ObBaseBootstrap(obrpc::ObSrvRpcProxy &rpc_proxy,
-                           common::ObServerConfig &config);
+  explicit ObBaseBootstrap(common::ObServerConfig &config);
   virtual ~ObBaseBootstrap() {}
 
 
-  inline obrpc::ObSrvRpcProxy &get_rpc_proxy() const { return rpc_proxy_; }
 protected:
   virtual int check_inner_stat() const;
 public:
   int64_t step_id_;
 protected:
-  obrpc::ObSrvRpcProxy &rpc_proxy_;
   common::ObServerConfig &config_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBaseBootstrap);
@@ -78,9 +74,7 @@ private:
 class ObPreBootstrap : public ObBaseBootstrap
 {
 public:
-  explicit ObPreBootstrap(obrpc::ObSrvRpcProxy &rpc_proxy,
-                          common::ObServerConfig &config,
-                          obrpc::ObCommonRpcProxy &rs_rpc_proxy);
+  explicit ObPreBootstrap(common::ObServerConfig &config);
   virtual ~ObPreBootstrap() {}
   virtual int prepare_bootstrap(common::ObAddr &master_rs);
 
@@ -97,7 +91,6 @@ private:
 private:
   volatile bool stop_;
   int64_t begin_ts_;
-  obrpc::ObCommonRpcProxy &common_proxy_;
   DISALLOW_COPY_AND_ASSIGN(ObPreBootstrap);
 };
 
@@ -115,11 +108,9 @@ public:
 private:
     int ret_;
   };
-  explicit ObBootstrap(obrpc::ObSrvRpcProxy &rpc_proxy,
-                       ObDDLService &ddl_service,
+  explicit ObBootstrap(ObDDLService &ddl_service,
                        ObTenantDDLService &tenant_ddl_service,
-                       common::ObServerConfig &config,
-                       obrpc::ObCommonRpcProxy &rs_rpc_proxy);
+                       common::ObServerConfig &config);
 
   virtual ~ObBootstrap() {}
   virtual int execute_bootstrap();
@@ -168,7 +159,6 @@ private:
 private:
   ObDDLService &ddl_service_;
   ObTenantDDLService &tenant_ddl_service_;
-  obrpc::ObCommonRpcProxy &common_proxy_;
   int64_t begin_ts_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBootstrap);

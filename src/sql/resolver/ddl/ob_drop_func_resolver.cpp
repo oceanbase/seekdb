@@ -81,7 +81,7 @@ int ObDropFuncResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-    obrpc::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
+    obcall::ObDropUserDefinedFunctionArg &drop_func_arg = drop_func_stmt->get_drop_func_arg();
     drop_func_arg.tenant_id_ = tenant_id;
     drop_func_arg.name_ = lower_name;
     drop_func_arg.if_exist_ =  (NULL != parse_tree.children_[0]);

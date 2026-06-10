@@ -54,7 +54,7 @@ int ObCatalogResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_catalog_stmt", K(ret));
   } else {
-    obrpc::ObCatalogDDLArg &arg = stmt->get_ddl_arg();
+    obcall::ObCatalogDDLArg &arg = stmt->get_ddl_arg();
     // tenant_id, user_id
     arg.schema_.set_tenant_id(session_info_->get_effective_tenant_id());
     arg.user_id_ = session_info_->get_user_id();
@@ -91,7 +91,7 @@ int ObCatalogResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
-int ObCatalogResolver::resolve_create_catalog(const ParseNode &parse_tree, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_create_catalog(const ParseNode &parse_tree, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ParseNode *name_node = NULL;
@@ -111,7 +111,7 @@ int ObCatalogResolver::resolve_create_catalog(const ParseNode &parse_tree, obrpc
   return ret;
 }
 
-int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ParseNode *name_node = NULL;
@@ -138,7 +138,7 @@ int ObCatalogResolver::resolve_drop_catalog(const ParseNode &parse_tree, obrpc::
   return ret;
 }
 
-int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ParseNode *name_node = NULL;
@@ -170,7 +170,7 @@ int ObCatalogResolver::resolve_set_catalog(const ParseNode &parse_tree, obrpc::O
   return ret;
 }
 
-int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ObString catalog_name;
@@ -203,7 +203,7 @@ int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obrpc::O
   return ret;
 }
 
-int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_node, obrpc::ObCatalogDDLArg &arg)
+int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_node, obcall::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   ObCatalogProperties::CatalogType type;

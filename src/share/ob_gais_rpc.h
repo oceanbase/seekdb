@@ -24,14 +24,11 @@
 #include "share/ob_define.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_gais_msg.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "rpc/obrpc/ob_rpc_result_code.h"
+#include "rpc/frame/ob_result_code.h"
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObGAISNextValRpcResult
 {
@@ -82,85 +79,7 @@ struct ObGAISNextSequenceValRpcResult
 };
 
 
-class ObGAISRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-  DEFINE_TO(ObGAISRpcProxy);
-
-  RPC_S(PR5 next_autoinc_val, OB_GAIS_NEXT_AUTO_INC_REQUEST,
-        (share::ObGAISNextAutoIncValReq), ObGAISNextValRpcResult);
-  RPC_S(PR5 curr_autoinc_val, OB_GAIS_CURR_AUTO_INC_REQUEST,
-        (share::ObGAISAutoIncKeyArg), ObGAISCurrValRpcResult);
-  RPC_S(PR5 push_autoinc_val, OB_GAIS_PUSH_AUTO_INC_REQUEST,
-        (share::ObGAISPushAutoIncValReq), uint64_t);
-  RPC_S(PR5 clear_autoinc_cache, OB_GAIS_CLEAR_AUTO_INC_CACHE, (share::ObGAISAutoIncKeyArg));
-  RPC_AP(PR3 broadcast_autoinc_cache, OB_GAIS_BROADCAST_AUTO_INC_CACHE,
-         (share::ObGAISBroadcastAutoIncCacheReq));
-
-  RPC_S(PR5 next_sequence_val, OB_GAIS_NEXT_SEQUENCE_REQUEST,
-        (share::ObGAISNextSequenceValReq), ObGAISNextSequenceValRpcResult);
-};
-
-class ObGAISNextAutoIncP : public ObRpcProcessor< obrpc::ObGAISRpcProxy::ObRpc<OB_GAIS_NEXT_AUTO_INC_REQUEST> >
-{
-public:
-  ObGAISNextAutoIncP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGAISNextAutoIncP);
-};
-
-class ObGAISCurrAutoIncP : public ObRpcProcessor< obrpc::ObGAISRpcProxy::ObRpc<OB_GAIS_CURR_AUTO_INC_REQUEST> >
-{
-public:
-  ObGAISCurrAutoIncP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGAISCurrAutoIncP);
-};
-
-class ObGAISPushAutoIncP : public ObRpcProcessor< obrpc::ObGAISRpcProxy::ObRpc<OB_GAIS_PUSH_AUTO_INC_REQUEST> >
-{
-public:
-  ObGAISPushAutoIncP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGAISPushAutoIncP);
-};
-
-class ObGAISClearAutoIncCacheP : public ObRpcProcessor< obrpc::ObGAISRpcProxy::ObRpc<OB_GAIS_CLEAR_AUTO_INC_CACHE> >
-{
-public:
-  ObGAISClearAutoIncCacheP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGAISClearAutoIncCacheP);
-};
-
-class ObGAISBroadcastAutoIncCacheP : public ObRpcProcessor< obrpc::ObGAISRpcProxy::ObRpc<OB_GAIS_BROADCAST_AUTO_INC_CACHE> >
-{
-public:
-  ObGAISBroadcastAutoIncCacheP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGAISBroadcastAutoIncCacheP);
-};
-class ObGAISNextSequenceP : public ObRpcProcessor< obrpc::ObGAISRpcProxy::ObRpc<OB_GAIS_NEXT_SEQUENCE_REQUEST> >
-{
-public:
-  ObGAISNextSequenceP() {}
-protected:
-  int process();
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObGAISNextSequenceP);
-};
-
-} // obrpc
+} // obcall
 
 namespace share
 {
@@ -168,9 +87,9 @@ namespace share
 class ObGAISRequestRpc
 {
 public:
-  ObGAISRequestRpc() : is_inited_(false), rpc_proxy_(NULL) {}
+  ObGAISRequestRpc() : is_inited_(false) {}
   ~ObGAISRequestRpc() { destroy(); }
-  int init(obrpc::ObGAISRpcProxy *rpc_proxy, const common::ObAddr &self);
+  int init(const common::ObAddr &self);
   void destroy();
 public:
   /*
@@ -179,7 +98,7 @@ public:
    */
   int next_autoinc_val(const common::ObAddr &server,
                        const ObGAISNextAutoIncValReq &msg,
-                       obrpc::ObGAISNextValRpcResult &rpc_result);
+                       obcall::ObGAISNextValRpcResult &rpc_result);
 
   /*
    * Returns the next sequence value of specified key,
@@ -187,13 +106,13 @@ public:
    */
   int next_sequence_val(const common::ObAddr &server,
                        const ObGAISNextSequenceValReq &msg,
-                       obrpc::ObGAISNextSequenceValRpcResult &rpc_result);
+                       obcall::ObGAISNextSequenceValRpcResult &rpc_result);
   /*
    * Returns the current auto-increment value of specified key.
    */
   int curr_autoinc_val(const common::ObAddr &server,
                        const ObGAISAutoIncKeyArg &msg,
-                       obrpc::ObGAISCurrValRpcResult &rpc_result);
+                       obcall::ObGAISCurrValRpcResult &rpc_result);
   /*
    * Push local sync value to global auto-increment service. This function may
    * change global sync value and current auto-increment value, and return
@@ -210,7 +129,6 @@ public:
 
 private:
   bool is_inited_;
-  obrpc::ObGAISRpcProxy *rpc_proxy_;
   common::ObAddr self_;
 };
 

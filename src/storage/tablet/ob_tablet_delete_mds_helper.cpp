@@ -27,7 +27,7 @@ namespace oceanbase
 namespace storage
 {
 int ObTabletDeleteMdsHelper::register_process(
-    obrpc::ObBatchRemoveTabletArg &arg,
+    obcall::ObBatchRemoveTabletArg &arg,
     mds::BufferCtx &ctx)
 {
   MDS_TG(1_s);
@@ -50,7 +50,7 @@ int ObTabletDeleteMdsHelper::on_commit_for_old_mds(
     const transaction::ObMulSourceDataNotifyArg &notify_arg)
 {
   mds::TLOCAL_MDS_INFO.reset();// disable runtime check
-  return ObTabletCreateDeleteHelper::process_for_old_mds<obrpc::ObBatchRemoveTabletArg, ObTabletDeleteMdsHelper>(buf, len, notify_arg);
+  return ObTabletCreateDeleteHelper::process_for_old_mds<obcall::ObBatchRemoveTabletArg, ObTabletDeleteMdsHelper>(buf, len, notify_arg);
 }
 
 int ObTabletDeleteMdsHelper::on_register(
@@ -60,7 +60,7 @@ int ObTabletDeleteMdsHelper::on_register(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  obrpc::ObBatchRemoveTabletArg arg;
+  obcall::ObBatchRemoveTabletArg arg;
   int64_t pos = 0;
   bool exist = true;
 
@@ -80,7 +80,7 @@ int ObTabletDeleteMdsHelper::on_register(
 }
 
 int ObTabletDeleteMdsHelper::replay_process(
-    obrpc::ObBatchRemoveTabletArg &arg,
+    obcall::ObBatchRemoveTabletArg &arg,
     const share::SCN &scn,
     mds::BufferCtx &ctx)
 {
@@ -106,7 +106,7 @@ int ObTabletDeleteMdsHelper::on_replay(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  obrpc::ObBatchRemoveTabletArg arg;
+  obcall::ObBatchRemoveTabletArg arg;
   int64_t pos = 0;
   bool exist = true;
 
@@ -125,7 +125,7 @@ int ObTabletDeleteMdsHelper::on_replay(
 }
 
 int ObTabletDeleteMdsHelper::delete_tablets(
-    const obrpc::ObBatchRemoveTabletArg &arg,
+    const obcall::ObBatchRemoveTabletArg &arg,
     mds::BufferCtx &ctx)
 {
   MDS_TG(1_s);
@@ -177,7 +177,7 @@ int ObTabletDeleteMdsHelper::delete_tablets(
 }
 
 int ObTabletDeleteMdsHelper::replay_delete_tablets(
-    const obrpc::ObBatchRemoveTabletArg &arg,
+    const obcall::ObBatchRemoveTabletArg &arg,
     const share::SCN &scn,
     mds::BufferCtx &ctx)
 {

@@ -19,7 +19,6 @@
 #include "lib/hash/ob_hashmap.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_share_info.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
-#include "sql/engine/px/p2p_datahub/ob_p2p_dh_rpc_proxy.h"
 
 namespace oceanbase
 {
@@ -72,7 +71,7 @@ public:
 
 public:
   ObP2PDatahubManager() : map_(), is_inited_(false),
-      p2p_dh_proxy_(), p2p_dh_id_(0)
+      p2p_dh_id_(0)
   {}
   ~ObP2PDatahubManager() { destroy(); }
   static ObP2PDatahubManager &instance();
@@ -108,7 +107,6 @@ public:
   MsgMap &get_map() { return map_; }
   int deep_copy_msg(ObP2PDatahubMsgBase &msg, ObP2PDatahubMsgBase *&new_msg);
   void free_msg(ObP2PDatahubMsgBase *&msg);
-  obrpc::ObP2PDhRpcProxy &get_proxy() { return p2p_dh_proxy_; }
   int generate_p2p_dh_id(int64_t &p2p_dh_id);
 private:
   template<typename T>
@@ -119,7 +117,6 @@ private:
 private:
   MsgMap map_;
   bool is_inited_;
-  obrpc::ObP2PDhRpcProxy p2p_dh_proxy_;
   int64_t p2p_dh_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObP2PDatahubManager);

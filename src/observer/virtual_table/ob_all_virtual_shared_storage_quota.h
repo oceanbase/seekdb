@@ -21,7 +21,7 @@
 #include "src/observer/ob_server_struct.h"
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObSharedDeviceResource;
 }
@@ -51,7 +51,7 @@ private:
 
 private:
   int add_one_storage_batch_row();
-  int add_row(const obrpc::ObSharedDeviceResource &usage, const obrpc::ObSharedDeviceResource &limit);
+  int add_row(const obcall::ObSharedDeviceResource &usage, const obcall::ObSharedDeviceResource &limit);
   DISALLOW_COPY_AND_ASSIGN(ObVirtualSharedStorageQuota);
 };
 

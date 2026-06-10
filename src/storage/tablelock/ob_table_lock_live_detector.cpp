@@ -1,3 +1,4 @@
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -68,7 +69,7 @@ int ObTableLockDetectFuncList::detect_session_alive(const uint32_t session_id, b
   return ret;
 }
 
-int ObTableLockDetectFuncList::detect_session_alive_for_rpc(const uint32_t session_id, obrpc::Bool &is_alive)
+int ObTableLockDetectFuncList::detect_session_alive_for_rpc(const uint32_t session_id, obcall::Bool &is_alive)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -162,44 +163,9 @@ int ObTableLockDetectFuncList::do_session_alive_detect_for_a_server_session_(con
                                                                              bool &is_alive)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = nullptr;
-  obrpc::Bool tmp_is_alive(true);
-  int64_t retry_times = 0;
-
   is_alive = true;
-
-  // In this branch, we don't persist svr_ip/svr_port in __all_client_to_server_session_info anymore.
-  // For local server sessions, avoid RPC and just check by local session mgr.
-  if (addr == GCTX.self_addr()) {
-    ret = detect_session_alive(static_cast<uint32_t>(server_session_id), is_alive);
-  } else if (OB_ISNULL(srv_rpc_proxy = GCTX.srv_rpc_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("srv_rpc_proxy is null");
-  } else {
-    do {
-      ret = OB_SUCCESS;
-      if (OB_FAIL(srv_rpc_proxy->to(addr).detect_session_alive(server_session_id, tmp_is_alive))) {
-        if (!tmp_is_alive) {
-          LOG_INFO("find server session is not alive", K(ret), K(addr), K(server_session_id), K(tmp_is_alive));
-          is_alive = false;
-          ret = OB_SUCCESS;
-          break;
-        } else {
-          retry_times++;
-          LOG_WARN("fail to call detect_session_alive by rpc",
-                   KR(ret),
-                   K(retry_times),
-                   K(addr),
-                   K(server_session_id),
-                   K(tmp_is_alive));
-          ob_usleep(RPC_INTERVAL_TIME_US);
-        }
-      } else {
-        is_alive = tmp_is_alive;
-      }
-    } while (OB_FAIL(ret) && retry_times <= RETRY_RPC_TIMES);
-  }
-
+  // seekdb single-node: all sessions are local, no RPC needed.
+  ret = detect_session_alive(static_cast<uint32_t>(server_session_id), is_alive);
   return ret;
 }
 

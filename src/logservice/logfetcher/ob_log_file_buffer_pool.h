@@ -60,10 +60,10 @@ struct BufferWriteMeta
       const palf::LSN next_req_lsn,
       const palf::offset_t write_size,
       const share::SCN replayable_point,
-      const obrpc::ObCdcFetchRawStatus &status,
-      const obrpc::FeedbackType feed_back,
+      const obcall::ObCdcFetchRawStatus &status,
+      const obcall::FeedbackType feed_back,
       const int err,
-      const obrpc::ObRpcResultCode &rcode,
+      const rpc::frame::ObResultCode &rcode,
       const int64_t rpc_cb_start_time,
       const int64_t sub_rpc_send_time)
   {
@@ -123,10 +123,10 @@ public:
       const palf::LSN data_start_lsn,
       const palf::LSN next_req_lsn,
       const share::SCN replayable_point,
-      const obrpc::ObCdcFetchRawStatus &fetch_status,
-      const obrpc::FeedbackType feed_back,
+      const obcall::ObCdcFetchRawStatus &fetch_status,
+      const obcall::FeedbackType feed_back,
       const int err,
-      const obrpc::ObRpcResultCode &rcode,
+      const rpc::frame::ObResultCode &rcode,
       const int64_t rpc_cb_start_time,
       const int64_t sub_rpc_send_time);
 
@@ -137,7 +137,7 @@ public:
       int32_t &valid_rpc_cnt,
       bool &is_readable,
       bool &is_active,
-      obrpc::ObCdcFetchRawSource &data_end_source,
+      obcall::ObCdcFetchRawSource &data_end_source,
       share::SCN &replayable_point,
       ObIArray<RawLogDataRpcStatus> &sub_rpc_status_arr);
 

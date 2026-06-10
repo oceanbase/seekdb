@@ -1,3 +1,4 @@
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -23,7 +24,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 
@@ -31,8 +32,7 @@ namespace rootserver
 {
 ObRootMinorFreeze::ObRootMinorFreeze()
     :inited_(false),
-     stopped_(false),
-     rpc_proxy_(NULL)
+     stopped_(false)
 {
 }
 
@@ -44,14 +44,13 @@ ObRootMinorFreeze::~ObRootMinorFreeze()
   }
 }
 
-int ObRootMinorFreeze::init(ObSrvRpcProxy &rpc_proxy)
+int ObRootMinorFreeze::init()
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else {
-    rpc_proxy_ = &rpc_proxy;
     stopped_ = false;
     inited_ = true;
   }
@@ -96,7 +95,7 @@ bool ObRootMinorFreeze::is_server_alive(const ObAddr &server) const
   return true;
 }
 
-int ObRootMinorFreeze::try_minor_freeze(const obrpc::ObRootMinorFreezeArg &arg) const
+int ObRootMinorFreeze::try_minor_freeze(const obcall::ObRootMinorFreezeArg &arg) const
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -140,35 +139,18 @@ int ObRootMinorFreeze::try_minor_freeze(const obrpc::ObRootMinorFreezeArg &arg) 
 int ObRootMinorFreeze::do_minor_freeze(const ParamsContainer &params) const
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   int64_t failure_cnt = 0;
-  ObMinorFreezeProxy proxy(*rpc_proxy_, &ObSrvRpcProxy::minor_freeze);
   LOG_INFO("do minor freeze", K(params));
 
   for (int64_t i = 0; OB_SUCC(ret) && i < params.get_params().count(); ++i) {
     const MinorFreezeParam &param = params.get_params().at(i);
     if (OB_FAIL(check_cancel())) {
       LOG_WARN("fail to check cancel", KR(ret));
-    } else if (OB_TMP_FAIL(proxy.call(param.server, MINOR_FREEZE_TIMEOUT, param.arg))) {
-      LOG_WARN("proxy call failed", KR(tmp_ret), K(param.arg),
-               "dest addr", param.server);
-      failure_cnt++;
-    }
-  }
-
-  ObArray<int> return_code_array;
-  if (OB_TMP_FAIL(proxy.wait_all(return_code_array))) {
-    LOG_WARN("proxy wait failed", KR(ret), KR(tmp_ret));
-    ret = OB_SUCC(ret) ? tmp_ret : ret;
-  } else if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(proxy.check_return_cnt(return_code_array.count()))) {
-    LOG_WARN("return cnt not match", KR(ret), "return_cnt", return_code_array.count());
-  } else {
-    for (int i = 0; i < proxy.get_results().count(); ++i) {
-      if (OB_TMP_FAIL(static_cast<int>(*proxy.get_results().at(i)))) {
-        LOG_WARN("fail to do minor freeze on target server, ", K(tmp_ret),
-                 "dest addr:", proxy.get_dests().at(i),
-                 "param:", proxy.get_args().at(i));
+    } else {
+      obcall::Int64 result;
+      int rpc_ret = GCTX.ob_service_->minor_freeze(param.arg, result);
+      if (OB_SUCCESS != rpc_ret || OB_SUCCESS != static_cast<int>(result)) {
+        LOG_WARN("minor freeze failed", KR(rpc_ret), "dest addr", param.server, "param", param.arg);
         failure_cnt++;
       }
     }

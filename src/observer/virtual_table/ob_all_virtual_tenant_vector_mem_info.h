@@ -52,9 +52,9 @@ private:
   lib::ObMallocSampleMap::const_iterator it_;
   lib::ObMallocSampleMap malloc_sample_map_;
   char vector_used_str_[OB_MAX_MYSQL_VARCHAR_LENGTH];
-  common::ObSEArray<obrpc::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
-  common::ObSEArray<obrpc::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
-  common::ObSEArray<obrpc::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
+  common::ObSEArray<obcall::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> complete_tablet_ids_;
+  common::ObSEArray<obcall::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> partial_tablet_ids_;
+  common::ObSEArray<obcall::ObLSTabletPair, ObTabletCommon::DEFAULT_ITERATOR_TABLET_ID_CNT> cache_tablet_ids_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTenantVectorMemInfo);
 };

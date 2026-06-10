@@ -19,7 +19,6 @@
 
 #include "sql/engine/px/ob_px_coord_op.h"
 #include "sql/engine/px/ob_dfo_mgr.h"
-#include "sql/engine/px/ob_px_rpc_proxy.h"
 #include "sql/engine/px/ob_px_data_ch_provider.h"
 #include "sql/engine/px/exchange/ob_row_heap.h"
 #include "sql/engine/px/ob_px_dtl_proc.h"

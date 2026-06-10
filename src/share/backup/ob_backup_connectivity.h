@@ -31,7 +31,6 @@ public:
   ~ObBackupConnectivityCheckManager();
   int init(
       const uint64_t tenant_id,
-      obrpc::ObSrvRpcProxy &rpc_proxy,
       common::ObISQLClient &sql_proxy);
   int check_backup_dest_connectivity(const share::ObBackupDest &backup_dests);
 private:
@@ -46,7 +45,6 @@ private:
   int set_last_check_time_(const share::ObBackupDest &backup_dest);
   bool is_inited_;
   uint64_t tenant_id_;
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
   common::ObISQLClient *sql_proxy_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBackupConnectivityCheckManager);

@@ -110,7 +110,7 @@ public:
   virtual void dump_deleted_log_info(const bool is_debug_log = true) const;
   virtual int check_need_add_cache_obj_stat(ObILibCacheCtx &ctx, bool &need_real_add);
 
-  //virtual obrpc::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
+  //virtual obcall::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
   TO_STRING_KV(K_(can_direct_use_param),
                K_(package_id),
                K_(routine_id),

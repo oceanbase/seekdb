@@ -37,7 +37,7 @@ public:
   void set_role_name(const common::ObString &role_name) { role_name_ = role_name; }
   const common::ObString &get_role_name() const { return role_name_; }
   virtual bool cause_implicit_commit() const override { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_role_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_role_arg_; }
   common::ObIArray<common::ObString> &get_user_names() { return user_names_; }
   common::ObIArray<common::ObString> &get_host_names() { return host_names_; }
   void set_if_exists() { if_exists_ = true; }
@@ -47,7 +47,7 @@ private:
   // data members
   uint64_t tenant_id_;
   common::ObString role_name_; 
-  obrpc::ObDropUserArg drop_role_arg_;
+  obcall::ObDropUserArg drop_role_arg_;
   // mysql role
   common::ObArray<common::ObString, common::ModulePageAllocator, true /*auto_free*/> user_names_;
   common::ObArray<common::ObString, common::ModulePageAllocator, true /*auto_free*/> host_names_;

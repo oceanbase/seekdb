@@ -23,7 +23,7 @@ namespace oceanbase
 using namespace common;
 using namespace share::schema;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 int ObDDLResolver::resolve_external_file_format(const ParseNode *format_node,

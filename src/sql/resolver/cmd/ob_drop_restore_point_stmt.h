@@ -40,7 +40,7 @@ public:
        restore_point_name_()
        {}
   virtual ~ObDropRestorePointStmt() {}
-  inline obrpc::ObDropRestorePointArg &get_drop_restore_point_arg()
+  inline obcall::ObDropRestorePointArg &get_drop_restore_point_arg()
   {
     return drop_restore_point_arg_;
   }
@@ -55,7 +55,7 @@ public:
   }
   ObString get_restore_point_name() { return restore_point_name_; }
 private:
-  obrpc::ObDropRestorePointArg drop_restore_point_arg_;
+  obcall::ObDropRestorePointArg drop_restore_point_arg_;
   ObString restore_point_name_;
   DISALLOW_COPY_AND_ASSIGN(ObDropRestorePointStmt);
 };

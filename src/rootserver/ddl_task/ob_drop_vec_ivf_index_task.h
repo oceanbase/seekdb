@@ -44,7 +44,7 @@ public:
       const int64_t schema_version,
       const int64_t consumer_group_id,
       const uint64_t tenant_data_version,
-      const obrpc::ObDropIndexArg &drop_index_arg);
+      const obcall::ObDropIndexArg &drop_index_arg);
   int init(const ObDDLTaskRecord &task_record);
   virtual int process() override;
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const override;
@@ -56,8 +56,8 @@ public:
 private:
   static const int64_t OB_DROP_VEC_IVF_INDEX_TASK_VERSION = 1;
   int deep_copy_index_arg(common::ObIAllocator &allocator,
-                          const obrpc::ObDropIndexArg &src_index_arg,
-                          obrpc::ObDropIndexArg &dst_index_arg);
+                          const obcall::ObDropIndexArg &src_index_arg,
+                          obcall::ObDropIndexArg &dst_index_arg);
   int check_switch_succ();
   int prepare(const share::ObDDLTaskStatus &status);
   int drop_aux_index_table(const share::ObDDLTaskStatus &status);
@@ -103,7 +103,7 @@ private:
   ObVecIndexDDLChildTaskInfo sq_meta_;
   ObVecIndexDDLChildTaskInfo pq_centroid_;
   ObVecIndexDDLChildTaskInfo pq_code_;
-  obrpc::ObDropIndexArg drop_index_arg_;
+  obcall::ObDropIndexArg drop_index_arg_;
 };
 
 } // end namespace rootserver

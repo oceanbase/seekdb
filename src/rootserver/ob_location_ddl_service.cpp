@@ -24,10 +24,10 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace rootserver
 {
-int ObLocationDDLService::create_location(const obrpc::ObCreateLocationArg &arg,
+int ObLocationDDLService::create_location(const obcall::ObCreateLocationArg &arg,
                                           const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;
@@ -107,7 +107,7 @@ int ObLocationDDLService::create_location(const obrpc::ObCreateLocationArg &arg,
   return ret;
 }
 
-int ObLocationDDLService::drop_location(const obrpc::ObDropLocationArg &arg,
+int ObLocationDDLService::drop_location(const obcall::ObDropLocationArg &arg,
                                         const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;

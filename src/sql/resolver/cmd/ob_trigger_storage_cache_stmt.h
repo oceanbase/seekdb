@@ -31,12 +31,12 @@ public:
       rpc_arg_()
   {}
   virtual ~ObTriggerStorageCacheStmt() {}
-  obrpc::ObTriggerStorageCacheArg &get_rpc_arg() { return rpc_arg_; }
-  void set_storage_cache_op(const obrpc::ObTriggerStorageCacheArg::ObStorageCacheOp op) { rpc_arg_.op_ = op; }
+  obcall::ObTriggerStorageCacheArg &get_rpc_arg() { return rpc_arg_; }
+  void set_storage_cache_op(const obcall::ObTriggerStorageCacheArg::ObStorageCacheOp op) { rpc_arg_.op_ = op; }
   void set_tenant_id(const uint64_t tenant_id) { rpc_arg_.tenant_id_ = tenant_id; }
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 public:
-  obrpc::ObTriggerStorageCacheArg rpc_arg_;
+  obcall::ObTriggerStorageCacheArg rpc_arg_;
 };
 } /* sql */
 } /* oceanbase */

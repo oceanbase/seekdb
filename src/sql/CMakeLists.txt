@@ -116,9 +116,6 @@ ob_set_subtarget(ob_sql dtl
   dtl/ob_dtl_linked_buffer.cpp
   dtl/ob_dtl_local_channel.cpp
   dtl/ob_dtl_local_first_buffer_manager.cpp
-  dtl/ob_dtl_rpc_channel.cpp
-  dtl/ob_dtl_rpc_processor.cpp
-  dtl/ob_dtl_rpc_proxy.cpp
   dtl/ob_dtl_task.cpp
   dtl/ob_dtl_tenant_mem_manager.cpp
   dtl/ob_dtl_utils.cpp
@@ -892,9 +889,7 @@ ob_set_subtarget(ob_sql engine_px
   engine/px/ob_px_op_size_factor.cpp
   engine/px/ob_px_row_store.cpp
   engine/px/ob_px_rpc_processor.cpp
-  engine/px/ob_px_rpc_proxy.cpp
   engine/px/ob_px_scheduler.cpp
-  engine/px/ob_px_sqc_async_proxy.cpp
   engine/px/ob_px_sqc_handler.cpp
   engine/px/ob_px_sqc_proxy.cpp
   engine/px/ob_px_sub_coord.cpp
@@ -933,9 +928,7 @@ ob_set_subtarget(ob_sql engine_px
   engine/px/datahub/components/ob_dh_opt_stats_gather.cpp
   engine/px/datahub/components/ob_dh_join_filter_count_row.cpp
   engine/px/p2p_datahub/ob_p2p_dh_mgr.cpp
-  engine/px/p2p_datahub/ob_p2p_dh_rpc_proxy.cpp
   engine/px/p2p_datahub/ob_p2p_dh_msg.cpp
-  engine/px/p2p_datahub/ob_p2p_dh_rpc_process.cpp
   engine/px/p2p_datahub/ob_runtime_filter_query_range.cpp
   engine/px/p2p_datahub/ob_runtime_filter_msg.cpp
   engine/px/p2p_datahub/ob_runtime_filter_vec_msg.cpp
@@ -987,7 +980,6 @@ ob_set_subtarget(ob_sql executor
   executor/ob_executor.cpp
   executor/ob_executor_rpc_impl.cpp
   executor/ob_executor_rpc_processor.cpp
-  executor/ob_executor_rpc_proxy.cpp
   executor/ob_job.cpp
   executor/ob_job_control.cpp
   executor/ob_job_id.cpp
@@ -996,7 +988,6 @@ ob_set_subtarget(ob_sql executor
   executor/ob_local_job_executor.cpp
   executor/ob_local_task_executor.cpp
   executor/ob_maintain_dependency_info_task.cpp
-  executor/ob_remote_executor_processor.cpp
   executor/ob_remote_identity_task_spliter.cpp
   executor/ob_remote_job_control.cpp
   executor/ob_remote_job_executor.cpp

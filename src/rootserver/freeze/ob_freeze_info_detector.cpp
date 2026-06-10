@@ -1,3 +1,4 @@
+#include "rootserver/ob_root_service.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -223,14 +224,12 @@ int ObMajorMergeInfoDetector::try_minor_freeze()
 {
   int ret = OB_SUCCESS;
   ObAddr rs_addr = GCTX.self_addr();
-  obrpc::ObRootMinorFreezeArg arg;
+  obcall::ObRootMinorFreezeArg arg;
   if (OB_FAIL(arg.tenant_ids_.push_back(tenant_id_))) {
     LOG_WARN("fail to push back tenant_id", KR(ret), K_(tenant_id));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid global context", KR(ret));
-  } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).timeout(GCONF.rpc_timeout)
-                     .root_minor_freeze(arg))) {
+  } else if (OB_FAIL(GCTX.root_service_->root_minor_freeze(arg))) {
     LOG_WARN("fail to execute root_minor_freeze rpc", KR(ret), K(arg));
   } else {
     LOG_INFO("succ to execute root_minor_freeze rpc", KR(ret), K(arg));

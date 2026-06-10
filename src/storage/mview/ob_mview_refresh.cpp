@@ -1,3 +1,5 @@
+#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_rs_serial_call.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -519,8 +521,8 @@ int ObMViewRefresher::complete_refresh()
   ObString select_string;
   ObArenaAllocator str_alloc;
   if (OB_SUCC(ret)) {
-    obrpc::ObMViewCompleteRefreshArg arg;
-    obrpc::ObMViewCompleteRefreshRes res;
+    obcall::ObMViewCompleteRefreshArg arg;
+    obcall::ObMViewCompleteRefreshRes res;
     arg.tenant_id_ = tenant_id;
     arg.table_id_ = mview_id;
     arg.consumer_group_id_ = THIS_WORKER.get_group_id();
@@ -555,12 +557,9 @@ int ObMViewRefresher::complete_refresh()
         LOG_WARN("fail to set default timeout ctx", KR(ret));
       } else {
         LOG_INFO("mview complete refresh start", K(rs_addr), K(arg));
-        if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr)
-                      .timeout(timeout_ctx.get_timeout())
-                      .mview_complete_refresh(arg, res))) {
+        if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->mview_complete_refresh(arg, res); }))) {
           LOG_WARN("fail to mview complete refresh", KR(ret), K(arg));
-        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(tenant_id, res.task_id_, DDL_MVIEW_COMPLETE_REFRESH, session_info,
-                                                              GCTX.rs_rpc_proxy_))) {
+        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(tenant_id, res.task_id_, DDL_MVIEW_COMPLETE_REFRESH, session_info))) {
           LOG_WARN("fail to wait mview complete refresh finish", KR(ret), K(arg));
         } else {
           LOG_INFO("mview complete refresh success", K(arg), K(res));

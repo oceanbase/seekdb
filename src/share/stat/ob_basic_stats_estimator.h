@@ -134,8 +134,8 @@ public:
 
   static int stroage_estimate_block_count_and_row_count(ObExecContext &ctx,
                                                         const ObAddr &addr,
-                                                        const obrpc::ObEstBlockArg &arg,
-                                                        obrpc::ObEstBlockRes &result);
+                                                        const obcall::ObEstBlockArg &arg,
+                                                        obcall::ObEstBlockRes &result);
 
   static int get_all_tablet_id_and_object_id(const ObTableStatParam &param,
                                              ObIArray<ObTabletID> &tablet_ids,
@@ -220,8 +220,8 @@ public:
 
   static int storage_estimate_skip_rate(ObExecContext &ctx,
                                         const ObAddr &addr,
-                                        const obrpc::ObEstSkipRateArg &arg,
-                                        obrpc::ObEstSkipRateRes &result);
+                                        const obcall::ObEstSkipRateArg &arg,
+                                        obcall::ObEstSkipRateRes &result);
 
 private:
 

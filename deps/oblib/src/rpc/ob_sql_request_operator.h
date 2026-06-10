@@ -19,7 +19,6 @@
 
 #include <stdint.h>
 #include "lib/net/ob_addr.h"
-#include "rpc/obrpc/ob_rpc_opts.h"
 
 namespace oceanbase
 {

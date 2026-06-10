@@ -103,7 +103,7 @@ int ObPLRouter::check_error_in_resolve(int code)
   return ret;
 }
 
-int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_info, ObRoutineInfo &routine_info, obrpc::ObDDLArg *ddl_arg)
+int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_info, ObRoutineInfo &routine_info, obcall::ObDDLArg *ddl_arg)
 {
   int ret = OB_SUCCESS;
   HEAP_VAR(ObPLFunctionAST, func_ast, inner_allocator_) {

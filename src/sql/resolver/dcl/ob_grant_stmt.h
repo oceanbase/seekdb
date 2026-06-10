@@ -83,7 +83,7 @@ public:
   bool is_grant_all_tab_priv() const { return is_grant_all_tab_priv_; }
 
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return grant_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return grant_arg_; }
   int add_column_privs(const ObString& column_name,const ObPrivSet priv_set) { return column_names_priv_.push_back(std::make_pair(column_name, priv_set)); }
   const ObIArray<std::pair<ObString, ObPrivType>> &get_column_privs() const { return column_names_priv_; }
   void set_table_schema_version(int64_t schema_version) { table_schema_version_ = schema_version; }
@@ -105,7 +105,7 @@ private:
   common::ObString masked_sql_;
   bool need_create_user_;
   bool need_create_user_priv_; // grant user identified by pwd
-  obrpc::ObGrantArg grant_arg_; // used to return exec_tenant_id_
+  obcall::ObGrantArg grant_arg_; // used to return exec_tenant_id_
   common::hash::ObPlacementHashSet<common::ObString, common::MAX_ENABLED_ROLES> user_name_set_;
   common::hash::ObPlacementHashSet<common::ObString, common::MAX_ENABLED_ROLES> role_name_set_;
   share::schema::ObObjectType object_type_;

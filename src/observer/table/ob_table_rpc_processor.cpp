@@ -26,7 +26,7 @@ using namespace oceanbase::observer;
 using namespace oceanbase::common;
 using namespace oceanbase::table;
 using namespace oceanbase::share;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 void OB_WEAK_SYMBOL request_finish_callback();
@@ -111,8 +111,8 @@ int ObTableLoginP::process()
   }
   // whether the client should refresh location cache
   if (OB_SUCCESS != ret && ObTableRpcProcessorUtil::is_require_rerouting_err(ret)) {
-    ObRpcProcessor::require_rerouting_ = true;
-    LOG_WARN("[TABLE] login require rerouting", K(ret), "require_rerouting", ObRpcProcessor::require_rerouting_);
+    obcall::ObTableDeadProcessorBase::require_rerouting_ = true;
+    LOG_WARN("[TABLE] login require rerouting", K(ret), "require_rerouting", obcall::ObTableDeadProcessorBase::require_rerouting_);
   }
 #ifndef NDEBUG
     LOG_INFO("[TABLE] login", K(ret), K_(arg), K_(result), "timeout", rpc_pkt_->get_timeout());
@@ -123,7 +123,7 @@ int ObTableLoginP::process()
 #endif
 
     if (common::OB_INVALID_ARGUMENT == ret) {
-      RPC_OBRPC_LOG(ERROR, "yyy retcode is 4002", "pkt", req_->get_packet());
+      LOG_ERROR("yyy retcode is 4002", "pkt", req_->get_packet());
     }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = ObTableConnectionMgr::get_instance().update_table_connection(req_, result_.tenant_id_,
@@ -655,16 +655,16 @@ int ObTableApiProcessorBase::process_with_retry(const ObString &credential, cons
 }
 
 ////////////////////////////////////////////////////////////////
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_EXECUTE> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_BATCH_EXECUTE> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_EXECUTE_QUERY> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_QUERY_AND_MUTATE> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_EXECUTE_QUERY_ASYNC> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_DIRECT_LOAD> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_LS_EXECUTE> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_REDIS_EXECUTE> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_REDIS_EXECUTE_V2> >;
-template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_META_INFO_EXECUTE> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_EXECUTE> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_BATCH_EXECUTE> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_EXECUTE_QUERY> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_QUERY_AND_MUTATE> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_EXECUTE_QUERY_ASYNC> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_DIRECT_LOAD> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_LS_EXECUTE> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_REDIS_EXECUTE> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_REDIS_EXECUTE_V2> >;
+template class oceanbase::observer::ObTableRpcProcessor<ObTableRpcBinding<OB_TABLE_API_META_INFO_EXECUTE> >;
 
 
 template<class T>
@@ -711,8 +711,8 @@ int ObTableRpcProcessor<T>::process()
     }
     // whether the client should refresh location cache and retry
     if (ObTableRpcProcessorUtil::is_require_rerouting_err(ret)) {
-      ObRpcProcessor<T>::require_rerouting_ = true;
-      LOG_WARN("table_api request require rerouting", K(ret), "require_rerouting", ObRpcProcessor<T>::require_rerouting_);
+      obcall::ObTableDeadProcessorBase::require_rerouting_ = true;
+      LOG_WARN("table_api request require rerouting", K(ret), "require_rerouting", obcall::ObTableDeadProcessorBase::require_rerouting_);
     }
   }
   return ret;
@@ -733,7 +733,7 @@ int ObTableRpcProcessor<T>::response(int error_code)
   int ret = OB_SUCCESS;
   // if it is waiting for retry in queue, the response can NOT be sent.
   if (!need_retry_in_queue_ && !had_do_response()) {
-    const ObRpcPacket *rpc_pkt = &reinterpret_cast<const ObRpcPacket&>(this->req_->get_packet());
+    const ObCallPacket *rpc_pkt = &reinterpret_cast<const ObCallPacket&>(this->req_->get_packet());
     if (ObTableRpcProcessorUtil::need_do_move_response(error_code, *rpc_pkt)) {
       // response rerouting packet
       ObTableMoveResponseSender sender(this->req_, error_code);

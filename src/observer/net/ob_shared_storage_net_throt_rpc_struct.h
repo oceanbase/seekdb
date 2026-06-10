@@ -33,7 +33,7 @@
 #include "share/io/ob_io_manager.h"
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObSharedDeviceResource
 {
@@ -65,12 +65,12 @@ struct ObSharedDeviceResourceArray
   OB_UNIS_VERSION(1);
 public:
   ObSharedDeviceResourceArray() {}
-  ObSharedDeviceResourceArray(const ObSEArray<obrpc::ObSharedDeviceResource, 1> &array) : array_(array)
+  ObSharedDeviceResourceArray(const ObSEArray<obcall::ObSharedDeviceResource, 1> &array) : array_(array)
   {}
   ~ObSharedDeviceResourceArray() {}
   bool is_valid() const { return true; }
   TO_STRING_KV(K(array_));
-  ObSEArray<obrpc::ObSharedDeviceResource, 1> array_;
+  ObSEArray<obcall::ObSharedDeviceResource, 1> array_;
 };
 
 struct ObSSNTKey
@@ -243,12 +243,12 @@ public:
   int64_t max_bw_;
   int64_t expire_time_;
 };
-typedef common::ObSEArray<obrpc::ObSSNTKey, 1> ObSSNTKeyArray;
+typedef common::ObSEArray<obcall::ObSSNTKey, 1> ObSSNTKeyArray;
 typedef common::hash::ObHashMap<ObAddr, ObEndpointInfos> ObEndpointRegMap;
 typedef common::hash::ObHashMap<ObSSNTKey, ObSSNTValue*> ObQuotaPlanMap;
 typedef common::hash::ObHashMap<ObTrafficControl::ObStorageKey, ObQuotaPlanMap*> ObBucketThrotMap;
 typedef common::hash::ObHashMap<ObTrafficControl::ObStorageKey, ObStorageKeyLimit> ObStorageKeyLimitMap;
 
-}  // namespace obrpc
+}  // namespace obcall
 }  // namespace oceanbase
 #endif /* OCEANBASE_SHARED_STORAGE_NET_THROT_RPC_STRUCT_H_ */

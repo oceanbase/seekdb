@@ -28,10 +28,9 @@ namespace common
   template <typename T> class ObIArray;
 }
 
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
-}//end namespace obrpc
+}//end namespace obcall
 
 namespace rootserver
 {
@@ -42,16 +41,16 @@ public:
   ObRootMinorFreeze();
   virtual ~ObRootMinorFreeze();
 
-  int init(obrpc::ObSrvRpcProxy &rpc_proxy);
+  int init();
   void start();
   void stop();
   int destroy();
-  int try_minor_freeze(const obrpc::ObRootMinorFreezeArg &arg) const;
+  int try_minor_freeze(const obcall::ObRootMinorFreezeArg &arg) const;
 private:
   typedef struct MinorFreezeParam
   {
     common::ObAddr server;
-    obrpc::ObMinorFreezeArg arg;
+    obcall::ObMinorFreezeArg arg;
 
     TO_STRING_KV(K(server), K(arg));
   } MinorFreezeParam;
@@ -103,7 +102,6 @@ private:
 
   bool inited_;
   bool stopped_;
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
 };
 
 }

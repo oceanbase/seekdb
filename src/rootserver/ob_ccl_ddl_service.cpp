@@ -22,10 +22,10 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace rootserver {
 
-int ObCclDDLService::check_create_ccl_valid(const obrpc::ObCreateCCLRuleArg &arg,
+int ObCclDDLService::check_create_ccl_valid(const obcall::ObCreateCCLRuleArg &arg,
                                             ObSchemaGetterGuard& schema_guard,
                                             const ObCCLRuleSchema *&exist_ccl_rule_schema) {
   int ret = OB_SUCCESS;
@@ -141,7 +141,7 @@ int ObCclDDLService::check_create_ccl_valid(const obrpc::ObCreateCCLRuleArg &arg
 }
 
 int ObCclDDLService::check_drop_ccl_valid(
-    const obrpc::ObDropCCLRuleArg &arg, ObSchemaGetterGuard &schema_guard,
+    const obcall::ObDropCCLRuleArg &arg, ObSchemaGetterGuard &schema_guard,
     const ObCCLRuleSchema *&ccl_rule_schema) {
   int ret = OB_SUCCESS;
   uint64_t tenant_id = arg.tenant_id_;
@@ -164,7 +164,7 @@ int ObCclDDLService::check_drop_ccl_valid(
   return ret;
 }
 
-int ObCclDDLService::create_ccl_ddl(const obrpc::ObCreateCCLRuleArg &arg) {
+int ObCclDDLService::create_ccl_ddl(const obcall::ObCreateCCLRuleArg &arg) {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const uint64_t tenant_id = arg.ccl_rule_schema_.get_tenant_id();
@@ -212,7 +212,7 @@ int ObCclDDLService::create_ccl_ddl(const obrpc::ObCreateCCLRuleArg &arg) {
   return ret;
 }
 
-int ObCclDDLService::drop_ccl_ddl(const obrpc::ObDropCCLRuleArg &arg) {
+int ObCclDDLService::drop_ccl_ddl(const obcall::ObDropCCLRuleArg &arg) {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const uint64_t tenant_id = arg.tenant_id_;

@@ -4305,7 +4305,7 @@ int ObVectorIndexUtil::set_new_index_column(
 int ObVectorIndexUtil::reconstruct_ivf_index_schema_in_rebuild(
   rootserver::ObDDLSQLTransaction &trans,
   rootserver::ObDDLService &ddl_service,
-  const obrpc::ObCreateIndexArg &create_index_arg,
+  const obcall::ObCreateIndexArg &create_index_arg,
   const ObTableSchema &data_table_schema,
   ObTableSchema &new_index_schema)
 {
@@ -4448,7 +4448,7 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
     const int64_t tenant_id,
     share::schema::ObSchemaGetterGuard &schema_guard,
     rootserver::ObDDLService &ddl_service,
-    const obrpc::ObCreateIndexArg &create_index_arg,
+    const obcall::ObCreateIndexArg &create_index_arg,
     const ObTableSchema &data_table_schema,
     ObTableSchema &new_index_schema)
 {
@@ -5022,7 +5022,7 @@ bool ObVectorIndexUtil::is_match_index_column_name(
   return is_match;
 }
 
-int ObVectorIndexUtil::get_rebuild_drop_index_id_and_name(share::schema::ObSchemaGetterGuard &schema_guard, obrpc::ObDropIndexArg &arg)
+int ObVectorIndexUtil::get_rebuild_drop_index_id_and_name(share::schema::ObSchemaGetterGuard &schema_guard, obcall::ObDropIndexArg &arg)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = arg.tenant_id_;

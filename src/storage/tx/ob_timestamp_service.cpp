@@ -27,7 +27,7 @@ using namespace oceanbase::share;
 namespace transaction
 {
 
-int ObTimestampService::init(rpc::frame::ObReqTransport *req_transport)
+int ObTimestampService::init()
 {
   const ObAddr &self = GCTX.self_addr();
   self_ = self;
@@ -36,19 +36,13 @@ int ObTimestampService::init(rpc::frame::ObReqTransport *req_transport)
   ATOMIC_STORE(&last_gts_, 0);
   ATOMIC_STORE(&last_request_ts_, 0);
   ATOMIC_STORE(&check_gts_speed_lock_, 0);
-  return rpc_.init(req_transport, self);
+  return OB_SUCCESS;
 }
 
 int ObTimestampService::mtl_init(ObTimestampService *&timestamp_service)
 {
   int ret = OB_SUCCESS;
-  rpc::frame::ObReqTransport *req_transport = GCTX.net_frame_->get_req_transport();
-  if (OB_ISNULL(req_transport)) {
-    ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KP(req_transport));
-  } else {
-    ret = timestamp_service->init(req_transport);
-  }
+  ret = timestamp_service->init();
   return ret;
 }
 
@@ -137,19 +131,13 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
      TRANS_LOG(DEBUG, "handle local gts request", K(requester));
      ret = handle_local_request_(request, result);
     } else if (OB_FAIL(get_timestamp(gts))) {
+      // single-replica: remote requester path is dead; only local requests occur
       if (EXECUTE_COUNT_PER_SEC(10)) {
         TRANS_LOG(WARN, "get timestamp failed", KR(ret));
       }
       int tmp_ret = OB_SUCCESS;
-      ObGtsErrResponse response;
       if (OB_SUCCESS != (tmp_ret = result.init(tenant_id, ret, srr, 0, 0))) {
         TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
-      } else if (OB_SUCCESS != (tmp_ret = response.init(tenant_id, srr, ret, self_))) {
-        TRANS_LOG(WARN, "gts err response init failed", K(tmp_ret), K(request));
-      } else if (OB_SUCCESS != (tmp_ret = rpc_.post(tenant_id, requester, response))) {
-        TRANS_LOG(WARN, "post gts err response failed", K(tmp_ret), K(response));
-      } else {
-        TRANS_LOG(DEBUG, "post gts err response success", K(response));
       }
     } else {
       if (OB_FAIL(result.init(tenant_id, ret, srr, gts, gts))) {
@@ -183,7 +171,7 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
 ERRSIM_POINT_DEF(EN_GTS_HANDLE_REQUEST)
 #endif
 
-int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result)
+int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obcall::ObGtsRpcResult &result)
 {
   int ret = OB_SUCCESS;
   int64_t gts = 0;

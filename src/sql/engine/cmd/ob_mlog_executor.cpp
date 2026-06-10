@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_mlog_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "sql/resolver/ddl/ob_create_mlog_stmt.h"
 #include "sql/resolver/ddl/ob_drop_mlog_stmt.h"
 #include "sql/resolver/ob_resolver_utils.h"
@@ -41,9 +42,8 @@ ObCreateMLogExecutor::~ObCreateMLogExecutor()
 int ObCreateMLogExecutor::execute(ObExecContext &ctx, ObCreateMLogStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = nullptr;
-  obrpc::ObCreateMLogArg &create_mlog_arg = stmt.get_create_mlog_arg();
-  obrpc::ObCreateMLogRes create_mlog_res;
+  obcall::ObCreateMLogArg &create_mlog_arg = stmt.get_create_mlog_arg();
+  obcall::ObCreateMLogRes create_mlog_res;
   ObString first_stmt;
   ObSQLSessionInfo *my_session = ctx.get_my_session();
   ObTaskExecutorCtx *task_exec_ctx = nullptr;
@@ -58,15 +58,10 @@ int ObCreateMLogExecutor::execute(ObExecContext &ctx, ObCreateMLogStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("failed to get task executor context", KR(ret));
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("faild to get common rpc proxy", KR(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", KR(ret));
   } else if (OB_INVALID_ID == create_mlog_arg.session_id_
              && FALSE_IT(create_mlog_arg.session_id_ = my_session->get_sessid_for_table())) {
     //impossible
-  } else if (OB_FAIL(common_rpc_proxy->create_mlog(create_mlog_arg, create_mlog_res))) {
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_mlog(create_mlog_arg, create_mlog_res); }))) {
     LOG_WARN("failed to create mlog", KR(ret), K(create_mlog_arg));
   } else if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(my_session, is_sync_ddl_user))) {
     LOG_WARN("failed to check sync ddl user", KR(ret));
@@ -78,7 +73,7 @@ int ObCreateMLogExecutor::execute(ObExecContext &ctx, ObCreateMLogStmt &stmt)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected schema version", KR(ret), K(create_mlog_res));
     } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(create_mlog_arg.tenant_id_,
-        create_mlog_res.task_id_, false/*do not need retry at executor*/, my_session, common_rpc_proxy))) {
+        create_mlog_res.task_id_, false/*do not need retry at executor*/, my_session))) {
       LOG_WARN("failed to wait ddl finish", KR(ret));
     }
   }
@@ -98,10 +93,9 @@ int ObDropMLogExecutor::execute(ObExecContext &ctx, ObDropMLogStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObSQLSessionInfo *my_session = ctx.get_my_session();
-  obrpc::ObDropIndexArg &drop_index_arg = stmt.get_drop_index_arg();
-  obrpc::ObDropIndexRes drop_index_res;
+  obcall::ObDropIndexArg &drop_index_arg = stmt.get_drop_index_arg();
+  obcall::ObDropIndexRes drop_index_res;
   ObString first_stmt;
 
   if (OB_ISNULL(my_session)) {
@@ -110,11 +104,6 @@ int ObDropMLogExecutor::execute(ObExecContext &ctx, ObDropMLogStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("failed to get task executor context");
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("failed to get common rpc proxy", KR(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", KR(ret));
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("failed to get first statement", KR(ret));
   } else if (OB_FALSE_IT(drop_index_arg.ddl_stmt_str_ = first_stmt)) {
@@ -123,8 +112,8 @@ int ObDropMLogExecutor::execute(ObExecContext &ctx, ObDropMLogStmt &stmt)
     //impossible
   } else if (FALSE_IT(drop_index_arg.consumer_group_id_ = THIS_WORKER.get_group_id())) {
   } else if (FALSE_IT(drop_index_arg.is_add_to_scheduler_ = true)) {
-  } else if (OB_FAIL(common_rpc_proxy->drop_index(drop_index_arg, drop_index_res))) {
-    LOG_WARN("rpc proxy drop index failed", "dst", common_rpc_proxy->get_server(), KR(ret));
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
+    LOG_WARN("rpc proxy drop index failed", "dst", GCTX.self_addr(), KR(ret));
   } else if (OB_FAIL(ObDropIndexExecutor::wait_drop_index_finish(drop_index_res.tenant_id_,
                                                                  drop_index_res.task_id_,
                                                                  *my_session))) {

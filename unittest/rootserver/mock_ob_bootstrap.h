@@ -20,7 +20,7 @@ namespace rootserver {
 class MockObBaseBootstrap : public ObBaseBootstrap {
  public:
   MOCK_METHOD1(check_bootstrap_rs_list,
-      int(const obrpc::ObServerInfoList &rs_list));
+      int(const obcall::ObServerInfoList &rs_list));
   MOCK_METHOD1(create_partition,
       int(const uint64_t table_id));
 };

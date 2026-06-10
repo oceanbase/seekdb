@@ -59,8 +59,8 @@ class IObLogErrHandler;
 class ObLogStartLSNLocator : public IObLogStartLSNLocator, public LocateWorker
 {
   static const int64_t DATA_OP_TIMEOUT = 100 * _MSEC_;
-  typedef obrpc::ObCdcReqStartLSNByTsReq RpcReq;
-  typedef obrpc::ObCdcReqStartLSNByTsResp RpcRes;
+  typedef obcall::ObCdcReqStartLSNByTsReq RpcReq;
+  typedef obcall::ObCdcReqStartLSNByTsResp RpcRes;
   typedef common::ObSafeArena AllocatorType;
 
   // Class member variables

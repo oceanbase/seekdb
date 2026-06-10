@@ -35,7 +35,6 @@ int ObBackupHandler::schedule_backup_meta_dag(const ObBackupJobDesc &job_desc, c
   ObBackupReportCtx report_ctx;
   report_ctx.location_service_ = GCTX.location_service_;
   report_ctx.sql_proxy_ = GCTX.sql_proxy_;
-  report_ctx.rpc_proxy_ = GCTX.srv_rpc_proxy_;
   ObTenantDagScheduler *dag_scheduler = NULL;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   if (OB_ISNULL(sql_proxy) || !job_desc.is_valid() || !backup_dest.is_valid() || OB_INVALID_ID == tenant_id ||
@@ -89,7 +88,6 @@ int ObBackupHandler::schedule_backup_data_dag(const ObBackupJobDesc &job_desc, c
   ObBackupReportCtx report_ctx;
   report_ctx.location_service_ = GCTX.location_service_;
   report_ctx.sql_proxy_ = GCTX.sql_proxy_;
-  report_ctx.rpc_proxy_ = GCTX.srv_rpc_proxy_;
   ObTenantDagScheduler *dag_scheduler = NULL;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   if (OB_ISNULL(sql_proxy) || !job_desc.is_valid() || !backup_dest.is_valid() || OB_INVALID_ID == tenant_id
@@ -140,7 +138,6 @@ int ObBackupHandler::schedule_build_tenant_level_index_dag(const ObBackupJobDesc
   ObBackupReportCtx report_ctx;
   report_ctx.location_service_ = GCTX.location_service_;
   report_ctx.sql_proxy_ = GCTX.sql_proxy_;
-  report_ctx.rpc_proxy_ = GCTX.srv_rpc_proxy_;
   ObTenantDagScheduler *dag_scheduler = NULL;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   if (OB_ISNULL(sql_proxy) || !job_desc.is_valid() || !backup_dest.is_valid() || OB_INVALID_ID == tenant_id ||
@@ -191,7 +188,6 @@ int ObBackupHandler::schedule_backup_complement_log_dag(const ObBackupJobDesc &j
   ObBackupReportCtx report_ctx;
   report_ctx.location_service_ = GCTX.location_service_;
   report_ctx.sql_proxy_ = GCTX.sql_proxy_;
-  report_ctx.rpc_proxy_ = GCTX.srv_rpc_proxy_;
   ObLSBackupDagNetInitParam param;
   ObTenantDagScheduler *dag_scheduler = NULL;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
@@ -245,7 +241,6 @@ int ObBackupHandler::schedule_backup_fuse_tablet_meta_dag(const ObBackupJobDesc 
   ObBackupReportCtx report_ctx;
   report_ctx.location_service_ = GCTX.location_service_;
   report_ctx.sql_proxy_ = GCTX.sql_proxy_;
-  report_ctx.rpc_proxy_ = GCTX.srv_rpc_proxy_;
   ObTenantDagScheduler *dag_scheduler = NULL;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   if (OB_ISNULL(sql_proxy) || !job_desc.is_valid() || !backup_dest.is_valid() || OB_INVALID_ID == tenant_id

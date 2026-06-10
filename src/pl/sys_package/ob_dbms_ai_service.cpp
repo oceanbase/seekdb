@@ -1,3 +1,5 @@
+#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_rs_serial_call.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -25,7 +27,7 @@
 #include "sql/privilege_check/ob_ai_model_priv_util.h"
 
 using namespace oceanbase::share;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {
@@ -293,19 +295,9 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
     } else {
       ObCreateAiModelArg arg(tenant_id, model_info);
       arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
-      ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(*ctx.exec_ctx_);
-      obrpc::ObCommonRpcProxy *common_rpc_proxy = nullptr;
-      if (OB_ISNULL(task_exec_ctx)) {
-        ret = OB_NOT_INIT;
-        LOG_WARN("get task executor context failed", K(ret));
-      } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-        LOG_WARN("get common rpc proxy failed", K(ret));
-      } else if (OB_ISNULL(common_rpc_proxy)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("common rpc proxy should not be null", K(ret));
-      } else if (OB_FAIL(arg.check_valid())) {
+      if (OB_FAIL(arg.check_valid())) {
         LOG_WARN("invalid create ai model arg", K(ret), K(arg));
-      } else if (OB_FAIL(common_rpc_proxy->create_ai_model(arg))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_ai_model(arg); }))) {
         LOG_WARN("failed to create ai model", K(ret), K(arg));
       }
     }
@@ -359,17 +351,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
   } else {
     ObDropAiModelArg arg(tenant_id, model_name);
     arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
-    ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(*ctx.exec_ctx_);
-    obrpc::ObCommonRpcProxy *common_rpc_proxy = nullptr;
-    if (OB_ISNULL(task_exec_ctx)) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("get task executor context failed", K(ret));
-    } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-      LOG_WARN("get common rpc proxy failed", K(ret));
-    } else if (OB_ISNULL(common_rpc_proxy)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("common rpc proxy should not be null", K(ret));
-    } else if (OB_FAIL(common_rpc_proxy->drop_ai_model(arg))) {
+      if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_ai_model(arg); }))) {
       LOG_WARN("failed to drop ai model", K(ret), K(arg));
     }
 

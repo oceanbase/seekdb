@@ -16,9 +16,7 @@
 
 #ifndef _OB_TABLE_QUERY_PROCESSOR_H
 #define _OB_TABLE_QUERY_PROCESSOR_H 1
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "ob_table_context.h"
 #include "ob_table_executor.h"
@@ -28,9 +26,9 @@ namespace oceanbase
 {
 namespace observer
 {
-class ObTableQueryP: public ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_EXECUTE_QUERY> >
+class ObTableQueryP: public ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_EXECUTE_QUERY> >
 {
-  typedef ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_EXECUTE_QUERY> > ParentType;
+  typedef ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_EXECUTE_QUERY> > ParentType;
 public:
   explicit ObTableQueryP(const ObGlobalContext &gctx);
   virtual ~ObTableQueryP() {}

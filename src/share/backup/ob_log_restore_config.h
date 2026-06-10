@@ -40,7 +40,7 @@ public:
     : ObLogArchiveDestConfigParser(type, tenant_id, dest_no) {}
   virtual ~ObLogRestoreSourceLocationConfigParser() {}
   virtual int update_inner_config_table(common::ObISQLClient &trans) override;
-  virtual int check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) override;
+  virtual int check_before_update_inner_config(common::ObISQLClient &trans) override;
 
 protected:
   virtual int do_parse_sub_config_(const common::ObString &config_str) override;
@@ -57,7 +57,7 @@ public:
   virtual ~ObLogRestoreSourceServiceConfigParser() {}
   virtual int parse_from(const common::ObSqlString &value) override;
   virtual int update_inner_config_table(common::ObISQLClient &trans) override;
-  virtual int check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) override;
+  virtual int check_before_update_inner_config(common::ObISQLClient &trans) override;
   int check_before_update_inner_config(
       const bool for_verify, 
       ObCompatibilityMode &compat_mode);

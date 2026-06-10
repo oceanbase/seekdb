@@ -71,12 +71,12 @@ public:
     create_ccl_rule_arg_.ccl_rule_schema_.set_ccl_keywords(ccl_keyword);
   }
 
-  const obrpc::ObCreateCCLRuleArg &get_create_ccl_rule_arg() const { return create_ccl_rule_arg_; }
+  const obcall::ObCreateCCLRuleArg &get_create_ccl_rule_arg() const { return create_ccl_rule_arg_; }
   virtual bool cause_implicit_commit() const
   {
     return true;
   }
-  virtual obrpc::ObDDLArg &get_ddl_arg()
+  virtual obcall::ObDDLArg &get_ddl_arg()
   {
     return create_ccl_rule_arg_;
   }
@@ -84,7 +84,7 @@ public:
   TO_STRING_KV(K_(create_ccl_rule_arg));
 
 private:
-  obrpc::ObCreateCCLRuleArg create_ccl_rule_arg_;
+  obcall::ObCreateCCLRuleArg create_ccl_rule_arg_;
 };
 }//namespace sql
 }//namespace oceanbase

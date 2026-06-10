@@ -32,6 +32,7 @@
 #include "src/observer/mysql/ob_query_driver.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 #include "share/catalog/ob_catalog_utils.h"
+#include "observer/ob_ex_rpc.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -1337,12 +1338,24 @@ int ObLoadDataSPImpl::shuffle_task_gen_and_dispatch(ObExecContext &ctx, ToolBox 
     }
 
     if (OB_SUCC(ret)) {
-      ObRpcLoadDataShuffleTaskCallBack mycallback(box.shuffle_task_controller,
-                                                  box.shuffle_task_reserve_queue,
-                                                  handle);
+      // Completion bookkeeping formerly done by ObCallLoadDataShuffleTaskCallBack:
+      // push the handle back to the reserve queue and notify the controller.
+      // Used only for the empty-buffer fast path below; the dispatched path
+      // does the same bookkeeping at the END of its async worker.
+      auto release_shuffle_resource = [&]() -> int {
+        int rel_ret = OB_SUCCESS;
+        int ret1 = box.shuffle_task_reserve_queue.push_back(handle);
+        MEM_BARRIER();
+        int ret2 = box.shuffle_task_controller.on_task_finished();
+        if (OB_SUCCESS != ret1 || OB_SUCCESS != ret2) {
+          rel_ret = (OB_SUCCESS != ret1) ? ret1 : ret2;
+          LOG_ERROR("shuffle release resource failed", K(ret1), K(ret2));
+        }
+        return rel_ret;
+      };
 
       if (OB_UNLIKELY(handle->data_buffer->get_data_len() <= 0)) {
-        ret = mycallback.release_resouce();
+        ret = release_shuffle_resource();
       } else {
         ObShuffleTask task;
         task.task_id_ = task_id;
@@ -1350,12 +1363,68 @@ int ObLoadDataSPImpl::shuffle_task_gen_and_dispatch(ObExecContext &ctx, ToolBox 
         if (OB_FAIL(task.shuffle_task_handle_.set_arg(handle))) {
           LOG_WARN("fail to set arg", K(ret));
         } else {
-          if (OB_FAIL(GCTX.load_data_proxy_->to(box.self_addr)
-                                             .by(box.tenant_id)
-                                             .timeout(box.txn_timeout)
-                                             .ap_load_data_shuffle(task, &mycallback))) {
-            LOG_WARN("load data proxy post rpc failed", K(ret));
-          }
+          // Single-replica seekdb: target is always self (box.self_addr).
+          // Fire-and-forget onto the shared async worker pool to restore
+          // pipeline parallelism. Mirrors ObCallLoadDataShuffleTaskExecuteP::
+          // process and drives the same completion bookkeeping the callback
+          // would (push handle back to reserve queue + on_task_finished) at the
+          // END of the worker so the controller token is returned only when the
+          // task truly finishes. Per-task errors propagate via
+          // handle->result.exec_ret_ (inspected later), never returned here.
+          const int64_t shuffle_begin_ts = ObTimeUtil::current_time();
+          // exec_handle from get_arg equals the handle pointer (ObCallPointerArg
+          // just stores the raw pointer), so capture handle / task_id / gid_.
+          const ObLoadDataGID shuffle_gid = task.gid_;
+          const int64_t shuffle_task_id = task.task_id_;
+          // Capture the dispatching tenant so the async pool thread (no MTL
+          // context) can switch into it for get_job_status / exec_shuffle.
+          const uint64_t tenant_id = MTL_ID();
+          ToolBox *box_ptr = &box;
+          (void)ex_rpc::async_call([handle, box_ptr, shuffle_gid, shuffle_task_id,
+                                      shuffle_begin_ts, tenant_id]() {
+            int tmp_ret = OB_SUCCESS;
+            // MTL_SWITCH expands to OB_SUCC(...) which assigns to a variable
+            // named `ret`; declare a local one for it (separate from the task
+            // result tracked in tmp_ret). A switch failure is folded into
+            // handle->result.exec_ret_ below.
+            int ret = OB_SUCCESS;
+            MTL_SWITCH(tenant_id) {
+              ObLoadDataStat *job_status = nullptr;
+              if (OB_FAIL(ObGlobalLoadDataStatMap::getInstance()->get_job_status(
+                      shuffle_gid, job_status))) {
+                LOG_WARN("fail to get job, main thread has already quit", K(tmp_ret), K(shuffle_gid));
+              } else if (OB_ISNULL(job_status)) {
+                tmp_ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("job status is null", K(tmp_ret));
+              } else {
+                if (OB_ISNULL(handle)) {
+                  tmp_ret = OB_ERR_UNEXPECTED;
+                  LOG_ERROR("handle is null", K(tmp_ret));
+                } else {
+                  if (OB_FAIL(ObLoadDataSPImpl::exec_shuffle(shuffle_task_id, handle))) {
+                    LOG_WARN("fail to exec shuffle task", K(tmp_ret));
+                  }
+                  handle->result.exec_ret_ = tmp_ret;
+                }
+                MEM_BARRIER();
+                job_status->release();
+              }
+            }
+            if (OB_FAIL(ret) && OB_SUCCESS == tmp_ret) {
+              // tenant switch failed before exec ran; surface it as the result.
+              tmp_ret = ret;
+              handle->result.exec_ret_ = tmp_ret;
+              LOG_WARN("fail to switch tenant for shuffle task", K(tmp_ret), K(tenant_id));
+            }
+            handle->result.process_us_ = ObTimeUtil::current_time() - shuffle_begin_ts;
+            // Completion bookkeeping (run LAST): push handle back + finish token.
+            int ret1 = box_ptr->shuffle_task_reserve_queue.push_back(handle);
+            MEM_BARRIER();
+            int ret2 = box_ptr->shuffle_task_controller.on_task_finished();
+            if (OB_SUCCESS != ret1 || OB_SUCCESS != ret2) {
+              LOG_ERROR("shuffle release resource failed", K(ret1), K(ret2));
+            }
+          });
         }
       }
     }
@@ -1619,16 +1688,82 @@ int ObLoadDataSPImpl::handle_returned_insert_task(ObExecContext &ctx,
 int ObLoadDataSPImpl::insert_task_send(ObInsertTask *insert_task, ToolBox &box)
 {
   int ret = OB_SUCCESS;
-  ObRpcLoadDataInsertTaskCallBack mycallback(box.insert_task_controller,
-                                             box.insert_task_reserve_queue,
-                                             insert_task);
   if (OB_ISNULL(insert_task)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(GCTX.load_data_proxy_->to(insert_task->part_mgr->get_leader_addr())
-                                           .by(box.tenant_id)
-                                           .timeout(box.txn_timeout)
-                                           .ap_load_data_insert(*insert_task, &mycallback))) {
-    LOG_WARN("load data proxy post rpc failed", K(ret));
+  } else {
+    // Single-replica seekdb: partition leader is always self. Run the insert
+    // task in-process (mirrors ObCallLoadDataInsertTaskExecuteP::process),
+    // copy the result back onto the task (mirrors the callback process()) and
+    // drive the same completion bookkeeping (release_resouce: push task back
+    // to the reserve queue + on_task_finished).
+    const int64_t insert_begin_ts = ObTimeUtil::current_time();
+    const uint64_t tenant_id = insert_task->tenant_id_;
+    ToolBox *box_ptr = &box;
+    // Fire-and-forget onto the shared async worker pool to restore pipeline
+    // parallelism. Per-task errors propagate via insert_task->result_.exec_ret_
+    // (inspected later by the main loop), never returned from send().
+    (void)ex_rpc::async_call([insert_task, box_ptr, insert_begin_ts, tenant_id]() {
+      // Async pool threads have no tenant MTL context; switch into the task's
+      // tenant so exec_insert / warning-buffer / memory_check_remote work.
+      int tmp_ret = OB_SUCCESS;
+      // MTL_SWITCH expands to OB_SUCC(...) which assigns to a variable named
+      // `ret`; declare a local one for it (separate from the task result
+      // tracked in tmp_ret). A switch failure is folded into tmp_ret below.
+      int ret = OB_SUCCESS;
+      ObInsertTask &task = *insert_task;
+      ObInsertResult result;
+      MTL_SWITCH(tenant_id) {
+        ObWarningBuffer *warning_buf = NULL;
+        bool need_wait_freeze = false;
+        if (OB_FAIL(ObLoadDataSPImpl::exec_insert(task, result))) {
+          LOG_WARN("fail to exec insert", K(tmp_ret));
+        }
+        result.exec_ret_ = tmp_ret;
+        if (OB_FAIL(tmp_ret) && OB_NOT_NULL(warning_buf = ob_get_tsi_warning_buffer())) {
+          int ret_backup = tmp_ret;
+          result.err_line_no_ = warning_buf->get_error_line();
+          // Cannot use OZ here: a macro return would skip the completion
+          // bookkeeping below in this fire-and-forget worker.
+          int write_ret = ob_write_string(result.allocator_, warning_buf->get_err_msg(), result.err_msg_);
+          if (OB_SUCCESS != write_ret) {
+            LOG_WARN("fail to write err msg", K(write_ret));
+          }
+          tmp_ret = ret_backup;
+        }
+        int temp_ret = ObLoadDataBase::memory_check_remote(task.tenant_id_, need_wait_freeze);
+        if (OB_SUCCESS != temp_ret) {
+          LOG_WARN("LOAD DATA remote memory check failed", K(temp_ret), K(task.tenant_id_));
+        }
+        result.flags_.reset();
+        if (need_wait_freeze) {
+          result.flags_.set_bit(ObTaskResFlag::NEED_WAIT_MINOR_FREEZE);
+        }
+      }
+      if (OB_FAIL(ret) && OB_SUCCESS == tmp_ret) {
+        // tenant switch failed before exec ran; surface it as the task result.
+        tmp_ret = ret;
+        result.exec_ret_ = tmp_ret;
+        LOG_WARN("fail to switch tenant for insert task", K(tmp_ret), K(tenant_id));
+      }
+      // mirror ObCallLoadDataInsertTaskCallBack::process()
+      int assign_ret = insert_task->result_.assign(result);
+      if (OB_SUCCESS != assign_ret) {
+        LOG_WARN("fail to assign result", K(assign_ret));
+      } else {
+        insert_task->result_recv_ts_ = ObTimeUtil::current_time();
+        insert_task->process_us_ = insert_task->result_recv_ts_ - insert_begin_ts;
+      }
+      // Completion bookkeeping formerly done by ObCallLoadDataInsertTaskCallBack:
+      // push the task back to the reserve queue and notify the controller. Run
+      // LAST so the controller token is returned only when the task truly
+      // finishes -- this bounds and re-enables the parallel pipeline.
+      int ret1 = box_ptr->insert_task_reserve_queue.push_back(insert_task);
+      MEM_BARRIER();
+      int ret2 = box_ptr->insert_task_controller.on_task_finished();
+      if (OB_SUCCESS != ret1 || OB_SUCCESS != ret2) {
+        LOG_ERROR("insert release resource failed", K(ret1), K(ret2));
+      }
+    });
   }
   return ret;
 }

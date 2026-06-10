@@ -469,7 +469,7 @@ public:
   int is_tablet_exist(const common::ObTabletID &tablet_id, bool &is_exist);
 
   // migration section
-  typedef common::ObFunction<int(const obrpc::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)> HandleTabletMetaFunc;
+  typedef common::ObFunction<int(const obcall::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)> HandleTabletMetaFunc;
   int ha_scan_all_tablets(
       const HandleTabletMetaFunc &handle_tablet_meta_f,
       const bool need_sorted_tablet_id);

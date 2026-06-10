@@ -39,7 +39,7 @@ ObAlterTablegroupStmt::~ObAlterTablegroupStmt()
 }
 
 
-int ObAlterTablegroupStmt::add_table_item(const obrpc::ObTableItem &table_item)
+int ObAlterTablegroupStmt::add_table_item(const obcall::ObTableItem &table_item)
 {
   return alter_tablegroup_arg_.table_items_.push_back(table_item);
 }

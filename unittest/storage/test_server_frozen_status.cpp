@@ -22,7 +22,7 @@
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 // > MAX_STORE_CNT_IN_STORAGE
 const int32_t INIT_RPC_MAX_VERSION = 74;

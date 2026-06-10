@@ -27,7 +27,7 @@ namespace rpc
 void OB_WEAK_SYMBOL response_rpc_error_packet(ObRequest* req, int ret)
 {
   UNUSED(ret);
-  RPC_REQ_OP.response_result(req, NULL);
+  RPC_REQ_OP.response_result(req);
 }
 
 void on_translate_fail(ObRequest* req, int ret)

@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX CLOG
 #include "ob_location_adapter.h"
 #include "share/location_cache/ob_location_service.h"
-#include "rpc/obrpc/ob_rpc_net_handler.h"
 
 namespace oceanbase
 {
@@ -60,7 +59,7 @@ void ObLocationAdapter::destroy()
 int ObLocationAdapter::get_leader(const int64_t id, common::ObAddr &leader)
 {
   int ret = OB_SUCCESS;
-  int64_t cluster_id = obrpc::ObRpcNetHandler::CLUSTER_ID;
+  int64_t cluster_id = 1L; // obcall CLUSTER_ID inlined
   uint64_t tenant_id = MTL_ID();
   ObLSID ls_id(id);
   if (IS_NOT_INIT) {
@@ -83,7 +82,7 @@ int ObLocationAdapter::get_leader(const uint64_t tenant_id,
                                   common::ObAddr &leader)
 {
   int ret = OB_SUCCESS;
-  int64_t cluster_id = obrpc::ObRpcNetHandler::CLUSTER_ID;
+  int64_t cluster_id = 1L; // obcall CLUSTER_ID inlined
   ObLSID ls_id(id);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -112,7 +111,7 @@ int ObLocationAdapter::nonblock_get_leader(const uint64_t tenant_id,
                                            common::ObAddr &leader)
 {
   int ret = OB_SUCCESS;
-  int64_t cluster_id = obrpc::ObRpcNetHandler::CLUSTER_ID;
+  int64_t cluster_id = 1L; // obcall CLUSTER_ID inlined
   ObLSID ls_id(id);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

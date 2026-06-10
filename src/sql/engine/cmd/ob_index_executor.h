@@ -19,12 +19,11 @@
 #include "lib/allocator/ob_allocator.h"
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObCreateIndexArg;
 struct ObDropIndexArg;
 struct ObAlterTableRes;
-class ObCommonRpcProxy;
 }
 
 namespace sql
@@ -43,12 +42,11 @@ public:
   int execute(ObExecContext &ctx, ObCreateIndexStmt &stmt);
 private:
   int set_drop_index_stmt_str(
-      obrpc::ObDropIndexArg &drop_index_arg,
+      obcall::ObDropIndexArg &drop_index_arg,
       common::ObIAllocator &allocator);
   int sync_check_index_status(sql::ObSQLSessionInfo &my_session,
-        obrpc::ObCommonRpcProxy &common_rpc_proxy,
-        const obrpc::ObCreateIndexArg &create_index_arg,
-        const obrpc::ObAlterTableRes &res,
+        const obcall::ObCreateIndexArg &create_index_arg,
+        const obcall::ObAlterTableRes &res,
         common::ObIAllocator &allocator,
         bool is_update_global_indexes = false);
   int handle_session_exception(ObSQLSessionInfo &session);

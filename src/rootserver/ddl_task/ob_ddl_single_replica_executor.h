@@ -236,11 +236,11 @@ private:
   int process_rpc_results(
       const ObArray<ObTabletID> &tablet_ids,
       const ObArray<ObAddr> addrs,
-      const ObIArray<const obrpc::ObDDLBuildSingleReplicaRequestResult *> &result_array,
+      const ObIArray<const obcall::ObDDLBuildSingleReplicaRequestResult *> &result_array,
       const ObArray<int> &ret_array);
   int construct_rpc_arg(
       const ObSingleReplicaBuildCtx &replica_build_ctx,
-      obrpc::ObDDLBuildSingleReplicaRequestArg &arg) const;
+      obcall::ObDDLBuildSingleReplicaRequestArg &arg) const;
   int construct_replica_build_ctxs(
       const ObDDLReplicaBuildExecutorParam &param,
       ObArray<ObSingleReplicaBuildCtx> &replica_build_ctxs) const;
@@ -253,7 +253,7 @@ private:
       const ObArray<ObAddr> &replica_addrs);
   int update_build_ctx(
       ObSingleReplicaBuildCtx &build_ctx,
-      const obrpc::ObDDLBuildSingleReplicaRequestResult *result,
+      const obcall::ObDDLBuildSingleReplicaRequestResult *result,
       const int ret_code);
   int update_replica_build_ctx(
       ObSingleReplicaBuildCtx &build_ctx,

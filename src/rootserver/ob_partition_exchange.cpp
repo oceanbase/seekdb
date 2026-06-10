@@ -26,7 +26,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace rootserver
@@ -44,7 +44,7 @@ ObPartitionExchange::~ObPartitionExchange()
 {
 }
 
-int ObPartitionExchange::check_and_exchange_partition(const obrpc::ObExchangePartitionArg &arg, obrpc::ObAlterTableRes &res, ObSchemaGetterGuard &schema_guard)
+int ObPartitionExchange::check_and_exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res, ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = arg.tenant_id_;
@@ -359,7 +359,7 @@ int ObPartitionExchange::inner_init(
 }
 
 int ObPartitionExchange::check_partition_exchange_conditions_(
-    const obrpc::ObExchangePartitionArg &arg,
+    const obcall::ObExchangePartitionArg &arg,
     const ObTableSchema &base_table_schema,
     const ObTableSchema &inc_table_schema,
     const bool is_oracle_mode,
@@ -440,8 +440,8 @@ int ObPartitionExchange::check_partition_exchange_conditions_(
 }
 
 int ObPartitionExchange::do_exchange_partitions_(
-    const obrpc::ObExchangePartitionArg &arg,
-    obrpc::ObAlterTableRes &res,
+    const obcall::ObExchangePartitionArg &arg,
+    obcall::ObAlterTableRes &res,
     const ObTableSchema &base_table_schema,
     const ObTableSchema &inc_table_schema,
     const bool is_oracle_mode,

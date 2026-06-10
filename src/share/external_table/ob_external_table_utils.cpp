@@ -16,7 +16,8 @@
 #define USING_LOG_PREFIX SQL
 #include "share/external_table/ob_external_table_utils.h"
 
-#include "share/external_table/ob_external_table_file_rpc_processor.h"
+#include "share/external_table/ob_external_table_file_mgr.h"
+#include "observer/ob_ex_rpc.h"
 #include "sql/executor/ob_task_spliter.h"
 #include "sql/engine/table/ob_csv_table_row_iter.h"
 #include "share/config/ob_server_config.h"
@@ -982,8 +983,6 @@ int ObExternalTableUtils::collect_local_files_on_servers(
   }
 
   if (OB_SUCC(ret)) {
-    ObAsyncRpcTaskWaitContext<ObRpcAsyncLoadExternalTableFileCallBack> context;
-    int64_t send_task_count = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < target_servers.count(); i++) {
       const int64_t ip_len = 64;
       char *ip_port_buffer = nullptr;
@@ -994,63 +993,45 @@ int ObExternalTableUtils::collect_local_files_on_servers(
       OZ (target_servers.at(i).ip_port_to_string(ip_port_buffer, ip_len));
       OZ (server_ip_port.push_back(ObString(ip_port_buffer)));
     }
-    OZ (context.init());
-    OZ (context.get_cb_list().reserve(target_servers.count()));
+    // RPC removed: targets are self on single replica; load file list in-process.
+    // Mirrors ObAsyncLoadExternalTableFileListP::process; results accumulated per server.
     for (int64_t i = 0; OB_SUCC(ret) && i < target_servers.count(); i++) {
-      const int64_t timeout = 10 * 1000000L; //10s
-      ObRpcAsyncLoadExternalTableFileCallBack* async_cb = nullptr;
-      ObLoadExternalFileListReq req;
-      req.location_ = location;
-      req.pattern_ = pattern;
-      req.regexp_vars_ = regexp_vars;
-
-      if (OB_ISNULL(async_cb = OB_NEWx(ObRpcAsyncLoadExternalTableFileCallBack, (&allocator), (&context)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate async cb memory", K(ret));
-      }
-      OZ (context.get_cb_list().push_back(async_cb));
-      OZ (GCTX.external_table_proxy_->to(target_servers.at(i))
-                                        .by(tenant_id)
-                                        .timeout(timeout)
-                                        .load_external_file_list(req, async_cb));
-      if (OB_SUCC(ret)) {
-        send_task_count++;
-      }
-    }
-
-    context.set_task_count(send_task_count);
-
-    do {
-      int temp_ret = context.wait_executing_tasks();
-      if (OB_SUCCESS != temp_ret) {
-        LOG_WARN("fail to wait executing task", K(temp_ret));
-        if (OB_SUCC(ret)) {
-          ret = temp_ret;
+      ObSEArray<ObString, 16> resp_file_urls;
+      ObSEArray<int64_t, 16> resp_file_sizes;
+      int load_ret = OB_SUCCESS;
+      (void)ex_rpc::async_call([&]() {
+        ObSEArray<ObString, 16> dev_file_urls;
+        ObString access_info;
+        ObArenaAllocator dev_allocator;
+        if (OB_SUCCESS != (load_ret = ObExternalTableFileManager::get_instance()
+                .get_external_file_list_on_device(location, pattern, regexp_vars,
+                    dev_file_urls, resp_file_sizes, access_info, dev_allocator))) {
+          LOG_WARN("get external table file on device failed", K(load_ret));
         }
-      }
-    } while(0);
-
-    for (int64_t i = 0; OB_SUCC(ret) && i < context.get_cb_list().count(); i++) {
-      if (OB_FAIL(context.get_cb_list().at(i)->get_task_resp().rcode_.rcode_)) {
+        for (int64_t k = 0; OB_SUCCESS == load_ret && k < dev_file_urls.count(); k++) {
+          ObString tmp;
+          if (OB_SUCCESS != (load_ret = ob_write_string(allocator, dev_file_urls.at(k), tmp))) {
+          } else {
+            load_ret = resp_file_urls.push_back(tmp);
+          }
+        }
+      })->wait();
+      if (OB_FAIL(load_ret)) {
+        ret = load_ret;
         LOG_WARN("async load files process failed", K(ret));
       } else {
-        const ObIArray<ObString> &resp_array = context.get_cb_list().at(i)->get_task_resp().file_urls_;
-        OZ (append(file_sizes, context.get_cb_list().at(i)->get_task_resp().file_sizes_));
-        for (int64_t j = 0; OB_SUCC(ret) && j < resp_array.count(); j++) {
+        OZ (append(file_sizes, resp_file_sizes));
+        for (int64_t j = 0; OB_SUCC(ret) && j < resp_file_urls.count(); j++) {
           ObSqlString tmp_file_url;
           ObString file_url;
           OZ (tmp_file_url.append(server_ip_port.at(i)));
           OZ (tmp_file_url.append("%"));
           OZ (tmp_file_url.append(partition_path.string()));
-          OZ (tmp_file_url.append(resp_array.at(j)));
+          OZ (tmp_file_url.append(resp_file_urls.at(j)));
           OZ (ob_write_string(allocator, tmp_file_url.string(), file_url));
           OZ (file_urls.push_back(file_url));
         }
       }
-    }
-
-    for (int64_t i = 0; i < context.get_cb_list().count(); i++) {
-      context.get_cb_list().at(i)->~ObRpcAsyncLoadExternalTableFileCallBack();
     }
   }
   LOG_TRACE("update external table file list", K(ret), K(file_urls), K(location), K(pattern), K(all_servers));

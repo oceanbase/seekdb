@@ -42,10 +42,6 @@ class TestJoinOrder_ob_join_order_src_Test;
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObSrvRpcProxy;
-}
 namespace share
 {
 namespace schema
@@ -1324,7 +1320,7 @@ class Path
 
     ObAddr addr_;
     ObBitSet<> path_id_set_;
-    obrpc::ObEstPartArg *est_arg_;
+    obcall::ObEstPartArg *est_arg_;
 
     TO_STRING_KV(K_(addr),
                  K_(path_id_set));

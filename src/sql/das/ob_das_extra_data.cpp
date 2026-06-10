@@ -38,7 +38,6 @@ ObDASExtraData::ObDASExtraData()
 int ObDASExtraData::init(const int64_t task_id,
                          const int64_t timeout_ts,
                          const common::ObAddr &result_addr,
-                         rpc::frame::ObReqTransport *transport,
                          const bool enable_rich_format)
 {
   int ret = OB_SUCCESS;

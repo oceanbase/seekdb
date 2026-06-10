@@ -23,7 +23,7 @@ namespace oceanbase
 namespace rootserver
 {
 
-int ObAiModelDDLService::create_ai_model(const obrpc::ObCreateAiModelArg &arg)
+int ObAiModelDDLService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = arg.exec_tenant_id_;
@@ -69,7 +69,7 @@ int ObAiModelDDLService::create_ai_model(const obrpc::ObCreateAiModelArg &arg)
   return ret;
 }
 
-int ObAiModelDDLService::drop_ai_model(const obrpc::ObDropAiModelArg &arg)
+int ObAiModelDDLService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = arg.exec_tenant_id_;

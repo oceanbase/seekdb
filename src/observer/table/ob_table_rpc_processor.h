@@ -17,9 +17,9 @@
 #ifndef _OB_TABLE_RPC_PROCESSOR_H
 #define _OB_TABLE_RPC_PROCESSOR_H 1
 
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+// obcall transport headers removed: the processor base (obcall ObCallProcessor<T>)
+// is now provided transport-free by ob_table_rpc_binding.h (dead Table-API RPC).
+#include "share/table/ob_table_rpc_binding.h"
 #include "sql/ob_sql_trans_control.h"
 #include "sql/optimizer/ob_table_location.h"  // ObTableLocation
 #include "ob_table_service.h"
@@ -44,10 +44,10 @@ using oceanbase::table::ObTableConsistencyLevel;
 
 class ObTableService;
 
-/// @see RPC_S(PR5 login, obrpc::OB_TABLE_API_LOGIN, (table::ObTableLoginRequest), table::ObTableLoginResult);
-class ObTableLoginP: public obrpc::ObRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_LOGIN> >
+/// @see CALL_S(PR5 login, obcall::OB_TABLE_API_LOGIN, (table::ObTableLoginRequest), table::ObTableLoginResult);
+class ObTableLoginP: public obcall::ObTableDeadProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_LOGIN> >
 {
-  typedef obrpc::ObRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_LOGIN> > ParentType;
+  typedef obcall::ObTableDeadProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_LOGIN> > ParentType;
 public:
   explicit ObTableLoginP(const ObGlobalContext &gctx)
       :gctx_(gctx)
@@ -208,9 +208,9 @@ protected:
 };
 
 template<class T>
-class ObTableRpcProcessor: public obrpc::ObRpcProcessor<T>, public ObTableApiProcessorBase
+class ObTableRpcProcessor: public obcall::ObTableDeadProcessor<T>, public ObTableApiProcessorBase
 {
-  typedef obrpc::ObRpcProcessor<T> RpcProcessor;
+  typedef obcall::ObTableDeadProcessor<T> RpcProcessor;
 public:
   explicit ObTableRpcProcessor(const ObGlobalContext &gctx) : ObTableApiProcessorBase(gctx) {}
   virtual ~ObTableRpcProcessor() = default;

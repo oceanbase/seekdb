@@ -1750,14 +1750,14 @@ DEF_PARAM(_enable_hgby_llc_ndv_adaptive, BOOL, OB_CLUSTER_PARAMETER, "True",
 DEF_PARAM(_enable_reserved_user_dcl_restriction, BOOL, OB_CLUSTER_PARAMETER, "False",
          "specifies whether to forbid non-reserved user to modify reserved users",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(rpc_client_authentication_method, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "NONE", common::ObRpcClientAuthMethodChecker,
+DEF_PARAM(rpc_client_authentication_method, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "NONE", common::ObCallClientAuthMethodChecker,
         "specifies rpc client authentication method. "
         "NONE: without authentication. "
         "SSL_NO_ENCRYPT: authentication by SSL handshake but not encrypt the communication channel. "
         "SSL_IO: authentication by SSL handshake and encrypt the communication channel",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
         "NONE, SSL_NO_ENCRYPT, SSL_IO");
-DEF_PARAM(rpc_server_authentication_method, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "ALL", common::ObRpcServerAuthMethodChecker,
+DEF_PARAM(rpc_server_authentication_method, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "ALL", common::ObCallServerAuthMethodChecker,
         "specifies rpc server authentication method. "
         "ALL: support all authentication methods. "
         "NONE: without authentication. "

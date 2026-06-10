@@ -91,7 +91,7 @@ void ObTTLService::inner_switch_to_follower()
   FLOG_INFO("ttl_service: switch_to_follower", K_(tenant_id), K(cost_us), KP_(tenant_ttl_mgr));
 }
 
-int ObTTLService::launch_ttl_task(const obrpc::ObTTLRequestArg &req)
+int ObTTLService::launch_ttl_task(const obcall::ObTTLRequestArg &req)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {

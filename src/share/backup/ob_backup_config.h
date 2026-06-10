@@ -106,7 +106,7 @@ public:
 
   virtual int parse_from(const common::ObSqlString &value) = 0;
   virtual int update_inner_config_table(common::ObISQLClient &trans) = 0;
-  virtual int check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) = 0;
+  virtual int check_before_update_inner_config(common::ObISQLClient &trans) = 0;
   virtual int check_before_update_inner_config(
     const bool for_verify,
     ObCompatibilityMode &compat_mode) { return OB_NOT_SUPPORTED; }
@@ -158,7 +158,7 @@ public:
   ObBackupConfigParserMgr();
   ~ObBackupConfigParserMgr() {}
   int init(const common::ObSqlString &name, const common::ObSqlString &value, const uint64_t tenant_id);
-  int update_inner_config_table(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans);
+  int update_inner_config_table(common::ObISQLClient &trans);
   void reset();
   int only_check_before_update(ObCompatibilityMode &compat_mode);
 private:
@@ -174,7 +174,7 @@ public:
   virtual ~ObDataBackupDestConfigParser() {}
   virtual int parse_from(const common::ObSqlString &value) override;
   virtual int update_inner_config_table(common::ObISQLClient &trans) override;
-  virtual int check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) override;
+  virtual int check_before_update_inner_config(common::ObISQLClient &trans) override;
 private:
   int check_doing_backup_(common::ObISQLClient &trans, bool &is_doing);
   int check_backup_dest_has_been_used_(bool &is_used);
@@ -191,7 +191,7 @@ public:
   virtual ~ObLogArchiveDestConfigParser() {}
   virtual int parse_from(const common::ObSqlString &value) override;
   virtual int update_inner_config_table(common::ObISQLClient &trans) override;
-  virtual int check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) override;
+  virtual int check_before_update_inner_config(common::ObISQLClient &trans) override;
   TO_STRING_KV(K_(dest_no), K_(archive_dest), K_(backup_dest), K_(is_empty));
 protected:
   virtual int do_parse_sub_config_(const common::ObString &config_str);
@@ -216,7 +216,7 @@ public:
   virtual ~ObLogArchiveDestStateConfigParser() {}
   virtual int parse_from(const common::ObSqlString &value) override;
   virtual int update_inner_config_table(common::ObISQLClient &trans) override;
-  virtual int check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans) override;
+  virtual int check_before_update_inner_config(common::ObISQLClient &trans) override;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLogArchiveDestStateConfigParser);
 };

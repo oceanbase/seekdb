@@ -20,6 +20,7 @@
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "ob_opt_est_parameter_normal.h"
 #include "sql/optimizer/ob_sel_estimator.h"
+#include "observer/ob_service.h"
 namespace oceanbase {
 using namespace share::schema;
 using namespace share;
@@ -1059,7 +1060,7 @@ int ObAccessPathEstimation::process_storage_estimation_result(ObIArray<ObBatchEs
       OPT_TRACE(*tasks.at(i));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < task->paths_.count(); ++j) {
-      const obrpc::ObEstPartResElement &res = task->res_.index_param_res_.at(j);
+      const obcall::ObEstPartResElement &res = task->res_.index_param_res_.at(j);
       AccessPath *path = task->paths_.at(j);
       int64_t idx = -1;
       const ObEstPartArgElement &index_param = task->arg_.index_params_.at(j);
@@ -1210,27 +1211,22 @@ int ObAccessPathEstimation::do_storage_estimation(ObOptimizerContext &ctx,
 {
   int ret = OB_SUCCESS;
   const ObAddr &addr = tasks.addr_;
-  const obrpc::ObEstPartArg &arg = tasks.arg_;
-  obrpc::ObEstPartRes &result = tasks.res_;
+  const obcall::ObEstPartArg &arg = tasks.arg_;
+  obcall::ObEstPartRes &result = tasks.res_;
   if (addr == ctx.get_local_server_addr()) {
     if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
       LOG_WARN("failed to estimate partition rows", K(ret));
     }
   } else {
-    obrpc::ObSrvRpcProxy *rpc_proxy = NULL;
     const ObSQLSessionInfo *session_info = NULL;
     int64_t timeout = -1;
-    if (OB_ISNULL(session_info = ctx.get_session_info()) ||
-        OB_ISNULL(rpc_proxy = ctx.get_srv_proxy())) {
+    if (OB_ISNULL(session_info = ctx.get_session_info())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("rpc_proxy or session is null", K(ret), K(rpc_proxy), K(session_info));
+      LOG_WARN("session is null", K(ret), K(session_info));
     } else if (0 >= (timeout = THIS_WORKER.get_timeout_remain())) {
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(rpc_proxy->to(addr)
-                       .timeout(timeout)
-                       .by(session_info->get_rpc_tenant_id())
-                       .estimate_partition_rows(arg, result))) {
+    } else if (OB_FAIL(GCTX.ob_service_->estimate_partition_rows(arg, result))) {
       LOG_WARN("OPT:[REMOTE STORAGE EST FAILED]", K(ret));
     }
   }
@@ -1560,7 +1556,7 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSEArray<common::ObNewRange, 4> scan_ranges;
-  obrpc::ObEstPartArgElement *index_est_arg = NULL;
+  obcall::ObEstPartArgElement *index_est_arg = NULL;
   if (OB_ISNULL(task) || OB_ISNULL(ctx.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid access path or batch task", K(ret), K(task), K(ap));
@@ -1983,8 +1979,8 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
   ret = OB_SUCCESS;
 
   HEAP_VAR(ObBatchEstTasks, task) {
-    obrpc::ObEstPartArg &arg = task.arg_;
-    obrpc::ObEstPartRes &res = task.res_;
+    obcall::ObEstPartArg &arg = task.arg_;
+    obcall::ObEstPartRes &res = task.res_;
 
     arg.schema_version_ = meta.schema_version_;
     if (OB_ISNULL(ctx.get_session_info())) {
@@ -2007,7 +2003,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
                                              best_index_part))) {
       LOG_WARN("failed to choose leader replica", K(ret));
     } else if (best_index_part.is_valid()) {
-      obrpc::ObEstPartArgElement path_arg;
+      obcall::ObEstPartArgElement path_arg;
       ObNewRange *range = NULL;
 
       task.addr_ = best_index_part.addr_;
@@ -2134,7 +2130,7 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
                                             task))) {
       LOG_WARN("failed to get task", K(ret));
     } else if (NULL != task) {
-      obrpc::ObEstPartArgElement path_arg;
+      obcall::ObEstPartArgElement path_arg;
       task->addr_ = best_index_part.addr_;
       path_arg.scan_flag_.index_back_ = 0;
       path_arg.index_id_ = meta.ref_table_id_;
@@ -2176,7 +2172,7 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
     for (int64_t i = 0; i < tasks.count(); ++i) {
       const ObBatchEstTasks *task = tasks.at(i);
       for (int64_t j = 0; j < task->res_.index_param_res_.count(); ++j) {
-        const obrpc::ObEstPartResElement &res = task->res_.index_param_res_.at(j);
+        const obcall::ObEstPartResElement &res = task->res_.index_param_res_.at(j);
         row_count += res.logical_row_count_;
         partition_count += 1.0;
       }

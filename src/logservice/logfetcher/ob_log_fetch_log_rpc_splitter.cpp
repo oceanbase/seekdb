@@ -69,7 +69,7 @@ int ObLogFetchLogRpcSplitter::split(RawLogFileRpcRequest &rpc_req)
       const palf::LSN aligned_start_lsn = palf::LSN(start_lsn.val_ & ~((1 << 12) - 1));
       const palf::block_id_t file_id = palf::lsn_2_block(aligned_start_lsn, palf::PALF_BLOCK_SIZE);
       const palf::LSN next_file_start_lsn = palf::LSN((file_id + 1) * palf::PALF_BLOCK_SIZE);
-      const uint64_t fetch_buffer_len = obrpc::ObCdcFetchRawLogResp::FETCH_BUF_LEN;
+      const uint64_t fetch_buffer_len = obcall::ObCdcFetchRawLogResp::FETCH_BUF_LEN;
       const palf::offset_t fetch_log_size = next_file_start_lsn - aligned_start_lsn;
       //min(ceil(fetch_log_size/fetch_buffer_len), last_valid_rpc_cnt_)
       const int32_t rpc_req_cnt = min(static_cast<int32_t>((fetch_log_size+fetch_buffer_len-1) / fetch_buffer_len),

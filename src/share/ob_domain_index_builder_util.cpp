@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_domain_index_builder_util.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "src/rootserver/ob_root_service.h"
 #include "share/ob_fts_index_builder_util.h"
 #include "share/ob_vec_index_builder_util.h"
@@ -23,7 +24,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 namespace share
 {
@@ -50,7 +51,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
                                                 const uint64_t& data_table_id,
                                                 const uint64_t& tenant_id,
                                                 const int64_t& task_id,
-                                                obrpc::ObCreateIndexArg& index_arg,
+                                                obcall::ObCreateIndexArg& index_arg,
                                                 rootserver::ObRootService *root_service,
                                                 common::hash::ObHashMap<uint64_t, ObDomainDependTaskStatus> &map,
                                                 const oceanbase::common::ObAddr &addr,
@@ -63,25 +64,19 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
     LOG_WARN("root_service is nullptr", K(ret));
   } else {
     int64_t ddl_rpc_timeout = 0;
-    rootserver::ObDDLService &ddl_service = root_service->get_ddl_service();
-    obrpc::ObCommonRpcProxy *common_rpc = nullptr;
     if (!map.created() &&
       OB_FAIL(map.create(map_num, lib::ObLabel("DepTasMap")))) {
       LOG_WARN("create dependent task map failed", K(ret));
     } else if (OB_ISNULL(root_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("root_service is nullptr", K(ret));
-    } else if (OB_FALSE_IT(common_rpc = root_service->get_ddl_service().get_common_rpc())) {
-    } else if (OB_ISNULL(common_rpc)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("common rpc is nullptr", K(ret));
     } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id,
                                                       data_table_id,
                                                       ddl_rpc_timeout))) {
       LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else {
-      SMART_VARS_2((obrpc::ObCreateAuxIndexArg, arg),
-                    (obrpc::ObCreateAuxIndexRes, res)) {
+      SMART_VARS_2((obcall::ObCreateAuxIndexArg, arg),
+                    (obcall::ObCreateAuxIndexRes, res)) {
       arg.tenant_id_ = tenant_id;
       arg.exec_tenant_id_ = tenant_id;
       arg.data_table_id_ = data_table_id;
@@ -92,8 +87,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to assign create index arg", K(ret));
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version)) {
-      } else if (OB_FAIL(common_rpc-> to(addr).
-                          timeout(ddl_rpc_timeout).create_aux_index(arg, res))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_aux_index(arg, res); }))) {
         LOG_WARN("generate aux index schema failed", K(ret), K(arg));
       } else if (res.schema_generated_) {
         task_submitted = true;

@@ -22,6 +22,10 @@
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "src/share/schema/ob_mview_info.h"
 #include "observer/ob_inner_sql_connection.h"
+#include "observer/ob_ex_rpc.h"
+#include "rootserver/mview/ob_mview_maintenance_service.h"
+#include "logservice/ob_log_service.h"
+#include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase
 {
@@ -386,30 +390,51 @@ int ObMViewRefreshHelper::get_mlog_dml_row_num(ObMViewTransaction &trans, const 
 }
 
 int ObMViewRefreshHelper::sync_post_nested_mview_rpc(
-                          obrpc::ObCheckNestedMViewMdsArg &arg,
-                          obrpc::ObCheckNestedMViewMdsRes &res)
+                          obcall::ObCheckNestedMViewMdsArg &arg,
+                          obcall::ObCheckNestedMViewMdsRes &res)
 {
   int ret = OB_SUCCESS;
   common::ObAddr leader;
   const uint64_t tenant_id = arg.tenant_id_;
   ObLocationService *location_service = GCTX.location_service_;
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
   int64_t abs_timeout_ts = ObTimeUtility::current_time()+
                            GCONF.location_cache_refresh_sql_timeout;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is invalid", K(ret), K(arg));
-  } else if (OB_ISNULL(location_service) || OB_ISNULL(rpc_proxy)) {
+  } else if (OB_ISNULL(location_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("location_service or rpc_proxy is NULL", K(ret), KP(location_service), KP(rpc_proxy));
+    LOG_WARN("location_service is NULL", K(ret), KP(location_service));
   } else if (OB_FAIL(location_service->get_leader_with_retry_until_timeout(
              GCONF.cluster_id, tenant_id, share::SYS_LS, leader, abs_timeout_ts))) {
     LOG_WARN("failed to get ls leader with retry until timeout",
              K(ret), K(tenant_id), K(leader), K(abs_timeout_ts));
-  } else if (OB_FAIL(rpc_proxy->to(leader).
-                                by(tenant_id).
-                                timeout(obrpc::ObRpcProxy::MAX_RPC_TIMEOUT).
-                                check_nested_mview_mds(arg, res))) {
+  } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
+      int ret = OB_SUCCESS;
+      MTL_SWITCH(arg.tenant_id_) {
+        common::ObRole role, new_role;
+        int64_t proposal_id = 0, new_proposal_id = 0;
+        share::SCN min_target_scn;
+        rootserver::ObMViewMaintenanceService *svc = MTL(rootserver::ObMViewMaintenanceService*);
+        if (OB_ISNULL(svc)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(MTL(logservice::ObLogService *)->get_palf_role(share::SYS_LS, role, proposal_id))) {
+        } else if (common::ObRole::LEADER != role || svc->get_proposal_id() != proposal_id) {
+          ret = OB_NOT_MASTER;
+        } else if (arg.refresh_id_ != OB_INVALID_ID &&
+                   OB_FAIL(svc->check_nested_mview_mds_exists(arg.refresh_id_, arg.target_data_sync_scn_))) {
+        } else if (arg.refresh_id_ == OB_INVALID_ID &&
+                   OB_FAIL(svc->get_min_target_data_sync_scn(arg.mview_id_, min_target_scn))) {
+        } else if (MTL(logservice::ObLogService *)->get_palf_role(share::SYS_LS, new_role, new_proposal_id)) {
+        } else if (role != new_role && proposal_id != new_proposal_id) {
+          ret = OB_NOT_MASTER;
+        }
+        res.ret_ = ret;
+        res.target_data_sync_scn_ = min_target_scn;
+        ret = OB_SUCCESS;
+      }
+      return ret;
+    }))) {
     LOG_WARN("fail to check nested mview mds", K(ret), K(arg), K(res), K(leader));
   } else if (OB_FAIL(res.ret_)) {
     LOG_WARN("check nested mview mds failed", K(ret), K(res), K(arg), K(leader));
@@ -424,12 +449,12 @@ int ObMViewRefreshHelper::sync_get_min_target_data_sync_scn(
 {
   int ret = OB_SUCCESS;
   min_target_scn.reset();
-  obrpc::ObCheckNestedMViewMdsArg arg;
+  obcall::ObCheckNestedMViewMdsArg arg;
   arg.tenant_id_ = tenant_id;
   arg.mview_id_ = mview_id;
   arg.refresh_id_ = OB_INVALID_ID;
   arg.target_data_sync_scn_.reset();
-  obrpc::ObCheckNestedMViewMdsRes res;
+  obcall::ObCheckNestedMViewMdsRes res;
   int64_t start_ts = ObTimeUtility::fast_current_time();
   const int64_t timeout_ts = 30 * 1000 * 1000; // 30s
   if (mview_id == OB_INVALID_ID || tenant_id == OB_INVALID_TENANT_ID) {

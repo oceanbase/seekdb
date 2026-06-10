@@ -146,7 +146,7 @@ TEST_F(TestIsOldMds, test_is_old_mds_for_create) {
   ret = arg.table_schemas_.push_back(table_schema);
   ASSERT_EQ(OB_SUCCESS, ret);
   for (int64_t i =0; OB_SUCC(ret) && i < 5; i++) {
-    obrpc::ObCreateTabletInfo create_tablet_info;
+    obcall::ObCreateTabletInfo create_tablet_info;
     create_tablet_info.compat_mode_ = lib::Worker::CompatMode::MYSQL;
     create_tablet_info.data_tablet_id_ = ObTabletID(1);
     ASSERT_EQ(OB_SUCCESS, ret);

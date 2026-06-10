@@ -59,10 +59,7 @@ DEF_TO_STRING(ObGlobalContext)
        KP_(config),
        KP_(config_mgr),
        KP_(tablet_operator),
-       KP_(srv_rpc_proxy),
        KP_(storage_rpc_proxy),
-       KP_(rs_rpc_proxy),
-       KP_(load_data_proxy),
        KP_(executor_rpc),
        KP_(sql_proxy),
        KP_(bandwidth_throttle),
@@ -71,7 +68,6 @@ DEF_TO_STRING(ObGlobalContext)
        KP_(sql_engine),
        KP_(omt),
        KP_(vt_iter_creator),
-       KP_(batch_rpc),
        K_(start_time),
        KP_(warm_up_start_time));
   J_COMMA();

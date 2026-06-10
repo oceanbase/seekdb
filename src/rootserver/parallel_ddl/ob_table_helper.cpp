@@ -822,7 +822,7 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
       ObIndexBuilder index_builder(*ddl_service_);
       for (int64_t i = 0; OB_SUCC(ret) && i < arg.index_arg_list_.size(); ++i) {
         index_schema.reset();
-        obrpc::ObCreateIndexArg &index_arg = const_cast<obrpc::ObCreateIndexArg&>(arg.index_arg_list_.at(i));
+        obcall::ObCreateIndexArg &index_arg = const_cast<obcall::ObCreateIndexArg&>(arg.index_arg_list_.at(i));
         if (!index_arg.index_schema_.is_partitioned_table()
             && !data_table->is_partitioned_table()
             && !data_table->is_auto_partitioned_table()) {

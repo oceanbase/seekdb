@@ -21,7 +21,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObBatchCreateTabletArg;
 }
@@ -31,14 +31,14 @@ namespace storage
 class ObBatchCreateTabletPrettyArg
 {
 public:
-  ObBatchCreateTabletPrettyArg(const obrpc::ObBatchCreateTabletArg &arg);
+  ObBatchCreateTabletPrettyArg(const obcall::ObBatchCreateTabletArg &arg);
   ~ObBatchCreateTabletPrettyArg() = default;
   ObBatchCreateTabletPrettyArg(const ObBatchCreateTabletPrettyArg&) = delete;
   ObBatchCreateTabletPrettyArg &operator=(const ObBatchCreateTabletPrettyArg&) = delete;
 public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
 private:
-  const obrpc::ObBatchCreateTabletArg &arg_;
+  const obcall::ObBatchCreateTabletArg &arg_;
 };
 } // namespace storage
 } // namespace oceanbase

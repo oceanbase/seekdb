@@ -30,8 +30,8 @@ class AccessPath;
 struct ObBatchEstTasks
 {
   ObAddr addr_;
-  obrpc::ObEstPartArg arg_;
-  obrpc::ObEstPartRes res_;
+  obcall::ObEstPartArg arg_;
+  obcall::ObEstPartRes res_;
   ObArray<AccessPath *> paths_;
   ObArray<int64_t> range_idx_;
 

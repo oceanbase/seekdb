@@ -52,7 +52,7 @@ using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 #define CSJ(x) (static_cast<const char *>(SJ((x))))

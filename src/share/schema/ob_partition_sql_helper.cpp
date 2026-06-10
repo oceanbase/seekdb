@@ -21,7 +21,7 @@
 
 namespace oceanbase
 {
-using namespace obrpc;
+using namespace obcall;
 namespace share
 {
 namespace schema

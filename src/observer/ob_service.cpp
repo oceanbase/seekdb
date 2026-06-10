@@ -63,7 +63,7 @@ namespace oceanbase
 
 using namespace common;
 using namespace rootserver;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
@@ -445,7 +445,7 @@ int ObService::submit_async_refresh_schema_task(
 }
 
 // should return success if all partition have merge to specific frozen_version
-int ObService::check_frozen_scn(const obrpc::ObCheckFrozenScnArg &arg)
+int ObService::check_frozen_scn(const obcall::ObCheckFrozenScnArg &arg)
 {
   LOG_INFO("receive check frozen SCN request", K(arg));
   int ret = OB_SUCCESS;
@@ -464,8 +464,8 @@ int ObService::check_frozen_scn(const obrpc::ObCheckFrozenScnArg &arg)
 }
 
 int ObService::get_min_sstable_schema_version(
-    const obrpc::ObGetMinSSTableSchemaVersionArg &arg,
-    obrpc::ObGetMinSSTableSchemaVersionRes &result)
+    const obcall::ObGetMinSSTableSchemaVersionArg &arg,
+    obcall::ObGetMinSSTableSchemaVersionRes &result)
 {
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
@@ -519,7 +519,7 @@ int ObService::get_min_sstable_schema_version(
   return ret;
 }
 
-int ObService::calc_column_checksum_request(const obrpc::ObCalcColumnChecksumRequestArg &arg, obrpc::ObCalcColumnChecksumRequestRes &res)
+int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRequestArg &arg, obcall::ObCalcColumnChecksumRequestRes &res)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
@@ -598,7 +598,7 @@ int ObService::calc_column_checksum_request(const obrpc::ObCalcColumnChecksumReq
   return ret;
 }
 
-int ObService::backup_ls_data(const obrpc::ObBackupDataArg &arg)
+int ObService::backup_ls_data(const obcall::ObBackupDataArg &arg)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[BACKUP] receive backup ls data rpc", K(arg));
@@ -645,7 +645,7 @@ int ObService::backup_ls_data(const obrpc::ObBackupDataArg &arg)
   return ret;
 }
 
-int ObService::backup_completing_log(const obrpc::ObBackupComplLogArg &arg)
+int ObService::backup_completing_log(const obcall::ObBackupComplLogArg &arg)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[BACKUP] receive backup completing log rpc", K(arg));
@@ -684,7 +684,7 @@ int ObService::backup_completing_log(const obrpc::ObBackupComplLogArg &arg)
   return ret;
 }
 
-int ObService::backup_build_index(const obrpc::ObBackupBuildIdxArg &arg)
+int ObService::backup_build_index(const obcall::ObBackupBuildIdxArg &arg)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[BACKUP] receive backup build index rpc", K(arg));
@@ -722,7 +722,7 @@ int ObService::backup_build_index(const obrpc::ObBackupBuildIdxArg &arg)
   return ret;
 }
 
-int ObService::backup_meta(const obrpc::ObBackupMetaArg &arg)
+int ObService::backup_meta(const obcall::ObBackupMetaArg &arg)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[BACKUP] receive backup meta rpc", K(arg));
@@ -761,7 +761,7 @@ int ObService::backup_meta(const obrpc::ObBackupMetaArg &arg)
   return ret;
 }
 
-int ObService::backup_fuse_tablet_meta(const obrpc::ObBackupFuseTabletMetaArg &arg)
+int ObService::backup_fuse_tablet_meta(const obcall::ObBackupFuseTabletMetaArg &arg)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[BACKUP] receive backup fuse tablet meta rpc", K(arg));
@@ -831,7 +831,7 @@ int ObService::check_backup_task_exist(const ObBackupCheckTaskArg &arg, bool &re
   return ret;
 }
 
-int ObService::delete_backup_ls_task(const obrpc::ObLSBackupCleanArg &arg)
+int ObService::delete_backup_ls_task(const obcall::ObLSBackupCleanArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive delete backup ls task request", K(arg));
@@ -850,15 +850,15 @@ int ObService::delete_backup_ls_task(const obrpc::ObLSBackupCleanArg &arg)
   return ret;
 }
 
-int ObService::notify_archive(const obrpc::ObNotifyArchiveArg &arg)
+int ObService::notify_archive(const obcall::ObNotifyArchiveArg &arg)
 {
   return OB_NOT_SUPPORTED;
 }
 
 
 
-int ObService::minor_freeze(const obrpc::ObMinorFreezeArg &arg,
-                            obrpc::Int64 &result)
+int ObService::minor_freeze(const obcall::ObMinorFreezeArg &arg,
+                            obcall::Int64 &result)
 {
   int ret = OB_SUCCESS;
   const int64_t start_ts = ObTimeUtility::current_time();
@@ -884,7 +884,7 @@ int ObService::minor_freeze(const obrpc::ObMinorFreezeArg &arg,
   return ret;
 }
 
-int ObService::handle_server_freeze_req_(const obrpc::ObMinorFreezeArg &arg)
+int ObService::handle_server_freeze_req_(const obcall::ObMinorFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.omt_)) {
@@ -905,7 +905,7 @@ int ObService::handle_server_freeze_req_(const obrpc::ObMinorFreezeArg &arg)
   return ret;
 }
 
-int ObService::handle_tenant_freeze_req_(const obrpc::ObMinorFreezeArg &arg)
+int ObService::handle_tenant_freeze_req_(const obcall::ObMinorFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   for (int i = 0; i < arg.tenant_ids_.count(); ++i) {
@@ -922,7 +922,7 @@ int ObService::handle_tenant_freeze_req_(const obrpc::ObMinorFreezeArg &arg)
   return ret;
 }
 
-int ObService::handle_ls_freeze_req_(const obrpc::ObMinorFreezeArg &arg)
+int ObService::handle_ls_freeze_req_(const obcall::ObMinorFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   if (1 != arg.tenant_ids_.count()) {
@@ -1014,8 +1014,8 @@ int ObService::tenant_freeze_(const uint64_t tenant_id)
   return ret;
 }
 
-int ObService::tablet_major_freeze(const obrpc::ObTabletMajorFreezeArg &arg,
-                            obrpc::Int64 &result)
+int ObService::tablet_major_freeze(const obcall::ObTabletMajorFreezeArg &arg,
+                            obcall::Int64 &result)
 {
   int ret = OB_SUCCESS;
   const int64_t start_ts = ObTimeUtility::fast_current_time();
@@ -1043,8 +1043,8 @@ int ObService::tablet_major_freeze(const obrpc::ObTabletMajorFreezeArg &arg,
 }
 
 int ObService::check_modify_time_elapsed(
-    const obrpc::ObCheckModifyTimeElapsedArg &arg,
-    obrpc::ObCheckModifyTimeElapsedResult &result)
+    const obcall::ObCheckModifyTimeElapsedArg &arg,
+    obcall::ObCheckModifyTimeElapsedResult &result)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive get checksum cal snapshot", K(arg));
@@ -1100,8 +1100,8 @@ int ObService::check_modify_time_elapsed(
 }
 
 int ObService::check_schema_version_elapsed(
-    const obrpc::ObCheckSchemaVersionElapsedArg &arg,
-    obrpc::ObCheckSchemaVersionElapsedResult &result)
+    const obcall::ObCheckSchemaVersionElapsedArg &arg,
+    obcall::ObCheckSchemaVersionElapsedResult &result)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive check schema version elapsed", K(arg));
@@ -1163,8 +1163,8 @@ int ObService::check_schema_version_elapsed(
 // 1. minor freeze
 // 2. get memtable cnt
 int ObService::check_memtable_cnt(
-    const obrpc::ObCheckMemtableCntArg &arg,
-    obrpc::ObCheckMemtableCntResult &result)
+    const obcall::ObCheckMemtableCntArg &arg,
+    obcall::ObCheckMemtableCntResult &result)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive check memtable cnt request", K(arg));
@@ -1239,15 +1239,15 @@ int ObService::check_memtable_cnt(
 // 2. ret == OB_SUCCESS && info_list_cnt_ > 0 && invalid compaction_scn
 // 3. ret == OB_SUCCESS && info_list_cnt_ == 0 && valid primary_compaction_scn_
 int ObService::check_medium_compaction_info_list_cnt(
-    const obrpc::ObCheckMediumCompactionInfoListArg &arg,
-    obrpc::ObCheckMediumCompactionInfoListResult &result)
+    const obcall::ObCheckMediumCompactionInfoListArg &arg,
+    obcall::ObCheckMediumCompactionInfoListResult &result)
 {
   return ObTabletSplitUtil::check_medium_compaction_info_list_cnt(arg, result);
 }
 
 int ObService::prepare_tablet_split_task_ranges(
-    const obrpc::ObPrepareSplitRangesArg &arg,
-    obrpc::ObPrepareSplitRangesRes &result)
+    const obcall::ObPrepareSplitRangesArg &arg,
+    obcall::ObPrepareSplitRangesRes &result)
 {
   int ret = OB_SUCCESS;
   result.parallel_datum_rowkey_list_.reset();
@@ -1265,8 +1265,8 @@ int ObService::prepare_tablet_split_task_ranges(
 }
 
 int ObService::check_ddl_tablet_merge_status(
-    const obrpc::ObDDLCheckTabletMergeStatusArg &arg,
-    obrpc::ObDDLCheckTabletMergeStatusResult &result)
+    const obcall::ObDDLCheckTabletMergeStatusArg &arg,
+    obcall::ObDDLCheckTabletMergeStatusResult &result)
 {
   int ret = OB_SUCCESS;
 
@@ -1347,8 +1347,8 @@ int ObService::batch_switch_rs_leader(const ObAddr &arg)
 }
 
 int ObService::switch_schema(
-    const obrpc::ObSwitchSchemaArg &arg,
-    obrpc::ObSwitchSchemaResult &result)
+    const obcall::ObSwitchSchemaArg &arg,
+    obcall::ObSwitchSchemaResult &result)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("start to switch schema", K(arg));
@@ -1428,8 +1428,8 @@ int ObService::switch_schema(
 }
 
 int ObService::broadcast_consensus_version(
-    const obrpc::ObBroadcastConsensusVersionArg &arg,
-    obrpc::ObBroadcastConsensusVersionRes &result)
+    const obcall::ObBroadcastConsensusVersionArg &arg,
+    obcall::ObBroadcastConsensusVersionRes &result)
 {
   int ret = OB_SUCCESS;
   int64_t local_consensus_version = OB_INVALID_VERSION;
@@ -1472,9 +1472,7 @@ int ObService::bootstrap()
     LOG_WARN("root service is null", K(ret));
   } else {
     BOOTSTRAP_LOG(INFO, "begin bootstrap");
-    ObPreBootstrap pre_bootstrap(*gctx_.srv_rpc_proxy_,
-                                 *gctx_.config_,
-                                 *gctx_.rs_rpc_proxy_);
+    ObPreBootstrap pre_bootstrap(*gctx_.config_);
     ObAddr master_rs;
     bool server_empty = false;
     if (OB_FAIL(check_server_empty(server_empty))) {
@@ -1702,10 +1700,10 @@ int ObService::set_server_id_(const int64_t server_id)
   return ret;
 }
 
-int ObService::check_server_empty(const obrpc::ObCheckServerEmptyArg &arg, obrpc::Bool &is_empty)
+int ObService::check_server_empty(const obcall::ObCheckServerEmptyArg &arg, obcall::Bool &is_empty)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCheckServerEmptyResult result;
+  obcall::ObCheckServerEmptyResult result;
   if (OB_FAIL(check_server_empty_with_result(arg, result))) {
     LOG_WARN("failed to call check_server_empty_with_result", KR(ret));
   } else {
@@ -1713,7 +1711,7 @@ int ObService::check_server_empty(const obrpc::ObCheckServerEmptyArg &arg, obrpc
   }
   return ret;
 }
-int ObService::check_server_empty_with_result(const obrpc::ObCheckServerEmptyArg &arg, obrpc::ObCheckServerEmptyResult &result)
+int ObService::check_server_empty_with_result(const obcall::ObCheckServerEmptyArg &arg, obcall::ObCheckServerEmptyResult &result)
 {
   int ret = OB_SUCCESS;
   uint64_t sys_data_version = 0;
@@ -1746,8 +1744,8 @@ int ObService::check_server_empty_with_result(const obrpc::ObCheckServerEmptyArg
 }
 
 int ObService::get_server_resource_info(
-    const obrpc::ObGetServerResourceInfoArg &arg,
-    obrpc::ObGetServerResourceInfoResult &result)
+    const obcall::ObGetServerResourceInfoArg &arg,
+    obcall::ObGetServerResourceInfoResult &result)
 {
   int ret = OB_SUCCESS;
   const ObAddr &my_addr = GCONF.self_addr_;
@@ -1847,7 +1845,7 @@ int ObService::get_build_version(share::ObBuildVersion &build_version)
   }
   return ret;
 }
-int ObService::get_partition_count(obrpc::ObGetPartitionCountResult &result)
+int ObService::get_partition_count(obcall::ObGetPartitionCountResult &result)
 {
   UNUSEDx(result);
   int ret = OB_NOT_SUPPORTED;
@@ -1894,7 +1892,7 @@ int ObService::check_server_empty(bool &is_empty)
   return ret;
 }
 
-int ObService::set_ds_action(const obrpc::ObDebugSyncActionArg &arg)
+int ObService::set_ds_action(const obcall::ObDebugSyncActionArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -1911,8 +1909,8 @@ int ObService::set_ds_action(const obrpc::ObDebugSyncActionArg &arg)
 
 // get tenant's refreshed schema version in new mode
 int ObService::get_tenant_refreshed_schema_version(
-    const obrpc::ObGetTenantSchemaVersionArg &arg,
-    obrpc::ObGetTenantSchemaVersionResult &result)
+    const obcall::ObGetTenantSchemaVersionArg &arg,
+    obcall::ObGetTenantSchemaVersionResult &result)
 {
   int ret = OB_SUCCESS;
   result.schema_version_ = OB_INVALID_VERSION;
@@ -1932,12 +1930,12 @@ int ObService::get_tenant_refreshed_schema_version(
   return ret;
 }
 
-int ObService::sync_partition_table(const obrpc::Int64 &arg)
+int ObService::sync_partition_table(const obcall::Int64 &arg)
 {
   return OB_NOT_SUPPORTED;
 }
 
-int ObService::set_tracepoint(const obrpc::ObAdminSetTPArg &arg)
+int ObService::set_tracepoint(const obcall::ObAdminSetTPArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -1981,7 +1979,7 @@ int ObService::cancel_sys_task(
   return ret;
 }
 
-int ObService::stop_partition_write(const obrpc::Int64 &switchover_timestamp, obrpc::Int64 &result)
+int ObService::stop_partition_write(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result)
 {
   //TODO for switchover
   int ret = OB_SUCCESS;
@@ -1989,7 +1987,7 @@ int ObService::stop_partition_write(const obrpc::Int64 &switchover_timestamp, ob
   return ret;
 }
 
-int ObService::check_partition_log(const obrpc::Int64 &switchover_timestamp, obrpc::Int64 &result)
+int ObService::check_partition_log(const obcall::Int64 &switchover_timestamp, obcall::Int64 &result)
 {
   UNUSEDx(switchover_timestamp, result);
   // Check that the log of all replicas in local have reached synchronization status
@@ -2035,8 +2033,8 @@ int ObService::check_partition_log(const obrpc::Int64 &switchover_timestamp, obr
   return ret;
 }
 
-int ObService::estimate_partition_rows(const obrpc::ObEstPartArg &arg,
-                                       obrpc::ObEstPartRes &res) const
+int ObService::estimate_partition_rows(const obcall::ObEstPartArg &arg,
+                                       obcall::ObEstPartRes &res) const
 {
   int ret = OB_SUCCESS;
   LOG_DEBUG("receive estimate rows request", K(arg));
@@ -2049,8 +2047,8 @@ int ObService::estimate_partition_rows(const obrpc::ObEstPartArg &arg,
   return ret;
 }
 
-int ObService::get_wrs_info(const obrpc::ObGetWRSArg &arg,
-                            obrpc::ObGetWRSResult &result)
+int ObService::get_wrs_info(const obcall::ObGetWRSArg &arg,
+                            obcall::ObGetWRSResult &result)
 {
   UNUSEDx(arg, result);
   int ret = OB_NOT_SUPPORTED;
@@ -2068,7 +2066,7 @@ int ObService::wash_memory_fragmentation()
   return OB_SUCCESS;
 }
 
-int ObService::build_split_tablet_data_start_request(const obrpc::ObTabletSplitStartArg &arg,  obrpc::ObTabletSplitStartResult &res)
+int ObService::build_split_tablet_data_start_request(const obcall::ObTabletSplitStartArg &arg,  obcall::ObTabletSplitStartResult &res)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -2099,7 +2097,7 @@ int ObService::build_split_tablet_data_start_request(const obrpc::ObTabletSplitS
   return ret;
 }
 
-int ObService::build_split_tablet_data_finish_request(const obrpc::ObTabletSplitFinishArg &arg, obrpc::ObTabletSplitFinishResult &res)
+int ObService::build_split_tablet_data_finish_request(const obcall::ObTabletSplitFinishArg &arg, obcall::ObTabletSplitFinishResult &res)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -2318,7 +2316,7 @@ int ObService::check_and_cancel_ddl_complement_data_dag(const ObDDLBuildSingleRe
   return ret;
 }
 
-int ObService::check_and_cancel_delete_lob_meta_row_dag(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg, bool &is_dag_exist)
+int ObService::check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLBuildSingleReplicaRequestArg &arg, bool &is_dag_exist)
 {
   int ret = OB_SUCCESS;
   is_dag_exist = true;
@@ -2460,19 +2458,19 @@ int ObService::fill_tablet_report_info(
   return ret;
 }
 
-int ObService::report_backup_over(const obrpc::ObBackupTaskRes &res)
+int ObService::report_backup_over(const obcall::ObBackupTaskRes &res)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObService::report_backup_clean_over(const obrpc::ObBackupTaskRes &res)
+int ObService::report_backup_clean_over(const obcall::ObBackupTaskRes &res)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObService::check_backup_dest_connectivity(const obrpc::ObCheckBackupConnectivityArg &arg)
+int ObService::check_backup_dest_connectivity(const obcall::ObCheckBackupConnectivityArg &arg)
 {
   int ret = OB_SUCCESS;
   share::ObBackupDestCheck backup_check;
@@ -2491,8 +2489,8 @@ int ObService::check_backup_dest_connectivity(const obrpc::ObCheckBackupConnecti
   return ret;
 }
 
-int ObService::estimate_tablet_block_count(const obrpc::ObEstBlockArg &arg,
-                                           obrpc::ObEstBlockRes &res) const
+int ObService::estimate_tablet_block_count(const obcall::ObEstBlockArg &arg,
+                                           obcall::ObEstBlockRes &res) const
 {
   int ret = OB_SUCCESS;
   LOG_DEBUG("receive estimate tablet block count request", K(arg));
@@ -2505,8 +2503,8 @@ int ObService::estimate_tablet_block_count(const obrpc::ObEstBlockArg &arg,
   return ret;
 }
 
-int ObService::estimate_skip_rate(const obrpc::ObEstSkipRateArg &arg,
-                                  obrpc::ObEstSkipRateRes &res) const
+int ObService::estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
+                                  obcall::ObEstSkipRateRes &res) const
 {
   int ret = OB_SUCCESS;
   LOG_DEBUG("receive estimate tablet skip rate request", K(arg));
@@ -2648,7 +2646,7 @@ int ObService::force_set_ls_as_single_replica(
   return ret;
 }
 
-int ObService::force_set_server_list(const obrpc::ObForceSetServerListArg &arg, obrpc::ObForceSetServerListResult &result)
+int ObService::force_set_server_list(const obcall::ObForceSetServerListArg &arg, obcall::ObForceSetServerListResult &result)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("force_set_server_list", K(arg));
@@ -2763,8 +2761,8 @@ int ObService::force_set_server_list(const obrpc::ObForceSetServerListArg &arg, 
 }
 
 int ObService::init_tenant_config(
-    const obrpc::ObInitTenantConfigArg &arg,
-    obrpc::ObInitTenantConfigRes &result)
+    const obcall::ObInitTenantConfigArg &arg,
+    obcall::ObInitTenantConfigRes &result)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2787,7 +2785,7 @@ int ObService::init_tenant_config(
   return OB_SUCCESS;
 }
 
-int ObService::change_external_storage_dest(obrpc::ObAdminSetConfigArg &arg)
+int ObService::change_external_storage_dest(obcall::ObAdminSetConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {

@@ -16,8 +16,6 @@
 
 #ifndef STORAGE_LOG_STREAM_BACKUP_CLEAN_H_
 #define STORAGE_LOG_STREAM_BACKUP_CLEAN_H_
-#include "share/ob_common_rpc_proxy.h"
-#include "share/ob_srv_rpc_proxy.h"
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "share/backup/ob_backup_clean_struct.h"
 #include "share/backup/ob_archive_struct.h"
@@ -32,7 +30,7 @@ class ObLSBackupCleanScheduler final
 public:
   ObLSBackupCleanScheduler() {}
   ~ObLSBackupCleanScheduler() {}
-  static int schedule_backup_clean_dag(const obrpc::ObLSBackupCleanArg &args);
+  static int schedule_backup_clean_dag(const obcall::ObLSBackupCleanArg &args);
 };
 
 struct ObLSBackupCleanDagNetInitParam : public share::ObIDagInitParam
@@ -41,7 +39,7 @@ public:
   ObLSBackupCleanDagNetInitParam();
   virtual ~ObLSBackupCleanDagNetInitParam() {}
   bool is_valid() const override;
-  int set(const obrpc::ObLSBackupCleanArg &args);
+  int set(const obcall::ObLSBackupCleanArg &args);
   bool operator == (const ObLSBackupCleanDagNetInitParam &other) const;
   bool operator != (const ObLSBackupCleanDagNetInitParam &other) const;
   int64_t hash() const;

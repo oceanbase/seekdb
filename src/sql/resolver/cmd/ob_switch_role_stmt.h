@@ -34,10 +34,10 @@ public:
   {
   }
 
-  obrpc::ObSwitchRoleArg  &get_arg() { return arg_; }
+  obcall::ObSwitchRoleArg  &get_arg() { return arg_; }
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
 private:
-  obrpc::ObSwitchRoleArg arg_;
+  obcall::ObSwitchRoleArg arg_;
 };
 
 } //end sql

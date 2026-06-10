@@ -31,10 +31,10 @@
    explicit ObCreateLocationStmt(common::ObIAllocator *name_pool);
    virtual ~ObCreateLocationStmt();
  
-   virtual obrpc::ObDDLArg &get_ddl_arg() { return arg_; }
+   virtual obcall::ObDDLArg &get_ddl_arg() { return arg_; }
    virtual bool cause_implicit_commit() const { return true; }
  
-   obrpc::ObCreateLocationArg &get_create_location_arg() { return arg_; }
+   obcall::ObCreateLocationArg &get_create_location_arg() { return arg_; }
  
    void set_tenant_id(const uint64_t tenant_id) { arg_.schema_.set_tenant_id(tenant_id); }
    void set_user_id(const uint64_t user_id) { arg_.user_id_ = user_id; }
@@ -48,7 +48,7 @@
 
    TO_STRING_KV(K_(arg));
  private:
-   obrpc::ObCreateLocationArg arg_;
+   obcall::ObCreateLocationArg arg_;
    common::ObString masked_sql_;
  private:
    DISALLOW_COPY_AND_ASSIGN(ObCreateLocationStmt);

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_partition_split_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "share/ob_ddl_checksum.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
@@ -365,7 +366,7 @@ int ObPartitionSplitTask::init(
     const int64_t table_id,
     const int64_t schema_version,
     const int64_t parallelism,
-    const obrpc::ObPartitionSplitArg &partition_split_arg,
+    const obcall::ObPartitionSplitArg &partition_split_arg,
     const int64_t tablet_size,
     const uint64_t tenant_data_version,
     const int64_t parent_task_id,   /* = 0 */
@@ -635,9 +636,6 @@ int ObPartitionSplitTask::check_freeze_progress(
   ObLocationService *location_service = nullptr;
   ObArray<ObTabletID> request_tablet_ids;
   const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
-  ObCheckMemtableCntProxy check_memtable_cnt_proxy(*rpc_proxy,
-      &obrpc::ObSrvRpcProxy::check_memtable_cnt);
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
     const ObTabletID &tablet_id = tablet_ids.at(i);
     share::ObLSID ls_id;
@@ -645,7 +643,7 @@ int ObPartitionSplitTask::check_freeze_progress(
     if (OB_ISNULL(location_service = GCTX.location_service_)) {
       ret = OB_ERR_SYS;
       LOG_WARN("location_cache is null", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service, 
+    } else if (OB_FAIL(ObDDLUtil::get_tablet_leader_addr(location_service,
             tenant_id_, tablet_id, rpc_timeout, ls_id, leader_addr))) {
       LOG_WARN("get tablet leader addr failed", K(ret));
     } else {
@@ -656,60 +654,33 @@ int ObPartitionSplitTask::check_freeze_progress(
         LOG_WARN("failed to get addr freeze status", K(ret), K(leader_addr));
       } else if (freeze_status == ObCheckProgressStatus::NOT_STARTED ||
           freeze_status == ObCheckProgressStatus::ONGOING) {
-        // 1. send rpc to check freeze progress
-        obrpc::ObCheckMemtableCntArg arg;
+        // Direct call (seekdb: all tablets are local).
+        UNUSED(leader_addr);
+        obcall::ObCheckMemtableCntArg arg;
+        obcall::ObCheckMemtableCntResult cur_result;
         arg.tenant_id_ = tenant_id_;
         arg.ls_id_ = ls_id;
         arg.tablet_id_ = tablet_id;
-        if (OB_FAIL(check_memtable_cnt_proxy.call(leader_addr,
-                rpc_timeout, tenant_id_, arg))) {
-          LOG_WARN("send rpc failed", K(ret), K(arg), K(leader_addr), K(tenant_id_));
-        } else {
+        int call_ret = GCTX.ob_service_->check_memtable_cnt(arg, cur_result);
+        UNUSED(call_ret);
+        {
           TCWLockGuard guard(lock_);
           if (OB_FAIL(freeze_progress_map_.set_refactored(check_progress_key,
                   ObCheckProgressStatus::ONGOING, true/*overwrite*/))) {
             LOG_WARN("failed to update addr freeze status", K(ret), K(leader_addr));
           } else if (OB_FAIL(request_tablet_ids.push_back(tablet_id))) {
             LOG_WARN("failed to push back tablet id", K(ret));
+          } else if (cur_result.memtable_cnt_ == 0) {
+            if (OB_FAIL(freeze_progress_map_.set_refactored(check_progress_key,
+                    ObCheckProgressStatus::DONE, true/*overwrite*/))) {
+              LOG_WARN("failed to update addr freeze status", K(ret));
+            } else {
+              ++num_tablet_finished;
+            }
           }
         }
       } else if (freeze_status == ObCheckProgressStatus::DONE) {
         ++num_tablet_finished;
-      }
-    }
-  }
-  // 2. collect rpc results
-  int tmp_ret = OB_SUCCESS;
-  common::ObArray<int> ret_array;
-  if (OB_SUCCESS != (tmp_ret = check_memtable_cnt_proxy.wait_all(ret_array))) {
-    LOG_WARN("rpc proxy wait failed", K(tmp_ret));
-    ret = OB_SUCCESS == ret ? tmp_ret : ret;
-  } else if (OB_SUCC(ret)) {
-    const ObIArray<const obrpc::ObCheckMemtableCntResult *> &result_array = 
-      check_memtable_cnt_proxy.get_results();
-    const int64_t num_rpc_requested = request_tablet_ids.count();
-    if (ret_array.count() != num_rpc_requested ||
-        result_array.count() != num_rpc_requested) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result count not match", K(ret), K(num_rpc_requested),
-          K(ret_array.count()), K(result_array.count()));
-    } else {
-      TCWLockGuard guard(lock_);
-      for (int64_t i = 0; OB_SUCC(ret) && i < result_array.count(); ++i) {
-        const obrpc::ObCheckMemtableCntResult *cur_result = result_array.at(i);
-        if (OB_FAIL(ret_array.at(i))) {
-        } else if (cur_result->memtable_cnt_ > 0) {
-          // NOT finished
-        } else if (cur_result->memtable_cnt_ == 0) {
-          const ObTabletID &tablet_id = request_tablet_ids.at(i);
-          const ObCheckProgressKey<uint64_t> check_progress_key(tenant_id_, tablet_id);
-          if (OB_FAIL(freeze_progress_map_.set_refactored(
-                  check_progress_key, ObCheckProgressStatus::DONE, true/*overwrite*/))) {
-            LOG_WARN("failed to update freeze status", K(ret));
-          } else {
-            ++num_tablet_finished;
-          }
-        }
       }
     }
   }
@@ -798,10 +769,7 @@ int ObPartitionSplitTask::check_compaction_progress(
 {
   int ret = OB_SUCCESS;
   is_end = false;
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
   const int64_t rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
-  ObCheckMediumCompactionInfoListProxy compaction_check_proxy(
-      *rpc_proxy, &obrpc::ObSrvRpcProxy::check_medium_compaction_info_list_cnt);
   if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() || split_replica_addrs.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(ls_id), K(tablet_id), K(split_replica_addrs));
@@ -833,38 +801,35 @@ int ObPartitionSplitTask::check_compaction_progress(
       if (OB_FAIL(ret)) {
       } else if (ObCheckProgressStatus::DONE != compaction_status) {
         // check compaction status
-        obrpc::ObCheckMediumCompactionInfoListArg arg;
+        obcall::ObCheckMediumCompactionInfoListArg arg;
         arg.tenant_id_ = tenant_id_;
         arg.ls_id_ = ls_id;
         arg.tablet_id_ = tablet_id;
-        int tmp_ret = OB_SUCCESS;
-        if (OB_FAIL(compaction_check_proxy.call(replica_addr, rpc_timeout, tenant_id_, arg))) {
-          LOG_WARN("send rpc failed", K(ret), K(tenant_id_), K(replica_addr), K(arg));
-        } else if (OB_TMP_FAIL(compaction_check_proxy.wait())) {
-          LOG_WARN("rpc proxy wait failed", K(tmp_ret), K(arg));
-          ret = tmp_ret;
+        // Direct call (seekdb: all replicas are local).
+        UNUSED(replica_addr);
+        obcall::ObCheckMediumCompactionInfoListResult result;
+        int call_ret = GCTX.ob_service_->check_medium_compaction_info_list_cnt(arg, result);
+        if (OB_FAIL(call_ret)) {
+          LOG_WARN("check medium compaction failed", K(call_ret), K(tenant_id_), K(arg));
         } else {
-          const ObIArray<const obrpc::ObCheckMediumCompactionInfoListResult *> &result_array = compaction_check_proxy.get_results();
-          const obrpc::ObCheckMediumCompactionInfoListResult *result = result_array.at(0);
           TCWLockGuard guard(lock_);
-          if (result->info_list_cnt_ > 0) {
+          if (result.info_list_cnt_ > 0) {
             if (OB_FAIL(compaction_progress_map_.set_refactored(check_progress_key, ObCheckProgressStatus::ONGOING, true/*overwrite*/))) {
               LOG_WARN("failed to update compaction progress", K(ret), K(replica_addr));
             }
-          } else if (result->info_list_cnt_ == 0) {
+          } else if (result.info_list_cnt_ == 0) {
             int64_t existed_compaction_scn;
             if (OB_FAIL(tablet_compaction_scn_map_.get_refactored(tablet_id, existed_compaction_scn))) {
               if (OB_HASH_NOT_EXIST == ret) {
-                // override ret is expected.
-                if (OB_FAIL(tablet_compaction_scn_map_.set_refactored(tablet_id, result->primary_compaction_scn_))) {
-                  LOG_WARN("failed to set tablet tablet's primary compaction scn", K(ret), K(tablet_id));
+                if (OB_FAIL(tablet_compaction_scn_map_.set_refactored(tablet_id, result.primary_compaction_scn_))) {
+                  LOG_WARN("failed to set tablet primary compaction scn", K(ret), K(tablet_id));
                 }
               } else {
                 LOG_WARN("get compaction scn from map failed", K(ret), K(tablet_id));
               }
-            } else if (OB_UNLIKELY(existed_compaction_scn != result->primary_compaction_scn_)) {
+            } else if (OB_UNLIKELY(existed_compaction_scn != result.primary_compaction_scn_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unequal compaction scn between replicas", K(ret), K(tablet_id), K(replica_addr), K(existed_compaction_scn), K(result->primary_compaction_scn_));
+              LOG_WARN("unequal compaction scn between replicas", K(ret), K(tablet_id), K(replica_addr), K(existed_compaction_scn), K(result.primary_compaction_scn_));
             } else if (OB_FAIL(compaction_progress_map_.set_refactored(check_progress_key, ObCheckProgressStatus::DONE, true/*overwrite*/))) {
               LOG_WARN("failed to update compaction progress", K(ret), K(replica_addr));
             } else {
@@ -1412,7 +1377,7 @@ int ObPartitionSplitTask::setup_split_finish_items(
   leader_addr.reset();
   split_info_array.reset();
   ObLSID ls_id;
-  ObArray<obrpc::ObTabletSplitArg> tmp_split_info_array;
+  ObArray<obcall::ObTabletSplitArg> tmp_split_info_array;
   ObLocationService *location_service = nullptr;
   const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
   if (OB_UNLIKELY(!is_inited_)) {
@@ -1429,7 +1394,7 @@ int ObPartitionSplitTask::setup_split_finish_items(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_split_info_array.count(); ++i) {
       ObCheckProgressStatus send_status;
-      const obrpc::ObTabletSplitArg &each_arg = tmp_split_info_array.at(i);
+      const obcall::ObTabletSplitArg &each_arg = tmp_split_info_array.at(i);
       const ObTabletID &tablet_id = each_arg.source_tablet_id_;
       ObCheckProgressKey<uint64_t> check_progress_key(tenant_id_, tablet_id);
       if (OB_FAIL(send_finish_map_.get_refactored(check_progress_key, send_status))) {
@@ -1458,23 +1423,17 @@ int ObPartitionSplitTask::send_split_rpc(
   ObTabletSplitStartResult start_result;
   ObTabletSplitFinishArg finish_arg;
   ObTabletSplitFinishResult finish_result;
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
   ObIArray<ObTabletSplitArg> &target_split_info_array = is_split_start ? start_arg.split_info_array_ : finish_arg.split_info_array_;
   if (OB_FAIL(setup_split_finish_items(leader_addr, target_split_info_array))) {
     LOG_WARN("failed to setup split finish items", K(ret));
   } else if (target_split_info_array.empty()) { // already all sent.
     LOG_TRACE("already all sent", K(ret)); // do nothing.
-  } else if (OB_ISNULL(rpc_proxy)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("srv_rpc_proxy is null", K(ret));
   } else if (is_split_start) {
-    if (OB_TMP_FAIL(rpc_proxy->to(leader_addr).by(tenant_id_).timeout(rpc_timeout)
-          .build_split_tablet_data_start_request(start_arg, start_result))) {
+    if (OB_TMP_FAIL(GCTX.ob_service_->build_split_tablet_data_start_request(start_arg, start_result))) {
       LOG_WARN("failed to freeze src tablet", K(ret), K(tmp_ret), K(leader_addr));
     }
   } else {
-    if (OB_TMP_FAIL(rpc_proxy->to(leader_addr).by(tenant_id_).timeout(rpc_timeout)
-          .build_split_tablet_data_finish_request(finish_arg, finish_result))) {
+    if (OB_TMP_FAIL(GCTX.ob_service_->build_split_tablet_data_finish_request(finish_arg, finish_result))) {
       LOG_WARN("failed to freeze src tablet", K(ret), K(tmp_ret), K(leader_addr));
     }
   }
@@ -1880,7 +1839,7 @@ int ObPartitionSplitTask::wait_recovery_task_finish(const share::ObDDLTaskStatus
   }
   if (OB_SUCC(ret)) {
     if (OB_INVALID_ID == orig_data_table_schema->get_association_table_id()) {
-      SMART_VAR(obrpc::ObAlterTableArg, alter_table_arg) {
+      SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
         int64_t ddl_rpc_timeout = 0;
         ObSArray<uint64_t> unused_ids;
         alter_table_arg.ddl_task_type_ = share::PARTITION_SPLIT_RECOVERY_TASK;
@@ -1905,13 +1864,11 @@ int ObPartitionSplitTask::wait_recovery_task_finish(const share::ObDDLTaskStatus
           if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id_, tz_map_wrap))) {
             LOG_WARN("get tenant timezone map failed", K(ret), K(tenant_id_));
           } else if (FALSE_IT(alter_table_arg.set_tz_info_map(tz_map_wrap.get_tz_map()))) {
-          } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_, object_id_, ddl_rpc_timeout))) {
             LOG_WARN("fail to get ddl rpc timeout", K(ret), K(tenant_id_), K(object_id_));
-          } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_).timeout(ddl_rpc_timeout).execute_ddl_task(alter_table_arg, unused_ids))) {
-            LOG_WARN("fail to execute ddl task", K(ret), K(obrpc::ObRpcProxy::myaddr_), K(ddl_rpc_timeout), K(alter_table_arg));
+          } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->execute_ddl_task(alter_table_arg, unused_ids); }))) {
+            LOG_WARN("fail to execute ddl task", K(ret), K(GCTX.self_addr()), K(ddl_rpc_timeout), K(alter_table_arg));
           }
         }
       }
@@ -2131,11 +2088,7 @@ int ObPartitionSplitTask::clean_splitted_tablet()
 {
   int ret = OB_SUCCESS;
   ObCleanSplittedTabletArg clean_arg;
-  obrpc::ObCommonRpcProxy *rpc_proxy = GCTX.rs_rpc_proxy_;
-  if (OB_ISNULL(rpc_proxy)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rpc_proxy is null", KR(ret));
-  } else if (FALSE_IT(clean_arg.tenant_id_ = tenant_id_)) {
+  if (FALSE_IT(clean_arg.tenant_id_ = tenant_id_)) {
   } else if (FALSE_IT(clean_arg.table_id_ = object_id_)) {
   } else if (FALSE_IT(clean_arg.task_id_ = task_id_)) {
   } else if (FALSE_IT(clean_arg.is_auto_split_ = is_auto_split(partition_split_arg_.task_type_))) {
@@ -2154,7 +2107,7 @@ int ObPartitionSplitTask::clean_splitted_tablet()
     LOG_WARN("fail to assign array", KR(ret));
   } else if (OB_FAIL(clean_arg.dest_lob_tablet_ids_.assign(partition_split_arg_.dest_lob_tablet_ids_))) {
     LOG_WARN("fail to assign array", KR(ret));
-  } else if (OB_FAIL(rpc_proxy->timeout(GCONF._ob_ddl_timeout).clean_splitted_tablet(clean_arg))) {
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->clean_splitted_tablet(clean_arg); }))) {
     LOG_WARN("failed to clean splitted tablet", KR(ret), K(clean_arg));
   }
 
@@ -2569,9 +2522,6 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.srv_rpc_proxy_));
   } else if (!data_tablet_parallel_rowkey_list_.empty()) {
     if (OB_UNLIKELY(source_index_tablets_cnt != index_tablet_parallel_rowkey_list_.count())) {
       ret = OB_ERR_UNEXPECTED; // defensive check.
@@ -2595,15 +2545,14 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
       const ObTabletID &src_tablet_id = tablet_idx == 0 ? partition_split_arg_.src_tablet_id_ : partition_split_arg_.src_local_index_tablet_ids_.at(tablet_idx - 1);
       ObIArray<blocksstable::ObDatumRowkey> &target_parallel_rowkey_list = tablet_idx == 0 ? 
             data_tablet_parallel_rowkey_list_ : index_tablet_parallel_rowkey_list_.at(tablet_idx - 1);
-      obrpc::ObPrepareSplitRangesArg arg;
-      obrpc::ObPrepareSplitRangesRes result;
+      obcall::ObPrepareSplitRangesArg arg;
+      obcall::ObPrepareSplitRangesRes result;
       arg.ls_id_              = ls_id;
       arg.tablet_id_          = src_tablet_id;
       arg.user_parallelism_   = parallelism_; // parallelism_;
       arg.schema_tablet_size_ = std::max(tablet_size_, static_cast<int64_t>(128 * 1024 * 1024L)/*128MB*/);
       arg.ddl_type_ = task_type_;
-      if (OB_FAIL(GCTX.srv_rpc_proxy_->to(leader_addr)
-        .by(tenant_id_).timeout(rpc_timeout).prepare_tablet_split_task_ranges(arg, result))) {
+      if (OB_FAIL(GCTX.ob_service_->prepare_tablet_split_task_ranges(arg, result))) {
         LOG_WARN("prepare tablet split task ranges failed", K(ret), K(arg));
       } else if (OB_UNLIKELY(result.parallel_datum_rowkey_list_.empty())) {
         ret = OB_ERR_UNEXPECTED;

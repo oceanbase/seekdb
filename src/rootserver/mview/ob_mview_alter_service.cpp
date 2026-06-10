@@ -26,8 +26,8 @@ using namespace share::schema;
 namespace rootserver
 {
 
-int ObMviewAlterService::alter_mview_or_mlog_in_trans(obrpc::ObAlterTableArg &alter_table_arg,
-                                                      obrpc::ObAlterTableRes &res, 
+int ObMviewAlterService::alter_mview_or_mlog_in_trans(obcall::ObAlterTableArg &alter_table_arg,
+                                                      obcall::ObAlterTableRes &res, 
                                                       ObSchemaGetterGuard &schema_guard,
                                                       share::schema::ObMultiVersionSchemaService *schema_service,
                                                       common::ObMySQLProxy *sql_proxy,
@@ -82,13 +82,13 @@ int ObMviewAlterService::alter_mview_or_mlog_in_trans(obrpc::ObAlterTableArg &al
 int ObMviewAlterService::alter_mview_attributes(
     const uint64_t tenant_id,
     const ObTableSchema *orig_table_schema,
-    obrpc::ObAlterTableArg &alter_table_arg, 
+    obcall::ObAlterTableArg &alter_table_arg, 
     ObDDLOperator &ddl_operator,
     ObSchemaGetterGuard &schema_guard,
     ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObAlterMViewArg &mv_arg = alter_table_arg.alter_mview_arg_;
+  obcall::ObAlterMViewArg &mv_arg = alter_table_arg.alter_mview_arg_;
   const ObSimpleDatabaseSchema *db_schema = NULL;
   const ObTableSchema *container_table_schema = NULL;
   ObMViewInfo mview_info;
@@ -222,13 +222,13 @@ int ObMviewAlterService::alter_mview_attributes(
 
 int ObMviewAlterService::alter_mlog_attributes(const uint64_t tenant_id,
                                                const ObTableSchema *orig_table_schema,
-                                               obrpc::ObAlterTableArg &alter_table_arg,
+                                               obcall::ObAlterTableArg &alter_table_arg,
                                                ObDDLOperator &ddl_operator,
                                                ObSchemaGetterGuard &schema_guard,
                                                ObDDLSQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObAlterMLogArg &alter_mlog_arg = alter_table_arg.alter_mlog_arg_;
+  obcall::ObAlterMLogArg &alter_mlog_arg = alter_table_arg.alter_mlog_arg_;
   const ObSimpleDatabaseSchema *db_schema = NULL;
   ObMLogInfo mlog_info;
   const ObTableSchema *data_table_schema = nullptr;

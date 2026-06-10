@@ -23,7 +23,7 @@
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::obsys;
 
 namespace oceanbase
@@ -412,24 +412,10 @@ int ObTableGroupUtils::init_schema_cache_guard(const ObTableGroup &group,
 int ObTableGroupUtils::trigger(const ObTableGroupTriggerRequest &request)
 {
   int ret = OB_SUCCESS;
-  ObTableEntity result_entity;
-  ObTableGroupTriggerResult result;
-  result.set_entity(&result_entity);
-  ObTableRpcProxy &proxy = OBSERVER.get_table_rpc_proxy();
-
-  if (!request.is_inited()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("trigger request not init", K(ret));
-  } else if (OB_FAIL(proxy.to(GCTX.self_addr())
-                          .timeout(DEFAULT_TIMEOUT_US)
-                          .by(MTL_ID())
-                          .execute(request.op_request_, result))) {
-    LOG_WARN("fail to send trigger request", K(ret), K(request));
-  } else if (OB_FAIL(result.get_errno())) {
-    LOG_WARN("fail to execute trigger request", K(ret), K(request), K(result));
-  } else {
-    LOG_DEBUG("trigger group commit successfully", K(ret), K(result));
-  }
+  // Table-API RPC removed (feature decommissioned)
+  UNUSEDx(request);
+  ret = OB_NOT_SUPPORTED;
+  LOG_WARN("table group commit trigger not supported: Table-API RPC removed", K(ret));
 
   return ret;
 }

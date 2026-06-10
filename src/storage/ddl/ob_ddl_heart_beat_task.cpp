@@ -1,3 +1,4 @@
+#include "rootserver/ob_root_service.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -17,7 +18,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_heart_beat_task.h"
-#include "share/ob_common_rpc_proxy.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -157,8 +157,7 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < heart_beart_task_infos.count(); i++) {
         ObDDLHeartBeatTaskInfo heart_beart_task_info;
-        obrpc::ObCommonRpcProxy *common_rpc_proxy = GCTX.rs_rpc_proxy_;
-        obrpc::ObUpdateDDLTaskActiveTimeArg arg;
+        obcall::ObUpdateDDLTaskActiveTimeArg arg;
         if (OB_FAIL(heart_beart_task_infos.at(i, heart_beart_task_info))) {
           LOG_WARN("get task id failed", K(ret));
         } else {
@@ -166,7 +165,7 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
           uint64_t tenant_id = heart_beart_task_info.get_tenant_id();
           arg.task_id_ = task_id;
           arg.tenant_id_ = tenant_id;
-          if (OB_FAIL(common_rpc_proxy->to(rs_leader_addr).update_ddl_task_active_time(arg))) {
+          if (OB_FAIL(GCTX.root_service_->update_ddl_task_active_time(arg))) {
             LOG_WARN("send to task status fail", K(ret), K(rs_leader_addr), K(tenant_id), K(task_id));
           }
         }

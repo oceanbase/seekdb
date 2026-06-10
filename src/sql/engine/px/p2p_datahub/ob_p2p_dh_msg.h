@@ -19,7 +19,6 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/page_arena.h"
-#include "sql/engine/px/p2p_datahub/ob_p2p_dh_rpc_proxy.h"
 #include "sql/engine/expr/ob_expr_join_filter.h"
 
 
@@ -89,8 +88,7 @@ public:
   virtual int merge(ObP2PDatahubMsgBase &) = 0;
   virtual int deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr) = 0;
   virtual int broadcast(
-      ObIArray<ObAddr> &target_addrs,
-      obrpc::ObP2PDhRpcProxy &p2p_dh_proxy);
+      ObIArray<ObAddr> &target_addrs);
   virtual int might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,

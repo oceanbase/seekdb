@@ -28,7 +28,7 @@ namespace sql
 {
 class ObDASScanOp;
 class ObDASInsertOp;
-class ObRpcDasAsyncAccessCallBack;
+class ObCallDasAsyncAccessCallBack;
 
 enum ObDasAggTaskStartStatus
 {

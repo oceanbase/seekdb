@@ -24,7 +24,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObMViewCompleteRefreshArg final : public ObDDLArg
 {
@@ -521,6 +521,6 @@ public:
   int64_t task_id_;
 };
 
-} // namespace obrpc
+} // namespace obcall
 } // namespace oceanbase
 #endif

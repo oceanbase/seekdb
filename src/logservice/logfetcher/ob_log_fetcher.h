@@ -285,7 +285,7 @@ public:
   common::ObIAllocator *get_decompression_allocator() {return &decompression_alloc_;}
   void free_decompression_buf(void *buf);
 
-  int update_fetch_log_protocol(const obrpc::ObCdcFetchLogProtocolType proto);
+  int update_fetch_log_protocol(const obcall::ObCdcFetchLogProtocolType proto);
 
 private:
   int suggest_cached_rpc_res_count_(const int64_t min_res_cnt,

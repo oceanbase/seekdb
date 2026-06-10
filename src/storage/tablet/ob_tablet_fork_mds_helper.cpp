@@ -23,7 +23,7 @@
 #include "lib/mysqlclient/ob_isql_connection.h"
 #include "storage/tx/ob_multi_data_source.h"
 
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -115,7 +115,7 @@ void ObTabletForkMdsArg::reset()
   allocator_.reset();
 }
 
-int ObTabletForkMdsArg::set_autoinc_seq_arg(const obrpc::ObBatchSetTabletAutoincSeqArg &arg)
+int ObTabletForkMdsArg::set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {

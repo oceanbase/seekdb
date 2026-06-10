@@ -417,7 +417,7 @@ public:
     UNUSEDx(upgrade_servers, timeout_us);
     return OB_SUCCESS;
   }
-  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obrpc::LogMemberGCStat &stat) const
+  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const
   {
     UNUSEDx(addr, is_valid_member, stat);
     return OB_SUCCESS;

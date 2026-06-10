@@ -16,9 +16,7 @@
 
 #ifndef _OB_TABLE_EXECUTE_PROCESSOR_H
 #define _OB_TABLE_EXECUTE_PROCESSOR_H 1
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "ob_table_context.h"
 #include "ob_table_executor.h"
@@ -32,10 +30,10 @@ namespace oceanbase
 {
 namespace observer
 {
-/// @see RPC_S(PR5 execute, obrpc::OB_TABLE_API_EXECUTE, (table::ObTableOperationRequest), table::ObTableOperationResult);
-class ObTableApiExecuteP: public ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_EXECUTE> >
+/// @see CALL_S(PR5 execute, obcall::OB_TABLE_API_EXECUTE, (table::ObTableOperationRequest), table::ObTableOperationResult);
+class ObTableApiExecuteP: public ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_EXECUTE> >
 {
-  typedef ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_EXECUTE> > ParentType;
+  typedef ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_EXECUTE> > ParentType;
 public:
   explicit ObTableApiExecuteP(const ObGlobalContext &gctx);
   virtual ~ObTableApiExecuteP() = default;

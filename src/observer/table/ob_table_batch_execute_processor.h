@@ -16,9 +16,7 @@
 
 #ifndef _OB_TABLE_BATCH_EXECUTE_PROCESSOR_H
 #define _OB_TABLE_BATCH_EXECUTE_PROCESSOR_H 1
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "ob_table_context.h"
 #include "ob_table_executor.h"
@@ -38,10 +36,10 @@ namespace oceanbase
 {
 namespace observer
 {
-/// @see RPC_S(PR5 batch_execute, obrpc::OB_TABLE_API_BATCH_EXECUTE, (table::ObTableBatchOperationRequest), table::ObTableBatchOperationResult);
-class ObTableBatchExecuteP: public ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_BATCH_EXECUTE> >
+/// @see CALL_S(PR5 batch_execute, obcall::OB_TABLE_API_BATCH_EXECUTE, (table::ObTableBatchOperationRequest), table::ObTableBatchOperationResult);
+class ObTableBatchExecuteP: public ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_BATCH_EXECUTE> >
 {
-  typedef ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_BATCH_EXECUTE> > ParentType;
+  typedef ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_BATCH_EXECUTE> > ParentType;
 public:
   explicit ObTableBatchExecuteP(const ObGlobalContext &gctx);
   virtual ~ObTableBatchExecuteP() = default;

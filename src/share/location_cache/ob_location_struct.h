@@ -30,10 +30,6 @@
 
 namespace oceanbase
 {
-namespace obrpc
-{
-class ObSrvRpcProxy;
-}
 namespace common
 {
 class ObAddr;

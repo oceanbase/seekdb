@@ -1,3 +1,5 @@
+#include "rootserver/ob_root_service.h"
+#include "rootserver/ob_rs_serial_call.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -21,7 +23,8 @@
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
-#include "share/external_table/ob_external_table_file_rpc_processor.h"
+#include "observer/ob_ex_rpc.h"
+#include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 
@@ -532,19 +535,8 @@ int ObExternalTableFileManager::alter_partition_for_ext_table(ObMySQLTransaction
 {
   int ret = OB_SUCCESS;
   UNUSED(trans); //TODO: use the same trans to create partition
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
   ObAlterTableRes res;
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(exec_ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("get common rpc proxy failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->alter_table(alter_table_stmt->get_alter_table_arg(), res))) {
+  if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_table(alter_table_stmt->get_alter_table_arg(), res); }))) {
     LOG_WARN("alter table failed", K(ret));
   } else if (OB_UNLIKELY(res.res_arg_array_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1477,57 +1469,22 @@ int ObExternalTableFileManager::flush_external_file_cache(
     const ObIArray<ObAddr> &all_servers)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator;
-  ObAsyncRpcTaskWaitContext<ObRpcAsyncFlushExternalTableKVCacheCallBack> context;
-  int64_t send_task_count = 0;
-  OZ (context.init());
-  OZ (context.get_cb_list().reserve(all_servers.count()));
+  // RPC removed: targets are self on single replica; flush cache in-process.
+  // Mirrors ObFlushExternalTableKVCacheP::process.
   for (int64_t i = 0; OB_SUCC(ret) && i < all_servers.count(); i++) {
-    ObFlushExternalTableFileCacheReq req;
-    int64_t timeout = ObExternalTableFileManager::CACHE_EXPIRE_TIME;
-    req.tenant_id_ = tenant_id;
-    req.table_id_ = table_id;
-    req.partition_id_ = part_id;
-    ObRpcAsyncFlushExternalTableKVCacheCallBack* async_cb = nullptr;
-    if (OB_ISNULL(async_cb = OB_NEWx(ObRpcAsyncFlushExternalTableKVCacheCallBack, (&allocator), (&context)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate async cb memory", K(ret));
-    }
-    OZ (context.get_cb_list().push_back(async_cb));
-    OZ (GCTX.external_table_proxy_->to(all_servers.at(i))
-                                            .by(tenant_id)
-                                            .timeout(timeout)
-                                            .flush_file_kvcahce(req, async_cb));
-    if (OB_SUCC(ret)) {
-      send_task_count++;
-    }
-  }
-
-  context.set_task_count(send_task_count);
-
-  do {
-    int temp_ret = context.wait_executing_tasks();
-    if (OB_SUCCESS != temp_ret) {
-      LOG_WARN("fail to wait executing task", K(temp_ret));
-      if (OB_SUCC(ret)) {
-        ret = temp_ret;
-      }
-    }
-  } while(0);
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < context.get_cb_list().count(); i++) {
-    ret = context.get_cb_list().at(i)->get_task_resp().rcode_.rcode_;
-    if (OB_FAIL(ret)) {
-      if (OB_TIMEOUT == ret) {
+    int flush_ret = OB_SUCCESS;
+    (void)ex_rpc::async_call([&flush_ret, tenant_id, table_id, part_id]() {
+      flush_ret = ObExternalTableFileManager::get_instance().flush_cache(tenant_id, table_id, part_id);
+    })->wait();
+    if (OB_FAIL(flush_ret)) {
+      if (OB_TIMEOUT == flush_ret) {
         // flush timeout is OK, because the file cache has already expire
         ret = OB_SUCCESS;
       } else {
+        ret = flush_ret;
         LOG_WARN("async flush kvcache process failed", K(ret));
       }
     }
-  }
-  for (int64_t i = 0; i < context.get_cb_list().count(); i++) {
-    context.get_cb_list().at(i)->~ObRpcAsyncFlushExternalTableKVCacheCallBack();
   }
   return ret;
 }

@@ -149,7 +149,7 @@ int ObTableBatchExecuteP::response(const int retcode)
     }
 
     // return the package even if negate_htable_timestamp fails
-    const obrpc::ObRpcPacket *rpc_pkt = &reinterpret_cast<const obrpc::ObRpcPacket&>(req_->get_packet());
+    const obcall::ObCallPacket *rpc_pkt = &reinterpret_cast<const obcall::ObCallPacket&>(req_->get_packet());
     if (ObTableRpcProcessorUtil::need_do_move_response(retcode, *rpc_pkt)) {
       // response rerouting packet
       ObTableMoveResponseSender sender(req_, retcode);
@@ -159,10 +159,10 @@ int ObTableBatchExecuteP::response(const int retcode)
         LOG_WARN("fail to do move response", K(ret));
       }
       if (OB_FAIL(ret)) {
-        ret = ObRpcProcessor::response(retcode); // do common response when do move response failed
+        ret = obcall::ObTableDeadProcessorBase::response(retcode); // do common response when do move response failed
       }
     } else {
-      ret = ObRpcProcessor::response(retcode);
+      ret = obcall::ObTableDeadProcessorBase::response(retcode);
     }
   }
   return ret;

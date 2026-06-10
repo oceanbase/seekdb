@@ -552,7 +552,7 @@ int ObPxTaskProcess::record_user_error_msg(int retcode)
         const common::ObWarningBuffer::WarningItem *item = wb->get_warning_item(idx);
         if (item != NULL) {
           if (OB_FAIL(rcode.warnings_.push_back(*item))) {
-            RPC_OBRPC_LOG(WARN, "Failed to add warning", K(ret));
+            RPC_OBCALL_LOG(WARN, "Failed to add warning", K(ret));
           }
         } else {
           not_null = false;

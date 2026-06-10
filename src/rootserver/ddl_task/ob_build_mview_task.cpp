@@ -17,13 +17,14 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
+#include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ddl_task/ob_build_mview_task.h"
 #include "rootserver/ob_root_service.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 
 namespace oceanbase
 {
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace rootserver
@@ -46,7 +47,7 @@ int ObBuildMViewTask::init(
     const int64_t schema_version,
     const int64_t parallelism,
     const int64_t consumer_group_id,
-    const obrpc::ObMViewCompleteRefreshArg &mview_complete_refresh_arg,
+    const obcall::ObMViewCompleteRefreshArg &mview_complete_refresh_arg,
     const int64_t parent_task_id,
     const int64_t task_status,
     const int64_t snapshot_version)
@@ -237,8 +238,8 @@ int ObBuildMViewTask::clean_on_fail()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is null", KR(ret), K(mview_schema->get_database_id()));
   } else {
-    obrpc::ObDropTableArg drop_table_arg;
-    obrpc::ObTableItem table_item;
+    obcall::ObDropTableArg drop_table_arg;
+    obcall::ObTableItem table_item;
     drop_table_arg.if_exist_ = true;
     drop_table_arg.tenant_id_ = tenant_id_;
     drop_table_arg.to_recyclebin_ = false;
@@ -251,18 +252,12 @@ int ObBuildMViewTask::clean_on_fail()
       LOG_WARN("failed to add table item!", K(table_item), KR(ret));
     } else {
       drop_table_arg.table_type_ = MATERIALIZED_VIEW;
-      obrpc::ObDDLRes drop_table_res;
+      obcall::ObDDLRes drop_table_res;
       int64_t ddl_rpc_timeout = 0;
       if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_,
           mview_table_id_, ddl_rpc_timeout))) {
         LOG_WARN("failed to get ddl rpc timeout", KR(ret));
-      } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-      } else if (OB_FAIL(GCTX.rs_rpc_proxy_
-          ->to(GCTX.self_addr())
-          .timeout(ddl_rpc_timeout)
-          .drop_table(drop_table_arg, drop_table_res))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_table(drop_table_arg, drop_table_res); }))) {
         LOG_WARN("failed to drop materialized view", KR(tmp_ret), K(drop_table_arg));
       } else {
         LOG_INFO("materialized view is successfully dropped",
@@ -296,20 +291,14 @@ int ObBuildMViewTask::cleanup_impl()
   return ret;
 }
 
-int ObBuildMViewTask::mview_complete_refresh(obrpc::ObMViewCompleteRefreshRes &res)
+int ObBuildMViewTask::mview_complete_refresh(obcall::ObMViewCompleteRefreshRes &res)
 {
   int ret = OB_SUCCESS;
   int64_t ddl_rpc_timeout = 0;
   if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_,
       arg_.table_id_, ddl_rpc_timeout))) {
     LOG_WARN("failed to get ddl rpc timeout", KR(ret));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-  } else if (OB_FAIL(GCTX.rs_rpc_proxy_
-      ->to(GCTX.self_addr())
-      .timeout(ddl_rpc_timeout)
-      .mview_complete_refresh(arg_, res))) {
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->mview_complete_refresh(arg_, res); }))) {
     LOG_WARN("failed to update mview status", KR(ret), K(arg_));
   }
   return ret;
@@ -508,13 +497,7 @@ int ObBuildMViewTask::enable_mview()
       if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_,
           mview_schema->get_table_id(), ddl_rpc_timeout))) {
         LOG_WARN("failed to get ddl rpc timeout", KR(ret));
-      } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-      } else if (OB_FAIL(GCTX.rs_rpc_proxy_
-          ->to(GCTX.self_addr())
-          .timeout(ddl_rpc_timeout)
-          .update_mview_status(arg))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->update_mview_status(arg); }))) {
         LOG_WARN("failed to update mview status", KR(ret), K(arg));
       }
     }
@@ -603,7 +586,7 @@ int ObBuildMViewTask::deserialize_params_from_message(
     int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObMViewCompleteRefreshArg tmp_arg;
+  obcall::ObMViewCompleteRefreshArg tmp_arg;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(data_len));

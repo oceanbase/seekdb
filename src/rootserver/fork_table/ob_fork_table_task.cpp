@@ -22,7 +22,6 @@
 #include "rootserver/ob_ddl_operator.h"
 #include "share/ob_ddl_common.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "rootserver/ob_rs_async_rpc_proxy.h"
 #include "share/location_cache/ob_location_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_ddl_task_executor.h"
@@ -56,7 +55,7 @@ namespace oceanbase
 using namespace common;
 using namespace share;
 using namespace share::schema;
-using namespace obrpc;
+using namespace obcall;
 using namespace transaction::tablelock;
 
 namespace rootserver
@@ -82,7 +81,7 @@ int ObForkTableTask::init(
     const share::schema::ObTableSchema *dst_table_schema,
     const int64_t schema_version,
     const int64_t snapshot_version,
-    const obrpc::ObForkTableArg &fork_table_arg,
+    const obcall::ObForkTableArg &fork_table_arg,
     const int64_t parent_task_id)
 {
   int ret = OB_SUCCESS;
@@ -306,7 +305,7 @@ int ObForkTableTask::serialize_params_to_message(char *buf, const int64_t buf_si
 int ObForkTableTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  SMART_VAR(obrpc::ObForkTableArg, tmp_arg) {
+  SMART_VAR(obcall::ObForkTableArg, tmp_arg) {
     if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || buf_size <= 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), K(tenant_id), KP(buf), K(buf_size));
@@ -333,7 +332,7 @@ int64_t ObForkTableTask::get_serialize_param_size() const
   return len;
 }
 
-int ObForkTableTask::deep_copy_fork_table_arg(const obrpc::ObForkTableArg &arg)
+int ObForkTableTask::deep_copy_fork_table_arg(const obcall::ObForkTableArg &arg)
 {
   int ret = OB_SUCCESS;
   fork_table_arg_.tenant_id_ = arg.tenant_id_;

@@ -20,7 +20,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using rpc::frame::ObReqTransport;
 
@@ -205,32 +205,19 @@ int ObServerBlacklist::handle_resp(const ObBlacklistResp &resp, const int64_t cl
 
 int ObServerBlacklist::send_req_(const ObCascadMember &member, const ObBlacklistReq &req)
 {
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "ObServerBlacklist is not inited", K(ret));
-  } else if (!member.is_valid() || !req.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid arguments", K(ret), K(member), K(req));
-  } else if (OB_FAIL(blacklist_proxy_.send_req(member.get_server(), member.get_cluster_id(), req))) {
-    SHARE_LOG(WARN, "send_req_ failed", K(ret));
-  } else {}
-  return ret;
+  // RPC transport removed for single-replica deployment; no-op.
+  UNUSED(member);
+  UNUSED(req);
+  return OB_SUCCESS;
 }
 
 int ObServerBlacklist::send_resp_(const ObAddr &server, const int64_t dst_cluster_id, const ObBlacklistResp &resp)
 {
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "ObServerBlacklist is not inited", K(ret));
-  } else if (!server.is_valid() || !resp.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid arguments", K(ret), K(server), K(resp));
-  } else if (OB_FAIL(blacklist_proxy_.send_resp(server, dst_cluster_id, resp))) {
-    SHARE_LOG(WARN, "send_resp failed", K(ret));
-  } else {}
-  return ret;
+  // RPC transport removed for single-replica deployment; no-op.
+  UNUSED(server);
+  UNUSED(dst_cluster_id);
+  UNUSED(resp);
+  return OB_SUCCESS;
 }
 
 void ObServerBlacklist::run1()

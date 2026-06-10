@@ -42,7 +42,7 @@ private:
                   table::ObTableMoveReplicaInfo &replica);
 private:
   table::ObTableMoveResult result_;
-  obrpc::ObTableRpcResponseSender response_sender_;
+  obcall::ObTableRpcResponseSender response_sender_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableMoveResponseSender);
 };

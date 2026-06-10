@@ -1,3 +1,4 @@
+#include "rootserver/ob_root_service.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -31,7 +32,7 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::table;
 
 namespace oceanbase
@@ -467,7 +468,7 @@ int ObTableSqlUtils::execute_set_kv_attribute(ObIAllocator &allocator,
   return ret;
 }
 
-int ObTableRsExecutor::execute(ObExecContext &ctx, obrpc::ObHTableDDLArg &arg, obrpc::ObHTableDDLRes &res)
+int ObTableRsExecutor::execute(ObExecContext &ctx, obcall::ObHTableDDLArg &arg, obcall::ObHTableDDLRes &res)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *my_session = ctx.get_my_session();
@@ -520,15 +521,7 @@ int ObTableRsExecutor::execute(ObExecContext &ctx, obrpc::ObHTableDDLArg &arg, o
     // do rpc call
     if (OB_SUCC(ret)) {
       arg.is_parallel_ = true;
-      ObTaskExecutorCtx *task_exec_ctx = nullptr;
-      obrpc::ObCommonRpcProxy *common_rpc_proxy = nullptr;
-      if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-        ret = OB_NOT_INIT;
-        LOG_WARN("get task executor context failed");
-      } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-        ret = OB_NOT_INIT;
-        LOG_WARN("get common rpc proxy failed", K(ret));
-      } else if (OB_FAIL(common_rpc_proxy->parallel_htable_ddl(arg, res))) {
+      if (OB_FAIL(GCTX.root_service_->parallel_htable_ddl(arg, res))) {
         LOG_WARN("rpc proxy drop resource_pool failed", K(ret));
       }
     }

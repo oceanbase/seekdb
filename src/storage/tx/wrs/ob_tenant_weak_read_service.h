@@ -91,7 +91,7 @@ public:
       const bool need_print_status);
 
   /// process cluster heartbeat RPC callback
-  void process_cluster_heartbeat_rpc_cb(const obrpc::ObRpcResultCode &rcode,
+  void process_cluster_heartbeat_rpc_cb(const rpc::frame::ObResultCode &rcode,
       const common::ObAddr &dst);
 
   /// process Cluster level RPC

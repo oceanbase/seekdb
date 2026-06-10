@@ -32,8 +32,8 @@ public:
   ObAiModelDDLService(ObDDLService &ddl_service) : ddl_service_(ddl_service) {}
   virtual ~ObAiModelDDLService() {}
 
-  int create_ai_model(const obrpc::ObCreateAiModelArg &arg);
-  int drop_ai_model(const obrpc::ObDropAiModelArg &arg);
+  int create_ai_model(const obcall::ObCreateAiModelArg &arg);
+  int drop_ai_model(const obcall::ObDropAiModelArg &arg);
 private:
   ObDDLService &ddl_service_;
 };

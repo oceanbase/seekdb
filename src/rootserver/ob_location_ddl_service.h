@@ -33,8 +33,8 @@ class ObLocationDDLService
     : ddl_service_(ddl_service)
   {}
   virtual ~ObLocationDDLService() {}
-  int create_location(const obrpc::ObCreateLocationArg &arg, const ObString *ddl_stmt_str);
-  int drop_location(const obrpc::ObDropLocationArg &arg, const ObString *ddl_stmt_str);
+  int create_location(const obcall::ObCreateLocationArg &arg, const ObString *ddl_stmt_str);
+  int drop_location(const obcall::ObDropLocationArg &arg, const ObString *ddl_stmt_str);
   static int check_location_constraint(const ObTableSchema &schema);
 private:
   ObDDLService *ddl_service_;

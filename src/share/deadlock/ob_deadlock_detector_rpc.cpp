@@ -15,6 +15,7 @@
  */
 
 #include "ob_deadlock_detector_rpc.h"
+#include "observer/ob_ex_rpc.h"
 
 namespace oceanbase
 {
@@ -23,88 +24,22 @@ using namespace common;
 using namespace share;
 using namespace detector;
 
-namespace obrpc
-{
-
-using share::detector::ObDeadLockDetectorMgr;
-
-int ObDetectorLCLMessageP::process()
-{
-  int ret = OB_SUCCESS;
-
-  DETECT_TIME_GUARD(100_ms);
-  ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
-  if (OB_ISNULL(p_deadlock_detector_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
-  } else if (OB_FAIL(p_deadlock_detector_mgr->process_lcl_message(arg_))) {
-    DETECT_LOG(WARN, "process lcl message failed", KR(ret), KP(p_deadlock_detector_mgr));
-  }
-  
-  result_ = Int64(ret);
-  return ret;
-}
-
-int ObDeadLockCollectInfoMessageP::process()
-{
-  int ret = OB_SUCCESS;
-
-  DETECT_TIME_GUARD(100_ms);
-  ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
-  if (OB_ISNULL(p_deadlock_detector_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
-  } else if (OB_FAIL(p_deadlock_detector_mgr->process_collect_info_message(arg_))) {
-    DETECT_LOG(WARN, "process collect info message failed",
-               KR(ret), K(arg_));
-  } else {
-    // do nothing
-  }
-  
-  result_ = Int64(ret);
-  return ret;
-}
-
-int ObDeadLockNotifyParentMessageP::process()
-{
-  int ret = OB_SUCCESS;
-
-  DETECT_TIME_GUARD(100_ms);
-  DETECT_LOG(INFO, "receive notify parent msg", K(arg_));
-  ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
-  if (OB_ISNULL(p_deadlock_detector_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
-  } else if (OB_FAIL(p_deadlock_detector_mgr->process_notify_parent_message(arg_))) {
-    DETECT_LOG(WARN, "process notify parent message failed",
-               KR(ret), K(arg_));
-  } else {
-    // do nothing
-  }
-
-  result_ = Int64(ret);
-  return ret;
-}
-
-}// namespace obrpc
-
 namespace share
 {
 namespace detector
 {
 
-int ObDeadLockDetectorRpc::init(obrpc::ObDetectorRpcProxy *proxy, const common::ObAddr &self)
+int ObDeadLockDetectorRpc::init(const common::ObAddr &self)
 {
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     DETECT_LOG(WARN, "init twice", KR(ret));
-  } else if (nullptr == proxy || false == self.is_valid()) {
+  } else if (false == self.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(WARN, "argument invalid", KR(ret), KP(proxy), K(self));
+    DETECT_LOG(WARN, "argument invalid", KR(ret), K(self));
   } else {
-    proxy_ = proxy;
     self_ = self;
     is_inited_ = true;
   }
@@ -127,7 +62,6 @@ int ObDeadLockDetectorRpc::post_lcl_message(const ObAddr &dest_addr,
   int ret = OB_SUCCESS;
 
   DETECT_TIME_GUARD(100_ms);
-  // DETECT_LOG(INFO, "post lcl msg", K(dest_addr), K(msg));
   if (false == is_inited_) {
     ret = OB_NOT_INIT;
     DETECT_LOG(WARN, "ObDeadLockDetectorRpc not inited", KR(ret));
@@ -136,15 +70,22 @@ int ObDeadLockDetectorRpc::post_lcl_message(const ObAddr &dest_addr,
     DETECT_LOG(WARN, "invalid argument",
               KR(ret), K(dest_addr), K(msg));
   } else {
-    if (OB_FAIL(proxy_->to(dest_addr)
-                      .by(MTL_ID())
-                      .timeout(OB_DETECTOR_RPC_TIMEOUT)
-                      .post_lcl_message(msg, &lcl_msg_cb_))) {
-      DETECT_LOG(WARN, "post label request failed",
-                KR(ret), K(dest_addr), K(OB_DETECTOR_RPC_TIMEOUT), K(msg));
-    } else {
-      // do nothing
-    }
+    // single-replica: dest is always self; dispatch async in-process (ex-RPC),
+    // restoring the original async post() decoupling (handler runs on a worker thread,
+    // keeping cycle propagation off the sender stack). msg is serialized; tenant
+    // context is restored on the worker via MTL_SWITCH.
+    const uint64_t tenant_id = MTL_ID();
+    (void)ex_rpc::async_call<void>(msg, [dest_addr](const ObLCLMessage &m) {
+      int ret = OB_SUCCESS;
+      MTL_SWITCH(tenant_id) {
+        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+        if (OB_ISNULL(p_deadlock_detector_mgr)) {
+          ret = OB_ERR_UNEXPECTED; DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KR(ret), KP(p_deadlock_detector_mgr));
+        } else if (OB_FAIL(p_deadlock_detector_mgr->process_lcl_message(m))) {
+          DETECT_LOG(WARN, "process lcl message failed", KR(ret), K(dest_addr), K(m));
+        }
+      }
+    });
   }
 
   return ret;
@@ -165,15 +106,22 @@ int ObDeadLockDetectorRpc::post_collect_info_message(const ObAddr &dest_addr,
     DETECT_LOG(WARN, "invalid argument",
               KR(ret), K(dest_addr), K(msg));
   } else {
-    if (OB_FAIL(proxy_->to(dest_addr)
-                      .by(MTL_ID())
-                      .timeout(OB_DETECTOR_RPC_TIMEOUT)
-                      .post_collect_info_message(msg, &collect_msg_cb_))) {
-      DETECT_LOG(WARN, "post collect info msg failed",
-                KR(ret), K(dest_addr), K(OB_DETECTOR_RPC_TIMEOUT), K(msg));
-    } else {
-      // do nothing
-    }
+    // single-replica: dest is always self; dispatch async in-process (ex-RPC),
+    // restoring the original async post() decoupling (handler runs on a worker thread,
+    // keeping cycle propagation off the sender stack). msg is serialized; tenant
+    // context is restored on the worker via MTL_SWITCH.
+    const uint64_t tenant_id = MTL_ID();
+    (void)ex_rpc::async_call<void>(msg, [dest_addr](const ObDeadLockCollectInfoMessage &m) {
+      int ret = OB_SUCCESS;
+      MTL_SWITCH(tenant_id) {
+        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+        if (OB_ISNULL(p_deadlock_detector_mgr)) {
+          ret = OB_ERR_UNEXPECTED; DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KR(ret), KP(p_deadlock_detector_mgr));
+        } else if (OB_FAIL(p_deadlock_detector_mgr->process_collect_info_message(m))) {
+          DETECT_LOG(WARN, "process collect info message failed", KR(ret), K(dest_addr), K(m));
+        }
+      }
+    });
   }
 
   return ret;
@@ -193,24 +141,23 @@ int ObDeadLockDetectorRpc::post_notify_parent_message(const ObAddr &dest_addr,
     ret = OB_INVALID_ARGUMENT;
     DETECT_LOG(WARN, "invalid argument",
               KR(ret), K(dest_addr), K(msg));
-  } else if (dest_addr == self_) {
-    ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
-    if (OB_ISNULL(p_deadlock_detector_mgr)) {
-      ret = OB_ERR_UNEXPECTED;
-      DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
-    } else if(OB_FAIL(p_deadlock_detector_mgr->process_notify_parent_message(msg))) {
-      DETECT_LOG(WARN, "process notify parent message failed", KR(ret), KP(p_deadlock_detector_mgr));
-    }
   } else {
-    if (OB_FAIL(proxy_->to(dest_addr)
-                      .by(MTL_ID())
-                      .timeout(OB_DETECTOR_RPC_TIMEOUT)
-                      .post_notify_parent_message(msg, &notify_msg_cb_))) {
-      DETECT_LOG(WARN, "post notify parent msg failed",
-                KR(ret), K(dest_addr), K(OB_DETECTOR_RPC_TIMEOUT), K(msg));
-    } else {
-      // do nothing
-    }
+    // single-replica: dest is always self; dispatch async in-process (ex-RPC),
+    // restoring the original async post() decoupling (handler runs on a worker thread,
+    // keeping cycle propagation off the sender stack). msg is serialized; tenant
+    // context is restored on the worker via MTL_SWITCH.
+    const uint64_t tenant_id = MTL_ID();
+    (void)ex_rpc::async_call<void>(msg, [dest_addr](const ObDeadLockNotifyParentMessage &m) {
+      int ret = OB_SUCCESS;
+      MTL_SWITCH(tenant_id) {
+        ObDeadLockDetectorMgr *p_deadlock_detector_mgr = MTL(ObDeadLockDetectorMgr *);
+        if (OB_ISNULL(p_deadlock_detector_mgr)) {
+          ret = OB_ERR_UNEXPECTED; DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KR(ret), KP(p_deadlock_detector_mgr));
+        } else if (OB_FAIL(p_deadlock_detector_mgr->process_notify_parent_message(m))) {
+          DETECT_LOG(WARN, "process notify parent message failed", KR(ret), K(dest_addr), K(m));
+        }
+      }
+    });
   }
 
   return ret;

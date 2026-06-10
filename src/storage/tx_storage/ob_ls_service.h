@@ -138,18 +138,18 @@ public:
   // @param [in] arg, all the create parameters needed.
   // @param [out] result, the return code and trans result of the op.
   int create_tablets_in_trans(transaction::ObTxDesc &tx_desc,
-                              const obrpc::ObBatchCreateTabletArg &batch_arg,
-                              obrpc::ObCreateTabletBatchInTransRes &result);
+                              const obcall::ObBatchCreateTabletArg &batch_arg,
+                              obcall::ObCreateTabletBatchInTransRes &result);
 
   // remove tablets from a ls
   // @param [in] tx_desc, trans descriptor
   // @param [in] arg, all the remove parameters needed.
   // @param [out] result, the return code of the remove op.
   int remove_tablets_in_trans(transaction::ObTxDesc &tx_desc,
-                              const obrpc::ObBatchRemoveTabletArg &batch_arg,
-                              obrpc::ObRemoveTabletsInTransRes &result);
+                              const obcall::ObBatchRemoveTabletArg &batch_arg,
+                              obcall::ObRemoveTabletsInTransRes &result);
 
-  obrpc::ObStorageRpcProxy *get_storage_rpc_proxy() { return &storage_svr_rpc_proxy_; }
+  obcall::ObStorageRpcProxy *get_storage_rpc_proxy() { return &storage_svr_rpc_proxy_; }
   storage::ObStorageRpc *get_storage_rpc() { return &storage_rpc_; }
   ObLSMap *get_ls_map() { return &ls_map_; }
   int64_t get_ls_count() const { return ls_map_.get_ls_count(); }
@@ -238,7 +238,7 @@ private:
   lib::ObMutex change_lock_;
 
   //TOD(muwei.ym) src rpc framework should be tenant level
-  obrpc::ObStorageRpcProxy storage_svr_rpc_proxy_;
+  obcall::ObStorageRpcProxy storage_svr_rpc_proxy_;
   storage::ObStorageRpc storage_rpc_;
 
   // for safe destroy

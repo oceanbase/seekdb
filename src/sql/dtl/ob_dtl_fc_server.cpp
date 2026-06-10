@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_DTL
 
 #include "ob_dtl_fc_server.h"
-#include "sql/dtl/ob_dtl_rpc_channel.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

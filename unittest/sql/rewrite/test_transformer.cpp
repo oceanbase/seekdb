@@ -49,7 +49,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using oceanbase::sql::ObTableLocation;
 using namespace oceanbase::json;
 namespace test {

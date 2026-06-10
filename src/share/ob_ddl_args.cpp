@@ -19,7 +19,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 int ObDDLArg::assign(const ObDDLArg &other)
 {
@@ -64,5 +64,5 @@ OB_SERIALIZE_MEMBER(ObDDLArg,
                     consumer_group_id_,
                     is_parallel_);
 
-} // namespace obrpc
+} // namespace obcall
 } // namespace oceanbase

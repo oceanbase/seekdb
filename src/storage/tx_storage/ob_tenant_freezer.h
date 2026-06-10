@@ -221,7 +221,6 @@ public:
   // this check if a major freeze is needed
   bool tenant_need_major_freeze();
   // used to print a log.
-  static int rpc_callback();
   // update the memstore limit use sysconf.
   int reload_config();
   // print the tenant usage info into print_buf.
@@ -287,6 +286,7 @@ private:
   int unset_tenant_freezing_(const bool rollback_freeze_cnt);
   static int64_t get_freeze_trigger_percentage_();
   static int64_t get_memstore_limit_percentage_();
+  int async_freeze_(const ObTenantFreezeArg &arg);
   int post_freeze_request_(const storage::ObFreezeType freeze_type,
                            const int64_t try_frozen_version);
   int retry_failed_major_freeze_(bool &triggered);
@@ -331,11 +331,7 @@ private:
   bool is_inited_;
   bool is_freezing_tx_data_;
   ObTenantInfo tenant_info_;                  // store the mem limit, memstore limit and etc.
-  obrpc::ObTenantFreezerRpcProxy rpc_proxy_;  // used to trigger minor/major freeze
-  obrpc::ObTenantFreezerRpcCb tenant_mgr_cb_; // callback after the trigger rpc finish.
-  obrpc::ObSrvRpcProxy *svr_rpc_proxy_;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy_;
-  ObAddr self_;
+ObAddr self_;
   ObRetryMajorInfo retry_major_info_;
 
   int freeze_trigger_tg_id_;

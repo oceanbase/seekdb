@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_catalog_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "sql/resolver/ddl/ob_catalog_stmt.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_common_rpc_proxy.h"
+#include "observer/ob_ex_rpc.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -31,21 +32,14 @@ namespace sql
 int ObCatalogExecutor::execute(ObExecContext &ctx, ObCatalogStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObString null_string;
   uint64_t catalog_id = 0;
   uint64_t drop_catalog_id = 0;
   ObSQLSessionInfo *session = NULL;
   ObObj obj;
   stmt.get_ddl_arg().ddl_stmt_str_ = stmt.get_query_ctx()->get_sql_stmt();
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed");
-  } else if (OB_FAIL(common_rpc_proxy->handle_catalog_ddl(stmt.get_ddl_arg()))) {
+  if (OB_ISNULL(GCTX.root_service_)) { ret = OB_NOT_INIT; LOG_WARN("root_service_ null"); }
+  else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->handle_catalog_ddl(stmt.get_ddl_arg()); }))) {
     LOG_WARN("handle catalog ddl error", K(ret));
   }
   if (OB_SUCC(ret) && OB_DDL_DROP_CATALOG == stmt.get_ddl_arg().ddl_type_) {

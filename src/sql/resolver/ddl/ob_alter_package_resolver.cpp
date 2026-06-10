@@ -141,7 +141,7 @@ int ObAlterPackageResolver::compile_package(const ObString& db_name,
   int ret = OB_SUCCESS;
   const ObPackageInfo *package_spec_info = nullptr;
   const ObPackageInfo *package_body_info = nullptr;
-  obrpc::ObAlterPackageArg &pkg_arg = alter_stmt.get_alter_package_arg();
+  obcall::ObAlterPackageArg &pkg_arg = alter_stmt.get_alter_package_arg();
   int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   share::schema::ObErrorInfo &error_info = pkg_arg.error_info_;
 

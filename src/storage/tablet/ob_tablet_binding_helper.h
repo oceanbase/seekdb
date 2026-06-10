@@ -27,7 +27,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObBatchCreateTabletArg;
 struct ObBatchRemoveTabletArg;
@@ -119,16 +119,16 @@ public:
   ~ObTabletBindingHelper() {}
 
   // create tablet by new mds
-  static int modify_tablet_binding_for_new_mds_create(const obrpc::ObBatchCreateTabletArg &arg, const share::SCN &replay_scn, mds::BufferCtx &ctx);
-  static int bind_hidden_tablet_to_orig_tablet(ObLS &ls, const obrpc::ObCreateTabletInfo &info, const share::SCN &replay_scn, mds::BufferCtx &ctx, const bool for_old_mds);
-  static int bind_lob_tablet_to_data_tablet(ObLS &ls, const obrpc::ObBatchCreateTabletArg &arg, const obrpc::ObCreateTabletInfo &info, const share::SCN &replay_scn, mds::BufferCtx &ctx);
+  static int modify_tablet_binding_for_new_mds_create(const obcall::ObBatchCreateTabletArg &arg, const share::SCN &replay_scn, mds::BufferCtx &ctx);
+  static int bind_hidden_tablet_to_orig_tablet(ObLS &ls, const obcall::ObCreateTabletInfo &info, const share::SCN &replay_scn, mds::BufferCtx &ctx, const bool for_old_mds);
+  static int bind_lob_tablet_to_data_tablet(ObLS &ls, const obcall::ObBatchCreateTabletArg &arg, const obcall::ObCreateTabletInfo &info, const share::SCN &replay_scn, mds::BufferCtx &ctx);
   // TODO (lihongqin.lhq) delete get_tablet_for_new_mds
   static int get_tablet_for_new_mds(const ObLS &ls, const ObTabletID &tablet_id, const share::SCN &replay_scn, ObTabletHandle &handle);
 
   // common
   template<typename F>
   static int modify_tablet_binding_new_mds(ObLS &ls, const ObTabletID &tablet_id, const share::SCN &replay_scn, mds::BufferCtx &ctx, const bool for_old_mds, F &&op);
-  static int has_lob_tablets(const obrpc::ObBatchCreateTabletArg &arg, const obrpc::ObCreateTabletInfo &info, bool &has_lob);
+  static int has_lob_tablets(const obcall::ObBatchCreateTabletArg &arg, const obcall::ObCreateTabletInfo &info, bool &has_lob);
   static int get_ls(const share::ObLSID &ls_id, ObLSHandle &ls_handle);
   static int build_single_table_write_defensive(const share::schema::ObTableSchema &table_schema,
                                                 const int64_t schema_version,
@@ -181,13 +181,13 @@ class ObBindHiddenTabletToOrigTabletOp final
 {
 public:
   ObBindHiddenTabletToOrigTabletOp() : info_(nullptr) {}
-  ObBindHiddenTabletToOrigTabletOp(const obrpc::ObCreateTabletInfo &info) : info_(&info) {}
+  ObBindHiddenTabletToOrigTabletOp(const obcall::ObCreateTabletInfo &info) : info_(&info) {}
   ~ObBindHiddenTabletToOrigTabletOp() = default;
   int assign(const ObBindHiddenTabletToOrigTabletOp &other);
   int operator()(ObTabletBindingMdsUserData &data);
   TO_STRING_KV(KPC_(info));
 private:
-  const obrpc::ObCreateTabletInfo *info_;
+  const obcall::ObCreateTabletInfo *info_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBindHiddenTabletToOrigTabletOp);
 };
@@ -196,15 +196,15 @@ class ObBindLobTabletToDataTabletOp final
 {
 public:
   ObBindLobTabletToDataTabletOp() : arg_(nullptr), info_(nullptr) {}
-  ObBindLobTabletToDataTabletOp(const obrpc::ObBatchCreateTabletArg &arg, const obrpc::ObCreateTabletInfo &info)
+  ObBindLobTabletToDataTabletOp(const obcall::ObBatchCreateTabletArg &arg, const obcall::ObCreateTabletInfo &info)
     : arg_(&arg), info_(&info) {}
   int assign(const ObBindLobTabletToDataTabletOp &other);
   ~ObBindLobTabletToDataTabletOp() = default;
   int operator()(ObTabletBindingMdsUserData &data);
   TO_STRING_KV(KPC_(arg), KPC_(info));
 private:
-  const obrpc::ObBatchCreateTabletArg *arg_;
-  const obrpc::ObCreateTabletInfo *info_;
+  const obcall::ObBatchCreateTabletArg *arg_;
+  const obcall::ObCreateTabletInfo *info_;
 };
 
 class ObUnbindHiddenTabletFromOrigTabletOp final
@@ -285,8 +285,8 @@ public:
     ObMySQLTransaction &trans);
   static int batch_get_tablet_binding(
     const int64_t abs_timeout_us,
-    const obrpc::ObBatchGetTabletBindingArg &arg,
-    obrpc::ObBatchGetTabletBindingRes &res);
+    const obcall::ObBatchGetTabletBindingArg &arg,
+    obcall::ObBatchGetTabletBindingRes &res);
   static int get_tablet_binding_mds_by_rpc(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,
@@ -295,7 +295,7 @@ public:
     ObIArray<ObTabletBindingMdsUserData> &datas);
   static int modify_tablet_binding_for_create(
     const uint64_t tenant_id,
-    const obrpc::ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
   static int modify_tablet_binding_for_unbind(

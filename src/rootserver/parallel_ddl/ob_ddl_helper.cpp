@@ -88,7 +88,7 @@ int ObDDLHelperUtils::write_1503_ddl_operation(ObMultiVersionSchemaService *sche
     LOG_WARN("fail to gen new schema version", KR(ret), K(tenant_id));
   } else {
     share::schema::ObDDLSqlService ddl_sql_service(*schema_service_impl);
-    obrpc::ObDDLNopOpreatorArg arg;
+    obcall::ObDDLNopOpreatorArg arg;
     arg.schema_operation_.op_type_ = OB_DDL_END_SIGN;
     arg.schema_operation_.tenant_id_ = tenant_id;
     if (OB_FAIL(ddl_sql_service.log_nop_operation(arg.schema_operation_,

@@ -90,11 +90,11 @@ int acquire_tx_ctx(const share::ObLSID &ls_id,
                    const bool try_get,
                    bool &exist);
 //handle msg
-int handle_trans_commit_request(ObTxCommitMsg &commit_req, obrpc::ObTransRpcResult &result);
-int handle_trans_commit_response(ObTxCommitRespMsg &commit_resp, obrpc::ObTransRpcResult &result);
-int handle_trans_abort_request(ObTxAbortMsg &abort_req, obrpc::ObTransRpcResult &result);
-int handle_sp_rollback_request(ObTxRollbackSPMsg &sp_rollbacck_req, obrpc::ObTxRpcRollbackSPResult &result);
-int handle_sp_rollback_response(ObTxRollbackSPRespMsg &sp_rollbacck_resp, obrpc::ObTransRpcResult &result);
+int handle_trans_commit_request(ObTxCommitMsg &commit_req, obcall::ObTransRpcResult &result);
+int handle_trans_commit_response(ObTxCommitRespMsg &commit_resp, obcall::ObTransRpcResult &result);
+int handle_trans_abort_request(ObTxAbortMsg &abort_req, obcall::ObTransRpcResult &result);
+int handle_sp_rollback_request(ObTxRollbackSPMsg &sp_rollbacck_req, obcall::ObTxRpcRollbackSPResult &result);
+int handle_sp_rollback_response(ObTxRollbackSPRespMsg &sp_rollbacck_resp, obcall::ObTransRpcResult &result);
 int handle_sp_rollback_resp(const share::ObLSID &ls_id,
                             const int64_t orig_epoch,
                             const transaction::ObTransID &tx_id,
@@ -112,8 +112,8 @@ int handle_trans_msg_callback(const share::ObLSID &sender_ls_id,
                               const ObAddr &receiver_addr,
                               const int64_t request_id,
                               const share::SCN &private_data);
-int handle_trans_keepalive(const ObTxKeepaliveMsg &msg, obrpc::ObTransRpcResult &result);
-int handle_trans_keepalive_response(const ObTxKeepaliveRespMsg &msg, obrpc::ObTransRpcResult &result);
+int handle_trans_keepalive(const ObTxKeepaliveMsg &msg, obcall::ObTransRpcResult &result);
+int handle_trans_keepalive_response(const ObTxKeepaliveRespMsg &msg, obcall::ObTransRpcResult &result);
 int handle_tx_batch_req(int type, const char* buf, int32_t size, const bool need_check_leader = true);
 int refresh_location_cache(const share::ObLSID ls);
 int handle_tx_commit_timeout(ObTxDesc &tx, const int64_t delay);
@@ -141,23 +141,23 @@ int iterate_tx_scheduler_stat(ObTxSchedulerStatIterator &tx_scheduler_stat_iter)
  * recover transaction descriptor with tx info
  */
 int handle_timeout_for_xa(ObTxDesc &tx, const int64_t delay);
-int handle_sub_prepare_request(const ObTxSubPrepareMsg &msg, obrpc::ObTransRpcResult &result);
-int handle_sub_prepare_response(const ObTxSubPrepareRespMsg &msg, obrpc::ObTransRpcResult &result);
+int handle_sub_prepare_request(const ObTxSubPrepareMsg &msg, obcall::ObTransRpcResult &result);
+int handle_sub_prepare_response(const ObTxSubPrepareRespMsg &msg, obcall::ObTransRpcResult &result);
 int handle_sub_prepare_result(const ObTransID &tx_id, const int result);
-int handle_sub_commit_request(const ObTxSubCommitMsg &msg, obrpc::ObTransRpcResult &result);
-int handle_sub_commit_response(const ObTxSubCommitRespMsg &msg, obrpc::ObTransRpcResult &result);
+int handle_sub_commit_request(const ObTxSubCommitMsg &msg, obcall::ObTransRpcResult &result);
+int handle_sub_commit_response(const ObTxSubCommitRespMsg &msg, obcall::ObTransRpcResult &result);
 int handle_sub_commit_result(const ObTransID &tx_id, const int result);
-int handle_sub_rollback_request(const ObTxSubRollbackMsg &msg, obrpc::ObTransRpcResult &result);
-int handle_sub_rollback_response(const ObTxSubRollbackRespMsg &msg, obrpc::ObTransRpcResult &result);
+int handle_sub_rollback_request(const ObTxSubRollbackMsg &msg, obcall::ObTransRpcResult &result);
+int handle_sub_rollback_response(const ObTxSubRollbackRespMsg &msg, obcall::ObTransRpcResult &result);
 int handle_sub_rollback_result(const ObTransID &tx_id, const int result);
 int gen_trans_id(ObTransID &trans_id);
 
 //for standby
 int check_and_fill_state_info(const ObTransID &tx_id, ObStateInfo &state_info);
-int handle_trans_ask_state(const ObAskStateMsg &msg, obrpc::ObTransRpcResult &result);
-int handle_trans_ask_state_response(const ObAskStateRespMsg &msg, obrpc::ObTransRpcResult &result);
-int handle_trans_collect_state(const ObCollectStateMsg &msg, obrpc::ObTransRpcResult &result);
-int handle_trans_collect_state_response(const ObCollectStateRespMsg &msg, obrpc::ObTransRpcResult &result);
+int handle_trans_ask_state(const ObAskStateMsg &msg, obcall::ObTransRpcResult &result);
+int handle_trans_ask_state_response(const ObAskStateRespMsg &msg, obcall::ObTransRpcResult &result);
+int handle_trans_collect_state(const ObCollectStateMsg &msg, obcall::ObTransRpcResult &result);
+int handle_trans_collect_state_response(const ObCollectStateRespMsg &msg, obcall::ObTransRpcResult &result);
 int handle_ls_deleted(const ObTxMsg &msg);
 void build_tx_collect_state_resp_(ObCollectStateRespMsg &resp, const ObCollectStateMsg &msg);
 void build_tx_ask_state_resp_(ObAskStateRespMsg &resp, const ObAskStateMsg &msg);

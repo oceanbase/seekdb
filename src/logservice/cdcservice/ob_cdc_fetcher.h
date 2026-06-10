@@ -66,18 +66,18 @@ public:
 
 public:
   // Fetch LogGroupEntry
-  int fetch_log(const obrpc::ObCdcLSFetchLogReq &req,
-      obrpc::ObCdcLSFetchLogResp &resp,
+  int fetch_log(const obcall::ObCdcLSFetchLogReq &req,
+      obcall::ObCdcLSFetchLogResp &resp,
       ClientLSCtx &ctx,
       ObCdcFetchLogTimeStats &fetch_log_time_stat);
 
   // Fetch Missing LogEntry
   // TODO optimize fetch LogEntry(Random read)
-  int fetch_missing_log(const obrpc::ObCdcLSFetchMissLogReq &req,
-      obrpc::ObCdcLSFetchLogResp &resp);
+  int fetch_missing_log(const obcall::ObCdcLSFetchMissLogReq &req,
+      obcall::ObCdcLSFetchLogResp &resp);
 
-  int fetch_raw_log(const obrpc::ObCdcFetchRawLogReq &req,
-      obrpc::ObCdcFetchRawLogResp &resp,
+  int fetch_raw_log(const obcall::ObCdcFetchRawLogReq &req,
+      obcall::ObCdcFetchRawLogResp &resp,
       ClientLSCtx &ctx);
 
 private:
@@ -86,9 +86,9 @@ private:
   int init_palf_handle_guard_(const ObLSID &ls_id,
       palf::PalfHandleGuard &palf_handle_guard);
 
-  int do_fetch_log_(const obrpc::ObCdcLSFetchLogReq &req,
+  int do_fetch_log_(const obcall::ObCdcLSFetchLogReq &req,
       FetchRunTime &fetch_runtime,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       ClientLSCtx &ctx,
       ObCdcFetchLogTimeStats &fetch_time_stat);
   int set_fetch_mode_before_fetch_log_(const ObLSID &ls_id,
@@ -100,7 +100,7 @@ private:
   int ls_fetch_log_(const ObLSID &ls_id,
       const int64_t end_tstamp,
       const int8_t fetch_flag,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       FetchRunTime &frt,
       bool &reach_upper_limit,
       bool &reach_max_lsn,
@@ -146,19 +146,19 @@ private:
 
   int fetch_missing_logs_in_palf_(const ObLSID &ls_id,
       palf::PalfHandleGuard &palf_handle_guard,
-      const obrpc::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
+      const obcall::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
       int64_t &cur_idx,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       FetchRunTime &frt);
 
   int fetch_missing_logs_in_archive_(const ObLSID &ls_id,
       ClientLSCtx &ctx,
-      const obrpc::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
+      const obcall::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
       int64_t &cur_idx,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       FetchRunTime &frt);
 
-  int calc_raw_read_size_(const obrpc::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
+  int calc_raw_read_size_(const obcall::ObCdcLSFetchMissLogReq::MissLogParamArray &miss_log_array,
       const int64_t cur_idx,
       const int64_t read_buf_len,
       int64_t &read_size,
@@ -183,7 +183,7 @@ private:
   void check_next_group_entry_(const LSN &next_lsn,
       const LogGroupEntry &next_log_group_entry,
       const int64_t fetched_log_count,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       FetchRunTime &frt,
       bool &reach_upper_limit,
       ClientLSCtx &ClientLSCtx);
@@ -192,57 +192,57 @@ private:
   int prefill_resp_with_group_entry_(const ObLSID &ls_id,
       const LSN &lsn,
       LogGroupEntry &log_group_entry,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       ObCdcFetchLogTimeStats &fetch_time_stat);
   void handle_when_buffer_full_(FetchRunTime &frt);
   // lsn of ls_id wantted does not exist on this server, feed this information back to CDC Connector,
   // CDC Connector needs to change search server.
   int handle_log_not_exist_(const ObLSID &ls_id,
-      obrpc::ObCdcLSFetchLogResp &resp);
+      obcall::ObCdcLSFetchLogResp &resp);
   // handle when has reached max lsn in this server
   void handle_when_reach_max_lsn_in_palf_(const ObLSID &ls_id,
       palf::PalfHandleGuard &palf_handle_guard,
       const int64_t fetched_log_count,
       FetchRunTime &frt,
-      obrpc::ObCdcLSFetchLogResp &resp);
+      obcall::ObCdcLSFetchLogResp &resp);
   // Check whether is backward standby server
   int check_lag_follower_(const ObLSID &ls_id,
       palf::PalfHandleGuard &palf_handle_guard,
-      obrpc::ObCdcLSFetchLogResp &resp);
+      obcall::ObCdcLSFetchLogResp &resp);
 
   int check_ls_sync_status_(const ObLSID &ls_id,
       palf::PalfHandleGuard &palf_handle_guard,
       ObRole &role,
       bool &in_sync);
-  int do_fetch_missing_log_(const obrpc::ObCdcLSFetchMissLogReq &req,
+  int do_fetch_missing_log_(const obcall::ObCdcLSFetchMissLogReq &req,
       FetchRunTime &frt,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       ClientLSCtx &ctx);
   // Check the next LogEntry to determine whether need to continue fetching logs.
   void check_next_entry_(const LSN &next_lsn,
       const LogEntry &next_log_entry,
-      obrpc::ObCdcLSFetchLogResp &resp,
+      obcall::ObCdcLSFetchLogResp &resp,
       FetchRunTime &frt);
   // Fill Log Entry directly into resp_buf.
   // TODO Consider compression and decryption
   int prefill_resp_with_log_entry_(const ObLSID &ls_id,
       const LSN &lsn,
       LogEntry &log_entry,
-      obrpc::ObCdcLSFetchLogResp &resp);
+      obcall::ObCdcLSFetchLogResp &resp);
   int prepare_berfore_fetch_missing_(const ObLSID &ls_id,
       ClientLSCtx &ctx,
       palf::PalfHandleGuard &palf_handle_guard,
       bool &ls_exist_in_palf,
       bool &archive_is_on);
 
-  int do_fetch_raw_log_(const obrpc::ObCdcFetchRawLogReq &req,
-      obrpc::ObCdcFetchRawLogResp &resp,
+  int do_fetch_raw_log_(const obcall::ObCdcFetchRawLogReq &req,
+      obcall::ObCdcFetchRawLogResp &resp,
       ClientLSCtx &ctx);
 
   int fetch_raw_log_in_palf_(const ObLSID &ls_id,
       const LSN &start_lsn,
       const int64_t req_size,
-      obrpc::ObCdcFetchRawLogResp &resp,
+      obcall::ObCdcFetchRawLogResp &resp,
       bool &ls_exist_in_palf,
       bool &fetch_log_succ,
       ClientLSCtx &ctx);
@@ -251,7 +251,7 @@ private:
       const LSN &start_lsn,
       const int64_t req_size,
       const int64_t progress,
-      obrpc::ObCdcFetchRawLogResp &resp,
+      obcall::ObCdcFetchRawLogResp &resp,
       bool &archive_is_on,
       bool &fetch_log_succ,
       ClientLSCtx &ctx);
@@ -308,7 +308,7 @@ struct FetchRunTime
   // the following are frequently changed
   //clog::ObReadCost read_cost_ CACHE_ALIGNED;
   //clog::ObIlogStorageQueryCost csr_cost_ CACHE_ALIGNED;
-  obrpc::ObCdcFetchStatus fetch_status_ CACHE_ALIGNED;
+  obcall::ObCdcFetchStatus fetch_status_ CACHE_ALIGNED;
 };
 
 } // namespace cdc

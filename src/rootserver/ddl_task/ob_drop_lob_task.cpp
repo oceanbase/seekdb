@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_drop_lob_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -25,7 +26,7 @@
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
@@ -47,7 +48,7 @@ int ObDropLobTask::init(
     const int64_t schema_version,
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
-    const obrpc::ObDDLArg &ddl_arg)
+    const obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id || task_id <= 0 || OB_INVALID_ID == data_table_id
@@ -154,7 +155,7 @@ int ObDropLobTask::drop_lob_impl()
     LOG_WARN("assign user drop index sql failed", KR(ret));
   } else {
     int64_t ddl_rpc_timeout = 0;
-    obrpc::ObDropLobArg arg;
+    obcall::ObDropLobArg arg;
     arg.tenant_id_ = tenant_id_;
     arg.exec_tenant_id_ = tenant_id_;
     arg.data_table_id_ = object_id_;
@@ -165,7 +166,7 @@ int ObDropLobTask::drop_lob_impl()
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(2 * data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (FALSE_IT(schema_guard.reset())) {
-    } else if (OB_FAIL(root_service_->get_common_rpc_proxy().timeout(ddl_rpc_timeout).drop_lob(arg))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return root_service_->drop_lob(arg); }))) {
       LOG_WARN("drop lob failed", KR(ret), K(ddl_rpc_timeout));
     }
     LOG_INFO("finish drop lob", KR(ret), K(arg));
@@ -306,8 +307,8 @@ int ObDropLobTask::check_switch_succ_()
 }
 
 int ObDropLobTask::deep_copy_ddl_arg(common::ObIAllocator &allocator,
-                                     const obrpc::ObDDLArg &src_ddl_arg,
-                                     obrpc::ObDDLArg &dst_ddl_arg)
+                                     const obcall::ObDDLArg &src_ddl_arg,
+                                     obcall::ObDDLArg &dst_ddl_arg)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
@@ -342,7 +343,7 @@ int ObDropLobTask::serialize_params_to_message(char *buf, const int64_t buf_size
 int ObDropLobTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t buf_size, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObDDLArg tmp_ddl_arg;
+  obcall::ObDDLArg tmp_ddl_arg;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(tenant_id), KP(buf), K(buf_size));

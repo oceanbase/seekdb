@@ -39,7 +39,7 @@ void RawLogFileRpcResult::reset()
   data_len_ = 0;
   is_readable_ = false;
   is_active_ = false;
-  data_end_source_ = obrpc::ObCdcFetchRawSource::UNKNOWN;
+  data_end_source_ = obcall::ObCdcFetchRawSource::UNKNOWN;
   replayable_point_.reset();
   sub_rpc_status_.reset();
   rpc_prepare_time_ = 0;
@@ -67,8 +67,8 @@ int RawLogFileRpcResult::generate_result_from_data(LogFileDataBuffer *&buffer)
 
 ////////////////////////////// LogGroupEntryRpcResult //////////////////////////////
 
-int LogGroupEntryRpcResult::set(const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObCdcLSFetchLogResp *resp,
+int LogGroupEntryRpcResult::set(const rpc::frame::ObResultCode &rcode,
+    const obcall::ObCdcLSFetchLogResp *resp,
     const common::ObCurTraceId::TraceId &trace_id,
     const int64_t rpc_start_time,
     const int64_t rpc_callback_start_time,

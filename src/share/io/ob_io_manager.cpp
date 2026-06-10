@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_manager.h"
+#include "observer/net/ob_shared_storage_net_throt_rpc_struct.h"
 #include "share/errsim_module/ob_errsim_module_interface_imp.h"
 #include "observer/ob_server.h"
 #include "src/share/io/io_schedule/ob_io_schedule_v2.h"
@@ -114,14 +115,14 @@ int ObTrafficControl::ObSharedDeviceIORecord::calc_usage(ObIORequest &req)
 // when use this interface input array default size shoulde be ResourceTypeCnt
 void ObTrafficControl::ObSharedDeviceIORecord::reset_total_size(ResourceUsage usages[])
 {
-  usages[obrpc::ResourceType::ibw].type_   = obrpc::ResourceType::ibw;
-  usages[obrpc::ResourceType::ibw].total_  = ibw_.clear();
-  usages[obrpc::ResourceType::obw].type_   = obrpc::ResourceType::obw;
-  usages[obrpc::ResourceType::obw].total_  = obw_.clear();
-  usages[obrpc::ResourceType::ips].type_   = obrpc::ResourceType::ips;
-  usages[obrpc::ResourceType::ips].total_  = ips_.clear();
-  usages[obrpc::ResourceType::ops].type_   = obrpc::ResourceType::ops;
-  usages[obrpc::ResourceType::ops].total_  = ops_.clear();
+  usages[obcall::ResourceType::ibw].type_   = obcall::ResourceType::ibw;
+  usages[obcall::ResourceType::ibw].total_  = ibw_.clear();
+  usages[obcall::ResourceType::obw].type_   = obcall::ResourceType::obw;
+  usages[obcall::ResourceType::obw].total_  = obw_.clear();
+  usages[obcall::ResourceType::ips].type_   = obcall::ResourceType::ips;
+  usages[obcall::ResourceType::ips].total_  = ips_.clear();
+  usages[obcall::ResourceType::ops].type_   = obcall::ResourceType::ops;
+  usages[obcall::ResourceType::ops].total_  = ops_.clear();
 }
 
 ObTrafficControl::ObSharedDeviceControlV2::ObSharedDeviceControlV2()
@@ -137,13 +138,13 @@ ObTrafficControl::ObSharedDeviceControlV2::~ObSharedDeviceControlV2()
 int ObTrafficControl::ObSharedDeviceControlV2::init()
 {
   int ret = OB_SUCCESS;
-  limits_[obrpc::ResourceType::ops] = INT64_MAX / 2;
-  limits_[obrpc::ResourceType::ips] = INT64_MAX / 2;
-  limits_[obrpc::ResourceType::iops] = INT64_MAX;
-  limits_[obrpc::ResourceType::obw] = INT64_MAX / (16 * (1<<11));
-  limits_[obrpc::ResourceType::ibw] = INT64_MAX / (16 * (1<<11));
-  limits_[obrpc::ResourceType::iobw] = INT64_MAX / (16 * (1<<10));
-  limits_[obrpc::ResourceType::tag] = INT64_MAX;
+  limits_[obcall::ResourceType::ops] = INT64_MAX / 2;
+  limits_[obcall::ResourceType::ips] = INT64_MAX / 2;
+  limits_[obcall::ResourceType::iops] = INT64_MAX;
+  limits_[obcall::ResourceType::obw] = INT64_MAX / (16 * (1<<11));
+  limits_[obcall::ResourceType::ibw] = INT64_MAX / (16 * (1<<11));
+  limits_[obcall::ResourceType::iobw] = INT64_MAX / (16 * (1<<10));
+  limits_[obcall::ResourceType::tag] = INT64_MAX;
   storage_key_  = ObStorageKey();
   return ret;
 }
@@ -181,12 +182,12 @@ int ObTrafficControl::ObSharedDeviceControlV2::is_group_key_exist(const ObIOSSGr
   return group_list_.is_group_key_exist(grp_key);
 }
 
-int64_t ObTrafficControl::ObSharedDeviceControlV2::get_limit(const obrpc::ResourceType type) const
+int64_t ObTrafficControl::ObSharedDeviceControlV2::get_limit(const obcall::ResourceType type) const
 {
   return limits_[static_cast<int>(type)];
 }
 
-int ObTrafficControl::ObSharedDeviceControlV2::update_limit(const obrpc::ObSharedDeviceResource &limit)
+int ObTrafficControl::ObSharedDeviceControlV2::update_limit(const obcall::ObSharedDeviceResource &limit)
 {
   int ret = OB_SUCCESS;
   limits_[static_cast<int>(limit.type_)] = limit.value_;
@@ -351,7 +352,7 @@ void ObTrafficControl::print_bucket_status_V2()
   shared_device_map_v2_.foreach_refactored(fn);
 }
 
-int ObTrafficControl::set_limit_v2(const obrpc::ObSharedDeviceResourceArray &limit)
+int ObTrafficControl::set_limit_v2(const obcall::ObSharedDeviceResourceArray &limit)
 {
   int ret = OB_SUCCESS;
   inner_calc_();

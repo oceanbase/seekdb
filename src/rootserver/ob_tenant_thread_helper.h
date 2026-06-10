@@ -26,9 +26,8 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
-class  ObSrvRpcProxy;
 }
 namespace common
 {

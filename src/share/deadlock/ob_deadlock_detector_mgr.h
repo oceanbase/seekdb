@@ -38,11 +38,6 @@ namespace unittest
 {
 class TestObDeadLockDetector;
 }
-namespace obrpc
-{
-class ObDetectorRpcProxy;
-class ObDeadLockDetectorRpc;
-}// namespace obrpc
 namespace rpc
 {
 namespace frame
@@ -212,8 +207,7 @@ private:
   int64_t stop_ts_;// the timestamp of stop() called
   // global single instance timer for detector period tansmit operation
   common::ObTimeWheel time_wheel_;
-  obrpc::ObDetectorRpcProxy *proxy_;// used by rpc_
-  ObDeadLockDetectorRpc *rpc_;// message sender/receiver
+  ObDeadLockDetectorRpc *rpc_;// message sender/receiver (in-process dispatch)
   ObLCLBatchSenderThread sender_thread_;// inner thread to cache, batch message and send them
   common::ObLinkHashMap<UserBinaryKey,
                         ObIDeadLockDetector,

@@ -71,38 +71,38 @@ int ObVirtualSharedStorageQuota::inner_get_next_row(common::ObNewRow *&row)
 int ObVirtualSharedStorageQuota::add_one_storage_batch_row()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSharedDeviceResourceArray usages;
-  obrpc::ObSharedDeviceResourceArray limits;
+  obcall::ObSharedDeviceResourceArray usages;
+  obcall::ObSharedDeviceResourceArray limits;
   struct GetLimitV2
   {
-    GetLimitV2(obrpc::ObSharedDeviceResourceArray &limits) : limits_(limits)
+    GetLimitV2(obcall::ObSharedDeviceResourceArray &limits) : limits_(limits)
     {}
     int operator()(oceanbase::common::hash::HashMapPair<ObTrafficControl::ObStorageKey,
         ObTrafficControl::ObSharedDeviceControlV2 *> &entry)
     {
       int ret = OB_SUCCESS;
       int idx_begin = limits_.array_.count();
-      for (int i = 0; i < obrpc::ResourceType::ResourceTypeCnt; ++i) {
-        limits_.array_.push_back(obrpc::ObSharedDeviceResource());
+      for (int i = 0; i < obcall::ResourceType::ResourceTypeCnt; ++i) {
+        limits_.array_.push_back(obcall::ObSharedDeviceResource());
       }
       if (OB_UNLIKELY(idx_begin < 0)
-          || OB_UNLIKELY(idx_begin + obrpc::ResourceType::ResourceTypeCnt > limits_.array_.count())) {
+          || OB_UNLIKELY(idx_begin + obcall::ResourceType::ResourceTypeCnt > limits_.array_.count())) {
       } else if (OB_UNLIKELY(OB_ISNULL(entry.second))) {
       } else {
-        for (int i = 0; i < obrpc::ResourceType::ResourceTypeCnt; ++i) {
+        for (int i = 0; i < obcall::ResourceType::ResourceTypeCnt; ++i) {
           limits_.array_.at(idx_begin + i).key_ = entry.first;
-          limits_.array_.at(idx_begin + i).type_ = static_cast<obrpc::ResourceType>(i);
-          limits_.array_.at(idx_begin + i).value_ = entry.second->get_limit(static_cast<obrpc::ResourceType>(i));
+          limits_.array_.at(idx_begin + i).type_ = static_cast<obcall::ResourceType>(i);
+          limits_.array_.at(idx_begin + i).value_ = entry.second->get_limit(static_cast<obcall::ResourceType>(i));
         }
       }
       return ret;
     }
-    obrpc::ObSharedDeviceResourceArray &limits_;
+    obcall::ObSharedDeviceResourceArray &limits_;
   };
 
   struct GetUsage
   {
-    GetUsage(obrpc::ObSharedDeviceResource &resource) : resource_(resource)
+    GetUsage(obcall::ObSharedDeviceResource &resource) : resource_(resource)
     {}
     int operator()(hash::HashMapPair<ObTrafficControl::ObIORecordKey, ObTrafficControl::ObSharedDeviceIORecord> &entry)
     {
@@ -116,25 +116,25 @@ int ObVirtualSharedStorageQuota::add_one_storage_batch_row()
         const int64_t tagps =   entry.second.tagps_.calc();
 
         switch (resource_.type_) {
-          case obrpc::ResourceType::ops:
+          case obcall::ResourceType::ops:
             resource_.value_ += req_out;
             break;
-          case obrpc::ResourceType::ips:
+          case obcall::ResourceType::ips:
             resource_.value_ += req_in;
             break;
-          case obrpc::ResourceType::iops:
+          case obcall::ResourceType::iops:
             resource_.value_ += req_out + req_in;
             break;
-          case obrpc::ResourceType::obw:
+          case obcall::ResourceType::obw:
             resource_.value_ += bw_out;
             break;
-          case obrpc::ResourceType::ibw:
+          case obcall::ResourceType::ibw:
             resource_.value_ += bw_in;
             break;
-          case obrpc::ResourceType::iobw:
+          case obcall::ResourceType::iobw:
             resource_.value_ += bw_out + bw_in;
             break;
-          case obrpc::ResourceType::tag:
+          case obcall::ResourceType::tag:
             resource_.value_ += tagps;
             break;
           default:
@@ -143,7 +143,7 @@ int ObVirtualSharedStorageQuota::add_one_storage_batch_row()
       }
       return ret;
     }
-    obrpc::ObSharedDeviceResource &resource_;
+    obcall::ObSharedDeviceResource &resource_;
   };
   // get limits
   GetLimitV2 limits_fn_v2(limits);
@@ -178,7 +178,7 @@ int ObVirtualSharedStorageQuota::add_one_storage_batch_row()
 }
 
 int ObVirtualSharedStorageQuota::add_row(
-    const obrpc::ObSharedDeviceResource &usage, const obrpc::ObSharedDeviceResource &limit)
+    const obcall::ObSharedDeviceResource &usage, const obcall::ObSharedDeviceResource &limit)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
@@ -205,20 +205,20 @@ int ObVirtualSharedStorageQuota::add_row(
         break;
       }
       case TYPE: {
-        const obrpc::ResourceType &type = limit.type_;
-        if (type == obrpc::ResourceType::ops) {
+        const obcall::ResourceType &type = limit.type_;
+        if (type == obcall::ResourceType::ops) {
           cells[i].set_varchar("ops");
-        } else if (type == obrpc::ResourceType::ips) {
+        } else if (type == obcall::ResourceType::ips) {
           cells[i].set_varchar("ips");
-        } else if (type == obrpc::ResourceType::iops) {
+        } else if (type == obcall::ResourceType::iops) {
           cells[i].set_varchar("iops");
-        } else if (type == obrpc::ResourceType::obw) {
+        } else if (type == obcall::ResourceType::obw) {
           cells[i].set_varchar("obw");
-        } else if (type == obrpc::ResourceType::ibw) {
+        } else if (type == obcall::ResourceType::ibw) {
           cells[i].set_varchar("ibw");
-        } else if (type == obrpc::ResourceType::iobw) {
+        } else if (type == obcall::ResourceType::iobw) {
           cells[i].set_varchar("iobw");
-        } else if (type == obrpc::ResourceType::tag) {
+        } else if (type == obcall::ResourceType::tag) {
           cells[i].set_varchar("tag");
         } else {
           ret = OB_ERR_UNEXPECTED;

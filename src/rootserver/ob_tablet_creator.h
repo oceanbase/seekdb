@@ -17,7 +17,6 @@
 #ifndef OB_TABLET_CREATOR_H
 #define OB_TABLET_CREATOR_H
 
-#include "ob_rs_async_rpc_proxy.h" //async rpc
 #include "lib/hash/ob_hashmap.h"
 #include "lib/allocator/ob_cached_allocator.h"
 #include "common/ob_tablet_id.h"//ObTabletID
@@ -115,7 +114,7 @@ public:
     result_ = common::OB_NOT_MASTER;
   }
   DECLARE_TO_STRING;
-  obrpc::ObBatchCreateTabletArg batch_arg_;
+  obcall::ObBatchCreateTabletArg batch_arg_;
   //table_id : index of table_schems_ in arg
   common::hash::ObHashMap<int64_t, int64_t> table_schemas_map_;
   // if non-empty, auto_part_size_arr_[i] = auto_part_size of batch_arg_.table_schemas_[i]

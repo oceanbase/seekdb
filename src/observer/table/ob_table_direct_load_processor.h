@@ -18,17 +18,17 @@
 
 #include "observer/table_load/client/ob_table_direct_load_exec_context.h"
 #include "observer/table/ob_table_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 
 namespace oceanbase
 {
 namespace observer
 {
 
-/// @see RPC_S(PR5 direct_load, obrpc::OB_TABLE_API_DIRECT_LOAD, (table::ObTableDirectLoadRequest), table::ObTableDirectLoadResult);
-class ObTableDirectLoadP : public ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_DIRECT_LOAD>>
+/// @see CALL_S(PR5 direct_load, obcall::OB_TABLE_API_DIRECT_LOAD, (table::ObTableDirectLoadRequest), table::ObTableDirectLoadResult);
+class ObTableDirectLoadP : public ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_DIRECT_LOAD>>
 {
-  typedef ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_TABLE_API_DIRECT_LOAD>> ParentType;
+  typedef ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_TABLE_API_DIRECT_LOAD>> ParentType;
 public:
   explicit ObTableDirectLoadP(const ObGlobalContext &gctx);
   virtual ~ObTableDirectLoadP() = default;

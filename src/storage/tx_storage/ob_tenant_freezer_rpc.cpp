@@ -29,56 +29,44 @@ using namespace storage;
 using namespace share;
 using namespace storage::mds;
 using namespace rootserver;
-namespace obrpc
+namespace obcall
 {
 
-int ObTenantFreezerRpcCb::process()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObTenantFreezer::rpc_callback())) {
-    LOG_WARN("rpc callback failed", K(ret));
-  }
-  return ret;
-}
+// File-local freeze handlers (formerly ObTenantFreezerP members). Run in the target
+// tenant's MTL context (the async_call caller sets it up via MTL_SWITCH).
+static int do_tx_data_table_freeze_(const ObTenantFreezeArg &arg);
+static int do_major_freeze_(const ObTenantFreezeArg &arg);
+static int do_mds_table_freeze_(const ObTenantFreezeArg &arg);
 
-void ObTenantFreezerRpcCb::on_timeout()
+int tenant_freeze_dispatch(const ObTenantFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("Tenant major freeze request timeout");
-  if (OB_FAIL(ObTenantFreezer::rpc_callback())) {
-    LOG_WARN("rpc callback failed", K(ret));
-  }
-}
-
-int ObTenantFreezerP::process()
-{
-  int ret = OB_SUCCESS;
-  if (storage::MINOR_FREEZE == arg_.freeze_type_) {
+  if (storage::MINOR_FREEZE == arg.freeze_type_) {
     LOG_ERROR("should not be here");
-  } else if (storage::TX_DATA_TABLE_FREEZE == arg_.freeze_type_) {
-    if (OB_FAIL(do_tx_data_table_freeze_())) {
-      LOG_WARN("do tx data table freeze failed.", KR(ret), K(arg_));
+  } else if (storage::TX_DATA_TABLE_FREEZE == arg.freeze_type_) {
+    if (OB_FAIL(do_tx_data_table_freeze_(arg))) {
+      LOG_WARN("do tx data table freeze failed.", KR(ret), K(arg));
     }
-  } else if (storage::MAJOR_FREEZE == arg_.freeze_type_) {
-    if (OB_FAIL(do_major_freeze_())) {
+  } else if (storage::MAJOR_FREEZE == arg.freeze_type_) {
+    if (OB_FAIL(do_major_freeze_(arg))) {
       LOG_WARN("do major freeze failed", K(ret));
     }
-  } else if (storage::MDS_TABLE_FREEZE == arg_.freeze_type_) {
-    if (OB_FAIL(do_mds_table_freeze_())) {
-      LOG_WARN("do mds table freeze failed.", KR(ret), K(arg_));
+  } else if (storage::MDS_TABLE_FREEZE == arg.freeze_type_) {
+    if (OB_FAIL(do_mds_table_freeze_(arg))) {
+      LOG_WARN("do mds table freeze failed.", KR(ret), K(arg));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unknown freeze type", K(arg_), K(ret));
+    LOG_WARN("unknown freeze type", K(arg), K(ret));
   }
   return ret;
 }
 
-int ObTenantFreezerP::do_tx_data_table_freeze_()
+static int do_tx_data_table_freeze_(const ObTenantFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
 
-  LOG_INFO("start tx data table self freeze task in rpc handle thread", K(arg_));
+  LOG_INFO("start tx data table self freeze task in rpc handle thread", K(arg));
 
   common::ObSharedGuard<ObLSIterator> iter_guard;
   ObTenantTxDataFreezeGuard tenant_freeze_guard;
@@ -99,15 +87,15 @@ int ObTenantFreezerP::do_tx_data_table_freeze_()
       ObLS *ls = nullptr;
       if (OB_FAIL(iter_guard->get_next(ls))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next ls failed.", KR(ret), K(arg_));
+          LOG_WARN("get next ls failed.", KR(ret), K(arg));
         }
       } else if (OB_ISNULL(ls)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls is unexpected nullptr", KR(ret), K(arg_));
+        LOG_WARN("ls is unexpected nullptr", KR(ret), K(arg));
       } else if (OB_FAIL(ls->get_tx_table_guard(tx_table_guard))) {
-        LOG_WARN("get tx table guard failed.", KR(ret), K(arg_));
+        LOG_WARN("get tx table guard failed.", KR(ret), K(arg));
       } else if (OB_FAIL(tx_table_guard.self_freeze_task())) {
-        LOG_WARN("freeze tx data table failed.", KR(ret), K(arg_));
+        LOG_WARN("freeze tx data table failed.", KR(ret), K(arg));
       }
       ++ls_cnt;
     }
@@ -120,11 +108,11 @@ int ObTenantFreezerP::do_tx_data_table_freeze_()
     }
   }
 
-  LOG_INFO("finish self freeze task in rpc handle thread", KR(ret), K(arg_));
+  LOG_INFO("finish self freeze task in rpc handle thread", KR(ret), K(arg));
   return ret;
 }
 
-int ObTenantFreezerP::do_major_freeze_()
+static int do_major_freeze_(const ObTenantFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -139,9 +127,9 @@ int ObTenantFreezerP::do_major_freeze_()
     ObTenantFreezer *freezer = MTL(ObTenantFreezer *);
     ObRetryMajorInfo retry_major_info = freezer->get_retry_major_info();
     retry_major_info.tenant_id_ = tenant_id;
-    retry_major_info.frozen_scn_ = arg_.try_frozen_scn_;
-    if (arg_.try_frozen_scn_ > 0) {
-      if (arg_.try_frozen_scn_ < frozen_scn_val) {
+    retry_major_info.frozen_scn_ = arg.try_frozen_scn_;
+    if (arg.try_frozen_scn_ > 0) {
+      if (arg.try_frozen_scn_ < frozen_scn_val) {
         need_major = false;
       } else {
         need_major = true;
@@ -155,7 +143,6 @@ int ObTenantFreezerP::do_major_freeze_()
       retry_major_info.frozen_scn_ = frozen_scn_val;
 
       ObMajorFreezeParam param;
-      param.transport_ = GCTX.net_frame_->get_req_transport();
       param.freeze_reason_ = rootserver::MF_MAJOR_COMPACT_TRIGGER;
       if (OB_FAIL(param.add_freeze_info(tenant_id))) {
         LOG_WARN("push back failed", KR(ret), K(tenant_id));
@@ -175,10 +162,10 @@ int ObTenantFreezerP::do_major_freeze_()
   return ret;
 }
 
-int ObTenantFreezerP::do_mds_table_freeze_()
+static int do_mds_table_freeze_(const ObTenantFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("start mds table self freeze task in rpc handle thread", K(arg_));
+  LOG_INFO("start mds table self freeze task in rpc handle thread", K(arg));
 
   common::ObSharedGuard<ObLSIterator> iter_guard;
   ObLSService *ls_srv = MTL(ObLSService *);
@@ -194,11 +181,11 @@ int ObTenantFreezerP::do_mds_table_freeze_()
 
       if (OB_FAIL(iter_guard->get_next(ls))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next ls failed.", KR(ret), K(arg_));
+          LOG_WARN("get next ls failed.", KR(ret), K(arg));
         }
       } else if (OB_ISNULL(ls) || OB_ISNULL(ls->get_tablet_svr())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ls is unexpected nullptr", KR(ret), K(arg_));
+        LOG_WARN("ls is unexpected nullptr", KR(ret), K(arg));
       } else {
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(ls->flush_mds_table(INT64_MAX))) {
@@ -216,9 +203,9 @@ int ObTenantFreezerP::do_mds_table_freeze_()
     }
   }
 
-  LOG_INFO("finish mds table self freeze task in rpc handle thread", KR(ret), K(arg_));
+  LOG_INFO("finish mds table self freeze task in rpc handle thread", KR(ret), K(arg));
   return ret;
 }
 
-} // obrpc
+} // obcall
 } // oceanbase

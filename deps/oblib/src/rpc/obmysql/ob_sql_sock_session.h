@@ -18,7 +18,7 @@
 #define OCEANBASE_OBMYSQL_OB_SQL_SOCK_SESSION_H_
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
 #include "rpc/obmysql/obsm_struct.h"
-#include "rpc/obrpc/ob_rpc_mem_pool.h"
+#include "rpc/ob_sql_mem_pool.h"
 #include "rpc/obmysql/ob_i_sm_conn_callback.h"
 #include "rpc/ob_request.h"
 #include "rpc/obmysql/ob_sql_nio.h"
@@ -38,7 +38,7 @@ public:
   void reset() { pool_.destroy(); }
   void reuse() { pool_.reuse(); }
 private:
-  obrpc::ObRpcMemPool pool_;
+  obmysql::ObSqlMemPool pool_;
 };
 
 class ObSqlSockSession

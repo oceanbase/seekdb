@@ -33,7 +33,7 @@ using namespace common::hash;
 using namespace lib;
 using namespace table;
 using namespace sql;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 
 ObTableLoadCoordinatorCtx::ObTableLoadCoordinatorCtx(ObTableLoadTableCtx *ctx)

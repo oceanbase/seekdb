@@ -115,7 +115,7 @@ public:
       palf::LSN &lsn,
       const char *&buf,
       const share::SCN replayable_point,
-      const obrpc::ObCdcFetchRawSource data_end_source);
+      const obcall::ObCdcFetchRawSource data_end_source);
   int get_next_remote_group_entry(
       palf::LogGroupEntry &group_entry,
       palf::LSN &lsn,

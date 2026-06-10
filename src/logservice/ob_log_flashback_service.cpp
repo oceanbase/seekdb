@@ -15,6 +15,8 @@
  */
 #define USING_LOG_PREFIX CLOG
 #include "ob_log_flashback_service.h"
+#include "logrpc/ob_log_request_handler.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -27,7 +29,6 @@ ObLogFlashbackService::ObLogFlashbackService() :
     lock_(),
     self_(),
     location_adapter_(nullptr),
-    rpc_proxy_(nullptr),
     sql_proxy_(nullptr)
   {}
 
@@ -38,22 +39,20 @@ ObLogFlashbackService::~ObLogFlashbackService()
 
 int ObLogFlashbackService::init(const common::ObAddr &self,
                                 logservice::ObLocationAdapter *location_adapter,
-                                obrpc::ObLogServiceRpcProxy *rpc_proxy,
                                 common::ObMySQLProxy *sql_proxy)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "init twice", K(ret), K(self));
-  } else if (false == self.is_valid() || OB_ISNULL(rpc_proxy) ||
+  } else if (false == self.is_valid() ||
       OB_ISNULL(sql_proxy) || OB_ISNULL(location_adapter)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", K(ret), K(self), KP(rpc_proxy));
+    CLOG_LOG(WARN, "invalid argument", K(ret), K(self), KP(sql_proxy), KP(location_adapter));
   } else {
     self_ = self;
     flashback_op_array_.reset();
     location_adapter_ = location_adapter;
-    rpc_proxy_ = rpc_proxy;
     sql_proxy_ = sql_proxy;
     is_inited_ = true;
   }
@@ -66,7 +65,6 @@ void ObLogFlashbackService::destroy()
   self_.reset();
   flashback_op_array_.reset();
   location_adapter_ = nullptr;
-  rpc_proxy_ = nullptr;
   sql_proxy_ = nullptr;
 }
 
@@ -271,7 +269,7 @@ int ObLogFlashbackService::construct_ls_operator_list_(
 {
   int ret = OB_SUCCESS;
   ls_operator_array.reset();
-  T op(tenant_id, SYS_LS/*ls_id*/, self_, flashback_scn, location_adapter_, rpc_proxy_);
+  T op(tenant_id, SYS_LS/*ls_id*/, self_, flashback_scn, location_adapter_);
   if (false == op.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "FlashbackService Operator invalid", K(ret), K_(self), K(op));
@@ -348,25 +346,68 @@ int ObLogFlashbackService::BaseLSOperator::update_leader_()
   return ret;
 }
 
+int ObLogFlashbackService::BaseLSOperator::get_palf_stat_in_process_(
+    const LogGetPalfStatReq &req, LogGetPalfStatResp &resp)
+{
+  int ret = OB_SUCCESS;
+  // single-replica: leader is always self, dispatch to local LogRequestHandler in-process
+  MTL_SWITCH(tenant_id_) {
+    LogRequestHandler handler;
+    if (OB_FAIL(handler.handle_sync_request(req, resp))) {
+      CLOG_LOG(WARN, "in-process get_palf_stat failed", K(ret), K(req));
+    }
+  }
+  return ret;
+}
+
+int ObLogFlashbackService::BaseLSOperator::change_access_mode_in_process_(
+    const LogChangeAccessModeCmd &cmd)
+{
+  int ret = OB_SUCCESS;
+  // single-replica: leader is always self, dispatch to local LogRequestHandler in-process
+  MTL_SWITCH(tenant_id_) {
+    LogRequestHandler handler;
+    if (OB_FAIL(handler.handle_request(cmd))) {
+      CLOG_LOG(WARN, "in-process change_access_mode failed", K(ret), K(cmd));
+    }
+  }
+  return ret;
+}
+
+int ObLogFlashbackService::BaseLSOperator::send_flashback_msg_in_process_(
+    const LogFlashbackMsg &msg)
+{
+  int ret = OB_SUCCESS;
+  // single-replica: leader is always self, dispatch to local LogRequestHandler in-process.
+  // The handler executes the flashback and delivers the flashback response in-process.
+  MTL_SWITCH(tenant_id_) {
+    LogRequestHandler handler;
+    if (OB_FAIL(handler.handle_request(msg))) {
+      CLOG_LOG(WARN, "in-process send_log_flashback_msg failed", K(ret), K(msg));
+    }
+  }
+  return ret;
+}
+
 int ObLogFlashbackService::BaseLSOperator::get_leader_palf_stat_(palf::PalfStat &palf_stat)
 {
   int ret = OB_SUCCESS;
-  const int64_t CONN_TIMEOUT_US = GCONF.rpc_timeout;
   if (false == leader_.is_valid() && OB_FAIL(update_leader_())) {
     ret = OB_EAGAIN;
   } else {
     const bool is_to_leader = true;
     LogGetPalfStatReq get_palf_stat_req(self_, ls_id_.id(), is_to_leader);
     LogGetPalfStatResp get_palf_stat_resp;
-    if (OB_FAIL(rpc_proxy_->to(leader_).timeout(CONN_TIMEOUT_US).trace_time(true).
-        max_process_handler_time(CONN_TIMEOUT_US).by(tenant_id_).
-        get_palf_stat(get_palf_stat_req, get_palf_stat_resp))) {
-      CLOG_LOG(WARN, "get_palf_stat failed", K(ret), KPC(this), K(get_palf_stat_req));
-      // send RPC fail or not master, need renew leader
-      leader_.reset();
-      ret = OB_EAGAIN;
-    } else {
-      palf_stat = get_palf_stat_resp.palf_stat_;
+    // single-replica: leader is always self, query palf stat in-process
+    MTL_SWITCH(tenant_id_) {
+      LogRequestHandler handler;
+      if (OB_FAIL(handler.handle_sync_request(get_palf_stat_req, get_palf_stat_resp))) {
+        CLOG_LOG(WARN, "get_palf_stat failed", K(ret), KPC(this), K(get_palf_stat_req));
+        leader_.reset();
+        ret = OB_EAGAIN;
+      } else {
+        palf_stat = get_palf_stat_resp.palf_stat_;
+      }
     }
   }
   return ret;
@@ -435,7 +476,6 @@ int ObLogFlashbackService::ChangeAccessModeOperator::switch_state()
   int ret = OB_SUCCESS;
   // 1. get access_mode
   // 2. change_access_mode
-  const int64_t CONN_TIMEOUT_US = GCONF.rpc_timeout;
   LogGetPalfStatReq get_mode_req(self_, ls_id_.id(), true);
   LogGetPalfStatResp get_mode_resp;
   if (false == this->is_valid()) {
@@ -443,9 +483,7 @@ int ObLogFlashbackService::ChangeAccessModeOperator::switch_state()
     CLOG_LOG(ERROR, "invalid operator", K(ret), KPC(this));
   } else if (false == leader_.is_valid() && OB_FAIL(update_leader_())) {
     ret = OB_EAGAIN;
-  } else if (OB_FAIL(rpc_proxy_->to(leader_).timeout(CONN_TIMEOUT_US).trace_time(true).
-                      max_process_handler_time(CONN_TIMEOUT_US).by(tenant_id_).
-                      get_palf_stat(get_mode_req, get_mode_resp))) {
+  } else if (OB_FAIL(get_palf_stat_in_process_(get_mode_req, get_mode_resp))) {
     CLOG_LOG(WARN, "get_palf_stat failed", K(ret), KPC(this), K(get_mode_req));
     leader_.reset();
     ret = OB_EAGAIN;
@@ -454,10 +492,9 @@ int ObLogFlashbackService::ChangeAccessModeOperator::switch_state()
       palf::AccessMode::FLASHBACK == get_mode_resp.palf_stat_.access_mode_) {
     // access_mode has been changed to dst_mode, skip
   } else {
+    // single-replica: leader is always self, change access mode in-process
     LogChangeAccessModeCmd change_mode_cmd(self_, ls_id_.id(), mode_version_, dst_mode_, SCN::min_scn());
-    if (OB_FAIL(rpc_proxy_->to(leader_).timeout(CONN_TIMEOUT_US).trace_time(true).
-        max_process_handler_time(CONN_TIMEOUT_US).by(tenant_id_).
-        send_change_access_mode_cmd(change_mode_cmd, NULL))) {
+    if (OB_FAIL(change_access_mode_in_process_(change_mode_cmd))) {
       CLOG_LOG(WARN, "send_change_access_mode_cmd failed", K(ret), KPC(this), K(change_mode_cmd));
     }
     ret = OB_EAGAIN;

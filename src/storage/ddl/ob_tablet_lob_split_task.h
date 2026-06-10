@@ -101,8 +101,8 @@ public:
   {}
   virtual ~ObLobSplitParam();
   int init(const ObLobSplitParam &other);
-  int init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg);
-  int init(const obrpc::ObTabletSplitArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
+  int init(const obcall::ObTabletSplitArg &arg);
   bool is_valid() const {
     return OB_INVALID_ID != tenant_id_ && ls_id_.is_valid() && ori_lob_meta_tablet_id_.is_valid()
            && new_lob_tablet_ids_.count() > 0 && schema_version_ > 0

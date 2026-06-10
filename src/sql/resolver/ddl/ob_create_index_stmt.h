@@ -36,10 +36,10 @@ public:
   ObCreateIndexStmt();
   virtual ~ObCreateIndexStmt();
 
-  obrpc::ObCreateIndexArg &get_create_index_arg();
+  obcall::ObCreateIndexArg &get_create_index_arg();
   int add_storing_column(const common::ObString &column_name);
   int add_hidden_storing_column(const common::ObString &column_name);
-  int add_sort_column(const obrpc::ObColumnSortItem &sort_column);
+  int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   void set_comment(const common::ObString &comment);
   void set_storage_cache_policy(const common::ObString &storage_cache_policy);
   void set_index_name(const common::ObString &index_name);
@@ -77,9 +77,9 @@ public:
   inline uint64_t get_table_id() const;
 
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_index_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_index_arg_; }
 private:
-  obrpc::ObCreateIndexArg create_index_arg_;
+  obcall::ObCreateIndexArg create_index_arg_;
   uint64_t table_id_;
   DISALLOW_COPY_AND_ASSIGN(ObCreateIndexStmt);
 };

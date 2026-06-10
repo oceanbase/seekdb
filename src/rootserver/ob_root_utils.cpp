@@ -25,7 +25,7 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
 using namespace oceanbase::common::sqlclient;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 int ObTenantUtils::get_tenant_ids(
     ObMultiVersionSchemaService *schema_service,

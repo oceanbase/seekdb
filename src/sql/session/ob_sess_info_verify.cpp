@@ -19,6 +19,7 @@
 
 #include "sql/session/ob_sess_info_verify.h"
 #include "observer/ob_sql_client_decorator.h"
+#include "observer/ob_ex_rpc.h"
 
 namespace oceanbase
 {
@@ -97,15 +98,12 @@ int ObSessInfoVerify::verify_session_info(sql::ObSQLSessionInfo &sess,
 {
   int ret = OB_SUCCESS;
   ObAddr addr;
-  obrpc::ObSessInfoVerifyArg arg;
-  obrpc::ObSessionInfoVeriRes result;
+  obcall::ObSessInfoVerifyArg arg;
+  obcall::ObSessionInfoVeriRes result;
   // current session verify info
   ObString current_verify_info;
   if (GET_MIN_CLUSTER_VERSION() == CLUSTER_CURRENT_VERSION) {
-    if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("fail to get srv_rpc_proxy", K(ret), K(GCTX.srv_rpc_proxy_));
-    } else if (OB_FAIL(ObSessInfoVerify::sql_port_to_rpc_port(sess,
+    if (OB_FAIL(ObSessInfoVerify::sql_port_to_rpc_port(sess,
                       sess_info_verification))) {
       LOG_WARN("fail to rpc port", K(ret));
       // For compatibility, no error
@@ -116,8 +114,35 @@ int ObSessInfoVerify::verify_session_info(sql::ObSQLSessionInfo &sess,
     } else if (FALSE_IT(arg.set_proxy_sess_id(
               sess_info_verification.get_verify_info_proxy_sess_id()))) {
       LOG_WARN("fail to set proxy session id", K(ret));
-    } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(addr).by(MTL_ID()).
-                          session_info_verification(arg, result))) {
+    } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
+      int ret = OB_SUCCESS;
+      ObSQLSessionInfo *session = NULL;
+      ObString str_result;
+      if (OB_ISNULL(GCTX.session_mgr_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(GCTX.session_mgr_->get_session(arg.get_sess_id(), session))) {
+      } else {
+        if (arg.get_proxy_sess_id() == session->get_proxy_sessid()
+            && GET_MIN_CLUSTER_VERSION() == CLUSTER_CURRENT_VERSION
+            && session->is_has_query_executed() && session->is_latest_sess_info()) {
+          if (OB_FAIL(ObSessInfoVerify::fetch_verify_session_info(*session, str_result, result.allocator_))) {
+          } else {
+            char *ptr = nullptr;
+            if (OB_ISNULL(ptr = static_cast<char *>(result.allocator_.alloc(str_result.length())))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else {
+              result.verify_info_buf_.assign_buffer(ptr, str_result.length());
+              result.verify_info_buf_.write(str_result.ptr(), str_result.length());
+              result.need_verify_ = true;
+            }
+          }
+        } else {
+          result.need_verify_ = false;
+        }
+        if (NULL != session) { GCTX.session_mgr_->revert_session(session); }
+      }
+      return ret;
+    }))) {
       // rpc fail not self-verification.
       LOG_TRACE("fail to rpc", K(ret));
       ret = OB_SUCCESS;

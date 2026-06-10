@@ -79,7 +79,7 @@ int ObAlterTablegroupResolver::resolve(const ParseNode &parser_tree)
         if (NULL != relation_node) {
           ObString table_name;
           ObString database_name;
-          obrpc::ObTableItem table_item;
+          obcall::ObTableItem table_item;
           if (OB_FAIL(resolve_table_relation_node(relation_node,
                                                   table_name,
                                                   database_name))) {

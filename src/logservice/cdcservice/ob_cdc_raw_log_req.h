@@ -26,7 +26,7 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
 
 class ObCdcFetchRawLogReq
@@ -127,11 +127,11 @@ public:
     return flag_;
   }
 
-  void set_client_type(const obrpc::ObCdcClientType client_type) {
+  void set_client_type(const obcall::ObCdcClientType client_type) {
     client_type_ = client_type;
   }
 
-  obrpc::ObCdcClientType get_client_type() const {
+  obcall::ObCdcClientType get_client_type() const {
     return client_type_;
   }
 

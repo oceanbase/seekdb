@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_opt_stat_monitor_manager.h"
+#include "observer/ob_ex_rpc.h"
 #include "sql/ob_sql_init.h"
 #include "observer/ob_sql_client_decorator.h"
 #include "lib/rc/ob_rc.h"
@@ -172,13 +173,11 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
 {
   int ret = OB_SUCCESS;
   int64_t timeout = -1;
-  if (OB_ISNULL(ctx.get_my_session()) ||
-      OB_ISNULL(GCTX.srv_rpc_proxy_)) {
+  if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(GCTX.srv_rpc_proxy_),
-                                    K(ctx.get_my_session()));
+    LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()));
   } else {
-    obrpc::ObFlushOptStatArg arg(ctx.get_my_session()->get_effective_tenant_id(),
+    obcall::ObFlushOptStatArg arg(ctx.get_my_session()->get_effective_tenant_id(),
                                  is_flush_col_usage,
                                  is_flush_dml_stat);
     timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
@@ -187,10 +186,12 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
     } else if (0 >= timeout) {
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(GCTX.srv_rpc_proxy_->to(GCTX.self_addr())
-                                              .timeout(timeout)
-                                              .by(ctx.get_my_session()->get_rpc_tenant_id())
-                                              .flush_local_opt_stat_monitoring_info(arg))) {
+    } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
+      MTL_SWITCH(arg.tenant_id_) {
+        return MTL(ObOptStatMonitorManager*)->update_opt_stat_monitoring_info(arg);
+      }
+      return OB_SUCCESS;
+    }))) {
       LOG_WARN("failed to flush opt stat monitoring info caused by unknow error", K(ret), K(arg));
       //ignore flush cache failed, TODO @jiangxiu.wt can aduit it and flush cache manually later.
       if (ignore_failed) {
@@ -268,7 +269,7 @@ int ObOptStatMonitorManager::update_local_cache(ObOptDmlStat &dml_stat)
   return ret;
 }
 
-int ObOptStatMonitorManager::update_opt_stat_monitoring_info(const obrpc::ObFlushOptStatArg &arg)
+int ObOptStatMonitorManager::update_opt_stat_monitoring_info(const obcall::ObFlushOptStatArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -1055,7 +1056,7 @@ int ObOptStatMonitorManager::mark_the_opt_stat_expired(const OptStatExpiredTable
                                                   no_table_stats))) {
     LOG_WARN("failed to do mark the opt stat missing", K(ret));
   } else {
-    obrpc::ObUpdateStatCacheArg stat_arg;
+    obcall::ObUpdateStatCacheArg stat_arg;
     stat_arg.tenant_id_ = expired_table_info.tenant_id_;
     stat_arg.table_id_ = expired_table_info.table_id_;
     stat_arg.no_invalidate_ = true;

@@ -17,9 +17,7 @@
 
 #pragma once
 
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
-#include "share/table/ob_table_rpc_proxy.h"
+#include "share/table/ob_table_rpc_binding.h"
 #include "ob_table_rpc_processor.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
 #include "sql/plan_cache/ob_plan_cache.h"
@@ -30,11 +28,11 @@ namespace oceanbase
 {
 namespace observer
 {
-/// @see RPC_S(PR5 redis_execute_v2, obrpc::OB_REDIS_EXECUTE_V2, (table::ObRedisRpcRequest),
+/// @see CALL_S(PR5 redis_execute_v2, obcall::OB_REDIS_EXECUTE_V2, (table::ObRedisRpcRequest),
 /// table::ObRedisResult);
-class ObRedisExecuteV2P : public ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_REDIS_EXECUTE_V2> >
+class ObRedisExecuteV2P : public ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_REDIS_EXECUTE_V2> >
 {
-  typedef ObTableRpcProcessor<obrpc::ObTableRpcProxy::ObRpc<obrpc::OB_REDIS_EXECUTE_V2>> ParentType;
+  typedef ObTableRpcProcessor<obcall::ObTableRpcBinding<obcall::OB_REDIS_EXECUTE_V2>> ParentType;
 
 public:
   explicit ObRedisExecuteV2P(const ObGlobalContext &gctx);

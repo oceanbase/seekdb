@@ -31,17 +31,20 @@ namespace omt
 {
 class ObTenant;
 } // end of namespace omt
-namespace obrpc
+namespace rpc
 {
-class ObRpcSessionHandler;
-} // end of namespace obrpc
+namespace frame
+{
+class ObReqSessionHandler;
+}
+} // end of namespace rpc
 
 namespace observer
 {
 
 using rpc::frame::ObReqQueue;
 using rpc::frame::ObiReqQHandler;
-using obrpc::ObRpcSessionHandler;
+using rpc::frame::ObReqSessionHandler;
 
 class QueueThread
 {
@@ -118,7 +121,7 @@ class ObSrvDeliver
 {
 public:
   ObSrvDeliver(ObiReqQHandler &qhandler,
-               ObRpcSessionHandler &session_handler,
+               ObReqSessionHandler &session_handler,
                ObGlobalContext &gctx);
 
   int init();
@@ -131,7 +134,6 @@ public:
 private:
   int init_queue_threads();
 
-  int deliver_rpc_request(rpc::ObRequest &req);
 
   int deliver_mysql_request(rpc::ObRequest &req);
   int acquire_diagnostic_info_object(int64_t tenant_id, int64_t group_id, int64_t session_id,
@@ -144,7 +146,7 @@ private:
   QueueThread *ddl_queue_;
   QueueThread *ddl_parallel_queue_;
   QueueThread *diagnose_queue_;
-  ObRpcSessionHandler &session_handler_;
+  ObReqSessionHandler &session_handler_;
   ObGlobalContext &gctx_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvDeliver);
 

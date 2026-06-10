@@ -31,7 +31,7 @@ namespace oceanbase
 {
 using namespace oceanbase;
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace rootserver;
 using namespace storage;
@@ -93,7 +93,7 @@ int ObStandbyService::check_inner_stat_()
     } while(0)
 
 void ObStandbyService::tenant_event_start_(
-    const obrpc::ObSwitchRoleArg &arg, int ret,
+    const obcall::ObSwitchRoleArg &arg, int ret,
     int64_t begin_ts, const share::ObAllTenantInfo &tenant_info)
 {
   char tenant_info_buf[1024] = "";
@@ -116,7 +116,7 @@ void ObStandbyService::tenant_event_start_(
 }
 
 void ObStandbyService::tenant_event_end_(
-    const obrpc::ObSwitchRoleArg &arg,
+    const obcall::ObSwitchRoleArg &arg,
     int ret, int64_t cost, int64_t end_ts, const share::SCN switch_scn,
     ObTenantRoleTransCostDetail &cost_detail)
 {
@@ -150,7 +150,7 @@ void ObStandbyService::tenant_event_end_(
   }
 }
 
-int ObStandbyService::switch_role(const obrpc::ObSwitchRoleArg &arg)
+int ObStandbyService::switch_role(const obcall::ObSwitchRoleArg &arg)
 {
   int ret = OB_SUCCESS;
   int64_t begin_ts = ObTimeUtility::current_time();
@@ -212,7 +212,7 @@ int ObStandbyService::switch_role(const obrpc::ObSwitchRoleArg &arg)
 }
 
 int ObStandbyService::failover_to_primary(
-    const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+    const obcall::ObSwitchRoleArg::OpType &switch_optype,
     const bool is_verify,
     const share::ObAllTenantInfo &tenant_info,
     share::SCN &switch_scn,
@@ -222,10 +222,7 @@ int ObStandbyService::failover_to_primary(
   ObTenantRoleTransitionService role_transition_service;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(GCTX.srv_rpc_proxy_));
-  } else if (OB_UNLIKELY(obrpc::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
+  } else if (OB_UNLIKELY(obcall::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid switch_optype", KR(ret), K(switch_optype));
   } else if (OB_FAIL(role_transition_service.init(
@@ -252,7 +249,7 @@ int ObStandbyService::failover_to_primary(
 }
 
 int ObStandbyService::switch_to_primary(
-    const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+    const obcall::ObSwitchRoleArg::OpType &switch_optype,
     const bool is_verify,
     share::SCN &switch_scn,
     ObTenantRoleTransCostDetail &cost_detail)
@@ -263,10 +260,10 @@ int ObStandbyService::switch_to_primary(
   ObAllTenantInfo tenant_info;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (OB_ISNULL(GCTX.srv_rpc_proxy_) || OB_ISNULL(sql_proxy_)) {
+  } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(GCTX.srv_rpc_proxy_), KP(sql_proxy_));
-  } else if (OB_UNLIKELY(obrpc::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
+    LOG_WARN("pointer is null", KR(ret), KP(sql_proxy_));
+  } else if (OB_UNLIKELY(obcall::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid switch_optype", KR(ret), K(switch_optype));
   } else if (OB_FAIL(role_transition_service.init(
@@ -274,7 +271,7 @@ int ObStandbyService::switch_to_primary(
       is_verify,
       &cost_detail))) {
     LOG_WARN("fail to init role_transition_service", KR(ret),
-             KP(GCTX.srv_rpc_proxy_), K(cost_detail));
+             K(cost_detail));
   } else {
     if (OB_FAIL(role_transition_service.failover_to_primary())) {
       LOG_WARN("fail to failover to primary", KR(ret));
@@ -288,7 +285,7 @@ int ObStandbyService::switch_to_primary(
 }
 
 int ObStandbyService::switch_to_standby(
-    const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+    const obcall::ObSwitchRoleArg::OpType &switch_optype,
     const bool is_verify,
     share::ObAllTenantInfo &tenant_info,
     share::SCN &switch_scn,
@@ -298,10 +295,7 @@ int ObStandbyService::switch_to_standby(
   const int32_t group_id = share::OBCG_DBA_COMMAND;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(inited));
-  } else if (OB_ISNULL(GCTX.srv_rpc_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(GCTX.srv_rpc_proxy_));
-  } else if (OB_UNLIKELY(obrpc::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
+  } else if (OB_UNLIKELY(obcall::ObSwitchRoleArg::OpType::INVALID == switch_optype)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid switch_optype", KR(ret), K(switch_optype));
   } else if (tenant_info.is_standby() && tenant_info.is_normal_status()) {
@@ -343,7 +337,7 @@ int ObStandbyService::switch_to_standby(
             is_verify,
             &cost_detail))) {
           LOG_WARN("fail to init role_transition_service", KR(ret), K(switch_optype),
-              KP(sql_proxy_), KP(GCTX.srv_rpc_proxy_), K(cost_detail));
+              KP(sql_proxy_), K(cost_detail));
         } else {
           if (OB_FAIL(role_transition_service.do_switch_access_mode_to_raw_rw(tenant_info))) {
             LOG_WARN("failed to do_switch_access_mode", KR(ret), K(tenant_info));

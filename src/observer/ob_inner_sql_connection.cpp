@@ -1237,33 +1237,8 @@ int ObInnerSQLConnection::start_transaction_inner(
         } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
           LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
         } else {
-          ObInnerSQLTransmitArg arg (MYADDR, get_resource_svr(), tenant_id, get_resource_conn_id(),
-              sql, ObInnerSQLTransmitArg::OPERATION_TYPE_START_TRANSACTION,
-              lib::Worker::CompatMode::ORACLE == get_compat_mode(), GCONF.cluster_id,
-              THIS_WORKER.get_timeout_ts(), query_timeout, trx_timeout,
-              sql_mode, ddl_info, is_load_data_exec, use_external_session_);
-          arg.set_nls_formats(get_session().get_local_nls_date_format(),
-                              get_session().get_local_nls_timestamp_format(),
-                              get_session().get_local_nls_timestamp_tz_format());
-          ObInnerSqlRpcStreamHandle *handler = res.remote_result_set().get_stream_handler();
-          if (OB_ISNULL(handler)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("handler is null ptr", K(ret));
-          } else if (OB_FAIL(arg.set_tz_info_wrap(get_session().get_tz_info_wrap()))) {
-            LOG_WARN("fail to set tz info wrap", K(ret));
-          } else if (FALSE_IT(handler->get_result()->set_conn_id(OB_INVALID_ID))) {
-          } else if (FALSE_IT(handler->get_result()->set_tenant_id(get_session().get_effective_tenant_id()))) {
-          } else if (OB_FAIL(GCTX.inner_sql_rpc_proxy_->to(resource_server_addr).by(tenant_id).
-                             timeout(query_timeout).group_id(group_id_).
-                             inner_sql_sync_transmit(
-                                 arg, *(handler->get_result()), handler->get_handle()))) {
-            LOG_WARN("inner_sql_sync_transmit process failed", K(ret), K(tenant_id));
-          } else if (OB_SUCCESS != handler->get_result()->get_err_code()) {
-            ret = handler->get_result()->get_err_code();
-            LOG_WARN("failed to execute inner sql", K(ret));
-          } else if (FALSE_IT(set_resource_conn_id(handler->get_result()->get_conn_id()))) {
-          } else if (FALSE_IT(get_session().set_trans_type(transaction::ObTxClass::SYS))) {
-          }
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
         }
         if (OB_FAIL(ret)) {
           reset_resource_conn_info();
@@ -1427,37 +1402,8 @@ int ObInnerSQLConnection::forward_request_(const uint64_t tenant_id,
   } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
     LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
   } else {
-    ObInnerSQLTransmitArg arg(MYADDR, get_resource_svr(), tenant_id, get_resource_conn_id(),
-                              sql, (ObInnerSQLTransmitArg::InnerSQLOperationType)op_type,
-                              lib::Worker::CompatMode::ORACLE == get_compat_mode(),
-                              GCONF.cluster_id, THIS_WORKER.get_timeout_ts(), query_timeout,
-                              trx_timeout, sql_mode, ddl_info, is_load_data_exec, use_external_session_);
-    arg.set_nls_formats(get_session().get_local_nls_date_format(),
-                        get_session().get_local_nls_timestamp_format(),
-                        get_session().get_local_nls_timestamp_tz_format());
-    ObInnerSqlRpcStreamHandle *handler = res.remote_result_set().get_stream_handler();
-    if (OB_ISNULL(handler)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("handler is null ptr", K(ret));
-    } else if (OB_FAIL(arg.set_tz_info_wrap(get_session().get_tz_info_wrap()))) {
-      LOG_WARN("fail to set tz info wrap", K(ret));
-      // } else if (FALSE_IT(handler->get_result()->set_conn_id(OB_INVALID_ID))) {
-    } else if (OB_FAIL(GCTX.inner_sql_rpc_proxy_->to(get_resource_svr())
-                       .by(tenant_id)
-                       .timeout(query_timeout)
-                       .group_id(real_group_id)
-                       .inner_sql_sync_transmit(arg,
-                                                *(handler->get_result()),
-                                                handler->get_handle()))) {
-      LOG_WARN("inner_sql_sync_transmit process failed", K(ret), K(tenant_id));
-      // } else if (FALSE_IT(set_resource_conn_id(handler->get_result()->get_conn_id()))) {
-    } else if (OB_SUCCESS != handler->get_result()->get_err_code()) {
-      ret = handler->get_result()->get_err_code();
-      LOG_WARN("failed to execute inner sql", K(ret));
-    } else if (FALSE_IT(get_session().set_trans_type(transaction::ObTxClass::SYS))) {
-    } else if (OB_FAIL(res.close())) {
-      LOG_WARN("close result set failed", K(ret), K(tenant_id));
-    }
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
   }
 
   return ret;
@@ -1500,34 +1446,8 @@ int ObInnerSQLConnection::rollback()
         } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
           LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
         } else {
-          ObInnerSQLTransmitArg arg (MYADDR, get_resource_svr(),
-              get_session().get_effective_tenant_id(), get_resource_conn_id(),
-              ObString::make_string("ROLLBACK"), ObInnerSQLTransmitArg::OPERATION_TYPE_ROLLBACK,
-              lib::Worker::CompatMode::ORACLE == get_compat_mode(), GCONF.cluster_id,
-              THIS_WORKER.get_timeout_ts(), query_timeout, trx_timeout, sql_mode,
-              ddl_info, is_load_data_exec, use_external_session_);
-          arg.set_nls_formats(get_session().get_local_nls_date_format(),
-                              get_session().get_local_nls_timestamp_format(),
-                              get_session().get_local_nls_timestamp_tz_format());
-          ObInnerSqlRpcStreamHandle *handler = res.remote_result_set().get_stream_handler();
-          if (OB_ISNULL(handler)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("handler is null ptr", K(ret));
-          } else if (OB_FAIL(arg.set_tz_info_wrap(get_session().get_tz_info_wrap()))) {
-            LOG_WARN("fail to set tz info wrap", K(ret));
-          } else if (OB_FAIL(GCTX.inner_sql_rpc_proxy_->to(get_resource_svr()).by(OB_SYS_TENANT_ID).
-                             timeout(query_timeout).
-                             group_id(group_id_).
-                             inner_sql_sync_transmit(
-                                 arg, *(handler->get_result()), handler->get_handle()))) {
-            LOG_WARN("inner_sql_sync_transmit process failed",
-                K(ret), K(handler->get_result()->get_err_code()));
-          } else if (OB_SUCCESS != handler->get_result()->get_err_code()) {
-            ret = handler->get_result()->get_err_code();
-            LOG_WARN("failed to execute inner sql", K(ret));
-          } else if (FALSE_IT(get_session().set_trans_type(transaction::ObTxClass::SYS))) {
-          } else if (FALSE_IT(reset_resource_conn_info())) {
-          }
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
         }
       }
     }
@@ -1573,33 +1493,8 @@ int ObInnerSQLConnection::commit()
         } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
           LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
         } else {
-          ObInnerSQLTransmitArg arg (MYADDR, get_resource_svr(),
-              get_session().get_effective_tenant_id(), get_resource_conn_id(),
-              ObString::make_string("COMMIT"), ObInnerSQLTransmitArg::OPERATION_TYPE_COMMIT,
-              lib::Worker::CompatMode::ORACLE == get_compat_mode(), GCONF.cluster_id,
-              THIS_WORKER.get_timeout_ts(), query_timeout, trx_timeout, sql_mode,
-              ddl_info, is_load_data_exec, use_external_session_);
-          arg.set_nls_formats(get_session().get_local_nls_date_format(),
-                              get_session().get_local_nls_timestamp_format(),
-                              get_session().get_local_nls_timestamp_tz_format());
-          ObInnerSqlRpcStreamHandle *handler = res.remote_result_set().get_stream_handler();
-          if (OB_ISNULL(handler)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("handler is null ptr", K(ret));
-          } else if (OB_FAIL(arg.set_tz_info_wrap(get_session().get_tz_info_wrap()))) {
-            LOG_WARN("fail to set tz info wrap", K(ret));
-          } else if (OB_FAIL(GCTX.inner_sql_rpc_proxy_->to(get_resource_svr()).by(OB_SYS_TENANT_ID).
-                     timeout(query_timeout).group_id(group_id_).
-                     inner_sql_sync_transmit(
-                         arg, *(handler->get_result()), handler->get_handle()))) {
-            LOG_WARN("inner_sql_sync_transmit process failed",
-                     K(ret), K(handler->get_result()->get_err_code()));
-          } else if (OB_SUCCESS != handler->get_result()->get_err_code()) {
-            ret = handler->get_result()->get_err_code();
-            LOG_WARN("failed to execute inner sql", K(ret));
-          } else if (FALSE_IT(get_session().set_trans_type(transaction::ObTxClass::SYS))) {
-          } else if (FALSE_IT(reset_resource_conn_info())) {
-          }
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
         }
       }
     }
@@ -1720,54 +1615,8 @@ int ObInnerSQLConnection::execute_write_inner(const uint64_t tenant_id, const Ob
         }
       }
       if (OB_SUCC(ret)) {
-        get_session().store_query_string(sql);
-        ObInnerSQLTransmitArg arg (MYADDR, get_resource_svr(), tenant_id, get_resource_conn_id(),
-            sql, ObInnerSQLTransmitArg::OPERATION_TYPE_EXECUTE_WRITE,
-            lib::Worker::CompatMode::ORACLE == get_compat_mode(), GCONF.cluster_id,
-            THIS_WORKER.get_timeout_ts(), query_timeout, trx_timeout, sql_mode,
-            ddl_info, is_load_data_exec, use_external_session_, consumer_group_id);
-        arg.set_nls_formats(get_session().get_local_nls_date_format(),
-                            get_session().get_local_nls_timestamp_format(),
-                            get_session().get_local_nls_timestamp_tz_format());
-        ObInnerSqlRpcStreamHandle *handler = res.remote_result_set().get_stream_handler();
-
-        if (OB_ISNULL(handler)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("handler is null ptr", K(ret));
-        } else if (OB_FAIL(arg.set_tz_info_wrap(get_session().get_tz_info_wrap()))) {
-          LOG_WARN("fail to set tz info wrap", K(ret));
-        } else if (OB_FAIL(GCTX.inner_sql_rpc_proxy_->to(get_resource_svr()).by(tenant_id).
-                           timeout(query_timeout).group_id(group_id_).inner_sql_sync_transmit(
-                               arg, *(handler->get_result()), handler->get_handle()))) {
-          // complement data for offline ddl may exceed rpc default timeout, thus need to set it to a bigger value for this proxy.
-          LOG_WARN("inner_sql_sync_transmit process failed", K(ret), K(tenant_id));
-        } else if (OB_SUCCESS != handler->get_result()->get_err_code()) {
-          ret = handler->get_result()->get_err_code();
-          LOG_WARN("failed to execute inner sql", K(ret));
-        } else if (FALSE_IT(affected_rows = handler->get_result()->get_affected_rows())) {
-        } else if (FALSE_IT(get_session().set_trans_type(transaction::ObTxClass::SYS))) {
-        } else if (get_session().get_in_transaction()) {
-          bool dml_or_savepoint =
-            ObStmt::is_dml_write_stmt(handler->get_result()->get_stmt_type())
-            || ObStmt::is_savepoint_stmt(handler->get_result()->get_stmt_type());
-          get_session().set_has_exec_inner_dml(dml_or_savepoint);
-        }
-        if (get_session().get_ddl_info().is_ddl()) {
-          SERVER_EVENT_ADD(
-            "ddl", "send ddl inner sql",
-            "tenant_id", tenant_id,
-            "trace_id", *ObCurTraceId::get_trace_id(),
-            "ret", ret,
-            "affected_rows", affected_rows,
-            "start_ts", res.execute_start_ts_,
-            "end_ts", res.execute_end_ts_);
-        }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(res.close())) {
-            LOG_WARN("close result set failed", K(ret), K(tenant_id), K(sql));
-          } else if (!is_in_trans() && FALSE_IT(reset_resource_conn_info())) {
-          }
-        }
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
       }
     }
 #ifndef NDEBUG
@@ -1826,22 +1675,16 @@ int ObInnerSQLConnection::execute_read(const int64_t cluster_id,
 
 bool ObInnerSQLConnection::is_local_execute(const int64_t cluster_id, const uint64_t tenant_id)
 {
-  bool local_execute = true;
-
-  if (GCONF.cluster_id != cluster_id) {
-    local_execute = false;
-  } else if (is_resource_conn() || is_extern_session()) {
-    local_execute = true;
-  } else if (is_in_trans()) {
-    // Force to remote execute when inner sql is in trans and other inner sql in the same trans has been remote executed before.
-    // Although local obs has tenant resource now. Vice versa.
-    local_execute = OB_INVALID_ID == get_resource_conn_id();
-  } else if (force_remote_execute_) {
-    local_execute = false;
-  } else if (!GCTX.omt_->is_available_tenant(tenant_id)) {
-    local_execute = false;
-  }
-  return local_execute;
+  // Single-replica: the only server is local and the remote inner-SQL
+  // resource-server RPC path has been removed (every !local_execute branch now
+  // returns OB_NOT_SUPPORTED / a dead forward_request). So inner SQL and
+  // inner-connection lock ops always execute locally. The former conditions that
+  // routed to a remote resource server (cross-cluster / force_remote_execute_ /
+  // tenant resource not local / a trans that had gone remote) can no longer be
+  // honoured remotely; executing locally is the only valid -- and correct --
+  // behaviour for a single-replica deployment.
+  UNUSEDx(cluster_id, tenant_id);
+  return true;
 }
 
 int ObInnerSQLConnection::execute_read_inner(const int64_t cluster_id,
@@ -1928,37 +1771,8 @@ int ObInnerSQLConnection::execute_read_inner(const int64_t cluster_id,
       }
     }
     if (OB_SUCC(ret)) {
-      get_session().store_query_string(sql);
-      ObInnerSQLTransmitArg arg (MYADDR, get_resource_svr(), tenant_id, get_resource_conn_id(),
-          sql, ObInnerSQLTransmitArg::OPERATION_TYPE_EXECUTE_READ,
-          lib::Worker::CompatMode::ORACLE == get_compat_mode(), GCONF.cluster_id,
-          THIS_WORKER.get_timeout_ts(), query_timeout, trx_timeout, sql_mode,
-          ddl_info, is_load_data_exec, use_external_session_, consumer_group_id_);
-      arg.set_nls_formats(get_session().get_local_nls_date_format(),
-                          get_session().get_local_nls_timestamp_format(),
-                          get_session().get_local_nls_timestamp_tz_format());
-      ObInnerSqlRpcStreamHandle *handler =
-          read_ctx->get_result().remote_result_set().get_stream_handler();
-      if (OB_ISNULL(handler)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("handler is null ptr", K(ret));
-      } else if (OB_FAIL(arg.set_tz_info_wrap(get_session().get_tz_info_wrap()))) {
-        LOG_WARN("fail to set tz info wrap", K(ret));
-      } else if (OB_FAIL(GCTX.inner_sql_rpc_proxy_->to(get_resource_svr()).
-            dst_cluster_id(cluster_id).by(tenant_id).timeout(query_timeout).group_id(group_id_).
-                         inner_sql_sync_transmit(
-                             arg, *(handler->get_result()), handler->get_handle()))) {
-        LOG_WARN("inner_sql_sync_transmit process failed", K(ret), K(tenant_id), K(cluster_id));
-      } else if (OB_SUCCESS != handler->get_result()->get_err_code()) {
-        ret = handler->get_result()->get_err_code();
-        LOG_WARN("failed to execute inner sql", K(ret));
-      } else if (FALSE_IT(read_ctx->get_result().remote_result_set().set_stmt_type(
-                          handler->get_result()->get_stmt_type()))) {
-      } else if (OB_FAIL(read_ctx->get_result().open())) {
-        LOG_WARN("result set open failed", K(ret));
-      } else if (FALSE_IT(read_ctx->get_result().set_is_read(true))) {
-      } else if (FALSE_IT(get_session().set_trans_type(transaction::ObTxClass::SYS))) {
-      }
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
     }
     if (!is_in_trans()) {
       reset_resource_conn_info();

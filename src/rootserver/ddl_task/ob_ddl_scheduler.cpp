@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_scheduler.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
 #include "rootserver/ddl_task/ob_drop_vec_index_task.h"
 #include "rootserver/ddl_task/ob_drop_lob_task.h"
@@ -31,7 +32,6 @@
 #include "rootserver/ddl_task/ob_vec_index_build_task.h"
 #include "rootserver/ob_root_service.h" // for ObRootService
 #include "share/longops_mgr/ob_longops_mgr.h"
-#include "share/ob_common_rpc_proxy.h" // ObCommonRpcProxy
 #include "share/ob_ddl_sim_point.h"
 #include "share/restore/ob_import_util.h"
 #include "share/scheduler/ob_partition_auto_split_helper.h"
@@ -1246,13 +1246,13 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
 {
   int ret = OB_SUCCESS;
   task_record.reset();
-  const obrpc::ObAlterTableArg *alter_table_arg = nullptr;
-  const obrpc::ObCreateIndexArg *create_index_arg = nullptr;
-  const obrpc::ObDropIndexArg *drop_index_arg = nullptr;
-  const obrpc::ObPartitionSplitArg *partition_split_arg = nullptr;
-  const obrpc::ObRebuildIndexArg *rebuild_index_arg = nullptr;
-  const obrpc::ObMViewCompleteRefreshArg *mview_complete_refresh_arg = nullptr;
-  const obrpc::ObForkTableArg *fork_table_arg = nullptr;
+  const obcall::ObAlterTableArg *alter_table_arg = nullptr;
+  const obcall::ObCreateIndexArg *create_index_arg = nullptr;
+  const obcall::ObDropIndexArg *drop_index_arg = nullptr;
+  const obcall::ObPartitionSplitArg *partition_split_arg = nullptr;
+  const obcall::ObRebuildIndexArg *rebuild_index_arg = nullptr;
+  const obcall::ObMViewCompleteRefreshArg *mview_complete_refresh_arg = nullptr;
+  const obcall::ObForkTableArg *fork_table_arg = nullptr;
   LOG_INFO("create ddl task", K(param));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1276,7 +1276,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_CREATE_INDEX:
       case DDL_CREATE_MLOG:
       case DDL_CREATE_PARTITIONED_LOCAL_INDEX:
-        create_index_arg = static_cast<const obrpc::ObCreateIndexArg *>(param.ddl_arg_);
+        create_index_arg = static_cast<const obcall::ObCreateIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_build_index_task(proxy,
                                             param.type_,
                                             param.src_table_schema_,
@@ -1298,7 +1298,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_CREATE_FTS_INDEX:
       case DDL_CREATE_MULTIVALUE_INDEX:
       case DDL_CREATE_VEC_SPIV_INDEX:
-        create_index_arg = static_cast<const obrpc::ObCreateIndexArg *>(param.ddl_arg_);
+        create_index_arg = static_cast<const obcall::ObCreateIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_build_fts_index_task(proxy,
                                                 param.src_table_schema_,
                                                 param.dest_table_schema_,
@@ -1317,7 +1317,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_CREATE_VEC_IVFFLAT_INDEX:
       case DDL_CREATE_VEC_IVFSQ8_INDEX:
       case DDL_CREATE_VEC_IVFPQ_INDEX:
-        create_index_arg = static_cast<const obrpc::ObCreateIndexArg *>(param.ddl_arg_);
+        create_index_arg = static_cast<const obcall::ObCreateIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_build_vec_ivf_index_task(proxy,
                                                     param.src_table_schema_,
                                                     param.dest_table_schema_,
@@ -1333,7 +1333,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
         }
         break;
       case DDL_CREATE_VEC_INDEX:
-        create_index_arg = static_cast<const obrpc::ObCreateIndexArg *>(param.ddl_arg_);
+        create_index_arg = static_cast<const obcall::ObCreateIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_build_vec_index_task(proxy,
                                                 param.src_table_schema_,
                                                 param.dest_table_schema_,
@@ -1352,7 +1352,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_DROP_INDEX:
       case DDL_DROP_MLOG:
         // in this case, src_table_schema is data table, dest_table_schema is index table
-        drop_index_arg = static_cast<const obrpc::ObDropIndexArg *>(param.ddl_arg_);
+        drop_index_arg = static_cast<const obcall::ObDropIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_drop_index_task(proxy,
                                            param.type_,
                                            param.src_table_schema_,
@@ -1368,7 +1368,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_DROP_FTS_INDEX:
       case DDL_DROP_MULVALUE_INDEX:
       case DDL_DROP_VEC_SPIV_INDEX:
-        drop_index_arg = static_cast<const obrpc::ObDropIndexArg *>(param.ddl_arg_);
+        drop_index_arg = static_cast<const obcall::ObDropIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_drop_fts_index_task(proxy,
                                                param.src_table_schema_,
                                                param.schema_version_,
@@ -1386,7 +1386,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_DROP_VEC_IVFFLAT_INDEX:
       case DDL_DROP_VEC_IVFSQ8_INDEX:
       case DDL_DROP_VEC_IVFPQ_INDEX:
-        drop_index_arg = static_cast<const obrpc::ObDropIndexArg *>(param.ddl_arg_);
+        drop_index_arg = static_cast<const obcall::ObDropIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_drop_vec_ivf_index_task(proxy,
                                                    param.src_table_schema_,
                                                    param.schema_version_,
@@ -1406,7 +1406,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
         }
         break;
       case DDL_DROP_VEC_INDEX:
-        drop_index_arg = static_cast<const obrpc::ObDropIndexArg *>(param.ddl_arg_);
+        drop_index_arg = static_cast<const obcall::ObDropIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_drop_vec_index_task(proxy,
                                                 param.src_table_schema_,
                                                 param.schema_version_,
@@ -1456,7 +1456,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
                                                    param.parent_task_id_,
                                                    param.task_id_,
                                                    param.sub_task_trace_id_,
-                                                   static_cast<const obrpc::ObAlterTableArg *>(param.ddl_arg_),
+                                                   static_cast<const obcall::ObAlterTableArg *>(param.ddl_arg_),
                                                    param.tenant_data_version_,
                                                    param.ddl_need_retry_at_executor_,
                                                    *param.allocator_,
@@ -1466,7 +1466,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
         break;
       case DDL_REBUILD_INDEX:
       case DDL_REPLACE_MLOG:
-        rebuild_index_arg = static_cast<const obrpc::ObRebuildIndexArg *>(param.ddl_arg_);
+        rebuild_index_arg = static_cast<const obcall::ObRebuildIndexArg *>(param.ddl_arg_);
         if (OB_FAIL(create_rebuild_index_task(proxy,
                                               param.type_,
                                               param.src_table_schema_,
@@ -1482,7 +1482,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
         }
         break;
       case DDL_CREATE_MVIEW:
-        mview_complete_refresh_arg = static_cast<const obrpc::ObMViewCompleteRefreshArg *>(param.ddl_arg_);
+        mview_complete_refresh_arg = static_cast<const obcall::ObMViewCompleteRefreshArg *>(param.ddl_arg_);
         if (OB_FAIL(create_build_mview_task(proxy,
                                             param.src_table_schema_,
                                             param.parallelism_,
@@ -1503,7 +1503,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
                                                    param.consumer_group_id_,
                                                    param.task_id_,
                                                    param.sub_task_trace_id_,
-                                                   static_cast<const obrpc::ObAlterTableArg *>(param.ddl_arg_),
+                                                   static_cast<const obcall::ObAlterTableArg *>(param.ddl_arg_),
                                                    param.tenant_data_version_,
                                                    *param.allocator_,
                                                    task_record))) {
@@ -1511,7 +1511,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
         }
         break;
       case DDL_DROP_PRIMARY_KEY:
-        alter_table_arg = static_cast<const obrpc::ObAlterTableArg *>(param.ddl_arg_);
+        alter_table_arg = static_cast<const obcall::ObAlterTableArg *>(param.ddl_arg_);
         if (OB_FAIL(create_drop_primary_key_task(proxy,
                                                  param.type_,
                                                  param.src_table_schema_,
@@ -1535,7 +1535,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
                                            param.object_id_,
                                            param.type_,
                                            param.schema_version_,
-                                           static_cast<const obrpc::ObAlterTableArg *>(param.ddl_arg_),
+                                           static_cast<const obcall::ObAlterTableArg *>(param.ddl_arg_),
                                            param.parent_task_id_,
                                            param.consumer_group_id_,
                                            param.sub_task_trace_id_,
@@ -1555,7 +1555,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
                                                     param.consumer_group_id_,
                                                     param.task_id_,
                                                     param.sub_task_trace_id_,
-                                                    static_cast<const obrpc::ObAlterTableArg *>(param.ddl_arg_),
+                                                    static_cast<const obcall::ObAlterTableArg *>(param.ddl_arg_),
                                                     param.tenant_data_version_,
                                                     *param.allocator_,
                                                     task_record))) {
@@ -1570,7 +1570,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
                                                param.consumer_group_id_,
                                                param.task_id_,
                                                param.sub_task_trace_id_,
-                                               static_cast<const obrpc::ObAlterTableArg *>(param.ddl_arg_),
+                                               static_cast<const obcall::ObAlterTableArg *>(param.ddl_arg_),
                                                *param.allocator_,
                                                task_record))) {
           LOG_WARN("fail to create modify autoinc task", K(ret));
@@ -1580,7 +1580,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_AUTO_SPLIT_NON_RANGE:
       case DDL_MANUAL_SPLIT_BY_RANGE:
       case DDL_MANUAL_SPLIT_NON_RANGE:
-        partition_split_arg = static_cast<const obrpc::ObPartitionSplitArg *>(param.ddl_arg_);
+        partition_split_arg = static_cast<const obcall::ObPartitionSplitArg *>(param.ddl_arg_);
         if (OB_FAIL(create_partition_split_task(proxy,
                                                 param.src_table_schema_,
                                                 param.parallelism_,
@@ -1594,7 +1594,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
         }
         break;
       case DDL_FORK_TABLE: {
-        fork_table_arg = static_cast<const obrpc::ObForkTableArg *>(param.ddl_arg_);
+        fork_table_arg = static_cast<const obcall::ObForkTableArg *>(param.ddl_arg_);
         if (OB_FAIL(create_fork_table_task(proxy,
                                            param.src_table_schema_,
                                            param.dest_table_schema_,
@@ -1682,7 +1682,7 @@ int ObDDLScheduler::remove_sys_task(ObDDLTask *task)
 }
 int ObDDLScheduler::prepare_alter_table_arg(const ObPrepareAlterTableArgParam &param,
                                             const ObTableSchema *target_table_schema,
-                                            obrpc::ObAlterTableArg &alter_table_arg)
+                                            obcall::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
   AlterTableSchema *alter_table_schema = &alter_table_arg.alter_table_schema_;
@@ -1716,9 +1716,9 @@ int ObDDLScheduler::prepare_alter_table_arg(const ObPrepareAlterTableArgParam &p
   } else if (OB_FAIL(alter_table_schema->set_database_name(param.target_database_name_))) {
     LOG_WARN("failed to set database name", K(ret));
   } else if (!target_table_schema->is_mysql_tmp_table()
-            && OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obrpc::ObAlterTableArg::SESSION_ID))) {
+            && OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obcall::ObAlterTableArg::SESSION_ID))) {
     LOG_WARN("failed to add member SESSION_ID for alter table schema", K(ret), K(alter_table_arg));
-  } else if (OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obrpc::ObAlterTableArg::TABLE_NAME))) {
+  } else if (OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obcall::ObAlterTableArg::TABLE_NAME))) {
     LOG_WARN("failed to add member TABLE_NAME for alter table schema", K(ret), K(alter_table_arg));
   } else if (FALSE_IT(alter_table_arg.foreign_key_checks_ = param.foreign_key_checks_)) {
   } else {
@@ -1727,8 +1727,8 @@ int ObDDLScheduler::prepare_alter_table_arg(const ObPrepareAlterTableArgParam &p
   return ret;
 }
 
-int ObDDLScheduler::cache_auto_split_task(const obrpc::ObAutoSplitTabletBatchArg &arg,
-                                          obrpc::ObAutoSplitTabletBatchRes &res)
+int ObDDLScheduler::cache_auto_split_task(const obcall::ObAutoSplitTabletBatchArg &arg,
+                                          obcall::ObAutoSplitTabletBatchRes &res)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -1738,11 +1738,11 @@ int ObDDLScheduler::cache_auto_split_task(const obrpc::ObAutoSplitTabletBatchArg
     ObRsAutoSplitScheduler &split_task_scheduler = ObRsAutoSplitScheduler::get_instance();
     ObArray<ObAutoSplitTask> task_array;
     ObAutoSplitTask task;
-    const ObSArray<obrpc::ObAutoSplitTabletArg> &single_arg_array = arg.args_;
+    const ObSArray<obcall::ObAutoSplitTabletArg> &single_arg_array = arg.args_;
     res.suggested_next_valid_time_ = OB_INVALID_TIMESTAMP;
     res.rets_.reuse();
     for (int64_t i = 0; OB_SUCC(ret) && i < single_arg_array.size(); ++i) {
-      const obrpc::ObAutoSplitTabletArg &single_arg = single_arg_array.at(i);
+      const obcall::ObAutoSplitTabletArg &single_arg = single_arg_array.at(i);
       task.reset();
       task.auto_split_tablet_size_ = single_arg.auto_split_tablet_size_;
       task.ls_id_ = single_arg.ls_id_;
@@ -1793,37 +1793,35 @@ int ObDDLScheduler::schedule_auto_split_task()
   } else {
     ObAutoSplitArgBuilder split_helper;
     ObArray<ObAutoSplitTask> failed_task;
-    obrpc::ObAlterTableRes unused_res;
+    obcall::ObAlterTableRes unused_res;
     common::ObMalloc allocator(common::ObMemAttr(OB_SERVER_TENANT_ID, "split_sched"));
     for (int64_t i = 0; OB_SUCC(ret) && i < task_array.count(); ++i) {
       tmp_ret = OB_SUCCESS;
       unused_res.reset();
       ObAutoSplitTask &task = task_array.at(i);
       void *buf = nullptr;
-      obrpc::ObAlterTableArg *single_arg = nullptr;
+      obcall::ObAlterTableArg *single_arg = nullptr;
       bool is_ls_migrating = false;
       if (OB_FAIL(ObRsAutoSplitScheduler::check_ls_migrating(task.tenant_id_, task.tablet_id_, is_ls_migrating))) {
         LOG_WARN("check ls migrating failed", K(ret), K(task));
       } else if (is_ls_migrating) {
         LOG_TRACE("ls migrating, delay auto split", K(task));
-      } else if (OB_ISNULL(buf = allocator.alloc(sizeof(obrpc::ObAlterTableArg)))) {
+      } else if (OB_ISNULL(buf = allocator.alloc(sizeof(obcall::ObAlterTableArg)))) {
         //ignore ret
         tmp_ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(tmp_ret), K(task));
-      } else if (FALSE_IT(single_arg = new (buf) obrpc::ObAlterTableArg())) {
+      } else if (FALSE_IT(single_arg = new (buf) obcall::ObAlterTableArg())) {
       } else if (OB_TMP_FAIL(split_helper.build_arg(task.tenant_id_, task.ls_id_, task.tablet_id_,
           task.auto_split_tablet_size_, task.used_disk_space_, *single_arg))) {
         LOG_WARN("fail to build arg", K(tmp_ret), K(task));
       } else if (!single_arg->is_auto_split_partition()) {
         //do nothing
-      } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
         tmp_ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(tmp_ret), KP(GCTX.rs_rpc_proxy_));
       } else if (single_arg->alter_table_schema_.is_global_index_table()
-          && OB_TMP_FAIL(GCTX.rs_rpc_proxy_->to(GCTX.self_addr()).timeout(GCONF._ob_ddl_timeout).split_global_index_tablet(*single_arg))) {
+          && OB_TMP_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->split_global_index_tablet(*single_arg); }))) {
         LOG_WARN("split global index failed", K(tmp_ret), K(single_arg));
       } else if (!single_arg->alter_table_schema_.is_global_index_table()
-          && OB_TMP_FAIL(GCTX.rs_rpc_proxy_->to(GCTX.self_addr()).timeout(GCONF._ob_ddl_timeout).alter_table(*single_arg, unused_res))) {
+          && OB_TMP_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_table(*single_arg, unused_res); }))) {
         LOG_WARN("alter table failed", K(tmp_ret), K(single_arg), K(unused_res));
       }
       if (OB_TMP_FAIL(tmp_ret) && split_task_scheduler.can_retry(task, tmp_ret)) {
@@ -2010,7 +2008,7 @@ int ObDDLScheduler::finish_redef_table(const ObDDLTaskID &task_id)
   return ret;
 }
 
-int ObDDLScheduler::start_redef_table(const obrpc::ObStartRedefTableArg &arg, obrpc::ObStartRedefTableRes &res)
+int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg, obcall::ObStartRedefTableRes &res)
 {
   int ret = OB_SUCCESS;
   ObDDLTaskRecord task_record;
@@ -2050,7 +2048,7 @@ int ObDDLScheduler::start_redef_table(const obrpc::ObStartRedefTableArg &arg, ob
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("target_table_schema is nullptr", K(ret));
   } else {
-    HEAP_VAR(obrpc::ObAlterTableArg, alter_table_arg) {
+    HEAP_VAR(obcall::ObAlterTableArg, alter_table_arg) {
       ObPrepareAlterTableArgParam param;
       if (OB_FAIL(param.init(THIS_WORKER.get_group_id(),
                              arg.session_id_,
@@ -2105,7 +2103,7 @@ int ObDDLScheduler::create_build_fts_index_task(
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
     const uint64_t tenant_data_version,
-    const obrpc::ObCreateIndexArg *create_index_arg,
+    const obcall::ObCreateIndexArg *create_index_arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record,
     int64_t snapshot_version,
@@ -2165,7 +2163,7 @@ int ObDDLScheduler::create_build_vec_ivf_index_task(
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
     const ObDDLType task_type,
-    const obrpc::ObCreateIndexArg *create_index_arg,
+    const obcall::ObCreateIndexArg *create_index_arg,
     const uint64_t tenant_data_version,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
@@ -2215,7 +2213,7 @@ int ObDDLScheduler::create_build_vec_index_task(
     const int64_t parallelism,
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
-    const obrpc::ObCreateIndexArg *create_index_arg,
+    const obcall::ObCreateIndexArg *create_index_arg,
     const uint64_t tenant_data_version,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record,
@@ -2272,7 +2270,7 @@ int ObDDLScheduler::create_build_index_task(
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObCreateIndexArg *create_index_arg,
+    const obcall::ObCreateIndexArg *create_index_arg,
     const share::ObDDLType task_type,
     const uint64_t tenant_data_version,
     ObIAllocator &allocator,
@@ -2331,7 +2329,7 @@ int ObDDLScheduler::create_drop_index_task(
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObDropIndexArg *drop_index_arg,
+    const obcall::ObDropIndexArg *drop_index_arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
 {
@@ -2379,7 +2377,7 @@ int ObDDLScheduler::create_drop_fts_index_task(
     const share::schema::ObTableSchema *doc_rowkey_schema,
     const share::schema::ObTableSchema *domain_index_schema,
     const share::schema::ObTableSchema *doc_word_schema,
-    const obrpc::ObDropIndexArg *drop_index_arg,
+    const obcall::ObDropIndexArg *drop_index_arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
 {
@@ -2485,7 +2483,7 @@ int ObDDLScheduler::create_drop_vec_index_task(
     const share::schema::ObTableSchema *snapshot_data_schema,
     const share::schema::ObTableSchema *embedded_vec_schema,
     const uint64_t tenant_data_version,
-    const obrpc::ObDropIndexArg *drop_index_arg,
+    const obcall::ObDropIndexArg *drop_index_arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
 {
@@ -2593,7 +2591,7 @@ int ObDDLScheduler::create_drop_vec_ivf_index_task(
     const share::schema::ObTableSchema *pq_centroid_schema,
     const share::schema::ObTableSchema *pq_code_schema,
     const uint64_t tenant_data_version,
-    const obrpc::ObDropIndexArg *drop_index_arg,
+    const obcall::ObDropIndexArg *drop_index_arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
 {
@@ -2730,7 +2728,7 @@ int ObDDLScheduler::create_constraint_task(
     const int64_t constraint_id,
     const ObDDLType ddl_type,
     const int64_t schema_version,
-    const obrpc::ObAlterTableArg *arg,
+    const obcall::ObAlterTableArg *arg,
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
     const int32_t sub_task_trace_id,
@@ -2771,7 +2769,7 @@ int ObDDLScheduler::create_table_redefinition_task(
     const int64_t parent_task_id,
     const int64_t task_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObAlterTableArg *alter_table_arg,
+    const obcall::ObAlterTableArg *alter_table_arg,
     const uint64_t tenant_data_version,
     const bool ddl_need_retry_at_executor,
     ObIAllocator &allocator,
@@ -2819,7 +2817,7 @@ int ObDDLScheduler::create_drop_primary_key_task(
     const int64_t consumer_group_id,
     const int64_t task_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObAlterTableArg *alter_table_arg,
+    const obcall::ObAlterTableArg *alter_table_arg,
     const uint64_t tenant_data_version,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
@@ -2864,7 +2862,7 @@ int ObDDLScheduler::create_column_redefinition_task(
     const int64_t consumer_group_id,
     const int64_t task_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObAlterTableArg *alter_table_arg,
+    const obcall::ObAlterTableArg *alter_table_arg,
     const uint64_t tenant_data_version,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
@@ -2909,7 +2907,7 @@ int ObDDLScheduler::create_modify_autoinc_task(
     const int64_t consumer_group_id,
     const int64_t task_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObAlterTableArg *arg,
+    const obcall::ObAlterTableArg *arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
 {
@@ -2943,7 +2941,7 @@ int ObDDLScheduler::create_partition_split_task(
     const int64_t parallelism,
     const int64_t parent_task_id,
     const int64_t task_id,
-    const obrpc::ObPartitionSplitArg *partition_split_arg,
+    const obcall::ObPartitionSplitArg *partition_split_arg,
     const uint64_t tenant_data_version,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
@@ -2986,7 +2984,7 @@ int ObDDLScheduler::create_recover_restore_table_task(
     const int64_t consumer_group_id,
     const int64_t task_id,
     const int32_t sub_task_trace_id,
-    const obrpc::ObAlterTableArg *alter_table_arg,
+    const obcall::ObAlterTableArg *alter_table_arg,
     const uint64_t tenant_data_version,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
@@ -3030,7 +3028,7 @@ int ObDDLScheduler::create_fork_table_task(
     const int64_t schema_version,
     const int64_t snapshot_version,
     const int64_t parent_task_id,
-    const obrpc::ObForkTableArg *fork_table_arg,
+    const obcall::ObForkTableArg *fork_table_arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
 {
@@ -3485,7 +3483,7 @@ int ObDDLScheduler::create_rebuild_index_task(
                     const int64_t parent_task_id,
                     const int64_t consumer_group_id,
                     const int32_t sub_task_trace_id,
-                    const obrpc::ObRebuildIndexArg *rebuild_index_arg,
+                    const obcall::ObRebuildIndexArg *rebuild_index_arg,
                     const uint64_t tenant_data_version,
                     ObIAllocator &allocator,
                     ObDDLTaskRecord &task_record)
@@ -3945,7 +3943,7 @@ int ObDDLScheduler::create_build_mview_task(
     const int64_t parallelism,
     const int64_t parent_task_id,
     const int64_t consumer_group_id,
-    const obrpc::ObMViewCompleteRefreshArg *mview_complete_refresh_arg,
+    const obcall::ObMViewCompleteRefreshArg *mview_complete_refresh_arg,
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record)
 {

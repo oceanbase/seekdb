@@ -70,7 +70,7 @@ public:
     is_no_logging_(false), dest_lob_meta_tablet_id_(), allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID())
   {}
   ~ObComplementDataParam() { destroy(); }
-  int init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int prepare_task_ranges();
   int split_task_ranges(
       const int64_t task_id,
@@ -238,7 +238,7 @@ class ObComplementDataDag final: public share::ObIDag
 public:
   ObComplementDataDag();
   ~ObComplementDataDag();
-  int init(const obrpc::ObDDLBuildSingleReplicaRequestArg &arg);
+  int init(const obcall::ObDDLBuildSingleReplicaRequestArg &arg);
   int prepare_context();
   virtual uint64_t hash() const override;
   bool operator ==(const share::ObIDag &other) const;

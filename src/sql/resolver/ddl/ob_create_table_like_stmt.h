@@ -73,14 +73,14 @@ public:
   { create_table_like_arg_.define_user_id_ = user_id; }
   virtual bool cause_implicit_commit() const { return share::schema::TMP_TABLE != create_table_like_arg_.table_type_; }
 
-  inline const obrpc::ObCreateTableLikeArg &get_create_table_like_arg() const;
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_table_like_arg_; }
+  inline const obcall::ObCreateTableLikeArg &get_create_table_like_arg() const;
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_table_like_arg_; }
   TO_STRING_KV(K_(stmt_type),K_(create_table_like_arg));
 private:
-  obrpc::ObCreateTableLikeArg create_table_like_arg_;
+  obcall::ObCreateTableLikeArg create_table_like_arg_;
 };
 
-inline const obrpc::ObCreateTableLikeArg &ObCreateTableLikeStmt::get_create_table_like_arg() const
+inline const obcall::ObCreateTableLikeArg &ObCreateTableLikeStmt::get_create_table_like_arg() const
 {
   return create_table_like_arg_;
 }

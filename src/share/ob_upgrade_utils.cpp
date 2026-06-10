@@ -117,8 +117,6 @@ int ObUpgradeProcesserSet::init(
     ObBaseUpgradeProcessor::UpgradeMode mode,
     common::ObMySQLProxy &sql_proxy,
     common::ObOracleSqlProxy &oracle_sql_proxy,
-    obrpc::ObSrvRpcProxy &rpc_proxy,
-    obrpc::ObCommonRpcProxy &common_proxy,
     share::schema::ObMultiVersionSchemaService &schema_service,
     share::ObCheckStopProvider &check_server_provider)
 {
@@ -137,7 +135,7 @@ int ObUpgradeProcesserSet::init(
       } else if (OB_ISNULL(processor = new(buf)PROCESSOR_NAME)) { \
         ret = OB_NOT_INIT; \
         LOG_WARN("fail to new upgrade processor", KR(ret)); \
-      } else if (OB_FAIL(processor->init(version, mode, sql_proxy, oracle_sql_proxy, rpc_proxy, common_proxy, \
+      } else if (OB_FAIL(processor->init(version, mode, sql_proxy, oracle_sql_proxy, \
                                          schema_service, check_server_provider))) { \
         LOG_WARN("fail to init processor", KR(ret), KDV(version)); \
       } \
@@ -308,7 +306,7 @@ int ObUpgradeProcesserSet::get_processor_idx_by_version(
 ObBaseUpgradeProcessor::ObBaseUpgradeProcessor()
   : inited_(false), data_version_(OB_INVALID_VERSION),
     tenant_id_(common::OB_INVALID_ID), mode_(UPGRADE_MODE_INVALID),
-    sql_proxy_(NULL), rpc_proxy_(NULL), common_proxy_(NULL), schema_service_(NULL),
+    sql_proxy_(NULL), schema_service_(NULL),
     check_stop_provider_(NULL)
 {
 }
@@ -340,8 +338,6 @@ int ObBaseUpgradeProcessor::init(
     UpgradeMode mode,
     common::ObMySQLProxy &sql_proxy,
     common::ObOracleSqlProxy &oracle_sql_proxy,
-    obrpc::ObSrvRpcProxy &rpc_proxy,
-    obrpc::ObCommonRpcProxy &common_proxy,
     share::schema::ObMultiVersionSchemaService &schema_service,
     share::ObCheckStopProvider &check_server_provider)
 {
@@ -354,8 +350,6 @@ int ObBaseUpgradeProcessor::init(
     data_version_ = data_version;
     sql_proxy_ = &sql_proxy;
     oracle_sql_proxy_ = &oracle_sql_proxy;
-    rpc_proxy_ = &rpc_proxy;
-    common_proxy_ = &common_proxy;
     schema_service_ = &schema_service;
     check_stop_provider_ = &check_server_provider;
     inited_ = true;

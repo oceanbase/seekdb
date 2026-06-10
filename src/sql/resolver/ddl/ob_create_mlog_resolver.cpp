@@ -22,10 +22,10 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share::schema;
 using namespace storage;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 /*

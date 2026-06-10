@@ -29,7 +29,6 @@
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 #include "share/ob_scanner.h"
 #include "observer/ob_server_struct.h"
-#include "sql/dtl/ob_dtl_rpc_proxy.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
 #include "sql/engine/px/ob_px_row_store.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"

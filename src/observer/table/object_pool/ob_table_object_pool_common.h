@@ -213,7 +213,7 @@ private:
   int64_t retire_time_; // us
   common::ObSpinLock lock_;
   common::ObFixedQueue<T> obj_pool_;
-  ObLabel obj_label_;
+  lib::ObLabel obj_label_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableObjectPool);
 };

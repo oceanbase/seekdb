@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_access_service.h"
+#include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/ob_io_device_helper.h" // LOCAL_DEVICE_INSTANCE
 #include "storage/ob_query_iterator_factory.h"
 #include "storage/access/ob_table_scan_iterator.h"

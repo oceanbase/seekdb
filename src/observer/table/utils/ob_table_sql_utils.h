@@ -110,7 +110,7 @@ public:
 class ObTableRsExecutor
 {
 public:
-  static int execute(sql::ObExecContext &ctx, obrpc::ObHTableDDLArg &arg, obrpc::ObHTableDDLRes &res);
+  static int execute(sql::ObExecContext &ctx, obcall::ObHTableDDLArg &arg, obcall::ObHTableDDLRes &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableRsExecutor);
 };

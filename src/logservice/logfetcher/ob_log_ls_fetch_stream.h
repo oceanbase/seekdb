@@ -55,7 +55,7 @@ private:
   static const int64_t STAT_INTERVAL = 30 * _SEC_;
   static const int64_t DEFAULT_TASK_SET_SIZE = 16;
 
-  typedef obrpc::FeedbackType Feedback;
+  typedef obcall::FeedbackType Feedback;
 
   // Class global variables
 public:
@@ -144,7 +144,7 @@ public:
   const common::ObAddr &get_server() const { return svr_; }
   IObLogRpc &get_log_rpc() { return *rpc_; }
 
-  void set_fetch_log_proto(const obrpc::ObCdcFetchLogProtocolType proto) {
+  void set_fetch_log_proto(const obcall::ObCdcFetchLogProtocolType proto) {
     if (fetch_log_arpc_.get_fetch_log_proto() != proto) {
       fetch_log_arpc_.set_fetch_log_proto(proto);
     }
@@ -258,7 +258,7 @@ private:
       int64_t &flush_time);
   int update_rpc_request_params_();
   int handle_fetch_log_error_(
-      const obrpc::ObRpcResultCode &rcode,
+      const rpc::frame::ObResultCode &rcode,
       const int err,
       const FetchLogRpcResult &result,
       KickOutInfo &kickout_info);
@@ -287,7 +287,7 @@ private:
   int read_log_(const char *data,
       const int64_t data_len,
       const share::SCN replayable_point,
-      const obrpc::ObCdcFetchRawSource data_end_source,
+      const obcall::ObCdcFetchRawSource data_end_source,
       volatile bool &stop_flag,
       KickOutInfo &kick_out_info,
       int64_t &log_num,
@@ -298,7 +298,7 @@ private:
 
   KickOutReason get_feedback_reason_(const Feedback &feedback) const;
   int check_feedback_(const FetchLogRpcResult &result,
-      const obrpc::FeedbackType feed_back,
+      const obcall::FeedbackType feed_back,
       KickOutInfo &kick_out_info);
   int kick_out_task_(const KickOutInfo &kick_out_info);
   int update_fetch_task_state_(
@@ -316,10 +316,10 @@ private:
       const char *&data,
       int64_t &data_len,
       share::SCN &replayable_point,
-      obrpc::ObRpcResultCode &rcode,
-      obrpc::ObCdcFetchRawSource &source,
+      rpc::frame::ObResultCode &rcode,
+      obcall::ObCdcFetchRawSource &source,
       int &err,
-      obrpc::FeedbackType &feed_back);
+      obcall::FeedbackType &feed_back);
 
 public:
   TO_STRING_KV("type", "FETCH_STREAM",

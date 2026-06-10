@@ -410,7 +410,7 @@ public:
                                ObOptStatRunningMonitor *running_monitor = NULL);
 
   static int update_stat_cache(const uint64_t tenant_id,
-                               obrpc::ObUpdateStatCacheArg &stat_arg,
+                               obcall::ObUpdateStatCacheArg &stat_arg,
                                ObOptStatRunningMonitor *running_monitor = NULL);
 
   static int parse_set_table_stat_options(ObExecContext &ctx,

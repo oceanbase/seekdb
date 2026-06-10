@@ -25,7 +25,7 @@
 #include "palf/palf_handle.h"
 #include "palf/palf_base_info.h"
 #include "palf/palf_iterator.h"
-#include "logrpc/ob_log_rpc_proxy.h"
+#include "logrpc/ob_log_service_rpc_shell.h"
 #include "logrpc/ob_log_request_handler.h"
 #include "ob_log_handler_base.h"
 #ifdef OB_BUILD_SHARED_STORAGE
@@ -181,7 +181,7 @@ public:
   virtual int disable_sync() = 0;
   virtual bool is_sync_enabled() const = 0;
   virtual int advance_base_info(const palf::PalfBaseInfo &palf_base_info, const bool is_rebuild) = 0;
-  virtual int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obrpc::LogMemberGCStat &stat) const = 0;
+  virtual int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const = 0;
   virtual void wait_append_sync() = 0;
   virtual int enable_replay(const palf::LSN &initial_lsn, const share::SCN &initial_scn) = 0;
   virtual int disable_replay() = 0;
@@ -212,7 +212,7 @@ public:
            ObRoleChangeService *rc_service,
            palf::PalfEnv *palf_env,
            palf::PalfLocationCacheCb *lc_cb,
-           obrpc::ObLogServiceRpcProxy *rpc_proxy,
+           obcall::ObLogServiceRpcProxy *rpc_proxy,
            common::ObILogAllocator *alloc_mgr);
   bool is_valid() const;
   int stop();
@@ -711,8 +711,8 @@ public:
   // @breif, check request server is in self member list
   // @param[in] const common::ObAddr, request server.
   // @param[out] is_valid_member&, whether in member list or  learner list.
-  // @param[out] obrpc::LogMemberGCStat&, gc stat like learner in migrating.
-  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obrpc::LogMemberGCStat &stat) const override final;
+  // @param[out] obcall::LogMemberGCStat&, gc stat like learner in migrating.
+  int get_member_gc_stat(const common::ObAddr &addr, bool &is_valid_member, obcall::LogMemberGCStat &stat) const override final;
   // @breif, wait cb append onto apply service Qsync
   // protect submit log and push cb in Qsync guard
   void wait_append_sync() override final;
@@ -817,7 +817,7 @@ private:
   // Note: using TCRWLock for using WLockGuardWithTimeout
   common::TCRWLock deps_lock_;
   mutable palf::PalfLocationCacheCb *lc_cb_;
-  mutable obrpc::ObLogServiceRpcProxy *rpc_proxy_;
+  mutable obcall::ObLogServiceRpcProxy *rpc_proxy_;
   common::ObQSync ls_qs_;
   ObMiniStat::ObStatItem append_cost_stat_;
   bool is_offline_;

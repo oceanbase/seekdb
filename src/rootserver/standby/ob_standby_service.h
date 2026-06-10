@@ -32,11 +32,11 @@
   if (OB_TMP_FAIL(err_msg.append_fmt(TRT_ERR_MSG))) {  \
     LOG_WARN("fail to assign error message", KR(tmp_ret));  \
   } else { \
-    if (obrpc::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == TRT_OP) {  \
+    if (obcall::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == TRT_OP) {  \
       tmp_ret = err_msg.append_fmt(", switchover to primary is"); \
-    } else if (obrpc::ObSwitchRoleArg::OpType::SWITCH_TO_STANDBY == TRT_OP) {  \
+    } else if (obcall::ObSwitchRoleArg::OpType::SWITCH_TO_STANDBY == TRT_OP) {  \
       tmp_ret = err_msg.append_fmt(", switchover to standby is"); \
-    } else if (obrpc::ObSwitchRoleArg::OpType::FAILOVER_TO_PRIMARY == TRT_OP) { \
+    } else if (obcall::ObSwitchRoleArg::OpType::FAILOVER_TO_PRIMARY == TRT_OP) { \
       tmp_ret = err_msg.append_fmt(", failover to primary is"); \
     } else { \
       tmp_ret = err_msg.append_fmt(", this operation is"); \
@@ -72,7 +72,7 @@ public:
            schema_service_(NULL),
            inited_(false) {}
   virtual ~ObStandbyService() {}
-  typedef obrpc::ObSwitchRoleArg::OpType RoleTransType;
+  typedef obcall::ObSwitchRoleArg::OpType RoleTransType;
   int init(ObMySQLProxy *sql_proxy,
            share::schema::ObMultiVersionSchemaService *schema_service);
   void destroy();
@@ -83,7 +83,7 @@ public:
    * @param[in] arg
    * @return return code
    */
-  int switch_role(const obrpc::ObSwitchRoleArg &arg);
+  int switch_role(const obcall::ObSwitchRoleArg &arg);
 
 private:
   int check_inner_stat_();
@@ -95,7 +95,7 @@ private:
    * @return return code
    */
   int failover_to_primary(
-      const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+      const obcall::ObSwitchRoleArg::OpType &switch_optype,
       const bool is_verify,
       const share::ObAllTenantInfo &tenant_info,
       share::SCN &switch_scn,
@@ -108,7 +108,7 @@ private:
    * @return return code
    */
   int switch_to_primary(
-      const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+      const obcall::ObSwitchRoleArg::OpType &switch_optype,
       const bool is_verify,
       share::SCN &switch_scn,
       ObTenantRoleTransCostDetail &cost_detail);
@@ -119,7 +119,7 @@ private:
    * @return return code
    */
   int switch_to_standby(
-      const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+      const obcall::ObSwitchRoleArg::OpType &switch_optype,
       const bool is_verify,
       share::ObAllTenantInfo &tenant_info,
       share::SCN &switch_scn,
@@ -168,9 +168,9 @@ private:
       ObAllTenantInfo &new_tenant_info);
 
   int check_if_tenant_status_is_normal_(const RoleTransType op_type);
-  void tenant_event_start_(const obrpc::ObSwitchRoleArg &arg,
+  void tenant_event_start_(const obcall::ObSwitchRoleArg &arg,
       int ret, int64_t begin_ts, const share::ObAllTenantInfo &tenant_info);
-  void tenant_event_end_(const obrpc::ObSwitchRoleArg &arg,
+  void tenant_event_end_(const obcall::ObSwitchRoleArg &arg,
       int ret, int64_t cost, int64_t end_ts, const share::SCN switch_scn,
       ObTenantRoleTransCostDetail &cost_detail);
 private:

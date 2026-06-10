@@ -35,7 +35,7 @@ int ObTransIDService::init()
   return OB_SUCCESS;
 }
 
-int ObTransIDService::handle_request(const ObGtiRequest &request, obrpc::ObGtiRpcResult &result)
+int ObTransIDService::handle_request(const ObGtiRequest &request, obcall::ObGtiRpcResult &result)
 {
   int ret = OB_SUCCESS;
 

@@ -19,6 +19,7 @@
 #include "share/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "share/stat/ob_topk_hist_estimator.h"
+#include "observer/ob_service.h"
 namespace oceanbase
 {
 namespace common
@@ -394,8 +395,8 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
           //do nothing
         } else {
           ObAddr &cur_selected_addr = all_selected_addr.at(i);
-          obrpc::ObEstBlockArg arg;
-          obrpc::ObEstBlockRes result;
+          obcall::ObEstBlockArg arg;
+          obcall::ObEstBlockRes result;
           ObSEArray<int64_t, 4> selected_tablet_idx;
           for (int64_t j = i ; OB_SUCC(ret) && j < all_selected_addr.count(); ++j) {
             if (skip_idx_set.has_member(j)) {//have been estimate
@@ -407,7 +408,7 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
                 LOG_WARN("get unexpected error", K(ret), K(tablet_ids), K(j),
                                 K(candi_tablet_locs.at(j).get_partition_location().get_tablet_id()));
               } else {
-                obrpc::ObEstBlockArgElement arg_element;
+                obcall::ObEstBlockArgElement arg_element;
                 arg_element.tenant_id_ = tenant_id;
                 arg_element.tablet_id_ = candi_tablet_locs.at(j).get_partition_location().get_tablet_id();
                 arg_element.ls_id_ = candi_tablet_locs.at(j).get_partition_location().get_ls_id();
@@ -460,8 +461,8 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
 
 int ObBasicStatsEstimator::stroage_estimate_block_count_and_row_count(ObExecContext &ctx,
                                                                       const ObAddr &addr,
-                                                                      const obrpc::ObEstBlockArg &arg,
-                                                                      obrpc::ObEstBlockRes &result)
+                                                                      const obcall::ObEstBlockArg &arg,
+                                                                      obcall::ObEstBlockRes &result)
 {
   int ret = OB_SUCCESS;
   if (addr == ctx.get_addr()) {
@@ -471,20 +472,15 @@ int ObBasicStatsEstimator::stroage_estimate_block_count_and_row_count(ObExecCont
       LOG_TRACE("succeed to stroage estimate block count and row count", K(addr), K(arg), K(result));
     }
   } else {
-    obrpc::ObSrvRpcProxy *rpc_proxy = NULL;
     const ObSQLSessionInfo *session_info = NULL;
     int64_t timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
-    if (OB_ISNULL(session_info = ctx.get_my_session()) ||
-        OB_ISNULL(rpc_proxy = GCTX.srv_rpc_proxy_)) {
+    if (OB_ISNULL(session_info = ctx.get_my_session())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("rpc_proxy or session is null", K(ret), K(rpc_proxy), K(session_info));
+      LOG_WARN("session is null", K(ret), K(session_info));
     } else if (0 >= timeout) {
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(rpc_proxy->to(addr)
-                       .timeout(timeout)
-                       .by(session_info->get_rpc_tenant_id())
-                       .estimate_tablet_block_count(arg, result))) {
+    } else if (OB_FAIL(GCTX.ob_service_->estimate_tablet_block_count(arg, result))) {
       LOG_WARN("failed to remote storage est failed", K(ret));
     } else {
       LOG_TRACE("succeed to stroage estimate block count", K(addr), K(arg), K(result));
@@ -1724,8 +1720,8 @@ int ObBasicStatsEstimator::do_estimate_skip_rate(ObExecContext &ctx,
           //do nothing
         } else {
           ObAddr &cur_selected_addr = all_selected_addr.at(i);
-          obrpc::ObEstSkipRateArg arg;
-          obrpc::ObEstSkipRateRes result;
+          obcall::ObEstSkipRateArg arg;
+          obcall::ObEstSkipRateRes result;
           ObSEArray<int64_t, 4> selected_tablet_idx;
           for (int64_t j = i ; OB_SUCC(ret) && j < all_selected_addr.count(); ++j) {
             if (skip_idx_set.has_member(j)) {//have been estimate
@@ -1737,7 +1733,7 @@ int ObBasicStatsEstimator::do_estimate_skip_rate(ObExecContext &ctx,
                 LOG_WARN("get unexpected error", K(ret), K(tablet_ids), K(j),
                                 K(candi_tablet_locs.at(j).get_partition_location().get_tablet_id()));
               } else {
-                obrpc::ObEstSkipRateArgElement arg_element;
+                obcall::ObEstSkipRateArgElement arg_element;
                 arg_element.tenant_id_ = param.tenant_id_;
                 arg_element.table_id_ = table_id;
                 arg_element.tablet_id_ = candi_tablet_locs.at(j).get_partition_location().get_tablet_id();
@@ -1791,8 +1787,8 @@ int ObBasicStatsEstimator::do_estimate_skip_rate(ObExecContext &ctx,
 
 int ObBasicStatsEstimator::storage_estimate_skip_rate(ObExecContext &ctx,
                                                       const ObAddr &addr,
-                                                      const obrpc::ObEstSkipRateArg &arg,
-                                                      obrpc::ObEstSkipRateRes &result)
+                                                      const obcall::ObEstSkipRateArg &arg,
+                                                      obcall::ObEstSkipRateRes &result)
 {
   int ret = OB_SUCCESS;
   if (addr == ctx.get_addr()) {
@@ -1802,20 +1798,15 @@ int ObBasicStatsEstimator::storage_estimate_skip_rate(ObExecContext &ctx,
       LOG_TRACE("succeed to do estimate skip rate", K(addr), K(arg), K(result));
     }
   } else {
-    obrpc::ObSrvRpcProxy *rpc_proxy = NULL;
     const ObSQLSessionInfo *session_info = NULL;
     int64_t timeout = std::min(MAX_OPT_STATS_PROCESS_RPC_TIMEOUT, THIS_WORKER.get_timeout_remain());
-    if (OB_ISNULL(session_info = ctx.get_my_session()) ||
-        OB_ISNULL(rpc_proxy = GCTX.srv_rpc_proxy_)) {
+    if (OB_ISNULL(session_info = ctx.get_my_session())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("rpc_proxy or session is null", K(ret), K(rpc_proxy), K(session_info));
+      LOG_WARN("session is null", K(ret), K(session_info));
     } else if (0 >= timeout) {
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(rpc_proxy->to(addr)
-                       .timeout(timeout)
-                       .by(session_info->get_rpc_tenant_id())
-                       .estimate_skip_rate(arg, result))) {
+    } else if (OB_FAIL(GCTX.ob_service_->estimate_skip_rate(arg, result))) {
       LOG_WARN("failed to remote storage est failed", K(ret));
     } else {
       LOG_TRACE("succeed to do estimate skip rate", K(addr), K(arg), K(result));

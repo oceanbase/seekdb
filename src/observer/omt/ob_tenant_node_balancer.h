@@ -22,7 +22,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "share/ob_unit_getter.h"
 #include "share/ob_thread_pool.h"
-#include "share/ob_rpc_struct.h"      // obrpc::
+#include "share/ob_rpc_struct.h"      // obcall::
 
 namespace oceanbase
 {

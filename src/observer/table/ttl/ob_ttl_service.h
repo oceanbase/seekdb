@@ -63,7 +63,7 @@ public:
   int switch_to_leader();
   int switch_to_follower_gracefully();
   int resume_leader() { return switch_to_leader(); }
-  int launch_ttl_task(const obrpc::ObTTLRequestArg &req);
+  int launch_ttl_task(const obcall::ObTTLRequestArg &req);
   uint64_t get_tenant_id() const { return tenant_id_; }
   int start() { return OB_SUCCESS; }
   void stop();

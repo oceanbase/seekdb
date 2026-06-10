@@ -21,11 +21,11 @@ namespace oceanbase
 {
 using namespace common;
 using namespace transaction;
-using namespace obrpc;
+using namespace obcall;
 namespace unittest
 {
 
-class MyResponseRpc : public ObIGtsResponseRpc
+class MyResponseRpc
 {
 public:
   MyResponseRpc() {}
@@ -119,7 +119,7 @@ public:
     }
     return ret;
   }
-  int handle_local_request_(const ObGtsRequest &request, obrpc::ObGtsRpcResult &result)
+  int handle_local_request_(const ObGtsRequest &request, obcall::ObGtsRpcResult &result)
   {
     int ret = OB_SUCCESS;
     int64_t gts = 0;

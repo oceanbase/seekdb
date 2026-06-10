@@ -38,7 +38,7 @@ bool ObFsContainerMgr::UpdateProtoFunc::operator() (const logservice::TenantLSID
 ObFsContainerMgr::ObFsContainerMgr() :
     is_inited_(false),
     self_tenant_id_(OB_INVALID_TENANT_ID),
-    proto_type_(obrpc::ObCdcFetchLogProtocolType::LogGroupEntryProto),
+    proto_type_(obcall::ObCdcFetchLogProtocolType::LogGroupEntryProto),
     rpc_(nullptr),
     stream_worker_(nullptr),
     progress_controller_(nullptr),
@@ -102,7 +102,7 @@ void ObFsContainerMgr::destroy()
   if (is_inited_) {
     is_inited_ = false;
     self_tenant_id_ = OB_INVALID_TENANT_ID;
-    proto_type_ = obrpc::ObCdcFetchLogProtocolType::LogGroupEntryProto;
+    proto_type_ = obcall::ObCdcFetchLogProtocolType::LogGroupEntryProto;
     rpc_ = nullptr;
     stream_worker_ = nullptr;
     progress_controller_ = nullptr;
@@ -244,7 +244,7 @@ bool ObFsContainerMgr::TenantStreamStatFunc::operator() (const logservice::Tenan
   return true;
 }
 
-int ObFsContainerMgr::update_fetch_log_protocol(const obrpc::ObCdcFetchLogProtocolType proto)
+int ObFsContainerMgr::update_fetch_log_protocol(const obcall::ObCdcFetchLogProtocolType proto)
 {
   int ret = OB_SUCCESS;
 

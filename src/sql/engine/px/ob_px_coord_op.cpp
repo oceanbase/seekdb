@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_px_coord_op.h"
-#include "share/ob_rpc_share.h"
 #include "sql/ob_sql.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/join/ob_nested_loop_join_op.h"
@@ -358,9 +357,7 @@ int64_t ObPxCoordOp::get_adaptive_px_dop(int64_t dop) const
 int ObPxCoordOp::post_init_op_ctx()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(init_obrpc_proxy(coord_info_.rpc_proxy_))) {
-    LOG_WARN("fail init rpc proxy", K(ret));
-  } else {
+  {
     int64_t plan_dop = GET_PHY_PLAN_CTX(ctx_)->get_phy_plan()->get_px_dop();
     int64_t adaptive_dop = get_adaptive_px_dop(plan_dop);
     use_serial_scheduler_ = ((1 == plan_dop && 1 == adaptive_dop) ? true : false);
@@ -491,15 +488,22 @@ int ObPxCoordOp::try_clear_p2p_dh_info()
       }
     }
     FOREACH_X(entry, dh_map, true) {
-      ObPxP2PClearMsgArg arg;
-      arg.px_seq_id_ = px_sequence_id_;
-      int tmp_ret = arg.p2p_dh_ids_.assign(*entry->second);
-      if (OB_SUCCESS == tmp_ret && !arg.p2p_dh_ids_.empty()) {
-        if (OB_FAIL(PX_P2P_DH.get_proxy().to(entry->first).
-            by(tenant_id).
-            clear_dh_msg(arg, nullptr))) {
-          LOG_WARN("fail to clear dh msg", K(ret));
-          ret = OB_SUCCESS;
+      // Single-replica seekdb: target is always loopback. Mirror
+      // ObPxP2pDhClearMsgP::process and erase the messages in-process.
+      ObSArray<int64_t> &p2p_dh_ids = *entry->second;
+      if (!p2p_dh_ids.empty()) {
+        ObP2PDhKey key;
+        ObP2PDatahubMsgBase *msg = nullptr;
+        for (int64_t i = 0; i < p2p_dh_ids.count(); ++i) {
+          key.p2p_datahub_id_ = p2p_dh_ids.at(i);
+          key.task_id_ = 0;
+          key.px_sequence_id_ = px_sequence_id_;
+          bool is_erased = false;
+          msg = nullptr;
+          int tmp_ret = PX_P2P_DH.erase_msg_if(key, msg, is_erased);
+          if (OB_SUCCESS != tmp_ret || !is_erased) {
+            LOG_TRACE("fail to erase msg", K(tmp_ret), K(is_erased));
+          }
         }
       }
       entry->second->reset();
@@ -818,7 +822,7 @@ int ObPxCoordOp::check_all_sqc(ObIArray<ObDfo *> &active_dfos,
         break;
       } else if (sqc.is_server_not_alive() || sqc.is_interrupt_by_dm()) {
         if (sqc.is_interrupt_by_dm()) {
-          ObRpcResultCode err_msg;
+          rpc::frame::ObResultCode err_msg;
           ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
               OB_RPC_CONNECT_ERROR, err_msg, sqc.get_exec_addr());
         }

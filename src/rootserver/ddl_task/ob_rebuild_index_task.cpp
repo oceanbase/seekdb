@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_rebuild_index_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -31,7 +32,7 @@
 using namespace oceanbase::rootserver;
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
@@ -58,7 +59,7 @@ int ObRebuildIndexTask::init(
     const int64_t parallelism,
     const uint64_t tenant_data_version,
     const ObTableSchema &index_schema,
-    const obrpc::ObRebuildIndexArg &rebuild_index_arg)
+    const obcall::ObRebuildIndexArg &rebuild_index_arg)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
@@ -170,11 +171,8 @@ int ObRebuildIndexTask::drop_index_impl()
   ObSqlString drop_index_sql;
   ObString index_name;
   const ObTableSchema *index_schema = nullptr;
-  obrpc::ObDropIndexArg drop_index_arg;
-  if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-  } else if (new_index_id_ == OB_INVALID_ID) {
+  obcall::ObDropIndexArg drop_index_arg;
+  if (new_index_id_ == OB_INVALID_ID) {
     index_drop_task_id_ = -1; // new index table maybe not build yet, drop nothing
     LOG_INFO("new index table not exist, maybe not build yet", K(ret), K(target_object_name_), K(new_index_id_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().
@@ -196,7 +194,7 @@ int ObRebuildIndexTask::drop_index_impl()
     LOG_WARN("failed to get drop index arg", KR(ret));
   } else {
     int64_t ddl_rpc_timeout = 0;
-    obrpc::ObDropIndexRes drop_index_res;
+    obcall::ObDropIndexRes drop_index_res;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DROP_INDEX_RPC_FAILED))) {
@@ -204,8 +202,7 @@ int ObRebuildIndexTask::drop_index_impl()
     } else if (OB_UNLIKELY(ERRSIM_DROP_INDEX_IMPL_ERROR)) {
       ret = OB_EAGAIN;
       LOG_WARN("errsim ERRSIM_DROP_INDEX_IMPL_ERROR", KR(ret));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->timeout(ddl_rpc_timeout)
-                           .drop_index(drop_index_arg, drop_index_res))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", KR(ret), K(ddl_rpc_timeout));
     } else {
       index_drop_task_id_ = drop_index_res.task_id_;
@@ -220,7 +217,7 @@ int ObRebuildIndexTask::prepare_drop_index_arg(ObSchemaGetterGuard &schema_guard
                                                const ObTableSchema *index_schema,
                                                const ObDatabaseSchema *database_schema,
                                                const ObTableSchema *data_table_schema,
-                                               obrpc::ObDropIndexArg &drop_index_arg)
+                                               obcall::ObDropIndexArg &drop_index_arg)
 {
   // we set the drop_index_arg.index_name_ as index_name is following the reason:
   // 1. In the success process, the index table and the new index table have already swapped names. 
@@ -244,11 +241,11 @@ int ObRebuildIndexTask::prepare_drop_index_arg(ObSchemaGetterGuard &schema_guard
 
   switch (rebuild_index_arg_.rebuild_index_type_) {
   case ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_VEC:
-    drop_index_arg.index_action_type_ = obrpc::ObIndexArg::DROP_INDEX;
+    drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_INDEX;
     drop_index_arg.is_vec_inner_drop_ = true;
     break;
   case ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_MLOG:
-    drop_index_arg.index_action_type_ = obrpc::ObIndexArg::DROP_MLOG;
+    drop_index_arg.index_action_type_ = obcall::ObIndexArg::DROP_MLOG;
     drop_index_arg.is_vec_inner_drop_ = false;
     break;
   default:
@@ -334,8 +331,8 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
     //    The naming convention for creating the new table: assuming new index name ='idx1', the name of the new table 3 will be __idx_{datatable_id}_idx1.
     // 2. create_index_arg.index_table_id_
     //    The ID of the old table 3 is needed to find the old table schema when creating the index, in order to assign the schema to the new table.
-    SMART_VAR(obrpc::ObCreateIndexArg, create_index_arg) {
-      obrpc::ObAlterTableRes res;
+    SMART_VAR(obcall::ObCreateIndexArg, create_index_arg) {
+      obcall::ObAlterTableRes res;
       int64_t ddl_rpc_timeout = 0;
       create_index_arg.index_type_ = index_schema->get_index_type();
       create_index_arg.index_name_ = rebuild_index_arg_.index_name_;  // new index name was generated at ddl_service of rebuild_vec_index func
@@ -345,7 +342,7 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
       create_index_arg.tenant_id_ = tenant_id_;
       create_index_arg.exec_tenant_id_ = tenant_id_;
       create_index_arg.table_name_ = table_schema->get_table_name();
-      create_index_arg.index_action_type_ = obrpc::ObIndexArg::ADD_INDEX;
+      create_index_arg.index_action_type_ = obcall::ObIndexArg::ADD_INDEX;
       create_index_arg.parallelism_ = parallelism_;
       create_index_arg.is_inner_ = true;  // is ddl task inner task
       create_index_arg.task_id_ = task_id_;
@@ -370,10 +367,7 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_, target_object_id_, ddl_rpc_timeout))) {
         LOG_WARN("get ddl rpc timeout failed", K(ret));
-      } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-      } else if (OB_FAIL(GCTX.rs_rpc_proxy_->timeout(ddl_rpc_timeout).create_index(create_index_arg, res))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_index(create_index_arg, res); }))) {
         LOG_WARN("fail to create vec index", K(ret), K(create_index_arg));
       } else {
         index_build_task_id_ = res.task_id_;  // create vector index task ID
@@ -389,8 +383,8 @@ ERRSIM_POINT_DEF(ERRSIM_REBUILD_MLOG_IMPL_ERROR);
 int ObRebuildIndexTask::rebuild_mlog_impl()
 {
   int ret = OB_SUCCESS;
-  obrpc::ObCreateMLogArg &create_mlog_arg = rebuild_index_arg_.create_mlog_arg_;
-  obrpc::ObCreateMLogRes create_mlog_res;
+  obcall::ObCreateMLogArg &create_mlog_arg = rebuild_index_arg_.create_mlog_arg_;
+  obcall::ObCreateMLogRes create_mlog_res;
   int64_t ddl_rpc_timeout = 0;
 
   if (ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_MLOG != rebuild_index_arg_.rebuild_index_type_) {
@@ -398,9 +392,7 @@ int ObRebuildIndexTask::rebuild_mlog_impl()
     LOG_WARN("invalid rebuild index type", KR(ret), K(rebuild_index_arg_.rebuild_index_type_));
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tenant_id_, target_object_id_, ddl_rpc_timeout))) {
     LOG_WARN("failed to get ddl rpc timeout", K(ret));
-  } else if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
   } else if (OB_UNLIKELY(ERRSIM_REBUILD_MLOG_IMPL_ERROR)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("errsim ERRSIM_REBUILD_MLOG_IMPL_ERROR", KR(ret), K(create_mlog_arg));
@@ -410,8 +402,7 @@ int ObRebuildIndexTask::rebuild_mlog_impl()
   }
   
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GCTX.rs_rpc_proxy_->timeout(ddl_rpc_timeout)
-                         .create_mlog(create_mlog_arg, create_mlog_res))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_mlog(create_mlog_arg, create_mlog_res); }))) {
     LOG_WARN("failed to create mlog", K(ret), K(create_mlog_arg));
   } else {
     index_build_task_id_ = create_mlog_res.task_id_;
@@ -707,7 +698,7 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
     const ObString origin_table_name = index_schema->get_table_name();
     ObTZMapWrap tz_map_wrap;
 
-    SMART_VAR(obrpc::ObAlterTableArg, alter_table_arg) {
+    SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
       alter_table_arg.alter_table_schema_.set_tenant_id(tenant_id_);
       alter_table_arg.alter_table_schema_.set_origin_database_name(origin_database_name);
       alter_table_arg.alter_table_schema_.set_origin_table_name(origin_table_name);
@@ -721,10 +712,7 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
       alter_table_arg.nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT;
       alter_table_arg.exec_tenant_id_ = tenant_id_;
       alter_table_arg.compat_mode_ = lib::Worker::CompatMode::MYSQL;
-      if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-      } else if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DDL_TASK_SWITCH_INDEX_NAME_FAILED))) {
+      if (OB_FAIL(DDL_SIM(tenant_id_, task_id_, DDL_TASK_SWITCH_INDEX_NAME_FAILED))) {
         LOG_WARN("ddl sim failure", K(ret), K(tenant_id_), K(task_id_));
       } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tenant_id_, tz_map_wrap))) {
         LOG_WARN("get tenant timezone map failed", K(ret), K(tenant_id_));
@@ -734,9 +722,7 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
       } else if (OB_UNLIKELY(ERRSIM_SWITCH_INDEX_NAME_ERROR)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("errsim ERRSIM_SWITCH_INDEX_NAME_ERROR", KR(ret));
-      } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(obrpc::ObRpcProxy::myaddr_)
-                             .timeout(rpc_timeout)
-                             .execute_ddl_task(alter_table_arg, unused_ids))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->execute_ddl_task(alter_table_arg, unused_ids); }))) {
         LOG_WARN("fail to swap original and hidden table state", K(ret));
       } else {
         LOG_INFO("success to switch index name", K(ret), K(origin_table_name), K(alter_table_arg));
@@ -998,8 +984,8 @@ int ObRebuildIndexTask::process()
 
 int ObRebuildIndexTask::deep_copy_index_arg(
     common::ObIAllocator &allocator,
-    const obrpc::ObRebuildIndexArg &src_index_arg,
-    obrpc::ObRebuildIndexArg &dst_index_arg)
+    const obcall::ObRebuildIndexArg &src_index_arg,
+    obcall::ObRebuildIndexArg &dst_index_arg)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
@@ -1040,7 +1026,7 @@ int ObRebuildIndexTask::serialize_params_to_message(char *buf, const int64_t buf
 int ObRebuildIndexTask::deserialize_params_from_message(const uint64_t tenant_id, const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObRebuildIndexArg tmp_rebuild_index_arg;
+  obcall::ObRebuildIndexArg tmp_rebuild_index_arg;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(tenant_id), KP(buf), K(data_len));

@@ -33,7 +33,7 @@ int ObDASIDService::init()
   return OB_SUCCESS;
 }
 
-int ObDASIDService::handle_request(const ObDASIDRequest &request, obrpc::ObDASIDRpcResult &result)
+int ObDASIDService::handle_request(const ObDASIDRequest &request, obcall::ObDASIDRpcResult &result)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!request.is_valid())) {

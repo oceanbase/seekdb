@@ -16,13 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_bloom_filter.h"
-#include "share/ob_rpc_share.h"
 #include "storage/blocksstable/encoding/ob_encoding_query_util.h"
 
 using namespace oceanbase;
 using namespace common;
 using namespace sql;
-using namespace obrpc;
+using namespace obcall;
 
 #define MIN_FILTER_SIZE 256
 #define MAX_BIT_COUNT 17179869184// 2^34 due to the memory single alloc limit

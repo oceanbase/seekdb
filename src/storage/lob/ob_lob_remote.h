@@ -25,43 +25,40 @@ namespace oceanbase
 {
 namespace storage
 {
-class ObLobQueryRemoteReader
-{
-public:
-  ObLobQueryRemoteReader() : rpc_buffer_pos_(0), data_buffer_() {}
-  ~ObLobQueryRemoteReader() {}
-  int open(ObLobAccessParam& param, common::ObDataBuffer &rpc_buffer);
-  int get_next_block(
-                     common::ObDataBuffer &rpc_buffer,
-                     obrpc::ObStorageRpcProxy::SSHandle<obrpc::OB_LOB_QUERY> &handle,
-                     ObString &data);
-private:
-  int do_fetch_rpc_buffer(
-                          common::ObDataBuffer &rpc_buffer,
-                          obrpc::ObStorageRpcProxy::SSHandle<obrpc::OB_LOB_QUERY> &handle);
-private:
-  int64_t rpc_buffer_pos_;
-  ObString data_buffer_;
-};
+class ObLobQueryIter;
+
+// cross-tenant LOB obcall RPC removed: the cross-tenant LOB read used to loop back to
+// this same machine via the OB_LOB_QUERY streaming RPC (obcall::ObStorageRpcProxy::lob_query).
+// It is now executed fully in-process under MTL_SWITCH to the lob's tenant, driving the same
+// local ObLobQueryIter the OB_LOB_QUERY processor used. ObLobRemoteQueryCtx therefore owns the
+// in-process iterator (READ) / cached length (GET_LENGTH) instead of an SSHandle stream.
 
 struct ObLobRemoteQueryCtx
 {
-  ObLobRemoteQueryCtx() : handle_(), rpc_buffer_(), query_arg_(), remote_reader_() {}
-  obrpc::ObStorageRpcProxy::SSHandle<obrpc::OB_LOB_QUERY> handle_;
-  common::ObDataBuffer rpc_buffer_;
-  obrpc::ObLobQueryArg query_arg_;
-  ObLobQueryRemoteReader remote_reader_;
+  ObLobRemoteQueryCtx()
+    : tenant_id_(OB_INVALID_TENANT_ID), qtype_(obcall::ObLobQueryArg::QueryType::READ),
+      query_iter_(nullptr), length_(0), read_buf_(nullptr), read_buf_len_(0) {}
+  ~ObLobRemoteQueryCtx();
+  // get next block of lob data for READ; runs the in-process iterator under the lob's tenant.
+  int get_next_block(ObString &data);
+
+  uint64_t tenant_id_;
+  obcall::ObLobQueryArg::QueryType qtype_;
+  ObLobQueryIter *query_iter_; // READ: in-process lob query iterator (owned)
+  uint64_t length_;            // GET_LENGTH: lob length
+  char *read_buf_;             // READ: output buffer fed to query_iter_->get_next_row
+  int64_t read_buf_len_;
 };
 
 
 class ObLobRemoteUtil
 {
 public:
-  static int query(ObLobAccessParam& param, const ObLobQueryArg::QueryType qtype, const ObAddr &dst_addr, ObLobRemoteQueryCtx *&ctx);
+  static int query(ObLobAccessParam& param, const obcall::ObLobQueryArg::QueryType qtype, const ObAddr &dst_addr, ObLobRemoteQueryCtx *&ctx);
 
 
 private:
-  static int remote_query_init_ctx(ObLobAccessParam &param, const ObLobQueryArg::QueryType qtype, ObLobRemoteQueryCtx *&ctx);
+  static int remote_query_init_ctx(ObLobAccessParam &param, const obcall::ObLobQueryArg::QueryType qtype, ObLobRemoteQueryCtx *&ctx);
 };
 
 }  // storage

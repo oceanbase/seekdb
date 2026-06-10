@@ -440,7 +440,6 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
                 CURRENT_CONTEXT->get_arena_allocator(),
                 &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
                 *ctx_->self_addr_,
-                GCTX.srv_rpc_proxy_,
                 stmt->get_query_ctx()->get_global_hint(),
                 tmp_expr_factory,
                 root_stmt,

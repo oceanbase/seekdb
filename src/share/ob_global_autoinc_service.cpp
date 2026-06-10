@@ -154,7 +154,7 @@ int ObGlobalAutoIncService::clear()
 
 int ObGlobalAutoIncService::handle_next_autoinc_request(
     const ObGAISNextAutoIncValReq &request,
-    obrpc::ObGAISNextValRpcResult &result)
+    obcall::ObGAISNextValRpcResult &result)
 {
   int ret = OB_SUCCESS;
   const AutoincKey &key = request.autoinc_key_;
@@ -247,7 +247,7 @@ int ObGlobalAutoIncService::handle_next_autoinc_request(
 }
 
 int ObGlobalAutoIncService::handle_curr_autoinc_request(const ObGAISAutoIncKeyArg &request,
-                                                        obrpc::ObGAISCurrValRpcResult &result)
+                                                        obcall::ObGAISCurrValRpcResult &result)
 {
   int ret = OB_SUCCESS;
   const AutoincKey &key = request.autoinc_key_;
@@ -403,7 +403,7 @@ int ObGlobalAutoIncService::handle_clear_autoinc_cache_request(const ObGAISAutoI
 
 int ObGlobalAutoIncService::handle_next_sequence_request(
   const ObGAISNextSequenceValReq &request,
-  obrpc::ObGAISNextSequenceValRpcResult &result)
+  obcall::ObGAISNextSequenceValRpcResult &result)
 {
   int ret = OB_SUCCESS;
   ObSequenceCache *sequence_cache = &share::ObSequenceCache::get_instance();

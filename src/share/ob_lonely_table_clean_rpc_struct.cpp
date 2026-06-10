@@ -20,11 +20,11 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 
 OB_SERIALIZE_MEMBER((ObForceDropLonelyLobAuxTableArg, ObDDLArg), tenant_id_, data_table_id_, aux_lob_meta_table_id_, aux_lob_piece_table_id_);
 
-}//end namespace obrpc
+}//end namespace obcall
 }//end namespace oceanbase
 

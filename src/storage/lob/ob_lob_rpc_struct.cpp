@@ -20,10 +20,10 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 using namespace storage;
 
-namespace obrpc
+namespace obcall
 {
 
 ObLobQueryBlock::ObLobQueryBlock()
@@ -106,6 +106,6 @@ ObLobQueryArg::~ObLobQueryArg()
 }
 
 
-} // obrpc
+} // obcall
 
 } // oceanbase

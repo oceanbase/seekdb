@@ -34,7 +34,7 @@ public:
   uint64_t get_tenant_id() const { return tenant_id_; }
   void set_locked(bool locked) { locked_ = locked; }
   bool is_locked() const { return locked_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return lock_user_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return lock_user_arg_; }
   // function members
   TO_STRING_KV(K_(stmt_type), K_(tenant_id), K_(user), K_(locked));
   virtual bool cause_implicit_commit() const { return true; }
@@ -44,7 +44,7 @@ private:
   uint64_t tenant_id_;
   common::ObStrings user_;//user1,host1; usr2,host2;...
   bool locked_;
-  obrpc::ObLockUserArg lock_user_arg_; // used to return exec_tenant_id_
+  obcall::ObLockUserArg lock_user_arg_; // used to return exec_tenant_id_
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLockUserStmt);
 };

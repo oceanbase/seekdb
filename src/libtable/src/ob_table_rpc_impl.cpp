@@ -28,8 +28,7 @@ ObTableRpcImpl::ObTableRpcImpl()
      table_id_(OB_INVALID_ID),
      default_entity_factory_(ObModIds::TEST),
      entity_factory_(&default_entity_factory_),
-     arena_(ObModIds::TABLE_CLIENT),
-     rpc_proxy_(NULL)
+     arena_(ObModIds::TABLE_CLIENT)
 {
   table_name_buf_[0] = '\0';
 }
@@ -49,7 +48,7 @@ int ObTableRpcImpl::init(ObTableServiceClient &client, const ObString &table_nam
     LOG_WARN("failed to store table name", K(ret), K(table_name));
   } else {
     client_ = &client;
-    rpc_proxy_ = &client.get_table_rpc_proxy();
+    // Table-API RPC removed (feature decommissioned)
     LOG_DEBUG("init table succ", K_(table_name), K_(table_id));
     inited_ = true;
   }
@@ -102,10 +101,7 @@ int ObTableRpcImpl::execute(const ObTableOperation &table_operation, const ObTab
         request.returning_affected_entity_ = request_options.returning_affected_entity();
         request.option_flag_ = request_options.get_option_flag();
 
-        ret = rpc_proxy_->
-              timeout(request_options.server_timeout())
-              .to(leader_loc.get_server())
-              .execute(request, result);
+        ret = OB_NOT_SUPPORTED; // Table-API RPC removed (feature decommissioned)
       }
     }
   }
@@ -313,10 +309,7 @@ int ObTableRpcImpl::batch_execute(const ObTableBatchOperation &batch_operation, 
         ObTableBatchOperationResult &batch_result = dynamic_cast<ObTableBatchOperationResult&>(result); // @FIXME
         batch_result.set_entity_factory(entity_factory_);
         batch_result.set_allocator(&arena_);  // have to deep copy values from the rpc memory
-        ret = rpc_proxy_->
-              timeout(request_options.server_timeout())
-              .to(server)
-              .batch_execute(request, batch_result);
+        ret = OB_NOT_SUPPORTED; // Table-API RPC removed (feature decommissioned)
         NG_TRACE(tag1);
       } else {
         // multi tablets
@@ -374,10 +367,7 @@ int ObTableRpcImpl::batch_execute(const ObTableBatchOperation &batch_operation, 
                 if (OB_SUCC(ret)) {
                   LOG_DEBUG("multi batch operation", K(i), K(j), K(server), K(tablet_idx), K(rowkey_array));
                   // send batch for each tablet of each server
-                  ret = rpc_proxy_->
-                        timeout(request_options.server_timeout())
-                        .to(server)
-                        .batch_execute(request, *server_batch_result);
+                  ret = OB_NOT_SUPPORTED; // Table-API RPC removed (feature decommissioned)
                 }
               }
             }
@@ -422,7 +412,8 @@ int ObTableRpcImpl::QueryMultiResult::get_next_entity(const ObITableEntity *&ent
   while (OB_ITER_END == ret) {
     if (query_rpc_handle_.has_more()) {
       // request for the next result packet
-      if (OB_FAIL(query_rpc_handle_.get_more(one_result_))) {
+      if (OB_FAIL(ret = OB_NOT_SUPPORTED)) { // Table-API RPC removed (feature decommissioned)
+        (void)query_rpc_handle_;
         LOG_WARN("failed to get more result", K(ret));
         int tmp_ret = ret;
         if (OB_FAIL(query_rpc_handle_.abort())) {
@@ -488,10 +479,7 @@ int ObTableRpcImpl::execute_query(const ObTableQuery &query, const ObTableReques
       request.consistency_level_ = request_options.consistency_level();
       query_multi_result_.reset();
 
-      ret = rpc_proxy_->
-            timeout(request_options.server_timeout())
-            .to(leader_loc.get_server())
-            .execute_query(request, query_multi_result_.get_one_result(), query_multi_result_.get_handle());
+      ret = OB_NOT_SUPPORTED; // Table-API RPC removed (feature decommissioned)
       if (OB_SUCC(ret)) {
         result = &query_multi_result_;
         LOG_INFO("[yzfdebug] query has more", "has_more", query_multi_result_.get_handle().has_more());
@@ -532,10 +520,7 @@ int ObTableRpcImpl::execute_query_and_mutate(const ObTableQueryAndMutate &query_
       request.credential_ = client_->get_credential();
       request.entity_type_ = this->entity_type_;
       query_multi_result_.reset();
-      ret = rpc_proxy_->
-            timeout(request_options.server_timeout())
-            .to(leader_loc.get_server())
-            .query_and_mutate(request, result);
+      ret = OB_NOT_SUPPORTED; // Table-API RPC removed (feature decommissioned)
     }
   }
   return ret;
@@ -575,10 +560,7 @@ int ObTableRpcImpl::query_start(const ObTableQuery& query, const ObTableRequestO
       request.query_type_ = ObQueryOperationType::QUERY_START;
       query_async_multi_result_.reset();
       result = &query_async_multi_result_.get_one_result();
-      ret = rpc_proxy_->
-            timeout(request_options.server_timeout())
-            .to(leader_loc.get_server())
-            .execute_query_async(request, *result);
+      ret = OB_NOT_SUPPORTED; // Table-API RPC removed (feature decommissioned)
       if (OB_SUCC(ret)) {
         query_async_multi_result_.server_addr_ = leader_loc.get_server();
         query_async_multi_result_.has_more_ = !result->is_end_;
@@ -615,10 +597,7 @@ int ObTableRpcImpl::query_next(const ObTableRequestOptions &request_options, ObT
     query_async_multi_result_.has_more_ = false;
     result = &query_async_multi_result_.get_one_result();
     result->reset();
-    ret = rpc_proxy_->
-          timeout(request_options.server_timeout())
-          .to(query_async_multi_result_.server_addr_)
-          .execute_query_async(request, *result);
+    ret = OB_NOT_SUPPORTED; // Table-API RPC removed (feature decommissioned)
     if (OB_SUCC(ret)) {
       query_async_multi_result_.has_more_ = !result->is_end_;
       query_async_multi_result_.result_packet_count_++;

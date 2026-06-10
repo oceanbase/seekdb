@@ -17,7 +17,7 @@
 #pragma once
 
 #include "ob_table_direct_load_exec_context.h"
-#include "ob_table_direct_load_rpc_proxy.h"
+#include "ob_table_direct_load_rpc.h"
 #include "share/table/ob_table_load_row_array.h"
 
 namespace oceanbase

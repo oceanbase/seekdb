@@ -22,7 +22,6 @@
 #include "sql/executor/ob_task_spliter.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "share/schema/ob_part_mgr_util.h"
-#include "rpc/obrpc/ob_net_keepalive.h"
 #include "share/external_table/ob_external_table_utils.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
 
@@ -3495,19 +3494,11 @@ bool ObVirtualTableErrorWhitelist::should_ignore_vtable_error(int error_code)
 
 bool ObPxCheckAlive::is_in_blacklist(const common::ObAddr &addr, int64_t server_start_time)
 {
-  int ret = OB_SUCCESS;
-  bool in_blacklist = false;
-  obrpc::ObNetKeepAliveData alive_data;
-  if (OB_FAIL(ObNetKeepAlive::get_instance().in_black(addr, in_blacklist, &alive_data))) {
-    ret = OB_SUCCESS;
-    in_blacklist = false;
-  } else if (!in_blacklist && server_start_time > 0) {
-    in_blacklist = alive_data.start_service_time_ >= server_start_time;
-  }
-  if (in_blacklist) {
-    LOG_WARN("server in blacklist", K(addr), K(server_start_time), K(alive_data.start_service_time_));
-  }
-  return in_blacklist;
+  // Single-replica seekdb: the only peer is the local server, which is never
+  // blacklisted (the obcall net-keepalive blacklist is gone).
+  UNUSED(addr);
+  UNUSED(server_start_time);
+  return false;
 }
 
 int LowestCommonAncestorFinder::find_op_common_ancestor(

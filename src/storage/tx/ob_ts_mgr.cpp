@@ -22,7 +22,7 @@ namespace oceanbase
 using namespace common;
 using namespace share;
 using namespace share::schema;
-using namespace obrpc;
+using namespace obcall;
 
 namespace transaction
 {
@@ -93,30 +93,24 @@ int ObTsSourceInfo::gts_callback_interrupted(const int errcode, const share::ObL
 
 int ObTsMgr::init(const ObAddr &server,
                   share::schema::ObMultiVersionSchemaService &schema_service,
-                  share::ObLocationService &location_service,
-                  rpc::frame::ObReqTransport *req_transport)
+                  share::ObLocationService &location_service)
 {
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     TRANS_LOG(WARN, "ObTsMgr inited twice", KR(ret));
-  } else if (!server.is_valid() || OB_ISNULL(req_transport)) {
+  } else if (!server.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server), KP(req_transport));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(server));
   } else if (OB_FAIL(location_adapter_def_.init(&schema_service, &location_service))) {
     TRANS_LOG(ERROR, "location adapter init error", KR(ret));
-  } else if (OB_ISNULL(gts_request_rpc_proxy_ = ObGtsRpcProxyFactory::alloc())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    TRANS_LOG(WARN, "alloc gts_reqeust_rpc_proxy fail", KR(ret));
   } else if (OB_ISNULL(gts_request_rpc_ = ObGtsRequestRpcFactory::alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc gts_reqeust_rpc fail", KR(ret));
-  } else if (OB_FAIL(gts_request_rpc_proxy_->init(req_transport, server))) {
-    TRANS_LOG(WARN, "rpc proxy init failed", KR(ret), KP(req_transport), K(server));
   } else if (OB_FAIL(ts_worker_.init(this, true))) {
     TRANS_LOG(WARN, "ts worker init failed", KR(ret));
-  } else if (OB_FAIL(gts_request_rpc_->init(gts_request_rpc_proxy_, server, this, &ts_worker_))) {
+  } else if (OB_FAIL(gts_request_rpc_->init(server, this, &ts_worker_))) {
     TRANS_LOG(WARN, "response rpc init failed", KR(ret), K(server));
   } else if (FALSE_IT(location_adapter_ = &location_adapter_def_)) {
   } else if (OB_FAIL(ts_source_.init(OB_SYS_TENANT_ID, server, gts_request_rpc_, location_adapter_))) {
@@ -130,10 +124,6 @@ int ObTsMgr::init(const ObAddr &server,
   }
 
   if (OB_FAIL(ret)) {
-    if (NULL != gts_request_rpc_proxy_) {
-      ObGtsRpcProxyFactory::release(gts_request_rpc_proxy_);
-      gts_request_rpc_proxy_ = NULL;
-    }
     if (NULL != gts_request_rpc_) {
       ObGtsRequestRpcFactory::release(gts_request_rpc_);
       gts_request_rpc_ = NULL;
@@ -150,7 +140,6 @@ void ObTsMgr::reset()
   ts_source_.reset();
   server_.reset();
   location_adapter_ = NULL;
-  gts_request_rpc_proxy_ = NULL;
   gts_request_rpc_ = NULL;
 }
 
@@ -232,10 +221,6 @@ void ObTsMgr::destroy()
     is_running_ = false;
     is_inited_ = false;
     TRANS_LOG(INFO, "ObTsMgr destroyed");
-  }
-  if (NULL != gts_request_rpc_proxy_) {
-    ObGtsRpcProxyFactory::release(gts_request_rpc_proxy_);
-    gts_request_rpc_proxy_ = NULL;
   }
   if (NULL != gts_request_rpc_) {
     ObGtsRequestRpcFactory::release(gts_request_rpc_);

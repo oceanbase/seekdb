@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl.h"
-#include "sql/dtl/ob_dtl_rpc_channel.h"
 #include "sql/dtl/ob_dtl_local_channel.h"
 #include "sql/dtl/ob_dtl_channel_watcher.h"
 
@@ -252,12 +251,10 @@ int ObDtlHashTableCell::get_channel(uint64_t chid, ObDtlChannel *&ch)
 ObDtl::ObDtl()
     : is_inited_(false),
       allocator_("SqlDtlMgr"),
-      rpc_proxy_(),
       dfc_server_(),
       hash_table_(),
       ch_mgrs_(nullptr)
 {
-  rpc_proxy_.set_tenant(OB_DTL_TENANT_ID);
 }
 
 ObDtl::~ObDtl()
@@ -406,24 +403,6 @@ int ObDtl::release_channel(ObDtlChannel *chan)
   return ret;
 }
 
-int ObDtl::create_rpc_channel(uint64_t tenant_id, uint64_t chid, const ObAddr &peer,
-    ObDtlChannel *&chan, ObDtlFlowControl *dfc)
-{
-  int ret = OB_SUCCESS;
-  // if nullptr != chan, batch free chans until link_ch_sets
-  const bool need_free_chan = (nullptr == chan);
-  if (nullptr == chan
-      && OB_FAIL(new_channel(tenant_id, chid, peer, chan, false))) {
-    LOG_WARN("create rpc channel fail", K(tenant_id), KP(chid), K(ret));
-  } else if (nullptr == chan) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("channel is null", K(tenant_id), KP(chid), K(ret));
-  } else if (OB_FAIL(init_channel(tenant_id, chid, peer, chan, dfc, need_free_chan))) {
-    LOG_WARN("failed to init channel", K(tenant_id), KP(chid), K(ret), K(chan));
-  }
-  return ret;
-}
-
 int ObDtl::create_local_channel(uint64_t tenant_id, uint64_t chid, const ObAddr &peer,
     ObDtlChannel *&chan, ObDtlFlowControl *dfc)
 {
@@ -446,19 +425,14 @@ int ObDtl::new_channel(uint64_t tenant_id, uint64_t chid, const ObAddr &peer,
     ObDtlChannel *&chan, bool is_local)
 {
   int ret = OB_SUCCESS;
+  UNUSED(is_local);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {
-    if (is_local) {
-      chan = static_cast<ObDtlChannel *> (ob_malloc(sizeof(ObDtlLocalChannel), ObMemAttr(tenant_id, "SqlDtlChan")));
-      if (nullptr != chan) {
-        new (chan) ObDtlLocalChannel(tenant_id, chid, peer, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
-      }
-    } else {
-      chan = static_cast<ObDtlChannel *> (ob_malloc(sizeof(ObDtlRpcChannel), ObMemAttr(tenant_id, "SqlDtlChan")));
-      if (nullptr != chan) {
-        new (chan) ObDtlRpcChannel(tenant_id, chid, peer, ObDtlChannel::DtlChannelType::RPC_CHANNEL);
-      }
+    // single-replica: only local (in-process) channels are supported.
+    chan = static_cast<ObDtlChannel *> (ob_malloc(sizeof(ObDtlLocalChannel), ObMemAttr(tenant_id, "SqlDtlChan")));
+    if (nullptr != chan) {
+      new (chan) ObDtlLocalChannel(tenant_id, chid, peer, ObDtlChannel::DtlChannelType::LOCAL_CHANNEL);
     }
     if (nullptr == chan) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

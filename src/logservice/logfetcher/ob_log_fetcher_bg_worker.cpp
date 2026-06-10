@@ -37,13 +37,13 @@ void UpdateProtoTask::runTimerTask()
   //} else if (cfg->logfetcher_parallel_log_transport &&
   //    ((source_min_observer_version >= MOCK_CLUSTER_VERSION_4_2_4_0 && source_min_observer_version < CLUSTER_VERSION_4_3_0_0) ||
   //     source_min_observer_version >= CLUSTER_VERSION_4_3_4_0)) {
-  //  fetcher_.update_fetch_log_protocol(obrpc::ObCdcFetchLogProtocolType::RawLogDataProto);
+  //  fetcher_.update_fetch_log_protocol(obcall::ObCdcFetchLogProtocolType::RawLogDataProto);
   //  LOG_INFO("update fetch log protocol to RawLogDataProto",
   //      "logfetcher_parallel_log_transport", cfg->logfetcher_parallel_log_transport.get(),
   //      "source_min_observer_version", fetcher_.get_source_min_observer_version());
   } else if (false) {
   } else {
-    fetcher_.update_fetch_log_protocol(obrpc::ObCdcFetchLogProtocolType::LogGroupEntryProto);
+    fetcher_.update_fetch_log_protocol(obcall::ObCdcFetchLogProtocolType::LogGroupEntryProto);
     LOG_INFO("update fetch log protocol to LogGroupEntryProto",
         "logfetcher_parallel_log_transport", cfg->logfetcher_parallel_log_transport.get(),
         "source_min_observer_version", fetcher_.get_source_min_observer_version());

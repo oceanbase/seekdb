@@ -174,7 +174,7 @@ int ObGrantResolver::resolve_grant_role_to_ur(
     ObSEArray<uint64_t, 4> role_id_array;
     ParseNode *grantee_clause = grant_role->children_[PARSE_GRANT_ROLE_GRANTEE];
     ParseNode *role_list = grant_role->children_[PARSE_GRANT_ROLE_LIST];
-    obrpc::ObGrantArg &args = static_cast<obrpc::ObGrantArg &>(grant_stmt->get_ddl_arg());
+    obcall::ObGrantArg &args = static_cast<obcall::ObGrantArg &>(grant_stmt->get_ddl_arg());
     ObSchemaChecker *schema_ck = params_.schema_checker_;
     uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();
     ObArray<uint64_t> grantee_ids;

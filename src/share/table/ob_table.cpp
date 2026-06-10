@@ -2277,7 +2277,12 @@ int64_t ObTableQueryResult::get_result_size()
 {
   if (0 >= fixed_result_size_) {
     fixed_result_size_ = properties_names_.get_serialize_size();
-    fixed_result_size_ += obrpc::ObRpcPacketHeader::HEADER_SIZE
+#ifdef ERRSIM
+    const int64_t k_obcall_pkt_header_size = 144; // mirrors obcall ObCallPacketHeader::HEADER_SIZE (ERRSIM)
+#else
+    const int64_t k_obcall_pkt_header_size = 136; // mirrors obcall ObCallPacketHeader::HEADER_SIZE
+#endif
+    fixed_result_size_ += k_obcall_pkt_header_size
                           + 8/*appr. row_count*/
                           + 8/*appr. buf_position*/;
   }

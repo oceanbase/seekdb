@@ -30,7 +30,7 @@ namespace common
 class ObMySQLProxy;
 class ObMySQLTransaction;
 }
-namespace obrpc
+namespace obcall
 {
   struct ObSeqCleanCacheRes;
 }
@@ -185,13 +185,13 @@ public:
   int nextval(const share::schema::ObSequenceSchema &schema,
               common::ObIAllocator &allocator, // used for various temporary calculations
               ObSequenceValue &nextval);
-  int remove(uint64_t tenant_id, uint64_t sequence_id, obrpc::ObSeqCleanCacheRes &cache_res);
+  int remove(uint64_t tenant_id, uint64_t sequence_id, obcall::ObSeqCleanCacheRes &cache_res);
 
 private:
   /* functions */
   int get_item(CacheItemKey &key, ObSequenceCacheItem *&item);
 
-  int del_item(uint64_t tenant_id, CacheItemKey &key, obrpc::ObSeqCleanCacheRes &cache_res);
+  int del_item(uint64_t tenant_id, CacheItemKey &key, obcall::ObSeqCleanCacheRes &cache_res);
 
   int prefetch_sequence_cache(const schema::ObSequenceSchema &schema,
                               ObSequenceCacheItem &cache,

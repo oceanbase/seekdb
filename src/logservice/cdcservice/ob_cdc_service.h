@@ -128,21 +128,21 @@ public:
   // The following interface is the entrance to service CDC-Connector,
   // and the internal implementation is to call the corresponding interface
   // of the corresponding component
-  int req_start_lsn_by_ts_ns(const obrpc::ObCdcReqStartLSNByTsReq &req_msg,
-      obrpc::ObCdcReqStartLSNByTsResp &resp);
+  int req_start_lsn_by_ts_ns(const obcall::ObCdcReqStartLSNByTsReq &req_msg,
+      obcall::ObCdcReqStartLSNByTsResp &resp);
 
-  int fetch_log(const obrpc::ObCdcLSFetchLogReq &req,
-      obrpc::ObCdcLSFetchLogResp &resp,
+  int fetch_log(const obcall::ObCdcLSFetchLogReq &req,
+      obcall::ObCdcLSFetchLogResp &resp,
       const int64_t send_ts,
       const int64_t recv_ts);
 
-  int fetch_missing_log(const obrpc::ObCdcLSFetchMissLogReq &req,
-      obrpc::ObCdcLSFetchLogResp &resp,
+  int fetch_missing_log(const obcall::ObCdcLSFetchMissLogReq &req,
+      obcall::ObCdcLSFetchLogResp &resp,
       const int64_t send_ts,
       const int64_t recv_ts);
 
-  int fetch_raw_log(const obrpc::ObCdcFetchRawLogReq &req,
-      obrpc::ObCdcFetchRawLogResp &resp,
+  int fetch_raw_log(const obcall::ObCdcFetchRawLogReq &req,
+      obcall::ObCdcFetchRawLogResp &resp,
       const int64_t send_ts,
       const int64_t recv_ts);
 
@@ -157,13 +157,13 @@ public:
     ctx_map = &ls_ctx_map_;
   }
 
-  int get_or_create_client_ls_ctx(const obrpc::ObCdcRpcId &client_id,
+  int get_or_create_client_ls_ctx(const obcall::ObCdcRpcId &client_id,
       const uint64_t client_tenant_id,
       const ObLSID &ls_id,
       const int8_t flag,
       const int64_t client_progress,
-      const obrpc::ObCdcFetchLogProtocolType proto_type,
-      const obrpc::ObCdcClientType client_type,
+      const obcall::ObCdcFetchLogProtocolType proto_type,
+      const obcall::ObCdcClientType client_type,
       ClientLSCtx *&ctx);
 
   int revert_client_ls_ctx(ClientLSCtx *ctx);
@@ -191,11 +191,11 @@ private:
   int snapshot_traffic_info_();
 
   template <class RpcRequest>
-  obrpc::ObCdcClientType get_client_type_from_req_(const RpcRequest &req) {
-    obrpc::ObCdcClientType client_type = req.get_client_type();
-    if (obrpc::ObCdcClientType::CLIENT_TYPE_UNKNOWN == client_type) {
+  obcall::ObCdcClientType get_client_type_from_req_(const RpcRequest &req) {
+    obcall::ObCdcClientType client_type = req.get_client_type();
+    if (obcall::ObCdcClientType::CLIENT_TYPE_UNKNOWN == client_type) {
       client_type = OB_INVALID_TENANT_ID == req.get_tenant_id() ?
-          obrpc::ObCdcClientType::CLIENT_TYPE_CDC : obrpc::ObCdcClientType::CLIENT_TYPE_STANDBY;
+          obcall::ObCdcClientType::CLIENT_TYPE_CDC : obcall::ObCdcClientType::CLIENT_TYPE_STANDBY;
     }
     return client_type;
   }

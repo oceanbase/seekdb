@@ -17,7 +17,7 @@
 #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"
 #include "share/ob_rpc_struct.h"
 
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {

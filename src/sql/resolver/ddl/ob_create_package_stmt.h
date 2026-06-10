@@ -33,10 +33,10 @@ public:
       : ObDDLStmt(stmt::T_CREATE_PACKAGE),
         create_package_arg_() {}
   virtual ~ObCreatePackageStmt() {}
-  obrpc::ObCreatePackageArg &get_create_package_arg() { return create_package_arg_; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return create_package_arg_; }
+  obcall::ObCreatePackageArg &get_create_package_arg() { return create_package_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return create_package_arg_; }
 private:
-  obrpc::ObCreatePackageArg create_package_arg_;
+  obcall::ObCreatePackageArg create_package_arg_;
   DISALLOW_COPY_AND_ASSIGN(ObCreatePackageStmt);
 };
 } //namespace sql

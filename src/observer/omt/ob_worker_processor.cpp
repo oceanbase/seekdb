@@ -27,7 +27,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::omt;
 using namespace oceanbase::rpc;
 using namespace oceanbase::rpc::frame;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 ObWorkerProcessor::ObWorkerProcessor(
     ObReqTranslator &xlator,
@@ -112,24 +112,10 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
     ObLocalDiagnosticInfo::set_service_module(THIS_THWORKER.get_module_name());
   }
   if (ObRequest::OB_RPC == req_type) {
-    // internal RPC request
-    const obrpc::ObRpcPacket &packet
-        = static_cast<const obrpc::ObRpcPacket&>(req.get_packet());
-    NG_TRACE_EXT(start_rpc, OB_ID(addr), RPC_REQ_OP.get_peer(&req), OB_ID(pcode), packet.get_pcode());
+    // obcall RPC transport removed (single-replica): OB_RPC requests are never
+    // delivered. Keep the branch as a dead no-op for type completeness.
+    NG_TRACE_EXT(start_rpc, OB_ID(addr), RPC_REQ_OP.get_peer(&req));
     ObCurTraceId::set(req.generate_trace_id(myaddr_));
-
-#ifdef ERRSIM
-    THIS_WORKER.set_module_type(packet.get_module_type());
-#endif
-
-    // Do not set thread local log level while log level upgrading (OB_LOGGER.is_info_as_wdiag)
-    if (OB_LOGGER.is_info_as_wdiag()) {
-      ObThreadLogLevelUtils::clear();
-    } else {
-      if (OB_LOG_LEVEL_NONE != packet.get_log_level()) {
-        ObThreadLogLevelUtils::init(packet.get_log_level());
-      }
-    }
   } else if (ObRequest::OB_MYSQL == req_type) {
     NG_TRACE_EXT(start_sql, OB_ID(addr), SQL_REQ_OP.get_peer(&req));
     // mysql command request

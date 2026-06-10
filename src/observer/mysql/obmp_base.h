@@ -172,18 +172,18 @@ public:
     //You can use:
     //alter system set_tp tp_no=405, error_code=label_high64, frequency=1;
     //alter system set_tp tp_no=406, error_code=label_low64, frequency=1;
-    //to inject a monitored ObLabel.
+    //to inject a monitored lib::ObLabel.
     //When this injection takes effect,
     //the maximum memory usage will only be counted for the specified label.
     //tp_no=405 and tp_no=406 need to be used at the same time
 
-    //To obtain the label_high64 and label_low64 values of an ObLabel,
+    //To obtain the label_high64 and label_low64 values of an lib::ObLabel,
     //you can use the tool './label2int64 LabelName' to easily retrieve them.
     //If you don't have access to this tool,
-    //you can map a string that conforms to the ObLabel format into two int64_t integer values,
+    //you can map a string that conforms to the lib::ObLabel format into two int64_t integer values,
     //ensuring consistency with the endianness of the target machine.
     int64_t label_high64 = - EVENT_CODE(EventTable::EN_SQL_MEMORY_LABEL_HIGH64);
-    if (OB_UNLIKELY(ObLabel("SqlDtlBuf") == attr.label_
+    if (OB_UNLIKELY(lib::ObLabel("SqlDtlBuf") == attr.label_
                     || ObCtxIds::MEMSTORE_CTX_ID == attr.ctx_id_)) {
       // do nothing
     } else if (label_high64 != 0) {
@@ -192,7 +192,7 @@ public:
       MEMSET(trace_label, 0, sizeof(trace_label));
       MEMCPY(trace_label, &label_high64, sizeof(int64_t));
       MEMCPY(trace_label + 8, &label_low64, sizeof(int64_t));
-      if (ObLabel(trace_label) == attr.label_) {
+      if (lib::ObLabel(trace_label) == attr.label_) {
         cur_used_ += add_size;
         max_used_ = cur_used_ > max_used_ ? cur_used_ : max_used_;
 #ifdef ERRSIM

@@ -66,7 +66,7 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
       LOG_WARN("current user info is null", K(ret));
     } else {
       
-      obrpc::ObAlterUserProfileArg &arg = stmt->get_ddl_arg();
+      obcall::ObAlterUserProfileArg &arg = stmt->get_ddl_arg();
       arg.tenant_id_ = params_.session_info_->get_effective_tenant_id();
       stmt->set_set_role_flag(ObAlterUserProfileStmt::SET_ROLE);
 
@@ -81,7 +81,7 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
 
 int ObAlterUserProfileResolver::resolve_role_list(
   const ParseNode *role_list,
-  obrpc::ObAlterUserProfileArg &arg,
+  obcall::ObAlterUserProfileArg &arg,
   const ObIArray<uint64_t> &role_id_array,
   bool for_default_role_stmt)
 {
@@ -125,7 +125,7 @@ int ObAlterUserProfileResolver::resolve_role_list(
         } else if (OB_FAIL(params_.schema_checker_->get_user_info(arg.tenant_id_, role_name,
                                                                   host_name, role_info))) {
           if (OB_USER_NOT_EXIST == ret) {
-            if (obrpc::OB_DEFAULT_ROLE_ALL_EXCEPT == arg.default_role_flag_) {
+            if (obcall::OB_DEFAULT_ROLE_ALL_EXCEPT == arg.default_role_flag_) {
               ret = OB_SUCCESS; //ignore EXCEPTED ROLE not exist
             } else {
               ret = OB_ERR_UNKNOWN_AUTHID;
@@ -178,7 +178,7 @@ int ObAlterUserProfileResolver::resolve_role_list(
               }
             }
             if (OB_ERR_ROLE_NOT_GRANTED_TO == ret) {
-              if (obrpc::OB_DEFAULT_ROLE_ALL_EXCEPT == arg.default_role_flag_) {
+              if (obcall::OB_DEFAULT_ROLE_ALL_EXCEPT == arg.default_role_flag_) {
                 skip = true;
                 ret = OB_SUCCESS; //ignore EXCEPTED ROLE not granted to user
               } else {
@@ -207,7 +207,7 @@ int ObAlterUserProfileResolver::resolve_role_list(
 
 int ObAlterUserProfileResolver::resolve_default_role_clause(
     const ParseNode *parse_tree,
-    obrpc::ObAlterUserProfileArg &arg,
+    obcall::ObAlterUserProfileArg &arg,
     const ObIArray<uint64_t> &role_id_array,
     bool for_default_role_stmt)
 {
@@ -223,15 +223,15 @@ int ObAlterUserProfileResolver::resolve_default_role_clause(
       if (OB_SUCC(ret)) {
         switch (parse_tree->children_[0]->value_) {
           case 1: {
-            arg.default_role_flag_ = obrpc::OB_DEFAULT_ROLE_ALL;
+            arg.default_role_flag_ = obcall::OB_DEFAULT_ROLE_ALL;
             break;
           }
           case 3: {
-            arg.default_role_flag_ = obrpc::OB_DEFAULT_ROLE_NONE;
+            arg.default_role_flag_ = obcall::OB_DEFAULT_ROLE_NONE;
             break;
           }
           case 4: {
-            arg.default_role_flag_ = obrpc::OB_DEFAULT_ROLE_DEFAULT;
+            arg.default_role_flag_ = obcall::OB_DEFAULT_ROLE_DEFAULT;
             break;
           }
           default: {
@@ -244,10 +244,10 @@ int ObAlterUserProfileResolver::resolve_default_role_clause(
       CK (2 == parse_tree->num_child_);
       if (OB_SUCC(ret)) {
         if (0 == parse_tree->children_[0]->value_) {
-          OX (arg.default_role_flag_ = obrpc::OB_DEFAULT_ROLE_LIST);
+          OX (arg.default_role_flag_ = obcall::OB_DEFAULT_ROLE_LIST);
         } else {
           CK (2 == parse_tree->children_[0]->value_);
-          OX (arg.default_role_flag_ = obrpc::OB_DEFAULT_ROLE_ALL_EXCEPT);
+          OX (arg.default_role_flag_ = obcall::OB_DEFAULT_ROLE_ALL_EXCEPT);
         }
         OZ (resolve_role_list(parse_tree->children_[1], arg, role_id_array, for_default_role_stmt));
       }
@@ -280,7 +280,7 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
     ObString user_name;
     ObString host_name;
     const ObUserInfo *user_info = NULL;
-    obrpc::ObAlterUserProfileArg &arg = stmt->get_ddl_arg();
+    obcall::ObAlterUserProfileArg &arg = stmt->get_ddl_arg();
     stmt->set_set_role_flag(ObAlterUserProfileStmt::SET_DEFAULT_ROLE);
 
     /* 1. resolve user */

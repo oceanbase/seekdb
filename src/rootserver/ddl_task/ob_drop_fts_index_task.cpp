@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "storage/ddl/ob_ddl_lock.h"
 
@@ -569,10 +570,7 @@ int ObDropFTSIndexTask::create_drop_index_task(
   const ObTableSchema *data_table_schema = nullptr;
   ObSqlString drop_index_sql;
   bool is_index_exist = false;
-  if (OB_ISNULL(GCTX.rs_rpc_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.rs_rpc_proxy_));
-  } else if (OB_INVALID_ID == index_tid) {
+  if (OB_INVALID_ID == index_tid) {
     // nothing to do, just by pass.
     task_id = -1;
   } else if (OB_UNLIKELY(index_name.empty())) {
@@ -599,8 +597,8 @@ int ObDropFTSIndexTask::create_drop_index_task(
     LOG_WARN("fail to assign drop index sql", K(ret));
   } else {
     int64_t ddl_rpc_timeout_us = 0;
-    obrpc::ObDropIndexArg arg;
-    obrpc::ObDropIndexRes res;
+    obcall::ObDropIndexArg arg;
+    obcall::ObDropIndexRes res;
     arg.is_inner_            = true;
     arg.tenant_id_           = tenant_id_;
     arg.exec_tenant_id_      = tenant_id_;
@@ -609,7 +607,7 @@ int ObDropFTSIndexTask::create_drop_index_task(
     arg.index_name_          = index_name;
     arg.table_name_          = data_table_schema->get_table_name();
     arg.database_name_       = database_schema->get_database_name_str();
-    arg.index_action_type_   = obrpc::ObIndexArg::DROP_INDEX;
+    arg.index_action_type_   = obcall::ObIndexArg::DROP_INDEX;
     arg.ddl_stmt_str_        = nullptr;
     arg.is_add_to_scheduler_ = true;
     arg.task_id_             = task_id_;
@@ -620,7 +618,7 @@ int ObDropFTSIndexTask::create_drop_index_task(
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
       LOG_WARN("fail to get ddl rpc timeout", K(ret));
-    } else if (OB_FAIL(GCTX.rs_rpc_proxy_->timeout(ddl_rpc_timeout_us).drop_index(arg, res))) {
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(arg, res); }))) {
       LOG_WARN("fail to drop index", K(ret), K(ddl_rpc_timeout_us), K(arg), K(res.task_id_));
     } else {
       task_id = res.task_id_;

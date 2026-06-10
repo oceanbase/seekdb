@@ -24,11 +24,11 @@ namespace oceanbase
 namespace observer
 {
 
-/// @see RPC_S(PR5 table_api_meta_info_execute, obrpc::OB_TABLE_API_META_INFO_EXECUTE, (ObTableMetaRequest),
+/// @see CALL_S(PR5 table_api_meta_info_execute, obcall::OB_TABLE_API_META_INFO_EXECUTE, (ObTableMetaRequest),
 /// ObTableMetaResponse);
-class ObTableMetaP: public oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_META_INFO_EXECUTE> >
+class ObTableMetaP: public oceanbase::observer::ObTableRpcProcessor<obcall::ObTableRpcBinding<OB_TABLE_API_META_INFO_EXECUTE> >
 {
-  typedef oceanbase::observer::ObTableRpcProcessor<ObTableRpcProxy::ObRpc<OB_TABLE_API_META_INFO_EXECUTE> > ParentType;
+  typedef oceanbase::observer::ObTableRpcProcessor<obcall::ObTableRpcBinding<OB_TABLE_API_META_INFO_EXECUTE> > ParentType;
 public:
   explicit ObTableMetaP(const ObGlobalContext &gctx);
   virtual ~ObTableMetaP() = default;

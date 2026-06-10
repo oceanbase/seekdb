@@ -16,7 +16,7 @@
 
 #include "dumpsst/ob_admin_dumpsst_executor.h"
 #include "io_bench/ob_admin_io_executor.h"
-#include "server_tool/ob_admin_server_executor.h"
+// server_tool disabled (obrpc removed): #include "server_tool/ob_admin_server_executor.h"
 #include "backup_tool/ob_admin_dump_backup_data_executor.h"
 #include "dump_enum_value/ob_admin_dump_enum_value_executor.h"
 #include "log_tool/ob_admin_log_tool_executor.h"
@@ -148,8 +148,6 @@ int main(int argc, char *argv[])
       executor = new ObAdminObjectStorageDriverQualityExecutor();
     } else if (0 == strcmp("uncompress_plan", argv[1])) {
       executor = new ObAdminUncompressPlanExecutor();
-    } else if (0 == strncmp("-h", argv[1], 2) || 0 == strncmp("-S", argv[1], 2)) {
-      executor = new ObAdminServerExecutor();
     } else {
       print_usage();
     }

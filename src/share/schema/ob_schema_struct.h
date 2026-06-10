@@ -74,7 +74,7 @@ namespace rootserver
 class ObRandomZoneSelector;
 struct ObReplicaAddr;
 }
-namespace obrpc
+namespace obcall
 {
 struct ObMVAdditionalInfo;
 }

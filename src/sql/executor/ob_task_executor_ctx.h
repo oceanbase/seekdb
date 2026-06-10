@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_TASK_EXECUTOR_CTX_
 
 #include "share/ob_autoincrement_service.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "sql/executor/ob_executor_rpc_impl.h"
 #include "sql/executor/ob_execute_result.h"
 #include "sql/ob_phy_table_location.h"
@@ -35,10 +34,8 @@ class ObAddr;
 class ObITabletScan;
 }
 
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
-class ObCommonRpcProxy;
 }
 
 namespace sql
@@ -87,11 +84,6 @@ public:
   {
     return GCTX.executor_rpc_;
   }
-  // @nijia.nj FIXme: this func should be replaced by
-  // int get_common_rpc(obrpc::ObCommonRpcProxy *&)
-  obrpc::ObCommonRpcProxy *get_common_rpc();
-
-  int get_common_rpc(obrpc::ObCommonRpcProxy *&common_rpc_proxy);
   inline ObExecuteResult &get_execute_result()
   {
     return execute_result_;
@@ -99,10 +91,6 @@ public:
   inline common::ObITabletScan *get_vt_partition_service()
   {
     return GCTX.vt_par_ser_;
-  }
-  inline obrpc::ObSrvRpcProxy *get_srv_rpc()
-  {
-    return GCTX.srv_rpc_proxy_;
   }
   inline void set_query_tenant_begin_schema_version(const int64_t schema_version)
   {
@@ -209,7 +197,6 @@ private:
 public:
   // BEGIN global singleton variable
   //
-  obrpc::ObCommonRpcProxy *rs_rpc_proxy_;
   int64_t query_tenant_begin_schema_version_; // Query start time to get the latest global tenant schema version
   int64_t query_sys_begin_schema_version_; // Query start time to get the latest global sys schema version
   share::schema::ObMultiVersionSchemaService *schema_service_;

@@ -335,9 +335,9 @@ int ObLSService::init(const uint64_t tenant_id)
     LOG_WARN("fail to init iter allocator, ", K(ret));
   } else if (OB_FAIL(ls_map_.init(tenant_id, &ls_allocator_))) {
     LOG_WARN("fail to init ls map", K(ret));
-  } else if (OB_FAIL(storage_svr_rpc_proxy_.init(GCTX.net_frame_->get_req_transport(), GCTX.self_addr()))) {
+  } else if (OB_FAIL(storage_svr_rpc_proxy_.init(GCTX.self_addr()))) {
     LOG_WARN("failed to init storage svr rpc proxy", K(ret));
-  } else if (OB_FAIL(storage_rpc_.init(&storage_svr_rpc_proxy_, GCTX.self_addr(), GCTX.rs_rpc_proxy_))) {
+  } else if (OB_FAIL(storage_rpc_.init(&storage_svr_rpc_proxy_, GCTX.self_addr()))) {
     STORAGE_LOG(WARN, "fail to init partition service rpc", K(ret));
   } else {
     tenant_id_ = tenant_id;

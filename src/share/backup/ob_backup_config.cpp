@@ -324,7 +324,7 @@ int ObBackupConfigParserMgr::init(const common::ObSqlString &name, const common:
   return ret;
 }
 
-int ObBackupConfigParserMgr::update_inner_config_table(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans)
+int ObBackupConfigParserMgr::update_inner_config_table(common::ObISQLClient &trans)
 {
   int ret = OB_SUCCESS;
   ObIBackupConfigItemParser *parser = nullptr;
@@ -334,7 +334,7 @@ int ObBackupConfigParserMgr::update_inner_config_table(obrpc::ObSrvRpcProxy &rpc
   } else if (OB_ISNULL(parser = parser_generator_.get_parser())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("parser must not be nullptr", K(ret));
-  } else if (OB_FAIL(parser->check_before_update_inner_config(rpc_proxy, trans))) {
+  } else if (OB_FAIL(parser->check_before_update_inner_config(trans))) {
     LOG_WARN("fail to check before update inner config", K(ret));
   } else if (OB_FAIL(parser->update_inner_config_table(trans))) {
     LOG_WARN("fail to update inner config table", K(ret));
@@ -393,7 +393,7 @@ int ObDataBackupDestConfigParser::parse_from(const common::ObSqlString &value)
 }
 
 
-int ObDataBackupDestConfigParser::check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans)
+int ObDataBackupDestConfigParser::check_before_update_inner_config(common::ObISQLClient &trans)
 {
   int ret = OB_SUCCESS;
   bool is_doing = false;
@@ -420,7 +420,7 @@ int ObDataBackupDestConfigParser::check_before_update_inner_config(obrpc::ObSrvR
       LOG_WARN("fail to check dest checksum type", K(ret), K(backup_dest));
     } else if (OB_FAIL(dest_mgr.init(tenant_id_, dest_type, backup_dest, trans))) {
       LOG_WARN("fail to init dest manager", K(ret), K_(tenant_id), K(backup_dest));
-    } else if (OB_FAIL(dest_mgr.check_dest_validity(rpc_proxy, false/*need_format_file*/))) {
+    } else if (OB_FAIL(dest_mgr.check_dest_validity(false/*need_format_file*/))) {
       if (OB_OBJECT_STORAGE_OBJECT_LOCKED_BY_WORM == ret) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                           "set backup dest: parameter enable_worm=true is required for bucket with worm.");
@@ -611,7 +611,7 @@ int ObLogArchiveDestConfigParser::update_inner_config_table(common::ObISQLClient
   return ret;
 }
 
-int ObLogArchiveDestConfigParser::check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans)
+int ObLogArchiveDestConfigParser::check_before_update_inner_config(common::ObISQLClient &trans)
 {
   int ret = OB_SUCCESS;
   ObBackupDestType::TYPE dest_type = ObBackupDestType::TYPE::DEST_TYPE_ARCHIVE_LOG;
@@ -642,7 +642,7 @@ int ObLogArchiveDestConfigParser::check_before_update_inner_config(obrpc::ObSrvR
     UNUSED(lag_target);
     if (OB_FAIL(dest_mgr.init(tenant_id_, dest_type, backup_dest_, trans))) {
       LOG_WARN("fail to update archive dest config", K(ret), K_(tenant_id));
-    } else if (OB_FAIL(dest_mgr.check_dest_validity(rpc_proxy, false/*need_format_file*/))) {
+    } else if (OB_FAIL(dest_mgr.check_dest_validity(false/*need_format_file*/))) {
       if (OB_OBJECT_STORAGE_OBJECT_LOCKED_BY_WORM == ret) {
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                           "set backup dest: parameter enable_worm=true is required for bucket with worm.");
@@ -811,7 +811,7 @@ int ObLogArchiveDestStateConfigParser::update_inner_config_table(common::ObISQLC
 }
 
 
-int ObLogArchiveDestStateConfigParser::check_before_update_inner_config(obrpc::ObSrvRpcProxy &rpc_proxy, common::ObISQLClient &trans)
+int ObLogArchiveDestStateConfigParser::check_before_update_inner_config(common::ObISQLClient &trans)
 {
   int ret = OB_SUCCESS;
   // do nothing
@@ -932,21 +932,17 @@ int ChangeExternalStorageDestMgr::update_and_validate_authorization(const char *
   int ret = OB_SUCCESS;
   ObBackupDestMgr dest_mgr;
   ObBackupPathString backup_dest_str;
-  obrpc::ObSrvRpcProxy *rpc_proxy = nullptr;
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ChangeExternalStorageDestMgr not init", K(ret));
-  } else if (OB_ISNULL(rpc_proxy = GCTX.srv_rpc_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rpc_proxy should not be NULL", K(ret), KP(rpc_proxy));
   } else if (OB_FAIL(update_backup_dest_authorization_(access_id, access_key))) {
     LOG_WARN("failed to update backup dest authorization", K(ret), KCSTRING(access_id));
   } else if (OB_FAIL(backup_dest_.get_backup_dest_str(backup_dest_str.ptr(), backup_dest_str.capacity()))) {
     LOG_WARN("fail to get backup dest str", K(ret));
   } else if (OB_FAIL(dest_mgr.init(tenant_id_, dest_type_, backup_dest_str, *sql_proxy_))) {
     LOG_WARN("failed to init dest mgr", K(ret), K(tenant_id_), K(backup_dest_str));
-  } else if (OB_FAIL(dest_mgr.check_dest_validity(*rpc_proxy, true/*need_format_file*/))) {
+  } else if (OB_FAIL(dest_mgr.check_dest_validity(true/*need_format_file*/))) {
     LOG_WARN("fail to check archive dest validity", K(ret), K(tenant_id_), K(backup_dest_str));
   } else {
     LOG_INFO("succeed to check archive dest validity", K(tenant_id_), K(backup_dest_str));

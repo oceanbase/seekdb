@@ -1152,7 +1152,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       stmt::StmtType stmt_type = stmt->get_stmt_type();
       if (ObStmt::is_ddl_stmt(stmt_type, stmt->has_global_variable()) || ObStmt::is_dcl_stmt(stmt_type)) {
         ObDDLStmt *ddl_stmt = static_cast<ObDDLStmt*>(stmt);
-        obrpc::ObDDLArg &ddl_arg = ddl_stmt->get_ddl_arg();
+        obcall::ObDDLArg &ddl_arg = ddl_stmt->get_ddl_arg();
         ddl_arg.exec_tenant_id_ = params_.session_info_->get_effective_tenant_id();
         if (OB_ISNULL(params_.query_ctx_)) {
           ret = OB_ERR_UNEXPECTED;

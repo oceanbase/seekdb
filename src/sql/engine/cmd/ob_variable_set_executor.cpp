@@ -18,6 +18,7 @@
 
 #include "observer/ob_sql_client_decorator.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "observer/ob_server.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -555,11 +556,9 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
                                                    const ObObj &val)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObRpcOpts rpc_opt;
   ObSQLSessionInfo *session = NULL;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
-  obrpc::ObModifySysVarArg &arg = static_cast<obrpc::ObModifySysVarArg &>(stmt.get_ddl_arg());
+  obcall::ObModifySysVarArg &arg = static_cast<obcall::ObModifySysVarArg &>(stmt.get_ddl_arg());
   ObString extra_var_name;
   ObString extra_var_value;
   ObString extra_val;
@@ -767,11 +766,10 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx)) ||
-        OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
+    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
-      LOG_WARN("task exec ctx or common rpc proxy is NULL", K(ret), K(task_exec_ctx), K(common_rpc_proxy));
-    } else if (OB_FAIL(common_rpc_proxy->modify_system_variable(arg))) {
+      LOG_WARN("task exec ctx is NULL", K(ret), K(task_exec_ctx));
+    } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->modify_system_variable(arg); }))) {
       LOG_WARN("rpc proxy alter system variable failed", K(ret));
     } else {}
   }

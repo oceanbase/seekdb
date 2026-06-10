@@ -77,7 +77,7 @@ public:
   TO_STRING_KV(K(leader_addr_), K(finish_arg_));
 public:
   ObAddr leader_addr_;
-  obrpc::ObTabletSplitFinishArg finish_arg_;
+  obcall::ObTabletSplitFinishArg finish_arg_;
 };
 
 // the process of partition split
@@ -91,7 +91,7 @@ public:
       const int64_t table_id,
       const int64_t schema_version,
       const int64_t parallelism,
-      const obrpc::ObPartitionSplitArg &partition_split_arg,
+      const obcall::ObPartitionSplitArg &partition_split_arg,
       const int64_t tablet_size,
       const uint64_t tenant_data_version,
       const int64_t parent_task_id = 0,
@@ -190,7 +190,7 @@ private:
     ObArray<ObTabletID> &dest_ids);
   int setup_split_finish_items(
     ObAddr &leader_addr,
-    ObIArray<obrpc::ObTabletSplitArg> &split_info_array);
+    ObIArray<obcall::ObTabletSplitArg> &split_info_array);
   int setup_lob_idxs_arr(ObSArray<uint64_t> &lob_col_idxs_);
   int check_freeze_progress(
       const ObSArray<ObTabletID> &tablet_ids,
@@ -238,7 +238,7 @@ private:
   int prepare_tablet_split_infos(
       const share::ObLSID &ls_id,
       const ObAddr &leader_addr,
-      ObIArray<obrpc::ObTabletSplitArg> &split_info_array);
+      ObIArray<obcall::ObTabletSplitArg> &split_info_array);
   int update_task_message();
 private:
   static const int64_t OB_PARTITION_SPLIT_TASK_VERSION = 1;
@@ -252,7 +252,7 @@ private:
   using ObDDLTask::dst_schema_version_;
   using ObDDLTask::task_type_;
   ObRootService *root_service_;
-  obrpc::ObPartitionSplitArg partition_split_arg_;
+  obcall::ObPartitionSplitArg partition_split_arg_;
   bool has_synced_stats_info_;
   bool replica_build_task_submit_;
   int64_t replica_build_request_time_;

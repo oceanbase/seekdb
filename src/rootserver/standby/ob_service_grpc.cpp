@@ -27,7 +27,7 @@
 
 using namespace oceanbase::obgrpc;
 using namespace oceanbase::share;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::storage;
 using namespace oceanbase::logservice;
 

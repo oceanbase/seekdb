@@ -191,7 +191,7 @@ public:
 };
 
 class ObDesExecContext;
-class ObRemoteTask : public obrpc::ObIFill
+class ObRemoteTask : public obcall::ObIFill
 {
   OB_UNIS_VERSION(1);
 public:

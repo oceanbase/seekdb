@@ -58,11 +58,11 @@ public:
   int add_tables_to_tablegroup(common::ObMySQLTransaction &trans,
                                share::schema::ObSchemaGetterGuard &schema_guard,
                                const share::schema::ObTablegroupSchema &tablegroup_schema,
-                               const obrpc::ObAlterTablegroupArg &arg);
+                               const obcall::ObAlterTablegroupArg &arg);
   int modify_partition_option(ObMySQLTransaction &trans,
                               ObSchemaGetterGuard &schema_guard,
                               const ObTablegroupSchema &tablegroup_schema,
-                              const obrpc::ObAlterTablegroupArg &arg);
+                              const obcall::ObAlterTablegroupArg &arg);
 
   int check_table_alter_tablegroup(
       share::schema::ObSchemaGetterGuard &schema_guard,
@@ -70,7 +70,7 @@ public:
       const share::schema::ObTableSchema &orig_table_schema,
       share::schema::ObTableSchema &new_table_schema);
       
-  int modify_sharding_type(const obrpc::ObAlterTablegroupArg &arg,
+  int modify_sharding_type(const obcall::ObAlterTablegroupArg &arg,
                            const ObTablegroupSchema &tablegroup_schema,
                            common::ObMySQLTransaction &trans,
                            ObSchemaGetterGuard &schema_guard); 

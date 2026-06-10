@@ -17,7 +17,7 @@
 #define OCEANBAE_LOG_FETCH_LOG_RPC_REQ_H_
 
 #include "logservice/cdcservice/ob_cdc_req.h"
-#include "logservice/cdcservice/ob_cdc_rpc_proxy.h"
+#include "logservice/cdcservice/ob_cdc_rpc_binding.h"
 #include "ob_log_fetch_log_rpc_stop_reason.h"
 #include "ob_log_utils.h"
 #include <cstdint>
@@ -34,7 +34,7 @@ class LogFileDataBuffer;
 
 struct FetchLogRpcReq
 {
-  FetchLogRpcReq(const obrpc::ObCdcFetchLogProtocolType proto,
+  FetchLogRpcReq(const obcall::ObCdcFetchLogProtocolType proto,
       FetchLogARpc &host,
       const int64_t rpc_timeout):
       host_(host),
@@ -48,7 +48,7 @@ struct FetchLogRpcReq
 
   virtual ~FetchLogRpcReq() = 0;
 
-  obrpc::ObCdcFetchLogProtocolType get_proto_type() const {
+  obcall::ObCdcFetchLogProtocolType get_proto_type() const {
     return proto_type_;
   }
 
@@ -74,7 +74,7 @@ struct FetchLogRpcReq
 
   // Invariant member variables within the request
   FetchLogARpc                    &host_;
-  obrpc::ObCdcFetchLogProtocolType proto_type_;
+  obcall::ObCdcFetchLogProtocolType proto_type_;
   // Variables that change with the request
   int64_t                         rpc_timeout_;     // RPC timeout
   common::ObCurTraceId::TraceId   trace_id_;
@@ -94,7 +94,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(FetchLogRpcReq);
 };
 
-typedef obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_LOG2> LogGroupEntryRpcCBBase;
+typedef obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_LOG2> LogGroupEntryRpcCBBase;
 class LogGroupEntryRpcCB : public LogGroupEntryRpcCBBase
 {
 public:
@@ -106,13 +106,13 @@ public:
   int process();
   void on_timeout();
   void on_invalid();
-  typedef typename obrpc::ObCdcProxy::ObRpc<obrpc::OB_LS_FETCH_LOG2> ProxyRpc;
+  typedef typename obcall::ObCdcProxy::ObRpc<obcall::OB_LS_FETCH_LOG2> ProxyRpc;
   void set_args(const typename ProxyRpc::Request &args) { UNUSED(args); }
 
   TO_STRING_KV("host", reinterpret_cast<void *>(&host_));
 
 private:
-  int do_process_(const obrpc::ObRpcResultCode &rcode, const obrpc::ObCdcLSFetchLogResp *resp);
+  int do_process_(const rpc::frame::ObResultCode &rcode, const obcall::ObCdcLSFetchLogResp *resp);
 
 private:
   LogGroupEntryRpcRequest &host_;
@@ -127,7 +127,7 @@ private:
 struct LogGroupEntryRpcRequest: public FetchLogRpcReq
 {
   LogGroupEntryRpcCB              cb_;              // RPC callback
-  obrpc::ObCdcLSFetchLogReq       req_;             // Fetch log request
+  obcall::ObCdcLSFetchLogReq       req_;             // Fetch log request
 
   LogGroupEntryRpcRequest(FetchLogARpc &host,
       const share::ObLSID &ls_id,
@@ -161,7 +161,7 @@ private:
 ////////////////////////////// RawLogRpcRequest //////////////////////////////
 struct RawLogDataRpcRequest;
 
-typedef obrpc::ObCdcProxy::AsyncCB<obrpc::OB_CDC_FETCH_RAW_LOG> RawLogDataRpcCBBase;
+typedef obcall::ObCdcProxy::AsyncCB<obcall::OB_CDC_FETCH_RAW_LOG> RawLogDataRpcCBBase;
 class RawLogDataRpcCB : public RawLogDataRpcCBBase
 {
 public:
@@ -173,13 +173,13 @@ public:
   int process();
   void on_timeout();
   void on_invalid();
-  typedef typename obrpc::ObCdcProxy::ObRpc<obrpc::OB_CDC_FETCH_RAW_LOG> ProxyRpc;
+  typedef typename obcall::ObCdcProxy::ObRpc<obcall::OB_CDC_FETCH_RAW_LOG> ProxyRpc;
   void set_args(const typename ProxyRpc::Request &args) { UNUSED(args); }
 
   TO_STRING_KV("host", reinterpret_cast<void *>(&host_));
 
 private:
-  int do_process_(const obrpc::ObRpcResultCode &rcode, const obrpc::ObCdcFetchRawLogResp *resp);
+  int do_process_(const rpc::frame::ObResultCode &rcode, const obcall::ObCdcFetchRawLogResp *resp);
 
 private:
   RawLogDataRpcRequest &host_;
@@ -193,11 +193,11 @@ struct RawLogFileRpcRequest: public FetchLogRpcReq
   typedef ObDList<RawLogDataRpcRequest> RawLogDataRpcReqList;
   // ceiling
   static constexpr int64_t MAX_SEND_REQ_CNT =
-      (palf::PALF_BLOCK_SIZE + obrpc::ObCdcFetchRawLogResp::FETCH_BUF_LEN - 1) / obrpc::ObCdcFetchRawLogResp::FETCH_BUF_LEN;
+      (palf::PALF_BLOCK_SIZE + obcall::ObCdcFetchRawLogResp::FETCH_BUF_LEN - 1) / obcall::ObCdcFetchRawLogResp::FETCH_BUF_LEN;
   RawLogFileRpcRequest(FetchLogARpc &host,
       const share::ObLSID &ls_id,
       const int64_t rpc_timeout):
-      FetchLogRpcReq(obrpc::ObCdcFetchLogProtocolType::RawLogDataProto, host, rpc_timeout),
+      FetchLogRpcReq(obcall::ObCdcFetchLogProtocolType::RawLogDataProto, host, rpc_timeout),
       free_list_(),
       busy_list_(),
       buffer_(nullptr),
@@ -223,8 +223,8 @@ struct RawLogFileRpcRequest: public FetchLogRpcReq
   int complete_request();
 
   int handle_sub_rpc_response(RawLogDataRpcRequest &rpc_req,
-      const obrpc::ObRpcResultCode &rcode,
-      const obrpc::ObCdcFetchRawLogResp *resp,
+      const rpc::frame::ObResultCode &rcode,
+      const obcall::ObCdcFetchRawLogResp *resp,
       const bool need_lock);
 
   // make sure the lock of host_ is held when calling this method;
@@ -305,7 +305,7 @@ struct RawLogDataRpcRequest: public ObDLinkBase<RawLogDataRpcRequest>
   int64_t rpc_prepare_time_;
   bool rpc_is_flying_;
   RawLogDataRpcCB cb_;
-  obrpc::ObCdcFetchRawLogReq req_;
+  obcall::ObCdcFetchRawLogReq req_;
 };
 
 ////////////////////////////// RpcRequestList //////////////////////////////

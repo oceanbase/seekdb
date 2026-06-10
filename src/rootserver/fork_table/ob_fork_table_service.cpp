@@ -29,7 +29,7 @@
 namespace oceanbase {
 using namespace common;
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 using namespace storage;
 namespace rootserver {
 
@@ -138,7 +138,7 @@ int ObDDLService::fork_single_table_in_trans_(
     if (OB_SUCC(ret)) {
       share::ObForkTableInfo fork_table_info(src_table_schema.get_table_id(),
                                              fork_snapshot_version);
-      obrpc::ObSequenceDDLArg empty_sequence_ddl_arg;
+      obcall::ObSequenceDDLArg empty_sequence_ddl_arg;
 
       if (OB_FAIL(create_tables_for_fork_(
               ddl_stmt_str, table_schemas, empty_sequence_ddl_arg,
@@ -200,7 +200,7 @@ int ObDDLService::fork_single_table_in_trans_(
 int ObDDLService::create_tables_for_fork_(
     const common::ObString &ddl_stmt_str,
     common::ObIArray<share::schema::ObTableSchema> &table_schemas,
-    const obrpc::ObSequenceDDLArg &sequence_ddl_arg,
+    const obcall::ObSequenceDDLArg &sequence_ddl_arg,
     ObIArray<ObMockFKParentTableSchema> &mock_fk_parent_table_schema_array,
     share::schema::ObSchemaGetterGuard &schema_guard,
     ObDDLSQLTransaction &trans, const share::ObForkTableInfo &fork_table_info) {
@@ -284,8 +284,8 @@ int ObDDLService::create_tables_for_fork_(
   return ret;
 }
 
-int ObDDLService::fork_table(const obrpc::ObForkTableArg &fork_table_arg,
-                             obrpc::ObDDLRes &res) {
+int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
+                             obcall::ObDDLRes &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init");

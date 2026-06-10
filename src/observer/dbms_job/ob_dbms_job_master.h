@@ -17,7 +17,6 @@
 #ifndef SRC_OBSERVER_OB_DBMS_JOB_MASTER_H_
 #define SRC_OBSERVER_OB_DBMS_JOB_MASTER_H_
 
-#include "ob_dbms_job_rpc_proxy.h"
 #include "ob_dbms_job_utils.h"
 
 #include "lib/ob_define.h"
@@ -162,7 +161,6 @@ public:
       trace_id_(NULL),
       rand_(),
       schema_service_(NULL),
-      job_rpc_proxy_(NULL),
       self_addr_(),
       ready_queue_(),
       scheduler_task_(),
@@ -217,7 +215,6 @@ private:
 
   common::ObRandom rand_; // for random pick server
   share::schema::ObMultiVersionSchemaService *schema_service_; // for got all tenant info
-  obrpc::ObDBMSJobRpcProxy *job_rpc_proxy_;
 
   common::ObAddr self_addr_;
   ObDBMSJobQueue ready_queue_;

@@ -36,7 +36,7 @@
 #include "lib/utility/serialization.h"
 #include "lib/net/ob_net_util.h"
 #include "grpc/ob_grpc_context.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
+#include "rpc/ob_req_operator.h"   // rpc::g_rpc_self_addr
 //#include "grpc/newlogstorepb.grpc.pb.h"
 
 using grpc::Channel;
@@ -254,7 +254,7 @@ void ObGrpcContext::set_grpc_context_(ClientContext &context, const int64_t time
   const uint64_t* trace_id = common::ObCurTraceId::get();
   if (0 == trace_id[0]) {
     common::ObCurTraceId::TraceId temp;
-    temp.init(obrpc::ObRpcProxy::myaddr_);
+    temp.init(rpc::g_rpc_self_addr);
     temp.to_string(trace_id_buf, sizeof(trace_id_buf));
     trace_id_str = trace_id_buf;
   } else {

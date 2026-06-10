@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 namespace sql
@@ -157,7 +157,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
         // Foreign key column deletion index impact check ends here
         if (OB_SUCC(ret)) {
           drop_index_stmt->set_index_name(index_name);
-          obrpc::ObDropIndexArg &drop_index_arg = drop_index_stmt->get_drop_index_arg();
+          obcall::ObDropIndexArg &drop_index_arg = drop_index_stmt->get_drop_index_arg();
         }
       }
     }

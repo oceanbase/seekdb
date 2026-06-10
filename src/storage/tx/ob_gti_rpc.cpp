@@ -17,11 +17,12 @@
 #include "ob_gti_rpc.h"
 #include "ob_trans_id_service.h"
 #include "ob_trans_service.h"
+#include "observer/ob_ex_rpc.h"
 
 namespace oceanbase
 {
 using namespace share;
-using namespace obrpc;
+using namespace obcall;
 namespace transaction
 {
 
@@ -45,19 +46,18 @@ bool ObGtiRequest::is_valid() const
   return is_valid_tenant_id(tenant_id_) && range_ > 0;
 }
 
-int ObGtiRequestRpc::init(ObGtiRpcProxy *rpc_proxy, const ObAddr &self, ObGtiSource *gti_source)
+int ObGtiRequestRpc::init(const ObAddr &self, ObGtiSource *gti_source)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     TRANS_LOG(WARN, "gti request rpc inited twice", KR(ret));
-  } else if (OB_ISNULL(rpc_proxy) || !self.is_valid()) {
+  } else if (!self.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid argument", KR(ret), KP(rpc_proxy), K(self));
+    TRANS_LOG(WARN, "invalid argument", KR(ret), K(self));
   } else if (OB_SUCCESS != (ret = gti_request_cb_.init(gti_source))) {
     TRANS_LOG(WARN, "gti request callback inited failed", KR(ret));
   } else {
-    rpc_proxy_ = rpc_proxy;
     self_ = self;
     is_inited_ = true;
     TRANS_LOG(INFO, "gti request rpc inited success", KP(this), K(self));
@@ -123,7 +123,6 @@ void ObGtiRequestRpc::destroy()
       }
     }
     is_inited_ = false;
-    rpc_proxy_ = NULL;
     self_.reset();
     TRANS_LOG(INFO, "gti request rpc destroy");
   }
@@ -144,39 +143,42 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(msg));
   } else if (OB_FAIL(MTL(transaction::ObTransService*)->get_location_adapter()->nonblock_get_leader(GCONF.cluster_id, msg.get_tenant_id(), GTI_LS, server))) {
     TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(GTI_LS));
-  } else if (server == self_) {
-   ObGtiRpcResult gti_rpc_result;
-   if (OB_FAIL(MTL(ObTransIDService*)->handle_request(msg, gti_rpc_result))) {
-     TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(msg));
-   } else if (!gti_rpc_result.is_valid()) {
-     ret = OB_ERR_UNEXPECTED;
-     TRANS_LOG(ERROR, "post local gti request and gti_rpc_result is invalid", KR(ret), K(server),
-               K(msg), K(gti_rpc_result));
-   } else {
-     ObRpcResultCode rcode;
-     // Local call, rpc succeeds by default
-     rcode.rcode_ = OB_SUCCESS;
-     gti_request_cb_.set_tenant_id(msg.get_tenant_id());
-     if (OB_FAIL(gti_request_cb_.process(gti_rpc_result, server, rcode))) {
-       TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(msg));
-     } else {
-       TRANS_LOG(DEBUG, "post local gti request success", KR(ret), K(server), K(msg));
-     }
-   }
-  } else if (OB_FAIL(rpc_proxy_->to(server).by(msg.get_tenant_id())
-                                           .timeout(ObGtiRpcResult::OB_GTI_RPC_TIMEOUT)
-                                           .group_id(OBCG_ID_SERVICE)
-                                           .post(msg, &gti_request_cb_))) {
-    TRANS_LOG(WARN, "post gti request failed", KR(ret), K(server), K(msg));
   } else {
-    TRANS_LOG(DEBUG, "post gti request success", K(server), K(msg));
+   // single-replica: target is always local; dispatch async in-process (ex-RPC),
+   // restoring the original async .post(msg, &gti_request_cb_) decoupling. msg is
+   // serialized; tenant context is restored on the worker via MTL_SWITCH. The cb is a
+   // plain value type now (no heap clone needed -- the result is passed to process() as
+   // an argument, not stored in the cb), so each async task captures its own value copy.
+   (void)ex_rpc::async_call<void>(msg,
+       [cb = gti_request_cb_, server](const ObGtiRequest &m) mutable {
+     int ret = OB_SUCCESS;
+     MTL_SWITCH(m.get_tenant_id()) {
+       ObGtiRpcResult gti_rpc_result;
+       if (OB_FAIL(MTL(ObTransIDService*)->handle_request(m, gti_rpc_result))) {
+         TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(m));
+       } else if (!gti_rpc_result.is_valid()) {
+         ret = OB_ERR_UNEXPECTED;
+         TRANS_LOG(ERROR, "post local gti request and gti_rpc_result is invalid", KR(ret), K(server),
+                   K(m), K(gti_rpc_result));
+       } else {
+         rpc::frame::ObResultCode rcode;
+         rcode.rcode_ = OB_SUCCESS;
+         cb.set_tenant_id(m.get_tenant_id());
+         if (OB_FAIL(cb.process(gti_rpc_result, server, rcode))) {
+           TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(m));
+         } else {
+           TRANS_LOG(DEBUG, "post local gti request success", KR(ret), K(server), K(m));
+         }
+       }
+     }
+   });
   }
   return ret;
 }
 
 } //transaction
 
-namespace obrpc
+namespace obcall
 {
 
 OB_SERIALIZE_MEMBER(ObGtiRpcResult, tenant_id_, status_, start_id_, end_id_);
@@ -215,29 +217,6 @@ bool ObGtiRpcResult::is_valid() const
     (OB_SUCCESS != status_ || (start_id_ > 0 && end_id_ > 0));
 }
 
-int ObGtiP::process()
-{
-  int ret = OB_SUCCESS;
-  ObTimeGuard timeguard("gti_request", 100000);
-  if (arg_.get_tenant_id() != MTL_ID()) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(WARN, "tenant is not match", K(ret), K(arg_));
-  }
-  if (OB_SUCC(ret)) {
-    transaction::ObTransIDService *trans_id_service = MTL(transaction::ObTransIDService *);
-    if (OB_ISNULL(trans_id_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "timestamp service is null", KR(ret), KP(trans_id_service));
-    } else if (OB_FAIL(trans_id_service->handle_request(arg_, result_))) {
-      TRANS_LOG(WARN, "handle request failed", KR(ret), K(arg_));
-    } else {
-      // do nothing
-    }
-  }
-  return ret;
-}
-
-
-} // obrpc
+} // obcall
 
 } // oceanbase

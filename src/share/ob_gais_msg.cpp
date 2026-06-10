@@ -22,7 +22,7 @@
 namespace oceanbase
 {
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::share;
 
 namespace share

@@ -17,14 +17,13 @@
 #ifndef OCEANBASE_COMMON_GLOBAL_INTERRUPT_CALL_H_
 #define OCEANBASE_COMMON_GLOBAL_INTERRUPT_CALL_H_
 
-#include "share/interrupt/ob_interrupt_rpc_proxy.h"
+#include "share/interrupt/ob_interrupt_message.h"
 #include "lib/ob_errno.h"
 #include "lib/net/ob_addr.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/coro/co_var.h"
 
-using oceanbase::obrpc::ObInterruptMessage;
-using oceanbase::obrpc::ObInterruptRpcProxy;
+using oceanbase::obcall::ObInterruptMessage;
 
 namespace oceanbase {
 
@@ -265,7 +264,7 @@ public:
   static ObGlobalInterruptManager *getInstance();
 
   /// The initialization method is used to obtain the host and rpc transmitter of the current machine, and initialize the map
-  int init(const ObAddr &host, ObInterruptRpcProxy *rpc_proxy);
+  int init(const ObAddr &host);
 
   /// Record the checker pointer in the map with tid as the key
   int register_checker(ObInterruptChecker *checker, const ObInterruptibleTaskID &tid);
@@ -287,7 +286,7 @@ public:
 
   MAP &get_map() { return map_; }
 private:
-  ObGlobalInterruptManager() : rpc_proxy_(nullptr), map_(), is_inited_(false) {};
+  ObGlobalInterruptManager() : map_(), is_inited_(false) {};
   ObGlobalInterruptManager(const ObGlobalInterruptManager &) {};
 
 private:
@@ -295,7 +294,6 @@ private:
 
 private:
   ObAddr local_;
-  ObInterruptRpcProxy *rpc_proxy_;
   MAP map_;
   bool is_inited_;
 };

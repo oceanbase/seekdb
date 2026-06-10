@@ -35,8 +35,8 @@ using oceanbase::share::ObLSID;
 using oceanbase::palf::LSN;
 class ObCdcService;
 
-typedef obrpc::ObCdcReqStartLSNByTsReq ObLocateLSNByTsReq;
-typedef obrpc::ObCdcReqStartLSNByTsResp ObLocateLSNByTsResp;
+typedef obcall::ObCdcReqStartLSNByTsReq ObLocateLSNByTsReq;
+typedef obcall::ObCdcReqStartLSNByTsResp ObLocateLSNByTsResp;
 
 class ObCdcStartLsnLocator
 {

@@ -18,7 +18,6 @@
 #define OCEANBASE_SHARE_UPGRADE_UTILS_H_
 
 #include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "share/ob_check_stop_provider.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "rootserver/ob_rs_job_table_operator.h"
@@ -57,8 +56,6 @@ public:
            UpgradeMode mode,
            common::ObMySQLProxy &sql_proxy,
            common::ObOracleSqlProxy &oracle_sql_proxy,
-           obrpc::ObSrvRpcProxy &rpc_proxy,
-           obrpc::ObCommonRpcProxy &common_proxy,
            share::schema::ObMultiVersionSchemaService &schema_service,
            share::ObCheckStopProvider &check_server_provider);
   int64_t get_version() const { return data_version_; }
@@ -82,8 +79,6 @@ protected:
   UpgradeMode mode_;
   common::ObMySQLProxy *sql_proxy_;
   common::ObOracleSqlProxy *oracle_sql_proxy_;
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
-  obrpc::ObCommonRpcProxy *common_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   share::ObCheckStopProvider *check_stop_provider_;
 private:
@@ -98,8 +93,6 @@ public:
   int init(ObBaseUpgradeProcessor::UpgradeMode mode,
            common::ObMySQLProxy &sql_proxy,
            common::ObOracleSqlProxy &oracle_sql_proxy,
-           obrpc::ObSrvRpcProxy &rpc_proxy,
-           obrpc::ObCommonRpcProxy &common_proxy,
            share::schema::ObMultiVersionSchemaService &schema_service,
            share::ObCheckStopProvider &check_server_provider);
   int get_processor_by_idx(const int64_t idx,

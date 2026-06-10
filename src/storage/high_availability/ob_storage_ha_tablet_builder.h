@@ -61,7 +61,7 @@ struct ObStorageHATabletsBuilderParam final
 
   ObStorageHATableInfoMgr *ha_table_info_mgr_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  obrpc::ObStorageRpcProxy *svr_rpc_proxy_;
+  obcall::ObStorageRpcProxy *svr_rpc_proxy_;
   storage::ObStorageRpc *storage_rpc_;
   const ObRestoreBaseInfo *restore_base_info_;
   ObTabletRestoreAction::ACTION restore_action_;
@@ -107,14 +107,14 @@ private:
   int get_tablet_info_restore_reader_(ObICopyTabletInfoReader *&reader);
   void free_tablet_info_reader_(ObICopyTabletInfoReader *&reader);
   int create_or_update_tablet_(
-      const obrpc::ObCopyTabletInfo &tablet_info,
+      const obcall::ObCopyTabletInfo &tablet_info,
       const bool need_check_tablet_limit,
       ObLS *ls);
   int get_tablets_sstable_reader_(
       const common::ObIArray<ObTabletHandle> &tablet_handle_array,
       ObICopySSTableInfoReader *&reader);
   int build_tablets_sstable_info_(
-      const obrpc::ObCopyTabletSSTableInfo &sstable_info);
+      const obcall::ObCopyTabletSSTableInfo &sstable_info);
   int get_tablets_sstable_restore_reader_(
       const common::ObIArray<ObTabletHandle> &tablet_handle_array,
       ObICopySSTableInfoReader *&reader);
@@ -122,7 +122,7 @@ private:
 
   int build_copy_tablet_sstable_info_arg_(
       const ObTabletHandle &tablet_handle,
-      obrpc::ObCopyTabletSSTableInfoArg &arg);
+      obcall::ObCopyTabletSSTableInfoArg &arg);
   int get_major_sstable_max_snapshot_(
       const ObSSTableArray &major_sstable_array,
       int64_t &max_snapshot_version);
@@ -149,11 +149,11 @@ private:
   int remove_uncomplete_tablet_(
       const common::ObTabletID &tablet_id);
   int modified_tablet_info_(
-      obrpc::ObCopyTabletInfo &tablet_info);
+      obcall::ObCopyTabletInfo &tablet_info);
 
   int create_tablet_with_major_sstables_(
       ObLS *ls,
-      const obrpc::ObCopyTabletInfo &tablet_info,
+      const obcall::ObCopyTabletInfo &tablet_info,
       const ObTablesHandleArray &major_tables,
       const ObBuildMajorSSTablesParam &major_sstables_param,
       const bool is_only_replace_major);
@@ -178,7 +178,7 @@ public:
   int init();
   int add_table_info(
       const common::ObTabletID &tablet_id,
-      const obrpc::ObCopyTabletSSTableInfo &sstable_info);
+      const obcall::ObCopyTabletSSTableInfo &sstable_info);
   int get_table_info(
       const common::ObTabletID &tablet_id,
       const ObITable::TableKey &table_key,
@@ -187,7 +187,7 @@ public:
       const common::ObTabletID &tablet_id,
       common::ObIArray<ObITable::TableKey> &table_keys);
   int remove_tablet_table_info(const common::ObTabletID &tablet_id);
-  int init_tablet_info(const obrpc::ObCopyTabletSSTableHeader &copy_header);
+  int init_tablet_info(const obcall::ObCopyTabletSSTableHeader &copy_header);
   int check_copy_tablet_exist(const common::ObTabletID &tablet_id, bool &is_exist);
   int check_tablet_table_info_exist(
       const common::ObTabletID &tablet_id, bool &is_exist);

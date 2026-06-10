@@ -29,8 +29,8 @@ namespace rootserver
 class ObMviewAlterService
 {
 public:
-  static int alter_mview_or_mlog_in_trans(obrpc::ObAlterTableArg &alter_table_arg,
-                                          obrpc::ObAlterTableRes &res,
+  static int alter_mview_or_mlog_in_trans(obcall::ObAlterTableArg &alter_table_arg,
+                                          obcall::ObAlterTableRes &res,
                                           ObSchemaGetterGuard &schema_guard,
                                           share::schema::ObMultiVersionSchemaService *schema_service,
                                           common::ObMySQLProxy *sql_proxy,
@@ -39,11 +39,11 @@ public:
 private:
   static int alter_mview_attributes(const uint64_t tenant_id,
                                     const ObTableSchema *orig_table_schema,
-                                    obrpc::ObAlterTableArg &alter_table_arg,
+                                    obcall::ObAlterTableArg &alter_table_arg,
                                     ObDDLOperator &ddl_operator, ObSchemaGetterGuard &schema_guard,
                                     ObDDLSQLTransaction &trans);
   static int alter_mlog_attributes(const uint64_t tenant_id, const ObTableSchema *orig_table_schema,
-                                   obrpc::ObAlterTableArg &alter_table_arg,
+                                   obcall::ObAlterTableArg &alter_table_arg,
                                    ObDDLOperator &ddl_operator, ObSchemaGetterGuard &schema_guard,
                                    ObDDLSQLTransaction &trans);
 };

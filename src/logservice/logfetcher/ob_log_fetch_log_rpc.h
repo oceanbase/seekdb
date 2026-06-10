@@ -28,10 +28,10 @@
 #include "ob_log_fetch_log_rpc_req.h"
 #include "ob_log_fetch_log_rpc_stop_reason.h"
 #include "rpc/frame/ob_req_transport.h"         // ObReqTranslator::AsyncCB
-#include "rpc/obrpc/ob_rpc_proxy.h"             // ObRpcProxy
-#include "rpc/obrpc/ob_rpc_packet.h"            // OB_LOG_OPEN_STREAM
-#include "rpc/obrpc/ob_rpc_result_code.h"       // ObRpcResultCode
-#include "logservice/cdcservice/ob_cdc_rpc_proxy.h"  // ObCdcProxy
+// obcall transport headers removed; the CDC async-callback base and
+// rpc::frame::ObResultCode stand-in come from ob_cdc_rpc_binding.h.
+#include "logservice/cdcservice/ob_cdc_rpc_binding.h"
+#include "logservice/cdcservice/ob_cdc_rpc_binding.h"  // ObCdcProxy
 #include "ob_log_ls_fetch_ctx.h"                // FetchTaskList
 
 namespace oceanbase
@@ -48,7 +48,7 @@ class RawLogFileRpcResult;
 // Use for fetch missing log
 class FetchLogSRpc
 {
-  typedef obrpc::ObCdcProxy::AsyncCB<obrpc::OB_LS_FETCH_MISSING_LOG> RpcCBBase;
+  typedef obcall::ObCdcProxy::AsyncCB<obcall::OB_LS_FETCH_MISSING_LOG> RpcCBBase;
 
 public:
   FetchLogSRpc();
@@ -61,24 +61,24 @@ public:
   int fetch_log(IObLogRpc &rpc,
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
-      const ObIArray<obrpc::ObCdcLSFetchMissLogReq::MissLogParam> &miss_log_array,
+      const ObIArray<obcall::ObCdcLSFetchMissLogReq::MissLogParam> &miss_log_array,
       const common::ObAddr &svr,
       const int64_t timeout);
 
-  int set_resp(const obrpc::ObRpcResultCode &rcode,
-      const obrpc::ObCdcLSFetchLogResp *resp);
+  int set_resp(const rpc::frame::ObResultCode &rcode,
+      const obcall::ObCdcLSFetchLogResp *resp);
 
   void reset();
 
-  const obrpc::ObRpcResultCode &get_result_code() const { return rcode_; }
-  const obrpc::ObCdcLSFetchLogResp &get_resp() const { return resp_; }
-  const obrpc::ObCdcLSFetchMissLogReq &get_req() const { return req_; }
+  const rpc::frame::ObResultCode &get_result_code() const { return rcode_; }
+  const obcall::ObCdcLSFetchLogResp &get_resp() const { return resp_; }
+  const obcall::ObCdcLSFetchMissLogReq &get_req() const { return req_; }
 
 private:
   int build_request_(
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
-      const ObIArray<obrpc::ObCdcLSFetchMissLogReq::MissLogParam> &miss_log_array);
+      const ObIArray<obcall::ObCdcLSFetchMissLogReq::MissLogParam> &miss_log_array);
 
 private:
   ////////////////////////////// RpcCB //////////////////////////////
@@ -94,11 +94,11 @@ private:
     int process();
     void on_timeout();
     void on_invalid();
-    typedef typename obrpc::ObCdcProxy::ObRpc<obrpc::OB_LS_FETCH_MISSING_LOG> ProxyRpc;
+    typedef typename obcall::ObCdcProxy::ObRpc<obcall::OB_LS_FETCH_MISSING_LOG> ProxyRpc;
     void set_args(const typename ProxyRpc::Request &args) { UNUSED(args); }
 
   private:
-    int do_process_(const obrpc::ObRpcResultCode &rcode, const obrpc::ObCdcLSFetchLogResp *resp);
+    int do_process_(const rpc::frame::ObResultCode &rcode, const obcall::ObCdcLSFetchLogResp *resp);
 
   private:
     FetchLogSRpc &host_;
@@ -108,9 +108,9 @@ private:
   };
 
 private:
-  obrpc::ObCdcLSFetchMissLogReq   req_;     // Fetch Missing log request
-  obrpc::ObCdcLSFetchLogResp      resp_;    // Fetch log response
-  obrpc::ObRpcResultCode          rcode_;   // Fetch log RPC result code
+  obcall::ObCdcLSFetchMissLogReq   req_;     // Fetch Missing log request
+  obcall::ObCdcLSFetchLogResp      resp_;    // Fetch log response
+  rpc::frame::ObResultCode          rcode_;   // Fetch log RPC result code
   RpcCB                           cb_;
   common::ObCond                  cond_;
 
@@ -240,8 +240,8 @@ public:
   // 2. If it doesn't match the current RPC request, it is a deprecated RPC request, so the RPC result is discarded and the deprecated RPC request is recycled
   // 3. Based on the request result, decide whether to launch the next RPC request immediately
   int handle_rpc_response(LogGroupEntryRpcRequest &rpc_request,
-    const obrpc::ObRpcResultCode &rcode,
-    const obrpc::ObCdcLSFetchLogResp *resp);
+    const rpc::frame::ObResultCode &rcode,
+    const obcall::ObCdcLSFetchLogResp *resp);
 
   // Lock is not needed when in the post-process after the failure of rpc
   int handle_rpc_response(RawLogFileRpcRequest &rpc_request,
@@ -257,11 +257,11 @@ public:
   void print_flying_request_list();
   bool is_rpc_ready() const { return State::READY == state_; }
 
-  void set_fetch_log_proto(const obrpc::ObCdcFetchLogProtocolType proto) {
+  void set_fetch_log_proto(const obcall::ObCdcFetchLogProtocolType proto) {
     ATOMIC_STORE(&proto_type_, proto);
   }
 
-  obrpc::ObCdcFetchLogProtocolType get_fetch_log_proto() const {
+  obcall::ObCdcFetchLogProtocolType get_fetch_log_proto() const {
     return ATOMIC_LOAD(&proto_type_);
   }
 
@@ -276,8 +276,8 @@ private:
 
   void free_rpc_request_(FetchLogRpcReq *request);
   int generate_rpc_result_(LogGroupEntryRpcRequest &rpc_req,
-      const obrpc::ObRpcResultCode &rcode,
-      const obrpc::ObCdcLSFetchLogResp *resp,
+      const rpc::frame::ObResultCode &rcode,
+      const obcall::ObCdcLSFetchLogResp *resp,
       const int64_t rpc_callback_start_time,
       const bool need_stop_rpc,
       const RpcStopReason rpc_stop_reason,
@@ -310,13 +310,13 @@ private:
   void clear_result_();
   int destroy_flying_request_(FetchLogRpcReq *target_request);
   int analyze_result_(LogGroupEntryRpcRequest &rpc_req,
-      const obrpc::ObRpcResultCode &rcode,
-      const obrpc::ObCdcLSFetchLogResp *resp,
+      const rpc::frame::ObResultCode &rcode,
+      const obcall::ObCdcLSFetchLogResp *resp,
       bool &need_stop_rpc,
       RpcStopReason &rpc_stop_reason,
       int64_t &next_upper_limit);
   void print_handle_info_(LogGroupEntryRpcRequest &rpc_req,
-      const obrpc::ObCdcLSFetchLogResp *resp,
+      const obcall::ObCdcLSFetchLogResp *resp,
       const int64_t next_upper_limit,
       const bool need_stop_rpc,
       const RpcStopReason rpc_stop_reason,
@@ -355,7 +355,7 @@ private:
   // Request Results Queue
   ResQueue                  res_queue_;
 
-  obrpc::ObCdcFetchLogProtocolType proto_type_;
+  obcall::ObCdcFetchLogProtocolType proto_type_;
   IFetchLogRpcSplitter      *splitter_;
 
   common::ObSpinLock        lock_;

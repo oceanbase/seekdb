@@ -24,7 +24,6 @@
 #include "lib/string/ob_fixed_length_string.h"
 #include "lib/thread/ob_work_queue.h"
 #include "share/ob_virtual_table_projector.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "share/ob_schema_status_proxy.h"
 #include "observer/ob_server_struct.h"
 

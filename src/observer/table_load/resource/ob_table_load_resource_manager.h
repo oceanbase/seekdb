@@ -23,7 +23,7 @@
 #include "observer/table_load/ob_table_load_utils.h"
 #include "observer/table_load/ob_table_load_service.h"
 #include "observer/table_load/resource/ob_table_load_resource_rpc_struct.h"
-#include "observer/table_load/resource/ob_table_load_resource_rpc_proxy.h"
+#include "observer/table_load/resource/ob_table_load_resource_rpc.h"
 
 namespace oceanbase
 {

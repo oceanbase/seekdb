@@ -27,7 +27,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObBatchSetTabletAutoincSeqArg;
 }
@@ -54,7 +54,7 @@ public:
   ~ObTabletForkMdsArg();
   bool is_valid() const;
   void reset();
-  int set_autoinc_seq_arg(const obrpc::ObBatchSetTabletAutoincSeqArg &arg);
+  int set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg);
   int set_truncate_arg(const rootserver::ObTruncateTabletArg &arg);
 
   TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(autoinc_seq_arg), K_(truncate_arg));
@@ -62,7 +62,7 @@ public:
 public:
   uint64_t tenant_id_;
   share::ObLSID ls_id_;
-  obrpc::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
+  obcall::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
   rootserver::ObTruncateTabletArg truncate_arg_;
 
 private:

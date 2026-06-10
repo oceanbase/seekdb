@@ -30,7 +30,7 @@
  
  }
  
- namespace obrpc
+ namespace obcall
  {
  
  class ObCreateAiModelArg;

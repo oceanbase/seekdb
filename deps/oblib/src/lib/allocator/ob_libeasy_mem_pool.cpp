@@ -17,7 +17,6 @@
 #include "lib/allocator/ob_libeasy_mem_pool.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/utility/ob_tracepoint.h"
-#include "rpc/obrpc/ob_rpc_packet.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -27,14 +26,8 @@ void *common::ob_easy_realloc(void *ptr, size_t size)
   void *ret = NULL;
   if (size != 0) {
     ObMemAttr attr;
-    // current_pcode() obtains pcode from thread local, rpc_proxy is responsible for setting thread local pcode
-    // OB_MOD_DO_NOT_USE_ME is also 0, here conversion of pcode is to not play WARN when realloc
-    obrpc::ObRpcPacketCode pcode = obrpc::current_pcode();
-    if (0 == pcode) {
-      pcode = obrpc::OB_TEST2_PCODE;
-    }
-    auto &set = obrpc::ObRpcPacketSet::instance();
-    attr.label_ = set.name_of_idx(set.idx_of_pcode(pcode));
+    // obcall RPC transport removed: the pcode->label table is gone. Use a fixed label.
+    attr.label_ = "rpc";
     attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
     attr.tenant_id_ = OB_SERVER_TENANT_ID;
     {

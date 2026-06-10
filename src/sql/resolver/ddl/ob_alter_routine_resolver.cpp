@@ -98,7 +98,7 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
     }
     //Step5: collection error info
     if (OB_SUCC(ret)) {
-      obrpc::ObCreateRoutineArg &crt_routine_arg = alter_routine_stmt->get_routine_arg();
+      obcall::ObCreateRoutineArg &crt_routine_arg = alter_routine_stmt->get_routine_arg();
       ObErrorInfo &error_info = crt_routine_arg.error_info_;
       error_info.collect_error_info(&(crt_routine_arg.routine_info_));
     }
@@ -107,7 +107,7 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
 }
 
 int ObAlterRoutineResolver::resolve_clause_list(
-  const ParseNode *node, obrpc::ObCreateRoutineArg &crt_routine_arg)
+  const ParseNode *node, obcall::ObCreateRoutineArg &crt_routine_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(node)) {
@@ -149,7 +149,7 @@ int ObAlterRoutineResolver::resolve_clause_list(
 }
 
 int ObAlterRoutineResolver::resolve_impl(
-  obrpc::ObCreateRoutineArg &crt_routine_arg,
+  obcall::ObCreateRoutineArg &crt_routine_arg,
   const share::schema::ObRoutineInfo &routine_info, const ParseNode &alter_clause_node)
 {
   int ret = OB_SUCCESS;
@@ -170,7 +170,7 @@ int ObAlterRoutineResolver::resolve_impl(
 }
 
 int ObAlterRoutineResolver::resolve_compile_clause(
-  obrpc::ObCreateRoutineArg &crt_routine_arg,
+  obcall::ObCreateRoutineArg &crt_routine_arg,
   const share::schema::ObRoutineInfo &routine_info, const ParseNode &alter_clause_node)
 {
   int ret = OB_SUCCESS;
@@ -368,7 +368,7 @@ int ObAlterRoutineResolver::mock_create_parse_node(const ParseNode *source_tree,
 }
 
 int ObAlterRoutineResolver::resolve_routine(
-  obrpc::ObCreateRoutineArg &crt_routine_arg,
+  obcall::ObCreateRoutineArg &crt_routine_arg,
   const share::schema::ObRoutineInfo &routine_info,
   bool need_recreate, const ParseNode *source_tree)
 {

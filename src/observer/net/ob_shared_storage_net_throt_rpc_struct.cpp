@@ -21,7 +21,7 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
 // for the serialize need of rpc
 OB_SERIALIZE_MEMBER(ObSharedDeviceResource, key_, type_, value_);
@@ -30,5 +30,5 @@ OB_SERIALIZE_MEMBER(ObSSNTKey, addr_, key_);
 OB_SERIALIZE_MEMBER(ObSSNTValue, predicted_resource_, assigned_resource_, expire_time_);
 OB_SERIALIZE_MEMBER(ObSSNTResource, ops_, ips_, iops_, obw_, ibw_, iobw_, tag_);
 
-}  // namespace obrpc
+}  // namespace obcall
 }  // namespace oceanbase

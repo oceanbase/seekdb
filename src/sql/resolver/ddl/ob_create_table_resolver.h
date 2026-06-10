@@ -90,7 +90,7 @@ private:
   int resolve_table_charset_info(const ParseNode *node);
   int resolve_external_table_format_early(const ParseNode *node);
   //index
-  int add_sort_column(const obrpc::ObColumnSortItem &sort_column);
+  int add_sort_column(const obcall::ObColumnSortItem &sort_column);
   int generate_index_arg(const bool process_heap_table_primary_key);
   int set_index_name();
   int set_index_option_to_arg();
@@ -142,7 +142,7 @@ private:
   common::ObSEArray<uint64_t, 16> primary_keys_;
   common::hash::ObPlacementHashSet<share::schema::ObColumnNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> column_name_set_;
   bool if_not_exist_;
-  obrpc::ObCreateIndexArg index_arg_;
+  obcall::ObCreateIndexArg index_arg_;
   IndexNameSet current_index_name_set_;
   common::hash::ObHashSet<share::schema::ObIndexNameHashWrapper> index_aux_name_set_;
   common::ObSEArray<GenColExpr, 5> gen_col_exprs_;//store generated column and dependent exprs

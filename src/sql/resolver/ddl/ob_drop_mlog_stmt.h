@@ -33,7 +33,7 @@ public:
   ObDropMLogStmt();
   virtual ~ObDropMLogStmt();
 
-  obrpc::ObDropIndexArg &get_drop_index_arg() { return drop_index_arg_; }
+  obcall::ObDropIndexArg &get_drop_index_arg() { return drop_index_arg_; }
   inline void set_database_name(const common::ObString &database_name)
   {
     drop_index_arg_.database_name_ = database_name;
@@ -59,18 +59,18 @@ public:
     drop_index_arg_.exec_tenant_id_ = exec_tenant_id;
   }
   inline uint64_t get_exec_tenant_id() const { return drop_index_arg_.exec_tenant_id_; }
-  inline const obrpc::ObIndexArg::IndexActionType &get_index_action_type() const
+  inline const obcall::ObIndexArg::IndexActionType &get_index_action_type() const
   {
     return drop_index_arg_.index_action_type_;
   }
-  inline void set_index_action_type(obrpc::ObIndexArg::IndexActionType action_type)
+  inline void set_index_action_type(obcall::ObIndexArg::IndexActionType action_type)
   {
     drop_index_arg_.index_action_type_ = action_type;
   }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return drop_index_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return drop_index_arg_; }
 
 private:
-  obrpc::ObDropIndexArg drop_index_arg_;
+  obcall::ObDropIndexArg drop_index_arg_;
 };
 } // sql
 } // oceanbase

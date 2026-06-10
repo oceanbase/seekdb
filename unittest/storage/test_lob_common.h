@@ -53,7 +53,7 @@ protected:
       const common::ObTabletID &data_tablet_id,
       const common::ObTabletID &lob_meta_tablet_id,
       const common::ObTabletID &lob_piece_tablet_id,
-      obrpc::ObBatchCreateTabletArg &arg);
+      obcall::ObBatchCreateTabletArg &arg);
 public:
   static const uint64_t TX_LOB_EXPIRE_TIME_US = 120 * 1000 * 1000; // 120s
   static const int64_t TEST_LOB_LS_ID = 2;
@@ -71,7 +71,7 @@ int TestLobCommon::create_data_tablet(
 {
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
-  obrpc::ObBatchCreateTabletArg arg;
+  obcall::ObBatchCreateTabletArg arg;
 
   if (OB_FAIL(TestDmlCommon::create_ls(tenant_id, ls_id, ls_handle))) {
     STORAGE_LOG(WARN, "failed to create ls", K(ret), K(tenant_id), K(ls_id));
@@ -311,7 +311,7 @@ int TestLobCommon::build_lob_tablet_arg(
     const common::ObTabletID &data_tablet_id,
     const common::ObTabletID &lob_meta_tablet_id,
     const common::ObTabletID &lob_piece_tablet_id,
-    obrpc::ObBatchCreateTabletArg &arg)
+    obcall::ObBatchCreateTabletArg &arg)
 {
   int ret = OB_SUCCESS;
 

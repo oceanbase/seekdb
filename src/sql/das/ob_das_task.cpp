@@ -353,7 +353,7 @@ int ObDASTaskResp::store_warning_msg(const ObWarningBuffer &wb)
     const ObWarningBuffer::WarningItem *item = wb.get_warning_item(idx);
     if (item != NULL) {
       if (OB_FAIL(rcode_.warnings_.push_back(*item))) {
-        RPC_OBRPC_LOG(WARN, "Failed to add warning", K(ret));
+        RPC_OBCALL_LOG(WARN, "Failed to add warning", K(ret));
       }
     } else {
       not_null = false;

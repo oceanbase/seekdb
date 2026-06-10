@@ -24,7 +24,6 @@
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "share/ob_light_hashmap.h"
 #include "sql/ob_end_trans_callback.h"
 #include "lib/utility/utility.h"
@@ -52,11 +51,9 @@
 namespace oceanbase
 {
 
-namespace obrpc
+namespace obcall
 {
-class ObTransRpcProxy;
 class ObTransRpcResult;
-class ObSrvRpcProxy;
 }
 
 namespace common
@@ -72,11 +69,6 @@ class ObIMemtable;
 namespace memtable
 {
 class ObMemtableCtx;
-}
-
-namespace obrpc
-{
-class ObSrvRpcProxy;
 }
 
 namespace transaction
@@ -175,7 +167,6 @@ public:
            ObILocationAdapter *location_adapter,
            ObIGtiSource *gti_source,
            ObTsMgr *ts_mgr,
-           obrpc::ObSrvRpcProxy *rpc_proxy,
            share::schema::ObMultiVersionSchemaService *schema_service);
   int start();
   void stop();
@@ -297,7 +288,6 @@ private:
   // txDesc's manager
   ObTxDescMgr tx_desc_mgr_;
 
-  obrpc::ObSrvRpcProxy *rpc_proxy_;
   ObTxELRUtil elr_util_;
   // for rollback-savepoint request-id
   int64_t rollback_sp_msg_sequence_;

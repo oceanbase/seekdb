@@ -34,13 +34,13 @@ public:
   inline uint64_t get_tenant_id() { return tenant_id_; }
   inline void set_tenant_id(uint64_t tenant_id) { tenant_id_ = tenant_id; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obrpc::ObDDLArg &get_ddl_arg() { return rename_user_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return rename_user_arg_; }
   DECLARE_VIRTUAL_TO_STRING;
 private:
   // data members
   common::ObStrings rename_infos_; // (from1_user, from1_host, to1_user, to1_host), (from2_user, from2_host, to2_user, to2_host)
   uint64_t tenant_id_;
-  obrpc::ObRenameUserArg rename_user_arg_; // used to return exec_tenant_id_
+  obcall::ObRenameUserArg rename_user_arg_; // used to return exec_tenant_id_
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRenameUserStmt);
 };

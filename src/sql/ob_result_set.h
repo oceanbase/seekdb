@@ -30,20 +30,17 @@
 #include "common/object/ob_object.h"
 #include "common/row/ob_row.h"
 #include "common/ob_string_buf.h"
-#include "share/ob_srv_rpc_proxy.h"
 #include "common/ob_field.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "share/ob_scanner.h"
 #include "sql/optimizer/ob_log_plan_factory.h"
 #include "sql/executor/ob_executor.h"
 #include "sql/executor/ob_execute_result.h"
 #include "sql/executor/ob_executor_rpc_impl.h"
-#include "sql/executor/ob_executor_rpc_proxy.h"
 #include "sql/executor/ob_cmd_executor.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
-#include "observer/ob_inner_sql_rpc_proxy.h"
+#include "observer/ob_inner_sql_transmit_struct.h"
 #include "observer/ob_req_time_service.h"
 #include "sql/resolver/tcl/ob_end_trans_stmt.h"
 
@@ -883,55 +880,6 @@ inline ObPhysicalPlan *ObResultSet::get_physical_plan()
   return static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
 }
 
-// for remote inner sql
-class ObRemoteResultSet
-{
-public:
-  /* functions */
-  explicit ObRemoteResultSet(common::ObIAllocator &allocator);
-  virtual ~ObRemoteResultSet();
-  int get_next_row(const common::ObNewRow *&row);
-  int close();
-
-  common::ObIAllocator& get_mem_pool() { return mem_pool_; }
-
-  obrpc::ObInnerSqlRpcStreamHandle *get_stream_handler() { return remote_resp_handler_; }
-  int reset_and_init_remote_resp_handler();
-
-  const common::ColumnsFieldIArray *get_field_columns() const { return &field_columns_; }
-  int copy_field_columns(const common::ObSArray<common::ObField> &field_columns);
-
-  sql::stmt::StmtType get_stmt_type() { return stmt_type_; }
-  void set_stmt_type(sql::stmt::StmtType stmt_type) { stmt_type_ = stmt_type; }
-
-private:
-  /* functions */
-  int setup_next_scanner();
-  int get_next_row_from_cur_scanner(const common::ObNewRow *&row);
-
-  uint64_t get_tenant_id_for_result_memory() const {
-    /* The actual innersql caller tenant alloctes the memory of ObRemoteResultSet.
-     * Currently set to user tenant or 500 tenant.
-     * For example, table recovery uses inner_sql's remote execution to query the data on the target
-     * tenant from（physically restored）auxiliary tenant in parallel. The innersql caller needs a large
-     * amount of memory to obtain the remote execution results. It's more appropriate for the innersql
-     * caller (user tenant or 500 tenant) to allocate this block of memory. */
-    return OB_INVALID_TENANT_ID != MTL_ID() && is_user_tenant(MTL_ID())
-            ? MTL_ID() : OB_SERVER_TENANT_ID;
-  }
-
-  /* variables */
-  common::ObIAllocator &mem_pool_;
-  obrpc::ObInnerSqlRpcStreamHandle *remote_resp_handler_;
-  common::ObSArray<common::ObField> field_columns_;
-  common::ObScanner *scanner_;
-  common::ObScanner::Iterator scanner_iter_;
-  bool all_data_empty_;
-  bool cur_data_empty_;
-  bool first_response_received_;
-  int64_t found_rows_;
-  sql::stmt::StmtType stmt_type_;
-};
 
 
 } // end namespace sql

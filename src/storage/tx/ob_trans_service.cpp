@@ -24,7 +24,7 @@
 namespace oceanbase
 {
 
-using namespace obrpc;
+using namespace obcall;
 using namespace common;
 using namespace lib;
 using namespace share;
@@ -61,22 +61,17 @@ int ObTransService::mtl_init(ObTransService *&it)
   const ObAddr &self = GCTX.self_addr();
   share::ObLocationService *location_service = GCTX.location_service_;
   share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
-  obrpc::ObBatchRpc *batch_rpc = GCTX.batch_rpc_;
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
-  ObSrvNetworkFrame *net_frame = GCTX.net_frame_;
-  rpc::frame::ObReqTransport *req_transport = net_frame->get_req_transport();
-  if (OB_FAIL(it->rpc_def_.init(it, req_transport, self, batch_rpc))) {
+  if (OB_FAIL(it->rpc_def_.init(it, self))) {
     TRANS_LOG(ERROR, "rpc init error", KR(ret));
   } else if (OB_FAIL(it->location_adapter_def_.init(schema_service, location_service))) {
     TRANS_LOG(ERROR, "location adapter init error", KR(ret));
-  } else if (OB_FAIL(it->gti_source_def_.init(self, req_transport))) {
+  } else if (OB_FAIL(it->gti_source_def_.init(self))) {
     TRANS_LOG(ERROR, "gti source init error", KR(ret));
   } else if (OB_FAIL(it->init(self,
                               &it->rpc_def_,
                               &it->location_adapter_def_,
                               &it->gti_source_def_,
                               &OB_TS_MGR,
-                              rpc_proxy,
                               schema_service))) {
     TRANS_LOG(ERROR, "trans-service init error", KR(ret), KPC(it));
   }
@@ -88,7 +83,6 @@ int ObTransService::init(const ObAddr &self,
                          ObILocationAdapter *location_adapter,
                          ObIGtiSource *gti_source,
                          ObTsMgr *ts_mgr,
-                         obrpc::ObSrvRpcProxy *rpc_proxy,
                          share::schema::ObMultiVersionSchemaService *schema_service)
 {
   int ret = OB_SUCCESS;
@@ -110,12 +104,11 @@ int ObTransService::init(const ObAddr &self,
              || OB_ISNULL(location_adapter)
              || OB_ISNULL(gti_source)
              || OB_ISNULL(ts_mgr)
-             || OB_ISNULL(rpc_proxy)
              || OB_ISNULL(schema_service)) {
     TRANS_LOG(WARN, "invalid argument", K(self),
               KP(location_adapter), KP(rpc), 
               KP(location_adapter), KP(ts_mgr),
-              KP(rpc_proxy), KP(schema_service));
+              KP(schema_service));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(timer_.init("TransTimeWheel"))) {
     TRANS_LOG(ERROR, "timer init error", KR(ret));
@@ -139,7 +132,6 @@ int ObTransService::init(const ObAddr &self,
     gti_source_ = gti_source;
     rpc_ = rpc;
     location_adapter_ = location_adapter;
-    rpc_proxy_ = rpc_proxy;
     schema_service_ = schema_service;
     ts_mgr_ = ts_mgr;
     rollback_sp_msg_sequence_ = ObTimeUtil::current_time();
@@ -508,8 +500,8 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObString str;
-  obrpc::ObRegisterTxDataArg arg;
-  obrpc::ObRegisterTxDataResult result;
+  obcall::ObRegisterTxDataArg arg;
+  obcall::ObRegisterTxDataResult result;
   ObAddr ls_leader_addr;
   str.assign_ptr(buf, buf_len);
   int64_t local_retry_cnt = 0;
@@ -531,9 +523,6 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
   } else if (!tx_desc.is_tx_active()) {
     ret = OB_TRANS_IS_EXITING;
     TRANS_LOG(WARN, "txn must in active for register", K(ret));
-  } else if (OB_ISNULL(rpc_proxy_)) {
-    ret = OB_NOT_INIT;
-    TRANS_LOG(WARN, "rpc proxy not inited", KR(ret), K(tx_desc), K(ls_id), K(type));
   } else if (OB_FAIL(create_implicit_savepoint(tx_desc, tx_param, savepoint))) {
     TRANS_LOG(WARN, "create implicit savepoint failed", K(ret), K(tx_desc));
   } else if (!seq_no.is_valid()) {
@@ -613,10 +602,7 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
       } else if (OB_FALSE_IT(arg.inc_request_id(-1))) {
       } else if (OB_FALSE_IT(tx_print_guard.click_start("register_by_rpc", 2))) {
       } else if (OB_FALSE_IT(remain_timeout_us = tx_desc.expire_ts_ - ObTimeUtil::fast_current_time())) {
-      } else if (OB_FAIL(rpc_proxy_->to(ls_leader_addr)
-                             .by(tx_desc.tenant_id_)
-                             .timeout(remain_timeout_us)
-                             .register_tx_data(arg, result))) {
+      } else if (OB_FAIL(OB_NOT_SUPPORTED /*single-replica: LS leader is local; remote register path dead*/)) {
         TRANS_LOG(WARN, "register_tx_fata failed", KR(ret), K(ls_leader_addr), K(arg), K(tx_desc),
                   K(ls_id), K(result));
         tx_print_guard.click_end(2);

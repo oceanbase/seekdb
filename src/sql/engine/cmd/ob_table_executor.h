@@ -34,7 +34,7 @@ struct ObBasePartition;
 class ObMultiVersionSchemaService;
 }
 }
-namespace obrpc
+namespace obcall
 {
 struct ObAlterTableArg;
 }
@@ -85,7 +85,7 @@ public:
   virtual ~ObCreateTableExecutor();
   int execute(ObExecContext &ctx, ObCreateTableStmt &stmt);
   int set_index_arg_list(ObExecContext &ctx, ObCreateTableStmt &stmt);
-  int execute_ctas(ObExecContext &ctx, ObCreateTableStmt &stmt, obrpc::ObCommonRpcProxy *common_rpc_proxy);
+  int execute_ctas(ObExecContext &ctx, ObCreateTableStmt &stmt);
 private:
   int prepare_stmt(ObCreateTableStmt &stmt, const ObSQLSessionInfo &my_session, ObString &create_table_name);
   int prepare_ins_arg(ObCreateTableStmt &stmt,
@@ -93,8 +93,8 @@ private:
                       ObSchemaGetterGuard *schema_guard,
                       const ParamStore *param_store,
                       ObSqlString &ins_sql);
-  int prepare_alter_arg(ObCreateTableStmt &stmt, const ObSQLSessionInfo *my_session, const ObString &create_table_name, obrpc::ObAlterTableArg &alter_table_arg);
-  int prepare_drop_arg(const ObCreateTableStmt &stmt, const ObSQLSessionInfo *my_session, obrpc::ObTableItem &table_item, obrpc::ObDropTableArg &drop_table_arg);
+  int prepare_alter_arg(ObCreateTableStmt &stmt, const ObSQLSessionInfo *my_session, const ObString &create_table_name, obcall::ObAlterTableArg &alter_table_arg);
+  int prepare_drop_arg(const ObCreateTableStmt &stmt, const ObSQLSessionInfo *my_session, obcall::ObTableItem &table_item, obcall::ObDropTableArg &drop_table_arg);
 };
 
 class ObAlterTableStmt;
@@ -111,34 +111,31 @@ private:
   static const int64_t WAIT_US = 500 * 1000; // 500ms
   static const int64_t GET_ASSOCIATED_SNAPSHOT_TIMEOUT = 9000000LL; // 9s
   int check_constraint_validity(ObExecContext &ctx,
-      obrpc::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableArg &alter_table_arg,
       common::ObIAllocator &allocator,
-      obrpc::ObAlterTableRes &res,
-      obrpc::ObCommonRpcProxy &common_rpc_proxy,
+      obcall::ObAlterTableRes &res,
       ObString first_stmt,
       const bool need_modify_notnull_validate);
 
   int alter_table_rpc_v2(
-      obrpc::ObAlterTableArg &alter_table_arg,
-      obrpc::ObAlterTableRes &res,
+      obcall::ObAlterTableArg &alter_table_arg,
+      obcall::ObAlterTableRes &res,
       common::ObIAllocator &allocator,
-      obrpc::ObCommonRpcProxy *common_rpc_proxy,
       ObSQLSessionInfo *my_session,
       const bool is_sync_ddl_user);
 
   int alter_table_exchange_partition_rpc(
-      obrpc::ObExchangePartitionArg &exchange_partition_arg,
-      obrpc::ObAlterTableRes &res,
-      obrpc::ObCommonRpcProxy *common_rpc_proxy,
+      obcall::ObExchangePartitionArg &exchange_partition_arg,
+      obcall::ObAlterTableRes &res,
       ObSQLSessionInfo *my_session);
 
-  int need_check_constraint_validity(obrpc::ObAlterTableArg &alter_table_arg, bool &need_check);
+  int need_check_constraint_validity(obcall::ObAlterTableArg &alter_table_arg, bool &need_check);
 
 
   int check_alter_partition(
       ObExecContext &ctx,
       ObAlterTableStmt &stmt,
-      const obrpc::ObAlterTableArg &arg);
+      const obcall::ObAlterTableArg &arg);
   int resolve_alter_column_partition_expr(
       const share::schema::ObColumnSchemaV2 &col_schema,
       const share::schema::ObTableSchema &table_schema,
@@ -182,7 +179,7 @@ private:
       ObExecContext &ctx,
       const bool is_subpart);
   int check_alter_part_key(ObExecContext &ctx,
-                           obrpc::ObAlterTableArg &arg);
+                           obcall::ObAlterTableArg &arg);
 
   int set_index_arg_list(ObExecContext &ctx, ObAlterTableStmt &stmt);
 
@@ -195,7 +192,7 @@ private:
     const common::ObString &access_info,
     common::ObIAllocator &allocator,
     common::ObStorageType &storage_type);
-  int populate_based_schema_obj_info_(obrpc::ObAlterTableArg &alter_table_arg);
+  int populate_based_schema_obj_info_(obcall::ObAlterTableArg &alter_table_arg);
 
 private:
   //DISALLOW_COPY_AND_ASSIGN(ObAlterTableExecutor);
@@ -210,7 +207,7 @@ public:
 private:
   // because of the lack of the assign in alter table schema and alter column schema, this function is implemented for
   // assigning args needed for parallel comment.
-  int assign_alter_to_comment_(const obrpc::ObAlterTableArg &alter_table_arg, obrpc::ObSetCommentArg &set_comment_arg);
+  int assign_alter_to_comment_(const obcall::ObAlterTableArg &alter_table_arg, obcall::ObSetCommentArg &set_comment_arg);
 };
 
 class ObDropTableStmt;
@@ -242,7 +239,7 @@ public:
   virtual ~ObTruncateTableExecutor();
   int execute(ObExecContext &ctx, ObTruncateTableStmt &stmt);
 private:
-  int check_use_parallel_truncate(const obrpc::ObTruncateTableArg &arg, bool &use_parallel_truncate);
+  int check_use_parallel_truncate(const obcall::ObTruncateTableArg &arg, bool &use_parallel_truncate);
 
 };
 
@@ -314,10 +311,9 @@ public:
   ObOptimizeTenantExecutor() = default;
   virtual ~ObOptimizeTenantExecutor() = default;
   int execute(ObExecContext &ctx, ObOptimizeTenantStmt &stmt);
-  static int optimize_tenant(const obrpc::ObOptimizeTenantArg &arg,
+  static int optimize_tenant(const obcall::ObOptimizeTenantArg &arg,
       const uint64_t tenant_id,
-      share::schema::ObMultiVersionSchemaService &schema_service,
-      obrpc::ObCommonRpcProxy *common_rpc_proxy);
+      share::schema::ObMultiVersionSchemaService &schema_service);
 };
 
 class ObOptimizeAllStmt;

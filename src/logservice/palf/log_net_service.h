@@ -298,12 +298,10 @@ int LogNetService::post_request_to_server_(
     const common::ObAddr &server,
     const ReqType &req)
 {
-  int ret = common::OB_SUCCESS;
-  if (OB_FAIL(log_rpc_->post_request(server, palf_id_, req))) {
-    PALF_LOG(WARN, "LogRpc post_request failed", K(ret), K(palf_id_), K(req), K(server));
-  } else {
-    PALF_LOG(TRACE, "post_request_to_server_ success", K(ret), K(server), K(palf_id_), K(req));
-  }
+  // RPC plumbing neutered: single-replica seekdb never sends inter-replica
+  // palf/election RPC. Self is excluded before send; self-ack/commit is local.
+  UNUSED(server);
+  UNUSED(req);
   return common::OB_SUCCESS;
 }
 
@@ -312,22 +310,11 @@ int LogNetService::post_request_to_member_list_(
     const List &member_list,
     const ReqType &req)
 {
+  // RPC plumbing neutered: single-replica seekdb has self excluded from the
+  // destination member list, so the send loop is a no-op. Keep arg validation.
   int ret = common::OB_SUCCESS;
-  int64_t member_number = member_list.get_member_number();
-  common::ObAddr server;
   if (!req.is_valid() || !member_list.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-  } else {
-    for (int64_t i = 0; i < member_number; i++) {
-      if (OB_FAIL(member_list.get_server_by_index(i, server))) {
-        PALF_LOG(WARN, "ObMemberList get_server_by_index failed", K(ret),
-            K(server), K(palf_id_), K(req));
-      } else if (OB_FAIL(post_request_to_server_(server, req))) {
-        // PALF_LOG(WARN, "post_request_to_server_ failed", K(ret),
-        //     K(server), K(palf_id_), K(server));
-      } else {
-      }
-    }
   }
   return ret;
 }
@@ -338,14 +325,13 @@ int LogNetService::post_sync_request_to_server_(const common::ObAddr &server,
                                                 const ReqType &req,
                                                 RespType &resp)
 {
-  int ret = common::OB_SUCCESS;
-  if (OB_FAIL(log_rpc_->post_sync_request(server, palf_id_, timeout_us, req, resp))) {
-    CLOG_LOG(WARN, "ObLogRpc post_sync_request failed", K(ret), K_(palf_id),
-        K(req), K(server));
-  } else {
-    CLOG_LOG(TRACE, "post_sync_request_to_server_ success", K(ret), K(server), K(palf_id_), K(req));
-  }
-  return ret;
+  // RPC plumbing neutered: single-replica seekdb never issues inter-replica
+  // sync palf RPC (config-change pre-check / get-stat target only peers).
+  UNUSED(server);
+  UNUSED(timeout_us);
+  UNUSED(req);
+  UNUSED(resp);
+  return common::OB_SUCCESS;
 }
 } // end namespace palf
 } // end namespace oceanbase

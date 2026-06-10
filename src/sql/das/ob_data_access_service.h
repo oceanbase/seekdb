@@ -36,8 +36,7 @@ public:
   ~ObDataAccessService() = default;
   static int mtl_init(ObDataAccessService *&das);
   static void mtl_destroy(ObDataAccessService *&das);
-  int init(rpc::frame::ObReqTransport *transport,
-           const common::ObAddr &self_addr);
+  int init(const common::ObAddr &self_addr);
   // Enable DAS Task partition related transaction control, and execute the op corresponding to the task
   int execute_das_task(ObDASRef &das_ref,
       ObDasAggregatedTask &task_ops, bool async = true);

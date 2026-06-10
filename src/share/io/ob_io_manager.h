@@ -26,7 +26,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObSharedDeviceResource;
 struct ObSharedDeviceResourceArray;
@@ -62,7 +62,7 @@ inline const char *get_resource_type_str(const ResourceType type)
   }
   return str;
 }
-}  // namespace obrpc
+}  // namespace obcall
 namespace common
 {
 int64_t get_norm_iops(const int64_t size, const double iops, const ObIOMode mode);
@@ -74,11 +74,11 @@ class ObSSIORequest;
 
 struct ResourceUsage
 {
-  ResourceUsage() : type_(obrpc::ResourceType::ResourceTypeCnt), total_(0)
+  ResourceUsage() : type_(obcall::ResourceType::ResourceTypeCnt), total_(0)
   {}
   ~ResourceUsage()
   {}
-  obrpc::ResourceType type_;
+  obcall::ResourceType type_;
   int64_t total_;
 };
 
@@ -223,11 +223,11 @@ public:
     int set_storage_key(const ObTrafficControl::ObStorageKey &key);
     int add_group(const ObIOSSGrpKey &grp_key);
     int is_group_key_exist(const ObIOSSGrpKey &grp_key);
-    int64_t get_limit(const obrpc::ResourceType type) const;
-    int update_limit(const obrpc::ObSharedDeviceResource &limit);
+    int64_t get_limit(const obcall::ResourceType type) const;
+    int update_limit(const obcall::ObSharedDeviceResource &limit);
     ObStorageKey storage_key_;
     // limit: ops = 0, ips = 1, iops = 2, obw = 3, ibw = 4, iobw = 5, tag = 6
-    int64_t limits_[static_cast<int>(obrpc::ResourceType::ResourceTypeCnt)];
+    int64_t limits_[static_cast<int>(obcall::ResourceType::ResourceTypeCnt)];
     ObSDGroupList group_list_;
   };
 
@@ -236,7 +236,7 @@ public:
   int calc_usage(ObIORequest &req);
   void print_server_status();
   void print_bucket_status_V2();
-  int set_limit_v2(const obrpc::ObSharedDeviceResourceArray &limit);
+  int set_limit_v2(const obcall::ObSharedDeviceResourceArray &limit);
   template <class _cb>
   int foreach_limit_v2(_cb &cb) const { return shared_device_map_v2_.foreach_refactored(cb); }
   template<class _cb>

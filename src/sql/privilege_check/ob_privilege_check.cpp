@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_SESSION
 #include "sql/privilege_check/ob_privilege_check.h"
+#include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_mlog_stmt.h"
@@ -510,7 +511,7 @@ int get_alter_table_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObAlterTableStmt *stmt = static_cast<const ObAlterTableStmt*>(basic_stmt);
-    const ObSArray<obrpc::ObCreateForeignKeyArg> &foreign_keys = stmt->get_read_only_foreign_key_arg_list();
+    const ObSArray<obcall::ObCreateForeignKeyArg> &foreign_keys = stmt->get_read_only_foreign_key_arg_list();
     if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, stmt->get_org_database_name()))) {
       LOG_WARN("Can not alter table in the database", K(session_priv), K(ret),
                "database_name", stmt->get_org_database_name());
@@ -546,7 +547,7 @@ int get_alter_table_stmt_need_privs(
       ADD_NEED_PRIV(need_priv);
 
       const AlterTableSchema &alter_schema = const_cast<ObAlterTableStmt*>(stmt)->get_alter_table_arg().alter_table_schema_;
-      if (alter_schema.alter_option_bitset_.has_member(obrpc::ObAlterTableArg::SESSION_ACTIVE_TIME)
+      if (alter_schema.alter_option_bitset_.has_member(obcall::ObAlterTableArg::SESSION_ACTIVE_TIME)
           && session_priv.tenant_id_ != OB_SYS_TENANT_ID) {
         ret = OB_ERR_NO_PRIVILEGE;
         LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "SUPER");
@@ -691,7 +692,7 @@ int get_create_table_stmt_need_privs(
       }
     } else {
       const ObSelectStmt *select_stmt = stmt->get_sub_select();
-      const ObSArray<obrpc::ObCreateForeignKeyArg> &foreign_keys = stmt->get_read_only_foreign_key_arg_list();
+      const ObSArray<obcall::ObCreateForeignKeyArg> &foreign_keys = stmt->get_read_only_foreign_key_arg_list();
       if (NULL != select_stmt) {
         need_priv.priv_set_ = OB_PRIV_CREATE | OB_PRIV_INSERT;
       } else {
@@ -766,9 +767,9 @@ int get_drop_table_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObDropTableStmt *stmt = static_cast<const ObDropTableStmt*>(basic_stmt);
-    const ObIArray<obrpc::ObTableItem> &tables = stmt->get_drop_table_arg().tables_;
+    const ObIArray<obcall::ObTableItem> &tables = stmt->get_drop_table_arg().tables_;
     for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); i++) {
-      const obrpc::ObTableItem &table_item = tables.at(i);
+      const obcall::ObTableItem &table_item = tables.at(i);
       if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item.database_name_))) {
         LOG_WARN("Can not drop table in information_schema database", K(session_priv), K(ret));
       } else if (ObPrivilegeCheck::is_mysql_org_table(table_item.database_name_, table_item.table_name_)
@@ -1775,9 +1776,9 @@ int get_rename_table_stmt_need_privs(
       LOG_WARN("Can not rename other tenant's table. Should not be here except change"
                "tenant which not suggested", K(ret));
     } else {
-      const obrpc::ObRenameTableArg &arg = stmt->get_rename_table_arg();
+      const obcall::ObRenameTableArg &arg = stmt->get_rename_table_arg();
       for (int64_t idx = 0; OB_SUCC(ret) && idx < arg.rename_table_items_.count(); ++idx) {
-        const obrpc::ObRenameTableItem &table_item = arg.rename_table_items_.at(idx);
+        const obcall::ObRenameTableItem &table_item = arg.rename_table_items_.at(idx);
         if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item.origin_db_name_))) {
           LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
         } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, table_item.new_db_name_))) {
@@ -1855,7 +1856,7 @@ int get_fork_table_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObForkTableStmt *stmt = static_cast<const ObForkTableStmt *>(basic_stmt);
-    const obrpc::ObForkTableArg &fork_table_arg = stmt->get_fork_table_arg();
+    const obcall::ObForkTableArg &fork_table_arg = stmt->get_fork_table_arg();
     if (OB_FAIL(ret)) {
     } else if (session_priv.tenant_id_ != fork_table_arg.tenant_id_) {
       ret = OB_ERR_NO_PRIVILEGE;
@@ -1897,7 +1898,7 @@ int get_fork_database_stmt_need_privs(
   } else {
     ObNeedPriv need_priv;
     const ObForkDatabaseStmt *stmt = static_cast<const ObForkDatabaseStmt *>(basic_stmt);
-    const obrpc::ObForkDatabaseArg &fork_database_arg = stmt->get_fork_database_arg();
+    const obcall::ObForkDatabaseArg &fork_database_arg = stmt->get_fork_database_arg();
     if (OB_FAIL(ret)) {
     } else if (session_priv.tenant_id_ != fork_database_arg.tenant_id_) {
       ret = OB_ERR_NO_PRIVILEGE;

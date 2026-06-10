@@ -113,13 +113,13 @@ public:
 private:
   int build_tablet_sstable_info_(
       grpc::ServerContext* context,
-      const obrpc::ObCopyTabletSSTableInfoArg &tablet_arg,
+      const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
       ObLS *ls,
       grpc::ServerWriter<storageservice::FetchTabletSSTableInfoRes>* writer);
   int build_sstable_macro_info_(
       grpc::ServerContext* context,
-      const obrpc::ObCopySSTableMacroRangeInfoHeader &header,
-      const obrpc::ObCopySSTableMacroRangeInfoArg &arg,
+      const obcall::ObCopySSTableMacroRangeInfoHeader &header,
+      const obcall::ObCopySSTableMacroRangeInfoArg &arg,
       grpc::ServerWriter<storageservice::FetchSSTableMacroInfoRes>* writer);
 };
 
@@ -131,26 +131,26 @@ public:
 
   int init(const common::ObAddr& addr, int64_t timeout);
   int get_ls_view_tablet_count(ObGetLSViewTabletCountResult& result);
-  int check_restore_precondition(obrpc::ObCheckRestorePreconditionResult& result); 
-  int fetch_tablet_info(const obrpc::ObCopyTabletInfoArg& arg,
-                        std::function<int(const obrpc::ObCopyTabletInfo&)> callback);
+  int check_restore_precondition(obcall::ObCheckRestorePreconditionResult& result); 
+  int fetch_tablet_info(const obcall::ObCopyTabletInfoArg& arg,
+                        std::function<int(const obcall::ObCopyTabletInfo&)> callback);
   int create_tablet_info_stream(
-      const obrpc::ObCopyTabletInfoArg &arg,
+      const obcall::ObCopyTabletInfoArg &arg,
       grpc::ClientContext &context,
       std::unique_ptr<grpc::ClientReader<storageservice::FetchTabletInfoRes>> &reader);
   int create_ls_view_stream(
       grpc::ClientContext &context,
       std::unique_ptr<grpc::ClientReader<storageservice::FetchLSViewRes>> &reader);
   int create_tablet_sstable_info_stream(
-      const obrpc::ObCopyTabletsSSTableInfoArg &arg,
+      const obcall::ObCopyTabletsSSTableInfoArg &arg,
       grpc::ClientContext &context,
       std::unique_ptr<grpc::ClientReader<storageservice::FetchTabletSSTableInfoRes>> &reader);
   int create_sstable_macro_info_stream(
-      const obrpc::ObCopySSTableMacroRangeInfoArg &arg,
+      const obcall::ObCopySSTableMacroRangeInfoArg &arg,
       grpc::ClientContext &context,
       std::unique_ptr<grpc::ClientReader<storageservice::FetchSSTableMacroInfoRes>> &reader);
   int create_macro_block_stream(
-      const obrpc::ObCopyMacroBlockRangeArg &arg,
+      const obcall::ObCopyMacroBlockRangeArg &arg,
       grpc::ClientContext &context,
       std::unique_ptr<grpc::ClientReader<storageservice::FetchMacroBlockRes>> &reader);
   int translate_error(const grpc::Status &status);
@@ -163,25 +163,25 @@ public:
   static int init_tablet_sstable_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
-      const obrpc::ObCopyTabletsSSTableInfoArg &arg,
+      const obcall::ObCopyTabletsSSTableInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx);
   static int init_sstable_macro_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
-      const obrpc::ObCopySSTableMacroRangeInfoArg &arg,
+      const obcall::ObCopySSTableMacroRangeInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx);
   static int init_macro_block_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
-      const obrpc::ObCopyMacroBlockRangeArg &arg,
+      const obcall::ObCopyMacroBlockRangeArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx);
   static int init_tablet_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
-      const obrpc::ObCopyTabletInfoArg &arg,
+      const obcall::ObCopyTabletInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx);
 

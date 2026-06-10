@@ -21,6 +21,7 @@
 #include "ob_rs_test_utils.h"
 #include "fake_zone_merge_manager.h"
 #include "rootserver/freeze/ob_tenant_all_zone_merge_strategy.h"
+#include "observer/ob_server_struct.h"
 #include "share/partition_table/fake_part_property_getter.h"
 
 namespace oceanbase
@@ -30,7 +31,7 @@ using namespace common;
 using namespace share;
 using namespace share::schema;
 using namespace share::host;
-using namespace obrpc;
+using namespace obcall;
 using ::testing::_;
 namespace rootserver
 {

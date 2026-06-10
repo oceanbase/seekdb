@@ -21,8 +21,6 @@
 #include "lib/thread/ob_dynamic_thread_pool.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/allocator/page_arena.h"
-#include "share/ob_common_rpc_proxy.h" // ObCommonRpcProxy
-#include "share/ob_srv_rpc_proxy.h" // ObPartitionServiceRpcProxy
 #include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ob_storage_rpc.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"

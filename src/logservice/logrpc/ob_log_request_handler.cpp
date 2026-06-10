@@ -80,22 +80,6 @@ int LogRequestHandler::get_self_addr_(common::ObAddr &self) const
   return ret;
 }
 
-int LogRequestHandler::get_rpc_proxy_(obrpc::ObLogServiceRpcProxy *&rpc_proxy) const
-{
-  int ret = OB_SUCCESS;
-  logservice::ObLogService *log_service = NULL;
-  if (OB_ISNULL(log_service = MTL(logservice::ObLogService*))) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "get_log_service failed", K(ret));
-  } else if (OB_ISNULL(rpc_proxy = log_service->get_rpc_proxy())) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "log_service.get_rpc_proxy failed", K(ret));
-  } else {
-    CLOG_LOG(TRACE, "get_rpc_proxy_", KP(rpc_proxy), KP(log_service), K(MTL_ID()));
-  }
-  return ret;
-}
-
 int LogRequestHandler::get_flashback_service_(ObLogFlashbackService *&flashback_srv) const
 {
   int ret = OB_SUCCESS;
@@ -300,9 +284,8 @@ int LogRequestHandler::handle_request<LogFlashbackMsg>(const LogFlashbackMsg &re
     CLOG_LOG(ERROR, "Invalid argument!!!", K(ret), K(req));
   } else if (is_flashback_req) {
     constexpr int64_t FLASHBACK_TIMEOUT_US = 2 * 1000L * 1000L;     // 1s
-    constexpr int64_t CONN_TIMEOUT_US = 1000 * 1000;
     palf::PalfHandleGuard palf_handle_guard;
-    obrpc::ObLogServiceRpcProxy *rpc_proxy = NULL;
+    logservice::ObLogFlashbackService *flashback_srv = nullptr;
     common::ObAddr self;
     logservice::ObLogReplayService *replay_srv = nullptr;
     palf::AccessMode curr_access_mode = palf::AccessMode::INVALID_ACCESS_MODE;
@@ -319,16 +302,15 @@ int LogRequestHandler::handle_request<LogFlashbackMsg>(const LogFlashbackMsg &re
           K(curr_access_mode), K(req));
     } else if (OB_FAIL(palf_handle_guard.flashback(req.mode_version_, req.flashback_scn_, FLASHBACK_TIMEOUT_US))) {
       CLOG_LOG(WARN, "flashback failed", K(ret), K(palf_id), K(req));
-    } else if (OB_FAIL(get_rpc_proxy_(rpc_proxy))) {
-      CLOG_LOG(WARN, "get_rpc_proxy_ failed", K(ret), K(palf_id));
     } else if (OB_FAIL(get_self_addr_(self))) {
       CLOG_LOG(WARN, "get_self_addr_ failed", K(ret), K(palf_id), K(self));
+    } else if (OB_FAIL(get_flashback_service_(flashback_srv))) {
+      CLOG_LOG(WARN, "get_flashback_service_ failed", K(ret), K(palf_id));
     } else {
-      const uint64_t src_tenant_id = req.src_tenant_id_;
+      // single-replica: deliver flashback response in-process (sender is always self)
       LogFlashbackMsg flashback_resp(MTL_ID(), self, palf_id, req.mode_version_, req.flashback_scn_, false);
-      if (OB_FAIL(rpc_proxy->to(server).timeout(CONN_TIMEOUT_US).trace_time(true).
-          max_process_handler_time(CONN_TIMEOUT_US).by(src_tenant_id).send_log_flashback_msg(flashback_resp, NULL))) {
-        CLOG_LOG(WARN, "send_log_flashback_msg failed", K(ret), K(palf_id), K(server), K(flashback_resp));
+      if (OB_FAIL(flashback_srv->handle_flashback_resp(flashback_resp))) {
+        CLOG_LOG(WARN, "handle_flashback_resp failed", K(ret), K(palf_id), K(server), K(flashback_resp));
       }
     }
     CLOG_LOG(INFO, "handle_log_flashback_msg finish", K(ret), K(req));

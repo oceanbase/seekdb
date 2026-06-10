@@ -17,8 +17,6 @@
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_ID_RPC_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_ID_RPC_H_
 #include "observer/ob_server_struct.h"
-#include "rpc/obrpc/ob_rpc_proxy.h"
-#include "rpc/obrpc/ob_rpc_processor.h"
 #include "ob_das_id_cache.h"
 #include "lib/atomic/ob_atomic.h"
 namespace oceanbase
@@ -43,7 +41,7 @@ private:
 };
 } // namespace sql
 
-namespace obrpc
+namespace obcall
 {
 class ObDASIDRpcResult
 {
@@ -65,24 +63,7 @@ private:
   int64_t end_id_;
 };
 
-class ObDASIDRpcProxy : public obrpc::ObRpcProxy
-{
-public:
-    DEFINE_TO(ObDASIDRpcProxy);
-    // fetch_das_id request should be processed using the highest priority RPC queue to ensure that the fetch das id request is not blocked by other RPCs, otherwise the entire execution will be stuck
-    RPC_S(PR1 sync_fetch_das_id, OB_DAS_SYNC_FETCH_ID, (sql::ObDASIDRequest), ObDASIDRpcResult);
-};
-
-class ObDASIDP : public ObRpcProcessor<obrpc::ObDASIDRpcProxy::ObRpc<OB_DAS_SYNC_FETCH_ID>>
-{
-public:
-    ObDASIDP() {}
-protected:
-    int process();
-private:
-    DISALLOW_COPY_AND_ASSIGN(ObDASIDP);
-};
-} // namespace obrpc
+} // namespace obcall
 
 namespace sql
 {
@@ -91,18 +72,16 @@ class ObDASIDRequestRpc
 public:
   ObDASIDRequestRpc();
   ~ObDASIDRequestRpc() { destroy(); }
-  int init(obrpc::ObDASIDRpcProxy *rpc_proxy,
-           const common::ObAddr &self,
+  int init(const common::ObAddr &self,
            ObDASIDCache *id_cache);
   void destroy();
   int fetch_new_range(const ObDASIDRequest &msg,
-                      obrpc::ObDASIDRpcResult &res,
+                      obcall::ObDASIDRpcResult &res,
                       const int64_t timeout,
                       const bool force_renew);
 private:
   bool is_inited_;
   bool is_running_;
-  obrpc::ObDASIDRpcProxy *rpc_proxy_;
   common::ObAddr self_;
   int64_t local_id_counter_ CACHE_ALIGNED; // Local auto-increment counter for DAS ID, resets to 0 on restart
 };

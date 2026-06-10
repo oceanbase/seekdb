@@ -24,7 +24,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 struct ObGAISNextValRpcResult;
 struct ObGAISCurrValRpcResult;

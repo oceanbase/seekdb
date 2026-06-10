@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_outline_executor.h"
+#include "rootserver/ob_rs_serial_call.h"
 
 #include "sql/ob_sql.h"
 #include "sql/resolver/ddl/ob_create_outline_stmt.h"
@@ -28,7 +29,7 @@ namespace oceanbase
 
 using namespace common;
 using namespace share::schema;
-using namespace obrpc;
+using namespace obcall;
 
 namespace sql
 {
@@ -299,7 +300,6 @@ int ObOutlineExecutor::get_outline(ObExecContext &ctx, ObDMLStmt *outline_stmt, 
                               ctx.get_allocator(),
                               &pctx->get_param_store(),
                               GCTX.self_addr(),
-                              GCTX.srv_rpc_proxy_,
                               global_hint,
                               *ctx.get_expr_factory(),
                               outline_stmt,
@@ -319,7 +319,6 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
   int ret = OB_SUCCESS;
   ObString outline_key;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObCreateOutlineArg &arg = stmt.get_create_outline_arg();
   ObOutlineInfo &outline_info = arg.outline_info_;
   ObString first_stmt;
@@ -336,13 +335,8 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
     LOG_WARN("schema_guard reset failed", K(ret));
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("get common rpc proxy failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->create_outline(arg))) {
-    LOG_WARN("rpc proxy create outline failed", "dst", common_rpc_proxy->get_server(), K(ret));
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_outline(arg); }))) {
+    LOG_WARN("rpc proxy create outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
 }
@@ -353,7 +347,6 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
   ObString outline_key;
   ObString outline;
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObAlterOutlineArg &arg = stmt.get_alter_outline_arg();
   ObOutlineInfo &outline_info = arg.alter_outline_info_;
   ObDMLStmt *outline_stmt = static_cast<ObDMLStmt *>(stmt.get_outline_stmt());
@@ -396,13 +389,8 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
     LOG_WARN("schema_guard reset failed", K(ret));
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("get common rpc proxy failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->alter_outline(arg))) {
-    LOG_WARN("rpc proxy alter outline failed", "dst", common_rpc_proxy->get_server(), K(ret));
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_outline(arg); }))) {
+    LOG_WARN("rpc proxy alter outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
 }
@@ -412,7 +400,6 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
   int ret = OB_SUCCESS;
   ObDropOutlineArg arg = stmt.get_drop_outline_arg();
   ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt" , K(ret));
@@ -423,14 +410,9 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
-    LOG_WARN("get common rpc proxy failed", K(ret));
-  } else if (OB_ISNULL(common_rpc_proxy)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("common rpc proxy should not be null", K(ret));
-  } else if (OB_FAIL(common_rpc_proxy->drop_outline(arg))) {
+  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_outline(arg); }))) {
     LOG_WARN("rpc proxy drop outline failed", K(ret),
-             "dst", common_rpc_proxy->get_server());
+             "dst", GCTX.self_addr());
   } else {/*do nothing*/ }
 
   return ret;

@@ -74,7 +74,7 @@ int ObObjPrivMysqlDDLOperator::grant_object(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("user not exist", K(object_priv_key), K(ret));
         } else if (gen_ddl_stmt == true && OB_FAIL(ObDDLSqlGenerator::gen_object_priv_sql(
-            obrpc::ObAccountArg(user_info->get_user_name_str(), user_info->get_host_name_str()),
+            obcall::ObAccountArg(user_info->get_user_name_str(), user_info->get_host_name_str()),
             need_priv, true, /*is_grant*/ ddl_stmt_str))) {
           LOG_WARN("gen_object_priv_sql failed", K(ret), K(need_priv));
         } else if (FALSE_IT(ddl_sql = ddl_stmt_str.string())) {
@@ -149,7 +149,7 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("user not exist", K(object_priv_key), K(ret));
         } else if (gen_ddl_stmt == true && OB_FAIL(ObDDLSqlGenerator::gen_object_priv_sql(
-                   obrpc::ObAccountArg(user_info->get_user_name_str(), user_info->get_host_name_str()),
+                   obcall::ObAccountArg(user_info->get_user_name_str(), user_info->get_host_name_str()),
                                        need_priv,
                                        false, /*is_grant*/
                                        ddl_stmt_str))) {
