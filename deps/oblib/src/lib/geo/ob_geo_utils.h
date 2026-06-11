@@ -27,7 +27,7 @@
 #include "lib/number/ob_number_v2.h"
 #include "common/object/ob_object.h"
 #include "lib/geo/ob_geo_to_tree_visitor.h"
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 
 namespace oceanbase
 {

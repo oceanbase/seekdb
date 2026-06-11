@@ -35,7 +35,7 @@ fi
 
 cat ../../../src/sql/parser/sql_parser_mysql_mode.y >> $TEMP_FILE
 cat ../../../src/sql/parser/sql_parser_mysql_mode.l >> $TEMP_FILE
-cat ../../../src/objit/include/objit/common/ob_item_type.h >> $TEMP_FILE
+cat ../../../deps/oblib/src/common/ob_item_type.h >> $TEMP_FILE
 if [ -d "../../../close_modules/oracle_pl/pl/parser/" ]; then
   cat ../../../close_modules/oracle_parser/sql/parser/sql_parser_oracle_mode.y >> $TEMP_FILE
   cat ../../../close_modules/oracle_parser/sql/parser/sql_parser_oracle_mode.l >> $TEMP_FILE
@@ -319,7 +319,7 @@ rm -rf ../../../src/sql/parser/sql_parser_oracle_mode.l
 fi
 
 # generate type name
-./gen_type_name.sh ../../../src/objit/include/objit/common/ob_item_type.h > type_name.c
+./gen_type_name.sh ../../../deps/oblib/src/common/ob_item_type.h > type_name.c
 
 echo "$md5sum_value" > $CACHE_MD5_FILE
 }

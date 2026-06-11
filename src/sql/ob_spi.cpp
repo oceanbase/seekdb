@@ -4127,12 +4127,14 @@ int ObSPIService::spi_get_pl_exception_code(pl::ObPLExecCtx *ctx, int64_t *code)
   CK (OB_NOT_NULL(ctx->exec_ctx_->get_my_session()));
   CK (OB_NOT_NULL(sqlcode_info = ctx->exec_ctx_->get_my_session()->get_pl_sqlcode_info()));
   CK (OB_NOT_NULL(code));
-  if (OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer())) {
-    OX (wb->reset_warning());
-  }
   OX (*code = sqlcode_info->get_sqlcode());
   if (OB_NOT_NULL(wb = common::ob_get_tsi_warning_buffer())) {
+    // Snapshot the current condition (errno + sqlstate + message) onto the diagnostic
+    // stack BEFORE clearing the TSI buffer, so a bare RESIGNAL in the handler body can
+    // recover the original sqlstate (e.g. 23000, not HY000); then reset the buffer so
+    // the handler body starts clean.
     OZ (sqlcode_info->get_stack_warning_buf().push_back(*wb));
+    OX (wb->reset_warning());
   }
   return ret;
 }

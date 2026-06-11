@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX PL_STORAGEROUTINE
 #include "ob_pl_persistent.h"
-#include "ob_pl_code_generator.h"
 #include "ob_pl_compile.h"
 #include "share/ob_version.h"
 
@@ -34,7 +33,7 @@ int ObRoutinePersistentInfo::get_total_size(ObPLCompileUnit &unit, int32_t &tota
   if (unit.is_pkg()) {
     // do nothing
   } else {
-    total_len += static_cast<ObPLFunction &>(unit).get_helper().get_compiled_object().length();
+    // LLVM JIT removed: no compiled object, so its serialized length is 0.
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < unit.get_routine_table().count(); ++i) {
@@ -111,11 +110,8 @@ int ObRoutinePersistentInfo::encode_dll(ObPLCompileUnit &unit, ObString &dll, in
   int ret = OB_SUCCESS;
   int16_t nums = unit.get_routine_table().count();
   ObString binary;
-  if (unit.is_pkg()) {
-    binary.reset();
-  } else {
-    binary = static_cast<ObPLFunction &>(unit).get_helper().get_compiled_object();
-  }
+  // LLVM JIT removed: no compiled object to serialize (binary stays empty).
+  binary.reset();
   OZ (encode_header(dll.ptr(), dll.length(), pos, 0, level, id, nums));
   OZ (encode_payload(dll.ptr(), dll.length(), pos, binary));
   for (int64_t i = 0; OB_SUCC(ret) && i < nums; ++i) {
@@ -249,45 +245,11 @@ int ObRoutinePersistentInfo::decode_dll(ObSQLSessionInfo &session_info,
             OZ (ObPLCompiler::init_function(schema_guard, exec_env, *routine_info, *routine));
             if (OB_SUCC(ret)) {
 
-    #ifdef USE_MCJIT
-              HEAP_VAR(ObPLCodeGenerator, cg ,unit.get_allocator(), session_info) {
-    #else
-              HEAP_VAR(ObPLCodeGenerator, cg, unit.get_allocator(),
-                      session_info,
-                      schema_guard,
-                      *routine_ast,
-                      routine->get_expressions(),
-                      routine->get_helper()) {
-    #endif
-                int8_t cur_level = 0;
-                int16_t sub_id = 0;
-                OZ (cg.init());
-                if (!routine_ast->get_is_all_sql_stmt()
-                    || !routine_ast->get_obj_access_exprs().empty()) {
-                  OZ (SMART_CALL(decode_dll(session_info, schema_guard, routine->get_exec_env(), *routine_ast, *routine, buf, len, pos, cur_level, sub_id)));
-                  CK (sub_id == routine_idx + 1);
-                  OZ (cg.prepare_expression(*routine));
-                  OZ (cg.final_expression(*routine));
-                  OZ (routine->get_enum_set_ctx().assgin(routine_ast->get_enum_set_ctx()));
-                  OZ (routine->set_variables(routine_ast->get_symbol_table()));
-                  OZ (routine->get_dependency_table().assign(routine_ast->get_dependency_table()));
-                  OZ (routine->add_members(routine_ast->get_flag()));
-                  OX (routine->set_pipelined(routine_ast->get_pipelined()));
-                  OX (routine->set_can_cached(routine_ast->get_can_cached()));
-                  OX (routine->set_is_all_sql_stmt(routine_ast->get_is_all_sql_stmt()));
-                  OX (routine->set_has_parallel_affect_factor(routine_ast->has_parallel_affect_factor()));
-                  OX (routine->set_ret_type(routine_ast->get_ret_type()));
-                  OZ (routine->set_types(routine_ast->get_user_type_table()));
-                } else {
-                  // simple routine(generate by generate_simpile interface), skip encode header byte
-                  OZ (SMART_CALL(decode_dll(session_info, schema_guard, routine->get_exec_env(), *routine_ast, *routine, buf, len, pos, cur_level, sub_id)));
-                  CK (sub_id == routine_idx + 1);
-                  CK (0 == routine->get_action());
-                  OZ (cg.generate_simple(*routine));
-                  OX (routine->set_ret_type(routine_ast->get_ret_type()));
-                }
-                OZ (unit.add_routine(routine));
-              } // end of HEAP_VAR
+              // LLVM JIT removed: a routine cannot be reconstructed from a persisted
+              // compiled object. Persistence is disabled at the compile entry, so this
+              // read path is never taken at runtime.
+              ret = OB_NOT_SUPPORTED;
+              LOG_WARN("loading a PL routine from a persisted DLL is unsupported without LLVM", K(ret));
             }
           }
           if (OB_FAIL(ret) && OB_NOT_NULL(routine)) {

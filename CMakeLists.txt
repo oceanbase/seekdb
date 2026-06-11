@@ -129,7 +129,6 @@ if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
 endif()
 
 add_subdirectory(deps/oblib)
-add_subdirectory(src/objit)
 add_subdirectory(src)
 add_subdirectory(sqlite-benchmark)
 

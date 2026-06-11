@@ -28,7 +28,7 @@
 #include "sql/resolver/ob_schema_checker.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
 
 namespace oceanbase

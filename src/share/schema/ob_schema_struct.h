@@ -34,7 +34,7 @@
 #include "share/schema/ob_priv_type.h"
 #include "share/ob_priv_common.h"
 #include "lib/worker.h"
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 #include "share/ob_share_util.h"          // ObIDGenerator
 #include "share/cache/ob_kv_storecache.h" // ObKVCacheHandle
 #include "lib/hash/ob_pointer_hashmap.h"

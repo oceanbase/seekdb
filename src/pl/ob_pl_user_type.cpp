@@ -18,7 +18,6 @@
 
 #include "ob_pl_user_type.h"
 #include "observer/mysql/obsm_utils.h"
-#include "pl/ob_pl_code_generator.h"
 #include "pl/ob_pl_package.h"
 #include "observer/mysql/ob_query_driver.h"
 
@@ -26,7 +25,6 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share::schema;
-using namespace jit;
 using namespace obmysql;
 using namespace sql;
 
@@ -45,29 +43,8 @@ const ObPLDataType *ObUserDefinedType::get_member(int64_t i) const
   return NULL;
 }
 
-int ObUserDefinedType::generate_assign_with_null(
-  ObPLCodeGenerator &generator,
-  const ObPLINS &ns, jit::ObLLVMValue &allocator, jit::ObLLVMValue &dest) const
-{
-  UNUSEDx(generator, ns, allocator, dest); return OB_SUCCESS;
-}
 
-int ObUserDefinedType::generate_default_value(
-  ObPLCodeGenerator &generator,
-  const ObPLINS &ns, const pl::ObPLStmt *stmt, jit::ObLLVMValue &value, jit::ObLLVMValue &allocator, bool is_top_level) const
-{
-  UNUSEDx(generator, ns, stmt, value, allocator); return OB_SUCCESS;
-}
 
-int ObUserDefinedType::generate_copy(
-  ObPLCodeGenerator &generator, const ObPLBlockNS &ns,
-  jit::ObLLVMValue &allocator, jit::ObLLVMValue &src, jit::ObLLVMValue &dest,
-  uint64_t location, bool in_notfound, bool in_warning, uint64_t package_id) const
-{
-  UNUSEDx(generator, ns, allocator, src, dest, in_notfound, in_warning, package_id);
-  LOG_WARN_RET(OB_NOT_SUPPORTED, "Call virtual func of ObUserDefinedType! May forgot implement in SubClass", K(this));
-  return OB_NOT_SUPPORTED;
-}
 
 int ObUserDefinedType::get_size(
   ObPLTypeSize type, int64_t &size) const
@@ -185,44 +162,7 @@ int ObUserDefinedType::deep_copy(common::ObIAllocator &alloc, const ObUserDefine
 }
 
 
-int ObUserDefinedType::generate_new(ObPLCodeGenerator &generator,
-                                          const ObPLINS &ns,
-                                          jit::ObLLVMValue &value, //The return value is an int64_t, representing the extend value
-                                          jit::ObLLVMValue &allocator,
-                                          bool is_top_level,
-                                          const pl::ObPLStmt *s) const
-{
-  int ret = OB_SUCCESS;
-  ObLLVMValue composite_value;
-  ObLLVMType ir_type;
-  ObLLVMType ir_pointer_type;
 
-  OZ (generator.get_llvm_type(*this, ir_type));
-  OZ (ir_type.get_pointer_to(ir_pointer_type));
-  OZ (generator.get_helper().create_int_to_ptr(ObString("ptr_to_user_type"), value, ir_pointer_type,
-                                             composite_value));
-  OX (composite_value.set_t(ir_type));
-  OZ (generate_construct(generator, ns, composite_value, allocator, is_top_level, s));
-  return ret;
-}
-
-int ObUserDefinedType::generate_construct(ObPLCodeGenerator &generator,
-                                          const ObPLINS &ns,
-                                          jit::ObLLVMValue &value,
-                                          jit::ObLLVMValue &allocator,
-                                          bool is_top_level,
-                                          const pl::ObPLStmt *stmt) const
-{
-  int ret = OB_SUCCESS;
-  UNUSED(ns);
-  UNUSED(stmt);
-  jit::ObLLVMType ir_type;
-  jit::ObLLVMValue const_value;
-  OZ (generator.get_llvm_type(*this, ir_type));
-  OZ (jit::ObLLVMHelper::get_null_const(ir_type, const_value));
-  OZ (generator.get_helper().create_store(const_value, value));
-  return ret;
-}
 
 int ObUserDefinedType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const
 {
@@ -564,41 +504,6 @@ int64_t ObUserDefinedType::get_serialize_obj_size(const ObObj &obj)
   return size;
 }
 
-int ObUserDefinedType::generate_init_composite(ObPLCodeGenerator &generator,
-                                                const ObPLINS &ns,
-                                                jit::ObLLVMValue &value,
-                                                const pl::ObPLStmt *stmt,
-                                                jit::ObLLVMValue &allocator,
-                                                bool is_record_type,
-                                                bool is_top_level)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObLLVMValue, 3> args;
-  ObLLVMValue ret_err;
-  ObLLVMValue addr;
-  ObLLVMType int_type;
-  ObLLVMValue int_value, is_record, is_top;
-  OZ (generator.get_helper().get_llvm_type(ObIntType, int_type));
-  OZ (generator.get_helper().create_ptr_to_int(ObString("composite_to_int64"),
-                                               value,
-                                               int_type,
-                                               int_value));
-  OZ (args.push_back(allocator));
-  OZ (args.push_back(int_value));
-  OZ (generator.get_helper().get_int8(is_record_type, is_record));
-  OZ (args.push_back(is_record));
-  OZ (generator.get_helper().get_int8(is_top_level, is_top));
-  OZ (args.push_back(is_top));
-  OZ (generator.get_helper().create_call(ObString("spi_init_composite"),
-                                         generator.get_spi_service().spi_init_composite_,
-                                         args,
-                                         ret_err));
-  OZ (generator.check_success(ret_err,
-                              stmt->get_stmt_id(),
-                              stmt->get_block()->in_notfound(),
-                              stmt->get_block()->in_warning()));
-  return ret;
-}
 
 
 //---------- for ObRefCursorType ----------
@@ -611,31 +516,7 @@ int ObRefCursorType::deep_copy(common::ObIAllocator &alloc, const ObRefCursorTyp
   return ret;
 }
 
-int ObRefCursorType::generate_construct(ObPLCodeGenerator &generator,
-                                        const ObPLINS &ns,
-                                        jit::ObLLVMValue &value,
-                                        jit::ObLLVMValue &allocator,
-                                        bool is_top_level,
-                                        const pl::ObPLStmt *stmt) const
-{
-  UNUSEDx(generator, ns, value, stmt);
-  return OB_NOT_SUPPORTED;
-}
 
-int ObRefCursorType::generate_new(ObPLCodeGenerator &generator,
-                                              const ObPLINS &ns,
-                                              jit::ObLLVMValue &value,
-                                              jit::ObLLVMValue &allocator,
-                                              bool is_top_level,
-                                              const pl::ObPLStmt *s) const
-{
-  UNUSED(generator);
-  UNUSED(ns);
-  UNUSED(value);
-  UNUSED(s);
-  int ret = OB_NOT_SUPPORTED;
-  return ret;
-}
 
 int ObRefCursorType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const
 {
@@ -983,96 +864,8 @@ int ObRecordType::deep_copy(
   return ret;
 }
 
-int ObRecordType::generate_assign_with_null(ObPLCodeGenerator &generator,
-                                            const ObPLINS &ns,
-                                            jit::ObLLVMValue &allocator,
-                                            jit::ObLLVMValue &dest) const
-{
-  /*
-   * ORACLE 12.1 Document, Page 196:
-   * Assigning the value NULL to a record variable assigns the value NULL to each of its fields.
-   */
-  int ret = OB_SUCCESS;
-  ObLLVMValue isnull_ptr;
-  ObLLVMValue dest_elem;
-  ObObj null_obj;
-  null_obj.set_null();
-  const ObPLDataType *member_type = NULL;
-  for (int64_t i = 0; OB_SUCC(ret) && i < get_record_member_count(); ++i) {
-    dest_elem.reset();
-    if (OB_FAIL(generator.extract_element_ptr_from_record(dest,
-                                                          get_record_member_count(),
-                                                          i,
-                                                          dest_elem))) {
-      LOG_WARN("failed to create gep", K(ret));
-    } else if (OB_ISNULL(member_type = get_record_member_type(i))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get member type", K(ret));
-    } else if (member_type->is_composite_type()) {
-      ObLLVMValue extend;
-      OZ (generator.extract_extend_from_obj(dest_elem, *member_type, extend));
-      OZ (member_type->generate_assign_with_null(generator, ns, allocator, extend));
-    } else {
-      ObSEArray<jit::ObLLVMValue, 2> args;
-      ObLLVMType int_type;
-      ObLLVMValue int_value, is_record, member_idx;
-      if (OB_FAIL(generator.get_helper().get_llvm_type(ObIntType, int_type))) {
-        LOG_WARN("failed to get_llvm_type", K(ret));
-      } else if (OB_FAIL(generator.get_helper().create_ptr_to_int(ObString("cast_ptr_to_int64"), dest,
-                                                                  int_type, int_value))) {
-        LOG_WARN("failed to create ptr to int", K(ret));
-      } else if (OB_FAIL(args.push_back(int_value))) {
-        LOG_WARN("push_back error", K(ret));
-      } else if (OB_FAIL(generator.get_helper().get_int8(true, is_record))) {
-        LOG_WARN("fail to get int8", K(ret));
-      } else if (OB_FAIL(args.push_back(is_record))) {
-        LOG_WARN("push_back error", K(ret));
-      } else if (OB_FAIL(generator.get_helper().get_int32(i, member_idx))) {
-        LOG_WARN("fail to get int8", K(ret));
-      } else if (OB_FAIL(args.push_back(member_idx))) {
-        LOG_WARN("push_back error", K(ret));
-      } else {
-        jit::ObLLVMValue ret_err;
-        if (OB_FAIL(generator.get_helper().create_call(ObString("spi_reset_composite"),
-            generator.get_spi_service().spi_reset_composite_, args, ret_err))) {
-          LOG_WARN("failed to create call", K(ret));
-        } else if (OB_FAIL(generator.check_success(ret_err))) {
-          LOG_WARN("failed to check success", K(ret));
-        } else if (OB_FAIL(generator.store_obj(null_obj, dest_elem))) {
-          LOG_WARN("failed to create store", K(ret));
-        }
-      }
-    }
-  }
-  OZ (generator.extract_isnull_ptr_from_record(dest, isnull_ptr));
-  OZ (generator.get_helper().create_istore(TRUE, isnull_ptr));
-  return ret;
-}
 
-int ObRecordType::generate_construct(ObPLCodeGenerator &generator,
-                                     const ObPLINS &ns,
-                                     jit::ObLLVMValue &value,
-                                     jit::ObLLVMValue &allocator,
-                                     bool is_top_level,
-                                     const pl::ObPLStmt *stmt) const
-{
-  int ret = OB_SUCCESS;
-  OZ (SMART_CALL(ObUserDefinedType::generate_construct(generator, ns, value, allocator, is_top_level, stmt)));
-  OZ (SMART_CALL(generate_default_value(generator, ns, stmt, value, allocator, is_top_level)));
-  return ret;
-}
 
-int ObRecordType::generate_new(ObPLCodeGenerator &generator,
-                                              const ObPLINS &ns,
-                                              jit::ObLLVMValue &value,
-                                              jit::ObLLVMValue &allocator,
-                                              bool is_top_level,
-                                              const pl::ObPLStmt *s) const
-{
-  int ret = OB_NOT_SUPPORTED;
-  ret = ObUserDefinedType::generate_new(generator, ns, value, allocator, is_top_level, s);
-  return ret;
-}
 
 
 int ObRecordType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const
@@ -1116,232 +909,7 @@ int ObRecordType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64
   return ret;
 }
 
-int ObRecordType::generate_alloc_complex_addr(ObPLCodeGenerator &generator,
-                                              int8_t type,
-                                              int64_t user_type_id,
-                                              int64_t init_size,
-                                              jit::ObLLVMValue &value, //The return value is an int64_t, representing the extend value
-                                              jit::ObLLVMValue &allocator,
-                                              const pl::ObPLStmt *s)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObLLVMValue, 8> args;
-  ObLLVMValue var_idx, init_value;
-  ObLLVMValue extend_ptr;
-  ObLLVMValue ret_err;
-  ObLLVMValue var_type, type_id;
-  ObPLCGBufferGuard buffer_guard(generator);
 
-  OZ (buffer_guard.get_int_buffer(extend_ptr));
-  OZ (args.push_back(generator.get_vars().at(generator.CTX_IDX)));
-  OZ (generator.get_helper().get_int8(type, var_type));
-  OZ (args.push_back(var_type));
-  OZ (generator.get_helper().get_int64(user_type_id, type_id));
-  OZ (args.push_back(type_id));
-  OZ (generator.get_helper().get_int64(OB_INVALID_INDEX, var_idx));
-  OZ (args.push_back(var_idx));
-  OZ (generator.get_helper().get_int32(init_size, init_value));
-  OZ (args.push_back(init_value));
-  OZ (args.push_back(extend_ptr));
-  OZ (args.push_back(allocator));
-  OZ (generator.get_helper().create_call(ObString("spi_alloc_complex_var"),
-                                         generator.get_spi_service().spi_alloc_complex_var_,
-                                         args,
-                                         ret_err));
-  OZ (generator.check_success(ret_err,
-                              s->get_stmt_id(),
-                              s->get_block()->in_notfound(),
-                              s->get_block()->in_warning()));
-
-  OZ (generator.get_helper().create_load("load_extend_ptr", extend_ptr, value));
-  return ret;
-}
-
-int ObRecordType::generate_default_value(ObPLCodeGenerator &generator,
-                                         const ObPLINS &ns,
-                                         const ObPLStmt *stmt,
-                                         jit::ObLLVMValue &value,
-                                         jit::ObLLVMValue &allocator,
-                                         bool is_top_level) const
-{
-  int ret = OB_SUCCESS;
-  ObLLVMValue type_value;
-  ObLLVMValue type_ptr;
-  ObLLVMValue id_value;
-  ObLLVMValue id_ptr;
-  ObLLVMValue isnull_value;
-  ObLLVMValue isnull_ptr;
-  ObLLVMValue count_value;
-  ObLLVMValue count_ptr;
-  ObLLVMValue notnull_value;
-  ObLLVMValue notnull_ptr;
-  ObLLVMValue meta_value;
-  ObLLVMValue meta_ptr;
-  ObDataType meta;
-  const ObRecordMember *member = NULL;
-  int64_t result_idx = OB_INVALID_INDEX;
-  ObLLVMValue obobj_res;
-  ObLLVMValue ptr_elem;
-  ObObj null_obj;
-  //Set composite and count
-  OZ (generator.get_helper().get_int32(type_, type_value));
-  OZ (generator.extract_type_ptr_from_record(value, type_ptr));
-  OZ (generator.get_helper().create_store(type_value, type_ptr));
-  OZ (generator.get_helper().get_int64(user_type_id_, id_value));
-  OZ (generator.extract_id_ptr_from_record(value, id_ptr));
-  OZ (generator.get_helper().create_store(id_value, id_ptr));
-  if (is_object_type()) {
-    OZ (generator.get_helper().get_int8(TRUE, isnull_value));
-  } else {
-    OZ (generator.get_helper().get_int8(FALSE, isnull_value));
-  }
-  OZ (generator.extract_isnull_ptr_from_record(value, isnull_ptr));
-  OZ (generator.get_helper().create_store(isnull_value, isnull_ptr));
-  OZ (generator.get_helper().get_int32( get_record_member_count(), count_value));
-  OZ (generator.extract_count_ptr_from_record(value, count_ptr));
-  OZ (generator.get_helper().create_store(count_value, count_ptr));
-  OZ (ObUserDefinedType::generate_init_composite(generator, ns, value, stmt, allocator, true, is_top_level));
-  OZ (generator.generate_debug("generate_default_value", value));
-  //Set meta and data
-  null_obj.set_null();
-  CK (OB_NOT_NULL(stmt));
-  for (int64_t i = 0; OB_SUCC(ret) && i < get_record_member_count(); ++i) {
-    ObLLVMValue result;
-    ObPLCGBufferGuard buffer_guard(generator);
-
-    member = get_record_member(i);
-    CK (OB_NOT_NULL(member));
-    //Set notnull and meta
-    if (OB_SUCC(ret)) {
-      meta.reset();
-      if (NULL == member->member_type_.get_data_type()) {
-        meta.set_obj_type(ObExtendType);
-      } else {
-        meta = *member->member_type_.get_data_type();
-      }
-      OZ (generator.get_helper().get_int8(false, notnull_value));
-      OZ (generator.extract_notnull_ptr_from_record(value, i, notnull_ptr));
-      OZ (generator.get_helper().create_store(notnull_value, notnull_ptr));
-      OZ (generator.extract_meta_ptr_from_record(value, get_record_member_count(), i, meta_ptr));
-      OZ (generator.store_data_type(meta, meta_ptr));
-    }
-
-    OZ (buffer_guard.get_objparam_buffer(result));
-    //Set data
-    if (OB_SUCC(ret)) {
-      if (OB_INVALID_INDEX != member->get_default()) {
-        if (OB_NOT_NULL(member->get_default_expr())) {
-          OZ (generator.generate_expr(member->get_default(), *stmt, result_idx, result));
-        } else {
-          OV (is_package_type(), OB_ERR_UNEXPECTED, KPC(this));
-          OZ (generator.generate_spi_package_calc(extract_package_id(get_user_type_id()),
-                                                  member->get_default(),
-                                                  *stmt,
-                                                  result));
-        }
-        OZ (generator.extract_obobj_from_objparam(result, obobj_res));
-      }
-      if (OB_SUCC(ret)) {
-        ptr_elem.reset();
-        OZ (generator.extract_element_ptr_from_record(value,
-                                                      get_record_member_count(),
-                                                      i,
-                                                      ptr_elem));
-        OZ (generator.generate_debug("generate_extract_value", ptr_elem));
-        if (OB_FAIL(ret)) {
-        } else if (member->member_type_.is_obj_type() || OB_INVALID_INDEX != member->get_default()) {
-          //Regardless of the basic type or complex type, if there is a default, directly store the default value
-          if (OB_INVALID_INDEX != member->get_default()) {
-            ObLLVMValue record_allocator;
-            ObLLVMValue src_datum;
-            ObLLVMValue dst_datum;
-            OZ (generator.extract_allocator_from_record(value, record_allocator));
-            OZ (generator.extract_obobj_ptr_from_objparam(result, src_datum));
-            OZ (member->member_type_.generate_copy(generator,
-                                                   stmt->get_block()->get_namespace(),
-                                                   record_allocator,
-                                                   src_datum,
-                                                   ptr_elem,
-                                                   stmt->get_location(),
-                                                   stmt->get_block()->in_notfound(),
-                                                   stmt->get_block()->in_warning(),
-                                                   OB_INVALID_ID));
-            OZ (generator.generate_check_not_null(*stmt,
-                                                  member->member_type_.get_not_null(),
-                                                  result));
-          } else {
-            OZ (generator.store_obj(null_obj, ptr_elem));
-          }
-          if (OB_SUCC(ret) && !member->member_type_.is_obj_type()) { // process complex null value
-            ObLLVMBasicBlock null_branch;
-            ObLLVMBasicBlock final_branch;
-            ObLLVMValue p_type_value;
-            ObLLVMValue type_value;
-            ObLLVMValue is_null;
-            ObLLVMValue record_allocator;
-            ObLLVMValue extend_value;
-            ObLLVMValue init_value;
-            ObLLVMValue composite_value;
-            ObLLVMType ir_type;
-            ObLLVMType ir_pointer_type;
-            int64_t init_size = OB_INVALID_SIZE;
-            OZ (generator.get_helper().create_block(ObString("null_branch"), generator.get_func(), null_branch));
-            OZ (generator.get_helper().create_block(ObString("final_branch"), generator.get_func(), final_branch));
-            OZ (generator.extract_type_ptr_from_objparam(result, p_type_value));
-            OZ (generator.get_helper().create_load(ObString("load_type"), p_type_value, type_value));
-            OZ (generator.get_helper().create_icmp_eq(type_value, ObNullType, is_null));
-            OZ (generator.get_helper().create_cond_br(is_null, null_branch, final_branch));
-            // null branch
-            OZ (generator.set_current(null_branch));
-            OZ (generator.extract_allocator_from_record(value, record_allocator));
-            OZ (ns.get_size(PL_TYPE_INIT_SIZE, member->member_type_, init_size));
-            OZ (generator.get_helper().get_int32(init_size, init_value));
-            OZ (generate_alloc_complex_addr(generator,
-                                            member->member_type_.get_type(),
-                                            member->member_type_.get_user_type_id(),
-                                            init_size,
-                                            extend_value,
-                                            record_allocator,
-                                            stmt));
-            OZ (generator.get_helper().get_int8(member->member_type_.get_type(), type_value));
-            OZ (generator.generate_set_extend(ptr_elem, type_value, init_value, extend_value));
-            OZ (SMART_CALL(member->member_type_.generate_new(generator, ns, extend_value, record_allocator, false, stmt)));
-            OZ (generator.generate_null(ObIntType, record_allocator));
-            OZ (generator.get_llvm_type(member->member_type_, ir_type));
-            OZ (ir_type.get_pointer_to(ir_pointer_type));
-            OZ (generator.get_helper().create_int_to_ptr(ObString("cast_extend_to_ptr"), extend_value, ir_pointer_type, composite_value));
-            OX (composite_value.set_t(ir_type));
-            OZ (member->member_type_.generate_assign_with_null(generator, ns, record_allocator, composite_value));
-            OZ (generator.get_helper().create_br(final_branch));
-            // final branch
-            OZ (generator.set_current(final_branch));
-          }
-        } else { //Complex type without default, call generate_new
-          ObLLVMValue extend_value;
-          ObLLVMValue type_value;
-          ObLLVMValue init_value;
-          ObLLVMValue record_allocator;
-          int64_t init_size = OB_INVALID_SIZE;
-          int64_t size = OB_INVALID_SIZE;
-          OZ (generator.extract_allocator_from_record(value, record_allocator));
-          OZ (ns.get_size(PL_TYPE_INIT_SIZE, member->member_type_, init_size));
-          OZ (generator.get_helper().get_int32(init_size, init_value));
-          OZ (generate_alloc_complex_addr(generator,
-                                          member->member_type_.get_type(),
-                                          member->member_type_.get_user_type_id(),
-                                          init_size,
-                                          extend_value,
-                                          record_allocator,
-                                          stmt));
-          OZ (generator.get_helper().get_int8(member->member_type_.get_type(), type_value));
-          OZ (generator.generate_set_extend(ptr_elem, type_value, init_value, extend_value));
-          OZ (SMART_CALL(member->member_type_.generate_new(generator, ns, extend_value, record_allocator, false, stmt)));
-        }
-      }
-    }
-  }
-  return ret;
-}
 
 int ObRecordType::get_size(ObPLTypeSize type, int64_t &size) const
 {

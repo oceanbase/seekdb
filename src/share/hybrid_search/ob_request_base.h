@@ -20,7 +20,7 @@
 #include "common/object/ob_object.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 #include "sql/printer/ob_raw_expr_printer.h"
 
 namespace oceanbase

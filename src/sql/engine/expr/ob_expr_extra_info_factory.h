@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_EXTRA_INFO_FACTORY_
 
 #include "sql/engine/expr/ob_expr.h"
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 #include "lib/allocator/ob_allocator.h"
 
 namespace oceanbase

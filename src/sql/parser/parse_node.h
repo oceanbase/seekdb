@@ -26,10 +26,10 @@
 #include <setjmp.h>
 #ifdef SQL_PARSER_COMPILATION
 #include "ob_sql_mode.h"
-#include "ob_item_type.h"
+#include "common/ob_item_type.h"
 #else
 #include "common/sql_mode/ob_sql_mode.h"
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 #endif
 
 #ifdef __cplusplus

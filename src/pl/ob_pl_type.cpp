@@ -18,7 +18,6 @@
 #include "ob_pl_type.h"
 #include "observer/mysql/obsm_utils.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
-#include "ob_pl_code_generator.h"
 #include "observer/mysql/obmp_stmt_execute.h"
 #include "pl/ob_pl_package.h"
 #include "sql/resolver/ob_stmt_resolver.h"
@@ -302,167 +301,12 @@ uint64_t ObPLDataType::get_user_type_id() const
   return user_type_id;
 }
 //Basic data types in the global symbol table of LLVM
-int ObPLDataType::get_llvm_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type)
-{
-  return get_datum_type(obj_type, helper, adt_service, type);
-}
 //Basic data types in SQL are actually stored as ObObj in the database
-int ObPLDataType::get_datum_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type)
-{
-  UNUSED(obj_type); UNUSED(helper); UNUSED(adt_service);
-  return adt_service.get_obj(type);
-}
 
-int ObPLDataType::generate_assign_with_null(ObPLCodeGenerator &generator,
-                                            const ObPLINS &ns,
-                                            jit::ObLLVMValue &allocator,
-                                            jit::ObLLVMValue &dest) const
-{
-  int ret = OB_SUCCESS;
-  if (is_obj_type()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type to assign NULL", K(*this), K(ret));
-  } else {
-    ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-    const ObUserDefinedType *user_type = NULL;
-    if (OB_FAIL(ns.get_user_type(get_user_type_id(), user_type, &tmp_allocator))) {
-      LOG_WARN("failed to get user type", K(*this), K(ret));
-    } else if (OB_ISNULL(user_type)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Cannot get valid user type", K(*this), K(ret));
-    } else if (OB_FAIL(SMART_CALL(user_type->generate_assign_with_null(generator,
-                                                                       ns,
-                                                                       allocator,
-                                                                       dest)))) {
-      LOG_WARN("failed to generate assign with null", K(*this), K(ret));
-    } else { /*do nothing*/ }
-  }
-  return ret;
-}
 
-int ObPLDataType::generate_default_value(ObPLCodeGenerator &generator,
-                                         const ObPLINS &ns,
-                                         const pl::ObPLStmt *stmt,
-                                         jit::ObLLVMValue &value,
-                                         jit::ObLLVMValue &llvm_allocator,
-                                         bool is_top_level) const
-{
-  int ret = OB_SUCCESS;
-  if (is_obj_type()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type to assign NULL", K(*this), K(ret));
-  } else {
-    ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-    const ObUserDefinedType *user_type = NULL;
-    if (OB_FAIL(ns.get_user_type(get_user_type_id(), user_type, &allocator))) {
-      LOG_WARN("failed to get user type", K(*this), K(ret));
-    } else if (OB_ISNULL(user_type)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Cannot get valid user type", K(*this), K(ret));
-    } else if (OB_FAIL(SMART_CALL(user_type->generate_default_value(generator,
-                                                                       ns,
-                                                                       stmt,
-                                                                       value,
-                                                                       llvm_allocator,
-                                                                       is_top_level)))) {
-      LOG_WARN("failed to generate default value", K(*this), K(ret));
-    } else { /*do nothing*/ }
-  }
-  return ret;
-}
 
-int ObPLDataType::generate_copy(ObPLCodeGenerator &generator,
-                                const ObPLBlockNS &ns,
-                                jit::ObLLVMValue &allocator,
-                                jit::ObLLVMValue &src,
-                                jit::ObLLVMValue &dest,
-                                uint64_t location,
-                                bool in_notfound,
-                                bool in_warning,
-                                uint64_t package_id) const
-{
-  UNUSED(ns);
-  int ret = OB_SUCCESS;
-  ObSEArray<jit::ObLLVMValue, 4> args;
-  jit::ObLLVMValue llvm_value;
-  jit::ObLLVMValue dest_type;
-  jit::ObLLVMValue type_info_id_value;
-  ObPLCGBufferGuard buffer_guard(generator);
 
-  OZ (args.push_back(generator.get_vars()[generator.CTX_IDX]));
-  OZ (args.push_back(allocator));
-  OZ (args.push_back(src));
-  OZ (args.push_back(dest));
-  OZ (buffer_guard.get_data_type_buffer(dest_type));
-  if (is_composite_type()) {
-    ObDataType obj_type;
-    ObObjMeta meta;
-    meta.set_ext();
-    obj_type.set_meta_type(meta);
-    obj_type.set_udt_id(user_type_id_);
-    OZ (generator.store_data_type(obj_type, dest_type));
-  } else {
-    OZ (generator.store_data_type(obj_type_, dest_type));
-  }
-  OZ (args.push_back(dest_type));
-  OZ (generator.get_helper().get_int64(package_id, llvm_value));
-  OZ (args.push_back(llvm_value));
-  OZ (generator.get_helper().get_int64(get_type_info_id(), type_info_id_value));
-  OZ (args.push_back(type_info_id_value));
-  if (OB_SUCC(ret)) {
-    jit::ObLLVMValue ret_err;
-    if (OB_FAIL(generator.get_helper().create_call(ObString("spi_copy_datum"), generator.get_spi_service().spi_copy_datum_, args, ret_err))) {
-      LOG_WARN("failed to create call", K(ret));
-    } else if (OB_FAIL(generator.check_success(ret_err, location, in_notfound, in_warning))) {
-      LOG_WARN("failed to check success", K(ret));
-    } else {
-      dest_type.reset();
-    }
-  }
-  return ret;
-}
 
-int ObPLDataType::generate_construct(ObPLCodeGenerator &generator,
-                                     const ObPLINS &ns,
-                                     jit::ObLLVMValue &value,
-                                     jit::ObLLVMValue &llvm_allocator,
-                                     bool is_top_level,
-                                     const pl::ObPLStmt *stmt) const
-{
-  int ret = OB_SUCCESS;
-  if (is_obj_type()) {
-    ObObj obj(get_obj_type());
-    OZ (generator.store_obj(obj, value));
-  } else {
-    ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-    const ObUserDefinedType *user_type = NULL;
-    OZ (ns.get_user_type(get_user_type_id(), user_type, &allocator));
-    CK (OB_NOT_NULL(user_type));
-    OZ (SMART_CALL(user_type->generate_construct(generator, ns, value, llvm_allocator, is_top_level, stmt)));
-  }
-  return ret;
-}
-
-int ObPLDataType::generate_new(ObPLCodeGenerator &generator,
-                                     const ObPLINS &ns,
-                                     jit::ObLLVMValue &value,
-                                     jit::ObLLVMValue &llvm_allocator,
-                                     bool is_top_level,
-                                     const pl::ObPLStmt *stmt) const
-{
-  int ret = OB_SUCCESS;
-  if (is_obj_type()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("NOoooooooo, please don't do that", K(ret));
-  } else {
-    ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-    const ObUserDefinedType *user_type = NULL;
-    OZ (ns.get_user_type(get_user_type_id(), user_type, &allocator));
-    CK (OB_NOT_NULL(user_type));
-    OZ (SMART_CALL(user_type->generate_new(generator, ns, value, llvm_allocator, is_top_level, stmt)));
-  }
-  return ret;
-}
 
 int ObPLDataType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const
 {
