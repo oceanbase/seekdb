@@ -184,6 +184,23 @@ int64_t ObILibCacheNode::get_mem_size()
   return total_mem_size;
 }
 
+int64_t ObILibCacheNode::get_cache_obj_mem_size()
+{
+  int ret = OB_SUCCESS;
+  int64_t total_mem_size = 0;
+  SpinRLockGuard lock_guard(co_list_lock_);
+  CacheObjList::iterator iter = co_list_.begin();
+  for (; OB_SUCC(ret) && iter != co_list_.end(); iter++) {
+    ObILibCacheObject *obj = *iter;
+    if (OB_ISNULL(obj)) {
+      BACKTRACE(ERROR, true, "invalid cache obj");
+    } else {
+      total_mem_size += obj->get_mem_size();
+    }
+  }
+  return total_mem_size;
+}
+
 int64_t ObILibCacheNode::inc_ref_count(const CacheRefHandleID ref_handle)
 {
   int ret = OB_SUCCESS;
@@ -219,7 +236,7 @@ int64_t ObILibCacheNode::dec_ref_count(const CacheRefHandleID ref_handle)
       LOG_ERROR("invalid null lib cache");
     } else {
       ObLCNodeFactory &ln_factory = lib_cache_->get_cache_node_factory();
-      lib_cache_->dec_mem_used(get_mem_size());
+      lib_cache_->dec_mem_used(get_added_mem_size());
       ln_factory.destroy_cache_node(this);
     }
   } else {

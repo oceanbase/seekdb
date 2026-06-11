@@ -109,7 +109,8 @@ public:
       lib_cache_(lib_cache),
       co_list_lock_(common::ObLatchIds::PLAN_SET_LOCK),
       co_list_(allocator_),
-      is_invalid_(false)
+      is_invalid_(false),
+      added_mem_size_(0)
   {
     lock_timeout_ts_ = GCONF.large_query_threshold;
   }
@@ -164,6 +165,9 @@ public:
   common::ObIAllocator &get_allocator_ref() { return allocator_; }
   lib::MemoryContext &get_mem_context() { return mem_context_; }
   int64_t get_mem_size();
+  int64_t get_cache_obj_mem_size();
+  int64_t get_added_mem_size() const { return ATOMIC_LOAD(&added_mem_size_); }
+  void inc_added_mem_size(int64_t delta) { ATOMIC_FAA(&added_mem_size_, delta); }
   ObPlanCache *get_lib_cache() const { return lib_cache_; }
   bool is_invalid() const { return is_invalid_; }
 
@@ -218,6 +222,7 @@ protected:
   common::SpinRWLock co_list_lock_;
   CacheObjList co_list_;
   bool is_invalid_;
+  int64_t added_mem_size_;
 };
 
 } // namespace common

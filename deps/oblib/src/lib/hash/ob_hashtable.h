@@ -1526,6 +1526,9 @@ public:
       const int64_t real_end = MAX(0, MIN(end_bucket, bucket_num_));
       for (int64_t i = real_start; OB_SUCC(ret) && i < real_end; i++) {
         hashbucket &bucket = buckets_[i];
+        if (NULL == bucket.node) {
+          continue;
+        }
         bucket_lock_cond blc(bucket);
         readlocker locker(blc.lock());
         hashnode *node = bucket.node;
