@@ -52,7 +52,7 @@ list(TRANSFORM ob_sql_parser_hash_object_list
 add_library(ob_sql_parser_base INTERFACE)
 target_include_directories(ob_sql_parser_base INTERFACE
   ${PROJECT_SOURCE_DIR}/deps/oblib/src/common/sql_mode/
-  ${PROJECT_SOURCE_DIR}/src/objit/include/objit/common
+  ${PROJECT_SOURCE_DIR}/deps/oblib/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src/lib/charset/
   )
 

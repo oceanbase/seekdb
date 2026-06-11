@@ -26,8 +26,6 @@ target_include_directories(
   ${CMAKE_SOURCE_DIR}/deps/oblib/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src/common
   ${CMAKE_SOURCE_DIR}/deps/easy/src/include
-  ${CMAKE_SOURCE_DIR}/src/objit/include
-  ${CMAKE_SOURCE_DIR}/src/objit/src
   ${DEP_DIR}/include
   ${DEP_DIR}/include/libxml2
   $<$<NOT:$<PLATFORM_ID:Darwin>>:${SYS_INCLUDE_DIR}>

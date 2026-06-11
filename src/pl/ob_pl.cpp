@@ -19,7 +19,6 @@
 #include "ob_pl.h"
 #include "pl/ob_pl_resolver.h"
 #include "pl/ob_pl_compile.h"
-#include "pl/ob_pl_code_generator.h"
 #include "sql/ob_spi.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "share/ob_truncated_string.h"
@@ -28,6 +27,7 @@
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "sql/dblink/ob_tm_service.h"
 #include "pl/ob_pl_exception_handling.h"
+#include "pl/ob_pl_interpreter.h"
 #ifdef _WIN32
 #include "core/ob_jit_allocator.h"
 #endif
@@ -72,158 +72,8 @@ struct ObPLSPIWrapper<Ret(Args...), func>
 int ObPL::init(common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  jit::ObLLVMHelper::initialize();
-
-#define WRAP_SPI_CALL(func) (void*)(ObPLSPIWrapper<decltype(func), func>::impl)
-
-  jit::ObLLVMHelper::add_symbol(ObString("spi_calc_expr_at_idx"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_calc_expr_at_idx));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_calc_package_expr"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_calc_package_expr));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_set_variable_to_expr"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_set_variable_to_expr));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_query_into_expr_idx"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_query_into_expr_idx));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_check_autonomous_trans"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_check_autonomous_trans));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_execute_with_expr_idx"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_execute_with_expr_idx));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_execute_immediate"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_execute_immediate));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_cursor_init"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_cursor_init));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_cursor_open_with_param_idx"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_cursor_open_with_param_idx));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_dynamic_open"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_dynamic_open));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_cursor_fetch"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_cursor_fetch));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_cursor_close"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_cursor_close));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_process_resignal"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_process_resignal));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_destruct_collection"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_destruct_collection));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_reset_composite"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_reset_composite));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_copy_datum"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_copy_datum));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_cast_enum_set_to_string"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_cast_enum_set_to_string));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_destruct_obj"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_destruct_obj));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_sub_nestedtable"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_sub_nestedtable));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_alloc_complex_var"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_alloc_complex_var));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_construct_collection"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_construct_collection));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_clear_diagnostic_area"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_clear_diagnostic_area));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_end_trans"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_end_trans));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_update_location"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_update_location));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_set_pl_exception_code"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_set_pl_exception_code));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_get_pl_exception_code"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_get_pl_exception_code));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_check_early_exit"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_check_early_exit));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_convert_objparam"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_convert_objparam));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_check_exception_handler_legal"),
-                               WRAP_SPI_CALL(sql::ObSPIService::spi_check_exception_handler_legal));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_interface_impl"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_interface_impl));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_process_nocopy_params"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_process_nocopy_params));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_update_package_change_info"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_update_package_change_info));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_check_composite_not_null"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_check_composite_not_null));
-  jit::ObLLVMHelper::add_symbol(ObString("pl_execute"),
-                                WRAP_SPI_CALL(ObPL::execute_proc));
-  jit::ObLLVMHelper::add_symbol(ObString("set_user_type_var"),
-                                WRAP_SPI_CALL(ObPL::set_user_type_var));
-  jit::ObLLVMHelper::add_symbol(ObString("set_implicit_cursor_in_forall"),
-                                WRAP_SPI_CALL(ObPL::set_implicit_cursor_in_forall));
-  jit::ObLLVMHelper::add_symbol(ObString("unset_implicit_cursor_in_forall"),
-                                WRAP_SPI_CALL(ObPL::unset_implicit_cursor_in_forall));
-
-  jit::ObLLVMHelper::add_symbol(ObString("eh_create_exception"),
-                                (void*)(ObPLEH::eh_create_exception));
-  jit::ObLLVMHelper::add_symbol(ObString("_Unwind_RaiseException"),
-                                (void*)(_Unwind_RaiseException));
-  jit::ObLLVMHelper::add_symbol(ObString("_Unwind_Resume"),
-                                (void*)(_Unwind_Resume));
-#ifdef _WIN32
-  // On Windows, LLVM encodes the personality function address in
-  // UNWIND_INFO.ExceptionHandler as a 32-bit RVA relative to RTDyld's
-  // ImageBase (= min loaded JIT section). seekdb.exe loads at addresses
-  // that VirtualAlloc(NULL, ...) cannot match within 4GB, so we cannot
-  // register ob_pl_seh_personality's absolute address directly — the
-  // IMAGE_REL_AMD64_ADDR32NB relocation would overflow.
-  //
-  // Instead, register the address of a process-lifetime trampoline page
-  // that performs `movabs rax, &ob_pl_seh_personality; jmp rax`. The
-  // trampoline lives near where the OS hands out fresh virtual memory, and
-  // the JIT allocator scans downward from it, so every JIT module's
-  // ImageBase stays within 1.5GB of the trampoline and the 32-bit RVA fits.
-  // See ob_jit_get_personality_trampoline() for the full rationale.
-  uintptr_t personality_tramp = oceanbase::jit::core::ob_jit_get_personality_trampoline();
-  jit::ObLLVMHelper::add_symbol(ObString("eh_personality"),
-                                reinterpret_cast<void*>(personality_tramp));
-#else
-  jit::ObLLVMHelper::add_symbol(ObString("eh_personality"),
-                                (void*)(ObPLEH::eh_personality));
-#endif
-#if defined(__aarch64__)
-  jit::ObLLVMHelper::add_symbol(ObString("DW.ref.eh_personality"),
-                                (void*)(&DW_REF_ObPLEH_eh_personality));
-#endif // defined(__aarch64__)
-
-  jit::ObLLVMHelper::add_symbol(ObString("eh_convert_exception"),
-                                WRAP_SPI_CALL(ObPLEH::eh_convert_exception));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_classify_exception"),
-                                (void*)(ObPLEH::eh_classify_exception));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_int64"),
-                                (void*)(ObPLEH::eh_debug_int64));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_int64ptr"),
-                                (void*)(ObPLEH::eh_debug_int64ptr));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_int32"),
-                                (void*)(ObPLEH::eh_debug_int32));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_int32ptr"),
-                                  (void*)(ObPLEH::eh_debug_int32ptr));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_int8"),
-                                  (void*)(ObPLEH::eh_debug_int8));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_int8ptr"),
-                                (void*)(ObPLEH::eh_debug_int8ptr));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_obj"),
-                                (void*)(ObPLEH::eh_debug_obj));
-  jit::ObLLVMHelper::add_symbol(ObString("eh_debug_objparam"),
-                                (void*)(ObPLEH::eh_debug_objparam));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_add_ref_cursor_refcount"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_add_ref_cursor_refcount));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_handle_ref_cursor_refcount"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_handle_ref_cursor_refcount));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_opaque_assign_null"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_opaque_assign_null));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_pl_profiler_before_record"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_pl_profiler_before_record));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_pl_profiler_after_record"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_pl_profiler_after_record));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_init_composite"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_init_composite));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_get_parent_allocator"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_get_parent_allocator));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_get_current_expr_allocator"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_get_current_expr_allocator));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_adjust_error_trace"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_adjust_error_trace));
-  jit::ObLLVMHelper::add_symbol(ObString("spi_convert_anonymous_array"),
-                                WRAP_SPI_CALL(sql::ObSPIService::spi_convert_anonymous_array));
-#undef WRAP_SPI_CALL
+  // LLVM/ORC codegen removed: PL no longer initializes or uses LLVM. The
+  // interpreter executes the AST and calls spi_* directly (not via JIT symbols).
 
   sql_proxy_ = &sql_proxy;
   OZ (jit_lock_.first.init(1024));
@@ -2792,7 +2642,6 @@ int ObPL::generate_pl_function(
 {
   int ret = OB_SUCCESS;
   ObPLFunction *routine = NULL;
-  ObArenaAllocator compile_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
 
   int64_t compile_start = ObTimeUtility::current_time();
   OZ (ObPLContext::valid_execute_context(ctx));
@@ -2802,7 +2651,9 @@ int ObPL::generate_pl_function(
   OX (routine = static_cast<ObPLFunction *>(cacheobj_guard.get_cache_obj()));
   CK (OB_NOT_NULL(routine));
   if (OB_SUCC(ret)) {
-    ObPLCompiler compiler(compile_alloc,
+    // Use the func's persistent allocator (not a transient arena) so the resolved
+    // ObPLFunctionAST tree survives for the tree-walking interpreter.
+    ObPLCompiler compiler(routine->get_allocator(),
                           *(ctx.get_my_session()),
                           *(ctx.get_sql_ctx()->schema_guard_),
                           *(ctx.get_package_guard()),
@@ -4349,162 +4200,10 @@ static int call_pl_jit_with_seh(int(*fp)(ObPLExecCtx*, int64_t, int64_t*),
 
 int ObPLExecState::execute()
 {
-  int ret = OB_SUCCESS;
-  int32_t pl_stack_size = func_.get_stack_size();
-
-  if (OB_ISNULL(get_allocator())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is NULL", K(ret));
-  } else if (OB_ISNULL(reinterpret_cast<void*>(func_.get_action()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("action is NULL", K(ret));
-  } else if (OB_ISNULL(ctx_.exec_ctx_) || OB_ISNULL(ctx_.exec_ctx_->get_my_session())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("execute context is null", K(ret));
-  } else {
-    int (*fp)(ObPLExecCtx*, int64_t, int64_t*) = (int(*)(ObPLExecCtx*, int64_t, int64_t*))(func_.get_action());
-    int64_t *argv = NULL;
-    if (ctx_.exec_ctx_ != NULL && ctx_.exec_ctx_->get_my_session() != NULL &&
-        ctx_.exec_ctx_->get_sql_ctx() != NULL &&
-        ctx_.exec_ctx_->get_sql_ctx()->schema_guard_ != NULL) {
-      uint64_t user_id = ctx_.exec_ctx_->get_my_session()->get_priv_user_id();
-    }
-    if (OB_SUCC(ret) && func_.get_arg_count() > 0) {
-      argv = static_cast<int64_t*>(get_exec_ctx().get_top_expr_allocator()->alloc(sizeof(int64_t) * func_.get_arg_count()));
-      if (OB_ISNULL(argv)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate failed", K(sizeof(int64_t) * func_.get_arg_count()), K(ret));
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < func_.get_arg_count(); ++i) {
-          argv[i] = reinterpret_cast<int64_t>(&get_params().at(i));
-        }
-      }
-    }
-#define PL_DYNAMIC_STACK_CHECK()                                               \
-  do {                                                                         \
-    bool is_overflow = false;                                                  \
-    int64_t stack_used = OB_INVALID_SIZE;                                      \
-    if (OB_FAIL(ret)) {                                                        \
-    } else if (!GCONF._ob_enable_pl_dynamic_stack_check) {                     \
-    } else if (OB_UNLIKELY(0 > pl_stack_size)) {                               \
-    } else if (OB_FAIL(check_stack_overflow(                                   \
-                         is_overflow,                                          \
-                         pl_stack_size + get_reserved_stack_size(),            \
-                         &stack_used))) {                                      \
-      LOG_WARN("failed to check_stack_overflow", K(ret));                      \
-    } else if (is_overflow) {                                                  \
-      ret = OB_SIZE_OVERFLOW;                                                  \
-      LOG_WARN("stack size is not enough to execute PL",                       \
-               K(ret),                                                         \
-               K(is_overflow),                                                 \
-               K(stack_used),                                                  \
-               K(pl_stack_size),                                               \
-               K(get_reserved_stack_size()),                                   \
-               K(func_));                                                      \
-    }                                                                          \
-  } while (0)
-    if (OB_SUCC(ret)) {
-      if (inner_call_) {
-        _Unwind_Exception *eptr = nullptr;
-        ret = SMART_CALL([&]() {
-                          int ret = OB_SUCCESS;
-                          PL_DYNAMIC_STACK_CHECK();
-                          if (OB_SUCC(ret)) {
-#ifdef _WIN32
-                            bool has_seh_exception = false;
-                            ret = call_pl_jit_with_seh(fp, &ctx_, func_.get_arg_count(),
-                                                       argv, has_seh_exception);
-                            if (has_seh_exception) {
-                              eptr = (_Unwind_Exception *)tl_ob_pl_seh_exc_ptr;
-                            }
-#else
-                            try {
-                              ret = fp(&ctx_, func_.get_arg_count(), argv);
-                            } catch(...) {
-                              eptr = tl_eptr;
-                            }
-#endif
-                          }
-                          return ret;
-                        }());
-        if (eptr != nullptr) {
-          ret = OB_SUCCESS == ret ? (NULL != ctx_.status_ ? *ctx_.status_ : OB_ERR_UNEXPECTED)
-              : ret;
-          final(ret); // Avoid memory leak of array in the currently executing pl, execute final before throwing the exception upwards after capturing it
-          _Unwind_RaiseException(eptr);
-        }
-      } else {
-        bool has_exception = false;
-        ret = SMART_CALL([&]() {
-                          int ret = OB_SUCCESS;
-                          PL_DYNAMIC_STACK_CHECK();
-                          if (OB_SUCC(ret)) {
-#ifdef _WIN32
-                            ret = call_pl_jit_with_seh(fp, &ctx_, func_.get_arg_count(),
-                                                       argv, has_exception);
-#else
-                            try {
-                              ret = fp(&ctx_, func_.get_arg_count(), argv);
-                            } catch(...) {
-                              has_exception = true;
-                            }
-#endif
-                          }
-                          return ret;
-                        }());
-        if (has_exception) {
-          if (OB_ISNULL(ctx_.status_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("status is NULL", K(ret));
-          } else {
-            ret = OB_SUCCESS == ret ? *ctx_.status_ : ret;
-            ret = ret > 0 ? OB_SP_RAISE_APPLICATION_ERROR : ret;
-            LOG_WARN("Unhandled exception has occurred in PL", K(*ctx_.status_), K(ret));
-            if (OB_ERR_SP_UNHANDLED_EXCEPTION == ret) {
-              LOG_USER_ERROR(OB_ERR_SP_UNHANDLED_EXCEPTION);
-            }
-          }
-        }
-      }
-      if (OB_ISNULL(ctx_.result_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is NULL", K(ret));
-      } else if (func_.is_function()
-                 && OB_SUCC(ret)
-                 && 0 == *ctx_.status_) {
-        if (ctx_.result_->is_invalid_type()) {
-          if (!func_.is_pipelined()) {
-            ret = OB_ER_SP_NORETURNEND;
-            LOG_WARN("FUNCTION ended without RETURN",K(func_), K(ret));
-          }
-        } else {
-          // Check function return value not null violated!
-          if (func_.get_ret_type().is_not_null()
-              && (ctx_.result_->is_null() || ctx_.result_->is_null_oracle())) {
-            ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
-            LOG_WARN("not null check violated!",
-                     K(ret), K(func_.get_ret_type()), KPC(ctx_.result_));
-          }
-        }
-      } else { /*do nothing*/ }
-    }
-#undef PL_DYNAMIC_STACK_CHECK
-
-    if (top_call_
-        && ctx_.exec_ctx_->get_my_session()->is_track_session_info()
-        && ctx_.exec_ctx_->get_my_session()->is_package_state_changed()) {
-      LOG_DEBUG("++++++++ add changed package info to session! +++++++++++");
-      int tmp_ret = ctx_.exec_ctx_->get_my_session()->add_changed_package_info(*ctx_.exec_ctx_);
-      if (tmp_ret != OB_SUCCESS) {
-        ret = OB_SUCCESS == ret ? tmp_ret : ret;
-        LOG_WARN("failed to add changed package info", K(ret));
-      } else {
-        ctx_.exec_ctx_->get_my_session()->reset_all_package_changed_info();
-      }
-    }
-
-  }
-  return ret;
+  // PL on this branch is executed by the tree-walking interpreter; the
+  // LLVM/ORC JIT path is not used here (no flag, no fallback).
+  ObPLInterpreter interpreter(*this);
+  return interpreter.execute();
 }
 
 ObPLCompileUnit::~ObPLCompileUnit()
@@ -4607,19 +4306,14 @@ void ObPLCompileUnit::dump_deleted_log_info(const bool is_debug_log /* = true */
 ObPLCompileUnit::ObPLCompileUnit(sql::ObLibCacheNameSpace ns,
                                  lib::MemoryContext &mem_context)
     : ObPLCacheObject(ns, mem_context), routine_table_(allocator_),
-      type_table_(), enum_set_ctx_(allocator_), helper_(allocator_),
+      type_table_(), enum_set_ctx_(allocator_),
       can_cached_(true),
       has_incomplete_rt_dep_error_(false),
       exec_env_(),
       profiler_unit_info_(std::make_pair(OB_INVALID_ID, INVALID_PROC_TYPE)),
       stack_size_(OB_INVALID_SIZE)
 {
-#ifndef USE_MCJIT
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(helper_.init())) {
-    LOG_WARN("failed to init llvm helper", K(ret), K(helper_.get_jc()));
-  }
-#endif // USE_MCJIT
+  // LLVM JIT removed: no compile helper to initialize.
 }
 
 ObPLFunction::~ObPLFunction()
@@ -4947,15 +4641,11 @@ int ObPL::check_session_alive(const ObBasicSessionInfo &session) {
 
 int ObPLFunction::gen_action_from_precompiled(const ObString &name, size_t length,
                                        const char *ptr) {
-  int ret = OB_SUCCESS;
-
-  uint64_t addr = 0;
-
-  OZ (helper_.add_compiled_object(length, ptr));
-  OZ (helper_.get_function_address(name, addr));
-  OX (set_action(addr));
-
-  return ret;
+  // LLVM JIT removed: there is no compiled object to load and no function address to
+  // bind. The interpreter executes the AST directly; persisted DLLs are neither
+  // produced nor consumed, so this load path is unsupported.
+  UNUSEDx(name, length, ptr);
+  return OB_NOT_SUPPORTED;
 }
 
 int ObPLConcurrentGuard::set_concurrent_num(ObPLFunction &routine, ObExecContext &ctx, ObPLPackageGuard &package_guard)

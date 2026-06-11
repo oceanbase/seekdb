@@ -16,7 +16,7 @@
 
 #ifndef _OB_ITEM_TYPE_STR_H
 #define _OB_ITEM_TYPE_STR_H 1
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 
 namespace oceanbase
 {

@@ -28,13 +28,12 @@ ob_set_subtarget(ob_pl ALONE
 
 ob_set_subtarget(ob_pl common
   ob_pl.cpp
-  ob_pl_adt_service.cpp
   ob_pl_allocator.cpp
-  ob_pl_code_generator.cpp
   ob_pl_compile.cpp
   ob_pl_compile_utils.cpp
   ob_pl_exception_handling.cpp
   ob_pl_interface_pragma.cpp
+  ob_pl_interpreter.cpp
   ob_pl_package.cpp
   ob_pl_package_manager.cpp
   ob_pl_package_state.cpp

@@ -55,7 +55,7 @@ class ObSchemaGetterGuard;
 }
 namespace pl
 {
-class ObPLCodeGenerator;
+class ObPLCompiler;
 }
 namespace sql
 {
@@ -1854,7 +1854,7 @@ class ObRawExpr
 public:
   friend sql::ObExpr *ObStaticEngineExprCG::get_rt_expr(const ObRawExpr &raw_expr);
   friend sql::ObExpr *ObExprOperator::get_rt_expr(const ObRawExpr &raw_expr) const;
-  friend class pl::ObPLCodeGenerator;
+  friend class pl::ObPLCompiler;
   friend class sql::ObCallProcedureInfo;
   friend class sql::ObRTDatumArith;
 

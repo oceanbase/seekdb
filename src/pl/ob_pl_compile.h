@@ -33,6 +33,11 @@ class ObRoutineInfo;
 class ObPackageInfo;
 }
 }
+namespace sql
+{
+class ObRawExpr;
+class ObSqlExpression;
+}
 namespace pl
 {
 class ObPLPackageAST;
@@ -142,13 +147,14 @@ private:
                                 ObString &database_name,
                                 ObString &package_name);
   int compile(const share::schema::ObRoutineInfo &routine, ObPLFunctionAST &func_ast, ObPLFunction &func);
-  int read_dll_from_disk(bool enable_persistent,
-                         ObRoutinePersistentInfo &routine_storage,
-                         ObPLFunctionAST &func_ast,
-                         ObPLCodeGenerator &cg,
-                         const ObRoutineInfo &routine,
-                         ObPLFunction &func,
-                         ObRoutinePersistentInfo::ObPLOperation &op);
+public:
+  // Bind a resolved raw expr's runtime ObExpr into the PL ObSqlExpression. Relocated off
+  // the deleted LLVM code generator; ObPLCompiler is a friend of ObRawExpr so it may read
+  // the protected rt_expr_.
+  static int link_sql_expr_rt(sql::ObRawExpr &raw_expr, sql::ObSqlExpression &sql_expr);
+  // Propagate a unit's profiler info to all nested routines (LLVM-free; relocated off the
+  // deleted code generator).
+  static int set_profiler_unit_info_recursive(const ObPLCompileUnit &unit);
 private:
   common::ObIAllocator &allocator_;
   sql::ObSQLSessionInfo &session_info_;

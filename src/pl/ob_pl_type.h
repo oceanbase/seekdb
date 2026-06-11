@@ -18,8 +18,7 @@
 #define OCEANBASE_SRC_PL_OB_PL_TYPE_H_
 
 #include "share/ob_define.h"
-#include "objit/ob_llvm_helper.h"
-#include "objit/common/ob_item_type.h"
+#include "common/ob_item_type.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "common/object/ob_object.h"
 #include "lib/container/ob_fast_array.h"
@@ -30,7 +29,6 @@
 #include "storage/tx/ob_trans_define.h"
 #include "share/schema/ob_schema_struct.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
-#include "ob_pl_adt_service.h"
 
 #define ObCursorType ObIntType
 #define ObPtrType ObIntType
@@ -76,7 +74,6 @@ namespace pl
 struct ObPLExecCtx;
 class ObPLResolver;
 class ObPLResolveCtx;
-class ObPLCodeGenerator;
 class ObPLBlockNS;
 class ObPLRoutineParam;
 class ObPLUserTypeTable;
@@ -499,42 +496,9 @@ public:
     const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
   // ------ new session serialize/deserialize interface -------
   //The type stored in LLVM
-  static int get_llvm_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type);
   //type stored in sql
-  static int get_datum_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type);
 
-  virtual int generate_assign_with_null(ObPLCodeGenerator &generator,
-                                        const ObPLINS &ns,
-                                        jit::ObLLVMValue &allocator,
-                                        jit::ObLLVMValue &dest) const;
-  virtual int generate_default_value(ObPLCodeGenerator &generator,
-                                     const ObPLINS &ns,
-                                     const pl::ObPLStmt *stmt,
-                                     jit::ObLLVMValue &value,
-                                     jit::ObLLVMValue &allocator,
-                                     bool is_top_level) const;
 
-  virtual int generate_copy(ObPLCodeGenerator &generator,
-                            const ObPLBlockNS &ns,
-                            jit::ObLLVMValue &allocator,
-                            jit::ObLLVMValue &src,
-                            jit::ObLLVMValue &dest,
-                            uint64_t location,
-                            bool in_notfound,
-                            bool in_warning,
-                            uint64_t package_id = OB_INVALID_ID) const;
-  virtual int generate_construct(ObPLCodeGenerator &generator,
-                                 const ObPLINS &ns,
-                                 jit::ObLLVMValue &value,
-                                 jit::ObLLVMValue &allocator,
-                                 bool is_top_level,
-                                 const pl::ObPLStmt *stmt = NULL) const;
-  virtual int generate_new(ObPLCodeGenerator &generator,
-                                       const ObPLINS &ns,
-                                       jit::ObLLVMValue &value,
-                                       jit::ObLLVMValue &allocator,
-                                       bool is_top_level,
-                                       const pl::ObPLStmt *stmt = NULL) const;
   virtual int newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const;
   virtual int get_size(ObPLTypeSize type, int64_t &size) const;
   virtual int init_session_var(const ObPLResolveCtx &resolve_ctx,

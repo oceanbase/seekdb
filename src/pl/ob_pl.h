@@ -26,7 +26,6 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/oblog/ob_log_module.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
-#include "objit/ob_llvm_helper.h"
 #include "share/ob_errno.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/session/ob_basic_session_info.h"
@@ -52,10 +51,6 @@ namespace sql
 class ObPsCache;
 class ObSQLSessionInfo;
 class ObAlterRoutineResolver;
-}
-namespace jit
-{
-class ObDWARFHelper;
 }
 using common::ObPsStmtId;
 namespace pl
@@ -257,13 +252,10 @@ public:
   inline const ObIArray<ObUserDefinedType *> &get_type_table() const { return type_table_; }
 
   inline ObPLEnumSetCtx & get_enum_set_ctx() { return enum_set_ctx_; }
-  inline jit::ObLLVMHelper &get_helper() { return helper_; }
 
   inline const sql::ObExecEnv &get_exec_env() const { return exec_env_; }
   inline sql::ObExecEnv &get_exec_env() { return exec_env_; }
   inline void set_exec_env(const sql::ObExecEnv &env) { exec_env_ = env; }
-
-  jit::ObDIRawData get_debug_info() const { return helper_.get_debug_info(); }
 
   virtual void reset();
   virtual void dump_deleted_log_info(const bool is_debug_log = true) const;
@@ -289,8 +281,6 @@ protected:
   common::ObArray<ObUserDefinedType *> type_table_;
 
   pl::ObPLEnumSetCtx enum_set_ctx_;
-
-  jit::ObLLVMHelper helper_;
 
   bool can_cached_;
   bool has_incomplete_rt_dep_error_;
@@ -427,6 +417,7 @@ public:
     in_args_(),
     out_args_(),
     action_(0),
+    ast_(NULL),
     di_buf_(NULL),
     di_len_(0),
     is_all_sql_stmt_(true),
@@ -459,13 +450,19 @@ public:
   inline int add_out_arg(int64_t i) { return out_args_.add_member(i); }
   inline ObFuncPtr get_action() const { return action_; }
   inline void set_action(ObFuncPtr action) { action_ = action; }
+  // Resolved AST retained for the tree-walking interpreter (non-owning: lives on
+  // this func's allocator / the test's scope). NULL on the JIT path.
+  inline ObPLFunctionAST *get_ast() const { return ast_; }
+  inline void set_ast(ObPLFunctionAST *ast) { ast_ = ast; }
   inline const common::ObString &get_interface_name() const { return interface_name_; }
   int set_interface_name(const ObString &interface_name)
   {
     return ob_write_string(get_allocator(), interface_name, interface_name_);
   }
 
-  inline bool is_debug_mode() const { return !get_debug_info().empty(); }
+  // LLVM JIT removed: the interpreter produces no DWARF debug info, so a routine is
+  // never in (JIT) debug mode.
+  inline bool is_debug_mode() const { return false; }
 
   inline bool get_is_all_sql_stmt() const { return is_all_sql_stmt_; }
   inline void set_is_all_sql_stmt(bool is_all_sql_stmt) { is_all_sql_stmt_ = is_all_sql_stmt; }
@@ -550,6 +547,7 @@ private:
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE> in_args_;
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE> out_args_;
   ObFuncPtr action_;
+  ObPLFunctionAST *ast_;  // retained resolved AST for the interpreter (non-owning)
   char *di_buf_;
   int64_t di_len_;
   bool is_all_sql_stmt_;
@@ -753,7 +751,6 @@ public:
     top_context_(NULL),
     loc_(loc),
     is_called_from_sql_(is_called_from_sql),
-    dwarf_helper_(NULL),
     pure_sql_exec_time_(0),
     pure_plsql_exec_time_(0),
     pure_sub_plsql_exec_time_(0),
@@ -803,11 +800,6 @@ public:
   inline bool is_called_from_sql() const { return is_called_from_sql_; }
   inline void set_is_called_from_sql(bool flag) { is_called_from_sql_ = flag; }
   inline bool is_for_trigger() const { return ObTriggerInfo::is_trigger_package_id(func_.get_package_id());}
-  inline void set_dwarf_helper(jit::ObDWARFHelper *dwarf_helper)
-  {
-    dwarf_helper_ = dwarf_helper;
-  }
-  inline jit::ObDWARFHelper* get_dwarf_helper() { return dwarf_helper_; } 
 
   inline void add_pure_sql_exec_time(int64_t sql_exec_time)
   {
@@ -862,7 +854,6 @@ private:
   ObPLContext *top_context_;
   uint64_t loc_; // combine of line and column number
   bool is_called_from_sql_;
-  jit::ObDWARFHelper *dwarf_helper_; // for decode dwarf debuginfo
   int64_t pure_sql_exec_time_;
   int64_t pure_plsql_exec_time_;
   int64_t pure_sub_plsql_exec_time_;

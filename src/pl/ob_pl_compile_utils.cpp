@@ -19,7 +19,6 @@
 #include "pl/ob_pl_compile_utils.h"
 #include "pl/ob_pl_compile.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
-#include "pl/ob_pl_code_generator.h"
 #include "pl/ob_pl_package.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 

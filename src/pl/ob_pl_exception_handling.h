@@ -122,13 +122,7 @@ class ObPLEHService
 public:
   ObPLEHService() :
     pl_exception_class_(0),
-    pl_exception_base_offset_(0),
-    eh_create_exception_(),
-    eh_raise_exception_(),
-    eh_resume_(),
-    eh_personality_(),
-    eh_convert_exception_(),
-    eh_classify_exception()
+    pl_exception_base_offset_(0)
   {}
   virtual ~ObPLEHService() {}
 
@@ -156,21 +150,6 @@ public:
 
   uint64_t pl_exception_class_;
   int64_t pl_exception_base_offset_;
-  jit::ObLLVMFunction eh_create_exception_;
-  jit::ObLLVMFunction eh_raise_exception_;
-  jit::ObLLVMFunction eh_resume_;
-  jit::ObLLVMFunction eh_personality_;
-  jit::ObLLVMFunction eh_convert_exception_;
-  jit::ObLLVMFunction eh_classify_exception;
-
-  jit::ObLLVMFunction eh_debug_int64_;
-  jit::ObLLVMFunction eh_debug_int64ptr_;
-  jit::ObLLVMFunction eh_debug_int32_;
-  jit::ObLLVMFunction eh_debug_int32ptr_;
-  jit::ObLLVMFunction eh_debug_int8_;
-  jit::ObLLVMFunction eh_debug_int8ptr_;
-  jit::ObLLVMFunction eh_debug_obj_;
-  jit::ObLLVMFunction eh_debug_objparam_;
 };
 
 }

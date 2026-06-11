@@ -27,7 +27,6 @@
 #include "lib/allocator/ob_libeasy_mem_pool.h"
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_defer.h"
-#include "objit/ob_llvm_symbolizer.h"
 #include "observer/ob_command_line_parser.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
@@ -577,9 +576,8 @@ int inner_main(int argc, char *argv[])
   // temporarily unlimited memory before init config
   set_memory_limit(INT_MAX64);
 
-#ifdef ENABLE_SANITY
-  backtrace_symbolize_func = oceanbase::common::backtrace_symbolize;
-#endif
+  // LLVM removed: the objit LLVM symbolizer is gone; sanity (ASAN/UBSAN) builds keep
+  // backtrace_symbolize_func at its default (NULL) -> unsymbolized frames.
 #if defined(_WIN32) || defined(__ANDROID__)
   snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
 #else

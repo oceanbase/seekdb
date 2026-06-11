@@ -69,32 +69,6 @@ public:
 public:
   virtual int64_t get_member_count() const;
   virtual const ObPLDataType *get_member(int64_t i) const;
-  virtual int generate_assign_with_null(
-    ObPLCodeGenerator &generator, const ObPLINS &ns,
-    jit::ObLLVMValue &allocator, jit::ObLLVMValue &dest) const;
-  virtual int generate_default_value(
-    ObPLCodeGenerator &generator,const ObPLINS &ns,
-    const pl::ObPLStmt *stmt, jit::ObLLVMValue &value, jit::ObLLVMValue &allocator, bool is_top_level) const;
-  virtual int generate_copy(ObPLCodeGenerator &generator,
-                            const ObPLBlockNS &ns,
-                            jit::ObLLVMValue &allocator,
-                            jit::ObLLVMValue &src,
-                            jit::ObLLVMValue &dest,
-                            uint64_t location,
-                            bool in_notfound,
-                            bool in_warning,
-                            uint64_t package_id = OB_INVALID_ID) const;
-  virtual int generate_construct(ObPLCodeGenerator &generator, const ObPLINS &ns,
-                                 jit::ObLLVMValue &value,
-                                 jit::ObLLVMValue &allocator,
-                                 bool is_top_level,
-                                 const pl::ObPLStmt *stmt = NULL) const;
-  virtual int generate_new(ObPLCodeGenerator &generator,
-                                            const ObPLINS &ns,
-                                            jit::ObLLVMValue &value,
-                                            jit::ObLLVMValue &allocator,
-                                            bool is_top_level,
-                                            const pl::ObPLStmt *s = NULL) const;
   virtual int newx(common::ObIAllocator &allocator,
                    const ObPLINS *ns,
                    int64_t &ptr) const;
@@ -160,18 +134,6 @@ public:
   static int deserialize_obj(ObObj &obj, const char* buf, const int64_t len, int64_t& pos);
   static int64_t get_serialize_obj_size(const ObObj &obj);
 
-  static int generate_init_composite(ObPLCodeGenerator &generator,
-                                      const ObPLINS &ns,
-                                      jit::ObLLVMValue &value,
-                                      const pl::ObPLStmt *stmt,
-                                      jit::ObLLVMValue &allocator,
-                                      bool is_record_type,
-                                      bool is_top_level);
-  static int generate_new_complex_type(ObPLCodeGenerator &generator,
-                                        jit::ObLLVMValue &allocator,
-                                        int64_t user_type_id,
-                                        jit::ObLLVMValue &value,
-                                        const pl::ObPLStmt *stmt);
 
   VIRTUAL_TO_STRING_KV(K_(type), K_(user_type_id), K_(type_name));
 protected:
@@ -195,23 +157,6 @@ public:
 
   virtual int64_t get_member_count() const { return 0; }
   virtual const ObPLDataType *get_member(int64_t i) const { UNUSED(i); return NULL; }
-  virtual int generate_assign_with_null(ObPLCodeGenerator &generator,
-                                        ObPLINS &ns,
-                                        jit::ObLLVMValue &allocator,
-                                        jit::ObLLVMValue &dest) const
-  { UNUSED(generator); UNUSED(ns), UNUSED(allocator); UNUSED(dest); return OB_SUCCESS;}
-  virtual int generate_construct(ObPLCodeGenerator &generator,
-                                 const ObPLINS &ns,
-                                 jit::ObLLVMValue &value,
-                                 jit::ObLLVMValue &allocator,
-                                 bool is_top_level,
-                                 const pl::ObPLStmt *stmt = NULL) const;
-  virtual int generate_new(ObPLCodeGenerator &generator,
-                                              const ObPLINS &ns,
-                                              jit::ObLLVMValue &value,
-                                              jit::ObLLVMValue &allocator,
-                                              bool is_top_level,
-                                              const pl::ObPLStmt *s = NULL) const;
   virtual int newx(common::ObIAllocator &allocator,
                      const ObPLINS *ns,
                      int64_t &ptr) const;
@@ -342,13 +287,6 @@ public:
   int record_members_init(common::ObIAllocator *alloc, int64_t size);
   void reset_record_member() { record_members_.reset(); }
 
-  static int generate_alloc_complex_addr(ObPLCodeGenerator &generator,
-                                          int8_t type,
-                                          int64_t user_type_id,
-                                          int64_t init_size,
-                                          jit::ObLLVMValue &value, //The return value is an int64_t, representing the extend value
-                                          jit::ObLLVMValue &allocator,
-                                          const pl::ObPLStmt *s);
 
   static int64_t get_notnull_offset();
   static int64_t get_meta_offset(int64_t count);
@@ -359,30 +297,8 @@ public:
 
   virtual const ObPLDataType *get_member(int64_t i) const { return get_record_member_type(i); }
 
-  virtual int generate_assign_with_null(ObPLCodeGenerator &generator,
-                                        const ObPLINS &ns,
-                                        jit::ObLLVMValue &allocator,
-                                        jit::ObLLVMValue &dest) const;
 
-  virtual int generate_construct(ObPLCodeGenerator &generator,
-                                 const ObPLINS &ns,
-                                 jit::ObLLVMValue &value,
-                                 jit::ObLLVMValue &allocator,
-                                 bool is_top_level,
-                                 const pl::ObPLStmt *stmt = NULL) const;
 
-  virtual int generate_default_value(ObPLCodeGenerator &generator,
-                                     const ObPLINS &ns,
-                                     const pl::ObPLStmt *stmt,
-                                     jit::ObLLVMValue &value,
-                                     jit::ObLLVMValue &allocator,
-                                     bool is_top_level) const;
-  virtual int generate_new(ObPLCodeGenerator &generator,
-                                                const ObPLINS &ns,
-                                                jit::ObLLVMValue &value,
-                                                jit::ObLLVMValue &allocator,
-                                                bool is_top_level,
-                                                const pl::ObPLStmt *s = NULL) const;
   virtual int newx(common::ObIAllocator &allocator,
                      const ObPLINS *ns,
                      int64_t &ptr) const;
@@ -482,22 +398,6 @@ public:
   int get_init_size(int64_t &size) const;
 
 public:
-  virtual int generate_construct(ObPLCodeGenerator &generator,
-                                 const ObPLINS &ns,
-                                 jit::ObLLVMValue &value,
-                                 jit::ObLLVMValue &allocator,
-                                 bool is_top_level,
-                                 const pl::ObPLStmt *stmt = NULL) const;
-  virtual int generate_assign_with_null(ObPLCodeGenerator &generator,
-                                        const ObPLINS &ns,
-                                        jit::ObLLVMValue &allocator,
-                                        jit::ObLLVMValue &dest) const;
-  virtual int generate_new(ObPLCodeGenerator &generator,
-                           const ObPLINS &ns,
-                           jit::ObLLVMValue &value,
-                           jit::ObLLVMValue &allocator,
-                           bool is_top_level,
-                           const pl::ObPLStmt *s = NULL) const;
   virtual int newx(common::ObIAllocator &allocator,
                      const ObPLINS *ns,
                      int64_t &ptr) const;
