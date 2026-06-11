@@ -1438,6 +1438,22 @@ int ObPlanCache::cache_evict_by_glitch_node()
   return ret;
 }
 
+// Plan cache only evicts plans when memory exceeds the high water mark,
+// so plans that are no longer accessed can stay cached indefinitely,
+// wasting memory until memory pressure triggers eviction.
+//
+// This function adds idle-based eviction: plans not accessed within
+// IDLE_EVICT_THRESHOLD_US (default 30s) are removed proactively.
+//
+// To avoid scanning all buckets and nodes in a single timer round
+// (which could be expensive with tens of thousands of buckets and
+// many nodes per bucket), the scan is rate-limited by two caps:
+//   - IDLE_SCAN_MAX_BUCKETS: max buckets scanned per round
+//   - IDLE_SCAN_MAX_NODES:   max nodes inspected per round
+// A cursor (idle_scan_cursor_) tracks progress across rounds so that
+// all buckets are eventually covered. Each node's existing
+// last_active_timestamp_ (already updated atomically on every access)
+// is checked against the threshold — no extra work on the hot path.
 int ObPlanCache::cache_evict_by_idle()
 {
   int ret = OB_SUCCESS;
