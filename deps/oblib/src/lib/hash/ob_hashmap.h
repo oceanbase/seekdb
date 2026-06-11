@@ -293,6 +293,13 @@ public:
   {
     return ht_.foreach_refactored(callback);
   }
+  template<class _callback>
+  int foreach_refactored_range(_callback &callback,
+                               const int64_t start_bucket,
+                               const int64_t end_bucket) const
+  {
+    return ht_.foreach_refactored_range(callback, start_bucket, end_bucket);
+  }
   int erase_refactored(const _key_type &key, _value_type *value = NULL)
   {
     int ret = OB_SUCCESS;

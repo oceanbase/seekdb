@@ -216,6 +216,8 @@ public:
   void runTimerTask(void);
 private:
   void run_plan_cache_task();
+  //void run_ps_cache_task();
+  void run_free_cache_obj_task();
 public:
   ObPlanCache* plan_cache_;
   int64_t run_task_counter_;
@@ -352,6 +354,7 @@ public:
   //evict plan, adjust mem between hwm and lwm
   int cache_evict();
   int cache_evict_by_glitch_node();
+  int cache_evict_by_idle();
   int cache_evict_plan_by_sql_id(uint64_t db_id, common::ObString sql_id);
   int cache_evict_by_ns(ObLibCacheNameSpace ns);
   template<typename CallBack = ObKVEntryTraverseOp>
@@ -382,6 +385,7 @@ public:
                                           ObFastParserResult &fp_result);
   static int construct_multi_stmt_fast_parser_result(common::ObIAllocator &allocator,
                                                      ObPlanCacheCtx &pc_ctx);
+  int dump_all_objs() const;
   int dump_deleted_objs_by_ns(ObIArray<AllocCacheObjInfo> &deleted_objs,
                               const int64_t safe_timestamp,
                               const ObLibCacheNameSpace ns);
@@ -455,6 +459,8 @@ private:
   int check_after_get_plan(int tmp_ret, ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj);
   int get_normalized_pattern_digest(const ObPlanCacheCtx &pc_ctx, uint64_t &pattern_digest);
 private:
+  enum PlanCacheGCStrategy { INVALID = -1, OFF = 0, REPORT = 1, AUTO = 2};
+  static int get_plan_cache_gc_strategy();
 private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
@@ -479,6 +485,10 @@ private:
   CacheKeyNodeMap cache_key_node_map_;
   ObPlanCacheEliminationTask evict_task_;
   int tg_id_;
+  int64_t idle_scan_cursor_;
+  static const int64_t IDLE_SCAN_MAX_NODES = 1000;
+  static const int64_t IDLE_SCAN_MAX_BUCKETS = 5000;
+  static const int64_t IDLE_EVICT_THRESHOLD_US = 30L * 1000L * 1000L; // 30s
 };
 
 template<typename _callback>
