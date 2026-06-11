@@ -31,8 +31,7 @@
 #include "share/compaction/ob_shared_storage_compaction_util.h"
 #endif
 #include "lib/stat/ob_diagnostic_info_container.h"
-#include "rpc/frame/ob_net_consts.h"
-#include "rpc/frame/ob_req_packet_code.h"  // rpc::frame::ObReqCheckSumCheckLevel (relocated)
+#include "rpc/obrpc/ob_rpc_net_handler.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -48,12 +47,12 @@ namespace observer
 int set_cluster_name_hash(const ObString &cluster_name)
 {
   int ret = OB_SUCCESS;
-  uint64_t cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
+  uint64_t cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
 
   if (OB_FAIL(calc_cluster_name_hash(cluster_name, cluster_name_hash))) {
     LOG_WARN("failed to calc_cluster_name_hash", KR(ret), K(cluster_name));
   } else {
-    rpc::frame::ObNetConsts::CLUSTER_NAME_HASH = cluster_name_hash;
+    obrpc::ObRpcNetHandler::CLUSTER_NAME_HASH = cluster_name_hash;
     LOG_INFO("set cluster_name_hash", KR(ret), K(cluster_name), K(cluster_name_hash));
   }
   return ret;
@@ -62,10 +61,10 @@ int set_cluster_name_hash(const ObString &cluster_name)
 int calc_cluster_name_hash(const ObString &cluster_name, uint64_t &cluster_name_hash)
 {
   int ret = OB_SUCCESS;
-  cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
+  cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
 
   if (0 == cluster_name.length()) {
-    cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
+    cluster_name_hash = obrpc::ObRpcPacket::INVALID_CLUSTER_NAME_HASH;
     LOG_INFO("set cluster_name_hash to invalid", K(cluster_name));
   } else {
     cluster_name_hash = common::murmurhash(cluster_name.ptr(), cluster_name.length(), 0);
@@ -243,17 +242,17 @@ int ObServerReloadConfig::operator()()
   }
 
   {
-    auto new_level = rpc::frame::get_rpc_checksum_check_level_from_string(GCONF._rpc_checksum.str());
-    auto orig_level = rpc::frame::get_rpc_checksum_check_level();
+    auto new_level = obrpc::get_rpc_checksum_check_level_from_string(GCONF._rpc_checksum.str());
+    auto orig_level = obrpc::get_rpc_checksum_check_level();
     if (new_level != orig_level) {
       LOG_INFO("rpc_checksum_check_level changed",
                "orig", orig_level,
                "new", new_level);
     }
-    rpc::frame::set_rpc_checksum_check_level(new_level);
+    obrpc::set_rpc_checksum_check_level(new_level);
   }
 
-    auto new_upgrade_stage = obcall::get_upgrade_stage(GCONF._upgrade_stage.str());
+    auto new_upgrade_stage = obrpc::get_upgrade_stage(GCONF._upgrade_stage.str());
     auto orig_upgrade_stage = GCTX.get_upgrade_stage();
     if (new_upgrade_stage != orig_upgrade_stage) {
       LOG_INFO("_upgrade_stage changed", K(new_upgrade_stage), K(orig_upgrade_stage));

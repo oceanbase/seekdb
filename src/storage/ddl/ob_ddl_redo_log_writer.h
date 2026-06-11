@@ -337,13 +337,13 @@ private:
       ObDDLCommitLogHandle &handle,
       uint32_t &lock_tid);
   int remote_write_ddl_commit_redo(
-      const obcall::ObCallRemoteWriteDDLCommitLogArg &arg,
+      const obrpc::ObRpcRemoteWriteDDLCommitLogArg &arg,
       share::SCN &commit_scn);
   int retry_remote_write_macro_redo(
       const int64_t task_id,
       const storage::ObDDLMacroBlockRedoInfo &redo_info);
   int retry_remote_write_commit_clog(
-      const obcall::ObCallRemoteWriteDDLCommitLogArg &arg,
+      const obrpc::ObRpcRemoteWriteDDLCommitLogArg &arg,
       share::SCN &commit_scn);
   int local_write_ddl_macro_redo(
       const storage::ObDDLMacroBlockRedoInfo &redo_info,
@@ -364,10 +364,10 @@ private:
       ObDDLFinishLogHandle &handle);
 
   int retry_remote_write_finish_log(
-      const obcall::ObCallRemoteWriteDDLFinishLogArg &arg);
+      const obrpc::ObRpcRemoteWriteDDLFinishLogArg &arg);
 
   int remote_write_ddl_finish_log(
-      const obcall::ObCallRemoteWriteDDLFinishLogArg &arg);
+      const obrpc::ObRpcRemoteWriteDDLFinishLogArg &arg);
   /* TODO @zhuoran.zzr wait to upload & update tablet meta in one func, use deep copy to avoid lock problem*/
   int upload_tablet(const ObDDLFinishLog &finish_log, ObTablet &shared_tablet, 
                     ObArenaAllocator &allocator, const bool is_remote_write);

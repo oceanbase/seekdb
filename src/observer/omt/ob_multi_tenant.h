@@ -81,9 +81,7 @@ typedef common::ObVector<uint64_t> TenantIdList;
 class ObMultiTenant : public common::ObTimerTask
 {
 public:
-  // 100ms: bounds packet-retry requeue latency (retry_queue_ is only drained
-  // by timeup); heavy work in timeup is gated to 1s internally.
-  const     static int64_t TIME_SLICE_PERIOD        = 100000;
+  const     static int64_t TIME_SLICE_PERIOD        = 1000000;
 
 public:
   explicit ObMultiTenant();

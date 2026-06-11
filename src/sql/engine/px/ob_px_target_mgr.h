@@ -18,12 +18,12 @@
 #define __SQL_ENG_PX_TARGET_MGR_H__
 
 #include "share/ob_thread_pool.h"
-#include "sql/engine/px/ob_px_target_monitor_rpc.h"
 #include "share/ob_define.h"
 #include "ob_px_tenant_target_monitor.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/hash/ob_link_hashmap.h"
+#include "ob_px_rpc_proxy.h"
 
 namespace oceanbase
 {

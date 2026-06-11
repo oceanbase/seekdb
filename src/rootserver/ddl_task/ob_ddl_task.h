@@ -261,7 +261,7 @@ public:
                        const int64_t parallelism,
                        const int64_t consumer_group_id,
                        ObIAllocator *allocator,
-                       const obcall::ObDDLArg *ddl_arg = nullptr,
+                       const obrpc::ObDDLArg *ddl_arg = nullptr,
                        const int64_t parent_task_id = 0,
                        const int64_t task_id = 0,
                        const bool ddl_need_retry_at_executor = false);
@@ -286,7 +286,7 @@ public:
   share::ObDDLType type_;
   const ObTableSchema *src_table_schema_;
   const ObTableSchema *dest_table_schema_;
-  const obcall::ObDDLArg *ddl_arg_;
+  const obrpc::ObDDLArg *ddl_arg_;
   common::ObIAllocator *allocator_;
   const ObTableSchema *aux_rowkey_doc_schema_;
   const ObTableSchema *aux_doc_rowkey_schema_;
@@ -604,6 +604,7 @@ private:
       common::ObIArray<int> &ret_array,
       common::ObIArray<int64_t> &snapshot_array,
       const uint64_t tenant_id,
+      obrpc::ObSrvRpcProxy *rpc_proxy,
       share::ObLocationService *location_service,
       const bool need_wait_trans_end,
       const bool need_write_defensive);
@@ -613,6 +614,7 @@ private:
       const uint64_t tenant_id,
       const int64_t sstable_exist_ts,
       const common::ObIArray<common::ObTabletID> &tablet_ids,
+      obrpc::ObSrvRpcProxy *rpc_proxy,
       share::ObLocationService *location_service,
       common::ObIArray<int> &ret_array,
       common::ObIArray<int64_t> &snapshot_array);
@@ -757,8 +759,8 @@ public:
   uint64_t get_gmt_create() const { return gmt_create_; }
   void set_gmt_create(uint64_t gmt_create) { gmt_create_ = gmt_create; }
   static int deep_copy_table_arg(common::ObIAllocator &allocator, 
-                                 const obcall::ObDDLArg &source_arg, 
-                                 obcall::ObDDLArg &dest_arg);
+                                 const obrpc::ObDDLArg &source_arg, 
+                                 obrpc::ObDDLArg &dest_arg);
   void set_longops_stat(share::ObDDLLongopsStat *longops_stat) { longops_stat_ = longops_stat; }
   share::ObDDLLongopsStat *get_longops_stat() const { return longops_stat_; }
   uint64_t get_data_format_version() const { return data_format_version_; }
