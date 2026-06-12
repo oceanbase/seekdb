@@ -29,9 +29,8 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
 struct ObPartitionSplitArg;
 struct ObAlterTableArg;
 struct ObDropDatabaseArg;
@@ -1160,7 +1159,7 @@ public:
       const uint64_t tenant_id,
       const int64_t orig_table_id,
       const uint64_t foreign_key_id,
-      obrpc::ObAlterTableArg &alter_table_arg);
+      obcall::ObAlterTableArg &alter_table_arg);
 
   static int generate_ddl_schema_hint_str(
       const ObString &table_name,
@@ -1283,7 +1282,7 @@ public:
      int64_t &snapshot_version,
      share::ObDDLTaskStatus &task_status);
 
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObPartitionSplitArg &split_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObPartitionSplitArg &split_arg);
   static int get_data_information(
      const uint64_t tenant_id,
      const uint64_t task_id,
@@ -1298,15 +1297,15 @@ public:
   static int replace_user_tenant_id(
     const ObDDLType &ddl_type,
     const uint64_t tenant_id,
-    obrpc::ObAlterTableArg &alter_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObDropDatabaseArg &drop_db_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObDropTableArg &drop_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObDropIndexArg &drop_index_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObRebuildIndexArg &rebuild_index_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObTruncateTableArg &trucnate_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObCreateIndexArg &create_index_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObForkTableArg &fork_table_arg);
-  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObForkDatabaseArg &fork_database_arg);
+    obcall::ObAlterTableArg &alter_table_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObDropDatabaseArg &drop_db_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObDropTableArg &drop_table_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObDropIndexArg &drop_index_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObRebuildIndexArg &rebuild_index_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObTruncateTableArg &trucnate_table_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObCreateIndexArg &create_index_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObForkTableArg &fork_table_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obcall::ObForkDatabaseArg &fork_database_arg);
 
   static int generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
@@ -1496,14 +1495,14 @@ public:
     const ObTableSchema *table_schema,
     const ObTableSchema *&index_schema,
     rootserver::ObDDLTask &task,
-    obrpc::ObCreateIndexArg &create_index_arg,
+    obcall::ObCreateIndexArg &create_index_arg,
     ObDDLType &ddl_type);
 
   static int get_domain_index_share_table_snapshot(
     const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
     const int64_t task_id,
-    const obrpc::ObCreateIndexArg &create_index_arg,
+    const obcall::ObCreateIndexArg &create_index_arg,
     int64_t &fts_snapshot_version);
 
   static int write_defensive_and_obtain_snapshot(
@@ -1657,7 +1656,7 @@ private:
     const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
     const int64_t task_id,
-    const obrpc::ObCreateIndexArg &create_index_arg,
+    const obcall::ObCreateIndexArg &create_index_arg,
     bool &need_update_snapshot);
 
   static int hold_snapshot(

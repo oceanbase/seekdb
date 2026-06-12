@@ -5073,7 +5073,6 @@ desc oceanbase.GV$OB_THREAD;
 Field	Type	Null	Key	Default	Extra
 TID	bigint(20)	NO		NULL	
 TNAME	varchar(16)	NO		NULL	
-STATUS	varchar(32)	NO		NULL	
 LATCH_WAIT	varchar(16)	NO		NULL	
 LATCH_HOLD	varchar(256)	NO		NULL	
 TRACE_ID	varchar(40)	NO		NULL	
@@ -5085,7 +5084,6 @@ desc oceanbase.V$OB_THREAD;
 Field	Type	Null	Key	Default	Extra
 TID	bigint(20)	NO			
 TNAME	varchar(16)	NO			
-STATUS	varchar(32)	NO			
 LATCH_WAIT	varchar(16)	NO			
 LATCH_HOLD	varchar(256)	NO			
 TRACE_ID	varchar(40)	NO			

@@ -34,6 +34,7 @@
 #include "sql/engine/px/ob_px_worker.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/resource/ob_affinity_ctrl.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -43,7 +44,7 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
 using namespace oceanbase::sql::dtl;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 #define GET_OTHER_TSI_ADDR(var_name, addr) \
 const int64_t var_name##_offset = ((int64_t)addr - (int64_t)pthread_self()); \
@@ -240,7 +241,6 @@ void ObPxPool::set_px_thread_name()
 {
   char buf[32];
   snprintf(buf, 32, "PX_G%ld", group_id_);
-  ob_get_tenant_id() = tenant_id_;
   lib::set_thread_name(buf);
 }
 
@@ -359,16 +359,12 @@ ObTenant::ObTenant(const int64_t id,
       workers_lock_(common::ObLatchIds::TENANT_WORKER_LOCK),
       cgroup_ctrl_(cgroup_ctrl),
       disable_user_sched_(false),
-      token_usage_(.0),
-      token_usage_check_ts_(0),
       token_change_ts_(0),
       completion_cnt_(0),
       ctx_(nullptr),
       st_metrics_(),
-      sql_limiter_(),
-      worker_us_(0)
+      sql_limiter_()
 {
-  token_usage_check_ts_ = ObTimeUtility::current_time();
 }
 
 ObTenant::~ObTenant() {}
@@ -549,10 +545,14 @@ int ObTenant::create_tenant_module()
   int ret = OB_SUCCESS;
   const uint64_t &tenant_id = id_;
   const double max_cpu = static_cast<double>(tenant_meta_.unit_.config_.max_cpu());
-  // set tenant ctx to thread_local
+  // set tenant ctx to global
   ObTenantSwitchGuard guard(this);
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>", K(tenant_id), K(MTL_ID()));
+
+  // Point g_tenant_ptr at this before create_mtl_module() so that
+  // module constructors can access get_tenant() without nullptr deref.
+  g_tenant_ptr = this;
 
   bool mtl_init = false;
   if (OB_FAIL(ObTenantBase::create_mtl_module())) {
@@ -561,10 +561,6 @@ int ObTenant::create_tenant_module()
     ret = CREATE_MTL_MODULE_FAIL;
     LOG_ERROR("create_tenant_module failed because of tracepoint CREATE_MTL_MODULE_FAIL",
               K(tenant_id), K(ret));
-  } else if (FALSE_IT(ObTenantEnv::set_tenant(this))) {
-    // Above, a new TenantBase thread-local variable is created through ObTenantSwitchGuard, rather than storing a pointer to TenantBase,
-    // The purpose is to reduce one memory jump when accessing via MTL(), but the pointer set for the mtl module is still nullptr, so when the mtl creation is completed
-    // Still needs to be set once.
   } else if (FALSE_IT(mtl_init = true)) {
   } else if (OB_FAIL(ObTenantBase::init_mtl_module())) {
     LOG_ERROR("init mtl module failed", K(tenant_id), K(ret));
@@ -600,7 +596,6 @@ void* ObTenant::wait(void* t)
 {
   int ret = OB_SUCCESS;
   ObTenant* tenant = (ObTenant*)t;
-  ob_get_tenant_id() = tenant->id_;
   lib::set_thread_name("UnitGC");
   lib::Thread::update_loop_ts();
   tenant->handle_retry_req(true);
@@ -762,7 +757,6 @@ int ObTenant::get_new_request(
 
   req = nullptr;
   w.set_large_query(false);
-  Thread::WaitGuard guard(Thread::WAIT_IN_TENANT_QUEUE);
   ret = req_queue_.pop(task, timeout);
 
   if (OB_SUCC(ret)) {
@@ -773,47 +767,14 @@ int ObTenant::get_new_request(
       if (req->large_retry_flag()) {
         w.set_large_query();
       }
-      if (req->get_type() == ObRequest::OB_RPC) {
-        using obrpc::ObRpcPacket;
-        const ObRpcPacket &pkt
-          = static_cast<const ObRpcPacket&>(req->get_packet());
-        w.set_curr_request_level(pkt.get_request_level());
-      }
     }
   }
   return ret;
 }
 
-using oceanbase::obrpc::ObRpcPacket;
-inline bool is_high_prio(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() < 5;
-}
-
-inline bool is_normal_prio(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() == 5;
-}
-
-inline bool is_low_prio(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() > 5 && pkt.get_priority() < 10;
-}
-
-inline bool is_ddl(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() == 10;
-}
-
-inline bool is_warmup(const ObRpcPacket &pkt)
-{
-  return pkt.get_priority() == 11;
-}
-
 int ObTenant::recv_request(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-  int req_level = 0;
   if (has_stopped()) {
     ret = OB_TENANT_NOT_IN_SERVER;
     LOG_WARN("receive request but tenant has already stopped", K(ret), K(id_));
@@ -829,53 +790,10 @@ int ObTenant::recv_request(ObRequest &req)
     req.set_trace_point(ObRequest::OB_EASY_REQUEST_TENANT_RECEIVED);
     switch (req.get_type()) {
       case ObRequest::OB_RPC: {
-        using obrpc::ObRpcPacket;
-        const ObRpcPacket& pkt = static_cast<const ObRpcPacket&>(req.get_packet());
-        req_level = pkt.get_request_level();
-        if (req_level < 0) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("unexpected level", K(req_level), K(id_));
-        } else {
-          // (0,5) High priority
-          //  [5,10) Normal priority
-          //  10 is the low priority used by ddl and should not appear here
-          //  11 Ultra-low priority for preheating
-          if (is_high_prio(pkt)) {  // the less number the higher priority
-            ATOMIC_INC(&recv_hp_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, QQ_HIGH, true))) {
-              if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
-                LOG_WARN("push request to queue fail", K(ret), K(*this));
-              }
-            }
-          } else if (req.is_retry_on_lock())  {
-            ATOMIC_INC(&recv_retry_on_lock_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, QQ_NORMAL, true))) {
-              LOG_WARN("push request to QQ_NORMAL queue fail", K(ret), K(this));
-            }
-          } else if (pkt.is_kv_request()) {
-            // the same as sql request, kv request use q4
-            ATOMIC_INC(&recv_np_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-              LOG_WARN("push kv request to queue fail", K(ret), K(this));
-            }
-          } else if (is_normal_prio(pkt) || is_low_prio(pkt)) {
-            ATOMIC_INC(&recv_np_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, QQ_LOW, true))) {
-              LOG_WARN("push request to queue fail", K(ret), K(this));
-            }
-          } else if (is_ddl(pkt)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("priority 10 should not come here", K(ret));
-          } else if (is_warmup(pkt)) {
-            ATOMIC_INC(&recv_lp_rpc_cnt_);
-            if (OB_FAIL(req_queue_.push(&req, RQ_LOW, true))) {
-              LOG_WARN("push request to queue fail", K(ret), K(this));
-            }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_ERROR("unexpected priority", K(ret), K(pkt.get_priority()));
-          }
-        }
+        // obcall RPC transport removed (single-replica): no OB_RPC request is
+        // ever delivered to a tenant. Treat any arrival as unexpected.
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("unexpected OB_RPC request after rpc removal", K(ret), K(id_));
         break;
       }
       case ObRequest::OB_MYSQL: {
@@ -951,8 +869,12 @@ int ObTenant::timeup()
   if (!has_stopped() && OB_SUCC(try_rdlock())) {
     // it may fail during drop tenant, try next time.
     if (!has_stopped()) {
-      check_worker_count();
-      update_token_usage();
+      // timeup ticks at 100ms so retry_queue_ is drained promptly
+      // (packet-retry latency is bounded by this period); the costly
+      // worker-count maintenance keeps its relaxed 1s cadence.
+      if (REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {
+        check_worker_count();
+      }
       // Rescue expansion: if request completion stalls for 3s while
       // queue is non-empty and workers are at min_worker_cnt, workers
       // may be deadlocked — expand up to max_worker_cnt.
@@ -966,7 +888,6 @@ int ObTenant::timeup()
         last_completion_cnt = completion_cnt;
       }
       handle_retry_req();
-      update_queue_size();
     }
     IGNORE_RETURN unlock();
   }
@@ -1110,11 +1031,6 @@ void ObTenant::handle_retry_req(bool need_clear)
   }
 }
 
-void ObTenant::update_queue_size()
-{
-  req_queue_.set_limit(common::ObServerConfig::get_instance().tenant_task_queue_size);
-}
-
 void ObTenant::check_worker_count()
 {
   int ret = OB_SUCCESS;
@@ -1163,26 +1079,6 @@ bool ObTenant::do_add_worker()
              "max_worker_cnt", max_worker_cnt());
   }
   return OB_SUCCESS == ret && succ_num == 1;
-}
-
-// thread unsafe
-void ObTenant::update_token_usage()
-{
-  int ret = OB_SUCCESS;
-  const auto now = ObTimeUtility::current_time();
-  const auto duration = static_cast<double>(now - token_usage_check_ts_);
-  if (duration >= 1000 * 1000 && OB_SUCC(workers_lock_.trylock())) {  // every second
-    int64_t idle_us = 0;
-    token_usage_check_ts_ = now;
-    DLIST_FOREACH_REMOVESAFE(wnode, workers_) {
-      const auto w = static_cast<ObThWorker*>(wnode->get_data());
-      idle_us += ATOMIC_SET(&w->idle_us_, 0);
-    }
-    workers_lock_.unlock();
-    const auto total_us = duration * worker_count();
-    token_usage_ = std::max(.0, 1.0 * (total_us - idle_us) / total_us);
-    IGNORE_RETURN ATOMIC_FAA(&worker_us_, total_us - idle_us);
-  }
 }
 
 int64_t ObTenant::get_cpu_time() const
@@ -1266,5 +1162,14 @@ void ObTenant::check_px_thread_recycle()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to switch to tenant", K(id_), K(ret));
     }
+  }
+}
+
+void ObTenant::on_schema_publish()
+{
+  int ret = OB_SUCCESS;
+  ObChangeStreamMgr *mgr = get<ObChangeStreamMgr *>();
+  if (OB_NOT_NULL(mgr) && mgr->is_inited()) {
+    mgr->get_fetcher().notify_schema_changed();
   }
 }

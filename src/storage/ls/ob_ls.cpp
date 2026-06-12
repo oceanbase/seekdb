@@ -26,6 +26,7 @@
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "observer/ob_sys_tenant_load_sys_package_service.h" // for ObSysTenantLoadSysPackageService
 #include "share/ob_global_autoinc_service.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "sql/das/ob_das_id_service.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
@@ -807,6 +808,13 @@ int ObLS::register_sys_service()
       REGISTER_TO_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, MTL(rootserver::ObDDLScheduler *));
       REGISTER_TO_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, MTL(rootserver::ObDDLServiceLauncher *));
       REGISTER_TO_LOGSERVICE(SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE, MTL(rootserver::ObSysTenantLoadSysPackageService *));
+      // ObInternalTableChangeNotifier only needs role_change, not replay/checkpoint
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(role_change_handler_.register_handler(
+          INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE,
+          &share::ObInternalTableChangeNotifier::get_instance()))) {
+        LOG_WARN("role_change_handler_ register notifier failed", K(ret), K(ls_id));
+      }
 #ifdef OB_BUILD_SYS_VEC_IDX
       REGISTER_TO_LOGSERVICE(VEC_INDEX_SERVICE_LOG_BASE_TYPE, MTL(ObPluginVectorIndexService *));
 
@@ -920,6 +928,7 @@ void ObLS::unregister_sys_service_()
       UNREGISTER_FROM_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, MTL(rootserver::ObDDLScheduler*));
       UNREGISTER_FROM_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, MTL(rootserver::ObDDLServiceLauncher*));
       UNREGISTER_FROM_LOGSERVICE(SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE, MTL(rootserver::ObSysTenantLoadSysPackageService*));
+      role_change_handler_.unregister_handler(INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE);
 #ifdef OB_BUILD_SYS_VEC_IDX
       UNREGISTER_FROM_LOGSERVICE(VEC_INDEX_SERVICE_LOG_BASE_TYPE, MTL(ObPluginVectorIndexService *));
       

@@ -909,7 +909,6 @@ static inline int check_io_hang_errsim()
       LOG_WARN("errsim: EN_IO_HANG_ERROR is ignored", K(ret), K(tmp_ret), K(hang_ms));
     }
     while (hang_ms > 0 && 0 == ATOMIC_LOAD(&clear_io_hang_errsim) % 2) {
-      oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT_FOR_LOCAL_RETRY);
       ObClockGenerator::msleep(10);
       hang_ms = hang_ms - 10;
     }

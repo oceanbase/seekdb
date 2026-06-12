@@ -7129,7 +7129,7 @@ int ObLSTabletService::ha_scan_all_tablets(
     } else {
       ObTabletHandle tablet_handle;
       ObTablet *tablet = nullptr;
-      obrpc::ObCopyTabletInfo tablet_info;
+      obcall::ObCopyTabletInfo tablet_info;
       ObTabletCreateDeleteMdsUserData user_data;
       mds::MdsWriter writer;// will be removed later
       mds::TwoPhaseCommitState trans_stat;// will be removed later

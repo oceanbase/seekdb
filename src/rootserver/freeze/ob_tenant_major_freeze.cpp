@@ -1,3 +1,4 @@
+#include "rootserver/ob_root_service.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -188,18 +189,16 @@ int ObTenantMajorFreeze::try_schedule_minor_before_major_()
   int ret = OB_SUCCESS;
   bool contains = false;
   ObAddr rs_addr = GCTX.self_addr();
-  obrpc::ObRootMinorFreezeArg arg;
-  if (OB_ISNULL(GCTX.rs_rpc_proxy_) || OB_ISNULL(GCTX.sql_proxy_)) {
+  obcall::ObRootMinorFreezeArg arg;
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid gctx", K(GCTX.rs_rpc_proxy_), K(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObMViewInfo::contains_major_refresh_mview(*GCTX.sql_proxy_, tenant_id_, contains))) {
     LOG_WARN("failed to check contain major mview", KR(ret));
   } else if (!contains) {
     // do nothing
   } else if (OB_FAIL(arg.tenant_ids_.push_back(tenant_id_))) {
     LOG_WARN("faiedl to push back tenant_id", KR(ret), K_(tenant_id));
-  } else if (OB_FAIL(GCTX.rs_rpc_proxy_->to(rs_addr).timeout(GCONF.rpc_timeout)
-                                                    .root_minor_freeze(arg))) {
+  } else if (OB_FAIL(GCTX.root_service_->root_minor_freeze(arg))) {
     LOG_WARN("fail to execute root_minor_freeze rpc", KR(ret), K(arg));
   } else {
     LOG_INFO("try_schedule_minor_before_major_", KR(ret), K(contains), K(rs_addr));

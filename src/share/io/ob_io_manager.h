@@ -23,7 +23,7 @@
 
 namespace oceanbase
 {
-namespace obrpc
+namespace obcall
 {
 enum ResourceType { ops = 0, ips = 1, iops = 2, obw = 3, ibw = 4, iobw = 5, tag = 6, ResourceTypeCnt };
 inline const char *get_resource_type_str(const ResourceType type)
@@ -57,7 +57,7 @@ inline const char *get_resource_type_str(const ResourceType type)
   }
   return str;
 }
-}  // namespace obrpc
+}  // namespace obcall
 namespace common
 {
 int64_t get_norm_iops(const int64_t size, const double iops, const ObIOMode mode);
@@ -66,11 +66,11 @@ class ObTenantIOManager;
 
 struct ResourceUsage
 {
-  ResourceUsage() : type_(obrpc::ResourceType::ResourceTypeCnt), total_(0)
+  ResourceUsage() : type_(obcall::ResourceType::ResourceTypeCnt), total_(0)
   {}
   ~ResourceUsage()
   {}
-  obrpc::ResourceType type_;
+  obcall::ResourceType type_;
   int64_t total_;
 };
 
@@ -202,7 +202,7 @@ public:
       ObSDGroupList();
       ~ObSDGroupList();
       int clear();
-      int add_group(const ObIOSSGrpKey &grp_key, int qid, int* limit_ids, int l_size);
+      int add_group(const ObIOSSGrpKey &grp_key);
       int is_group_key_exist(const ObIOSSGrpKey &grp_key);
       common::ObSEArray<ObIOSSGrpKey, 7> grp_list_;
       TO_STRING_KV(K(grp_list_));
@@ -213,15 +213,12 @@ public:
     int init();
     void destroy();
     int set_storage_key(const ObTrafficControl::ObStorageKey &key);
-    int add_shared_device_limits();
-    int fill_qsched_req_storage_key(ObIORequest& req);
-    int add_group(const ObIOSSGrpKey &grp_key, const int qid);
+    int add_group(const ObIOSSGrpKey &grp_key);
     int is_group_key_exist(const ObIOSSGrpKey &grp_key);
-    int64_t get_limit(const obrpc::ResourceType type) const;
+    int64_t get_limit(const obcall::ResourceType type) const;
     ObStorageKey storage_key_;
-    // limit and limit_ids: ops = 0, ips = 1, iops = 2, obw = 3, ibw = 4, iobw = 5, tag = 6
-    int64_t limits_[static_cast<int>(obrpc::ResourceType::ResourceTypeCnt)];
-    int limit_ids_[static_cast<int>(obrpc::ResourceType::ResourceTypeCnt)];
+    // limit: ops = 0, ips = 1, iops = 2, obw = 3, ibw = 4, iobw = 5, tag = 6
+    int64_t limits_[static_cast<int>(obcall::ResourceType::ResourceTypeCnt)];
     ObSDGroupList group_list_;
   };
 
@@ -230,8 +227,6 @@ public:
   int calc_usage(ObIORequest &req);
   void print_server_status();
   void print_bucket_status_V2();
-  int register_bucket(ObIORequest &req, const int qid);
-  int add_shared_device_limits(const ObStorageKey &key, const int qid);
   template <class _cb>
   int foreach_limit_v2(_cb &cb) const { return shared_device_map_v2_.foreach_refactored(cb); }
   template<class _cb>
@@ -360,7 +355,6 @@ public:
   int inner_aio(const ObIOInfo &info, ObIOHandle &handle);
   int detect_aio(const ObIOInfo &info, ObIOHandle &handle);
   int enqueue_callback(ObIORequest &req);
-  int retry_io(ObIORequest &req);
   ObIOUsage &get_io_usage()
   {
     return io_usage_;

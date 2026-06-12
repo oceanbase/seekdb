@@ -20,9 +20,6 @@
 #include "observer/mysql/obsm_conn_callback.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
-#include "share/ob_rpc_share.h"
-#include "observer/net/ob_rpc_reverse_keepalive.h"
-#include "rpc/obrpc/ob_local_procedure_call.h"
 
 using namespace oceanbase::rpc::frame;
 using namespace oceanbase::common;
@@ -36,17 +33,15 @@ ObSrvNetworkFrame::ObSrvNetworkFrame(ObGlobalContext &gctx)
       request_qhandler_(xlator_),
       deliver_(request_qhandler_, xlator_.get_session_handler(), gctx),
       ingress_service_(),
-      rpc_transport_(NULL),
-      high_prio_rpc_transport_(NULL),
-      mysql_transport_(NULL),
-      batch_rpc_transport_(NULL),
       last_ssl_info_hash_(UINT64_MAX),
       lock_(),
       standby_fetchlog_bw_limit_(0),
       standby_fetchlog_bytes_(0),
       standby_fetchlog_time_(0)
 {
-  oblpc::deliver = &deliver_;
+  // obcall local-procedure-call dispatch hook removed: no in-process obcall RPC
+  // is delivered through deliver_ anymore. deliver_ / the request queue handler /
+  // the MySQL listener remain (shared by the MySQL serving path).
 }
 
 ObSrvNetworkFrame::~ObSrvNetworkFrame()
@@ -119,11 +114,6 @@ int ObSrvNetworkFrame::init()
   } else if (OB_FAIL(reload_ssl_config())) {
     LOG_ERROR("load_ssl_config fail", K(ret));
   } else {
-    // Many other modules check whether rpc_transport_ is null during startup,
-    // but this structure is actually no longer used.
-    // To simplify the changes, a dummy structure is set to ensure a successful startup.
-    rpc_transport_ = OB_NEW(ObReqTransport, ObModIds::OB_RPC, NULL, NULL);
-    share::set_obrpc_transport(rpc_transport_);
     LOG_INFO("init rpc network frame successfully",
              "ssl_client_authentication", GCONF.ssl_client_authentication.str());
   }
@@ -407,26 +397,6 @@ int ObSrvNetworkFrame::stop()
   int ret = OB_SUCCESS;
   deliver_.stop();
   return ret;
-}
-
-int ObSrvNetworkFrame::get_proxy(obrpc::ObRpcProxy &proxy)
-{
-  return proxy.init(rpc_transport_);
-}
-
-ObReqTransport *ObSrvNetworkFrame::get_req_transport()
-{
-  return rpc_transport_;
-}
-
-ObReqTransport *ObSrvNetworkFrame::get_high_prio_req_transport()
-{
-  return high_prio_rpc_transport_;
-}
-
-ObReqTransport *ObSrvNetworkFrame::get_batch_rpc_req_transport()
-{
-  return batch_rpc_transport_;
 }
 
 	

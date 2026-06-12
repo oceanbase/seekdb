@@ -25,7 +25,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::share;
 using namespace oceanbase::storage;
 using namespace oceanbase::compaction;

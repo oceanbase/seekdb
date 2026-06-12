@@ -37,17 +37,16 @@ namespace oceanbase
 {
 
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
 namespace rootserver
 {
 
-ObBaseBootstrap::ObBaseBootstrap(ObSrvRpcProxy &rpc_proxy,
+ObBaseBootstrap::ObBaseBootstrap(
                                  common::ObServerConfig &config)
     : step_id_(0),
-      rpc_proxy_(rpc_proxy),
       config_(config)
 {
 }
@@ -58,13 +57,10 @@ int ObBaseBootstrap::check_inner_stat() const
   return ret;
 }
 
-ObPreBootstrap::ObPreBootstrap(ObSrvRpcProxy &rpc_proxy,
-                               common::ObServerConfig &config,
-                               obrpc::ObCommonRpcProxy &rs_rpc_proxy)
-  : ObBaseBootstrap(rpc_proxy, config),
+ObPreBootstrap::ObPreBootstrap(common::ObServerConfig &config)
+  : ObBaseBootstrap(config),
     stop_(false),
-    begin_ts_(0),
-    common_proxy_(rs_rpc_proxy)
+    begin_ts_(0)
 {
 }
 
@@ -116,7 +112,7 @@ int ObPreBootstrap::notify_sys_tenant_config_()
       OB_SYS_TENANT_ID, DATA_CURRENT_VERSION, config))) {
   } else if (OB_FAIL(init_configs.push_back(config))) {
     LOG_WARN("fail to push back config", KR(ret), K(config));
-  } else if (OB_FAIL(ObTenantDDLService::notify_init_tenant_config(rpc_proxy_, init_configs))) {
+  } else if (OB_FAIL(ObTenantDDLService::notify_init_tenant_config(init_configs))) {
     LOG_WARN("fail to notify init tenant config", KR(ret), K(init_configs));
   }
 
@@ -206,15 +202,12 @@ bool ObBootstrap::TableIdCompare::operator() (const ObSimpleTableSchemaV2* left,
 }
 
 ObBootstrap::ObBootstrap(
-    ObSrvRpcProxy &rpc_proxy,
     ObDDLService &ddl_service,
     ObTenantDDLService &tenant_ddl_service,
-    ObServerConfig &config,
-    obrpc::ObCommonRpcProxy &rs_rpc_proxy)
-  : ObBaseBootstrap(rpc_proxy, config),
+    ObServerConfig &config)
+  : ObBaseBootstrap(config),
     ddl_service_(ddl_service),
     tenant_ddl_service_(tenant_ddl_service),
-    common_proxy_(rs_rpc_proxy),
     begin_ts_(0)
 {
 }
@@ -313,7 +306,7 @@ int ObBootstrap::load_all_schema(
                   DBA_STEP_INC_INFO(bootstrap),
                   "bootstrap create all schema begin.");
   ObLoadInnerTableSchemaExecutor executor;
-  if (OB_FAIL(executor.init(table_schemas, OB_SYS_TENANT_ID, get_cpu_count(), &rpc_proxy_))) {
+  if (OB_FAIL(executor.init(table_schemas, OB_SYS_TENANT_ID, get_cpu_count()))) {
     LOG_WARN("failed to init executor", KR(ret));
   } else if (OB_FAIL(executor.execute())) {
     LOG_WARN("failed to execute load all schema", KR(ret));
@@ -864,7 +857,7 @@ int ObBootstrap::create_sys_tenant()
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
   } else {
-    obrpc::ObCreateTenantArg arg;
+    obcall::ObCreateTenantArg arg;
     arg.name_case_mode_ = OB_LOWERCASE_AND_INSENSITIVE;
     tenant.set_tenant_id(OB_SYS_TENANT_ID);
     tenant.set_schema_version(OB_CORE_SCHEMA_VERSION);

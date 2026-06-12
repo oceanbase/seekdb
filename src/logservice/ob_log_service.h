@@ -22,7 +22,7 @@
 #include "applyservice/ob_log_apply_service.h"
 #include "cdcservice/ob_cdc_service.h"
 #include "logrpc/ob_log_rpc_req.h"
-#include "logrpc/ob_log_rpc_proxy.h"
+#include "logrpc/ob_log_service_rpc_shell.h"
 #include "palf/log_block_pool_interface.h"             // ILogBlockPool
 #include "palf/log_define.h"
 #include "rcservice/ob_role_change_service.h"
@@ -47,20 +47,12 @@ class ObILogAllocator;
 class ObMySQLProxy;
 }
 
-namespace obrpc
-{
-class ObNetKeepAlive;
-}
 namespace rpc
 {
 namespace frame
 {
 class ObReqTransport;
 }
-}
-namespace obrpc
-{
-class ObBatchRpc;
 }
 
 namespace share
@@ -103,8 +95,6 @@ public:
            const char *base_dir,
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,
-           rpc::frame::ObReqTransport *transport,
-           obrpc::ObBatchRpc *batch_rpc,
            storage::ObLSService *ls_service,
            share::ObLocationService *location_service,
            palf::ILogBlockPool *log_block_pool,
@@ -216,7 +206,7 @@ public:
   ObLogReplayService *get_log_replay_service()  { return &replay_service_; }
   ObLogRestoreService *get_log_restore_service() { return &restore_service_; }
   ObLogApplyService *get_log_apply_service()  { return &apply_service_; }
-  obrpc::ObLogServiceRpcProxy *get_rpc_proxy() { return &rpc_proxy_; }
+  obcall::ObLogServiceRpcProxy *get_rpc_proxy() { return &rpc_proxy_; }
   ObLogFlashbackService *get_flashback_service() { return &flashback_service_; }
   // Get restore net driver for standby log sync
   // Returns the net driver from restore service if available
@@ -268,7 +258,7 @@ private:
   ObRoleChangeService role_change_service_;
   ObLocationAdapter location_adapter_;
   ObLSAdapter ls_adapter_;
-  obrpc::ObLogServiceRpcProxy rpc_proxy_;
+  obcall::ObLogServiceRpcProxy rpc_proxy_;
   ObLogFlashbackService flashback_service_;
   ObLogMonitor monitor_;
   ObSpinLock update_palf_opts_lock_;

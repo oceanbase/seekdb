@@ -17,7 +17,6 @@
 #ifndef SRC_OBSERVER_OB_DBMS_SCHED_JOB_MASTER_H_
 #define SRC_OBSERVER_OB_DBMS_SCHED_JOB_MASTER_H_
 
-#include "ob_dbms_sched_job_rpc_proxy.h"
 #include "ob_dbms_sched_job_utils.h"
 #include "ob_dbms_sched_table_operator.h"
 
@@ -107,7 +106,6 @@ public:
       tenant_id_(OB_INVALID_TENANT_ID),
       rand_(),
       schema_service_(NULL),
-      job_rpc_proxy_(NULL),
       self_addr_(),
       allocator_(ObMemAttr(MTL_ID(), "DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
@@ -171,7 +169,6 @@ private:
 
   common::ObRandom rand_; // for random pick server
   share::schema::ObMultiVersionSchemaService *schema_service_; // for got all tenant info
-  obrpc::ObDBMSSchedJobRpcProxy *job_rpc_proxy_;
 
   common::ObAddr self_addr_;
   ObDBMSSchedTableOperator table_operator_;

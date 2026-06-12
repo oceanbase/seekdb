@@ -1,3 +1,5 @@
+#include "observer/ob_service.h"
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -374,7 +376,7 @@ int ObBackupUtils::report_task_result(const int64_t job_id, const int64_t task_i
 {
   int ret = OB_SUCCESS;
   common::ObAddr leader_addr;
-  obrpc::ObBackupTaskRes backup_ls_res;
+  obcall::ObBackupTaskRes backup_ls_res;
   backup_ls_res.job_id_ = job_id;
   backup_ls_res.task_id_ = task_id;
   backup_ls_res.tenant_id_ = tenant_id;
@@ -401,7 +403,7 @@ int ObBackupUtils::report_task_result(const int64_t job_id, const int64_t task_i
   } else if (OB_FAIL(report_ctx.location_service_->get_leader_with_retry_until_timeout(
       cluster_id, meta_tenant_id, ObLSID(ObLSID::SYS_LS_ID), leader_addr))) {
     LOG_WARN("failed to get leader address", K(ret));
-  } else if (OB_FAIL(report_ctx.rpc_proxy_->to(leader_addr).report_backup_over(backup_ls_res))) {
+  } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int { return GCTX.ob_service_->report_backup_over(backup_ls_res); }))) {
     LOG_WARN("failed to post backup ls data res", K(ret), K(backup_ls_res));
   } else {
     SERVER_EVENT_ADD("backup_data", "report_result",

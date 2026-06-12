@@ -1463,17 +1463,6 @@ int ObIORequest::recycle_buffer()
 }
 
 
-int ObIORequest::retry_io()
-{
-  int ret = OB_SUCCESS;
-  if(OB_ISNULL(tenant_io_mgr_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("tenant io mgr is null", K(ret), K(*this));
-  } else if (OB_FAIL(tenant_io_mgr_->retry_io(*this))) {
-    LOG_WARN("retry io failed", K(ret), K(*this));
-  }
-  return ret;
-}
 int ObIORequest::try_alloc_buf_until_timeout(char *&io_buf)
 {
   int ret = OB_SUCCESS;

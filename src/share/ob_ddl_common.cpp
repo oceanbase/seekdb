@@ -1,3 +1,5 @@
+#include "observer/ob_service.h"
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -41,11 +43,12 @@
 #include "sql/resolver/mv/ob_mv_provider.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
+#include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 using namespace oceanbase::sql;
 
 const char *oceanbase::share::get_ddl_type(ObDDLType ddl_type)
@@ -553,7 +556,7 @@ int ObDDLUtil::refresh_alter_table_arg(
     const uint64_t tenant_id,
     const int64_t orig_table_id,
     const uint64_t foreign_key_id,
-    obrpc::ObAlterTableArg &alter_table_arg)
+    obcall::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
@@ -3027,7 +3030,7 @@ int ObDDLUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
     LOG_WARN("fail to get multivalue index column name", K(ret), K(index_schema));
   } else {
     FOREACH_X(it, col_names, OB_SUCC(ret)) {
-      obrpc::ObColumnSortItem sort_item;
+      obcall::ObColumnSortItem sort_item;
       sort_item.column_name_ = (*it);
       if (OB_FAIL(create_index_arg.index_columns_.push_back(sort_item))) {
         LOG_WARN("failed to push back sort columns", K(ret), K(sort_item));
@@ -3068,7 +3071,7 @@ int ObDDLUtil::check_need_update_domain_index_share_table_snapshot(
   const ObTableSchema *table_schema,
   const ObTableSchema *index_schema,
   const int64_t task_id,
-  const obrpc::ObCreateIndexArg &create_index_arg,
+  const obcall::ObCreateIndexArg &create_index_arg,
   bool &need_update_snapshot)
 {
   int ret = OB_SUCCESS;
@@ -3121,7 +3124,7 @@ int ObDDLUtil::check_need_update_domain_index_share_table_snapshot(
 int ObDDLUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
     const int64_t task_id,
-    const obrpc::ObCreateIndexArg &create_index_arg,
+    const obcall::ObCreateIndexArg &create_index_arg,
     int64_t &fts_snapshot_version)
 {
   int ret = OB_SUCCESS;
@@ -3367,9 +3370,9 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
   } else if (OB_UNLIKELY(!task->is_inited())) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(location_service) || OB_ISNULL(GCTX.srv_rpc_proxy_)) {
+  } else if (OB_ISNULL(location_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(location_service), KP(GCTX.srv_rpc_proxy_));
+    LOG_WARN("unexpected null", K(ret), KP(location_service));
   } else if (OB_UNLIKELY(!check_dag_exit_tablets_map.created())) {
     const int64_t CHECK_DAG_EXIT_BUCKET_NUM = 64;
     common::ObArray<common::ObTabletID> src_tablet_ids;
@@ -3414,7 +3417,7 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
         LOG_WARN("get tablet paxos member list failed", K(ret));
       } else {
         bool is_tablet_dag_exist = false;
-        obrpc::ObDDLBuildSingleReplicaRequestArg arg;
+        obcall::ObDDLBuildSingleReplicaRequestArg arg;
         arg.ls_id_ = src_ls_id;
         arg.dest_ls_id_ = dst_ls_id;
         arg.tenant_id_ = tenant_id;
@@ -3435,15 +3438,13 @@ int ObDDLUtil::check_and_cancel_single_replica_dag(
         arg.consumer_group_id_ = 0; // to ensure arg valid only.
         for (int64_t j = 0; OB_SUCC(ret) && j < paxos_server_list.count(); j++) {
           int tmp_ret = OB_SUCCESS;
-          obrpc::Bool is_replica_dag_exist(true);
-          if (is_complement_data_dag && OB_TMP_FAIL(GCTX.srv_rpc_proxy_->to(paxos_server_list.at(j))
-            .by(dst_tenant_id).timeout(timeout_us).check_and_cancel_ddl_complement_dag(arg, is_replica_dag_exist))) {
+          obcall::Bool is_replica_dag_exist(true);
+          if (is_complement_data_dag && OB_TMP_FAIL(ex_rpc::sync_call(ObDDLUtil::get_default_ddl_rpc_timeout(), [&]() -> int { bool b = is_replica_dag_exist; int r = GCTX.ob_service_->check_and_cancel_ddl_complement_data_dag(arg, b); is_replica_dag_exist = b; return r; }))) {
             // consider as dag does exist in this server.
             saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
             is_tablet_dag_exist = true;
             LOG_WARN("check and cancel ddl complement dag failed", K(ret), K(tmp_ret), K(arg));
-          } else if (!is_complement_data_dag && OB_TMP_FAIL(GCTX.srv_rpc_proxy_->to(paxos_server_list.at(j))
-            .by(dst_tenant_id).timeout(timeout_us).check_and_cancel_delete_lob_meta_row_dag(arg, is_replica_dag_exist))) {
+          } else if (!is_complement_data_dag && OB_TMP_FAIL(ex_rpc::sync_call(ObDDLUtil::get_default_ddl_rpc_timeout(), [&]() -> int { bool b = is_replica_dag_exist; int r = GCTX.ob_service_->check_and_cancel_delete_lob_meta_row_dag(arg, b); is_replica_dag_exist = b; return r; }))) {
             // consider as dag does exist in this server.
             saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
             is_tablet_dag_exist = true;
@@ -4288,7 +4289,7 @@ static inline void try_replace_user_tenant_id(const uint64_t user_tenant_id, uin
 }
 
 int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id,
-                                      obrpc::ObPartitionSplitArg &split_arg)
+                                      obcall::ObPartitionSplitArg &split_arg)
 {
   int ret = OB_SUCCESS;
   if (!is_user_tenant(tenant_id)) {
@@ -4302,7 +4303,7 @@ int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id,
 int ObDDLUtil::replace_user_tenant_id(
     const ObDDLType &ddl_type,
     const uint64_t tenant_id,
-    obrpc::ObAlterTableArg &alter_table_arg)
+    obcall::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_invalid_ddl_type(ddl_type))) {
@@ -4314,12 +4315,12 @@ int ObDDLUtil::replace_user_tenant_id(
     const bool need_replace_schema_info = DDL_TABLE_RESTORE != ddl_type;
     try_replace_user_tenant_id(tenant_id, alter_table_arg.exec_tenant_id_);
     for (int64_t i = 0; OB_SUCC(ret) && i < alter_table_arg.index_arg_list_.count(); ++i) {
-      obrpc::ObIndexArg *index_arg = alter_table_arg.index_arg_list_.at(i);
+      obcall::ObIndexArg *index_arg = alter_table_arg.index_arg_list_.at(i);
       try_replace_user_tenant_id(tenant_id, index_arg->exec_tenant_id_);
       try_replace_user_tenant_id(tenant_id, index_arg->tenant_id_);
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < alter_table_arg.foreign_key_arg_list_.count(); ++i) {
-      obrpc::ObCreateForeignKeyArg &fk_arg = alter_table_arg.foreign_key_arg_list_.at(i);
+      obcall::ObCreateForeignKeyArg &fk_arg = alter_table_arg.foreign_key_arg_list_.at(i);
       try_replace_user_tenant_id(tenant_id, fk_arg.exec_tenant_id_);
       try_replace_user_tenant_id(tenant_id, fk_arg.tenant_id_);
     }
@@ -4334,7 +4335,7 @@ int ObDDLUtil::replace_user_tenant_id(
   return ret;
 }
 
-int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObCreateIndexArg &create_index_arg)
+int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, obcall::ObCreateIndexArg &create_index_arg)
 {
   int ret = OB_SUCCESS;
   if (!is_user_tenant(tenant_id)) {
@@ -4349,7 +4350,7 @@ int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObCreateI
   return ret;
 }
 
-int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObForkTableArg &fork_table_arg)
+int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, obcall::ObForkTableArg &fork_table_arg)
 {
   int ret = OB_SUCCESS;
   if (!is_user_tenant(tenant_id)) {
@@ -4374,12 +4375,12 @@ int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, ArgType &ddl_arg
   return ret; \
 }
 
-REPLACE_DDL_ARG_FUNC(obrpc::ObDropDatabaseArg)
-REPLACE_DDL_ARG_FUNC(obrpc::ObDropTableArg)
-REPLACE_DDL_ARG_FUNC(obrpc::ObDropIndexArg)
-REPLACE_DDL_ARG_FUNC(obrpc::ObRebuildIndexArg)
-REPLACE_DDL_ARG_FUNC(obrpc::ObTruncateTableArg)
-REPLACE_DDL_ARG_FUNC(obrpc::ObForkDatabaseArg)
+REPLACE_DDL_ARG_FUNC(obcall::ObDropDatabaseArg)
+REPLACE_DDL_ARG_FUNC(obcall::ObDropTableArg)
+REPLACE_DDL_ARG_FUNC(obcall::ObDropIndexArg)
+REPLACE_DDL_ARG_FUNC(obcall::ObRebuildIndexArg)
+REPLACE_DDL_ARG_FUNC(obcall::ObTruncateTableArg)
+REPLACE_DDL_ARG_FUNC(obcall::ObForkDatabaseArg)
 
 #undef REPLACE_DDL_ARG_FUNC
 
@@ -4863,8 +4864,8 @@ int ObDDLUtil::set_tablet_autoinc_seq(const ObLSID &ls_id, const ObTabletID &tab
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(seq_value));
   } else {
     ObMigrateTabletAutoincSeqParam tablet_autoinc_param;
-    obrpc::ObBatchSetTabletAutoincSeqArg arg;
-    obrpc::ObBatchSetTabletAutoincSeqRes res;
+    obcall::ObBatchSetTabletAutoincSeqArg arg;
+    obcall::ObBatchSetTabletAutoincSeqRes res;
     arg.tenant_id_ = MTL_ID();
     arg.ls_id_ = ls_id;
     tablet_autoinc_param.src_tablet_id_ = tablet_id;
@@ -4872,7 +4873,7 @@ int ObDDLUtil::set_tablet_autoinc_seq(const ObLSID &ls_id, const ObTabletID &tab
     tablet_autoinc_param.autoinc_seq_ = seq_value;
     if (OB_FAIL(arg.autoinc_params_.push_back(tablet_autoinc_param))) {
       LOG_WARN("push back tablet autoinc param failed", K(ret), K(tablet_autoinc_param));
-    } else if (OB_FAIL(GCTX.srv_rpc_proxy_->set_tablet_autoinc_seq(arg, res))) {
+    } else if (OB_FAIL(ObTabletAutoincSeqRpcHandler::get_instance().batch_set_tablet_autoinc_seq(arg, res))) {
       LOG_WARN("set tablet auto inc seq failed", K(ret));
     } else if (1 != res.autoinc_params_.count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -6131,21 +6132,19 @@ int ObCheckTabletDataComplementOp::do_check_tablets_merge_status(
   int64_t &tablet_build_succ_count)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
   ip_tablets_map.reuse();
   tablets_commited_map.reuse();
 
   tablet_build_succ_count = 0;
 
-  if (OB_UNLIKELY(tablet_ids.count() < 0 || OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_TIMESTAMP == snapshot_version) ||
-        OB_ISNULL(rpc_proxy)) {
+  if (OB_UNLIKELY(tablet_ids.count() < 0 || OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_TIMESTAMP == snapshot_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()), K(tenant_id), K(snapshot_version), K(rpc_proxy));
+    LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()), K(tenant_id), K(snapshot_version));
   } else {
-    rootserver::ObCheckTabletMergeStatusProxy proxy(*rpc_proxy,
-        &obrpc::ObSrvRpcProxy::check_ddl_tablet_merge_status);
-    obrpc::ObDDLCheckTabletMergeStatusArg arg;
-    const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
+    obcall::ObDDLCheckTabletMergeStatusArg arg;
+    arg.tenant_id_ = tenant_id;
+    arg.ls_id_ = ls_id;
+    arg.snapshot_version_ = snapshot_version;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
       const ObTabletID &tablet_id = tablet_ids.at(i);
@@ -6153,81 +6152,49 @@ int ObCheckTabletDataComplementOp::do_check_tablets_merge_status(
         LOG_WARN("fail to get tablet ip addr", K(ret), K(tablet_id));
       }
     }
-    // handle every addr tablet
+    // Direct calls to local service (seekdb has no remote servers).
     for (hash::ObHashMap<ObAddr, ObArray<ObTabletID>>::const_iterator ip_iter = ip_tablets_map.begin();
       OB_SUCC(ret) && ip_iter != ip_tablets_map.end(); ++ip_iter) {
       const ObAddr & dest_ip = ip_iter->first;
+      UNUSED(dest_ip);
       const ObArray<ObTabletID> &tablet_array = ip_iter->second;
       if (OB_FAIL(arg.tablet_ids_.assign(tablet_array))) {
         LOG_WARN("fail to get tablet ip addr", K(ret), K(tablet_array));
       } else {
-        arg.tenant_id_ = tenant_id;
-        arg.ls_id_ = ls_id;
-        arg.snapshot_version_ = snapshot_version;
-        if (OB_FAIL(proxy.call(dest_ip, rpc_timeout, tenant_id, arg))) {
-          LOG_WARN("send rpc failed", K(ret), K(arg), K(dest_ip), K(tenant_id));
+        obcall::ObDDLCheckTabletMergeStatusResult cur_result;
+        int return_ret = GCTX.ob_service_->check_ddl_tablet_merge_status(arg, cur_result);
+        if (OB_SUCCESS == return_ret) {
+          common::ObSArray<bool> tablet_rsp_array;
+          common::ObArray<ObTabletID> tablet_req_array;
+          if (FALSE_IT(tablet_rsp_array = cur_result.merge_status_)) {
+          } else if (FALSE_IT(tablet_req_array = tablet_array)) {
+          } else if (tablet_req_array.count() != tablet_rsp_array.count()) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("tablet req count is not equal to tablet rsp count", K(ret), K(tablet_req_array), K(tablet_rsp_array));
+          } else {
+            for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_rsp_array.count(); ++idx) {
+              const common::ObTabletID &tablet_id = tablet_req_array.at(idx);
+              const bool tablet_status = tablet_rsp_array.at(idx);
+              if (OB_FAIL(update_replica_merge_status(tablet_id, tablet_status, tablets_commited_map))) {
+                LOG_WARN("fail to update replica merge status", K(ret), K(tablet_id), K(dest_ip));
+              } else {
+                LOG_INFO("succ to update replica merge status", K(dest_ip), K(tablet_id), K(tablet_status));
+              }
+            }
+          }
+        } else {
+          LOG_WARN("check ddl tablet merge status failed.", K(return_ret));
         }
       }
     }
-    // handle batch result
-    int tmp_ret = OB_SUCCESS;
-    common::ObArray<int> return_ret_array;
-    if (OB_TMP_FAIL(proxy.wait_all(return_ret_array))) {
-      LOG_WARN("rpc proxy wait failed", K(tmp_ret));
-      ret = OB_SUCCESS == ret ? tmp_ret : ret;
-    } else if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(proxy.check_return_cnt(return_ret_array.count()))) {
-      LOG_WARN("return cnt not match", KR(ret), "return_cnt", return_ret_array.count());
-    } else {
-      if (return_ret_array.count() != ip_tablets_map.size()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("rpc proxy rsp size not equal to send size", K(ret), K(return_ret_array.count()), K(ip_tablets_map.size()));
+    // 3. check any commit tablet
+    if (OB_SUCC(ret)) {
+      int64_t build_succ_count = 0;
+      if (OB_FAIL(calculate_build_finish(tenant_id, tablet_ids, tablets_commited_map, build_succ_count))) {
+        LOG_WARN("check and commit tbalets commit log fail.", K(ret), K(tablet_ids), K(build_succ_count));
       } else {
-        const ObIArray<const obrpc::ObDDLCheckTabletMergeStatusResult *> &result_array = proxy.get_results();
-        // 1. handle every ip addr result
-        for (int64_t i = 0; OB_SUCC(ret) && i < result_array.count(); i++) {
-          int return_ret = return_ret_array.at(i);  // check return ret code
-          if (OB_SUCCESS == return_ret) {
-            const obrpc::ObDDLCheckTabletMergeStatusResult *cur_result = nullptr;  // ip tablets status result
-            common::ObSArray<bool> tablet_rsp_array;
-            common::ObArray<ObTabletID> tablet_req_array;
-            const common::ObAddr &tablet_addr = proxy.get_dests().at(i); // get rpc dest addr
-
-            if (OB_ISNULL(cur_result = result_array.at(i))) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("merge status result is null.", K(ret), K(cur_result));
-            } else if (FALSE_IT(tablet_rsp_array = cur_result->merge_status_)) {
-            } else if (OB_FAIL(ip_tablets_map.get_refactored(tablet_addr, tablet_req_array))) {
-              LOG_WARN("get from ip tablet map fail.", K(ret), K(tablet_addr));
-            } else if (tablet_req_array.count() != tablet_rsp_array.count()) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("tablet req count is not equal to tablet rsp count", K(ret), K(tablet_req_array), K(tablet_rsp_array));
-            } else {
-              // 2. handle every tablet status
-              for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_rsp_array.count(); ++idx) {
-                const common::ObTabletID &tablet_id = tablet_req_array.at(idx); // tablet id
-                const bool tablet_status = tablet_rsp_array.at(idx);
-                if (OB_FAIL(update_replica_merge_status(tablet_id, tablet_status, tablets_commited_map))) { // update tablet merge status from get
-                  LOG_WARN("fail to update replica merge status", K(ret), K(tablet_id), K(tablet_addr));
-                } else {
-                  LOG_INFO("succ to update replica merge status", K(tablet_addr), K(tablet_id), K(tablet_status));
-                }
-              }
-            }
-          } else {
-            LOG_WARN("rpc proxy return fail.", K(return_ret));
-          }
-        }
-        // 3. check any commit tablet
-        if (OB_SUCC(ret)) {
-          int64_t build_succ_count = 0;
-          if (OB_FAIL(calculate_build_finish(tenant_id, tablet_ids, tablets_commited_map, build_succ_count))) {
-            LOG_WARN("check and commit tbalets commit log fail.", K(ret), K(tablet_ids), K(build_succ_count));
-          } else {
-            DEBUG_SYNC(DDL_CHECK_TABLET_MERGE_STATUS);
-            tablet_build_succ_count += build_succ_count;
-          }
-        }
+        DEBUG_SYNC(DDL_CHECK_TABLET_MERGE_STATUS);
+        tablet_build_succ_count += build_succ_count;
       }
     }
   }

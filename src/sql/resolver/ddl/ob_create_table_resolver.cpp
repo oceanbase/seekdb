@@ -29,7 +29,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace omt;
@@ -2520,7 +2520,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
           ParseNode *attrs_node = node->children_[2];
           bool has_pk = false;
           HEAP_VAR(ObCreateIndexStmt, create_index_stmt) {
-            ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+            ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
             for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.size(); ++i) {
               ObCreateIndexArg &create_index_arg = index_arg_list.at(i);
               has_pk |= INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == create_index_arg.index_type_;
@@ -2609,7 +2609,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
       HEAP_VARS_2((ObCreateIndexStmt, create_index_stmt), (ObPartitionResolveResult, resolve_result))  {
         ObCreateIndexArg &create_index_arg = create_index_stmt.get_create_index_arg();
         ObSArray<ObPartitionResolveResult> &resolve_results = create_table_stmt->get_index_partition_resolve_results();
-        ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+        ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
         index_arg_.index_key_ = static_cast<int64_t>(index_keyname_);
         if (OB_FAIL(create_index_arg.assign(index_arg_))) {
           LOG_WARN("fail to assign create index arg", K(ret));
@@ -2932,9 +2932,9 @@ int ObCreateTableResolver::check_building_domain_index_legal()
     LOG_WARN("fail to init index aux name set", K(ret));
   } else {
     ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-    const ObSArray<obrpc::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
+    const ObSArray<obcall::ObCreateIndexArg> &index_arg_list = create_table_stmt->get_index_arg_list();
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); ++i) {
-      const obrpc::ObCreateIndexArg &index_arg = index_arg_list.at(i);
+      const obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
       ObIndexNameHashWrapper index_name_key(index_arg.index_name_);
       if (OB_FAIL(index_aux_name_set_.exist_refactored(index_name_key))) {
         if (OB_HASH_EXIST == ret) {

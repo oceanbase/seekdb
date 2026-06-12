@@ -1840,6 +1840,14 @@ void ObMultiTenant::runTimerTask()
   }
 }
 
+void ObMultiTenant::reload_tenant_task_queue_size()
+{
+  SpinRLockGuard guard(lock_);
+  if (OB_NOT_NULL(tenant_)) {
+    tenant_->set_queue_limit(GCONF.tenant_task_queue_size);
+  }
+}
+
 uint32_t ObMultiTenant::get_tenant_lock_bucket_idx(const uint64_t tenant_id)
 {
   return 0;

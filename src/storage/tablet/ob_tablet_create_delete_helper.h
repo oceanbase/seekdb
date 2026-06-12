@@ -182,7 +182,7 @@ public:
       const ObTabletCreateSSTableParam &param,
       common::ObArenaAllocator &allocator,
       T &sstable);
-  static bool is_pure_hidden_tablets(const obrpc::ObCreateTabletInfo &info);
+  static bool is_pure_hidden_tablets(const obcall::ObCreateTabletInfo &info);
 
   template<typename Arg, typename Helper>
   static int process_for_old_mds(

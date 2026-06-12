@@ -99,7 +99,7 @@ namespace table
 class ObHTableDDLParam;
 }
 
-namespace obrpc
+namespace obcall
 {
 typedef common::ObSArray<common::ObAddr> ObServerList;
 static const int64_t MAX_COUNT = 128;
@@ -6007,7 +6007,7 @@ public:
   ~ObForceSetServerListArg() {}
 
   DECLARE_TO_STRING;
-  obrpc::ObServerList server_list_;
+  obcall::ObServerList server_list_;
   int64_t replica_num_;
 };
 
@@ -7932,12 +7932,12 @@ public:
   int progress_;
 };
 
-struct ObRpcRemoteWriteDDLRedoLogArg
+struct ObCallRemoteWriteDDLRedoLogArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObRpcRemoteWriteDDLRedoLogArg();
-  ~ObRpcRemoteWriteDDLRedoLogArg() = default;
+  ObCallRemoteWriteDDLRedoLogArg();
+  ~ObCallRemoteWriteDDLRedoLogArg() = default;
   int init(const uint64_t tenant_id,
            const share::ObLSID &ls_id,
            const storage::ObDDLMacroBlockRedoInfo &redo_info,
@@ -7950,15 +7950,15 @@ public:
   storage::ObDDLMacroBlockRedoInfo redo_info_;
   int64_t task_id_;
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObRpcRemoteWriteDDLRedoLogArg);
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLRedoLogArg);
 };
 
-struct ObRpcRemoteWriteDDLCommitLogArg final
+struct ObCallRemoteWriteDDLCommitLogArg final
 {
   OB_UNIS_VERSION(1);
 public:
-  ObRpcRemoteWriteDDLCommitLogArg();
-  ~ObRpcRemoteWriteDDLCommitLogArg() = default;
+  ObCallRemoteWriteDDLCommitLogArg();
+  ~ObCallRemoteWriteDDLCommitLogArg() = default;
   int init(const uint64_t tenant_id,
            const share::ObLSID &ls_id,
            const storage::ObITable::TableKey &table_key,
@@ -7978,14 +7978,14 @@ public:
   int64_t execution_id_; // depercated
   int64_t ddl_task_id_; // depercated
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObRpcRemoteWriteDDLCommitLogArg);
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLCommitLogArg);
 };
-struct ObRpcRemoteWriteDDLIncCommitLogArg final
+struct ObCallRemoteWriteDDLIncCommitLogArg final
 {
   OB_UNIS_VERSION(1);
 public:
-  ObRpcRemoteWriteDDLIncCommitLogArg();
-  ~ObRpcRemoteWriteDDLIncCommitLogArg();
+  ObCallRemoteWriteDDLIncCommitLogArg();
+  ~ObCallRemoteWriteDDLIncCommitLogArg();
   int init(const uint64_t tenant_id,
            const share::ObLSID &ls_id,
            const common::ObTabletID tablet_id,
@@ -8006,20 +8006,20 @@ public:
   transaction::ObTxDesc *tx_desc_;
   bool need_release_;
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObRpcRemoteWriteDDLIncCommitLogArg);
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLIncCommitLogArg);
 };
 
-struct ObRpcRemoteWriteDDLIncCommitLogRes final
+struct ObCallRemoteWriteDDLIncCommitLogRes final
 {
   OB_UNIS_VERSION(1);
 public:
-  ObRpcRemoteWriteDDLIncCommitLogRes() : tx_result_() {}
-  ~ObRpcRemoteWriteDDLIncCommitLogRes() {}
+  ObCallRemoteWriteDDLIncCommitLogRes() : tx_result_() {}
+  ~ObCallRemoteWriteDDLIncCommitLogRes() {}
   TO_STRING_KV(K_(tx_result));
 public:
   transaction::ObTxExecResult tx_result_;
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObRpcRemoteWriteDDLIncCommitLogRes);
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLIncCommitLogRes);
 };
 
 struct ObRegisterTxDataArg
@@ -9540,6 +9540,6 @@ public:
   common::ObString grantor_host_;
 };
 
-}//end namespace obrpc
+}//end namespace obcall
 }//end namespace oceanbase
 #endif

@@ -157,6 +157,8 @@ enum ObLogBaseType
   VEC_INDEX_SERVICE_LOG_BASE_TYPE  = 60,
   // for sys tenant load sys package service on sys ls leader
   SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE_LOG_BASE_TYPE = 61,
+  // for internal table change notifier (timezone, SRS, etc.)
+  INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE = 62,
   // pay attention!!!
   // add log type in log_base_type_to_string
   // max value
@@ -273,6 +275,8 @@ int log_base_type_to_string(const ObLogBaseType log_type,
     strncpy(str ,"SYS_TENANT_LOAD_SYS_PACKAGE_SERVICE", str_len);
   } else if (log_type == VEC_INDEX_SERVICE_LOG_BASE_TYPE ) {
     strncpy(str, "VEC_INDEX_SERVICE", str_len);
+  } else if (log_type == INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE) {
+    strncpy(str, "INTERNAL_TABLE_NOTIFIER", str_len);
   } else {
     ret = OB_INVALID_ARGUMENT;
   }

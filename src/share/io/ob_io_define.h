@@ -26,7 +26,6 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/profile/ob_trace_id.h"
 #include "lib/restore/ob_storage.h"
-#include "lib/tc/ob_tc.h"
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/worker.h"
 #include "share/resource_manager/ob_resource_plan_info.h"
@@ -555,7 +554,6 @@ public:
   int64_t get_align_offset() const;
   int prepare(char *next_buffer = nullptr, int64_t next_size = 0, int64_t next_offset = 0);
   int recycle_buffer();
-  int retry_io();
   int try_alloc_buf_until_timeout(char *&io_buf);
   bool can_callback() const;
   void free_io_buffer();
@@ -590,7 +588,6 @@ private:
 public:
   common::LinkTask req_node_;
   ObIOResult *io_result_;
-  TCRequest qsched_req_;
 protected:
   bool is_inited_;
   int8_t retry_count_;

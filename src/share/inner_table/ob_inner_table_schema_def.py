@@ -9464,12 +9464,9 @@ def_table_schema(
   normal_columns    = [
     ('tid',                 'int'),
     ('tname',               'varchar:16'),
-    ('status',              'varchar:32'),
-    ('wait_event',          'varchar:96'),
     ('latch_wait',          'varchar:16'),
     ('latch_hold',          'varchar:256'),
     ('trace_id',            'varchar:40'),
-    ('loop_ts',             'timestamp'),
     ('cgroup_path',         'varchar:256'),
     ('numa_node',           'int')
   ],  vtable_route_policy = 'local'
@@ -22865,7 +22862,6 @@ def_table_schema(
 SELECT
        tid AS TID,
        tname AS TNAME,
-       status AS STATUS,
        latch_wait AS LATCH_WAIT,
        latch_hold AS LATCH_HOLD,
        trace_id AS TRACE_ID,
@@ -22887,7 +22883,6 @@ def_table_schema(
 SELECT
     TID,
     TNAME,
-    STATUS,
     LATCH_WAIT,
     LATCH_HOLD,
     TRACE_ID,

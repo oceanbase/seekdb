@@ -104,7 +104,6 @@
 #include "observer/table/ob_table_client_info_mgr.h"
 #include "observer/table/common/ob_table_query_session_mgr.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
-#include "rpc/obrpc/ob_rpc_net_handler.h"
 #include "observer/omt/ob_tenant_ai_service.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
 
@@ -361,7 +360,6 @@ private:
   ObAddr self_addr_;
   observer::ObSrvNetworkFrame net_frame_;
   share::ObCgroupCtrl cgroup_ctrl_;
-  obrpc::ObBatchRpc batch_rpc_;
   omt::ObMultiTenant multi_tenant_;
   transaction::ObWeakReadService  weak_read_service_;
   MockObService ob_service_;
@@ -379,8 +377,6 @@ private:
   std::string sstable_dir_;
   std::string clog_dir_;
   std::string slog_dir_;
-  obrpc::ObCommonRpcProxy rs_rpc_proxy_;
-  obrpc::ObSrvRpcProxy srv_rpc_proxy_;
   common::ObServerConfig &config_;
   MockDiskUsageReport mock_disk_reporter_;
   logservice::ObServerLogBlockMgr log_block_mgr_;
@@ -585,7 +581,6 @@ void MockTenantModuleEnv::init_gctx_gconf()
   GCONF.cluster_id = 1;
   GCTX.self_addr_seq_.set_addr(self_addr_);
   GCTX.location_service_ = &location_service_;
-  GCTX.batch_rpc_ = &batch_rpc_;
   GCTX.schema_service_ = &schema_service_;
   GCTX.net_frame_ = &net_frame_;
   GCTX.ob_service_ = &ob_service_;
@@ -596,8 +591,6 @@ void MockTenantModuleEnv::init_gctx_gconf()
   GCTX.session_mgr_ = &session_mgr_;
   GCTX.scramble_rand_ = &scramble_rand_;
   (void) GCTX.set_server_id(1);
-  GCTX.rs_rpc_proxy_ = &rs_rpc_proxy_;
-  GCTX.srv_rpc_proxy_ = &srv_rpc_proxy_;
   GCTX.config_ = &config_;
   GCTX.disk_reporter_ = &mock_disk_reporter_;
   GCTX.bandwidth_throttle_ = &bandwidth_throttle_;
@@ -634,21 +627,18 @@ int MockTenantModuleEnv::init_before_start_mtl()
     STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(net_frame_.start())) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
-  } else if (OB_FAIL(batch_rpc_.init(net_frame_.get_batch_rpc_req_transport(),
-                                   self_addr_))) {
-    STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(startup_accel_handler_.init(observer::SERVER_ACCEL))) {
     STORAGE_LOG(WARN, "init server startup task handler failed", KR(ret));
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init())) {
     STORAGE_LOG(ERROR, "init server checkpoint slog handler fail", K(ret));
   } else if (OB_FAIL(multi_tenant_.init(self_addr_, &sql_proxy_, false))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
-  } else if (OB_FAIL(weak_read_service_.init(net_frame_.get_req_transport()))) {
+  } else if (OB_FAIL(weak_read_service_.init())) {
     STORAGE_LOG(WARN, "init weak_read_service failed", KR(ret));
   } else if (FAILEDx(weak_read_service_.start())) {
     STORAGE_LOG(WARN, "fail to start weak read service", KR(ret));
   } else if (OB_FAIL(ObTsMgr::get_instance().init(self_addr_,
-                         schema_service_, location_service_, net_frame_.get_req_transport()))) {
+                         schema_service_, location_service_))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(ObTsMgr::get_instance().start())) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));

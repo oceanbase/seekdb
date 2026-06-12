@@ -4353,7 +4353,7 @@ int ObLSBackupMetaTask::backup_ls_meta_and_tablet_metas_(const uint64_t tenant_i
 
   // persist tablet meta
   auto backup_tablet_meta_f = [&writer, &backup_tablet_count, &max_tablet_checkpoint_scn, &backup_macro_block_count, &calc_macro_block_count_time]
-      (const obrpc::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)->int {
+      (const obcall::ObCopyTabletInfo &tablet_info, const ObTabletHandle &tablet_handle)->int {
     int ret = OB_SUCCESS;
     blocksstable::ObSelfBufferWriter buffer_writer("LSBackupMetaTask");
     blocksstable::ObBufferReader buffer_reader;

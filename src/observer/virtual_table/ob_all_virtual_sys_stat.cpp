@@ -162,6 +162,14 @@ int ObAllVirtualSysStat::update_all_stats_(const int64_t tenant_id, common::ObDi
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_schema_log_dropped_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_FORCE_ALLOW_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_force_allow_log_dropped_count() : 0;
+    stat_events.get(ObStatEventIds::RINGBUF_ALLOC_WAIT_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
+        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_alloc_wait_count() : 0;
+    stat_events.get(ObStatEventIds::RINGBUF_ALLOC_DROP_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
+        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_alloc_drop_count() : 0;
+    stat_events.get(ObStatEventIds::RINGBUF_ALLOC_SUCCESS_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
+        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_alloc_success_count() : 0;
+    stat_events.get(ObStatEventIds::RINGBUF_QUEUE_DEPTH - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
+        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_queue_depth() : 0;
     stat_events.get(ObStatEventIds::ASYNC_ERROR_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
       (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_dropped_error_log_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_WARN_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
