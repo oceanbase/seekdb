@@ -22,8 +22,7 @@
 #include "share/stat/ob_dbms_stats_maintenance_window.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
 #include "storage/ob_common_id_utils.h"
-#include "sql/session/ob_sql_session_mgr.h"
-#include "observer/ob_ex_rpc.h"
+#include "observer/dbms_scheduler/ob_dbms_sched_job_rpc_proxy.h"
 #include "storage/mview/ob_mview_sched_job_utils.h"
 
 namespace oceanbase
@@ -365,9 +364,11 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
     const bool is_delete_after_stop)
 {
   int ret = OB_SUCCESS;
+  obrpc::ObDBMSSchedJobRpcProxy *rpc_proxy = GCTX.dbms_sched_job_rpc_proxy_;
   uint64_t tenant_id = job_info.tenant_id_;
   bool is_oracle_tenant =  lib::is_oracle_mode();
   ObSqlString sql;
+  CK (OB_NOT_NULL(rpc_proxy));
 
   if (OB_SUCC(ret)) {
     if (is_delete_after_stop) {
@@ -406,49 +407,10 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
                 if (OB_SUCC(ret)) {
                   LOG_INFO("send rpc", K(tenant_id), K(job_info.job_name_), K(svr), K(session_id));
                   ObString stop_job_name = ObString(job_info.job_name_);
-                  const int64_t stop_rpc_send_time = ObTimeUtility::current_time();
-                  // RPC removed: target is self on single replica; run stop in-process.
-                  // Mirrors ObCallStopDBMSSchedJobP::process (preserves session reuse guard).
-                  OZ (ex_rpc::sync_call([&stop_job_name, session_id, stop_rpc_send_time]() -> int {
-                    int ret = OB_SUCCESS;
-                    ObSQLSessionInfo *kill_session = NULL;
-                    if (OB_ISNULL(GCTX.session_mgr_)) {
-                      ret = OB_ERR_UNEXPECTED;
-                      LOG_WARN("session_mgr_ is null", K(ret));
-                    } else {
-                      sql::ObSessionGetterGuard sess_guard(*GCTX.session_mgr_, session_id);
-                      if (OB_FAIL(sess_guard.get_session(kill_session))) {
-                        LOG_WARN("failed to get session", K(session_id), K(stop_job_name));
-                      } else if (OB_ISNULL(kill_session)) {
-                        ret = OB_ERR_UNEXPECTED;
-                        LOG_WARN("session is null", K(ret));
-                      } else {
-                        {
-                          ObSQLSessionInfo::LockGuard lock_guard(kill_session->get_thread_data_lock());
-                          ObDBMSSchedJobInfo *cur_job_info = kill_session->get_job_info();
-                          if (OB_ISNULL(cur_job_info)) {
-                            ret = OB_ENTRY_NOT_EXIST;
-                            LOG_WARN("job_info is null, maybe job end", K(ret), K(stop_job_name));
-                          } else if (0 != cur_job_info->get_job_name().case_compare(stop_job_name)) {
-                            ret = OB_ERR_UNEXPECTED;
-                            LOG_WARN("job_info is not expected", K(ret), KPC(cur_job_info), K(stop_job_name));
-                          }
-                        }
-                        if (OB_SUCC(ret)) {
-                          if (stop_rpc_send_time <= kill_session->get_sess_create_time()) {
-                            ret = OB_ERR_UNEXPECTED;
-                            LOG_WARN("session maybe reused by later round", K(ret), K(stop_job_name),
-                                K(session_id), K(kill_session->get_sess_create_time()), KPC(kill_session));
-                          } else if (OB_FAIL(GCTX.session_mgr_->kill_session(*kill_session))) {
-                            LOG_WARN("failed to kill session", K(ret), K(stop_job_name), KPC(kill_session));
-                          } else {
-                            LOG_INFO("stop job finish", K(stop_job_name), K(session_id));
-                          }
-                        }
-                      }
-                    }
-                    return ret;
-                  }));
+                  OZ (rpc_proxy->stop_dbms_sched_job(tenant_id,
+                    stop_job_name,
+                    svr,
+                    session_id));
                 }
               }
             } while (OB_SUCC(ret));

@@ -48,7 +48,7 @@ using namespace common;
 using namespace diagnose;
 using namespace oceanbase::observer;
 using namespace oceanbase::rpc::frame;
-using namespace obcall;
+using namespace obrpc;
 using namespace rpc;
 using namespace sql;
 using namespace transaction;

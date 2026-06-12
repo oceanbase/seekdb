@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_dbms_sched_job_master.h"
-#include "ob_dbms_sched_job_executor.h"
-#include "observer/ob_ex_rpc.h"
 #include "rootserver/ob_root_service.h"
 #include "storage/mview/ob_mview_sched_job_utils.h"
 #include "sql/session/ob_basic_session_info.h"
@@ -31,7 +29,7 @@ using namespace share;
 using namespace share::schema;
 using namespace rootserver;
 using namespace obutil;
-using namespace obcall;
+using namespace obrpc;
 using namespace storage;
 
 namespace dbms_scheduler
@@ -47,6 +45,7 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
     LOG_WARN("dbms sched job master already inited", K(ret), K(inited_));
   } else if (OB_ISNULL(sql_proxy)
           || OB_ISNULL(schema_service)
+          || OB_ISNULL(GCTX.dbms_sched_job_rpc_proxy_)
           ) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null ptr", K(ret), K(sql_proxy), K(schema_service));
@@ -62,6 +61,7 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
   } else {
     self_addr_ = GCONF.self_addr_;
     schema_service_ = schema_service;
+    job_rpc_proxy_ = GCTX.dbms_sched_job_rpc_proxy_;
     tenant_id_ = tenant_id;
     inited_ = true;
   }
@@ -133,21 +133,20 @@ int64_t ObDBMSSchedJobMaster::run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJ
     LOG_INFO("job reach end date, not running", K(job_info));
   } else if (OB_FAIL(table_operator_.update_for_start(job_info.get_tenant_id(), job_info, next_date, execute_addr))) {
     LOG_WARN("failed to update for start", K(ret), K(job_info), KPC(job_key));
-  } else {
-    // RPC removed: dispatch run async (fire-and-forget), matching original async-RPC
-    // semantics (do not block the scheduler thread on the full job execution).
-    // job_name (ObString) is deep-copied via async_call's serialize-arg overload.
-    const uint64_t run_tenant_id = job_key->get_tenant_id();
-    const bool run_is_oracle = job_key->is_oracle_tenant();
-    const uint64_t run_job_id = job_key->get_job_id();
-    ex_rpc::async_call<void>(job_key->get_job_name(),
-      [run_tenant_id, run_is_oracle, run_job_id](const ObString &run_job_name) {
-        ObDBMSSchedJobExecutor executor;
-        if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
-            && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
-          (void)executor.run_dbms_sched_job(run_tenant_id, run_is_oracle, run_job_id, run_job_name);
-        }
-      });
+  } else if (OB_FAIL(job_rpc_proxy_->run_dbms_sched_job(job_key->get_tenant_id(),
+      job_key->is_oracle_tenant(),
+      job_key->get_job_id(),
+      job_key->get_job_name(),
+      execute_addr,
+      self_addr_,
+      job_info.is_olap_async_job() ? share::OBCG_OLAP_ASYNC_JOB : share::OBCG_DBMS_SCHED_JOB))) {
+    LOG_WARN("failed to run dbms sched job", K(ret), K(job_info), KPC(job_key));
+    if (is_server_down_error(ret)) {
+      int tmp = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp = table_operator_.update_for_rollback(job_info))) {
+        LOG_WARN("update for end failed for send rpc failed job", K(tmp), K(job_info), KPC(job_key));
+      }
+    }
   }
   return ret;
 }
@@ -517,37 +516,11 @@ int ObDBMSSchedJobMaster::purge_run_detail()
     ret = OB_NOT_INIT;
     LOG_WARN("dbms sched job not init yet", K(ret), K(inited_));
   } else {
-    // RPC removed: target is self on single replica; run purge in-process.
-    const uint64_t purge_tenant_id = tenant_id_;
-    ex_rpc::async_call([purge_tenant_id]() {
-          int ret = OB_SUCCESS;
-          const int64_t PURGE_RUN_DETAIL_TIMEOUT = 5 * 60 * 1000 * 1000L; // 5min
-          if (OB_ISNULL(GCTX.sql_proxy_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sql proxy is null", K(ret), K(purge_tenant_id));
-          } else {
-            dbms_scheduler::ObDBMSSchedTableOperator table_operator;
-            if (OB_FAIL(table_operator.init(GCTX.sql_proxy_))) {
-              LOG_WARN("failed to init table_operator", K(ret), K(purge_tenant_id));
-            } else {
-              bool is_primary_cluster = true;
-              if (OB_FAIL(share::ObShareUtil::is_primary_cluster(is_primary_cluster))) {
-                LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
-              } else if (!is_primary_cluster) {
-                LOG_INFO("tenant is standby, not GC", K(purge_tenant_id), K(is_primary_cluster));
-              } else {
-                const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
-                THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + PURGE_RUN_DETAIL_TIMEOUT);
-                if (OB_FAIL(table_operator.purge_run_detail(purge_tenant_id))) {
-                  LOG_WARN("failed to purge run detail", K(ret), K(purge_tenant_id));
-                }
-                THIS_WORKER.set_timeout_ts(save_timeout_ts);
-              }
-            }
-            LOG_INFO("[DBMS_SCHED_GC] finish once", K(ret), K(purge_tenant_id));
-          }
-        });
-    LOG_INFO("dispatch purge run detail async (fire-and-forget)", K(ret), K(tenant_id_));
+    if (OB_FAIL(job_rpc_proxy_->purge_run_detail(tenant_id_, self_addr_))) {
+      LOG_WARN("failed to run dbms sched job", K(ret), K(tenant_id_), K(self_addr_));
+    } else {
+      LOG_INFO("send purge run detail rpc finish", K(ret), K(tenant_id_));
+    }
   }
   return ret;
 }

@@ -4199,7 +4199,7 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(
 
 // cal purge recyclebin need timeout
 int ObMultiVersionSchemaService::cal_purge_need_timeout(
-    const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg,
+    const obrpc::ObPurgeRecycleBinArg &purge_recyclebin_arg,
     int64_t &cal_timeout)
 {
   int ret = OB_SUCCESS;

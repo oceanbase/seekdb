@@ -799,7 +799,7 @@ int ObTransService::handle_trans_keepalive(const ObTxKeepaliveMsg &msg, ObTransR
   return ret;
 }
 
-int ObTransService::handle_trans_keepalive_response(const ObTxKeepaliveRespMsg &msg, obcall::ObTransRpcResult &result)
+int ObTransService::handle_trans_keepalive_response(const ObTxKeepaliveRespMsg &msg, obrpc::ObTransRpcResult &result)
 {
   int ret = OB_SUCCESS;
   ObPartTransCtx *ctx = NULL;
@@ -1875,7 +1875,7 @@ int ObTransService::handle_trans_abort_request(ObTxAbortMsg &abort_req, ObTransR
 }
 
 int ObTransService::handle_sp_rollback_request(ObTxRollbackSPMsg &msg,
-                                               obcall::ObTxRpcRollbackSPResult &result)
+                                               obrpc::ObTxRpcRollbackSPResult &result)
 {
   int ret = OB_SUCCESS;
   int64_t ctx_born_epoch = -1;
@@ -1929,7 +1929,7 @@ int ObTransService::handle_sp_rollback_request(ObTxRollbackSPMsg &msg,
 }
 
 int ObTransService::handle_sp_rollback_response(ObTxRollbackSPRespMsg &msg,
-                                                obcall::ObTransRpcResult &result)
+                                                obrpc::ObTransRpcResult &result)
 {
   int ret = OB_SUCCESS;
   ret = handle_sp_rollback_resp(msg.sender_,
@@ -3079,7 +3079,7 @@ int ObTransService::mds_infer_standby_trx_state(const ObLS *ls_ptr,
 }
 
 int ObTransService::handle_trans_ask_state(const ObAskStateMsg &msg,
-                                           obcall::ObTransRpcResult &result)
+                                           obrpc::ObTransRpcResult &result)
 {
   int ret = OB_SUCCESS;
 
@@ -3131,7 +3131,7 @@ void ObTransService::build_tx_ask_state_resp_(ObAskStateRespMsg &resp, const ObA
 }
 
 int ObTransService::handle_trans_ask_state_response(const ObAskStateRespMsg &msg,
-                                                    obcall::ObTransRpcResult &result)
+                                                    obrpc::ObTransRpcResult &result)
 {
   int ret = OB_NOT_SUPPORTED;
   TRANS_LOG(ERROR, "handle trans ask state resp state", K(ret), K(msg));
@@ -3139,7 +3139,7 @@ int ObTransService::handle_trans_ask_state_response(const ObAskStateRespMsg &msg
 }
 
 int ObTransService::handle_trans_collect_state(const ObCollectStateMsg &msg,
-                                               obcall::ObTransRpcResult &result)
+                                               obrpc::ObTransRpcResult &result)
 {
   int ret = OB_NOT_SUPPORTED;
   TRANS_LOG(INFO, "handle trans collect state", K(ret), K(msg));
@@ -3160,7 +3160,7 @@ void ObTransService::build_tx_collect_state_resp_(ObCollectStateRespMsg &resp, c
 }
 
 int ObTransService::handle_trans_collect_state_response(const ObCollectStateRespMsg &msg,
-                                                        obcall::ObTransRpcResult &result)
+                                                        obrpc::ObTransRpcResult &result)
 {
   int ret = OB_NOT_SUPPORTED;
   TRANS_LOG(INFO, "handle trans collect state", K(ret), K(msg));

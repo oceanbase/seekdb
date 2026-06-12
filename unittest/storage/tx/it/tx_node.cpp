@@ -151,6 +151,7 @@ ObTxNode::ObTxNode(const int64_t ls_id,
                &get_location_adapter_(),
                &get_gti_source_(),
                &get_ts_mgr_(),
+               &rpc_proxy_,
                &schema_service_));
   tenant_.set(&txs_);
   OZ(fake_opt_stat_mgr_.init(tenant_id_));
@@ -481,7 +482,7 @@ int ObTxNode::handle_msg_(MsgPack *pkt)
   case ROLLBACK_SAVEPOINT:
     {
       ObTxRollbackSPMsg msg;
-      obcall::ObTxRpcRollbackSPResult rslt;
+      obrpc::ObTxRpcRollbackSPResult rslt;
       OZ(msg.deserialize(buf, size, pos));
       TRANS_LOG(TRACE, "handle_msg", K(msg), KPC(this));
       OZ(txs_.handle_sp_rollback_request(msg, rslt), msg);

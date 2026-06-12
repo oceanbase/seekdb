@@ -54,6 +54,10 @@ namespace frame
 class ObReqTransport;
 }
 }
+namespace obrpc
+{
+class ObBatchRpc;
+}
 namespace share
 {
 class ObLocalDevice;
@@ -214,6 +218,8 @@ public:
            const common::ObAddr &self,
            const int64_t cluster_id,
            const int64_t tenant_id,
+           rpc::frame::ObReqTransport *transport,
+           obrpc::ObBatchRpc *batch_rpc,
            common::ObILogAllocator *alloc_mgr,
            ILogBlockPool *log_block_pool,
            PalfMonitorCb *monitor,

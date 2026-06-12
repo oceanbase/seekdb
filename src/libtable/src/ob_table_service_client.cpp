@@ -23,6 +23,7 @@
 #include "ob_table_service_config.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
+#include "rpc/obrpc/ob_net_client.h"      // ObNetClient
 #include "sql/session/ob_sql_session_info.h"
 #include "ob_tablet_location_proxy.h"
 #include "observer/ob_signal_handle.h"
@@ -63,6 +64,7 @@ public:
   bool inited() const { return inited_; }
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return schema_service_; }
   ObITabletLocationGetter &get_location_getter() { return *location_getter_; }
+  obrpc::ObTableRpcProxy &get_table_rpc_proxy() { return table_rpc_proxy_; }
   int get_timer_tg_id() const { return tg_id_; }
   const ObAddr &get_one_server() { return addr_; }
 
@@ -97,7 +99,8 @@ private:
   ObTabletLocationCache location_cache_;
   ObITabletLocationGetter *location_getter_;
   // for Table API proxy
-  obcall::ObNetClient net_client_;
+  obrpc::ObNetClient net_client_;
+  obrpc::ObTableRpcProxy table_rpc_proxy_;
 };
 
 ObTableServiceClientEnv::~ObTableServiceClientEnv()
@@ -160,7 +163,9 @@ int ObTableServiceClientEnv::init_net_client(int64_t net_io_thread_num, const Ob
     LOG_WARN("failed to set addr", K(host), K(port));
   } else if (OB_FAIL(net_client_.init(opt))) {
     LOG_ERROR("init net client fail", K(ret), K(net_io_thread_num));
-  } else { // Table-API RPC proxy removed (feature decommissioned)
+  } else if (OB_FAIL(net_client_.get_proxy(table_rpc_proxy_))) {
+    LOG_ERROR("net client get proxy fail", K(ret));
+  } else {
     LOG_INFO("init rpc succ", K(net_io_thread_num));
   }
   return ret;
@@ -343,6 +348,7 @@ public:
   int get_table_id(const ObString &table_name, uint64_t &table_id);
 
   common::ObMySQLProxy &get_user_sql_client() { return user_sql_client_; }
+  obrpc::ObTableRpcProxy &get_table_rpc_proxy() { return client_env_->get_table_rpc_proxy(); }
   uint64_t get_tenant_id() const { return tenant_id_; }
   uint64_t get_database_id() const { return database_id_; }
   const ObString &get_credential() const { return credential_; }
@@ -507,9 +513,11 @@ int ObTableServiceClientImpl::verify_user(const ObString &tenant, const ObString
   } else {
     login_request.pass_secret_.assign_ptr(pass_secret_buf, static_cast<int32_t>(pos));
     ObTableLoginResult login_result;
-    // Table-API RPC removed (feature decommissioned)
-    if (OB_FAIL((ret = OB_NOT_SUPPORTED))) {
-      LOG_WARN("login failed: Table-API RPC removed", K(ret), K(login_request));
+    if (OB_FAIL(client_env_->get_table_rpc_proxy()
+                .to(client_env_->get_one_server())
+                .as(OB_SYS_TENANT_ID)
+                .login(login_request, login_result))) {
+      LOG_WARN("login failed", K(ret), K(login_request));
     } else if (256 < login_result.credential_.length()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("credential is too long", K(ret), K(login_result));
@@ -1065,6 +1073,10 @@ oceanbase::common::ObMySQLProxy &ObTableServiceClient::get_user_sql_client()
   return impl_.get_user_sql_client();
 }
 
+oceanbase::obrpc::ObTableRpcProxy &ObTableServiceClient::get_table_rpc_proxy()
+{
+  return impl_.get_table_rpc_proxy();
+}
 
 
 

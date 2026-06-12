@@ -30,7 +30,6 @@ namespace common
 ObKVCacheMap::ObKVCacheMap()
     : is_inited_(false),
       bucket_allocator_(ObMemAttr(OB_SERVER_TENANT_ID, "CACHE_MAP_BKT", ObCtxIds::DEFAULT_CTX_ID)),
-      node_allocator_(),
       bucket_start_pos_(0),
       bucket_num_(0),
       bucket_size_(0),
@@ -59,10 +58,6 @@ int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
     COMMON_LOG(WARN, "Fail to init bucket lock, ", K(bucket_num), K(ret));
   } else if (OB_FAIL(global_hazard_station_.init(HAZARD_STATION_WAITING_THRESHOLD, HAZARD_STATION_SLOT_NUM))) {
     COMMON_LOG(WARN, "Fail to init hazard version, ", K(ret));
-  } else if (OB_FAIL(node_allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE,
-                                          ObMemAttr(OB_SYS_TENANT_ID, "CACHE_MAP_NODE"),
-                                          1))) {
-    COMMON_LOG(WARN, "Fail to init shared node allocator", K(ret));
   } else {
     bucket_size_ = DEFAULT_BUCKET_SIZE;
     if (is_mini_mode()) {
@@ -75,15 +70,15 @@ int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       COMMON_LOG(WARN, "failed to allocate bucket array", K(ret), K(bucket_cnt));
     } else {
+      Node **nodes = NULL;
       MEMSET(buckets_, 0, sizeof(Bucket) * bucket_cnt);
-      Node **all_nodes = static_cast<Node **>(bucket_allocator_.alloc(sizeof(Node *) * bucket_num));
-      if (OB_ISNULL(all_nodes)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        COMMON_LOG(WARN, "failed to allocate all nodes", K(ret), K(bucket_num));
-      } else {
-        memset(all_nodes, 0, sizeof(Node *) * bucket_num);
-        for (int64_t i = 0; i < bucket_cnt; ++i) {
-          buckets_[i].nodes_ = all_nodes + i * bucket_size_;
+      for (int64_t i = 0; OB_SUCC(ret) && i < bucket_cnt; ++i) {
+        if (OB_ISNULL(nodes = static_cast<Node **>(bucket_allocator_.alloc(sizeof(Node *) * bucket_size_)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          COMMON_LOG(WARN, "failed to allocate bucket", K(ret), K(i), K(bucket_cnt));
+        } else {
+          memset(nodes, 0, sizeof(Node *) * bucket_size_);
+          buckets_[i].nodes_ = nodes;
         }
       }
     }
@@ -102,7 +97,6 @@ int ObKVCacheMap::init(const int64_t bucket_num, ObKVCacheStore *store)
 
 void ObKVCacheMap::destroy()
 {
-  int ret = OB_SUCCESS;
   if (NULL != buckets_) {
     if (is_inited_) {
       ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
@@ -120,22 +114,19 @@ void ObKVCacheMap::destroy()
           iter = NULL;
         }
       }  // hazard version guard
-      int tmp_ret = global_hazard_station_.retire();
-      if (OB_SUCCESS != tmp_ret) {
-        _OB_LOG(WARN, "Fail to retire hazard nodes before destroy, ret=%d", tmp_ret);
-      }
     }
-    const int64_t bucket_cnt = bucket_size_ == 0 ? 0 : (bucket_num_ % bucket_size_ == 0 ?
-      bucket_num_ / bucket_size_ : bucket_num_ / bucket_size_ + 1);
-    if (bucket_cnt > 0 && NULL != buckets_[0].nodes_) {
-      bucket_allocator_.free(buckets_[0].nodes_);
-      buckets_[0].nodes_ = NULL;
+    const int64_t bucket_cnt = bucket_num_ % bucket_size_ == 0 ?
+      bucket_num_ / bucket_size_ : bucket_num_ / bucket_size_ + 1;
+    for (int64_t i = 0; i < bucket_cnt; ++i) {
+      if (NULL != buckets_[i].nodes_) {
+        bucket_allocator_.free(buckets_[i].nodes_);
+        buckets_[i].nodes_ = NULL;
+      }
     }
     bucket_allocator_.free(buckets_);
     buckets_ = NULL;
   }
   global_hazard_station_.destroy();
-  node_allocator_.destroy();
   bucket_lock_.destroy();
   bucket_num_ = 0;
   bucket_size_ = 0;
@@ -226,7 +217,7 @@ int ObKVCacheMap::put(
           (void) ATOMIC_SAF(&iter->inst_->status_.kv_cnt_, 1);
           internal_map_erase(hazard_guard, prev, iter, bucket_ptr);
         } else {
-          if (OB_NOT_NULL(iter->inst_->node_allocator_) && iter->inst_->node_allocator_->is_fragment(iter)) {
+          if (iter->inst_->node_allocator_.is_fragment(iter)) {
             internal_map_replace(hazard_guard, prev, iter, bucket_ptr);
           }
           if (hash_code == iter->hash_code_) {
@@ -248,10 +239,7 @@ int ObKVCacheMap::put(
       if (OB_SUCC(ret)) {
         Node *new_node = NULL;
         void *buf = NULL;
-        if (OB_ISNULL(inst.node_allocator_)) {
-          ret = OB_ERR_UNEXPECTED;
-          COMMON_LOG(ERROR, "Unexpected null node allocator", K(ret), K(inst.cache_id_));
-        } else if (NULL == (buf = inst.node_allocator_->alloc(sizeof(Node)))) {
+        if (NULL == (buf = inst.node_allocator_.alloc(sizeof(Node)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           COMMON_LOG(ERROR, "Fail to allocate memory, ", K(ret), "size", sizeof(Node));
         } else {
@@ -423,7 +411,7 @@ int ObKVCacheMap::erase(const int64_t cache_id, const ObIKVCacheKey &key)
         if (OB_FAIL(hazptr_holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
           COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
         } else if (protect_success) {
-          if (OB_NOT_NULL(iter->inst_->node_allocator_) && iter->inst_->node_allocator_->is_fragment(iter)) {
+          if (iter->inst_->node_allocator_.is_fragment(iter)) {
             internal_map_replace(hazard_guard, prev, iter, bucket_ptr);
           }
           if (hash_code == iter->hash_code_ && OB_SUCC(key.equal(*iter->key_, is_equal)) && is_equal) {
@@ -775,7 +763,7 @@ int ObKVCacheMap::replace_fragment_node(int64_t &start_pos, int64_t &replace_nod
           iter = bucket_ptr;
           int64_t node_count = 0;
           while (NULL != iter) {
-            if (OB_NOT_NULL(iter->inst_->node_allocator_) && iter->inst_->node_allocator_->is_fragment(iter)) {
+            if (iter->inst_->node_allocator_.is_fragment(iter)) {
               internal_map_replace(hazard_guard, prev, iter, bucket_ptr);
               ++node_count;
             }
@@ -876,8 +864,7 @@ void ObKVCacheMap::internal_map_replace(const ObKVCacheHazardGuard &guard,
   if (NULL != iter) {
     Node *new_node = NULL;
     void *buf = NULL;
-    if (OB_NOT_NULL(iter->inst_->node_allocator_)
-        && NULL != (buf = iter->inst_->node_allocator_->alloc(sizeof(Node)))) {
+     if (NULL != (buf = iter->inst_->node_allocator_.alloc(sizeof(Node)))) {
       new_node = new (buf) Node();
       *new_node = *iter;
 
@@ -907,14 +894,11 @@ int ObKVCacheMap::internal_data_move(const ObKVCacheHazardGuard &guard,
   ObKVCachePair *new_kvpair = NULL;
   ObKVMemBlockHandle *new_mb_handle = NULL;
   HazptrHolder hazptr_holder;
-  if (OB_ISNULL(old_iter->inst_->node_allocator_)) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Unexpected null node allocator", K(ret), KPC(old_iter));
-  } else if (NULL == (buf = old_iter->inst_->node_allocator_->alloc(sizeof(Node)))) {
+  if (NULL == (buf = old_iter->inst_->node_allocator_.alloc(sizeof(Node)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     COMMON_LOG(WARN, "Fail to allocate memory for Node, ", K(ret), "size:", sizeof(Node));
   } else if (OB_FAIL(store_->store(*old_iter->key_, *old_iter->value_, new_kvpair, hazptr_holder, LFU))) {
-    old_iter->inst_->node_allocator_->free(buf);
+    old_iter->inst_->node_allocator_.free(buf);
     COMMON_LOG(WARN, "Fail to move kvpair ", K(ret));
   } else {
     new_mb_handle = hazptr_holder.get_mb_handle();
@@ -957,12 +941,7 @@ int ObKVCacheMap::internal_data_move(const ObKVCacheHazardGuard &guard,
 
 void ObKVCacheMap::Node::retire()
 {
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(inst_) && OB_NOT_NULL(inst_->node_allocator_)) {
-    inst_->node_allocator_->free(this);
-  } else {
-    _OB_LOG(ERROR, "Invalid node allocator when retire, inst=%p, node=%p", inst_, this);
-  }
+  inst_->node_allocator_.free(this);
 }
 
 }//end namespace common

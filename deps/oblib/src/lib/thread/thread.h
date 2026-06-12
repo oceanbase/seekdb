@@ -22,8 +22,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/lock/ob_latch.h"
 #include "lib/net/ob_addr.h"
-#include "io/easy_io_struct.h"   // easy_addr_t (RpcGuard); formerly via ob_call_packet.h
-#include "rpc/frame/ob_req_packet_code.h"
+#include "rpc/obrpc/ob_rpc_packet.h"
 
 // Windows PThreads4W: pthread_t is a struct, not an integer
 #ifdef _WIN32
