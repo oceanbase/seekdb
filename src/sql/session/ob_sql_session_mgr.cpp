@@ -229,7 +229,9 @@ int ObSQLSessionMgr::ValueAlloc::clean_tenant(uint64_t tenant_id)
   int ret = OB_SUCCESS;
   MTL_SWITCH(tenant_id) {
     ObTenantSQLSessionMgr *t_session_mgr = MTL(ObTenantSQLSessionMgr*);
-    t_session_mgr->clean_session_pool();
+    if (OB_NOT_NULL(t_session_mgr)) {
+      t_session_mgr->clean_session_pool();
+    }
   } else {
     LOG_ERROR("switch tenant failed", K(ret), K(tenant_id));
   }
