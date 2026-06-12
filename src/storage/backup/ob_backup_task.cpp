@@ -2723,9 +2723,7 @@ int ObLSBackupDataTask::deal_with_backup_meta_(common::ObIArray<ObIODevice *> &d
         case PROVIDER_ITEM_TABLET_AND_SSTABLE_META: {
           const ObTabletID &tablet_id = item.get_tablet_id();
           const storage::ObITable::TableKey &table_key = item.get_table_key();
-          if (OB_FAIL(deal_with_sstable_other_block_root_blocks_(tablet_id, table_key))) {
-            LOG_WARN("failed to deal with ddl sstable root blocks", K(ret), K(tablet_id), K(table_key));
-          } else if (OB_FAIL(do_backup_single_meta_data_(item, device_handle_array.at(0)))) {
+          if (OB_FAIL(do_backup_single_meta_data_(item, device_handle_array.at(0)))) {
             LOG_WARN("failed to do backup single meta data", K(ret), K(item));
           }
           break;
@@ -3119,12 +3117,6 @@ int ObLSBackupDataTask::add_item_to_other_block_mgr_(const blocksstable::MacroBl
     LOG_INFO("add item to other block mgr", K(linked_item));
   }
   return ret;
-}
-
-int ObLSBackupDataTask::deal_with_sstable_other_block_root_blocks_(
-    const common::ObTabletID &tablet_id, const storage::ObITable::TableKey &table_key)
-{
-  return OB_SUCCESS;
 }
 
 int ObLSBackupDataTask::get_sstable_meta_item_list_(common::ObIArray<ObBackupProviderItem> &list)

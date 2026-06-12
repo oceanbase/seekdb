@@ -1991,13 +1991,6 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
     }
   }
 
-  /* print storage cache policy for shared storage mode */
-  if (OB_SUCC(ret) && !strict_compat_ && !is_oracle_mode) {
-    if (OB_FAIL(ObStorageCacheUtil::print_table_storage_cache_policy(table_schema, buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to print storage cache policy", K(ret), K(table_schema));
-    }
-  }
-
   if (OB_SUCC(ret) && !strict_compat_ && !is_index_tbl && table_schema.with_dynamic_partition_policy()) {
     if (OB_FAIL(print_dynamic_partition_policy(table_schema, buf, buf_len, pos))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print store format", K(ret), K(table_schema));
