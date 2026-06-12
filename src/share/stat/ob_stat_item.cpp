@@ -102,7 +102,7 @@ int ObStatMaxValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column param is null", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                     lib::is_oracle_mode() ? " MAX(\"%.*s\")" : " MAX(`%.*s`)",
+                                     " MAX(`%.*s`)",
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr()))) {
     LOG_WARN("failed to print max(col) expr", K(ret));
@@ -132,7 +132,7 @@ int ObStatMinValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column param is null", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                     lib::is_oracle_mode() ? " MIN(\"%.*s\")" : " MIN(`%.*s`)",
+                                     " MIN(`%.*s`)",
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr()))) {
     LOG_WARN("failed to print max(col) expr", K(ret));
@@ -247,7 +247,6 @@ int ObStatTopKHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
     double err_rate = 1.0 / get_window_size(bkt_num);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                  lib::is_oracle_mode() ? " TOP_K_FRE_HIST(%lf, \"%.*s\", %ld, %ld)" :
                                   " TOP_K_FRE_HIST(%lf, `%.*s`, %ld, %ld)",
                                   err_rate,
                                   col_param_->column_name_.length(),
@@ -815,7 +814,6 @@ int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column param is null", K(ret), K(col_param_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                     lib::is_oracle_mode() ? " HYBRID_HIST(\"%.*s\", %ld)" :
                                      " HYBRID_HIST(`%.*s`, %ld)",
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr(),
@@ -960,8 +958,7 @@ int ObStatAvgLen::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
     LOG_WARN("column param is null", K(ret));
   } else if (col_param_->column_type_ < type_count &&
              DEFAULT_DATA_TYPE_LEGNTH[col_param_->column_type_] > 0) {
-    const char* fmt = lib::is_oracle_mode() ? " (%d * COUNT(\"%.*s\"))/decode(COUNT(*),0,1,COUNT(*))" 
-                     : " (%d * COUNT(`%.*s`))/(case when COUNT(*) = 0 then 1 else COUNT(*) end)";
+    const char* fmt = " (%d * COUNT(`%.*s`))/(case when COUNT(*) = 0 then 1 else COUNT(*) end)";
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, fmt, 
                                 DEFAULT_DATA_TYPE_LEGNTH[col_param_->column_type_],
                                 col_param_->column_name_.length(),

@@ -162,7 +162,7 @@ public:
 
   const char *get_fmt() const
   {
-    return lib::is_oracle_mode() ? " COUNT(\"%.*s\")" : " COUNT(`%.*s`)";
+    return " COUNT(`%.*s`)";
   }
   virtual int decode(ObObj &obj) override;
 protected:
@@ -182,11 +182,9 @@ public:
   const char *get_fmt() const
   {
     if (need_approx_ndv_) {
-      return lib::is_oracle_mode() ? " APPROX_COUNT_DISTINCT(\"%.*s\")"
-                                     : " APPROX_COUNT_DISTINCT(`%.*s`)";
+      return " APPROX_COUNT_DISTINCT(`%.*s`)";
     } else {
-      return lib::is_oracle_mode() ? " COUNT(DISTINCT \"%.*s\")"
-                                     : " COUNT(DISTINCT `%.*s`)";
+      return " COUNT(DISTINCT `%.*s`)";
     }
   }
   virtual int decode(ObObj &obj) override;
@@ -205,7 +203,7 @@ public:
   virtual bool is_needed() const { return col_param_ != NULL && col_param_->need_avg_len(); }
   const char *get_fmt() const
   {
-    return lib::is_oracle_mode() ? " SUM_OPNSIZE(\"%.*s\")/decode(COUNT(*),0,1,COUNT(*))" : " SUM_OPNSIZE(`%.*s`)/(case when COUNT(*) = 0 then 1 else COUNT(*) end)";
+    return " SUM_OPNSIZE(`%.*s`)/(case when COUNT(*) = 0 then 1 else COUNT(*) end)";
   }
   virtual int decode(ObObj &obj) override;
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
@@ -222,8 +220,7 @@ public:
 
   const char *get_fmt() const
   {
-    return lib::is_oracle_mode() ? " APPROX_COUNT_DISTINCT_SYNOPSIS(\"%.*s\")"
-                                   : " APPROX_COUNT_DISTINCT_SYNOPSIS(`%.*s`)";
+    return " APPROX_COUNT_DISTINCT_SYNOPSIS(`%.*s`)";
   }
   virtual int decode(ObObj &obj) override;
 };

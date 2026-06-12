@@ -1211,8 +1211,8 @@ int ObBasicStatsEstimator::fill_hints(common::ObIAllocator &alloc,
 {
   int ret = OB_SUCCESS;
   ObSqlString default_hints;
-  const char *use_col_tab_hint = lib::is_oracle_mode() ? " USE_COLUMN_TABLE(\"%.*s\")" : " USE_COLUMN_TABLE(`%.*s`) ";
-  const char *use_full_table_hint = lib::is_oracle_mode() ? " FULL(\"%.*s\") " : " FULL(`%.*s`) ";
+  const char *use_col_tab_hint = " USE_COLUMN_TABLE(`%.*s`) ";
+  const char *use_full_table_hint = " FULL(`%.*s`) ";
   const char *no_use_plan_cache_hint = " USE_PLAN_CACHE(NONE)";
   if (OB_UNLIKELY(table_name.empty() || gather_vectorize < 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1416,8 +1416,7 @@ int ObBasicStatsEstimator::fill_partition_info(ObIAllocator &allocator,
                                                const PartInfo &part_info)
 {
   int ret = OB_SUCCESS;
-  const char *fmt_str = lib::is_oracle_mode() ? "CALC_PARTITION_ID(\"%.*s\", %.*s) = %d"
-                                                : "CALC_PARTITION_ID(`%.*s`, %.*s) = %d";
+  const char *fmt_str = "CALC_PARTITION_ID(`%.*s`, %.*s) = %d";
   ObSqlString raw_sql_str;
   const int64_t buf_len = 512;
   char buf[buf_len];

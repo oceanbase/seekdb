@@ -87,14 +87,8 @@ int ObDbmsStatsExportImport::create_stat_table(ObExecContext &ctx,
                                                const ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_oracle_mode()) {
-    if (OB_FAIL(create_oracle_stat_table(ctx, param))) {
-      LOG_WARN("failed to create oracle stat table", K(ret));
-    } else {/*do nothing*/}
-  } else {
-    if (OB_FAIL(create_mysql_stat_table(ctx, param))) {
-      LOG_WARN("failed to create oracle stat table", K(ret));
-    } else {/*do nothing*/}
+  if (OB_FAIL(create_mysql_stat_table(ctx, param))) {
+    LOG_WARN("failed to create mysql stat table", K(ret));
   }
   return ret;
 }
@@ -150,10 +144,8 @@ int ObDbmsStatsExportImport::drop_stat_table(ObExecContext &ctx, const ObTableSt
   int ret = OB_SUCCESS;
   ObSqlString select_raw_sql;
   ObSqlString drop_raw_sql;
-  const char* check_table_str = lib::is_oracle_mode() ? "from \"%.*s\".\"%.*s\" where 0 = 1;" :
-                                                          "from `%.*s`.`%.*s` where 0 = 1;";
-  const char* drop_table_str = lib::is_oracle_mode() ? "DROP TABLE \"%.*s\".\"%.*s\"" :
-                                                         "DROP TABLE `%.*s`.`%.*s`";
+  const char* check_table_str = "from `%.*s`.`%.*s` where 0 = 1;";
+  const char* drop_table_str = "DROP TABLE `%.*s`.`%.*s`";
   if (OB_FAIL(select_raw_sql.append(CHECK_STAT_SELECT_LIST))) {
     LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(select_raw_sql.append_fmt(check_table_str,
@@ -190,14 +182,11 @@ int ObDbmsStatsExportImport::export_table_stats(ObExecContext &ctx,
   ObSqlString table_name_str;
   const uint64_t tenant_id = param.tenant_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  uint64_t valid_tab_id = lib::is_oracle_mode() ? param.table_id_ :
-                              ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_);
-  const char *from_table_name = lib::is_oracle_mode() ? "sys.ALL_VIRTUAL_TABLE_STAT_REAL_AGENT"
-                                                          : "oceanbase.__all_table_stat";
+  uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_);
+  const char *from_table_name = "oceanbase.__all_table_stat";
   const char *null_str = "NULL";
   int32_t null_str_len = static_cast<int32_t>(strlen(null_str));
-  if (OB_FAIL(table_name_str.append_fmt(lib::is_oracle_mode() ? "\"%.*s\".\"%.*s\"" :
-                                                                  "`%.*s`.`%.*s`",
+  if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                         param.stat_own_.length(), param.stat_own_.ptr(),
                                         param.stat_tab_.length(), param.stat_tab_.ptr()))) {
     LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
@@ -293,12 +282,9 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
   ObSqlString table_name_str;
   const uint64_t tenant_id = param.tenant_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  uint64_t valid_tab_id = lib::is_oracle_mode() ? param.table_id_ :
-                              ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_);
-  const char *col_stat_table = lib::is_oracle_mode() ? "sys.ALL_VIRTUAL_COLUMN_STAT_REAL_AGENT" :
-                                                         "oceanbase.__all_column_stat";
-  const char *hist_stat_table = lib::is_oracle_mode() ? "sys.ALL_VIRTUAL_HISTOGRAM_STAT_REAL_AGENT" :
-                                                          "oceanbase.__all_histogram_stat";
+  uint64_t valid_tab_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id, param.table_id_);
+  const char *col_stat_table = "oceanbase.__all_column_stat";
+  const char *hist_stat_table = "oceanbase.__all_histogram_stat";
   if (!param.part_name_.empty()) {//specify part name
     ObSEArray<int64_t, 4> partition_ids;
     ObSqlString partition_list;
@@ -351,8 +337,7 @@ int ObDbmsStatsExportImport::export_column_stats(ObExecContext &ctx, const ObTab
     } else {/*do nothing*/}
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(table_name_str.append_fmt(lib::is_oracle_mode() ? "\"%.*s\".\"%.*s\"" :
-                                                                  "`%.*s`.`%.*s`",
+    if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                           param.stat_own_.length(), param.stat_own_.ptr(),
                                           param.stat_tab_.length(), param.stat_tab_.ptr()))) {
       LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
@@ -402,10 +387,8 @@ int ObDbmsStatsExportImport::import_table_stats(ObExecContext &ctx, const ObTabl
   ObSqlString partition_list;
   ObSqlString column_list;
   ObSqlString table_name_str;
-  const char *histflag = lib::is_oracle_mode() ? "bitand(flags, 29700) histflg" :
-                                                   "cast(flags&29700 as decimal) histflg";
-  if (OB_FAIL(table_name_str.append_fmt(lib::is_oracle_mode() ? "\"%.*s\".\"%.*s\"" :
-                                                                  "`%.*s`.`%.*s`",
+  const char *histflag = "cast(flags&29700 as decimal) histflg";
+  if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                           param.stat_own_.length(), param.stat_own_.ptr(),
                                           param.stat_tab_.length(), param.stat_tab_.ptr()))) {
       LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
@@ -446,10 +429,8 @@ int ObDbmsStatsExportImport::import_column_stats(ObExecContext &ctx, const ObTab
   ObSqlString partition_list;
   ObSqlString column_list;
   ObSqlString table_name_str;
-  const char *histflag = lib::is_oracle_mode() ? "bitand(flags, 29700) histflg" :
-                                                   "cast(flags&29700 as decimal) histflg";
-  if (OB_FAIL(table_name_str.append_fmt(lib::is_oracle_mode() ? "\"%.*s\".\"%.*s\"" :
-                                                                  "`%.*s`.`%.*s`",
+  const char *histflag = "cast(flags&29700 as decimal) histflg";
+  if (OB_FAIL(table_name_str.append_fmt("`%.*s`.`%.*s`",
                                           param.stat_own_.length(), param.stat_own_.ptr(),
                                           param.stat_tab_.length(), param.stat_tab_.ptr()))) {
       LOG_WARN("fail to append SQL stmt string.", K(table_name_str), K(ret));
@@ -486,15 +467,7 @@ int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  common::ObOracleSqlProxy oracle_proxy;
   ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
-  if (lib::is_oracle_mode()) {
-    if (OB_FAIL(oracle_proxy.init(ctx.get_sql_proxy()->get_pool()))) {
-      LOG_WARN("failed to init oracle proxy", K(ret));
-    } else {
-      sql_proxy = &oracle_proxy;
-    }
-  }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(sql_proxy->write(tenant_id, raw_sql.ptr(), affected_rows))) {
     LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
@@ -512,15 +485,7 @@ int ObDbmsStatsExportImport::do_execute_sql(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
-  common::ObOracleSqlProxy oracle_proxy;
   int64_t affected_rows = 0;
-  if (lib::is_oracle_mode()) {
-    if (OB_FAIL(oracle_proxy.init(ctx.get_sql_proxy()->get_pool()))) {
-      LOG_WARN("failed to init oracle proxy", K(ret));
-    } else {
-      sql_proxy = &oracle_proxy;
-    }
-  }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(trans.start(sql_proxy, tenant_id))) {
       LOG_WARN("fail to start transaction", K(ret));
@@ -548,17 +513,9 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
                                              const ObSqlString &raw_sql)
 {
   int ret = OB_SUCCESS;
-  common::ObOracleSqlProxy oracle_proxy;
   ObArray<ObOptTableStat *> all_tstats;
   ObArray<ObOptColumnStat *> all_cstats;
   ObCommonSqlProxy *sql_proxy = ctx.get_sql_proxy();
-  if (lib::is_oracle_mode()) {
-    if (OB_FAIL(oracle_proxy.init(ctx.get_sql_proxy()->get_pool()))) {
-      LOG_WARN("failed to init oracle proxy", K(ret));
-    } else {
-      sql_proxy = &oracle_proxy;
-    }
-  }
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
@@ -1040,17 +997,8 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
           case StatTableColumnName::D1: {//Last analyzed
             int64_t last_date = 0;
             if (!result_objs.at(i).is_null() &&
-                lib::is_oracle_mode() &&
-                OB_FAIL(result_objs.at(i).get_datetime(last_date))) {
-              LOG_WARN("failed to get date", K(ret), K(result_objs.at(i)));
-            } else if (!result_objs.at(i).is_null() &&
-                                              OB_FAIL(result_objs.at(i).get_timestamp(last_date))) {
+                OB_FAIL(result_objs.at(i).get_timestamp(last_date))) {
               LOG_WARN("failed to get timestamp", K(ret), K(result_objs.at(i).get_type()));
-            } else if (lib::is_oracle_mode() &&
-                       OB_FAIL(ObTimeConverter::datetime_to_timestamp(last_date,
-                                                         get_timezone_info(ctx.get_my_session()),
-                                                         last_date))) {
-              LOG_WARN("fail to convert datetime", K(ret));
             } else if (stat_type == TABLE_STAT || stat_type == INDEX_STAT) {
               tbl_stat->set_last_analyzed(last_date);
             } else if (stat_type == COLUMN_STAT) {
@@ -1069,12 +1017,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (lib::is_oracle_mode() &&
-                       OB_FAIL(convert_bin_hex_raw_to_obj(*param.allocator_,
-                                                          result_objs.at(i),
-                                                          min_obj))) {
-              LOG_WARN("failed to convert bin hex raw to obj", K(ret));
-            } else if (                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
                                                            result_objs.at(i),
                                                            min_obj))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));
@@ -1091,12 +1034,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (lib::is_oracle_mode() &&
-                       OB_FAIL(convert_bin_hex_raw_to_obj(*param.allocator_,
-                                                          result_objs.at(i),
-                                                          max_obj))) {
-              LOG_WARN("failed to convert bin hex raw to obj", K(ret));
-            } else if (                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
                                                            result_objs.at(i),
                                                            max_obj))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));
@@ -1112,12 +1050,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (lib::is_oracle_mode() &&
-                       OB_FAIL(convert_bin_hex_raw_to_obj(*param.allocator_,
-                                                          result_objs.at(i),
-                                                          hist_bucket.endpoint_value_))) {
-              LOG_WARN("failed to convert bin hex raw to obj", K(ret));
-            } else if (                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
                                                            result_objs.at(i),
                                                            hist_bucket.endpoint_value_))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));

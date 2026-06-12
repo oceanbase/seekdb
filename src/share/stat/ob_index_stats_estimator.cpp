@@ -160,8 +160,7 @@ int ObIndexStatsEstimator::fill_index_group_by_info(ObIAllocator &allocator,
                                                     ObString &calc_part_id_str)
 {
   int ret = OB_SUCCESS;
-  const char *fmt_str = lib::is_oracle_mode() ? "GROUP BY CALC_PARTITION_ID(\"%.*s\", \"%.*s\", %.*s)"
-                                                : "GROUP BY CALC_PARTITION_ID(`%.*s`, `%.*s`, %.*s)";
+  const char *fmt_str = "GROUP BY CALC_PARTITION_ID(`%.*s`, `%.*s`, %.*s)";
   char *buf = NULL;
   ObString type_str;
   if (param.stat_level_ == PARTITION_LEVEL) {
@@ -208,8 +207,7 @@ int ObIndexStatsEstimator::fill_partition_condition(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (param.stat_level_ == PARTITION_LEVEL || param.stat_level_ == SUBPARTITION_LEVEL) {
-    const char *fmt_str = lib::is_oracle_mode() ? "WHERE CALC_PARTITION_ID(\"%.*s\", \"%.*s\", %.*s) = %ld"
-                                                  : "WHERE CALC_PARTITION_ID(`%.*s`, `%.*s`, %.*s) = %ld";
+    const char *fmt_str = "WHERE CALC_PARTITION_ID(`%.*s`, `%.*s`, %.*s) = %ld";
     char *buf = NULL;
     ObString type_str;
     if (param.stat_level_ == PARTITION_LEVEL) {
