@@ -2992,17 +2992,10 @@ int ObPLExecState::add_pl_exec_time(int64_t pl_exec_time, bool is_called_from_sq
   return ret;
 }
 
-ObArenaAllocator *ObPLExecCtx::get_top_expr_allocator()
-{
-  return &expr_alloc_;
-}
-
 bool ObPLExecCtx::valid()
 {
   return OB_NOT_NULL(allocator_)
          && OB_NOT_NULL(exec_ctx_)
-         // The interface mapped in through the interface mechanism cannot provide or use the func_ pointer.
-//       && OB_NOT_NULL(func_)
          && OB_NOT_NULL(exec_ctx_->get_sql_ctx())
          && OB_NOT_NULL(exec_ctx_->get_my_session());
 }
@@ -3281,7 +3274,7 @@ int ObPLExecState::init_complex_obj(ObIAllocator &allocator,
       OZ (ns->get_user_type(composite->get_id(), user_type));
       CK (OB_NOT_NULL(user_type));
     } else {
-      ObPLResolveCtx ns(get_exec_ctx().expr_alloc_,
+      ObPLResolveCtx ns(*get_exec_ctx().get_top_expr_allocator(),
                       *session,
                       *schema_guard,
                       *package_guard,
@@ -3301,15 +3294,15 @@ int ObPLExecState::init_complex_obj(ObIAllocator &allocator,
       && OB_NOT_NULL(session->get_pl_context()->get_current_ctx())) {
     pl::ObPLINS *ns = session->get_pl_context()->get_current_ctx();
     CK (OB_NOT_NULL(ns));
-    OZ (ns->init_complex_obj(allocator, get_exec_ctx().expr_alloc_, *real_pl_type, obj, false, set_null));
+    OZ (ns->init_complex_obj(allocator, *get_exec_ctx().get_top_expr_allocator(), *real_pl_type, obj, false, set_null));
   } else {
-    ObPLResolveCtx ns(get_exec_ctx().expr_alloc_,
+    ObPLResolveCtx ns(*get_exec_ctx().get_top_expr_allocator(),
                       *session,
                       *schema_guard,
                       *package_guard,
                       *sql_proxy,
                       false);
-    OZ (ns.init_complex_obj(allocator, get_exec_ctx().expr_alloc_, *real_pl_type, obj, false, set_null));
+    OZ (ns.init_complex_obj(allocator, *get_exec_ctx().get_top_expr_allocator(), *real_pl_type, obj, false, set_null));
   }
   OX (obj.set_udt_id(real_pl_type->get_user_type_id()));
   return ret;
@@ -3928,10 +3921,14 @@ int ObPLExecState::init(const ParamStore *params, bool is_anonymous)
   }
 
   if (OB_SUCC(ret)) {
-    // TODO bin.lb: how about the memory?
-    //
-    OZ(func_.get_frame_info().pre_alloc_exec_memory(*ctx_.exec_ctx_, expr_alloc));
+    // Always realloc frame info:
+    // because in spi_calc_expr, frame dynamic memory may alloc by current routine, then frame info can not reuse.
+    // so here use get_top_expr_allocator() to alloc memory, frame memory will release by current routine finish.
+    OZ (func_.get_frame_info().pre_alloc_exec_memory(*ctx_.exec_ctx_, expr_alloc));
   }
+
+  // Use to Alloc expr ctx, all these expr ctx will destruct on final interface.
+  OX (ctx_.exec_ctx_->set_pl_expr_alloc(ctx_.get_top_expr_allocator()));
 
   // saved self ctx on stack, will used by spi_calc_subprogram_expr
   OX (self_exec_ctx_bak_.backup(*ctx_.exec_ctx_));
