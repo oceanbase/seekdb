@@ -992,14 +992,6 @@ int ObMultiTenant::update_tenant_log_disk_size(const uint64_t tenant_id,
   return ret;
 }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObMultiTenant::update_tenant_data_disk_size(const uint64_t tenant_id,
-                                                 const int64_t new_data_disk_size)
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-#endif
 
 int ObMultiTenant::update_tenant_config(uint64_t tenant_id)
 {
@@ -1510,7 +1502,7 @@ int ObMultiTenant::convert_real_to_hidden_sys_tenant()
       } else if (FALSE_IT(lock_succ = true)) {
       } else if (OB_FAIL(update_tenant_unit_no_lock(tenant_meta.unit_))) {
         LOG_WARN("fail to update_tenant_unit_no_lock", K(ret), K(tenant_meta));
-      } else if (!GCTX.is_shared_storage_mode()) {
+      } else {
         ObTenantSwitchGuard guard(tenant);
         if (OB_FAIL(MTL(ObTenantStorageMetaService *)->get_active_cursor(tenant_meta.super_block_.replay_start_point_))) {
           LOG_WARN("get slog current cursor fail", K(ret));
@@ -1828,6 +1820,14 @@ void ObMultiTenant::runTimerTask()
         tenant_->print_throttled_time();
       }
     }
+  }
+}
+
+void ObMultiTenant::reload_tenant_task_queue_size()
+{
+  SpinRLockGuard guard(lock_);
+  if (OB_NOT_NULL(tenant_)) {
+    tenant_->set_queue_limit(GCONF.tenant_task_queue_size);
   }
 }
 

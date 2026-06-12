@@ -34,8 +34,8 @@ const char* ObSetKvAttributeHelper::ALTER_KV_ATTRIBUTE_FORMAT_STR = "ALTER TABLE
 
 ObSetKvAttributeHelper::ObSetKvAttributeHelper(
   share::schema::ObMultiVersionSchemaService *schema_service,
-  const obrpc::ObHTableDDLArg &arg,
-  obrpc::ObParallelDDLRes &res)
+  const obcall::ObHTableDDLArg &arg,
+  obcall::ObParallelDDLRes &res)
   : ObDDLHelper(schema_service, arg.exec_tenant_id_, "[paralle set kv_attribute]"),
   arg_(arg),
   res_(res),

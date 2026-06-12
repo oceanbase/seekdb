@@ -5574,12 +5574,9 @@ desc oceanbase.__all_virtual_thread;
 Field	Type	Null	Key	Default	Extra
 tid	bigint(20)	NO		NULL	
 tname	varchar(16)	NO		NULL	
-status	varchar(32)	NO		NULL	
-wait_event	varchar(96)	NO		NULL	
 latch_wait	varchar(16)	NO		NULL	
 latch_hold	varchar(256)	NO		NULL	
 trace_id	varchar(40)	NO		NULL	
-loop_ts	timestamp(6)	NO		NULL	
 cgroup_path	varchar(256)	NO		NULL	
 numa_node	bigint(20)	NO		NULL	
 select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_thread;
@@ -6442,18 +6439,6 @@ select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all
 IF(count(*) >= 0, 1, 0)
 1
 select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_column_privilege_history limit 1;
-desc oceanbase.__all_virtual_shared_storage_quota;
-Field	Type	Null	Key	Default	Extra
-module	varchar(32)	NO	PRI	NULL	
-class_id	bigint(20)	NO	PRI	NULL	
-storage_id	bigint(20)	NO	PRI	NULL	
-type	varchar(32)	NO	PRI	NULL	
-requirement	bigint(20)	NO		NULL	
-assign	bigint(20)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_shared_storage_quota;
-IF(count(*) >= 0, 1, 0)
-1
-select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_shared_storage_quota limit 1;
 desc information_schema.ENABLED_ROLES;
 Field	Type	Null	Key	Default	Extra
 ROLE_NAME	varchar(128)	YES		NULL	
@@ -7058,33 +7043,6 @@ desc oceanbase.__tenant_virtual_show_catalog_databases;
 Field	Type	Null	Key	Default	Extra
 catalog_id	bigint(20)	NO	PRI	NULL	
 database_name	varchar(256)	NO	PRI	NULL	
-desc oceanbase.__all_virtual_storage_cache_task;
-Field	Type	Null	Key	Default	Extra
-tablet_id	bigint(20)	NO	PRI	NULL	
-status	varchar(64)	NO		NULL	
-speed	varchar(29)	NO		NULL	
-start_time	timestamp(6)	NO		NULL	
-complete_time	timestamp(6)	NO		NULL	
-result	bigint(20)	NO		NULL	
-comment	varchar(4096)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_storage_cache_task;
-IF(count(*) >= 0, 1, 0)
-1
-select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_storage_cache_task limit 1;
-desc oceanbase.__all_virtual_tablet_local_cache;
-Field	Type	Null	Key	Default	Extra
-tablet_id	bigint(20)	NO	PRI	NULL	
-storage_cache_policy	varchar(64)	NO		NULL	
-cached_data_size	bigint(20)	NO		NULL	
-cache_hit_count	bigint(20)	NO		NULL	
-cache_miss_count	bigint(20)	NO		NULL	
-cache_hit_size	bigint(20)	NO		NULL	
-cache_miss_size	bigint(20)	NO		NULL	
-info	varchar(4096)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_tablet_local_cache;
-IF(count(*) >= 0, 1, 0)
-1
-select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_tablet_local_cache limit 1;
 desc oceanbase.__all_virtual_ccl_rule;
 Field	Type	Null	Key	Default	Extra
 tenant_id	bigint(20)	NO	PRI	NULL	

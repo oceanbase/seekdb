@@ -671,7 +671,6 @@ public:
   static int all_virtual_index_usage_info_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_column_privilege_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_column_privilege_history_schema(share::schema::ObTableSchema &table_schema);
-  static int all_virtual_shared_storage_quota_schema(share::schema::ObTableSchema &table_schema);
   static int enabled_roles_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_session_ps_info_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_tracepoint_info_schema(share::schema::ObTableSchema &table_schema);
@@ -707,8 +706,6 @@ public:
   static int all_virtual_vector_index_task_history_schema(share::schema::ObTableSchema &table_schema);
   static int tenant_virtual_show_create_catalog_schema(share::schema::ObTableSchema &table_schema);
   static int tenant_virtual_show_catalog_databases_schema(share::schema::ObTableSchema &table_schema);
-  static int all_virtual_storage_cache_task_schema(share::schema::ObTableSchema &table_schema);
-  static int all_virtual_tablet_local_cache_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_ccl_rule_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_ccl_status_schema(share::schema::ObTableSchema &table_schema);
   static int all_virtual_mview_running_job_schema(share::schema::ObTableSchema &table_schema);
@@ -1115,10 +1112,6 @@ public:
   static int cdb_ob_vector_index_tasks_schema(share::schema::ObTableSchema &table_schema);
   static int dba_ob_vector_index_task_history_schema(share::schema::ObTableSchema &table_schema);
   static int cdb_ob_vector_index_task_history_schema(share::schema::ObTableSchema &table_schema);
-  static int gv_ob_storage_cache_tasks_schema(share::schema::ObTableSchema &table_schema);
-  static int v_ob_storage_cache_tasks_schema(share::schema::ObTableSchema &table_schema);
-  static int gv_ob_tablet_local_cache_schema(share::schema::ObTableSchema &table_schema);
-  static int v_ob_tablet_local_cache_schema(share::schema::ObTableSchema &table_schema);
   static int dba_ob_ccl_rules_schema(share::schema::ObTableSchema &table_schema);
   static int cdb_ob_ccl_rules_schema(share::schema::ObTableSchema &table_schema);
   static int gv_ob_sql_ccl_status_schema(share::schema::ObTableSchema &table_schema);
@@ -2106,7 +2099,6 @@ const schema_create_func virtual_table_schema_creators [] = {
   ObInnerTableSchema::all_virtual_index_usage_info_schema,
   ObInnerTableSchema::all_virtual_column_privilege_schema,
   ObInnerTableSchema::all_virtual_column_privilege_history_schema,
-  ObInnerTableSchema::all_virtual_shared_storage_quota_schema,
   ObInnerTableSchema::enabled_roles_schema,
   ObInnerTableSchema::all_virtual_session_ps_info_schema,
   ObInnerTableSchema::all_virtual_tracepoint_info_schema,
@@ -2142,8 +2134,6 @@ const schema_create_func virtual_table_schema_creators [] = {
   ObInnerTableSchema::all_virtual_vector_index_task_history_schema,
   ObInnerTableSchema::tenant_virtual_show_create_catalog_schema,
   ObInnerTableSchema::tenant_virtual_show_catalog_databases_schema,
-  ObInnerTableSchema::all_virtual_storage_cache_task_schema,
-  ObInnerTableSchema::all_virtual_tablet_local_cache_schema,
   ObInnerTableSchema::all_virtual_ccl_rule_schema,
   ObInnerTableSchema::all_virtual_ccl_status_schema,
   ObInnerTableSchema::all_virtual_mview_running_job_schema,
@@ -2561,10 +2551,6 @@ const schema_create_func sys_view_schema_creators [] = {
   ObInnerTableSchema::cdb_ob_vector_index_tasks_schema,
   ObInnerTableSchema::dba_ob_vector_index_task_history_schema,
   ObInnerTableSchema::cdb_ob_vector_index_task_history_schema,
-  ObInnerTableSchema::gv_ob_storage_cache_tasks_schema,
-  ObInnerTableSchema::v_ob_storage_cache_tasks_schema,
-  ObInnerTableSchema::gv_ob_tablet_local_cache_schema,
-  ObInnerTableSchema::v_ob_tablet_local_cache_schema,
   ObInnerTableSchema::dba_ob_ccl_rules_schema,
   ObInnerTableSchema::cdb_ob_ccl_rules_schema,
   ObInnerTableSchema::gv_ob_sql_ccl_status_schema,
@@ -3015,7 +3001,6 @@ const uint64_t tenant_space_tables [] = {
   OB_ALL_VIRTUAL_CLIENT_TO_SERVER_SESSION_INFO_TID,
   OB_ALL_VIRTUAL_SYS_VARIABLE_DEFAULT_VALUE_TID,
   OB_ALL_VIRTUAL_WR_SQLTEXT_TID,
-  OB_ALL_VIRTUAL_SHARED_STORAGE_QUOTA_TID,
   OB_ENABLED_ROLES_TID,
   OB_ALL_VIRTUAL_SESSION_PS_INFO_TID,
   OB_ALL_VIRTUAL_TRACEPOINT_INFO_TID,
@@ -3038,8 +3023,6 @@ const uint64_t tenant_space_tables [] = {
   OB_ALL_VIRTUAL_PLUGIN_INFO_TID,
   OB_TENANT_VIRTUAL_SHOW_CREATE_CATALOG_TID,
   OB_TENANT_VIRTUAL_SHOW_CATALOG_DATABASES_TID,
-  OB_ALL_VIRTUAL_STORAGE_CACHE_TASK_TID,
-  OB_ALL_VIRTUAL_TABLET_LOCAL_CACHE_TID,
   OB_ALL_VIRTUAL_CCL_RULE_TID,
   OB_ALL_VIRTUAL_CCL_STATUS_TID,
   OB_ALL_VIRTUAL_MVIEW_RUNNING_JOB_TID,
@@ -3359,10 +3342,6 @@ const uint64_t tenant_space_tables [] = {
   OB_V_OB_PLUGINS_TID,
   OB_DBA_OB_VECTOR_INDEX_TASKS_TID,
   OB_DBA_OB_VECTOR_INDEX_TASK_HISTORY_TID,
-  OB_GV_OB_STORAGE_CACHE_TASKS_TID,
-  OB_V_OB_STORAGE_CACHE_TASKS_TID,
-  OB_GV_OB_TABLET_LOCAL_CACHE_TID,
-  OB_V_OB_TABLET_LOCAL_CACHE_TID,
   OB_DBA_OB_CCL_RULES_TID,
   OB_CDB_OB_CCL_RULES_TID,
   OB_GV_OB_SQL_CCL_STATUS_TID,
@@ -4164,7 +4143,6 @@ const char* const tenant_space_table_names [] = {
   OB_ALL_VIRTUAL_CLIENT_TO_SERVER_SESSION_INFO_TNAME,
   OB_ALL_VIRTUAL_SYS_VARIABLE_DEFAULT_VALUE_TNAME,
   OB_ALL_VIRTUAL_WR_SQLTEXT_TNAME,
-  OB_ALL_VIRTUAL_SHARED_STORAGE_QUOTA_TNAME,
   OB_ENABLED_ROLES_TNAME,
   OB_ALL_VIRTUAL_SESSION_PS_INFO_TNAME,
   OB_ALL_VIRTUAL_TRACEPOINT_INFO_TNAME,
@@ -4187,8 +4165,6 @@ const char* const tenant_space_table_names [] = {
   OB_ALL_VIRTUAL_PLUGIN_INFO_TNAME,
   OB_TENANT_VIRTUAL_SHOW_CREATE_CATALOG_TNAME,
   OB_TENANT_VIRTUAL_SHOW_CATALOG_DATABASES_TNAME,
-  OB_ALL_VIRTUAL_STORAGE_CACHE_TASK_TNAME,
-  OB_ALL_VIRTUAL_TABLET_LOCAL_CACHE_TNAME,
   OB_ALL_VIRTUAL_CCL_RULE_TNAME,
   OB_ALL_VIRTUAL_CCL_STATUS_TNAME,
   OB_ALL_VIRTUAL_MVIEW_RUNNING_JOB_TNAME,
@@ -4508,10 +4484,6 @@ const char* const tenant_space_table_names [] = {
   OB_V_OB_PLUGINS_TNAME,
   OB_DBA_OB_VECTOR_INDEX_TASKS_TNAME,
   OB_DBA_OB_VECTOR_INDEX_TASK_HISTORY_TNAME,
-  OB_GV_OB_STORAGE_CACHE_TASKS_TNAME,
-  OB_V_OB_STORAGE_CACHE_TASKS_TNAME,
-  OB_GV_OB_TABLET_LOCAL_CACHE_TNAME,
-  OB_V_OB_TABLET_LOCAL_CACHE_TNAME,
   OB_DBA_OB_CCL_RULES_TNAME,
   OB_CDB_OB_CCL_RULES_TNAME,
   OB_GV_OB_SQL_CCL_STATUS_TNAME,

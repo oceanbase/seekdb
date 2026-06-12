@@ -20,6 +20,7 @@
 #include "storage/vector_index/ob_vector_index_refresh.h"
 #include "share/vector_index/ob_vector_index_async_task.h"
 #include "share/vector_index/ob_vector_index_async_task_util.h"
+#include "rootserver/ob_rs_serial_call.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 
@@ -705,9 +706,8 @@ int ObVectorIndexRefresher::do_rebuild() {
     const int64_t ddl_rpc_timeout = GCONF._ob_ddl_timeout;
     ObTimeoutCtx timeout_ctx;
     ObAddr rs_addr = GCTX.self_addr();
-    obrpc::ObCommonRpcProxy *common_rpc_proxy = GCTX.rs_rpc_proxy_;
     SMART_VAR(ObRebuildIndexArg, rebuild_index_arg) {
-      obrpc::ObAlterTableRes rebuild_index_res;
+      obcall::ObAlterTableRes rebuild_index_res;
       const bool is_support_cancel = true;
       rebuild_index_arg.tenant_id_ = tenant_id;
       rebuild_index_arg.exec_tenant_id_ = tenant_id;
@@ -716,10 +716,10 @@ int ObVectorIndexRefresher::do_rebuild() {
       rebuild_index_arg.table_name_ = base_table_schema->get_table_name_str();
       rebuild_index_arg.index_name_ = domain_table_schema->get_table_name_str();
       rebuild_index_arg.index_table_id_ = domain_table_schema->get_table_id();
-      rebuild_index_arg.index_action_type_ = obrpc::ObIndexArg::ADD_INDEX;
+      rebuild_index_arg.index_action_type_ = obcall::ObIndexArg::ADD_INDEX;
       rebuild_index_arg.parallelism_ = refresh_ctx_->idx_parallel_creation_;
       rebuild_index_arg.vidx_refresh_info_.index_params_ = idx_parameters;
-      rebuild_index_arg.rebuild_index_type_ = obrpc::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_VEC;
+      rebuild_index_arg.rebuild_index_type_ = obcall::ObRebuildIndexArg::RebuildIndexType::REBUILD_INDEX_TYPE_VEC;
       
       if (OB_FAIL(rebuild_index_arg.based_schema_object_infos_.push_back(
               ObBasedSchemaObjectInfo(domain_table_schema->get_table_id(), TABLE_SCHEMA,
@@ -728,20 +728,16 @@ int ObVectorIndexRefresher::do_rebuild() {
       }
 
       if (OB_FAIL(ret)) {
-      } else if (OB_ISNULL(common_rpc_proxy)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected common_rpc_proxy nullptr", K(ret));
-      } else if (OB_FAIL(common_rpc_proxy->to(rs_addr).timeout(ddl_rpc_timeout).rebuild_vec_index(rebuild_index_arg, rebuild_index_res))) {
+      } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->rebuild_vec_index(rebuild_index_arg, rebuild_index_res); }))) {
         LOG_WARN("failed to post backup ls data res", K(ret), K(ddl_rpc_timeout), K(rebuild_index_arg));
       } else {
         LOG_INFO("succ to send rebuild vector index rpc", K(rs_addr), K(refresh_ctx_));
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(rebuild_index_arg.tenant_id_, 
-                                                       rebuild_index_res.task_id_, 
-                                                       false/*do not retry at executor*/, 
-                                                       session_info, 
-                                                       common_rpc_proxy, 
+        if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(rebuild_index_arg.tenant_id_,
+                                                       rebuild_index_res.task_id_,
+                                                       false/*do not retry at executor*/,
+                                                       session_info,
                                                        is_support_cancel))) {
           LOG_WARN("fail wait rebuild vec index finish", K(ret));
         } else {

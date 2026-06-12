@@ -30,10 +30,10 @@
 namespace oceanbase
 {
 using namespace share::schema;
-using obrpc::ObCreateIndexArg;
-using obrpc::ObDropIndexArg;
+using obcall::ObCreateIndexArg;
+using obcall::ObDropIndexArg;
 using namespace common;
-using namespace obrpc;
+using namespace obcall;
 namespace sql
 {
 ObAlterTableResolver::ObAlterTableResolver(ObResolverParams &params)
@@ -223,8 +223,8 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCCESS == ret && NULL != parse_tree.children_[ACTION_LIST]){
       if (OB_FAIL(resolve_action_list(*(parse_tree.children_[ACTION_LIST])))) {
         SQL_RESV_LOG(WARN, "failed to resolve action list.", K(ret));
-      } else if (alter_table_bitset_.has_member(obrpc::ObAlterTableArg::LOCALITY)
-                 && alter_table_bitset_.has_member(obrpc::ObAlterTableArg::TABLEGROUP_NAME)) {
+      } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::LOCALITY)
+                 && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLEGROUP_NAME)) {
         ret = OB_OP_NOT_ALLOW;
         SQL_RESV_LOG(WARN, "alter table localiy and tablegroup in the same time not allowed", K(ret));
         LOG_USER_ERROR(OB_OP_NOT_ALLOW, "alter table localiy and tablegroup at the same time");
@@ -241,7 +241,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       } else {
         // deal with alter table rename to mock_fk_parent_table_name
         if (is_mysql_mode()
-            && alter_table_bitset_.has_member(obrpc::ObAlterTableArg::TABLE_NAME)) {
+            && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLE_NAME)) {
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
           const AlterTableSchema &alter_table_schema = alter_table_stmt->get_alter_table_arg().alter_table_schema_;
           const ObString &new_table_name = alter_table_schema.get_table_name_str();
@@ -331,14 +331,6 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
     
-    if (OB_FAIL(ret)) {
-    } else if (GCTX.is_shared_storage_mode() && is_mysql_mode()) {
-      // Version validation is included in check_alter_stmt_storage_cache_policy
-      if (OB_FAIL(check_alter_stmt_storage_cache_policy(table_schema_))) {
-        LOG_WARN("check alter stmt storage cache policy failed", K(ret));
-      }
-    }
-
     if (OB_SUCC(ret)) {
       if (OB_FAIL(resolve_hints(parse_tree.children_[ALTER_HINT],
           *alter_table_stmt, nullptr == index_schema_ ? *table_schema_ : *index_schema_))) {
@@ -1376,7 +1368,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
       // 2.oracle mode after 4351, can only drop column in instant
       } else if (has_add_column
                  && has_drop_column) {
-        alter_table_stmt->get_alter_table_arg().alter_algorithm_ = obrpc::ObAlterTableArg::AlterAlgorithm::INPLACE;
+        alter_table_stmt->get_alter_table_arg().alter_algorithm_ = obcall::ObAlterTableArg::AlterAlgorithm::INPLACE;
       }
     }
     // alter hbase table with max versions to seconary partitioned table is not suppored
@@ -1555,14 +1547,14 @@ int ObAlterTableResolver::resolve_drop_unused_columns(const ParseNode& node)
   }
 
   if (OB_SUCC(ret)) {
-    obrpc::ObAlterTableArg &alter_table_arg = alter_table_stmt->get_alter_table_arg();
+    obcall::ObAlterTableArg &alter_table_arg = alter_table_stmt->get_alter_table_arg();
     alter_table_arg.ddl_task_type_          = share::ObDDLTaskType::DELETE_COLUMN_FROM_SCHEMA;
   }
   return ret;
 }
 
 int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
-                                                    obrpc::ObCreateIndexArg &index_arg,
+                                                    obcall::ObCreateIndexArg &index_arg,
                                                     const int64_t index_name_value,
                                                     ObIArray<ObString> &input_index_columns_name,
                                                     bool &cnt_func_index)
@@ -1573,7 +1565,7 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
   } else {
-    obrpc::ObColumnSortItem sort_item;
+    obcall::ObColumnSortItem sort_item;
     //reset sort column set
     sort_column_array_.reset();
     cnt_func_index = false;
@@ -1699,8 +1691,8 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
 }
 
 
-int ObAlterTableResolver::add_sort_column(const obrpc::ObColumnSortItem &sort_column,
-                                          obrpc::ObCreateIndexArg &index_arg)
+int ObAlterTableResolver::add_sort_column(const obcall::ObColumnSortItem &sort_column,
+                                          obcall::ObCreateIndexArg &index_arg)
 {
   int ret = OB_SUCCESS;
   const ObString &column_name = sort_column.column_name_;
@@ -1793,12 +1785,12 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
       //column_list node should be parse first in case the index name is not specified
       if (OB_SUCC(ret)) {
         HEAP_VAR(ObCreateIndexStmt, create_index_stmt ,allocator_) {
-          obrpc::ObCreateIndexArg *create_index_arg = NULL;
+          obcall::ObCreateIndexArg *create_index_arg = NULL;
           void *tmp_ptr = NULL;
           ObSEArray<ObString, 8> input_index_columns_name;
           bool cnt_func_index = false;
           if (NULL == (tmp_ptr = (ObCreateIndexArg *)allocator_->alloc(
-                  sizeof(obrpc::ObCreateIndexArg)))) {
+                  sizeof(obcall::ObCreateIndexArg)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
           } else {
@@ -1946,7 +1938,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
             }
             if (OB_SUCC(ret)) {
               ObSArray<ObPartitionResolveResult> &resolve_results = alter_table_stmt->get_index_partition_resolve_results();
-              ObSArray<obrpc::ObCreateIndexArg*> &index_arg_list = alter_table_stmt->get_index_arg_list();
+              ObSArray<obcall::ObCreateIndexArg*> &index_arg_list = alter_table_stmt->get_index_arg_list();
               ObPartitionResolveResult resolve_result;
               ObCreateIndexArg &index_arg = create_index_stmt.get_create_index_arg();
               if (is_index_part_specified) {
@@ -2431,7 +2423,7 @@ int ObAlterTableResolver::mock_part_func_node(const ObTableSchema &table_schema,
 }
 
 
-int ObAlterTableResolver::generate_index_arg(obrpc::ObCreateIndexArg &index_arg, const bool is_unique_key)
+int ObAlterTableResolver::generate_index_arg(obcall::ObCreateIndexArg &index_arg, const bool is_unique_key)
 {
   int ret = OB_SUCCESS;
   ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
@@ -2550,7 +2542,7 @@ int ObAlterTableResolver::resolve_drop_index(const ParseNode &node)
       //construct ObDropIndexArg
       ObDropIndexArg *drop_index_arg = NULL;
       void *tmp_ptr = NULL;
-      if (NULL == (tmp_ptr = (ObDropIndexArg *)allocator_->alloc(sizeof(obrpc::ObDropIndexArg)))) {
+      if (NULL == (tmp_ptr = (ObDropIndexArg *)allocator_->alloc(sizeof(obcall::ObDropIndexArg)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
@@ -2940,7 +2932,7 @@ int ObAlterTableResolver::generate_exchange_partition_arg(
 {
   int ret = OB_SUCCESS;
   ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  obrpc::ObExchangePartitionArg exchange_partition_arg;
+  obcall::ObExchangePartitionArg exchange_partition_arg;
   if (OB_ISNULL(session_info_) || OB_ISNULL(alter_table_stmt)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session info and alter table stmt should not be null", K(ret), KP(session_info_), KP(alter_table_stmt));
@@ -3145,7 +3137,7 @@ int ObAlterTableResolver::resolve_alter_index(const ParseNode &node)
       //construct ObAlterIndexArg
       ObAlterIndexArg *alter_index_arg = NULL;
       void *tmp_ptr = NULL;
-      if (OB_UNLIKELY(NULL == (tmp_ptr = (ObAlterIndexArg *)allocator_->alloc(sizeof(obrpc::ObAlterIndexArg))))) {
+      if (OB_UNLIKELY(NULL == (tmp_ptr = (ObAlterIndexArg *)allocator_->alloc(sizeof(obcall::ObAlterIndexArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
@@ -3227,7 +3219,7 @@ int ObAlterTableResolver::resolve_alter_index_parallel_oracle(const ParseNode &n
     } else {
       ObAlterIndexParallelArg *alter_index_parallel_arg = NULL;
       void *tmp_ptr = NULL;
-      if (OB_UNLIKELY(NULL == (tmp_ptr = (ObAlterIndexParallelArg *)allocator_->alloc(sizeof(obrpc::ObAlterIndexParallelArg))))) {
+      if (OB_UNLIKELY(NULL == (tmp_ptr = (ObAlterIndexParallelArg *)allocator_->alloc(sizeof(obcall::ObAlterIndexParallelArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
@@ -3286,7 +3278,7 @@ int ObAlterTableResolver::resolve_alter_index_parallel_mysql(const ParseNode &no
                             static_cast<int32_t>(mysql_index_name_node->str_len_));
       ObAlterIndexParallelArg *alter_index_parallel_arg = NULL;
       void *tmp_ptr = NULL;
-      if (OB_UNLIKELY(NULL == (tmp_ptr = (ObAlterIndexParallelArg *)allocator_->alloc(sizeof(obrpc::ObAlterIndexParallelArg))))) {
+      if (OB_UNLIKELY(NULL == (tmp_ptr = (ObAlterIndexParallelArg *)allocator_->alloc(sizeof(obcall::ObAlterIndexParallelArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
       } else {
@@ -3348,7 +3340,7 @@ int ObAlterTableResolver::resolve_rename_index(const ParseNode &node)
         new_index_name.assign_ptr(new_name_node->str_value_, static_cast<int32_t>(new_name_node->str_len_));
         void *tmp_ptr = NULL;
 
-        if (OB_UNLIKELY(NULL == (tmp_ptr = (ObRenameIndexArg *)allocator_->alloc(sizeof(obrpc::ObRenameIndexArg))))) {
+        if (OB_UNLIKELY(NULL == (tmp_ptr = (ObRenameIndexArg *)allocator_->alloc(sizeof(obcall::ObRenameIndexArg))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
         } else {
@@ -3421,9 +3413,9 @@ int ObAlterTableResolver::resolve_alter_primary(const ParseNode &action_node_lis
   }
   if (OB_FAIL(ret)) {
   } else {
-    obrpc::ObAlterPrimaryArg *alter_pk_arg = NULL;
+    obcall::ObAlterPrimaryArg *alter_pk_arg = NULL;
     void *tmp_ptr = NULL;
-    if (NULL == (tmp_ptr = (ObAlterPrimaryArg *)allocator_->alloc(sizeof(obrpc::ObAlterPrimaryArg)))) {
+    if (NULL == (tmp_ptr = (ObAlterPrimaryArg *)allocator_->alloc(sizeof(obcall::ObAlterPrimaryArg)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
     } else {
@@ -3440,7 +3432,7 @@ int ObAlterTableResolver::resolve_alter_primary(const ParseNode &action_node_lis
         LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
       }
 
-      obrpc::ObColumnSortItem sort_item;
+      obcall::ObColumnSortItem sort_item;
       const ObColumnSchemaV2 *col = NULL;
       for (int32_t i = 0; OB_SUCC(ret) && i < column_list->num_child_; ++i) {
         ParseNode *column_node = column_list->children_[i];
@@ -3498,9 +3490,9 @@ int ObAlterTableResolver::resolve_add_primary(const ParseNode &node)
     ret = OB_ERR_MULTIPLE_PRI_KEY;
     SQL_RESV_LOG(WARN, "multiple primary key defined", K(ret));
   } else {
-    obrpc::ObCreateIndexArg *create_index_arg = NULL;
+    obcall::ObCreateIndexArg *create_index_arg = NULL;
     void *tmp_ptr = NULL;
-    if (NULL == (tmp_ptr = (ObCreateIndexArg *)allocator_->alloc(sizeof(obrpc::ObCreateIndexArg)))) {
+    if (NULL == (tmp_ptr = (ObCreateIndexArg *)allocator_->alloc(sizeof(obcall::ObCreateIndexArg)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
     } else {
@@ -3518,7 +3510,7 @@ int ObAlterTableResolver::resolve_add_primary(const ParseNode &node)
       LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
     }
 
-    obrpc::ObColumnSortItem sort_item;
+    obcall::ObColumnSortItem sort_item;
     const ObColumnSchemaV2 *col = NULL;
     for (int32_t i = 0; OB_SUCC(ret) && i < column_list->num_child_; ++i) {
       ParseNode *column_node = column_list->children_[i];
@@ -3785,19 +3777,6 @@ int ObAlterTableResolver::resolve_index_options(const ParseNode &action_node_lis
         }
         break;
       }
-    case T_INDEX_ALTER_STORAGE_CACHE_POLICY: {  
-      if (!GCTX.is_shared_storage_mode()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("storage cache policy is not supported in shared storage mode", K(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "storage cache policy is not supported in shared storage mode");
-      } else {
-        ParseNode *index_node = node.children_[0];
-        if (OB_FAIL(resolve_alter_index_storage_cache_policy(*index_node))) {
-          SQL_RESV_LOG(WARN, "Resolve alter index storage cache policy error!", K(ret));
-        }
-      }
-      break;
-    }
     case T_INDEX_RENAME: {
         ParseNode *index_node = node.children_[0];
         if (OB_FAIL(resolve_rename_index(*index_node))) {
@@ -4120,7 +4099,7 @@ int ObAlterTableResolver::fill_high_bound_val_for_split_partition(const AlterTab
 
 int ObAlterTableResolver::check_dup_foreign_keys_exist(
     share::schema::ObSchemaGetterGuard *schema_guard,
-    const obrpc::ObCreateForeignKeyArg &foreign_key_arg)
+    const obcall::ObCreateForeignKeyArg &foreign_key_arg)
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 4> child_column_ids;
@@ -4175,7 +4154,7 @@ int ObAlterTableResolver::resolve_modify_foreign_key_state(const ParseNode *node
   ParseNode *enable_option_node = NULL;
   ParseNode *validate_option_node = NULL;
   ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  obrpc::ObCreateForeignKeyArg foreign_key_arg;
+  obcall::ObCreateForeignKeyArg foreign_key_arg;
 
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
@@ -4586,36 +4565,6 @@ int ObAlterTableResolver::resolve_partition_options(const ParseNode &node)
             LOG_WARN("Resolve rename subpartition error!", KR(ret));
           } else {
             alter_table_stmt->get_alter_table_arg().alter_part_type_=ObAlterTableArg::RENAME_SUB_PARTITION;
-          }
-          break;
-        }
-        case T_ALTER_PARTITION_STORAGE_CACHE_POLICY: {
-          if (!GCTX.is_shared_storage_mode()) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("storage cache policy is not supported in shared storage mode", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "storage cache policy is not supported in shared storage mode");
-          } else {
-            if (OB_FAIL(resolve_alter_partition_storage_cache_policy(*partition_node, *table_schema_))) {
-              SQL_RESV_LOG(WARN, "Resolve alter partition storage cache policy error!", K(ret));
-            } else {
-            alter_table_stmt->get_alter_table_arg().alter_part_type_ =
-                ObAlterTableArg::ALTER_PARTITION_STORAGE_CACHE_POLICY;
-            }
-          }
-          break;
-        }
-        case T_ALTER_SUBPARTITION_STORAGE_CACHE_POLICY: {
-          if (!GCTX.is_shared_storage_mode()) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("storage cache policy is not supported in shared storage mode", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "storage cache policy is not supported in shared storage mode");
-          } else {
-            if (OB_FAIL(resolve_alter_subpartition_storage_cache_policy(*partition_node, *table_schema_))) {
-              SQL_RESV_LOG(WARN, "Resolve alter subpartition storage cache policy error!", K(ret));
-            } else {
-            alter_table_stmt->get_alter_table_arg().alter_part_type_ =
-                ObAlterTableArg::ALTER_SUBPARTITION_STORAGE_CACHE_POLICY;
-            }
           }
           break;
         }
@@ -5129,7 +5078,7 @@ int ObAlterTableResolver::resolve_tablegroup_options(const ParseNode &node)
         OB_UNLIKELY(T_TABLEGROUP_DROP != tablegroup_action_node->type_ )) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
-    } else if (OB_FAIL(alter_table_bitset_.add_member(obrpc::ObAlterTableArg::TABLEGROUP_NAME))) {
+    } else if (OB_FAIL(alter_table_bitset_.add_member(obcall::ObAlterTableArg::TABLEGROUP_NAME))) {
       SQL_RESV_LOG(WARN, "failed to add member to bitset!", K(ret));
     } else {
       tablegroup_name_ = ObString("");
@@ -5248,7 +5197,7 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
       alter_column_schema.reset();
       alter_column_schema.alter_type_ = OB_DDL_ADD_COLUMN;
       alter_table_stmt->get_alter_table_arg().alter_algorithm_ = lib::is_mysql_mode()
-                                                                 ? obrpc::ObAlterTableArg::AlterAlgorithm::INSTANT : obrpc::ObAlterTableArg::AlterAlgorithm::INPLACE;
+                                                                 ? obcall::ObAlterTableArg::AlterAlgorithm::INSTANT : obcall::ObAlterTableArg::AlterAlgorithm::INPLACE;
       if (OB_ISNULL(node.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
@@ -6157,17 +6106,17 @@ int ObAlterTableResolver::resolve_column_index(const ObString &column_name)
   int ret = OB_SUCCESS;
   sort_column_array_.reset();
   storing_column_set_.reset();
-  obrpc::ObCreateIndexArg *create_index_arg = NULL;
+  obcall::ObCreateIndexArg *create_index_arg = NULL;
   void *tmp_ptr = NULL;
   if (OB_ISNULL(allocator_)) {
       ret = OB_NOT_INIT;
       SQL_RESV_LOG(WARN, "allocator is null");
-  } else if (NULL == (tmp_ptr = (ObCreateIndexArg *)allocator_->alloc(sizeof(obrpc::ObCreateIndexArg)))) {
+  } else if (NULL == (tmp_ptr = (ObCreateIndexArg *)allocator_->alloc(sizeof(obcall::ObCreateIndexArg)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
   } else {
     create_index_arg = new (tmp_ptr) ObCreateIndexArg();
-    obrpc::ObColumnSortItem sort_item;
+    obcall::ObColumnSortItem sort_item;
     if (OB_FAIL(ob_write_string(*allocator_, column_name, sort_item.column_name_))) {
       SQL_RESV_LOG(WARN, "write index name failed", K(ret));
     } else if (OB_FAIL(add_sort_column(sort_item, *create_index_arg))) {
@@ -6685,12 +6634,12 @@ int ObAlterTableResolver::check_semistruct_encoding_type(const ObTableSchema &or
 {
   int ret = OB_SUCCESS;
   // skip check if not modify semistruct encoding options and store format
-  if (! alter_table_bitset_.has_member(obrpc::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE)
-      && ! alter_table_bitset_.has_member(obrpc::ObAlterTableArg::STORE_FORMAT)) { 
+  if (! alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE)
+      && ! alter_table_bitset_.has_member(obcall::ObAlterTableArg::STORE_FORMAT)) { 
   // skip check if semistruct_encoding is disable 
-  } else if ((alter_table_bitset_.has_member(obrpc::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! alter_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())
-    || (! alter_table_bitset_.has_member(obrpc::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! origin_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())) {
-  } else if (alter_table_bitset_.has_member(obrpc::ObAlterTableArg::STORE_FORMAT)) {
+  } else if ((alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! alter_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())
+    || (! alter_table_bitset_.has_member(obcall::ObAlterTableArg::SEMISTRUCT_ENCODING_TYPE) && ! origin_schema.get_semistruct_encoding_type().is_enable_semistruct_encoding())) {
+  } else if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::STORE_FORMAT)) {
     if (alter_schema.get_row_store_type() != CS_ENCODING_ROW_STORE) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("semistruct_encoding is not support if cs encoding is not set", K(ret),

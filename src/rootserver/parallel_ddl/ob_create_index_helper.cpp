@@ -39,8 +39,8 @@ ObCreateIndexHelper::ObCreateIndexHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const uint64_t tenant_id,
     rootserver::ObDDLService &ddl_service,
-    const obrpc::ObCreateIndexArg &arg,
-    obrpc::ObAlterTableRes &res)
+    const obcall::ObCreateIndexArg &arg,
+    obcall::ObAlterTableRes &res)
   : ObDDLHelper(schema_service, tenant_id, "[parallel create index]"),
     arg_(arg),
     new_arg_(nullptr),
@@ -321,10 +321,10 @@ int ObCreateIndexHelper::generate_index_schema_()
   HEAP_VAR(ObTableSchema, tmp_index_schema){
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_ISNULL(new_arg_ptr = allocator_.alloc(sizeof(obrpc::ObCreateIndexArg)))) {
+  } else if (OB_ISNULL(new_arg_ptr = allocator_.alloc(sizeof(obcall::ObCreateIndexArg)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail alloc memory", KR(ret), KP(new_arg_ptr));
-  } else if (FALSE_IT(new_arg_ = new (new_arg_ptr)obrpc::ObCreateIndexArg)) {
+  } else if (FALSE_IT(new_arg_ = new (new_arg_ptr)obcall::ObCreateIndexArg)) {
   } else if (OB_ISNULL(new_arg_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new_arg_ is null", KR(ret));

@@ -581,9 +581,14 @@ int read_tenant_task_status(uint64_t tenant_id,
 int ObPluginVectorIndexLoadScheduler::check_and_load_task_executors(bool &has_ivf_index)
 {
   int ret = OB_SUCCESS;
+  bool need_schedule = can_schedule(ObVectorTaskScheduleType::HNSW_OPTIMIZE)
+                    || can_schedule(ObVectorTaskScheduleType::IVF_TASK);
+  if (!need_schedule) {
+    return ret;
+  }
   uint64_t task_trace_base_num = 0;
   bool schema_changed = false;
-  
+
   if (OB_FAIL(async_task_exec_.check_and_set_thread_pool())) {
     LOG_WARN("fail to check and open thread pool", K(ret));
   } else if (OB_FAIL(async_task_exec_.clear_old_task_ctx_if_need())) {
@@ -592,7 +597,8 @@ int ObPluginVectorIndexLoadScheduler::check_and_load_task_executors(bool &has_iv
     LOG_WARN("fail to load index async task", K(ret));
   } else if (can_schedule(ObVectorTaskScheduleType::HNSW_OPTIMIZE) && OB_FAIL(async_task_exec_.load_task(task_trace_base_num))) {
     LOG_WARN("fail to load tenant sync task", K(ret));
-  } else if (OB_FAIL(embedding_task_exec_.load_task(task_trace_base_num))) {
+  } else if (can_schedule(ObVectorTaskScheduleType::HNSW_OPTIMIZE)
+             && OB_FAIL(embedding_task_exec_.load_task(task_trace_base_num))) {
     LOG_WARN("fail to load tenant sync task", K(ret));
   } else if (can_schedule(ObVectorTaskScheduleType::IVF_TASK)) {
     if (OB_FAIL(ivf_task_exec_.check_schema_version_changed(schema_changed))) {
@@ -1151,7 +1157,8 @@ int ObPluginVectorIndexLoadScheduler::start_task_executors()
     LOG_WARN("fail to start index async task", K(ret));
   } else if (can_schedule(ObVectorTaskScheduleType::IVF_TASK) && OB_FAIL(ivf_task_exec_.start_task())) {
     LOG_WARN("fail to start index async task", K(ret));
-  } else if (OB_FAIL(embedding_task_exec_.start_task())) {
+  } else if (can_schedule(ObVectorTaskScheduleType::HNSW_OPTIMIZE)
+             && OB_FAIL(embedding_task_exec_.start_task())) {
     LOG_WARN("fail to start hybrid index async task", K(ret));
   }
   return ret;
@@ -1244,6 +1251,12 @@ void ObPluginVectorIndexLoadScheduler::run_task()
     }
   } else if (check_can_do_work()){
     check_can_schedule();
+    if (!can_schedule(ObVectorTaskScheduleType::ADAPTER_MAINTENANCE)
+        && !can_schedule(ObVectorTaskScheduleType::FOLLOWER_SYNC)
+        && !can_schedule(ObVectorTaskScheduleType::HNSW_OPTIMIZE)
+        && !can_schedule(ObVectorTaskScheduleType::IVF_TASK)) {
+      return;
+    }
     bool has_ivf_index = false;
     ObSEArray<uint64_t, DEFAULT_TABLE_ARRAY_SIZE> vec_table_id_array;
     if (OB_FAIL(check_tenant_memory())) {

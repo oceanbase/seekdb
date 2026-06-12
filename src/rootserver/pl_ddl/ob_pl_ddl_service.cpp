@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_pl_ddl_service.h"
+#include "common/ob_smart_call.h"
 #include "rootserver/ob_ddl_service.h"
 #include "share/schema/ob_error_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -33,8 +34,8 @@ using rootserver::ObDDLOperator;
 namespace rootserver
 {
 
-int ObPLDDLService::create_routine(const obrpc::ObCreateRoutineArg &arg,
-                                   obrpc::ObRoutineDDLRes *res,
+int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
+                                   obcall::ObRoutineDDLRes *res,
                                    rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -266,8 +267,8 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
   return ret;
 }
 
-int ObPLDDLService::alter_routine(const obrpc::ObCreateRoutineArg &arg,
-                                  obrpc::ObRoutineDDLRes* res,
+int ObPLDDLService::alter_routine(const obcall::ObCreateRoutineArg &arg,
+                                  obcall::ObRoutineDDLRes* res,
                                   rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -543,8 +544,8 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
 }
 
 //----Functions for managing package----
-int ObPLDDLService::create_package(const obrpc::ObCreatePackageArg &arg,
-                                    obrpc::ObRoutineDDLRes *res,
+int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
+                                    obcall::ObRoutineDDLRes *res,
                                     rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -712,8 +713,8 @@ int ObPLDDLService::create_package(ObSchemaGetterGuard &schema_guard,
   return ret;
 }
 
-int ObPLDDLService::alter_package(const obrpc::ObAlterPackageArg &arg,
-                                 obrpc::ObRoutineDDLRes *res,
+int ObPLDDLService::alter_package(const obcall::ObAlterPackageArg &arg,
+                                 obcall::ObRoutineDDLRes *res,
                                  rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -840,7 +841,7 @@ int ObPLDDLService::alter_package(ObSchemaGetterGuard &schema_guard,
   return ret;
 }
 
-int ObPLDDLService::drop_package(const obrpc::ObDropPackageArg &arg,
+int ObPLDDLService::drop_package(const obcall::ObDropPackageArg &arg,
                                  rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -940,8 +941,8 @@ int ObPLDDLService::drop_package(share::schema::ObSchemaGetterGuard &schema_guar
 //----End of functions for managing package----
 
 //----Functions for managing trigger----
-int ObPLDDLService::create_trigger(const obrpc::ObCreateTriggerArg &arg,
-                                    obrpc::ObCreateTriggerRes *res,
+int ObPLDDLService::create_trigger(const obcall::ObCreateTriggerArg &arg,
+                                    obcall::ObCreateTriggerRes *res,
                                     rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -954,8 +955,8 @@ int ObPLDDLService::create_trigger(const obrpc::ObCreateTriggerArg &arg,
   return ret;
 }
 
-int ObPLDDLService::alter_trigger(const obrpc::ObAlterTriggerArg &arg,
-                                  obrpc::ObRoutineDDLRes *res,
+int ObPLDDLService::alter_trigger(const obcall::ObAlterTriggerArg &arg,
+                                  obcall::ObRoutineDDLRes *res,
                                   rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -1017,7 +1018,7 @@ int ObPLDDLService::alter_trigger(const obrpc::ObAlterTriggerArg &arg,
   return ret;
 }
 
-int ObPLDDLService::drop_trigger(const obrpc::ObDropTriggerArg &arg,
+int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
                                  rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -1061,9 +1062,9 @@ int ObPLDDLService::drop_trigger(const obrpc::ObDropTriggerArg &arg,
   return ret;
 }
 
-int ObPLDDLService::create_trigger(const obrpc::ObCreateTriggerArg &arg,
+int ObPLDDLService::create_trigger(const obcall::ObCreateTriggerArg &arg,
                                    ObSchemaGetterGuard &schema_guard,
-                                   obrpc::ObCreateTriggerRes *res,
+                                   obcall::ObCreateTriggerRes *res,
                                    rootserver::ObDDLService &ddl_service)
 {
   int ret = OB_SUCCESS;
@@ -1609,7 +1610,7 @@ int ObPLDDLService::get_object_info(ObSchemaGetterGuard &schema_guard,
 }
 
 int ObPLDDLService::rebuild_triggers_on_hidden_table(
-                  const obrpc::ObAlterTableArg &alter_table_arg,
+                  const obcall::ObAlterTableArg &alter_table_arg,
                   const ObTableSchema &orig_table_schema,
                   const ObTableSchema &hidden_table_schema,
                   ObSchemaGetterGuard &src_tenant_schema_guard,
@@ -1695,7 +1696,7 @@ int ObPLDDLService::drop_trigger_in_drop_user(ObMySQLTransaction &trans,
 //  3. database of the trigger does no exist.
 //  4. same name trigger has existed.
 int ObPLDDLService::check_and_construct_restore_trigger_info(
-    const obrpc::ObAlterTableArg &alter_table_arg,
+    const obcall::ObAlterTableArg &alter_table_arg,
     ObSchemaGetterGuard &src_tenant_schema_guard,
     ObSchemaGetterGuard &dst_tenant_schema_guard,
     const ObTableSchema &orig_table_schema,
