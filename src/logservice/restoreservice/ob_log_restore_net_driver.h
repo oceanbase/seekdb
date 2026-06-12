@@ -109,8 +109,6 @@ private:
   void delete_fetcher_if_needed_with_lock_();
   void update_config_();
   int64_t get_rpc_timeout_sec_();
-  // update standby_fetch_log_specified_region
-  void update_standby_preferred_upstream_log_region_();
 
   int do_fetch_log_(storage::ObLS &ls);
   int check_need_schedule_(storage::ObLS &ls,

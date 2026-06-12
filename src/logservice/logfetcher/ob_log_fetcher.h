@@ -75,12 +75,6 @@ public:
   // Get Tenant ID
   virtual uint64_t get_source_tenant_id() const = 0;
 
-  // Update assign region to fetch log
-  virtual int update_preferred_upstream_log_region(const common::ObRegion &region) = 0;
-
-  // Get assign region
-  virtual int get_preferred_upstream_log_region(common::ObRegion &region) = 0;
-
   // Add the log stream
   //
   // @param  [in]   ls_id        LS ID
@@ -229,9 +223,6 @@ public:
   virtual int64_t get_cluster_id() const { return cluster_id_; }
   virtual uint64_t get_source_tenant_id() const { return source_tenant_id_; }
 
-  virtual int update_preferred_upstream_log_region(const common::ObRegion &region);
-  virtual int get_preferred_upstream_log_region(common::ObRegion &region);
-
   virtual int add_ls(
       const share::ObLSID &ls_id,
       const ObLogFetcherStartParameters &start_parameters);
@@ -285,7 +276,7 @@ public:
   common::ObIAllocator *get_decompression_allocator() {return &decompression_alloc_;}
   void free_decompression_buf(void *buf);
 
-  int update_fetch_log_protocol(const obcall::ObCdcFetchLogProtocolType proto);
+  int update_fetch_log_protocol(const obrpc::ObCdcFetchLogProtocolType proto);
 
 private:
   int suggest_cached_rpc_res_count_(const int64_t min_res_cnt,

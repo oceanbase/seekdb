@@ -317,7 +317,7 @@ int LSFetchCtx::get_next_group_entry(
     palf::LSN &lsn,
     const char *&buf,
     const share::SCN replayable_point,
-    const obcall::ObCdcFetchRawSource data_end_source)
+    const obrpc::ObCdcFetchRawSource data_end_source)
 {
   int ret = OB_SUCCESS;
 
@@ -326,7 +326,7 @@ int LSFetchCtx::get_next_group_entry(
     LOG_ERROR("group_iterator_ not init!");
   } else if (OB_FAIL(group_iterator_.next(replayable_point))) {
     if (OB_ITER_END != ret) {
-      if (obcall::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
+      if (obrpc::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
         LOG_ERROR("iterate group_entry failed", KR(ret), K_(group_iterator));
       } else {
         LOG_WARN("iterate group_entry failed", KR(ret), K_(group_iterator));
@@ -938,37 +938,6 @@ void LSFetchCtx::dispatch_in_dead_pool()
 {
   fetch_info_.dispatch_in_dead_pool();
   print_dispatch_info();
-}
-
-int LSFetchCtx::get_cur_svr_start_fetch_tstamp(const common::ObAddr &svr,
-      int64_t &svr_start_fetch_tstamp) const
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_FAIL(fetch_info_.get_cur_svr_start_fetch_tstamp(svr, svr_start_fetch_tstamp))) {
-    LOG_ERROR("get_cur_svr_start_fetch_tstamp fail", KR(ret), K(fetch_info_),
-        K(svr), K(svr_start_fetch_tstamp));
-  }
-
-  return ret;
-}
-
-int LSFetchCtx::add_into_blacklist(const common::ObAddr &svr,
-    const int64_t svr_service_time,
-    int64_t &survival_time)
-{
-  int ret = OB_SUCCESS;
-  logservice::ObLogRouteService *log_route_service = nullptr;
-
-  if (OB_FAIL(get_log_route_service_(log_route_service))) {
-    LOG_ERROR("get_log_route_service_ failed", KR(ret));
-  } else if (OB_FAIL(log_route_service->add_into_blacklist(tls_id_.get_tenant_id(), tls_id_.get_ls_id(),
-          svr, svr_service_time, survival_time))) {
-    LOG_ERROR("ObLogRouteService add_into_blacklist failed", KR(ret), K(tls_id_), K(svr),
-        K(svr_service_time), K(survival_time));
-  } else {}
-
-  return ret;
 }
 
 bool LSFetchCtx::need_switch_server(const common::ObAddr &cur_svr)

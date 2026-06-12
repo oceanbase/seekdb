@@ -225,24 +225,6 @@ int ObLSWorker::dispatch_fetch_task(LSFetchCtx &task, const char *dispatch_reaso
     // Get the next valid server for the service log
     while (OB_SUCCESS == ret && ! found_valid_svr && OB_SUCC(task.next_server(request_svr))) {
       found_valid_svr = true;
-      if (! found_valid_svr) {
-        //  server is not available, blacklisted
-        int64_t svr_service_time = 0;
-        int64_t survival_time = ATOMIC_LOAD(&g_blacklist_survival_time);
-        if (OB_FAIL(task.add_into_blacklist(request_svr, svr_service_time, survival_time))) {
-          // add server to blacklist
-          LOG_ERROR("not-avail server, task add into blacklist fail", KR(ret), K(task), K(request_svr),
-                    "svr_service_time", TVAL_TO_STR(svr_service_time),
-                    "survival_time", TVAL_TO_STR(survival_time));
-        } else {
-          LOG_TRACE("not-avail server, task add into blacklist succ", KR(ret), K(task), K(request_svr),
-                    "svr_service_time", TVAL_TO_STR(svr_service_time),
-                    "survival_time", TVAL_TO_STR(survival_time));
-        }
-
-        LOG_WARN("[STAT] [STREAM_WORKER] [DISPATCH_FETCH_TASK] ignore not-avail server",
-            K(request_svr), "tls_id", task.get_tls_id());
-      }
     }
 
     // The server list is iterated over

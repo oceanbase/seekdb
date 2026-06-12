@@ -27,7 +27,7 @@
 #include "ob_log_fetch_log_rpc_result.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::obcall;
+using namespace oceanbase::obrpc;
 
 namespace oceanbase
 {
@@ -468,28 +468,6 @@ int FetchStream::dispatch_fetch_task_(LSFetchCtx &task,
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("ls_fetch_ctx_ is NULL", KR(ret), K(ls_fetch_ctx_));
   } else {
-    const ClientFetchingMode fetching_mode = ls_fetch_ctx_->get_fetching_mode();
-    // The server is not blacklisted when the stream is actively switch and when the partition is discarded, but is blacklisted in all other cases.
-    if (is_integrated_fetching_mode(fetching_mode) && need_add_into_blacklist_(dispatch_reason)) {
-      // Get the total time of the current partition of the server service at this time
-      int64_t svr_start_fetch_tstamp = OB_INVALID_TIMESTAMP;
-
-      if (OB_FAIL(task.get_cur_svr_start_fetch_tstamp(svr_, svr_start_fetch_tstamp))) {
-        LOG_ERROR("get_cur_svr_start_fetch_tstamp fail", KR(ret), "tls_id", task.get_tls_id(),
-            K_(svr), K(svr_start_fetch_tstamp));
-      } else {
-        int64_t svr_service_time = get_timestamp() - svr_start_fetch_tstamp;
-        int64_t cur_survival_time = ATOMIC_LOAD(&g_blacklist_survival_time);
-        int64_t survival_time = cur_survival_time;
-        // Server add into blacklist
-        if (OB_FAIL(task.add_into_blacklist(svr_, svr_service_time, survival_time))) {
-          LOG_ERROR("task add into blacklist fail", KR(ret), K(task), K_(svr),
-              "svr_service_time", TVAL_TO_STR(svr_service_time),
-              "survival_time", TVAL_TO_STR(survival_time));
-        }
-      }
-    }
-
     if (OB_SUCCESS == ret) {
       const char *dispatch_reason_str = print_switch_reason(dispatch_reason);
 
@@ -1329,7 +1307,7 @@ void FetchStream::update_fetch_stat_info_(
   ObByteLockGuard lock_guard(stat_lock_);
 
   FetchStatInfo &fsi = cur_stat_info_;
-  const rpc::frame::ObResultCode &rcode = result.rcode_;
+  const ObRpcResultCode &rcode = result.rcode_;
   const ObCdcLSFetchLogResp &resp = result.resp_;
   const ObCdcFetchStatus &fetch_status = resp.get_fetch_status();
 
@@ -1400,9 +1378,9 @@ int FetchStream::handle_fetch_log_result_(
   int64_t data_len = 0;
   int64_t read_len = 0;
   share::SCN replayable_point = share::SCN::max_scn();
-  rpc::frame::ObResultCode rcode;
+  obrpc::ObRpcResultCode rcode;
   FeedbackType feed_back = FeedbackType::INVALID_FEEDBACK;
-  obcall::ObCdcFetchRawSource data_end_source = obcall::ObCdcFetchRawSource::UNKNOWN;
+  obrpc::ObCdcFetchRawSource data_end_source = obrpc::ObCdcFetchRawSource::UNKNOWN;
 
   is_stream_valid = true;
   stream_invalid_reason = NULL;
@@ -1533,7 +1511,7 @@ int FetchStream::update_rpc_request_params_()
 }
 
 int FetchStream::handle_fetch_log_error_(
-    const rpc::frame::ObResultCode &rcode,
+    const ObRpcResultCode &rcode,
     const int err,
     const FetchLogRpcResult &result,
     KickOutInfo &kickout_info)
@@ -1600,21 +1578,6 @@ int FetchStream::handle_fetch_log_error_(
   return ret;
 }
 
-bool FetchStream::need_add_into_blacklist_(const KickOutReason reason)
-{
-  bool bool_ret = false;
-
-  if ((NEED_SWITCH_SERVER == reason) ||
-      (DISCARDED == reason) ||
-      (ARCHIVE_ITER_END_BUT_LS_NOT_EXIST_IN_PALF == reason)) {
-    bool_ret = false;
-  } else {
-    bool_ret = true;
-  }
-
-  return bool_ret;
-}
-
 bool FetchStream::exist_(KickOutInfo &kick_out_info,
     const logservice::TenantLSID &tls_id)
 {
@@ -1642,7 +1605,7 @@ int FetchStream::set_(KickOutInfo &kick_out_info,
 int FetchStream::read_log_(const char *data,
     const int64_t data_len,
     const share::SCN replayable_point,
-    const obcall::ObCdcFetchRawSource data_end_source,
+    const obrpc::ObCdcFetchRawSource data_end_source,
     volatile bool &stop_flag,
     KickOutInfo &kick_out_info,
     int64_t &log_num,
@@ -1685,7 +1648,7 @@ int FetchStream::read_log_(const char *data,
       if (OB_FAIL(ls_fetch_ctx_->get_next_group_entry(group_entry, group_start_lsn,
           buffer, replayable_point, data_end_source))) {
         if (OB_ITER_END != ret) {
-          if (obcall::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
+          if (obrpc::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
             LOG_ERROR("get next_group_entry failed", KR(ret), K_(ls_fetch_ctx), K(data_end_source));
             if (OB_CHECKSUM_ERROR == ret || OB_INVALID_DATA == ret)  {
               OB_ASSERT(ret);
@@ -2027,10 +1990,10 @@ int FetchStream::get_result_data_(const FetchLogRpcResult &result,
     const char *&data,
     int64_t &data_len,
     share::SCN &replayable_point,
-    rpc::frame::ObResultCode &rcode,
-    obcall::ObCdcFetchRawSource &source,
+    obrpc::ObRpcResultCode &rcode,
+    obrpc::ObCdcFetchRawSource &source,
     int &err,
-    obcall::FeedbackType &feed_back)
+    obrpc::FeedbackType &feed_back)
 {
   int ret = OB_SUCCESS;
 
@@ -2042,7 +2005,7 @@ int FetchStream::get_result_data_(const FetchLogRpcResult &result,
     data = resp.get_log_entry_buf();
     data_len = resp.get_pos();
     // regard all fetch source as palf, loggroupentry proto ensure that all fetched logs are complete
-    source = obcall::ObCdcFetchRawSource::PALF;
+    source = obrpc::ObCdcFetchRawSource::PALF;
     replayable_point = SCN::max_scn();
     feed_back = resp.get_feedback_type();
     is_readable = (OB_SUCCESS == ret && OB_SUCCESS == rcode.rcode_);
@@ -2064,16 +2027,16 @@ int FetchStream::get_result_data_(const FetchLogRpcResult &result,
         rcode = status.rcode_;
       }
 
-      if (obcall::FeedbackType::INVALID_FEEDBACK == feed_back &&
-          obcall::FeedbackType::INVALID_FEEDBACK != status.feed_back_) {
+      if (obrpc::FeedbackType::INVALID_FEEDBACK == feed_back &&
+          obrpc::FeedbackType::INVALID_FEEDBACK != status.feed_back_) {
         feed_back = status.feed_back_;
       }
     }
 
     if (is_readable &&
         (OB_SUCCESS != err || OB_SUCCESS != rcode.rcode_) &&
-        obcall::FeedbackType::INVALID_FEEDBACK == feed_back) {
-      feed_back = obcall::FeedbackType::LOG_NOT_IN_THIS_SERVER;
+        obrpc::FeedbackType::INVALID_FEEDBACK == feed_back) {
+      feed_back = obrpc::FeedbackType::LOG_NOT_IN_THIS_SERVER;
     }
 
   } else {

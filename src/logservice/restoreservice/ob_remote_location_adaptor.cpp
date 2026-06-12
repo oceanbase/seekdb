@@ -164,23 +164,9 @@ int ObRemoteLocationAdaptor::get_source_(share::ObLogRestoreSourceItem &item, bo
     if (OB_FAIL(config_str.assign(config_value))) {
       LOG_WARN("failed to assign config value", K(ret), K(config_value));
     } else if (OB_FAIL(service_attr.parse_service_attr_from_str(config_str))) {
-      // Try parsing as location source if service parsing fails
-      LOG_DEBUG("not a service source, try location", K(config_value));
-      // For location source, the config value is the path directly
-      // Format: LOCATION=file:///path or oss://xxx
-      share::SCN until_scn = share::SCN::max_scn();
-      share::ObLogRestoreSourceItem temp_item(
-          tenant_id_,
-          1,  // id: use 1 as default
-          share::ObLogRestoreSourceType::LOCATION,
-          config_value,
-          until_scn);
-      if (OB_FAIL(item.deep_copy(temp_item))) {
-        LOG_WARN("deep_copy failed", K(ret), K(temp_item));
-      } else {
-        source_exist = true;
-        ret = OB_SUCCESS;  // Reset error from parsing attempt
-      }
+      // Only SERVICE log restore source is supported; LOCATION/RAWPATH archive
+      // restore has been removed.
+      LOG_WARN("log_restore_source is not a valid service source", K(ret), K(config_value));
     } else {
       // Successfully parsed as service source
       char value_str[1024] = {'\0'};
@@ -236,27 +222,13 @@ int ObRemoteLocationAdaptor::add_source_(const share::ObLogRestoreSourceItem &it
   if (OB_UNLIKELY(!item.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid log restore source item", K(ret), K(item));
-  } else if (is_location_log_source_type(item.type_)) {
-    ret = add_location_source_(item, restore_handler);
   } else if (is_service_log_source_type(item.type_)) {
     ret = add_service_source_(item, restore_handler);
-  } else if (is_raw_path_log_source_type(item.type_)) {
-    ret = add_rawpath_source_(item, restore_handler);
   } else {
+    // Only SERVICE log restore source is supported; LOCATION/RAWPATH archive
+    // restore has been removed.
     ret = OB_NOT_SUPPORTED;
-  }
-  return ret;
-}
-
-int ObRemoteLocationAdaptor::add_location_source_(const share::ObLogRestoreSourceItem &item,
-    ObLogRestoreHandler &restore_handler)
-{
-  int ret = OB_SUCCESS;
-  share::ObBackupDest dest;
-  if (OB_FAIL(ObLogRestoreSourceMgr::get_backup_dest(item, dest))) {
-    LOG_WARN("get backup dest failed", K(ret), K(item));
-  } else if (OB_FAIL(restore_handler.add_source(dest, item.until_scn_))) {
-    LOG_WARN("add ObBackupDest source failed", K(ret), K(dest), K(item));
+    LOG_WARN("unsupported log restore source type", K(ret), K(item));
   }
   return ret;
 }
@@ -290,45 +262,5 @@ int ObRemoteLocationAdaptor::add_service_source_(const share::ObLogRestoreSource
   return ret;
 }
 
-int ObRemoteLocationAdaptor::add_rawpath_source_(const share::ObLogRestoreSourceItem &item,
-    ObLogRestoreHandler &restore_handler)
-{
-  int ret = OB_SUCCESS;
-  SMART_VAR(logservice::DirArray, dir_array) {
-    ObSqlString tmp_str;
-    char *token = nullptr;
-    char *saveptr = nullptr;
-
-    if (OB_FAIL(tmp_str.assign(item.value_))) {
-      LOG_WARN("fail to parse rawpath value", K(item));
-    } else {
-      token = tmp_str.ptr();
-      for (char *str = token; OB_SUCC(ret); str = nullptr) {
-        ObBackupDest dest;
-        SMART_VAR(logservice::DirInfo, dir_info) {
-          char storage_info_str[OB_MAX_BACKUP_STORAGE_INFO_LENGTH] = { 0 };
-          token = ::STRTOK_R(str, ",", &saveptr);
-          if (nullptr == token) {
-            break;
-          } else if (OB_FAIL(dest.set(token))) {
-            LOG_WARN("fail to set dest", K(token));
-          } else if (OB_FALSE_IT(dir_info.first = dest.get_root_path())) {
-          } else if (OB_FAIL(dest.get_storage_info()->get_storage_info_str(storage_info_str, sizeof(storage_info_str)))) {
-            LOG_WARN("fail to get storage info str", K(dest));
-          } else if (OB_FALSE_IT(dir_info.second = storage_info_str)) {
-          } else if (OB_FAIL(dir_array.push_back(dir_info))) {
-            LOG_WARN("fail to push backup dir_array", K(ret), K(dir_array));
-          }
-        }
-      }
-    }
-    if ((OB_SUCC(ret)) && OB_FAIL(restore_handler.add_source(dir_array, item.until_scn_))) {
-      LOG_WARN("fail to add rawpath source", K(ret), K(item), K(dir_array));
-    } else {
-      LOG_INFO("add rawpath source", K(ret), K(dir_array.count()), K(dir_array));
-    }
-  }
-  return ret;
-}
 } // namespace logservice
 } // namespace oceanbase

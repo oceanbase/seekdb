@@ -21,7 +21,6 @@
 #include "share/config/ob_server_config.h"  // GCONF
 #include "share/backup/ob_log_restore_struct.h"  // ObRestoreSourceServiceAttr
 #include "lib/string/ob_sql_string.h"  // ObSqlString
-#include "ob_log_route_struct.h"    // ObLSRouterKey, ObLSRouterValue, LSSvrList
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -141,163 +140,11 @@ void ObLogRouteService::destroy()
   LOG_INFO("ObLogRouteService destroy finish");
 }
 
-void ObLogRouteService::free_mem_()
-{
-  // For single machine: no memory to free
-}
-
 void ObLogRouteService::handle(void *task)
 {
   UNUSED(task);
   // For single machine: no async task to handle
   LOG_TRACE("handle ignored for single machine");
-}
-
-int ObLogRouteService::update_background_refresh_time(const int64_t background_refresh_time_sec)
-{
-  UNUSED(background_refresh_time_sec);
-  // For single machine: no-op
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::get_background_refresh_time(int64_t &background_refresh_time_sec)
-{
-  if (IS_NOT_INIT) {
-    return OB_NOT_INIT;
-  }
-  background_refresh_time_sec = 0;
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::update_preferred_upstream_log_region(const common::ObRegion &prefer_region)
-{
-  UNUSED(prefer_region);
-  // For single machine: no-op
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::get_preferred_upstream_log_region(common::ObRegion &prefer_region)
-{
-  if (IS_NOT_INIT) {
-    return OB_NOT_INIT;
-  }
-  prefer_region.reset();
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::update_cache_update_interval(const int64_t all_server_cache_update_interval_sec,
-    const int64_t all_zone_cache_update_interval_sec)
-{
-  UNUSED(all_server_cache_update_interval_sec);
-  UNUSED(all_zone_cache_update_interval_sec);
-  // For single machine: no-op
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::get_cache_update_interval(int64_t &all_server_cache_update_interval_sec,
-    int64_t &all_zone_cache_update_interval_sec)
-{
-  if (IS_NOT_INIT) {
-    return OB_NOT_INIT;
-  }
-  all_server_cache_update_interval_sec = 0;
-  all_zone_cache_update_interval_sec = 0;
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::update_blacklist_parameter(
-    const int64_t blacklist_survival_time_sec,
-    const int64_t blacklist_survival_time_upper_limit_min,
-    const int64_t blacklist_survival_time_penalty_period_min,
-    const int64_t blacklist_history_overdue_time_min,
-    const int64_t blacklist_history_clear_interval_min)
-{
-  UNUSED(blacklist_survival_time_sec);
-  UNUSED(blacklist_survival_time_upper_limit_min);
-  UNUSED(blacklist_survival_time_penalty_period_min);
-  UNUSED(blacklist_history_overdue_time_min);
-  UNUSED(blacklist_history_clear_interval_min);
-  // For single machine: no-op
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::get_blacklist_parameter(
-    int64_t &blacklist_survival_time_sec,
-    int64_t &blacklist_survival_time_upper_limit_min,
-    int64_t &blacklist_survival_time_penalty_period_min,
-    int64_t &blacklist_history_overdue_time_min,
-    int64_t &blacklist_history_clear_interval_min)
-{
-  if (IS_NOT_INIT) {
-    return OB_NOT_INIT;
-  }
-  blacklist_survival_time_sec = 0;
-  blacklist_survival_time_upper_limit_min = 0;
-  blacklist_survival_time_penalty_period_min = 0;
-  blacklist_history_overdue_time_min = 0;
-  blacklist_history_clear_interval_min = 0;
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::registered(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
-  UNUSED(ls_id);
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObLogRouteService has not been inited", KR(ret));
-  } else {
-    // For single machine, single tenant, single LS: no need to register async task
-    LOG_TRACE("registered ignored for single machine");
-  }
-
-  return ret;
-}
-
-int ObLogRouteService::remove(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
-  UNUSED(ls_id);
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObLogRouteService has not been inited", KR(ret));
-  } else {
-    // For single machine, single tenant, single LS: no need to remove
-    LOG_TRACE("remove ignored for single machine");
-  }
-
-  return ret;
-}
-
-int ObLogRouteService::get_all_ls(
-    const uint64_t tenant_id,
-    ObIArray<share::ObLSID> &ls_ids)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObLogRouteService has not been inited", KR(ret));
-  } else {
-    // For single machine, single tenant, single LS: hardcode to return sys LS
-    ls_ids.reset();
-    if (OB_FAIL(ls_ids.push_back(share::ObLSID(share::SYS_LS)))) {
-      LOG_WARN("push_back SYS_LS failed", KR(ret));
-    } else {
-      LOG_TRACE("get_all_ls return SYS_LS");
-    }
-  }
-
-  return ret;
 }
 
 int ObLogRouteService::next_server(
@@ -388,30 +235,6 @@ int ObLogRouteService::get_server_array_for_locate_start_lsn(
   return ret;
 }
 
-int ObLogRouteService::get_leader(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
-    common::ObAddr &leader)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
-  UNUSED(ls_id);
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObLogRouteService has not been inited", KR(ret));
-  } else {
-    if (OB_FAIL(get_restore_source_addr_(leader))) {
-      ret = OB_NOT_MASTER;
-      LOG_WARN("restore_source is not configured", KR(ret));
-    } else {
-      LOG_TRACE("get_leader return restore_source", K(leader));
-    }
-  }
-
-  return ret;
-}
-
 bool ObLogRouteService::need_switch_server(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,
@@ -458,42 +281,6 @@ int ObLogRouteService::get_server_count(
   return ret;
 }
 
-int ObLogRouteService::add_into_blacklist(
-    const uint64_t tenant_id,
-    const share::ObLSID &ls_id,
-    const common::ObAddr &svr,
-    const int64_t svr_service_time,
-    int64_t &survival_time)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(tenant_id);
-  UNUSED(ls_id);
-  UNUSED(svr);
-  UNUSED(svr_service_time);
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObLogRouteService has not been inited", KR(ret));
-  } else {
-    // For single machine, single tenant, single LS: blacklist is not needed
-    // Just return success with survival_time = 0
-    survival_time = 0;
-    LOG_TRACE("add_into_blacklist ignored for single machine", K(svr));
-  }
-
-  return ret;
-}
-
-int ObLogRouteService::set_external_svr_blacklist(const char *server_blacklist)
-{
-  UNUSED(server_blacklist);
-  if (IS_NOT_INIT) {
-    return OB_NOT_INIT;
-  }
-  // For single machine: no-op
-  return OB_SUCCESS;
-}
-
 int ObLogRouteService::async_server_query_req(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id)
@@ -511,87 +298,6 @@ int ObLogRouteService::async_server_query_req(
   }
 
   return ret;
-}
-
-int ObLogRouteService::get_ls_svr_list_(const ObLSRouterKey &router_key,
-    LSSvrList &svr_list)
-{
-  UNUSED(router_key);
-  UNUSED(svr_list);
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::query_ls_log_info_and_update_(const ObLSRouterKey &router_key,
-    LSSvrList &svr_list)
-{
-  UNUSED(router_key);
-  UNUSED(svr_list);
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::query_units_info_and_update_(const ObLSRouterKey &router_key,
-    LSSvrList &svr_list)
-{
-  UNUSED(router_key);
-  UNUSED(svr_list);
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::get_ls_router_value_(
-    const ObLSRouterKey &router_key,
-    ObLSRouterValue *&router_value)
-{
-  UNUSED(router_key);
-  router_value = nullptr;
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::handle_when_ls_route_info_not_exist_(
-    const ObLSRouterKey &router_key,
-    ObLSRouterValue *&router_value)
-{
-  UNUSED(router_key);
-  router_value = nullptr;
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-// For single machine: these functors are not used, removed
-
-int ObLogRouteService::update_all_ls_server_list_()
-{
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::update_server_list_(
-    const ObLSRouterKey &router_key,
-    ObLSRouterValue &router_value)
-{
-  UNUSED(router_key);
-  UNUSED(router_value);
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::query_units_info_and_update_(
-    const ObLSRouterKey &router_key,
-    ObLSRouterValue &router_value)
-{
-  UNUSED(router_key);
-  UNUSED(router_value);
-  // For single machine: not used
-  return OB_SUCCESS;
-}
-
-int ObLogRouteService::update_all_server_and_zone_cache_()
-{
-  // For single machine: not used
-  return OB_SUCCESS;
 }
 
 ObLogRouteService::ObLSRouteTimerTask::ObLSRouteTimerTask(ObLogRouteService &log_route_service) :

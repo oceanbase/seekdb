@@ -164,9 +164,7 @@ public:
   int get_upper_limit_scn(share::SCN &scn) const;
   // get the log ts of the max restored log
   int get_max_restore_scn(share::SCN &scn) const;
-  // @brief add log fetch source of phyiscal backups
-  int add_source(logservice::DirArray &array, const share::SCN &end_scn);
-  int add_source(share::ObBackupDest &dest, const share::SCN &end_scn);
+  // @brief add log fetch source (only SERVICE supported)
   int add_source(const share::ObRestoreSourceServiceAttr &service_attr, const share::SCN &end_scn);
   // clean source if log_restore_source is empty
   int clean_source();
@@ -277,14 +275,6 @@ private:
   int check_member_list_change_(common::ObMemberList &member_list, bool &member_list_change);
   int check_restore_to_newest_from_service_(const share::ObRestoreSourceServiceAttr &attr,
       const share::SCN &end_scn, share::SCN &archive_scn);
-  int check_restore_to_newest_from_archive_(ObRemoteLocationParent &location_parent,
-      const palf::LSN &end_lsn, const share::SCN &end_scn, share::SCN &archive_next_scn);
-
-  int get_next_log_after_end_lsn_(ObRemoteLocationParent &location_parent,
-      const palf::LSN &end_lsn, const share::SCN &end_scn, share::SCN &archive_next_scn);
-
-  int check_restore_to_newest_from_rawpath_(ObLogRawPathPieceContext &rawpath_ctx,
-      const palf::LSN &end_lsn, const share::SCN &end_scn, share::SCN &archive_scn);
   bool restore_to_end_unlock_() const;
   int get_offline_scn_(share::SCN &scn);
   void deep_copy_source_(ObRemoteSourceGuard &guard);

@@ -91,70 +91,6 @@ public:
   virtual void handle(void *task);
 
 public:
-  //// Obtain and modify related parameters
-  // Background refresh time
-  int update_background_refresh_time(const int64_t background_refresh_time_sec);
-  int get_background_refresh_time(int64_t &background_refresh_time_sec);
-
-  // Region
-  int update_preferred_upstream_log_region(const common::ObRegion &prefer_region);
-  int get_preferred_upstream_log_region(common::ObRegion &prefer_region);
-
-  // Cache interval
-  int update_cache_update_interval(const int64_t all_server_cache_update_interval_sec,
-      const int64_t all_zone_cache_update_interval_sec);
-  int get_cache_update_interval(int64_t &all_server_cache_update_interval_sec,
-      int64_t &all_zone_cache_update_interval_sec);
-
-  // BlackList
-  int update_blacklist_parameter(
-      const int64_t blacklist_survival_time_sec,
-      const int64_t blacklist_survival_time_upper_limit_min,
-      const int64_t blacklist_survival_time_penalty_period_min,
-      const int64_t blacklist_history_overdue_time_min,
-      const int64_t blacklist_history_clear_interval_min);
-  int get_blacklist_parameter(
-      int64_t &blacklist_survival_time_sec,
-      int64_t &blacklist_survival_time_upper_limit_min,
-      int64_t &blacklist_survival_time_penalty_period_min,
-      int64_t &blacklist_history_overdue_time_min,
-      int64_t &blacklist_history_clear_interval_min);
-
-  // Non-blocking registered: generate an asynchronous task
-  //
-  // @param [in] tenant_id        tenantID
-  // @param [in] ls_id            LS ID
-  //
-  // @retval OB_SUCCESS           Success
-  // @retval OB_EAGAIN            thread queue is already full
-  // @retval OB_HASH_EXIST        tenant_ls_id is already registe async task
-  // @retval Other return values  Failed
-  int registered(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id);
-
-  // Remove the task when LS remove
-  //
-  // @param [in] tenant_id        tenantID
-  // @param [in] ls_id            LS ID
-  //
-  // @retval OB_SUCCESS           Success
-  // @retval Other return values  Failed
-  int remove(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id);
-
-  // Return all the LS for the specified tenant
-  //
-  // @param [in] tenant_id        tenantID
-  // @param [out] ls_ids          all LS ID
-  //
-  // @retval OB_SUCCESS           Success
-  // @retval Other return values  Failed
-  int get_all_ls(
-      const uint64_t tenant_id,
-      ObIArray<share::ObLSID> &ls_ids);
-
   // Get the server synchronously, iterate over the server for the next service log.
   // If the local cache does not exist, the SQL query is triggered and construct struct to insert.
   //
@@ -187,21 +123,6 @@ public:
       const share::ObLSID &ls_id,
       ObIArray<common::ObAddr> &svr_array);
 
-  // Get the leader synchronously. If the local cache does not exist or the leader information do not get,
-  // query the LEADER synchronously
-  //
-  // @param [in] tenant_id        tenantID
-  // @param [in] ls_id            LS ID
-  // @param [out] leader          return leader
-  //
-  // @retval OB_SUCCESS           Success
-  // @retval OB_NOT_MASTER        Current has no leader, need retry
-  // @retval Other return values  Failed
-  int get_leader(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      common::ObAddr &leader);
-
   // Determine if the server needs to be switched
   //
   // @param [in] tenant_id        tenantID
@@ -230,33 +151,6 @@ public:
       const share::ObLSID &ls_id,
       int64_t &avail_svr_count) const;
 
-  // Add server to blacklist
-  //
-  // @param [in] tenant_id        tenantID
-  // @param [in] ls_id            LS ID
-  // @param [in] svr              blacklisted sever
-  // @param [in] svr_service_time Current server service time
-  //
-  // @retval OB_SUCCESS           Success
-  // @retval Other error codes    Fail
-  int add_into_blacklist(
-      const uint64_t tenant_id,
-      const share::ObLSID &ls_id,
-      const common::ObAddr &svr,
-      const int64_t svr_service_time,
-      int64_t &survival_time);
-
-   // External Server blacklist, default is|, means no configuration, support configuration single/multiple servers
-   // Single: SEVER_IP1:PORT1
-   // Multiple: SEVER_IP1:PORT1|SEVER_IP2:PORT2|SEVER_IP3:PORT3
-   // Used to filter server
-   //
-   // @param [in] server_blacklist External server blacklist string
-   //
-   // @retval OB_SUCCESS           Success
-   // @retval Other error codes    Fail
-   int set_external_svr_blacklist(const char *server_blacklist);
-
   // Launch an asynchronous update task for the server list of LS
   //
   // @param [in] tenant_id        tenantID
@@ -270,23 +164,8 @@ public:
        const share::ObLSID &ls_id);
 
 private:
-  // For single machine: simplified private methods (all empty or no-op)
-  // Forward declarations
-  struct ObLSRouterKey;
-  struct ObLSRouterValue;
-  class LSSvrList;
-  
-  int get_ls_svr_list_(const ObLSRouterKey &router_key, LSSvrList &svr_list);
-  int query_ls_log_info_and_update_(const ObLSRouterKey &router_key, LSSvrList &svr_list);
-  int query_units_info_and_update_(const ObLSRouterKey &router_key, LSSvrList &svr_list);
-  int get_ls_router_value_(const ObLSRouterKey &router_key, ObLSRouterValue *&router_value);
+  // Read the configured restore source (log_restore_source = $IP:$RPC_PORT) and return its address.
   int get_restore_source_addr_(common::ObAddr &addr) const;
-  int handle_when_ls_route_info_not_exist_(const ObLSRouterKey &router_key, ObLSRouterValue *&router_value);
-  int update_all_ls_server_list_();
-  int update_server_list_(const ObLSRouterKey &router_key, ObLSRouterValue &router_value);
-  int query_units_info_and_update_(const ObLSRouterKey &router_key, ObLSRouterValue &router_value);
-  int update_all_server_and_zone_cache_();
-  void free_mem_();
 
   class ObLSRouteTimerTask : public common::ObTimerTask
   {

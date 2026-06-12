@@ -57,8 +57,6 @@ private:
   int clean_source_(ObLogRestoreHandler &restore_handler);
   int add_source_(const share::ObLogRestoreSourceItem &item, ObLogRestoreHandler &restore_handler);
   int add_service_source_(const share::ObLogRestoreSourceItem &item, ObLogRestoreHandler &restore_handler);
-  int add_location_source_(const share::ObLogRestoreSourceItem &item, ObLogRestoreHandler &restore_handler);
-  int add_rawpath_source_(const share::ObLogRestoreSourceItem &item, ObLogRestoreHandler &restore_handler);
 
 private:
   static const int64_t LOCATION_REFRESH_INTERVAL = 5 * 1000 * 1000L;

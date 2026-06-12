@@ -27,7 +27,6 @@ namespace oceanbase
 
 namespace logservice
 {
-class ObLogRestoreArchiveDriver;
 class ObLogRestoreNetDriver;
 class ObRemoteFetchLogImpl
 {
@@ -37,7 +36,6 @@ public:
   ~ObRemoteFetchLogImpl();
 
   int init(const uint64_t tenant_id,
-      ObLogRestoreArchiveDriver *archive_driver,
       ObLogRestoreNetDriver *net_driver);
   void destroy();
   int do_schedule(const share::ObLogRestoreSourceItem &source);
@@ -48,7 +46,6 @@ public:
 private:
   bool inited_;
   uint64_t tenant_id_;
-  ObLogRestoreArchiveDriver *archive_driver_;
   ObLogRestoreNetDriver *net_driver_;
 
 private:

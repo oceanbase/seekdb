@@ -115,7 +115,7 @@ public:
       palf::LSN &lsn,
       const char *&buf,
       const share::SCN replayable_point,
-      const obcall::ObCdcFetchRawSource data_end_source);
+      const obrpc::ObCdcFetchRawSource data_end_source);
   int get_next_remote_group_entry(
       palf::LogGroupEntry &group_entry,
       palf::LSN &lsn,
@@ -271,22 +271,6 @@ public:
   }
 
   ClientFetchingMode get_fetching_mode() const { return fetching_mode_; }
-
-  // Get the start fetch log time on the current server
-  int get_cur_svr_start_fetch_tstamp(const common::ObAddr &svr,
-      int64_t &svr_start_fetch_tstamp) const;
-
-  // add server to blacklist
-  ///
-  /// @param [in] svr               blacklisted sever
-  /// @param [in] svr_service_time  Current server service partition time
-  /// @param [in] survival_time     server survival time in blacklist (may be modified based on history)
-  ///
-  /// @retval OB_SUCCESS            add svr to blacklist success
-  /// @retval Other error codes     Fail
-  int add_into_blacklist(const common::ObAddr &svr,
-      const int64_t svr_service_time,
-      int64_t &survival_time);
 
   // Determine if the server needs to be switched
   //

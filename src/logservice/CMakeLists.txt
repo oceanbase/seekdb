@@ -27,6 +27,8 @@ ob_set_subtarget(ob_logservice common_mixed
   cdcservice/ob_cdc_service.cpp
   cdcservice/ob_cdc_fetcher.cpp
   cdcservice/ob_cdc_start_lsn_locator.cpp
+  cdcservice/ob_cdc_rpc_processor.cpp
+  cdcservice/ob_cdc_rpc_proxy.cpp
   cdcservice/ob_cdc_service_monitor.cpp
   cdcservice/ob_cdc_struct.cpp
   cdcservice/ob_cdc_req.cpp
@@ -77,6 +79,8 @@ ob_set_subtarget(ob_logservice palf
   palf/log_req.cpp
   palf/log_request_handler.cpp
   palf/log_rpc.cpp
+  palf/log_rpc_processor.cpp
+  palf/log_rpc_proxy.cpp
   palf/log_simple_member_list.cpp
   palf/log_sliding_window.cpp
   palf/log_state_mgr.cpp
@@ -153,6 +157,8 @@ ob_set_subtarget(ob_logservice restoreservice
   restoreservice/ob_fetch_log_task.cpp
   restoreservice/ob_log_restore_define.cpp
   restoreservice/ob_log_restore_handler.cpp
+  restoreservice/ob_log_restore_rpc.cpp
+  restoreservice/ob_log_restore_rpc_define.cpp
   restoreservice/ob_log_restore_service.cpp
   restoreservice/ob_remote_data_generator.cpp
   restoreservice/ob_remote_fetch_log.cpp
@@ -167,7 +173,6 @@ ob_set_subtarget(ob_logservice restoreservice
   restoreservice/ob_log_restore_scheduler.cpp
   restoreservice/ob_log_restore_driver_base.cpp
   restoreservice/ob_log_restore_net_driver.cpp
-  restoreservice/ob_log_restore_archive_driver.cpp
   restoreservice/ob_restore_log_function.cpp
   restoreservice/ob_remote_log_writer.cpp
   restoreservice/ob_remote_log_raw_reader.cpp
@@ -184,19 +189,7 @@ ob_set_subtarget(ob_logservice data_dictionary
 )
 
 ob_set_subtarget(ob_logservice logrouteservice
-  logrouteservice/ob_all_server_info.cpp
-  logrouteservice/ob_all_zone_info.cpp
-  logrouteservice/ob_all_units_info.cpp
-  logrouteservice/ob_external_server_blacklist.cpp
-  logrouteservice/ob_log_all_svr_cache.cpp
-  logrouteservice/ob_log_route_key.cpp
   logrouteservice/ob_log_route_service.cpp
-  logrouteservice/ob_log_route_struct.cpp
-  logrouteservice/ob_log_systable_queryer.cpp
-  logrouteservice/ob_ls_log_stat_info.cpp
-  logrouteservice/ob_ls_server_list.cpp
-  logrouteservice/ob_server_blacklist.cpp
-  logrouteservice/ob_server_priority.cpp
 )
 
 ob_set_subtarget(ob_logservice archiveservice

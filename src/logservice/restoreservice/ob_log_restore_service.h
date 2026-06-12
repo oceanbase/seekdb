@@ -20,13 +20,13 @@
 #include "rpc/frame/ob_req_transport.h"                     // ObReqTransport
 #include "share/ob_thread_pool.h"                           // ObThreadPool
 #include "ob_remote_fetch_log.h"                            // ObRemoteFetchLogImpl
+#include "ob_log_restore_rpc.h"                             // ObLogResSvrRpc
 #include "ob_remote_fetch_log_worker.h"                     // ObRemoteFetchWorker
 #include "ob_remote_location_adaptor.h"                     // ObRemoteLocationAdaptor
 #include "ob_remote_error_reporter.h"                       // ObRemoteErrorReporter
 #include "ob_log_restore_allocator.h"                       // ObLogRestoreAllocator
 #include "ob_log_restore_scheduler.h"                       // ObLogRestoreScheduler
 #include "ob_log_restore_net_driver.h"                      // ObLogRestoreNetDriver
-#include "ob_log_restore_archive_driver.h"                  // ObLogRestoreArchiveDriver
 #include "ob_remote_log_writer.h"                           // ObRemoteLogWriter
 
 namespace oceanbase
@@ -59,7 +59,11 @@ public:
   ~ObLogRestoreService();
 
 public:
-  int init(           ObLSService *ls_svr,
+  ObLogResSvrRpc *get_log_restore_proxy() { return &proxy_; }
+
+public:
+  int init(rpc::frame::ObReqTransport *transport,
+           ObLSService *ls_svr,
            ObLogService *log_service);
   void destroy();
   int start();
@@ -86,8 +90,8 @@ private:
 private:
   bool inited_;
   ObLSService *ls_svr_;
+  ObLogResSvrRpc proxy_;
   ObRemoteLocationAdaptor location_adaptor_;
-  ObLogRestoreArchiveDriver archive_driver_;
   ObLogRestoreNetDriver net_driver_;
   ObRemoteFetchLogImpl fetch_log_impl_;
   ObRemoteFetchWorker fetch_log_worker_;

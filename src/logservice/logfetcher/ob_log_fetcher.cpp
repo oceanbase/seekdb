@@ -115,10 +115,10 @@ int ObLogFetcher::init(
     // Before the LogFetcher module is initialized, the following configuration items need to be loaded
     configure(cfg);
     const int64_t max_log_file_buffer_cnt = max(
-      (lib::get_tenant_memory_limit(self_tenant_id_) >> 5) / palf::PALF_PHY_BLOCK_SIZE, 1);
+      (get_tenant_memory_limit(self_tenant_id_) >> 5) / palf::PALF_PHY_BLOCK_SIZE, 1);
     const int64_t MIN_FETCH_LOG_ARPC_RES_CNT = 4;
     const common::ObRegion region(cfg.region.str());
-    const obcall::ObCdcClientType client_type = get_client_type_from_user_type(log_fetcher_user_);
+    const obrpc::ObCdcClientType client_type = get_client_type_from_user_type(log_fetcher_user_);
 
     if (is_integrated_fetching_mode(fetching_mode_) && OB_FAIL(log_route_service_.init(
         proxy,
@@ -393,34 +393,6 @@ void ObLogFetcher::mark_stop_flag()
   }
 }
 
-int ObLogFetcher::update_preferred_upstream_log_region(const common::ObRegion &region)
-{
-  int ret = OB_SUCCESS;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObLogFetcher has not been inited", KR(ret));
-  } else if (OB_FAIL(log_route_service_.update_preferred_upstream_log_region(region))) {
-    LOG_WARN("ObLogRouteService update_preferred_upstream_log_region failed", KR(ret), K(region));
-  }
-
-  return ret;
-}
-
-int ObLogFetcher::get_preferred_upstream_log_region(common::ObRegion &region)
-{
-  int ret = OB_SUCCESS;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObLogFetcher has not been inited", KR(ret));
-  } else if (OB_FAIL(log_route_service_.get_preferred_upstream_log_region(region))) {
-    LOG_WARN("ObLogRouteService get_preferred_upstream_log_region failed", KR(ret), K(region));
-  }
-
-  return ret;
-}
-
 int ObLogFetcher::add_ls(
     const share::ObLSID &ls_id,
     const ObLogFetcherStartParameters &start_parameters)
@@ -446,9 +418,6 @@ int ObLogFetcher::add_ls(
   else if (OB_UNLIKELY(start_tstamp_ns <= -1)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid start tstamp", KR(ret), K(start_tstamp_ns), K(tls_id), K(start_lsn));
-  } else if (is_integrated_fetching_mode(fetching_mode_)
-      && OB_FAIL(log_route_service_.registered(tls_id.get_tenant_id(), tls_id.get_ls_id()))) {
-    LOG_WARN("ObLogRouteService registered fail", KR(ret), K(start_tstamp_ns), K(tls_id), K(start_lsn));
   }
   // Push LS into ObLogLSFetchMgr
   else if (OB_FAIL(ls_fetch_mgr_.add_ls(tls_id, start_parameters, is_loading_data_dict_baseline_data_,
@@ -700,15 +669,6 @@ void ObLogFetcher::configure(const ObLogFetcherConfig &cfg)
   int ret = OB_SUCCESS;
   bool print_ls_heartbeat_info = cfg.print_ls_heartbeat_info;
 
-  const int64_t log_router_background_refresh_interval_sec = cfg.log_router_background_refresh_interval_sec;
-  const int64_t all_server_cache_update_interval_sec = cfg.all_server_cache_update_interval_sec;
-  const int64_t all_zone_cache_update_interval_sec = cfg.all_zone_cache_update_interval_sec;
-
-  const int64_t blacklist_survival_time_sec = cfg.blacklist_survival_time_sec;
-  const int64_t blacklist_survival_time_upper_limit_min = cfg.blacklist_survival_time_upper_limit_min;
-  const int64_t blacklist_survival_time_penalty_period_min = cfg.blacklist_survival_time_penalty_period_min;
-  const int64_t blacklist_history_overdue_time_min = cfg.blacklist_history_overdue_time_min;
-  const int64_t blacklist_history_clear_interval_min = cfg.blacklist_history_clear_interval_min;
   const int64_t log_ext_handler_concurrency = cfg.cdc_read_archive_log_concurrency;
 
   ATOMIC_STORE(&g_print_ls_heartbeat_info, print_ls_heartbeat_info);
@@ -720,32 +680,7 @@ void ObLogFetcher::configure(const ObLogFetcherConfig &cfg)
   ObLogLSFetchMgr::configure(cfg);
   FetchLogARpc::configure(cfg);
 
-  // only update LogRouteServer::update_blacklist_parameter if fetcher is inited.
-  if (IS_INIT && is_integrated_fetching_mode(fetching_mode_)) {
-    if (OB_FAIL(log_route_service_.update_blacklist_parameter(
-        blacklist_survival_time_sec,
-        blacklist_survival_time_upper_limit_min,
-        blacklist_survival_time_penalty_period_min,
-        blacklist_history_overdue_time_min,
-        blacklist_history_clear_interval_min))) {
-      LOG_WARN("update_blacklist_parameter failed", KR(ret),
-        K(blacklist_survival_time_sec),
-        K(blacklist_survival_time_upper_limit_min),
-        K(blacklist_survival_time_penalty_period_min),
-        K(blacklist_history_overdue_time_min),
-        K(blacklist_history_clear_interval_min));
-    } else if (OB_FAIL(log_route_service_.update_preferred_upstream_log_region(cfg.region.str()))) {
-      LOG_ERROR("update_preferred_upstream_log_region failed", KR(ret), "region", cfg.region);
-    } else if (OB_FAIL(log_route_service_.update_cache_update_interval(
-        all_server_cache_update_interval_sec,
-        all_zone_cache_update_interval_sec))) {
-      LOG_ERROR("update_cache_update_interval failed", KR(ret),
-          K(all_server_cache_update_interval_sec), K(all_zone_cache_update_interval_sec));
-    } else if (OB_FAIL(log_route_service_.update_background_refresh_time(log_router_background_refresh_interval_sec))) {
-      LOG_ERROR("update_background_refresh_time failed", KR(ret),
-          "log_router_background_refresh_interval_sec", log_router_background_refresh_interval_sec);
-    }
-  } else if (IS_INIT && is_direct_fetching_mode(fetching_mode_)) {
+  if (IS_INIT && is_direct_fetching_mode(fetching_mode_)) {
     if (OB_FAIL(log_ext_handler_.resize(log_ext_handler_concurrency))) {
       LOG_ERROR("log_ext_handler failed to resize when reloading configure", K(log_ext_handler_concurrency));
     } else {
@@ -872,7 +807,7 @@ void ObLogFetcher::print_stat()
 int ObLogFetcher::suggest_cached_rpc_res_count_(const int64_t min_res_cnt,
     const int64_t max_res_cnt)
 {
-  const int64_t memory_limit = lib::get_tenant_memory_limit(self_tenant_id_);
+  const int64_t memory_limit = get_tenant_memory_limit(self_tenant_id_);
   // the maximum memory hold by rpc_result should be 1/32 of the memory limit.
   const int64_t rpc_res_hold_max = (memory_limit >> 5);
   int64_t rpc_res_cnt = rpc_res_hold_max / FetchLogRpcResultPool::DEFAULT_RESULT_POOL_BLOCK_SIZE;
@@ -1011,7 +946,7 @@ int ObLogFetcher::print_delay()
   return ret;
 }
 
-int ObLogFetcher::update_fetch_log_protocol(const obcall::ObCdcFetchLogProtocolType proto)
+int ObLogFetcher::update_fetch_log_protocol(const obrpc::ObCdcFetchLogProtocolType proto)
 {
   return fs_container_mgr_.update_fetch_log_protocol(proto);
 }
