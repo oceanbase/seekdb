@@ -946,7 +946,7 @@ int ObTextStringResult::calc_buffer_len(int64_t res_len)
       buff_len_ = res_len;
     } else if (res_len < OB_MAX_LONGTEXT_LENGTH - MAX_TMP_LOB_HEADER_LEN) {
       // inrow lob with lob header
-      bool has_extern = lib::is_oracle_mode(); // even oracle may not need extern for temp data
+      bool has_extern = false; // even oracle may not need extern for temp data
       ObMemLobExternFlags extern_flags(has_extern);
       res_len += sizeof(ObLobCommon);
       if (has_extern) {
@@ -978,23 +978,13 @@ int ObTextStringResult::fill_temp_lob_header(const int64_t res_len)
     ObLobLocatorV2 locator(buffer_, static_cast<uint32_t>(buff_len_), has_lob_header_);
     // temp lob in oracle mode not need extern neither, for it does not have rowkey
     // However we mock extern failed in case of return it to old client
-    ObMemLobExternFlags extern_flags(lib::is_oracle_mode());
+    ObMemLobExternFlags extern_flags(false);
     ObString rowkey_str;
     ObString empty_str;
     ObLobCommon lob_common;
-    if (lib::is_mysql_mode()) {
-      // for mysql mode temp lob, we can mock it as disk inrow lob
-      MEMCPY(buffer_, &lob_common, sizeof(ObLobCommon));
-    } else if (OB_FAIL(locator.fill(TEMP_FULL_LOB,
-                             extern_flags,
-                             rowkey_str,
-                             &lob_common,
-                             static_cast<uint32_t>(res_len + sizeof(ObLobCommon)),
-                             0,
-                             0,
-                             false))) {
-      LOG_WARN("Lob: fill temp lob locator failed", K(type_), K(ret));
-    } else if (OB_FAIL((locator.set_payload_data(&lob_common, empty_str)))) {
+    // for mysql mode temp lob, we can mock it as disk inrow lob
+    MEMCPY(buffer_, &lob_common, sizeof(ObLobCommon));
+    if (OB_FAIL((locator.set_payload_data(&lob_common, empty_str)))) {
       LOG_WARN("Lob: set temp lob locator payload failed", K(type_), K(ret));
     }
     pos_ = buff_len_ - res_len; // only res_len could be used later

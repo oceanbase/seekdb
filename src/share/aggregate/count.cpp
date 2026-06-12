@@ -33,13 +33,8 @@ int init_count_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id, ObIA
   ObAggrInfo &aggr_info = agg_ctx.locate_aggr_info(agg_col_id);
   agg = nullptr;
   bool has_distinct = aggr_info.has_distinct_;
-  if (lib::is_oracle_mode()) {
-    ret = init_agg_func<CountAggregate<VEC_TC_NUMBER>>(agg_ctx, agg_col_id, has_distinct, allocator,
-                                                       agg);
-  } else {
-    ret = init_agg_func<CountAggregate<VEC_TC_INTEGER>>(agg_ctx, agg_col_id, has_distinct,
-                                                        allocator, agg);
-  }
+  ret = init_agg_func<CountAggregate<VEC_TC_NUMBER>>(agg_ctx, agg_col_id, has_distinct, allocator,
+                                                     agg);
   return ret;
 #undef INIT_COUNT_CASE
 }
@@ -80,27 +75,6 @@ int quick_add_batch_rows_for_count(IAggregate *agg, RuntimeContext &agg_ctx,
     int64_t &data = *reinterpret_cast<int64_t *>(agg_cell);
     data += diff;
 
-  } else if (lib::is_mysql_mode()) {
-    auto &count_agg = *static_cast<SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_INTEGER> *>(agg);
-    if (OB_LIKELY(row_sel.is_empty() && bound.get_all_rows_active())) {
-      for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
-        ret =
-          count_agg.add_row(agg_ctx, mock_cols, i, agg_col_id, agg_cell, nullptr, fake_calc_info);
-      }
-    } else if (!row_sel.is_empty()) {
-      for (int i = 0; OB_SUCC(ret) && i < row_sel.size(); i++) {
-        ret = count_agg.add_row(agg_ctx, mock_cols, row_sel.index(i), agg_col_id, agg_cell, nullptr,
-                                fake_calc_info);
-      }
-    } else {
-      for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
-        if (skip.at(i)) {
-        } else {
-          ret =
-            count_agg.add_row(agg_ctx, mock_cols, i, agg_col_id, agg_cell, nullptr, fake_calc_info);
-        }
-      }
-    }
   } else {
     auto &count_agg = *static_cast<SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_NUMBER> *>(agg);
     if (OB_LIKELY(row_sel.is_empty() && bound.get_all_rows_active())) {

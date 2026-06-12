@@ -42,18 +42,12 @@ int init_sum_opnsize_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id
                       aggr_info.get_first_child_datum_precision());
     bool has_lob_header = is_lob_storage(aggr_info.get_first_child_type()) &&
                           aggr_info.param_exprs_.at(0)->obj_meta_.has_lob_header();
-    if (lib::is_oracle_mode() && !has_lob_header) {
+    if (!has_lob_header) {
       ret = init_agg_func<
               SumOpNSize<VEC_TC_NUMBER, false>>(agg_ctx, agg_col_id, has_distinct, allocator, agg);
-    } else if (!lib::is_oracle_mode() && !has_lob_header) {
-      ret = init_agg_func<
-              SumOpNSize<VEC_TC_INTEGER, false>>(agg_ctx, agg_col_id, has_distinct, allocator, agg);
-    } else if (lib::is_oracle_mode() && has_lob_header) {
-      ret = init_agg_func<
-              SumOpNSize<VEC_TC_NUMBER, true>>(agg_ctx, agg_col_id, has_distinct, allocator, agg);
     } else {
       ret = init_agg_func<
-              SumOpNSize<VEC_TC_INTEGER, true>>(agg_ctx, agg_col_id, has_distinct, allocator, agg);
+              SumOpNSize<VEC_TC_NUMBER, true>>(agg_ctx, agg_col_id, has_distinct, allocator, agg);
     }
   }  
   return ret;

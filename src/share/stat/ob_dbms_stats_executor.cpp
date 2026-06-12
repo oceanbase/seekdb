@@ -1695,17 +1695,7 @@ int ObDbmsStatsExecutor::restore_session_for_online_stat(sql::ObSQLSessionInfo *
     } else {
       session->set_nested_count(nested_count);
     }
-    //2.restore seesion compatible oracle mode
-    if (lib::is_oracle_mode()) {
-      ObObj oracle_mode;
-      oracle_mode.set_int(1);
-      int tmp_ret = session->update_sys_variable(share::SYS_VAR_OB_COMPATIBILITY_MODE, oracle_mode);
-      if (tmp_ret != OB_SUCCESS) {
-        ret = COVER_SUCC(tmp_ret);
-        LOG_WARN("failed to update sys variable for compatibility mode", K(tmp_ret));
-      }
-    }
-    //3.restore trx lock timeout
+    //2.restore trx lock timeout
     if (need_reset_trx_lock_timeout) {
       ObObj trx_lock_timeout;
       trx_lock_timeout.set_int(old_trx_lock_timeout);

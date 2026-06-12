@@ -258,12 +258,8 @@ struct ObObjCastParams
 
   void set_compatible_cast_mode()
   {
-    if (lib::is_oracle_mode()) {
-      cast_mode_ &= ~CM_WARN_ON_FAIL;
-      cast_mode_ |= CM_ORACLE_MODE;
-    } else {
-      cast_mode_ &= ~CM_ORACLE_MODE;
-    }
+    cast_mode_ &= ~CM_WARN_ON_FAIL;
+    cast_mode_ |= CM_ORACLE_MODE;
     return;
   }
 

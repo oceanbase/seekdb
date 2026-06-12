@@ -973,9 +973,8 @@ int ObDDLUtil::generate_build_replica_sql(
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("fail to get table schema", K(ret), KP(source_table_schema), KP(dest_table_schema),
       K(tenant_id), K(data_table_id), K(dest_table_id));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(tenant_id, data_table_id, oracle_mode))) {
-    LOG_WARN("check if oracle mode failed", K(ret), K(data_table_id));
   } else {
+    bool oracle_mode = false;
     ObArray<ObColDesc> column_ids;
     ObArray<ObColumnNameInfo> column_names;
     ObArray<ObColumnNameInfo> insert_column_names;
@@ -1289,9 +1288,6 @@ int ObDDLUtil::generate_build_mview_replica_sql(
     } else if (OB_ISNULL(container_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("fail to get table schema", KR(ret), K(container_table_id));
-    } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                 tenant_id, mview_table_id, is_oracle_mode))) {
-      LOG_WARN("check if oracle mode failed", KR(ret), K(mview_table_id));
     } else if (OB_FAIL(schema_guard.get_database_schema(
                  tenant_id, mview_table_schema->get_database_id(), database_schema))) {
       LOG_WARN("fail to get database schema", KR(ret), K(tenant_id),
@@ -1300,6 +1296,7 @@ int ObDDLUtil::generate_build_mview_replica_sql(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, database schema must not be nullptr", KR(ret));
     } else {
+      bool is_oracle_mode = false;
       ObArenaAllocator allocator("ObDDLTmp");
       ObString database_name;
       ObString container_table_name;
@@ -1514,7 +1511,7 @@ int ObDDLUtil::find_table_scan_table_id(const ObOpSpec *spec, uint64_t &table_id
 
 bool ObDDLUtil::need_reshape(const ObObjMeta &col_type)
 {
-  return col_type.is_binary() || col_type.is_fixed_len_char_type() || (lib::is_oracle_mode() && col_type.is_character_type());
+  return col_type.is_binary() || col_type.is_fixed_len_char_type() || col_type.is_character_type();
 }
 
 int ObDDLUtil::check_null_and_length(
@@ -4545,7 +4542,7 @@ int ObDDLUtil::get_temp_store_compress_type(const share::schema::ObTableSchema *
   } else {
     ObCompressorType schema_compr_type = table_schema->get_compressor_type();
     if (NONE_COMPRESSOR == schema_compr_type && table_schema->get_row_store_type() != FLAT_ROW_STORE) { // encoding without compress
-      schema_compr_type = ZSTD_1_3_8_COMPRESSOR;
+      schema_compr_type = ZSTD_COMPRESSOR;
     }
     ret = get_temp_store_compress_type(schema_compr_type, parallel, compr_type);
   }
@@ -4566,9 +4563,9 @@ int ObDDLUtil::get_temp_store_compress_type(const ObCompressorType schema_compr_
     if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("NONE")) {
       compr_type = NONE_COMPRESSOR;
     } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("ZSTD")) {
-      compr_type = ZSTD_1_3_8_COMPRESSOR;
+      compr_type = ZSTD_COMPRESSOR;
     } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("LZ4")) {
-      compr_type = ZSTD_1_3_8_COMPRESSOR;
+      compr_type = LZ4_COMPRESSOR;
     } else if (0 == tenant_config->_ob_ddl_temp_file_compress_func.get_value_string().case_compare("AUTO")) {
       UNUSED(parallel);
       if (schema_compr_type > INVALID_COMPRESSOR && schema_compr_type < MAX_COMPRESSOR) {

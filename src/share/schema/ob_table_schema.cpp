@@ -15,7 +15,6 @@
  */
 
 #include "share/ob_fts_index_builder_util.h"
-#include "share/table/ob_ttl_util.h"
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_table_schema.h"
 #include "share/schema/ob_part_mgr_util.h"
@@ -1956,7 +1955,7 @@ int ObTableSchema::check_valid(const bool count_varchar_size_by_byte) const
                     K(OB_MAX_VARCHAR_LENGTH));
               } else {
                 if (count_varchar_size_by_byte) {
-                  if (OB_FAIL(column->get_byte_length(varchar_col_len, lib::is_oracle_mode(), false))) {
+                  if (OB_FAIL(column->get_byte_length(varchar_col_len, false, false))) {
                     LOG_WARN("get_byte_length failed ", K(ret));
                   }
                 } else {
@@ -2339,14 +2338,12 @@ int ObTableSchema::alter_column(ObColumnSchemaV2 &column_schema, ObColumnCheckMo
       autoinc_column_id_ = 0;
     }
     if (src_schema->get_column_name_str() != dst_name && is_column_store_supported()) {
-      bool is_oracle_mode = false;
+      constexpr bool is_oracle_mode = false;
       char cg_name[OB_MAX_COLUMN_GROUP_NAME_LENGTH] = {'\0'};
       ObString cg_name_str(OB_MAX_COLUMN_GROUP_NAME_LENGTH, 0, cg_name);
 
       if (OB_FAIL(src_schema->get_each_column_group_name(cg_name_str))) {
         LOG_WARN("fail to get each column group name", K(ret));
-      } else if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-        LOG_WARN("fail to check oracle mode", KR(ret));
       } else if (OB_FAIL(remove_col_from_name_hash_array(is_oracle_mode, src_schema))) {
         LOG_WARN("Failed to remove old column name from name_hash_array", K(ret));
       } else if (OB_FAIL(src_schema->set_column_name(dst_name))) {
@@ -2397,13 +2394,7 @@ int ObTableSchema::alter_mysql_table_columns(ObIArray<ObColumnSchemaV2> &columns
   int ret = OB_SUCCESS;
   ObSEArray<ObColumnSchemaV2 *, 16> src_cols;
   ObSEArray<ObColumnSchemaV2 *, 16> rename_cols;
-  bool is_oracle_mode = false;
-  if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("failed to check oracle mode", K(ret));
-  } else if (OB_UNLIKELY(is_oracle_mode)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only for mysql mode", K(ret));
-  }
+  constexpr bool is_oracle_mode = false;
   for (int i = 0; OB_SUCC(ret) && i < columns.count(); i++) {
     ObColumnSchemaV2 *src_col = get_column_schema(orig_names.at(i));
     if (OB_ISNULL(src_col)) {
@@ -3041,19 +3032,12 @@ ObColumnSchemaV2 *ObTableSchema::get_column_schema_by_name_internal(
 {
   int ret = OB_SUCCESS;
   ObColumnSchemaV2 *column = NULL;
-  bool is_oracle_mode = lib::is_oracle_mode();
-  if (static_cast<int64_t>(table_id_) > 0 // may be used in resolver
-      && OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret));
-  } else {
-    lib::CompatModeGuard g(is_oracle_mode ?
-                      lib::Worker::CompatMode::ORACLE :
-                      lib::Worker::CompatMode::MYSQL);
-    if (!column_name.empty() && NULL != name_hash_array_) {
-      ObColumnSchemaHashWrapper column_name_key(column_name);
-      if (OB_SUCCESS != name_hash_array_->get_refactored(column_name_key, column)) {
-        column = NULL;
-      }
+  constexpr bool is_oracle_mode = false;
+  lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
+  if (!column_name.empty() && NULL != name_hash_array_) {
+    ObColumnSchemaHashWrapper column_name_key(column_name);
+    if (OB_SUCCESS != name_hash_array_->get_refactored(column_name_key, column)) {
+      column = NULL;
     }
   }
   return column;
@@ -4232,11 +4216,8 @@ int ObTableSchema::delete_column_internal(ObColumnSchemaV2 *column_schema, const
     LOG_USER_ERROR(OB_CANT_REMOVE_ALL_FIELDS);
     LOG_WARN("Can not delete all columns in table", K(ret));
   } else {
-    bool is_oracle_mode = lib::is_oracle_mode();
-    if (static_cast<int64_t>(table_id_) > 0 // may be used in resolver
-        && OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-      LOG_WARN("fail to check oracle mode", KR(ret));
-    } else if (!for_view && OB_FAIL(delete_column_update_prev_id(column_schema))) {
+    constexpr bool is_oracle_mode = false;
+    if (!for_view && OB_FAIL(delete_column_update_prev_id(column_schema))) {
       LOG_WARN("Failed to update column previous id", K(ret));
     } else if (OB_FAIL(remove_col_from_column_array(column_schema))) {
       LOG_WARN("Failed to remove col from column array", K(ret));
@@ -5545,12 +5526,9 @@ int ObTableSchema::has_add_column_instant(bool &add_column_instant) const
   add_column_instant = false;
   int64_t max_column_id = 0;
   const ObColumnSchemaV2 *col = NULL;
-  bool is_oracle_mode = false;
+  constexpr bool is_oracle_mode = false;
   ObColumnIterByPrevNextID iter(*this);
-  if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to if oracle mode", KR(ret));
-  }
-  while (!is_oracle_mode && OB_SUCC(ret)) {
+  while (OB_SUCC(ret)) {
     if (OB_FAIL(iter.next(col))) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
@@ -8410,7 +8388,7 @@ int ObTableSchema::is_hbase_table(bool &is_h_table) const
   const int64_t HBASE_TABLE_COLUMN_COUNT = 4;
   is_h_table = false;
   ObKVAttr kv_attr;
-  if (OB_FAIL(common::ObTTLUtil::parse_kv_attributes(get_kv_attributes(), kv_attr))) {
+  if (OB_FAIL(ObTTLUtil::parse_kv_attributes(get_kv_attributes(), kv_attr))) {
     LOG_WARN("fail to parse kv attributes", KR(ret), K(get_kv_attributes()));
   } else if (kv_attr.type_ == common::ObKVAttr::ObTTLTableType::HBASE) {
     is_h_table = true;
@@ -8449,10 +8427,7 @@ int ObTableSchema::is_hbase_table(bool &is_h_table) const
         } else if (0 == strcmp(column_name_ptr, T_COLULMN)) {
           col_flags.at(2) = true;
           /*The T column must be int type for mysql mode*/
-          /*Since the oralce mode hasn't officially specified the htable schema so we do a strict denfensive here*/
-          if (lib::is_oracle_mode()) {
-            is_h_table = true;
-          } else if (!lib::is_oracle_mode() && ObIntType == column_schema->get_data_type()) {
+          if (ObIntType == column_schema->get_data_type()) {
             is_h_table = true;
           }
         } else if (0 == strcmp(column_name_ptr, V_COLULMN)) {
@@ -9372,25 +9347,13 @@ int ObTableSchema::do_add_column_group(
 {
   int ret = OB_SUCCESS;
   ObColumnGroupSchema *column_group = NULL;
-  bool is_oracle_mode = lib::is_oracle_mode();
+  constexpr bool is_oracle_mode = false;
   if (OB_ISNULL(column_group = OB_NEWx(ObColumnGroupSchema, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", KR(ret));
-  } else if (static_cast<int64_t>(table_id_) > 0  // resolver will add column when table_id is invalid
-             && OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    // When deserialize column in physical restore, tenant id is wrong. We need to use lib::is_oracle_mode() to do this check.
-    SHARE_SCHEMA_LOG(WARN, "check if_oracle_compat_mode failed", K(ret), K(tenant_id_), K(table_id_));
-    ret = OB_SUCCESS;
-    SHARE_SCHEMA_LOG(WARN, "replace error code to OB_SUCCESS, because tenant_id is invalid in physical restore",
-                     K(ret), K(tenant_id_), K(table_id_), K(is_oracle_mode));
-  } else if (static_cast<int64_t>(table_id_) <= 0 // deserialize create table arg
-             && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-    SHARE_SCHEMA_LOG(WARN, "check if_oracle_compat_mode failed", K(ret), K(tenant_id_), K(table_id_));
   }
   if (OB_SUCC(ret)) {
-    lib::CompatModeGuard g(is_oracle_mode ?
-                  lib::Worker::CompatMode::ORACLE :
-                  lib::Worker::CompatMode::MYSQL);
+    lib::CompatModeGuard g(lib::Worker::CompatMode::MYSQL);
     if (OB_FAIL(column_group->assign(other))) {
       LOG_WARN("fail to assign column_group", KR(ret), K(other));
     } else if (OB_FAIL((add_column_group_to_hash_array<ObColumnGroupIdKey, CgIdHashArray>(column_group,

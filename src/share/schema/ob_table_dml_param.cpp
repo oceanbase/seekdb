@@ -347,7 +347,7 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
                 allocator_,
                 schema->get_column_count(),
                 schema_rowkey_cnt,
-                lib::is_oracle_mode(),
+                true,
                 tmp_col_descs,
                 &tmp_cols_index,
                 &tmp_cols,
@@ -383,7 +383,7 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
           LOG_WARN("alloc failed", K(ret));
         } else if (FALSE_IT(cur_read_info = new (tmp_ptr) storage::ObTableReadInfo())) {
         } else if (OB_FAIL(storage::ObTenantCGReadInfoMgr::construct_cg_read_info(allocator_,
-                                                                                  read_info_.is_oracle_mode(),
+                                                                                  true,
                                                                                   tmp_col_descs.at(i),
                                                                                   tmp_cols.at(i),
                                                                                   *cur_read_info))) {

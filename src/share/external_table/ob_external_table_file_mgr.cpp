@@ -750,7 +750,7 @@ int ObExternalTableFileManager::calculate_odps_part_val_by_part_spec(const ObTab
               odps_part_row.get_cell(j).set_meta_type(part_col->get_meta_type());
               odps_part_row.get_cell(j).set_int(val);
             }
-          } else if (is_oracle_mode() && ObNumberType == part_key_type) {
+          } else if (ObNumberType == part_key_type) {
             number::ObNumber num;
             if (OB_FAIL(num.from(part_spec.ptr(), part_spec.length(), allocator))) {
               LOG_WARN("cast string to number failed", K(ret), K(part_spec),
@@ -1641,8 +1641,6 @@ int ObExternalTableFileManager::create_auto_refresh_job(ObExecContext &ctx, cons
   OZ (sql::ObExecEnv::gen_exec_env(*ctx.get_my_session(), buf, OB_MAX_PROC_ENV_LENGTH, pos));
   ObString exec_env(pos, buf);
   ObCommonID raw_id;
-  bool is_oracle_mode = false;
-  OZ (ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(ctx.get_my_session()->get_effective_tenant_id(), is_oracle_mode));
   OZ (storage::ObCommonIDUtils::gen_unique_id(ctx.get_my_session()->get_effective_tenant_id(), raw_id));
   int64_t max_job_id = raw_id.id() + dbms_scheduler::ObDBMSSchedTableOperator::JOB_ID_OFFSET;
   ObSqlString interval_str;
@@ -1654,9 +1652,9 @@ int ObExternalTableFileManager::create_auto_refresh_job(ObExecContext &ctx, cons
       job_info.job_ = max_job_id;
       job_info.job_name_ = ObString(auto_refresh_job_name);
       job_info.job_action_ = ObString("dbms_external_table.auto_refresh_external_table()");
-      job_info.lowner_ = is_oracle_mode ? "SYS" : "root@%";
-      job_info.cowner_ = is_oracle_mode ? "SYS" : "oceanbase";
-      job_info.powner_ = is_oracle_mode ? "SYS" : "root@%";
+      job_info.lowner_ = "root@%";
+      job_info.cowner_ = "oceanbase";
+      job_info.powner_ = "root@%";
       job_info.start_date_ = ObTimeUtility::current_time();
       job_info.end_date_ = 64060560000000000;//4000-01-01 00:00:00.000000
       job_info.repeat_interval_ = interval_str.string();

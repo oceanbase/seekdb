@@ -166,17 +166,9 @@ public:
     if (OB_LIKELY(not_nulls.at(agg_col_id))) {
       CellWriter<ResultType>::set(agg_cell, agg_cell_len, res_vec, output_idx, nullptr);
     } else if (agg_ctx.locate_aggr_info(agg_col_id).get_expr_type() == T_FUN_COUNT_SUM) {
-      if (VEC_TC_INTEGER == out_tc) {
-        int64_t res = 0;
-        res_vec->set_payload(output_idx, &res, sizeof(int64_t));
-      } else if (VEC_TC_NUMBER == out_tc) {
-        number::ObNumber zero;
-        zero.set_zero();
-        res_vec->set_payload(output_idx, &zero, sizeof(ObNumberDesc));
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "unexpected output result type", K(ret), K(out_tc));
-      }
+      number::ObNumber zero;
+      zero.set_zero();
+      res_vec->set_payload(output_idx, &zero, sizeof(ObNumberDesc));
     } else {
       res_vec->set_null(output_idx);
     }
@@ -289,21 +281,17 @@ private:
     ret = add_overflow(lparam, rparam, res_buf, res_len);
     if (OB_FAIL(ret)) {
       if (ret == OB_OPERATE_OVERFLOW && out_tc == VEC_TC_FLOAT) {
-        if (!lib::is_oracle_mode()) {
-          char buf[OB_MAX_TWO_OPERATOR_EXPR_LENGTH] = {0};
-          int64_t buf_len = OB_MAX_TWO_OPERATOR_EXPR_LENGTH;
-          int64_t pos = 0;
-          BUF_PRINTF("'(");
-          BUF_PRINTO(lparam);
-          BUF_PRINTF(" + ");
-          BUF_PRINTO(rparam);
-          BUF_PRINTF(")'");
-          LOG_USER_ERROR(OB_OPERATE_OVERFLOW, (in_tc == VEC_TC_FLOAT ? "BINARY_FLOAT" : "DOUBLE"),
-                         buf);
-          SQL_LOG(WARN, "do_overflow failed", K(lparam), K(rparam), K(ret));
-        } else {
-          ret = OB_SUCCESS;
-        }
+        char buf[OB_MAX_TWO_OPERATOR_EXPR_LENGTH] = {0};
+        int64_t buf_len = OB_MAX_TWO_OPERATOR_EXPR_LENGTH;
+        int64_t pos = 0;
+        BUF_PRINTF("'(");
+        BUF_PRINTO(lparam);
+        BUF_PRINTF(" + ");
+        BUF_PRINTO(rparam);
+        BUF_PRINTF(")'");
+        LOG_USER_ERROR(OB_OPERATE_OVERFLOW, (in_tc == VEC_TC_FLOAT ? "BINARY_FLOAT" : "DOUBLE"),
+                       buf);
+        SQL_LOG(WARN, "do_overflow failed", K(lparam), K(rparam), K(ret));
       }
     }
     return ret;
@@ -600,16 +588,9 @@ public:
         }
       }
     } else if (agg_ctx.locate_aggr_info(agg_col_id).get_expr_type() == T_FUN_COUNT_SUM) {
-      if (lib::is_oracle_mode() || out_tc == VEC_TC_NUMBER) {
-        number::ObNumber res_nmb;
-        res_nmb.set_zero();
-        res_vec->set_number(output_idx, res_nmb);
-      } else if (wide::IsIntegral<ResultType>::value) { // decimal int is used
-        set_decint_zero<ColumnFmt, sizeof(ResultType)>(res_vec, output_idx);
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "invalid result type of count sum", K(ret), K(out_tc));
-      }
+      number::ObNumber res_nmb;
+      res_nmb.set_zero();
+      res_vec->set_number(output_idx, res_nmb);
     } else {
       static_cast<ColumnFmt *>(agg_expr.get_vector(ctx))->set_null(output_idx);
     }

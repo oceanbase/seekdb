@@ -107,38 +107,22 @@ public:
 public:
   static common::number::ObNumber &no_max_value()
   {
-    if (lib::is_oracle_mode()) {
-      return NO_MAX_VALUE.val();
-    } else {
-      return MYSQL_NO_MAX_VALUE.val();
-    }
+    return NO_MAX_VALUE.val();
   }
 
   static common::number::ObNumber &no_min_value()
   {
-    if (lib::is_oracle_mode()) {
-      return NO_MIN_VALUE.val();
-    } else {
-      return MYSQL_NO_MIN_VALUE.val();
-    }
+    return NO_MIN_VALUE.val();
   }
 
   static common::number::ObNumber &max_value()
   {
-    if (lib::is_oracle_mode()) {
-      return MAX_VALUE.val();
-    } else {
-      return MYSQL_MAX_VALUE.val();
-    }
+    return MAX_VALUE.val();
   }
 
   static common::number::ObNumber &min_value()
   {
-    if (lib::is_oracle_mode()) {
-      return MIN_VALUE.val();
-    } else {
-      return MYSQL_MIN_VALUE.val();
-    }
+    return MIN_VALUE.val();
   }
 };
 

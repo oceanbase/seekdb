@@ -1107,7 +1107,6 @@ int ObPluginVectorIndexService::switch_to_leader()
 #ifndef OB_BUILD_SYS_VEC_IDX
   } else if (!is_user_tenant(tenant_id_)) { // skip not user tenant
 #endif
-  } else if (is_oracle_mode()) { // skip oracle mode
   } else {
     if (OB_ISNULL(tenant_vec_async_task_sched_)) {
       if (OB_FAIL(alloc_tenant_vec_async_task_sched())) {

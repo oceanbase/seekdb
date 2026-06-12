@@ -936,15 +936,11 @@ int Processor::collect_empty_set(bool collect_for_third_stage) const
       case T_FUN_COUNT_SUM:
       case T_FUN_APPROX_COUNT_DISTINCT:
       case T_FUN_KEEP_COUNT:
-      case T_FUN_GROUP_PERCENT_RANK: 
+      case T_FUN_GROUP_PERCENT_RANK:
       case T_FUN_SUM_OPNSIZE: {
-        if (lib::is_oracle_mode()) {
-          number::ObNumber zero_nmb;
-          zero_nmb.set_zero();
-          res_vec->set_number(output_idx, zero_nmb);
-        } else {
-          res_vec->set_int(output_idx, 0);
-        }
+        number::ObNumber zero_nmb;
+        zero_nmb.set_zero();
+        res_vec->set_number(output_idx, zero_nmb);
         break;
       }
       case T_FUN_GROUP_RANK:

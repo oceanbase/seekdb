@@ -129,12 +129,7 @@ public:
                                  int64_t max_group_cnt = INT64_MIN) override
   {
     int ret = OB_NOT_IMPLEMENT;
-    if (lib::is_oracle_mode()) {
-      SQL_LOG(WARN, "vectorization 2.0 not support LISTAGG with rollup", K(ret));
-    } else {
-      SQL_LOG(WARN, "vectorization 2.0 not support group_concat with rollup", K(ret));
-    }
-
+    SQL_LOG(WARN, "vectorization 2.0 not support LISTAGG with rollup", K(ret));
     return ret;
   }
 
@@ -210,11 +205,9 @@ protected:
   inline int get_concat_str_max_len(RuntimeContext &agg_ctx, uint64_t &concat_str_max_len)
   {
     int ret = OB_SUCCESS;
-    concat_str_max_len = (lib::is_oracle_mode() ? OB_DEFAULT_GROUP_CONCAT_MAX_LEN_FOR_ORACLE :
-                                                  OB_DEFAULT_GROUP_CONCAT_MAX_LEN);
-    if (!lib::is_oracle_mode()
-        && OB_FAIL(agg_ctx.eval_ctx_.exec_ctx_.get_my_session()->get_group_concat_max_len(
-             concat_str_max_len))) {
+    concat_str_max_len = OB_DEFAULT_GROUP_CONCAT_MAX_LEN_FOR_ORACLE;
+    if (OB_FAIL(agg_ctx.eval_ctx_.exec_ctx_.get_my_session()->get_group_concat_max_len(
+           concat_str_max_len))) {
       SQL_LOG(WARN, "fail to get group concat max len", K(ret));
     }
     return ret;
@@ -226,12 +219,7 @@ protected:
     int ret = OB_SUCCESS;
     if (aggr_info.separator_expr_ == NULL) {
       // Default sperator for not specific case.
-      if (lib::is_oracle_mode()) {
-        sep_str = ObString::make_empty_string();
-      } else {
-        // default comma
-        sep_str = ObCharsetUtils::get_const_str(aggr_info.expr_->datum_meta_.cs_type_, ',');
-      }
+      sep_str = ObString::make_empty_string();
     } else if (aggr_info.separator_expr_->is_const_expr()) {
       // If user specific a seperator, and it is a const, use it directly.
       ObDatum *separator_result = NULL;
@@ -282,13 +270,11 @@ protected:
   {
     int ret = OB_SUCCESS;
     buf_is_full = false;
-    if (oceanbase::lib::is_mysql_mode()) {
-      int32_t buffer_size = *reinterpret_cast<int32_t *>(agg_cell + sizeof(char **));
-      int32_t string_len =
-        *reinterpret_cast<int32_t *>(agg_cell + sizeof(char **) + sizeof(int32_t));
-      if (buffer_size == string_len && buffer_size == concat_str_max_len) {
-        buf_is_full = true;
-      }
+    int32_t buffer_size = *reinterpret_cast<int32_t *>(agg_cell + sizeof(char **));
+    int32_t string_len =
+      *reinterpret_cast<int32_t *>(agg_cell + sizeof(char **) + sizeof(int32_t));
+    if (buffer_size == string_len && buffer_size == concat_str_max_len) {
+      buf_is_full = true;
     }
     return ret;
   }
@@ -362,26 +348,20 @@ protected:
     if (after_length <= buffer_size) {
       // do nothing
     } else {
-      if (after_length <= max_length || oceanbase::lib::is_mysql_mode()) {
-        if (after_length > buffer_size && buffer_size < max_length) {
-          if (OB_UNLIKELY(buffer_size <= 0)) {
-            // Init the buffer size to 1024.
-            buffer_size = max_length > 1024 ? 1024 : max_length;
-          }
-          if (buffer_size * 2 < after_length) {
-            buffer_size = next_pow2(after_length);
-          } else if (after_length > buffer_size) {
-            buffer_size = buffer_size * 2;
-          }
-          if (buffer_size > max_length) {
-            buffer_size = max_length;
-          }
-          ret = extend_string(base_string, buffer_size, allocator);
+      if (after_length > buffer_size && buffer_size < max_length) {
+        if (OB_UNLIKELY(buffer_size <= 0)) {
+          // Init the buffer size to 1024.
+          buffer_size = max_length > 1024 ? 1024 : max_length;
         }
-      } else {
-        ret = OB_ERR_TOO_LONG_STRING_IN_CONCAT;
-        SQL_LOG(WARN, "result of string concatenation is too long", K(ret), K(append_length),
-                K(base_string.length()), K(max_length));
+        if (buffer_size * 2 < after_length) {
+          buffer_size = next_pow2(after_length);
+        } else if (after_length > buffer_size) {
+          buffer_size = buffer_size * 2;
+        }
+        if (buffer_size > max_length) {
+          buffer_size = max_length;
+        }
+        ret = extend_string(base_string, buffer_size, allocator);
       }
     }
     return ret;

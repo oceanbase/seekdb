@@ -1170,7 +1170,7 @@ int ObIndexBuilderUtil::adjust_spatial_args(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid arguments", K(ret));
   } else if (OB_FAIL(generate_spatial_columns(sort_items.at(0).column_name_, data_schema, spatial_cols))) {
-    if (lib::is_oracle_mode() && ret == OB_ERR_COLUMN_DUPLICATE) { // error code adaptation
+    if (ret == OB_ERR_COLUMN_DUPLICATE) { // error code adaptation
       ret = OB_ERR_DOMAIN_COLUMN_DUPLICATE;
       LOG_WARN("cannot create multiple domain indexes on a column list using same", K(ret));
     } else {
@@ -1245,9 +1245,6 @@ int ObIndexBuilderUtil::generate_spatial_cellid_column(
         name_pos, "_%ld", geo_col_id))) {
       LOG_WARN("print column id to col_name_buf failed", K(ret), K(geo_col_id));
     } else if (OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
-        def_pos, "SPATIAL_CELLID(`%s`)", col_schema.get_column_name()))) {
-      LOG_WARN("print cellid expr to cellid_expr_def failed", K(ret), K(col_schema.get_column_name()));
-    } else if (lib::is_oracle_mode() && OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_CELLID(%s)", col_schema.get_column_name()))) {
       LOG_WARN("print cellid expr to cellid_expr_def failed", K(ret), K(col_schema.get_column_name()));
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
@@ -1310,9 +1307,6 @@ int ObIndexBuilderUtil::generate_spatial_mbr_column(
         name_pos, "_%ld", geo_col_id))) {
       LOG_WARN("print column id to buffer failed", K(ret), K(geo_col_id));
     } else if (OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
-        def_pos, "SPATIAL_MBR(`%s`)", col_schema.get_column_name()))) {
-      LOG_WARN("print mbr expr to mbr_expr_def failed", K(ret), K(col_schema.get_column_name()));
-    } else if (lib::is_oracle_mode() && OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_MBR(%s)", col_schema.get_column_name()))) {
       LOG_WARN("print mbr expr to mbr_expr_def failed", K(ret), K(col_schema.get_column_name()));
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {

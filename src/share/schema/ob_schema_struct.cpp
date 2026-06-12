@@ -4237,23 +4237,7 @@ int ObTablegroupSchema::check_if_oracle_compat_mode(bool &is_oracle_mode) const
 
 {
   int ret = OB_SUCCESS;
-  const uint64_t tenant_id = get_tenant_id();
-  const int64_t tablegroup_id = get_tablegroup_id();
-  is_oracle_mode = false;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-
-  if (is_sys_tablegroup_id(tablegroup_id)) {
-    is_oracle_mode = false;
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("fail to get tenant mode", KR(ret), K(tenant_id), K(tablegroup_id));
-  } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-    is_oracle_mode = true;
-  } else if (lib::Worker::CompatMode::MYSQL == compat_mode) {
-    is_oracle_mode = false;
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compat_mode should not be INVALID.", KR(ret), K(tenant_id), K_(tablegroup_id));
-  }
+  is_oracle_mode = true;
   return ret;
 }
 
@@ -6755,23 +6739,18 @@ int ObPartitionUtils::calc_hash_part_idx(const uint64_t val,
   int64_t N = 0;
   int64_t powN = 0;
   const static int64_t max_part_num_log2 = 64;
-  // This function is used by SQL. Should ensure SQL runs in MySQL mode when query sys table.
-  if (lib::is_oracle_mode()) {
-    // 
-    // It will not be a negative number, so use forced conversion instead of floor
-    N = static_cast<int64_t>(std::log(part_num) / std::log(2));
-    if (N >= max_part_num_log2) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result is too big", K(N), K(part_num), K(val));
-    } else {
-      powN = (1ULL << N);
-      partition_idx = val & (powN - 1); //pow(2, N));
-      if (partition_idx + powN < part_num && (val & powN) == powN) {
-        partition_idx += powN;
-      }
-    }
+  //
+  // It will not be a negative number, so use forced conversion instead of floor
+  N = static_cast<int64_t>(std::log(part_num) / std::log(2));
+  if (N >= max_part_num_log2) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("result is too big", K(N), K(part_num), K(val));
   } else {
-    partition_idx = val % part_num;
+    powN = (1ULL << N);
+    partition_idx = val & (powN - 1); //pow(2, N));
+    if (partition_idx + powN < part_num && (val & powN) == powN) {
+      partition_idx += powN;
+    }
   }
   return ret;
 }
@@ -10171,19 +10150,8 @@ int ObCompareNameWithTenantID::compare(const common::ObString &str1, const commo
       is_mysql_sys_database_id(database_id_)) {
     // If it is the oceanbase database, no matter what the tenant, I hope that it is not case sensitive
     cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
-  } else if (lib::is_oracle_mode()) {
-    cs_type = common::CS_TYPE_UTF8MB4_BIN;
-  } else if (tenant_id_ == OB_INVALID_ID) {
-    // Used for scenarios that do not require the tenant id to be case sensitive, such as column, only rely on is_oracle_mode()
-    /* ^-^ */
   } else {
-    if (name_case_mode_ != OB_NAME_CASE_INVALID) {
-      cs_type = ObSchema::get_cs_type_with_cmp_mode(name_case_mode_);
-    }
-    (void) ObCompatModeGetter::get_tenant_mode(tenant_id_, compat_mode);
-    if (compat_mode == lib::Worker::CompatMode::ORACLE) {
-      cs_type = common::CS_TYPE_UTF8MB4_BIN;
-    }
+    cs_type = common::CS_TYPE_UTF8MB4_BIN;
   }
   return common::ObCharset::strcmp(cs_type, str1, str2);
 }

@@ -2766,7 +2766,7 @@ int ObTableSchema::add_column(const ColumnType &column)
   int ret = common::OB_SUCCESS;
   char *buf = NULL;
   ColumnType *local_column = NULL;
-  bool is_oracle_mode = false;
+  constexpr bool is_oracle_mode = false;
   const char* thread_name = ob_get_origin_thread_name();
   const bool in_replay_thread = OB_NOT_NULL(thread_name)
                                 && 0 == STRCMP(thread_name, REPLAY_SERVICE_THREAD_NAME);
@@ -2783,33 +2783,6 @@ int ObTableSchema::add_column(const ColumnType &column)
   } else if (NULL == (buf = static_cast<char*>(alloc(sizeof(ColumnType))))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
     SHARE_SCHEMA_LOG(ERROR, "Fail to allocate memory", KR(ret), "size", sizeof(ColumnType));
-  } else if (static_cast<int64_t>(table_id_) > 0
-             && is_ls_reserved_table(table_id_)) {
-    // create or replay ls inner tablet (which should use tenant's compat mode
-    if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(mtl_tenant_id, is_oracle_mode))) {
-      SHARE_SCHEMA_LOG(WARN, "check if_oracle_compat_mode failed",
-                       KR(ret), K(mtl_tenant_id), K(tenant_id_), K(table_id_));
-    }
-  } else if (in_replay_thread) {
-    // For replay thread in physical restore/standby tenant,
-    // either tenant_id which is persisted in log or lib::is_oracle_mode() is not credible.
-    // Compat mode should be fetched by MTL_ID().
-    // bugfix: 52769689
-    if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(mtl_tenant_id, table_id_, is_oracle_mode))) {
-      SHARE_SCHEMA_LOG(WARN, "check if_oracle_compat_mode failed",
-                       KR(ret), K(mtl_tenant_id), K(tenant_id_), K(table_id_));
-    }
-  } else if (static_cast<int64_t>(table_id_) > 0) {
-    if (OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to get tenant's compat_mode",
-                       KR(ret), K(mtl_tenant_id), K(tenant_id_), K(table_id_));
-    }
-  } else if (static_cast<int64_t>(table_id_) <= 0) {
-    // arg deserialize or ddl resolver
-    if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-      SHARE_SCHEMA_LOG(WARN, "check if_oracle_compat_mode failed",
-                       KR(ret), K(mtl_tenant_id), K(tenant_id_), K(table_id_));
-    }
   }
   if (OB_FAIL(ret)) {
   } else if (!is_view_table()
@@ -3023,9 +2996,9 @@ int ObTableSchema::build_mlog_table_name(Allocator &allocator,
   int ret = OB_SUCCESS;
   ObString prefix;
   if (is_tmp) {
-    prefix = (is_oracle_mode ? common::OB_TMP_MLOG_PREFIX_ORACLE : common::OB_TMP_MLOG_PREFIX_MYSQL);
+    prefix = common::OB_TMP_MLOG_PREFIX_MYSQL;
   } else {
-    prefix = (is_oracle_mode ? common::OB_MLOG_PREFIX_ORACLE : common::OB_MLOG_PREFIX_MYSQL);
+    prefix = common::OB_MLOG_PREFIX_MYSQL;
   }
   int32_t buf_len = prefix.length() + base_table_name.length() + 1;
   char *name_buf = nullptr;

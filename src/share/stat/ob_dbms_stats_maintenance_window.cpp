@@ -49,10 +49,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   int64_t job_id = 1;
   int64_t pos = 0;
   int32_t offset_sec = 0;
-  bool is_oracle_mode = false;
-  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", K(ret));
-  } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+  if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
     LOG_WARN("failed to gen exec env", K(ret));
   } else if (OB_FAIL(get_time_zone_offset(sys_variable, tenant_id, offset_sec))) {
     LOG_WARN("failed to get time zone offset", K(ret));
@@ -69,7 +66,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(start_usec), K(job_action));
         } else {
-          if (OB_FAIL(get_stat_window_job_info(is_oracle_mode,
+          if (OB_FAIL(get_stat_window_job_info(false,
                                                     tenant_id,
                                                     job_id,
                                                     windows_name[i],
@@ -87,7 +84,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
       }
       if (OB_SUCC(ret)) {
         //set stats history manager job
-        if (OB_FAIL(get_stats_history_manager_job_info(is_oracle_mode, tenant_id,
+        if (OB_FAIL(get_stats_history_manager_job_info(false, tenant_id,
                                                       job_id, exec_env, job_info))) {
           LOG_WARN("failed to get stats history manager job sql", K(ret));
         } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, tenant_id, job_id, job_info))) {
@@ -98,7 +95,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
 
         //set async gather stats job
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(get_async_gather_stats_job_info(is_oracle_mode, tenant_id,
+        } else if (OB_FAIL(get_async_gather_stats_job_info(false, tenant_id,
                                                   job_id, exec_env, job_info))) {
           LOG_WARN("failed to get async gather stats job sql", K(ret));
         } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, tenant_id, job_id, job_info))) {
@@ -112,7 +109,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const bool is_oracle_mode,
+int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const bool /*is_oracle_mode*/,
                                                           const uint64_t tenant_id,
                                                           const int64_t job_id,
                                                           const char *job_name,
@@ -129,9 +126,9 @@ int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const bool is_oracle_
   job_info.job_name_ = ObString(job_name);
   job_info.job_ = job_id;
   job_info.job_action_ = job_action.string();
-  job_info.lowner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-  job_info.powner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-  job_info.cowner_ = is_oracle_mode ? ObString("SYS") : ObString("oceanbase");
+  job_info.lowner_ = ObString("root@%");
+  job_info.powner_ = ObString("root@%");
+  job_info.cowner_ = ObString("oceanbase");
   job_info.job_style_ = ObString("regular");
   job_info.job_type_ = ObString("STORED_PROCEDURE");
   job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");
@@ -147,7 +144,7 @@ int ObDbmsStatsMaintenanceWindow::get_stat_window_job_info(const bool is_oracle_
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const bool is_oracle_mode,
+int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const bool /*is_oracle_mode*/,
                                                                     const uint64_t tenant_id,
                                                                     const int64_t job_id,
                                                                     const ObString &exec_env,
@@ -161,9 +158,9 @@ int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const bool 
   job_info.job_name_ = ObString(opt_stats_history_manager);
   job_info.job_ = job_id;
   job_info.job_action_ = ObString("DBMS_STATS.PURGE_STATS(NULL)");
-  job_info.lowner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-  job_info.powner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-  job_info.cowner_ = is_oracle_mode ? ObString("SYS") : ObString("oceanbase");
+  job_info.lowner_ = ObString("root@%");
+  job_info.powner_ = ObString("root@%");
+  job_info.cowner_ = ObString("oceanbase");
   job_info.job_style_ = ObString("regular");
   job_info.job_type_ = ObString("STORED_PROCEDURE");
   job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");
@@ -179,7 +176,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_history_manager_job_info(const bool 
   return ret;
 }
 
-int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(const bool is_oracle_mode,
+int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(const bool /*is_oracle_mode*/,
                                                                  const uint64_t tenant_id,
                                                                  const int64_t job_id,
                                                                  const ObString &exec_env,
@@ -193,9 +190,9 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_info(const bool is_
   job_info.job_name_ = ObString(async_gather_stats_job_proc);
   job_info.job_ = job_id;
   job_info.job_action_ = ObString("DBMS_STATS.ASYNC_GATHER_STATS_JOB_PROC(600000000)");
-  job_info.lowner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-  job_info.powner_ = is_oracle_mode ? ObString("SYS") : ObString("root@%");
-  job_info.cowner_ = is_oracle_mode ? ObString("SYS") : ObString("oceanbase");
+  job_info.lowner_ = ObString("root@%");
+  job_info.powner_ = ObString("root@%");
+  job_info.cowner_ = ObString("oceanbase");
   job_info.job_style_ = ObString("regular");
   job_info.job_type_ = ObString("STORED_PROCEDURE");
   job_info.job_class_ = ObString("DEFAULT_JOB_CLASS");
@@ -330,8 +327,7 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
           LOG_WARN("failed to get timezone offset", K(ret));
         }
       }
-      if (OB_FAIL(ret)) {
-      } else if (lib::is_mysql_mode()) {
+      if (OB_SUCC(ret)) {
         if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, src_obj, time_obj))) {
           LOG_WARN("failed to ObTimestampType type", K(ret));
         } else {
@@ -406,11 +402,8 @@ int ObDbmsStatsMaintenanceWindow::get_time_zone_offset(const ObSysVariableSchema
                                                        int32_t &offset_sec)
 {
   int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
   const ObSysVarSchema *sysvar_schema = NULL;
-  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", K(ret));
-  } else if (OB_FAIL(sys_variable.get_sysvar_schema(share::SYS_VAR_TIME_ZONE, sysvar_schema))) {
+  if (OB_FAIL(sys_variable.get_sysvar_schema(share::SYS_VAR_TIME_ZONE, sysvar_schema))) {
     LOG_WARN("failed to get sysvar schema", K(ret));
   } else if (OB_ISNULL(sysvar_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -428,7 +421,7 @@ int ObDbmsStatsMaintenanceWindow::get_time_zone_offset(const ObSysVariableSchema
       trimed_tz_str = trimed_tz_str.trim();
       int ret_more = OB_SUCCESS;
       if (OB_FAIL(ObTimeConverter::str_to_offset(trimed_tz_str, offset_sec, ret_more,
-                                                 is_oracle_mode, true))) {
+                                                 false, true))) {
         if (ret != OB_ERR_UNKNOWN_TIME_ZONE) {
           LOG_WARN("fail to convert str_to_offset", K(trimed_tz_str), K(ret));
         } else if (ret_more != OB_SUCCESS) {

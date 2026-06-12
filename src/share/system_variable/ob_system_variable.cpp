@@ -749,26 +749,6 @@ int ObTypeLibSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
   } else if (false == ob_is_integer_type(val.get_type())
              && false == ob_is_string_type(val.get_type())) {
     ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-    if (is_oracle_mode()) {
-      if (ObNumberType == val.get_type()) {
-        number::ObNumber num = val.get_number();
-        if (num.is_valid_int()) {
-          ret = OB_SUCCESS;
-          LOG_DEBUG("number is valid int", K(val), K(num));
-        }
-      } else if (ob_is_decimal_int(val.get_type())) {
-        int tmp_ret = ret;
-        bool is_valid_int64 = false;
-        int64_t res_v = 0;
-        if (OB_FAIL(wide::check_range_valid_int64(val.get_decimal_int(), val.get_int_bytes(),
-                                                  is_valid_int64, res_v))) {
-          LOG_WARN("check valid int64 failed", K(ret));
-        } else if (is_valid_int64) {
-          ret = OB_SUCCESS;
-          LOG_DEBUG("decimal int is valid int", K(val), K(res_v));
-        }
-      }
-    }
     if (OB_SUCCESS != ret) {
       LOG_WARN("wrong type for var", K(ret), K(val));
     }
@@ -926,13 +906,6 @@ int ObCharsetSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
   } else if (false == ob_is_integer_type(val.get_type())
              && false == ob_is_string_type(val.get_type())) {
     ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-    if (is_oracle_mode() && ObNumberType == val.get_type()) {
-      number::ObNumber num = val.get_number();
-      if (num.is_valid_int()) {
-        ret = OB_SUCCESS;
-        LOG_DEBUG("number is valid int", K(val), K(num));
-      }
-    }
     if (OB_SUCCESS != ret) {
       LOG_WARN("wrong type for var", K(ret), K(val));
     }
@@ -984,15 +957,6 @@ int ObCharsetSysVar::do_check_and_convert(ObExecContext &ctx,
       LOG_ERROR("succ to cast obj, but res_obj_ptr is NULL", K(ret));
     } else {
       out_val = *res_obj_ptr;
-    }
-  } else if (is_oracle_mode() && (ObNumberType == in_val.get_type())) {
-    number::ObNumber num = in_val.get_number();
-    int64_t int_val = 0;
-    if (num.is_valid_int64(int_val)) {
-      out_val.set_int(int_val);
-    } else {
-      ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-      LOG_WARN("not valid int value for var on oracle mode", K(in_val));
     }
   } else {
     ret = OB_ERR_WRONG_TYPE_FOR_VAR;
@@ -1061,16 +1025,6 @@ int ObTinyintSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
     // do nothing
   } else if (ObTinyIntType != val.get_type()) {
     ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-    if (is_oracle_mode() && ObNumberType == val.get_type()) {
-      number::ObNumber num = val.get_number();
-      //do value range check in do_check_and_convert
-      if (num.is_valid_int()) {
-        ret = OB_SUCCESS;
-        LOG_DEBUG("number is valid int", K(val), K(num));
-      } else {
-        LOG_WARN("number is not valid int for sys var on oracle mode", K(val), K(num));
-      }
-    }
     if (OB_SUCCESS != ret) {
       LOG_WARN("wrong type for var", K(ret), K(val));
     }
@@ -1087,30 +1041,6 @@ int ObTinyintSysVar::do_check_and_convert(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   if (true == set_var.is_set_default_) {
     // do nothing
-  } else if (is_oracle_mode() && (ObNumberType == in_val.get_type())) {
-    number::ObNumber num = in_val.get_number();
-    int64_t int_val = 0;
-    if (num.is_valid_int64(int_val)) {
-      ObObj tmp_val;
-      tmp_val.set_int(int_val);
-      if (OB_FAIL(check_and_convert_int_tc_value(tmp_val, (1LL << 8), int_val))) {
-        if (OB_ERR_WRONG_VALUE_FOR_VAR == ret) {
-          int log_ret = OB_SUCCESS;
-          if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, in_val))) {
-            // log_ret is only used for logging, does not overwrite ret
-            LOG_ERROR("fail to log error", K(ret), K(log_ret), K(in_val));
-          } else {}
-        } else {
-          LOG_WARN("fail to check uint tc value", K(ret), K(in_val));
-        }
-        LOG_WARN("value is not valid tinyint for sys var on oracle mode", K(in_val), K(out_val));
-      } else {
-        out_val.set_tinyint(static_cast<int8_t>(int_val));
-      }
-    } else {
-      ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-      LOG_WARN("not valid int value for sys var on oracle mode", K(in_val));
-    }
   } else {
     out_val = in_val;
   }
@@ -1449,8 +1379,6 @@ int ObVarcharSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
   if (true == set_var.is_set_default_
       || (0 != (flags_ & ObSysVarFlag::NULLABLE) && ObNullType == val.get_type())) {
     // do nothing
-  } else if (lib::is_oracle_mode() && ob_is_null(val.get_type())) {
-    //'' will be regard as NULL in oracle mode, let it go
   } else if (false == ob_is_string_type(val.get_type())) {
     if (set_var.var_name_ == OB_SV_NLS_DATE_FORMAT
              || set_var.var_name_ == OB_SV_NLS_TIMESTAMP_FORMAT
@@ -1552,7 +1480,7 @@ int ObTimeZoneSysVar::do_check_and_convert(ObExecContext &ctx,
       LOG_ERROR("unexpected type", K(ret), K(in_val));
     }
 
-    const bool is_oracle_compatible = (NULL != ctx.get_my_session() ? is_oracle_mode() : false);
+    const bool is_oracle_compatible = false;
     CHECK_COMPATIBILITY_MODE(ctx.get_my_session());
     int ret_more = OB_SUCCESS;
     if (OB_SUCC(ret) && OB_FAIL(ObTimeConverter::str_to_offset(str_val, offset,
@@ -1641,29 +1569,6 @@ int ObSqlModeVar::do_check_and_convert(ObExecContext &ctx,
         }
       } else {
         sql_mode = uint64_val;
-      }
-    } else if (is_oracle_mode() && (ObNumberType == in_val.get_type())) {
-      number::ObNumber num = in_val.get_number();
-      uint64_t int_val = 0;
-      if (num.is_valid_uint64(int_val)) {
-        ObObj tmp_val;
-        tmp_val.set_uint64(int_val);
-        if (OB_FAIL(check_and_convert_uint_tc_value(tmp_val, (1LL << 32), int_val))) {
-          if (OB_ERR_WRONG_VALUE_FOR_VAR == ret) {
-            int log_ret = OB_SUCCESS;
-            if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, in_val))) {
-              // log_ret is only used for logging, does not overwrite ret
-              LOG_ERROR("fail to log error", K(ret), K(log_ret), K(in_val));
-            } else {}
-          } else {
-            LOG_WARN("fail to check uint tc value", K(ret), K(in_val));
-          }
-        } else {
-          sql_mode = int_val;
-        }
-      } else {
-        ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-        LOG_WARN("not valid int value for var on oracle mode", K(in_val));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -2036,11 +1941,10 @@ int ObSysVarOnCheckFuncs::check_and_convert_tx_isolation(ObExecContext &ctx,
                    in_val.get_string().length(), in_val.get_string().ptr());
     LOG_WARN("invalid tx_isolation value", K(ret));
   } else if (ObTransIsolation::READ_UNCOMMITTED == isolation) {
-    if (lib::is_oracle_mode()) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "isolation level READ-UNCOMMITTED");
-      LOG_WARN("isolation level read-uncommitted not supported", K(ret), K(in_val));
-    }
+    // READ_UNCOMMITTED was only supported in oracle mode (now removed)
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "isolation level READ-UNCOMMITTED");
+    LOG_WARN("isolation level read-uncommitted not supported", K(ret), K(in_val));
   } else {
     if (OB_FAIL(ob_write_obj(ctx.get_allocator(), in_val, out_val))) {
       LOG_WARN("deep copy out_val obj failed", K(ret));
@@ -2153,53 +2057,7 @@ bool ObSysVarOnCheckFuncs::can_set_trans_var(ObSetVar::SetScopeType scope,
                                              ObBasicSessionInfo &session)
 {
   bool ret = false;
-  if (lib::is_oracle_mode()) {
-    /*
-     * in oracle, isolation = SERIALIZABLE:
-     * 1. statement may get a snapshot and read it without any transaction,
-     *    create new snapshot if there is no current snapshot, otherwise
-     *    reuse current snapshot generated by the previous statement.
-     * 2. statement need a transaction ONLY IF it needs lock row,
-     *    create new transaction if there is no current transaction, otherwise
-     *    reuse current transaction generated by the previous statement.
-     * 3. 'SET TRANSACTION xxx' will ALWAYS release current snapshot (if exists),
-     *    then create new snapshot, but it will cause error in any of these cases:
-     *   a. the current snapshot is generated by previous 'SET TRANSACTION xxx', or
-     *   b. the current snapshot is in transaction.
-     * 4. 'ALTER SESSION SET isolation_level' will ALWAYS release current snapshot
-     *    (if exists), then modify the 'isolation_level' value in session, but it
-     *    will cause error in any of these cases:
-     *   a. the current snapshot is generated by previous 'SET TRANSACTION xxx'.
-     *
-     * since OB 4.0, transaction's model very like to Oracle's and we can handle
-     * these transaction characteristics modifiy stmt more simply.
-     *
-     * in previouse version OB:
-     * the most problem is: every snapshot must base on a transaction, create
-     * new snapshot means create new transaction too. so we need some extra flags to
-     * record some informations:
-     * 1. has_set_trans_var: whether the current transaction is generated by 'SET TRANSACTION xxx',
-     *    for oracle rule 3-a and 4-a.
-     * 2. has_hold_row_lock: whether the current transaction hold row lock,
-     *    for oracle rule 3-b.
-     * ps: SET_SCOPE_GLOBAL could not appear in oracle mode, so we need not care scope
-     *     because SET_SCOPE_SESSION and SET_SCOPE_NEXT_TRANS have same behavior in this
-     *     function.
-     * see:
-     * 
-     * 
-     */
-    ret = !session.is_in_transaction();
-  } else if (lib::is_mysql_mode()) {
-    /*
-     * mysql mode is much simpler than oracle mode, only 'SET TRANSACTION xxx' is forbidden
-     * when it appears in an explicit transaction, and it will not create new snapshot or
-     * transaction in all cases.
-     */
-    ret = !session.is_in_transaction() || ObSetVar::SET_SCOPE_NEXT_TRANS != scope;
-  } else {
-    // nothing.
-  }
+  return !session.is_in_transaction() || ObSetVar::SET_SCOPE_NEXT_TRANS != scope;
   return ret;
 }
 
@@ -2678,46 +2536,9 @@ int ObSysVarOnUpdateFuncs::update_tx_isolation(ObExecContext &ctx,
     LOG_WARN("isolation level is invalid", K(ret), K(var_val), K(var_name));
   } else if (ObTxIsolationLevel::RU == isolation) {
     // only supports RU syntax, the actual behavior is RC
-    if (lib::is_mysql_mode()) {
-      isolation = ObTxIsolationLevel::RC;
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "isolation level READ-UNCOMMITTED");
-      LOG_WARN("isolation level read-uncommitted not supported", K(ret), K(var_val), K(var_name));
-    }
+    isolation = ObTxIsolationLevel::RC;
   } else if (for_next_trans && FALSE_IT(session->set_tx_isolation(isolation))) {
     // nothing.
-  } else if (lib::is_oracle_mode()) {
-    if (for_next_trans) {
-      /*
-       * 'SET TRANSACTION xxx' will ALWAYS create new snapshot in oracle
-       * see comments in can_set_trans_var() for more details.
-       * ps: read only can't be 'ALTER SESSION SET' in oracle, so use default value false.
-       */
-      session->set_tx_isolation(isolation);
-      // tx must be ilde, previouse check `can_set_trans_var` has check this
-      if (OB_FAIL(start_trans_by_set_trans_char_(ctx))) {
-        // TODO: fatal bug, need disconnect
-        LOG_WARN("auto start trans fail when set txn charactor", K(ret),
-                 KPC(session->get_tx_desc()), KPC(session));
-      }
-    } else {
-      /*
-       * 'ALTER SESSION SET isolation_level' just release snapshot since 4.0
-       * previouse check in can_set_trans_var promise no active trans in current session
-       */
-      if (ObTxIsolationLevel::SERIAL == isolation ||
-          ObTxIsolationLevel::RR == isolation) {
-        // release snapshot, following stmt will acquire snapshot again
-        if (OB_NOT_NULL(session->get_tx_desc()) &&
-            OB_FAIL(MTL(transaction::ObTransService*)
-                    ->release_snapshot(*session->get_tx_desc()))) {
-          TRANS_LOG(WARN, "try to release snapshot for current session fail",
-                    K(ret), KPC(session->get_tx_desc()));
-          // TODO: fatal bug, need disconnect
-        }
-      }
-    }
   }
   return ret;
 }
@@ -2739,20 +2560,6 @@ int ObSysVarOnUpdateFuncs::update_tx_read_only_no_scope(ObExecContext &ctx,
       LOG_WARN("fail to get session info", K(ret));
     } else if (FALSE_IT(session->set_tx_read_only(!read_only, read_only))) {
       // nothing.
-    } else if (lib::is_oracle_mode()) {
-      // READ ONLY will use SERIALIZABLE implicitly,
-      // READ WRITE need use default value in session, so set UNKNOWN.
-      // 
-      // if read only, set tx isolation level to serializable
-      // otherwise, use the value in session
-      if (read_only) {
-        session->set_tx_isolation(ObTxIsolationLevel::SERIAL);
-      }
-      if (OB_FAIL(start_trans_by_set_trans_char_(ctx))) {
-        // TODO: fatal bug, need disconnect
-        LOG_WARN("auto start trans fail when set txn charactor", K(ret),
-                 KPC(session->get_tx_desc()), KPC(session));
-      }
     }
     LOG_DEBUG("update tx_read only, while scope=none", K(ret), K(val.get_bool()));
   }

@@ -441,7 +441,7 @@ int ObCreateHiddenTableArg::init(const uint64_t tenant_id, const uint64_t dest_t
     tz_info_ = tz_info;
     // load data no need to reorder column id
     need_reorder_column_id_ = need_reorder_column_id;
-    foreign_key_checks_ = (is_oracle_mode() || (foreign_key_checks));
+    foreign_key_checks_ = foreign_key_checks;
   }
   return ret;
 }

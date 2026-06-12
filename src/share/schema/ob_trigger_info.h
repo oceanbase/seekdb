@@ -477,14 +477,12 @@ public:
   OB_INLINE static uint64_t get_delete_event() { return ObTriggerEvents::get_delete_event(); }
   OB_INLINE TgTimingEvent get_timing_event() {
     TgTimingEvent t = TG_TIMING_EVENT_INVALID;
-    if (lib::is_mysql_mode()) {
-      if (has_before_row_point()) {
-        t = has_insert_event() ? TG_BEFORE_INSERT : (has_update_event() ? TG_BEFORE_UPDATE
-                                                                        : TG_BEFORE_DELETE);
-      } else {
-        t = has_insert_event() ? TG_AFTER_INSERT : (has_update_event() ? TG_AFTER_UPDATE
-                                                                       : TG_AFTER_DELETE);
-      }
+    if (has_before_row_point()) {
+      t = has_insert_event() ? TG_BEFORE_INSERT : (has_update_event() ? TG_BEFORE_UPDATE
+                                                                      : TG_BEFORE_DELETE);
+    } else {
+      t = has_insert_event() ? TG_AFTER_INSERT : (has_update_event() ? TG_AFTER_UPDATE
+                                                                     : TG_AFTER_DELETE);
     }
     return t;
   }

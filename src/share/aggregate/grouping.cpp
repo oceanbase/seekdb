@@ -35,21 +35,11 @@ int init_grouping_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   ObExprOperatorType agg_func = aggr_info.get_expr_type();
   agg = nullptr;
   if (agg_func == T_FUN_GROUPING) {
-    if (lib::is_mysql_mode()) {
-      ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING, VEC_TC_INTEGER>>(
-        agg_ctx, agg_col_id, has_distinct, allocator, agg);
-    } else {
-      ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING, VEC_TC_NUMBER>>(
-        agg_ctx, agg_col_id, has_distinct, allocator, agg);
-    }
+    ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING, VEC_TC_NUMBER>>(
+      agg_ctx, agg_col_id, has_distinct, allocator, agg);
   } else if (agg_func == T_FUN_GROUPING_ID) {
-    if (lib::is_mysql_mode()) {
-      ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING_ID, VEC_TC_INTEGER>>(
-        agg_ctx, agg_col_id, has_distinct, allocator, agg);
-    } else {
-      ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING_ID, VEC_TC_NUMBER>>(
-        agg_ctx, agg_col_id, has_distinct, allocator, agg);
-    }
+    ret = init_agg_func<GroupingAggregate<T_FUN_GROUPING_ID, VEC_TC_NUMBER>>(
+      agg_ctx, agg_col_id, has_distinct, allocator, agg);
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid aggregate function", K(ret), K(agg_func));

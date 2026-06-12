@@ -281,13 +281,8 @@ int init_count_sum_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
                              ObIAllocator &allocator, IAggregate *&agg)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_oracle_mode()) {
-    return init_agg_func<SumNumberAggregate>(
-      agg_ctx, agg_col_id, agg_ctx.aggr_infos_.at(agg_col_id).has_distinct_, allocator, agg);
-  } else {
-    return init_agg_func<SumAggregate<VEC_TC_INTEGER, VEC_TC_INTEGER>>(
-      agg_ctx, agg_col_id, agg_ctx.aggr_infos_.at(agg_col_id).has_distinct_, allocator, agg);
-  }
+  return init_agg_func<SumNumberAggregate>(
+    agg_ctx, agg_col_id, agg_ctx.aggr_infos_.at(agg_col_id).has_distinct_, allocator, agg);
 }
 } // end helper
 } // end aggregate

@@ -362,19 +362,19 @@ int ObDbmsStatsCopyTableStats::check_parts_valid(sql::ObExecContext &ctx,
   } else {
     bool is_src_onepart = ObDbmsStatsUtils::find_part(table_stat_param.all_part_infos_,
                                                       srcpart_name,
-                                                      lib::is_oracle_mode(),
+                                                      false,
                                                       dummy_part);
     bool is_src_twopart = ObDbmsStatsUtils::find_part(table_stat_param.all_subpart_infos_,
                                                       srcpart_name,
-                                                      lib::is_oracle_mode(),
+                                                      false,
                                                       dummy_part);
     bool is_dst_onepart = ObDbmsStatsUtils::find_part(table_stat_param.all_part_infos_,
                                                       dstpart_name,
-                                                      lib::is_oracle_mode(),
+                                                      false,
                                                       dummy_part);
     bool is_dst_twopart = ObDbmsStatsUtils::find_part(table_stat_param.all_subpart_infos_,
                                                       dstpart_name,
-                                                      lib::is_oracle_mode(),
+                                                      false,
                                                       dummy_part);
     if ((!is_src_onepart && !is_src_twopart) ||
         (!is_dst_onepart && !is_dst_twopart)) {

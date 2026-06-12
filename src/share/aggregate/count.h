@@ -193,17 +193,13 @@ public:
     int64_t output_idx = ctx.get_batch_idx();
     ColumnFormat &columns = *static_cast<ColumnFormat *>(agg_expr.get_vector(ctx));
     SQL_LOG(DEBUG, "count collect result", K(agg_col_id), K(res_data));
-    if (lib::is_oracle_mode()) {
-      char buf_alloc[number::ObNumber::MAX_CALC_BYTE_LEN] = {0};
-      ObDataBuffer local_alloc(buf_alloc, number::ObNumber::MAX_CALC_BYTE_LEN);
-      number::ObNumber tmp_nmb;
-      if (OB_FAIL(tmp_nmb.from(res_data, local_alloc))) {
-        SQL_LOG(WARN, "number::from failed", K(ret));
-      } else {
-        columns.set_number(output_idx, tmp_nmb);
-      }
+    char buf_alloc[number::ObNumber::MAX_CALC_BYTE_LEN] = {0};
+    ObDataBuffer local_alloc(buf_alloc, number::ObNumber::MAX_CALC_BYTE_LEN);
+    number::ObNumber tmp_nmb;
+    if (OB_FAIL(tmp_nmb.from(res_data, local_alloc))) {
+      SQL_LOG(WARN, "number::from failed", K(ret));
     } else {
-      columns.set_int(output_idx, res_data);
+      columns.set_number(output_idx, tmp_nmb);
     }
     return ret;
   }

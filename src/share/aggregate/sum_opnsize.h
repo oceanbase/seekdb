@@ -401,16 +401,12 @@ public:
     int64_t res_data = *reinterpret_cast<const int64_t *>(agg_cell);
     int64_t output_idx = agg_ctx.eval_ctx_.get_batch_idx();
     ColumnFmt *res_vec = static_cast<ColumnFmt *>(agg_expr.get_vector(agg_ctx.eval_ctx_));
-    if (lib::is_mysql_mode()) {
-      res_vec->set_int(output_idx, res_data);
+    ObNumStackOnceAlloc tmp_alloc;
+    number::ObNumber res_nmb;
+    if (OB_FAIL(res_nmb.from(res_data, tmp_alloc))) {
+      SQL_LOG(WARN, "convert int to number failed", K(ret));
     } else {
-      ObNumStackOnceAlloc tmp_alloc;
-      number::ObNumber res_nmb;
-      if (OB_FAIL(res_nmb.from(res_data, tmp_alloc))) {
-        SQL_LOG(WARN, "convert int to number failed", K(ret));
-      } else {
-        res_vec->set_number(output_idx, res_nmb);
-      }
+      res_vec->set_number(output_idx, res_nmb);
     }
     return ret;
   }

@@ -62,7 +62,7 @@ public:
   static sql::ObExprBasicFuncs* get_basic_func(const ObObjType type,
                                                const ObCollationType cs_type,
                                                const ObScale scale = SCALE_UNKNOWN_YET,
-                                               const bool is_oracle_mode = lib::is_oracle_mode(),
+                                               const bool is_oracle_mode = false,
                                                const bool is_lob_locator = true,
                                                const ObPrecision prec = PRECISION_UNKNOWN_YET);
 };

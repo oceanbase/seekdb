@@ -37,9 +37,7 @@ namespace share
 bool ObExternalTableUtils::is_left_edge(const ObObj &value)
 {
   bool ret = false;
-  bool is_oracle = lib::is_oracle_mode();
-  if ((is_oracle && value.is_min_value()) ||
-      (!is_oracle && (value.is_min_value() || value.is_null()))) {
+  if (value.is_min_value() || value.is_null()) {
     ret = true;
   }
   return ret;
@@ -48,9 +46,7 @@ bool ObExternalTableUtils::is_left_edge(const ObObj &value)
 bool ObExternalTableUtils::is_right_edge(const ObObj &value)
 {
   bool ret = false;
-  bool is_oracle = lib::is_oracle_mode();
-  if ((is_oracle && (value.is_max_value() || value.is_null())) ||
-      (!is_oracle && value.is_max_value())) {
+  if (value.is_max_value() || value.is_null()) {
     ret = true;
   }
   return ret;

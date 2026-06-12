@@ -70,13 +70,13 @@ int ObStatsEstimator::add_from_table(common::ObIAllocator &allocator,
               allocator,
               db_name,
               new_db_name,
-              lib::is_oracle_mode()))) {
+              false))) {
     LOG_WARN("fail to generate new name with escape character", K(ret), K(db_name));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator,
                     table_name,
                     new_tbl_name,
-                    lib::is_oracle_mode()))) {
+                    false))) {
     LOG_WARN("fail to generate new name with escape character", K(ret), K(table_name));
   } else {
     db_name_ = new_db_name;
@@ -423,12 +423,6 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     } else if (session->is_in_external_catalog()
                && OB_FAIL(session->set_internal_catalog_db())) {
       LOG_WARN("failed to set catalog", K(ret));
-    } else if (lib::is_oracle_mode()) {
-      if (OB_FAIL(oracle_proxy.init(ctx_.get_sql_proxy()->get_pool()))) {
-        LOG_WARN("failed to init oracle proxy", K(ret));
-      } else {
-        sql_proxy = &oracle_proxy;
-      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -440,7 +434,7 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     session->set_autocommit(true);
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      if (OB_FAIL(pool->acquire(session, conn, lib::is_oracle_mode()))) {
+      if (OB_FAIL(pool->acquire(session, conn, false))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
