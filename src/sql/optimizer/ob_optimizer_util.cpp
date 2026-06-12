@@ -9464,9 +9464,7 @@ int ObOptimizerUtil::can_extract_implicit_cast_range(ObItemType cmp_type,
   ObObjTypeClass column_tc = column_expr.get_result_type().get_type_class();
   ObObjTypeClass const_tc = target_expr.get_result_type().get_type_class();
   can_extract = false;
-  if (lib::is_oracle_mode()) {
-    can_extract = false;
-  } else if (column_expr.get_result_type().get_type() ==
+  if (column_expr.get_result_type().get_type() ==
              target_expr.get_result_type().get_type() &&
              column_expr.get_result_type().is_string_type()) {
     if (OB_FAIL(is_implicit_collation_range_valid(cmp_type,

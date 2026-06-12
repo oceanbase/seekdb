@@ -885,7 +885,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
             ObNumStackOnceAlloc tmp_alloc;
             if (stat_type == COLUMN_STAT) {
               if (result_objs.at(i).is_null()) {
-                compress_type = ObOptStatCompressType::ZSTD_1_3_8_COMPRESS;
+                compress_type = ObOptStatCompressType::ZLIB_COMPRESS;
               } else if (OB_FAIL(get_nmb_val(result_objs.at(i), tmp_alloc, num_val))) {
                 LOG_WARN("failed to get number", K(ret));
               } else if (OB_FAIL(num_val.extract_valid_int64_with_trunc(compress_type))) {
@@ -1044,8 +1044,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 OB_FAIL(result_objs.at(i).get_datetime(last_date))) {
               LOG_WARN("failed to get date", K(ret), K(result_objs.at(i)));
             } else if (!result_objs.at(i).is_null() &&
-                       lib::is_mysql_mode() &&
-                       OB_FAIL(result_objs.at(i).get_timestamp(last_date))) {
+                                              OB_FAIL(result_objs.at(i).get_timestamp(last_date))) {
               LOG_WARN("failed to get timestamp", K(ret), K(result_objs.at(i).get_type()));
             } else if (lib::is_oracle_mode() &&
                        OB_FAIL(ObTimeConverter::datetime_to_timestamp(last_date,
@@ -1075,8 +1074,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                                                           result_objs.at(i),
                                                           min_obj))) {
               LOG_WARN("failed to convert bin hex raw to obj", K(ret));
-            } else if (lib::is_mysql_mode() &&
-                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
                                                            result_objs.at(i),
                                                            min_obj))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));
@@ -1098,8 +1096,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                                                           result_objs.at(i),
                                                           max_obj))) {
               LOG_WARN("failed to convert bin hex raw to obj", K(ret));
-            } else if (lib::is_mysql_mode() &&
-                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
                                                            result_objs.at(i),
                                                            max_obj))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));
@@ -1120,8 +1117,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                                                           result_objs.at(i),
                                                           hist_bucket.endpoint_value_))) {
               LOG_WARN("failed to convert bin hex raw to obj", K(ret));
-            } else if (lib::is_mysql_mode() &&
-                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (                       OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
                                                            result_objs.at(i),
                                                            hist_bucket.endpoint_value_))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));

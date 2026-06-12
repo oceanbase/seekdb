@@ -186,7 +186,7 @@ public:
   bool is_valid_unique_index() const // Unique index can maintain uniqueness in query range
   {
     return is_unique_index_ && range_info_.is_index_column_get()
-           && !((lib::is_mysql_mode() && range_info_.equal_prefix_has_null()));
+           && !range_info_.equal_prefix_has_null();
   }
   void set_is_unique_index(const bool is_unique_index) { is_unique_index_ = is_unique_index; }
   bool is_index_back() const { return is_index_back_; }

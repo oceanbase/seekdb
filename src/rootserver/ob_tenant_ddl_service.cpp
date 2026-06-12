@@ -25,7 +25,9 @@
 #include "share/location_cache/ob_location_service.h"
 #include "rootserver/ob_table_creator.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/backup/ob_backup_config.h"
 #include "share/ob_schema_status_proxy.h"
+#include "share/backup/ob_log_restore_config.h"//ObLogRestoreSourceServiceConfigParser
 #include "storage/tx/ob_ts_mgr.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "observer/ob_sql_client_decorator.h"
@@ -277,29 +279,12 @@ int ObTenantDDLService::set_tenant_compatibility_(
     ObTenantSchema &tenant_schema)
 {
   int ret = OB_SUCCESS;
-  const int64_t set_sys_var_count = arg.sys_var_list_.count();
   const uint64_t tenant_id = tenant_schema.get_tenant_id();
-  // the default compatibility_mode is MYSQL
+  // seekdb is MySQL-only: tenant compatibility mode is always MYSQL.
   tenant_schema.set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
   if (!is_valid_tenant_id(tenant_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arguments", KR(ret), K(tenant_id), K(arg));
-  } else if (!is_user_tenant(tenant_id)) {
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < set_sys_var_count; ++i) {
-      ObSysVarIdValue sys_var;
-      if (OB_FAIL(arg.sys_var_list_.at(i, sys_var))) {
-        LOG_WARN("failed to get sys var", K(i), K(ret));
-      } else {
-        if (SYS_VAR_OB_COMPATIBILITY_MODE == sys_var.sys_id_) {
-          if (0 == sys_var.value_.compare("1")) {
-            tenant_schema.set_compatibility_mode(ObCompatibilityMode::ORACLE_MODE);
-          } else {
-            tenant_schema.set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
-          }
-        }
-      }
-    }
   }
   return ret;
 }

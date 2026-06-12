@@ -1062,7 +1062,7 @@ int ObTriggerInfo::gen_procedure_source(const common::ObString &base_object_data
   char delimiter = MODE_DELIMITER;
   ObIAllocator *alloc = get_allocator();
   int32_t param_new_inout_len = has_after_row_point() ? 2 : 5; // IN or INOUT
-  OV (lib::is_mysql_mode() && OB_NOT_NULL(alloc));
+  OV (OB_NOT_NULL(alloc));
   OV (OB_NOT_NULL(parse_node.str_value_) && parse_node.str_len_ > 0);
   OX (tg_body.assign_ptr(parse_node.str_value_, static_cast<int32_t>(parse_node.str_len_)));
   // OZ (ObSQLUtils::convert_sql_text_to_schema_for_storing(*alloc, dtc_params, tg_body));

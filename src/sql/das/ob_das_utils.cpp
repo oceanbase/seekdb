@@ -292,10 +292,6 @@ int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
         datum_value.set_string(ObString(binary_len, dest_str));
       }
     }
-  } else if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && col_type.is_character_type() && datum_value.len_ == 0) {
-    // Oracle compatibility mode: '' as null
-    LOG_DEBUG("reshape empty string to null", K(datum_value));
-    datum_value.set_null();
   } else if (col_type.is_fixed_len_char_type()) {
     const char *str = datum_value.ptr_;
     int32_t len = datum_value.len_;
@@ -354,32 +350,13 @@ int ObDASUtils::reshape_datum_vector_value(const ObObjMeta &col_type,
         ObDatum &datum = datum_vector.datums_[i];
         if (!datum.is_null()) {
           ObLength len = datum.len_;
-          if (lib::is_oracle_mode() && 0 == len) {
-            // Oracle compatibility mode: '' as null
-            LOG_DEBUG("reshape empty string to null", K(i));
-            datum.set_null();
-          } else {
-            const char *str = datum.ptr_;
-            for (; len >= space_pattern.length(); len -= space_pattern.length()) {
-              if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
-                break;
-              }
+          const char *str = datum.ptr_;
+          for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+            if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+              break;
             }
-            datum.len_ = len;
           }
-        }
-      }
-      if (OB_LIKELY(OB_ITER_END == ret)) {
-        ret = OB_SUCCESS;
-      }
-    } else if (lib::is_oracle_mode() && col_type.is_character_type()) {
-      // Oracle compatibility mode: '' as null
-      int64_t i = 0;
-      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-        ObDatum &datum = datum_vector.datums_[i];
-        if (!datum.is_null() && 0 == datum.len_) {
-          LOG_DEBUG("reshape empty string to null", K(i));
-          datum.set_null();
+          datum.len_ = len;
         }
       }
       if (OB_LIKELY(OB_ITER_END == ret)) {
@@ -651,12 +628,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
             discrete_vec->set_null(i);
           } else {
             const ObLength length = offsets[i + 1] - offsets[i];
-            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == length) {
-              // Oracle compatibility mode: '' as null
-              LOG_DEBUG("reshape empty string to null", K(i));
-              continuous_vec->set_null(i);
-              discrete_vec->set_null(i);
-            } else {
+            {
               ObLength len = length;
               char *str = data + offsets[i];
               for (; len >= space_pattern.length(); len -= space_pattern.length()) {
@@ -689,11 +661,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           if (!discrete_vec->is_null(i)) {
             ObLength len = lens[i];
-            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
-              // Oracle compatibility mode: '' as null
-              LOG_DEBUG("reshape empty string to null", K(i));
-              discrete_vec->set_null(i);
-            } else {
+            {
               const char *str = ptrs[i];
               for (; len >= space_pattern.length(); len -= space_pattern.length()) {
                 if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
@@ -718,11 +686,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
           ObDatum &datum = datums[i];
           if (!datum.is_null()) {
             ObLength len = datum.len_;
-            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
-              // Oracle compatibility mode: '' as null
-              LOG_DEBUG("reshape empty string to null", K(i));
-              datum.set_null();
-            } else {
+            {
               const char *str = datum.ptr_;
               for (; len >= space_pattern.length(); len -= space_pattern.length()) {
                 if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
@@ -744,11 +708,7 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         ObDatum &datum = uniform_vec->get_datums()[0];
         if (!datum.is_null()) {
           ObLength len = datum.len_;
-          if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
-            // Oracle compatibility mode: '' as null
-            LOG_DEBUG("reshape empty string to null");
-            datum.set_null();
-          } else {
+          {
             const char *str = datum.ptr_;
             for (; len >= space_pattern.length(); len -= space_pattern.length()) {
               if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
@@ -757,74 +717,6 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
             }
             datum.len_ = len;
           }
-        }
-        break;
-      }
-      default:
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected fixed len char vector format", KR(ret), K(format), K(col_type));
-        break;
-    }
-  } else if (lib::is_oracle_mode() && col_type.is_character_type() && enable_oracle_empty_char_reshape_to_null) {
-    // Oracle compatibility mode: '' as null
-    const VectorFormat format = vector->get_format();
-    switch (format) {
-      case VEC_CONTINUOUS:
-      {
-        ObContinuousBase *continuous_vec = static_cast<ObContinuousBase *>(vector);
-        uint32_t *offsets = continuous_vec->get_offsets();
-        int64_t i = 0;
-        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-          if (!continuous_vec->is_null(i) && offsets[i + 1] == offsets[i]) {
-            LOG_DEBUG("reshape empty string to null", K(i));
-            continuous_vec->set_null(i);
-          }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-        break;
-      }
-      case VEC_DISCRETE:
-      {
-        ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
-        ObLength *lens =discrete_vec->get_lens();
-        int64_t i = 0;
-        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-          if (!discrete_vec->is_null(i) && 0 == lens[i]) {
-            LOG_DEBUG("reshape empty string to null", K(i));
-            discrete_vec->set_null(i);
-          }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-        break;
-      }
-      case VEC_UNIFORM:
-      {
-        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
-        ObDatum *datums = uniform_vec->get_datums();
-        int64_t i = 0;
-        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-          ObDatum &datum = datums[i];
-          if (!datum.is_null() && 0 == datum.len_) {
-            LOG_DEBUG("reshape empty string to null", K(i));
-            datum.set_null();
-          }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-        break;
-      }
-      case VEC_UNIFORM_CONST:
-      {
-        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
-        ObDatum &datum = uniform_vec->get_datums()[0];
-        if (!datum.is_null() && 0 == datum.len_) {
-          LOG_DEBUG("reshape empty string to null");
-          datum.set_null();
         }
         break;
       }

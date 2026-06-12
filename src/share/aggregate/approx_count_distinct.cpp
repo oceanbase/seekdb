@@ -28,19 +28,10 @@ namespace helper
 extern int init_approx_count_distinct_mysql_aggregate(RuntimeContext &agg_ctx,
                                                       const int64_t agg_col_id,
                                                       ObIAllocator &allocator, IAggregate *&agg);
-extern int init_approx_count_distinct_oracle_aggregate(RuntimeContext &agg_ctx,
-                                                       const int64_t agg_col_id,
-                                                       ObIAllocator &allocator, IAggregate *&agg);
 int init_approx_count_distinct_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
                                          ObIAllocator &allocator, IAggregate *&agg)
 {
-  int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
-    ret = init_approx_count_distinct_mysql_aggregate(agg_ctx, agg_col_id, allocator, agg);
-  } else {
-    ret = init_approx_count_distinct_oracle_aggregate(agg_ctx, agg_col_id, allocator, agg);
-  }
-  return ret;
+  return init_approx_count_distinct_mysql_aggregate(agg_ctx, agg_col_id, allocator, agg);
 }
 
 int init_approx_count_distinct_synopsis_merge_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,

@@ -180,7 +180,7 @@ public:
     } else {
       res_vec->set_null(output_idx);
     }
-    if (out_tc == VEC_TC_DEC_INT512 && OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (out_tc == VEC_TC_DEC_INT512 && OB_SUCC(ret)) {
       // check mysql decimal int overflow
       const int512_t &res = *reinterpret_cast<const int512_t *>(agg_cell);
       if (res <= wide::ObDecimalIntConstValue::MYSQL_DEC_INT_MIN
@@ -613,7 +613,7 @@ public:
     } else {
       static_cast<ColumnFmt *>(agg_expr.get_vector(ctx))->set_null(output_idx);
     }
-    if (out_tc == VEC_TC_DEC_INT512 && OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (out_tc == VEC_TC_DEC_INT512 && OB_SUCC(ret)) {
       // check mysql decimal int overflow
       const int512_t &res = *reinterpret_cast<const int512_t *>(agg_cell);
       if (res <= wide::ObDecimalIntConstValue::MYSQL_DEC_INT_MIN

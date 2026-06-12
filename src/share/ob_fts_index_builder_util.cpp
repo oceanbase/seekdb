@@ -2948,7 +2948,7 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (lib::is_mysql_mode() && is_add_column > 1) {
+  } else if (is_add_column > 1) {
     ret = OB_NOT_MULTIVALUE_SUPPORT;
     LOG_USER_ERROR(OB_NOT_MULTIVALUE_SUPPORT, "more than one multi-valued key part per index");
   } else if (expr_def_string.length() > 0) {

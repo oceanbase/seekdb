@@ -72,7 +72,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         LOG_TRACE("succeed to flatten_condition", K(is_happened));
       }
     }  
-    if (OB_SUCC(ret) && is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
         LOG_WARN("failed to generate straight join leading", K(ret));
       } else {
@@ -246,7 +246,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
       }
     }
     if (OB_SUCC(ret)) {
-      if (lib::is_mysql_mode() && stmt->get_match_exprs().count() > 0 &&
+      if (stmt->get_match_exprs().count() > 0 &&
           OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
         LOG_WARN("failed to preserve order for fulltext search", K(ret));
       } else {
@@ -1542,10 +1542,8 @@ int ObTransformPreProcess::transform_expr(ObRawExprFactory &expr_factory,
   }
   if (OB_SUCC(ret)) {
     // The rewriting is done for the purpose of MySQL compatibility.
-    if (lib::is_mysql_mode()) {
-      if (OB_FAIL(replace_align_date4cmp_recursively(expr_factory, session, expr))) {
-        LOG_WARN("replace align_date4cmp failed", K(ret), K(expr));
-      }
+    if (OB_FAIL(replace_align_date4cmp_recursively(expr_factory, session, expr))) {
+      LOG_WARN("replace align_date4cmp failed", K(ret), K(expr));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1927,7 +1925,7 @@ int ObTransformPreProcess::create_equal_expr_for_case_expr(ObRawExprFactory &exp
                                             when_type.get_type(),
                                             ObMaxType))) { // last argument is unused
       LOG_WARN("failed to get_cmp_type", K(ret));
-    } else if (lib::is_mysql_mode() && ob_is_string_type(obj_type)) {
+    } else if (ob_is_string_type(obj_type)) {
       // when cmp_type is string, need to use case_res_type.calc_type_.cs_type_ as
       // collation type. it is aggregated by all when_exprs.
       // eg: select case col_utf8_general_ci when col_utf8_general_ci then 'a'
@@ -3951,7 +3949,7 @@ int ObTransformPreProcess::transform_rollup_exprs(ObDMLStmt *stmt, bool &trans_h
     } else {
       stmt->get_rollup_exprs().at(i) = remove_const_expr;
       trans_happened = true;
-      if (lib::is_mysql_mode() && expr->is_exec_param_expr()) {
+      if (expr->is_exec_param_expr()) {
         ObExecParamRawExpr *exec_expr = static_cast<ObExecParamRawExpr *>(expr);
         const ObRawExpr *ref_expr = exec_expr->get_ref_expr();
         if (OB_ISNULL(ref_expr)) {

@@ -1244,7 +1244,7 @@ int ObIndexBuilderUtil::generate_spatial_cellid_column(
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "_%ld", geo_col_id))) {
       LOG_WARN("print column id to col_name_buf failed", K(ret), K(geo_col_id));
-    } else if (lib::is_mysql_mode() && OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
+    } else if (OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_CELLID(`%s`)", col_schema.get_column_name()))) {
       LOG_WARN("print cellid expr to cellid_expr_def failed", K(ret), K(col_schema.get_column_name()));
     } else if (lib::is_oracle_mode() && OB_FAIL(databuff_printf(cellid_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
@@ -1309,7 +1309,7 @@ int ObIndexBuilderUtil::generate_spatial_mbr_column(
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH,
         name_pos, "_%ld", geo_col_id))) {
       LOG_WARN("print column id to buffer failed", K(ret), K(geo_col_id));
-    } else if (lib::is_mysql_mode() && OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
+    } else if (OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,
         def_pos, "SPATIAL_MBR(`%s`)", col_schema.get_column_name()))) {
       LOG_WARN("print mbr expr to mbr_expr_def failed", K(ret), K(col_schema.get_column_name()));
     } else if (lib::is_oracle_mode() && OB_FAIL(databuff_printf(mbr_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH,

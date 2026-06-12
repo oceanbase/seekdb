@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_SESSION
 
 #include "ob_sql_session_info.h"
-#include "storage/memtable/mvcc/ob_btree_iter_cache.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "pl/ob_pl_package.h"
 #include "observer/mysql/obmp_stmt_send_piece_data.h"
@@ -163,7 +162,6 @@ ObSQLSessionInfo::ObSQLSessionInfo(const uint64_t tenant_id) :
       client_non_standard_(false),
       is_session_sync_support_(false),
       job_info_(nullptr),
-      btree_iter_cache_(nullptr),
       failover_mode_(false),
       executing_sql_stat_record_(),
       unit_gc_min_sup_proxy_version_(0),
@@ -224,12 +222,6 @@ int ObSQLSessionInfo::init(uint32_t sessid, uint64_t proxy_sessid,
     } else {
       is_inited_ = true;
       refresh_temp_tables_sess_active_time();
-      if (OB_ISNULL(btree_iter_cache_)) {
-        void *buf = get_session_allocator().alloc(sizeof(memtable::ObBtreeIterCache));
-        if (OB_NOT_NULL(buf)) {
-          btree_iter_cache_ = new (buf) memtable::ObBtreeIterCache();
-        }
-      }
     }
   }
   if (OB_FAIL(ret)) {
@@ -704,12 +696,6 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
     }
     // Non-distributed needs it, distributed also needs it, used for cleaning up the global variable values of package
     reset_all_package_state();
-    if (OB_NOT_NULL(btree_iter_cache_)) {
-      btree_iter_cache_->destroy();
-      btree_iter_cache_->~ObBtreeIterCache();
-      get_session_allocator().free(btree_iter_cache_);
-      btree_iter_cache_ = nullptr;
-    }
     reset(skip_sys_var);
     is_inited_ = false;
     sql_req_level_ = 0;
@@ -1217,7 +1203,7 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
     LOG_TRACE("will add session info", K(proxy_version_), K(min_proxy_version_ps_),
               K(inner_stmt_id), K(client_stmt_id), K(next_client_ps_stmt_id_),
               K(is_new_proxy), K(ret), K(is_inner_sql));
-    if(lib::is_mysql_mode() && OB_FAIL(try_create_in_use_ps_stmt_id_set())) {
+    if(OB_FAIL(try_create_in_use_ps_stmt_id_set())) {
       LOG_WARN("fail create in use ps stmt id", K(ret));
     } else if (OB_FAIL(try_create_ps_session_info_map())) {
       LOG_WARN("fail create map", K(ret));

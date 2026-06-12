@@ -5346,7 +5346,7 @@ int ObSelectLogPlan::allocate_plan_top()
     if (OB_SUCC(ret) && (select_stmt->has_group_by() || select_stmt->has_rollup())) {
       // group-by or rollup both allocate group by logical operator.
       // mysql mode for update need allocate before group by because group by isn't pk preserving.
-      if (lib::is_mysql_mode() && select_stmt->has_for_update()) {
+      if (select_stmt->has_for_update()) {
         if (OB_FAIL(candi_allocate_for_update())) {
           LOG_WARN("failed to allocate for update operator", K(ret));
         } else {
@@ -5377,7 +5377,7 @@ int ObSelectLogPlan::allocate_plan_top()
     // step. allocate 'distinct' if needed
     if (OB_SUCC(ret) && select_stmt->has_distinct()) {
       // mysql mode for update need allocate before distinct because distinct isn't pk preserving.
-      if (lib::is_mysql_mode() && select_stmt->has_for_update() && !for_update_is_allocated) {
+      if (select_stmt->has_for_update() && !for_update_is_allocated) {
         if (OB_FAIL(candi_allocate_for_update())) {
           LOG_WARN("failed to allocate for update operator", K(ret));
         } else {

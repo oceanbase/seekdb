@@ -910,8 +910,7 @@ int ObSql::do_add_ps_cache(const PsCacheInfoCtx &info_ctx,
   if (OB_ISNULL(ps_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ps plan cache should not be null", K(ret));
-  } else if (lib::is_mysql_mode() &&
-      OB_FAIL(check_contain_temporary_table(schema_guard, result, is_contain_tmp_tbl))) {
+  } else if (      OB_FAIL(check_contain_temporary_table(schema_guard, result, is_contain_tmp_tbl))) {
     LOG_WARN("failed to check contain temporary table", K(ret));
   } else {
     ObPsStmtItem *ps_stmt_item = NULL;
@@ -1039,8 +1038,7 @@ int ObSql::do_real_prepare(const ObString &sql,
                                   parse_mode))) {
     LOG_WARN("generate syntax tree failed",
              "sql", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : sql, K(ret));
-  } else if (is_mysql_mode()
-             && ObSQLUtils::is_mysql_ps_not_support_stmt(parse_result)) {
+  } else if (ObSQLUtils::is_mysql_ps_not_support_stmt(parse_result)) {
     ret = OB_ER_UNSUPPORTED_PS;
     LOG_WARN("This command is not supported in the prepared statement protocol yet", K(ret));
   }  else if (parse_result.question_mark_ctx_.count_ > common::OB_MAX_PS_PARAM_COUNT) {
@@ -1354,7 +1352,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
                                           pl_prepare_ctx.is_parser_dynamic_sql_))) {
             LOG_WARN("generate syntax tree failed", K(ret),
                      "sql", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : sql);
-          } else if (is_mysql_mode() && ObSQLUtils::is_mysql_ps_not_support_stmt(parse_result)) {
+          } else if (ObSQLUtils::is_mysql_ps_not_support_stmt(parse_result)) {
             ret = OB_ER_UNSUPPORTED_PS;
             LOG_WARN("This command is not supported in the prepared statement protocol yet", K(ret));
           } else if (NULL == pl_prepare_ctx.secondary_ns_ && !pl_prepare_ctx.is_dynamic_sql_) {
@@ -2893,8 +2891,8 @@ int ObSql::generate_stmt(ParseResult &parse_result,
           bool in_pl = NULL != resolver_ctx.secondary_namespace_
             || (resolver_ctx.is_dynamic_sql_ && OB_NOT_NULL(result.get_session().get_pl_context()))
             || resolver_ctx.is_dbms_sql_;
-          bool need_rebuild = (lib::is_mysql_mode() ? (resolver_ctx.is_dynamic_sql_ &&
-          OB_NOT_NULL(result.get_session().get_pl_context()) && resolver_ctx.is_prepare_stage_) : resolver_ctx.is_prepare_stage_ && in_pl);
+          bool need_rebuild = (resolver_ctx.is_dynamic_sql_ &&
+          OB_NOT_NULL(result.get_session().get_pl_context()) && resolver_ctx.is_prepare_stage_);
           bool is_returning_into = false;
           if (stmt->is_insert_stmt() || stmt->is_update_stmt() || stmt->is_delete_stmt()) {
             ObDelUpdStmt &dml_stmt = static_cast<ObDelUpdStmt&>(*stmt);
@@ -4239,7 +4237,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
     if (OB_FAIL(parser.parse(outlined_stmt, parse_result,
                              STD_MODE,
                              pc_ctx.sql_ctx_.handle_batched_multi_stmt(),
-                             false, lib::is_mysql_mode() && NULL != session->get_pl_context()))) {
+                             false, NULL != session->get_pl_context()))) {
       LOG_WARN("Generate syntax tree failed", K(ret),
                "outlined_stmt", parse_result.contain_sensitive_data_ ? ObString(OB_MASKED_STR) : outlined_stmt);
     } else if ((PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_)

@@ -1296,7 +1296,7 @@ int ObDynamicSampling::gen_partition_str(const ObIArray<PartInfo> &partition_inf
     LOG_WARN("get unexpected error", K(ret), K(partition_infos));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_infos.count(); ++i) {
-      const char *quot = lib::is_mysql_mode() ? "`" : "\"";
+      const char *quot = "`";
       ObString print_name;
       if (i > 0 && OB_FAIL(partition_str.append(","))) {
         LOG_WARN("failed to append", K(ret));

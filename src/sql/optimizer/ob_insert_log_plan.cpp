@@ -882,7 +882,7 @@ int ObInsertLogPlan::check_insert_plan_need_multi_partition_dml(ObTablePartition
     is_multi_part_dml = true;
     OPT_TRACE("insert table has only one partition in partition level, force use multi part dml");
   } else if ((insert_stmt->is_ignore() && !is_one_part_table) ||
-             (lib::is_mysql_mode() && !is_strict_mode(session_info->get_sql_mode()))) {
+             (!is_strict_mode(session_info->get_sql_mode()))) {
     // insert ignore, and when inserting into a partitioned table, it cannot be optimized
     // mysql non strict mode can not optimize as multi part dml
     is_multi_part_dml = true;

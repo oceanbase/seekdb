@@ -383,13 +383,16 @@ inline void set_compat_mode(Worker::CompatMode mode)
   get_ob_runtime_context().compat_mode_ = mode;
 }
 
+// seekdb is MySQL-only: Oracle compatibility mode has been removed.
+// These are folded to compile-time constants so any residual Oracle
+// branches become dead code that is never executed.
 inline bool is_oracle_mode()
 {
-  return get_compat_mode() == Worker::CompatMode::ORACLE;
+  return false;
 }
 inline bool is_mysql_mode()
 {
-  return get_compat_mode() == Worker::CompatMode::MYSQL;
+  return true;
 }
 
 OB_INLINE void Worker::set_compatibility_mode(Worker::CompatMode mode)

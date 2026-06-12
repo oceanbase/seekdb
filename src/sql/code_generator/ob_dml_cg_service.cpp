@@ -223,12 +223,6 @@ int ObDmlCgService::generate_delete_ctdef(ObLogDelUpd &op,
     del_ctdef.distinct_algo_ = index_dml_info.distinct_algo_;
   }
 
-  if (OB_SUCC(ret) && lib::is_oracle_mode() &&
-      index_dml_info.is_primary_index_ && op.get_err_log_define().is_err_log_) {
-    if (OB_FAIL(generate_err_log_ctdef(op.get_err_log_define(), del_ctdef.error_logging_ctdef_))) {
-      LOG_WARN("generate error_logging ctdef failed", K(ret), K(index_dml_info));
-    }
-  }
 
   if (OB_SUCC(ret) && NULL != index_dml_info.old_part_id_expr_) {
     //generate multi_ctdef
@@ -489,12 +483,6 @@ int ObDmlCgService::generate_update_ctdef(ObLogDelUpd &op,
     }
   }
 
-  if (OB_SUCC(ret) && lib::is_oracle_mode() &&
-      index_dml_info.is_primary_index_ && op.get_err_log_define().is_err_log_) {
-    if (OB_FAIL(generate_err_log_ctdef(op.get_err_log_define(), upd_ctdef.error_logging_ctdef_))) {
-      LOG_WARN("generate error_logging ctdef failed", K(ret), K(index_dml_info));
-    }
-  }
 
   if (OB_SUCC(ret) &&
       NULL != index_dml_info.old_part_id_expr_ &&

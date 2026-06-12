@@ -52,7 +52,7 @@ int ObIRIterLoserTreeCmp::init(ObDatumMeta doc_id_meta, const ObIArray<ObDocIdEx
   } else {
     iter_doc_ids_ = iter_doc_ids;
     sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(doc_id_meta.type_, doc_id_meta.cs_type_);
-    cmp_func_ = lib::is_oracle_mode() ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
+    cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));

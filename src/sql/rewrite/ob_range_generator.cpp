@@ -1234,8 +1234,7 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
     expect_type.set_collation_type(collation_type);
     ObAccuracy res_acc;
     ObObj tmp_dest_obj;
-    if (lib::is_mysql_mode() &&
-        value.get_meta().get_type_class() == ObDoubleTC &&
+    if (        value.get_meta().get_type_class() == ObDoubleTC &&
         meta.column_type_.get_obj_meta().get_type_class() == ObDoubleTC &&
         meta.column_type_.get_accuracy().get_scale() != SCALE_UNKNOWN_YET) {
       /*

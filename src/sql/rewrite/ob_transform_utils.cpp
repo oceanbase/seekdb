@@ -2150,8 +2150,7 @@ int ObTransformUtils::is_expr_not_null(ObNotNullContext &ctx,
                OB_FAIL(constraints->push_back(const_cast<ObRawExpr*>(expr)))) {
       LOG_WARN("failed to push back constraint expr", K(ret));
     }
-  } else if(is_mysql_mode() &&
-            expr->is_win_func_expr() &&
+  } else if(            expr->is_win_func_expr() &&
             expr->get_result_type().is_not_null_for_read()) {
     const ObWinFunRawExpr *win_expr = reinterpret_cast<const ObWinFunRawExpr*>(expr);
     if (T_WIN_FUN_RANK == win_expr->get_func_type() ||
@@ -8703,13 +8702,10 @@ int StmtUniqueKeyProvider::get_unique_keys_from_unique_stmt(const ObSelectStmt *
   unique_keys.reuse();
   added_unique_keys.reuse();
   ObConstRawExpr *expr = NULL;
-  const bool can_use_lob_as_unique_key = lib::is_mysql_mode();
   if (OB_ISNULL(select_stmt) || OB_ISNULL(expr_factory)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(select_stmt), K(expr_factory));
-  } else if (can_use_lob_as_unique_key && OB_FAIL(select_stmt->get_select_exprs(unique_keys))) {
-    LOG_WARN("failed to get select exprs", K(ret));
-  } else if (!can_use_lob_as_unique_key && OB_FAIL(select_stmt->get_select_exprs_without_lob(unique_keys))) {
+  } else if (OB_FAIL(select_stmt->get_select_exprs(unique_keys))) {
     LOG_WARN("failed to get select exprs", K(ret));
   } else if (OB_LIKELY(!unique_keys.empty())) {
     /* do nothing */
@@ -9719,8 +9715,7 @@ int ObTransformUtils::replace_with_groupby_exprs(ObSelectStmt *select_stmt,
         if (OB_ISNULL(groupby_exprs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("got an unexpected null", K(ret));
-        } else if ((is_mysql_mode() || !expr->is_static_const_expr())
-                    && groupby_exprs.at(i)->same_as(*expr, &check_context)) {
+        } else if (groupby_exprs.at(i)->same_as(*expr, &check_context)) {
           expr = groupby_exprs.at(i);
           is_existed = true;
         } else { /*do nothing.*/ }
@@ -9729,8 +9724,7 @@ int ObTransformUtils::replace_with_groupby_exprs(ObSelectStmt *select_stmt,
         if (OB_ISNULL(rollup_exprs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("got an unexpected null", K(ret));
-        } else if ((lib::is_mysql_mode()|| !expr->is_static_const_expr())
-                    && rollup_exprs.at(i)->same_as(*expr, &check_context)) {
+        } else if (rollup_exprs.at(i)->same_as(*expr, &check_context)) {
           expr = rollup_exprs.at(i);
           is_existed = true;
         } else { /*do nothing.*/ }

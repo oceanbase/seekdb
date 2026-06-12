@@ -312,7 +312,7 @@ int check_convert_str_err(const char *str,
   if (OB_UNLIKELY(str == endptr) || OB_UNLIKELY(EDOM == err)) {
     ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD; //1366
   } else {
-    if (is_mysql_mode() && CS_TYPE_BINARY == in_cs_type) {
+    if (CS_TYPE_BINARY == in_cs_type) {
     } else {
       endptr += ObCharset::scan_str(endptr, str + len, OB_SEQ_SPACES);
     }
@@ -2882,7 +2882,7 @@ static int double_string(const ObObjType expect_type, ObObjCastParams &params,
       } else {
         const int32_t buf_length = static_cast<int32_t>(sizeof(buf) - 1);
         int32_t double_width = buf_length;
-        if (lib::is_mysql_mode() && CM_IS_COLUMN_CONVERT(cast_mode) && params.dest_max_length_ > 0) {
+        if (CM_IS_COLUMN_CONVERT(cast_mode) && params.dest_max_length_ > 0) {
           double_width = min(double_width, params.dest_max_length_);
         }
         length = ob_gcvt_opt(in.get_double(), OB_GCVT_ARG_DOUBLE,
@@ -6097,7 +6097,7 @@ static int string_double(const ObObjType expect_type, ObObjCastParams &params,
           ret = OB_DATA_OUT_OF_RANGE;
         } else {
           ObString trimed_str = str_utf8.trim();
-          if (lib::is_mysql_mode() && 0 == trimed_str.length()) {
+          if (0 == trimed_str.length()) {
             if (!CM_IS_COLUMN_CONVERT(cast_mode)) {
               // In mysql mode, do not report an error when converting an empty string or a string with only spaces to double in convert_column
               // skip
@@ -6108,7 +6108,7 @@ static int string_double(const ObObjType expect_type, ObObjCastParams &params,
           } else if (OB_SUCCESS != (ret = check_convert_str_err(
                                           str_utf8.ptr(), endptr, str_utf8.length(), err, in.get_collation_type()))) {
             LOG_WARN("failed to check_convert_str_err", K(ret), K(str_utf8), K(value), K(err), K(in.get_collation_type()));
-            if (lib::is_mysql_mode() && CM_IS_COLUMN_CONVERT(cast_mode) && ret == OB_ERR_DATA_TRUNCATED) {
+            if (CM_IS_COLUMN_CONVERT(cast_mode) && ret == OB_ERR_DATA_TRUNCATED) {
               // do nothing, compatible mysql, retain OB_ERR_DATA_TRUNCATED error code in column_convert.
             } else {
               ret = OB_ERR_DOUBLE_TRUNCATED;
@@ -6188,7 +6188,7 @@ static int string_number(const ObObjType expect_type, ObObjCastParams &params,
         if (OB_SUCCESS != (tmp_ret = value.from(*bound_num, *params.allocator_v2_))) {
           LOG_WARN("copy min number failed", K(ret), K(tmp_ret), KPC(bound_num));
         }
-      } else if (lib::is_mysql_mode() && OB_INVALID_NUMERIC == ret
+      } else if (OB_INVALID_NUMERIC == ret
           && OB_NOT_NULL(params.exec_ctx_)) {
         if (CM_IS_COLUMN_CONVERT(params.cast_mode_)) {
           ObString decimal_type_str("decimal");
@@ -6545,7 +6545,7 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
       // by add '\0' prefix in mysql mode. (see mysql String::copy)
       int64_t align_offset = 0;
       const ObCharsetInfo *cs = NULL;
-      if (CS_TYPE_BINARY == in.get_collation_type() && is_mysql_mode()
+      if (CS_TYPE_BINARY == in.get_collation_type()
           && NULL != (cs = ObCharset::get_charset(params.dest_collation_))) {
         if (cs->mbminlen > 0 && in.get_string_len() % cs->mbminlen != 0) {
           align_offset = cs->mbminlen - in.get_string_len() % cs->mbminlen;
@@ -6873,7 +6873,7 @@ static int string_text(const ObObjType expect_type, ObObjCastParams &params,
 
   if (OB_FAIL(ret)) {
   } else if (is_null_result) {
-  } else if (has_lob_header && lib::is_mysql_mode() && nullptr == lob_locator) {
+  } else if (has_lob_header && nullptr == lob_locator) {
     // fast path for mysql string_text
     out = tmp_out; // copy meta
     if (OB_FAIL(sql::ObTextStringHelper::pack_to_disk_inrow_lob(params, res_str, expect_type, out))) {
@@ -6908,7 +6908,7 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
   bool need_charset_convert = ((CS_TYPE_BINARY != in.get_collation_type()) &&
                                (ObCharset::charset_type_by_coll(in.get_collation_type()) !=
                                 ObCharset::charset_type_by_coll(params.dest_collation_)));
-  if (lib::is_mysql_mode() && (ObCharset::charset_type_by_coll(params.dest_collation_) != CHARSET_UTF8MB4)) {
+  if ((ObCharset::charset_type_by_coll(params.dest_collation_) != CHARSET_UTF8MB4)) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
     LOG_WARN("fail to cast string to json invalid outtype", K(ret), K(params.dest_collation_));
   } else if (CM_IS_COLUMN_CONVERT(cast_mode) && is_mysql_unsupported_json_column_conversion(in.get_type())) {
@@ -9132,7 +9132,7 @@ static int json_year(const ObObjType expect_type, ObObjCastParams &params,
       } else if (CAST_FAIL(ObTimeConverter::int_to_year(int_value, value))){
         LOG_WARN("fail to cast json int to year type", K(ret), K(int_value), K(expect_type));
       } else {
-        if (lib::is_mysql_mode() && (params.warning_ == OB_DATA_OUT_OF_RANGE)) {
+        if (params.warning_ == OB_DATA_OUT_OF_RANGE) {
           if (CM_IS_WARN_ON_FAIL(cast_mode)) {
             value = 0;
             SET_RES_YEAR(out);
@@ -10747,7 +10747,7 @@ static int string_decimalint(const ObObjType expected_type, ObObjCastParams &par
   } else if (OB_FAIL(wide::from_string(utf8_string.ptr(), utf8_string.length(),
                                        *params.allocator_v2_, in_scale, in_precision, int_bytes,
                                        decint))) {
-    if (OB_NUMERIC_OVERFLOW == ret && lib::is_mysql_mode()) {
+    if (OB_NUMERIC_OVERFLOW == ret) {
       // bug: 4263211. compatible with mysql behavior when value overflows type range.
       // select cast('1e500' as decimal);  -> max_val
       // select cast('-1e500' as decimal); -> min_val
@@ -10773,7 +10773,7 @@ static int string_decimalint(const ObObjType expected_type, ObObjCastParams &par
       } else {
         MEMCPY(decint, limit_decint, int_bytes);
       }
-    } else if (lib::is_mysql_mode() && OB_INVALID_NUMERIC == ret && OB_NOT_NULL(params.exec_ctx_)) {
+    } else if (OB_INVALID_NUMERIC == ret && OB_NOT_NULL(params.exec_ctx_)) {
       if (CM_IS_COLUMN_CONVERT(params.cast_mode_)) {
         ObString decimal_type_str("decimal");
         sql::ObDataTypeCastUtil::log_user_error_warning(params.exec_ctx_->get_user_logging_ctx(),
@@ -15194,7 +15194,7 @@ int ObObjCaster::to_type(const ObObjType expect_type, ObCastCtx &cast_ctx,
     const_cast<ObObjMeta &>(buf_obj.get_meta()).set_type_simple(expect_type);
     res_obj = &buf_obj;
   } else if (OB_FAIL(to_type(expect_type,
-                             (is_string && lib::is_mysql_mode()
+                             (is_string
                                         && CS_TYPE_INVALID == cast_ctx.dest_collation_) ?
                                 in_obj.get_collation_type()
                               : cast_ctx.dest_collation_,

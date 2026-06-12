@@ -3990,14 +3990,9 @@ int ObBasicSessionInfo::get_init_connect(ObString &str) const
 int ObBasicSessionInfo::get_locale_name(common::ObString &str) const
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
-    if(OB_FAIL(get_string_sys_var(SYS_VAR_LC_TIME_NAMES, str))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to load sys variables", "var_name",SYS_VAR_LC_TIME_NAMES, K(ret));
-    }
-   } else {
+  if (OB_FAIL(get_string_sys_var(SYS_VAR_LC_TIME_NAMES, str))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("oracle mode does not support lc_time_names", K(ret));
+    LOG_WARN("failed to load sys variables", "var_name", SYS_VAR_LC_TIME_NAMES, K(ret));
   }
   return ret;
 }
@@ -6885,38 +6880,11 @@ int ObExecEnv::gen_exec_env(const share::schema::ObSysVariableSchema &sys_variab
 {
   int ret = OB_SUCCESS;
   ObObj val;
-  bool is_oracle_mode = false;
-  if (OB_FAIL(sys_variable.get_oracle_mode(is_oracle_mode))) {
-    LOG_WARN("failed to get oracle mode", K(ret));
-  }
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     const ObSysVarSchema *sysvar_schema = nullptr;
     switch (i) {
       case PLSQL_CCFLAGS: {
-        if (is_oracle_mode) { // plsql_ccflags only in oracle mode!
-          int64_t size = 0;
-          if (OB_FAIL(sys_variable.get_sysvar_schema(ExecEnvMap[i], sysvar_schema))) {
-            LOG_WARN("failed to get sysvar schema", K(ret));
-          } else if (OB_ISNULL(sysvar_schema)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret), K(sysvar_schema));
-          } else {
-            ObString plsql_ccflags = sysvar_schema->get_value();
-            // print length of plsql_ccflags
-            OZ (databuff_printf(buf + pos, len - pos, size, "%d",
-                                static_cast<int32_t>(plsql_ccflags.length())));
-            OX (pos += size);
-            CK (pos < len);
-            OX (buf[pos++] = ',');
-            // print content of plsql_ccflags
-            OX (size = 0);
-            OZ (databuff_printf(buf + pos, len - pos, size, "%.*s",
-                                static_cast<int32_t>(plsql_ccflags.length()), plsql_ccflags.ptr()));
-            OX (pos += size);
-            CK (pos < len);
-            OX (buf[pos++] = ',');
-          }
-        }
+        // plsql_ccflags is Oracle-only; nothing to do in MySQL mode.
       } break;
       case SQL_MODE:
       case CHARSET_CLIENT:
@@ -7045,12 +7013,9 @@ int ObExecEnv::load(ObBasicSessionInfo &session, ObIAllocator *alloc)
 {
   int ret = OB_SUCCESS;
   ObObj val;
-  bool is_mysql = lib::is_mysql_mode();
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
-    if (is_mysql && PLSQL_CCFLAGS == i) {
-      // do nothing ...
-    } else if (!is_mysql && SQL_MODE == i) {
+    if (PLSQL_CCFLAGS == i) {
       // do nothing ...
     } else if (OB_FAIL(session.get_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));
@@ -7099,7 +7064,6 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   ObObj val;
-  bool is_mysql = lib::is_mysql_mode();
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
     switch (i) {
@@ -7135,9 +7099,7 @@ int ObExecEnv::store(ObBasicSessionInfo &session)
     break;
     }
     if (OB_FAIL(ret)) {
-    } else if (is_mysql && PLSQL_CCFLAGS == i) {
-      // do nothing ...
-    } else if (!is_mysql && SQL_MODE == i) {
+    } else if (PLSQL_CCFLAGS == i) {
       // do nothing ...
     } else if (OB_FAIL(session.update_sys_variable(ExecEnvMap[i], val))) {
       LOG_WARN("failed to get sys_variable", K(ExecEnvMap[i]), K(ret));

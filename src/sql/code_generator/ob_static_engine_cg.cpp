@@ -822,7 +822,13 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
   } else if (0 == ObString::make_string("none").case_compare(codec_str)) {
     compress_type = NONE_COMPRESSOR;
   } else if (0 == ObString::make_string("zstd").case_compare(codec_str)) {
-    compress_type = ZSTD_1_3_8_COMPRESSOR;
+    compress_type = ZSTD_COMPRESSOR;
+  } else if (0 == ObString::make_string("lz4").case_compare(codec_str)) {
+    compress_type = LZ4_COMPRESSOR;
+  } else if (0 == ObString::make_string("snappy").case_compare(codec_str)) {
+    compress_type = SNAPPY_COMPRESSOR;
+  } else if (0 == ObString::make_string("zlib").case_compare(codec_str)) {
+    compress_type = ZLIB_COMPRESSOR;
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected compression algorithm", K(ret));
@@ -3096,7 +3102,7 @@ int ObStaticEngineCG::generate_update_with_das(ObLogUpdate &op, ObTableUpdateSpe
     spec.check_fk_batch_ = !find;
   }
 
-  if (lib::is_mysql_mode()) {
+  {
     // Check if there exists fk cycle ref
     // 1. Get all the table ids in the update
     ObArray<uint64_t> ref_table_ids;
@@ -3718,7 +3724,7 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
             LOG_WARN("hash func or cmp func is null, check datatype is valid", K(ret));
           } else if (OB_FAIL(spec.hash_funcs_.push_back(hash_func))) {
             LOG_WARN("failed to push back hash func", K(ret));
-          } else if (lib::is_mysql_mode() && OB_FAIL(spec.cmp_funcs_.push_back(null_first_cmp))) {
+          } else if (OB_FAIL(spec.cmp_funcs_.push_back(null_first_cmp))) {
             LOG_WARN("failed to push back null first cmp func", K(ret));
           }
         }

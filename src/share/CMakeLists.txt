@@ -28,7 +28,6 @@ ob_set_subtarget(ob_share_extra ALONE
   aggregate/min.cpp
   aggregate/max.cpp
   aggregate/approx_count_distinct_mysql.cpp
-  aggregate/approx_count_distinct_oracle.cpp
   aggregate/sum_opnsize.cpp
   aggregate/group_concat.cpp
   aggregate/approx_count_distinct_synopsis.cpp
@@ -297,6 +296,7 @@ ob_set_subtarget(ob_share common_mixed
   restore/ob_physical_restore_table_operator.cpp
   restore/ob_log_restore_source.cpp
   restore/ob_log_restore_source_mgr.cpp
+  restore/ob_restore_table_operator.cpp
   restore/ob_recover_table_persist_helper.cpp
   restore/ob_restore_persist_helper.cpp
   restore/ob_import_table_persist_helper.cpp
@@ -319,6 +319,8 @@ ob_set_subtarget(ob_share common_mixed
   system_variable/ob_system_variable_init.cpp
   ob_lob_access_utils.cpp
   ob_json_access_utils.cpp
+  table/ob_table.cpp
+  table/ob_table_rpc_struct.cpp
   table/ob_table_ddl_struct.cpp
   table/ob_table_load_define.cpp
   table/ob_table_load_dml_stat.cpp
@@ -331,6 +333,7 @@ ob_set_subtarget(ob_share common_mixed
   index_usage/ob_index_usage_info_mgr.cpp
   index_usage/ob_index_usage_report_task.cpp
   table/ob_table_util.cpp
+  table/ob_table_object.cpp
   scheduler/ob_tenant_dag_scheduler.cpp
   scheduler/ob_independent_dag.cpp
   scheduler/ob_sys_task_stat.cpp
@@ -367,6 +370,10 @@ ob_set_subtarget(ob_share common_mixed
   throttle/ob_share_throttle_define.cpp
   throttle/ob_throttle_common.cpp
   restore/ob_restore_data_mode.cpp
+  table/redis/ob_redis_parser.cpp
+  table/redis/ob_redis_common.cpp
+  table/redis/ob_redis_util.cpp
+  table/redis/ob_redis_error.cpp
   table/ob_redis_importer.cpp
   restore/ob_restore_progress_display_mode.cpp
 )

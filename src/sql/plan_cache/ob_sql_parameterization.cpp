@@ -297,8 +297,8 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (true == tree->is_tree_not_param_) {
     ret_bool = true;
-  } else if (lib::is_mysql_mode() && T_GROUPBY_CLAUSE == tree->type_) {
-    // In oracle mode, the syntax like select a from t group by 1 is prohibited, so the group by parameterization can be enabled
+  } else if (T_GROUPBY_CLAUSE == tree->type_) {
+    // select a from t group by 1 enables group by parameterization
     ret_bool = true;
   } else if (T_SORT_LIST == tree->type_) {
     // vector index query always use order by vec_func() approx limit, we should open Parameterization for this situation
@@ -539,7 +539,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           bool fmt_int_or_ch_decint =
             (ctx.value_father_level_ < VALUE_VECTOR_LEVEL
              && ctx.assign_father_level_ < ASSIGN_ITEM_LEVEL)
-            && (lib::is_mysql_mode() && node->type_ == T_INT)
+            && (node->type_ == T_INT)
             && (ctx.parent_type_ == T_OP_DIV
                 || ctx.parent_type_ == T_OP_MUL
                 || ctx.parent_type_ == T_OP_ADD
@@ -2460,8 +2460,7 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
   } else if (OB_FAIL(session.check_feature_enable(ObCompatFeatureType::PROJECT_NULL,
                                                   enable_modify_null_name))) {
     LOG_WARN("failed to check feature enable", K(ret));
-  } else if (is_mysql_mode() &&
-             1 == param_info.params_idx_.count() &&
+  } else if (1 == param_info.params_idx_.count() &&
              0 == ObString(param_info.name_len_, param_info.paramed_field_name_).compare("?") &&
              enable_modify_null_name) {
     int64_t idx = param_info.params_idx_.at(0);
@@ -2576,7 +2575,7 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     }
   } else if (T_OP_MUL == tree->children_[1]->type_ || T_OP_DIV == tree->children_[1]->type_
              || T_OP_INT_DIV == tree->children_[1]->type_
-             || (lib::is_mysql_mode() && T_OP_MOD == tree->children_[1]->type_)) {
+             || T_OP_MOD == tree->children_[1]->type_) {
     /*  '0 - 2 * 3' should be transformed to '0 + (-2) * 3' */
     /*  '0 - 2 / 3' should be transformed to '0 + (-2) / 3' */
     /*  '0 - 4 mod 3' should be transformed to '0 + (-4 mod 3)' */

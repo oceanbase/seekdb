@@ -128,7 +128,7 @@ int ObSchemaPrinter::print_table_definition(const uint64_t tenant_id,
       SHARE_SCHEMA_LOG(WARN, "fail to print foreign keys", K(ret), K(*table_schema));
     } else if (!agent_mode && OB_FAIL(print_table_definition_indexes(*table_schema, buf, buf_len, pos, true, sql_mode, tz_info))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print indexes", K(ret), K(*table_schema));
-    } else if (!agent_mode && lib::is_mysql_mode()
+    } else if (!agent_mode
                && OB_FAIL(print_table_definition_indexes(*table_schema, buf, buf_len, pos, false, sql_mode, tz_info))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print indexes", K(ret), K(*table_schema));
     } else if (OB_FAIL(print_table_definition_constraints(*table_schema, buf, buf_len, pos))) {
@@ -766,7 +766,7 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
           }
         }
         // print index partition info
-        if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+        if (OB_SUCC(ret)) {
           if (index_schema->is_global_index_table()
               && OB_FAIL(print_table_definition_partition_options(*index_schema, buf, buf_len, pos, false, tz_info))) {
             SHARE_SCHEMA_LOG(WARN, "fail to print partition info for index", K(ret), KPC(index_schema));
@@ -911,7 +911,7 @@ int ObSchemaPrinter::print_table_definition_constraints(const ObTableSchema &tab
                new_cst_name,
                is_oracle_mode))) {
       SHARE_SCHEMA_LOG(WARN, "fail to generate new name with escape character", K(ret), K(cst->get_constraint_name_str()));
-    } else if (lib::is_mysql_mode() && CONSTRAINT_TYPE_NOT_NULL != cst->get_constraint_type()) {
+    } else if (CONSTRAINT_TYPE_NOT_NULL != cst->get_constraint_type()) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, ",\n  CONSTRAINT "))) {
         SHARE_SCHEMA_LOG(WARN, "fail to print constraint", K(ret));
       } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_cst_name, false))) {
@@ -4209,7 +4209,7 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
     OX (routine_param = static_cast<const ObRoutineParam*>(routine_info->get_ret_info()));
     OZ (print_routine_param_type(routine_param, return_type, buf, buf_len, pos, tz_info));
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     if (routine_info->is_no_sql()) {
       OZ (databuff_printf(buf, buf_len, pos, "\nNO SQL"));
     } else if (routine_info->is_reads_sql_data()) {

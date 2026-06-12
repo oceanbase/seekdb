@@ -20,6 +20,7 @@
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_executor.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/backup/ob_backup_data_table_operator.h"
 #include "share/schema/ob_mview_info.h"
 #include "share/schema/ob_mlog_info.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -473,13 +474,6 @@ int ObMViewSchedJobUtils::calc_date_expression(
         } else if (OB_FAIL(executor.init_env(job_info, session))) {
           LOG_WARN("failed to init env", KR(ret), K(job_info));
         } else {
-          bool is_oracle_mode = lib::is_oracle_mode();
-          bool is_oracle_tenant = false;
-          is_oracle_tenant = job_info.is_oracle_tenant_;
-          if (is_oracle_tenant && !is_oracle_mode) {
-            THIS_WORKER.set_compatibility_mode(Worker::CompatMode::ORACLE);
-          }
-
           int64_t current_time = ObTimeUtility::current_time() / 1000000L * 1000000L; // ignore micro seconds
           int64_t next_time = 0;
           if (OB_FAIL(calc_date_expr_from_str(session, tmp_allocator,
@@ -493,10 +487,6 @@ int ObMViewSchedJobUtils::calc_date_expression(
             LOG_USER_ERROR(OB_ERR_TIME_EARLIER_THAN_SYSDATE, "next date");
           } else {
             next_date_ts = next_time;
-          }
-
-          if (is_oracle_tenant && !is_oracle_mode) {
-            THIS_WORKER.set_compatibility_mode(Worker::CompatMode::MYSQL);
           }
         }
         exec_ctx.set_physical_plan_ctx(NULL);
