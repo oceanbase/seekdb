@@ -294,18 +294,7 @@ int ObBasicSysVar::do_check_and_convert(ObExecContext &ctx,
   if (true == set_var.is_set_default_) {
     // do nothing
   } else {
-    if (is_oracle_mode() && (ObNumberType == in_val.get_type())) {
-      number::ObNumber num = in_val.get_number();
-      int64_t int_val = 0;
-      if (num.is_valid_int64(int_val)) {
-        out_val.set_int(int_val);
-      } else {
-        ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-        LOG_WARN("not valid int value for var on oracle mode", K(in_val));
-      }
-    } else {
-      out_val = in_val;
-    }
+    out_val = in_val;
   }
   return ret;
 }
@@ -905,40 +894,6 @@ int ObTypeLibSysVar::do_check_and_convert(ObExecContext &ctx,
     } else {
       out_val.set_int(static_cast<int64_t>(uint64_val));
     }
-  } else if (is_oracle_mode() && (ObNumberType == in_val.get_type())) {
-    number::ObNumber num = in_val.get_number();
-    int64_t int_val = 0;
-    if (num.is_valid_int64(int_val)) {
-      if (int_val < 0 || int_val >= type_lib_.count_) {
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        int log_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, in_val))) {
-          LOG_ERROR("fail to log error", K(ret), K(log_ret), K(in_val));
-        }
-      } else {
-        out_val.set_int(int_val);
-      }
-    } else {
-      ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-      LOG_WARN("not valid int value for var on oracle mode", K(in_val));
-    }
-  } else if (is_oracle_mode() && ob_is_decimal_int(in_val.get_type())) {
-    int64_t res_v = 0;
-    bool is_valid_int64 = false;
-    if (OB_FAIL(wide::check_range_valid_int64(in_val.get_decimal_int(), in_val.get_int_bytes(),
-                                              is_valid_int64, res_v))) {
-      LOG_WARN("check int64 range failed", K(ret));
-    } else if (is_valid_int64) {
-      if (res_v < 0 || res_v >= type_lib_.count_) {
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        int log_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, in_val))) {
-          LOG_ERROR("fail to log error", K(ret), K(log_ret), K(in_val));
-        }
-      } else {
-        out_val.set_int(res_v);
-      }
-    }
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid type", K(ret), K(in_val.get_type()));
@@ -1090,15 +1045,6 @@ int ObVersionSysVar::do_check_and_convert(ObExecContext &ctx,
       LOG_ERROR("succ to cast obj, but res_obj_ptr is NULL", K(ret));
     } else {
       out_val = *res_obj_ptr;
-    }
-  } else if (is_oracle_mode() && (ObNumberType == in_val.get_type())) {
-    number::ObNumber num = in_val.get_number();
-    uint64_t uint_val = 0;
-    if (num.is_valid_uint64(uint_val)) {
-      out_val.set_uint64(uint_val);
-    } else {
-      ret = OB_ERR_WRONG_TYPE_FOR_VAR;
-      LOG_WARN("not valid int value for var on oracle mode", K(in_val));
     }
   } else {
     ret = OB_ERR_WRONG_TYPE_FOR_VAR;
