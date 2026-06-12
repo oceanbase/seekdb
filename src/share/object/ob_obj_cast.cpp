@@ -121,7 +121,7 @@ static int cast_not_expected(const ObObjType expect_type,
   UNUSED(params);
   LOG_WARN_RET(OB_ERR_UNEXPECTED, "not expected obj type convert",
             K(expect_type), K(in), K(out), K(cast_mode));
-  return lib::is_oracle_mode() ? OB_ERR_INVALID_DATATYPE : OB_ERR_UNEXPECTED;
+  return OB_ERR_UNEXPECTED;
 }
 
 static int cast_inconsistent_types(const ObObjType expect_type,
@@ -305,8 +305,6 @@ int check_convert_str_err(const char *str,
   if ((OB_ISNULL(str) || OB_ISNULL(endptr)) && str != endptr) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null pointer(s)", K(ret), KP(str), KP(endptr));
-  } else if (is_oracle_mode() && 0 != err) {
-    ret = OB_ERR_CAST_VARCHAR_TO_NUMBER;
   } else
   // 2. str == endptr include NULL == NULL.
   if (OB_UNLIKELY(str == endptr) || OB_UNLIKELY(EDOM == err)) {
@@ -1005,40 +1003,7 @@ static int check_convert_string(const ObObjType expect_type, ObObjCastParams &pa
     const ObObj &in, ObObj &out)
 {
   int ret = OB_SUCCESS;
-  //UNUSED(expect_type);
-  //UNUSED(params);
-//  if (lib::is_oracle_mode()) {
-//    //varchar2 --> raw
-//    if (in.is_varchar_or_char() && ob_is_varbinary_type(expect_type, params.expect_obj_collation_)) {
-//      if (OB_FAIL(ObHexUtils::hextoraw(in, params, out))) {
-//        LOG_WARN("fail to hextoraw", K(ret), K(in));
-//      }
-//    //raw --> varchar2
-//    } else if (in.is_varbinary() && ob_is_varchar_char_type(expect_type, params.expect_obj_collation_)) {
-//      if (OB_FAIL(ObHexUtils::rawtohex(in, params, out))) {
-//        LOG_WARN("fail to rawtohex", K(ret), K(in));
-//      }
-//    } else {
-//      //TODO::for lob, for long raw @yanhua, @hanhui
-//      out = in;
-//      LOG_DEBUG("do nothing");
-//    }
-//    LOG_DEBUG("finish check_convert_string", K(ret), "in_type", in.get_type(), "in_cs_type", in.get_collation_type(), K(in), K(expect_type), "expect_cs_type", params.dest_collation_, K(out));
-  if (lib::is_oracle_mode()
-      && ob_is_blob(expect_type, params.expect_obj_collation_)
-      && !in.is_blob()) {
-    if (in.is_varchar_or_char()) {
-      if (OB_FAIL(ObHexUtils::hextoraw(in, params, out))) {
-        LOG_WARN("fail to hextoraw for blob", K(ret), K(in));
-      }
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
-    }
-  } else {
-    out = in;
-  }
+  out = in;
   return ret;
 }
 
@@ -2195,12 +2160,7 @@ static int float_number(const ObObjType expect_type, ObObjCastParams &params,
     char buf[MAX_DOUBLE_STRICT_PRINT_SIZE];
     MEMSET(buf, 0, MAX_DOUBLE_STRICT_PRINT_SIZE);
     int64_t length = 0;
-    if (lib::is_oracle_mode()) {
-      length = ob_gcvt_opt(value, OB_GCVT_ARG_FLOAT, static_cast<int32_t>(sizeof(buf) - 1),
-                           buf, NULL, TRUE);
-    } else {
-      length = ob_gcvt(value, OB_GCVT_ARG_DOUBLE, sizeof(buf) - 1, buf, NULL);
-    }
+    length = ob_gcvt(value, OB_GCVT_ARG_DOUBLE, sizeof(buf) - 1, buf, NULL);
     ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
     number::ObNumber nmb;
     if (OB_FAIL(nmb.from_sci_opt(str.ptr(), str.length(), params, &res_precision, &res_scale))) {
@@ -2622,8 +2582,7 @@ static int double_float(const ObObjType expect_type, ObObjCastParams &params,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
-  } else if (lib::is_mysql_mode()
-              && CAST_FAIL(real_range_check(expect_type, in.get_double(), value))) {
+  } else if (CAST_FAIL(real_range_check(expect_type, in.get_double(), value))) {
   } else {
     out.set_float(expect_type, value);
     LOG_DEBUG("succ to double_float", K(ret), K(in), K(value), K(out));
@@ -3423,18 +3382,9 @@ static int number_string(const ObObjType expect_type, ObObjCastParams &params,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
-  } else if (is_oracle_mode() && ob_is_blob(expect_type, params.dest_collation_)) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("cast number to blob not allowed", K(ret));
   } else {
-    if (lib::is_oracle_mode() && params.format_number_with_limit_) {
-      if (OB_FAIL(in.get_number().format_with_oracle_limit(buf, sizeof(buf), len, in.get_scale()))) {
-        LOG_WARN("fail to format", K(ret), K(in.get_number()));
-      }
-    } else {
-      if (OB_FAIL(in.get_number().format(buf, sizeof(buf), len, in.get_scale()))) {
-        LOG_WARN("fail to format", K(ret), K(in.get_number()));
-      }
+    if (OB_FAIL(in.get_number().format(buf, sizeof(buf), len, in.get_scale()))) {
+      LOG_WARN("fail to format", K(ret), K(in.get_number()));
     }
 
     if (OB_SUCC(ret)) {
@@ -4181,9 +4131,6 @@ static int datetime_string(const ObObjType expect_type, ObObjCastParams &params,
   } else {
     const ObTimeZoneInfo *tz_info = (ObTimestampType == in.get_type()) ? params.dtc_params_.tz_info_ : NULL;
     ObString nls_format;
-    if (lib::is_oracle_mode() && !params.dtc_params_.force_use_standard_format_) {
-      nls_format = params.dtc_params_.get_nls_format(ObDateTimeType);
-    }
     char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
     int64_t len = 0;
     ret = in.is_mysql_datetime() ?
@@ -5983,10 +5930,6 @@ static int string_int(const ObObjType expect_type, ObObjCastParams &params,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (OB_FAIL(convert_string_collation(in.get_string(), in.get_collation_type(), utf8_string, ObCharset::get_system_collation(), params))) {
       LOG_WARN("convert_string_collation", K(ret));
   } else {
@@ -6019,10 +5962,6 @@ static int string_uint(const ObObjType expect_type, ObObjCastParams &params,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else {
     const ObString &str = in.get_string();
     uint64_t value = 0;
@@ -6054,10 +5993,6 @@ static int string_float(const ObObjType expect_type, ObObjCastParams &params,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (OB_FAIL(string_double(ObDoubleType, params, in, dbl, cast_mode))) {
   } else if (OB_FAIL(double_float(expect_type, params, dbl, out, cast_mode))) {
   }
@@ -6076,10 +6011,6 @@ static int string_double(const ObObjType expect_type, ObObjCastParams &params,
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else {
     double value = 0.0;
     if (ObHexStringType == in.get_type()) {
@@ -6150,10 +6081,6 @@ static int string_number(const ObObjType expect_type, ObObjCastParams &params,
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else {
     number::ObNumber value;
     if (ObHexStringType == in.get_type()) {
@@ -6223,19 +6150,12 @@ static int common_string_datetime(const ObObjType expect_type, ObObjCastParams &
   ObScale res_scale = -1;
   ObString utf8_string;
   ObMySQLDateTime mdt_value = 0;
-  if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
-  } else if (OB_FAIL(convert_string_collation(in.get_string(), in.get_collation_type(), utf8_string, ObCharset::get_system_collation(), params))) {
+  if (OB_FAIL(convert_string_collation(in.get_string(), in.get_collation_type(), utf8_string, ObCharset::get_system_collation(), params))) {
     LOG_WARN("convert_string_collation", K(ret));
   } else {
     bool need_truncate = CM_IS_COLUMN_CONVERT(cast_mode) ? CM_IS_TIME_TRUNCATE_FRACTIONAL(cast_mode) : false;
     ObTimeConvertCtx cvrt_ctx(params.dtc_params_.tz_info_, ObTimestampType == expect_type, need_truncate);
-    if (lib::is_oracle_mode()) {
-      cvrt_ctx.oracle_nls_format_ = params.dtc_params_.get_nls_format(ObDateTimeType);
-      CAST_RET(ObTimeConverter::str_to_date_oracle(utf8_string, cvrt_ctx, value));
-    } else {
+    {
       ObDateSqlMode date_sql_mode;
       date_sql_mode.allow_invalid_dates_ = CM_IS_ALLOW_INVALID_DATES(cast_mode);
       date_sql_mode.no_zero_date_ =
@@ -6341,10 +6261,6 @@ static int string_date(const ObObjType expect_type, ObObjCastParams &params,
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (CAST_FAIL(ObTimeConverter::str_to_date(in.get_string(), value, date_sql_mode))) {
   } else if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode) && value == ObTimeConverter::ZERO_DATE) {
     // check zero date for scale over mode
@@ -6375,10 +6291,6 @@ static int string_mdate(const ObObjType expect_type, ObObjCastParams &params,
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (CAST_FAIL(ObTimeConverter::str_to_mdate(in.get_string(), md_value, date_sql_mode))) {
   } else if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode) && md_value == ObTimeConverter::MYSQL_ZERO_DATE) {
     // check zero date for scale over mode
@@ -6405,10 +6317,6 @@ static int string_time(const ObObjType expect_type, ObObjCastParams &params,
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (CAST_FAIL(ObTimeConverter::str_to_time(in.get_string(), value, &res_scale, need_truncate))) {
   } else {
     SET_RES_TIME(out);
@@ -6429,10 +6337,6 @@ static int string_year(const ObObjType expect_type, ObObjCastParams &params,
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (OB_FAIL(string_int(ObIntType, params, in, int64,
                                 CM_UNSET_STRING_INTEGER_TRUNC(CM_SET_WARN_ON_FAIL(cast_mode))))) {
   } else if (0 == int64.get_int()) {
@@ -6458,13 +6362,6 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
                      && ObTextTC != ob_obj_type_class(expect_type)))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode()
-             && !(in.is_blob() && ob_is_blob(expect_type, params.expect_obj_collation_))
-             && (in.is_blob())) {
-    // Only allow blob -> blob, disallow blob -> !blob
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid cast of blob type", K(ret), K(in), K(out.get_meta()), K(expect_type), K(cast_mode));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast to blob type");
   } else if (ObTextTC == in.get_type_class() && in.is_outrow()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("invalid cast of out row lob obj", K(ret), K(in), K(out.get_meta()), K(expect_type), K(cast_mode));
@@ -6593,10 +6490,6 @@ static int string_bit(const ObObjType expect_type, ObObjCastParams &params,
                   || ObBitTC != ob_obj_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else {
     int32_t bit_len = 0;
     const ObString &str = in.get_string();
@@ -6650,10 +6543,6 @@ static int string_enum(const ObExpectType &expect_type, ObObjCastParams &params,
       || OB_ISNULL(type_infos = expect_type.get_type_infos())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(expect_type), K(in), K(ret));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (OB_FAIL(ObCharset::charset_convert(*params.allocator_v2_,
                                                 in.get_string(), in_cs_type,
                                                 cs_type, in_str))) {
@@ -6710,10 +6599,6 @@ static int string_set(const ObExpectType &expect_type, ObObjCastParams &params, 
       || !ObCharset::is_valid_collation(cs_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(expect_type), K(in), K(cs_type), K(ret));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (in.get_string().empty()) {
      value = 0;
   } else if (OB_FAIL(ObCharset::charset_convert(*params.allocator_v2_,
@@ -6800,10 +6685,6 @@ static int text_##TYPE(const ObExpectType &expect_type, ObObjCastParams &params,
     || OB_ISNULL(expect_type.get_type_infos())) {                                   \
     ret = OB_ERR_UNEXPECTED;                                                        \
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));                 \
-  } else if (lib::is_oracle_mode() && in.is_blob()) {                               \
-    ret = OB_NOT_SUPPORTED;                                                         \
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type));           \
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Blob cast to other type");                    \
   } else {                                                                          \
     ObString in_str;                                                                \
     ObTextStringIter instr_iter(in);                                                \
@@ -6931,7 +6812,6 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
     ObJsonNull j_null;
     ObJsonNode *j_tree = NULL;
     uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
-    bool is_oracle = lib::is_oracle_mode();
     ObObjType in_type = in.get_type();
     bool is_convert_jstr_type = (in_type == ObTinyTextType
                                  || in_type == ObTextType
@@ -6939,16 +6819,13 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
                                  || in_type == ObLongTextType);
     if (expect_type == ObJsonType && j_text.length() == 0 && cast_mode == 0) { // add column json null
       j_base = &j_null;
-    } else if (is_oracle && (OB_ISNULL(j_text.ptr()) || j_text.length() == 0)) {
-      j_base = &j_null;
-    } else if (!is_oracle && CS_TYPE_BINARY == in.get_collation_type()) {
+    } else if (CS_TYPE_BINARY == in.get_collation_type()) {
       j_base = &j_opaque;
-    } else if (!is_oracle  && (
-                (CM_IS_SQL_AS_JSON_SCALAR(cast_mode) && ob_is_string_type(in_type))
+    } else if ((CM_IS_SQL_AS_JSON_SCALAR(cast_mode) && ob_is_string_type(in_type))
                 || (CM_IS_IMPLICIT_CAST(cast_mode)
                     && !CM_IS_COLUMN_CONVERT(cast_mode)
                     && !CM_IS_JSON_VALUE(cast_mode)
-                    && is_convert_jstr_type))) {
+                    && is_convert_jstr_type)) {
       // consistent with mysql: TINYTEXT, TEXT, MEDIUMTEXT, and LONGTEXT. We want to treat them like strings
       ret = OB_SUCCESS;
       j_base = &j_string;
@@ -6958,7 +6835,7 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
     } else if (OB_FAIL(ObJsonParser::get_tree(params.allocator_v2_, j_text,
                                               j_tree, parse_flag,
                                               sql::ObJsonExprHelper::get_json_max_depth_config()))) {
-      if (!is_oracle && CM_IS_IMPLICIT_CAST(cast_mode)
+      if (CM_IS_IMPLICIT_CAST(cast_mode)
                      && !CM_IS_COLUMN_CONVERT(cast_mode)
                      && is_convert_jstr_type) {
         ret = OB_SUCCESS;
@@ -7073,13 +6950,6 @@ static int text_string(const ObObjType expect_type, ObObjCastParams &params,
       || OB_UNLIKELY(ObStringTC != ob_obj_type_class(expect_type)))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (lib::is_oracle_mode()
-             && !(in.is_blob() && ob_is_blob(expect_type, params.expect_obj_collation_))
-             && (in.is_blob())) {
-    // blob can only cast to blobs
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid cast of blob type", K(ret), K(in), K(out.get_meta()), K(expect_type), K(cast_mode));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast to blob type");
   } else if (OB_FAIL(instr_iter.init(0, NULL, params.allocator_v2_))) {
     LOG_WARN("init lob str iter failed ", K(ret), K(in));
   } else if (OB_FAIL(instr_iter.get_full_data(in_str))) {
@@ -8698,10 +8568,6 @@ static int text_##TYPE(const ObObjType expect_type, ObObjCastParams &params,    
                   || TYPE_CLASS != ob_obj_type_class(expect_type))) {               \
     ret = OB_ERR_UNEXPECTED;                                                        \
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));       \
-  } else if (lib::is_oracle_mode() && in.is_blob() && !ob_is_raw_tc(expect_type)) { \
-    ret = OB_NOT_SUPPORTED;                                                         \
-    LOG_ERROR("invalid use of blob type", K(ret), K(in), K(expect_type)); \
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Blob cast to other type");                    \
   } else {                                                                          \
     ObString in_str;                                                                \
     ObTextStringIter instr_iter(in);                                                \
@@ -10080,14 +9946,8 @@ static int decimalint_string(const ObObjType expected_type, ObObjCastParams &par
                       && ObTextTC != ob_obj_type_class(expected_type)))) {
     ret = OB_ERR_UNDEFINED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
-  } else if (is_oracle_mode() && ob_is_blob(expected_type, params.dest_collation_)) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("cast number to blob not allowed", K(ret));
   } else {
     bool need_to_sci = false;
-    if (lib::is_oracle_mode() && params.format_number_with_limit_) {
-      need_to_sci = true;
-    }
     if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buf,
                                 sizeof(buf), length, need_to_sci))) {
       LOG_WARN("failed to cast decimalint to string", K(ret));
@@ -10406,8 +10266,6 @@ static int float_decimalint(const ObObjType expected_type, ObObjCastParams &para
   } else if (OB_ISNULL(params.res_accuracy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null res accuracy", K(ret));
-  } else if (lib::is_oracle_mode()) {
-    length = ob_gcvt_opt(in.get_float(), OB_GCVT_ARG_FLOAT, sizeof(buf) - 1, buf, NULL, TRUE);
   } else {
     length = ob_gcvt(in.get_float(), OB_GCVT_ARG_DOUBLE, sizeof(buf) - 1, buf, NULL);
   }
@@ -10724,10 +10582,6 @@ static int string_decimalint(const ObObjType expected_type, ObObjCastParams &par
   } else if (OB_ISNULL(params.allocator_v2_) || OB_ISNULL(params.res_accuracy_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null params", K(ret), K(params.allocator_v2_), K(params.res_accuracy_));
-  } else if (lib::is_oracle_mode() && in.is_blob()) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("invalid use of blob type", K(ret), K(in.get_type()), K(expected_type));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Cast to blob type");
   } else if (ObHexStringType == in.get_type()) {
     uint64_t hex_v = hex_to_uint64(in.get_string());
     if (OB_FAIL(wide::from_integer(hex_v, params, decint, int_bytes))) {
@@ -14047,18 +13901,8 @@ int float_range_check(ObObjCastParams &params, const ObAccuracy &accuracy,
   if (obj.is_ufloat() && 0.0 > value) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unsiged type with negative value", K(ret), K(obj), K(value));
-  } else if (lib::is_oracle_mode() && 0.0 == value) {
-    value = 0.0;
-    buf_obj.set_float(obj.get_type(), value);
-    res_obj = &buf_obj;
-  } else if (lib::is_oracle_mode() && isnan(value)) {
-    // overwrite -NAN to NAN, OB only store NAN
-    value = NAN;
-    buf_obj.set_float(obj.get_type(), value);
-    res_obj = &buf_obj;
   } else {
     // float/double comparison using "==" or "!=" matches MySQL
-    // and Oracle doesn't support raw float/double
     if (CAST_FAIL(real_range_check(accuracy, value))) {
     } else if (obj.get_float() != value) {
       buf_obj.set_float(obj.get_type(), value);
@@ -14077,18 +13921,8 @@ int double_check_precision(ObObjCastParams &params, const ObAccuracy &accuracy,
   if (obj.is_udouble() && 0.0 > value) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unsiged type with negative value", K(ret), K(obj), K(value));
-  } else if (lib::is_oracle_mode() && 0.0 == value) {
-    value = 0.0;
-    buf_obj.set_double(obj.get_type(), value);
-    res_obj = &buf_obj;
-  } else if (lib::is_oracle_mode() && isnan(value)) {
-    // overwrite -NAN to NAN, OB only store NAN
-    value = NAN;
-    buf_obj.set_double(obj.get_type(), value);
-    res_obj = &buf_obj;
   } else if (CAST_FAIL(real_range_check(accuracy, value))) {
     // float/double comparison using "==" or "!=" matches MySQL
-    // and Oracle doesn't support raw float/double
   } else if (obj.get_double() != value) {
     buf_obj.set_double(obj.get_type(), value);
     res_obj = &buf_obj;
@@ -14201,24 +14035,15 @@ int number_range_check_v2(ObObjCastParams &params, const ObAccuracy &accuracy,
 
     if (OB_SUCC(ret) && !is_finish) {
       if (OB_ISNULL(min_check_num) || OB_ISNULL(max_check_num)
-          || (!lib::is_oracle_mode()
-              && (OB_ISNULL(min_num_mysql) || OB_ISNULL(max_num_mysql)))) {
+          || OB_ISNULL(min_num_mysql) || OB_ISNULL(max_num_mysql)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("min_num or max_num is null", K(ret), KPC(min_check_num), KPC(max_check_num));
       } else if (in_val <= *min_check_num) {
-        if (lib::is_oracle_mode()) {
-          cast_ret = OB_ERR_VALUE_LARGER_THAN_ALLOWED;
-        } else {
-          cast_ret = OB_DATA_OUT_OF_RANGE;
-          buf_obj.set_number(obj.get_type(), *min_num_mysql);
-        }
+        cast_ret = OB_DATA_OUT_OF_RANGE;
+        buf_obj.set_number(obj.get_type(), *min_num_mysql);
       } else if (in_val >= *max_check_num) {
-        if (lib::is_oracle_mode()) {
-          cast_ret = OB_ERR_VALUE_LARGER_THAN_ALLOWED;
-        } else {
-          cast_ret = OB_DATA_OUT_OF_RANGE;
-          buf_obj.set_number(obj.get_type(), *max_num_mysql);
-        }
+        cast_ret = OB_DATA_OUT_OF_RANGE;
+        buf_obj.set_number(obj.get_type(), *max_num_mysql);
         //need round
       } else {
         if (OB_FAIL(out_val.from(in_val, allocator))) {
@@ -14227,7 +14052,7 @@ int number_range_check_v2(ObObjCastParams &params, const ObAccuracy &accuracy,
           if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode)) {
             ret = OB_OPERATE_OVERFLOW;
             LOG_WARN("input value is out of range.", K(ret), K(scale), K(in_val));
-          } else if (lib::is_mysql_mode()) {
+          } else {
             // MySQL emits warnings for decimal column truncation, regardless of sql_mode settings.
             params.warning_ = OB_ERR_DATA_TOO_LONG;
           }
@@ -14519,10 +14344,9 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
   int ret = OB_SUCCESS;
   const ObLength max_accuracy_len = accuracy.get_length();
   const int32_t str_len_byte = obj.get_string_len();
-  bool is_oracle = is_oracle_mode();
   // Handle abnormal cases, but str_len_byte greater than max_len_char is not necessarily a problem, further judgment is required
   if (max_accuracy_len <= 0 || str_len_byte > max_accuracy_len) {
-    int &cast_ret = (CM_IS_ERROR_ON_FAIL(cast_mode) && !is_oracle)
+    int &cast_ret = CM_IS_ERROR_ON_FAIL(cast_mode)
                     ? ret
                     : params.warning_;
     const char *str = obj.get_string_ptr();
@@ -14548,32 +14372,14 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
           cast_ret = OB_ERR_DATA_TOO_LONG;
           LOG_WARN("binary type length is too long", K(max_accuracy_len), K(str_len_char), K(obj));
         }
-      } else if (is_oracle_byte_length(is_oracle, accuracy.get_length_semantics())) {
-        const ObLength max_len_byte = accuracy.get_length();
-        if (OB_UNLIKELY(str_len_byte > max_len_byte)) {
-          cast_ret = OB_ERR_DATA_TOO_LONG;
-          LOG_WARN("char type length is too long", K(str_len_byte), K(max_len_byte), K(obj));
-        }
-      } else if (is_oracle && obj.is_fixed_len_char_type()) {
-        const int32_t str_len_char = static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
-        if (OB_UNLIKELY(str_len_byte > OB_MAX_ORACLE_CHAR_LENGTH_BYTE)) {
-          cast_ret = OB_ERR_DATA_TOO_LONG;
-          LOG_WARN("char byte length is too long", K(str_len_byte), K(OB_MAX_ORACLE_CHAR_LENGTH_BYTE), K(obj));
-        } else if (OB_UNLIKELY(str_len_char > max_accuracy_len)) {
-          cast_ret = OB_ERR_DATA_TOO_LONG;
-          LOG_WARN("char char length is too long", K(str_len_char), K(max_accuracy_len), K(obj));
-        }
-      } else {//mysql, oracle varchar(char)
+      } else {//mysql varchar(char)
         // trunc_len_char > max_accuracy_len means an error or warning, without tail ' ', otherwise
         // str_len_char > max_accuracy_len means only warning, even in strict mode.
         // lengthsp()  - returns the length of the given string without trailing spaces. So strlen_byte_no_sp returns the result that is less than or equal to the length of str.
         trunc_len_byte = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, str_len_byte));
         trunc_len_char = obj.is_lob() ? trunc_len_byte : static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, trunc_len_byte));
 
-        if (is_oracle && OB_UNLIKELY(str_len_byte > OB_MAX_ORACLE_VARCHAR_LENGTH)) {
-          cast_ret = OB_ERR_DATA_TOO_LONG;
-          LOG_WARN("varchar2 byte length is too long", K(str_len_byte), K(OB_MAX_ORACLE_VARCHAR_LENGTH), K(obj));
-        } else if (OB_UNLIKELY(trunc_len_char > max_accuracy_len)) {
+        if (OB_UNLIKELY(trunc_len_char > max_accuracy_len)) {
           cast_ret = OB_ERR_DATA_TOO_LONG;
           LOG_WARN("char type length is too long", K(max_accuracy_len), K(trunc_len_char), K(obj), K(trunc_len_byte), K(obj.is_lob()));
         } else {
@@ -14598,13 +14404,7 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
           } else {
             trunc_len_byte = static_cast<int32_t>(ObCharset::charpos(cs_type, str, str_len_byte, max_accuracy_len));
           }
-          if (is_oracle) {
-          // In oracle mode, trailing space characters are not cleaned up for the following reasons:
-          // #bug18529663:for example select cast(' a' as char) from dual;
-          // At this point, trunc_len_byte = 1, meaning it truncates to the first character ' ' of ' a'
-          // If no judgment is added, strlen_byte_no_sp will be executed directly to clean up the trailing space characters. After execution, since the spaces are cleaned up, it leads to trunc_len_byte=0
-          // trunc_len_byte = 0 will cause the final output length of obchar type to be 0, which will be judged as empty in the comparison in oracle mode, not meeting the expectation.
-          } else if (obj.is_fixed_len_char_type() && !obj.is_binary()) {
+          if (obj.is_fixed_len_char_type() && !obj.is_binary()) {
             trunc_len_byte = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, trunc_len_byte));
           }
           if (OB_FAIL(copy_string(params, obj.get_type(), str, trunc_len_byte, buf_obj))) {
@@ -14613,11 +14413,6 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
             buf_obj.set_collation_type(obj.get_collation_type());
             res_obj = &buf_obj;
           }
-          if (is_oracle) {
-            ret = params.warning_;
-          }
-        } else if (OB_SUCC(params.warning_) && is_oracle) {
-          ret = params.warning_;
         } else {
           res_obj = &obj;
         }
@@ -14740,8 +14535,6 @@ int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type
     //nothing to do
   } else if (cs_type == CS_TYPE_BINARY) {
     //Any type can be directly converted to binary
-    obj.set_collation_type(cs_type);
-  } else if (!lib::is_mysql_mode()) {
     obj.set_collation_type(cs_type);
   } else {
     ObString str;
@@ -15298,14 +15091,6 @@ int ObObjCaster::to_type(const ObObjType expect_type,
     out_obj = in_obj;
     const_cast<ObObjMeta &>(out_obj.get_meta()).set_type_simple(expect_type);
   } else {
-    if (lib::is_oracle_mode() && in_obj.is_character_type()) {
-      //Defense measure: convert to Oracle's string type,
-      //The character set is determined by two NLS variables, which are passed in through ObCastCtx
-      ObCollationType dest_collation = cast_ctx.dtc_params_.nls_collation_;
-      if (CS_TYPE_INVALID != dest_collation) {
-        cast_ctx.dest_collation_ = dest_collation;
-      }
-    }
     ret = to_type(expect_type,
                   (is_string && CS_TYPE_INVALID == cast_ctx.dest_collation_) ?
                      in_obj.get_collation_type() : cast_ctx.dest_collation_,
@@ -15380,16 +15165,6 @@ int ObObjCaster::to_type(const ObObjType expect_type,
   if (OB_UNLIKELY(ob_is_invalid_obj_tc(in_tc) || ob_is_invalid_obj_tc(out_tc))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected type", K(ret), K(in_obj), K(expect_type));
-  } else if (lib::is_oracle_mode()) {
-    /*if (CM_IS_EXPLICIT_CAST(cast_ctx.cast_mode_)) {
-      if (OB_FAIL(OBJ_CAST_ORACLE_EXPLICIT[in_tc][out_tc](expect_type, cast_ctx, in_obj, out_obj, cast_ctx.cast_mode_))) {
-        LOG_WARN("failed to cast obj", K(ret), K(in_obj), K(in_tc), K(out_tc), K(expect_type), K(cast_ctx.cast_mode_));
-      }
-    } else {*/
-      if (OB_FAIL(OBJ_CAST_ORACLE_IMPLICIT[in_tc][out_tc](expect_type, cast_ctx, in_obj, out_obj, cast_ctx.cast_mode_))) {
-        LOG_WARN("failed to cast obj", K(ret), K(in_obj), K(in_tc), K(out_tc), K(expect_type), K(cast_ctx.cast_mode_));
-      }
-    //}
   } else {
     if (OB_FAIL(OB_OBJ_CAST[in_tc][out_tc](expect_type, cast_ctx, in_obj, out_obj, cast_ctx.cast_mode_))) {
       LOG_WARN("failed to cast obj", K(ret), K(in_obj), K(in_tc), K(out_tc), K(expect_type), K(cast_ctx.cast_mode_));
@@ -17559,8 +17334,6 @@ int ObObjEvaluator::is_true(const ObObj &obj, ObCastMode cast_mode, bool &result
     // do nothing
   } else if (obj.is_numeric_type()) {
     result = !obj.is_zero();
-  } else if (lib::is_oracle_mode() && obj.is_varchar_or_char() && 0 == obj.get_string_len()) {
-    result = true;
   } else {
     ObArenaAllocator allocator(ObModIds::BLOCK_ALLOC);
     ObCastCtx cast_ctx(&allocator, NULL, cast_mode, CS_TYPE_INVALID);
