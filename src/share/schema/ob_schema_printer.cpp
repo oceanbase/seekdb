@@ -781,7 +781,6 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
         }
 
         if (OB_FAIL(ret)) {
-        } else if (!lib::is_mysql_mode()) { /* only used for mysql mode */
         } else if (!index_schema->is_index_visible() && OB_FAIL(databuff_printf(buf, buf_len, pos, " /*!80000 INVISIBLE */"))) {
           LOG_WARN("failed to print invisible info", K(ret));
         }
@@ -3216,7 +3215,7 @@ int ObSchemaPrinter::print_hash_sub_partition_elements(ObSubPartition **sub_part
         const ObString &part_name = sub_partition->get_part_name();
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "subpartition "))) {
           SHARE_SCHEMA_LOG(WARN, "print subpartition failed", K(ret));
-        } else if (OB_FAIL(print_identifier(buf, buf_len, pos, part_name, lib::is_oracle_mode()))) {
+        } else if (OB_FAIL(print_identifier(buf, buf_len, pos, part_name, false))) {
           SHARE_SCHEMA_LOG(WARN, "print part name failed", K(ret), K(part_name));
         } else if (sub_part_num - 1 != i && OB_FAIL(databuff_printf(buf, buf_len, pos, ",\n"))) {
           SHARE_SCHEMA_LOG(WARN, "print enter failed", K(ret));
@@ -3606,7 +3605,7 @@ int ObSchemaPrinter::print_database_definiton(
       SHARE_SCHEMA_LOG(WARN, "fail to print database definition", K(ret));
     } else if (OB_FAIL(print_identifier(buf, buf_len, pos, 
                                         database_schema->get_database_name_str(), 
-                                        lib::is_oracle_mode()))) {
+                                        false))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print database definition", K(ret));
     }
   }
@@ -3620,7 +3619,7 @@ int ObSchemaPrinter::print_database_definiton(
       SHARE_SCHEMA_LOG(WARN, "fail to print default charset", K(ret), K(*database_schema));
     }
   }
-  if (OB_SUCCESS == ret && !lib::is_oracle_mode() && CS_TYPE_INVALID != database_schema->get_collation_type()
+  if (OB_SUCCESS == ret && CS_TYPE_INVALID != database_schema->get_collation_type()
       && !ObCharset::is_default_collation(database_schema->get_collation_type())) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, " DEFAULT COLLATE = %s",
                                              ObCharset::collation_name(database_schema->get_collation_type())))) {
@@ -3789,13 +3788,7 @@ int ObSchemaPrinter::print_tenant_definition(uint64_t tenant_id,
     }
   }
 
-  if (OB_SUCC(ret) && lib::is_oracle_mode() && is_agent_mode) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, " set ob_tcp_invited_nodes='%%', ob_compatibility_mode='oracle'"))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to print tenant ob_compatibility_mode", K(ret));
-    } else if (OB_FAIL(add_create_tenant_variables(tenant_id, sql_proxy, buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to add create tenant variables", K(ret));
-    }
-  }
+  UNUSED(is_agent_mode);
   return ret;
 }
 
@@ -3916,7 +3909,7 @@ int ObSchemaPrinter::print_package_definition(const uint64_t tenant_id,
     ret = OB_ERR_BAD_DATABASE;
     SHARE_SCHEMA_LOG(WARN, "Unknow database", K(ret), K(package_info->get_database_id()));
   }
-  CK (lib::is_oracle_mode());
+  CK (false);
   OZ (databuff_printf(buf, buf_len, pos, "CREATE OR REPLACE%s PACKAGE%s \"%.*s\".\"%.*s\"\n",
                       package_info->is_noneditionable() ? " NONEDITIONABLE" : "",
                       package_info->is_package() ? "" : " BODY",
@@ -3965,7 +3958,7 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
   } else if (param->is_extern_type()) {
     ObParamExternType type = param->get_extern_type_flag();
     const ObDatabaseSchema *database_schema = NULL;
-    CK (lib::is_oracle_mode());
+    CK (false);
     CK (!param->get_type_name().empty());
     if (OB_FAIL(ret)) {
     } else if (param->is_sys_refcursor_type()) {
@@ -4042,39 +4035,31 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
         LOG_WARN("unexpected pls integer type", K(type));
         break;
     }
-    CK (lib::is_oracle_mode());
+    CK (false);
   } else {
-    if (lib::is_mysql_mode()) {
-      int64_t type_pos = 0;
-      uint64_t sub_type = static_cast<uint64_t>(common::ObGeoType::GEOTYPEMAX);
-      char type_str[OB_MAX_SYS_PARAM_NAME_LENGTH];
+    int64_t type_pos = 0;
+    uint64_t sub_type = static_cast<uint64_t>(common::ObGeoType::GEOTYPEMAX);
+    char type_str[OB_MAX_SYS_PARAM_NAME_LENGTH];
 #ifdef _WIN32
-      memset(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
+    memset(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
 #else
-      bzero(type_str, OB_MAX_SYS_PARAM_NAME_LENGTH);
+    bzero(type_str, OB_MAX_SYS_PARAM_NAME_LENGTH);
 #endif
-      if (ObGeometryTC == param->get_param_type().get_type_class()) {
-        CK (OB_NOT_NULL(param_type));
-        OX (sub_type = param_type->int32_values_[1]);
-      }
-      OZ (ob_sql_type_str(type_str,
-                          OB_MAX_SYS_PARAM_NAME_LENGTH,
-                          type_pos,
-                          param->get_param_type().get_obj_type(),
-                          param->get_param_type().get_length(),
-                          param->get_param_type().get_precision(),
-                          param->get_param_type().get_scale(),
-                          param->get_param_type().get_collation_type(),
-                          param->get_extended_type_info(),
-                          sub_type));
-      OZ (databuff_printf(buf, buf_len, pos, " %s", type_str));
-    } else {
-      ObString type_str;
+    if (ObGeometryTC == param->get_param_type().get_type_class()) {
       CK (OB_NOT_NULL(param_type));
-      OX (type_str = ObString(param_type->str_len_, param_type->str_value_));
-      CK (!type_str.empty());
-      OZ (databuff_printf(buf, buf_len, pos, " %.*s", type_str.length(), type_str.ptr()));
+      OX (sub_type = param_type->int32_values_[1]);
     }
+    OZ (ob_sql_type_str(type_str,
+                        OB_MAX_SYS_PARAM_NAME_LENGTH,
+                        type_pos,
+                        param->get_param_type().get_obj_type(),
+                        param->get_param_type().get_length(),
+                        param->get_param_type().get_precision(),
+                        param->get_param_type().get_scale(),
+                        param->get_param_type().get_collation_type(),
+                        param->get_extended_type_info(),
+                        sub_type));
+    OZ (databuff_printf(buf, buf_len, pos, " %s", type_str));
   }
   return ret;
 }
@@ -4088,7 +4073,7 @@ int ObSchemaPrinter::print_routine_definition_param_v1(const ObRoutineInfo &rout
 {
   int ret = OB_SUCCESS;
   bool is_first_param = true;
-  bool is_oracle_mode = lib::is_oracle_mode();
+  const bool is_oracle_mode = false;
 
   if (is_oracle_mode) {
     CK (OB_NOT_NULL(param_list));
@@ -4181,17 +4166,15 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
   }
   OX (routine_type = routine_info->is_procedure() ? "PROCEDURE" : "FUNCTION");
   OZ (databuff_printf(buf, buf_len, pos,
-                      lib::is_oracle_mode() ?
-                      "CREATE OR REPLACE%s%.*s %s " :
                       "CREATE DEFINER =%s %.*s %s ",
                       routine_info->is_noneditionable() ? " NONEDITIONABLE" : "",
                       routine_info->get_priv_user().length(),
                       routine_info->get_priv_user().ptr(),
                       routine_type));
-  OZ (print_identifier(buf, buf_len, pos, db_schema->get_database_name_str(), lib::is_oracle_mode()),
+  OZ (print_identifier(buf, buf_len, pos, db_schema->get_database_name_str(), false),
                        K(routine_type), K(db_name), K(routine_info));
   OZ (databuff_printf(buf, buf_len, pos, "."));
-  OZ (print_identifier(buf, buf_len, pos, routine_info->get_routine_name(), lib::is_oracle_mode()), 
+  OZ (print_identifier(buf, buf_len, pos, routine_info->get_routine_name(), false), 
                        K(routine_type), K(db_name), K(routine_info));
   OZ (databuff_printf(buf, buf_len, pos, "\n"));
   if (OB_SUCC(ret) && routine_info->get_param_count() > 0) {
@@ -4199,13 +4182,11 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
     OZ (print_routine_definition_param_v1(*routine_info, param_list, buf, buf_len, pos, tz_info));
     OZ (databuff_printf(buf, buf_len, pos, "\n)"));
   } else {
-    if (lib::is_mysql_mode()) {
-      OZ (databuff_printf(buf, buf_len, pos, "()\n"));
-    }
+    OZ (databuff_printf(buf, buf_len, pos, "()\n"));
   }
   if (OB_SUCC(ret) && routine_info->is_function()) {
     const ObRoutineParam *routine_param = NULL;
-    OZ (databuff_printf(buf, buf_len, pos, lib::is_oracle_mode() ? " RETURN" : " RETURNS"));
+    OZ (databuff_printf(buf, buf_len, pos, " RETURNS"));
     OX (routine_param = static_cast<const ObRoutineParam*>(routine_info->get_ret_info()));
     OZ (print_routine_param_type(routine_param, return_type, buf, buf_len, pos, tz_info));
   }
@@ -4227,12 +4208,8 @@ int ObSchemaPrinter::print_routine_definition_v1(const ObRoutineInfo *routine_in
       OZ (databuff_printf(buf, buf_len, pos, "\n"));
     }
   }
-  if (OB_SUCC(ret) && lib::is_oracle_mode() && !clause.empty()) {
-    OZ (databuff_printf(buf, buf_len, pos, " %.*s\n", clause.length(), clause.ptr()));
-  }
-  OZ (databuff_printf(buf, buf_len, pos,
-      lib::is_oracle_mode() ? (routine_info->is_aggregate() ? "\nAGGREGATE USING %.*s" : " IS\n%.*s")
-                              : " %.*s", body.length(), body.ptr()));
+  UNUSED(clause);
+  OZ (databuff_printf(buf, buf_len, pos, " %.*s", body.length(), body.ptr()));
   return ret;
 }
 
@@ -4262,14 +4239,14 @@ int ObSchemaPrinter::print_routine_definition(
     CK(!routine_body.empty());
 
     // TODO: disable Oracle mode for OB-JDBC compatibility, will enable it soon
-    if (OB_FAIL(ret) || lib::is_oracle_mode()) {
+    if (OB_FAIL(ret) || false) {
       // do nothing
     } else if (routine_info->get_routine_body().prefix_match_ci("procedure")
                || routine_info->get_routine_body().prefix_match_ci("function")) {
       use_v1 = false;
       ObSQLMode sql_mode = exec_env.get_sql_mode();
 
-      if (lib::is_mysql_mode()) {
+      {
         const char prefix[] = "CREATE\n";
         int64_t prefix_len = STRLEN(prefix);
         int64_t buf_sz = prefix_len + routine_body.length();
@@ -4284,8 +4261,6 @@ int ObSchemaPrinter::print_routine_definition(
           routine_stmt.assign_ptr(stmt_buf, buf_sz);
           sql_mode &= ~SMO_ORACLE;
         }
-      } else { // oracle mode
-        routine_stmt = routine_body;
       }
       CK(!routine_stmt.empty());
 
@@ -4296,85 +4271,24 @@ int ObSchemaPrinter::print_routine_definition(
     }
 
     if (OB_SUCC(ret) && !use_v1) {
-      if (lib::is_mysql_mode()) { // mysql mode
-        if (OB_FAIL(print_routine_definition_v2_mysql(
-                      *routine_info,
-                      parse_result.result_tree_,
-                      exec_env,
-                      buf,
-                      buf_len,
-                      pos,
-                      tz_info))) {
-          LOG_WARN("failed to print definition for mysql routine", K(*routine_info));
-        }
-      } else { // TODO: oracle mode, never use this branch for now
-        if (OB_FAIL(print_routine_definition_v2_oracle(
-                      *routine_info,
-                      parse_result.result_tree_,
-                      buf,
-                      buf_len,
-                      pos,
-                      tz_info))) {
-          LOG_WARN("failed to print definition for oracle routine", K(*routine_info));
-        }
+      if (OB_FAIL(print_routine_definition_v2_mysql(
+                    *routine_info,
+                    parse_result.result_tree_,
+                    exec_env,
+                    buf,
+                    buf_len,
+                    pos,
+                    tz_info))) {
+        LOG_WARN("failed to print definition for mysql routine", K(*routine_info));
       }
     }
   }
 
   if (OB_FAIL(ret) || !use_v1) {
     //do nothing
-  } else if (lib::is_mysql_mode()) {
+  } else {
     ObString clause;
     OZ (print_routine_definition_v1(routine_info, NULL, NULL, routine_info->get_routine_body(), clause, buf, buf_len, pos, tz_info));
-  } else { // oracle mode
-    ObString routine_body = routine_info->get_routine_body();
-    ObString actully_body;
-    ObString routine_clause;
-    ObStmtNodeTree *wrapped_parse_tree = NULL;
-    ObStmtNodeTree *parse_tree = NULL;
-    const ObStmtNodeTree *routine_tree = NULL;
-    ObArenaAllocator allocator;
-    pl::ObPLParser parser(allocator, ObCharsets4Parser());
-    ObStmtNodeTree *param_list = NULL;
-    ObStmtNodeTree *return_type = NULL;
-    ObStmtNodeTree *clause_list = NULL;
-    bool is_wrapped_routine = false;
-    CK (!routine_body.empty());
-    OZ (parser.parse_routine_body(routine_body, parse_tree, false));
-    CK (OB_NOT_NULL(parse_tree));
-    CK (T_STMT_LIST == parse_tree->type_);
-    CK (1 == parse_tree->num_child_);
-    CK (OB_NOT_NULL(parse_tree->children_[0]));
-    OX (routine_tree = parse_tree->children_[0]);
-    CK (OB_NOT_NULL(routine_tree));
-
-    if (OB_SUCC(ret)) {
-      LOG_INFO("print routine define", K(routine_tree->type_), K(routine_info->is_function()), K(routine_body));
-    } else {
-      LOG_INFO("print routine define", K(routine_tree), K(routine_info->is_function()), K(routine_body));
-    }
-
-    CK (routine_info->is_function() ? T_SF_SOURCE == routine_tree->type_
-                                      || T_SF_AGGREGATE_SOURCE == routine_tree->type_
-                                    : T_SP_SOURCE == routine_tree->type_);
-    CK (routine_info->is_function() ? 6 == routine_tree->num_child_
-                                    : 4 == routine_tree->num_child_);
-    CK (routine_info->is_function() ? OB_NOT_NULL(routine_tree->children_[5])
-                                    : OB_NOT_NULL(routine_tree->children_[3]));
-    OX (actully_body =
-            is_wrapped_routine ? ObString("BEGIN /* HIDDEN WRAPPED ROUTINE BODY */ NULL; END")
-            : routine_info->is_function() ? ObString(routine_tree->children_[5]->str_len_,
-                                                     routine_tree->children_[5]->str_value_)
-                                          : ObString(routine_tree->children_[3]->str_len_,
-                                                     routine_tree->children_[3]->str_value_));
-    OX (clause_list = routine_info->is_function() ? routine_tree->children_[3] : routine_tree->children_[2]);
-    if (OB_SUCC(ret) && OB_NOT_NULL(clause_list)) {
-      OX (routine_clause = ObString(clause_list->str_len_, clause_list->str_value_));
-    }
-    OX (param_list = routine_tree->children_[1]);
-    OX (return_type = (routine_info->is_function() ? routine_tree->children_[2] : NULL));
-    CK (!actully_body.empty());
-    OZ (print_routine_definition_v1(routine_info, param_list, return_type, actully_body, routine_clause, buf, buf_len, pos, tz_info));
   }
   return ret;
 }
@@ -4658,7 +4572,7 @@ int ObSchemaPrinter::print_trigger_definition(const ObTriggerInfo &trigger_info,
 {
   int ret = OB_SUCCESS;
   const ObDatabaseSchema *database_schema = NULL;
-  if (lib::is_oracle_mode()) {
+  if (false) {
     OZ (schema_guard_.get_database_schema(trigger_info.get_tenant_id(),
         trigger_info.get_database_id(), database_schema));
     CK (OB_NOT_NULL(database_schema));
@@ -4955,7 +4869,7 @@ int ObSchemaPrinter::print_unique_cst_definition(
              new_data_table_name.length(), new_data_table_name.ptr()))) {
     SHARE_SCHEMA_LOG(WARN, "fail to print alter table add constraint prefix", K(ret), K(new_db_name), K(new_data_table_name));
   } else if (OB_FAIL(print_single_index_definition(&unique_index_schema, table_schema, allocator,
-                     buf, buf_len, pos, true, lib::is_oracle_mode(), true, sql_mode, NULL))) {
+                     buf, buf_len, pos, true, false, true, sql_mode, NULL))) {
     SHARE_SCHEMA_LOG(WARN, "fail to print unique constraint columns", K(ret));
   }
 
@@ -5084,7 +4998,7 @@ int ObSchemaPrinter::print_user_definition(uint64_t tenant_id,
   const ObString &user_name = user_info.get_user_name_str();
   const ObString &host_name = user_info.get_host_name_str();
   const ObString &user_passwd = user_info.get_passwd_str();
-  bool is_oracle_mode = lib::is_oracle_mode();  
+  const bool is_oracle_mode = false;  
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, 
                               is_oracle_mode ? "create %s " 
                                              : "create %s if not exists ",
@@ -5225,7 +5139,7 @@ int ObSchemaPrinter::print_hash_partition_elements(const ObPartitionSchema *&sch
           const ObString &part_name = partition->get_part_name();
           if (OB_FAIL(databuff_printf(buf, buf_len, pos, "partition "))) {
             SHARE_SCHEMA_LOG(WARN, "print partition failed", K(ret));
-          } else if (OB_FAIL(print_identifier(buf, buf_len, pos, part_name, lib::is_oracle_mode()))) {
+          } else if (OB_FAIL(print_identifier(buf, buf_len, pos, part_name, false))) {
             SHARE_SCHEMA_LOG(WARN, "print partition name failed", K(ret), K(part_name));
           } else if (agent_mode &&
                      OB_FAIL(databuff_printf(buf, buf_len, pos, " id %ld", partition->get_part_id()))) { // print id
@@ -5754,7 +5668,7 @@ int ObSchemaPrinter::print_location_definiton(const uint64_t tenant_id,
       SHARE_SCHEMA_LOG(WARN, "fail to print location definition", K(ret));
     } else if (OB_FAIL(print_identifier(buf, buf_len, pos, 
                                         location_schema->get_location_name_str(), 
-                                        lib::is_oracle_mode()))) {
+                                        false))) {
       SHARE_SCHEMA_LOG(WARN, "fail to print location definition", K(ret));
     }
   }
