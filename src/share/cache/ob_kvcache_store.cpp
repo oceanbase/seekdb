@@ -1426,7 +1426,8 @@ ObKVMemBlockHandle *ObKVCacheStore::WashHeap::add(ObKVMemBlockHandle *mb_handle)
 {
   StoreMBHandleCmp mb_cmp;
   ObKVMemBlockHandle *remove_handle = NULL;
-  if (NULL != mb_handle && NULL != heap_ && (mb_cnt_ < heap_size_ || mb_cmp(mb_handle, heap_[0]))) {
+  if (NULL != mb_handle && NULL != heap_
+      && (mb_cnt_ < heap_size_ || (mb_cnt_ > 0 && mb_cmp(mb_handle, heap_[0])))) {
     if (mb_cnt_ < heap_size_) {
       heap_[mb_cnt_++] = mb_handle;
     } else {
