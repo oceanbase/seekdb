@@ -63,7 +63,7 @@ OB_INLINE static int pad_on_local_buf(const ObString &space_pattern,
   int ret = OB_SUCCESS;
   char *buf = nullptr;
   const int32_t pad_len = length + pad_whitespace_length * space_pattern.length();
-  const int64_t buf_len = lib::is_oracle_mode() ? MIN(pad_len, OB_MAX_ORACLE_CHAR_LENGTH_BYTE) : pad_len;
+  const int64_t buf_len = pad_len;
   if (OB_ISNULL((buf = (char*) padding_alloc.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "no memory", K(ret));
@@ -84,7 +84,7 @@ int pad_column(const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, c
     ObLength length = accuracy.get_length(); // byte or char length
     int32_t cell_strlen = 0; // byte or char length
     const ObString space_pattern = get_padding_str(cell.get_collation_type());
-    if (OB_FAIL(cell.get_char_length(accuracy, *(reinterpret_cast<int32_t *>(&cell_strlen)), lib::is_oracle_mode()))) {
+    if (OB_FAIL(cell.get_char_length(accuracy, *(reinterpret_cast<int32_t *>(&cell_strlen)), false))) {
       STORAGE_LOG(WARN, "Fail to get char length, ", K(ret));
     } else {
       if (cell_strlen < length) {
@@ -115,7 +115,7 @@ int pad_column(const ObObjMeta &obj_meta, const ObAccuracy accuracy, common::ObI
     const ObString space_pattern = get_padding_str(cs_type);
     int32_t cur_len = 0; // byte or char length
     bool is_ascii = can_do_ascii_optimize(cs_type) && is_ascii_str(datum.ptr_, datum.pack_);
-    if (is_ascii || is_oracle_byte_length(lib::is_oracle_mode(), accuracy.get_length_semantics())) {
+    if (is_ascii) {
       cur_len = datum.pack_;
     } else {
       cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, datum.ptr_, datum.pack_));
@@ -140,7 +140,7 @@ int pad_column(const common::ObAccuracy accuracy, sql::ObEvalCtx &ctx, sql::ObEx
     const ObString space_pattern = get_padding_str(cs_type);
     int32_t cur_len = 0; // byte or char length
     bool is_ascii = can_do_ascii_optimize(cs_type) && is_ascii_str(datum.ptr_, datum.pack_);
-    if (is_ascii || is_oracle_byte_length(lib::is_oracle_mode(), accuracy.get_length_semantics())) {
+    if (is_ascii) {
       cur_len = datum.pack_;
     } else {
       cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, datum.ptr_, datum.pack_));
@@ -148,7 +148,7 @@ int pad_column(const common::ObAccuracy accuracy, sql::ObEvalCtx &ctx, sql::ObEx
     if (cur_len < length) {
       char *ptr = nullptr;
       const int32_t pad_len = datum.pack_ + (length - cur_len) * space_pattern.length();
-      const int64_t buf_len = lib::is_oracle_mode() ? MIN(pad_len, OB_MAX_ORACLE_CHAR_LENGTH_BYTE) : pad_len;
+      const int64_t buf_len = pad_len;
       if (OB_ISNULL(ptr = expr.get_str_res_mem(ctx, buf_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "no memory", K(ret));
@@ -173,7 +173,7 @@ int pad_on_datums(const common::ObAccuracy accuracy,
   int ret = OB_SUCCESS;
   ObLength length = accuracy.get_length(); // byte or char length
   const ObString space_pattern = get_padding_str(cs_type);
-  bool is_oracle_byte = is_oracle_byte_length(lib::is_oracle_mode(), accuracy.get_length_semantics());
+  bool is_oracle_byte = false;
   char *buf = nullptr;
   if (1 == length) {
     int32_t buf_len = space_pattern.length();
@@ -264,7 +264,7 @@ int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
     sql::ObBitVector *nulls = discrete_format->get_nulls();
     ObLength length = accuracy.get_length(); // byte or char length
     const ObString space_pattern = get_padding_str(cs_type);
-    bool is_oracle_byte = is_oracle_byte_length(lib::is_oracle_mode(), accuracy.get_length_semantics());
+    bool is_oracle_byte = false;
     char *buf = nullptr;
     if (1 == length) {
       int32_t buf_len = space_pattern.length();
@@ -611,23 +611,10 @@ int get_query_begin_version_for_mlog(
       sql::ObExpr *left = e->args_[0];
       sql::ObExpr *right = e->args_[1];
       int64_t rowscn = -1;
-      if (T_ORA_ROWSCN != left->type_ && lib::is_oracle_mode()) {
-        if (T_FUN_SYS_CAST == left->type_ &&
-            2 == left->arg_cnt_ &&
-            T_ORA_ROWSCN == left->args_[0]->type_ ) {
-          left = left->args_[0];
-        } else {
-          left = nullptr;
-        }
-      }
       if (nullptr != left &&
           T_ORA_ROWSCN == left->type_ && (right->is_static_const_ || T_FUN_SYS_LAST_REFRESH_SCN == right->type_)) {
         if (OB_FAIL(right->eval(eval_ctx, datum))) {
           STORAGE_LOG(WARN, "Failed to eval const expr", K(ret));
-        } else if (lib::is_oracle_mode()) {
-          if (OB_FAIL(decimal_or_number_to_int64(*datum, right->datum_meta_, rowscn))) {
-            STORAGE_LOG(WARN, "Failed to get rowscn", K(ret));
-          }
         } else {
           rowscn = datum->get_int();
         }
@@ -674,23 +661,10 @@ int build_mview_scan_info_if_need(
         sql::ObExpr *left = e->args_[0];
         sql::ObExpr *right = e->args_[1];
         int64_t rowscn = -1;
-        if (T_ORA_ROWSCN != left->type_ && lib::is_oracle_mode()) {
-          if (T_FUN_SYS_CAST == left->type_ &&
-              2 == left->arg_cnt_ &&
-              T_ORA_ROWSCN == left->args_[0]->type_ ) {
-            left = left->args_[0];
-          } else {
-            left = nullptr;
-          }
-        }
         if (nullptr != left &&
             T_ORA_ROWSCN == left->type_ && (right->is_static_const_ || T_FUN_SYS_LAST_REFRESH_SCN == right->type_)) {
           if (OB_FAIL(right->eval(eval_ctx, datum))) {
             STORAGE_LOG(WARN, "Failed to eval const expr", K(ret));
-          } else if (lib::is_oracle_mode()) {
-            if (OB_FAIL(decimal_or_number_to_int64(*datum, right->datum_meta_, rowscn))) {
-              STORAGE_LOG(WARN, "Failed to get rowscn", K(ret));
-            }
           } else {
             rowscn = datum->get_int();
           }
