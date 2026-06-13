@@ -70,7 +70,7 @@ using namespace oceanbase::common;
     LOG_WARN("eval arg failed", K(ret));                                                              \
   } else if (child_res->is_null()) {                                                                  \
     res_datum.set_null();                                                                             \
-  } else if (lib::is_mysql_mode() && CM_IS_COLUMN_CONVERT(expr.extra_) && is_mysql_unsupported_json_column_conversion(in_type)) {  \
+  } else if (CM_IS_COLUMN_CONVERT(expr.extra_) && is_mysql_unsupported_json_column_conversion(in_type)) {  \
     ret = OB_ERR_INVALID_JSON_TEXT;                                                                   \
     LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);                                                         \
   } else
@@ -864,7 +864,7 @@ int common_string_double(const ObExpr &expr,
     } else {
       ObString tmp_str = in_str;
       ObString trimed_str = tmp_str.trim();
-      if (lib::is_mysql_mode() && 0 == trimed_str.length()) {
+      if (0 == trimed_str.length()) {
         if (!CM_IS_COLUMN_CONVERT(expr.extra_)) {
           // In mysql mode, when not in convert_column, encountering empty string or all-space string conversion to double, do not report error
           // skip
@@ -874,8 +874,8 @@ int common_string_double(const ObExpr &expr,
         }
       } else if (OB_FAIL(check_convert_str_err(in_str.ptr(), endptr, in_str.length(), err, in_cs_type))) {
         LOG_WARN("failed to check_convert_str_err", K(ret), K(in_str), K(out_val), K(err), K(in_cs_type));
-        if (lib::is_mysql_mode() && CM_IS_COLUMN_CONVERT(expr.extra_) && ret == OB_ERR_DATA_TRUNCATED) {
-          // do nothing, compatible mysql, retain OB_ERR_DATA_TRUNCATED error code in column_convert. 
+        if (CM_IS_COLUMN_CONVERT(expr.extra_) && ret == OB_ERR_DATA_TRUNCATED) {
+          // do nothing, compatible mysql, retain OB_ERR_DATA_TRUNCATED error code in column_convert.
         } else {
           ret = OB_ERR_DOUBLE_TRUNCATED;
         }
@@ -907,9 +907,7 @@ static OB_INLINE int common_double_float(const ObExpr &expr,
   int warning = OB_SUCCESS;
   out_val = static_cast<float>(in_val);
   ObObjType out_type = expr.datum_meta_.type_;
-  // oracle support float/double infiniy, no need to verify data overflow.
-  // C language would cast value to infinity, which is correct behavor in oracle mode
-  if (lib::is_mysql_mode()) {
+  {
     double truncated_val = in_val;
     if (ob_is_float_tc(out_type) && CM_IS_COLUMN_CONVERT(expr.extra_)) {
       // truncate float value if its ps information is fixed.
@@ -1115,7 +1113,7 @@ static OB_INLINE int common_string_number(const ObExpr &expr,
       } else if (OB_SUCCESS != (tmp_ret = nmb.from(*bound_num, alloc))) {
         LOG_WARN("copy min number failed", K(ret), K(tmp_ret), KPC(bound_num));
       }
-    } else if (lib::is_mysql_mode() && OB_INVALID_NUMERIC == ret) {
+    } else if (OB_INVALID_NUMERIC == ret) {
       if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
         ObString decimal_type_str("decimal");
         ObDataTypeCastUtil::log_user_error_warning(user_logging_ctx, ret, decimal_type_str, in_str,
@@ -1199,7 +1197,7 @@ static int common_string_decimalint(const ObExpr &expr, const ObString &in_str,
     } else if (OB_FAIL(wide::from_string(in_str.ptr(), in_str.length(), tmp_alloc, in_scale,
                                          in_precision, int_bytes, decint))) {
       LOG_WARN("failed to parse string", K(ret));
-      if (OB_NUMERIC_OVERFLOW == ret && lib::is_mysql_mode()) {
+      if (OB_NUMERIC_OVERFLOW == ret) {
         // bug: 4263211. compatible with mysql behavior when value overflows type range.
         // select cast('1e500' as decimal);  -> max_val
         // select cast('-1e500' as decimal); -> min_val
@@ -1225,7 +1223,7 @@ static int common_string_decimalint(const ObExpr &expr, const ObString &in_str,
         } else {
           MEMCPY(decint, limit_decint, int_bytes);
         }
-      } else if (lib::is_mysql_mode() && OB_INVALID_NUMERIC == ret) {
+      } else if (OB_INVALID_NUMERIC == ret) {
         if (CM_IS_COLUMN_CONVERT(expr.extra_)) {
           ObString decimal_type_str("decimal");
           ObDataTypeCastUtil::log_user_error_warning(user_logging_ctx, ret, decimal_type_str,
@@ -1347,7 +1345,7 @@ int ObOdpsDataTypeCastUtil::common_string_decimalint_wrap(const ObExpr &expr, co
     } else if (OB_FAIL(wide::from_string(in_str.ptr(), in_str.length(), tmp_alloc, in_scale,
                                          in_precision, int_bytes, decint))) {
       LOG_WARN("failed to parse string", K(ret));
-      if (OB_NUMERIC_OVERFLOW == ret && lib::is_mysql_mode()) {
+      if (OB_NUMERIC_OVERFLOW == ret) {
         // bug: 4263211. compatible with mysql behavior when value overflows type range.
         // select cast('1e500' as decimal);  -> max_val
         // select cast('-1e500' as decimal); -> min_val
@@ -1729,7 +1727,7 @@ int common_check_convert_string(const ObExpr &expr,
   // by add '\0' prefix in mysql mode. (see mysql String::copy)
   const ObCharsetInfo *cs = NULL;
   int64_t align_offset = 0;
-  if (CS_TYPE_BINARY == in_cs_type && lib::is_mysql_mode()
+  if (CS_TYPE_BINARY == in_cs_type
       && (NULL != (cs = ObCharset::get_charset(out_cs_type)))) {
     if (cs->mbminlen > 0 && in_str.length() % cs->mbminlen != 0) {
       align_offset = cs->mbminlen - in_str.length() % cs->mbminlen;
@@ -1767,7 +1765,7 @@ static int common_string_string(const ObExpr &expr,
       LOG_WARN("alloc memory failed", K(ret));
     } else if (OB_FAIL(ObCharset::charset_convert(in_cs_type, in_str.ptr(),
                                                   in_str.length(), out_cs_type, buf,
-                                                  buf_len, result_len, lib::is_mysql_mode(),
+                                                  buf_len, result_len, true,
                                                   !CM_IS_IGNORE_CHARSET_CONVERT_ERR(expr.extra_) && CM_IS_IMPLICIT_CAST(expr.extra_),
                                                   ObCharset::is_cs_unicode(out_cs_type) ? 0xFFFD : '?'))) {
       LOG_WARN("charset convert failed", K(ret));
@@ -1806,7 +1804,7 @@ int ObOdpsDataTypeCastUtil::common_check_convert_string(const ObExpr &expr,
   // by add '\0' prefix in mysql mode. (see mysql String::copy)
   const ObCharsetInfo *cs = NULL;
   int64_t align_offset = 0;
-  if (CS_TYPE_BINARY == in_cs_type && lib::is_mysql_mode()
+  if (CS_TYPE_BINARY == in_cs_type
       && (NULL != (cs = ObCharset::get_charset(out_cs_type)))) {
     if (cs->mbminlen > 0 && in_str.length() % cs->mbminlen != 0) {
       align_offset = cs->mbminlen - in_str.length() % cs->mbminlen;
@@ -1844,7 +1842,7 @@ int ObOdpsDataTypeCastUtil::common_string_string_wrap(const ObExpr &expr,
       LOG_WARN("alloc memory failed", K(ret));
     } else if (OB_FAIL(ObCharset::charset_convert(in_cs_type, in_str.ptr(),
                                                   in_str.length(), out_cs_type, buf,
-                                                  buf_len, result_len, lib::is_mysql_mode(),
+                                                  buf_len, result_len, true,
                                                   !CM_IS_IGNORE_CHARSET_CONVERT_ERR(expr.extra_) && CM_IS_IMPLICIT_CAST(expr.extra_),
                                                   ObCharset::is_cs_unicode(out_cs_type) ? 0xFFFD : '?'))) {
       LOG_WARN("charset convert failed", K(ret));
@@ -2040,7 +2038,7 @@ static int common_string_text(const ObExpr &expr,
   bool is_final_res = false;
   OB_ASSERT(ob_is_text_tc(out_type));
   // fast path for mysql same cs type because charset_type_by_coll may be slow
-  if (OB_LIKELY(in_cs_type == out_cs_type && has_lob_header && lib::is_mysql_mode() && OB_ISNULL(lob_locator))) {
+  if (OB_LIKELY(in_cs_type == out_cs_type && has_lob_header && OB_ISNULL(lob_locator))) {
     if (OB_FAIL(ObTextStringHelper::pack_to_disk_inrow_lob(expr, ctx, res_str, res_datum))) {
       LOG_WARN("pack_to_disk_inrow_lob fail", K(ret), K(expr), K(ctx));
     } else {
@@ -2062,7 +2060,7 @@ static int common_string_text(const ObExpr &expr,
 
   if (OB_FAIL(ret)) {
   } else if (is_final_res) {
-  } else if (has_lob_header && lib::is_mysql_mode() && nullptr == lob_locator) {
+  } else if (has_lob_header && nullptr == lob_locator) {
     // fast path for mysql string_text
     if (OB_FAIL(ObTextStringHelper::pack_to_disk_inrow_lob(expr, ctx, res_str, res_datum))) {
       LOG_WARN("pack_to_disk_inrow_lob fail", K(ret), K(expr), K(ctx));
@@ -2424,15 +2422,9 @@ int check_decimalint_accuracy(const ObCastMode cast_mode,
   if (OB_SUCC(ret) && !is_finish) {
     const ObDecimalInt *min_decint = nullptr, *max_decint = nullptr;
     int32_t int_bytes2 = 0;
-    if (lib::is_mysql_mode()) {
-      min_decint = wide::ObDecimalIntConstValue::get_min_value(precision);
-      max_decint = wide::ObDecimalIntConstValue::get_max_value(precision);
-      int_bytes2 = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
-    } else {
-      min_decint = wide::ObDecimalIntConstValue::get_min_value(precision);
-      max_decint = wide::ObDecimalIntConstValue::get_max_value(precision);
-      int_bytes2 = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
-    }
+    min_decint = wide::ObDecimalIntConstValue::get_min_value(precision);
+    max_decint = wide::ObDecimalIntConstValue::get_max_value(precision);
+    int_bytes2 = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
 
     decint_cmp_fp cmp_fp =
       wide::ObDecimalIntCmpSet::get_decint_decint_cmp_func(int_bytes, int_bytes2);
@@ -2464,9 +2456,7 @@ void ObDataTypeCastUtil::log_user_error_warning(const ObUserLoggingCtx *user_log
                                                 const ObString &input,
                                                 const ObCastMode cast_mode)
 {
-  if (!lib::is_mysql_mode()) {
-    // user logging warning only in mysql mode
-  } else if (CM_IS_COLUMN_CONVERT(cast_mode)) {
+  if (CM_IS_COLUMN_CONVERT(cast_mode)) {
     if (OB_ISNULL(user_logging_ctx) || user_logging_ctx->skip_logging()) {
     } else if (OB_ERR_DATA_TRUNCATED == ret) {
       const ObString *column_name = user_logging_ctx->get_column_name();
@@ -2671,7 +2661,7 @@ static int common_floating_string(const ObExpr &expr,
     } else {
       const int32_t buf_length = static_cast<int32_t>(sizeof(buf) - 1);
       int32_t double_width = buf_length;
-      if (lib::is_mysql_mode() && CM_IS_COLUMN_CONVERT(expr.extra_) &&
+      if (CM_IS_COLUMN_CONVERT(expr.extra_) &&
           ob_is_double_tc(expr.args_[0]->datum_meta_.type_) && expr.max_length_ > 0) {
         double_width = min(double_width, expr.max_length_);
       }
@@ -3950,7 +3940,7 @@ static int common_string_json(const ObExpr &expr,
   bool is_need_charset_convert = ((CS_TYPE_BINARY != in_cs_type) && 
                                   (ObCharset::charset_type_by_coll(in_cs_type) != 
                                    ObCharset::charset_type_by_coll(out_cs_type)));
-  if (lib::is_mysql_mode() && (out_cs_type != CS_TYPE_UTF8MB4_BIN)) {
+  if (out_cs_type != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
     LOG_WARN("fail to cast string to json invalid outtype", K(ret), K(out_cs_type));
   } else if (is_need_charset_convert && 
@@ -9250,7 +9240,7 @@ CAST_FUNC_NAME(json, year)
       } else if (CAST_FAIL(ObTimeConverter::int_to_year(int_val, out_val))){
         LOG_WARN("fail to cast json int to year type", K(ret), K(int_val));
       } else {
-        if (lib::is_mysql_mode() && (warning == OB_DATA_OUT_OF_RANGE)) {
+        if (warning == OB_DATA_OUT_OF_RANGE) {
           if (CM_IS_WARN_ON_FAIL(expr.extra_)) {
             out_val = 0;
             SET_RES_YEAR(out_val);
@@ -10320,7 +10310,7 @@ int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
     dst_type.set_collation_type(static_cast<ObCollationType>(node.int16_values_[OB_NODE_CAST_COLL_IDX]));
     dst_type.set_type(obj_type);
     int64_t text_length = node.int32_values_[1];
-    if (lib::is_mysql_mode() && !dst_type.is_binary() && !dst_type.is_varbinary()) {
+    if (!dst_type.is_binary() && !dst_type.is_varbinary()) {
       dst_type.set_full_length(node.int32_values_[OB_NODE_CAST_C_LEN_IDX], expr.datum_meta_.length_semantics_);
       if (dst_type.get_length() > OB_MAX_CAST_CHAR_VARCHAR_LENGTH && dst_type.get_length() <= OB_MAX_CAST_CHAR_TEXT_LENGTH) {
         dst_type.set_type(ObTextType);
@@ -11819,8 +11809,7 @@ int anytype_to_varchar_char_explicit(const sql::ObExpr &expr,
             }
           } else if (out_acc.get_length() == text_length
                      || ObCharType != out_type
-                     || (lib::is_mysql_mode()
-                         && ob_is_char(out_type, expr.datum_meta_.cs_type_))) {
+                     || ob_is_char(out_type, expr.datum_meta_.cs_type_)) {
             // do not padding
             LOG_DEBUG("no need to padding", K(ret), K(out_acc.get_length()),
                                             K(text_length), K(text));
@@ -12387,7 +12376,7 @@ int number_range_check_v2(const ObCastMode &cast_mode,
         if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode)) {
           ret = OB_OPERATE_OVERFLOW;
           LOG_WARN("input value is out of range.", K(ret), K(scale), K(in_val));
-        } else if (lib::is_mysql_mode()) {
+        } else {
           // MySQL emits warnings for decimal column truncation, regardless of sql_mode settings.
           warning = OB_ERR_DATA_TOO_LONG;
         }
@@ -12471,7 +12460,7 @@ int number_range_check_v2(const ObCastMode &cast_mode,
         if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode)) {
           ret = OB_OPERATE_OVERFLOW;
           LOG_WARN("input value is out of range.", K(ret), K(scale), K(in_val));
-        } else if (lib::is_mysql_mode()) {
+        } else {
           // MySQL emits warnings for decimal column truncation, regardless of sql_mode settings.
           warning = OB_ERR_DATA_TOO_LONG;
         }
@@ -16768,7 +16757,7 @@ int ObDatumCaster::setup_cast_expr(const ObDatumMeta &dst_type,
     if (ob_is_user_defined_pl_type(src_expr.obj_meta_.get_type()) && dst_type.type_ == ObUserDefinedSQLType) {
       cast_expr.obj_meta_.set_subschema_id(subschema_id);
     }
-    if (lib::is_mysql_mode() && ob_is_double_tc(src_expr.datum_meta_.type_) &&
+    if (ob_is_double_tc(src_expr.datum_meta_.type_) &&
         ob_is_string_tc(dst_type.type_) && CM_IS_COLUMN_CONVERT(cm) && max_length > 0) {
       cast_expr.max_length_ = max_length;
     }
