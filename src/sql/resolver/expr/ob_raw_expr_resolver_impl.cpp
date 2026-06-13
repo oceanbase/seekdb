@@ -1918,7 +1918,7 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
         }
       } else {
         OZ (check_name_type(q_name, ctx_.current_scope_, name_type), K(q_name), K(name_type));
-        if (lib::is_mysql_mode() && PL_VAR == name_type) {
+        if (PL_VAR == name_type) {
           // mysql can not access variable with '()', if found variable, adjust to udf.
           name_type = PL_UDF;
           access_ident.set_pl_udf();
@@ -2238,7 +2238,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
                                              nullptr != ctx_.secondary_namespace_,
                                              ctx_.formalize_const_int_prec_))) {
     LOG_WARN("failed to resolve const", K(ret));
-  } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(lib::is_mysql_mode() && node.type_ == T_NCHAR ?
+  } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node.type_ == T_NCHAR ?
                                                                               T_VARCHAR : node.type_, c_expr))) {
     LOG_WARN("fail to create raw expr", K(ret));
   } else if (OB_ISNULL(c_expr)) {
@@ -3523,7 +3523,7 @@ int ObRawExprResolverImpl::process_between_node(const ParseNode *node, ObRawExpr
         LOG_WARN("unexpected null", K(ret), K(i));
       }
     }
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       if (OB_ISNULL(ctx_.session_info_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(ctx_.session_info_));
@@ -3551,7 +3551,7 @@ int ObRawExprResolverImpl::process_between_node(const ParseNode *node, ObRawExpr
     // The content of the 4th raw expr is same to that of the 1st raw expr.
     // But the ptr addresses need to be different because our optimizer relys on it.
     if (OB_SUCC(ret)) {
-      if (lib::is_mysql_mode() && !can_transform_in_mysql_mode) {
+      if (!can_transform_in_mysql_mode) {
         // do nothing
       } else {
         if (OB_FAIL(recursive_resolve(node->children_[0], btw_params[BTW_PARAM_NUM]))) {
@@ -3738,7 +3738,7 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
       // otherwise, it is not possible to determine whether ESCAPE is explicitly specified.
       bool is_no_backslash_escapes = false;
       IS_NO_BACKSLASH_ESCAPES(ctx_.session_info_->get_sql_mode(), is_no_backslash_escapes);
-      if (lib::is_mysql_mode() && is_no_backslash_escapes) {
+      if (is_no_backslash_escapes) {
         escape_node.str_len_ = 0;
         escape_node.str_value_ = "";
       }
@@ -4543,7 +4543,7 @@ int ObRawExprResolverImpl::process_group_aggr_node(const ParseNode *node, ObRawE
   } else {
     bool need_add_flag = !ctx_.parents_expr_info_.has_member(IS_AGG);
     ParseNode *expr_list_node = node->children_[1];
-    if (lib::is_mysql_mode() && T_FUN_GROUP_PERCENTILE_CONT == node->type_) {
+    if (T_FUN_GROUP_PERCENTILE_CONT == node->type_) {
       expr_list_node = node->children_[2];
     }
     if (need_add_flag && OB_FAIL(ctx_.parents_expr_info_.add_member(IS_AGG))) {
@@ -4610,7 +4610,7 @@ int ObRawExprResolverImpl::process_group_aggr_node(const ParseNode *node, ObRawE
 
     if (OB_SUCC(ret)) {
       // Parse order by
-      if (is_mysql_mode() && T_FUN_GROUP_PERCENTILE_CONT == node->type_) {
+      if (T_FUN_GROUP_PERCENTILE_CONT == node->type_) {
         const ParseNode *column_node = node->children_[1];
         if (OB_ISNULL(column_node)) {
           ret = OB_INVALID_ARGUMENT;
@@ -5038,7 +5038,7 @@ int ObRawExprResolverImpl::process_collation_node(const ParseNode *node, ObRawEx
     ObConstRawExpr *c_expr = NULL;
     ObString collation(node->str_len_, node->str_value_);
     ObCollationType collation_type = CS_TYPE_INVALID;
-    if (lib::is_mysql_mode() && 0 == collation.case_compare("utf8mb4_name_case")) {
+    if (0 == collation.case_compare("utf8mb4_name_case")) {
       if (OB_ORIGIN_AND_SENSITIVE == ctx_.case_mode_) {
         collation_type = CS_TYPE_UTF8MB4_BIN;
       } else if (OB_ORIGIN_AND_INSENSITIVE == ctx_.case_mode_ ||
@@ -6891,7 +6891,7 @@ int ObRawExprResolverImpl::process_match_score(const ParseNode *node, ObRawExpr 
 int ObRawExprResolverImpl::not_int_check(const ObRawExpr *expr)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode() && NULL != expr && T_INT == expr->get_expr_type()) {
+  if (NULL != expr && T_INT == expr->get_expr_type()) {
     ret = OB_ERR_WINDOW_ILLEGAL_ORDER_BY;
     LOG_WARN("int not expected in window function's orderby ", K(ret));
   }
@@ -7087,7 +7087,7 @@ int ObRawExprResolverImpl::process_window_function_node(const ParseNode *node, O
         LOG_WARN("fail to add param expr", K(ret));
       } else if (OB_FAIL(n_expr->extract_info())) {
         LOG_WARN("faield to extract info", K(ret));
-      } else if (OB_UNLIKELY(lib::is_mysql_mode() && !n_expr->is_const_expr())) {
+      } else if (OB_UNLIKELY(!n_expr->is_const_expr())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid arguments to nth_value", K(ret));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nth_value");
@@ -7329,8 +7329,7 @@ int ObRawExprResolverImpl::process_window_function_node(const ParseNode *node, O
       if (OB_SUCC(ret) && NULL != frame_node) {
         if (OB_FAIL(process_frame_node(frame_node, frame))) {
           LOG_WARN("process window node failed", K(ret));
-        } else if (lib::is_mysql_mode() &&
-                   OB_UNLIKELY((frame.get_upper().interval_expr_ != NULL && !frame.get_upper().interval_expr_->is_const_expr()) ||
+        } else if (OB_UNLIKELY((frame.get_upper().interval_expr_ != NULL && !frame.get_upper().interval_expr_->is_const_expr()) ||
                                (frame.get_lower().interval_expr_ != NULL && !frame.get_lower().interval_expr_->is_const_expr()))) {
           ret = OB_ERR_WINDOW_RANGE_BOUND_NOT_CONSTANT;
           LOG_WARN("Window has a non-constant frame bound.", K(ret), KPC(frame.get_upper().interval_expr_), KPC(frame.get_lower().interval_expr_));
@@ -7484,7 +7483,7 @@ int ObRawExprResolverImpl::process_frame_node(const ParseNode *node,
       * mysql: select c1, sum(c1) over(order by c1 rows interval 5 day preceding) from t1;
       * mysql will raise error: ERROR 3596 (HY000): INTERVAL can only be used with RANGE frames.
       */
-      if (OB_SUCC(ret) && lib::is_mysql_mode() && frame.win_type_ == WINDOW_ROWS) {
+      if (OB_SUCC(ret) && frame.win_type_ == WINDOW_ROWS) {
         if (frame.get_upper().type_ == BOUND_INTERVAL &&
             !frame.get_upper().is_nmb_literal_) {
           // upper is a (INTERVAL expr unit)
@@ -7661,7 +7660,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
       LOG_WARN("parse error", K(ret), K(upper), K(lower), K(win_type));
     }
 
-    if (OB_SUCC(ret) && lib::is_mysql_mode() && w_expr->has_frame_orig() &&
+    if (OB_SUCC(ret) && w_expr->has_frame_orig() &&
         WINDOW_RANGE == win_type && 0 == order_items.count() &&
         (w_expr->get_upper().type_ == BOUND_INTERVAL || w_expr->get_lower().type_ == BOUND_INTERVAL)) {
       /* if preceding or following has a specific value (not the default unbounded)
@@ -8181,18 +8180,11 @@ int ObRawExprResolverImpl::check_internal_function(const ObString &name)
     // ignore
   } else if (FALSE_IT(ObExprOperatorFactory::get_internal_info_by_name(name, exist, is_internal))) {
   } else if (exist && is_internal) {
-    if (lib::is_mysql_mode()) {
-      ret = OB_ERR_SP_DOES_NOT_EXIST;
-      LOG_USER_ERROR(OB_ERR_SP_DOES_NOT_EXIST, "FUNCTION",
-                      ctx_.session_info_->get_database_name().length(),
-                      ctx_.session_info_->get_database_name().ptr(),
-                      name.length(), name.ptr());
-    } else {
-      ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
-      LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
-                      name.length(),
-                      name.ptr());
-    }
+    ret = OB_ERR_SP_DOES_NOT_EXIST;
+    LOG_USER_ERROR(OB_ERR_SP_DOES_NOT_EXIST, "FUNCTION",
+                    ctx_.session_info_->get_database_name().length(),
+                    ctx_.session_info_->get_database_name().ptr(),
+                    name.length(), name.ptr());
   }
   return ret;
 }
