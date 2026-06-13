@@ -2581,6 +2581,10 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
                 } else if (OB_ISNULL(tbl_schema)) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("table schema is NULL", K(ret));
+                } else if (OB_FAIL(ObTTLUtil::check_kv_attributes(kv_attributes_,
+                                                                  *tbl_schema,
+                                                                  tbl_schema->get_part_level()))) {
+                  LOG_WARN("fail to check kv attributes partition", K(ret));
                 }
               }
               if (OB_SUCC(ret) && OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::KV_ATTRIBUTES))) {
@@ -3287,8 +3291,8 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       }
     }
     LOG_DEBUG("resolve column definition mid", K(column));
-    // Specify the position of the column, currently only supported in mysql mode for add column syntax
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    // Specify the position of the column for add column syntax
+    if (OB_SUCC(ret)) {
       ParseNode *pos_node = NULL;
       if (OB_UNLIKELY(GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_)) {
         // generated column with pos_column
@@ -4510,8 +4514,7 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
             }
           }
         }
-      } else if (lib::is_mysql_mode() &&
-                   (ObFloatTC == column_schema.get_data_type_class() ||
+      } else if ((ObFloatTC == column_schema.get_data_type_class() ||
                       ObDoubleTC == column_schema.get_data_type_class()) &&
                    (column_schema.get_data_precision() != PRECISION_UNKNOWN_YET &&
                     column_schema.get_data_scale() != SCALE_UNKNOWN_YET)) {
@@ -4855,8 +4858,7 @@ int ObDDLResolver::check_text_length(ObCharsetType cs_type,
           }
         }
       }//int -> tinytext
-    } else if (lib::is_mysql_mode()
-      && CS_TYPE_BINARY == co_type && length * mbmaxlen > default_length) {
+    } else if (CS_TYPE_BINARY == co_type && length * mbmaxlen > default_length) {
       ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
       LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, name, static_cast<int>(default_length / mbmaxlen));
       SQL_RESV_LOG(WARN, "fail to check column data length",
@@ -4866,7 +4868,7 @@ int ObDDLResolver::check_text_length(ObCharsetType cs_type,
     }
   }
 
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && need_rewrite_length) {
+  if (OB_SUCC(ret) && need_rewrite_length) {
     if (OB_FAIL(rewrite_text_length_mysql(type, length))) {
       LOG_WARN("check_text_length_mysql fails", K(ret), K(type), K(length));
     }
@@ -6403,7 +6405,7 @@ int ObDDLResolver::resolve_spatial_index_constraint(
     LOG_WARN("get tenant data version failed", K(ret));
   } else if (OB_FAIL(table_schema.check_if_oracle_compat_mode(is_oracle_mode))) {
     LOG_WARN("check oracle compat mode failed", K(ret));
-  } else if (is_func_index && is_mysql_mode()) {
+  } else if (is_func_index) {
     ObRawExprFactory expr_factory(*allocator_);
     ObRawExpr *expr = NULL;
     if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
@@ -6511,7 +6513,7 @@ int ObDDLResolver::resolve_spatial_index_constraint(
         LOG_USER_ERROR(OB_ERR_SPATIAL_MUST_HAVE_GEOM_COL);
         LOG_WARN("spatial index can only be built on spatial column", K(ret), K(column_schema));
       }
-    } else if (is_default_index && lib::is_mysql_mode()) { // there are no keyword, not allowed in oracle mode
+    } else if (is_default_index) {
       if (is_geo_column) {
         index_keyname_ = SPATIAL_KEY;
       } else {
@@ -6542,7 +6544,7 @@ int ObDDLResolver::resolve_spatial_index_constraint(
     } else if (is_explicit_order) {
       ret = OB_ERR_INDEX_ORDER_WRONG_USAGE;
       LOG_USER_ERROR(OB_ERR_INDEX_ORDER_WRONG_USAGE);
-    } else if (lib::is_mysql_mode() && column_schema.is_nullable()) {
+    } else if (column_schema.is_nullable()) {
       ret = OB_ERR_SPATIAL_CANT_HAVE_NULL;
       LOG_USER_ERROR(OB_ERR_SPATIAL_CANT_HAVE_NULL);
       LOG_WARN("column of a spatial index must be NOT NULL.", K(ret), K(column_schema));
@@ -7036,7 +7038,7 @@ int ObDDLResolver::check_column_in_check_constraint(
           // drop the constraint internally when dropping all related columns under oracle mode.
           // can not drop the constraint even all related columns are dropped under mysql mode.
           bool need_drop_cst = true;
-          if ((*iter)->get_column_cnt() >= 2 && lib::is_mysql_mode()) {
+          if ((*iter)->get_column_cnt() >= 2) {
             need_drop_cst = false;
           }
           for (int64_t i = 0; OB_SUCC(ret) && need_drop_cst && i < cst_columns_name.count(); i++) {
@@ -7462,10 +7464,10 @@ int ObDDLResolver::resolve_check_constraint_node(
       SQL_RESV_LOG(WARN, "NULL ptr", K(ret), K(cst_check_expr_node));
     } else if (OB_ISNULL(cst_name_node)) {
       is_sys_generated_cst_name = true;
-    } else if (is_mysql_mode() && cst_name_node->num_child_ != 1) {
+    } else if (cst_name_node->num_child_ != 1) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "the num_child of constraint_name_node is wrong", K(ret), K(cst_name_node->num_child_));
-    } else if (lib::is_mysql_mode() && OB_ISNULL(cst_name_node->children_[0])) {
+    } else if (OB_ISNULL(cst_name_node->children_[0])) {
       is_sys_generated_cst_name = true;
     } else {
       cst_name.assign_ptr(cst_name_node->children_[0]->str_value_, static_cast<int32_t>(cst_name_node->children_[0]->str_len_));
@@ -7486,14 +7488,13 @@ int ObDDLResolver::resolve_check_constraint_node(
         }
         // check length of constraint name
         if (OB_FAIL(ret)) {
-        } else if (lib::is_mysql_mode() && cst_name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL) {
-          // TODO:@xiaofeng.lby, can we add this restrict for mysql mode ?
+        } else if (cst_name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL) {
           ret = OB_ERR_TOO_LONG_IDENT;
           LOG_WARN("constraint_name length overflow", K(ret), K(cst_name.length()));
         }
         //check if cst name is duplicate
         for (int64_t i = 0; OB_SUCC(ret) && i < csts.count() && !need_reset_generated_name; ++i) {
-          if (lib::is_mysql_mode() && 0 == cst_name.case_compare(csts.at(i).get_constraint_name_str())) {
+          if (0 == cst_name.case_compare(csts.at(i).get_constraint_name_str())) {
             if (is_sys_generated_cst_name) {
               need_reset_generated_name = true; // sys generated cst name is duplicate
             } else {
@@ -8076,6 +8077,9 @@ int ObDDLResolver::resolve_foreign_key_node(const ParseNode *node,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", K(ret), "tenant_id", session_info_->get_effective_tenant_id(),
                  K(arg.parent_database_), K(arg.parent_table_));
+      } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*tbl_schema, false /*by_admin*/))) {
+        LOG_WARN("failed to check htable ddl supported", K(ret), "tenant_id", session_info_->get_effective_tenant_id(),
+                 K(arg.parent_database_), K(arg.parent_table_));
       }
     }
   }
@@ -8319,7 +8323,6 @@ int ObDDLResolver::check_foreign_key_reference(
         if (OB_TABLE_NOT_EXIST == ret) {
           int64_t foreign_key_checks = true;
           session_info_->get_foreign_key_checks(foreign_key_checks);
-          foreign_key_checks = (is_mysql_mode() && foreign_key_checks);
           if (!foreign_key_checks) {
             if (0 != database_name.case_compare(database_name_)) {
               ret = OB_NOT_SUPPORTED;
@@ -8390,7 +8393,7 @@ int ObDDLResolver::check_foreign_key_reference(
         ObSEArray<ObString, 8> &child_columns = arg.child_columns_;
         ObSEArray<ObString, 8> &parent_columns = arg.parent_columns_;
         if (OB_FAIL(ObResolverUtils::check_foreign_key_columns_type(
-                    lib::is_mysql_mode(),
+                    true,
                     *child_table_schema,
                     *parent_table_schema,
                     child_columns,
@@ -8408,17 +8411,12 @@ int ObDDLResolver::check_foreign_key_reference(
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObResolverUtils::foreign_key_column_match_index_column(
-              *parent_table_schema, *schema_checker_, parent_columns, index_arg_list, !lib::is_mysql_mode()/*is_oracle_mode*/,
+              *parent_table_schema, *schema_checker_, parent_columns, index_arg_list, false/*is_oracle_mode*/,
               arg.fk_ref_type_, arg.ref_cst_id_, is_matched))) {
             LOG_WARN("Failed to check reference columns in parent table");
           } else if (!is_matched) {
-            if (lib::is_mysql_mode()) {
-              ret = OB_ERR_CANNOT_ADD_FOREIGN;
-              LOG_WARN("reference columns aren't reference to the index in parent table", K(ret));
-            } else { // oracle mode
-              ret = OB_ERR_NO_MATCHING_UK_PK_FOR_COL_LIST;
-              LOG_WARN("reference columns aren't reference to pk or uk in parent table", K(ret));
-            }
+            ret = OB_ERR_CANNOT_ADD_FOREIGN;
+            LOG_WARN("reference columns aren't reference to the index in parent table", K(ret));
           } else { } // do-nothing
         }
         if (OB_SUCC(ret) && !is_self_reference) {
@@ -8440,8 +8438,8 @@ int ObDDLResolver::check_foreign_key_reference(
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(arg, *child_table_schema, lib::is_mysql_mode()))) {
-        LOG_WARN("check fk set null satisfy failed", K(ret), K(arg), "is_mysql_mode", lib::is_mysql_mode());
+      if (OB_FAIL(ObResolverUtils::check_foreign_key_set_null_satisfy(arg, *child_table_schema, true))) {
+        LOG_WARN("check fk set null satisfy failed", K(ret), K(arg));
       }
     }
   }
@@ -10138,7 +10136,7 @@ int ObDDLResolver::try_set_auto_partition_by_config(const ParseNode *node,
         // thus we need to check index with index_arg
         for (int64_t i = 0; OB_SUCC(ret) && i < index_arg_list.count(); i++) {
           obcall::ObCreateIndexArg &index_arg = index_arg_list.at(i);
-          if (!index_arg.is_index_scope_specified_ && is_support_split_index_type(index_arg.index_type_) && lib::is_mysql_mode()) {
+          if (!index_arg.is_index_scope_specified_ && is_support_split_index_type(index_arg.index_type_)) {
             bool is_prefix = false;
             if (OB_FAIL(check_primary_key_prefix_of_index_columns(table_schema, index_arg, is_prefix))) {
               LOG_WARN("check primary key prefix of index columns", K(ret), K(table_schema), K(index_arg));
