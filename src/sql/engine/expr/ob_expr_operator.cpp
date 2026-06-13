@@ -365,7 +365,7 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
     }
     bool is_bool = false;
     ObItemType item_type = T_NULL;
-    if (lib::is_mysql_mode() && calc_type == ObJsonType && ob_obj_type_class(param_type) == ObIntTC) {
+    if (calc_type == ObJsonType && ob_obj_type_class(param_type) == ObIntTC) {
       if (OB_FAIL(get_param_is_boolean(expr_ctx, res_obj, is_bool))) {
         LOG_WARN("get src item type failed, bool may be cast as json int", K(res_obj), K(ret));
       }
@@ -377,7 +377,7 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
       EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
       if (CS_TYPE_INVALID != calc_collation_type) {
         cast_ctx.dest_collation_ = calc_collation_type;
-      } else if (lib::is_mysql_mode() && CS_TYPE_INVALID != param_collation_type) {
+      } else if (CS_TYPE_INVALID != param_collation_type) {
         cast_ctx.dest_collation_ = param_collation_type;
       }
       ret = ObObjCaster::bool_to_json(calc_type, cast_ctx, res_obj, res_obj, tmp_res_obj);
@@ -406,8 +406,7 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
         if (ob_is_string_or_lob_type(param_type)) {
           if (CS_TYPE_INVALID != calc_collation_type) {
             cast_ctx.dest_collation_ = calc_collation_type;
-          } else if (lib::is_mysql_mode()
-              && CS_TYPE_INVALID != param_collation_type) {
+          } else if (CS_TYPE_INVALID != param_collation_type) {
             cast_ctx.dest_collation_ = param_collation_type;
           }
         } else {
@@ -417,7 +416,7 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
             cast_ctx.dest_collation_ = ObCharset::get_default_collation_oracle(CHARSET_UTF8MB4);
           }
         }
-      } else if (lib::is_mysql_mode() && ob_is_json(calc_type)) {
+      } else if (ob_is_json(calc_type)) {
         cast_ctx.dest_collation_ = CS_TYPE_UTF8MB4_BIN;
       }
       ObObj tmp_obj;
@@ -740,12 +739,7 @@ ObCollationType ObExprOperator::get_default_collation_type(
 {
   ObCollationType collation_type = CS_TYPE_INVALID;
   if (OB_NOT_NULL(type_ctx.get_session()) && ob_is_string_or_lob_type(type)) {
-    if (lib::is_mysql_mode()) {
-      collation_type = static_cast<ObCollationType>(type_ctx.get_coll_type());
-    } else {
-      //varchar2 char clob
-      collation_type = type_ctx.get_session()->get_nls_collation();
-    }
+    collation_type = static_cast<ObCollationType>(type_ctx.get_coll_type());
   }
   return collation_type;
 }
@@ -2274,8 +2268,7 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("Incorrect cmp type with roaringbitmap arguments", K(type1), K(type2), K(type_), K(ret));
 #if defined(__ANDROID__)
-  } else if (lib::is_mysql_mode()
-             && (type_ == T_OP_EQ || type_ == T_OP_NE || type_ == T_OP_NSEQ
+  } else if ((type_ == T_OP_EQ || type_ == T_OP_NE || type_ == T_OP_NSEQ
                  || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE || type_ == T_OP_SQ_NSEQ)
              && (type1.is_collection_sql_type() != type2.is_collection_sql_type())
              && !ob_is_null(type1.get_type())
@@ -2284,8 +2277,7 @@ int ObExprOperator::calc_cmp_type2(ObExprResType &type,
              && !ob_is_string_or_lob_type(type2.get_type())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Incorrect cmp type with scalar and collection arguments", K(type1), K(type2), K(type_), K(ret));
-  } else if (lib::is_mysql_mode()
-             && type_ == T_OP_NSEQ
+  } else if (type_ == T_OP_NSEQ
              && type1.is_collection_sql_type()
              && type2.is_collection_sql_type()) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -2347,8 +2339,7 @@ int ObExprOperator::calc_cmp_type3(ObExprResType &type,
   }
 #if defined(__ANDROID__)
   else if (type1.is_collection_sql_type() || type2.is_collection_sql_type() || type3.is_collection_sql_type()) {
-    if (lib::is_mysql_mode()
-        && !type1.is_collection_sql_type()
+    if (!type1.is_collection_sql_type()
         && type2.is_collection_sql_type()
         && type3.is_collection_sql_type()) {
       ret = OB_INVALID_ARGUMENT;
@@ -2537,7 +2528,7 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
   } else if (OB_FAIL(expr.calc_cmp_type2(cmp_type, type1, type2, type_ctx,
                                          left_param->is_static_const_expr(),
                                          right_param->is_static_const_expr()))) {
-    if (lib::is_mysql_mode() && ret == OB_INVALID_ARGUMENT
+    if (ret == OB_INVALID_ARGUMENT
         && (type1.is_collection_sql_type() != type2.is_collection_sql_type())) {
       // Keep 1210 only when: non-collection side IS a column ref AND collection side is NOT a column
       // ref (e.g. scalar_col <> array_map(...)). All other cases (collection column/ROW vs scalar,
@@ -2578,7 +2569,7 @@ int ObRelationalExprOperator::deduce_cmp_type(const ObExprOperator &expr,
     } else if (ob_is_string_or_lob_type(cmp_type.get_calc_type())) {
       type1.set_calc_collation(cmp_type);
       type2.set_calc_collation(cmp_type);
-    } else if (is_mysql_mode() && ob_is_double_type(cmp_type.get_calc_type())) {
+    } else if (ob_is_double_type(cmp_type.get_calc_type())) {
       if (ob_is_numeric_tc(type1.get_type_class()) && ob_is_numeric_tc(type2.get_type_class()) &&
             SCALE_UNKNOWN_YET != type1.get_scale() && SCALE_UNKNOWN_YET != type2.get_scale()) {
         const ObScale scale = MAX(type1.get_scale(), type2.get_scale());
@@ -4570,7 +4561,7 @@ int ObVectorExprOperator::calc_result_type2_(ObExprResType &type,
         type1.set_calc_collation(cmp_type);
         type2.set_calc_collation(cmp_type);
       }
-    } else if (is_mysql_mode() && ob_is_double_tc(cmp_type.get_calc_type())) {
+    } else if (ob_is_double_tc(cmp_type.get_calc_type())) {
       if (ob_is_numeric_tc(type1.get_type_class()) && ob_is_numeric_tc(type2.get_type_class()) &&
             SCALE_UNKNOWN_YET != type1.get_scale() && SCALE_UNKNOWN_YET != type2.get_scale()) {
         const ObScale scale = MAX(type1.get_scale(), type2.get_scale());
@@ -4676,7 +4667,7 @@ void ObStringExprOperator::calc_temporal_format_result_length(ObExprResType &typ
     type.set_varchar();
     type.set_length(MAX_VARCHAR_BUFFER_SIZE);
   }
-  if (is_mysql_mode() && ob_is_text_tc(type.get_type())) {
+  if (ob_is_text_tc(type.get_type())) {
     const int32_t mbmaxlen = 4;
     const int32_t default_text_length =
         ObAccuracy::DDL_DEFAULT_ACCURACY[type.get_type()].get_length() / mbmaxlen;
@@ -5549,10 +5540,8 @@ int ObBitwiseExprOperator::get_uint64(const ObObj &obj,
 
 DEF_SET_LOCAL_SESSION_VARS(ObBitwiseExprOperator, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(1);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(1);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
   return ret;
 }
 
@@ -5711,7 +5700,7 @@ int ObMinMaxExprOperator::calc_result_meta_for_comparison(
       // Compatible with MySQL behavior to promote types.
         type.set_type(ObIntType);
       }
-      if (lib::is_mysql_mode() && ob_is_real_type(type.get_type())) {
+      if (ob_is_real_type(type.get_type())) {
         if (SCALE_UNKNOWN_YET != result_scale && OB_MAX_DOUBLE_FLOAT_SCALE >= result_scale) {
           type.set_scale(result_scale);
           type.set_precision(static_cast<ObPrecision>(ObMySQLUtil::float_length(result_scale)));
@@ -5815,10 +5804,9 @@ int ObMinMaxExprOperator::calc_with_cast(ObObj &result,
     LOG_WARN("stack is null or param_num is wrong", K(objs_stack), K(param_num), K(result_type), K(ret));
   } else {
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    if (lib::is_mysql_mode() && ob_is_json(result_type.get_calc_type())) {
+    if (ob_is_json(result_type.get_calc_type())) {
       cast_ctx.dest_collation_ = CS_TYPE_UTF8MB4_BIN;
-    } //for 
-      else if (lib::is_mysql_mode() && CS_TYPE_INVALID != result_type.get_collation_type()) {
+    } else if (CS_TYPE_INVALID != result_type.get_collation_type()) {
       cast_ctx.dest_collation_ = result_type.get_collation_type();
     }
     ObFixedArray<ObObj, ObIAllocator> buf_obj(expr_ctx.calc_buf_, param_num);
@@ -6660,8 +6648,7 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
     const ObCollationType cs_type = rt_expr.args_[0]->datum_meta_.cs_type_;
     if (ObDatumFuncs::is_string_type(input_type1) && ObDatumFuncs::is_string_type(input_type2)) {
       CK(rt_expr.args_[0]->datum_meta_.cs_type_ == rt_expr.args_[1]->datum_meta_.cs_type_);
-    } else if (lib::is_mysql_mode() &&
-        ob_is_double_tc(input_type1) && ob_is_double_tc(input_type2)) {
+    } else if (ob_is_double_tc(input_type1) && ob_is_double_tc(input_type2)) {
       CK(rt_expr.args_[0]->datum_meta_.scale_ == rt_expr.args_[1]->datum_meta_.scale_);
     }
     if (OB_SUCC(ret)) {
