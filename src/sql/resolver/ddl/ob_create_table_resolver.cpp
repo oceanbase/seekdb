@@ -25,7 +25,6 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "share/ob_vec_index_builder_util.h"
-#include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
 {
@@ -275,11 +274,9 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             case T_TEMPORARY:
               if (create_table_node->children_[5] != NULL) { // Temporary table does not support partitioning
                 ret = OB_ERR_TEMPORARY_TABLE_WITH_PARTITION;
-              } else if (lib::is_mysql_mode()) {
+              } else {
                 ret = OB_NOT_SUPPORTED;
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "MySQL compatible temporary table");
-              } else {
-                is_temporary_table = true;
               }
               break;
             case T_EXTERNAL: {
@@ -636,6 +633,10 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
 
     if (OB_SUCC(ret)) {
       ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
+      if (!table_schema.get_kv_attributes().empty() &&
+          OB_FAIL(ObTTLUtil::check_kv_attributes(table_schema, params_.is_htable_))) {
+        LOG_WARN("fail to check kv attributes", K(ret));
+      }
     }
   }
   return ret;
@@ -1276,19 +1277,10 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           }
 
           if (OB_SUCC(ret)) {
-            if (is_mysql_mode()) {
-              // In MySQL mode, when column definitions are provided in a CTAS,
-              // they are always complete (name,type,attri,...) and will ignore the deduced attributes from SELECT statement.
-              if (OB_FAIL(cols_with_nullable_specified_.push_back(column.get_column_name_str()))) {
-                SQL_RESV_LOG(WARN, "push back column with defination", K(ret));
-              }
-            } else if (is_oracle_mode) {
-              if (!stat.is_set_not_null_ && !stat.is_set_null_) {
-                // In Oracle mode, the column definitions provided in CTAS are incomplete (cannot specify column types).
-                // When column attributes are not explicitly specified, the values are derived from the SELECT statement.
-              } else if (OB_FAIL(cols_with_nullable_specified_.push_back(column.get_column_name_str()))) {
-                SQL_RESV_LOG(WARN, "push back column with defination", K(ret));
-              }
+            // In MySQL mode, when column definitions are provided in a CTAS,
+            // they are always complete (name,type,attri,...) and will ignore the deduced attributes from SELECT statement.
+            if (OB_FAIL(cols_with_nullable_specified_.push_back(column.get_column_name_str()))) {
+              SQL_RESV_LOG(WARN, "push back column with defination", K(ret));
             }
           }
 
@@ -1398,17 +1390,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           SQL_RESV_LOG(WARN, "add foreign key node failed", K(ret));
         } else { /*do nothing*/ }
       } else if (T_CHECK_CONSTRAINT == element->type_) {
-        if (lib::is_mysql_mode()) {
-          // TODO:@xiaofeng.lby : do we also need to deal with constraints like this in oracle mode
-          if (OB_FAIL(table_level_constraint_list.push_back(i))) {
-            SQL_RESV_LOG(WARN, "add check constraint node failed", K(ret));
-          }
-        } else { // oracle mode
-          ObCreateTableStmt* create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
-          ObSEArray<ObConstraint, 4>& csts = create_table_stmt->get_create_table_arg().constraint_list_;
-          if (OB_FAIL(resolve_check_constraint_node(*element, csts))) {
-            SQL_RESV_LOG(WARN, "resolve constraint failed", K(ret));
-          }
+        if (OB_FAIL(table_level_constraint_list.push_back(i))) {
+          SQL_RESV_LOG(WARN, "add check constraint node failed", K(ret));
         }
       } else if (T_EMPTY == element->type_) {
         // compatible with mysql 5.7 check (expr), do nothing
@@ -1467,7 +1450,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       }
     }
     // MySQL mode, a table must have at least one non-hidden column
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       bool has_non_hidden_column = false;
       for (int64_t i = 0;
            OB_SUCC(ret) && !has_non_hidden_column && i < table_schema.get_column_count();
@@ -1530,7 +1513,7 @@ int ObCreateTableResolver::set_nullable_for_cta_column(ObSelectStmt *select_stmt
   if (OB_ISNULL(expr) || OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of expr and select stmt.", K(ret));
-  } else if (lib::is_mysql_mode()) {
+  } else {
     // scope set to FROM since it will not go deduce process with context,
     // such as null reject in where condition and having condition.
     // if is_not_null true, it will pass into full scope checking at next step.
@@ -1543,8 +1526,6 @@ int ObCreateTableResolver::set_nullable_for_cta_column(ObSelectStmt *select_stmt
                                                           NULL))) {
       LOG_WARN("failed to check expr not null", K(ret));
     }
-  } else if (expr->is_column_ref_expr()) {
-    is_not_null = expr->get_result_type().has_result_flag(HAS_NOT_NULL_VALIDATE_CONSTRAINT_FLAG);
   }
   if (OB_SUCC(ret) && is_not_null) {
     // deduce pre-condition: already not null
@@ -1627,8 +1608,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                                                    T_TABLE_ELEMENT_LIST == parse_tree.children_[3]->type_;
   // select layer should not see the insert stmt's attributes from the upper layer, so the upper scope stmt should be empty
   select_resolver.set_parent_namespace_resolver(NULL);
-  if (lib::is_mysql_mode()
-        && OB_NOT_NULL(params_.query_ctx_)
+  if (OB_NOT_NULL(params_.query_ctx_)
         && 0 != params_.query_ctx_->question_marks_count_
         && !params_.is_prepare_protocol_) {
     ret = OB_ERR_PARSER_SYNTAX;
@@ -1718,7 +1698,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                 K(ret), K(column.get_column_name_str()));
             }
           }
-          if (OB_SUCC(ret) && is_mysql_mode()) {
+          if (OB_SUCC(ret)) {
             if (new_table_item != NULL && new_table_item->is_basic_table()) {
               if (base_table_schema == NULL &&
                   OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
@@ -1778,7 +1758,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                 LOG_WARN("failed to fill column with subschema", K(ret));
               }
             }
-            if (OB_SUCC(ret) && lib::is_mysql_mode() && ob_is_geometry(expr->get_result_type().get_type())) {
+            if (OB_SUCC(ret) && ob_is_geometry(expr->get_result_type().get_type())) {
               column.set_geo_type(static_cast<uint64_t>(expr->get_geo_expr_result_type()));
             }
             OZ (adjust_string_column_length_within_max(column, false));
@@ -2554,7 +2534,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
       } else if (ObItemType::T_INDEX == node->type_ && OB_FAIL(resolve_table_options(node->children_[2], true))) {
         SQL_RESV_LOG(WARN, "resolve index options failed", K(ret));
       }
-      if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+      if (OB_SUCC(ret)) {
         if (ObItemType::T_INDEX == node->type_ && NULL != node->children_[4]) {
           if (1 != node->children_[4]->num_child_ || T_PARTITION_OPTION != node->children_[4]->type_) {
             ret = OB_NOT_SUPPORTED;
@@ -2573,7 +2553,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
       }
 
       // index column_group
-      if (OB_SUCC(ret) && lib::is_mysql_mode()) { //only mysql support create table with index
+      if (OB_SUCC(ret)) { //only mysql support create table with index
         if (node->num_child_ < 6) {
           // no cg, ignore
         } else if (ObItemType::T_INDEX == node->type_ && NULL != node->children_[5]) {

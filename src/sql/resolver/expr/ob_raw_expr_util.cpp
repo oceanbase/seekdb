@@ -969,7 +969,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
     OZ (func_info->get_routine_param(i, iparam));
     CK (OB_NOT_NULL(iparam));
     OX (mode = static_cast<pl::ObPLRoutineParamMode>(iparam->get_mode()));
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       bool need_wrap = false;
       OZ (ObRawExprUtils::need_wrap_to_string(udf_raw_expr->get_param_expr(i)->get_result_type(),
                                               iparam->get_pl_data_type().get_obj_type(),
@@ -1850,18 +1850,8 @@ int ObRawExprUtils::check_deterministic_single(const ObRawExpr *expr,
       if (expr->is_pseudo_column_expr()) {
         // do nothing
       } else if (expr->is_udf_expr()) {
-        if (lib::is_mysql_mode()) {
-          ret = OB_ERR_ONLY_PURE_FUNC_CANBE_VIRTUAL_COLUMN_EXPRESSION;
-          LOG_WARN("user-defined functions are not allowd in generated column", K(ret), K(*expr));
-        } else {
-          const ObUDFRawExpr *udf_expr = dynamic_cast<const ObUDFRawExpr *>(expr);
-          CK(OB_NOT_NULL(udf_expr));
-          if (!udf_expr->is_deterministic()) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("user-defined function is not deterministic", K(ret), K(*expr));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "The user-defined function is not deterministic");
-          }
-        }
+        ret = OB_ERR_ONLY_PURE_FUNC_CANBE_VIRTUAL_COLUMN_EXPRESSION;
+        LOG_WARN("user-defined functions are not allowd in generated column", K(ret), K(*expr));
       }
       // need to change err code if check_status is CHECK_FOR_CHECK_CONSTRAINT
       if (OB_FAIL(ret) && ObResolverUtils::CHECK_FOR_CHECK_CONSTRAINT == check_status) {
@@ -2001,7 +1991,6 @@ int ObRawExprUtils::build_generated_column_expr(const obcall::ObCreateIndexArg *
   }
   if (OB_SUCC(ret)
       && expr->get_result_type().is_decimal_int()
-      && lib::is_mysql_mode()
       && expr->get_result_type().get_precision() > OB_MAX_DECIMAL_PRECISION) {
     // maximum stored precision is 65, need truncating
     LOG_INFO("truncate precision to `OB_MAX_DECIMAL_PRECISION` for deicmal_int", K(*expr));
@@ -2055,7 +2044,7 @@ int ObRawExprUtils::build_check_constraint_expr(ObRawExprFactory &expr_factory,
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "use user defined function in check constraint");
   } else if (OB_UNLIKELY(expr->has_flag(CNT_SUB_QUERY))) {
-    ret = lib::is_mysql_mode() ? OB_ERR_CHECK_CONSTRAINT_FUNCTION_IS_NOT_ALLOWED : OB_ERR_INVALID_SUBQUERY_USE;
+    ret = OB_ERR_CHECK_CONSTRAINT_FUNCTION_IS_NOT_ALLOWED;
     LOG_WARN("subquery not allowed here", K(ret));
   } else if (OB_UNLIKELY(expr->has_flag(CNT_AGG))) {
     ret = OB_ERR_GROUP_FUNC_NOT_ALLOWED;
@@ -3522,7 +3511,7 @@ int ObRawExprUtils::try_add_cast_expr_above(ObRawExprFactory *expr_factory,
       }
       // setup zerofill cm
       // eg: select concat(cast(c_zf as char(10)), cast(col_no_zf as char(10))) from t1;
-      if (lib::is_mysql_mode() && dst_type.is_string_type() &&
+      if (dst_type.is_string_type() &&
           expr.get_result_type().has_result_flag(ZEROFILL_FLAG)) {
         cm_zf |= CM_ZERO_FILL;
       }
@@ -3624,8 +3613,7 @@ int ObRawExprUtils::wrap_cm_warn_on_fail_if_need(const ObRawExpr *src_expr,
   if (OB_ISNULL(src_expr) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null expr or session", K(ret), KP(src_expr), KP(session));
-  } else if (lib::is_mysql_mode()
-                && is_strict_mode(session->get_sql_mode())
+  } else if (is_strict_mode(session->get_sql_mode())
                 && !session->is_ignore_stmt()
                 && !CM_IS_COLUMN_CONVERT(cm)
                 && session->get_stmt_type() != stmt::T_SELECT
@@ -4601,7 +4589,7 @@ int ObRawExprUtils::build_column_conv_expr(const ObSQLSessionInfo *session_info,
   if (OB_SUCC(ret)) {
     stmt_type_bak = session_info->get_stmt_type();
     bool is_ddl = const_cast<sql::ObSQLSessionInfo *>(session_info)->get_ddl_info().is_ddl();
-    bool is_strict = lib::is_mysql_mode() && is_strict_mode(sql_mode);
+    bool is_strict = is_strict_mode(sql_mode);
     bool ignore_charset_error = is_generated_column && stmt_type_bak==stmt::T_SELECT;
     (const_cast<ObSQLSessionInfo *>(session_info))->set_stmt_type(stmt::T_NONE);
     ObSQLUtils::get_default_cast_mode(false,/* explicit_cast */
@@ -7462,7 +7450,7 @@ int ObRawExprUtils::check_need_cast_expr(const ObRawExprResType &src_type,
   } else if ((ob_is_string_or_lob_type(in_type) && in_type == out_type && in_cs_type == out_cs_type)
              || (!ob_is_string_or_lob_type(in_type) && in_type == out_type)) {
     need_cast = false;
-    if (lib::is_mysql_mode() && ob_is_double_type(in_type) &&
+    if (ob_is_double_type(in_type) &&
           src_type.get_scale() != dst_type.get_scale() &&
           src_type.get_precision() != PRECISION_UNKNOWN_YET) {
       // for the conversion between doubles with increased scale in mysql mode,
