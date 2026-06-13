@@ -144,7 +144,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
           && is_restrict_access_virtual_table(table_schema->get_table_id())) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("fail to get table schema", K(ret), K(show_table_id));
-      } else if (!lib::is_oracle_mode()) {
+      } else {
         ObStmtNeedPrivs stmt_need_privs;
         stmt_need_privs.need_privs_.set_allocator(allocator_);
         ObSessionPrivInfo session_priv;
@@ -260,12 +260,9 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
               LOG_WARN("The column is null", K(ret));
             } else if (table_schema->is_heap_organized_table() && col->is_hidden_pk_column_id(col->get_column_id())) {
               // heap organized table should not output hidden pk columns
-            } else if (col->is_invisible_column() && lib::is_oracle_mode()) { // ignore invisible column
-              // mysql 8.0.23 has supported invisivle column, we should not ignore them
-              // for mysql
             } else if (OB_FAIL(fill_row_cells(*table_schema, *col, has_column_priv))) {
               LOG_WARN("fail to fill row cells", K(ret), K(col));
-            } else if (lib::is_mysql_mode() && is_column_level && !has_column_priv) {
+            } else if (is_column_level && !has_column_priv) {
               //do not output the column
             } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
               LOG_WARN("fail to add row", K(ret), K(cur_row_));
@@ -326,13 +323,6 @@ int ObTableColumns::get_type_str(
   int ret = OB_SUCCESS;
   const ObObjMeta &obj_meta = column_schema.get_meta_type();
   ObAccuracy acc = column_schema.get_accuracy();
-  if (lib::is_oracle_mode()
-      && column_schema.get_meta_type().is_number()
-      && acc.get_precision() == PRECISION_UNKNOWN_YET
-      && acc.get_scale() >= OB_MIN_NUMBER_SCALE) {
-      //compatible with oracle, just show differently
-    acc.set_precision(38);
-  }
   const common::ObIArray<ObString> &type_info = column_schema.get_extended_type_info();
   const uint64_t sub_type = static_cast<uint64_t>(column_schema.get_geo_type());
   int64_t pos = 0;
@@ -482,11 +472,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           cur_row_.cells_[cell_idx].set_varchar(
               ObCharset::collation_name(column_schema.get_collation_type()));
         } else {
-          if (lib::is_oracle_mode()) {
-            cur_row_.cells_[cell_idx].set_varchar("NULL");
-          } else {
-            cur_row_.cells_[cell_idx].set_null();//in mysql mode should not be filled with string "NULL";
-          }
+          cur_row_.cells_[cell_idx].set_null();//in mysql mode should not be filled with string "NULL";
         }
         cur_row_.cells_[cell_idx].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -556,11 +542,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           cur_row_.cells_[cell_idx].set_varchar(def_obj.get_string());
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
         } else if (def_obj.is_null()) {
-          if (lib::is_oracle_mode()) {
-            cur_row_.cells_[cell_idx].set_varchar("NULL");// Note: default value is NULL when displayed as a string
-          } else {
-            cur_row_.cells_[cell_idx].set_null();//in mysql mode, should not be filled with string "NULL";
-          }
+          cur_row_.cells_[cell_idx].set_null();//in mysql mode, should not be filled with string "NULL";
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
         } else if (def_obj.is_bit()) {
           if (OB_FAIL(def_obj.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
@@ -685,7 +667,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           }
         }
 
-        if (OB_SUCC(ret) && lib::is_mysql_mode() && column_schema.is_invisible_column()) {
+        if (OB_SUCC(ret) && column_schema.is_invisible_column()) {
           int64_t append_len = sizeof("INVISIBLE");
           int64_t cur_len = extra_val.length();
 
@@ -1275,7 +1257,7 @@ int ObTableColumns::resolve_view_definition(
     const ObString &db_name = db_schema->get_database_name_str();
     const ObString &table_name = table_schema.get_table_name_str();
 #if defined(__ANDROID__)
-    if (lib::is_mysql_mode()) {
+    {
       ObString view_definition;
       ParseResult view_parse_result;
       ObParser view_parser(*allocator, session->get_sql_mode(), session->get_charsets4parser());
@@ -1385,10 +1367,10 @@ int ObTableColumns::resolve_view_definition(
           }
         }
         int tmp_ret = OB_SUCCESS;
-        bool reset_column_infos = (OB_SUCCESS == ret) ? false : (lib::is_oracle_mode() ? true : false);
+        bool reset_column_infos = false;
         if (OB_UNLIKELY(OB_SUCCESS != ret && OB_ERR_VIEW_INVALID != ret)) {
           LOG_WARN("failed to resolve view", K(ret));
-        } else if (OB_UNLIKELY(OB_ERR_VIEW_INVALID == ret && lib::is_mysql_mode())) {
+        } else if (OB_UNLIKELY(OB_ERR_VIEW_INVALID == ret)) {
           // do nothing
         } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(table_schema, select_stmt, reset_column_infos, *allocator, *session))) {
           LOG_WARN("failed to add recompile view task", K(tmp_ret));

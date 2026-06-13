@@ -340,7 +340,7 @@ int ObMPStmtExecute::construct_execute_param_for_arraybinding(int64_t pos)
     }
     if (data[pos].is_numeric_type()) {
       ObAccuracy default_acc =
-        ObAccuracy::DDL_DEFAULT_ACCURACY2[lib::is_oracle_mode()][data[pos].get_type()];
+        ObAccuracy::DDL_DEFAULT_ACCURACY2[0][data[pos].get_type()];
       if (params_->at(i).get_scale() == NUMBER_SCALE_UNKNOWN_YET) {
         params_->at(i).set_scale(default_acc.get_scale());
       }
@@ -511,7 +511,7 @@ int ObMPStmtExecute::save_exception_for_arraybinding(
   int64_t errm_length = 0;
 
   exception.pos_ = pos;
-  exception.error_code_ = static_cast<uint16_t>(ob_errpkt_errno(error_code, lib::is_oracle_mode()));
+  exception.error_code_ = static_cast<uint16_t>(ob_errpkt_errno(error_code, false));
 
   ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
 
@@ -781,7 +781,7 @@ int ObMPStmtExecute::parse_request_type(const char* &pos,
                 type_name_info.elem_type_.set_collation_type(cs_type);
                 ObLengthSemantics ls = ctx_.session_info_->get_actual_nls_length_semantics();
                 if (LS_INVALIED == ls) {
-                  type_name_info.elem_type_.set_length_semantics(lib::is_oracle_mode() ? LS_BYTE : LS_CHAR);
+                  type_name_info.elem_type_.set_length_semantics(LS_CHAR);
                 } else {
                   type_name_info.elem_type_.set_length_semantics(ls);
                 }
@@ -840,7 +840,7 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
                                          param_type,
                                          charset,
                                          ncharset,
-                                         is_oracle_mode() ? cs_server : cs_conn,
+                                         cs_conn,
                                          pos,
                                          session->get_timezone_info(),
                                          &param_type_info,
@@ -1223,10 +1223,7 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
       ObPLExecCtx pl_ctx(cursor->get_allocator(), &result.get_exec_context(), NULL/*params*/,
                         NULL/*result*/, &ret, NULL/*func*/, true);
       int64_t orc_max_ret_rows = INT64_MAX;
-      if (lib::is_oracle_mode()
-          && OB_FAIL(session.get_oracle_sql_select_limit(orc_max_ret_rows))) {
-        LOG_WARN("failed to get sytem variable _oracle_sql_select_limit", K(ret));
-      } else if (OB_FAIL(ObSPIService::dbms_dynamic_open(
+      if (OB_FAIL(ObSPIService::dbms_dynamic_open(
                      &pl_ctx, *cursor, false, orc_max_ret_rows))) {
         LOG_WARN("open cursor fail. ", K(ret), K(stmt_id_));
         if (!THIS_WORKER.need_retry()) {
@@ -2130,8 +2127,7 @@ int ObMPStmtExecute::get_package_type_by_name(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   const share::schema::ObPackageInfo *package_info = NULL;
-  int64_t compatible_mode = lib::is_oracle_mode() ? COMPATIBLE_ORACLE_MODE
-                                                  : COMPATIBLE_MYSQL_MODE;
+  int64_t compatible_mode = COMPATIBLE_MYSQL_MODE;
   ObSchemaChecker schema_checker;
   CK (OB_NOT_NULL(type_info));
   CK (OB_NOT_NULL(ctx_.schema_guard_));
@@ -2250,34 +2246,7 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
       {
         MEMCPY(&value, data, sizeof(value));
         data += sizeof(value);
-        if (lib::is_mysql_mode()) {
-          param.set_double(value);
-        } else {
-          if (OB_ISNULL(session)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("null conn ptr", K(ret));
-          } else if (session->is_support_jdbc_binary_double()) {
-            // for setBinaryDouble
-            param.set_double(value);
-          } else {
-            // for setDouble in old jdbc, need convert to number type
-            char *buf = NULL;
-            int64_t buf_len = 0;
-            number::ObNumber nb;
-            const int64_t alloc_size = OB_MAX_DOUBLE_FLOAT_DISPLAY_WIDTH;
-            if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(alloc_size)))) {
-              ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("failed to allocate memory", K(ret));
-            } else if (FALSE_IT(buf_len = ob_gcvt_strict(value, OB_GCVT_ARG_DOUBLE, alloc_size,
-                                                        buf, NULL,
-                                                        FALSE/*is_binary_double*/, FALSE))) {
-            } else if (OB_FAIL(nb.from_sci_opt(buf, buf_len, allocator))) {
-              LOG_WARN("decode double param to number failed", K(ret));
-            } else {
-              param.set_number(nb);
-            }
-          }
-        }
+        param.set_double(value);
       }
       break;
     }
@@ -2457,8 +2426,6 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
               } else {
                 param.set_varchar(dst);
               }
-            } else if (is_oracle_mode()) {
-              param.set_char(dst);
             } else {
               param.set_varchar(dst);
             }
@@ -2474,7 +2441,7 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
       break;
     }
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     param.set_collation_level(CS_LEVEL_COERCIBLE);
   }
   return ret;
@@ -2651,33 +2618,6 @@ int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
       }
     }
   }
-  // set length semantics
-  if (OB_SUCC(ret) && lib::is_oracle_mode()) {
-    const ObLengthSemantics default_length_semantics = ctx_.session_info_->get_actual_nls_length_semantics();
-    if (MYSQL_TYPE_VAR_STRING == type ||
-                MYSQL_TYPE_VARCHAR == type ||
-                MYSQL_TYPE_STRING == type) {
-      if (length == 0) {
-        param.set_length_semantics(default_length_semantics);
-      } else {
-        ObLengthSemantics length_semantics = LS_DEFAULT;
-        if (MYSQL_TYPE_VAR_STRING == type) {
-          length_semantics = LS_CHAR;
-        } else {
-          length_semantics = default_length_semantics;
-        }
-        if (is_oracle_byte_length(true, length_semantics)
-            && MYSQL_TYPE_VAR_STRING != type) {
-          param.set_length_semantics(LS_BYTE);
-        } else {     
-          param.set_length_semantics(LS_CHAR);
-        }
-      }
-    } else if (type == MYSQL_TYPE_NEWDECIMAL && param.get_scale() == -1) {
-      // is number, and scale is -1 (-1 is the result after reset)
-      param.set_scale(ORA_NUMBER_SCALE_UNKNOWN_YET);
-    }
-  }
   return ret;
 }
 
@@ -2748,8 +2688,6 @@ int ObMPStmtExecute::parse_integer_value(const uint32_t type,
                                          bool is_unsigned) // oracle unsigned need 
 {
   int ret = OB_SUCCESS;
-  bool cast_to_number = !(lib::is_mysql_mode() || is_complex_element || MYSQL_TYPE_TINY == type);
-  int64_t res_val = 0;
   switch(type) {
     case MYSQL_TYPE_TINY: {
       PS_STATIC_DEFENSE_CHECK(checker, 1)
@@ -2765,19 +2703,7 @@ int ObMPStmtExecute::parse_integer_value(const uint32_t type,
       {
         int16_t value = 0;
         ObMySQLUtil::get_int2(data, value);
-        if (!cast_to_number) {
-          is_unsigned ? param.set_usmallint(value) : param.set_smallint(value);
-        } else {
-          res_val = static_cast<int64_t>(value);
-          if (is_unsigned) {
-            if (((1LL << 16) + res_val) < 1 || res_val > 0xFFFF) {
-              ret = OB_DECIMAL_OVERFLOW_WARN;
-              LOG_WARN("param is over flower.", K(res_val), K(type), K(ret));
-            } else {
-              res_val = res_val < 0 ? ((1LL << 16) + res_val) : res_val;
-            }
-          }
-        }
+        is_unsigned ? param.set_usmallint(value) : param.set_smallint(value);
       }
       break;
     }
@@ -2786,19 +2712,7 @@ int ObMPStmtExecute::parse_integer_value(const uint32_t type,
       {
         int32_t value = 0;
         ObMySQLUtil::get_int4(data, value);
-        if (!cast_to_number) {
-          is_unsigned ? param.set_uint32(value) : param.set_int32(value);
-        } else {
-          res_val = static_cast<int64_t>(value);
-          if (is_unsigned) {
-            if (((1LL << 32) + res_val) < 1 || res_val > 0xFFFFFFFF) {
-              ret = OB_DECIMAL_OVERFLOW_WARN;
-              LOG_WARN("param is over flower.", K(res_val), K(type), K(ret));
-            } else {
-              res_val = res_val < 0 ? ((1LL << 32) + res_val) : res_val;
-            }
-          }
-        }
+        is_unsigned ? param.set_uint32(value) : param.set_int32(value);
       }
       break;
     }
@@ -2807,11 +2721,7 @@ int ObMPStmtExecute::parse_integer_value(const uint32_t type,
       {
         int64_t value = 0;
         ObMySQLUtil::get_int8(data, value);
-        if (!cast_to_number) {
-          is_unsigned ? param.set_uint(ObUInt64Type, value) : param.set_int(value);
-        } else {
-          res_val = value;
-        }
+        is_unsigned ? param.set_uint(ObUInt64Type, value) : param.set_int(value);
       }
       break;
     }
@@ -2819,16 +2729,6 @@ int ObMPStmtExecute::parse_integer_value(const uint32_t type,
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("unexpected integer type", K(type), K(ret));
       break;
-    }
-  }
-  if (OB_SUCC(ret) && cast_to_number) {
-    number::ObNumber nb;
-    if (is_unsigned && OB_FAIL(nb.from(static_cast<uint64_t>(res_val), allocator))) {
-      LOG_WARN("decode param to number failed", K(ret), K(res_val));
-    } else if (!is_unsigned && OB_FAIL(nb.from(static_cast<int64_t>(res_val), allocator))) {
-      LOG_WARN("decode param to number failed", K(ret), K(res_val));
-    } else {
-      param.set_number(nb);
     }
   }
   return ret;
@@ -2892,10 +2792,6 @@ int ObMPStmtExecute::parse_mysql_timestamp_value(const EMySQLFieldType field_typ
   if (OB_SUCC(ret)) {
     ObTime ob_time;
     if (0 != length) {
-      if (lib::is_oracle_mode()) {
-        //oracle mode datetime should not has microsecond
-        microsecond = 0;
-      }
       ob_time.parts_[DT_YEAR] = year;
       ob_time.parts_[DT_MON] = month;
       ob_time.parts_[DT_MDAY] = day;
