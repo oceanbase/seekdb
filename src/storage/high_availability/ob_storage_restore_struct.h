@@ -20,17 +20,12 @@
 #include "share/ob_ls_id.h"
 #include "common/ob_tablet_id.h"
 #include "lib/container/ob_array.h"
-#include "share/backup/ob_backup_path.h"
 #include "common/ob_member.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "ob_storage_ha_struct.h"
 #include "ob_tablet_ha_status.h"
-#include "storage/backup/ob_backup_index_store.h"
-#include "storage/backup/ob_backup_restore_util.h"
-#include "storage/backup/ob_backup_data_struct.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
 #include "storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
-#include "storage/backup/ob_backup_sstable_sec_meta_iterator.h"
 
 namespace oceanbase
 {
@@ -110,26 +105,6 @@ struct ObRestoreUtils
   static int get_backup_data_type(
       const ObITable::TableKey &table_key,
       share::ObBackupDataType &data_type);
-  
-  // call backup::ObLSBackupFactory::free to release iterator after not use.
-  static int create_backup_sstable_sec_meta_iterator(
-      const uint64_t tenant_id,
-      const common::ObTabletID &tablet_id,
-      const storage::ObTabletHandle &tablet_handle,
-      const ObITable::TableKey &table_key,
-      const blocksstable::ObDatumRange &query_range,
-      const ObRestoreBaseInfo &restore_base_info,
-      backup::ObBackupMetaIndexStoreWrapper &meta_index_store,
-      backup::ObBackupSSTableSecMetaIterator *&sstable_sec_meta_iterator);
-
-  static int create_backup_sstable_sec_meta_iterator(
-      const uint64_t tenant_id,
-      const common::ObTabletID &tablet_id,
-      const storage::ObTabletHandle &tablet_handle,
-      const ObITable::TableKey &table_key,
-      const ObRestoreBaseInfo &restore_base_info,
-      backup::ObBackupMetaIndexStoreWrapper &meta_index_store,
-      backup::ObBackupSSTableSecMetaIterator *&sstable_sec_meta_iterator);
 };
 
 struct ObTabletGroupRestoreArg
@@ -203,77 +178,6 @@ public:
   DISALLOW_COPY_AND_ASSIGN(ObIRestoreDagNetCtx);
 };
 
-struct ObRestoreMacroBlockId final
-{
-  ObRestoreMacroBlockId();
-  ~ObRestoreMacroBlockId() = default;
-  void reset();
-  int set(const blocksstable::ObLogicMacroBlockId &logic_id,
-      const backup::ObBackupDeviceMacroBlockId &macro_id);
-  TO_STRING_KV(
-      K_(logic_block_id),
-      K_(macro_id));
-
-  blocksstable::ObLogicMacroBlockId logic_block_id_;
-  backup::ObBackupPhysicalID backup_physic_block_id_;
-  backup::ObBackupDeviceMacroBlockId macro_id_;
-};
-
-class ObRestoreMacroBlockIdMgr
-{
-public:
-  ObRestoreMacroBlockIdMgr();
-  virtual ~ObRestoreMacroBlockIdMgr();
-  int init(
-      const common::ObTabletID &tablet_id,
-      const ObTabletHandle &tablet_handle,
-      const ObITable::TableKey &table_key,
-      const ObRestoreBaseInfo &restore_base_info,
-      backup::ObBackupMetaIndexStoreWrapper &meta_index_store,
-      backup::ObBackupMetaIndexStoreWrapper &second_meta_index_store);
-  int get_macro_block_id(
-      const int64_t block_id_index,
-      blocksstable::ObLogicMacroBlockId &logic_block_id,
-      backup::ObBackupPhysicalID &physic_block_id);
-  // for v_4_4
-  int get_macro_block_id(
-      const int64_t block_id_index,
-      blocksstable::ObLogicMacroBlockId &logic_block_id,
-      backup::ObBackupDeviceMacroBlockId &macro_id);
-  int get_block_id_index(
-      const blocksstable::ObLogicMacroBlockId &logic_block_id,
-      int64_t &block_id_index);
-  int get_restore_macro_block_id_array(
-      common::ObIArray<ObRestoreMacroBlockId> &block_id_array);
-
-private:
-  // for version smaller than 4.3.2
-  int inner_init_v1_(
-      const common::ObTabletID &tablet_id,
-      const ObITable::TableKey &table_key,
-      const ObRestoreBaseInfo &restore_base_info,
-      backup::ObBackupMetaIndexStoreWrapper &meta_index_store,
-      backup::ObBackupMetaIndexStoreWrapper &second_meta_index_store);
-  int sort_block_id_array(common::ObIArray<blocksstable::ObLogicMacroBlockId> &logic_id_list);
-  int inner_init_v2_(
-      const common::ObTabletID &tablet_id,
-      const ObTabletHandle &tablet_handle,
-      const ObITable::TableKey &table_key,
-      const ObRestoreBaseInfo &restore_base_info,
-      backup::ObBackupMetaIndexStoreWrapper &meta_index_store);
-
-private:
-  int get_macro_block_index_list_from_iter_(
-      backup::ObBackupSSTableSecMetaIterator &sstable_sec_meta_iterator,
-      common::ObIArray<ObRestoreMacroBlockId> &macro_id_list);
-
-private:
-  bool is_inited_;
-  ObITable::TableKey table_key_;
-  ObArray<ObRestoreMacroBlockId> block_id_array_;
-  share::ObBackupSetFileDesc::Compatible backup_compatible_;
-  DISALLOW_COPY_AND_ASSIGN(ObRestoreMacroBlockIdMgr);
-};
 
 
 }

@@ -1050,8 +1050,6 @@ int ObRecoverTableJob::assign(const ObRecoverTableJob &that)
     LOG_WARN("failed to set backup passwd", K(ret));
   } else if (OB_FAIL(set_external_kms_info(that.get_external_kms_info()))) {
     LOG_WARN("failed to set external kms", K(ret));
-  } else if (OB_FAIL(multi_restore_path_list_.assign(that.get_multi_restore_path_list()))) {
-    LOG_WARN("failed to assign multi restore path", K(ret));
   } else if (OB_FAIL(import_arg_.assign(that.get_import_arg()))) {
     LOG_WARN("failed to assign import arg", K(ret));
   } else if (OB_FAIL(set_description(that.get_description()))) {
@@ -1104,7 +1102,6 @@ void ObRecoverTableJob::reset()
   external_kms_info_.reset();
   result_.reset();
   import_arg_.reset();
-  multi_restore_path_list_.reset();
   description_.reset();
 }
 
@@ -1200,19 +1197,11 @@ int ObRecoverTableJob::parse_from(common::sqlclient::ObMySQLResult &result)
   if (OB_SUCC(ret)) {
     ObString str;
     EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, OB_STR_BACKUP_SET_LIST, str);
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(multi_restore_path_list_.backup_set_list_assign_with_format_str(str))) {
-      LOG_WARN("fail to assign backup set list", KR(ret), K(str));
-    }
   }
 
   if (OB_SUCC(ret)) {
     ObString str;
     EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, OB_STR_BACKUP_PIECE_LIST, str);
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(multi_restore_path_list_.backup_piece_list_assign_with_format_str(str))) {
-      LOG_WARN("fail to assign backup set list", KR(ret), K(str));
-    }
   }
 
   if (OB_SUCC(ret)) {
@@ -1387,11 +1376,7 @@ int ObRecoverTableJob::fill_dml(share::ObDMLSqlSplicer &dml) const
     const share::ObImportTableArg &import_table_arg = import_arg_.get_import_table_arg();
     const share::ObImportRemapArg &remap_table_arg = import_arg_.get_remap_table_arg();
 
-    if (OB_FAIL(multi_restore_path_list_.get_backup_set_list_format_str(allocator, backup_set_list_))) {
-      LOG_WARN("fail to get format str", KR(ret), K(multi_restore_path_list_));
-    } else if (OB_FAIL(multi_restore_path_list_.get_backup_piece_list_format_str(allocator, backup_piece_list_))) {
-      LOG_WARN("fail to get format str", KR(ret), K(multi_restore_path_list_));
-    } else if (OB_FAIL(import_table_arg.get_db_list_format_str(allocator, db_list_))) {
+    if (OB_FAIL(import_table_arg.get_db_list_format_str(allocator, db_list_))) {
       LOG_WARN("fail to get db list format str", KR(ret), K(import_table_arg));
     } else if (OB_FAIL(import_table_arg.get_table_list_format_str(allocator, table_list_))) {
       LOG_WARN("fail to get table list format str", KR(ret), K(import_table_arg));

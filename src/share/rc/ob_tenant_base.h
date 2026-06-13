@@ -90,6 +90,7 @@ class ObTenantMdsService;
   namespace checkpoint {
     class ObCheckPointService;
     class ObTabletGCService;
+    class ObCheckpointDiagnoseMgr;
   }
   class ObLobManager;
   class ObTenantRestoreInfoMgr;
@@ -99,6 +100,15 @@ class ObTenantMdsService;
   class ObTenantDirectLoadMgr;
   class ObEmptyReadBucket;
   class ObTabletMemtableMgrPool;
+#ifdef OB_BUILD_SHARED_STORAGE
+  class ObTenantDiskSpaceManager;
+  class ObTenantFileManager;
+  class ObSSMicroCachePrewarmService;
+  class ObSSMicroCache;
+  class ObPublicBlockGCService;
+  class ObStorageCachePolicyService;
+#else
+#endif
 
   class ObGlobalIteratorPool;
 } // namespace storage
@@ -159,9 +169,6 @@ namespace rootserver
   class ObPrimaryMajorFreezeService;
   class ObRestoreMajorFreezeService;
   class ObBackupTaskScheduler;
-  class ObBackupDataService;
-  class ObBackupCleanService;
-  class ObArchiveSchedulerService;
   class ObDBMSSchedService;
   class ObMViewMaintenanceService;
   class ObDDLScheduler;
@@ -226,6 +233,17 @@ namespace detector
 #define TenantErrsimEvent
 #endif
 
+#ifdef OB_BUILD_SHARED_STORAGE
+#define TenantDiskSpaceManager storage::ObTenantDiskSpaceManager*,
+#define TenantFileManager storage::ObTenantFileManager*,
+#define SSMicroCachePrewarmService storage::ObSSMicroCachePrewarmService*,
+#define SSMicroCache storage::ObSSMicroCache*,
+#define TenantCompactionObjMgr compaction::ObTenantCompactionObjMgr*,
+#define TenantLSMergeScheduler compaction::ObTenantLSMergeScheduler*,
+#define TenantLSMergeChecker compaction::ObTenantLSMergeChecker*,
+#define PublicBlockGCService storage::ObPublicBlockGCService*,
+#define StorageCachePolicyService storage::ObStorageCachePolicyService*,
+#else
 #define TenantDiskSpaceManager
 #define TenantFileManager
 #define SSMicroCachePrewarmService
@@ -235,6 +253,7 @@ namespace detector
 #define TenantLSMergeChecker
 #define PublicBlockGCService
 #define StorageCachePolicyService
+#endif
 // List the types of tenant-local variables that need to be added here, the tenant will create an instance for each type.
 // The initialization and destruction logic of the instance is specified by the MTL_BIND interface.
 // Use the MTL interface to obtain an instance.
@@ -274,9 +293,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       observer::ObTabletTableUpdater*,               \
       storage::ObStorageHAHandlerService*,           \
       rootserver::ObBackupTaskScheduler*,            \
-      rootserver::ObBackupDataService*,              \
-      rootserver::ObBackupCleanService*,             \
-      rootserver::ObArchiveSchedulerService*,        \
       storage::ObTenantSSTableMergeInfoMgr*,         \
       share::ObDagWarningHistoryManager*,            \
       compaction::ObScheduleSuspectInfoMgr*,         \
@@ -341,6 +357,7 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       rootserver::ObMViewMaintenanceService*,       \
       PublicBlockGCService                          \
       share::ObResourceLimitCalculator*,            \
+      storage::checkpoint::ObCheckpointDiagnoseMgr*, \
       storage::ObGlobalIteratorPool*,                \
       common::ObRbMemMgr*,                           \
       share::ObPluginVectorIndexService*,            \

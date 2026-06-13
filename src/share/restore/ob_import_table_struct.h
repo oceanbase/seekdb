@@ -18,7 +18,6 @@
 #define OCEANBASE_SHARE_IMPORT_TABLE_STRUCT_H
 
 #include "lib/ob_define.h"
-#include "share/backup/ob_backup_struct.h"
 #include "share/ob_inner_table_operator.h"
 #include "share/restore/ob_import_arg.h"
 
@@ -34,6 +33,7 @@ public:
     SUCCESS = 0,
     PARTIAL_SUCCESS = 1,
     FAILED = 2,
+    MAX,
   };
   using Comment = common::ObFixedLengthString<OB_COMMENT_LENGTH>;
   ObImportResult(): is_succeed_(true), tables_import_result_(TablesImportResult::SUCCESS), comment_() {}
@@ -424,7 +424,7 @@ public:
   TO_STRING_KV(K_(tenant_id), K_(job_id), K_(initiator_tenant_id), K_(initiator_job_id), K_(start_ts), K_(end_ts), K_(status),
       K_(aux_tenant_name), K_(target_tenant_name), K_(target_tenant_id), K_(restore_scn), K_(restore_option),
       K_(backup_dest), K_(backup_dest), K_(backup_passwd), K_(external_kms_info), K_(result),
-      K_(import_arg), K_(multi_restore_path_list));
+      K_(import_arg));
 
   Property_declare_int(uint64_t, tenant_id)
   Property_declare_int(int64_t, job_id)
@@ -443,13 +443,10 @@ public:
   Property_declare_ObString(external_kms_info)
   Property_declare_struct(ObImportResult, result)
   Property_declare_ObString(description)
-  ObPhysicalRestoreBackupDestList& get_multi_restore_path_list() { return multi_restore_path_list_; }
-  const ObPhysicalRestoreBackupDestList& get_multi_restore_path_list() const { return multi_restore_path_list_; }
   share::ObImportArg &get_import_arg() { return import_arg_; }
   const share::ObImportArg &get_import_arg() const { return import_arg_; }
 private:
   share::ObImportArg import_arg_;
-  share::ObPhysicalRestoreBackupDestList multi_restore_path_list_;
   common::ObArenaAllocator allocator_;
 };
 

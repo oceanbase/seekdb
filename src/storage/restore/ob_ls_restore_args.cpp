@@ -28,10 +28,7 @@ ObTenantRestoreCtx::ObTenantRestoreCtx()
     tenant_id_(0),
     backup_cluster_version_(0),
     backup_data_version_(0),
-    backup_compatible_(share::ObBackupSetFileDesc::MAX_COMPATIBLE_VERSION),
-    backup_set_list_(),
-    backup_piece_list_(),
-    progress_display_mode_(ObRestoreProgressDisplayMode::TABLET_CNT)
+    progress_display_mode_(share::ObRestoreProgressDisplayMode::TABLET_CNT)
 {
 }
 
@@ -41,7 +38,7 @@ ObTenantRestoreCtx::~ObTenantRestoreCtx()
 
 bool ObTenantRestoreCtx::is_valid() const
 {
-  return job_id_ > 0 && restore_type_.is_valid() && !backup_set_list_.empty();
+  return job_id_ > 0 && restore_type_.is_valid();
 }
 
 int ObTenantRestoreCtx::assign(const ObTenantRestoreCtx &args)
@@ -50,10 +47,6 @@ int ObTenantRestoreCtx::assign(const ObTenantRestoreCtx &args)
   if (!args.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(args));
-  } else if (OB_FAIL(backup_set_list_.assign(args.get_backup_set_list()))) {
-    LOG_WARN("fail to assign backup set list", K(ret));
-  } else if (OB_FAIL(backup_piece_list_.assign(args.get_backup_piece_list()))) {
-    LOG_WARN("fail to assign backup piece list", K(ret));
   } else {
     job_id_ = args.get_job_id();
     restore_type_ = args.get_restore_type();
@@ -62,7 +55,6 @@ int ObTenantRestoreCtx::assign(const ObTenantRestoreCtx &args)
     tenant_id_ = args.get_tenant_id();
     backup_cluster_version_ = args.get_backup_cluster_version();
     backup_data_version_ = args.get_backup_data_version();
-    backup_compatible_ = args.backup_compatible_;
     progress_display_mode_ = args.progress_display_mode_;
   }
   return ret;

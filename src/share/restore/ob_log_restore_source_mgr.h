@@ -19,7 +19,6 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
-#include "share/backup/ob_backup_struct.h"
 #include "ob_log_restore_source.h"
 #include "share/ob_kv_storage.h"
 #include "share/ob_server_struct.h"  // GCTX
@@ -34,7 +33,6 @@ class ObAddr;
 
 namespace share
 {
-typedef common::ObSEArray<ObBackupPathString, 1> DirArray;
 // For standby and restore tenant, set log source with the log archive destination explicitly.
 class ObLogRestoreSourceMgr final
 {
@@ -53,8 +51,6 @@ public:
   // oss://backup_dir/?host=xxx.com&access_id=111&access_key=222
   // 3. cos example
   int add_location_source(const SCN &recovery_until_scn, const ObString &archive_dest);
-  // add source with raw pieces
-  int add_rawpath_source(const SCN &recovery_until_scn, const DirArray &array);
 
   // modify log restore source recovery until scn
   int update_recovery_until_scn(const SCN &recovery_until_scn);
@@ -64,10 +60,6 @@ public:
 
   // get log restore source
   int get_source(ObLogRestoreSourceItem &item);
-  
-  // Removed get_source_for_update - not needed for KV storage
-
-  static int get_backup_dest(const ObLogRestoreSourceItem &item, ObBackupDest& dest);
 private:
   const int64_t OB_DEFAULT_LOG_RESTORE_SOURCE_ID = 1;
   

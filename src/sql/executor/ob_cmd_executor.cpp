@@ -130,6 +130,10 @@
 #include "sql/engine/cmd/ob_ccl_rule_executor.h"
 #include "sql/resolver/ddl/ob_catalog_stmt.h"
 #include "sql/engine/cmd/ob_catalog_executor.h"
+#ifdef OB_BUILD_SHARED_STORAGE
+#include "sql/resolver/cmd/ob_trigger_storage_cache_stmt.h"
+#include "sql/engine/cmd/ob_trigger_storage_cache_executor.h"
+#endif
 #include "sql/resolver/cmd/ob_sys_dispatch_call_stmt.h"
 #include "sql/engine/cmd/ob_sys_dispatch_call_executor.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
@@ -468,6 +472,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_SERVER_ACTION: {
         break;
       }
+#ifdef OB_BUILD_SHARED_STORAGE
+      case stmt::T_TRIGGER_STORAGE_CACHE: {
+        DEFINE_EXECUTE_CMD(ObTriggerStorageCacheStmt, ObTriggerStorageCacheExecutor);
+        break;
+      }
+#endif
       case stmt::T_FREEZE: {
         DEFINE_EXECUTE_CMD(ObFreezeStmt, ObFreezeExecutor);
         break;
@@ -751,12 +761,9 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObAlterRoleStmt, ObAlterRoleExecutor);
         break;
       }
-      case stmt::T_ARCHIVE_LOG: {
-        DEFINE_EXECUTE_CMD(ObArchiveLogStmt, ObArchiveLogExecutor);
-        break;
-      }
+      case stmt::T_ARCHIVE_LOG:
       case stmt::T_BACKUP_DATABASE: {
-        DEFINE_EXECUTE_CMD(ObBackupDatabaseStmt, ObBackupDatabaseExecutor);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case stmt::T_CANCEL_RESTORE: {
@@ -779,36 +786,15 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObSwitchRoleStmt, ObSwitchRoleExecutor);
         break;
       }
-      case stmt::T_BACKUP_MANAGE: {
-        DEFINE_EXECUTE_CMD(ObBackupManageStmt, ObBackupManageExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_CLEAN: {
-        DEFINE_EXECUTE_CMD(ObBackupCleanStmt, ObBackupCleanExecutor);
-        break;
-      }
-      case stmt::T_DELETE_POLICY: {
-        DEFINE_EXECUTE_CMD(ObDeletePolicyStmt, ObDeletePolicyExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_CLUSTER_PARAMETERS: {
-        DEFINE_EXECUTE_CMD(ObBackupClusterParamStmt, ObBackupClusterParamExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_BACKUPSET: {
-        DEFINE_EXECUTE_CMD(ObBackupBackupsetStmt, ObBackupBackupsetExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_ARCHIVELOG: {
-        DEFINE_EXECUTE_CMD(ObBackupArchiveLogStmt, ObBackupArchiveLogExecutor);
-        break;
-      }
-      case stmt::T_BACKUP_SET_ENCRYPTION: {
-        DEFINE_EXECUTE_CMD(ObBackupSetEncryptionStmt, ObBackupSetEncryptionExecutor);
-        break;
-      }
+      case stmt::T_BACKUP_MANAGE:
+      case stmt::T_BACKUP_CLEAN:
+      case stmt::T_DELETE_POLICY:
+      case stmt::T_BACKUP_CLUSTER_PARAMETERS:
+      case stmt::T_BACKUP_BACKUPSET:
+      case stmt::T_BACKUP_ARCHIVELOG:
+      case stmt::T_BACKUP_SET_ENCRYPTION:
       case stmt::T_BACKUP_SET_DECRYPTION: {
-        DEFINE_EXECUTE_CMD(ObBackupSetDecryptionStmt, ObBackupSetDecryptionExecutor);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case stmt::T_ENABLE_SQL_THROTTLE: {
@@ -849,15 +835,15 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         break;
       }
       case stmt::T_BACKUP_BACKUPPIECE: {
-        DEFINE_EXECUTE_CMD(ObBackupBackupPieceStmt, ObBackupBackupPieceExecutor);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case stmt::T_ADD_RESTORE_SOURCE: {
-        DEFINE_EXECUTE_CMD(ObAddRestoreSourceStmt, ObAddRestoreSourceExecutor);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case stmt::T_CLEAR_RESTORE_SOURCE: {
-        DEFINE_EXECUTE_CMD(ObClearRestoreSourceStmt, ObClearRestoreSourceExecutor);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case stmt::T_CREATE_CONTEXT: {
@@ -975,6 +961,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       ret = tmp_ret;
     }
   }
+
 
   return ret;
 }

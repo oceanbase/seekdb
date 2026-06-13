@@ -18,7 +18,6 @@
 #include "share/restore/ob_restore_table_operator.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "ob_log_restore_source.h"
-#include "share/backup/ob_backup_struct.h"
 #include "lib/mysqlclient/ob_mysql_transaction.h"
 
 using namespace oceanbase::share;

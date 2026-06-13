@@ -19,7 +19,6 @@
 #include "rootserver/mview/ob_mview_push_refresh_scn_task.h"
 #include "share/schema/ob_mview_info.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/backup/ob_backup_data_table_operator.h"
 #include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase {

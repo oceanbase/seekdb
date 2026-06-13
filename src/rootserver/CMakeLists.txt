@@ -6,14 +6,6 @@ ob_set_subtarget(ob_rootserver ALONE
   ob_lonely_table_cleaner.cpp
 )
 
-ob_set_subtarget(ob_rootserver backup
-  backup/ob_archive_scheduler_service.cpp
-  backup/ob_backup_base_service.cpp
-  backup/ob_tenant_archive_scheduler.cpp 
-  backup/ob_backup_proxy.cpp
-  backup/ob_backup_param_operator.cpp 
-)
-
 ob_set_subtarget(ob_rootserver common
   ob_bootstrap.cpp
   ob_ddl_help.cpp

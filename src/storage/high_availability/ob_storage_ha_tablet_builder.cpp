@@ -42,8 +42,7 @@ ObStorageHATabletsBuilderParam::ObStorageHATabletsBuilderParam()
     svr_rpc_proxy_(nullptr),
     storage_rpc_(nullptr),
     restore_base_info_(nullptr),
-    restore_action_(ObTabletRestoreAction::MAX),
-    meta_index_store_(nullptr)
+    restore_action_(ObTabletRestoreAction::MAX)
 {
 }
 
@@ -61,8 +60,7 @@ bool ObStorageHATabletsBuilderParam::is_valid() const
           && OB_NOT_NULL(svr_rpc_proxy_) && OB_NOT_NULL(storage_rpc_);
     } else {
       bool_ret = OB_NOT_NULL(restore_base_info_)
-         && ObTabletRestoreAction::is_valid(restore_action_)
-         && OB_NOT_NULL(meta_index_store_);
+         && ObTabletRestoreAction::is_valid(restore_action_);
     }
   }
   return bool_ret;
@@ -91,7 +89,6 @@ int ObStorageHATabletsBuilderParam::assign(const ObStorageHATabletsBuilderParam 
     storage_rpc_ = param.storage_rpc_;
     restore_base_info_ = param.restore_base_info_;
     restore_action_ = param.restore_action_;
-    meta_index_store_ = param.meta_index_store_;
   }
   return ret;
 }
@@ -133,7 +130,7 @@ int ObStorageHATabletsBuilder::create_or_update_tablets(ObIDagNet *dag_net)
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   ObICopyTabletInfoReader *reader = nullptr;
-  obcall::ObCopyTabletInfo tablet_info;
+  obrpc::ObCopyTabletInfo tablet_info;
   const int overwrite = 1;
   const bool need_check_tablet_limit = false;
 
@@ -206,7 +203,7 @@ int ObStorageHATabletsBuilder::update_pending_tablets_with_remote()
   } else if (OB_FAIL(get_tablet_info_reader_(reader))) {
     LOG_WARN("failed to get tablet info reader", K(ret), K(param_));
   } else {
-    obcall::ObCopyTabletInfo tablet_info;
+    obrpc::ObCopyTabletInfo tablet_info;
     ObTabletHandle tablet_handle;
     ObTablet *tablet = nullptr;
     while (OB_SUCC(ret)) {
@@ -314,8 +311,6 @@ int ObStorageHATabletsBuilder::get_tablet_info_restore_reader_(ObICopyTabletInfo
     LOG_WARN("failed to alloc memory", K(ret), KP(buf));
   } else if (FALSE_IT(restore_reader = new (buf) ObCopyTabletInfoRestoreReader())) {
   } else if (FALSE_IT(reader = restore_reader)) {
-  } else if (OB_FAIL(restore_reader->init(*param_.restore_base_info_, param_.tablet_id_array_, *param_.meta_index_store_))) {
-    LOG_WARN("failed to init tablet restore reader", K(ret), K(param_));
   }
 
   if (OB_FAIL(ret)) {
@@ -336,7 +331,7 @@ void ObStorageHATabletsBuilder::free_tablet_info_reader_(ObICopyTabletInfoReader
 }
 
 int ObStorageHATabletsBuilder::create_or_update_tablet_(
-    const obcall::ObCopyTabletInfo &tablet_info,
+    const obrpc::ObCopyTabletInfo &tablet_info,
     const bool need_check_tablet_limit,
     ObLS *ls)
 {
@@ -385,8 +380,8 @@ int ObStorageHATabletsBuilder::build_tablets_sstable_info(ObIDagNet *dag_net)
 {
   int ret = OB_SUCCESS;
   ObICopySSTableInfoReader *reader = nullptr;
-  obcall::ObCopyTabletSSTableInfo sstable_info;
-  obcall::ObCopyTabletSSTableHeader copy_header;
+  obrpc::ObCopyTabletSSTableInfo sstable_info;
+  obrpc::ObCopyTabletSSTableHeader copy_header;
   ObLS *ls = nullptr;
   ObArray<ObTabletHandle> tablet_handle_array;
 
@@ -448,7 +443,7 @@ int ObStorageHATabletsBuilder::build_tablets_sstable_info(ObIDagNet *dag_net)
 }
 
 int ObStorageHATabletsBuilder::build_tablets_sstable_info_(
-    const obcall::ObCopyTabletSSTableInfo &sstable_info)
+    const obrpc::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("start create sstable", K(sstable_info));
@@ -498,7 +493,6 @@ int ObStorageHATabletsBuilder::get_tablets_sstable_restore_reader_(
   reader = nullptr;
   void *buf = nullptr;
   ObCopySSTableInfoRestoreReader *restore_reader = nullptr;
-  ObArray<ObTabletID> tablet_id_array;
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
@@ -512,23 +506,6 @@ int ObStorageHATabletsBuilder::get_tablets_sstable_restore_reader_(
     LOG_WARN("failed to alloc memory", K(ret), KP(buf));
   } else if (FALSE_IT(restore_reader = new (buf) ObCopySSTableInfoRestoreReader())) {
   } else if (FALSE_IT(reader = restore_reader)) {
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_handle_array.count(); ++i) {
-      const ObTabletHandle &tablet_handle = tablet_handle_array.at(i);
-      if (!tablet_handle.is_valid()) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("tablet handle should be valid", K(ret), K(tablet_handle));
-      } else if (OB_FAIL(tablet_id_array.push_back(tablet_handle.get_obj()->get_tablet_meta().tablet_id_))) {
-        LOG_WARN("failed to push tablet id into array", K(ret), K(tablet_handle));
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(restore_reader->init(param_.ls_->get_ls_id(),
-        *param_.restore_base_info_, param_.restore_action_,
-        tablet_id_array, *param_.meta_index_store_))) {
-      LOG_WARN("failed to init restore reader", K(ret), K(param_));
-    }
   }
 
   if (OB_FAIL(ret)) {
@@ -552,7 +529,7 @@ void ObStorageHATabletsBuilder::free_sstable_info_reader_(
 
 int ObStorageHATabletsBuilder::build_copy_tablet_sstable_info_arg_(
     const ObTabletHandle &tablet_handle,
-    obcall::ObCopyTabletSSTableInfoArg &arg)
+    obrpc::ObCopyTabletSSTableInfoArg &arg)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -947,7 +924,7 @@ int ObStorageHATabletsBuilder::remove_uncomplete_tablet_(
 }
 
 int ObStorageHATabletsBuilder::modified_tablet_info_(
-    obcall::ObCopyTabletInfo &tablet_info)
+    obrpc::ObCopyTabletInfo &tablet_info)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
@@ -971,7 +948,7 @@ int ObStorageHATabletsBuilder::modified_tablet_info_(
 
 int ObStorageHATabletsBuilder::create_tablet_with_major_sstables_(
     ObLS *ls,
-    const obcall::ObCopyTabletInfo &tablet_info,
+    const obrpc::ObCopyTabletInfo &tablet_info,
     const ObTablesHandleArray &major_tables,
     const ObBuildMajorSSTablesParam &major_sstables_param,
     const bool is_only_replace_major)
@@ -1241,7 +1218,7 @@ int ObStorageHATableInfoMgr::get_table_info(
 
 int ObStorageHATableInfoMgr::add_table_info(
     const common::ObTabletID &tablet_id,
-    const obcall::ObCopyTabletSSTableInfo &sstable_info)
+    const obrpc::ObCopyTabletSSTableInfo &sstable_info)
 {
   int ret = OB_SUCCESS;
   ObStorageHATabletTableInfoMgr *tablet_table_info_mgr = nullptr;
@@ -1333,7 +1310,7 @@ int ObStorageHATableInfoMgr::get_table_keys(
 }
 
 int ObStorageHATableInfoMgr::init_tablet_info(
-    const obcall::ObCopyTabletSSTableHeader &copy_header)
+    const obrpc::ObCopyTabletSSTableHeader &copy_header)
 {
   int ret = OB_SUCCESS;
   ObStorageHATabletTableInfoMgr *tablet_table_info_mgr = nullptr;
@@ -2202,6 +2179,17 @@ int ObStorageHATabletBuilderUtil::inner_update_tablet_table_store_with_major_(
                       "has_truncate_info", major_sstables_param.has_truncate_info_);
 #endif
 
+#ifdef OB_BUILD_SHARED_STORAGE
+    int64_t start_meta_macro_seq = table_extra_param.start_meta_macro_seq_;
+    if (OB_FAIL(ret)) {
+    } else if (!table_extra_param.is_valid()) {
+    } else if (!table_extra_param.is_leader_restore_) {
+    } else if (OB_FAIL(ls->upload_major_compaction_tablet_meta(tablet_id, param, start_meta_macro_seq))) {
+      LOG_WARN("failed to upload compaction tablet meta", K(ret), K(tablet_id), K(param), K(table_extra_param), K(start_meta_macro_seq));
+    } else {
+      LOG_INFO("succeed to upload major compaction tablet meta", K(tablet_id), K(param), K(table_extra_param), K(start_meta_macro_seq));
+    }
+#endif
 
     if (FAILEDx(ls->update_tablet_table_store(tablet_id, param, tablet_handle))) {
       LOG_WARN("failed to build ha tablet new table store", K(ret), KPC(tablet), K(param));

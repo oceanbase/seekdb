@@ -17,7 +17,6 @@
 #ifndef __OB_PHYSICAL_RESTORE_INFO_H__
 #define __OB_PHYSICAL_RESTORE_INFO_H__
 
-#include "share/backup/ob_backup_struct.h"
 #include "share/restore/ob_restore_type.h"//ObRestoreType
 #include "share/restore/ob_restore_persist_helper.h"//ObRestoreJobPersistKey
 #include "share/restore/ob_restore_progress_display_mode.h"
@@ -28,7 +27,7 @@ namespace common
 {
   class ObMySQLProxy;
 }
-namespace obcall
+namespace obrpc
 {
 struct ObTableItem;
 }
@@ -70,18 +69,18 @@ public:
   int assign_with_hex_str(const common::ObString &str);
   void reset();
 
-  int add_table_item(const obcall::ObTableItem &item);
+  int add_table_item(const obrpc::ObTableItem &item);
   // length without '\0'
   int64_t get_format_str_length() const;
   // str without '\0'
   int get_format_str(common::ObIAllocator &allocator, common::ObString &str) const;
   // str without '\0'
   int get_hex_str(common::ObIAllocator &allocator, common::ObString &str) const;
-  const common::ObSArray<obcall::ObTableItem> &get_table_white_list() const { return table_items_; }
+  const common::ObSArray<obrpc::ObTableItem> &get_table_white_list() const { return table_items_; }
   DECLARE_TO_STRING;
 private:
   ObArenaAllocator allocator_;
-  common::ObSArray<obcall::ObTableItem> table_items_;
+  common::ObSArray<obrpc::ObTableItem> table_items_;
 };
 
 struct ObSimplePhysicalRestoreJob;
@@ -115,15 +114,6 @@ public:
   void reset();
 
   DECLARE_TO_STRING;
-  
-  ObPhysicalRestoreBackupDestList& get_multi_restore_path_list()
-  {
-    return multi_restore_path_list_;
-  }
-  const ObPhysicalRestoreBackupDestList& get_multi_restore_path_list() const
-  {
-    return multi_restore_path_list_;
-  }
 
   ObPhysicalRestoreWhiteList& get_white_list()
   {
@@ -202,8 +192,6 @@ public:
 private:
   //job_id and tenant_id in __all_restore_job primary_key
   ObRestoreJobPersistKey restore_key_;
-  //for restore
-  ObPhysicalRestoreBackupDestList multi_restore_path_list_;
   //for table recovery
   ObPhysicalRestoreWhiteList white_list_;
   //after recovery, restore will change to standby_tenant or primary tenant

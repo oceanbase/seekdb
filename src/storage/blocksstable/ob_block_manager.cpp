@@ -24,7 +24,6 @@
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
-#include "storage/backup/ob_backup_device_wrapper.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
@@ -78,22 +77,6 @@ int ObSuperBlockPreadChecker::do_check(void *read_buf,
 /**
  * ------------------------------------ObMacroBlockWriteInfo-------------------------------------
  */
-
-int ObMacroBlockWriteInfo::fill_io_info_for_backup(const blocksstable::MacroBlockId &macro_id, ObIOInfo &io_info) const
-{
-  int ret = OB_SUCCESS;
-  if (!backup::ObBackupDeviceMacroBlockId::is_backup_block_file(macro_id.first_id())) {
-    // do nothing
-  } else if (!has_backup_device_handle_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("device handle should not be null", K(ret));
-  } else {
-    backup::ObBackupWrapperIODevice *device = static_cast<backup::ObBackupWrapperIODevice *>(device_handle_);
-    io_info.fd_.fd_id_ = device->simulated_fd_id();
-    io_info.fd_.slot_version_ = device->simulated_slot_version();
-  }
-  return ret;
-}
 
 /**
  * ------------------------------------ObMacroBlockRewriteSeqGenerator-------------------------------------
@@ -1400,8 +1383,6 @@ int ObBlockManager::mark_tablet_block(
           ret = OB_SUCCESS;
           break;
         }
-      } else if (block_info.macro_id_.is_backup_id()) {
-        // do nothing
       } else if (OB_FAIL(do_mark_tablet_block(block_info, mark_info, macro_id_set, tmp_status))) {
         LOG_WARN("fail to mark macro id", K(ret), K(block_info));
       }

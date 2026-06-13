@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_macro_block_id.h"
-#include "storage/backup/ob_backup_data_struct.h"
 
 namespace oceanbase
 {
@@ -94,9 +93,6 @@ bool MacroBlockId::is_valid() const
   if (id_mode_ == (uint64_t)ObMacroBlockIdMode::ID_MODE_LOCAL) {
     is_valid &= MACRO_BLOCK_ID_VERSION_V2 == version_ && id_mode_ < (uint64_t)ObMacroBlockIdMode::ID_MODE_MAX;
     is_valid &= second_id_ >= AUTONOMIC_BLOCK_INDEX && second_id_ < INT64_MAX && third_id_ >= 0;
-  } else if (id_mode_ == (uint64_t)ObMacroBlockIdMode::ID_MODE_BACKUP) {
-    // BACKUP_MODE use BACKUP_MACRO_BLOCK_ID_VERSION
-    is_valid &= backup::ObBackupDeviceMacroBlockId::check_valid(first_id_, second_id_, third_id_);
   } else if (is_valid && id_mode_ == (uint64_t)ObMacroBlockIdMode::ID_MODE_SHARE) {
     is_valid &= MACRO_BLOCK_ID_VERSION_V2 == version_ && id_mode_ < (uint64_t)ObMacroBlockIdMode::ID_MODE_MAX;
     if (is_private_data_or_meta()) {

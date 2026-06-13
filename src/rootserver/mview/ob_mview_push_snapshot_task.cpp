@@ -21,7 +21,6 @@
 #include "share/schema/ob_mview_info.h"
 #include "share/ob_global_stat_proxy.h"
 #include "storage/compaction/ob_tenant_freeze_info_mgr.h"
-#include "share/backup/ob_backup_data_table_operator.h"
 
 namespace oceanbase {
 namespace rootserver {
@@ -115,9 +114,6 @@ void ObMViewPushSnapshotTask::runTimerTask()
     share::SCN min_refresh_scn;
     share::ObSnapshotTableProxy snapshot_proxy;
     const bool select_for_update = true;
-    uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id_);
-    bool space_danger = false;
-    ObArray<share::ObBackupJobAttr> backup_jobs;
     // we query the major_refresh_mv_merge_scn in __all_core_table to conflict with the backup
     // process.
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(select_for_update,
@@ -138,13 +134,6 @@ void ObMViewPushSnapshotTask::runTimerTask()
         LOG_WARN("fail to get min major_refresh_mview_scn", KR(ret), K(tenant_id_),
                   K(snapshot_for_tx));
       }
-    } else if (OB_FAIL(share::ObBackupJobOperator::get_jobs(
-                   *sql_proxy, meta_tenant_id, false /*select for update*/, backup_jobs))) {
-      LOG_WARN("failed to get backup jobs", K(ret), K(tenant_id_));
-    } else if (!backup_jobs.empty() && OB_FAIL(check_space_occupy_(space_danger))) {
-      LOG_WARN("backup jobs exist, check space occupy failed", KR(ret), K(tenant_id_));
-    } else if (!backup_jobs.empty() && !space_danger) {
-      LOG_INFO("backup jobs exist, space is not in danger just skip push snapshot", KR(ret), K(tenant_id_));
     } else if (OB_FAIL(snapshot_proxy.push_snapshot_for_major_refresh_mv(trans, tenant_id_,
                                                                          min_refresh_scn))) {
       LOG_WARN("fail to push snapshot for major refresh mv", KR(ret), K(tenant_id_),

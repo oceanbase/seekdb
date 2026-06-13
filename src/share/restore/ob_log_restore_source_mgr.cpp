@@ -18,7 +18,7 @@
 #include "ob_log_restore_source_mgr.h"
 #include "share/ob_kv_storage.h"
 #include "share/ob_server_struct.h"  // GCTX
-#include "lib/string/ob_sql_string.h"
+#include "share/backup/ob_backup_struct.h"
 
 using namespace oceanbase::share;
 
@@ -194,59 +194,8 @@ int ObLogRestoreSourceMgr::add_location_source(const SCN &recovery_until_scn,
   return ret;
 }
 
-int ObLogRestoreSourceMgr::add_rawpath_source(const SCN &recovery_until_scn, const DirArray &array)
-{
-  int ret = OB_SUCCESS;
-  ObSqlString rawpath_value;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ObLogRestoreSourceMgr not init", K(ret), K_(is_inited));
-  } else if (OB_UNLIKELY(array.empty() || !recovery_until_scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument to add rawpath source", K(ret), K(array), K(recovery_until_scn));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < array.count(); i++) {
-      ObBackupDest dest;
-      ObBackupPathString rawpath = array[i];
-      char dest_buf[OB_MAX_BACKUP_DEST_LENGTH] = { 0 };
-      if (OB_UNLIKELY(rawpath.is_empty())) {
-        LOG_WARN("raw path is empty", K(array));
-      } else if (OB_FAIL(dest.set(rawpath.ptr()))) {
-        LOG_WARN("set rawpath backup dest failed", K(ret), K(rawpath));
-      } else if (OB_FAIL(dest.get_backup_dest_str(dest_buf, sizeof(dest_buf)))) {
-        LOG_WARN("get rawpath backup path failed", K(ret), K(dest));
-      } else if (0 == i) {
-        if (OB_FAIL(rawpath_value.assign(dest_buf))) {
-          LOG_WARN("fail to assign rawpath", K(ret), K(dest_buf));
-        }
-      } else if (OB_FAIL(rawpath_value.append(","))) {
-        LOG_WARN("fail to append rawpath", K(ret));
-      } else if (OB_FAIL(rawpath_value.append(dest_buf))) {
-        LOG_WARN("fail to append rawpath", K(ret), K(dest_buf));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ObLogRestoreSourceItem item(tenant_id_,
-                                  OB_DEFAULT_LOG_RESTORE_SOURCE_ID,
-                                  ObLogRestoreSourceType::RAWPATH,
-                                  ObString(rawpath_value.ptr()),
-                                  recovery_until_scn);
-      // Save to KV storage
-      ObString key;
-      ObString value;
-      if (OB_FAIL(get_kv_key_(tenant_id_, key))) {
-        LOG_WARN("failed to get kv key", KR(ret), K(tenant_id_));
-      } else if (OB_FAIL(serialize_to_kv_(item, value, item.allocator_))) {
-        LOG_WARN("failed to serialize restore source", KR(ret), K(item));
-      } else if (OB_FAIL(GCTX.kv_storage_->set(key, value))) {
-        LOG_WARN("failed to set to kv storage", KR(ret), K(key), K(value));
-      } else {
-        LOG_INFO("add rawpath source succ", K(recovery_until_scn), K(array));
-      }
-    }
-  }
-  return ret;
-}
+
+
 
 int ObLogRestoreSourceMgr::get_source(ObLogRestoreSourceItem &item)
 {
@@ -403,14 +352,5 @@ int ObLogRestoreSourceMgr::deserialize_from_kv_(const ObString &value, ObLogRest
   return ret;
 }
 
-int ObLogRestoreSourceMgr::get_backup_dest(const ObLogRestoreSourceItem &item, ObBackupDest &dest)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(! item.is_valid() || ! is_location_log_source_type(item.type_))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(item));
-  } else if OB_FAIL(dest.set(item.value_)) {
-    LOG_WARN("backup dest set failed", K(ret), K(item));
-  }
-  return ret;
-}
+
+

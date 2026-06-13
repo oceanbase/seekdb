@@ -1,5 +1,3 @@
-#include "observer/ob_service.h"
-#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -25,9 +23,7 @@
 #include "share/location_cache/ob_location_service.h"
 #include "rootserver/ob_table_creator.h"
 #include "share/ob_global_stat_proxy.h"
-#include "share/backup/ob_backup_config.h"
 #include "share/ob_schema_status_proxy.h"
-#include "share/backup/ob_log_restore_config.h"//ObLogRestoreSourceServiceConfigParser
 #include "storage/tx/ob_ts_mgr.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "observer/ob_sql_client_decorator.h"
@@ -86,7 +82,7 @@
 
 namespace oceanbase
 {
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 namespace rootserver
 {
@@ -97,11 +93,11 @@ int ObTenantDDLService::check_inner_stat()
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTenantDDLService is not inited", KR(ret), K(inited_));
-  } else if (OB_ISNULL(ddl_service_)
+  } else if (OB_ISNULL(ddl_service_) || OB_ISNULL(rpc_proxy_) || OB_ISNULL(common_rpc_)
       || OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_service_)
       || OB_ISNULL(ddl_trans_controller_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pointer", KR(ret), KP(ddl_service_), KP(sql_proxy_),
+    LOG_WARN("null pointer", KR(ret), KP(ddl_service_), KP(rpc_proxy_), KP(sql_proxy_),
         KP(schema_service_), KP(ddl_trans_controller_));
   }
   return ret;
@@ -212,7 +208,7 @@ int ObTenantDDLService::replace_sys_stat(const uint64_t tenant_id,
 }
 
 int ObTenantDDLService::create_sys_tenant(
-    const obcall::ObCreateTenantArg &arg,
+    const obrpc::ObCreateTenantArg &arg,
     share::schema::ObTenantSchema &tenant_schema)
 {
   int ret = OB_SUCCESS;
@@ -275,7 +271,7 @@ int ObTenantDDLService::create_sys_tenant(
 }
 
 int ObTenantDDLService::set_tenant_compatibility_(
-    const obcall::ObCreateTenantArg &arg,
+    const obrpc::ObCreateTenantArg &arg,
     ObTenantSchema &tenant_schema)
 {
   int ret = OB_SUCCESS;
@@ -330,6 +326,7 @@ int ObTenantDDLService::gen_tenant_init_config(
 }
 
 int ObTenantDDLService::notify_init_tenant_config(
+    obrpc::ObSrvRpcProxy &rpc_proxy,
     const common::ObIArray<common::ObConfigPairs> &init_configs)
 {
   int ret = OB_SUCCESS;
@@ -343,10 +340,10 @@ int ObTenantDDLService::notify_init_tenant_config(
   } else {
     ObArenaAllocator allocator("InitTenantConf");
     // 1. construct arg
-    obcall::ObInitTenantConfigArg arg;
+    obrpc::ObInitTenantConfigArg arg;
     for (int64_t i = 0; OB_SUCC(ret) && i < init_configs.count(); i++) {
      const common::ObConfigPairs &pairs = init_configs.at(i);
-     obcall::ObTenantConfigArg config;
+     obrpc::ObTenantConfigArg config;
      char *buf = NULL;
      int64_t length = pairs.get_config_str_length();
      if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(length)))) {
@@ -365,16 +362,50 @@ int ObTenantDDLService::notify_init_tenant_config(
        }
      }
     } // end for
-    // 2. direct sync call (seekdb single-node, no serialization needed)
-    if (OB_SUCC(ret)) {
-      obcall::ObInitTenantConfigRes result;
-      ret = GCTX.ob_service_->init_tenant_config(arg, result);
-      if (OB_SUCCESS != ret && OB_SUCCESS != result.get_ret()) {
-        ret = OB_SUCC(ret) ? result.get_ret() : ret;
-      } else if (OB_SUCCESS != result.get_ret()) {
-        ret = result.get_ret();
-        LOG_WARN("persist tenant config failed", KR(ret));
+    // 2. send rpc
+    rootserver::ObInitTenantConfigProxy proxy(
+        rpc_proxy, &obrpc::ObSrvRpcProxy::init_tenant_config);
+    bool call_rs = false;
+    ObAddr rs_addr = GCONF.self_addr_;
+    int64_t timeout = ctx.get_timeout();
+    if (OB_FAIL(ret)) {
+    } else {
+      const ObAddr &addr = GCTX.self_addr();
+      if (OB_FAIL(proxy.call(addr, timeout, arg))) {
+        LOG_WARN("send rpc failed", KR(ret), K(addr), K(timeout), K(arg));
+      } else if (rs_addr == addr) {
+        call_rs = true;
       }
+    }
+    if (OB_FAIL(ret) || call_rs) {
+    } else if (OB_FAIL(proxy.call(rs_addr, timeout, arg))) {
+      LOG_WARN("fail to call rs", KR(ret), K(rs_addr), K(timeout), K(arg));
+    }
+    // 3. check result
+    ObArray<int> return_ret_array;
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(proxy.wait_all(return_ret_array))) { // ignore ret
+      LOG_WARN("wait batch result failed", KR(tmp_ret), KR(ret));
+      ret = OB_SUCC(ret) ? tmp_ret : ret;
+    } else if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(proxy.check_return_cnt(return_ret_array.count()))) {
+      LOG_WARN("return cnt not match", KR(ret), "return_cnt", return_ret_array.count());
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < return_ret_array.count(); i++) {
+        int return_ret = return_ret_array.at(i);
+        const ObAddr &addr = proxy.get_dests().at(i);
+        const ObInitTenantConfigRes *result = proxy.get_results().at(i);
+        if (OB_SUCCESS != return_ret) {
+          ret = return_ret;
+          LOG_WARN("rpc return error", KR(ret), K(addr), K(timeout));
+        } else if (OB_ISNULL(result)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get empty result", KR(ret), K(addr), K(timeout));
+        } else if (OB_SUCCESS != result->get_ret()) {
+          ret = result->get_ret();
+          LOG_WARN("persist tenant config failed", KR(ret), K(addr), K(timeout));
+        }
+      } // end for
     }
   }
   return ret;
@@ -442,11 +473,15 @@ int ObTenantDDLService::insert_tenant_merge_info_(
 
 int ObTenantDDLService::init(
     ObDDLService &ddl_service,
+    obrpc::ObSrvRpcProxy &rpc_proxy,
+    obrpc::ObCommonRpcProxy &common_rpc,
     common::ObMySQLProxy &sql_proxy,
     share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   ddl_service_ = &ddl_service;
+  rpc_proxy_ = &rpc_proxy;
+  common_rpc_ = &common_rpc;
   sql_proxy_ = &sql_proxy;
   schema_service_ = &schema_service;
   ddl_trans_controller_ = &schema_service.get_ddl_trans_controller();

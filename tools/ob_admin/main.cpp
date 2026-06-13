@@ -15,9 +15,9 @@
  */
 
 #include "dumpsst/ob_admin_dumpsst_executor.h"
+#include "lib/file/file_directory_utils.h"
 #include "io_bench/ob_admin_io_executor.h"
-// server_tool disabled (obrpc removed): #include "server_tool/ob_admin_server_executor.h"
-#include "backup_tool/ob_admin_dump_backup_data_executor.h"
+#include "server_tool/ob_admin_server_executor.h"
 #include "dump_enum_value/ob_admin_dump_enum_value_executor.h"
 #include "log_tool/ob_admin_log_tool_executor.h"
 #include "slog_tool/ob_admin_slog_executor.h"
@@ -36,7 +36,6 @@ void print_usage()
          "       ob_admin slog_tool\n"
          "       ob_admin dumpsst\n"
          "       ob_admin dump_enum_value\n"
-         "       ob_admin dump_backup\n"
          "       ob_admin log_tool ## './ob_admin log_tool' for more detail\n"
          "       ob_admin -h127.0.0.1 -p2883 xxx\n"
          "       ob_admin -h127.0.0.1 -p2883 (-sintl/-ssm -mbkmi/-mlocal) [command]\n"
@@ -136,8 +135,6 @@ int main(int argc, char *argv[])
       executor = new ObAdminDumpsstExecutor();
     } else if (0 == strcmp("log_tool", argv[1])) {
       executor = new ObAdminLogExecutor();
-    } else if (0 == strcmp("dump_backup", argv[1])) {
-      executor = new ObAdminDumpBackupDataExecutor();
     } else if (0 == strcmp("slog_tool", argv[1])) {
       executor = new ObAdminSlogExecutor();
     } else if (0 == strcmp("io_adapter_benchmark", argv[1])) {
@@ -148,6 +145,8 @@ int main(int argc, char *argv[])
       executor = new ObAdminObjectStorageDriverQualityExecutor();
     } else if (0 == strcmp("uncompress_plan", argv[1])) {
       executor = new ObAdminUncompressPlanExecutor();
+    } else if (0 == strncmp("-h", argv[1], 2) || 0 == strncmp("-S", argv[1], 2)) {
+      executor = new ObAdminServerExecutor();
     } else {
       print_usage();
     }

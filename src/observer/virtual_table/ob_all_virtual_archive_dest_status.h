@@ -18,7 +18,6 @@
 #define OCEANBASE_OBSERVER_OB_ALL_VIRTUAL_ARCHIVE_DEST_STATUS_H_
 
 #include "share/ob_virtual_table_projector.h"
-#include "share/backup/ob_backup_struct.h"
 
 namespace oceanbase
 {

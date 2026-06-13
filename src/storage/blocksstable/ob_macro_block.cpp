@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_macro_block.h"
-#include "storage/backup/ob_backup_data_struct.h"
 #include "storage/blocksstable/ob_macro_block_flusher.h"
 
 using namespace oceanbase::common;

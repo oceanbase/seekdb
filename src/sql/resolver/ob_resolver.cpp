@@ -132,6 +132,9 @@
 #include "sql/resolver/ddl/ob_alter_location_resolver.h"
 #include "sql/resolver/ddl/ob_drop_location_resolver.h"
 #include "sql/resolver/cmd/ob_location_utils_resolver.h"
+#ifdef OB_BUILD_SHARED_STORAGE
+#include "sql/resolver/cmd/ob_trigger_storage_cache_resolver.h"
+#endif
 #include "sql/resolver/cmd/ob_sys_dispatch_call_resolver.h"
 
 namespace oceanbase
@@ -341,6 +344,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(FlushDagWarnings);
         break;
       }
+#ifdef OB_BUILD_SHARED_STORAGE
+       case T_TRIGGER_STORAGE_CACHE: {
+        REGISTER_STMT_RESOLVER(TriggerStorageCache);
+        break;
+      }
+#endif
       case T_FLUSH_PRIVILEGES: 
       case T_INSTALL_PLUGIN:
       case T_UNINSTALL_PLUGIN:
@@ -869,12 +878,9 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(Trigger);
         break;
       }
-      case T_ARCHIVE_LOG: {
-        REGISTER_STMT_RESOLVER(ArchiveLog);
-        break;
-      }
+      case T_ARCHIVE_LOG:
       case T_BACKUP_DATABASE: {
-        REGISTER_STMT_RESOLVER(BackupDatabase);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case T_CANCEL_RESTORE: {
@@ -886,7 +892,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         break;
       }
       case T_BACKUP_CLUSTER_PARAMETERS: {
-        REGISTER_STMT_RESOLVER(BackupClusterParam);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case T_RECOVER_TABLE: {
@@ -905,36 +911,15 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(SwitchRole);
         break;
       }
-      case T_BACKUP_MANAGE: {
-        REGISTER_STMT_RESOLVER(BackupManage);
-        break;
-      }
-      case T_BACKUP_CLEAN: {
-        REGISTER_STMT_RESOLVER(BackupClean);
-        break;
-      }
-      case T_DELETE_POLICY: {
-        REGISTER_STMT_RESOLVER(DeletePolicy);
-        break;
-      }
-      case T_BACKUP_ARCHIVELOG: {
-        REGISTER_STMT_RESOLVER(BackupArchiveLog);
-        break;
-      }
-      case T_BACKUP_SET_ENCRYPTION: {
-        REGISTER_STMT_RESOLVER(BackupSetEncryption);
-        break;
-      }
-      case T_BACKUP_SET_DECRYPTION: {
-        REGISTER_STMT_RESOLVER(BackupSetDecryption);
-        break;
-      }
-      case T_ADD_RESTORE_SOURCE: {
-        REGISTER_STMT_RESOLVER(AddRestoreSource);
-        break;
-      }
+      case T_BACKUP_MANAGE:
+      case T_BACKUP_CLEAN:
+      case T_DELETE_POLICY:
+      case T_BACKUP_ARCHIVELOG:
+      case T_BACKUP_SET_ENCRYPTION:
+      case T_BACKUP_SET_DECRYPTION:
+      case T_ADD_RESTORE_SOURCE:
       case T_CLEAR_RESTORE_SOURCE: {
-        REGISTER_STMT_RESOLVER(ClearRestoreSource);
+        ret = OB_NOT_SUPPORTED;
         break;
       }
       case T_CREATE_RESTORE_POINT: {
@@ -1143,7 +1128,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       stmt::StmtType stmt_type = stmt->get_stmt_type();
       if (ObStmt::is_ddl_stmt(stmt_type, stmt->has_global_variable()) || ObStmt::is_dcl_stmt(stmt_type)) {
         ObDDLStmt *ddl_stmt = static_cast<ObDDLStmt*>(stmt);
-        obcall::ObDDLArg &ddl_arg = ddl_stmt->get_ddl_arg();
+        obrpc::ObDDLArg &ddl_arg = ddl_stmt->get_ddl_arg();
         ddl_arg.exec_tenant_id_ = params_.session_info_->get_effective_tenant_id();
         if (OB_ISNULL(params_.query_ctx_)) {
           ret = OB_ERR_UNEXPECTED;

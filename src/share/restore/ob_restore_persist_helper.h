@@ -18,6 +18,7 @@
 #define OCEANBASE_SHARE_OB_RESTORE_PERSIST_HELPER_H_
 
 #include "common/ob_role.h"
+#include "share/backup/ob_backup_struct.h"
 #include "share/ob_define.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_delegate.h"
@@ -25,7 +26,6 @@
 #include "share/restore/ob_ls_restore_status.h"
 #include "share/restore/ob_restore_type.h"
 #include "share/scn.h"
-#include "share/backup/ob_backup_struct.h"
 
 namespace oceanbase
 {
@@ -515,10 +515,6 @@ public:
 
   int move_ls_restore_progress_to_history(common::ObMySQLTransaction &trans) const;
   int record_restore_info(common::ObMySQLTransaction &trans) const;
-  int get_backup_dest_list_from_restore_info(
-      common::ObISQLClient &proxy, 
-      int64_t &job_id, 
-      ObPhysicalRestoreBackupDestList &backup_dest_list) const;
 
   int set_ls_total_bytes(
       common::ObISQLClient &proxy, const ObLSRestoreJobPersistKey &ls_key,

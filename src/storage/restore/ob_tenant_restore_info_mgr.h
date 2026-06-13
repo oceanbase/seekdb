@@ -19,7 +19,6 @@
 
 #include "lib/lock/ob_mutex.h"
 #include "lib/task/ob_timer.h"
-#include "share/backup/ob_backup_struct.h"
 
 namespace oceanbase
 {
@@ -41,12 +40,9 @@ public:
 
   int refresh_restore_info();
   bool is_refreshed() const { return is_refreshed_; }
-  int get_backup_dest(const int64_t backup_set_id, share::ObBackupDest &backup_dest);
-  int get_backup_type(const int64_t backup_set_id, share::ObBackupType &backup_type);
   int get_restore_dest_id(int64_t &dest_id);
 
 private:
-  int get_restore_backup_set_brief_info_(const int64_t backup_set_id, int64_t &idx);
   void set_refreshed_() { is_refreshed_ = true; }
 
 private:
@@ -70,7 +66,6 @@ private:
   bool is_refreshed_;
   uint64_t tenant_id_;
   int64_t restore_job_id_;
-  common::ObArray<share::ObRestoreBackupSetBriefInfo> backup_set_list_;
   int64_t dest_id_;
 };
 

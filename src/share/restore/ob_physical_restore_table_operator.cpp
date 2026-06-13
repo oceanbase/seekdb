@@ -287,29 +287,6 @@ int ObPhysicalRestoreTableOperator::fill_dml_splicer(
      }
 
 
-    if (OB_SUCC(ret)) {
-      ObArenaAllocator allocator;
-      ObString backup_set_list;
-      ObString backup_set_desc_list;
-      ObString backup_piece_list;
-      ObString log_path_list;
-      const ObPhysicalRestoreBackupDestList &dest_list = job_info.get_multi_restore_path_list();
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(dest_list.get_backup_set_list_format_str(allocator, backup_set_list))) {
-        LOG_WARN("fail to get format str", KR(ret), K(dest_list));
-      } else if (OB_FAIL(dest_list.get_backup_set_desc_list_format_str(allocator, backup_set_desc_list))) {
-        LOG_WARN("fail to get format str", KR(ret), K(dest_list));
-      } else if (OB_FAIL(dest_list.get_backup_piece_list_format_str(allocator, backup_piece_list))) {
-        LOG_WARN("fail to get format str", KR(ret), K(dest_list));
-      } else if (OB_FAIL(dest_list.get_log_path_list_format_str(allocator, log_path_list))) {
-        LOG_WARN("fail to get format str", KR(ret), K(dest_list));
-      } else {
-        ADD_COLUMN_WITH_VALUE(job_info, backup_set_list, backup_set_list); 
-        ADD_COLUMN_WITH_VALUE(job_info, backup_set_desc_list, backup_set_desc_list); 
-        ADD_COLUMN_WITH_VALUE(job_info, backup_piece_list, backup_piece_list); 
-        ADD_COLUMN_WITH_VALUE(job_info, log_path_list, log_path_list);
-      }
-    }
 
 #undef ADD_COLUMN_MACRO_IN_TABLE_OPERATOR
 #undef ADD_COLUMN_WITH_VALUE
@@ -555,49 +532,6 @@ int ObPhysicalRestoreTableOperator::retrieve_restore_option(
       }
     }
 
-    if (OB_SUCC(ret)) {
-      if (name == OB_STR_BACKUP_SET_LIST) {
-        ObString str;
-        EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "value", str);
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(job.get_multi_restore_path_list().backup_set_list_assign_with_format_str(str))) {
-          LOG_WARN("fail to assign backup set list", KR(ret), K(str));
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (name == "backup_set_desc_list") {
-        ObString str;
-        EXTRACT_VARCHAR_FIELD_MYSQL(result, "value", str);
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(job.get_multi_restore_path_list().backup_set_desc_list_assign_with_format_str(str))) {
-          LOG_WARN("fail to assign backup set list", KR(ret), K(str));
-        } 
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (name == OB_STR_BACKUP_PIECE_LIST) {
-        ObString str;
-        EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "value", str);
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(job.get_multi_restore_path_list().backup_piece_list_assign_with_format_str(str))) {
-          LOG_WARN("fail to assign backup piece list", KR(ret), K(str));
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (name == OB_STR_LOG_PATH_LIST) {
-        ObString str;
-        EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "value", str);
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(job.get_multi_restore_path_list().log_path_list_assign_with_format_str(str))) {
-          LOG_WARN("fail to assign log path list", KR(ret), K(str));
-        }
-      }
-    }
 
     if (OB_SUCC(ret)) {
       if (name == "b_white_list") {

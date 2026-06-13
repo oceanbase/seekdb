@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 #include "ob_io_define.h"
 #include "share/io/ob_io_manager.h"
-#include "storage/backup/ob_backup_factory.h"
+#include "lib/restore/ob_object_device.h"
 #include "src/storage/ob_file_system_router.h"
 #include "src/observer/ob_server.h"
 using namespace oceanbase::lib;
@@ -528,6 +528,57 @@ ObSNIOInfo &ObSNIOInfo::operator=(const ObSNIOInfo &other)
 
 
 /******************             S2IOInfo              **********************/
+#ifdef OB_BUILD_SHARED_STORAGE
+ObSSIOInfo::ObSSIOInfo() : ObSNIOInfo(), phy_block_handle_(), fd_cache_handle_(), tmp_file_valid_length_(0)
+{
+}
+
+ObSSIOInfo::ObSSIOInfo(const ObSSIOInfo &other)
+{
+  *this = other;
+}
+
+ObSSIOInfo::~ObSSIOInfo()
+{
+}
+
+void ObSSIOInfo::reset()
+{
+  ObSNIOInfo::reset();
+  phy_block_handle_.reset();
+  fd_cache_handle_.reset();
+  tmp_file_valid_length_ = 0;
+}
+
+ObSSIOInfo &ObSSIOInfo::operator=(const ObSSIOInfo &other)
+{
+  int ret = OB_SUCCESS;
+  if (&other != this) {
+    reset();
+    tenant_id_ = other.tenant_id_;
+    fd_ = other.fd_;
+    offset_ = other.offset_;
+    size_ = other.size_;
+    timeout_us_ = other.timeout_us_;
+    flag_ = other.flag_;
+    callback_ = other.callback_;
+    buf_ = other.buf_;
+    user_data_buf_ = other.user_data_buf_;
+    part_id_ = other.part_id_;
+    tmp_file_valid_length_ = other.tmp_file_valid_length_;
+    // ignore ret, cuz assign fails only when other.phy_block_handle_/fd_cache_handle_ is invalid.
+    // in case when other.phy_block_handle_/fd_cache_handle_ is invalid, ret is unnecessary.
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(phy_block_handle_.assign(other.phy_block_handle_))) {
+      LOG_WARN("fail to assign phy block handle", KR(tmp_ret), KPC(this), K(other));
+    }
+    if (OB_TMP_FAIL(fd_cache_handle_.assign(other.fd_cache_handle_))) {
+      LOG_WARN("fail to assign fd cache handle", KR(tmp_ret), KPC(this), K(other));
+    }
+  }
+  return (*this);
+}
+#endif
 
 /******************             IOTimeLog              **********************/
 
@@ -874,17 +925,14 @@ void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
           }
         }
         tenant_io_mgr_->io_func_infos_.accumulate(*req);
-        // do not detect backup io
-        if (!req->fd_.is_backup_block_file()) {
-          // record io error
-          if (OB_UNLIKELY(OB_IO_ERROR == ret_code_.io_ret_)) {
-            OB_IO_MANAGER.get_device_health_detector().record_io_error(*this, *req); 
-          }
-          // record timeout
-          if (OB_UNLIKELY(ObTimeUtility::current_time() > req->timeout_ts())) {
-            OB_IO_MANAGER.get_device_health_detector().record_io_timeout(*this, *req);
-          }
-	      }
+        // record io error
+        if (OB_UNLIKELY(OB_IO_ERROR == ret_code_.io_ret_)) {
+          OB_IO_MANAGER.get_device_health_detector().record_io_error(*this, *req);
+        }
+        // record timeout
+        if (OB_UNLIKELY(ObTimeUtility::current_time() > req->timeout_ts())) {
+          OB_IO_MANAGER.get_device_health_detector().record_io_timeout(*this, *req);
+        }
       }
       if (OB_FAIL(guard.get_ret())) {
         LOG_ERROR("lock io result condition failed", K(ret), K(*this));
@@ -1095,11 +1143,6 @@ void ObIORequest::reset() //only for test, not dec resut_ref
 {
   int ret = OB_SUCCESS;
   retry_count_ = 0;
-  // only read need destroy here
-  // TODO(yanfeng): works now, need refactor
-  if (fd_.is_backup_block_file() && nullptr != io_result_ && io_result_->flag_.is_read()) {
-    backup::ObLSBackupFactory::free(static_cast<backup::ObBackupWrapperIODevice *>(fd_.device_handle_));
-  }
   if (nullptr != control_block_ && nullptr != fd_.device_handle_) {
     fd_.device_handle_->free_iocb(control_block_);
     control_block_ = nullptr;
@@ -1402,9 +1445,7 @@ int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offs
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("io result is null", K(ret));
   } else {
-    if (fd_.is_backup_block_file()) {
-      // ignore
-    } else if (io_result_->flag_.is_read()) {
+    if (io_result_->flag_.is_read()) {
       if (OB_FAIL(fd_.device_handle_->io_prepare_pread(
               fd_,
               io_buf,

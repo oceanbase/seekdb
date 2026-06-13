@@ -17,13 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/cmd/ob_alter_system_executor.h"
-#include "rootserver/ob_rs_serial_call.h"
-#include "observer/ob_ex_rpc.h"
-#include "share/io/ob_io_manager.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "observer/ob_server.h"
-#include "share/table/ob_ttl_util.h"
 #include "rootserver/standby/ob_standby_service.h" // ObStandbyService
 #include "sql/resolver/cmd/ob_switch_role_stmt.h" // ObSwitchRoleStmt
 #include "share/scheduler/ob_dag_warning_history_mgr.h"
@@ -33,7 +27,6 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 
 #include "rootserver/ob_tenant_event_def.h"
-#include "rootserver/backup/ob_backup_param_operator.h" // ObBackupParamOperator
 #include "share/table/ob_redis_importer.h"
 #include "share/ob_timezone_importer.h"
 #include "share/ob_srs_importer.h"
@@ -42,7 +35,7 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 using namespace omt;
 using namespace obmysql;
@@ -53,9 +46,16 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
+
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
+  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
+    LOG_WARN("get common rpc proxy failed", K(ret));
+  } else if (OB_ISNULL(common_rpc_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("common_rpc_proxy is null", K(ret));
   } else {
     if (!stmt.is_major_freeze()) {
       const uint64_t local_tenant_id = MTL_ID();
@@ -134,8 +134,9 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(GCTX.root_service_->root_minor_freeze(arg))) {
-          LOG_WARN("minor freeze failed", K(arg), K(ret), "dst", GCTX.self_addr());
+        int64_t timeout = THIS_WORKER.get_timeout_remain();
+        if (OB_FAIL(common_rpc_proxy->timeout(timeout).root_minor_freeze(arg))) {
+          LOG_WARN("minor freeze rpc failed", K(arg), K(ret), K(timeout), "dst", common_rpc_proxy->get_server());
         }
       }
     } else if (stmt.get_tablet_id().is_valid()) {
@@ -156,6 +157,7 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
       param.freeze_all_ = stmt.is_freeze_all();
       param.freeze_all_user_ = stmt.is_freeze_all_user();
       param.freeze_all_meta_ = stmt.is_freeze_all_meta();
+      param.transport_ = GCTX.net_frame_->get_req_transport();
       param.freeze_reason_ = rootserver::MF_USER_REQUEST;
       for (int64_t i = 0; i < stmt.get_tenant_ids().count() && OB_SUCC(ret); ++i) {
         uint64_t tenant_id = stmt.get_tenant_ids().at(i);
@@ -442,7 +444,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       }
       //case CACHE_TYPE_BALANCE: {
       //  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-      //  ObCommonRpcProxy *common_rpc_proxy = NULL;
+      //  obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
 
       //  if (OB_ISNULL(task_exec_ctx)) {
       //    ret = OB_NOT_INIT;
@@ -483,12 +485,16 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
     }
   } else { // flush global
     ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+    obrpc::ObCommonRpcProxy *common_rpc = NULL;
     if (OB_ISNULL(task_exec_ctx)) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed");
-    } else if (OB_FAIL(GCTX.root_service_->admin_flush_cache(
+    } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+    } else if (OB_FAIL(common_rpc->admin_flush_cache(
                            stmt.flush_cache_arg_))) {
-      LOG_WARN("flush cache failed", K(ret), "rpc_arg", stmt.flush_cache_arg_);
+      LOG_WARN("flush cache rpc failed", K(ret), "rpc_arg", stmt.flush_cache_arg_);
     }
   }
   return ret;
@@ -499,9 +505,13 @@ int ObFlushKVCacheExecutor::execute(ObExecContext &ctx, ObFlushKVCacheStmt &stmt
   UNUSED(stmt);
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
   } else {
     share::schema::ObSchemaGetterGuard schema_guard;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
@@ -561,7 +571,7 @@ int ObFlushIlogCacheExecutor::execute(ObExecContext &ctx, ObFlushIlogCacheStmt &
   UNUSEDx(ctx, stmt);
   int ret = OB_NOT_SUPPORTED;
   // ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  // ObCommonRpcProxy *common_rpc = NULL;
+  // obrpc::ObCommonRpcProxy *common_rpc = NULL;
   // if (OB_ISNULL(task_exec_ctx)) {
   //   ret = OB_NOT_INIT;
   //   LOG_WARN("get task executor context failed");
@@ -597,9 +607,13 @@ int ObFlushDagWarningsExecutor::execute(ObExecContext &ctx, ObFlushDagWarningsSt
   UNUSED(stmt);
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task exec ctx error", K(ret), KP(task_exec_ctx));
   } else {
     MTL(ObDagWarningHistoryManager *)->clear();
   }
@@ -610,12 +624,16 @@ int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  const ObAdminMergeArg &arg = stmt.get_rpc_arg();
+  const obrpc::ObAdminMergeArg &arg = stmt.get_rpc_arg();
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_merge(arg))) {
-    LOG_WARN("admin merge failed", K(ret), "rpc_arg", arg);
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_merge(arg))) {
+    LOG_WARN("admin merge rpc failed", K(ret), "rpc_arg", arg);
   }
   return ret;
 }
@@ -624,12 +642,16 @@ int ObAdminRecoveryExecutor::execute(ObExecContext &ctx, ObAdminRecoveryStmt &st
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_recovery(
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_recovery(
                          stmt.get_rpc_arg()))) {
-    LOG_WARN("admin recovery failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+    LOG_WARN("admin merge rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -638,12 +660,16 @@ int ObClearRoottableExecutor::execute(ObExecContext &ctx, ObClearRoottableStmt &
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_clear_roottable(
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_clear_roottable(
                          stmt.get_rpc_arg()))) {
-    LOG_WARN("clear roottable failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+    LOG_WARN("clear roottable rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -652,12 +678,16 @@ int ObRefreshSchemaExecutor::execute(ObExecContext &ctx, ObRefreshSchemaStmt &st
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_refresh_schema(
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_refresh_schema(
                          stmt.get_rpc_arg()))) {
-    LOG_WARN("refresh schema failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+    LOG_WARN("refresh schema rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -666,12 +696,16 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
-    LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+    LOG_WARN("refresh memory stat rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -680,12 +714,16 @@ int ObWashMemFragmentationExecutor::execute(ObExecContext &ctx, ObWashMemFragmen
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_wash_memory_fragmentation(
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_wash_memory_fragmentation(
                          stmt.get_rpc_arg()))) {
-    LOG_WARN("wash memory fragmentation failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+    LOG_WARN("sync wash fragment rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -694,11 +732,15 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_refresh_io_calibration(stmt.get_rpc_arg()))) {
-    LOG_WARN("refresh io calibration failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_refresh_io_calibration(stmt.get_rpc_arg()))) {
+    LOG_WARN("refresh io calibration rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -725,10 +767,18 @@ int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 int ObChangeExternalStorageDestExecutor::execute(ObExecContext &ctx, ObChangeExternalStorageDestStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ex_rpc::sync_call([&]{
-    return GCTX.ob_service_->change_external_storage_dest(stmt.get_rpc_arg());
-  }))) {
-    LOG_WARN("change external storage dest failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObSrvRpcProxy *svr_rpc = NULL;
+  if (OB_ISNULL(task_exec_ctx)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task executor context failed");
+  } else if (OB_ISNULL(svr_rpc = task_exec_ctx->get_srv_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get svr rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(svr_rpc->change_external_storage_dest(stmt.get_rpc_arg()))) {
+    LOG_WARN("set config rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  } else {
+    LOG_INFO("change external storage dest rpc", K(stmt.get_rpc_arg()));
   }
   return ret;
 }
@@ -754,12 +804,16 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
 	int ret = OB_SUCCESS;
 	UNUSED(stmt);
 	ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  const ObAdminMergeArg &arg = stmt.get_rpc_arg();
+  const obrpc::ObAdminMergeArg &arg = stmt.get_rpc_arg();
+	obrpc::ObCommonRpcProxy *common_rpc = NULL;
 	if (OB_ISNULL(task_exec_ctx)) {
 		ret = OB_NOT_INIT;
 		LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(GCTX.root_service_->admin_clear_merge_error(arg))) {
-		LOG_WARN("clear merge error failed", K(ret), "rpc_arg", arg);
+	} else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+		ret = OB_NOT_INIT;
+		LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->admin_clear_merge_error(arg))) {
+		LOG_WARN("clear merge error rpc failed", K(ret), "rpc_arg", arg);
 	}
   return ret;
 }
@@ -770,11 +824,16 @@ int ObUpgradeVirtualSchemaExecutor ::execute(
   int ret = OB_SUCCESS;
   UNUSED(stmt);
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
+  int64_t timeout = THIS_WORKER.get_timeout_remain();
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->admin_upgrade_virtual_schema(); }))) {
-    LOG_WARN("upgrade virtual schema failed", K(ret));
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->timeout(timeout).admin_upgrade_virtual_schema())) {
+    LOG_WARN("upgrade virtual schema rpc failed", K(ret));
   }
   return ret;
 }
@@ -782,21 +841,26 @@ int ObUpgradeVirtualSchemaExecutor ::execute(
 int ObAdminUpgradeCmdExecutor::execute(ObExecContext &ctx, ObAdminUpgradeCmdStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  Bool upgrade = true;
+  obrpc::Bool upgrade = true;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
+  int64_t timeout = THIS_WORKER.get_timeout_remain();
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
   } else {
     if (ObAdminUpgradeCmdStmt::BEGIN == stmt.get_op()) {
       upgrade = true;
-      if (OB_FAIL(GCTX.root_service_->admin_upgrade_cmd(upgrade))) {
-        LOG_WARN("begin upgrade failed", K(ret));
+      if (OB_FAIL(common_rpc->timeout(timeout).admin_upgrade_cmd(upgrade))) {
+        LOG_WARN("begin upgrade rpc failed", K(ret));
       }
     } else if (ObAdminUpgradeCmdStmt::END == stmt.get_op()) {
       upgrade = false;
-      if (OB_FAIL(GCTX.root_service_->admin_upgrade_cmd(upgrade))) {
-        LOG_WARN("end upgrade failed", K(ret));
+      if (OB_FAIL(common_rpc->timeout(timeout).admin_upgrade_cmd(upgrade))) {
+        LOG_WARN("end upgrade rpc failed", K(ret));
       }
     }
   }
@@ -807,20 +871,25 @@ int ObAdminRollingUpgradeCmdExecutor::execute(ObExecContext &ctx, ObAdminRolling
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
+  int64_t timeout = THIS_WORKER.get_timeout_remain();
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
   } else {
     ObAdminRollingUpgradeArg arg;
     if (ObAdminRollingUpgradeCmdStmt::BEGIN == stmt.get_op()) {
-      arg.stage_ = OB_UPGRADE_STAGE_DBUPGRADE;
-      if (OB_FAIL(GCTX.root_service_->admin_rolling_upgrade_cmd(arg))) {
-        LOG_WARN("begin upgrade failed", K(ret));
+      arg.stage_ = obrpc::OB_UPGRADE_STAGE_DBUPGRADE;
+      if (OB_FAIL(common_rpc->timeout(timeout).admin_rolling_upgrade_cmd(arg))) {
+        LOG_WARN("begin upgrade rpc failed", K(ret));
       }
     } else if (ObAdminRollingUpgradeCmdStmt::END == stmt.get_op()) {
-      arg.stage_ = OB_UPGRADE_STAGE_POSTUPGRADE;
-      if (OB_FAIL(GCTX.root_service_->admin_rolling_upgrade_cmd(arg))) {
-        LOG_WARN("end upgrade failed", K(ret));
+      arg.stage_ = obrpc::OB_UPGRADE_STAGE_POSTUPGRADE;
+      if (OB_FAIL(common_rpc->timeout(timeout).admin_rolling_upgrade_cmd(arg))) {
+        LOG_WARN("end upgrade rpc failed", K(ret));
       }
     }
   }
@@ -832,12 +901,17 @@ int ObRunUpgradeJobExecutor::execute(
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  int64_t timeout = THIS_WORKER.get_timeout_remain();
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->run_upgrade_job(
-                         stmt.get_rpc_arg()); }))) {
-    LOG_WARN("run upgrade job failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->timeout(timeout).run_upgrade_job(
+                         stmt.get_rpc_arg()))) {
+    LOG_WARN("run job rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -847,12 +921,17 @@ int ObStopUpgradeJobExecutor::execute(
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  int64_t timeout = THIS_WORKER.get_timeout_remain();
+  obrpc::ObCommonRpcProxy *common_rpc = NULL;
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->run_upgrade_job(
-                         stmt.get_rpc_arg()); }))) {
-    LOG_WARN("run upgrade job failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(common_rpc->timeout(timeout).run_upgrade_job(
+                         stmt.get_rpc_arg()))) {
+    LOG_WARN("run job rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -930,22 +1009,41 @@ int ObDisableSqlThrottleExecutor::execute(ObExecContext &ctx, ObDisableSqlThrott
 int ObCancelTaskExecutor::execute(ObExecContext &ctx, ObCancelTaskStmt &stmt)
 {
   int ret = OB_SUCCESS;
+  ObAddr task_server;
   share::ObTaskId task_id;
+  bool is_local_task = false;
 
-  LOG_INFO("cancel sys task log",
-           K(stmt.get_task_id()), K(stmt.get_task_type()), K(stmt.get_cmd_type()));
+	LOG_INFO("cancel sys task log",
+		       K(stmt.get_task_id()), K(stmt.get_task_type()), K(stmt.get_cmd_type()));
 
-  if (NULL == GCTX.ob_service_) {
-    ret = OB_ERR_SYS;
-    LOG_ERROR("GCTX must not inited", K(ret), KP(GCTX.ob_service_));
-  } else if (OB_FAIL(parse_task_id(stmt.get_task_id(), task_id))) {
-    LOG_WARN("failed to parse task id", K(ret), K(stmt.get_task_id()));
-  } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return GCTX.ob_service_->cancel_sys_task(task_id);
-  }))) {
-    LOG_WARN("failed to cancel sys task", K(ret), K(task_id));
-  }
-  return ret;
+	if (NULL == GCTX.ob_service_ || NULL == GCTX.srv_rpc_proxy_) {
+		ret = OB_ERR_SYS;
+		LOG_ERROR("GCTX must not inited", K(ret), KP(GCTX.srv_rpc_proxy_), KP(GCTX.ob_service_));
+	} else if (OB_FAIL(parse_task_id(stmt.get_task_id(), task_id))) {
+		LOG_WARN("failed to parse task id", K(ret), K(stmt.get_task_id()));
+	} else if (OB_FAIL(SYS_TASK_STATUS_MGR.task_exist(task_id, is_local_task))) {
+		LOG_WARN("failed to check is local task", K(ret), K(task_id));
+	} else if (is_local_task) {
+		if (OB_FAIL(GCTX.ob_service_->cancel_sys_task(task_id))) {
+		  LOG_WARN("failed to cancel sys task at local", K(ret), K(task_id));
+      }
+	} else {
+		if (OB_FAIL(fetch_sys_task_info(ctx, stmt.get_task_id(), task_server))) {
+		  LOG_WARN("failed to fetch sys task info", K(ret));
+    } else if (!task_server.is_valid() || task_id.is_invalid()) {
+		  ret = OB_INVALID_ARGUMENT;
+		  LOG_WARN("invalid task info", K(ret), K(task_server), K(task_id));
+		} else {
+		  obrpc::ObCancelTaskArg rpc_arg;
+		  rpc_arg.task_id_ = task_id;
+		  if (OB_FAIL(GCTX.srv_rpc_proxy_->to(task_server).cancel_sys_task(rpc_arg))) {
+			LOG_WARN("failed to cancel remote sys task", K(ret), K(task_server), K(rpc_arg));
+		  } else {
+			LOG_INFO("succeed to cancel sys task at remote", K(task_server), K(rpc_arg));
+		  }
+		}
+	}
+	return ret;
 }
 
 int ObCancelTaskExecutor::fetch_sys_task_info(
@@ -1038,10 +1136,24 @@ int ObCancelTaskExecutor::parse_task_id(
 int ObSetDiskValidExecutor::execute(ObExecContext &ctx, ObSetDiskValidStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  LOG_INFO("set_disk_valid", "server", stmt.server_);
-  if (OB_FAIL(ex_rpc::sync_call([]{ return ObIOManager::get_instance().reset_device_health(); }))) {
-    LOG_WARN("set_disk_valid failed", K(ret));
+  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = NULL;
+  ObAddr server = stmt.server_;
+  ObSetDiskValidArg arg;
+
+  LOG_INFO("set_disk_valid", K(server));
+  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task executor failed");
+  } else if (OB_ISNULL(srv_rpc_proxy = task_exec_ctx->get_srv_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get srv rpc proxy failed");
+  } else if (OB_FAIL(srv_rpc_proxy->to(GCTX.self_addr()).set_disk_valid(arg))) {
+    LOG_WARN("rpc proxy set_disk_valid failed", K(ret));
+  } else {
+    LOG_INFO("set_disk_valid success", K(server));
   }
+
   return ret;
 }
 
@@ -1049,11 +1161,18 @@ int ObAddDiskExecutor::execute(ObExecContext &ctx, ObAddDiskStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = NULL;
+
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(ex_rpc::sync_call([]{ return OB_NOT_SUPPORTED; }))) {
-    LOG_WARN("add_disk failed", K(ret), "arg", stmt.arg_);
+  } else if (OB_ISNULL(srv_rpc_proxy = task_exec_ctx->get_srv_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get server rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(srv_rpc_proxy->to(stmt.arg_.server_).add_disk(stmt.arg_))) {
+    LOG_WARN("failed to send add disk rpc", K(ret), "arg", stmt.arg_);
+  } else {
+    FLOG_INFO("succeed to send add disk rpc", "arg", stmt.arg_);
   }
   return ret;
 }
@@ -1062,432 +1181,53 @@ int ObDropDiskExecutor::execute(ObExecContext &ctx, ObDropDiskStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(ex_rpc::sync_call([]{ return OB_NOT_SUPPORTED; }))) {
-    LOG_WARN("drop_disk failed", K(ret), "arg", stmt.arg_);
-  }
-  return ret;
-}
-
-int ObArchiveLogExecutor::execute(ObExecContext &ctx, ObArchiveLogStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  common::ObCurTraceId::mark_user_request();
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else {
-    FLOG_INFO("ObArchiveLogExecutor::execute", K(stmt), K(ctx));
-    ObArchiveLogArg arg;
-    arg.enable_ = stmt.is_enable();
-    arg.tenant_id_ = stmt.get_tenant_id();
-    if (OB_FAIL(arg.archive_tenant_ids_.assign(stmt.get_archive_tenant_ids()))) {
-      LOG_WARN("failed to assign archive tenant ids", K(ret), K(stmt));
-    } else if (OB_FAIL(GCTX.root_service_->handle_archive_log(arg))) {
-      LOG_WARN("archive_tenant failed", K(ret), K(arg), "dst", GCTX.self_addr());
-    }
-  }
-  return ret;
-}
-
-int ObBackupDatabaseExecutor::execute(ObExecContext &ctx, ObBackupDatabaseStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  ObSQLSessionInfo *session_info = ctx.get_my_session();
-  common::ObCurTraceId::mark_user_request();
-  ObString passwd;
-  ObObj value;
-  ObBackupDatabaseArg arg;
-  // rs will attempt to update the schema_version of the freeze point every 5s
-  const int64_t SECOND = 1* 1000 * 1000; //1s
-  const int64_t MAX_RETRY_NUM = UPDATE_SCHEMA_ADDITIONAL_INTERVAL / SECOND + 1;
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(session_info)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info must not null", K(ret));
-  } else if (!session_info->user_variable_exists(OB_BACKUP_ENCRYPTION_MODE_SESSION_STR)) {
-    arg.encryption_mode_ = ObBackupEncryptionMode::NONE;
-    arg.passwd_.reset();
-    LOG_INFO("no backup encryption mode is specified", K(stmt));
-  } else {
-    if (OB_FAIL(session_info->get_user_variable_value(OB_BACKUP_ENCRYPTION_MODE_SESSION_STR,
-        value))) {
-      LOG_WARN("failed to get encryption mode", K(ret));
-    } else if (FALSE_IT(arg.encryption_mode_ = ObBackupEncryptionMode::parse_str(value.get_varchar()))) {
-    } else if (!ObBackupEncryptionMode::is_valid(arg.encryption_mode_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid mode", K(ret), K(arg), K(value));
-    } else if (OB_FAIL(session_info->get_user_variable_value(OB_BACKUP_ENCRYPTION_PASSWD_SESSION_STR,
-        value))) {
-      LOG_WARN("failed to get passwd", K(ret));
-    } else if (OB_FAIL(arg.passwd_.assign(value.get_varchar()))) {
-      LOG_WARN("failed to assign passwd", K(ret));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(arg.backup_dest_.assign(stmt.get_backup_dest()))) {
-    LOG_WARN("failed to assign backup dest", K(ret));
-  } else if (OB_FAIL(arg.backup_tenant_ids_.assign(stmt.get_backup_tenant_ids()))) {
-    LOG_WARN("failed to assign backup tenant ids", K(ret));
-  } else if (OB_FAIL(arg.backup_description_.assign(stmt.get_backup_description()))) {
-    LOG_WARN("failed to assign backup description", K(ret));
-  } else {
-    arg.tenant_id_ = stmt.get_tenant_id();
-    arg.is_incremental_ = stmt.get_incremental();
-    arg.is_compl_log_ = stmt.get_compl_log();
-    arg.initiator_tenant_id_ = stmt.get_tenant_id();
-    LOG_INFO("ObBackupDatabaseExecutor::execute", K(stmt), K(arg), K(ctx));
-
-    if (!arg.is_valid()) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid args", K(ret), K(arg));
-    } else {
-      int32_t retry_cnt = 0;
-      while (retry_cnt < MAX_RETRY_NUM) {
-        ret = OB_SUCCESS;
-        if (OB_FAIL(GCTX.root_service_->handle_backup_database(arg))) {
-          if (OB_EAGAIN == ret) {
-            LOG_WARN("backup_database rpc failed, need retry", K(ret), K(arg),
-                "dst", GCTX.self_addr(), "retry_cnt", retry_cnt);
-            ob_usleep(SECOND); //1s
-          } else {
-            LOG_WARN("backup_database rpc failed", K(ret), K(arg), "dst", GCTX.self_addr());
-            break;
-          }
-        } else {
-          break;
-        }
-        ++retry_cnt;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObBackupManageExecutor::execute(ObExecContext &ctx, ObBackupManageStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  common::ObCurTraceId::mark_user_request();
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = NULL;
 
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else {
-    LOG_INFO("ObBackupManageExecutor::execute", K(stmt), K(ctx));
-    ObBackupManageArg arg;
-    arg.tenant_id_ = stmt.get_tenant_id();
-    arg.type_ = stmt.get_type();
-    arg.value_ = stmt.get_value();
-    arg.copy_id_ = stmt.get_copy_id();
-    if (OB_FAIL(append(arg.managed_tenant_ids_, stmt.get_managed_tenant_ids()))) {
-      LOG_WARN("failed to append managed tenants", K(ret), K(stmt));
-    } else if (OB_FAIL(GCTX.root_service_->handle_backup_manage(arg))) {
-      LOG_WARN("backup_manage failed", K(ret), K(arg), "dst", GCTX.self_addr());
-    }
-  }
-  return ret;
-}
-
-int ObBackupCleanExecutor::execute(ObExecContext &ctx, ObBackupCleanStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  common::ObCurTraceId::mark_user_request();
-
-  if (OB_ISNULL(task_exec_ctx)) {
+  } else if (OB_ISNULL(srv_rpc_proxy = task_exec_ctx->get_srv_rpc())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
+    LOG_WARN("get server rpc proxy failed", K(task_exec_ctx));
+  } else if (OB_FAIL(srv_rpc_proxy->to(stmt.arg_.server_).drop_disk(stmt.arg_))) {
+    LOG_WARN("failed to send drop disk rpc", K(ret), "arg", stmt.arg_);
   } else {
-    LOG_INFO("ObBackupCleanExecutor::execute", K(stmt), K(ctx));
-    ObBackupCleanArg arg;
-    arg.initiator_tenant_id_ = stmt.get_tenant_id();
-    arg.type_ = stmt.get_type();
-    arg.value_ = stmt.get_value();
-    arg.dest_id_ = stmt.get_copy_id();
-    if (OB_FAIL(arg.description_.assign(stmt.get_description()))) {
-      LOG_WARN("set clean description failed", K(ret));
-    } else if (OB_FAIL(arg.clean_tenant_ids_.assign(stmt.get_clean_tenant_ids()))) {
-      LOG_WARN("set clean tenant ids failed", K(ret));
-    } else if (OB_FAIL(GCTX.root_service_->handle_backup_delete(arg))) {
-      LOG_WARN("backup clean failed", K(ret), K(arg), "dst", GCTX.self_addr());
-    }
-  }
-  FLOG_INFO("ObBackupCleanExecutor::execute");
-  return ret;
-}
-
-int ObDeletePolicyExecutor::execute(ObExecContext &ctx, ObDeletePolicyStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  common::ObCurTraceId::mark_user_request();
-
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else {
-    LOG_INFO("ObDeletePolicyExecutor::execute", K(stmt), K(ctx));
-    ObDeletePolicyArg arg;
-    arg.initiator_tenant_id_ = stmt.get_tenant_id();
-    arg.type_ = stmt.get_type();
-    arg.redundancy_ = stmt.get_redundancy();
-    arg.backup_copies_ = stmt.get_backup_copies();
-    if (OB_FAIL(databuff_printf(arg.policy_name_, sizeof(arg.policy_name_), "%s", stmt.get_policy_name()))) {
-      LOG_WARN("failed to set policy name", K(ret), K(stmt));
-    } else if (OB_FAIL(databuff_printf(arg.recovery_window_, sizeof(arg.recovery_window_), "%s", stmt.get_recovery_window()))) {
-      LOG_WARN("failed to set recovery window", K(ret), K(stmt));
-    } else if (OB_FAIL(arg.clean_tenant_ids_.assign(stmt.get_clean_tenant_ids()))) {
-      LOG_WARN("set clean tenant ids failed", K(ret));
-    } else if (OB_FAIL(GCTX.root_service_->handle_delete_policy(arg))) {
-      LOG_WARN("delete policy failed", K(ret), K(arg), "dst", GCTX.self_addr());
-    }
-  }
-  FLOG_INFO("ObDeletePolicyExecutor::execute");
-  return ret;
-}
-
-int ObBackupClusterParamExecutor::execute(ObExecContext &ctx, ObBackupClusterParamStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  ObSQLSessionInfo *session_info = ctx.get_my_session();
-  uint64_t login_tenant_id = OB_INVALID_TENANT_ID;
-  const share::ObBackupPathString &backup_dest = stmt.get_backup_dest();
-
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("task exec ctx is null", KR(ret));
-  } else if (FALSE_IT(login_tenant_id = session_info->get_login_tenant_id())) {
-  } else if (OB_SYS_TENANT_ID != login_tenant_id) {
-    ret = OB_OP_NOT_ALLOW;
-    LOG_WARN("non-sys tenant backup cluster parameters not allowed", KR(ret), K(login_tenant_id));
-    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "operation from regular user tenant");
-  } else if (OB_FAIL(backup::ObBackupParamOperator::backup_cluster_parameters(backup_dest))) {
-    LOG_WARN("failed to backup cluster parameters", KR(ret), K(backup_dest));
-  } else {
-    LOG_INFO("backup cluster parameters", KR(ret), K(stmt));
+    FLOG_INFO("succeed to send drop disk rpc", "arg", stmt.arg_);
   }
   return ret;
 }
 
-int ObBackupBackupsetExecutor::execute(ObExecContext &ctx, ObBackupBackupsetStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  common::ObCurTraceId::reset();
-  common::ObCurTraceId::mark_user_request();
-
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("task exec ctx is null", KR(ret));
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("not support now", K(ret));
-  }
-  return ret;
-}
-
-int ObBackupArchiveLogExecutor::execute(ObExecContext &ctx, ObBackupArchiveLogStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  common::ObCurTraceId::mark_user_request();
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor context failed");
-  } else {
-    FLOG_INFO("ObBackupArchiveLogExecutor::execute", K(stmt), K(ctx));
-//    ObBackupArchiveLogArg arg;
-//    arg.enable_ = stmt.is_enable();
-
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("not support now", K(ret));
-//    if (OB_FAIL(common_rpc_proxy->backup_archive_log(arg))) {
-//      LOG_WARN("archive_log rpc failed", K(ret), K(arg), "dst", common_rpc_proxy->get_server());
-//    }
-  }
-  return ret;
-}
-
-int ObBackupBackupPieceExecutor::execute(ObExecContext &ctx, ObBackupBackupPieceStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  common::ObCurTraceId::reset();
-  common::ObCurTraceId::mark_user_request();
-
-  if (OB_ISNULL(task_exec_ctx)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("task exec ctx is null", KR(ret));
-  } else {
-    LOG_INFO("ObBackupBackupPieceExecutor::execute", K(stmt), K(ctx));
-//    ObBackupBackupPieceArg arg;
-//    arg.tenant_id_ = stmt.get_tenant_id();
-//    arg.piece_id_ = stmt.get_piece_id();
-//    arg.max_backup_times_ = stmt.get_max_backup_times();
-//    arg.backup_all_ = stmt.is_backup_all();
-//    MEMCPY(arg.backup_backup_dest_, stmt.get_backup_backup_dest().ptr(), stmt.get_backup_backup_dest().length());
-//    arg.with_active_piece_ = stmt.with_active_piece();
-
-    ret = OB_NOT_SUPPORTED;
-    LOG_ERROR("not support now", K(ret));
-//    if (OB_FAIL(common_proxy->backup_backuppiece(arg))) {
-//      LOG_WARN("backup archive log rpc failed", KR(ret), K(arg), "dst", common_proxy->get_server());
-//    }
-  }
-  return ret;
-}
-
-int ObBackupSetEncryptionExecutor::execute(ObExecContext &ctx, ObBackupSetEncryptionStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  common::ObCurTraceId::mark_user_request();
-  ObSQLSessionInfo *session_info = ctx.get_my_session();
-  ObSessionVariable encryption_mode;
-  ObSessionVariable encryption_passwd;
-  if (OB_ISNULL(session_info)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(session_info));
-  } else {
-    encryption_mode.value_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-    encryption_mode.value_.set_varchar(ObBackupEncryptionMode::to_str(stmt.get_mode()));
-    encryption_mode.meta_.set_meta(encryption_mode.value_.meta_);
-
-    encryption_passwd.value_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-    encryption_passwd.value_.set_varchar(stmt.get_passwd().ptr(), stmt.get_passwd().length());
-    encryption_passwd.meta_.set_meta(encryption_passwd.value_.meta_);
-
-    if (OB_FAIL(session_info->replace_user_variable(OB_BACKUP_ENCRYPTION_MODE_SESSION_STR, encryption_mode))) {
-      LOG_WARN("failed to set encryption mode", K(ret), K(encryption_mode));
-    } else if (OB_FAIL(session_info->replace_user_variable(OB_BACKUP_ENCRYPTION_PASSWD_SESSION_STR, encryption_passwd))) {
-      LOG_WARN("failed to set encryption passwd", K(ret), K(encryption_passwd));
-    } else {
-      LOG_INFO("ObBackupSetEncryptionExecutor::execute", K(encryption_mode), K(encryption_passwd));
-    }
-  }
-
-  return ret;
-}
-
-int ObBackupSetDecryptionExecutor::execute(ObExecContext &ctx, ObBackupSetDecryptionStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  common::ObCurTraceId::mark_user_request();
-  ObSQLSessionInfo *session_info = ctx.get_my_session();
-  ObSessionVariable decryption_passwd;
-  if (OB_ISNULL(session_info)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(session_info));
-  } else {
-    decryption_passwd.value_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-    decryption_passwd.value_.set_varchar(stmt.get_passwd_array().ptr(), stmt.get_passwd_array().length());
-    decryption_passwd.meta_.set_meta(decryption_passwd.value_.meta_);
-
-    if (OB_FAIL(session_info->replace_user_variable(OB_BACKUP_DECRYPTION_PASSWD_ARRAY_SESSION_STR, decryption_passwd))) {
-      LOG_WARN("failed to set decryption passwd", K(ret), K(decryption_passwd));
-    } else {
-      LOG_INFO("ObBackupSetDecryptionExecutor::execute", K(decryption_passwd));
-    }
-  }
-
-  return ret;
-}
-
-int ObAddRestoreSourceExecutor::execute(ObExecContext &ctx, ObAddRestoreSourceStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  common::ObCurTraceId::mark_user_request();
-  ObSQLSessionInfo *session_info = ctx.get_my_session();
-  ObObj value;
-  ObSessionVariable new_value;
-
-  if (OB_ISNULL(session_info)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(session_info));
-  } else if (!session_info->user_variable_exists(OB_RESTORE_SOURCE_NAME_SESSION_STR)) {
-    LOG_INFO("no restore source specified before");
-  } else {
-    if (OB_FAIL(session_info->get_user_variable_value(OB_RESTORE_SOURCE_NAME_SESSION_STR, value))) {
-      LOG_WARN("failed to get user variable value", KR(ret));
-    } else if (OB_FAIL(stmt.add_restore_source(value.get_char()))) {
-      LOG_WARN("failed to add restore source", KR(ret), K(value));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else {
-    new_value.value_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-    new_value.value_.set_varchar(stmt.get_restore_source_array().ptr(), stmt.get_restore_source_array().length());
-    new_value.meta_.set_meta(new_value.value_.meta_);
-
-    if (OB_FAIL(session_info->replace_user_variable(OB_RESTORE_SOURCE_NAME_SESSION_STR, new_value))) {
-      LOG_WARN("failed to set user variable", K(ret), K(new_value));
-    } else {
-      LOG_INFO("ObAddRestoreSourceExecutor::execute", K(stmt), K(new_value));
-    }
-  }
-
-  return ret;
-}
-
-int ObClearRestoreSourceExecutor::execute(ObExecContext &ctx, ObClearRestoreSourceStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-  common::ObCurTraceId::mark_user_request();
-  ObSQLSessionInfo *session_info = ctx.get_my_session();
-  if (OB_ISNULL(session_info)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(session_info));
-  } else {
-    if (session_info->user_variable_exists(OB_RESTORE_SOURCE_NAME_SESSION_STR)) {
-      if (OB_FAIL(session_info->remove_user_variable(OB_RESTORE_SOURCE_NAME_SESSION_STR))) {
-        LOG_WARN("failed to remove user variable", KR(ret));
-      }
-    }
-  }
-  UNUSED(stmt);
-  return ret;
-}
 
 int ObCheckpointSlogExecutor::execute(ObExecContext &ctx, ObCheckpointSlogStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_id = stmt.tenant_id_;
-  if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
-    if (OB_SERVER_TENANT_ID == tenant_id) {
-      return SERVER_STORAGE_META_SERVICE.write_checkpoint(true);
-    } else {
-      int r = OB_SUCCESS;
-      MTL_SWITCH(tenant_id) { r = MTL(ObTenantStorageMetaService*)->write_checkpoint(true); }
-      return r;
-    }
-  }))) {
-    LOG_WARN("checkpoint slog failed", K(ret), K(tenant_id));
+  ObTaskExecutorCtx *task_exec_ctx = NULL;
+  obrpc::ObSrvRpcProxy *srv_rpc_proxy = NULL;
+  const ObAddr server = stmt.server_;
+  ObCheckpointSlogArg arg;
+  arg.tenant_id_ = stmt.tenant_id_;
+
+  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get task executor failed");
+  } else if (OB_ISNULL(srv_rpc_proxy = task_exec_ctx->get_srv_rpc())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("get srv rpc proxy failed");
+  } else if (OB_FAIL(srv_rpc_proxy->to(GCTX.self_addr()).timeout(THIS_WORKER.get_timeout_remain()).checkpoint_slog(arg))) {
+    LOG_WARN("rpc proxy checkpoint slog failed", K(ret));
   }
+
+  LOG_INFO("checkpoint slog execute finish", K(ret), K(arg.tenant_id_), K(server));
+
   return ret;
 }
 
 int ObRecoverTableExecutor::execute(ObExecContext &ctx, ObRecoverTableStmt &stmt)
 {
-  int ret = OB_SUCCESS;
-  ObTaskExecutorCtx *task_exec_ctx = nullptr;
-  if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get task executor failed");
-  } else if (OB_FAIL(GCTX.root_service_->handle_recover_table(stmt.get_rpc_arg()))) {
-    LOG_WARN("failed to recover table", K(ret));
-  } else {
-    const ObRecoverTableArg &recover_table_rpc_arg = stmt.get_rpc_arg();
-    LOG_INFO("recover table finish", K(recover_table_rpc_arg));
-  }
+  int ret = OB_NOT_SUPPORTED;
+  UNUSED(ctx);
+  UNUSED(stmt);
+  LOG_WARN("recover table is not supported", K(ret));
   return ret;
 }
 
@@ -1498,7 +1238,7 @@ int ObSwitchRoleExecutor::execute(ObExecContext &ctx, ObSwitchRoleStmt &stmt)
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("fail to get first stmt", KR(ret), K(stmt));
   } else {
-    ObSwitchRoleArg &arg = stmt.get_arg();
+    obrpc::ObSwitchRoleArg &arg = stmt.get_arg();
     // Always use sys tenant, arg already initialized in resolver with OB_SYS_TENANT_ID
     arg.set_stmt_str(first_stmt);
     if (OB_FAIL(OB_STANDBY_SERVICE.switch_role(arg))) {
@@ -1518,14 +1258,22 @@ int ObTableTTLExecutor::execute(ObExecContext& ctx, ObTableTTLStmt& stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx* task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
+  obrpc::ObCommonRpcProxy* common_rpc_proxy = NULL;
+
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
+  } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
+    LOG_WARN("get common rpc proxy failed", K(ret));
+  } else if (OB_ISNULL(common_rpc_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("common_rpc_proxy is null", K(ret));
   } else {
     FLOG_INFO("ObTableTTLExecutor::execute", K(stmt), K(ctx));
     common::ObTTLParam param;
     ObSEArray<common::ObSimpleTTLInfo, 32> ttl_info_array;
     param.ttl_all_ = stmt.is_ttl_all();
+    param.transport_ = GCTX.net_frame_->get_req_transport();
     param.type_ = stmt.get_type();
     for (int64_t i = 0; (i < stmt.get_tenant_ids().count()) && OB_SUCC(ret); i++) {
       uint64_t tenant_id = stmt.get_tenant_ids().at(i);

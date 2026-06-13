@@ -25,7 +25,6 @@
 #include "share/ob_index_builder_util.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "share/deadlock/ob_deadlock_inner_table_service.h"
-#include "share/backup/ob_backup_config.h"
 #include "share/scheduler/ob_partition_auto_split_helper.h"
 
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
@@ -48,7 +47,6 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_ddl_common.h" // for ObDDLUtil
 #include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
-#include "rootserver/backup/ob_backup_proxy.h" //ObBackupServiceProxy
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "observer/ob_sys_tenant_load_sys_package_task.h"
@@ -69,15 +67,12 @@
 #include "rootserver/ob_ai_model_ddl_service.h"
 #include "lib/utility/ob_print_utils.h"     // databuff_printf
 #include "share/ob_thread_mgr.h"
-#include "observer/ob_ex_rpc.h"
-#include "share/stat/ob_opt_stat_manager.h"
-#include "share/stat/ob_opt_stat_monitor_manager.h"
 
 namespace oceanbase
 {
 
 using namespace common;
-using namespace obcall;
+using namespace obrpc;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
@@ -326,7 +321,7 @@ ObRootService::ObRootService()
 : inited_(false), server_refreshed_(false),
     debug_(false),
     self_addr_(), config_(NULL), config_mgr_(NULL),
-    sql_proxy_(), restore_ctx_(NULL),
+    rpc_proxy_(), common_proxy_(), sql_proxy_(), restore_ctx_(NULL),
     schema_service_(NULL),
     root_minor_freeze_(),
     ddl_service_(),
@@ -361,6 +356,8 @@ ObRootService::~ObRootService()
 
 int ObRootService::init(ObServerConfig &config,
                         ObConfigManager &config_mgr,
+                        ObSrvRpcProxy &srv_rpc_proxy,
+                        ObCommonRpcProxy &common_proxy,
                         ObAddr &self,
                         ObMySQLProxy &sql_proxy,
                         observer::ObRestoreCtx &restore_ctx,
@@ -380,6 +377,13 @@ int ObRootService::init(ObServerConfig &config,
   } else {
     config_ = &config;
     config_mgr_ = &config_mgr;
+
+    rpc_proxy_ = srv_rpc_proxy;
+    common_proxy_ = common_proxy;
+
+    const bool rpc_active = false;
+    common_proxy_.active(rpc_active);
+    rpc_proxy_.active(rpc_active);
 
     self_addr_ = self;
 
@@ -405,15 +409,15 @@ int ObRootService::init(ObServerConfig &config,
     FLOG_WARN("create rs event table clear task timer tg failed", KR(ret));
   } else if (OB_FAIL(TG_CREATE(lib::TGDefIDs::RootServiceTaskTimer, purge_recyclebin_task_tg_id_))) {
     FLOG_WARN("create rs purge recyclebin task timer tg failed", KR(ret));
-  } else if (OB_FAIL(root_minor_freeze_.init())) {
+  } else if (OB_FAIL(root_minor_freeze_.init(rpc_proxy_))) {
     // init root minor freeze
     FLOG_WARN("init root_minor_freeze_ failed", KR(ret));
-  } else if (OB_FAIL(ddl_service_.init(*GCTX.sql_proxy_, *GCTX.schema_service_,
+  } else if (OB_FAIL(ddl_service_.init(*GCTX.srv_rpc_proxy_, *GCTX.rs_rpc_proxy_,*GCTX.sql_proxy_, *GCTX.schema_service_,
                                        snapshot_manager_, tenant_ddl_service_))) {
     // init ddl service
     FLOG_WARN("init ddl_service_ failed", KR(ret));
-  } else if (OB_FAIL(tenant_ddl_service_.init(ddl_service_,
-          sql_proxy_, *schema_service))) {
+  } else if (OB_FAIL(tenant_ddl_service_.init(ddl_service_, rpc_proxy_,
+          common_proxy_, sql_proxy_, *schema_service))) {
     // init tenant ddl service
     FLOG_WARN("init tenant_ddl_service_ failed", KR(ret));
   } else if (OB_FAIL(snapshot_manager_.init(self_addr_))) {
@@ -521,6 +525,9 @@ int ObRootService::start_service()
   } else {
     sql_proxy_.set_active();
     oracle_sql_proxy_.set_active();
+    const bool rpc_active = true;
+    common_proxy_.active(rpc_active);
+    rpc_proxy_.active(rpc_active);
     tenant_ddl_service_.restart();
 #ifndef OB_BUILD_LITE
     if (OB_FAIL(hb_checker_.start())) {
@@ -606,6 +613,11 @@ int ObRootService::stop()
     FLOG_INFO("sql_proxy set inactive finished");
     oracle_sql_proxy_.set_inactive();
     FLOG_INFO("oracle_sql_proxy set inactive finished");
+    const bool rpc_active = false;
+    common_proxy_.active(rpc_active);
+    FLOG_INFO("commom_proxy set inactive finished");
+    rpc_proxy_.active(rpc_active);
+    FLOG_INFO("rpc_proxy set inactive finished");
 
     // let RS stop failed after proxy inactive
     if (OB_UNLIKELY(ERRSIM_RS_STOP_ERROR)) {
@@ -848,8 +860,8 @@ int ObRootService::execute_bootstrap()
     FLOG_INFO("[ROOTSERVICE_NOTICE] try to get lock for bootstrap in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
     FLOG_INFO("[ROOTSERVICE_NOTICE] success to get lock for bootstrap in execute_bootstrap");
-    ObBootstrap bootstrap(ddl_service_, tenant_ddl_service_,
-        *config_);
+    ObBootstrap bootstrap(rpc_proxy_, ddl_service_, tenant_ddl_service_,
+        *config_, common_proxy_);
     if (OB_FAIL(bootstrap.execute_bootstrap())) {
       LOG_ERROR("failed to execute_bootstrap", K(ret));
     }
@@ -1089,7 +1101,7 @@ int ObRootService::add_system_variable(const ObAddSysVarArg &arg)
   return ret;
 }
 
-int ObRootService::modify_system_variable(const obcall::ObModifySysVarArg &arg)
+int ObRootService::modify_system_variable(const obrpc::ObModifySysVarArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -1380,7 +1392,7 @@ int ObRootService::generate_table_schema_in_tenant_space(
   return ret;
 }
 
-int ObRootService::fork_database(const obcall::ObForkDatabaseArg &arg, obcall::ObDDLRes &res)
+int ObRootService::fork_database(const obrpc::ObForkDatabaseArg &arg, obrpc::ObDDLRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -1406,7 +1418,7 @@ int ObRootService::fork_database(const obcall::ObForkDatabaseArg &arg, obcall::O
   return ret;
 }
 
-int ObRootService::maintain_obj_dependency_info(const obcall::ObDependencyObjDDLArg &arg)
+int ObRootService::maintain_obj_dependency_info(const obrpc::ObDependencyObjDDLArg &arg)
 {
   LOG_DEBUG("receive maintain obj dependency info arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1422,8 +1434,8 @@ int ObRootService::maintain_obj_dependency_info(const obcall::ObDependencyObjDDL
   return ret;
 }
 
-int ObRootService::mview_complete_refresh(const obcall::ObMViewCompleteRefreshArg &arg,
-                                          obcall::ObMViewCompleteRefreshRes &res)
+int ObRootService::mview_complete_refresh(const obrpc::ObMViewCompleteRefreshArg &arg,
+                                          obrpc::ObMViewCompleteRefreshRes &res)
 {
   LOG_DEBUG("receive mview complete refresh arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1447,7 +1459,7 @@ int ObRootService::mview_complete_refresh(const obcall::ObMViewCompleteRefreshAr
   return ret;
 }
 
-int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
+int ObRootService::execute_ddl_task(const obrpc::ObAlterTableArg &arg,
                                     common::ObSArray<uint64_t> &obj_ids)
 {
   LOG_DEBUG("receive execute ddl task arg", K(arg));
@@ -1462,21 +1474,21 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
     switch (arg.ddl_task_type_) {
       case share::REBUILD_INDEX_TASK: {
         if (OB_FAIL(ddl_service_.rebuild_hidden_table_index_in_trans(
-            const_cast<obcall::ObAlterTableArg &>(arg), obj_ids))) {
+            const_cast<obrpc::ObAlterTableArg &>(arg), obj_ids))) {
           LOG_WARN("failed to rebuild hidden table index in trans", K(ret));
         }
         break;
       }
       case share::REBUILD_CONSTRAINT_TASK: {
         if (OB_FAIL(ddl_service_.rebuild_hidden_table_constraints_in_trans(
-            const_cast<obcall::ObAlterTableArg &>(arg), obj_ids))) {
+            const_cast<obrpc::ObAlterTableArg &>(arg), obj_ids))) {
           LOG_WARN("failed to rebuild hidden table constraints in trans", K(ret));
         }
         break;
       }
       case share::REBUILD_FOREIGN_KEY_TASK: {
         if (OB_FAIL(ddl_service_.rebuild_hidden_table_foreign_key_in_trans(
-            const_cast<obcall::ObAlterTableArg &>(arg), obj_ids))) {
+            const_cast<obrpc::ObAlterTableArg &>(arg), obj_ids))) {
           LOG_WARN("failed to rebuild hidden table foreign key in trans", K(ret));
         }
         break;
@@ -1484,11 +1496,11 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
       case share::MAKE_DDL_TAKE_EFFECT_TASK: {
         if (arg.is_direct_load_partition_) {
           if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_partitions(
-              const_cast<obcall::ObAlterTableArg &>(arg)))) {
+              const_cast<obrpc::ObAlterTableArg &>(arg)))) {
             LOG_WARN("failed to swap orig and hidden table partitions", K(ret));
           }
         } else if (OB_FAIL(ddl_service_.swap_orig_and_hidden_table_state(
-            const_cast<obcall::ObAlterTableArg &>(arg)))) {
+            const_cast<obrpc::ObAlterTableArg &>(arg)))) {
           LOG_WARN("failed to swap orig and hidden table state", K(ret));
         }
         break;
@@ -1496,14 +1508,14 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
       case share::CLEANUP_GARBAGE_TASK:
       case share::PARTITION_SPLIT_RECOVERY_CLEANUP_GARBAGE_TASK: {
         if (OB_FAIL(ddl_service_.cleanup_garbage(
-            const_cast<obcall::ObAlterTableArg &>(arg)))) {
+            const_cast<obrpc::ObAlterTableArg &>(arg)))) {
           LOG_WARN("failed to cleanup garbage", K(ret));
         }
         break;
       }
       case share::MODIFY_FOREIGN_KEY_STATE_TASK: {
         if (OB_FAIL(ddl_service_.modify_hidden_table_fk_state(
-            const_cast<obcall::ObAlterTableArg &>(arg)))) {
+            const_cast<obrpc::ObAlterTableArg &>(arg)))) {
           LOG_WARN("failed to modify hidden table fk state", K(ret));
         }
         break;
@@ -1517,7 +1529,7 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
       // remap all index tables to hidden table and take effect concurrently.
       case share::REMAP_INDEXES_AND_TAKE_EFFECT_TASK: {
         if (OB_FAIL(ddl_service_.remap_index_tablets_and_take_effect(
-            const_cast<obcall::ObAlterTableArg &>(arg)))) {
+            const_cast<obrpc::ObAlterTableArg &>(arg)))) {
           LOG_WARN("fail to remap index tables to hidden table and take effect", K(ret));
         }
         break;
@@ -1569,14 +1581,14 @@ int ObRootService::execute_ddl_task(const obcall::ObAlterTableArg &arg,
 int ObRootService::create_table_like(const ObCreateTableLikeArg &arg)
 {
   int ret = OB_SUCCESS;
-  obcall::ObCreateTableRes res;
+  obrpc::ObCreateTableRes res;
   if (OB_FAIL(parallel_create_table_like(arg,res))) {
     LOG_WARN("fail to parallel create table like", KR(ret));
   }
   return ret;
 }
 
-int ObRootService::parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res)
+int ObRootService::parallel_create_table_like(const obrpc::ObCreateTableLikeArg &arg, obrpc::ObCreateTableRes &res)
 {
   int ret = OB_SUCCESS;
   int64_t begin_time = ObTimeUtility::current_time();
@@ -1608,7 +1620,7 @@ int ObRootService::parallel_create_table_like(const obcall::ObCreateTableLikeArg
   return ret;
 }
 
-int ObRootService::precheck_interval_part(const obcall::ObAlterTableArg &arg)
+int ObRootService::precheck_interval_part(const obrpc::ObAlterTableArg &arg)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
@@ -1618,7 +1630,7 @@ int ObRootService::precheck_interval_part(const obcall::ObAlterTableArg &arg)
   int64_t tenant_id = alter_table_schema.get_tenant_id();
 
   if (!alter_table_schema.is_interval_part()
-      || obcall::ObAlterTableArg::ADD_PARTITION != op_type) {
+      || obrpc::ObAlterTableArg::ADD_PARTITION != op_type) {
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
@@ -1685,8 +1697,8 @@ int ObRootService::precheck_interval_part(const obcall::ObAlterTableArg &arg)
   return ret;
 }
 
-int ObRootService::create_hidden_table(const obcall::ObCreateHiddenTableArg &arg,
-                                       obcall::ObCreateHiddenTableRes &res)
+int ObRootService::create_hidden_table(const obrpc::ObCreateHiddenTableArg &arg,
+                                       obrpc::ObCreateHiddenTableRes &res)
 {
   LOG_DEBUG("receive create hidden table arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1718,7 +1730,7 @@ int ObRootService::create_hidden_table(const obcall::ObCreateHiddenTableArg &arg
   return ret;
 }
 
-int ObRootService::update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg)
+int ObRootService::update_ddl_task_active_time(const obrpc::ObUpdateDDLTaskActiveTimeArg &arg)
 {
   LOG_DEBUG("receive recv ddl task status arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1736,7 +1748,7 @@ int ObRootService::update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActi
   return ret;
 }
 
-int ObRootService::abort_redef_table(const obcall::ObAbortRedefTableArg &arg)
+int ObRootService::abort_redef_table(const obrpc::ObAbortRedefTableArg &arg)
 {
   LOG_DEBUG("receive abort redef table arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1764,7 +1776,7 @@ int ObRootService::abort_redef_table(const obcall::ObAbortRedefTableArg &arg)
   return ret;
 }
 
-int ObRootService::finish_redef_table(const obcall::ObFinishRedefTableArg &arg)
+int ObRootService::finish_redef_table(const obrpc::ObFinishRedefTableArg &arg)
 {
   LOG_DEBUG("receive finish redef table arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1792,7 +1804,7 @@ int ObRootService::finish_redef_table(const obcall::ObFinishRedefTableArg &arg)
   return ret;
 }
 
-int ObRootService::copy_table_dependents(const obcall::ObCopyTableDependentsArg &arg)
+int ObRootService::copy_table_dependents(const obrpc::ObCopyTableDependentsArg &arg)
 {
   LOG_INFO("receive copy table dependents arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1830,7 +1842,7 @@ int ObRootService::copy_table_dependents(const obcall::ObCopyTableDependentsArg 
   return ret;
 }
 
-int ObRootService::start_redef_table(const obcall::ObStartRedefTableArg &arg, obcall::ObStartRedefTableRes &res)
+int ObRootService::start_redef_table(const obrpc::ObStartRedefTableArg &arg, obrpc::ObStartRedefTableRes &res)
 {
   LOG_DEBUG("receive start redef table arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1861,7 +1873,7 @@ int ObRootService::start_redef_table(const obcall::ObStartRedefTableArg &arg, ob
   return ret;
 }
 
-int ObRootService::recover_restore_table_ddl(const obcall::ObRecoverRestoreTableDDLArg &arg)
+int ObRootService::recover_restore_table_ddl(const obrpc::ObRecoverRestoreTableDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
@@ -1877,7 +1889,7 @@ int ObRootService::recover_restore_table_ddl(const obcall::ObRecoverRestoreTable
   return ret;
 }
 
-int ObRootService::set_comment(const obcall::ObSetCommentArg &arg, obcall::ObParallelDDLRes &res)
+int ObRootService::set_comment(const obrpc::ObSetCommentArg &arg, obrpc::ObParallelDDLRes &res)
 {
   LOG_TRACE("receive set comment arg", K(arg));
   int64_t begin_time = ObTimeUtility::current_time();
@@ -1909,7 +1921,7 @@ int ObRootService::set_comment(const obcall::ObSetCommentArg &arg, obcall::ObPar
   return ret;
 }
 
-int ObRootService::alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlterTableRes &res)
+int ObRootService::alter_table(const obrpc::ObAlterTableArg &arg, obrpc::ObAlterTableRes &res)
 {
   LOG_DEBUG("receive alter table arg", K(arg));
   int ret = OB_SUCCESS;
@@ -1941,21 +1953,21 @@ int ObRootService::alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlt
       ObDDLType ddl_type = ObDDLType::DDL_INVALID;
       const ObTableSchema *orig_table_schema = nullptr;
       schema_guard.set_session_id(arg.session_id_);
-      if (obcall::ObAlterTableArg::DROP_PARTITION == nonconst_arg.alter_part_type_) {
+      if (obrpc::ObAlterTableArg::DROP_PARTITION == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_DROP_PARTITION;
-      } else if (obcall::ObAlterTableArg::DROP_SUB_PARTITION == nonconst_arg.alter_part_type_) {
+      } else if (obrpc::ObAlterTableArg::DROP_SUB_PARTITION == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_DROP_SUB_PARTITION;
-      } else if (obcall::ObAlterTableArg::TRUNCATE_PARTITION == nonconst_arg.alter_part_type_) {
+      } else if (obrpc::ObAlterTableArg::TRUNCATE_PARTITION == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_TRUNCATE_PARTITION;
-      } else if (obcall::ObAlterTableArg::TRUNCATE_SUB_PARTITION == nonconst_arg.alter_part_type_) {
+      } else if (obrpc::ObAlterTableArg::TRUNCATE_SUB_PARTITION == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_TRUNCATE_SUB_PARTITION;
-      } else if (obcall::ObAlterTableArg::RENAME_PARTITION == nonconst_arg.alter_part_type_) {
+      } else if (obrpc::ObAlterTableArg::RENAME_PARTITION == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_RENAME_PARTITION;
-      } else if (obcall::ObAlterTableArg::RENAME_SUB_PARTITION == nonconst_arg.alter_part_type_) {
+      } else if (obrpc::ObAlterTableArg::RENAME_SUB_PARTITION == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_RENAME_SUB_PARTITION;
-      } else if (obcall::ObAlterTableArg::ALTER_PARTITION_STORAGE_CACHE_POLICY == nonconst_arg.alter_part_type_) {
+      } else if (obrpc::ObAlterTableArg::ALTER_PARTITION_STORAGE_CACHE_POLICY == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_ALTER_PARTITION_POLICY;
-      } else if (obcall::ObAlterTableArg::ALTER_SUBPARTITION_STORAGE_CACHE_POLICY == nonconst_arg.alter_part_type_) {
+      } else if (obrpc::ObAlterTableArg::ALTER_SUBPARTITION_STORAGE_CACHE_POLICY == nonconst_arg.alter_part_type_) {
         ddl_type = ObDDLType::DDL_ALTER_SUBPARTITION_POLICY;
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -2027,7 +2039,7 @@ int ObRootService::alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlt
   return ret;
 }
 
-int ObRootService::exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res)
+int ObRootService::exchange_partition(const obrpc::ObExchangePartitionArg &arg, obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
@@ -2077,7 +2089,7 @@ int ObRootService::create_aux_index(
   return ret;
 }
 
-int ObRootService::create_index(const ObCreateIndexArg &arg, obcall::ObAlterTableRes &res)
+int ObRootService::create_index(const ObCreateIndexArg &arg, obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
@@ -2112,7 +2124,7 @@ int ObRootService::create_index(const ObCreateIndexArg &arg, obcall::ObAlterTabl
   return ret;
 }
 
-int ObRootService::create_mlog(const obcall::ObCreateMLogArg &arg, obcall::ObCreateMLogRes &res)
+int ObRootService::create_mlog(const obrpc::ObCreateMLogArg &arg, obrpc::ObCreateMLogRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2138,7 +2150,7 @@ int ObRootService::create_mlog(const obcall::ObCreateMLogArg &arg, obcall::ObCre
   return ret;
 }
 
-int ObRootService::parallel_create_index(const ObCreateIndexArg &arg, obcall::ObAlterTableRes &res)
+int ObRootService::parallel_create_index(const ObCreateIndexArg &arg, obrpc::ObAlterTableRes &res)
 {
   LOG_TRACE("receive parallel create index arg", K(arg));
   int ret = OB_SUCCESS;
@@ -2179,7 +2191,7 @@ int ObRootService::parallel_create_index(const ObCreateIndexArg &arg, obcall::Ob
   return ret;
 }
 
-int ObRootService::fork_table(const obcall::ObForkTableArg &arg, obcall::ObDDLRes &res)
+int ObRootService::fork_table(const obrpc::ObForkTableArg &arg, obrpc::ObDDLRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2205,7 +2217,7 @@ int ObRootService::fork_table(const obcall::ObForkTableArg &arg, obcall::ObDDLRe
   return ret;
 }
 
-int ObRootService::drop_table(const obcall::ObDropTableArg &arg, obcall::ObDDLRes &res)
+int ObRootService::drop_table(const obrpc::ObDropTableArg &arg, obrpc::ObDDLRes &res)
 {
   int ret = OB_SUCCESS;
   uint64_t target_object_id = OB_INVALID_ID;
@@ -2331,7 +2343,7 @@ int ObRootService::parallel_drop_table(const ObDropTableArg &arg, ObDropTableRes
   return ret;
 }
 
-int ObRootService::drop_database(const obcall::ObDropDatabaseArg &arg, ObDropDatabaseRes &drop_database_res)
+int ObRootService::drop_database(const obrpc::ObDropDatabaseArg &arg, ObDropDatabaseRes &drop_database_res)
 {
   int ret = OB_SUCCESS;
   uint64_t database_id = 0;
@@ -2388,7 +2400,7 @@ int ObRootService::drop_database(const obcall::ObDropDatabaseArg &arg, ObDropDat
   return ret;
 }
 
-int ObRootService::drop_tablegroup(const obcall::ObDropTablegroupArg &arg)
+int ObRootService::drop_tablegroup(const obrpc::ObDropTablegroupArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2403,7 +2415,7 @@ int ObRootService::drop_tablegroup(const obcall::ObDropTablegroupArg &arg)
   return ret;
 }
 
-int ObRootService::alter_tablegroup(const obcall::ObAlterTablegroupArg &arg)
+int ObRootService::alter_tablegroup(const obrpc::ObAlterTablegroupArg &arg)
 {
   LOG_DEBUG("receive alter tablegroup arg", K(arg));
   const ObTablegroupSchema *tablegroup_schema = NULL;
@@ -2444,7 +2456,7 @@ int ObRootService::alter_tablegroup(const obcall::ObAlterTablegroupArg &arg)
   return ret;
 }
 
-int ObRootService::drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res)
+int ObRootService::drop_index_on_failed(const obrpc::ObDropIndexArg &arg, obrpc::ObDropIndexRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2470,7 +2482,7 @@ int ObRootService::drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcal
   return ret;
 }
 
-int ObRootService::drop_index(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res)
+int ObRootService::drop_index(const obrpc::ObDropIndexArg &arg, obrpc::ObDropIndexRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2496,7 +2508,7 @@ int ObRootService::drop_index(const obcall::ObDropIndexArg &arg, obcall::ObDropI
   return ret;
 }
 
-int ObRootService::rebuild_vec_index(const obcall::ObRebuildIndexArg &arg, obcall::ObAlterTableRes &res)
+int ObRootService::rebuild_vec_index(const obrpc::ObRebuildIndexArg &arg, obrpc::ObAlterTableRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2541,8 +2553,8 @@ int ObRootService::force_drop_lonely_lob_aux_table(const ObForceDropLonelyLobAux
 }
 
 
-int ObRootService::send_auto_split_tablet_task_request(const obcall::ObAutoSplitTabletBatchArg &arg,
-                                                       obcall::ObAutoSplitTabletBatchRes &res)
+int ObRootService::send_auto_split_tablet_task_request(const obrpc::ObAutoSplitTabletBatchArg &arg,
+                                                       obrpc::ObAutoSplitTabletBatchRes &res)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
@@ -2557,14 +2569,14 @@ int ObRootService::send_auto_split_tablet_task_request(const obcall::ObAutoSplit
   return ret;
 }
 
-int ObRootService::split_global_index_tablet(const obcall::ObAlterTableArg &arg)
+int ObRootService::split_global_index_tablet(const obrpc::ObAlterTableArg &arg)
 {
   int ret = OB_SUCCESS;
   bool is_oracle_mode = false;
   ObSchemaGetterGuard schema_guard;
   const uint64_t tenant_id = arg.alter_table_schema_.get_tenant_id();
   ObAlterTableArg &nonconst_arg = const_cast<ObAlterTableArg &>(arg);
-  obcall::ObAlterTableRes res;
+  obrpc::ObAlterTableRes res;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -2596,7 +2608,7 @@ int ObRootService::split_global_index_tablet(const obcall::ObAlterTableArg &arg)
   return ret;
 }
 
-int ObRootService::clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg &arg)
+int ObRootService::clean_splitted_tablet(const obrpc::ObCleanSplittedTabletArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2642,7 +2654,7 @@ int ObRootService::purge_index(const ObPurgeIndexArg &arg)
   return ret;
 }
 
-int ObRootService::rename_table(const obcall::ObRenameTableArg &arg)
+int ObRootService::rename_table(const obrpc::ObRenameTableArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2657,7 +2669,7 @@ int ObRootService::rename_table(const obcall::ObRenameTableArg &arg)
   return ret;
 }
 
-int ObRootService::truncate_table(const obcall::ObTruncateTableArg &arg, obcall::ObDDLRes &res)
+int ObRootService::truncate_table(const obrpc::ObTruncateTableArg &arg, obrpc::ObDDLRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2725,20 +2737,9 @@ int ObRootService::truncate_table(const obcall::ObTruncateTableArg &arg, obcall:
 /*
  * new parallel truncate table
  */
-int ObRootService::truncate_table_v2(const obcall::ObTruncateTableArg &arg, obcall::ObDDLRes &res)
+int ObRootService::truncate_table_v2(const obrpc::ObTruncateTableArg &arg, obrpc::ObDDLRes &res)
 {
   int ret = OB_SUCCESS;
-  // Parallel truncate generates schema versions in batch (gen_batch_new_schema_versions),
-  // which only works in the parallel-DDL schema-version context. The former RPC path delivered
-  // this op to the dedicated PARALLEL_DDL thread (in_parallel_ddl_thread_()==true); after the RPC
-  // framework removal it runs on the tenant ReqWorker, so set the batch-generate flag here to
-  // restore that context (otherwise gen_batch_new_schema_versions returns OB_NOT_SUPPORTED).
-  struct BatchGenSchemaVersionGuard {
-    bool saved_;
-    BatchGenSchemaVersionGuard() : saved_(ob_batch_generate_schema_version())
-    { ob_batch_generate_schema_version() = true; }
-    ~BatchGenSchemaVersionGuard() { ob_batch_generate_schema_version() = saved_; }
-  } batch_gen_schema_version_guard;
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -2783,7 +2784,7 @@ int ObRootService::flashback_table_from_recyclebin(const ObFlashBackTableFromRec
   return ret;
 }
 
-int ObRootService::flashback_table_to_time_point(const obcall::ObFlashBackTableToScnArg &arg)
+int ObRootService::flashback_table_to_time_point(const obrpc::ObFlashBackTableToScnArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive flashback table arg", K(arg));
@@ -2877,9 +2878,9 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
   } else {
     const int64_t all_core_table_id = OB_ALL_CORE_TABLE_TID;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.tables_.count(); ++i) {
-      SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
+      SMART_VAR(obrpc::ObAlterTableArg, alter_table_arg) {
         ObSqlString sql;
-        const obcall::ObTableItem &table_item = arg.tables_.at(i);
+        const obrpc::ObTableItem &table_item = arg.tables_.at(i);
         const ObTableSchema *table_schema = nullptr;
         alter_table_arg.is_alter_options_ = true;
         alter_table_arg.alter_table_schema_.set_origin_database_name(table_item.database_name_);
@@ -2913,7 +2914,7 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
           }
           if (OB_SUCC(ret)) {
             alter_table_arg.ddl_stmt_str_ = sql.string();
-            obcall::ObAlterTableRes res;
+            obrpc::ObAlterTableRes res;
             if (OB_FAIL(alter_table_arg.alter_table_schema_.alter_option_bitset_.add_member(ObAlterTableArg::PROGRESSIVE_MERGE_ROUND))) {
               LOG_WARN("fail to add member", K(ret));
             } else if (OB_FAIL(alter_table(alter_table_arg, res))) {
@@ -2927,7 +2928,7 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
   return ret;
 }
 
-int ObRootService::calc_column_checksum_repsonse(const obcall::ObCalcColumnChecksumResponseArg &arg)
+int ObRootService::calc_column_checksum_repsonse(const obrpc::ObCalcColumnChecksumResponseArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
@@ -2963,7 +2964,7 @@ int ObRootService::root_minor_freeze(const ObRootMinorFreezeArg &arg)
   return ret;
 }
 
-int ObRootService::update_index_status(const obcall::ObUpdateIndexStatusArg &arg)
+int ObRootService::update_index_status(const obrpc::ObUpdateIndexStatusArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -2985,7 +2986,7 @@ int ObRootService::update_index_status(const obcall::ObUpdateIndexStatusArg &arg
   return ret;
 }
 
-int ObRootService::update_mview_status(const obcall::ObUpdateMViewStatusArg &arg)
+int ObRootService::update_mview_status(const obrpc::ObUpdateMViewStatusArg &arg)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = arg.exec_tenant_id_;
@@ -3001,7 +3002,7 @@ int ObRootService::update_mview_status(const obcall::ObUpdateMViewStatusArg &arg
   return ret;
 }
 
-int ObRootService::parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res)
+int ObRootService::parallel_update_index_status(const obrpc::ObUpdateIndexStatusArg &arg, obrpc::ObParallelDDLRes &res)
 {
   LOG_TRACE("receive update index status arg", K(arg));
   int64_t begin_time = ObTimeUtility::current_time();
@@ -3251,7 +3252,7 @@ int ObRootService::revoke_rs()
 }
 int ObRootService::check_parallel_ddl_conflict(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    const obcall::ObDDLArg &arg)
+    const obrpc::ObDDLArg &arg)
 {
   return ddl_service_.check_parallel_ddl_conflict(schema_guard, arg);
 }
@@ -3397,7 +3398,7 @@ void ObRootService::ObRestartTask::runTimerTask()
 }
 
 //-----Functions for managing privileges------
-int ObRootService::create_user(obcall::ObCreateUserArg &arg,
+int ObRootService::create_user(obrpc::ObCreateUserArg &arg,
                                common::ObSArray<int64_t> &failed_index)
 {
   int ret = OB_SUCCESS;
@@ -3431,7 +3432,7 @@ int ObRootService::drop_user(const ObDropUserArg &arg,
   return ret;
 }
 
-int ObRootService::rename_user(const obcall::ObRenameUserArg &arg,
+int ObRootService::rename_user(const obrpc::ObRenameUserArg &arg,
                                common::ObSArray<int64_t> &failed_index)
 {
   int ret = OB_SUCCESS;
@@ -3448,7 +3449,7 @@ int ObRootService::rename_user(const obcall::ObRenameUserArg &arg,
   return ret;
 }
 
-int ObRootService::alter_role(const obcall::ObAlterRoleArg &arg)
+int ObRootService::alter_role(const obrpc::ObAlterRoleArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3463,7 +3464,7 @@ int ObRootService::alter_role(const obcall::ObAlterRoleArg &arg)
   return ret;
 }
 
-int ObRootService::set_passwd(const obcall::ObSetPasswdArg &arg)
+int ObRootService::set_passwd(const obrpc::ObSetPasswdArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3525,7 +3526,7 @@ int ObRootService::lock_user(const ObLockUserArg &arg, ObSArray<int64_t> &failed
 }
 
 
-int ObRootService::create_directory(const obcall::ObCreateDirectoryArg &arg)
+int ObRootService::create_directory(const obrpc::ObCreateDirectoryArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3537,7 +3538,7 @@ int ObRootService::create_directory(const obcall::ObCreateDirectoryArg &arg)
   return ret;
 }
 
-int ObRootService::drop_directory(const obcall::ObDropDirectoryArg &arg)
+int ObRootService::drop_directory(const obrpc::ObDropDirectoryArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3549,7 +3550,7 @@ int ObRootService::drop_directory(const obcall::ObDropDirectoryArg &arg)
   return ret;
 }
 
-int ObRootService::handle_catalog_ddl(const obcall::ObCatalogDDLArg &arg)
+int ObRootService::handle_catalog_ddl(const obrpc::ObCatalogDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   uint64_t data_version = 0;
@@ -3707,7 +3708,7 @@ int ObRootService::create_outline(const ObCreateOutlineArg &arg)
   return ret;
 }
 
-int ObRootService::create_user_defined_function(const obcall::ObCreateUserDefinedFunctionArg &arg)
+int ObRootService::create_user_defined_function(const obrpc::ObCreateUserDefinedFunctionArg &arg)
 {
   int ret = OB_SUCCESS;
   bool exist = false;
@@ -3730,7 +3731,7 @@ int ObRootService::create_user_defined_function(const obcall::ObCreateUserDefine
   return ret;
 }
 
-int ObRootService::drop_user_defined_function(const obcall::ObDropUserDefinedFunctionArg &arg)
+int ObRootService::drop_user_defined_function(const obrpc::ObDropUserDefinedFunctionArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3762,7 +3763,7 @@ int ObRootService::alter_outline(const ObAlterOutlineArg &arg)
   return ret;
 }
 
-int ObRootService::drop_outline(const obcall::ObDropOutlineArg &arg)
+int ObRootService::drop_outline(const obrpc::ObDropOutlineArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3789,7 +3790,7 @@ int ObRootService::create_routine(const ObCreateRoutineArg &arg)
 }
 
 int ObRootService::create_routine_with_res(const ObCreateRoutineArg &arg,
-                                           obcall::ObRoutineDDLRes &res)
+                                           obrpc::ObRoutineDDLRes &res)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3806,7 +3807,7 @@ int ObRootService::alter_routine(const ObCreateRoutineArg &arg)
 }
 
 int ObRootService::alter_routine_with_res(const ObCreateRoutineArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
+                                          obrpc::ObRoutineDDLRes &res)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3823,7 +3824,7 @@ int ObRootService::drop_routine(const ObDropRoutineArg &arg)
 }
 
 
-int ObRootService::create_package(const obcall::ObCreatePackageArg &arg)
+int ObRootService::create_package(const obrpc::ObCreatePackageArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3831,8 +3832,8 @@ int ObRootService::create_package(const obcall::ObCreatePackageArg &arg)
   return ret;
 }
 
-int ObRootService::create_package_with_res(const obcall::ObCreatePackageArg &arg,
-                                           obcall::ObRoutineDDLRes &res)
+int ObRootService::create_package_with_res(const obrpc::ObCreatePackageArg &arg,
+                                           obrpc::ObRoutineDDLRes &res)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3840,7 +3841,7 @@ int ObRootService::create_package_with_res(const obcall::ObCreatePackageArg &arg
   return ret;
 }
 
-int ObRootService::alter_package(const obcall::ObAlterPackageArg &arg)
+int ObRootService::alter_package(const obrpc::ObAlterPackageArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3848,8 +3849,8 @@ int ObRootService::alter_package(const obcall::ObAlterPackageArg &arg)
   return ret;
 }
 
-int ObRootService::alter_package_with_res(const obcall::ObAlterPackageArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
+int ObRootService::alter_package_with_res(const obrpc::ObAlterPackageArg &arg,
+                                          obrpc::ObRoutineDDLRes &res)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3857,7 +3858,7 @@ int ObRootService::alter_package_with_res(const obcall::ObAlterPackageArg &arg,
   return ret;
 }
 
-int ObRootService::drop_package(const obcall::ObDropPackageArg &arg)
+int ObRootService::drop_package(const obrpc::ObDropPackageArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3865,7 +3866,7 @@ int ObRootService::drop_package(const obcall::ObDropPackageArg &arg)
   return ret;
 }
 
-int ObRootService::create_trigger(const obcall::ObCreateTriggerArg &arg)
+int ObRootService::create_trigger(const obrpc::ObCreateTriggerArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3873,8 +3874,8 @@ int ObRootService::create_trigger(const obcall::ObCreateTriggerArg &arg)
   return ret;
 }
 
-int ObRootService::create_trigger_with_res(const obcall::ObCreateTriggerArg &arg,
-                                           obcall::ObCreateTriggerRes &res)
+int ObRootService::create_trigger_with_res(const obrpc::ObCreateTriggerArg &arg,
+                                           obrpc::ObCreateTriggerRes &res)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3882,7 +3883,7 @@ int ObRootService::create_trigger_with_res(const obcall::ObCreateTriggerArg &arg
   return ret;
 }
 
-int ObRootService::alter_trigger(const obcall::ObAlterTriggerArg &arg)
+int ObRootService::alter_trigger(const obrpc::ObAlterTriggerArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3890,8 +3891,8 @@ int ObRootService::alter_trigger(const obcall::ObAlterTriggerArg &arg)
   return ret;
 }
 
-int ObRootService::alter_trigger_with_res(const obcall::ObAlterTriggerArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
+int ObRootService::alter_trigger_with_res(const obrpc::ObAlterTriggerArg &arg,
+                                          obrpc::ObRoutineDDLRes &res)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3899,7 +3900,7 @@ int ObRootService::alter_trigger_with_res(const obcall::ObAlterTriggerArg &arg,
   return ret;
 }
 
-int ObRootService::drop_trigger(const obcall::ObDropTriggerArg &arg)
+int ObRootService::drop_trigger(const obrpc::ObDropTriggerArg &arg)
 {
   int ret = OB_SUCCESS;
   OV (inited_, OB_NOT_INIT);
@@ -3910,7 +3911,7 @@ int ObRootService::drop_trigger(const obcall::ObDropTriggerArg &arg)
 ////////////////////////////////////////////////////////////////
 // sequence
 ////////////////////////////////////////////////////////////////
-int ObRootService::do_sequence_ddl(const obcall::ObSequenceDDLArg &arg)
+int ObRootService::do_sequence_ddl(const obrpc::ObSequenceDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3925,7 +3926,7 @@ int ObRootService::do_sequence_ddl(const obcall::ObSequenceDDLArg &arg)
 ////////////////////////////////////////////////////////////////
 // context
 ////////////////////////////////////////////////////////////////
-int ObRootService::do_context_ddl(const obcall::ObContextDDLArg &arg)
+int ObRootService::do_context_ddl(const obrpc::ObContextDDLArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3940,7 +3941,7 @@ int ObRootService::do_context_ddl(const obcall::ObContextDDLArg &arg)
 ////////////////////////////////////////////////////////////////
 // schema revise
 ////////////////////////////////////////////////////////////////
-int ObRootService::schema_revise(const obcall::ObSchemaReviseArg &arg)
+int ObRootService::schema_revise(const obrpc::ObSchemaReviseArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3963,6 +3964,7 @@ int ObRootService::init_sys_admin_ctx(ObSystemAdminCtx &ctx)
     LOG_WARN("not init", K(ret));
   } else {
     ctx.rs_status_ = &rs_status_;
+    ctx.rpc_proxy_ = &rpc_proxy_;
     ctx.sql_proxy_ = &sql_proxy_;
     ctx.schema_service_ = schema_service_;
     ctx.ddl_service_ = &ddl_service_;
@@ -3973,7 +3975,7 @@ int ObRootService::init_sys_admin_ctx(ObSystemAdminCtx &ctx)
   return ret;
 }
 
-int ObRootService::admin_flush_cache(const obcall::ObAdminFlushCacheArg &arg)
+int ObRootService::admin_flush_cache(const obrpc::ObAdminFlushCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -3997,7 +3999,7 @@ int ObRootService::admin_flush_cache(const obcall::ObAdminFlushCacheArg &arg)
   return ret;
 }
 
-int ObRootService::admin_merge(const obcall::ObAdminMergeArg &arg)
+int ObRootService::admin_merge(const obrpc::ObAdminMergeArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -4021,13 +4023,13 @@ int ObRootService::admin_merge(const obcall::ObAdminMergeArg &arg)
   return ret;
 }
 
-int ObRootService::admin_recovery(const obcall::ObAdminRecoveryArg &arg)
+int ObRootService::admin_recovery(const obrpc::ObAdminRecoveryArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObRootService::admin_clear_roottable(const obcall::ObAdminClearRoottableArg &arg)
+int ObRootService::admin_clear_roottable(const obrpc::ObAdminClearRoottableArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -4051,7 +4053,7 @@ int ObRootService::admin_clear_roottable(const obcall::ObAdminClearRoottableArg 
   return ret;
 }
 
-int ObRootService::admin_refresh_schema(const obcall::ObAdminRefreshSchemaArg &arg)
+int ObRootService::admin_refresh_schema(const obrpc::ObAdminRefreshSchemaArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -4075,7 +4077,7 @@ int ObRootService::admin_refresh_schema(const obcall::ObAdminRefreshSchemaArg &a
   return ret;
 }
 
-int ObRootService::admin_set_config(obcall::ObAdminSetConfigArg &arg)
+int ObRootService::admin_set_config(obrpc::ObAdminSetConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -4084,10 +4086,6 @@ int ObRootService::admin_set_config(obcall::ObAdminSetConfigArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else if (arg.is_backup_config_) {
-    if (OB_FAIL(admin_set_backup_config(arg))) {
-      LOG_WARN("fail to set backup config", K(ret), K(arg));
-    }
   } else {
     ObSystemAdminCtx ctx;
     if (OB_FAIL(init_sys_admin_ctx(ctx))) {
@@ -4158,7 +4156,7 @@ int ObRootService::admin_wash_memory_fragmentation(const ObAdminWashMemFragmenta
   return ret;
 }
 
-int ObRootService::admin_refresh_io_calibration(const obcall::ObAdminRefreshIOCalibrationArg &arg)
+int ObRootService::admin_refresh_io_calibration(const obrpc::ObAdminRefreshIOCalibrationArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
@@ -4182,7 +4180,7 @@ int ObRootService::admin_refresh_io_calibration(const obcall::ObAdminRefreshIOCa
   return ret;
 }
 
-int ObRootService::admin_clear_merge_error(const obcall::ObAdminMergeArg &arg)
+int ObRootService::admin_clear_merge_error(const obrpc::ObAdminMergeArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("admin receive clear_merge_error request");
@@ -4211,7 +4209,7 @@ int ObRootService::admin_upgrade_virtual_schema()
   return ret;
 }
 
-int ObRootService::admin_upgrade_cmd(const obcall::Bool &arg)
+int ObRootService::admin_upgrade_cmd(const obrpc::Bool &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -4232,7 +4230,7 @@ int ObRootService::admin_upgrade_cmd(const obcall::Bool &arg)
   return ret;
 }
 
-int ObRootService::admin_rolling_upgrade_cmd(const obcall::ObAdminRollingUpgradeArg &arg)
+int ObRootService::admin_rolling_upgrade_cmd(const obrpc::ObAdminRollingUpgradeArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -4253,14 +4251,14 @@ int ObRootService::admin_rolling_upgrade_cmd(const obcall::ObAdminRollingUpgrade
   return ret;
 }
 
-int ObRootService::run_upgrade_job(const obcall::ObUpgradeJobArg &arg)
+int ObRootService::run_upgrade_job(const obrpc::ObUpgradeJobArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   LOG_WARN("upgrade in lite version not supported now", KR(ret), K(arg));
   return ret;
 }
 
-int ObRootService::broadcast_ds_action(const obcall::ObDebugSyncActionArg &arg)
+int ObRootService::broadcast_ds_action(const obrpc::ObDebugSyncActionArg &arg)
 {
   LOG_INFO("receive broadcast debug sync actions", K(arg));
   int ret = OB_SUCCESS;
@@ -4270,13 +4268,13 @@ int ObRootService::broadcast_ds_action(const obcall::ObDebugSyncActionArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else if (OB_FAIL(ex_rpc::sync_call([&]{ return GCTX.ob_service_->set_ds_action(arg); }))) {
+  } else if (OB_FAIL(rpc_proxy_.to(GCTX.self_addr()).timeout(config_->rpc_timeout).set_debug_sync_action(arg))) {
     LOG_WARN("set server's global sync action failed", K(ret), K(arg));
   }
   return ret;
 }
 
-int ObRootService::check_dangling_replica_finish(const obcall::ObCheckDanglingReplicaFinishArg &arg)
+int ObRootService::check_dangling_replica_finish(const obrpc::ObCheckDanglingReplicaFinishArg &arg)
 {
   UNUSED(arg);
   return OB_NOT_SUPPORTED;
@@ -4333,7 +4331,7 @@ int ObRootService::set_cluster_version()
   return ret;
 }
 
-int ObRootService::admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg)
+int ObRootService::admin_set_tracepoint(const obrpc::ObAdminSetTPArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -4359,7 +4357,7 @@ int ObRootService::admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg)
 
 // RS may receive refresh time zone from observer with old binary during upgrade.
 // do notiong
-int ObRootService::refresh_time_zone_info(const obcall::ObRefreshTimezoneArg &arg)
+int ObRootService::refresh_time_zone_info(const obrpc::ObRefreshTimezoneArg &arg)
 {
   int ret = OB_SUCCESS;
   UNUSED(arg);
@@ -4427,7 +4425,7 @@ status::ObRootServiceStatus ObRootService::get_status() const
   return rs_status_.get_rs_status();
 }
 
-int ObRootService::table_allow_ddl_operation(const obcall::ObAlterTableArg &arg)
+int ObRootService::table_allow_ddl_operation(const obrpc::ObAlterTableArg &arg)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *schema = NULL;
@@ -4470,7 +4468,7 @@ int ObRootService::table_allow_ddl_operation(const obcall::ObAlterTableArg &arg)
 }
 
 // ask each server to update statistic
-int ObRootService::update_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+int ObRootService::update_stat_cache(const obrpc::ObUpdateStatCacheArg &arg)
 {
   int ret = OB_SUCCESS;
   ObZone null_zone;
@@ -4479,7 +4477,7 @@ int ObRootService::update_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    if (OB_FAIL(ex_rpc::sync_call([&]{ return ObOptStatManager::get_instance().add_refresh_stat_task(arg); }))) {
+    if (OB_FAIL(rpc_proxy_.to(GCTX.self_addr()).update_local_stat_cache(arg))) {
       LOG_WARN("fail to update table statistic", K(ret));
       // OB_SQL_PC_NOT_EXIST represent evict plan failed
       if (OB_SQL_PC_NOT_EXIST == ret) {
@@ -4548,7 +4546,7 @@ int ObRootService::check_weak_read_version_refresh_interval(int64_t refresh_inte
   return ret;
 }
 
-int ObRootService::set_config_pre_hook(obcall::ObAdminSetConfigArg &arg)
+int ObRootService::set_config_pre_hook(obrpc::ObAdminSetConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
@@ -4690,7 +4688,7 @@ int ObRootService::set_config_pre_hook(obcall::ObAdminSetConfigArg &arg)
     }                                                                                      \
   } while (0)
 
-int ObRootService::check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_tx_share_memory_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   // There is a prefix "Incorrect arguments to " before user log so the warn log looked kinds of wired
@@ -4700,7 +4698,7 @@ int ObRootService::check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &it
   return ret;
 }
 
-int ObRootService::check_memstore_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_memstore_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "cluster config memstore_limit_percentage. "
@@ -4723,7 +4721,7 @@ int ObRootService::check_memstore_limit_(obcall::ObAdminSetConfigItem &item)
   return ret;
 }
 
-int ObRootService::check_vector_memory_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_vector_memory_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "ob_vector_limit_percentage. "
@@ -4732,7 +4730,7 @@ int ObRootService::check_vector_memory_limit_(obcall::ObAdminSetConfigItem &item
   return ret;
 }
 
-int ObRootService::check_tenant_memstore_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_tenant_memstore_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "tenant config _memstore_limit_percentage. "
@@ -4741,7 +4739,7 @@ int ObRootService::check_tenant_memstore_limit_(obcall::ObAdminSetConfigItem &it
   return ret;
 }
 
-int ObRootService::check_tx_data_memory_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_tx_data_memory_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "tenant config _tx_data_memory_limit_percentage. "
@@ -4750,7 +4748,7 @@ int ObRootService::check_tx_data_memory_limit_(obcall::ObAdminSetConfigItem &ite
   return ret;
 }
 
-int ObRootService::check_mds_memory_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_mds_memory_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "tenant config _mds_memory_limit_percentage. "
@@ -4759,7 +4757,7 @@ int ObRootService::check_mds_memory_limit_(obcall::ObAdminSetConfigItem &item)
   return ret;
 }
 
-int ObRootService::check_freeze_trigger_percentage_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_freeze_trigger_percentage_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "tenant freeze_trigger_percentage "
@@ -4768,7 +4766,7 @@ int ObRootService::check_freeze_trigger_percentage_(obcall::ObAdminSetConfigItem
   return ret;
 }
 
-int ObRootService::check_write_throttle_trigger_percentage(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_write_throttle_trigger_percentage(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "tenant writing_throttling_trigger_percentage "
@@ -4777,7 +4775,7 @@ int ObRootService::check_write_throttle_trigger_percentage(obcall::ObAdminSetCon
   return ret;
 }
 
-int ObRootService::check_no_logging(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_no_logging(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   const char *warn_log = "set _no_logging, becacuse archivelog and _no_logging are exclusive parameters";
@@ -4785,7 +4783,7 @@ int ObRootService::check_no_logging(obcall::ObAdminSetConfigItem &item)
   return ret;
 }
 
-int ObRootService::check_data_disk_write_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_data_disk_write_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   bool is_valid = false;
@@ -4808,7 +4806,7 @@ int ObRootService::check_data_disk_write_limit_(obcall::ObAdminSetConfigItem &it
   return ret;
 }
 
-int ObRootService::check_data_disk_usage_limit_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_data_disk_usage_limit_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   bool is_valid = false;
@@ -4835,7 +4833,7 @@ int ObRootService::check_data_disk_usage_limit_(obcall::ObAdminSetConfigItem &it
 #undef CHECK_CLUSTER_CONFIG_WITH_FUNC
 
 //ensure execute on DDL thread
-int ObRootService::force_create_sys_table(const obcall::ObForceCreateSysTableArg &arg)
+int ObRootService::force_create_sys_table(const obrpc::ObForceCreateSysTableArg &arg)
 {
   return OB_NOT_SUPPORTED;
 }
@@ -4866,7 +4864,7 @@ int ObRootService::clear_special_cluster_schema_status()
 
 // if tenant_id =  OB_INVALID_TENANT_ID, indicates refresh all tenants's schema;
 // otherwise, refresh specify tenant's schema. ensure schema_version not fallback by outer layer logic.
-int ObRootService::broadcast_schema(const obcall::ObBroadcastSchemaArg &arg)
+int ObRootService::broadcast_schema(const obrpc::ObBroadcastSchemaArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receieve broadcast_schema request", K(arg));
@@ -4923,8 +4921,8 @@ int ObRootService::broadcast_schema(const obcall::ObBroadcastSchemaArg &arg)
  *   - schema_version > OB_CORE_SCHEMA_VERSION, indicate that the schema_version is valid.
  */
 int ObRootService::get_tenant_schema_versions(
-    const obcall::ObGetSchemaArg &arg,
-    obcall::ObTenantSchemaVersions &tenant_schema_versions)
+    const obrpc::ObGetSchemaArg &arg,
+    obrpc::ObTenantSchemaVersions &tenant_schema_versions)
 {
   int ret = OB_SUCCESS;
   tenant_schema_versions.reset();
@@ -5022,8 +5020,8 @@ int ObRootService::get_tenant_schema_versions(
 
 
 int ObRootService::get_recycle_schema_versions(
-    const obcall::ObGetRecycleSchemaVersionsArg &arg,
-    obcall::ObGetRecycleSchemaVersionsResult &result)
+    const obrpc::ObGetRecycleSchemaVersionsArg &arg,
+    obrpc::ObGetRecycleSchemaVersionsResult &result)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("receive get recycle schema versions request", K(arg));
@@ -5046,185 +5044,13 @@ int ObRootService::get_recycle_schema_versions(
 }
 
 int ObRootService::rebuild_index_in_restore(
-    const obcall::ObRebuildIndexInRestoreArg &arg)
+    const obrpc::ObRebuildIndexInRestoreArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   UNUSED(arg);
   return ret;
 }
 
-int ObRootService::handle_archive_log(const obcall::ObArchiveLogArg &arg)
-{
-  int ret = OB_SUCCESS;
-  LOG_INFO("handle_archive_log", K(arg));
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObBackupServiceProxy::handle_archive_log(arg))) {
-    LOG_WARN("failed to handle archive log", K(ret));
-  }
-  return ret;
-}
-
-int ObRootService::handle_backup_database(const obcall::ObBackupDatabaseArg &in_arg)
-{
-  int ret = OB_SUCCESS;
-	if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObBackupServiceProxy::handle_backup_database(in_arg))) {
-    LOG_WARN("failed to handle backup database", K(ret), K(in_arg));
-  }
-  FLOG_INFO("handle_backup_database", K(ret), K(in_arg));
-  return ret;
-}
-
-int ObRootService::handle_validate_database(const obcall::ObBackupManageArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_ERROR("not supported now", K(ret), K(arg));
-  return ret;
-}
-
-int ObRootService::handle_validate_backupset(const obcall::ObBackupManageArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_ERROR("not supported now", K(ret), K(arg));
-  return ret;
-}
-
-int ObRootService::handle_cancel_validate(const obcall::ObBackupManageArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_ERROR("not supported now", K(ret), K(arg));
-  return ret;
-}
-
-int ObRootService::handle_backup_manage(const obcall::ObBackupManageArg &arg)
-{
-  int ret = OB_SUCCESS;
-
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else {
-    switch (arg.type_) {
-    case ObBackupManageArg::CANCEL_BACKUP: {
-      if (OB_FAIL(handle_backup_database_cancel(arg))) {
-        LOG_WARN("failed to handle backup database cancel", K(ret), K(arg));
-      }
-      break;
-    };
-    case ObBackupManageArg::VALIDATE_DATABASE: {
-      if (OB_FAIL(handle_validate_database(arg))) {
-        LOG_WARN("failed to handle validate database", K(ret), K(arg));
-      }
-      break;
-    };
-    case ObBackupManageArg::VALIDATE_BACKUPSET: {
-      if (OB_FAIL(handle_validate_backupset(arg))) {
-        LOG_WARN("failed to handle validate backupset", K(ret), K(arg));
-      }
-      break;
-    };
-    case ObBackupManageArg::CANCEL_VALIDATE: {
-      if (OB_FAIL(handle_cancel_validate(arg))) {
-        LOG_WARN("failed to handle cancel validate", K(ret), K(arg));
-      }
-      break;
-    };
-    case ObBackupManageArg::CANCEL_BACKUP_BACKUPSET: {
-      if (OB_FAIL(handle_cancel_backup_backup(arg))) {
-        LOG_WARN("failed to handle cancel backup backup", K(ret), K(arg));
-      }
-      break;
-    }
-    case ObBackupManageArg::CANCEL_BACKUP_BACKUPPIECE: {
-      if (OB_FAIL(handle_cancel_backup_backup(arg))) {
-        LOG_WARN("failed to handle cancel backup backup", K(ret), K(arg));
-      }
-      break;
-    }
-    case ObBackupManageArg::CANCEL_ALL_BACKUP_FORCE: {
-      if (OB_FAIL(handle_cancel_all_backup_force(arg))) {
-        LOG_WARN("failed to handle cancel all backup force", K(ret), K(arg));
-      }
-      break;
-    };
-    default: {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_ERROR("invalid backup manage arg", K(ret), K(arg));
-      break;
-    }
-    }
-  }
-
-  FLOG_INFO("finish handle_backup_manage", K(ret), K(arg));
-  return ret;
-}
-
-int ObRootService::handle_backup_delete(const obcall::ObBackupCleanArg &arg)
-{
-  int ret = OB_SUCCESS;
-	if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObBackupServiceProxy::handle_backup_delete(arg))) {
-    LOG_WARN("failed to handle backup delete", K(ret), K(arg));
-  }
-  return ret;
-}
-
-int ObRootService::handle_delete_policy(const obcall::ObDeletePolicyArg &arg)
-{
-  int ret = OB_SUCCESS;
-	if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-	} else if (OB_FAIL(ObBackupServiceProxy::handle_delete_policy(arg))) {
-    LOG_WARN("failed to handle delete policy", K(ret), K(arg));
-  }
-  return ret;
-}
-
-int ObRootService::handle_backup_database_cancel(
-    const obcall::ObBackupManageArg &arg)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (ObBackupManageArg::CANCEL_BACKUP != arg.type_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("handle backup database cancel get invalid argument", K(ret), K(arg));
-  } else if (OB_FAIL(ObBackupServiceProxy::handle_backup_database_cancel(arg))) {
-    LOG_WARN("failed to start schedule backup cancel", K(ret), K(arg));
-  }
-  return ret;
-}
-
-int ObRootService::check_backup_scheduler_working(Bool &is_working)
-{
-  int ret = OB_NOT_SUPPORTED;
-  is_working = true;
-
-  FLOG_INFO("not support check backup scheduler working, should not use anymore", K(ret), K(is_working));
-  return ret;
-}
-
-int ObRootService::handle_cancel_backup_backup(const obcall::ObBackupManageArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_ERROR("not supported now", K(ret), K(arg));
-  return ret;
-}
-
-int ObRootService::handle_cancel_all_backup_force(const obcall::ObBackupManageArg &arg)
-{
-  int ret = OB_NOT_SUPPORTED;
-  LOG_ERROR("not support now", K(ret), K(arg));
-  return ret;
-}
 
 void ObRootService::reset_fail_count()
 {
@@ -5239,7 +5065,7 @@ void ObRootService::update_fail_count(int ret)
                KR(ret), "fail_cnt", count);
 }
 
-int ObRootService::create_restore_point(const obcall::ObCreateRestorePointArg &arg)
+int ObRootService::create_restore_point(const obrpc::ObCreateRestorePointArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   UNUSED(arg);
@@ -5247,7 +5073,7 @@ int ObRootService::create_restore_point(const obcall::ObCreateRestorePointArg &a
   return ret;
 }
 
-int ObRootService::drop_restore_point(const obcall::ObDropRestorePointArg &arg)
+int ObRootService::drop_restore_point(const obrpc::ObDropRestorePointArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   UNUSED(arg);
@@ -5255,7 +5081,7 @@ int ObRootService::drop_restore_point(const obcall::ObDropRestorePointArg &arg)
   return ret;
 }
 
-int ObRootService::build_ddl_single_replica_response(const obcall::ObDDLBuildSingleReplicaResponseArg &arg)
+int ObRootService::build_ddl_single_replica_response(const obrpc::ObDDLBuildSingleReplicaResponseArg &arg)
 {
   int ret = OB_SUCCESS;
   ObDDLTaskInfo info;
@@ -5304,11 +5130,11 @@ int ObRootService::purge_recyclebin_objects(int64_t purge_each_time)
     LOG_WARN("get all tenants failed", KR(ret));
   } else {
     const int64_t current_time = ObTimeUtility::current_time();
-    obcall::Int64 expire_time = current_time - expire_timeval;
+    obrpc::Int64 expire_time = current_time - expire_timeval;
     const int64_t SLEEP_INTERVAL = 100 * 1000;  //100ms interval of send rpc
     const int64_t PURGE_EACH_RPC = 10;          //delete count per rpc
-    obcall::Int64 affected_rows = 0;
-    obcall::ObPurgeRecycleBinArg arg;
+    obrpc::Int64 affected_rows = 0;
+    obrpc::ObPurgeRecycleBinArg arg;
     int64_t purge_sum = purge_each_time;
     const bool is_standby = PRIMARY_CLUSTER != ObClusterInfoGetter::get_cluster_role_v2();
     const ObSimpleTenantSchema *simple_tenant = NULL;
@@ -5350,7 +5176,7 @@ int ObRootService::purge_recyclebin_objects(int64_t purge_each_time)
         } else if (0 == cal_timeout) {
           LOG_INFO("cal purge need timeout is zero, just exit", K(tenant_id), K(purge_sum));
           break;
-        } else if (OB_FAIL(this->purge_expire_recycle_objects(arg, affected_rows))) {
+        } else if (OB_FAIL(common_proxy_.timeout(cal_timeout).purge_expire_recycle_objects(arg, affected_rows))) {
           LOG_WARN("purge reyclebin objects failed", KR(ret),
               K(current_time), K(expire_time), K(affected_rows), K(arg));
         } else {
@@ -5377,7 +5203,7 @@ int ObRootService::purge_recyclebin_objects(int64_t purge_each_time)
   return ret;
 }
 
-int ObRootService::flush_opt_stat_monitoring_info(const obcall::ObFlushOptStatArg &arg)
+int ObRootService::flush_opt_stat_monitoring_info(const obrpc::ObFlushOptStatArg &arg)
 {
   int ret = OB_SUCCESS;
   ObZone empty_zone;
@@ -5385,79 +5211,13 @@ int ObRootService::flush_opt_stat_monitoring_info(const obcall::ObFlushOptStatAr
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    if (OB_FAIL(ex_rpc::sync_call([&]() -> int { int ret = OB_SUCCESS; MTL_SWITCH(arg.tenant_id_) { ObOptStatMonitorManager *m = MTL(ObOptStatMonitorManager*); if (OB_ISNULL(m)) { ret = OB_ERR_UNEXPECTED; } else if (OB_FAIL(m->update_opt_stat_monitoring_info(arg))) {} } return ret; }))) {
+    if (OB_FAIL(rpc_proxy_.to(GCTX.self_addr()).flush_local_opt_stat_monitoring_info(arg))) {
       LOG_WARN("fail to update table statistic", K(ret));
     } else { /*do nothing*/}
   }
   return ret;
 }
 
-int ObRootService::admin_set_backup_config(const obcall::ObAdminSetConfigArg &arg)
-{
-  int ret = OB_SUCCESS;  
-  if (!arg.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid backup config arg", K(ret));
-  } else if (!arg.is_backup_config_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("admin set config type not backup config", K(ret), K(arg));
-  }
-  share::BackupConfigItemPair config_item;
-  share::ObBackupConfigParserMgr config_parser_mgr;
-  ARRAY_FOREACH_X(arg.items_, i , cnt, OB_SUCC(ret)) {
-    const ObAdminSetConfigItem &item = arg.items_.at(i);
-    uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
-    ObMySQLTransaction trans;
-    config_parser_mgr.reset();
-    if ((common::is_sys_tenant(item.exec_tenant_id_) && item.tenant_name_.is_empty())
-        || (common::is_user_tenant(item.exec_tenant_id_) && !item.tenant_name_.is_empty())
-        || common::is_meta_tenant(item.exec_tenant_id_)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("backup config only support user tenant", K(ret));
-    } else if (!item.tenant_name_.is_empty()) {
-      schema::ObSchemaGetterGuard guard;
-      if (OB_ISNULL(schema_service_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema service must not be null", K(ret));
-      } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
-        LOG_WARN("fail to get tenant schema guard", K(ret));
-      } else if (OB_FAIL(guard.get_tenant_id(ObString(item.tenant_name_.ptr()), exec_tenant_id))) {
-        LOG_WARN("fail to get tenant id", K(ret));
-      }
-    } else {
-      exec_tenant_id = item.exec_tenant_id_;
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(trans.start(&sql_proxy_, gen_meta_tenant_id(exec_tenant_id)))) {
-      LOG_WARN("fail to start trans", K(ret));
-    } else {
-      common::ObSqlString name;
-      common::ObSqlString value;
-      if (OB_FAIL(name.assign(item.name_.ptr()))) {
-        LOG_WARN("fail to assign name", K(ret));
-      } else if (OB_FAIL(value.assign(item.value_.ptr()))) {
-        LOG_WARN("fail to assign value", K(ret));
-      } else if (OB_FAIL(config_parser_mgr.init(name, value, exec_tenant_id))) {
-        LOG_WARN("fail to init backup config parser mgr", K(ret), K(item));
-      } else if (OB_FAIL(config_parser_mgr.update_inner_config_table(trans))) {
-        LOG_WARN("fail to update inner config table", K(ret));
-      }
-
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(trans.end(true))) {
-          LOG_WARN("fail to commit trans", K(ret));
-        }
-      } else {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
-          LOG_WARN("fail to rollback trans", K(tmp_ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
 
 int ObRootService::cancel_ddl_task(const ObCancelDDLTaskArg &arg)
 {
@@ -5516,13 +5276,13 @@ int ObRootService::set_config_after_bootstrap_()
   return ret;
 }
 
-int ObRootService::handle_recover_table(const obcall::ObRecoverTableArg &arg)
+int ObRootService::handle_recover_table(const obrpc::ObRecoverTableArg &arg)
 {
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 
-int ObRootService::recompile_all_views_batch(const obcall::ObRecompileAllViewsBatchArg &arg)
+int ObRootService::recompile_all_views_batch(const obrpc::ObRecompileAllViewsBatchArg &arg)
 {
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
@@ -5540,7 +5300,7 @@ int ObRootService::recompile_all_views_batch(const obcall::ObRecompileAllViewsBa
   return ret;
 }
 
-int ObRootService::check_transfer_task_tablet_count_threshold_(obcall::ObAdminSetConfigItem &item)
+int ObRootService::check_transfer_task_tablet_count_threshold_(obrpc::ObAdminSetConfigItem &item)
 {
   int ret = OB_SUCCESS;
   bool valid = true;
@@ -5599,7 +5359,7 @@ int ObRootService::start_ddl_service_()
   return ret;
 }
 
-int ObRootService::create_ccl_rule_ddl(const obcall::ObCreateCCLRuleArg &arg)
+int ObRootService::create_ccl_rule_ddl(const obrpc::ObCreateCCLRuleArg &arg)
 {
   int ret = OB_SUCCESS;
   ObCclDDLService ccl_ddl_service(&ddl_service_);
@@ -5612,7 +5372,7 @@ int ObRootService::create_ccl_rule_ddl(const obcall::ObCreateCCLRuleArg &arg)
   return ret;
 }
 
-int ObRootService::drop_ccl_rule_ddl(const obcall::ObDropCCLRuleArg &arg)
+int ObRootService::drop_ccl_rule_ddl(const obrpc::ObDropCCLRuleArg &arg)
 {
   int ret = OB_SUCCESS;
   ObCclDDLService ccl_ddl_service(&ddl_service_);
@@ -5625,7 +5385,7 @@ int ObRootService::drop_ccl_rule_ddl(const obcall::ObDropCCLRuleArg &arg)
   return ret;
 }
 
-int ObRootService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
+int ObRootService::create_ai_model(const obrpc::ObCreateAiModelArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_TRACE("receive create ai model arg", K(arg));
@@ -5644,7 +5404,7 @@ int ObRootService::create_ai_model(const obcall::ObCreateAiModelArg &arg)
   return ret;
 }
 
-int ObRootService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
+int ObRootService::drop_ai_model(const obrpc::ObDropAiModelArg &arg)
 {
   int ret = OB_SUCCESS;
   LOG_TRACE("receive drop ai model arg", K(arg));
@@ -5666,7 +5426,7 @@ int ObRootService::drop_ai_model(const obcall::ObDropAiModelArg &arg)
 
 
 
-int ObRootService::create_location(const obcall::ObCreateLocationArg &arg)
+int ObRootService::create_location(const obrpc::ObCreateLocationArg &arg)
 {
   int ret = OB_SUCCESS;
   ObLocationDDLService location_ddl_service(&ddl_service_);
@@ -5679,7 +5439,7 @@ int ObRootService::create_location(const obcall::ObCreateLocationArg &arg)
   return ret;
 }
 
-int ObRootService::drop_location(const obcall::ObDropLocationArg &arg)
+int ObRootService::drop_location(const obrpc::ObDropLocationArg &arg)
 {
   int ret = OB_SUCCESS;
   ObLocationDDLService location_ddl_service(&ddl_service_);

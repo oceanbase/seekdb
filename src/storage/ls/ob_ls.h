@@ -26,9 +26,7 @@
 #include "storage/ls/ob_ls_tx_service.h"
 #include "storage/ls/ob_ls_role_handler.h"
 #include "storage/ls/ob_ls_fo_handler.h"
-#include "storage/ls/ob_ls_backup_handler.h"
 #include "storage/ls/ob_ls_rebuild_handler.h"
-#include "storage/ls/ob_ls_archive_handler.h"
 #include "storage/ls/ob_ls_meta.h"
 #include "storage/ls/ob_freezer.h"
 #include "storage/ls/ob_ls_sync_tablet_seq_handler.h"
@@ -55,9 +53,13 @@
 #include "logservice/leader_coordinator/election_priority_impl/election_priority_impl.h"
 #include "storage/tx_storage/ob_tablet_gc_service.h"
 #include "storage/tx_storage/ob_empty_shell_task.h"
+#include "observer/table/ttl/ob_tenant_tablet_ttl_mgr.h"
 #include "storage/mview/ob_major_mv_merge_info.h"
-#include "share/vector_index/ob_plugin_vector_index_scheduler.h"
 #include "storage/ls/ob_freezer_define.h"
+#ifdef OB_BUILD_SHARED_STORAGE
+#include "storage/shared_storage/ob_private_block_gc_task.h"
+#include "storage/shared_storage/prewarm/ob_ls_prewarm_handler.h"
+#endif
 
 namespace oceanbase
 {
@@ -125,7 +127,7 @@ struct DiagnoseInfo
   logservice::RCDiagnoseInfo rc_diagnose_info_;
   logservice::ApplyDiagnoseInfo apply_diagnose_info_;
   logservice::ReplayDiagnoseInfo replay_diagnose_info_;
-  checkpoint::ObLsClogCheckpointStat ls_clog_checkpoint_stat_;
+  checkpoint::CheckpointDiagnoseInfo checkpoint_diagnose_info_;
   char read_only_tx_info_[1024];
   TO_STRING_KV(K(ls_id_),
                K(log_handler_diagnose_info_),
@@ -133,7 +135,7 @@ struct DiagnoseInfo
                K(rc_diagnose_info_),
                K(apply_diagnose_info_),
                K(replay_diagnose_info_),
-               K(ls_clog_checkpoint_stat_),
+               K(checkpoint_diagnose_info_),
                K(read_only_tx_info_));
   void reset() {
     ls_id_ = -1;
@@ -142,7 +144,7 @@ struct DiagnoseInfo
     rc_diagnose_info_.reset();
     apply_diagnose_info_.reset();
     replay_diagnose_info_.reset();
-    ls_clog_checkpoint_stat_.reset();
+    checkpoint_diagnose_info_.reset();
     read_only_tx_info_[0] = '\0';
   }
 };
@@ -254,6 +256,10 @@ public:
 
   checkpoint::ObTabletGCHandler *get_tablet_gc_handler() { return &tablet_gc_handler_; }
   checkpoint::ObTabletEmptyShellHandler *get_tablet_empty_shell_handler() { return &tablet_empty_shell_handler_; }
+#ifdef OB_BUILD_SHARED_STORAGE
+  ObLSPrivateBlockGCHandler& get_ls_private_block_gc_handler() { return ls_private_block_gc_handler_; }
+  ObSSLSPreWarmHandler& get_ls_prewarm_handler() { return ls_prewarm_handler_; }
+#endif
 
   // get ls info
   int get_ls_info(ObLSVTInfo &ls_info);
@@ -462,6 +468,7 @@ public:
   DELEGATE_WITH_RET(ls_meta_, get_rebuild_info, int);
   DELEGATE_WITH_RET(ls_meta_, get_create_type, int);
   DELEGATE_WITH_RET(ls_meta_, get_store_format, ObLSStoreFormat);
+
 
   // get ls_meta_package and sorted tablet_metas for backup. tablet gc is forbidden meanwhile.
   // @param [in] check_archive if need check archive, migration/rebuild is true
@@ -789,6 +796,7 @@ public:
   // for transfer move tx ctx to dest_ls
   DELEGATE_WITH_RET(ls_tx_svr_, move_tx_op, int);
 
+
   // ObReplayHandler interface:
   DELEGATE_WITH_RET(replay_handler_, replay, int);
 
@@ -900,6 +908,16 @@ public:
   int inner_check_allow_read_(const ObRestoreStatus &restore_status, bool &allow_read);
   int set_ls_allow_to_read();
 
+#ifdef OB_BUILD_SHARED_STORAGE
+  int upload_major_compaction_tablet_meta(
+    const common::ObTabletID &tablet_id,
+    const ObUpdateTableStoreParam &param,
+    const int64_t start_macro_seq);
+
+  // write tablet_id_set to pending_free_array when ls replica remove for shared storage
+  DELEGATE_WITH_RET(ls_tablet_svr_, write_tablet_id_set_to_pending_free, int);
+#endif
+
 private:
   void record_async_freeze_tablets_(const ObIArray<ObTabletID> &tablet_ids, const int64_t epoch);
   int inner_build_tablet_with_batch_tables_(
@@ -927,12 +945,8 @@ private:
   ObFreezer ls_freezer_;
   // for FO
   // ObLSFailoverHandler ls_failover_handler_;
-  // for Backup
-  // ObLSBackupHandler ls_backup_handler_;
   // for rebuild
   // ObLSRebuildHandler ls_rebuild_handler_;
-  // for log archive
-  // ObLSArchiveHandler ls_archive_handler_;
   // for restore
   restore::ObRestoreHandler ls_restore_handler_;
   ObTxTable tx_table_;
@@ -946,18 +960,25 @@ private:
   // interface for submit keep alive log
   transaction::ObKeepAliveLSHandler keep_alive_ls_handler_;
 
+
   ObLSWRSHandler ls_wrs_handler_;
   // for tablet gc
   checkpoint::ObTabletGCHandler tablet_gc_handler_;
   // for update tablet to empty shell
   checkpoint::ObTabletEmptyShellHandler tablet_empty_shell_handler_;
+#ifdef OB_BUILD_SHARED_STORAGE
+  // for share storage private dir micro block gc
+  ObLSPrivateBlockGCHandler ls_private_block_gc_handler_;
+#endif
   // record reserved snapshot
   ObLSReservedSnapshotMgr reserved_snapshot_mgr_;
   ObLSResvSnapClogHandler reserved_snapshot_clog_handler_;
   ObMediumCompactionClogHandler medium_compaction_clog_handler_;
-  // vector index scheduler (previously hosted in ObTenantTabletTTLMgr)
-  int vec_tg_id_;
-  share::ObPluginVectorIndexLoadScheduler vector_idx_scheduler_;
+  table::ObTenantTabletTTLMgr tablet_ttl_mgr_;
+#ifdef OB_BUILD_SHARED_STORAGE
+  // for shared storage ls replica prewarm
+  ObSSLSPreWarmHandler ls_prewarm_handler_;
+#endif
 private:
   bool is_inited_;
   uint64_t tenant_id_;
