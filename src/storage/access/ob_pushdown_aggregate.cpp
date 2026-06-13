@@ -630,19 +630,8 @@ int ObCountAggCell::copy_output_rows(const int32_t start_offset, const int32_t e
   } else {
     common::ObDatum *result_datums = group_by_result_datum_buf_->get_basic_buf();
     if (exclude_null_) {
-      if (lib::is_oracle_mode()) {
-        for (int64_t i = start_offset; i < end_offset; i++) {
-          col_datums_[i].is_null() ? result_datums[i].set_number(common::number::ObNumber::get_zero()) :
-              result_datums[i].set_number(common::number::ObNumber::get_positive_one());
-        }
-      } else {
-        for (int64_t i = start_offset; i < end_offset; i++) {
-          col_datums_[i].is_null() ? result_datums[i].set_int(0) : result_datums[i].set_int(1);
-        }
-      }
-    } else if (lib::is_oracle_mode()) {
       for (int64_t i = start_offset; i < end_offset; i++) {
-        result_datums[i].set_number(common::number::ObNumber::get_positive_one());
+        col_datums_[i].is_null() ? result_datums[i].set_int(0) : result_datums[i].set_int(1);
       }
     } else {
       for (int64_t i = start_offset; i < end_offset; i++) {
@@ -667,13 +656,13 @@ int ObCountAggCell::copy_single_output_row(sql::ObEvalCtx &ctx)
     } else {
       sql::ObDatum &datum = basic_info_.agg_expr_->args_[0]->locate_expr_datum(ctx);
       if (!datum.is_null()) {
-        lib::is_oracle_mode() ? result_datum.set_number(common::number::ObNumber::get_positive_one()) : result_datum.set_int(1);
+        result_datum.set_int(1);
       } else {
-        lib::is_oracle_mode() ? result_datum.set_number(common::number::ObNumber::get_zero()) : result_datum.set_int(0);
+        result_datum.set_int(0);
       }
     }
   } else {
-    lib::is_oracle_mode() ? result_datum.set_number(common::number::ObNumber::get_positive_one()) : result_datum.set_int(1);
+    result_datum.set_int(1);
   }
   return ret;
 }
@@ -684,20 +673,6 @@ int ObCountAggCell::collect_batch_result_in_group_by(const int64_t distinct_cnt)
   if (OB_UNLIKELY(distinct_cnt > group_by_result_datum_buf_->get_capacity())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(distinct_cnt), KPC(group_by_result_datum_buf_));
-  } else if (lib::is_oracle_mode()) {
-    common::number::ObNumber result_num;
-    char local_buf[common::number::ObNumber::MAX_BYTE_LEN];
-    common::ObDataBuffer local_alloc(local_buf, common::number::ObNumber::MAX_BYTE_LEN);
-    for (int64_t i = 0; OB_SUCC(ret) && i < distinct_cnt; ++i) {
-      local_alloc.free();
-      common::ObDatum &result_datum = group_by_result_datum_buf_->at(i);
-      const int64_t row_count = result_datum.get_int();
-      if (OB_FAIL(result_num.from(row_count, local_alloc))) {
-        LOG_WARN("Failed to cons number from int", K(ret), K(row_count));
-      } else {
-        result_datum.set_number(result_num);
-      }
-    }
   }
   LOG_DEBUG("[GROUP BY PUSHDOWN]", K(ret), K(distinct_cnt));
   return ret;
@@ -708,20 +683,8 @@ int ObCountAggCell::collect_result(sql::ObEvalCtx &ctx)
   int ret = OB_SUCCESS;
   ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
-  if (lib::is_oracle_mode()) {
-    common::number::ObNumber result_num;
-    char local_buff[common::number::ObNumber::MAX_BYTE_LEN];
-    common::ObDataBuffer local_alloc(local_buff, common::number::ObNumber::MAX_BYTE_LEN);
-    if (OB_FAIL(result_num.from(row_count_, local_alloc))) {
-      LOG_WARN("Failed to cons number from int", K(ret), K(row_count_));
-    } else {
-      result.set_number(result_num);
-      eval_info.evaluated_ = true;
-    }
-  } else {
-    result.set_int(row_count_);
-    eval_info.evaluated_ = true;
-  }
+  result.set_int(row_count_);
+  eval_info.evaluated_ = true;
   LOG_DEBUG("collect_result", K(result), KPC(this));
   return ret;
 }
@@ -1492,17 +1455,7 @@ int ObSumOpSizeAggCell::collect_result(sql::ObEvalCtx &ctx)
   int ret = OB_SUCCESS;
   ObDatum &result = basic_info_.agg_expr_->locate_datum_for_write(ctx);
   sql::ObEvalInfo &eval_info = basic_info_.agg_expr_->get_eval_info(ctx);
-  if (lib::is_oracle_mode()) {
-    common::number::ObNumber result_num;
-    char local_buff[common::number::ObNumber::MAX_BYTE_LEN];
-    common::ObDataBuffer local_alloc(local_buff, common::number::ObNumber::MAX_BYTE_LEN);
-    if (OB_FAIL(result_num.from(total_size_, local_alloc))) {
-      LOG_WARN("Failed to cons number from uint", K(ret), K_(total_size));
-    } else {
-      result.set_number(result_num);
-      eval_info.evaluated_ = true;
-    }
-  } else {
+  {
     result.set_uint(total_size_);
     eval_info.evaluated_ = true;
   }
