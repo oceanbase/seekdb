@@ -55,7 +55,7 @@ int ObExprRegexpInstr::calc_result_typeN(ObExprResType &type,
         LOG_WARN("the parameter is not castable", K(ret), K(i));
       }
     }
-    if (OB_SUCC(ret) && is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       ObExprResType cmp_type;
       if (OB_FAIL(ObExprRegexContext::check_binary_compatible(types, 2))) {
         LOG_WARN("types are not compatible with binary.", K(ret));
@@ -159,7 +159,7 @@ int ObExprRegexpInstr::is_valid_for_generated_column(const ObRawExpr*expr,
                                                      const common::ObIArray<ObRawExpr *> &exprs,
                                                      bool &is_valid) const {
   int ret = OB_SUCCESS;
-  is_valid = lib::is_mysql_mode();
+  is_valid = true;
   return ret;
 }
 
@@ -176,7 +176,7 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   ObDatum *subexpr = NULL;
   if (OB_FAIL(expr.eval_param_value(
               ctx, text, pattern, position, occurrence, return_opt, match_type, subexpr))) {
-    if (lib::is_mysql_mode() && ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
+    if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
       expr_datum.set_null();
       const char *charset_name = ObCharset::charset_name(expr.args_[0]->datum_meta_.cs_type_);
@@ -197,7 +197,7 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
                           expr.args_[1]->datum_meta_.cs_type_ != CS_TYPE_UTF16_BIN))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expr));
-  } else if (lib::is_mysql_mode() && !pattern->is_null() && pattern->get_string().empty()) {
+  } else if (!pattern->is_null() && pattern->get_string().empty()) {
     if (NULL == match_type || !match_type->is_null()) {
       ret = OB_ERR_REGEXP_ERROR;
       LOG_WARN("empty regex expression", K(ret));
@@ -209,10 +209,10 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     int64_t occur = 1;
     int64_t return_opt_val = 0;
     int64_t subexpr_val = 0;
-    bool null_result = lib::is_mysql_mode() && ((position != NULL && position->is_null()) ||
-                                                (occurrence != NULL && occurrence->is_null()) ||
-                                                (return_opt != NULL && return_opt->is_null()) ||
-                                                (match_type != NULL && match_type->is_null()));
+    bool null_result = ((position != NULL && position->is_null()) ||
+                        (occurrence != NULL && occurrence->is_null()) ||
+                        (return_opt != NULL && return_opt->is_null()) ||
+                        (match_type != NULL && match_type->is_null()));
     if (OB_FAIL(ObExprUtil::get_int_param_val(
           position, expr.arg_cnt_ > 2 && expr.args_[2]->obj_meta_.is_decimal_int(), pos))
         || OB_FAIL(ObExprUtil::get_int_param_val(
@@ -280,7 +280,7 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
                  (NULL != occurrence && occurrence->is_null()) ||
                  (NULL != subexpr && subexpr->is_null()) ||
                  (NULL != return_opt && return_opt->is_null()) ||
-                 (lib::is_mysql_mode() && NULL != match_type && match_type->is_null())) {
+                 (NULL != match_type && match_type->is_null())) {
         expr_datum.set_null();
       } else {
         is_null = false;
@@ -304,16 +304,8 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
       } else if (OB_FAIL(regexp_ctx->find(tmp_alloc, text_utf, res_coll_type, pos - 1, occur,
                                           return_opt_val, subexpr_val, res_pos))) {
         LOG_WARN("failed to regexp find loc", K(ret));
-      } else if (lib::is_mysql_mode()) {
-        expr_datum.set_int(res_pos);
       } else {
-        number::ObNumber nmb;
-        ObNumStackOnceAlloc nmb_alloc;
-        if (OB_FAIL(nmb.from(res_pos, nmb_alloc))) {
-          LOG_WARN("set integer to number failed", K(ret));
-        } else {
-          expr_datum.set_number(nmb);
-        }
+        expr_datum.set_int(res_pos);
       }
     }
   }

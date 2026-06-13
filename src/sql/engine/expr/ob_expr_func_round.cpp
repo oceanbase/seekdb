@@ -108,14 +108,12 @@ int ObExprFuncRound::set_res_scale_prec(ObExprTypeCtx &type_ctx, ObExprResType *
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param_num", K(ret), K(param_num));
   } else {
-    if (1 == param_num && lib::is_mysql_mode()) {
+    if (1 == param_num) {
       res_scale = DEFAULT_SCALE_FOR_INTEGER;
     } else if (2 == param_num && params[1].is_null()) {
       res_scale = DEFAULT_SCALE_FOR_INTEGER; // compatible with mysql
-    } else if (lib::is_mysql_mode() && 2 == param_num && params[1].is_literal()
+    } else if (2 == param_num && params[1].is_literal()
                && !params[0].is_integer_type()) {
-      // oracle mode return number type, scale is ORA_NUMBER_SCALE_UNKNOWN_YET
-      // here is only for mysql mode
       const ObObj &obj = params[1].get_param();
       ObArenaAllocator oballocator(ObModIds::BLOCK_ALLOC);
       ObCastMode cast_mode = CM_NONE;
@@ -137,22 +135,17 @@ int ObExprFuncRound::set_res_scale_prec(ObExprTypeCtx &type_ctx, ObExprResType *
         res_scale = params[0].get_scale();
       }
     } else {
-      if (lib::is_mysql_mode()) {
-        if (ob_is_numeric_type(res_type)) {
-          if (ob_is_int_tc(res_type)) {
-            res_prec = ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].precision_;
-            res_scale = ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].scale_;
-          } else if (ob_is_uint_tc(res_type)) {
-            res_prec = ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type].precision_;
-            res_scale = ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type].scale_;
-          } else {
-            res_prec = params[0].get_precision();
-            res_scale = params[0].get_scale();
-          }
+      if (ob_is_numeric_type(res_type)) {
+        if (ob_is_int_tc(res_type)) {
+          res_prec = ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].precision_;
+          res_scale = ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].scale_;
+        } else if (ob_is_uint_tc(res_type)) {
+          res_prec = ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type].precision_;
+          res_scale = ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type].scale_;
+        } else {
+          res_prec = params[0].get_precision();
+          res_scale = params[0].get_scale();
         }
-      } else {
-        res_scale = ORA_NUMBER_SCALE_UNKNOWN_YET;
-        res_prec = PRECISION_UNKNOWN_YET;
       }
     }
   }
@@ -1125,9 +1118,8 @@ int calc_round_expr_numeric2(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
       LOG_WARN("unexpected fmt type", K(ret), K(fmt_type), K(expr));
     }
     if (OB_SUCC(ret)) {
-      if (is_mysql_mode()
-          && (ob_is_number_tc(expr.args_[0]->datum_meta_.get_type())
-              || ob_is_decimal_int_tc(expr.args_[0]->datum_meta_.get_type()))) {
+      if (ob_is_number_tc(expr.args_[0]->datum_meta_.get_type())
+              || ob_is_decimal_int_tc(expr.args_[0]->datum_meta_.get_type())) {
         if (expr.args_[0]->datum_meta_.scale_ < scale
             // eg : select round(123.123, 100);
             //      -> result is 123.123
@@ -1183,9 +1175,8 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
           results[i].set_null();
         }
       } else {
-        if (is_mysql_mode()
-            && (ob_is_number_tc(expr.args_[0]->datum_meta_.get_type())
-                || ob_is_decimal_int_tc(expr.args_[0]->datum_meta_.get_type()))) {
+        if (ob_is_number_tc(expr.args_[0]->datum_meta_.get_type())
+                || ob_is_decimal_int_tc(expr.args_[0]->datum_meta_.get_type())) {
           if (expr.args_[0]->datum_meta_.scale_ < scale
               // eg : select round(123.123, 100);
               //      -> result is 123.123
@@ -1266,9 +1257,8 @@ int ObExprFuncRound::inner_calc_round_expr_numeric2_vector(const ObExpr &expr,
           res_vec->set_null(j);
         }
       } else {
-        if (is_mysql_mode()
-            && (ob_is_number_tc(expr.args_[0]->datum_meta_.get_type())
-                || ob_is_decimal_int_tc(expr.args_[0]->datum_meta_.get_type()))) {
+        if (ob_is_number_tc(expr.args_[0]->datum_meta_.get_type())
+                || ob_is_decimal_int_tc(expr.args_[0]->datum_meta_.get_type())) {
           if (expr.args_[0]->datum_meta_.scale_ < scale
               // eg : select round(123.123, 100);
               //      -> result is 123.123
@@ -1476,19 +1466,10 @@ int ObExprFuncRound::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprFuncRound, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
-    SET_LOCAL_SYSVAR_CAPACITY(3);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
-  } else {
-    SET_LOCAL_SYSVAR_CAPACITY(5);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_NLS_DATE_FORMAT);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_NLS_TIMESTAMP_FORMAT);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
-  }
+  SET_LOCAL_SYSVAR_CAPACITY(3);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
+  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 
