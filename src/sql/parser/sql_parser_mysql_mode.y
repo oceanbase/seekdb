@@ -15691,10 +15691,6 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
   (void)($2);
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_CREATE_TABLEGROUP, 1, $4);
 }
-| SHOW RESTORE PREVIEW
-{
-  malloc_terminal_node($$, result->malloc_pool_, T_SHOW_RESTORE_PREVIEW);
-}
 | SHOW SEQUENCES opt_show_condition opt_from_or_in_database_clause
 { malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_SEQUENCES, 2, $3, $4); }
 | SHOW ENGINE_ relation_name_or_string opt_show_engine

@@ -18,7 +18,6 @@
 
 #ifndef OB_BUILD_EMBED_MODE
 #include <parquet/arrow/schema.h>
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
 #endif
 
 #include "sql/resolver/ob_resolver_utils.h"
@@ -41,7 +40,7 @@ namespace oceanbase
 {
 using namespace common;
 using namespace share::schema;
-using namespace obcall;
+using namespace obrpc;
 using namespace pl;
 namespace sql
 {
@@ -2009,7 +2008,6 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_SHOW_INDEXES);
       SET_STMT_TYPE(T_SHOW_PROCESSLIST);
       SET_STMT_TYPE(T_SHOW_TABLEGROUPS);
-      SET_STMT_TYPE(T_SHOW_RESTORE_PREVIEW);
       SET_STMT_TYPE(T_SHOW_TRIGGERS);
       SET_STMT_TYPE(T_HELP);
       SET_STMT_TYPE(T_SHOW_RECYCLEBIN);
@@ -6113,7 +6111,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
 }
 
 int ObResolverUtils::check_self_reference_fk_columns_satisfy(
-    const obcall::ObCreateForeignKeyArg &arg)
+    const obrpc::ObCreateForeignKeyArg &arg)
 {
   int ret = OB_SUCCESS;
   if (arg.parent_columns_.empty() || arg.child_columns_.empty()) {
@@ -6134,7 +6132,7 @@ int ObResolverUtils::check_self_reference_fk_columns_satisfy(
 }
 
 int ObResolverUtils::check_foreign_key_set_null_satisfy(
-    const obcall::ObCreateForeignKeyArg &arg,
+    const obrpc::ObCreateForeignKeyArg &arg,
     const share::schema::ObTableSchema &child_table_schema,
     const bool is_mysql_compat_mode)
 {
@@ -8899,7 +8897,7 @@ int ObResolverUtils::fast_get_param_type(const ParseNode &node,
 }
 
 int ObResolverUtils::check_allowed_alter_operations_for_mlog(
-    const obcall::ObAlterTableArg &arg,
+    const obrpc::ObAlterTableArg &arg,
     const share::schema::ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;

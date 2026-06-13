@@ -1660,22 +1660,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         }
         break;
       }
-      case T_SHOW_RESTORE_PREVIEW: {
-        if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
-        } else if (!is_sys_tenant(real_tenant_id)) {
-          ret = OB_OP_NOT_ALLOW;
-          LOG_WARN("the tenant has no priv to show restore preview", K(ret), K(real_tenant_id));
-        } else {
-          show_resv_ctx.stmt_type_ = stmt::T_SHOW_RESTORE_PREVIEW;
-          GEN_SQL_STEP_1(ObShowSqlSet::SHOW_RESTORE_PREVIEW);
-          GEN_SQL_STEP_2(ObShowSqlSet::SHOW_RESTORE_PREVIEW,
-                         OB_SYS_DATABASE_NAME,
-                         OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TNAME);
-        }
-        break;
-      }
       case T_SHOW_OLAP_ASYNC_JOB_STATUS: {
         [&] {
           const int WHERE_JOB_NAME_LENGTH = 128 + 20;
@@ -3735,11 +3719,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_RECYCLEBIN,
                        "SELECT OBJECT_NAME, ORIGINAL_NAME, TYPE, CREATETIME",
                        "SELECT OBJECT_NAME, ORIGINAL_NAME, case TYPE when 1 then 'TABLE' when 2 then 'INDEX' when 3 then 'VIEW' when 4 then 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' when 7 then 'TENANT' else 'INVALID' end as TYPE, gmt_create as CREATETIME FROM %s.%s WHERE TYPE != 8 AND TYPE != 9",
                        R"(SELECT "OBJECT_NAME", "ORIGINAL_NAME", CASE "TYPE" WHEN 1 THEN 'TABLE' WHEN 2 THEN 'INDEX' WHEN 3 THEN 'VIEW' WHEN 4 THEN 'DATABASE' when 5 then 'AUX_VP' when 6 then 'TRIGGER' WHEN 7 THEN 'TENANT' ELSE 'INVALID' END AS "TYPE", "GMT_CREATE" AS "CREATETIME" FROM %s.%s WHERE TYPE != 8 AND TYPE != 9)",
-                       NULL);
-DEFINE_SHOW_CLAUSE_SET(SHOW_RESTORE_PREVIEW,
-                       NULL,
-                       "SELECT * FROM %s.%s",
-                       NULL,
                        NULL);
 DEFINE_SHOW_CLAUSE_SET(SHOW_SEQUENCES,
                        "SELECT sequence_name AS `Sequences_in_%.*s` ",

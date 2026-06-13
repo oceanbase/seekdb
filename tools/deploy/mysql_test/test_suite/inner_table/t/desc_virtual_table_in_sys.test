@@ -47,7 +47,9 @@ when "$table_name" in (
 "__all_virtual_session_event",
 "__all_virtual_storage_leak_info") then 4
 when "$table_name" in (
-"__all_virtual_tx_data") then 5
+"__all_virtual_tx_data",
+"__all_virtual_checkpoint_diagnose_memtable_info",
+"__all_virtual_checkpoint_diagnose_checkpoint_unit_info") then 5
 else 1 end) as query_type from dual`;
 
 
@@ -67,9 +69,7 @@ let $select_type = `
 select (
 case when "$table_name" in (
 # __all_virtual_mds_node_stat need tenant_id or ls_id
-"__all_virtual_mds_node_stat",
-# __tenant_virtual_show_restore_preview need run `ALTER SYSTEM RESTORE PREVIEW` first
-"__tenant_virtual_show_restore_preview"
+"__all_virtual_mds_node_stat"
 ) then 2
 else 1 end) as select_type from dual`;
 

@@ -306,8 +306,9 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_ALL_VIRTUAL_TRANS_LOCK_STAT_TID ||
          table_id == share::OB_ALL_VIRTUAL_TRANS_SCHEDULER_TID ||
          table_id == share::OB_ALL_VIRTUAL_SQL_AUDIT_TID ||
-         table_id == share::OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TID ||
          table_id == share::OB_ALL_VIRTUAL_MDS_NODE_STAT_TID ||
+         table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_MEMTABLE_INFO_TID ||
+         table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_CHECKPOINT_UNIT_INFO_TID ||
 #if defined(__APPLE__) || defined(__ANDROID__)
          table_id == share::OB_ALL_VIRTUAL_THREAD_TID ||
 #endif
