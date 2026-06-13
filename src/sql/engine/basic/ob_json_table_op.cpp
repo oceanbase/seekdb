@@ -892,10 +892,7 @@ int RegularCol::eval_exist_col(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* col_e
   INIT_SUCC(ret);
   is_null = true;
   if (ob_is_string_type(col_node.col_info_.data_type_.get_obj_type())) {
-    ObString value("true");
-    if (lib::is_mysql_mode()) {
-      value.assign_ptr("1", 1);
-    }
+    ObString value("1");
     void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1369,7 +1366,7 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   bool need_cast_res = true;
   bool enable_error = true;
 
-  if (lib::is_mysql_mode() && OB_ISNULL(in)) {
+  if (OB_ISNULL(in)) {
     is_null_value = true;
     need_cast_res = false;
     curr_ = nullptr;
@@ -1437,11 +1434,9 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
       if (OB_FAIL(ctx->table_func_->set_on_empty(*this, ctx, need_cast_res, is_null_value))) {
         LOG_WARN("fail to process on empty", K(ret));
       }
-    } else if (ctx->is_json_table_func() 
-              && curr_ && NOT_DATUM == res_flag_ 
-              && static_cast<ObIJsonBase*>(curr_)->json_type() == ObJsonNodeType::J_NULL 
-              && (!static_cast<ObIJsonBase*>(curr_)->is_real_json_null(static_cast<ObIJsonBase*>(curr_))
-                  || lib::is_mysql_mode())) {
+    } else if (ctx->is_json_table_func()
+              && curr_ && NOT_DATUM == res_flag_
+              && static_cast<ObIJsonBase*>(curr_)->json_type() == ObJsonNodeType::J_NULL) {
       curr_ = nullptr;
     }
   }
@@ -1750,39 +1745,17 @@ int ObJsonTableOp::inner_get_next_row()
 int JsonTableFunc::col_res_type_check(ObRegCol &col_node, JtScanCtx* ctx)
 {
   INIT_SUCC(ret);
-  ObObjType obj_type = col_node.col_info_.data_type_.get_obj_type();
-  JtColType col_type = col_node.type();
-  if (lib::is_mysql_mode()) {
-  } else if (col_type == COL_TYPE_EXISTS) {
-    if (ob_is_string_type(obj_type) 
-        || ob_is_numeric_type(obj_type) 
-        || ob_is_integer_type(obj_type)) {
-      // do nothing
-    } else if (ob_is_json_tc(obj_type)) {
-      ret = OB_ERR_USAGE_KEYWORD;
-      LOG_WARN("invalid usage of keyword EXISTS", K(ret));
-    } else {
-      ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE;
-      SET_COVER_ERROR(ctx, ret);
-    }
-  } else if (col_type == COL_TYPE_QUERY ) {
-    // do nothing
-  }
+  UNUSED(col_node);
+  UNUSED(ctx);
   return ret;
 }
 
 int JsonTableFunc::check_default_value(JtScanCtx* ctx, ObRegCol &col_node, ObExpr* expr)
 {
   INIT_SUCC(ret);
-  if (lib::is_mysql_mode()) {
-    // in mysql mode, should check default value with parse json
-    if (OB_FAIL(RegularCol::check_default_value_mysql(col_node, ctx, expr))) {
-      LOG_WARN("fail to check default value in mysql", K(ret));
-    }
-  } else { // oracle mode can use datum as result
-    if (OB_FAIL(RegularCol::check_default_value_oracle(ctx, col_node.col_info_, expr))) {
-      LOG_WARN("fail to check default value in oracle", K(ret));
-    }
+  // in mysql mode, should check default value with parse json
+  if (OB_FAIL(RegularCol::check_default_value_mysql(col_node, ctx, expr))) {
+    LOG_WARN("fail to check default value in mysql", K(ret));
   }
   return ret;
 }
@@ -2094,10 +2067,7 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
       
       if (OB_FAIL(ret)) {
       } else if (ob_is_string_type(info.data_type_.get_obj_type())) {
-        ObString value = is_true ? ObString("true") : ObString("false");
-        if (lib::is_mysql_mode()) {
-          value = is_true ? ObString("1") : ObString("0");
-        }
+        ObString value = is_true ? ObString("1") : ObString("0");
         void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonString));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2106,7 +2076,7 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
           col_node.curr_ = static_cast<ObJsonString*>(new(buf)ObJsonString(value.ptr(), value.length()));
           is_null = false;
         }
-      } else if (ob_is_number_tc(info.data_type_.get_obj_type()) || lib::is_mysql_mode()) {
+      } else {
         void* buf = ctx->row_alloc_.alloc(sizeof(ObJsonInt));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2114,13 +2084,6 @@ int JsonTableFunc::set_on_error(ObRegCol& col_node, JtScanCtx* ctx, int& ret)
         } else {
           col_node.curr_ = static_cast<ObJsonInt*>(new(buf)ObJsonInt(is_true));
           is_null = false;
-        }
-      } else {
-        if (col_node.col_info_.on_error_ != JSN_EXIST_ERROR) {
-          col_node.curr_ = nullptr;
-          is_null = true;
-        } else {
-          ret = OB_ERR_NON_NUMERIC_CHARACTER_VALUE;
         }
       }
     }
@@ -2240,14 +2203,12 @@ int JsonTableFunc::eval_seek_col(ObRegCol &col_node, void* in, JtScanCtx* ctx, b
   } else if (col_node.type() != COL_TYPE_QUERY && hit.size() == 1) {
     is_null_value = false;
     col_node.curr_ = hit[0];
-  } else if (col_node.type() == COL_TYPE_VALUE 
-             && !(lib::is_mysql_mode() 
-                   && ob_is_json(col_expr->datum_meta_.type_))) {
+  } else if (col_node.type() == COL_TYPE_VALUE
+             && !ob_is_json(col_expr->datum_meta_.type_)) {
     ret = OB_ERR_JSON_VALUE_NO_SCALAR;
     SET_COVER_ERROR(ctx, ret);
   } else if (col_node.type() == COL_TYPE_QUERY ||
-             (col_node.type() == COL_TYPE_VALUE 
-              && lib::is_mysql_mode() 
+             (col_node.type() == COL_TYPE_VALUE
               && ob_is_json(col_expr->datum_meta_.type_))) {
     void* js_arr_buf = ctx->row_alloc_.alloc(sizeof(ObJsonArray));
     ObIJsonBase* js_arr_ptr = nullptr;
