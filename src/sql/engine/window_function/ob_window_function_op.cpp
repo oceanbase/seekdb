@@ -582,7 +582,7 @@ int ObWindowFunctionOp::NonAggrCellNthValue::eval(RowsReader &row_reader,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid number of params", K(params.count()), K(ret));
   } else if (OB_FAIL(ObWindowFunctionOp::get_param_int_value(*params.at(1),
-      op_.eval_ctx_, is_null, nth_val, false, lib::is_mysql_mode()))) {
+      op_.eval_ctx_, is_null, nth_val, false, true))) {
     if (ret == OB_ERR_WINDOW_FRAME_ILLEGAL) {
       if (is_null) {
         ret = OB_SUCCESS;
@@ -595,8 +595,7 @@ int ObWindowFunctionOp::NonAggrCellNthValue::eval(RowsReader &row_reader,
     } else {
       LOG_WARN("get_param_int_value failed", K(ret));
     }
-  } else if (OB_UNLIKELY(lib::is_mysql_mode() &&
-                         (!params.at(1)->obj_meta_.is_integer_type() || nth_val == 0))) {
+  } else if (OB_UNLIKELY(!params.at(1)->obj_meta_.is_integer_type() || nth_val == 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments to nth_value", K(ret), K(nth_val), K(params.at(1)->obj_meta_));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nth_value");
@@ -795,7 +794,7 @@ int ObWindowFunctionOp::NonAggrCellNtile::eval(RowsReader &row_reader,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(ObWindowFunctionOp::get_param_int_value(*param,
-      op_.eval_ctx_, is_null, bucket_num, false, lib::is_mysql_mode()))) {
+      op_.eval_ctx_, is_null, bucket_num, false, true))) {
     if (ret == OB_ERR_WINDOW_FRAME_ILLEGAL) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Incorrect arguments to ntile", K(ret));
@@ -2951,10 +2950,10 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
       if (OB_ISNULL(between_value_expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("between_value_expr is unexpected", KPC(between_value_expr), K(ret));
-      } else if (OB_UNLIKELY(lib::is_mysql_mode() && is_rows && !between_value_expr->obj_meta_.is_integer_type())) {
+      } else if (OB_UNLIKELY(is_rows && !between_value_expr->obj_meta_.is_integer_type())) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
         LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(between_value_expr->obj_meta_));
-      } else if (OB_FAIL(get_param_int_value(*between_value_expr, eval_ctx_, is_null, interval, false, lib::is_mysql_mode()))) {
+      } else if (OB_FAIL(get_param_int_value(*between_value_expr, eval_ctx_, is_null, interval, false, true))) {
         LOG_WARN("get_param_int_value failed", K(ret), KPC(between_value_expr));
       }
       if (OB_FAIL(ret)) {
@@ -2970,13 +2969,8 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
     } else if (is_rows) {
     // range or rows with expr
       if (OB_UNLIKELY(!is_preceding && static_cast<uint64>(row_idx + interval) > INT64_MAX)) {
-        if (lib::is_mysql_mode()) {
-          ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-          LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(row_idx + interval));
-        } else {
-          ret = OB_DATA_OUT_OF_RANGE;
-          LOG_WARN("int64 out of range", K(ret), K(row_idx + interval));
-        }
+        ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+        LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(row_idx + interval));
       } else {
         pos = is_preceding ? row_idx - interval : row_idx + interval;
       }
@@ -3035,8 +3029,7 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         LOG_WARN("NULL ptr", K(ret), K(bound_expr));
       } else if (OB_FAIL(bound_expr->eval(eval_ctx_, cmp_val))) {
         LOG_WARN("calc compare value failed", K(ret));
-      } else if (lib::is_mysql_mode() &&
-                 !is_nmb_literal &&
+      } else if (!is_nmb_literal &&
                  ob_is_temporal_type(bound_expr->datum_meta_.get_type())) {
         if (OB_FAIL(check_interval_valid(*bound_expr))) {
           LOG_WARN("failed to check interval valid", K(ret));
