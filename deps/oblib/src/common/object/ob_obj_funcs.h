@@ -105,8 +105,8 @@ template <>
   int ret = OB_SUCCESS;
   const char *NULL_VALUE_STR = "NULL";
   if (params.print_null_string_value_) {
-    bool is_oracle_mode = lib::is_oracle_mode();
-    // oracle and mysql data type mapping: 
+    const bool is_oracle_mode = false;
+    // oracle and mysql data type mapping:
     switch (params.ob_obj_type_) {
       case ObNullType:
         break;
@@ -376,7 +376,7 @@ template <>
       v = 0.0;                                                        \
     } else if (isnan(v)) {                                            \
       v = NAN;                                                        \
-    } else if (obj.is_fixed_double() && lib::is_mysql_mode()) {       \
+    } else if (obj.is_fixed_double()) {       \
       char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};                   \
       int64_t len = ob_fcvt(v, static_cast<int>(obj.get_scale()), sizeof(buf) - 1, buf, NULL); \
       res = murmurhash(buf, static_cast<int32_t>(len), ret);            \
@@ -395,7 +395,7 @@ template <>
         v2 = 0.0;                                                     \
       } else if (isnan(v2)) {                                         \
         v2 = NAN;                                                     \
-      } else if (obj.is_fixed_double() && lib::is_mysql_mode()) {     \
+      } else if (obj.is_fixed_double()) {     \
         char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};                   \
         int64_t len = ob_fcvt(v2, static_cast<int>(obj.get_scale()), sizeof(buf) - 1, buf, NULL); \
         res = T::hash(buf, static_cast<int32_t>(len), hash);            \
@@ -486,13 +486,6 @@ template <>
       ret = OB_SIZE_OVERFLOW;\
     } else {\
       pos += print_len;\
-      if (lib::is_oracle_mode()) {\
-        if (OB_UNLIKELY(pos + 1 > length)) {\
-          ret = OB_SIZE_OVERFLOW;\
-        } else {\
-          buffer[pos++] = (IS_DOUBLE ? 'D' : 'F');\
-        }\
-      }\
     }\
     return ret; \
   }                                                                     \
@@ -519,21 +512,11 @@ template <>
         ret = OB_SIZE_OVERFLOW;\
       } else {\
         pos += print_len;\
-        if (lib::is_oracle_mode()) {\
-          if (OB_UNLIKELY(pos + 3 > length)) {\
-            ret = OB_SIZE_OVERFLOW;\
-          } else {\
-            buffer[pos++] = (IS_DOUBLE ? 'D' : 'F');\
-            buffer[pos++] = '\'';\
-            buffer[pos] = '\0';\
-          }\
+        if (OB_UNLIKELY(pos + 2 > length)) {\
+          ret = OB_SIZE_OVERFLOW;\
         } else {\
-          if (OB_UNLIKELY(pos + 2 > length)) {\
-            ret = OB_SIZE_OVERFLOW;\
-          } else {\
-            buffer[pos++] = '\'';\
-            buffer[pos] = '\0';\
-          }\
+          buffer[pos++] = '\'';\
+          buffer[pos] = '\0';\
         }\
       }\
     }\
@@ -912,8 +895,6 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
                                     int64_t &pos, const ObObjPrintParams &params) \
   {                                                                     \
     int ret = common::OB_SUCCESS;                                       \
-    static const char *CAST_PREFIX_ORACLE = "TO_DATE('";                \
-    static const char *CAST_SUFFIX_ORACLE = "', 'YYYY-MM-DD HH24:MI:SS')"; \
     static const char *CAST_PREFIX_MYSQL_TIMESTAMP = "TIMESTAMP";        \
     static const char *CAST_PREFIX_MYSQL_DATETIME = "DATETIME";        \
     static const char *NORMAL_SUFFIX = "'";                             \
@@ -921,11 +902,9 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
     const char *NORMAL_PREFIX = params.beginning_space_ ? "' " : "'";        \
     ObString str(static_cast<int32_t>(length - pos - 1), 0, buffer + pos + 1);  \
     if (OB_SUCC(ret)) {                                                 \
-      if (lib::is_oracle_mode() && params.need_cast_expr_) {                                            \
-        ret = databuff_printf(buffer, length, pos, "%s", CAST_PREFIX_ORACLE);                           \
-      } else if (params.print_const_expr_type_ && !lib::is_oracle_mode() && ob_is_datetime_or_mysql_datetime(obj.get_type())) {  \
+      if (params.print_const_expr_type_ && ob_is_datetime_or_mysql_datetime(obj.get_type())) {  \
         ret = databuff_printf(buffer, length, pos, "CAST('"); \
-      } else if (params.print_const_expr_type_ && !lib::is_oracle_mode() && ObTimestampType == obj.get_type()) {                         \
+      } else if (params.print_const_expr_type_ && ObTimestampType == obj.get_type()) {                         \
         ret = databuff_printf(buffer, length, pos, "%s %s", CAST_PREFIX_MYSQL_TIMESTAMP, NORMAL_PREFIX);\
       } else {                                                                                          \
         ret = databuff_printf(buffer, length, pos, "%s", NORMAL_PREFIX);                                \
@@ -940,12 +919,10 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
                                             obj.get_scale(), buffer, length, pos); \
     }                                                                   \
     if (OB_SUCC(ret)) {                                            \
-      if (params.print_const_expr_type_ && !lib::is_oracle_mode() && ob_is_datetime_or_mysql_datetime(obj.get_type())) {                        \
+      if (params.print_const_expr_type_ && ob_is_datetime_or_mysql_datetime(obj.get_type())) {                        \
         ret = databuff_printf(buffer, length, pos, "' AS %s)", CAST_PREFIX_MYSQL_DATETIME);     \
       } else {                                                                                  \
-        const char *fmt_suffix = params.need_cast_expr_ && lib::is_oracle_mode() ?              \
-                                  CAST_SUFFIX_ORACLE : NORMAL_SUFFIX;                           \
-        ret = databuff_printf(buffer, length, pos, "%s", fmt_suffix);     \
+        ret = databuff_printf(buffer, length, pos, "%s", NORMAL_SUFFIX);     \
       }                                                                   \
     }                                                                     \
     return ret;                                                         \
@@ -981,7 +958,7 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
       tz_info = NULL;                                                   \
     }                                                                   \
     const ObString nls_format;																				  \
-    return ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, (lib::is_oracle_mode() ? OB_MAX_DATE_PRECISION : OB_MAX_DATETIME_PRECISION), buffer, length, pos); \
+    return ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, OB_MAX_DATETIME_PRECISION, buffer, length, pos); \
   }                                                                     \
                                                                         \
   template <>                                                           \
@@ -997,7 +974,7 @@ DEF_NUMBER_FUNCS(ObUNumberType, unumber);
       tz_info = NULL;                                                   \
     }                                                                   \
     const ObString nls_format;																				\
-    int ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, (lib::is_oracle_mode() ? OB_MAX_DATE_PRECISION : OB_MAX_DATETIME_PRECISION), buf, buf_len, pos); \
+    int ret = ObTimeConverter::FTYPE##_to_str(obj.get_##TYPE(), tz_info, nls_format, OB_MAX_DATETIME_PRECISION, buf, buf_len, pos); \
     if (OB_SUCC(ret)) {                                            \
       J_QUOTE();                                                        \
       J_OBJ_END();                                                      \
@@ -1023,7 +1000,7 @@ DEF_DATETIME_FUNCS(ObTimestampType, timestamp, int64_t);
   {                                                                     \
     UNUSED(params);                                                    \
     int ret = OB_SUCCESS;                                               \
-    if (params.print_const_expr_type_ && !lib::is_oracle_mode() && ob_is_date_or_mysql_date(obj.get_type())) {       \
+    if (params.print_const_expr_type_ && ob_is_date_or_mysql_date(obj.get_type())) {       \
       ret = databuff_printf(buffer, length, pos, "DATE '");            \
     } else {                                                           \
       ret = databuff_printf(buffer, length, pos, "'");                 \
@@ -1093,7 +1070,7 @@ DEF_DATE_YEAR_FUNCS(ObDateType, date, int32_t);
   {                                                                     \
     UNUSED(params);                                                    \
     int ret = OB_SUCCESS;                                              \
-    if (params.print_const_expr_type_ && !lib::is_oracle_mode() && ObTimeType == obj.get_type()) {      \
+    if (params.print_const_expr_type_ && ObTimeType == obj.get_type()) {      \
       ret = databuff_printf(buffer, length, pos, "TIME '");            \
     } else {                                                           \
       ret = databuff_printf(buffer, length, pos, "'");                 \
@@ -1181,7 +1158,7 @@ inline int obj_print_plain_str<ObHexStringType>(const ObObj &obj, char *buffer,
     int ret = OB_SUCCESS;                                                            \
     ObCharsetType src_type = ObCharset::charset_type_by_coll(obj.get_collation_type());     \
     ObCharsetType dst_type = ObCharset::charset_type_by_coll(params.cs_type_);              \
-    if (CHARSET_BINARY == src_type && lib::is_mysql_mode()) {               \
+    if (CHARSET_BINARY == src_type) {               \
       ret = obj_print_sql<ObHexStringType>(obj, buffer, length, pos, params);      \
     } else if (params.character_hex_safe_represent_                                       \
       && ob_is_character_type(obj.get_type(), obj.get_collation_type())) {                 \
@@ -1369,7 +1346,7 @@ static uint64_t varchar_murmurhash(const ObObj &obj, const ObCollationType cs_ty
   ObObjType obj_type = ObVarcharType;
   uint64_t ret = murmurhash(&obj_type, sizeof(obj_type), hash);
   return ObCharset::hash(cs_type, obj.get_string_ptr(), obj.get_string_len(), ret,
-           obj.is_varying_len_char_type() && lib::is_oracle_mode(), NULL);
+           false, NULL);
 }
 
 #define DEF_VARCHAR_FUNCS(OBJTYPE, TYPE, VTYPE) \
@@ -1468,10 +1445,8 @@ DEF_ENUMSET_INNER_FUNCS(ObSetInnerType, set_inner, ObString);
       COMMON_LOG(WARN, "read_lob_data fail", K(ret), K(obj));                                     \
     } else if (OB_FALSE_IT(str.assign_ptr(data.ptr(), MIN(data.length(), length - pos)))) {       \
     } else if (CS_TYPE_BINARY == obj.get_collation_type()) {                   \
-      if (!lib::is_oracle_mode() && OB_SUCCESS != (ret = databuff_printf(buffer, \
-                                                                        length, pos, "X'"))) { \
-      } else if (lib::is_oracle_mode() && OB_SUCCESS != (ret = databuff_printf(buffer, \
-                                                                            length, pos, "'"))) { \
+      if (OB_SUCCESS != (ret = databuff_printf(buffer, \
+                                               length, pos, "X'"))) { \
       } else if (OB_SUCCESS != (ret = hex_print(str.ptr(), str.length(), buffer, length, pos))) { \
       } else {                                                            \
         ret = databuff_printf(buffer, length, pos, "'");                  \
@@ -1577,7 +1552,7 @@ DEF_ENUMSET_INNER_FUNCS(ObSetInnerType, set_inner, ObString);
         COMMON_LOG(ERROR, "read_lob_data fail", K(ret), K(obj));                                            \
       } else {                                                                                      \
         res = ObCharset::hash(obj.get_collation_type(), data.ptr(), data.length(),                  \
-                              hash, obj.is_varying_len_char_type() && lib::is_oracle_mode(),        \
+                              hash, false,        \
                               T::is_varchar_hash ? T::hash : NULL);                                 \
       }                                                                                             \
       return ret;                                                                                   \
@@ -1770,7 +1745,7 @@ inline int obj_print_sql<ObJsonType>(const ObObj &obj, char *buffer, int64_t len
   ObJsonBuffer jbuf(&tmp_allocator);
   ObIJsonBase *j_base = NULL;
   ObJsonInType in_type = ObJsonInType::JSON_BIN;
-  uint32_t parse_flag = lib::is_mysql_mode() ? 0 : ObJsonParser::JSN_RELAXED_FLAG;
+  uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
     COMMON_LOG(WARN, "fail to get json data", K(ret), K(in_type));
   } else if (str.empty()) { // nothing to print;
@@ -1807,7 +1782,7 @@ inline int obj_print_plain_str<ObJsonType>(const ObObj &obj, char *buffer, int64
   ObIJsonBase *j_base = NULL;
   ObJsonBuffer jbuf(&tmp_allocator);
   ObJsonInType in_type = ObJsonInType::JSON_BIN;
-  uint32_t parse_flag = lib::is_mysql_mode() ? 0 : ObJsonParser::JSN_RELAXED_FLAG;
+  uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
     COMMON_LOG(WARN, "fail to get json data", K(ret), K(in_type));
   } else if (str.empty()) { // nothing to print;
@@ -1835,7 +1810,7 @@ inline int obj_print_json<ObJsonType>(const ObObj &obj, char *buf, int64_t buf_l
   ObIJsonBase *j_base = NULL;
   ObJsonInType in_type = ObJsonInType::JSON_BIN;
   ObJsonBuffer jbuf(&tmp_allocator);
-  uint32_t parse_flag = lib::is_mysql_mode() ? 0 : ObJsonParser::JSN_RELAXED_FLAG;
+  uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buf, buf_len, pos))) {
     COMMON_LOG(WARN, "fail to get json data", K(ret), K(in_type));
   } else if (str.empty()) { // nothing to print;
