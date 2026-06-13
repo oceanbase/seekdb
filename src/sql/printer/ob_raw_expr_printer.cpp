@@ -105,20 +105,9 @@ int ObRawExprPrinter::print_bool_expr(ObRawExpr *expr)
   if (OB_ISNULL(buf_) || OB_ISNULL(pos_) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ is NULL of buf_ is NULL or pos_ is NULL or expr is NULL", K(ret));
-  } else if (lib::is_mysql_mode() || !print_params_.for_dblink_) {
+  } else {
     if (OB_FAIL(SMART_CALL(print(expr)))) {
       LOG_WARN("failed to print expr", K(ret));
-    }
-  } else {
-    bool is_bool_expr = false;
-    if (OB_FAIL(ObRawExprUtils::check_is_bool_expr(expr, is_bool_expr))) {
-      LOG_WARN("failed to check is bool expr", K(ret));
-    } else if (!is_bool_expr && OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, "("))) {
-      LOG_WARN("fail to print", K(ret));
-    } else if (OB_FAIL(SMART_CALL(print(expr)))) {
-      LOG_WARN("failed to print expr", K(ret));
-    } else if (!is_bool_expr && OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, " = 1)"))) {
-      LOG_WARN("fail to print", K(ret));
     }
   }
   return ret;
@@ -156,7 +145,7 @@ int ObRawExprPrinter::print(ObRawExpr *expr)
       && scope_ != T_WHERE_SCOPE
       && scope_ != T_NONE_SCOPE
       && scope_ != T_ORDER_SCOPE
-      && (scope_ == T_HAVING_SCOPE && lib::is_mysql_mode())) {
+      && (scope_ == T_HAVING_SCOPE)) {
     //expr is a alias column ref
     //alias column target list
     PRINT_IDENT_WITH_QUOT(expr->get_alias_column_name());
@@ -484,11 +473,7 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
     case T_OP_EXISTS:
       SET_SYMBOL_IF_EMPTY("exists");
     case T_OP_NOT: {
-      if (lib::is_mysql_mode()) {
-        SET_SYMBOL_IF_EMPTY("(not");
-      } else {
-        SET_SYMBOL_IF_EMPTY("not");
-      }
+      SET_SYMBOL_IF_EMPTY("(not");
       if (1 != expr->get_param_count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr param count should be equal 1 ", K(ret), K(expr->get_param_count()));
@@ -502,7 +487,7 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
         }
         DATA_PRINTF(")");
       }
-      if (type == T_OP_NOT && lib::is_mysql_mode()) {
+      if (type == T_OP_NOT) {
         DATA_PRINTF(")");
       }
       break;
@@ -521,12 +506,8 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
     }
     case T_OP_AND:
       SET_SYMBOL_IF_EMPTY("and");
-    case T_OP_XOR: 
-      if (lib::is_mysql_mode()) {
-        SET_SYMBOL_IF_EMPTY("xor");
-      } else {
-        SET_SYMBOL_IF_EMPTY("^");
-      }
+    case T_OP_XOR:
+      SET_SYMBOL_IF_EMPTY("xor");
     case T_OP_OR: {
       SET_SYMBOL_IF_EMPTY("or");
       // Here the child is not necessarily 2, for example a or (b or c) would be rewritten as an or with three children
@@ -818,7 +799,7 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
     }
     case T_OP_BOOL:{
       CK(1 == expr->get_param_count());
-      if (print_params_.for_dblink_ && lib::is_mysql_mode()) {
+      if (print_params_.for_dblink_) {
         DATA_PRINTF("!!(");
         PRINT_EXPR(expr->get_param_expr(0));
         DATA_PRINTF(")");
@@ -1012,19 +993,9 @@ int ObRawExprPrinter::print_ora_json_arrayagg(ObAggFunRawExpr *expr)
           const OrderItem &order_item = order_items.at(i);
           PRINT_EXPR(order_item.expr_);
           if (OB_SUCC(ret)) {
-            if (lib::is_mysql_mode()) {
-              if (is_descending_direction(order_item.order_type_)) {
-                DATA_PRINTF(" desc ");
-              }
-            } else if (order_item.order_type_ == NULLS_FIRST_ASC) {
-              DATA_PRINTF(" asc nulls first ");
-            } else if (order_item.order_type_ == NULLS_LAST_ASC) {//use default value
-              /*do nothing*/
-            } else if (order_item.order_type_ == NULLS_FIRST_DESC) {//use default value
+            if (is_descending_direction(order_item.order_type_)) {
               DATA_PRINTF(" desc ");
-            } else if (order_item.order_type_ == NULLS_LAST_DESC) {
-              DATA_PRINTF(" desc nulls last ");
-            } else {/*do nothing*/}
+            }
           }
           DATA_PRINTF(",");
         }
@@ -1303,7 +1274,7 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
       // mysql: group_concat(distinct c1,c2+1 order by c1 desc separator ',')
       SET_SYMBOL_IF_EMPTY("group_concat");
       DATA_PRINTF("%.*s(", LEN_AND_PTR(symbol));
-      if (lib::is_mysql_mode() && type == T_FUN_GROUP_PERCENTILE_CONT) {
+      if (type == T_FUN_GROUP_PERCENTILE_CONT) {
         // mysql: percentile_cont(expr, percentile_num)
         const ObIArray<OrderItem> &order_items = expr->get_order_items();
         int64_t order_item_size = order_items.count();
@@ -1346,19 +1317,9 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
               const OrderItem &order_item = order_items.at(i);
               PRINT_EXPR(order_item.expr_);
               if (OB_SUCC(ret)) {
-                if (lib::is_mysql_mode()) {
-                  if (is_descending_direction(order_item.order_type_)) {
-                    DATA_PRINTF(" desc ");
-                  }
-                } else if (order_item.order_type_ == NULLS_FIRST_ASC) {
-                  DATA_PRINTF(" asc nulls first ");
-                } else if (order_item.order_type_ == NULLS_LAST_ASC) {//use default value
-                  /*do nothing*/
-                } else if (order_item.order_type_ == NULLS_FIRST_DESC) {//use default value
+                if (is_descending_direction(order_item.order_type_)) {
                   DATA_PRINTF(" desc ");
-                } else if (order_item.order_type_ == NULLS_LAST_DESC) {
-                  DATA_PRINTF(" desc nulls last ");
-                } else {/*do nothing*/}
+                }
               }
               DATA_PRINTF(",");
             }
@@ -1417,19 +1378,9 @@ int ObRawExprPrinter::print(ObAggFunRawExpr *expr)
             const OrderItem &order_item = order_items.at(i);
             PRINT_EXPR(order_item.expr_);
             if (OB_SUCC(ret)) {
-              if (lib::is_mysql_mode()) {
-                if (is_descending_direction(order_item.order_type_)) {
-                  DATA_PRINTF(" desc ");
-                }
-              } else if (order_item.order_type_ == NULLS_FIRST_ASC) {
-                DATA_PRINTF(" asc nulls first ");
-              } else if (order_item.order_type_ == NULLS_LAST_ASC) {//use default value
-                /*do nothing*/
-              } else if (order_item.order_type_ == NULLS_FIRST_DESC) {//use default value
+              if (is_descending_direction(order_item.order_type_)) {
                 DATA_PRINTF(" desc ");
-              } else if (order_item.order_type_ == NULLS_LAST_DESC) {
-                DATA_PRINTF(" desc nulls last ");
-              } else {/*do nothing*/}
+              }
             }
             DATA_PRINTF(",");
           }
@@ -1998,9 +1949,7 @@ int ObRawExprPrinter::print_json_value(ObSysFunRawExpr *expr)
           DATA_PRINTF(" error on empty");
           break;
         case JsnValueType::JSN_VALUE_NULL:
-          if (lib::is_mysql_mode() || type == 1) {
-            DATA_PRINTF(" null on empty");
-          }
+          DATA_PRINTF(" null on empty");
           break;
         
         case JsnValueType::JSN_VALUE_IMPLICIT:
@@ -2768,20 +2717,15 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
         break;
       }
       case T_FUN_SYS_CONVERT: {
-        if (lib::is_mysql_mode()) {
-          if (2 != expr->get_param_count()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("param count should be equal 2", K(ret), K(expr->get_param_count()));
-          } else {
-            DATA_PRINTF("convert(");
-            PRINT_EXPR(expr->get_param_expr(0));
-            DATA_PRINTF(" using ");
-            PRINT_EXPR(expr->get_param_expr(1));
-            DATA_PRINTF(")");
-          }
+        if (2 != expr->get_param_count()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("param count should be equal 2", K(ret), K(expr->get_param_count()));
         } else {
-          DATA_PRINTF("%.*s", LEN_AND_PTR(func_name));
-          OZ(inner_print_fun_params(*expr));
+          DATA_PRINTF("convert(");
+          PRINT_EXPR(expr->get_param_expr(0));
+          DATA_PRINTF(" using ");
+          PRINT_EXPR(expr->get_param_expr(1));
+          DATA_PRINTF(")");
         }
         break;
       }
@@ -2997,9 +2941,7 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
       case T_FUN_SYS_DBTIMEZONE:
       case T_FUN_SYS_USER: {
         DATA_PRINTF("%.*s", LEN_AND_PTR(expr->get_func_name()));
-        if (lib::is_mysql_mode()) {
-          DATA_PRINTF("()");
-        }
+        DATA_PRINTF("()");
         break;
       }
       case T_FUN_SYS_CUR_DATE: {
@@ -3217,7 +3159,7 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
       case T_FUN_SYS_JSON_ARRAY:
       case T_FUN_SYS_JSON_MERGE_PATCH:
       case T_FUN_SYS_JSON_EXISTS: {
-        if (lib::is_mysql_mode() && (expr_type == T_FUN_SYS_JSON_ARRAY || expr_type == T_FUN_SYS_JSON_MERGE_PATCH)) {
+        if (expr_type == T_FUN_SYS_JSON_ARRAY || expr_type == T_FUN_SYS_JSON_MERGE_PATCH) {
           DATA_PRINTF("%.*s", LEN_AND_PTR(func_name));
           OZ(inner_print_fun_params(*expr));
         } else if (T_FUN_SYS_JSON_QUERY == expr_type 
@@ -3871,19 +3813,9 @@ int ObRawExprPrinter::print(ObWinFunRawExpr *expr)
               } else {
                 PRINT_EXPR(order_item.expr_);
                 if (OB_SUCC(ret)) {
-                  if (lib::is_mysql_mode()) {
-                    if (is_descending_direction(order_item.order_type_)) {
-                      DATA_PRINTF(" desc ");
-                    }
-                  } else if (order_item.order_type_ == NULLS_FIRST_ASC) {
-                    DATA_PRINTF(" asc nulls first ");
-                  } else if (order_item.order_type_ == NULLS_LAST_ASC) {//use default value
-                    /*do nothing*/
-                  } else if (order_item.order_type_ == NULLS_FIRST_DESC) {//use default value
+                  if (is_descending_direction(order_item.order_type_)) {
                     DATA_PRINTF(" desc ");
-                  } else if (order_item.order_type_ == NULLS_LAST_DESC) {
-                    DATA_PRINTF(" desc nulls last ");
-                  } else {/*do nothing*/}
+                  }
                 }
               }
               DATA_PRINTF(",");
@@ -4003,7 +3935,7 @@ int ObRawExprPrinter::print(ObMatchFunRawExpr *expr)
   if (OB_ISNULL(buf_) || OB_ISNULL(pos_) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(buf_), K(pos_), K(expr));
-  } else if (is_mysql_mode() && expr->is_es_match()) {
+  } else if (expr->is_es_match()) {
     DATA_PRINTF("MATCH('");
     int64_t i = 0;
     for (; OB_SUCC(ret) && i < expr->get_match_columns().count() - 1; ++i) {
@@ -4035,7 +3967,7 @@ int ObRawExprPrinter::print(ObMatchFunRawExpr *expr)
         DATA_PRINTF("')");
       }
     }
-  } else if (is_mysql_mode() && !expr->is_es_match()) {
+  } else if (!expr->is_es_match()) {
     DATA_PRINTF("MATCH(");
     int64_t i = 0;
     for (; OB_SUCC(ret) && i < expr->get_match_columns().count() - 1; ++i) {
@@ -4529,19 +4461,9 @@ int ObRawExprPrinter::print_array_agg_expr(ObAggFunRawExpr *expr)
           const OrderItem &order_item = order_items.at(i);
           PRINT_EXPR(order_item.expr_);
           if (OB_SUCC(ret)) {
-            if (lib::is_mysql_mode()) {
-              if (is_descending_direction(order_item.order_type_)) {
-                DATA_PRINTF(" desc ");
-              }
-            } else if (order_item.order_type_ == NULLS_FIRST_ASC) {
-              DATA_PRINTF(" asc nulls first ");
-            } else if (order_item.order_type_ == NULLS_LAST_ASC) {//use default value
-              /*do nothing*/
-            } else if (order_item.order_type_ == NULLS_FIRST_DESC) {//use default value
+            if (is_descending_direction(order_item.order_type_)) {
               DATA_PRINTF(" desc ");
-            } else if (order_item.order_type_ == NULLS_LAST_DESC) {
-              DATA_PRINTF(" desc nulls last ");
-            } else {/*do nothing*/}
+            }
           }
           DATA_PRINTF(",");
         }
