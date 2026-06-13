@@ -240,8 +240,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("failed to check semistruct encoding options", KR(ret));
       } else {
         // deal with alter table rename to mock_fk_parent_table_name
-        if (is_mysql_mode()
-            && alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLE_NAME)) {
+        if (alter_table_bitset_.has_member(obcall::ObAlterTableArg::TABLE_NAME)) {
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
           const AlterTableSchema &alter_table_schema = alter_table_stmt->get_alter_table_arg().alter_table_schema_;
           const ObString &new_table_name = alter_table_schema.get_table_name_str();
@@ -357,6 +356,8 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_ISNULL(tbl_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is NULL", K(ret));
+      } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*tbl_schema, params_.is_htable_))) {
+        LOG_WARN("failed to check htable ddl supported", K(ret));
       }
     }
   }
@@ -396,6 +397,10 @@ int ObAlterTableResolver::set_table_options()
     //deep copy
     if (OB_FAIL(ret)) {
       //do nothing
+    } else if (compress_method_ == all_compressor_name[ZLIB_COMPRESSOR]) {
+      ret = OB_NOT_SUPPORTED;
+      SQL_RESV_LOG(WARN, "Not allowed to use zlib compressor!", K(ret));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "zlib compressor");
     } else if (OB_FAIL(alter_table_schema.set_compress_func_name(compress_method_))) {
       SQL_RESV_LOG(WARN, "Write compress_method_ to alter_table_schema failed!", K(ret));
     } else if (OB_FAIL(alter_table_schema.set_comment(comment_))) {
@@ -951,7 +956,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         case T_ALTER_PARTITION_OPTION: {
             has_alter_partition = true;
             alter_table_stmt->set_alter_table_partition();
-            if (lib::is_mysql_mode() && alter_table_stmt->get_alter_table_arg().is_alter_columns_) {
+            if (alter_table_stmt->get_alter_table_arg().is_alter_columns_) {
               ret = OB_NOT_SUPPORTED;
               LOG_USER_ERROR(
                 OB_NOT_SUPPORTED,
@@ -1028,7 +1033,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
                   }
                 }
               }
-              if (OB_SUCC(ret) && (lib::is_mysql_mode() || !is_constraint)) { // drop foreign key
+              if (OB_SUCC(ret)) { // drop foreign key
                 // When dropping constraint check if the constraint type is foreign key or unique constraint
                 if (OB_FAIL(schema_guard->get_foreign_key_id(table_schema_->get_tenant_id(),
                                                              table_schema_->get_database_id(),
@@ -1078,9 +1083,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
                 }
               } else {
                 ret = OB_ERR_NONEXISTENT_CONSTRAINT;
-                if (lib::is_mysql_mode()) {
-                  LOG_USER_ERROR(OB_ERR_NONEXISTENT_CONSTRAINT, constraint_name.length(), constraint_name.ptr());
-                }
+                LOG_USER_ERROR(OB_ERR_NONEXISTENT_CONSTRAINT, constraint_name.length(), constraint_name.ptr());
                 SQL_RESV_LOG(WARN,
                     "Cannot drop constraint  - nonexistent constraint",
                     K(ret),
@@ -1175,7 +1178,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
       LOG_WARN("failed to resolve skip index", K(ret));
     }
     //deal with drop column affer drop constraint (mysql mode)
-    if (OB_SUCC(ret) && lib::is_mysql_mode() && drop_col_act_position_list.count() > 0) {
+    if (OB_SUCC(ret) && drop_col_act_position_list.count() > 0) {
       for (uint64_t i = 0; OB_SUCC(ret) && i < drop_col_act_position_list.count(); ++i) {
         if (OB_FAIL(resolve_drop_column_nodes_for_mysql(*node.children_[drop_col_act_position_list.at(i)], reduced_visible_col_set, drop_column_names_set))) {
           SQL_RESV_LOG(WARN, "Resolve drop column error!", K(ret));
@@ -1377,6 +1380,11 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         } else if (OB_ISNULL(tbl_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is NULL", K(ret));
+        } else if (!tbl_schema->get_kv_attributes().empty() &&
+            OB_FAIL(ObTTLUtil::check_kv_attributes(tbl_schema->get_kv_attributes(),
+                                                   *tbl_schema,
+                                                   PARTITION_LEVEL_TWO))) {
+          LOG_WARN("fail to check kv attributes", K(ret));
         }
       }
     }
@@ -1454,11 +1462,7 @@ int ObAlterTableResolver::resolve_column_options(const ParseNode &node,
           }
         case T_COLUMN_DROP: {
             has_drop_column = true;
-            if (lib::is_mysql_mode()) {
-              is_mysql_drop_column = true;
-            } else if (OB_FAIL(resolve_drop_column(*column_node, reduced_visible_col_set, drop_column_names_set))) {
-              SQL_RESV_LOG(WARN, "Resolve drop column error!", K(ret));
-            }
+            is_mysql_drop_column = true;
             break;
           }
         case T_COLUMN_ADD_WITH_LOB_PARAMS: {
@@ -1579,7 +1583,7 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
           SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
         } else {
           //if the type of node is not identifiter, the index is considered as a fuctional index
-          if (is_mysql_mode() && sort_column_node->children_[0]->type_ != T_IDENT) {
+          if (sort_column_node->children_[0]->type_ != T_IDENT) {
             sort_item.is_func_index_ = true;
             cnt_func_index = true;
           }
@@ -1873,7 +1877,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                 }
               } 
             }
-            if (OB_SUCC(ret) && is_mysql_mode()) {
+            if (OB_SUCC(ret)) {
               if (NULL != index_partition_option) {
                 if (1 != index_partition_option->num_child_ || T_PARTITION_OPTION != index_partition_option->type_) {
                   ret = OB_NOT_SUPPORTED;
@@ -1893,7 +1897,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
               }
             }
 
-            if (OB_SUCC(ret) && is_mysql_mode()) {
+            if (OB_SUCC(ret)) {
               if (OB_ISNULL(colulmn_group_node)) {
                 // no cg, ignore
               } else if (T_COLUMN_GROUP != colulmn_group_node->type_ || colulmn_group_node->num_child_ <= 0) {
@@ -2572,15 +2576,9 @@ int ObAlterTableResolver::resolve_drop_index(const ParseNode &node)
                                                                true /* index table */,
                                                                index_table_schema))) {
             if (OB_TABLE_NOT_EXIST == ret) {
-              if (is_mysql_mode()) {
-                ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
-                LOG_WARN("index does not exist", K(ret), K(drop_index_name));
-                LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, drop_index_name.length(), drop_index_name.ptr());
-              } else {
-                ObCStringHelper helper;
-                LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(alter_table_stmt->get_org_database_name()),
-                              helper.convert(alter_table_stmt->get_org_table_name()));
-              }
+              ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
+              LOG_WARN("index does not exist", K(ret), K(drop_index_name));
+              LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY, drop_index_name.length(), drop_index_name.ptr());
             }
             LOG_WARN("fail to get index table schema", K(ret));
           } else if (OB_ISNULL(index_table_schema)) {
@@ -2591,7 +2589,7 @@ int ObAlterTableResolver::resolve_drop_index(const ParseNode &node)
                                                         *schema_checker_,
                                                         has_other_indexes_on_same_cols))) {
             LOG_WARN("check indexes on same cols failed", K(ret));
-          } else if (!has_other_indexes_on_same_cols && lib::is_mysql_mode()) {
+          } else if (!has_other_indexes_on_same_cols) {
             if (OB_FAIL(check_index_columns_equal_foreign_key(*table_schema_, *index_table_schema))) {
               LOG_WARN("failed to check_index_columns_equal_foreign_key", K(ret), K(index_table_name));
             }
@@ -2617,7 +2615,7 @@ int ObAlterTableResolver::resolve_drop_foreign_key(const ParseNode &node)
   ObString foreign_key_name;
   bool has_same_fk_arg = false;
   void *tmp_ptr = NULL;
-  if (lib::is_mysql_mode() && ((T_FOREIGN_KEY_DROP != node.type_ && T_DROP_CONSTRAINT != node.type_) || OB_ISNULL(node.children_))) {
+  if ((T_FOREIGN_KEY_DROP != node.type_ && T_DROP_CONSTRAINT != node.type_) || OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree", K(ret), K(node.type_));
   } else if (OB_ISNULL(name_node = node.children_[0]) || T_IDENT != name_node->type_) {
@@ -2651,7 +2649,7 @@ int ObAlterTableResolver::resolve_drop_constraint(const ParseNode &node)
   if (OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
-  } else if (lib::is_mysql_mode()) {
+  } else {
     const ParseNode *name_list = node.children_[0];
     if (OB_ISNULL(name_list)) {
       ret = OB_ERR_UNEXPECTED;
@@ -3171,7 +3169,7 @@ int ObAlterTableResolver::resolve_alter_index(const ParseNode &node)
           } else if (OB_ISNULL(index_table_schema)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("table schema is NULL", K(ret), K(index_table_name));
-          } else if (lib::is_mysql_mode() && OB_FAIL(check_index_columns_equal_foreign_key(*table_schema_, *index_table_schema))) {
+          } else if (OB_FAIL(check_index_columns_equal_foreign_key(*table_schema_, *index_table_schema))) {
             LOG_WARN("failed to check_index_columns_equal_foreign_key", K(ret), K(index_table_schema));
           }
         }
@@ -3241,10 +3239,7 @@ int ObAlterTableResolver::resolve_alter_index_parallel_oracle(const ParseNode &n
 int ObAlterTableResolver::resolve_alter_index_parallel_mysql(const ParseNode &node)
 {
   int ret = OB_SUCCESS;
-  if (!lib::is_mysql_mode()) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "the mode is not mysql", K(ret));
-  } else if (node.type_ != T_INDEX_ALTER_PARALLEL || OB_ISNULL(node.children_)) {
+  if (node.type_ != T_INDEX_ALTER_PARALLEL || OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "the type is not right or the children is null",
       K(ret), K(node.type_), K(node.children_==NULL));
@@ -3306,10 +3301,9 @@ int ObAlterTableResolver::resolve_rename_index(const ParseNode &node)
   } else {
     ParseNode *index_node = node.children_[0];
     ParseNode *new_name_node = node.children_[1];
-    if (lib::is_mysql_mode()
-        && (OB_ISNULL(index_node)
+    if (OB_ISNULL(index_node)
             || T_IDENT != index_node->type_
-            || OB_ISNULL(new_name_node) || T_IDENT != new_name_node ->type_)) {
+            || OB_ISNULL(new_name_node) || T_IDENT != new_name_node ->type_) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "invalid index node", K(ret), KP(index_node));
     } else {
@@ -3329,10 +3323,8 @@ int ObAlterTableResolver::resolve_rename_index(const ParseNode &node)
         ObString tmp_index_name;
         ObString ori_index_name;
         ObString new_index_name;
-        if (lib::is_mysql_mode()) {
-          ori_index_name.assign_ptr(index_node->str_value_,
-                                    static_cast<int32_t>(index_node->str_len_));
-        }
+        ori_index_name.assign_ptr(index_node->str_value_,
+                                  static_cast<int32_t>(index_node->str_len_));
         new_index_name.assign_ptr(new_name_node->str_value_, static_cast<int32_t>(new_name_node->str_len_));
         void *tmp_ptr = NULL;
 
@@ -3377,11 +3369,11 @@ int ObAlterTableResolver::resolve_alter_primary(const ParseNode &action_node_lis
   } else if (OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
-  } else if (lib::is_mysql_mode() && (is_exist_alter_pk)) {
+  } else if (is_exist_alter_pk) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported to alter primary key using modify syntax under Mysql mode", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Alter primary using MODIFY PRIMARY KEY under Mysql mode");
-  } else if (lib::is_mysql_mode() && (!is_exist_add_pk || !is_exist_drop_pk)) {
+  } else if (!is_exist_add_pk || !is_exist_drop_pk) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "Mysql mode, invalid parse tree!", K(ret));
   } else if (OB_ISNULL(table_schema_)) {
@@ -3718,12 +3710,7 @@ int ObAlterTableResolver::resolve_index_options(const ParseNode &action_node_lis
   } else {
     switch(node.children_[0]->type_) {
     case T_INDEX_ADD: {
-        ParseNode *index_node = node.children_[0];
-        if (is_mysql_mode()) {
-          is_add_index = true;
-        } else if (OB_FAIL(resolve_add_index(*index_node))) {
-          SQL_RESV_LOG(WARN, "Resolve add index error!", K(ret));
-        }
+        is_add_index = true;
         break;
       }
     case T_INDEX_DROP: {
@@ -3825,7 +3812,7 @@ int ObAlterTableResolver::resolve_index_options(const ParseNode &action_node_lis
         constraint_name.assign_ptr(constraint_name_node->str_value_, static_cast<int32_t>(constraint_name_node->str_len_));
       }
       if (OB_FAIL(ret)) {
-      } else if (lib::is_mysql_mode()) {
+      } else {
         if (cons_state_node->value_ == 0) { // 0 : alter state of a check constraint or foreign key
           if (OB_FAIL(schema_guard->get_foreign_key_id(table_schema_->get_tenant_id(),
                   table_schema_->get_database_id(),
@@ -3882,69 +3869,6 @@ int ObAlterTableResolver::resolve_index_options(const ParseNode &action_node_lis
         if (OB_SUCC(ret)) {
           if (OB_FAIL(resolve_modify_check_constraint_state_mysql(cons_state_node))) { // alter check constraint state
             LOG_WARN("modify check constraint state failed", K(ret));
-          }
-        }
-      } else { // oracle mode
-        if(OB_FAIL(schema_guard->get_foreign_key_id(table_schema_->get_tenant_id(),
-                      table_schema_->get_database_id(),
-                      constraint_name,
-                      constraint_id))) {
-          LOG_WARN("get foreign key id failed",
-              K(ret),
-              K(table_schema_->get_tenant_id()),
-              K(table_schema_->get_database_id()),
-              K(constraint_name));
-        } else if (OB_INVALID_ID != constraint_id) {
-          ObAlterTableStmt* alter_table_stmt = get_alter_table_stmt();
-          if (OB_ISNULL(alter_table_stmt)) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "alter_table_stmt is null", K(ret));
-          } else if (OB_FAIL(resolve_modify_foreign_key_state(cons_state_node))) {
-            LOG_WARN("modify foreign key state failed", K(ret));
-          }
-        } else {
-          if (OB_FAIL(schema_guard->get_constraint_id(
-                  table_schema_->get_tenant_id(), table_schema_->get_database_id(), constraint_name, constraint_id))) {
-            LOG_WARN("get constraint id failed",
-                K(ret),
-                K(table_schema_->get_tenant_id()),
-                K(table_schema_->get_database_id()),
-                K(constraint_name));
-          } else if (OB_INVALID_ID != constraint_id) {
-            if (OB_FAIL(resolve_modify_check_constraint_state_oracle(cons_state_node))) {
-              LOG_WARN("modify check constraint state failed", K(ret));
-            }
-          } else {  // OB_INVALID_ID == constraint_id
-            const ObSimpleTableSchemaV2* simple_table_schema = nullptr;
-            ObString unique_index_name_with_prefix;
-            if (OB_FAIL(ObTableSchema::build_index_table_name(*allocator_,
-                        table_schema_->get_table_id(),
-                        constraint_name,
-                        unique_index_name_with_prefix))) {
-              LOG_WARN("build_index_table_name failed", K(ret), K(table_schema_->get_table_id()), K(constraint_name));
-            } else if (OB_FAIL(schema_guard->get_simple_table_schema(table_schema_->get_tenant_id(),
-                               table_schema_->get_database_id(),
-                               unique_index_name_with_prefix,
-                               true,
-                               simple_table_schema))) {
-              LOG_WARN("failed to get simple table schema",
-                        K(ret),
-                        K(table_schema_->get_tenant_id()),
-                        K(table_schema_->get_database_id()),
-                        K(unique_index_name_with_prefix));
-            } else if (OB_NOT_NULL(simple_table_schema) && simple_table_schema->is_unique_index()) {
-              ret = OB_NOT_SUPPORTED;
-              SQL_RESV_LOG(WARN, "modify unique constraint is not supported", K(ret));
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "Modify unique constraint");
-            } else {
-              ret = OB_ERR_MODIFY_NONEXISTENT_CONSTRAINT;
-              SQL_RESV_LOG(WARN,
-                  "Cannot modify constraint - nonexistent constraint",
-                  K(ret),
-                  K(constraint_name),
-                  K(table_schema_->get_table_name_str()));
-              LOG_USER_ERROR(OB_ERR_MODIFY_NONEXISTENT_CONSTRAINT, constraint_name.length(), constraint_name.ptr());
-            }
           }
         }
       }
@@ -4141,312 +4065,18 @@ int ObAlterTableResolver::check_dup_foreign_keys_exist(
 
   return ret;
 }
-
-int ObAlterTableResolver::resolve_modify_foreign_key_state(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  ParseNode *constraint_name_node = NULL;
-  ParseNode *rely_option_node = NULL;
-  ParseNode *enable_option_node = NULL;
-  ParseNode *validate_option_node = NULL;
-  ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  obcall::ObCreateForeignKeyArg foreign_key_arg;
-
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "enable_cons_node is null", K(ret));
-  } else if (T_MODIFY_CONSTRAINT_OPTION != node->type_ || 4 != node->num_child_ || OB_ISNULL(node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node->type_), K(node->num_child_), K(node->children_));
-  } else if (OB_ISNULL(constraint_name_node = node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "constraint_name_node is null", K(ret));
-  } else {
-    rely_option_node = node->children_[1];
-    enable_option_node = node->children_[2];
-    validate_option_node = node->children_[3];
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(rely_option_node)
-             && OB_ISNULL(enable_option_node)
-             && OB_ISNULL(validate_option_node)) {
-    ret = OB_ERR_PARSER_SYNTAX;
-    SQL_RESV_LOG(WARN, "all options are null", K(ret));
-  } else {
-    foreign_key_arg.is_modify_fk_state_ = true;
-    foreign_key_arg.foreign_key_name_.assign_ptr(constraint_name_node->str_value_, static_cast<int32_t>(constraint_name_node->str_len_));
-    const ObIArray<ObForeignKeyInfo> &foreign_key_infos = table_schema_->get_foreign_key_infos();
-    const ObForeignKeyInfo *foreign_key_info = NULL;
-    for (int64_t i = 0; OB_SUCC(ret) && i < foreign_key_infos.count(); i++) {
-      if (0 == foreign_key_arg.foreign_key_name_.case_compare(foreign_key_infos.at(i).foreign_key_name_)
-          && table_schema_->get_table_id() == foreign_key_infos.at(i).child_table_id_) {
-        foreign_key_info = &foreign_key_infos.at(i);
-        break;
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(foreign_key_info)) {
-      ret = OB_ERR_MODIFY_NONEXISTENT_CONSTRAINT;
-      SQL_RESV_LOG(WARN, "Cannot modify constraint - nonexistent constraint", K(ret), K(foreign_key_arg.foreign_key_name_), K(table_schema_->get_table_name_str()));
-      LOG_USER_ERROR(OB_ERR_MODIFY_NONEXISTENT_CONSTRAINT, static_cast<int32_t>(constraint_name_node->str_len_), constraint_name_node->str_value_);
-    } else if (OB_ISNULL(session_info_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session_info is null", KR(ret));
-    } else {
-      const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-      ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
-      const ObDatabaseSchema *parent_db_schema = NULL;
-      const ObTableSchema *parent_table_schema = NULL;
-      foreign_key_arg.name_generated_type_ = foreign_key_info->name_generated_type_;
-      if (OB_ISNULL(schema_guard)) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "schema_guard is null", K(ret));
-      } else if (OB_FAIL(schema_guard->get_table_schema(
-                 tenant_id, foreign_key_info->parent_table_id_, parent_table_schema))) {
-        SQL_RESV_LOG(WARN, "get parent_table_schema failed", K(ret), K(foreign_key_info->parent_table_id_));
-      } else if (OB_ISNULL(parent_table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "parent_table_schema is null", K(ret), K(foreign_key_info->parent_table_id_));
-      } else if (OB_FAIL(schema_guard->get_database_schema(tenant_id,
-                 parent_table_schema->get_database_id(), parent_db_schema))) {
-        SQL_RESV_LOG(WARN, "get parent_database_schema failed", K(ret), K(parent_table_schema->get_database_id()));
-      } else if (OB_ISNULL(parent_db_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "parent_db_schema is null", K(ret), K(parent_table_schema->get_database_id()));
-      } else {
-        const ObColumnSchemaV2 *child_col = NULL;
-        const ObColumnSchemaV2 *parent_col = NULL;
-        for (int64_t i = 0; OB_SUCC(ret) && i < foreign_key_info->child_column_ids_.count(); ++i) {
-          ObString tmp_child_column_name;
-          ObString tmp_parent_column_name;
-          if (OB_ISNULL(child_col = table_schema_->get_column_schema(foreign_key_info->child_column_ids_.at(i)))) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "child column schema not exists", K(ret), K(foreign_key_info->child_column_ids_.at(i)));
-          } else if (OB_ISNULL(parent_col = parent_table_schema->get_column_schema(foreign_key_info->parent_column_ids_.at(i)))) {
-            ret = OB_ERR_UNEXPECTED;
-            SQL_RESV_LOG(WARN, "parent column schema not exists", K(ret), K(foreign_key_info->parent_column_ids_.at(i)));
-          } else if (OB_FAIL(ob_write_string(*allocator_, child_col->get_column_name_str(), tmp_child_column_name))) {
-            SQL_RESV_LOG(WARN, "deep copy parent database name failed", K(ret), K(child_col->get_column_name_str()));
-          } else if (OB_FAIL(ob_write_string(*allocator_, parent_col->get_column_name_str(), tmp_parent_column_name))) {
-            SQL_RESV_LOG(WARN, "deep copy parent table name failed", K(ret), K(parent_col->get_column_name_str()));
-          } else if (OB_FAIL(foreign_key_arg.child_columns_.push_back(tmp_child_column_name))) {
-            SQL_RESV_LOG(WARN, "push back failed", K(ret), K(tmp_child_column_name));
-          } else if (OB_FAIL(foreign_key_arg.parent_columns_.push_back(tmp_parent_column_name))) {
-            SQL_RESV_LOG(WARN, "push back failed", K(ret), K(tmp_parent_column_name));
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(ob_write_string(*allocator_, parent_db_schema->get_database_name_str(), foreign_key_arg.parent_database_))) {
-          SQL_RESV_LOG(WARN, "deep copy parent database name failed", K(ret), K(parent_db_schema->get_database_name_str()));
-        } else if (OB_FAIL(ob_write_string(*allocator_, parent_table_schema->get_table_name_str(), foreign_key_arg.parent_table_))) {
-          SQL_RESV_LOG(WARN, "deep copy parent table name failed", K(ret), K(parent_table_schema->get_table_name_str()));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else {
-        if (OB_NOT_NULL(rely_option_node)) {
-          if (T_RELY_CONSTRAINT == rely_option_node->type_ && !foreign_key_info->rely_flag_) {
-            foreign_key_arg.is_modify_rely_flag_ = true;
-            foreign_key_arg.rely_flag_ = true;
-          } else if (T_NORELY_CONSTRAINT == rely_option_node->type_ && foreign_key_info->rely_flag_) {
-            foreign_key_arg.is_modify_rely_flag_ = true;
-            foreign_key_arg.rely_flag_ = false;
-          }
-        }
-        if (OB_NOT_NULL(validate_option_node)) {
-          if (T_VALIDATE_CONSTRAINT == validate_option_node->type_ && !foreign_key_info->validate_flag_) {
-            foreign_key_arg.is_modify_validate_flag_ = true;
-            foreign_key_arg.validate_flag_ = CST_FK_VALIDATED;
-          } else if (T_NOVALIDATE_CONSTRAINT == validate_option_node->type_ && foreign_key_info->validate_flag_) {
-            foreign_key_arg.is_modify_validate_flag_ = true;
-            foreign_key_arg.validate_flag_ = CST_FK_NO_VALIDATE;
-          }
-        }
-        if (OB_NOT_NULL(enable_option_node)) {
-          if (T_ENABLE_CONSTRAINT == enable_option_node->type_) {
-            if (!foreign_key_info->enable_flag_) {
-              foreign_key_arg.is_modify_enable_flag_ = true;
-              foreign_key_arg.enable_flag_ = true;
-            }
-            if (OB_ISNULL(validate_option_node) && !foreign_key_info->validate_flag_) {
-              foreign_key_arg.is_modify_validate_flag_ = true;
-              foreign_key_arg.validate_flag_ = CST_FK_VALIDATED;
-            }
-          } else if (T_DISABLE_CONSTRAINT == enable_option_node->type_) {
-            if (foreign_key_info->enable_flag_) {
-              foreign_key_arg.is_modify_enable_flag_ = true;
-              foreign_key_arg.enable_flag_ = false;
-            }
-            if (OB_ISNULL(validate_option_node) && foreign_key_info->validate_flag_) {
-              foreign_key_arg.is_modify_validate_flag_ = true;
-              foreign_key_arg.validate_flag_ = CST_FK_NO_VALIDATE;
-            }
-          }
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(alter_table_stmt->get_foreign_key_arg_list().push_back(foreign_key_arg))) {
-      SQL_RESV_LOG(WARN, "failed to push back foreign key arg", K(ret));
-    }
-  }
-
-  return ret;
-}
-
-int ObAlterTableResolver::resolve_modify_check_constraint_state_oracle(const ParseNode *node)
-{
-  int ret = OB_SUCCESS;
-  ParseNode *constraint_name_node = NULL;
-  ParseNode *rely_option_node = NULL;
-  ParseNode *enable_option_node = NULL;
-  ParseNode *validate_option_node = NULL;
-  ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-  ObConstraint cst;
-  ObString cst_name;
-
-  if (OB_ISNULL(node)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "enable_cons_node is null", K(ret));
-  } else if (T_MODIFY_CONSTRAINT_OPTION != node->type_ || 4 != node->num_child_ || OB_ISNULL(node->children_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(node->type_), K(node->num_child_), K(node->children_));
-  } else if (OB_ISNULL(constraint_name_node = node->children_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_RESV_LOG(WARN, "constraint_name_node is null", K(ret));
-  } else {
-    rely_option_node = node->children_[1];
-    enable_option_node = node->children_[2];
-    validate_option_node = node->children_[3];
-    cst_name.assign_ptr(constraint_name_node->str_value_, static_cast<int32_t>(constraint_name_node->str_len_));
-    ObTableSchema::const_constraint_iterator iter = table_schema_->constraint_begin();
-    for (;OB_SUCC(ret) && iter != table_schema_->constraint_end(); ++iter) {
-      if (0 == cst_name.case_compare((*iter)->get_constraint_name_str())) {
-        if (OB_FAIL(cst.assign(**iter))) {
-          SQL_RESV_LOG(WARN, "Fail to assign constraint", K(ret));
-        }
-        break;
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (table_schema_->constraint_end() == iter) {
-      ret = OB_ERR_MODIFY_NONEXISTENT_CONSTRAINT;
-      SQL_RESV_LOG(WARN,
-          "Cannot modify constraint - nonexistent constraint",
-          K(ret),
-          K(cst_name),
-          K(table_schema_->get_table_name_str()));
-      LOG_USER_ERROR(OB_ERR_MODIFY_NONEXISTENT_CONSTRAINT, cst_name.length(), cst_name.ptr());
-    } else if (OB_ISNULL(rely_option_node) && OB_ISNULL(enable_option_node) && OB_ISNULL(validate_option_node)) {
-      ret = OB_ERR_PARSER_SYNTAX;
-      SQL_RESV_LOG(WARN, "all options are null", K(ret));
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_NOT_NULL(rely_option_node)) {
-        if (T_RELY_CONSTRAINT == rely_option_node->type_ && !cst.get_rely_flag()) {
-          cst.set_is_modify_rely_flag(true);
-          cst.set_rely_flag(true);
-        } else if (T_NORELY_CONSTRAINT == rely_option_node->type_ && cst.get_rely_flag()) {
-          cst.set_is_modify_rely_flag(true);
-          cst.set_rely_flag(false);
-        }
-      }
-      if (OB_NOT_NULL(validate_option_node)) {
-        if (T_VALIDATE_CONSTRAINT == validate_option_node->type_ && cst.is_no_validate()) {
-          cst.set_is_modify_validate_flag(true);
-          cst.set_validate_flag(CST_FK_VALIDATED);
-        } else if (T_NOVALIDATE_CONSTRAINT == validate_option_node->type_ && cst.is_validated()) {
-          cst.set_is_modify_validate_flag(true);
-          cst.set_validate_flag(CST_FK_NO_VALIDATE);
-        }
-      }
-      if (OB_NOT_NULL(enable_option_node)) {
-        if (T_ENABLE_CONSTRAINT == enable_option_node->type_) {
-          if (!cst.get_enable_flag()) {
-            cst.set_is_modify_enable_flag(true);
-            cst.set_enable_flag(true);
-          }
-          if (OB_ISNULL(validate_option_node) && cst.is_no_validate()) {
-            cst.set_is_modify_validate_flag(true);
-            cst.set_validate_flag(CST_FK_VALIDATED);
-          }
-        } else if (T_DISABLE_CONSTRAINT == enable_option_node->type_) {
-          if (cst.get_enable_flag()) {
-            cst.set_is_modify_enable_flag(true);
-            cst.set_enable_flag(false);
-          }
-          if (OB_ISNULL(validate_option_node) && cst.is_validated()) {
-            cst.set_is_modify_validate_flag(true);
-            cst.set_validate_flag(CST_FK_NO_VALIDATE);
-          }
-        }
-      }
-      if (CONSTRAINT_TYPE_NOT_NULL == (*iter)->get_constraint_type()) {
-        AlterTableSchema &alter_table_schema =
-          alter_table_stmt->get_alter_table_arg().alter_table_schema_;
-        ObColumnSchemaV2 *col_schema = NULL;
-        if (1 != (*iter)->get_column_cnt()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected column count of not null constraint", K(ret), KPC(*iter));
-        } else if (NULL == (col_schema = alter_table_schema.get_column_schema(*((*iter)->cst_col_begin())))) {
-          AlterColumnSchema alter_column_schema;
-          const ObColumnSchemaV2 *origin_col_schema = NULL;
-          if (OB_FAIL(schema_checker_->get_column_schema(table_schema_->get_tenant_id(), table_schema_->get_table_id(),
-                                                         *cst.cst_col_begin(), origin_col_schema, false))) {
-            LOG_WARN("get not null origin col schema failed", K(ret));
-          } else if (OB_UNLIKELY(origin_col_schema->is_identity_column())) {
-            ret = origin_col_schema->is_default_on_null_identity_column()
-                 ? OB_ERR_CANNOT_MODIFY_NOT_NULL_CONSTRAINT_ON_DEFAULT_ON_NULL_COLUMN
-                  : OB_ERR_CANNOT_MODIFY_NOT_NULL_CONSTRAINT_ON_IDENTITY_COLUMN;
-            LOG_WARN("can't modify not null constraint on an identity column", K(ret));
-          } else if (OB_FAIL(alter_column_schema.assign(*origin_col_schema))) {
-            LOG_WARN("copy column schema failed", K(ret));
-          } else if (OB_FAIL(alter_column_schema.set_origin_column_name(
-                        alter_column_schema.get_column_name_str()))) {
-            LOG_WARN("set origin column name faield", K(ret));
-          } else {
-            // need to add alter_column_schema when modify not null constraint,
-            // in order to modify column_flags.
-            alter_column_schema.add_not_null_cst(cst.get_rely_flag(), cst.get_enable_flag(),
-                                                 cst.is_validated());
-            alter_column_schema.alter_type_ = OB_DDL_MODIFY_COLUMN;
-            alter_table_stmt->set_alter_table_column();
-            if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
-              LOG_WARN("add alter column schema failed", K(ret));
-            }
-            LOG_DEBUG("modify not null constraint", KPC(origin_col_schema), K(alter_column_schema));
-          }
-        } else if (OB_UNLIKELY(col_schema->is_identity_column())) {
-          ret = col_schema->is_default_on_null_identity_column()
-                ? OB_ERR_CANNOT_MODIFY_NOT_NULL_CONSTRAINT_ON_DEFAULT_ON_NULL_COLUMN
-                : OB_ERR_CANNOT_MODIFY_NOT_NULL_CONSTRAINT_ON_IDENTITY_COLUMN;
-          LOG_WARN("can't modify not null constraint on an identity column", K(ret));
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(alter_table_stmt->get_alter_table_arg().alter_table_schema_.add_constraint(cst))) {
-        SQL_RESV_LOG(WARN, "add constraint failed", K(ret));
-      } else {
-        alter_table_stmt->get_alter_table_arg().alter_constraint_type_ = ObAlterTableArg::ALTER_CONSTRAINT_STATE;
-        ++add_or_modify_check_cst_times_;
-      }
-    }
-  }
-
-  return ret;
-}
 // Used to parse add/drop check constraint
 int ObAlterTableResolver::resolve_constraint_options(const ParseNode &node, const bool is_multi_actions)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode() && ((T_ALTER_CHECK_CONSTRAINT_OPTION != node.type_ && T_DROP_CONSTRAINT != node.type_) || OB_ISNULL(node.children_))) {
+  if ((T_ALTER_CHECK_CONSTRAINT_OPTION != node.type_ && T_DROP_CONSTRAINT != node.type_) || OB_ISNULL(node.children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
   } else {
     if (OB_SUCC(ret)) {
       ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
       const ParseNode *constraint_node = NULL;
-      if (lib::is_mysql_mode() && T_ALTER_CHECK_CONSTRAINT_OPTION == node.type_) {
+      if (T_ALTER_CHECK_CONSTRAINT_OPTION == node.type_) {
         constraint_node = node.children_[0];
       } else {
         constraint_node = &node;
@@ -5087,7 +4717,7 @@ int ObAlterTableResolver::resolve_foreign_key_options(const ParseNode &node)
 {
   int ret = OB_SUCCESS;
 
-  if (lib::is_mysql_mode()) {
+  {
     ParseNode *foreign_key_action_node = NULL;
     if (T_DROP_CONSTRAINT == node.type_) {
       if (OB_FAIL(resolve_drop_foreign_key(node))) {
@@ -5192,8 +4822,7 @@ int ObAlterTableResolver::resolve_add_column(const ParseNode &node, ObColumnName
     for (int i = 0; OB_SUCC(ret) && i < node.num_child_; ++i) {
       alter_column_schema.reset();
       alter_column_schema.alter_type_ = OB_DDL_ADD_COLUMN;
-      alter_table_stmt->get_alter_table_arg().alter_algorithm_ = lib::is_mysql_mode()
-                                                                 ? obcall::ObAlterTableArg::AlterAlgorithm::INSTANT : obcall::ObAlterTableArg::AlterAlgorithm::INPLACE;
+      alter_table_stmt->get_alter_table_arg().alter_algorithm_ = obcall::ObAlterTableArg::AlterAlgorithm::INSTANT;
       if (OB_ISNULL(node.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
@@ -5346,7 +4975,6 @@ int ObAlterTableResolver::resolve_alter_table_column_definition(AlterColumnSchem
   tmp_str[ObNLSFormatEnum::NLS_DATE] = session_info_->get_local_nls_date_format();
   tmp_str[ObNLSFormatEnum::NLS_TIMESTAMP] = session_info_->get_local_nls_timestamp_format();
   tmp_str[ObNLSFormatEnum::NLS_TIMESTAMP_TZ] = session_info_->get_local_nls_timestamp_tz_format();
-  AlterColumnSchema dummy_column(column.get_allocator());
   ObTableSchema tmp_table_schema; // check_default_value will change table_schema
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
@@ -5359,15 +4987,8 @@ int ObAlterTableResolver::resolve_alter_table_column_definition(AlterColumnSchem
               false,
               allow_has_default))) {
     SQL_RESV_LOG(WARN, "resolve column definition failed", K(ret));
-  } else if (is_mysql_mode()){ // add column level constraint
+  } else { // add column level constraint
     add_or_modify_check_cst_times_ += alter_table_schema.get_constraint_count() - cst_cnt;
-  } else if (FALSE_IT(dummy_column = column)) {
-  } else if (OB_FAIL(dummy_column.get_err_ret())) {
-    LOG_WARN("failed to copy from column", K(ret));
-  } else if (OB_FAIL(column.set_cur_default_value(
-                 dummy_column.get_cur_default_value(),
-                 dummy_column.is_default_expr_v2_column()))) {
-    LOG_WARN("failed to set default value", K(ret));
   }
   // else if (OB_FAIL(process_default_value(stat, column))) {
   //   SQL_RESV_LOG(WARN, "failed to set default value", K(ret));
@@ -5379,18 +5000,16 @@ int ObAlterTableResolver::resolve_alter_table_column_definition(AlterColumnSchem
   if (OB_SUCC(ret)) {
     ParseNode *pos_node = NULL;
     CHECK_COMPATIBILITY_MODE(session_info_);
-    if (lib::is_mysql_mode()) {
-      if (OB_UNLIKELY(GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_)) {
-      // generated column with pos_column
-        pos_node = node->children_[5];
-      } else {
-        // normal column with pos_column
-        pos_node = node->children_[3];
-      }
-      if (NULL != pos_node) {
-        if (OB_FAIL(resolve_pos_column(pos_node, column))) {
-         LOG_WARN("fail to resove position column", K(ret));
-        }
+    if (OB_UNLIKELY(GEN_COLUMN_DEFINITION_NUM_CHILD == node->num_child_)) {
+    // generated column with pos_column
+      pos_node = node->children_[5];
+    } else {
+      // normal column with pos_column
+      pos_node = node->children_[3];
+    }
+    if (NULL != pos_node) {
+      if (OB_FAIL(resolve_pos_column(pos_node, column))) {
+       LOG_WARN("fail to resove position column", K(ret));
       }
     }
   }
@@ -5783,7 +5402,7 @@ int ObAlterTableResolver::resolve_change_column(const ParseNode &node)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+      if (OB_SUCC(ret)) {
         if (0 != origin_col_schema->get_rowkey_position()
             && alter_column_schema.is_set_default_
             && alter_column_schema.get_cur_default_value().is_null()) {
@@ -6022,7 +5641,7 @@ int ObAlterTableResolver::resolve_modify_column(const ParseNode &node,
             SQL_RESV_LOG(WARN, "Add alter column schema failed!", K(ret));
           }
         }
-        if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+        if (OB_SUCC(ret)) {
           if (0 != origin_col_schema->get_rowkey_position()
               && alter_column_schema.is_set_default_
               && alter_column_schema.get_cur_default_value().is_null()) {
@@ -6222,15 +5841,9 @@ int ObAlterTableResolver::resolve_drop_column(
         ObColumnSchemaHashWrapper col_key(column_name);
         if (OB_FAIL(drop_column_names_set.set_refactored(col_key))) {
           if (OB_HASH_EXIST == ret) {
-            if (is_mysql_mode()) {
-              //In mysql mode, OB will check whether a column is dropped twice on rootserver
-              //So don't return error here
-              ret = OB_SUCCESS;
-            } else {
-              ret = OB_ERR_COLUMN_DUPLICATE;
-              LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, column_name.length(), column_name.ptr());
-              LOG_WARN("duplicate column name", KR(ret), K(column_name));
-            }
+            //In mysql mode, OB will check whether a column is dropped twice on rootserver
+            //So don't return error here
+            ret = OB_SUCCESS;
           } else {
             LOG_WARN("set refactored failed", KR(ret), K(column_name));
           }
@@ -6238,14 +5851,9 @@ int ObAlterTableResolver::resolve_drop_column(
 
         if (FAILEDx(reduced_visible_col_set.set_refactored(col_key))) {
           if (OB_HASH_EXIST == ret) {
-            if (is_mysql_mode()) {
-              //In mysql mode, OB will check whether a column is dropped twice on rootserver
-              //So don't return error here
-              ret = OB_SUCCESS;
-            } else {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "drop the same column twice");
-            }
+            //In mysql mode, OB will check whether a column is dropped twice on rootserver
+            //So don't return error here
+            ret = OB_SUCCESS;
           }
           if (OB_FAIL(ret)) {
             SQL_RESV_LOG(WARN, "set col_key to hash set failed", K(ret), K(column_name));
@@ -6367,9 +5975,8 @@ int ObAlterTableResolver::resolve_rename_column(const ParseNode &node)
       SQL_RESV_LOG(WARN, "fail to set origin column name", K(origin_column_name), K(ret));
     } else if (OB_FAIL(alter_column_schema.set_column_name(new_column_name))) {
       SQL_RESV_LOG(WARN, "fail to set new column name", K(new_column_name), K(ret));
-    } else if (lib::is_mysql_mode()
-               && OB_FAIL(check_mysql_rename_column(alter_column_schema, *table_schema_,
-                                                    *alter_table_stmt))) {
+    } else if (OB_FAIL(check_mysql_rename_column(alter_column_schema, *table_schema_,
+                                                 *alter_table_stmt))) {
       LOG_WARN("check rename mysql columns failed", K(ret));
     } else {
       //rs end reuse ddl_change_column

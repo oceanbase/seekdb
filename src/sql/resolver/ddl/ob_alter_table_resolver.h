@@ -63,8 +63,6 @@ public:
                             bool &is_add_index);
   int resolve_partition_options(const ParseNode &node);
   int resolve_constraint_options(const ParseNode &node, const bool is_multi_actions);
-  int resolve_modify_foreign_key_state(const ParseNode *node);
-  int resolve_modify_check_constraint_state_oracle(const ParseNode *node);
   int resolve_modify_check_constraint_state_mysql(const ParseNode* node);
   int resolve_tablegroup_options(const ParseNode &node);
   int resolve_convert_to_character(const ParseNode &node);

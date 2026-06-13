@@ -256,17 +256,7 @@ int ObVecIndexAsyncTaskUtil::get_table_id_from_adapter(
 // TODO@xiajin: change data_version
 bool ObVecIndexAsyncTaskUtil::check_can_do_work()
 {
-  bool bret = true;
-  int ret = OB_SUCCESS;
-  bool is_oracle_mode = false;
-  int64_t tenant_id = MTL_ID();
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", K(ret), K(tenant_id));
-  } else if (is_oracle_mode) {
-    bret = false;
-    LOG_DEBUG("vector index not support oracle mode", K(tenant_id));
-  }
-  return bret;
+  return true;
 }
 
 int ObVecIndexAsyncTaskUtil::clear_history_expire_task_record(
