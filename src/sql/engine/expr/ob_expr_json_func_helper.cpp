@@ -92,7 +92,7 @@ int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (!ob_is_string_type(type) && type != ObJsonType) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input type error", K(type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
   } else {
     ObString j_str;
@@ -136,7 +136,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(val_type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(val_type), K(cs_type));
   } else if (ob_is_json(val_type)
       && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(expr, ctx, json_datum->get_string(), allow_partial_update))) {
@@ -195,7 +195,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(val_type));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(val_type), K(cs_type));
   } else if (ob_is_json(val_type)
       && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(expr, ctx, json_datum->get_string(), allow_partial_update))) {
@@ -1449,8 +1449,7 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
     case ObMediumTextType:
     case ObLongTextType: {
       ObString j_str;
-      if (is_mysql_mode() 
-          && OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
+      if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
         // should check collation first
         LOG_WARN("Invalid collation type for input string.", K(ret));
       } else {
@@ -1632,7 +1631,7 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
       }
       dst_type.set_precision(-1);
       dst_type.set_scale(parse_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX]);
-    } else if (lib::is_mysql_mode() && ObJsonType == dst_type.get_type()) {
+    } else if (ObJsonType == dst_type.get_type()) {
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
       dst_type.set_precision(parse_node.int16_values_[OB_NODE_CAST_N_PREC_IDX]);
@@ -2200,16 +2199,6 @@ int ObJsonExprHelper::pre_default_value_check(ObObjType dst_type, ObString val_s
     case ObVarcharType:
     case ObCharType:
     case ObHexStringType: {
-      if (lib::is_mysql_mode()) {
-      } else  if (val_type != ObVarcharType && val_type != ObCharType) {
-        ret = OB_ERR_DEFAULT_VALUE_NOT_MATCH;
-        LOG_WARN("default value not match",K(ret));
-      } else if (dst_type == ObVarcharType) {
-         if (val_str.length() > length) {
-          ret = OB_ERR_VALUE_EXCEEDED_MAX;
-          LOG_USER_ERROR(OB_ERR_VALUE_EXCEEDED_MAX, static_cast<int>(val_str.length()), static_cast<int>(length));
-         }
-      }
       break;
     }
     case ObNumberType:
