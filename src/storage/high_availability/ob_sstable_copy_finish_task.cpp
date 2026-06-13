@@ -652,15 +652,7 @@ bool ObSSTableCopyFinishTask::is_sstable_should_rebuild_index_(const ObMigration
 {
   // Non-empty SSTable whose macro blocks should be copied needs rebuild index after
   // macros are copied.
-  return !sstable_param->is_empty_sstable() 
-         && !is_shared_sstable_without_copy_(sstable_param);
-}
-
-bool ObSSTableCopyFinishTask::is_shared_sstable_without_copy_(const ObMigrationSSTableParam *sstable_param) const
-{
-  // In standby restore from primary, always treat as "need copy" to avoid skipping.
-  UNUSED(sstable_param);
-  return false;
+  return !sstable_param->is_empty_sstable();
 }
 
 int ObSSTableCopyFinishTask::prepare_sstable_index_builder_(
@@ -806,11 +798,7 @@ int ObSSTableCopyFinishTask::alloc_and_init_sstable_creator_(ObCopiedSSTableCrea
   if (sstable_param_->is_empty_sstable()) {
     tmp_creator = MTL_NEW(ObCopiedEmptySSTableCreator, "CopySSTCreator");
   } else {
-    if (sstable_param_->is_shared_sstable() && is_shared_sstable_without_copy_(sstable_param_)) {
-      tmp_creator = MTL_NEW(ObCopiedSharedSSTableCreator, "CopySSTCreator");
-    } else {
-      tmp_creator = MTL_NEW(ObCopiedSSTableCreator, "CopySSTCreator");
-    }
+    tmp_creator = MTL_NEW(ObCopiedSSTableCreator, "CopySSTCreator");
   }
 
   if (OB_ISNULL(tmp_creator)) {
