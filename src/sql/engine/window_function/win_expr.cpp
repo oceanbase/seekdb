@@ -269,7 +269,7 @@ int Ntile::process_window(WinExprEvalCtx &ctx, const Frame &frame, const int64_t
       ret = OB_DATA_OUT_OF_RANGE;
       LOG_WARN("invalid argument", K(ret), K(param->obj_meta_));
     } else if (OB_FAIL(NonAggrWinExpr::eval_param_int_value(param, ctx.win_col_.op_.get_eval_ctx(),
-                                                           lib::is_mysql_mode(), false, *param_status))) {
+                                                           true, false, *param_status))) {
       if (ret == OB_ERR_WINDOW_FRAME_ILLEGAL) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("Incorrect arguments to ntile", K(ret));
@@ -375,7 +375,7 @@ int NthValue::process_window(WinExprEvalCtx &ctx, const Frame &frame, const int6
     LOG_WARN("invalid number of params", K(ret), K(params.count()), K(ret));
   } else if (OB_FAIL(
                NonAggrWinExpr::eval_param_int_value(params.at(1), ctx.win_col_.op_.get_eval_ctx(),
-                                                    lib::is_mysql_mode(), false, param_status))) {
+                                                    true, false, param_status))) {
     if (ret == OB_ERR_WINDOW_FRAME_ILLEGAL) {
       if (param_status.is_null_) {
         ret = OB_SUCCESS;
@@ -396,8 +396,7 @@ int NthValue::process_window(WinExprEvalCtx &ctx, const Frame &frame, const int6
   }
   if (OB_SUCC(ret) && !is_null) {
     ObWindowFunctionVecOp &op = ctx.win_col_.op_;
-    if (OB_UNLIKELY(lib::is_mysql_mode()
-                           && (!params.at(1)->obj_meta_.is_integer_type() || nth_val == 0))) {
+    if (OB_UNLIKELY(!params.at(1)->obj_meta_.is_integer_type() || nth_val == 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments to nth_value", K(ret), K(nth_val), K(params.at(1)->obj_meta_));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nth_value");
@@ -493,7 +492,7 @@ int NthValue::generate_extra(ObIAllocator &allocator, void *&extra)
 {
   int ret = OB_SUCCESS;
   extra = nullptr;
-  if (lib::is_mysql_mode()) {
+  {
     void *buf = allocator.alloc(sizeof(ParamStatus));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1055,7 +1054,7 @@ int eval_bound_exprs(WinExprEvalCtx &ctx, const int64_t row_start, const int64_t
     if (OB_ISNULL(between_value_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null between value expr", K(ret));
-    } else if (OB_UNLIKELY(lib::is_mysql_mode() && is_rows
+    } else if (OB_UNLIKELY(is_rows
                            && !between_value_expr->obj_meta_.is_integer_type())) {
       ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
       LOG_WARN("frame start or end is negative, NULL or non-integral type", K(ret),
@@ -1246,13 +1245,8 @@ static int _check_betweenn_value(const ObExpr *expr, ObEvalCtx &ctx, const ObBit
     if (OB_FAIL(ret)) {
       LOG_WARN("truncate integer failed", K(ret));
     } else if (OB_UNLIKELY(value < 0)) {
-      if (lib::is_mysql_mode()) {
-        ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-        LOG_WARN("rame start or end is negative, NULL or of non-integral type", K(ret), K(value));
-      } else {
-        ret = OB_DATA_OUT_OF_RANGE;
-        LOG_WARN("invaid argument", K(ret), K(value));
-      }
+      ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+      LOG_WARN("rame start or end is negative, NULL or of non-integral type", K(ret), K(value));
     }
   }
   return ret;
@@ -1297,41 +1291,21 @@ int eval_and_check_between_literal(winfunc::WinExprEvalCtx &ctx, ObBitVector &ev
     case common::VEC_CONTINUOUS:
     case common::VEC_FIXED: {
       ObBitmapNullVectorBase *data = static_cast<ObBitmapNullVectorBase *>(between_expr->get_vector(eval_ctx));
-      if (lib::is_mysql_mode()) {
-        for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
-          if (eval_skip.at(i)) { continue; }
-          if (data->is_null(i)) {
-            ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-            LOG_WARN("frame start or end is negative, NULL or non-integral type", K(ret));
-          }
-        }
-      } else {
-        for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
-          if (eval_skip.at(i)) { continue; }
-          if (data->is_null(i)) {
-            // frame of current must be invalid,
-            // we set pos_arr[i] to INT64_MAX to represent invalid frame border
-            pos_arr[i] = INT64_MAX;
-          }
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
+        if (eval_skip.at(i)) { continue; }
+        if (data->is_null(i)) {
+          ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+          LOG_WARN("frame start or end is negative, NULL or non-integral type", K(ret));
         }
       }
     } break;
     case common::VEC_UNIFORM: {
       ObUniformFormat<false> *data = static_cast<ObUniformFormat<false> *>(between_expr->get_vector(eval_ctx));
-      if (lib::is_mysql_mode()) {
-        for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
-          if (eval_skip.at(i)) { continue; }
-          if (data->is_null(i)) {
-            ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-            LOG_WARN("frame start or end is_negative, NULL or non-integral type", K(ret));
-          }
-        }
-      } else {
-        for (int i = 0; i < batch_size; i++) {
-          if (eval_skip.at(i)) { continue; }
-          if (data->is_null(i)) {
-            pos_arr[i] = INT64_MAX;
-          }
+      for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
+        if (eval_skip.at(i)) { continue; }
+        if (data->is_null(i)) {
+          ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+          LOG_WARN("frame start or end is_negative, NULL or non-integral type", K(ret));
         }
       }
     } break;
@@ -1344,15 +1318,8 @@ int eval_and_check_between_literal(winfunc::WinExprEvalCtx &ctx, ObBitVector &ev
         break;
       }
       if (has_null) {
-        if (lib::is_mysql_mode()) {
-          ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-          LOG_WARN("frame start or end is negative, NULL or non-integral type", K(ret));
-        } else {
-          for (int i = 0; i < batch_size; i++) {
-            if (eval_skip.at(i)) { continue; }
-            pos_arr[i] = INT64_MAX;
-          }
-        }
+        ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+        LOG_WARN("frame start or end is negative, NULL or non-integral type", K(ret));
       }
     } break;
     default: {
@@ -1426,14 +1393,9 @@ static OB_INLINE int check_interval_valid(const int64_t row_idx, const int64_t i
     ret = OB_DATA_OUT_OF_RANGE;
     LOG_WARN("invalid interval", K(ret), K(interval));
   } else if (OB_UNLIKELY(!is_preceding && static_cast<uint64_t>(row_idx + interval) > INT64_MAX)) {
-    if (lib::is_mysql_mode()) {
-      ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-      LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret),
-               K(row_idx + interval));
-    } else {
-      ret = OB_DATA_OUT_OF_RANGE;
-      LOG_WARN("int64 out of range", K(ret), K(row_idx + interval));
-    }
+    ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+    LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret),
+             K(row_idx + interval));
   }
   return ret;
 }
@@ -1454,11 +1416,9 @@ int _calc_borders_for_rows_between(winfunc::WinExprEvalCtx &ctx, const int64_t r
       between_data->get_payload(i, payload, len);
       const number::ObCompactNumber *cnum = reinterpret_cast<const number::ObCompactNumber *>(payload);
       number::ObNumber result_nmb(*cnum);
-      if (lib::is_mysql_mode()) {
-        if (OB_UNLIKELY(result_nmb.is_negative())) {
-          ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-          LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(result_nmb));
-        }
+      if (OB_UNLIKELY(result_nmb.is_negative())) {
+        ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+        LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(result_nmb));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(result_nmb.extract_valid_int64_with_trunc(interval))) {
@@ -1471,29 +1431,14 @@ int _calc_borders_for_rows_between(winfunc::WinExprEvalCtx &ctx, const int64_t r
       }
     }
   } else if (ob_is_decimal_int(meta.type_)) {
-    int16_t in_prec = meta.precision_;
-    int16_t in_scale = meta.scale_;
-    int16_t out_scale = 0;
     ObDecimalIntBuilder trunc_res_val;
-    ObDatum in_datum;
     for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
       int64_t row_idx = row_start + i;
       if (eval_skip.at(i) || between_data->is_null(i)) { continue; }
       between_data->get_payload(i, payload, len);
-      if (lib::is_mysql_mode()) {
-        if (OB_UNLIKELY(wide::is_negative(reinterpret_cast<const ObDecimalInt *>(payload), len))) {
-          ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
-          LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret));
-        }
-      } else if (in_scale == out_scale) {
-        trunc_res_val.from(reinterpret_cast<const ObDecimalInt *>(payload), len);
-      } else {
-        in_datum.ptr_ = payload;
-        in_datum.len_ = len;
-        if (OB_FAIL(sql::ObExprTruncate::do_trunc_decimalint(in_prec, in_scale, in_prec, out_scale,
-                                                             out_scale, in_datum, trunc_res_val))) {
-          LOG_WARN("trunc decimal int failed", K(ret));
-        }
+      if (OB_UNLIKELY(wide::is_negative(reinterpret_cast<const ObDecimalInt *>(payload), len))) {
+        ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
+        LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret));
       }
       if (OB_SUCC(ret)) {
         bool is_in_val_valid = false;
@@ -1518,7 +1463,7 @@ int _calc_borders_for_rows_between(winfunc::WinExprEvalCtx &ctx, const int64_t r
       if (eval_skip.at(i) || between_data->is_null(i)) { continue; }
       between_data->get_payload(i, payload, len);
       interval = *reinterpret_cast<const int64_t *>(payload);
-      if (lib::is_mysql_mode() && OB_UNLIKELY(interval < 0)) {
+      if (OB_UNLIKELY(interval < 0)) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
         LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(interval));
       } else if (OB_FAIL(check_interval_valid(row_idx, interval, is_preceding))) {
@@ -1534,7 +1479,7 @@ int _calc_borders_for_rows_between(winfunc::WinExprEvalCtx &ctx, const int64_t r
       if (eval_skip.at(i) || between_data->is_null(i)) { continue; }
       between_data->get_payload(i, payload, len);
       uint64_t tmp_val = *reinterpret_cast<const uint64_t *>(payload);
-      if (lib::is_mysql_mode() && static_cast<int64_t>(tmp_val) < 0) {
+      if (static_cast<int64_t>(tmp_val) < 0) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
         LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(tmp_val));
       } else if (tmp_val > INT64_MAX) {
@@ -1556,7 +1501,7 @@ int _calc_borders_for_rows_between(winfunc::WinExprEvalCtx &ctx, const int64_t r
       if (eval_skip.at(i) || between_data->is_null(i)) { continue; }
       between_data->get_payload(i, payload, len);
       float tmp_val = *reinterpret_cast<const float *>(payload);
-      if (lib::is_mysql_mode() && tmp_val < 0) {
+      if (tmp_val < 0) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
         LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(tmp_val));
       } else if (tmp_val > INT64_MAX) {
@@ -1578,7 +1523,7 @@ int _calc_borders_for_rows_between(winfunc::WinExprEvalCtx &ctx, const int64_t r
       if (eval_skip.at(i) || between_data->is_null(i)) { continue; }
       between_data->get_payload(i, payload, len);
       double tmp_val = *reinterpret_cast<const double *>(payload);
-      if (lib::is_mysql_mode() && tmp_val < 0) {
+      if (tmp_val < 0) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
         LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(tmp_val));
       } else if (tmp_val > INT64_MAX) {
@@ -1600,7 +1545,7 @@ int _calc_borders_for_rows_between(winfunc::WinExprEvalCtx &ctx, const int64_t r
       if (eval_skip.at(i) || between_data->is_null(i)) { continue; }
       between_data->get_payload(i, payload, len);
       uint64_t tmp_val = *reinterpret_cast<const uint64_t *>(payload);
-      if (lib::is_mysql_mode() && static_cast<int64_t>(tmp_val) < 0) {
+      if (static_cast<int64_t>(tmp_val) < 0) {
         ret = OB_ERR_WINDOW_FRAME_ILLEGAL;
         LOG_WARN("frame start or end is negative, NULL or of non-integral type", K(ret), K(tmp_val));
       } else if (tmp_val > INT64_MAX) {
@@ -1954,7 +1899,7 @@ int calc_borders_for_sort_expr(WinExprEvalCtx &ctx, const ObExpr *bound_expr,
         eval_ctx, eval_skip,
         EvalBound(batch_size, eval_skip.accumulate_bit_cnt(batch_size) == 0)))) {
     LOG_WARN("eval vector failed", K(ret));
-  } else if (lib::is_mysql_mode() && !is_nmb_literal
+  } else if (!is_nmb_literal
              && ob_is_temporal_type(bound_expr->datum_meta_.type_)) {
     if (OB_FAIL(_check_datetime_interval_valid(eval_ctx, bound_expr, batch_size, eval_skip))) {
       LOG_WARN("invalid datetime interval", K(ret));
@@ -2066,7 +2011,7 @@ struct int_trunc<VEC_TC_UINTEGER>
   {
     int ret = OB_SUCCESS;
     uint64_t tmp_value = *reinterpret_cast<const uint64_t *>(payload);
-    bool is_valid_param = !lib::is_mysql_mode() || static_cast<int64_t>(tmp_value) >= 0;
+    bool is_valid_param = static_cast<int64_t>(tmp_value) >= 0;
     if (tmp_value > INT64_MAX && is_valid_param) {
       ret = OB_DATA_OUT_OF_RANGE;
       LOG_WARN("int64 out of range", K(ret));
@@ -2395,13 +2340,10 @@ int AggrExpr::set_payload(WinExprEvalCtx &ctx, ColumnFmt *columns, const int64_t
   ObExpr *res_expr = ctx.win_col_.wf_info_.expr_;
   VecValueTypeClass vec_tc = res_expr->get_vec_value_tc();
   ObEvalCtx &eval_ctx = ctx.win_col_.op_.get_eval_ctx();
-  const ObWindowFunctionVecSpec &spec = static_cast<const ObWindowFunctionVecSpec &>(ctx.win_col_.op_.get_spec());
   // guard used for `get_str_res_mem`
   ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx);
   guard.set_batch_idx(idx);
-  // count function in consolidator is T_FUN_COUNT, not T_FUN_COUNT_SUM!!!
-  bool is_count_sum = (T_FUN_COUNT == ctx.win_col_.wf_info_.func_type_ && spec.is_consolidator());
-  if (T_FUN_COUNT != ctx.win_col_.wf_info_.func_type_ || is_count_sum || lib::is_mysql_mode()) {
+  {
     if (is_fixed_length_vec(vec_tc)) {
       columns->set_payload(idx, payload, len);
     } else if (vec_tc == VEC_TC_NUMBER) {
@@ -2415,13 +2357,6 @@ int AggrExpr::set_payload(WinExprEvalCtx &ctx, ColumnFmt *columns, const int64_t
         MEMCPY(res_buf, payload, len);
         columns->set_payload_shallow(idx, res_buf, len);
       }
-    }
-  } else {
-    number::ObNumber res_nmb;
-    if (OB_FAIL(res_nmb.from(*reinterpret_cast<const int64_t *>(payload), ctx.allocator_))) {
-      LOG_WARN("cast to number failed", K(ret));
-    } else {
-      columns->set_number(idx, res_nmb);
     }
   }
   return ret;
