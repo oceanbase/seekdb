@@ -115,10 +115,10 @@ int ObLogFetcher::init(
     // Before the LogFetcher module is initialized, the following configuration items need to be loaded
     configure(cfg);
     const int64_t max_log_file_buffer_cnt = max(
-      (get_tenant_memory_limit(self_tenant_id_) >> 5) / palf::PALF_PHY_BLOCK_SIZE, 1);
+      (lib::get_tenant_memory_limit(self_tenant_id_) >> 5) / palf::PALF_PHY_BLOCK_SIZE, 1);
     const int64_t MIN_FETCH_LOG_ARPC_RES_CNT = 4;
     const common::ObRegion region(cfg.region.str());
-    const obrpc::ObCdcClientType client_type = get_client_type_from_user_type(log_fetcher_user_);
+    const obcall::ObCdcClientType client_type = get_client_type_from_user_type(log_fetcher_user_);
 
     if (is_integrated_fetching_mode(fetching_mode_) && OB_FAIL(log_route_service_.init(
         proxy,
@@ -807,7 +807,7 @@ void ObLogFetcher::print_stat()
 int ObLogFetcher::suggest_cached_rpc_res_count_(const int64_t min_res_cnt,
     const int64_t max_res_cnt)
 {
-  const int64_t memory_limit = get_tenant_memory_limit(self_tenant_id_);
+  const int64_t memory_limit = lib::get_tenant_memory_limit(self_tenant_id_);
   // the maximum memory hold by rpc_result should be 1/32 of the memory limit.
   const int64_t rpc_res_hold_max = (memory_limit >> 5);
   int64_t rpc_res_cnt = rpc_res_hold_max / FetchLogRpcResultPool::DEFAULT_RESULT_POOL_BLOCK_SIZE;
@@ -946,7 +946,7 @@ int ObLogFetcher::print_delay()
   return ret;
 }
 
-int ObLogFetcher::update_fetch_log_protocol(const obrpc::ObCdcFetchLogProtocolType proto)
+int ObLogFetcher::update_fetch_log_protocol(const obcall::ObCdcFetchLogProtocolType proto)
 {
   return fs_container_mgr_.update_fetch_log_protocol(proto);
 }

@@ -1,7 +1,5 @@
 set(ob_admin_tde_files "")
 
-set(ob_admin_shared_storage_files "")
-
 add_executable(ob_admin
   #  clog_tool/cmd_args_parser.h
   #  clog_tool/ob_admin_clog_v2_executor.cpp
@@ -28,10 +26,12 @@ add_executable(ob_admin
   ob_admin_executor.h
   ob_admin_common_utils.cpp
   ob_admin_common_utils.h
-  server_tool/ob_admin_routine.cpp
-  server_tool/ob_admin_routine.h
-  server_tool/ob_admin_server_executor.cpp
-  server_tool/ob_admin_server_executor.h
+  #  server_tool disabled: ObSrvRpcProxy (RPC client to a remote observer) was
+  #  removed with the obrpc framework; the -S server-admin mode is unavailable.
+  #  server_tool/ob_admin_routine.cpp
+  #  server_tool/ob_admin_routine.h
+  #  server_tool/ob_admin_server_executor.cpp
+  #  server_tool/ob_admin_server_executor.h
   #  server_tool/ob_admin_utils.h
   slog_tool/ob_admin_slog_executor.cpp
   slog_tool/ob_admin_slog_executor.h
@@ -73,7 +73,6 @@ add_executable(ob_admin
   log_tool/parser/ob_admin_parser_group_entry.cpp
   log_tool/ob_admin_log_tool_executor.cpp
   ${ob_admin_tde_files}
-  ${ob_admin_shared_storage_files}
   sql_tool/ob_admin_uncompress_plan_executor.cpp
   )
 

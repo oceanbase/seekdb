@@ -147,6 +147,26 @@ private:
 };
 
 
+
+
+// Create shared SSTable which is not empty. Shared SSTable is the SSTable whose macro blocks, including data and 
+// index blocks, are all in shared or backup storage. Macro blocks need not copy and index does not need to be 
+// rebuilt, just put the ObMigrationSSTableParam from source into local table store. This is happen during migration
+// or follower restore, when source SSTable is shared.
+class ObCopiedSharedSSTableCreator final : public ObCopiedSSTableCreatorImpl
+{
+public:
+  ObCopiedSharedSSTableCreator() : ObCopiedSSTableCreatorImpl() {}
+
+  virtual int create_sstable() override;
+
+private:
+  virtual int check_sstable_param_for_init_(const ObMigrationSSTableParam *src_sstable_param) const override;
+
+  DISALLOW_COPY_AND_ASSIGN(ObCopiedSharedSSTableCreator);
+};
+
+
 class ObSSTableCopyFinishTask : public share::ObITask
 {
 public:
@@ -175,6 +195,7 @@ public:
 
 private:
   bool is_sstable_should_rebuild_index_(const ObMigrationSSTableParam *sstable_param) const;
+  bool is_shared_sstable_without_copy_(const ObMigrationSSTableParam *sstable_param) const;
   int get_cluster_version_(
       const ObPhysicalCopyTaskInitParam &init_param,
       int64_t &cluster_version);

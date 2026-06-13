@@ -218,7 +218,9 @@ const char *const OB_ORACLE_RECYCLE_PREFIX = "RECYCLE_$_";
 OB_INLINE bool is_valid_log_compressor_type(common::ObCompressorType compressor_type)
 {
    bool b_ret = false;
-   if (common::ObCompressorType::ZSTD_1_3_8_COMPRESSOR == compressor_type) {
+   if (common::ObCompressorType::LZ4_COMPRESSOR == compressor_type
+   || common::ObCompressorType::ZSTD_COMPRESSOR == compressor_type
+   || common::ObCompressorType::ZSTD_1_3_8_COMPRESSOR == compressor_type) {
     b_ret = true;
    }
    return b_ret;

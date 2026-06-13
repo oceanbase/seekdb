@@ -480,17 +480,8 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
           }
         } else {
           // single-replica: QC and SQC are on the same node. Serialize the args
-          // exactly as the old fast_init_sqc rpc would, then launch the SQC
-          // ASYNCHRONOUSLY on a tenant ReqWorker (a separate thread), restoring
-          // the pre-in-process topology. The fast path runs the SQC's task inline
-          // on the worker (transmit included); doing this under a blocking
-          // sync_call would deadlock -- the inline transmit fills the qc-sqc dtl
-          // send buffer and waits for the QC to drain it, while the QC is blocked
-          // waiting for the sync_call to return. With async_call the QC returns
-          // immediately and drains the channel from its msg loop. It learns this
-          // sqc's outcome via the dtl FINISH_SQC_RESULT report (success or
-          // post-link failure) or via an interrupt (pre-link failure, raised
-          // inside px_init_sqc_fast_in_proc).
+          // exactly as the old fast_init_sqc rpc would, then run the SQC launch
+          // in-process synchronously (the fast path executes the task inline).
           int64_t ser_len = args.get_serialize_size();
           char *ser_buf = static_cast<char *>(exec_ctx.get_allocator().alloc(ser_len));
           int64_t ser_pos = 0;
@@ -499,14 +490,21 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
             LOG_WARN("fail to alloc serialize buffer", K(ret), K(ser_len));
           } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
-          } else {
-            // Capture ser_buf/ser_pos BY VALUE: the QC does not block, so a
-            // by-reference capture would dangle once dispatch_sqcs returns.
-            // ser_buf lives in exec_ctx's allocator, which outlives the async sqc
-            // (the QC blocks in wait_all_running_dfos_exit until all sqcs report),
-            // and is MEMCPY'd at decode time, so it is safe to pass by pointer.
-            (void)ex_rpc::async_call([ser_buf, ser_pos]() {
-              return px_init_sqc_fast_in_proc(ser_buf, ser_pos); });
+          } else if (OB_FAIL(ex_rpc::sync_call([&]() {
+                       return px_init_sqc_fast_in_proc(ser_buf, ser_pos); }))) {
+            // mirror the old ObFastInitSqcCB error path: if the sqc-qc channel
+            // was never linked, the in-proc launch returns ret here and the QC
+            // must be told this sqc will not report.
+            if (ignore_vtable_error && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(ret)) {
+              LOG_WARN("ignore error when init sqc with virtual table failed", K(ret), K(sqc));
+              ObFastInitSqcReportQCMessageCall call(&sqc, ret, phy_plan_ctx->get_timeout_timestamp(), true);
+              call.mock_sqc_finish_msg();
+              ret = OB_SUCCESS;
+            } else {
+              LOG_WARN("fail to init sqc", K(ret), K(sqc));
+            }
+            sqc.set_need_report(false);
+            sqc.set_server_not_alive(true);
           }
         }
       }

@@ -65,8 +65,8 @@ public:
   void set_freeze_all_meta() { freeze_all_flag_ |= FREEZE_ALL_META; }
   bool is_rebuild_column_group() const { return rebuild_column_group_; }
   void set_rebuild_column_group(bool rebuild_column_group) { rebuild_column_group_ = rebuild_column_group; }
-  inline obrpc::ObServerList &get_ignore_server_list() { return opt_server_list_; }
-  inline obrpc::ObServerList &get_server_list() { return opt_server_list_; }
+  inline obcall::ObServerList &get_ignore_server_list() { return opt_server_list_; }
+  inline obcall::ObServerList &get_server_list() { return opt_server_list_; }
   inline common::ObSArray<uint64_t> &get_tenant_ids() { return opt_tenant_ids_; }
   inline common::ObZone &get_zone() { return opt_zone_; }
   inline common::ObTabletID &get_tablet_id() { return opt_tablet_id_; }
@@ -83,7 +83,7 @@ private:
   // for minor_freeze, it is candidate server list
   int freeze_all_flag_;
   // for major_freeze only
-  obrpc::ObServerList opt_server_list_;
+  obcall::ObServerList opt_server_list_;
   // for minor_freeze only,
   common::ObSArray<uint64_t> opt_tenant_ids_;
   // for minor_freeze only
@@ -107,7 +107,7 @@ public:
   virtual ~ObFlushCacheStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(flush_cache_arg));
 
-  obrpc::ObAdminFlushCacheArg flush_cache_arg_;
+  obcall::ObAdminFlushCacheArg flush_cache_arg_;
   bool is_global_;
 };
 
@@ -154,7 +154,7 @@ class ObAdminServerStmt : public ObSystemCmdStmt
 {
 public:
   ObAdminServerStmt()
-      : ObSystemCmdStmt(stmt::T_ADMIN_SERVER), op_(obrpc::ObAdminServerArg::ADD)
+      : ObSystemCmdStmt(stmt::T_ADMIN_SERVER), op_(obcall::ObAdminServerArg::ADD)
   {
   }
 
@@ -165,14 +165,14 @@ public:
 
   virtual ~ObAdminServerStmt() {}
 
-  inline obrpc::ObServerList &get_server_list() { return server_list_; }
+  inline obcall::ObServerList &get_server_list() { return server_list_; }
   inline const common::ObZone &get_zone() const { return zone_; }
   inline void set_zone(const common::ObZone &zone) { zone_ = zone; }
-  inline obrpc::ObAdminServerArg::AdminServerOp get_op() const { return op_; }
-  inline void set_op(const obrpc::ObAdminServerArg::AdminServerOp op) { op_ = op; }
+  inline obcall::ObAdminServerArg::AdminServerOp get_op() const { return op_; }
+  inline void set_op(const obcall::ObAdminServerArg::AdminServerOp op) { op_ = op; }
 private:
-  obrpc::ObAdminServerArg::AdminServerOp op_;
-  obrpc::ObServerList server_list_;
+  obcall::ObAdminServerArg::AdminServerOp op_;
+  obcall::ObServerList server_list_;
   common::ObZone zone_;
 };
 
@@ -182,11 +182,11 @@ public:
   ObAdminMergeStmt() : ObSystemCmdStmt(stmt::T_ADMIN_MERGE) {}
   virtual ~ObAdminMergeStmt() {}
 
-  obrpc::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminMergeArg rpc_arg_;
+  obcall::ObAdminMergeArg rpc_arg_;
 };
 
 class ObAdminRecoveryStmt: public ObSystemCmdStmt
@@ -195,11 +195,11 @@ public:
   ObAdminRecoveryStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RECOVERY) {}
   virtual ~ObAdminRecoveryStmt() {}
 
-  obrpc::ObAdminRecoveryArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminRecoveryArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminRecoveryArg rpc_arg_;
+  obcall::ObAdminRecoveryArg rpc_arg_;
 };
 
 class ObClearRoottableStmt : public ObSystemCmdStmt
@@ -208,11 +208,11 @@ public:
   ObClearRoottableStmt() : ObSystemCmdStmt(stmt::T_CLEAR_ROOT_TABLE) {}
   virtual ~ObClearRoottableStmt() {}
 
-  obrpc::ObAdminClearRoottableArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminClearRoottableArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminClearRoottableArg rpc_arg_;
+  obcall::ObAdminClearRoottableArg rpc_arg_;
 };
 
 class ObRefreshSchemaStmt : public ObSystemCmdStmt
@@ -221,11 +221,11 @@ public:
   ObRefreshSchemaStmt() : ObSystemCmdStmt(stmt::T_REFRESH_SCHEMA) {}
   virtual ~ObRefreshSchemaStmt() {}
 
-  obrpc::ObAdminRefreshSchemaArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminRefreshSchemaArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminRefreshSchemaArg rpc_arg_;
+  obcall::ObAdminRefreshSchemaArg rpc_arg_;
 };
 
 class ObRefreshMemStatStmt : public ObSystemCmdStmt
@@ -234,11 +234,11 @@ public:
   ObRefreshMemStatStmt() : ObSystemCmdStmt(stmt::T_REFRESH_MEMORY_STAT) {}
   virtual ~ObRefreshMemStatStmt() {}
 
-  obrpc::ObAdminRefreshMemStatArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminRefreshMemStatArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminRefreshMemStatArg rpc_arg_;
+  obcall::ObAdminRefreshMemStatArg rpc_arg_;
 };
 
 class ObWashMemFragmentationStmt : public ObSystemCmdStmt
@@ -247,11 +247,11 @@ public:
   ObWashMemFragmentationStmt() : ObSystemCmdStmt(stmt::T_WASH_MEMORY_FRAGMENTATION) {}
   virtual ~ObWashMemFragmentationStmt() {}
 
-  obrpc::ObAdminWashMemFragmentationArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminWashMemFragmentationArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminWashMemFragmentationArg rpc_arg_;
+  obcall::ObAdminWashMemFragmentationArg rpc_arg_;
 };
 
 class ObRefreshIOCalibraitonStmt : public ObSystemCmdStmt
@@ -260,11 +260,11 @@ public:
   ObRefreshIOCalibraitonStmt() : ObSystemCmdStmt(stmt::T_REFRESH_IO_CALIBRATION) {}
   virtual ~ObRefreshIOCalibraitonStmt() {}
 
-  obrpc::ObAdminRefreshIOCalibrationArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminRefreshIOCalibrationArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminRefreshIOCalibrationArg rpc_arg_;
+  obcall::ObAdminRefreshIOCalibrationArg rpc_arg_;
 };
 
 class ObSetConfigStmt : public ObSystemCmdStmt
@@ -273,11 +273,11 @@ public:
   ObSetConfigStmt() : ObSystemCmdStmt(stmt::T_ALTER_SYSTEM_SET_PARAMETER) {}
   virtual ~ObSetConfigStmt() {}
 
-  obrpc::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
   
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminSetConfigArg rpc_arg_;
+  obcall::ObAdminSetConfigArg rpc_arg_;
 };
 
 class ObChangeExternalStorageDestStmt : public ObSystemCmdStmt
@@ -286,11 +286,11 @@ public:
   ObChangeExternalStorageDestStmt() : ObSystemCmdStmt(stmt::T_CHANGE_EXTERNAL_STORAGE_DEST) {}
   virtual ~ObChangeExternalStorageDestStmt() {}
 
-  obrpc::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminSetConfigArg rpc_arg_;
+  obcall::ObAdminSetConfigArg rpc_arg_;
 };
 
 class ObSetTPStmt : public ObSystemCmdStmt
@@ -299,11 +299,11 @@ public:
   ObSetTPStmt() : ObSystemCmdStmt(stmt::T_ALTER_SYSTEM_SETTP) {}
   virtual ~ObSetTPStmt() {}
 
-  obrpc::ObAdminSetTPArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminSetTPArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminSetTPArg rpc_arg_;
+  obcall::ObAdminSetTPArg rpc_arg_;
 };
 
 class ObClearMergeErrorStmt : public ObSystemCmdStmt
@@ -312,11 +312,11 @@ public:
   ObClearMergeErrorStmt() : ObSystemCmdStmt(stmt::T_CLEAR_MERGE_ERROR) {}
   virtual ~ObClearMergeErrorStmt() {}
 
-  obrpc::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminMergeArg &get_rpc_arg() { return rpc_arg_; }
 
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminMergeArg rpc_arg_;
+  obcall::ObAdminMergeArg rpc_arg_;
 };
 
 class ObUpgradeVirtualSchemaStmt : public ObSystemCmdStmt
@@ -366,9 +366,9 @@ public:
   ObRunUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_RUN_UPGRADE_JOB) {}
   virtual ~ObRunUpgradeJobStmt() {}
 
-  obrpc::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
 private:
-  obrpc::ObUpgradeJobArg rpc_arg_;
+  obcall::ObUpgradeJobArg rpc_arg_;
 };
 
 class ObStopUpgradeJobStmt : public ObSystemCmdStmt
@@ -377,9 +377,9 @@ public:
   ObStopUpgradeJobStmt() : ObSystemCmdStmt(stmt::T_ADMIN_STOP_UPGRADE_JOB) {}
   virtual ~ObStopUpgradeJobStmt() {}
 
-  obrpc::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObUpgradeJobArg &get_rpc_arg() { return rpc_arg_; }
 private:
-  obrpc::ObUpgradeJobArg rpc_arg_;
+  obcall::ObUpgradeJobArg rpc_arg_;
 };
 
 class ObCancelTaskStmt : public ObSystemCmdStmt
@@ -435,7 +435,7 @@ public:
   virtual ~ObAddDiskStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
 
-  obrpc::ObAdminAddDiskArg arg_;
+  obcall::ObAdminAddDiskArg arg_;
 };
 
 class ObDropDiskStmt : public ObSystemCmdStmt
@@ -447,7 +447,7 @@ public:
   virtual ~ObDropDiskStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(arg));
 
-  obrpc::ObAdminDropDiskArg arg_;
+  obcall::ObAdminDropDiskArg arg_;
 };
 
 class ObEnableSqlThrottleStmt
@@ -516,24 +516,24 @@ public:
     : ObSystemCmdStmt(stmt::T_CANCEL_RESTORE),
       drop_tenant_arg_() {}
   virtual ~ObCancelRestoreStmt() {}
-  obrpc::ObDropTenantArg &get_drop_tenant_arg() { return drop_tenant_arg_; }
+  obcall::ObDropTenantArg &get_drop_tenant_arg() { return drop_tenant_arg_; }
 	TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(drop_tenant_arg));
 private:
-  obrpc::ObDropTenantArg drop_tenant_arg_;
+  obcall::ObDropTenantArg drop_tenant_arg_;
 };
 
 class ObTableTTLStmt : public ObSystemCmdStmt {
 public:
   ObTableTTLStmt()
     : ObSystemCmdStmt(stmt::T_TABLE_TTL),
-      type_(obrpc::ObTTLRequestArg::TTL_INVALID_TYPE),
+      type_(obcall::ObTTLRequestArg::TTL_INVALID_TYPE),
       opt_tenant_ids_(),
       ttl_all_(false)
   {}
   virtual ~ObTableTTLStmt()
   {}
 
-  obrpc::ObTTLRequestArg::TTLRequestType get_type() const
+  obcall::ObTTLRequestArg::TTLRequestType get_type() const
   {
     return type_;
   }
@@ -541,11 +541,11 @@ public:
   {
     int ret = common::OB_SUCCESS;
 
-    if (type < 0 || type >= obrpc::ObTTLRequestArg::TTL_MOVE_TYPE) {
+    if (type < 0 || type >= obcall::ObTTLRequestArg::TTL_MOVE_TYPE) {
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "invalid args", K(type));
     } else {
-      type_ = static_cast<obrpc::ObTTLRequestArg::TTLRequestType>(type);
+      type_ = static_cast<obcall::ObTTLRequestArg::TTLRequestType>(type);
     }
 
     return ret;
@@ -559,7 +559,7 @@ public:
 
 private:
   uint64_t tenant_id_;
-  obrpc::ObTTLRequestArg::TTLRequestType type_;
+  obcall::ObTTLRequestArg::TTLRequestType type_;
   common::ObSArray<uint64_t> opt_tenant_ids_;
   bool ttl_all_;
 };
@@ -584,9 +584,9 @@ public:
   ObRecoverTableStmt()
     : ObSystemCmdStmt(stmt::T_RECOVER_TABLE), rpc_arg_() {}
   virtual ~ObRecoverTableStmt() {}
-  obrpc::ObRecoverTableArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObRecoverTableArg &get_rpc_arg() { return rpc_arg_; }
 private:
-  obrpc::ObRecoverTableArg rpc_arg_;
+  obcall::ObRecoverTableArg rpc_arg_;
 };
 
 
@@ -596,10 +596,10 @@ class ObResetConfigStmt : public ObSystemCmdStmt
 public:
   ObResetConfigStmt() : ObSystemCmdStmt(stmt::T_ALTER_SYSTEM_RESET_PARAMETER) {}
   virtual ~ObResetConfigStmt() {}
-  obrpc::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
+  obcall::ObAdminSetConfigArg &get_rpc_arg() { return rpc_arg_; }
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
-  obrpc::ObAdminSetConfigArg rpc_arg_;
+  obcall::ObAdminSetConfigArg rpc_arg_;
 };
 
 class ObModuleDataStmt : public ObSystemCmdStmt

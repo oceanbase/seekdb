@@ -317,7 +317,7 @@ int LSFetchCtx::get_next_group_entry(
     palf::LSN &lsn,
     const char *&buf,
     const share::SCN replayable_point,
-    const obrpc::ObCdcFetchRawSource data_end_source)
+    const obcall::ObCdcFetchRawSource data_end_source)
 {
   int ret = OB_SUCCESS;
 
@@ -326,7 +326,7 @@ int LSFetchCtx::get_next_group_entry(
     LOG_ERROR("group_iterator_ not init!");
   } else if (OB_FAIL(group_iterator_.next(replayable_point))) {
     if (OB_ITER_END != ret) {
-      if (obrpc::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
+      if (obcall::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
         LOG_ERROR("iterate group_entry failed", KR(ret), K_(group_iterator));
       } else {
         LOG_WARN("iterate group_entry failed", KR(ret), K_(group_iterator));

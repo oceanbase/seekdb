@@ -27,7 +27,7 @@
 #include "ob_log_fetch_log_rpc_result.h"
 
 using namespace oceanbase::common;
-using namespace oceanbase::obrpc;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {
@@ -1307,7 +1307,7 @@ void FetchStream::update_fetch_stat_info_(
   ObByteLockGuard lock_guard(stat_lock_);
 
   FetchStatInfo &fsi = cur_stat_info_;
-  const ObRpcResultCode &rcode = result.rcode_;
+  const rpc::frame::ObResultCode &rcode = result.rcode_;
   const ObCdcLSFetchLogResp &resp = result.resp_;
   const ObCdcFetchStatus &fetch_status = resp.get_fetch_status();
 
@@ -1378,9 +1378,9 @@ int FetchStream::handle_fetch_log_result_(
   int64_t data_len = 0;
   int64_t read_len = 0;
   share::SCN replayable_point = share::SCN::max_scn();
-  obrpc::ObRpcResultCode rcode;
+  rpc::frame::ObResultCode rcode;
   FeedbackType feed_back = FeedbackType::INVALID_FEEDBACK;
-  obrpc::ObCdcFetchRawSource data_end_source = obrpc::ObCdcFetchRawSource::UNKNOWN;
+  obcall::ObCdcFetchRawSource data_end_source = obcall::ObCdcFetchRawSource::UNKNOWN;
 
   is_stream_valid = true;
   stream_invalid_reason = NULL;
@@ -1511,7 +1511,7 @@ int FetchStream::update_rpc_request_params_()
 }
 
 int FetchStream::handle_fetch_log_error_(
-    const ObRpcResultCode &rcode,
+    const rpc::frame::ObResultCode &rcode,
     const int err,
     const FetchLogRpcResult &result,
     KickOutInfo &kickout_info)
@@ -1605,7 +1605,7 @@ int FetchStream::set_(KickOutInfo &kick_out_info,
 int FetchStream::read_log_(const char *data,
     const int64_t data_len,
     const share::SCN replayable_point,
-    const obrpc::ObCdcFetchRawSource data_end_source,
+    const obcall::ObCdcFetchRawSource data_end_source,
     volatile bool &stop_flag,
     KickOutInfo &kick_out_info,
     int64_t &log_num,
@@ -1648,7 +1648,7 @@ int FetchStream::read_log_(const char *data,
       if (OB_FAIL(ls_fetch_ctx_->get_next_group_entry(group_entry, group_start_lsn,
           buffer, replayable_point, data_end_source))) {
         if (OB_ITER_END != ret) {
-          if (obrpc::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
+          if (obcall::ObCdcFetchRawSource::ARCHIVE != data_end_source && OB_PARTIAL_LOG != ret) {
             LOG_ERROR("get next_group_entry failed", KR(ret), K_(ls_fetch_ctx), K(data_end_source));
             if (OB_CHECKSUM_ERROR == ret || OB_INVALID_DATA == ret)  {
               OB_ASSERT(ret);
@@ -1990,10 +1990,10 @@ int FetchStream::get_result_data_(const FetchLogRpcResult &result,
     const char *&data,
     int64_t &data_len,
     share::SCN &replayable_point,
-    obrpc::ObRpcResultCode &rcode,
-    obrpc::ObCdcFetchRawSource &source,
+    rpc::frame::ObResultCode &rcode,
+    obcall::ObCdcFetchRawSource &source,
     int &err,
-    obrpc::FeedbackType &feed_back)
+    obcall::FeedbackType &feed_back)
 {
   int ret = OB_SUCCESS;
 
@@ -2005,7 +2005,7 @@ int FetchStream::get_result_data_(const FetchLogRpcResult &result,
     data = resp.get_log_entry_buf();
     data_len = resp.get_pos();
     // regard all fetch source as palf, loggroupentry proto ensure that all fetched logs are complete
-    source = obrpc::ObCdcFetchRawSource::PALF;
+    source = obcall::ObCdcFetchRawSource::PALF;
     replayable_point = SCN::max_scn();
     feed_back = resp.get_feedback_type();
     is_readable = (OB_SUCCESS == ret && OB_SUCCESS == rcode.rcode_);
@@ -2027,16 +2027,16 @@ int FetchStream::get_result_data_(const FetchLogRpcResult &result,
         rcode = status.rcode_;
       }
 
-      if (obrpc::FeedbackType::INVALID_FEEDBACK == feed_back &&
-          obrpc::FeedbackType::INVALID_FEEDBACK != status.feed_back_) {
+      if (obcall::FeedbackType::INVALID_FEEDBACK == feed_back &&
+          obcall::FeedbackType::INVALID_FEEDBACK != status.feed_back_) {
         feed_back = status.feed_back_;
       }
     }
 
     if (is_readable &&
         (OB_SUCCESS != err || OB_SUCCESS != rcode.rcode_) &&
-        obrpc::FeedbackType::INVALID_FEEDBACK == feed_back) {
-      feed_back = obrpc::FeedbackType::LOG_NOT_IN_THIS_SERVER;
+        obcall::FeedbackType::INVALID_FEEDBACK == feed_back) {
+      feed_back = obcall::FeedbackType::LOG_NOT_IN_THIS_SERVER;
     }
 
   } else {

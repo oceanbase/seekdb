@@ -130,10 +130,6 @@
 #include "sql/engine/cmd/ob_ccl_rule_executor.h"
 #include "sql/resolver/ddl/ob_catalog_stmt.h"
 #include "sql/engine/cmd/ob_catalog_executor.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "sql/resolver/cmd/ob_trigger_storage_cache_stmt.h"
-#include "sql/engine/cmd/ob_trigger_storage_cache_executor.h"
-#endif
 #include "sql/resolver/cmd/ob_sys_dispatch_call_stmt.h"
 #include "sql/engine/cmd/ob_sys_dispatch_call_executor.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
@@ -472,12 +468,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_SERVER_ACTION: {
         break;
       }
-#ifdef OB_BUILD_SHARED_STORAGE
-      case stmt::T_TRIGGER_STORAGE_CACHE: {
-        DEFINE_EXECUTE_CMD(ObTriggerStorageCacheStmt, ObTriggerStorageCacheExecutor);
-        break;
-      }
-#endif
       case stmt::T_FREEZE: {
         DEFINE_EXECUTE_CMD(ObFreezeStmt, ObFreezeExecutor);
         break;
@@ -961,7 +951,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       ret = tmp_ret;
     }
   }
-
 
   return ret;
 }

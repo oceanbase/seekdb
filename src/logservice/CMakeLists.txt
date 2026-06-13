@@ -27,8 +27,6 @@ ob_set_subtarget(ob_logservice common_mixed
   cdcservice/ob_cdc_service.cpp
   cdcservice/ob_cdc_fetcher.cpp
   cdcservice/ob_cdc_start_lsn_locator.cpp
-  cdcservice/ob_cdc_rpc_processor.cpp
-  cdcservice/ob_cdc_rpc_proxy.cpp
   cdcservice/ob_cdc_service_monitor.cpp
   cdcservice/ob_cdc_struct.cpp
   cdcservice/ob_cdc_req.cpp
@@ -79,8 +77,6 @@ ob_set_subtarget(ob_logservice palf
   palf/log_req.cpp
   palf/log_request_handler.cpp
   palf/log_rpc.cpp
-  palf/log_rpc_processor.cpp
-  palf/log_rpc_proxy.cpp
   palf/log_simple_member_list.cpp
   palf/log_sliding_window.cpp
   palf/log_state_mgr.cpp
@@ -157,8 +153,6 @@ ob_set_subtarget(ob_logservice restoreservice
   restoreservice/ob_fetch_log_task.cpp
   restoreservice/ob_log_restore_define.cpp
   restoreservice/ob_log_restore_handler.cpp
-  restoreservice/ob_log_restore_rpc.cpp
-  restoreservice/ob_log_restore_rpc_define.cpp
   restoreservice/ob_log_restore_service.cpp
   restoreservice/ob_remote_data_generator.cpp
   restoreservice/ob_remote_fetch_log.cpp

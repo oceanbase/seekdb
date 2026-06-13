@@ -520,7 +520,7 @@ int ObLogService::update_palf_options_except_disk_usage_limit_size()
     CLOG_LOG(WARN, "tenant_config is not valid", K(ret), K(MTL_ID()));
   } else {
     PalfOptions palf_opts;
-    common::ObCompressorType compressor_type = ZSTD_1_3_8_COMPRESSOR;
+    common::ObCompressorType compressor_type = LZ4_COMPRESSOR;
     if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor_type(
                 tenant_config->log_transport_compress_func, compressor_type))) {
       CLOG_LOG(ERROR, "log_transport_compress_func invalid.", K(ret));

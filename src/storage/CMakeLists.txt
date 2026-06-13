@@ -674,7 +674,6 @@ ob_set_subtarget(ob_storage common
   ob_tenant_tablet_stat_mgr.cpp
   ob_protected_memtable_mgr_handle.cpp
   ob_gc_upper_trans_helper.cpp
-  ob_storage_async_rpc.cpp
   ob_partition_pre_split.cpp
 )
 
@@ -835,7 +834,7 @@ ob_set_subtarget(ob_storage tablelock
   tablelock/ob_table_lock_iterator.cpp
   tablelock/ob_table_lock_rpc_struct.cpp
   tablelock/ob_table_lock_service.cpp
-  tablelock/ob_table_lock_rpc_processor.cpp
+  tablelock/ob_table_lock_local_executor.cpp
   tablelock/ob_table_lock_rpc_client.cpp
   tablelock/ob_table_lock_live_detector.cpp
 )

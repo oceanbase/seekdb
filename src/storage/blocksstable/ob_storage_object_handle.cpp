@@ -18,9 +18,6 @@
 
 #include "ob_storage_object_handle.h"
 #include "share/ob_io_device_helper.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#include "storage/shared_storage/ob_file_manager.h"
-#endif
 
 namespace oceanbase
 {
@@ -151,12 +148,6 @@ int ObStorageObjectHandle::async_read(const ObStorageObjectReadInfo &read_info)
       if (OB_FAIL(sn_async_read(read_info))) {
         LOG_WARN("fail to sn_async_read", K(ret), K(read_info));
       }
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (read_info.macro_block_id_.is_id_mode_share()) {
-      if (OB_FAIL(ss_async_read(read_info))) {
-        LOG_WARN("fail to ss_async_read", K(ret), K(read_info));
-      }
-#endif
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected id mode", K(ret), "id_mode", read_info.macro_block_id_.id_mode(),
@@ -177,12 +168,6 @@ int ObStorageObjectHandle::async_write(const ObStorageObjectWriteInfo &write_inf
       if (OB_FAIL(sn_async_write(write_info))) {
         LOG_WARN("fail to sn_async_write", K(ret), K_(macro_id), K(write_info));
       }
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (macro_id_.is_id_mode_share()) {
-      if (OB_FAIL(ss_async_write(write_info))) {
-        LOG_WARN("fail to ss_async_write", K(ret), K_(macro_id), K(write_info));
-      }
-#endif
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected id mode", K(ret), "id_mode", macro_id_.id_mode(), K_(macro_id),
@@ -267,62 +252,6 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
   return ret;
 }
 
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObStorageObjectHandle::ss_async_read(const ObStorageObjectReadInfo &read_info)
-{
-  int ret = OB_SUCCESS;
-  ObBaseFileManager *file_manager = nullptr;
-  if (OB_UNLIKELY(!read_info.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid io argument", K(ret), K(read_info), KCSTRING(lbt()));
-  } else if (OB_FAIL(get_file_manager(read_info.mtl_tenant_id_, file_manager))) {
-    LOG_WARN("fail to get file manager", KR(ret), "tenant_id", read_info.mtl_tenant_id_, K(read_info));
-  } else if (OB_FAIL(file_manager->async_pread_file(read_info, *this))) {
-    LOG_WARN("fail to async pread file", KR(ret), K(read_info), KPC(this));
-  }
-  return ret;
-}
-
-int ObStorageObjectHandle::ss_async_write(const ObStorageObjectWriteInfo &write_info)
-{
-  int ret = OB_SUCCESS;
-  ObBaseFileManager *file_manager = nullptr;
-  ObStorageObjectType object_type = macro_id_.storage_object_type();
-  if (OB_UNLIKELY(!write_info.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(write_info));
-  } else if (OB_FAIL(get_file_manager(write_info.mtl_tenant_id_, file_manager))) {
-    LOG_WARN("fail to get file manager", KR(ret), "tenant_id", write_info.mtl_tenant_id_, K(write_info));
-  } else if (ObStorageObjectType::TMP_FILE == object_type) {
-    if (OB_FAIL(file_manager->async_append_file(write_info, *this))) {
-      LOG_WARN("fail to async append file", KR(ret), K(write_info), KPC(this));
-    }
-  } else {
-    if (OB_FAIL(file_manager->async_write_file(write_info, *this))) {
-      LOG_WARN("fail to async write file", KR(ret), K(write_info), KPC(this));
-    }
-  }
-  return ret;
-}
-
-int ObStorageObjectHandle::get_file_manager(
-    const uint64_t tenant_id,
-    ObBaseFileManager *&file_manager)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", KR(ret), K(tenant_id));
-  } else if (OB_SERVER_TENANT_ID == tenant_id) {
-    file_manager = &OB_SERVER_FILE_MGR;
-  } else if (OB_ISNULL(file_manager = MTL(ObTenantFileManager *))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("file manager is null", KR(ret), K(tenant_id));
-  }
-  return ret;
-}
-#endif
-
 int ObStorageObjectHandle::wait()
 {
   int ret = OB_SUCCESS;
@@ -338,7 +267,6 @@ int ObStorageObjectHandle::wait()
   }
   return ret;
 }
-
 
 int ObStorageObjectHandle::get_io_time_us(int64_t &io_time_us) const
 {

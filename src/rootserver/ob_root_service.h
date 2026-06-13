@@ -21,7 +21,6 @@
 #include "lib/thread/ob_work_queue.h"
 
 #include "share/object_storage/ob_object_storage_struct.h"
-#include "share/ob_common_rpc_proxy.h"
 #include "share/ob_tenant_id_schema_version.h"
 #include "share/ob_unit_replica_counter.h"
 #include "share/ob_ls_id.h"
@@ -76,10 +75,8 @@ class ObSchemaGetterGuard;
 }
 }
 
-namespace obrpc
+namespace obcall
 {
-class ObSrvRpcProxy;
-class ObCommonRpcProxy;
 }
 
 namespace rootserver
@@ -140,7 +137,6 @@ public:
   void update_fail_count(int ret);
 
   int init(common::ObServerConfig &config, common::ObConfigManager &config_mgr,
-           obrpc::ObSrvRpcProxy &rpc_proxy, obrpc::ObCommonRpcProxy &common_proxy,
            common::ObAddr &self, common::ObMySQLProxy &sql_proxy,
            observer::ObRestoreCtx &restore_ctx,
            share::schema::ObMultiVersionSchemaService *schema_mgr_);
@@ -169,8 +165,6 @@ public:
   // misc get functions
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return *schema_service_; }
   common::ObMySQLProxy &get_sql_proxy() { return sql_proxy_; }
-  obrpc::ObCommonRpcProxy &get_common_rpc_proxy() { return common_proxy_; }
-  obrpc::ObSrvRpcProxy &get_rpc_proxy() { return rpc_proxy_; }
   common::ObServerConfig *get_server_config() { return config_; }
   int64_t get_core_meta_table_version() { return core_meta_table_version_; }
   ObSchemaHistoryRecycler &get_schema_history_recycler() { return schema_history_recycler_; }
@@ -181,31 +175,31 @@ public:
   int check_config_result(const char *name, const char *value);
   int check_ddl_allowed();
 
-  int merge_finish(const obrpc::ObMergeFinishArg &arg);
+  int merge_finish(const obcall::ObMergeFinishArg &arg);
 
-  int broadcast_ds_action(const obrpc::ObDebugSyncActionArg &arg);
-  int check_dangling_replica_finish(const obrpc::ObCheckDanglingReplicaFinishArg &arg);
-  int get_tenant_schema_versions(const obrpc::ObGetSchemaArg &arg,
-                                 obrpc::ObTenantSchemaVersions &tenant_schema_versions);
+  int broadcast_ds_action(const obcall::ObDebugSyncActionArg &arg);
+  int check_dangling_replica_finish(const obcall::ObCheckDanglingReplicaFinishArg &arg);
+  int get_tenant_schema_versions(const obcall::ObGetSchemaArg &arg,
+                                 obcall::ObTenantSchemaVersions &tenant_schema_versions);
 
   // ddl related
-  int modify_system_variable(const obrpc::ObModifySysVarArg &arg);
-  int add_system_variable(const obrpc::ObAddSysVarArg &arg);
-  int create_database(const obrpc::ObCreateDatabaseArg &arg, obrpc::UInt64 &db_id);
-  int create_tablegroup(const obrpc::ObCreateTablegroupArg &arg, obrpc::UInt64 &tg_id);
-  int parallel_create_table(const obrpc::ObCreateTableArg &arg, obrpc::ObCreateTableRes &res);
-  int create_table(const obrpc::ObCreateTableArg &arg, obrpc::ObCreateTableRes &res);
-  int alter_database(const obrpc::ObAlterDatabaseArg &arg);
-  int set_comment(const obrpc::ObSetCommentArg &arg, obrpc::ObParallelDDLRes &res);
-  int alter_table(const obrpc::ObAlterTableArg &arg, obrpc::ObAlterTableRes &res);
-  int start_redef_table(const obrpc::ObStartRedefTableArg &arg, obrpc::ObStartRedefTableRes &res);
-  int copy_table_dependents(const obrpc::ObCopyTableDependentsArg &arg);
-  int finish_redef_table(const obrpc::ObFinishRedefTableArg &arg);
-  int abort_redef_table(const obrpc::ObAbortRedefTableArg &arg);
-  int update_ddl_task_active_time(const obrpc::ObUpdateDDLTaskActiveTimeArg &arg);
-  int create_hidden_table(const obrpc::ObCreateHiddenTableArg &arg, obrpc::ObCreateHiddenTableRes &res);
-  int send_auto_split_tablet_task_request(const obrpc::ObAutoSplitTabletBatchArg &arg, obrpc::ObAutoSplitTabletBatchRes &res);
-  int split_global_index_tablet(const obrpc::ObAlterTableArg &arg);
+  int modify_system_variable(const obcall::ObModifySysVarArg &arg);
+  int add_system_variable(const obcall::ObAddSysVarArg &arg);
+  int create_database(const obcall::ObCreateDatabaseArg &arg, obcall::UInt64 &db_id);
+  int create_tablegroup(const obcall::ObCreateTablegroupArg &arg, obcall::UInt64 &tg_id);
+  int parallel_create_table(const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res);
+  int create_table(const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res);
+  int alter_database(const obcall::ObAlterDatabaseArg &arg);
+  int set_comment(const obcall::ObSetCommentArg &arg, obcall::ObParallelDDLRes &res);
+  int alter_table(const obcall::ObAlterTableArg &arg, obcall::ObAlterTableRes &res);
+  int start_redef_table(const obcall::ObStartRedefTableArg &arg, obcall::ObStartRedefTableRes &res);
+  int copy_table_dependents(const obcall::ObCopyTableDependentsArg &arg);
+  int finish_redef_table(const obcall::ObFinishRedefTableArg &arg);
+  int abort_redef_table(const obcall::ObAbortRedefTableArg &arg);
+  int update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg);
+  int create_hidden_table(const obcall::ObCreateHiddenTableArg &arg, obcall::ObCreateHiddenTableRes &res);
+  int send_auto_split_tablet_task_request(const obcall::ObAutoSplitTabletBatchArg &arg, obcall::ObAutoSplitTabletBatchRes &res);
+  int split_global_index_tablet(const obcall::ObAlterTableArg &arg);
   /**
    * For recover restore table ddl, data insert into the target table is selected from another tenant.
    * The function is used to create a hidden target table without any change on the source table,
@@ -213,103 +207,103 @@ public:
    * The format about the command is,
    * alter system recover table test.t1 to tenant backup_oracle_tenant from '$ARCHIVE_FILES_PATH' with 'pool_list=small_pool_0&primary_zone=z1' remap table test.t1:recover_test.t3;
   */
-  int recover_restore_table_ddl(const obrpc::ObRecoverRestoreTableDDLArg &arg);
-  int execute_ddl_task(const obrpc::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
-  int cancel_ddl_task(const obrpc::ObCancelDDLTaskArg &arg);
-  int alter_tablegroup(const obrpc::ObAlterTablegroupArg &arg);
-  int maintain_obj_dependency_info(const obrpc::ObDependencyObjDDLArg &arg);
-  int mview_complete_refresh(const obrpc::ObMViewCompleteRefreshArg &arg, obrpc::ObMViewCompleteRefreshRes &res);
-  int rename_table(const obrpc::ObRenameTableArg &arg);
-  int fork_table(const obrpc::ObForkTableArg &arg, obrpc::ObDDLRes &res);
-  int fork_database(const obrpc::ObForkDatabaseArg &arg, obrpc::ObDDLRes &res);
-  int truncate_table(const obrpc::ObTruncateTableArg &arg, obrpc::ObDDLRes &res);
-  int truncate_table_v2(const obrpc::ObTruncateTableArg &arg, obrpc::ObDDLRes &res);
-  int exchange_partition(const obrpc::ObExchangePartitionArg &arg, obrpc::ObAlterTableRes &res);
+  int recover_restore_table_ddl(const obcall::ObRecoverRestoreTableDDLArg &arg);
+  int execute_ddl_task(const obcall::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
+  int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
+  int alter_tablegroup(const obcall::ObAlterTablegroupArg &arg);
+  int maintain_obj_dependency_info(const obcall::ObDependencyObjDDLArg &arg);
+  int mview_complete_refresh(const obcall::ObMViewCompleteRefreshArg &arg, obcall::ObMViewCompleteRefreshRes &res);
+  int rename_table(const obcall::ObRenameTableArg &arg);
+  int fork_table(const obcall::ObForkTableArg &arg, obcall::ObDDLRes &res);
+  int fork_database(const obcall::ObForkDatabaseArg &arg, obcall::ObDDLRes &res);
+  int truncate_table(const obcall::ObTruncateTableArg &arg, obcall::ObDDLRes &res);
+  int truncate_table_v2(const obcall::ObTruncateTableArg &arg, obcall::ObDDLRes &res);
+  int exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res);
   int create_aux_index(
-      const obrpc::ObCreateAuxIndexArg &arg,
-      obrpc::ObCreateAuxIndexRes &result);
-  int create_index(const obrpc::ObCreateIndexArg &arg, obrpc::ObAlterTableRes &res);
-  int parallel_create_index(const obrpc::ObCreateIndexArg &arg, obrpc::ObAlterTableRes &res);
-  int drop_table(const obrpc::ObDropTableArg &arg, obrpc::ObDDLRes &res);
-  int parallel_drop_table(const obrpc::ObDropTableArg &arg, obrpc::ObDropTableRes &res);
-  int drop_database(const obrpc::ObDropDatabaseArg &arg, obrpc::ObDropDatabaseRes &drop_database_res);
-  int drop_tablegroup(const obrpc::ObDropTablegroupArg &arg);
-  int drop_index(const obrpc::ObDropIndexArg &arg, obrpc::ObDropIndexRes &res);
-  int create_mlog(const obrpc::ObCreateMLogArg &arg, obrpc::ObCreateMLogRes &res);
-  int drop_lob(const obrpc::ObDropLobArg &arg);
-  int force_drop_lonely_lob_aux_table(const obrpc::ObForceDropLonelyLobAuxTableArg &drop_table_arg);
-  int rebuild_vec_index(const obrpc::ObRebuildIndexArg &arg, obrpc::ObAlterTableRes &res);
+      const obcall::ObCreateAuxIndexArg &arg,
+      obcall::ObCreateAuxIndexRes &result);
+  int create_index(const obcall::ObCreateIndexArg &arg, obcall::ObAlterTableRes &res);
+  int parallel_create_index(const obcall::ObCreateIndexArg &arg, obcall::ObAlterTableRes &res);
+  int drop_table(const obcall::ObDropTableArg &arg, obcall::ObDDLRes &res);
+  int parallel_drop_table(const obcall::ObDropTableArg &arg, obcall::ObDropTableRes &res);
+  int drop_database(const obcall::ObDropDatabaseArg &arg, obcall::ObDropDatabaseRes &drop_database_res);
+  int drop_tablegroup(const obcall::ObDropTablegroupArg &arg);
+  int drop_index(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
+  int create_mlog(const obcall::ObCreateMLogArg &arg, obcall::ObCreateMLogRes &res);
+  int drop_lob(const obcall::ObDropLobArg &arg);
+  int force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonelyLobAuxTableArg &drop_table_arg);
+  int rebuild_vec_index(const obcall::ObRebuildIndexArg &arg, obcall::ObAlterTableRes &res);
 
   // the interface only for gc splitted source tablet
-  int clean_splitted_tablet(const obrpc::ObCleanSplittedTabletArg &arg);
+  int clean_splitted_tablet(const obcall::ObCleanSplittedTabletArg &arg);
 
   //the interface only for switchover: execute skip check enable_ddl
-  int flashback_index(const obrpc::ObFlashBackIndexArg &arg);
-  int purge_index(const obrpc::ObPurgeIndexArg &arg);
-  int create_table_like(const obrpc::ObCreateTableLikeArg &arg);
-  int parallel_create_table_like(const obrpc::ObCreateTableLikeArg &arg, obrpc::ObCreateTableRes &res);
-  int root_minor_freeze(const obrpc::ObRootMinorFreezeArg &arg);
-  int update_index_status(const obrpc::ObUpdateIndexStatusArg &arg);
-  int update_mview_status(const obrpc::ObUpdateMViewStatusArg &arg);
-  int parallel_update_index_status(const obrpc::ObUpdateIndexStatusArg &arg, obrpc::ObParallelDDLRes &res);
-  int purge_table(const obrpc::ObPurgeTableArg &arg);
-  int flashback_table_from_recyclebin(const obrpc::ObFlashBackTableFromRecyclebinArg &arg);
-  int flashback_table_to_time_point(const obrpc::ObFlashBackTableToScnArg &arg);
-  int purge_database(const obrpc::ObPurgeDatabaseArg &arg);
-  int flashback_database(const obrpc::ObFlashBackDatabaseArg &arg);
+  int flashback_index(const obcall::ObFlashBackIndexArg &arg);
+  int purge_index(const obcall::ObPurgeIndexArg &arg);
+  int create_table_like(const obcall::ObCreateTableLikeArg &arg);
+  int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);
+  int root_minor_freeze(const obcall::ObRootMinorFreezeArg &arg);
+  int update_index_status(const obcall::ObUpdateIndexStatusArg &arg);
+  int update_mview_status(const obcall::ObUpdateMViewStatusArg &arg);
+  int parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res);
+  int purge_table(const obcall::ObPurgeTableArg &arg);
+  int flashback_table_from_recyclebin(const obcall::ObFlashBackTableFromRecyclebinArg &arg);
+  int flashback_table_to_time_point(const obcall::ObFlashBackTableToScnArg &arg);
+  int purge_database(const obcall::ObPurgeDatabaseArg &arg);
+  int flashback_database(const obcall::ObFlashBackDatabaseArg &arg);
 
-  int create_restore_point(const obrpc::ObCreateRestorePointArg &arg);
-  int drop_restore_point(const obrpc::ObDropRestorePointArg &arg);
-  int drop_index_on_failed(const obrpc::ObDropIndexArg &arg, obrpc::ObDropIndexRes &res);
+  int create_restore_point(const obcall::ObCreateRestorePointArg &arg);
+  int drop_restore_point(const obcall::ObDropRestorePointArg &arg);
+  int drop_index_on_failed(const obcall::ObDropIndexArg &arg, obcall::ObDropIndexRes &res);
 
   //for inner table monitor, purge in fixed time
-  int purge_expire_recycle_objects(const obrpc::ObPurgeRecycleBinArg &arg, obrpc::Int64 &affected_rows);
-  int calc_column_checksum_repsonse(const obrpc::ObCalcColumnChecksumResponseArg &arg);
-  int build_ddl_single_replica_response(const obrpc::ObDDLBuildSingleReplicaResponseArg &arg);
-  int optimize_table(const obrpc::ObOptimizeTableArg &arg);
+  int purge_expire_recycle_objects(const obcall::ObPurgeRecycleBinArg &arg, obcall::Int64 &affected_rows);
+  int calc_column_checksum_repsonse(const obcall::ObCalcColumnChecksumResponseArg &arg);
+  int build_ddl_single_replica_response(const obcall::ObDDLBuildSingleReplicaResponseArg &arg);
+  int optimize_table(const obcall::ObOptimizeTableArg &arg);
 
   //----Functions for managing privileges----
-  int create_user(obrpc::ObCreateUserArg &arg,
+  int create_user(obcall::ObCreateUserArg &arg,
                   common::ObSArray<int64_t> &failed_index);
-  int drop_user(const obrpc::ObDropUserArg &arg,
+  int drop_user(const obcall::ObDropUserArg &arg,
                 common::ObSArray<int64_t> &failed_index);
-  int rename_user(const obrpc::ObRenameUserArg &arg,
+  int rename_user(const obcall::ObRenameUserArg &arg,
                   common::ObSArray<int64_t> &failed_index);
-  int set_passwd(const obrpc::ObSetPasswdArg &arg);
-  int grant(const obrpc::ObGrantArg &arg);
-  int revoke_user(const obrpc::ObRevokeUserArg &arg);
-  int lock_user(const obrpc::ObLockUserArg &arg, common::ObSArray<int64_t> &failed_index);
-  int revoke_catalog(const obrpc::ObRevokeCatalogArg &arg);
-  int revoke_database(const obrpc::ObRevokeDBArg &arg);
-  int revoke_table(const obrpc::ObRevokeTableArg &arg);
-  int revoke_routine(const obrpc::ObRevokeRoutineArg &arg);
-  int alter_role(const obrpc::ObAlterRoleArg &arg);
-  int revoke_object(const obrpc::ObRevokeObjMysqlArg &arg);
+  int set_passwd(const obcall::ObSetPasswdArg &arg);
+  int grant(const obcall::ObGrantArg &arg);
+  int revoke_user(const obcall::ObRevokeUserArg &arg);
+  int lock_user(const obcall::ObLockUserArg &arg, common::ObSArray<int64_t> &failed_index);
+  int revoke_catalog(const obcall::ObRevokeCatalogArg &arg);
+  int revoke_database(const obcall::ObRevokeDBArg &arg);
+  int revoke_table(const obcall::ObRevokeTableArg &arg);
+  int revoke_routine(const obcall::ObRevokeRoutineArg &arg);
+  int alter_role(const obcall::ObAlterRoleArg &arg);
+  int revoke_object(const obcall::ObRevokeObjMysqlArg &arg);
   //----End of functions for managing privileges----
 
   //----Functions for managing outlines----
-  int create_outline(const obrpc::ObCreateOutlineArg &arg);
-  int alter_outline(const obrpc::ObAlterOutlineArg &arg);
-  int drop_outline(const obrpc::ObDropOutlineArg &arg);
+  int create_outline(const obcall::ObCreateOutlineArg &arg);
+  int alter_outline(const obcall::ObAlterOutlineArg &arg);
+  int drop_outline(const obcall::ObDropOutlineArg &arg);
   //----End of functions for managing outlines----
 
   //----Functions for managing schema revise----
-  int schema_revise(const obrpc::ObSchemaReviseArg &arg);
+  int schema_revise(const obcall::ObSchemaReviseArg &arg);
   //----End of functions for managing schema revise----
 
   //----Functions for managing UDF----
-  int create_user_defined_function(const obrpc::ObCreateUserDefinedFunctionArg &arg);
-  int drop_user_defined_function(const obrpc::ObDropUserDefinedFunctionArg &arg);
+  int create_user_defined_function(const obcall::ObCreateUserDefinedFunctionArg &arg);
+  int drop_user_defined_function(const obcall::ObDropUserDefinedFunctionArg &arg);
   //----End of functions for managing UDF----
 
   //----Functions for managing routines----
-  int create_routine(const obrpc::ObCreateRoutineArg &arg);
-  int create_routine_with_res(const obrpc::ObCreateRoutineArg &arg,
-                              obrpc::ObRoutineDDLRes &res);
-  int drop_routine(const obrpc::ObDropRoutineArg &arg);
-  int alter_routine(const obrpc::ObCreateRoutineArg &arg);
-  int alter_routine_with_res(const obrpc::ObCreateRoutineArg &arg,
-                             obrpc::ObRoutineDDLRes &res);
+  int create_routine(const obcall::ObCreateRoutineArg &arg);
+  int create_routine_with_res(const obcall::ObCreateRoutineArg &arg,
+                              obcall::ObRoutineDDLRes &res);
+  int drop_routine(const obcall::ObDropRoutineArg &arg);
+  int alter_routine(const obcall::ObCreateRoutineArg &arg);
+  int alter_routine_with_res(const obcall::ObCreateRoutineArg &arg,
+                             obcall::ObRoutineDDLRes &res);
   //----End of functions for managing routines----
 
   //----Functions for managing routines----
@@ -317,77 +311,77 @@ public:
 
 
   //----Functions for managing package----
-  int create_package(const obrpc::ObCreatePackageArg &arg);
-  int create_package_with_res(const obrpc::ObCreatePackageArg &arg,
-                              obrpc::ObRoutineDDLRes &res);
-  int alter_package(const obrpc::ObAlterPackageArg &arg);
-  int alter_package_with_res(const obrpc::ObAlterPackageArg &arg,
-                              obrpc::ObRoutineDDLRes &res);
-  int drop_package(const obrpc::ObDropPackageArg &arg);
+  int create_package(const obcall::ObCreatePackageArg &arg);
+  int create_package_with_res(const obcall::ObCreatePackageArg &arg,
+                              obcall::ObRoutineDDLRes &res);
+  int alter_package(const obcall::ObAlterPackageArg &arg);
+  int alter_package_with_res(const obcall::ObAlterPackageArg &arg,
+                              obcall::ObRoutineDDLRes &res);
+  int drop_package(const obcall::ObDropPackageArg &arg);
   //----End of functions for managing package----
 
   //----Functions for managing trigger----
-  int create_trigger(const obrpc::ObCreateTriggerArg &arg);
-  int create_trigger_with_res(const obrpc::ObCreateTriggerArg &arg,
-                              obrpc::ObCreateTriggerRes &res);
-  int alter_trigger(const obrpc::ObAlterTriggerArg &arg);
-  int alter_trigger_with_res(const obrpc::ObAlterTriggerArg &arg,
-                             obrpc::ObRoutineDDLRes &res);
-  int drop_trigger(const obrpc::ObDropTriggerArg &arg);
+  int create_trigger(const obcall::ObCreateTriggerArg &arg);
+  int create_trigger_with_res(const obcall::ObCreateTriggerArg &arg,
+                              obcall::ObCreateTriggerRes &res);
+  int alter_trigger(const obcall::ObAlterTriggerArg &arg);
+  int alter_trigger_with_res(const obcall::ObAlterTriggerArg &arg,
+                             obcall::ObRoutineDDLRes &res);
+  int drop_trigger(const obcall::ObDropTriggerArg &arg);
   //----End of functions for managing trigger----
 
   //----Functions for managing sequence----
   // create alter drop actions all in one, avoid noodle-like code
-  int do_sequence_ddl(const obrpc::ObSequenceDDLArg &arg);
+  int do_sequence_ddl(const obcall::ObSequenceDDLArg &arg);
   //----End of functions for managing sequence----
 
   //----Functions for managing context----
   // create alter drop actions all in one, avoid noodle-like code
-  int do_context_ddl(const obrpc::ObContextDDLArg &arg);
+  int do_context_ddl(const obcall::ObContextDDLArg &arg);
   //----End of functions for managing context----
 
   //----Functions for directory object----
-  int create_directory(const obrpc::ObCreateDirectoryArg &arg);
-  int drop_directory(const obrpc::ObDropDirectoryArg &arg);
+  int create_directory(const obcall::ObCreateDirectoryArg &arg);
+  int drop_directory(const obcall::ObDropDirectoryArg &arg);
   //----End of functions for directory object----
 
   //----Functions for managing catalog----
-  int handle_catalog_ddl(const obrpc::ObCatalogDDLArg &arg);
+  int handle_catalog_ddl(const obcall::ObCatalogDDLArg &arg);
   //----End of functions for managing catalog----
-  int create_ccl_rule_ddl(const obrpc::ObCreateCCLRuleArg &arg);
-  int drop_ccl_rule_ddl(const obrpc::ObDropCCLRuleArg &arg);
+  int create_ccl_rule_ddl(const obcall::ObCreateCCLRuleArg &arg);
+  int drop_ccl_rule_ddl(const obcall::ObDropCCLRuleArg &arg);
 
   //----Functions for managing ai model----
-  int create_ai_model(const obrpc::ObCreateAiModelArg &arg);
-  int drop_ai_model(const obrpc::ObDropAiModelArg &arg);
+  int create_ai_model(const obcall::ObCreateAiModelArg &arg);
+  int drop_ai_model(const obcall::ObDropAiModelArg &arg);
   //----End of functions for managing ai model----
 
   //----Functions for location object----
-  int create_location(const obrpc::ObCreateLocationArg &arg);
-  int drop_location(const obrpc::ObDropLocationArg &arg);
+  int create_location(const obcall::ObCreateLocationArg &arg);
+  int drop_location(const obcall::ObDropLocationArg &arg);
   //----End of functions for location object----
 
   // system admin command (alter system ...)
-  int admin_merge(const obrpc::ObAdminMergeArg &arg);
-  int admin_recovery(const obrpc::ObAdminRecoveryArg &arg);
-  int admin_clear_roottable(const obrpc::ObAdminClearRoottableArg &arg);
-  int admin_refresh_schema(const obrpc::ObAdminRefreshSchemaArg &arg);
-  int admin_set_config(obrpc::ObAdminSetConfigArg &arg);
-  int admin_refresh_memory_stat(const obrpc::ObAdminRefreshMemStatArg &arg);
-  int admin_wash_memory_fragmentation(const obrpc::ObAdminWashMemFragmentationArg &arg);
-  int admin_refresh_io_calibration(const obrpc::ObAdminRefreshIOCalibrationArg &arg);
-  int admin_clear_merge_error(const obrpc::ObAdminMergeArg &arg);
+  int admin_merge(const obcall::ObAdminMergeArg &arg);
+  int admin_recovery(const obcall::ObAdminRecoveryArg &arg);
+  int admin_clear_roottable(const obcall::ObAdminClearRoottableArg &arg);
+  int admin_refresh_schema(const obcall::ObAdminRefreshSchemaArg &arg);
+  int admin_set_config(obcall::ObAdminSetConfigArg &arg);
+  int admin_refresh_memory_stat(const obcall::ObAdminRefreshMemStatArg &arg);
+  int admin_wash_memory_fragmentation(const obcall::ObAdminWashMemFragmentationArg &arg);
+  int admin_refresh_io_calibration(const obcall::ObAdminRefreshIOCalibrationArg &arg);
+  int admin_clear_merge_error(const obcall::ObAdminMergeArg &arg);
   int admin_upgrade_virtual_schema();
-  int run_upgrade_job(const obrpc::ObUpgradeJobArg &arg);
-  int admin_flush_cache(const obrpc::ObAdminFlushCacheArg &arg);
-  int admin_upgrade_cmd(const obrpc::Bool &arg);
-  int admin_rolling_upgrade_cmd(const obrpc::ObAdminRollingUpgradeArg &arg);
-  int admin_set_tracepoint(const obrpc::ObAdminSetTPArg &arg);
-  int admin_set_backup_config(const obrpc::ObAdminSetConfigArg &arg);
+  int run_upgrade_job(const obcall::ObUpgradeJobArg &arg);
+  int admin_flush_cache(const obcall::ObAdminFlushCacheArg &arg);
+  int admin_upgrade_cmd(const obcall::Bool &arg);
+  int admin_rolling_upgrade_cmd(const obcall::ObAdminRollingUpgradeArg &arg);
+  int admin_set_tracepoint(const obcall::ObAdminSetTPArg &arg);
+  int admin_set_backup_config(const obcall::ObAdminSetConfigArg &arg);
   /* physical restore */
-  int rebuild_index_in_restore(const obrpc::ObRebuildIndexInRestoreArg &arg);
+  int rebuild_index_in_restore(const obcall::ObRebuildIndexInRestoreArg &arg);
   /*-----------------*/
-  int refresh_time_zone_info(const obrpc::ObRefreshTimezoneArg &arg);
+  int refresh_time_zone_info(const obcall::ObRefreshTimezoneArg &arg);
   int request_time_zone_info(const common::ObRequestTZInfoArg &arg, common::ObRequestTZInfoResult &result);
   // async tasks and callbacks
   int report_replica();
@@ -396,7 +390,7 @@ public:
   int submit_ddl_single_replica_build_task(share::ObAsyncTask &task);
   int check_weak_read_version_refresh_interval(int64_t refresh_interval, bool &valid);
   // may modify arg before taking effect
-  int set_config_pre_hook(obrpc::ObAdminSetConfigArg &arg);
+  int set_config_pre_hook(obcall::ObAdminSetConfigArg &arg);
 
   // @see ObRestartTask
   int after_restart();
@@ -409,28 +403,28 @@ public:
   int schedule_primary_cluster_inspection_task();
   int schedule_recyclebin_task(int64_t delay);
   //update statistic cache
-  int update_stat_cache(const obrpc::ObUpdateStatCacheArg &arg);
+  int update_stat_cache(const obcall::ObUpdateStatCacheArg &arg);
 
   int schedule_load_ddl_task();
   // ob_admin command, must be called in ddl thread
-  int force_create_sys_table(const obrpc::ObForceCreateSysTableArg &arg);
-  int broadcast_schema(const obrpc::ObBroadcastSchemaArg &arg);
+  int force_create_sys_table(const obcall::ObForceCreateSysTableArg &arg);
+  int broadcast_schema(const obcall::ObBroadcastSchemaArg &arg);
   ObDDLService &get_ddl_service() { return ddl_service_; }
   ObMaxIdCacheMgr &get_max_id_cache_mgr() { return max_id_cache_mgr_; }
   int get_recycle_schema_versions(
-      const obrpc::ObGetRecycleSchemaVersionsArg &arg,
-      obrpc::ObGetRecycleSchemaVersionsResult &result);
-  int handle_recover_table(const obrpc::ObRecoverTableArg &arg);
-  int standby_upgrade_virtual_schema(const obrpc::ObDDLNopOpreatorArg &arg);
-  int check_backup_scheduler_working(obrpc::Bool &is_working);
+      const obcall::ObGetRecycleSchemaVersionsArg &arg,
+      obcall::ObGetRecycleSchemaVersionsResult &result);
+  int handle_recover_table(const obcall::ObRecoverTableArg &arg);
+  int standby_upgrade_virtual_schema(const obcall::ObDDLNopOpreatorArg &arg);
+  int check_backup_scheduler_working(obcall::Bool &is_working);
   int purge_recyclebin_objects(int64_t purge_each_time);
-  int flush_opt_stat_monitoring_info(const obrpc::ObFlushOptStatArg &arg);
-  int recompile_all_views_batch(const obrpc::ObRecompileAllViewsBatchArg &arg);
-  int parallel_htable_ddl(const obrpc::ObHTableDDLArg &arg, obrpc::ObHTableDDLRes &res);
+  int flush_opt_stat_monitoring_info(const obcall::ObFlushOptStatArg &arg);
+  int recompile_all_views_batch(const obcall::ObRecompileAllViewsBatchArg &arg);
+  int parallel_htable_ddl(const obcall::ObHTableDDLArg &arg, obcall::ObHTableDDLRes &res);
 private:
   int check_parallel_ddl_conflict(
       share::schema::ObSchemaGetterGuard &schema_guard,
-      const obrpc::ObDDLArg &arg);
+      const obcall::ObDDLArg &arg);
   int increase_rs_epoch_and_get_proposal_id_(
       int64_t &new_rs_epoch,
       int64_t &proposal_id_to_check);
@@ -445,7 +439,7 @@ private:
   int set_cluster_version();
   bool is_replica_count_reach_rs_limit(int64_t replica_count) { return replica_count > OB_MAX_CLUSTER_REPLICA_COUNT; }
   int generate_table_schema_in_tenant_space(
-      const obrpc::ObCreateTableArg &arg,
+      const obcall::ObCreateTableArg &arg,
       share::schema::ObTableSchema &table_schema);
   int clear_special_cluster_schema_status();
   int check_tenant_gts_config(const int64_t tenant_id, bool &tenant_gts_config_ok,
@@ -471,7 +465,7 @@ private:
     return lhs < tenant_id;
   }
 
-  int table_allow_ddl_operation(const obrpc::ObAlterTableArg &arg);
+  int table_allow_ddl_operation(const obcall::ObAlterTableArg &arg);
   int get_table_schema(uint64_t tenant_id,
                        const common::ObString &database_name,
                        const common::ObString &table_name,
@@ -482,21 +476,21 @@ private:
   int finish_bootstrap();
   int set_config_after_bootstrap_();
 
-  int precheck_interval_part(const obrpc::ObAlterTableArg &arg);
+  int precheck_interval_part(const obcall::ObAlterTableArg &arg);
 
   int parallel_ddl_pre_check_(const uint64_t tenant_id);
-  int check_tx_share_memory_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_memstore_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_tenant_memstore_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_tx_data_memory_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_mds_memory_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_freeze_trigger_percentage_(obrpc::ObAdminSetConfigItem &item);
-  int check_write_throttle_trigger_percentage(obrpc::ObAdminSetConfigItem &item);
-  int check_no_logging(obrpc::ObAdminSetConfigItem &item);
-  int check_data_disk_write_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_data_disk_usage_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_vector_memory_limit_(obrpc::ObAdminSetConfigItem &item);
-  int check_transfer_task_tablet_count_threshold_(obrpc::ObAdminSetConfigItem &item);
+  int check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_memstore_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_tenant_memstore_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_tx_data_memory_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_mds_memory_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_freeze_trigger_percentage_(obcall::ObAdminSetConfigItem &item);
+  int check_write_throttle_trigger_percentage(obcall::ObAdminSetConfigItem &item);
+  int check_no_logging(obcall::ObAdminSetConfigItem &item);
+  int check_data_disk_write_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_data_disk_usage_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_vector_memory_limit_(obcall::ObAdminSetConfigItem &item);
+  int check_transfer_task_tablet_count_threshold_(obcall::ObAdminSetConfigItem &item);
   int start_ddl_service_();
 private:
   static const int64_t OB_MAX_CLUSTER_REPLICA_COUNT = 10000000;
@@ -511,8 +505,6 @@ private:
   common::ObServerConfig *config_;
   common::ObConfigManager *config_mgr_;
 
-  obrpc::ObSrvRpcProxy rpc_proxy_;
-  obrpc::ObCommonRpcProxy common_proxy_;
   common::ObMySQLProxy sql_proxy_;
   common::ObOracleSqlProxy oracle_sql_proxy_;
   observer::ObRestoreCtx *restore_ctx_;

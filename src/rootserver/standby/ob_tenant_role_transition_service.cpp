@@ -185,7 +185,7 @@ int64_t ObTenantRoleTransCostDetail::to_string(char *buf, const int64_t buf_len)
 ////////////ObTenantRoleTransitionService//////////////
 
 int ObTenantRoleTransitionService::init(
-      const obrpc::ObSwitchRoleArg::OpType &switch_optype,
+      const obcall::ObSwitchRoleArg::OpType &switch_optype,
       const bool is_verify,
       ObTenantRoleTransCostDetail *cost_detail)
 {
@@ -271,8 +271,8 @@ int ObTenantRoleTransitionService::do_failover_to_primary_(share::ObAllTenantInf
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("error unexpected", KR(ret));
-  } else if (OB_UNLIKELY(obrpc::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY != switch_optype_
-                         && obrpc::ObSwitchRoleArg::OpType::FAILOVER_TO_PRIMARY != switch_optype_)) {
+  } else if (OB_UNLIKELY(obcall::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY != switch_optype_
+                         && obcall::ObSwitchRoleArg::OpType::FAILOVER_TO_PRIMARY != switch_optype_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected switch tenant action", KR(ret),
              K_(switch_optype), K(tenant_info));
@@ -280,7 +280,7 @@ int ObTenantRoleTransitionService::do_failover_to_primary_(share::ObAllTenantInf
       || tenant_info.is_primary())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant switchover status not valid", KR(ret), K(tenant_info));
-  } else if (obrpc::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == switch_optype_
+  } else if (obcall::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == switch_optype_
       && OB_FAIL(wait_sys_ls_sync_to_latest_until_timeout_(tenant_info))) {
     LOG_WARN("fail to execute wait_sys_ls_sync_to_latest_until_timeout_", KR(ret), K(tenant_info));
     SOURCE_TENANT_CHECK_USER_ERROR_FOR_SWITCHOVER_TO_PRIMARY;
@@ -299,7 +299,7 @@ int ObTenantRoleTransitionService::do_failover_to_primary_(share::ObAllTenantInf
   } else {
     // Update tenant status to PREPARE_FLASHBACK_FOR_XXX (keep STANDBY role)
     const share::ObTenantSwitchoverStatus prepare_flashback_status =
-        (obrpc::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == switch_optype_)
+        (obcall::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == switch_optype_)
         ? share::PREPARE_FLASHBACK_FOR_SWITCH_TO_PRIMARY_SWITCHOVER_STATUS
         : share::PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_SWITCHOVER_STATUS;
     if (OB_FAIL(ObAllTenantInfoProxy::update_tenant_status(
@@ -328,11 +328,11 @@ int ObTenantRoleTransitionService::do_prepare_flashback_(share::ObAllTenantInfo 
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("switchover status not match, switch tenant is not allowed", KR(ret), K(tenant_info));
     TENANT_ROLE_TRANS_USER_ERR_WITH_SUFFIX(OB_OP_NOT_ALLOW, "switchover status not match", switch_optype_);
-  } else if (obrpc::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == switch_optype_) {
+  } else if (obcall::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY == switch_optype_) {
     if (OB_FAIL(do_prepare_flashback_for_switch_to_primary_(tenant_info))) {
       LOG_WARN("failed to do_prepare_flashback_for_switch_to_primary_", KR(ret), K(tenant_info));
     }
-  } else if (obrpc::ObSwitchRoleArg::OpType::FAILOVER_TO_PRIMARY == switch_optype_) {
+  } else if (obcall::ObSwitchRoleArg::OpType::FAILOVER_TO_PRIMARY == switch_optype_) {
     if (OB_FAIL(do_prepare_flashback_for_failover_to_primary_(tenant_info))) {
       LOG_WARN("failed to do_prepare_flashback_for_failover_to_primary_", KR(ret), K(tenant_info));
     }
@@ -729,7 +729,7 @@ int ObTenantRoleTransitionService::ls_status_stats_when_change_access_mode_(
 
 int ObTenantRoleTransitionService::get_ls_access_mode_(
     const share::ObLSStatusInfo &status_info,
-    obrpc::ObLSAccessModeInfo &ls_access_info)
+    obcall::ObLSAccessModeInfo &ls_access_info)
 {
   int ret = OB_SUCCESS;
   // Simplified for single LS scenario: directly get access mode from local LS
@@ -793,7 +793,7 @@ int ObTenantRoleTransitionService::get_ls_access_mode_(
 }
 
 int ObTenantRoleTransitionService::do_change_ls_access_mode_(
-    const obrpc::ObLSAccessModeInfo &ls_access_info,
+    const obcall::ObLSAccessModeInfo &ls_access_info,
     const palf::AccessMode target_access_mode,
     const SCN &ref_scn,
     const share::SCN &sys_ls_sync_scn)
@@ -807,7 +807,7 @@ int ObTenantRoleTransitionService::do_change_ls_access_mode_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(target_access_mode), K(ls_access_info), K(ref_scn));
   } else {
-    const obrpc::ObLSAccessModeInfo &info = ls_access_info;
+    const obcall::ObLSAccessModeInfo &info = ls_access_info;
     MTL_SWITCH(OB_SYS_TENANT_ID) {
       storage::ObLSService *ls_service = MTL(storage::ObLSService*);
       storage::ObLSHandle ls_handle;
@@ -911,7 +911,7 @@ int ObTenantRoleTransitionService::switchover_update_tenant_status(
   share::ObLSStatusInfo status_info;
   status_info.ls_id_ = share::SYS_LS;
   status_info.status_ = share::OB_LS_NORMAL;
-  obrpc::ObCheckpoint switchover_checkpoint;
+  obcall::ObCheckpoint switchover_checkpoint;
   bool is_sync_to_latest = false;
   SCN final_sync_scn;
   final_sync_scn.set_min();
@@ -987,7 +987,7 @@ int ObTenantRoleTransitionService::wait_sys_ls_sync_to_latest_until_timeout_(
   bool only_check_sys_ls = true;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("inner stat error", KR(ret));
-  } else if (obrpc::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY != switch_optype_) {
+  } else if (obcall::ObSwitchRoleArg::OpType::SWITCH_TO_PRIMARY != switch_optype_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("only switchover to primary can execute this logic", KR(ret), K(switch_optype_));
   } else if (OB_UNLIKELY(!tenant_info.is_normal_status())) {
@@ -1095,11 +1095,11 @@ int ObTenantRoleTransitionService::check_sync_to_latest_(
 int ObTenantRoleTransitionService::get_checkpoint(
   const share::ObLSStatusInfo &status_info,
   const bool check_sync_to_latest,
-  obrpc::ObCheckpoint &checkpoint)
+  obcall::ObCheckpoint &checkpoint)
 {
   int ret = OB_SUCCESS;
-  obrpc::ObGetLSSyncScnArg arg;
-  obrpc::ObGetLSSyncScnRes res;
+  obcall::ObGetLSSyncScnArg arg;
+  obcall::ObGetLSSyncScnRes res;
 
   LOG_INFO("start to get_checkpoint", KR(ret), K(check_sync_to_latest), K(status_info));
   if (OB_ISNULL(GCTX.ob_service_)) {
@@ -1115,7 +1115,7 @@ int ObTenantRoleTransitionService::get_checkpoint(
     const share::SCN restore_source_next_scn = check_sync_to_latest
         ? res.get_cur_restore_source_next_scn()
         : res.get_cur_sync_scn();
-    checkpoint = obrpc::ObCheckpoint(share::SYS_LS, res.get_cur_sync_scn(), restore_source_next_scn);
+    checkpoint = obcall::ObCheckpoint(share::SYS_LS, res.get_cur_sync_scn(), restore_source_next_scn);
     LOG_INFO("get checkpoint from local LS", K(checkpoint),
              "is_sync_to_latest", checkpoint.is_sync_to_latest());
   }
@@ -1131,7 +1131,7 @@ int ObTenantRoleTransitionService::get_sys_ls_sync_scn_(
   share::ObLSStatusInfo sys_ls_status;
   sys_ls_status.ls_id_ = share::SYS_LS;
   sys_ls_status.status_ = share::OB_LS_NORMAL;
-  obrpc::ObCheckpoint switchover_checkpoint;
+  obcall::ObCheckpoint switchover_checkpoint;
   sys_ls_sync_scn = SCN::min_scn();
   is_sync_to_latest = false;
   if (OB_FAIL(check_inner_stat())) {
@@ -1147,7 +1147,7 @@ int ObTenantRoleTransitionService::get_sys_ls_sync_scn_(
 }
 
 int ObTenantRoleTransitionService::get_sys_ls_sync_scn_(
-  obrpc::ObCheckpoint &checkpoint,
+  obcall::ObCheckpoint &checkpoint,
   SCN &sys_ls_sync_scn,
   bool &is_sync_to_latest)
 {

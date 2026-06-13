@@ -519,6 +519,7 @@ int ObFreezer::logstream_freeze(int64_t trace_id)
 
     set_need_resubmit_log(false);
     stat_.reset();
+    MTL(checkpoint::ObCheckpointDiagnoseMgr *)->update_freeze_clock(ls_id, trace_id, get_freeze_clock());
 
     (void)stat_.begin_set_freeze_stat(get_freeze_clock(),
                                       start_time,

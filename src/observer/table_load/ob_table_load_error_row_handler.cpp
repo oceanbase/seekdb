@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/ob_table_load_error_row_handler.h"
+#include "observer/table_load/ob_table_load_struct.h" // ObTableLoadParam
 
 namespace oceanbase
 {

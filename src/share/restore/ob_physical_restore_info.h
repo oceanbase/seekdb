@@ -27,7 +27,7 @@ namespace common
 {
   class ObMySQLProxy;
 }
-namespace obrpc
+namespace obcall
 {
 struct ObTableItem;
 }
@@ -69,18 +69,18 @@ public:
   int assign_with_hex_str(const common::ObString &str);
   void reset();
 
-  int add_table_item(const obrpc::ObTableItem &item);
+  int add_table_item(const obcall::ObTableItem &item);
   // length without '\0'
   int64_t get_format_str_length() const;
   // str without '\0'
   int get_format_str(common::ObIAllocator &allocator, common::ObString &str) const;
   // str without '\0'
   int get_hex_str(common::ObIAllocator &allocator, common::ObString &str) const;
-  const common::ObSArray<obrpc::ObTableItem> &get_table_white_list() const { return table_items_; }
+  const common::ObSArray<obcall::ObTableItem> &get_table_white_list() const { return table_items_; }
   DECLARE_TO_STRING;
 private:
   ObArenaAllocator allocator_;
-  common::ObSArray<obrpc::ObTableItem> table_items_;
+  common::ObSArray<obcall::ObTableItem> table_items_;
 };
 
 struct ObSimplePhysicalRestoreJob;
