@@ -218,7 +218,7 @@ int ObExprRegexpReplace::is_valid_for_generated_column(const ObRawExpr*expr,
                                                        const common::ObIArray<ObRawExpr *> &exprs,
                                                        bool &is_valid) const {
   int ret = OB_SUCCESS;
-  is_valid = lib::is_mysql_mode();
+  is_valid = true;
   return ret;
 }
 
@@ -298,8 +298,8 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
   int64_t occur = 0;
   bool null_result = (position != NULL && position->is_null(0))
                      || (occurrence != NULL && occurrence->is_null(0))
-                     || (lib::is_mysql_mode() && match_type != NULL && match_type->is_null(0));
-  if (lib::is_mysql_mode() && !pattern->is_null(0) && pattern->get_string(0).empty()) {
+                     || (match_type != NULL && match_type->is_null(0));
+  if (!pattern->is_null(0) && pattern->get_string(0).empty()) {
     if (NULL == match_type || !match_type->is_null(0)) {
       ret = OB_ERR_REGEXP_ERROR;
       LOG_WARN("empty regex expression", K(ret));
@@ -347,9 +347,9 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
     bool params_contain_null =
         pattern->is_null(0) || null_result || (NULL != position && position->is_null(0))
         || (NULL != occurrence && occurrence->is_null(0))
-        || (lib::is_mysql_mode() && NULL != pattern && pattern->is_null(0))
-        || (lib::is_mysql_mode() && NULL != to && to->is_null(0))
-        || (lib::is_mysql_mode() && NULL != match_type && match_type->is_null(0));
+        || (NULL != pattern && pattern->is_null(0))
+        || (NULL != to && to->is_null(0))
+        || (NULL != match_type && match_type->is_null(0));
     ObString to_utf16;
     ObExprRegexpSessionVariables regexp_vars;
     if (OB_FAIL(ret)) {
@@ -432,7 +432,7 @@ int ObExprRegexpReplace::eval_regexp_replace_vector(VECTOR_EVAL_FUNC_ARG_DECL)
   if (OB_UNLIKELY(skip.accumulate_bit_cnt(bound) == bound.range_size())) {
     // do nothing
   } else if (OB_FAIL(expr.eval_vector_param_value(ctx, skip, bound))) {
-    if (lib::is_mysql_mode() && ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
+    if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
       ObVectorBase* res_vec = static_cast<ObVectorBase *>(expr.get_vector(ctx));
       for (int64_t i = bound.start(); i < bound.end(); i++) {
@@ -485,7 +485,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
   if (OB_FAIL(expr.eval_param_value(ctx, text, pattern, to, position, occurrence, match_type))) {
-    if (lib::is_mysql_mode() && ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
+    if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
       expr_datum.set_null();
       const char *charset_name = ObCharset::charset_name(expr.args_[0]->datum_meta_.cs_type_);
@@ -498,7 +498,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   } else if (expr.args_[0]->datum_meta_.is_clob()
              && ob_is_empty_lob(expr.args_[0]->datum_meta_.type_, *text, expr.args_[0]->obj_meta_.has_lob_header())) {
     expr_datum.set_datum(*text);
-  } else if (lib::is_mysql_mode() && !pattern->is_null() && pattern->get_string().empty()) {
+  } else if (!pattern->is_null() && pattern->get_string().empty()) {
     if (NULL == match_type || !match_type->is_null()) {
       ret = OB_ERR_REGEXP_ERROR;
       LOG_WARN("empty regex expression", K(ret));
@@ -510,7 +510,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     int64_t occur = 0;
     bool null_result = (position != NULL && position->is_null()) ||
                        (occurrence != NULL && occurrence->is_null()) ||
-                       (lib::is_mysql_mode() && match_type != NULL && match_type->is_null());
+                       (match_type != NULL && match_type->is_null());
     if (OB_FAIL(ObExprUtil::get_int_param_val(
           position, expr.arg_cnt_ > 3 && expr.args_[3]->obj_meta_.is_decimal_int(), pos))
         || OB_FAIL(ObExprUtil::get_int_param_val(
@@ -556,9 +556,9 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
                  null_result ||
                  (NULL != position && position->is_null()) ||
                  (NULL != occurrence && occurrence->is_null()) ||
-                 (lib::is_mysql_mode() && NULL != pattern && pattern->is_null()) ||
-                 (lib::is_mysql_mode() && NULL != to && to->is_null()) ||
-                 (lib::is_mysql_mode() && NULL != match_type && match_type->is_null())) {
+                 (NULL != pattern && pattern->is_null()) ||
+                 (NULL != to && to->is_null()) ||
+                 (NULL != match_type && match_type->is_null())) {
         expr_datum.set_null();
       } else {
         ObString text_utf;

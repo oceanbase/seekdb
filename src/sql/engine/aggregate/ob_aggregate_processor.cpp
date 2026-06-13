@@ -417,7 +417,7 @@ int ObAggregateProcessor::AggrCell::collect_result(
         }
       }
     }
-  } else if (ObDecimalIntTC == tc && lib::is_mysql_mode()) {
+  } else if (ObDecimalIntTC == tc) {
     if (OB_UNLIKELY(iter_result_.is_null())) {
       result.set_null();
     } else {
@@ -2324,13 +2324,7 @@ int ObAggregateProcessor::collect_for_empty_set()
         case T_FUN_SUM_OPNSIZE: {
           ObDatum &result = aggr_info.expr_->locate_datum_for_write(eval_ctx_);
           aggr_info.expr_->set_evaluated_projected(eval_ctx_);
-          if (lib::is_mysql_mode()) {
-            result.set_int(0);
-          } else {
-            ObNumber result_num;
-            result_num.set_zero();
-            result.set_number(result_num);
-          }
+          result.set_int(0);
           break;
         }
         case T_FUN_GROUP_RANK:
@@ -4311,18 +4305,7 @@ int ObAggregateProcessor::collect_aggr_result(
   const ObItemType aggr_fun = aggr_info.get_expr_type();
   switch (aggr_fun) {
     case T_FUN_COUNT: {
-      if (lib::is_mysql_mode()) {
-        result.set_int(aggr_cell.get_row_count());
-      } else {
-        ObNumber result_num;
-        char local_buff[ObNumber::MAX_BYTE_LEN];
-        ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN );
-        if (OB_FAIL(result_num.from(aggr_cell.get_row_count(), local_alloc))) {
-          LOG_WARN("fail to call from", K(ret));
-        } else {
-          result.set_number(result_num);
-        }
-      }
+      result.set_int(aggr_cell.get_row_count());
       break;
     }
     case T_FUN_COUNT_SUM:
@@ -4357,17 +4340,8 @@ int ObAggregateProcessor::collect_aggr_result(
       if (OB_FAIL(ret)) {
       } else if (OB_UNLIKELY(null_result)) {
         result.set_null();
-      } else if (lib::is_mysql_mode()) {
-        result.set_int(new_value);
       } else {
-        ObNumber result_num;
-        char local_buff[ObNumber::MAX_BYTE_LEN];
-        ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN );
-        if (OB_FAIL(result_num.from(new_value, local_alloc))) {
-          LOG_WARN("fail to call from", K(ret));
-        } else {
-          result.set_number(result_num);
-        }
+        result.set_int(new_value);
       }
       break;
     }
@@ -4375,10 +4349,8 @@ int ObAggregateProcessor::collect_aggr_result(
       if (aggr_info.hash_rollup_info_) {
         if (OB_UNLIKELY(!aggr_cell.get_is_evaluated())) {
           result.set_null();
-        } else if (lib::is_mysql_mode()) {
-          result.set_int(aggr_cell.get_tiny_num_int());
         } else {
-          result.set_number(aggr_cell.get_iter_result().get_number());
+          result.set_int(aggr_cell.get_tiny_num_int());
         }
       } else {
         uint64_t new_value = aggr_cell.get_tiny_num_uint();
@@ -4393,17 +4365,8 @@ int ObAggregateProcessor::collect_aggr_result(
           }
         }
         if (OB_FAIL(ret)) {
-        } else if (lib::is_mysql_mode()) {
-          result.set_int(new_value);
         } else {
-          ObNumber result_num;
-          char local_buff[ObNumber::MAX_BYTE_LEN];
-          ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-          if (OB_FAIL(result_num.from(new_value, local_alloc))) {
-            LOG_WARN("fail to call from", K(ret));
-          } else {
-            result.set_number(result_num);
-          }
+          result.set_int(new_value);
         }
       }
       break;
@@ -4423,18 +4386,7 @@ int ObAggregateProcessor::collect_aggr_result(
           new_value = 0;
         }
       }
-      if (lib::is_mysql_mode()) {
-        result.set_int(new_value);
-      } else {
-        ObNumber result_num;
-        char local_buff[ObNumber::MAX_BYTE_LEN];
-        ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-        if (OB_FAIL(result_num.from(new_value, local_alloc))) {
-          LOG_WARN("fail to call from", K(ret));
-        } else {
-          result.set_number(result_num);
-        }
-      }
+      result.set_int(new_value);
       break;
     }
     case T_FUN_MAX:
@@ -4448,18 +4400,7 @@ int ObAggregateProcessor::collect_aggr_result(
       int64_t tmp_result = OB_INVALID_COUNT;
       ObExprEstimateNdv::llc_estimate_ndv(tmp_result, aggr_cell.get_iter_result().get_string());
       if (tmp_result >= 0) {
-        if (lib::is_mysql_mode()) {
-          result.set_int(tmp_result);
-        } else {
-          char local_buff[ObNumber::MAX_BYTE_LEN];
-          ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-          ObNumber result_num;
-          if (OB_FAIL(result_num.from(tmp_result, local_alloc))) {
-            LOG_WARN("failed to convert to number", K(ret));
-          } else {
-            result.set_number(result_num);
-          }
-        }
+        result.set_int(tmp_result);
       }
       break;
     }
@@ -5151,18 +5092,7 @@ int ObAggregateProcessor::collect_aggr_result(
     case T_FUN_SUM_OPNSIZE: {
       int64_t size = aggr_cell.get_tiny_num_int();
       if (size > 0) {
-        if (lib::is_mysql_mode()) {
-          result.set_int(size);
-        } else {
-          char local_buff[ObNumber::MAX_BYTE_LEN];
-          ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-          ObNumber result_num;
-          if (OB_FAIL(result_num.from(size, local_alloc))) {
-            LOG_WARN("failed to convert to number", K(ret));
-          } else {
-            result.set_number(result_num);
-          }
-        }
+        result.set_int(size);
       }
       break;
     }
@@ -8368,11 +8298,7 @@ int ObAggregateProcessor::fast_single_row_agg(
           for (int64_t j = 0; !has_null && j < aggr_info.param_exprs_.count(); ++j) {
             has_null = aggr_info.param_exprs_.at(j)->locate_expr_datum(eval_ctx).is_null();
           }
-          if (lib::is_mysql_mode()) {
-            result.set_int(has_null ? 0 : 1);
-          } else {
-            result.set_number(has_null ? ObNumber::get_zero() : ObNumber::get_positive_one());
-          }
+          result.set_int(has_null ? 0 : 1);
           break;
         }
         case T_FUN_SUM: {
@@ -8476,20 +8402,11 @@ int ObAggregateProcessor::fast_single_row_agg_batch(ObEvalCtx &eval_ctx, const i
             has_null[batch_idx] = param_vec.at(batch_idx)->is_null();
           }
         }
-        if (lib::is_mysql_mode()) {
-          for (int64_t batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-            if (skip->at(batch_idx)) {
-              continue;
-            }
-            result[batch_idx].set_int(has_null[batch_idx] ? 0 : 1);
+        for (int64_t batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+          if (skip->at(batch_idx)) {
+            continue;
           }
-        } else {
-          for (int64_t batch_idx = 0; OB_SUCC(ret) && batch_idx < batch_size; ++batch_idx) {
-            if (skip->at(batch_idx)) {
-              continue;
-            }
-            result[batch_idx].set_number(has_null[batch_idx] ? ObNumber::get_zero() : ObNumber::get_positive_one());
-          }
+          result[batch_idx].set_int(has_null[batch_idx] ? 0 : 1);
         }
         break;
       }

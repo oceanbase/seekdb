@@ -105,9 +105,8 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get table item failed", K(*ref_expr), K(ret));
       } else {
-        // Statement `update (select * from t1) t set t.c1 = 1` is legal in oralce, illegal in mysql.
         const bool is_updatable_generated_table = (table->is_generated_table() || table->is_temp_table())
-            && (!is_mysql_mode() || table->is_view_table_);
+            && table->is_view_table_;
         if (!table->is_basic_table() && !table->is_link_table() && !is_updatable_generated_table) {
           ret = OB_ERR_NON_UPDATABLE_TABLE;
           const ObString &table_name = table->alias_name_;
@@ -143,40 +142,22 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
         assignment.column_expr_ = column->expr_;
         ObRawExpr *expr = value_list.at(i);
         bool is_generated_column = true;
-        SQL_RESV_LOG(DEBUG, "is standard assignment", K(is_mysql_mode()));
-        // Here the logic for Oracle and Mysql is different
         // Mysql only allows updating generated columns to their default value
-        // Oracle does not allow update on generated columns, therefore handle them separately
         if (OB_FAIL(check_basic_column_generated(ref_expr, stmt, is_generated_column))) {
           LOG_WARN("check basic column generated failed", K(ret));
         } else {
-          if (is_mysql_mode()) {
-            if (T_DEFAULT == expr->get_expr_type()) {
-              ObDefaultValueUtils utils(stmt, &params_, this);
-              if (OB_FAIL(utils.resolve_default_expr(*column, expr, scope))) {
-                LOG_WARN("failed to resolve default expr", K(*column), K(ret));
-              }
-            } else if (is_generated_column) {
-              ret = OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN;
-              const ObString &column_name = ref_expr->get_column_name();
-              const ObString &table_name = ref_expr->get_table_name();
-              LOG_USER_ERROR(OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN,
-                            column_name.length(), column_name.ptr(),
-                            table_name.length(), table_name.ptr());
+          if (T_DEFAULT == expr->get_expr_type()) {
+            ObDefaultValueUtils utils(stmt, &params_, this);
+            if (OB_FAIL(utils.resolve_default_expr(*column, expr, scope))) {
+              LOG_WARN("failed to resolve default expr", K(*column), K(ret));
             }
-          } else { // oracle mode
-            if (is_generated_column) {
-              ret = OB_ERR_UPDATE_OPERATION_ON_VIRTUAL_COLUMNS;
-              LOG_WARN("virtual column cannot be updated in Oracle mode", K(ret));
-            } else if (ref_expr->is_always_identity_column()) {
-              ret = OB_ERR_UPDATE_GENERATED_ALWAYS_IDENTITY_COLUMN;
-              LOG_USER_ERROR(OB_ERR_UPDATE_GENERATED_ALWAYS_IDENTITY_COLUMN);
-            } else if (T_DEFAULT == expr->get_expr_type()) {
-              ObDefaultValueUtils utils(stmt, &params_, this);
-              if (OB_FAIL(utils.resolve_default_expr(*column, expr, scope))) {
-                LOG_WARN("failed to resolve default expr", K(*column), K(ret));
-              }
-            }
+          } else if (is_generated_column) {
+            ret = OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN;
+            const ObString &column_name = ref_expr->get_column_name();
+            const ObString &table_name = ref_expr->get_table_name();
+            LOG_USER_ERROR(OB_NON_DEFAULT_VALUE_FOR_GENERATED_COLUMN,
+                          column_name.length(), column_name.ptr(),
+                          table_name.length(), table_name.ptr());
           }
         }
         if (OB_SUCC(ret)) {
@@ -769,8 +750,7 @@ int ObDelUpdResolver::add_assignment(common::ObIArray<ObTableAssignment> &assign
       table_assign = &assigns.at(assigns.count() - 1);
     }
   }
-  if (OB_SUCC(ret) && !params_.is_prepare_stage_
-      && (is_mysql_mode() || assign.column_expr_->is_generated_column())) {
+  if (OB_SUCC(ret) && !params_.is_prepare_stage_) {
     //in MySQL:
     //The second assignment in the following statement sets col2 to the current (updated) col1 value,
     //not the original col1 value.
@@ -910,7 +890,7 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
     } else {
       ObRawExpr *expr = stmt->get_select_item(idx).expr_;
       if (!expr->is_column_ref_expr()) {
-        ret = is_mysql_mode() ? OB_ERR_NONUPDATEABLE_COLUMN : OB_ERR_VIRTUAL_COL_NOT_ALLOWED;
+        ret = OB_ERR_NONUPDATEABLE_COLUMN;
         LOG_WARN("column is not updatable", K(ret), K(col_ref));
       } else {
         ObColumnRefRawExpr *new_col_ref = static_cast<ObColumnRefRawExpr *>(expr);
@@ -948,7 +928,7 @@ int ObDelUpdResolver::set_base_table_for_updatable_view(TableItem &table_item,
             ret = dml->is_insert_stmt() ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_NON_UPDATABLE_TABLE;
             LOG_WARN("view is not updatable", K(ret));
           } else if (new_table_item->is_json_table()) {
-            ret = is_mysql_mode() ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_VIRTUAL_COL_NOT_ALLOWED;
+            ret = OB_ERR_NON_INSERTABLE_TABLE;
             LOG_WARN("json table can not be insert", K(ret));
           } else {
             ret = OB_ERR_UNEXPECTED;
@@ -1010,17 +990,15 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
       LOG_WARN("not updatable", K(ret));
     } else if (stmt->get_table_items().empty()) {
       // create view v as select 1 a;
-      ret = is_mysql_mode() ? OB_ERR_NON_UPDATABLE_TABLE : OB_ERR_ILLEGAL_VIEW_UPDATE;
+      ret = OB_ERR_NON_UPDATABLE_TABLE;
       LOG_WARN("no table item in select stmt", K(ret));
     } else {
       // get the first table item for oracle mode
       TableItem *base = stmt->get_table_items().at(0);
       if (stmt->get_table_items().count() > 1) {
         // mysql delete join view not supported.
-        if (is_mysql_mode()) {
-          ret = OB_ERR_VIEW_DELETE_MERGE_VIEW;
-          LOG_WARN("delete join view", K(ret));
-        }
+        ret = OB_ERR_VIEW_DELETE_MERGE_VIEW;
+        LOG_WARN("delete join view", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (NULL == base) {
@@ -1054,7 +1032,7 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
         ret = OB_ERR_NON_UPDATABLE_TABLE;
         LOG_WARN("non update table", K(ret));
       } else if (base->is_json_table()) {
-        ret = is_mysql_mode() ? OB_ERR_NON_UPDATABLE_TABLE : OB_ERR_O_DELETE_VIEW_NON_KEY_PRESERVED;
+        ret = OB_ERR_NON_UPDATABLE_TABLE;
         LOG_WARN("non update json table", K(ret));
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -1094,13 +1072,13 @@ int ObDelUpdResolver::check_same_base_table(const TableItem &table_item,
   } else {
     ObRawExpr *expr = stmt->get_select_item(idx).expr_;
     if (!expr->is_column_ref_expr()) {
-      ret = is_mysql_mode() ? OB_ERR_NONUPDATEABLE_COLUMN : OB_ERR_VIRTUAL_COL_NOT_ALLOWED;
+      ret = OB_ERR_NONUPDATEABLE_COLUMN;
       LOG_WARN("column is not updatable", K(ret), K(col_ref));
     } else {
       ObColumnRefRawExpr *new_col_ref = static_cast<ObColumnRefRawExpr *>(expr);
       const TableItem *new_table_item = table_item.view_base_item_;
       if (new_col_ref->get_table_id() != new_table_item->table_id_) {
-        ret = is_mysql_mode() ? OB_ERR_VIEW_MULTIUPDATE : OB_ERR_O_VIEW_MULTIUPDATE;
+        ret = OB_ERR_VIEW_MULTIUPDATE;
         LOG_WARN("Can not modify more than one base table through a join view", K(ret), K(col_ref));
       } else {
         if (new_table_item->is_basic_table() || new_table_item->is_link_table()) {
