@@ -1101,7 +1101,7 @@ int ObDMLResolver::resolve_sql_expr(const ParseNode &node, ObRawExpr *&expr,
     ctx.is_for_dynamic_sql_ = params_.is_dynamic_sql_;
     ctx.is_for_dbms_sql_ = params_.is_dbms_sql_;
     ctx.view_ref_id_ = view_ref_id_;
-    ctx.is_variable_allowed_ = !(is_mysql_mode() && params_.is_from_create_view_);
+    ctx.is_variable_allowed_ = !params_.is_from_create_view_;
     ctx.is_from_show_resolver_ = params_.is_from_show_resolver_;
     ctx.is_expanding_view_ = params_.is_expanding_view_;
     ctx.is_in_system_view_ = params_.is_in_sys_view_;
@@ -4238,7 +4238,7 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
 bool ObDMLResolver::is_update_for_mv_fast_refresh(const ObDMLStmt &stmt)
 {
   bool is_refresh_stmt = false;
-  if (lib::is_mysql_mode() && stmt.is_update_stmt() && 2 == stmt.get_table_size()) {
+  if (stmt.is_update_stmt() && 2 == stmt.get_table_size()) {
     const TableItem *table1 = stmt.get_table_item(0);
     const TableItem *table2 = stmt.get_table_item(1);
     is_refresh_stmt = (NULL != table1 && NULL != table2 && MATERIALIZED_VIEW == table1->table_type_
@@ -4845,7 +4845,7 @@ int ObDMLResolver::resolve_generate_table(const ParseNode &table_node,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (stmt->is_select_stmt() ||
-             (is_mysql_mode() && (stmt->is_delete_stmt() || stmt->is_update_stmt()))) {
+             (stmt->is_delete_stmt() || stmt->is_update_stmt())) {
     //resolve with cte table
     select_resolver.set_is_sub_stmt(true);
     if (OB_FAIL(select_resolver.set_cte_ctx(cte_ctx_, true, true))) {
@@ -4879,7 +4879,7 @@ int ObDMLResolver::resolve_lateral_generated_table(const ParseNode &table_node,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (stmt->is_select_stmt() ||
-             (is_mysql_mode() && (stmt->is_delete_stmt() || stmt->is_update_stmt()))) {
+             (stmt->is_delete_stmt() || stmt->is_update_stmt())) {
     //resolve with cte table
     select_resolver.set_is_sub_stmt(true);
     if (OB_FAIL(select_resolver.set_cte_ctx(cte_ctx_, true, true))) {
@@ -5717,7 +5717,7 @@ int ObDMLResolver::resolve_json_table_item(const ParseNode &parse_tree, TableIte
   ObDmlJtColDef* root_col_def = NULL;
   if (OB_SUCC(ret)) {
     ObString alias_name;
-    if (lib::is_mysql_mode() && OB_ISNULL(alias_node)) {
+    if (OB_ISNULL(alias_node)) {
       ret = OB_ERR_TABLE_WITHOUT_ALIAS;
       LOG_WARN("table function need alias", K(ret));
     } else if (OB_ISNULL(item = stmt->create_table_item(*allocator_))) {
@@ -6283,7 +6283,7 @@ int ObDMLResolver::do_expand_view(TableItem &view_item, ObChildStmtResolver &vie
       bool reset_column_infos = false;
       if (OB_UNLIKELY(OB_SUCCESS != ret && OB_ERR_VIEW_INVALID != ret)) {
         LOG_WARN("failed to resolve view", K(ret));
-      } else if (OB_UNLIKELY(OB_ERR_VIEW_INVALID == ret && lib::is_mysql_mode())) {
+      } else if (OB_UNLIKELY(OB_ERR_VIEW_INVALID == ret)) {
         // do nothing
       } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(*view_schema, view_stmt,reset_column_infos, *allocator_, *session_info_))) {
         LOG_WARN("failed to add recompile view task", K(tmp_ret));
@@ -7788,7 +7788,7 @@ int ObDMLResolver::check_expr_param(const ObRawExpr &expr)
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if ((lib::is_mysql_mode() || stmt->is_insert_stmt()) && T_REF_QUERY == expr.get_expr_type()) {
+  } else if (T_REF_QUERY == expr.get_expr_type()) {
     const ObQueryRefRawExpr &ref_query = static_cast<const ObQueryRefRawExpr&>(expr);
     if (1 != ref_query.get_output_column()) {
       ret = OB_ERR_INVALID_COLUMN_NUM;
@@ -7833,7 +7833,7 @@ int ObDMLResolver::resolve_partitions(const ParseNode *part_node,
         if (T_USE_PARTITION == part_node->type_) {
           if (OB_FAIL(part_getter.get_part_ids(partition_name, partition_ids))) {
             LOG_WARN("failed to get part ids", K(ret), K(partition_name));
-            if (OB_UNKNOWN_PARTITION == ret && lib::is_mysql_mode()) {
+            if (OB_UNKNOWN_PARTITION == ret) {
               LOG_USER_ERROR(OB_UNKNOWN_PARTITION, partition_name.length(), partition_name.ptr(),
                             table_schema.get_table_name_str().length(),
                             table_schema.get_table_name_str().ptr());
@@ -8106,8 +8106,6 @@ int ObDMLResolver::resolve_autoincrement_column_is_null(ObRawExpr *&expr)
   if (OB_ISNULL(session_info_) || OB_ISNULL(params_.expr_factory_) || OB_ISNULL(expr)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session info is NULL", K_(session_info), K_(params_.expr_factory), K(expr));
-  } else if (!is_mysql_mode()) {
-    //nothing to do
   } else if (OB_UNLIKELY(expr->get_expr_type() != T_OP_IS) || OB_ISNULL(expr->get_param_expr(0))
   || OB_ISNULL(expr->get_param_expr(1))
   || OB_UNLIKELY(expr->get_param_expr(0)->get_expr_type() != T_REF_COLUMN)
@@ -8433,7 +8431,7 @@ int ObDMLResolver::resolve_external_table_generated_column(
       }
       if (OB_SUCC(ret) && format.csv_format_.binary_format_ != ObCSVGeneralFormat::ObCSVBinaryFormat::DEFAULT) {
         // handle for binary format, only support for mysql mode(bit/binary/varbinary)
-        if (lib::is_mysql_mode() && (column_schema->get_meta_type().is_bit() || column_schema->get_meta_type().is_varbinary_or_binary())) {
+        if (column_schema->get_meta_type().is_bit() || column_schema->get_meta_type().is_varbinary_or_binary()) {
           if (OB_FAIL(ObResolverUtils::wrap_csv_binary_format_expr(params_, format.csv_format_, real_ref_expr))) {
             LOG_WARN("fail to wrap binary format expr", K(ret));
           }
@@ -8766,7 +8764,7 @@ int ObDMLResolver::resolve_generated_column_expr(const ObString &expr_str,
       //do nothing if all local vars are same with cur session vars
     } else if (OB_FAIL(params_.query_ctx_->add_local_session_vars(allocator_, local_vars, var_array_idx))) {
       LOG_WARN("add local session var failed", K(ret));
-    } else if (!session_info->is_inner() && lib::is_mysql_mode()) {
+    } else if (!session_info->is_inner()) {
       //print user warnings
       ObSEArray<const ObSessionSysVar *, 4> var_array;
       if (OB_FAIL(local_vars.get_local_vars(var_array))) {
@@ -9593,17 +9591,11 @@ int ObDMLResolver::resolve_json_table_column_name_and_path(const ParseNode *name
     if ((path_node->type_ == T_CHAR || path_node->type_ == T_VARCHAR)
           && OB_FAIL(resolve_str_const(*path_node, col_def->col_base_info_.path_))) {
       LOG_WARN("fail to resolve path const", K(ret));
-    } else if (lib::is_mysql_mode()) { // do nothing
+    } else {
       (const_cast<ParseNode *>(path_node))->type_ = T_CHAR;
       if (OB_FAIL(resolve_str_const(*path_node, col_def->col_base_info_.path_))) {
         LOG_WARN("fail to resolve path const in mysql", K(ret));
       }
-    } else if (((table_type == OB_ORA_JSON_TABLE_TYPE && *path_node->str_value_ != '$' && path_node->value_ != 1))
-                && OB_FAIL(json_table_make_json_path(*path_node, allocator, col_def->col_base_info_.path_, table_type))) {
-      LOG_WARN("failed to make json path", K(ret));
-    } else if (table_type == OB_ORA_JSON_TABLE_TYPE && path_node->type_ == T_IDENT && path_node->is_input_quoted_ == 1) {
-      ret = OB_ERR_INVALID_IDENTIFIER_JSON_TABLE;
-      LOG_WARN("invalid identifier used for path expression in JSON_TABLE", K(ret), K(path_node->type_));
     }
   } else if (path_node->type_ == T_NULL
              && OB_FAIL(json_table_make_json_path(*name_node, allocator, col_def->col_base_info_.path_, table_type))) {
@@ -9613,7 +9605,7 @@ int ObDMLResolver::resolve_json_table_column_name_and_path(const ParseNode *name
     LOG_WARN("failed to make json path by lists", K(ret));
   }
   if (OB_SUCC(ret)) {
-    if (lib::is_mysql_mode() && (name_node->str_value_[name_node->str_len_ - 1] == ' ')) {
+    if (name_node->str_value_[name_node->str_len_ - 1] == ' ') {
       ret = OB_WRONG_COLUMN_NAME;
       LOG_USER_ERROR(OB_WRONG_COLUMN_NAME, static_cast<int32_t>(name_node->str_len_), name_node->str_value_);
     } else {
@@ -9676,7 +9668,7 @@ int ObDMLResolver::resolve_json_table_column_type(const ParseNode &parse_tree,
     if (OB_UNLIKELY(!ob_is_valid_obj_type(obj_type))) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid obj type", K(ret), K(obj_type));
-    } else if (lib::is_mysql_mode()) {
+    } else {
       omt::ObTenantConfigGuard tcg(TENANT_CONF(session_info_->get_effective_tenant_id()));
       bool convert_real_to_decimal = (tcg.is_valid() && tcg->_enable_convert_real_to_decimal);
       uint64_t tenant_data_version = 0;
@@ -9711,70 +9703,6 @@ int ObDMLResolver::resolve_json_table_column_type(const ParseNode &parse_tree,
           LOG_WARN("failed to get collation", K(ret));
         } else {
           data_type.set_charset_type(charset_type);
-          data_type.set_collation_type(coll_type);
-        }
-        if (OB_SUCC(ret) && ob_is_json_tc(obj_type)) {
-          data_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-        }
-      }
-    } else {
-      if (ObNumberType == obj_type
-          && parse_tree.int16_values_[2] == -1 && parse_tree.int16_values_[3] == 0) {
-        obj_type = ObIntType;
-      } else if (ObFloatType == obj_type) {
-        // boundaries already checked in calc result type
-        if (parse_tree.int16_values_[OB_NODE_CAST_N_PREC_IDX] > OB_MAX_FLOAT_PRECISION) {
-          obj_type = ObDoubleType;
-        }
-      }
-      common::ObAccuracy accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[1][obj_type];
-      common::ObLengthSemantics length_semantics = parse_tree.length_semantics_;
-      accuracy.set_length_semantics(length_semantics);
-      ObObjTypeClass dest_tc = ob_obj_type_class(obj_type);
-
-      if (ObExtendTC == dest_tc) {
-        ret = OB_ERR_INVALID_CAST_UDT;
-        LOG_WARN("invalid CAST to a type that is not a nested table or VARRAY", K(ret));
-      } else if (ObStringTC == dest_tc) {
-        if (parse_tree.length_semantics_ == LS_DEFAULT) {
-          length_semantics = (OB_NOT_NULL(session_info_) ?
-                session_info_->get_actual_nls_length_semantics() : LS_BYTE);
-        }
-        accuracy.set_full_length(parse_tree.int32_values_[1], length_semantics, true);
-      } else if (ObRawTC == dest_tc) {
-        accuracy.set_length(parse_tree.int32_values_[1]);
-      } else if (ObTextTC == dest_tc || ObJsonTC == dest_tc) {
-        accuracy.set_length(parse_tree.int32_values_[1] <= 0 ?
-            ObAccuracy::DDL_DEFAULT_ACCURACY[obj_type].get_length() : parse_tree.int32_values_[1]);
-      } else {
-        const ObAccuracy &def_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[1][obj_type];
-        if (ObNumberType == obj_type && parse_tree.int16_values_[2] == -1) {
-          accuracy.set_precision(parse_tree.int16_values_[2]);
-          accuracy.set_scale(parse_tree.int16_values_[3]);
-        } else if (ObIntType == obj_type) {
-          data_type.set_int();
-          accuracy = def_acc;
-        } else {
-          accuracy.set_precision(parse_tree.int16_values_[2]);
-          accuracy.set_scale(parse_tree.int16_values_[3]);
-        }
-        if (ObDoubleType == obj_type) {
-          accuracy.set_accuracy(def_acc.get_precision());
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else {
-        data_type.set_accuracy(accuracy);
-        data_type.set_obj_type(obj_type);
-        ObCollationType coll_type = static_cast<ObCollationType>(parse_tree.int16_values_[OB_NODE_CAST_COLL_IDX]);
-        if (CS_TYPE_INVALID != coll_type) {
-          data_type.set_collation_type(coll_type);
-        } else if (OB_ISNULL(session_info_)) { // use connection_collation. for cast('a' as char)
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected collation type", K(ret));
-        } else if (OB_FAIL(session_info_->get_collation_connection(coll_type))) {
-          LOG_WARN("failed to get collation", K(ret));
-        } else {
           data_type.set_collation_type(coll_type);
         }
         if (OB_SUCC(ret) && ob_is_json_tc(obj_type)) {
@@ -10666,7 +10594,7 @@ int ObDMLResolver::resolve_generated_table_column_item(const TableItem &table_it
               if (!with_is_json_constraint) {
                 with_is_json_constraint = check_generated_column_has_json_constraint(ref_stmt, col_ref);
               }
-              if (lib::is_mysql_mode()) {
+              {
                 col_expr->set_joined_dup_column(col_ref->is_joined_dup_column());
                 col_expr->set_lob_column(col_ref->is_lob_column());
                 col_expr->set_srs_id(col_ref->get_srs_id());
@@ -15087,7 +15015,7 @@ int ObDMLResolver::add_fake_schema(ObSelectStmt *left_stmt)
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
     LOG_WARN("fail to get name case mode", K(ret));
   } else {
-    if (lib::is_mysql_mode() && OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
+    if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
       ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, tblname);
     }
     tbl_schema = new (tbl_schema) ObTableSchema(allocator_);
@@ -15127,8 +15055,7 @@ int ObDMLResolver::add_fake_schema(ObSelectStmt *left_stmt)
           } else if (OB_ISNULL(new_col)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("fail to allocate memory", K(ret));
-          } else if (lib::is_mysql_mode() &&
-                     expr->get_result_type().is_null()) {
+          } else if (expr->get_result_type().is_null()) {
             ObRawExpr *new_expr = NULL;
             ObRawExprResType bin_type;
             bin_type.set_binary();
@@ -15191,7 +15118,7 @@ int ObDMLResolver::resolve_basic_table(const ParseNode &parse_tree, TableItem *&
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (stmt->is_select_stmt() ||
-             (is_mysql_mode() && (stmt->is_delete_stmt() || stmt->is_update_stmt()))) {
+             (stmt->is_delete_stmt() || stmt->is_update_stmt())) {
     if (OB_FAIL(resolve_basic_table_with_cte(parse_tree, table_item))) {
       LOG_WARN("fail to resolve basic table with cte", K(ret));
     }
