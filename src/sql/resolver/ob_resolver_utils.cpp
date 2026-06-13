@@ -835,7 +835,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker,
     if (OB_FAIL(ret) || OB_INVALID_ID == package_id) {
       if (ObPLResolver::is_unrecoverable_error(ret)) {
         // do nothing
-      } else if (lib::is_mysql_mode()) { // mysql mode only has system package
+      } else { // mysql mode only has system package
         if (OB_FAIL(schema_checker.get_package_id( // try system pacakge
             OB_SYS_TENANT_ID, OB_SYS_DATABASE_NAME, package_name, compatible_mode, package_id))
             || OB_INVALID_ID == package_id) {
@@ -1617,18 +1617,8 @@ int ObResolverUtils::get_routine(const pl::ObPLResolveCtx &resolve_ctx,
              K(db_name), K(package_name), K(routine_name), K(ret));
   } else {
     if (!candidate_routine_infos.empty()) {
-      if (lib::is_mysql_mode()) {
-        CK (1 == candidate_routine_infos.count());
-        OX (routine = static_cast<const ObRoutineInfo *>(candidate_routine_infos.at(0)));
-      } else {
-        OZ (pick_routine(resolve_ctx, expr_params, candidate_routine_infos, routine));
-        LOG_INFO("call ObResolverUtils::get_routine fit routine",
-                  K(db_name),
-                  K(package_name),
-                  K(routine_name),
-                  KPC(routine),
-                  K(candidate_routine_infos));
-      }
+      CK (1 == candidate_routine_infos.count());
+      OX (routine = static_cast<const ObRoutineInfo *>(candidate_routine_infos.at(0)));
     }
     if (OB_SUCC(ret) && NULL == routine) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
@@ -1846,7 +1836,7 @@ int ObResolverUtils::resolve_column_ref(const ParseNode *node, const ObNameCaseM
     }
   }
 
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
+  if (OB_SUCC(ret) && OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
     ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, column_ref.catalog_name_);
     ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, column_ref.database_name_);
     ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, column_ref.tbl_name_);
@@ -2009,6 +1999,7 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_SHOW_INDEXES);
       SET_STMT_TYPE(T_SHOW_PROCESSLIST);
       SET_STMT_TYPE(T_SHOW_TABLEGROUPS);
+      SET_STMT_TYPE(T_SHOW_RESTORE_PREVIEW);
       SET_STMT_TYPE(T_SHOW_TRIGGERS);
       SET_STMT_TYPE(T_HELP);
       SET_STMT_TYPE(T_SHOW_RECYCLEBIN);
@@ -2275,7 +2266,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       ObObj result_val;
       bool is_nchar = T_NVARCHAR2 == node->type_ || T_NCHAR == node->type_;
       str_val.assign_ptr(const_cast<char *>(node->str_value_), static_cast<int32_t>(node->str_len_));
-      val.set_string(lib::is_mysql_mode() && is_nchar ?
+      val.set_string(is_nchar ?
                           ObVarcharType : static_cast<ObObjType>(node->type_), str_val);
       // decide collation
       /*
@@ -2294,7 +2285,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
         LOG_WARN("input str len is over size", K(ret), K(node->str_len_));
       } else if (0 == node->num_child_) {
         // for STRING without collation, e.g. show tables like STRING;
-        if (lib::is_mysql_mode() && is_nchar) {
+        if (is_nchar) {
           ObString charset(strlen("utf8mb4"), "utf8mb4");
           if (OB_FAIL(set_string_val_charset(allocator, val, charset, result_val, false, false))) {
             LOG_WARN("set string val charset failed", K(ret));
@@ -2401,7 +2392,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       val.set_scale(0);
       int16_t formalized_prec = static_cast<int16_t>(node->str_len_);
       // for constant integers, reset precision to 4/8/16/20
-      if (!is_from_pl && lib::is_mysql_mode() && enable_decimal_int_type
+      if (!is_from_pl && enable_decimal_int_type
           && !(ObStmt::is_ddl_stmt(stmt_type, true) || ObStmt::is_show_stmt(stmt_type))) {
         int16_t node_prec = static_cast<int16_t>(node->str_len_);
         if (fmt_int_or_ch_decint) {
@@ -2861,7 +2852,7 @@ int ObResolverUtils::get_collation_type_of_names(const ObSQLSessionInfo *session
   int ret = OB_SUCCESS;
   ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
   cs_type = CS_TYPE_INVALID;
-  if (lib::is_mysql_mode()) {
+  {
     if (OB_TABLE_NAME_CLASS == type_class) {
       if (OB_ISNULL(session_info)) {
         ret = OB_NOT_INIT;
@@ -2878,8 +2869,6 @@ int ObResolverUtils::get_collation_type_of_names(const ObSQLSessionInfo *session
     } else if (OB_USER_NAME_CLASS == type_class) {
       cs_type = CS_TYPE_UTF8MB4_BIN;
     }
-  } else {
-    cs_type = CS_TYPE_UTF8MB4_BIN;
   }
   return ret;
 }
@@ -3295,7 +3284,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
     if (PARTITION_FUNC_TYPE_RANGE == part_type || PARTITION_FUNC_TYPE_LIST == part_type
         || PARTITION_FUNC_TYPE_INTERVAL == part_type) {
       ObObjType value_type = part_value_expr.get_data_type();
-      if (lib::is_mysql_mode() && ob_is_integer_type(value_type)) {
+      if (ob_is_integer_type(value_type)) {
         // partition by range(xx) partition p0 values less than (expr) expr only allows integer type
       } else if (ObNullTC == part_value_expr.get_type_class() && PARTITION_FUNC_TYPE_LIST == part_type) {
         //do nothing
@@ -3304,7 +3293,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
         LOG_USER_ERROR(OB_ERR_VALUES_IS_NOT_INT_TYPE_ERROR,
                        part_name.length(), part_name.ptr());
         LOG_WARN("part_value_expr type is not correct", K(ret),
-                 "data_type", part_value_expr.get_data_type(), K(lib::is_mysql_mode()));
+                 "data_type", part_value_expr.get_data_type());
       }
     } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type) {
       if (!part_func_expr.is_column_ref_expr()) {
@@ -4284,7 +4273,7 @@ int ObResolverUtils::build_file_column_expr_for_parquet(
           }
           if (ob_is_enum_or_set_type(column_expr->get_data_type())
               || ob_is_text_tc(column_expr->get_data_type())) {
-            if (is_mysql_mode() && ob_is_enum_or_set_type(column_expr->get_data_type())) {
+            if (ob_is_enum_or_set_type(column_expr->get_data_type())) {
               file_column_expr->set_data_type(ObCharType);
               file_column_expr->set_length(OB_MAX_MYSQL_VARCHAR_LENGTH);
             } else {
@@ -4636,7 +4625,7 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
           ret = OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN;
           LOG_USER_ERROR(OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN,
                         "Defining a generated column on generated column(s)");
-        } else if (lib::is_mysql_mode() && col_schema->is_autoincrement()) {
+        } else if (col_schema->is_autoincrement()) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("generated column cannot refer to auto-increment column", K(ret), K(*expr));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "generated column refer to auto-increment column");
@@ -5018,7 +5007,7 @@ int ObResolverUtils::resolve_check_constraint_expr(
       ObRawExpr *sys_func = q_name.access_idents_.at(0).sys_func_expr_;
       CK (OB_NOT_NULL(sys_func));
       if (OB_FAIL(ret)) {
-      } else if (lib::is_mysql_mode()) {
+      } else {
         bool is_non_pure_func = false;
         if (OB_FAIL(sys_func->is_non_pure_sys_func_expr(is_non_pure_func))) {
           LOG_WARN("check is non pure sys func expr failed", K(ret));
@@ -5052,18 +5041,16 @@ int ObResolverUtils::resolve_check_constraint_expr(
       } else { // is_col_level_cst
         if (0 != columns.at(i).col_name_.compare(column_schema->get_column_name_str())) {
           ret = OB_ERR_COL_CHECK_CST_REFER_ANOTHER_COL;
-          if (lib::is_mysql_mode()) {
-            LOG_USER_ERROR(OB_ERR_COL_CHECK_CST_REFER_ANOTHER_COL,
-                constraint.get_constraint_name_str().length(),
-                constraint.get_constraint_name_str().ptr());
-          }
+          LOG_USER_ERROR(OB_ERR_COL_CHECK_CST_REFER_ANOTHER_COL,
+              constraint.get_constraint_name_str().length(),
+              constraint.get_constraint_name_str().ptr());
           LOG_WARN("column check constraint cannot reference other columns",
                    K(ret),
                    K(columns.at(i).col_name_),
                    K(column_schema->get_column_name_str()));
         }
       }
-      if (OB_SUCC(ret) && lib::is_mysql_mode() && column_schema->is_autoincrement()) {
+      if (OB_SUCC(ret) && column_schema->is_autoincrement()) {
         ret = OB_ERR_CHECK_CONSTRAINT_REFERS_AUTO_INCREMENT_COLUMN;
         LOG_WARN("Check constraint cannot refer to an auto-increment column", K(ret), K(column_schema->get_column_id()));
       }
@@ -5094,7 +5081,7 @@ int ObResolverUtils::resolve_check_constraint_expr(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (T_INT == expr->get_expr_type()
         || T_TINYINT == expr->get_expr_type()
         || IS_BOOL_OP(expr->get_expr_type())) {
@@ -5106,16 +5093,6 @@ int ObResolverUtils::resolve_check_constraint_expr(
       LOG_USER_ERROR(OB_ERR_NON_BOOLEAN_EXPR_FOR_CHECK_CONSTRAINT,
          constraint.get_constraint_name_str().length(), constraint.get_constraint_name_str().ptr());
       LOG_WARN("expr result type is not boolean", K(ret), K(expr->get_result_type().get_type()));
-    }
-  } else {
-    if (expr->get_expr_type() == T_FUN_SYS_IS_JSON) {
-      ObObjType in_type = column_schema->get_data_type();
-      if (!(in_type == ObVarcharType
-            || in_type == ObLongTextType
-            || in_type == ObJsonType)) {
-        ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "-", ob_obj_type_str(in_type));
-      }
     }
   }
 
@@ -6620,7 +6597,7 @@ int ObResolverUtils::resolve_xid(const ParseNode *node, common::ObString &gtrid_
   } else {
     // for mysql mode
     // if format id is not specified, set format id to 1 by default
-    if (lib::is_mysql_mode() && 3 > node->num_child_) {
+    if (3 > node->num_child_) {
       format_id = 1;
     }
   }
@@ -7062,28 +7039,15 @@ int ObResolverUtils::uv_check_basic(ObSelectStmt &stmt, const bool is_insert)
   int ret = OB_SUCCESS;
   if (stmt.get_table_items().count() == 0) {
     // create view as select 1 a;
-    ret = lib::is_mysql_mode() ? (is_insert ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_NON_UPDATABLE_TABLE) : OB_ERR_ILLEGAL_VIEW_UPDATE;
+    ret = is_insert ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_NON_UPDATABLE_TABLE;
     LOG_WARN("no table in select", K(ret));
   } else {
-    if (lib::is_mysql_mode()) {
-      if (stmt.has_group_by() || stmt.has_having() || stmt.get_aggr_item_size() > 0 || stmt.has_window_function()
-          || stmt.is_distinct()
-          || stmt.is_set_stmt()
-          || stmt.has_limit()) {
-        ret = is_insert ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_NON_UPDATABLE_TABLE;
-        LOG_WARN("not updatable", K(ret));
-      }
-    // In oracle mode, insert/update/delete statements containing fetch are uniformly reported as errors to be compatible with oracle behavior
-    } else if (stmt.has_fetch()) {
-      ret = OB_ERR_VIRTUAL_COL_NOT_ALLOWED;
-      LOG_WARN("subquery with fetch can't occur in insert/update/delete stmt", K(ret));
-    } else {
-      if (stmt.has_window_function()
-          || stmt.is_set_stmt()
-          || (!is_insert && (stmt.has_group_by() || stmt.has_having() || stmt.get_aggr_item_size() > 0))) {
-        ret = OB_ERR_ILLEGAL_VIEW_UPDATE;
-        LOG_WARN("not updatable", K(ret));
-      }
+    if (stmt.has_group_by() || stmt.has_having() || stmt.get_aggr_item_size() > 0 || stmt.has_window_function()
+        || stmt.is_distinct()
+        || stmt.is_set_stmt()
+        || stmt.has_limit()) {
+      ret = is_insert ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_NON_UPDATABLE_TABLE;
+      LOG_WARN("not updatable", K(ret));
     }
   }
   return ret;
@@ -7771,12 +7735,10 @@ double ObResolverUtils::strntod(const char *str, size_t str_len,
 bool ObResolverUtils::is_synonymous_type(ObObjType type1, ObObjType type2)
 {
   bool ret = false;
-  if (lib::is_mysql_mode()) {
-    if (ob_is_float_tc(type1) && ob_is_float_tc(type2)) {
-      ret = true;
-    } else if (ob_is_double_tc(type1) && ob_is_double_tc(type2)) {
-      ret = true;
-    }
+  if (ob_is_float_tc(type1) && ob_is_float_tc(type2)) {
+    ret = true;
+  } else if (ob_is_double_tc(type1) && ob_is_double_tc(type2)) {
+    ret = true;
   }
   if (ob_is_decimal_int_tc(type1) && ob_is_number_tc(type2)) {
     ret = true;
@@ -7807,7 +7769,7 @@ int ObResolverUtils::resolve_default_value_and_expr_from_select_item(const Selec
       column_item.set_default_value(tmp_column_item->default_value_);
       column_item.set_default_value_expr(tmp_column_item->default_value_expr_);
     }
-  } else if (is_mysql_mode() && select_item.expr_->is_win_func_expr()) {
+  } else if (select_item.expr_->is_win_func_expr()) {
     const ObWinFunRawExpr *win_expr = reinterpret_cast<const ObWinFunRawExpr*>(select_item.expr_);
     if (T_WIN_FUN_RANK == win_expr->get_func_type() ||
         T_WIN_FUN_DENSE_RANK == win_expr->get_func_type() ||
@@ -8788,7 +8750,7 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
       if (must_be_positive_idx.has_member(param_idx)) {
         if (obj_param.is_boolean()) {
           // boolean will skip this check
-        } else if (lib::is_mysql_mode()) {
+        } else {
           if (obj_param.is_integer_type() &&
               (obj_param.get_int() < 0 || (0 == obj_param.get_int() && '-' == raw_param->str_value_[0]))) {
             ret = OB_ERR_UNEXPECTED;
@@ -8832,8 +8794,8 @@ int ObResolverUtils::fast_get_param_type(const ParseNode &node,
   } else if (IS_DATATYPE_OP(node.type_)) {
     if (T_VARCHAR == node.type_ || T_CHAR == node.type_ ||  T_NCHAR == node.type_) {
       bool is_nchar = T_NCHAR == node.type_;
-      obj_type = lib::is_mysql_mode() && is_nchar ? ObVarcharType :
-                                              static_cast<ObObjType>(node.type_);
+      obj_type = is_nchar ? ObVarcharType :
+                            static_cast<ObObjType>(node.type_);
       coll_level = CS_LEVEL_COERCIBLE;
       if (OB_UNLIKELY(node.str_len_ > OB_MAX_LONGTEXT_LENGTH)) {
         ret = OB_ERR_INVALID_INPUT_ARGUMENT;
