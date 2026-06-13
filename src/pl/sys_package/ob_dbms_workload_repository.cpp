@@ -1501,10 +1501,8 @@ int ObDbmsWorkloadRepository::append_fmt_ash_view_sql(
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "fail to print time as str", K(ret));
   } else if (FALSE_IT(sprintf(port_buf, "%ld", ash_report_params.port))) {
   } else if (OB_FAIL(sql_string.append_fmt(ash_view_ptr,
-                 lib::is_oracle_mode() ? "CAST(DECODE(EVENT_NO, 0, 'ON CPU', EVENT) AS VARCHAR2(64)) AS EVENT,"
-                                       : "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT) AS CHAR(64)) AS EVENT,",
-                 lib::is_oracle_mode() ? "CAST(DECODE(EVENT_NO, 0, 'NULL', WAIT_CLASS) AS VARCHAR2(64)) AS WAIT_CLASS,"
-                                       : "CAST(IF (EVENT_NO = 0, 'NULL', WAIT_CLASS) AS CHAR(64)) AS WAIT_CLASS,",
+                 "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT) AS CHAR(64)) AS EVENT,",
+                 "CAST(IF (EVENT_NO = 0, 'NULL', WAIT_CLASS) AS CHAR(64)) AS WAIT_CLASS,",
                  lib::is_oracle_mode() ? oracle_table : mysql_table,
                  static_cast<int>(time_buf_pos),
                  ash_begin_time_buf,
@@ -1709,13 +1707,9 @@ int ObDbmsWorkloadRepository::append_fmt_wr_view_sql(
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "fail to print time as str", K(ret));
   } else if (FALSE_IT(sprintf(port_buf, "%ld", ash_report_params.port))) {
   } else if (OB_FAIL(sql_string.append_fmt(WR_VIEW_SQL_4352, 
-                 lib::is_oracle_mode()
-                     ? " CAST(DECODE(SESSION_TYPE, 0, 'FOREGROUND', 'BACKGROUND') AS VARCHAR2(10)) AS SESSION_TYPE,"
-                     : " CAST(IF (SESSION_TYPE = 0, 'FOREGROUND', 'BACKGROUND') AS CHAR(10)) AS SESSION_TYPE,",
-                 lib::is_oracle_mode() ? "CAST(DECODE(EVENT_NO, 0, 'ON CPU', EVENT_NAME) AS VARCHAR2(64)) AS EVENT,"
-                                       : "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT_NAME) AS CHAR(64)) AS EVENT,",
-                 lib::is_oracle_mode() ? "CAST(DECODE(EVENT_NO, 0, 'NULL', WAIT_CLASS) AS VARCHAR2(64)) AS WAIT_CLASS,"
-                                       : "CAST(IF (EVENT_NO = 0, 'NULL', WAIT_CLASS) AS CHAR(64)) AS WAIT_CLASS,",
+                 " CAST(IF (SESSION_TYPE = 0, 'FOREGROUND', 'BACKGROUND') AS CHAR(10)) AS SESSION_TYPE,",
+                 "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT_NAME) AS CHAR(64)) AS EVENT,",
+                 "CAST(IF (EVENT_NO = 0, 'NULL', WAIT_CLASS) AS CHAR(64)) AS WAIT_CLASS,",
                  lib::is_oracle_mode()                                 ? wr_oracle_table
                  : ash_report_params.cur_tenant_id == OB_SYS_TENANT_ID ? wr_mysql_sys_table
                                                                        : wr_mysql_tenant_table,
@@ -1776,9 +1770,8 @@ int ObDbmsWorkloadRepository::get_ash_begin_and_end_time(AshReportParams &ash_re
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy_ is nullptr", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     const uint64_t tenant_id = MTL_ID();
     HEAP_VARS_2((ObISQLClient::ReadResult, res), (ObSqlString, sql_string))
     {
@@ -1789,7 +1782,7 @@ int ObDbmsWorkloadRepository::get_ash_begin_and_end_time(AshReportParams &ash_re
       } else if (OB_FAIL(append_fmt_ash_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(") top_event  GROUP BY svr_ip, svr_port ORDER BY ASH_BEGIN_TIME DESC %s",
-                         lib::is_oracle_mode() ? "FETCH FIRST 1 ROW ONLY" : "LIMIT 1"))) {
+                         "LIMIT 1"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, tenant_id, sql_string.ptr()))) {
         LOG_WARN("failed to execute sql", KR(ret), K(tenant_id), K(sql_string));
@@ -1852,9 +1845,8 @@ int ObDbmsWorkloadRepository::get_wr_begin_and_end_time(AshReportParams &ash_rep
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy_ is nullptr", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     const uint64_t tenant_id = MTL_ID();
     HEAP_VARS_2((ObISQLClient::ReadResult, res), (ObSqlString, sql_string))
     {
@@ -1924,9 +1916,8 @@ int ObDbmsWorkloadRepository::get_ash_num_samples(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy_ is nullptr", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     const uint64_t tenant_id = MTL_ID();
     HEAP_VARS_2((ObISQLClient::ReadResult, res), (ObSqlString, sql_string))
     {
@@ -1976,9 +1967,8 @@ int ObDbmsWorkloadRepository::get_wr_num_samples(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy_ is nullptr", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     const uint64_t tenant_id = MTL_ID();
     HEAP_VARS_2((ObISQLClient::ReadResult, res), (ObSqlString, sql_string))
     {
@@ -2069,7 +2059,7 @@ int ObDbmsWorkloadRepository::print_ash_summary_info(
                    ash_end_time_buf, time_buf_len, ash_end_time_buf_pos))) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "fail to print time as str", K(ret));
     } else {
-      strncpy(ash_data_source_buf, lib::is_oracle_mode() ? "SYS.GV$ACTIVE_SESSION_HISTORY" : "oceanbase.GV$ACTIVE_SESSION_HISTORY", data_source_len);
+      strncpy(ash_data_source_buf, "oceanbase.GV$ACTIVE_SESSION_HISTORY", data_source_len);
     }
     if (OB_FAIL(ret)) {
     } else if (ash_report_params.wr_begin_time <= 0 && ash_report_params.wr_end_time <= 0) {
@@ -2245,9 +2235,8 @@ int ObDbmsWorkloadRepository::print_ash_top_active_tenants(const AshReportParams
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 8;
@@ -2277,8 +2266,7 @@ int ObDbmsWorkloadRepository::print_ash_top_active_tenants(const AshReportParams
                     "SUM(CASE WHEN event_no = 0 THEN 0 ELSE count_weight END) AS wait_cnt, "
                     "%s AS delta_time "
             "FROM (",
-        lib::is_oracle_mode() ? "(ROUND((CAST(MAX(sample_time) AS DATE) - CAST(MIN(sample_time) AS DATE)) * 86400) + 1)"
-                              : "CAST((UNIX_TIMESTAMP(MAX(sample_time)) - UNIX_TIMESTAMP(MIN(sample_time)) + 1) AS SIGNED)"))) {
+        "CAST((UNIX_TIMESTAMP(MAX(sample_time)) - UNIX_TIMESTAMP(MIN(sample_time)) + 1) AS SIGNED)"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -2397,9 +2385,8 @@ int ObDbmsWorkloadRepository::print_ash_top_node_load(const AshReportParams &ash
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))){
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 9;
@@ -2518,9 +2505,8 @@ int ObDbmsWorkloadRepository::print_ash_foreground_db_time(const AshReportParams
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))){
     LOG_WARN("failed to print section header and explaination");
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 6;
@@ -2537,11 +2523,9 @@ int ObDbmsWorkloadRepository::print_ash_foreground_db_time(const AshReportParams
           "WITH session_data AS ("
             "SELECT %s AS event, %s AS wait_class, SUM(count_weight) AS event_time, %s AS node "
             "FROM (",
-            lib::is_oracle_mode() ? "CAST(DECODE(event_no, 0, 'ON CPU', event) AS VARCHAR2(64))"
-                                  : "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64))", //%s AS event
-            lib::is_oracle_mode() ? "CAST(DECODE(event_no, 0, 'NULL', wait_class) AS VARCHAR2(64))"
-                                  : "CAST(IF (event_no = 0, 'NULL', wait_class) AS CHAR(64))", //%s AS wait_class
-            lib::is_oracle_mode() ? "svr_ip || ':' || svr_port" : "CONCAT(svr_ip, ':', svr_port)"))) { //%s AS node
+            "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64))", //%s AS event
+            "CAST(IF (event_no = 0, 'NULL', wait_class) AS CHAR(64))", //%s AS wait_class
+            "CONCAT(svr_ip, ':', svr_port)"))) { //%s AS node
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -2551,7 +2535,7 @@ int ObDbmsWorkloadRepository::print_ash_foreground_db_time(const AshReportParams
             "GROUP BY ta.svr_ip, ta.svr_port, ta.event_no, ta.event, ta.wait_class "
             "ORDER BY event_time DESC %s"
           "), ",
-          lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"))) { //ORDER BY event_time DESC %s
+          "LIMIT 30"))) { //ORDER BY event_time DESC %s
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append(
           "top_event AS ("
@@ -2681,9 +2665,8 @@ int ObDbmsWorkloadRepository::print_ash_top_execution_phase(
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))){
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 6;
@@ -2837,9 +2820,8 @@ int ObDbmsWorkloadRepository::print_ash_background_db_time(const AshReportParams
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 9;
@@ -2859,11 +2841,9 @@ int ObDbmsWorkloadRepository::print_ash_background_db_time(const AshReportParams
                     "CASE WHEN module IS NULL THEN 'UNDEFINED' ELSE module END AS module, "
                     "CASE WHEN action IS NULL THEN 'UNDEFINED' ELSE action END AS action "
             "FROM (",
-            lib::is_oracle_mode() ? "CAST(DECODE(event_no, 0, 'ON CPU', event) AS VARCHAR2(64))"
-                                  : "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64))", //%s AS event
-            lib::is_oracle_mode() ? "CAST(DECODE(event_no, 0, 'NULL', wait_class) AS VARCHAR2(64))"
-                                  : "CAST(IF (event_no = 0, 'NULL', wait_class) AS CHAR(64))", //%s AS wait_class
-            lib::is_oracle_mode() ? "svr_ip || ':' || svr_port" : "CONCAT(svr_ip, ':', svr_port)"))) { //%s AS node
+            "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64))", //%s AS event
+            "CAST(IF (event_no = 0, 'NULL', wait_class) AS CHAR(64))", //%s AS wait_class
+            "CONCAT(svr_ip, ':', svr_port)"))) { //%s AS node
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -2873,7 +2853,7 @@ int ObDbmsWorkloadRepository::print_ash_background_db_time(const AshReportParams
             "GROUP BY ta.svr_ip, ta.svr_port, ta.program, ta.module, ta.action, ta.event_no, ta.event, ta.wait_class "
             "ORDER BY event_time DESC %s"
           "), ",
-          lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"))) { //ORDER BY event_time DESC %s
+          "LIMIT 30"))) { //ORDER BY event_time DESC %s
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append(
           "top_event AS ("
@@ -2983,9 +2963,8 @@ int ObDbmsWorkloadRepository::print_ash_top_sessions(const AshReportParams &ash_
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 12;
@@ -3004,12 +2983,8 @@ int ObDbmsWorkloadRepository::print_ash_top_sessions(const AshReportParams &ash_
                 "SELECT svr_ip, svr_port, session_id, %s AS event, %s AS wait_class, "
                 "event_no, sql_id, plan_hash, trace_id, program, count_weight "
               "FROM (",
-              lib::is_oracle_mode()
-                  ? "CAST(DECODE(event_no, 0, 'ON CPU', event) AS VARCHAR2(64))"
-                  : "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64))",
-              lib::is_oracle_mode()
-                  ? "CAST(DECODE(event_no, 0, 'NULL', wait_class) AS VARCHAR2(64))"
-                  : "CAST(IF (event_no = 0, 'NULL', wait_class) AS CHAR(64))"))) {
+              "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64))",
+              "CAST(IF (event_no = 0, 'NULL', wait_class) AS CHAR(64))"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -3021,7 +2996,7 @@ int ObDbmsWorkloadRepository::print_ash_top_sessions(const AshReportParams &ash_
                 "FROM session_data "
                 "GROUP BY svr_ip, svr_port, session_id, program "
                 "ORDER BY total_sample_count DESC %s), ",
-                  lib::is_oracle_mode() ? "FETCH FIRST 15 ROWS ONLY" : "LIMIT 15"))) {
+                  "LIMIT 15"))) {
         LOG_WARN("append top session topic text failed", K(ret));
       } else if (OB_FAIL(sql_string.append(
               "top_event AS ("
@@ -3077,7 +3052,7 @@ int ObDbmsWorkloadRepository::print_ash_top_sessions(const AshReportParams &ash_
               "LEFT JOIN top_event te ON ts.session_id = te.session_id and ts.svr_ip = te.svr_ip and ts.svr_port = te.svr_port "
               "LEFT JOIN top_sql tsq ON ts.session_id = tsq.session_id and ts.svr_ip = tsq.svr_ip and ts.svr_port = tsq.svr_port "
               "ORDER BY ts.total_sample_count DESC",
-              lib::is_oracle_mode() ? "ts.svr_ip||':'||ts.svr_port" : "CONCAT(ts.svr_ip, ':', ts.svr_port)"//%s AS node
+              "CONCAT(ts.svr_ip, ':', ts.svr_port)"//%s AS node
               ))) {
         LOG_WARN("append the main topic failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
@@ -3176,9 +3151,8 @@ int ObDbmsWorkloadRepository::print_ash_top_group(const AshReportParams &ash_rep
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 11;
@@ -3239,7 +3213,7 @@ int ObDbmsWorkloadRepository::print_ash_top_group(const AshReportParams &ash_rep
           "ORDER BY action_time DESC %s"
         ") ",
         num_samples / 100, //WHERE action_time >= %ld, drop %action < 1%
-        lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"))) { //ORDER BY action_time DESC %s
+        "LIMIT 30"))) { //ORDER BY action_time DESC %s
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append(
         "SELECT SVR_IP, SVR_PORT, NODE_TIME, "
@@ -3428,9 +3402,8 @@ int ObDbmsWorkloadRepository::print_action_activity_over_time(const AshReportPar
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy_ is nullptr", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 6;
@@ -3481,16 +3454,12 @@ int ObDbmsWorkloadRepository::print_action_activity_over_time(const AshReportPar
                           "CASE WHEN action IS NULL THEN 'UNDEFINED' ELSE action END AS action, "
                           "%s AS utc_seconds "
                   "FROM (",
-          lib::is_oracle_mode() ? "ROUND((slot_end_time - slot_begin_time) * 86400)"
-                                : "UNIX_TIMESTAMP(slot_end_time) - UNIX_TIMESTAMP(slot_begin_time)", //%s AS interval_time
-          lib::is_oracle_mode() ? "TO_DATE('1970-01-01') + (utc_seconds - MOD(utc_seconds, interval_time)) / 86400"
-                                : "FROM_UNIXTIME(utc_seconds - (utc_seconds % interval_time))", //%s AS slot_begin_time
-          lib::is_oracle_mode() ? "TO_DATE('1970-01-01') + (utc_seconds + interval_time - MOD(utc_seconds, interval_time)) / 86400"
-                                : "FROM_UNIXTIME(utc_seconds + interval_time - (utc_seconds % interval_time))", //%s AS slot_end_time
+          "UNIX_TIMESTAMP(slot_end_time) - UNIX_TIMESTAMP(slot_begin_time)", //%s AS interval_time
+          "FROM_UNIXTIME(utc_seconds - (utc_seconds % interval_time))", //%s AS slot_begin_time
+          "FROM_UNIXTIME(utc_seconds + interval_time - (utc_seconds % interval_time))", //%s AS slot_end_time
           min_sample_time, max_sample_time, //%s AS min_sample_time, %s AS max_sample_time
           DEFAULT_INTERVAL_TIME, //%d AS interval_time
-          lib::is_oracle_mode() ? "ROUND((CAST(sample_time AS DATE) - DATE '1970-01-01') * 86400)"
-                                : "CAST(UNIX_TIMESTAMP(sample_time) AS SIGNED)") //%s AS utc_seconds
+          "CAST(UNIX_TIMESTAMP(sample_time) AS SIGNED)") //%s AS utc_seconds
         )) {
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
@@ -3523,7 +3492,7 @@ int ObDbmsWorkloadRepository::print_action_activity_over_time(const AshReportPar
             "ORDER BY cnt DESC %s"
           "), ",
           num_samples / 100, //HAVING SUM(count_weight) >= %ld, drop %action < 1%
-          lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"))) { //ORDER BY cnt DESC %s
+          "LIMIT 30"))) { //ORDER BY cnt DESC %s
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(sql_string.append(
           "top_slot AS ("
@@ -3672,9 +3641,8 @@ int ObDbmsWorkloadRepository::print_ash_top_latches(const AshReportParams &ash_r
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 4;
@@ -3690,8 +3658,7 @@ int ObDbmsWorkloadRepository::print_ash_top_latches(const AshReportParams &ash_r
       } else if (OB_FAIL(sql_string.append_fmt(
         "SELECT %s AS EVENT, SUM(count_weight) AS CNT "
         "FROM (",
-        lib::is_oracle_mode() ? "CAST(DECODE(EVENT_NO, 0, 'ON CPU', EVENT) AS VARCHAR2(64))"
-                              : "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT) AS CHAR(64))"))) {
+        "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT) AS CHAR(64))"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -3703,7 +3670,7 @@ int ObDbmsWorkloadRepository::print_ash_top_latches(const AshReportParams &ash_r
         "ORDER BY cnt DESC "))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
-        "%s", lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"))) {
+        "%s", "LIMIT 30"))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
         LOG_WARN("falied to execute sql", KR(ret), K(request_tenant_id), K(sql_string));
@@ -3786,9 +3753,8 @@ int ObDbmsWorkloadRepository::print_ash_activity_over_time(const AshReportParams
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 7;
@@ -3831,16 +3797,12 @@ int ObDbmsWorkloadRepository::print_ash_activity_over_time(const AshReportParams
                           "CASE WHEN event_no = 0 THEN 'NULL' ELSE wait_class END AS wait_class, "
                           "%s AS utc_seconds "
                   "FROM (",
-          lib::is_oracle_mode() ? "ROUND((slot_end_time - slot_begin_time) * 86400)"
-                                : "UNIX_TIMESTAMP(slot_end_time) - UNIX_TIMESTAMP(slot_begin_time)", //%s AS interval_time
-          lib::is_oracle_mode() ? "TO_DATE('1970-01-01') + (utc_seconds - MOD(utc_seconds, interval_time)) / 86400"
-                                : "FROM_UNIXTIME(utc_seconds - (utc_seconds % interval_time))", //%s AS slot_begin_time
-          lib::is_oracle_mode() ? "TO_DATE('1970-01-01') + (utc_seconds + interval_time - MOD(utc_seconds, interval_time)) / 86400"
-                                : "FROM_UNIXTIME(utc_seconds + interval_time - (utc_seconds % interval_time))", //%s AS slot_end_time
+          "UNIX_TIMESTAMP(slot_end_time) - UNIX_TIMESTAMP(slot_begin_time)", //%s AS interval_time
+          "FROM_UNIXTIME(utc_seconds - (utc_seconds % interval_time))", //%s AS slot_begin_time
+          "FROM_UNIXTIME(utc_seconds + interval_time - (utc_seconds % interval_time))", //%s AS slot_end_time
           min_sample_time, max_sample_time, //%s AS min_sample_time, %s AS max_sample_time
           time_window, //%d AS interval_time
-          lib::is_oracle_mode() ? "ROUND((CAST(sample_time AS DATE) - DATE '1970-01-01') * 86400)"
-                                : "CAST(UNIX_TIMESTAMP(sample_time) AS SIGNED)") //%s AS utc_seconds
+          "CAST(UNIX_TIMESTAMP(sample_time) AS SIGNED)") //%s AS utc_seconds
         )) {
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
@@ -3882,7 +3844,7 @@ int ObDbmsWorkloadRepository::print_ash_activity_over_time(const AshReportParams
                 "ON te.slot_begin_time = ts.slot_begin_time AND te.interval_time = ts.interval_time "
             "WHERE te.event_rank <= 5 "
             "ORDER BY ts.slot_begin_time, ts.interval_time, te.event_rank "
-            "%s", lib::is_oracle_mode() ? "FETCH FIRST 50 ROWS ONLY" : "LIMIT 50"))) {
+            "%s", "LIMIT 50"))) {
         LOG_WARN("append sql string failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
         LOG_WARN("falied to execute sql", KR(ret), K(request_tenant_id), K(sql_string));
@@ -3975,9 +3937,8 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t tenant_id = MTL_ID();
     const int64_t column_size = 10;
@@ -4000,8 +3961,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
           "SELECT sql_id, svr_ip, svr_port, session_id, trace_id, "
                   " plan_hash, sql_plan_line_id, event_no, %s AS event, time_model, count_weight, action "
           "FROM (",
-        lib::is_oracle_mode() ? "CAST(DECODE(event_no, 0, 'ON CPU', event) AS VARCHAR2(64))"
-                              : "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64)) "))) {
+        "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64)) "))) {
         LOG_WARN("append sql string failed", KR(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -4053,10 +4013,8 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
                   " ) ) "
               " WHERE sql_id is not null "
           " ), ",
-          lib::is_oracle_mode() ? "BITAND(time_model, 3178509) "
-                              : "(time_model & 3178509) ",
-          lib::is_oracle_mode() ? "BITAND(time_model, 3178509) " 
-                              : "(time_model & 3178509) "))) {
+          "(time_model & 3178509) ",
+          "(time_model & 3178509) "))) {
         LOG_WARN("failed to append sql string", K(ret)); 
       } else if (OB_FAIL(append_time_model_view_sql(
         tm_view,"sql_id, plan_hash, event_no", tm_cols_wrap, tm_flags_wrap, "session_data_fixup", true))) {
@@ -4105,7 +4063,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
           ") "
         "), ",
           num_samples / 100, //HAVING SUM(count_weight) >=%ld, drop %% Activity < 1%
-          lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"))) { //DESC %s
+          "LIMIT 30"))) { //DESC %s
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append(
         "top_ash AS ("
@@ -4132,14 +4090,14 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
           "UNION ALL "
           "SELECT sql_id, %s AS query_sql FROM %s where query_sql %s "
         "), ",
-        lib::is_oracle_mode() ? "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHR(10), '''')), 0, 55) AS VARCHAR2(64))" : "query_sql",
-        lib::is_oracle_mode() ? "sys.gv$ob_sqlstat " : "oceanbase.gv$ob_sqlstat ",
-        lib::is_oracle_mode() ? "is not NULL " : "!= ''" ,
-        lib::is_oracle_mode() ? "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHR(10), '''')), 0, 55) AS VARCHAR2(64))" : "query_sql",
+        "query_sql",
+        "oceanbase.gv$ob_sqlstat ",
+        "!= ''" ,
+        "query_sql",
         lib::is_oracle_mode() ? "sys.DBA_WR_SQLTEXT "
                               : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQLTEXT " 
                                                                  : " oceanbase.DBA_WR_SQLTEXT ",
-        lib::is_oracle_mode() ? "is not NULL " : "!= ''" 
+        "!= ''" 
       ))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -4148,7 +4106,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
           "UNION ALL "
           "SELECT sql_id, plan_hash, id, operator, object_alias FROM %s "
         ")",
-        lib::is_oracle_mode() ? "sys.gv$ob_sql_plan " : "oceanbase.gv$ob_sql_plan ",
+        "oceanbase.gv$ob_sql_plan ",
         lib::is_oracle_mode() ? "sys.DBA_WR_SQL_PLAN "
                               : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQL_PLAN " 
                                                                  : " oceanbase.DBA_WR_SQL_PLAN "
@@ -4181,8 +4139,8 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
         "ORDER BY ash.plan_rank ASC, ash.event_rank ASC",
         lib::is_oracle_mode() ? "query_sql" //plan_hash, %s AS query_sql
                               : "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHAR(10), '''')), 1, 55) AS CHAR(64))",
-        lib::is_oracle_mode() ? "id || ':' || operator" : "CONCAT(id, ':', operator)", //CASE WHEN object_alias...THEN %s ...
-        lib::is_oracle_mode() ? "id || ':' || operator || ':' || object_alias" : "CONCAT(id, ':', operator, ':', object_alias)" //CASE WHEN object_alias...ELSE %s END
+        "CONCAT(id, ':', operator)", //CASE WHEN object_alias...THEN %s ...
+        "CONCAT(id, ':', operator, ':', object_alias)" //CASE WHEN object_alias...ELSE %s END
         ))) { //FROM %s) sp
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, tenant_id, sql_string.ptr()))) {
@@ -4308,9 +4266,8 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t tenant_id = MTL_ID();
     const int64_t column_size = 10;
@@ -4330,8 +4287,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
         "WITH session_data AS ("
           "SELECT sql_id, plan_hash, sql_plan_line_id, event_no, %s AS event, trace_id, count_weight, svr_ip, svr_port,session_id "
           "FROM (",
-        lib::is_oracle_mode() ? "CAST(DECODE(event_no, 0, 'ON CPU', event) AS VARCHAR2(64))"
-                              : "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64)) "))) {
+        "CAST(IF (event_no = 0, 'ON CPU', event) AS CHAR(64)) "))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -4369,7 +4325,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
           ") "
         "), ",
         num_samples / 100, //HAVING SUM(count_weight) >= %ld, drop %Activity < 1%
-        lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"))) { //DESC %s
+        "LIMIT 30"))) { //DESC %s
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append(
         "top_ash AS ("
@@ -4396,14 +4352,14 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
           "UNION ALL "
           "SELECT sql_id, %s AS query_sql FROM %s where query_sql %s "
         "), ",
-        lib::is_oracle_mode() ? "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHR(10), '''')), 0, 55) AS VARCHAR2(64))" : "query_sql",
-        lib::is_oracle_mode() ? "sys.gv$ob_sqlstat " : "oceanbase.gv$ob_sqlstat ",
-        lib::is_oracle_mode() ? "is not NULL " : "!= ''" ,
-        lib::is_oracle_mode() ? "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHR(10), '''')), 0, 55) AS VARCHAR2(64))" : "query_sql",
+        "query_sql",
+        "oceanbase.gv$ob_sqlstat ",
+        "!= ''" ,
+        "query_sql",
         lib::is_oracle_mode() ? "sys.DBA_WR_SQLTEXT "
                               : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQLTEXT " 
                                                                  : " oceanbase.DBA_WR_SQLTEXT ",
-        lib::is_oracle_mode() ? "is not NULL " : "!= ''" 
+        "!= ''" 
       ))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -4412,7 +4368,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
           "UNION ALL "
           "SELECT sql_id, plan_hash, id, operator, object_alias FROM %s "
         ")",
-        lib::is_oracle_mode() ? "sys.gv$ob_sql_plan " : "oceanbase.gv$ob_sql_plan ",
+        "oceanbase.gv$ob_sql_plan ",
         lib::is_oracle_mode() ? "sys.DBA_WR_SQL_PLAN "
                               : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQL_PLAN " 
                                                                  : " oceanbase.DBA_WR_SQL_PLAN "
@@ -4442,8 +4398,8 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
         "ORDER BY ash.plan_rank ASC, ash.operator_rank ASC",
         lib::is_oracle_mode() ? "query_sql " //plan_hash, %s AS query_sql
                               : "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHAR(10), '''')), 1, 55) AS CHAR(64))",
-        lib::is_oracle_mode() ? "id || ':' || operator" : "CONCAT(id, ':', operator)", //CASE WHEN object_alias...THEN %s ...
-        lib::is_oracle_mode() ? "id || ':' || operator || ':' || object_alias" : "CONCAT(id, ':', operator, ':', object_alias)" //CASE WHEN object_alias...ELSE %s END
+        "CONCAT(id, ':', operator)", //CASE WHEN object_alias...THEN %s ...
+        "CONCAT(id, ':', operator, ':', object_alias)" //CASE WHEN object_alias...ELSE %s END
         ))) { //FROM %s) sp
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, tenant_id, sql_string.ptr()))) {
@@ -4566,9 +4522,8 @@ int ObDbmsWorkloadRepository::print_top_sql_command_type(const AshReportParams &
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 8;
@@ -4629,10 +4584,8 @@ int ObDbmsWorkloadRepository::print_top_sql_command_type(const AshReportParams &
                   " ) t2 ON t1.session_id = t2.session_id AND t1.trace_id = t2.trace_id "
               " WHERE t2.session_id IS NULL AND t2.trace_id IS NULL )"
             " ), ",
-            lib::is_oracle_mode() ? "BITAND(time_model, 3178509) "
-                                : "(time_model & 3178509) ",
-            lib::is_oracle_mode() ? "BITAND(time_model, 3178509) " 
-                      : "(time_model & 3178509) "))) {
+            "(time_model & 3178509) ",
+            "(time_model & 3178509) "))) {
         LOG_WARN("failed to append sql string", K(ret));
       } else if (OB_FAIL(sql_string.append(
         "sql2stmt AS ("
@@ -4659,7 +4612,7 @@ int ObDbmsWorkloadRepository::print_top_sql_command_type(const AshReportParams &
           "LEFT JOIN sql2stmt s2s "
             "ON sd.sql_id = s2s.sql_id "
         ") ",
-        lib::is_oracle_mode() ? "sd.svr_ip||':'||sd.svr_port" : "CONCAT(sd.svr_ip, ':', sd.svr_port)" //%s AS node
+        "CONCAT(sd.svr_ip, ':', sd.svr_port)" //%s AS node
         ))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -4683,7 +4636,7 @@ int ObDbmsWorkloadRepository::print_top_sql_command_type(const AshReportParams &
           "ORDER BY node_samples DESC, node_rank ASC %s"
         ") top_stmt"
         " ORDER BY total_samples DESC, node_rank ASC",
-        lib::is_oracle_mode() ? "FETCH FIRST 15 ROWS ONLY" : "LIMIT 15"))) {
+        "LIMIT 15"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
         LOG_WARN("falied to execute sql", KR(ret), K(request_tenant_id), K(sql_string));
@@ -4777,9 +4730,8 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contens, 4))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     const uint64_t tenant_id = MTL_ID();
     const int64_t column_size = 4;
     const int64_t column_widths[column_size] = {60, 20, 60, 20};
@@ -4834,9 +4786,7 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                      "GROUP BY plsql_entry_object_id, plsql_entry_subprogram_id, "
                      "plsql_object_id, plsql_subprogram_id, plsql_subprogram_name "
                      "), ",
-                     lib::is_oracle_mode()
-                         ? "BITAND(time_model, 4096) > 0 OR BITAND(time_model, 2048) > 0"
-                         : "(time_model & 4096) > 0 OR (time_model & 2048) > 0"))) {
+                     "(time_model & 4096) > 0 OR (time_model & 2048) > 0"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
                      "top_sql_subprogram AS ("
@@ -4868,7 +4818,7 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                      ") tmp_subprogram "
                      "ORDER BY subprogram_cnt DESC %s "
                      "), ",
-                     lib::is_oracle_mode() ? "FETCH FIRST 50 ROWS ONLY" : "LIMIT 50"))) {
+                     "LIMIT 50"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt("pl_object AS ("
                                                "SELECT db.database_name AS owner, r.routine_name "
@@ -4887,19 +4837,12 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                                                "WHERE trg.database_id = db.database_id "
                                                "%s"
                                                ") ",
-                     lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT"
-                                           : "oceanbase.__all_database",
-                     lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_ROUTINE_REAL_AGENT"
-                                           : "oceanbase.__all_routine",  // FROM %s db, %s r
-                     lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT"
-                                           : "oceanbase.__all_database",
-                     lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_PACKAGE_REAL_AGENT"
-                                           : "oceanbase.__all_package",  // FROM %s db, %s p
-                     lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT"
-                                           : "oceanbase.__all_database",
-                     lib::is_oracle_mode()
-                         ? "SYS.ALL_VIRTUAL_TENANT_TRIGGER_REAL_AGENT"
-                         : "oceanbase.__all_tenant_trigger",  // FROM %s db, %s trg
+                     "oceanbase.__all_database",
+                     "oceanbase.__all_routine",  // FROM %s db, %s r
+                     "oceanbase.__all_database",
+                     "oceanbase.__all_package",  // FROM %s db, %s p
+                     "oceanbase.__all_database",
+                     "oceanbase.__all_tenant_trigger",  // FROM %s db, %s trg
                      lib::is_oracle_mode() ? "UNION ALL "
                                              "SELECT db.database_name AS owner, ps.package_name AS "
                                              "object_name, ps.package_id AS object_id "
@@ -4931,17 +4874,11 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
               "LEFT JOIN pl_object sub_obj "
               "ON ts.plsql_object_id = sub_obj.object_id "
               "ORDER BY te.entry_cnt DESC, ts.subprogram_rank",
-              lib::is_oracle_mode()
-                  ? "obj.owner"
-                  : "nvl(obj.owner, 'oceanbase')",  // sys package under MySQL mode cannot obtain
+              "nvl(obj.owner, 'oceanbase')",  // sys package under MySQL mode cannot obtain
                                                     // the owner name
-              lib::is_oracle_mode()
-                  ? "obj.object_name"
-                  : "nvl(obj.object_name, mysql_proc_info(te.plsql_entry_object_id, 'name'))",
-              lib::is_oracle_mode() ? "sub_obj.owner" : "nvl(sub_obj.owner, 'oceanbase')",
-              lib::is_oracle_mode()
-                  ? "sub_obj.object_name"
-                  : "nvl(sub_obj.object_name, mysql_proc_info(ts.plsql_object_id, 'name'))"))) {
+              "nvl(obj.object_name, mysql_proc_info(te.plsql_entry_object_id, 'name'))",
+              "nvl(sub_obj.owner, 'oceanbase')",
+              "nvl(sub_obj.object_name, mysql_proc_info(ts.plsql_object_id, 'name'))"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, tenant_id, sql_string.ptr()))) {
         LOG_WARN("failed to execute sql", KR(ret), K(tenant_id), K(sql_string));
@@ -5070,9 +5007,8 @@ int ObDbmsWorkloadRepository::print_top_sql_text(const AshReportParams &ash_repo
   } else if (OB_FAIL(print_section_header(ash_report_params, buff, "Complete List of SQL Text"))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     const uint64_t tenant_id = MTL_ID();
     HEAP_VARS_2((ObISQLClient::ReadResult, res), (ObSqlString, sql_string))
     {
@@ -5085,7 +5021,7 @@ int ObDbmsWorkloadRepository::print_top_sql_text(const AshReportParams &ash_repo
                   "ROW_NUMBER() OVER(PARTITION BY sql_id ORDER BY NULL) AS sql_rank "
           "FROM %s "
           "WHERE query_sql IS NOT NULL ",
-        lib::is_oracle_mode() ? "SYS.GV$OB_SQLSTAT" : "oceanbase.gv$ob_sqlstat"))) {
+        "oceanbase.gv$ob_sqlstat"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (!top_sql_ids.empty()) {
         if (OB_FAIL(sql_string.append(
@@ -5979,9 +5915,8 @@ int ObDbmsWorkloadRepository::print_top_blocking_session(const AshReportParams &
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, 4))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 11;
@@ -6053,7 +5988,7 @@ int ObDbmsWorkloadRepository::print_top_blocking_session(const AshReportParams &
           " ) top_waitting_sql "
           "ORDER BY sql_samples DESC %s"
         ")",
-          lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30" //ORDER BY sql_samples DESC %s
+          "LIMIT 30" //ORDER BY sql_samples DESC %s
         ))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -6081,7 +6016,7 @@ int ObDbmsWorkloadRepository::print_top_blocking_session(const AshReportParams &
         ") t "
         "WHERE t.holder_sql_rank = 1 "
         "ORDER BY t.session_samples DESC, t.event_samples DESC, t.sql_rank ASC",
-        lib::is_oracle_mode() ? "SYS.GV$OB_SQL_AUDIT" : "oceanbase.gv$ob_sql_audit"))) {
+        "oceanbase.gv$ob_sql_audit"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
         LOG_WARN("falied to execute sql", KR(ret), K(request_tenant_id), K(sql_string));
@@ -6230,9 +6165,8 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
   } else if (OB_FAIL(print_section_explaination_end(ash_report_params, buff))) {
     LOG_WARN("failed to push string into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
     ObCommonSqlProxy *sql_proxy =
-        lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+        static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const int64_t column_size = 11;
@@ -6260,9 +6194,7 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                         " session_id "
                     "  FROM ( "
                         " SELECT * FROM ( ",
-                  lib::is_oracle_mode()? 
-                    " module || '.' || action " :
-                    " CONCAT(module, '.', action)"))) {
+                  " CONCAT(module, '.', action)"))) {
         LOG_WARN("failed to append sql string", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -6389,7 +6321,7 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
                 "  FROM %s A JOIN %s D ON A.DATABASE_ID = D.DATABASE_ID "
             " ),",
           /*all_virtual_table*/
-          lib::is_oracle_mode()? " SYS.ALL_VIRTUAL_TABLE_REAL_AGENT ": " oceanbase.__ALL_VIRTUAL_TABLE ",
+          " oceanbase.__ALL_VIRTUAL_TABLE ",
           /*all_virtual_database*/
           lib::is_oracle_mode()? " SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT ": is_sys_tenant(request_tenant_id)? " oceanbase.__ALL_VIRTUAL_DATABASE " : " oceanbase.__ALL_DATABASE "
           ))) {
@@ -6474,7 +6406,7 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
               " LEFT JOIN tablet_info ti ON tr.tablet_id = ti.tablet_id "
               " WHERE tr.event_rank <= 5 "
               " ORDER BY display_rank ASC; ",
-              lib::is_oracle_mode() ? "tr.svr_ip || ':' || tr.svr_port " : "CONCAT(tr.svr_ip, ':', tr.svr_port)" ))) {
+              "CONCAT(tr.svr_ip, ':', tr.svr_port)" ))) {
         LOG_WARN("failed to append sql string", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
         LOG_WARN("falied to execute sql", KR(ret), K(request_tenant_id), K(sql_string));
@@ -6632,8 +6564,7 @@ int ObDbmsWorkloadRepository::print_ash_top_io_bandwidth(const AshReportParams &
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push ash top io header into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
-    ObCommonSqlProxy *sql_proxy = lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+    ObCommonSqlProxy *sql_proxy = static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const uint64_t column_size  = 9;
@@ -6744,9 +6675,9 @@ int ObDbmsWorkloadRepository::print_ash_top_io_bandwidth(const AshReportParams &
                         "TYPE, TABLET_ID, TOTAL_IO_COUNTS, TOTAL_IO_BYTES "
                 "FROM module_data WHERE RANK=1 "
         ") ORDER BY TOTAL_IO_BYTES / TOTAL_DELTA_TIME DESC %s",
-        lib::is_oracle_mode() ? "svr_ip || ':' || svr_port" : "CONCAT(svr_ip, ':', svr_port)",
-        lib::is_oracle_mode() ? "svr_ip || ':' || svr_port" : "CONCAT(svr_ip, ':', svr_port)",
-        lib::is_oracle_mode() ? "FETCH FIRST 50 ROW ONLY" : "LIMIT 50"
+        "CONCAT(svr_ip, ':', svr_port)",
+        "CONCAT(svr_ip, ':', svr_port)",
+        "LIMIT 50"
       ))) {
         LOG_WARN("Failed to append top io sql");
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
@@ -6864,8 +6795,7 @@ int ObDbmsWorkloadRepository::print_ash_top_io_event(const AshReportParams &ash_
   } else if (OB_FAIL(print_section_header_and_explaination(ash_report_params, buff, contents, ARRAYSIZEOF(contents)))) {
     LOG_WARN("failed to push ash top io header into buff", K(ret));
   } else {
-    ObOracleSqlProxy oracle_proxy(*(static_cast<ObMySQLProxy *>(GCTX.sql_proxy_)));
-    ObCommonSqlProxy *sql_proxy = lib::is_oracle_mode() ? &oracle_proxy : static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
+    ObCommonSqlProxy *sql_proxy = static_cast<ObCommonSqlProxy *>(GCTX.sql_proxy_);
     bool with_color = true;
     const uint64_t request_tenant_id = MTL_ID();
     const uint64_t column_size  = 11;
@@ -6896,7 +6826,7 @@ int ObDbmsWorkloadRepository::print_ash_top_io_event(const AshReportParams &ash_
           "SELECT event_id, display_name as event_name, wait_class as type "
           "FROM %s "
         "), ",
-        lib::is_oracle_mode() ? "sys.V$EVENT_NAME" : "oceanbase.V$EVENT_NAME"
+        "oceanbase.V$EVENT_NAME"
       ))) {
         LOG_WARN("Failed to append top io time sql");
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -7050,9 +6980,9 @@ int ObDbmsWorkloadRepository::print_ash_top_io_event(const AshReportParams &ash_
               "mad.type AS TYPE "
             "FROM module_all_data mad "
         ") ORDER BY ROW_COUNT DESC, ROW_RANK ASC, EVENT_RANK ASC %s ",
-        lib::is_oracle_mode() ? "svr_ip || ':' || svr_port" : "CONCAT(svr_ip, ':', svr_port)",
-        lib::is_oracle_mode() ? "svr_ip || ':' || svr_port" : "CONCAT(svr_ip, ':', svr_port)",
-        lib::is_oracle_mode() ? "FETCH FIRST 30 ROWS ONLY" : "LIMIT 30"
+        "CONCAT(svr_ip, ':', svr_port)",
+        "CONCAT(svr_ip, ':', svr_port)",
+        "LIMIT 30"
       ))) {
         LOG_WARN("Failed to append top io sql");
       } else if (OB_FAIL(sql_proxy->read(res, request_tenant_id, sql_string.ptr()))) {
