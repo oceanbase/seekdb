@@ -991,7 +991,7 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
       || IS_LABEL_SE_POLICY_FUNC(type_)
       || (T_FUN_SYS_LAST_INSERT_ID == type_ && get_param_count() > 0)
       || T_FUN_SYS_TO_BLOB == type_
-      || (T_FUN_SYS_SYSDATE == type_ && lib::is_mysql_mode())
+      || T_FUN_SYS_SYSDATE == type_
       || (param_need_replace ? is_not_calculable_expr() : cnt_not_calculable_expr())
       || T_FUN_LABEL_SE_SESSION_LABEL == type_
       || T_FUN_LABEL_SE_SESSION_ROW_LABEL == type_
@@ -7193,7 +7193,7 @@ uint64_t ObMatchFunRawExpr::hash_internal(uint64_t seed) const
 int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64_t &pos, ExplainType type) const
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode() && !is_es_match()) {
+  if (!is_es_match()) {
     if (OB_FAIL(BUF_PRINTF("MATCH("))) {
       LOG_WARN("fail to BUF_PRINTF", K(ret));
     } else {
@@ -7246,7 +7246,7 @@ int ObMatchFunRawExpr::get_name_internal(char *buf, const int64_t buf_len, int64
         }
       }
     }
-  } else if (lib::is_mysql_mode() && is_es_match()) {
+  } else if (is_es_match()) {
     if (OB_FAIL(BUF_PRINTF("MATCH("))) {
       LOG_WARN("fail to BUF_PRINTF", K(ret));
     } else {

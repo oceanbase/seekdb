@@ -547,7 +547,7 @@ int ObExprRegexContext::preprocess_pattern(ObExprStringBuf &string_buf,
                                            ObString &pattern)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
+  if (true) {
     pattern = origin_pattern;
   } else if (origin_pattern.length() / sizeof(UChar) > strlen("[^][:]")) {
     /*oracle mode allow:
@@ -655,13 +655,7 @@ int ObExprRegexContext::get_regexp_flags(const ObString &match_param,
         flags |= UREGEX_DOTALL;
         break;
       case 'u':
-        if (lib::is_mysql_mode()) {//compatible oracle
-          flags |= UREGEX_UNIX_LINES;
-        } else {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid match param", K(match_param), K(c));
-          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "use match param in regexp expression");
-        }
+        flags |= UREGEX_UNIX_LINES;
         break;
       case 'x':
         ret = OB_INVALID_ARGUMENT;
@@ -713,7 +707,7 @@ int ObExprRegexContext::get_valid_replace_string(ObIAllocator &alloc,
   u_replace_len = 0;
   u_replace = NULL;
   int32_t buf_len = origin_replace.empty() ? sizeof(UChar) : origin_replace.length() * 2;
-  if (lib::is_mysql_mode()) {
+  if (true) {
     if (OB_FAIL(get_valid_unicode_string(alloc, origin_replace, u_replace, u_replace_len))) {
       LOG_WARN("failed to get valid unicode string", K(ret));
     } else {/*do nothing*/}

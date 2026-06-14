@@ -54,9 +54,9 @@ int ObExprMod::calc_result_type2(ObExprResType &type,
     } else {
       type.set_scale(MAX(scale1, scale2));
       type.set_precision(MAX(type1.get_precision(), type2.get_precision()));
-      if (lib::is_mysql_mode() && type.is_double()) {
+      if (type.is_double()) {
         type.set_precision(ObMySQLUtil::float_length(type.get_scale()));
-      } else if (lib::is_mysql_mode() && type.is_decimal_int()) {
+      } else if (type.is_decimal_int()) {
         // In mysql mode, precision of int(255) is 255, more than OB_MAX_DECIMAL_POSSIBLE_PRECISION
         // So precision deduced just now may be larger than 81 while res type is decimal_int
         // TODO:@xiaofeng.lby, use a more generic method to solve this problem
@@ -512,8 +512,7 @@ int ObExprMod::cg_expr(ObExprCGCtx &op_cg_ctx,
     LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
-    if (lib::is_mysql_mode()
-        && is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())
+    if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())
         && is_strict_mode(op_cg_ctx.session_->get_sql_mode())
         && !op_cg_ctx.session_->is_ignore_stmt()
         && (stmt::T_INSERT == stmt_type
