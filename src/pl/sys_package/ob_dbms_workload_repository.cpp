@@ -507,7 +507,7 @@ int ObDbmsWorkloadRepository::generate_ash_report_text(
     }
 
     if (OB_SUCC(ret)) {
-      ObTextStringResult text_res(lib::is_oracle_mode()? ObLongTextType : ObTextType, true, &ctx.exec_ctx_->get_allocator());
+      ObTextStringResult text_res(ObTextType, true, &ctx.exec_ctx_->get_allocator());
       if (FALSE_IT(
               result.set_collation_type(ctx.exec_ctx_->get_my_session()->get_nls_collation()))) {
       } else if (OB_FAIL(text_res.init(buff.length()))) {
@@ -517,7 +517,7 @@ int ObDbmsWorkloadRepository::generate_ash_report_text(
       } else {
         ObString lob_str;
         text_res.get_result_buffer(lob_str);
-        OX(result.set_lob_value(lib::is_oracle_mode()? ObLongTextType : ObTextType, lob_str.ptr(), lob_str.length()));
+        OX(result.set_lob_value(ObTextType, lob_str.ptr(), lob_str.length()));
         OX(result.set_has_lob_header());
       }
     }
@@ -603,9 +603,6 @@ int ObDbmsWorkloadRepository::get_ash_bound_sql_time(const AshReportParams &ash_
                                     time_buf_len,
                                     time_buf_pos))) {
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "fail to print time as str", K(ret));
-  } else if (is_oracle_mode()) {
-    snprintf(start_time_buf, start_buf_len, "TO_DATE('%s')", ash_begin_time_buf);
-    snprintf(end_time_buf, end_buf_len, "TO_DATE('%s')", ash_end_time_buf);
   } else {
     snprintf(start_time_buf, start_buf_len, "TIMESTAMP'%s'", ash_begin_time_buf);
     snprintf(end_time_buf, end_buf_len, "TIMESTAMP'%s'", ash_end_time_buf);
@@ -621,7 +618,7 @@ int ObDbmsWorkloadRepository::usec_to_string(const common::ObTimeZoneInfo *tz_in
   if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(usec, tz_info, time))) {
     LOG_WARN("failed to usec to ob time", K(ret), K(usec));
   } else if (OB_FAIL(ObTimeConverter::ob_time_to_str(time,
-                 lib::is_oracle_mode() ? DT_TYPE_ORACLE_TIMESTAMP : DT_TYPE_DATETIME, 0 /*scale*/,
+                 DT_TYPE_DATETIME, 0 /*scale*/,
                  buf, buf_len, pos, true /*with_delim*/))) {
     LOG_WARN("fail to change time to string", K(ret), K(time), K(pos));
   }
@@ -1503,7 +1500,7 @@ int ObDbmsWorkloadRepository::append_fmt_ash_view_sql(
   } else if (OB_FAIL(sql_string.append_fmt(ash_view_ptr,
                  "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT) AS CHAR(64)) AS EVENT,",
                  "CAST(IF (EVENT_NO = 0, 'NULL', WAIT_CLASS) AS CHAR(64)) AS WAIT_CLASS,",
-                 lib::is_oracle_mode() ? oracle_table : mysql_table,
+                 mysql_table,
                  static_cast<int>(time_buf_pos),
                  ash_begin_time_buf,
                  static_cast<int>(time_buf_pos),
@@ -1576,11 +1573,7 @@ int ObDbmsWorkloadRepository::append_time_model_view_sql(ObSqlString &sql_string
       LOG_WARN("append sql string failed", KR(ret));
     } else if (with_sum && OB_FAIL(sql_string.append("SUM("))) {
       LOG_WARN("append sql string failed", KR(ret));
-    } else if (lib::is_oracle_mode() &&
-      OB_FAIL(sql_string.append_fmt("CASE WHEN BITAND(TIME_MODEL, %ld) = 0 THEN 0 ELSE COUNT_WEIGHT END", timemodel_flag))) {
-      LOG_WARN("append timemodel flag failed", KR(ret));
-    } else if (!lib::is_oracle_mode() &&
-      OB_FAIL(sql_string.append_fmt("CASE WHEN (time_model & %ld) = 0 THEN 0 ELSE COUNT_WEIGHT END", timemodel_flag))) {
+    } else if (OB_FAIL(sql_string.append_fmt("CASE WHEN (time_model & %ld) = 0 THEN 0 ELSE COUNT_WEIGHT END", timemodel_flag))) {
       LOG_WARN("append timemodel flag failed", KR(ret));
     } else if (with_sum && OB_FAIL(sql_string.append(")"))) {
       LOG_WARN("append sql string failed", KR(ret));
@@ -1710,9 +1703,8 @@ int ObDbmsWorkloadRepository::append_fmt_wr_view_sql(
                  " CAST(IF (SESSION_TYPE = 0, 'FOREGROUND', 'BACKGROUND') AS CHAR(10)) AS SESSION_TYPE,",
                  "CAST(IF (EVENT_NO = 0, 'ON CPU', EVENT_NAME) AS CHAR(64)) AS EVENT,",
                  "CAST(IF (EVENT_NO = 0, 'NULL', WAIT_CLASS) AS CHAR(64)) AS WAIT_CLASS,",
-                 lib::is_oracle_mode()                                 ? wr_oracle_table
-                 : ash_report_params.cur_tenant_id == OB_SYS_TENANT_ID ? wr_mysql_sys_table
-                                                                       : wr_mysql_tenant_table,
+                 ash_report_params.cur_tenant_id == OB_SYS_TENANT_ID ? wr_mysql_sys_table
+                                                                     : wr_mysql_tenant_table,
                  static_cast<int>(time_buf_pos),
                  wr_begin_time_buf,
                  static_cast<int>(time_buf_pos),
@@ -2074,13 +2066,9 @@ int ObDbmsWorkloadRepository::print_ash_summary_info(
                    wr_end_time_buf, time_buf_len, wr_end_time_buf_pos))) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "fail to print time as str", K(ret));
     } else {
-      if (lib::is_oracle_mode()) {
-        strncpy(wr_data_source_buf, "SYS.DBA_WR_ACTIVE_SESSION_HISTORY", data_source_len);
-      } else {
-        strncpy(wr_data_source_buf, ash_report_params.tenant_id == OB_SYS_TENANT_ID
-                                      ?  "oceanbase.CDB_WR_ACTIVE_SESSION_HISTORY"
-                                      : "oceanbase.DBA_WR_ACTIVE_SESSION_HISTORY", data_source_len);
-      }
+      strncpy(wr_data_source_buf, ash_report_params.tenant_id == OB_SYS_TENANT_ID
+                                    ?  "oceanbase.CDB_WR_ACTIVE_SESSION_HISTORY"
+                                    : "oceanbase.DBA_WR_ACTIVE_SESSION_HISTORY", data_source_len);
     }
 
     // OS info
@@ -4094,10 +4082,9 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
         "oceanbase.gv$ob_sqlstat ",
         "!= ''" ,
         "query_sql",
-        lib::is_oracle_mode() ? "sys.DBA_WR_SQLTEXT "
-                              : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQLTEXT " 
-                                                                 : " oceanbase.DBA_WR_SQLTEXT ",
-        "!= ''" 
+        is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQLTEXT "
+                                         : " oceanbase.DBA_WR_SQLTEXT ",
+        "!= ''"
       ))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -4107,9 +4094,8 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
           "SELECT sql_id, plan_hash, id, operator, object_alias FROM %s "
         ")",
         "oceanbase.gv$ob_sql_plan ",
-        lib::is_oracle_mode() ? "sys.DBA_WR_SQL_PLAN "
-                              : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQL_PLAN " 
-                                                                 : " oceanbase.DBA_WR_SQL_PLAN "
+        is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQL_PLAN "
+                                         : " oceanbase.DBA_WR_SQL_PLAN "
       ))){
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -4137,8 +4123,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_wait_events(
               "LEFT JOIN top_exec_phase tep "
               "ON ash.sql_id = tep.sql_id AND ash.plan_hash = tep.plan_hash AND ash.event_no = tep.event_no "
         "ORDER BY ash.plan_rank ASC, ash.event_rank ASC",
-        lib::is_oracle_mode() ? "query_sql" //plan_hash, %s AS query_sql
-                              : "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHAR(10), '''')), 1, 55) AS CHAR(64))",
+        "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHAR(10), '''')), 1, 55) AS CHAR(64))",
         "CONCAT(id, ':', operator)", //CASE WHEN object_alias...THEN %s ...
         "CONCAT(id, ':', operator, ':', object_alias)" //CASE WHEN object_alias...ELSE %s END
         ))) { //FROM %s) sp
@@ -4356,10 +4341,9 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
         "oceanbase.gv$ob_sqlstat ",
         "!= ''" ,
         "query_sql",
-        lib::is_oracle_mode() ? "sys.DBA_WR_SQLTEXT "
-                              : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQLTEXT " 
-                                                                 : " oceanbase.DBA_WR_SQLTEXT ",
-        "!= ''" 
+        is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQLTEXT "
+                                         : " oceanbase.DBA_WR_SQLTEXT ",
+        "!= ''"
       ))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -4369,9 +4353,8 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
           "SELECT sql_id, plan_hash, id, operator, object_alias FROM %s "
         ")",
         "oceanbase.gv$ob_sql_plan ",
-        lib::is_oracle_mode() ? "sys.DBA_WR_SQL_PLAN "
-                              : is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQL_PLAN " 
-                                                                 : " oceanbase.DBA_WR_SQL_PLAN "
+        is_sys_tenant(request_tenant_id) ? " oceanbase.CDB_WR_SQL_PLAN "
+                                         : " oceanbase.DBA_WR_SQL_PLAN "
       ))){
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
@@ -4396,8 +4379,7 @@ int ObDbmsWorkloadRepository::print_top_sql_with_top_operator(
                    "FROM sql_plan) sp "
               "ON ash.sql_id = sp.sql_id AND ash.plan_hash = sp.plan_hash AND ash.sql_plan_line_id = sp.id "
         "ORDER BY ash.plan_rank ASC, ash.operator_rank ASC",
-        lib::is_oracle_mode() ? "query_sql " //plan_hash, %s AS query_sql
-                              : "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHAR(10), '''')), 1, 55) AS CHAR(64))",
+        "CAST(SUBSTR(TRIM(REPLACE(query_sql, CHAR(10), '''')), 1, 55) AS CHAR(64))",
         "CONCAT(id, ':', operator)", //CASE WHEN object_alias...THEN %s ...
         "CONCAT(id, ':', operator, ':', object_alias)" //CASE WHEN object_alias...ELSE %s END
         ))) { //FROM %s) sp
@@ -4751,13 +4733,9 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                      "%s"
                      "time_model, count_weight "
                      "FROM (",
-                     lib::is_oracle_mode()
-                         ? "CAST(CASE WHEN BITAND(TIME_MODEL , 2048) > 0 THEN 'Y' ELSE 'N' END  AS VARCHAR2(1)) AS IN_PLSQL_COMPILATION, "
-                         "CAST(CASE WHEN BITAND(TIME_MODEL , 4096) > 0 THEN 'Y' ELSE 'N' END  AS VARCHAR2(1)) AS IN_PLSQL_EXECUTION, "
-                         "CAST(CASE WHEN BITAND(TIME_MODEL , 16) > 0 THEN 'Y' ELSE 'N' END  AS VARCHAR2(1)) AS IN_SQL_EXECUTION, "
-                         : "CAST(CASE WHEN (TIME_MODEL & 2048) > 0 THEN 'Y' ELSE 'N' END AS CHAR(1)) AS IN_PLSQL_COMPILATION, "
-                         "CAST(CASE WHEN (TIME_MODEL & 4096) > 0 THEN 'Y' ELSE 'N' END AS CHAR(1)) AS IN_PLSQL_EXECUTION, "
-                         "CAST(CASE WHEN (TIME_MODEL & 16) > 0 THEN 'Y' ELSE 'N' END AS CHAR(1)) AS IN_SQL_EXECUTION, "))) {
+                     "CAST(CASE WHEN (TIME_MODEL & 2048) > 0 THEN 'Y' ELSE 'N' END AS CHAR(1)) AS IN_PLSQL_COMPILATION, "
+                     "CAST(CASE WHEN (TIME_MODEL & 4096) > 0 THEN 'Y' ELSE 'N' END AS CHAR(1)) AS IN_PLSQL_EXECUTION, "
+                     "CAST(CASE WHEN (TIME_MODEL & 16) > 0 THEN 'Y' ELSE 'N' END AS CHAR(1)) AS IN_SQL_EXECUTION, "))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(append_fmt_ash_wr_view_sql(ash_report_params, sql_string))) {
         LOG_WARN("failed to append fmt ash view sql", K(ret));
@@ -4800,10 +4778,8 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                      "AND (%s) "
                      "GROUP BY plsql_entry_object_id, plsql_entry_subprogram_id "
                      "), ",
-                     lib::is_oracle_mode() ? "BITAND(time_model, 16) > 0 AND BITAND(time_model, "
-                                             "4096) = 0 AND BITAND(time_model, 2048) = 0"
-                                           : "(time_model & 16) > 0 AND (time_model & 4096) = 0 "
-                                             "AND (time_model & 2048) = 0"))) {
+                     "(time_model & 16) > 0 AND (time_model & 4096) = 0 "
+                     "AND (time_model & 2048) = 0"))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_string.append_fmt(
                      "top_subprogram AS ("
@@ -4843,13 +4819,7 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                      "oceanbase.__all_package",  // FROM %s db, %s p
                      "oceanbase.__all_database",
                      "oceanbase.__all_tenant_trigger",  // FROM %s db, %s trg
-                     lib::is_oracle_mode() ? "UNION ALL "
-                                             "SELECT db.database_name AS owner, ps.package_name AS "
-                                             "object_name, ps.package_id AS object_id "
-                                             "FROM SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT db, "
-                                             "SYS.ALL_VIRTUAL_PACKAGE_SYS_AGENT ps "
-                                             "WHERE ps.database_id = db.database_id "
-                                           : ""  // oracle mode from db, sp
+                     ""  // oracle mode from db, sp
                      ))) {
         LOG_WARN("append sql failed", K(ret));
       } else if (
@@ -5165,18 +5135,8 @@ int ObDbmsWorkloadRepository::process_ash_report_params(
       LOG_WARN("failed to get wait class from params", K(ret), K(params.at(4)));
     } else {
 
-      if (lib::is_oracle_mode()) {
-        if (OB_FAIL(cast_otimestamp_mydatetime(
-                params.at(0), ash_report_params.ash_begin_time, ash_report_params))) {
-          LOG_WARN("failed to convert otimestamp", K(ret));
-        } else if (OB_FAIL(cast_otimestamp_mydatetime(
-                       params.at(1), ash_report_params.ash_end_time, ash_report_params))) {
-          LOG_WARN("failed to convert otimestamp", K(ret));
-        }
-      } else {
-        ash_report_params.ash_begin_time = params.at(0).get_timestamp();
-        ash_report_params.ash_end_time = params.at(1).get_timestamp();
-      }
+      ash_report_params.ash_begin_time = params.at(0).get_timestamp();
+      ash_report_params.ash_end_time = params.at(1).get_timestamp();
 
       ash_report_params.user_input_ash_begin_time = ash_report_params.ash_begin_time;
       ash_report_params.user_input_ash_end_time = ash_report_params.ash_end_time;
@@ -5186,14 +5146,7 @@ int ObDbmsWorkloadRepository::process_ash_report_params(
           LOG_WARN("failed to get svr_ip from params", K(ret), K(params.at(5)));
         }
         if (OB_SUCC(ret) && !params.at(6).is_null()) {
-          if (lib::is_oracle_mode()) {
-            if (!params.at(6).get_number().is_valid_int64(ash_report_params.port)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("cast svr prot to int_64 fail", K(ret));
-            }
-          } else {
-            ash_report_params.port = params.at(6).get_int();
-          }
+          ash_report_params.port = params.at(6).get_int();
         } else {
           ash_report_params.port = -1;
         }
@@ -5210,14 +5163,7 @@ int ObDbmsWorkloadRepository::process_ash_report_params(
         }
         if (OB_SUCC(ret)) {
           if (OB_SUCC(ret) && !params.at(7).is_null()) {
-            if (lib::is_oracle_mode()) {
-              if (!params.at(7).get_number().is_valid_int64(ash_report_params.tenant_id)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("cast svr prot to int_64 fail", K(ret));
-              }
-            } else {
-              ash_report_params.tenant_id = params.at(7).get_int();
-            }
+            ash_report_params.tenant_id = params.at(7).get_int();
 
             if (MTL_ID() != OB_SYS_TENANT_ID && ash_report_params.tenant_id != MTL_ID()) {
               ret = OB_OP_NOT_ALLOW;
@@ -6323,24 +6269,10 @@ int ObDbmsWorkloadRepository::print_top_db_object(const AshReportParams &ash_rep
           /*all_virtual_table*/
           " oceanbase.__ALL_VIRTUAL_TABLE ",
           /*all_virtual_database*/
-          lib::is_oracle_mode()? " SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT ": is_sys_tenant(request_tenant_id)? " oceanbase.__ALL_VIRTUAL_DATABASE " : " oceanbase.__ALL_DATABASE "
+          is_sys_tenant(request_tenant_id)? " oceanbase.__ALL_VIRTUAL_DATABASE " : " oceanbase.__ALL_DATABASE "
           ))) {
         LOG_WARN("failed to append sql string", K(ret));
-      } else if (lib::is_oracle_mode() && OB_FAIL(tmp_concat_string.append(
-        " ( database_name || '.' ||  CASE WHEN table_type IN ('INDEX', 'LOB AUX TABLE') THEN data_table_name ELSE table_name END || "
-        " CASE "
-            " WHEN table_type = 'INDEX' THEN '.' || index_name "
-            " WHEN table_type = 'LOB AUX TABLE' THEN '.lob_aux_table' "
-            " ELSE '' "
-        " END || "
-        " CASE "
-            " WHEN subpartition_name <> 'NULL' THEN '(' || subpartition_name || ')' "
-            " WHEN partition_name <> 'NULL' THEN '(' || partition_name || ')' "
-            " ELSE '' "
-        " END )  "
-      ))) {
-        LOG_WARN("failed to append tmp concat string", K(ret));
-      } else if (!lib::is_oracle_mode() && OB_FAIL(tmp_concat_string.append(
+      } else if (OB_FAIL(tmp_concat_string.append(
         " CONCAT( "
             " database_name, '.',  "
             " CASE WHEN table_type IN ('INDEX', 'LOB AUX TABLE') THEN data_table_name ELSE table_name END, "
