@@ -250,7 +250,7 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
       if (OB_SUCC(ret) && NULL != parse_tree->children_[2]) {
         if (OB_FAIL(resolve_ident(parse_tree->children_[2], end_label))) {
           LOG_WARN("failed to resolve ident", K(parse_tree->children_[2]), K(ret));
-        } else if (lib::is_mysql_mode()) {
+        } else {
           bool find_flag = false;
           for (int64_t i = 0; i < labels.count(); ++i) {
             if (0 == labels.at(i).case_compare(end_label)) {
@@ -261,18 +261,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
             ret =  OB_ERR_SP_LILABEL_MISMATCH;
             LOG_USER_ERROR(OB_ERR_SP_LILABEL_MISMATCH, end_label.length(), end_label.ptr());
             LOG_WARN("begin label is not match with end label", K(label), K(end_label), K(ret));
-          }
-        } else { // Oracle's EndLabel behavior, only match EndLabel at the end of Procedure and Function
-          if (NULL != current_block_
-              && NULL == current_block_->get_namespace().get_pre_ns()) {
-            if (func.get_name().case_compare("__anonymous_block__") != 0
-                && end_label.compare(func.get_name()) != 0) {
-              ret =  OB_ERR_END_LABEL_NOT_MATCH;
-              LOG_WARN("begin label is not match with end label", K(label), K(end_label), K(ret));
-              LOG_USER_ERROR(OB_ERR_END_LABEL_NOT_MATCH,
-                             end_label.length(), end_label.ptr(),
-                             func.get_name().length(), func.get_name().ptr());
-            }
           }
         }
       }
@@ -376,10 +364,9 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         RESOLVE_STMT(PL_RETURN, resolve_return, ObPLReturnStmt);
         // OB_ERR_FUNCTION_UNKNOWN need set too.
         // case: CREATE FUNCTION f1() RETURNS INT RETURN f1()
-        if (lib::is_mysql_mode()
-            && (OB_SUCCESS == ret
-                || OB_ERR_FUNCTION_UNKNOWN == ret
-                || OB_ERR_SP_DOES_NOT_EXIST == ret)) {
+        if (OB_SUCCESS == ret
+            || OB_ERR_FUNCTION_UNKNOWN == ret
+            || OB_ERR_SP_DOES_NOT_EXIST == ret) {
           func.set_return();
         }
       }
@@ -396,10 +383,8 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         break;
       case T_SP_DO: {
         RESOLVE_STMT(PL_DO, resolve_do, ObPLDoStmt);
-        if (lib::is_mysql_mode()) {
-          if (!func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
-            func.set_contains_sql();
-          }
+        if (!func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
+          func.set_contains_sql();
         }
       }
         break;
@@ -437,14 +422,14 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         break;
       case T_SP_RESIGNAL: {
         RESOLVE_STMT(PL_SIGNAL, resolve_resignal, ObPLSignalStmt);
-        if (lib::is_mysql_mode() && !func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
+        if (!func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
           func.set_contains_sql();
         }
       }
         break;
       case T_SP_SIGNAL: {
         RESOLVE_STMT(PL_SIGNAL, resolve_signal, ObPLSignalStmt);
-        if (lib::is_mysql_mode() && !func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
+        if (!func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
           func.set_contains_sql();
         }
       }
@@ -602,13 +587,12 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
 #undef NOT_SUPPORT_IN_ROUTINE
       // MySQL compatibility: For errors where the object does not exist, do not report an error during the resolve phase; here it is replaced with a single statement, which will report an error during execution
       // Since the object creation may occur after the sp is created, the function with the single statement is not placed in the cache here
-      if ((OB_ERR_FUNCTION_UNKNOWN == ret
+      if (OB_ERR_FUNCTION_UNKNOWN == ret
            || OB_ERR_SP_WRONG_ARG_NUM == ret
            || OB_ERR_SP_DOES_NOT_EXIST == ret
            || OB_ERR_GET_STACKED_DIAGNOSTICS == ret
            || OB_ERR_RESIGNAL_WITHOUT_ACTIVE_HANDLER == ret
-           || OB_ERR_BAD_TABLE == ret)
-          && lib::is_mysql_mode()) {
+           || OB_ERR_BAD_TABLE == ret) {
         ObPLSignalStmt *signal_stmt = NULL;
         int save_ret = ret;
         if (NULL != stmt) {
@@ -632,7 +616,7 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
           signal_stmt->set_str_len(STRLEN(ob_sqlstate(save_ret)));
           func.set_has_incomplete_rt_dep_error(true);
           func.set_is_all_sql_stmt(false);
-          if (lib::is_mysql_mode() && !func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
+          if (!func.is_reads_sql_data() && !func.is_modifies_sql_data()) {
             func.set_contains_sql();
           }
         }
@@ -1307,24 +1291,8 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
         }
       } else if (CHARSET_INVALID == charset_type
                  && CS_TYPE_INVALID == collation_type) {
-        if (lib::is_mysql_mode()) {
-          OZ (session_info.get_character_set_connection(charset_type));
-          OZ (session_info.get_collation_connection(collation_type));
-        } else { // oracle mode
-          if (OB_FAIL(ret)) {
-            // do nothing
-          } else if (OB_MIN_SYS_PL_OBJECT_ID < package_id
-                       && package_id < OB_MAX_SYS_PL_OBJECT_ID) {
-            // system package
-            session_info.get_collation_database(collation_type);
-          } else {
-            collation_type = session_info.get_nls_collation();
-          }
-          if (OB_SUCC(ret)) {
-            charset_type = CS_TYPE_ANY == collation_type ?
-                           CHARSET_ANY : ObCharset::charset_type_by_coll(collation_type);
-          }
-        }
+        OZ (session_info.get_character_set_connection(charset_type));
+        OZ (session_info.get_collation_connection(collation_type));
       } else if (OB_FAIL(ObCharset::check_and_fill_info(charset_type, collation_type))) {
         LOG_WARN("fail to fill collation info", K(charset_type), K(collation_type), K(ret));
       }
@@ -1514,7 +1482,7 @@ int ObPLResolver::build_record_type_by_table_schema(ObSchemaGetterGuard &schema_
     ObTableSchema::const_column_iterator cs_iter_end = table_schema->column_end();
     for (; OB_SUCC(ret) && cs_iter != cs_iter_end; cs_iter++) {
       const ObColumnSchemaV2 &column_schema = **cs_iter;
-      if (!column_schema.is_hidden() && (!(column_schema.is_invisible_column() && !with_rowid) || lib::is_mysql_mode())) { 
+      if (!column_schema.is_hidden()) {
         ObPLDataType pl_type;
         ObDataType data_type;
         data_type.set_meta_type(column_schema.get_meta_type());
@@ -2829,7 +2797,7 @@ int ObPLResolver::resolve_if(const ObStmtNodeTree *parse_tree, ObPLIfStmt *stmt,
     ObPLDataType data_type(ObTinyIntType);
     set_item_type(T_SP_IF);
     if (OB_FAIL(resolve_then(
-        parse_tree, func, &data_type, expr, then_block, lib::is_mysql_mode()))) {
+        parse_tree, func, &data_type, expr, then_block, true))) {
       LOG_WARN("failed to resolve then", K(ret));
     } else if (OB_FAIL(func.add_expr(expr))) {
       LOG_WARN("failed to add expr", K(*expr), K(ret));
@@ -2998,7 +2966,7 @@ int ObPLResolver::resolve_when(const ObStmtNodeTree *parse_tree, ObRawExpr *case
       ObPLStmtBlock *body = nullptr;
       ObPLDataType data_type(ObTinyIntType);
       bool is_bool_stmt = false;
-      if (!case_expr_var && lib::is_mysql_mode()) {
+      if (!case_expr_var) {
         is_bool_stmt = true;
       }
       set_item_type(T_SP_WHEN);
@@ -3021,7 +2989,7 @@ int ObPLResolver::resolve_when(const ObStmtNodeTree *parse_tree, ObRawExpr *case
                                              case_expr_var,
                                              expr,
                                              cmp_expr));
-        if (OB_SUCC(ret) && is_mysql_mode()) {
+        if (OB_SUCC(ret)) {
           ObRawExprWrapEnumSet enum_set_wrapper(expr_factory_, &resolve_ctx_.session_info_);
           OZ (enum_set_wrapper.analyze_expr(cmp_expr));
         }
@@ -3030,7 +2998,7 @@ int ObPLResolver::resolve_when(const ObStmtNodeTree *parse_tree, ObRawExpr *case
 
       OZ (func.add_expr(expr));
       OZ (expr->formalize(&resolve_ctx_.session_info_));
-      if (!is_bool_stmt && lib::is_mysql_mode()) {
+      if (!is_bool_stmt) {
         OZ (set_cm_warn_on_fail(expr));
       }
       OZ (stmt->add_when_clause(func.get_expr_count() - 1, body));
@@ -3192,11 +3160,9 @@ int ObPLResolver::resolve_return(const ObStmtNodeTree *parse_tree, ObPLReturnStm
   CK (OB_NOT_NULL(stmt));
 
   if (OB_SUCC(ret) && !func.is_function()) {
-    if (lib::is_mysql_mode()) {
-      ret = OB_ER_SP_BADRETURN;
-      LOG_WARN("RETURN is only allowed in a FUNCTION", K(ret));
-      LOG_USER_ERROR(OB_ER_SP_BADRETURN);
-    }
+    ret = OB_ER_SP_BADRETURN;
+    LOG_WARN("RETURN is only allowed in a FUNCTION", K(ret));
+    LOG_USER_ERROR(OB_ER_SP_BADRETURN);
   }
 
   if (OB_SUCC(ret)) {
@@ -3205,11 +3171,8 @@ int ObPLResolver::resolve_return(const ObStmtNodeTree *parse_tree, ObPLReturnStm
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_ISNULL(expr_node)) {
-      if (lib::is_mysql_mode()
-          || (func.is_function() && !func.get_pipelined())) {
-        ret = OB_ERR_RETURN_VALUE_REQUIRED;
-        LOG_WARN("not allow return expr node is null in function", K(ret), K(expr_node));
-      }
+      ret = OB_ERR_RETURN_VALUE_REQUIRED;
+      LOG_WARN("not allow return expr node is null in function", K(ret), K(expr_node));
     } else if (!func.is_function()) {
       ret = OB_ER_SP_BADRETURN;
       LOG_WARN("not allow return expr node is not null in procedure", K(ret), K(func.is_function()));
@@ -3277,6 +3240,7 @@ int ObPLResolver::check_and_record_stmt_type(ObPLFunctionAST &func,
     case stmt::T_HELP:
     case stmt::T_SHOW_RECYCLEBIN:
     case stmt::T_SHOW_PROFILE:
+    case stmt::T_SHOW_RESTORE_PREVIEW:
     case stmt::T_SHOW_TENANT:
     case stmt::T_SHOW_SEQUENCES:
     case stmt::T_SHOW_STATUS:
@@ -3440,19 +3404,18 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
         } else {
           LOG_WARN("failed to prepare stmt", K(ret));
         }
-      } else if (is_mysql_mode()
-                 && OB_FAIL(check_and_record_stmt_type(func, prepare_result))) {
+      } else if (OB_FAIL(check_and_record_stmt_type(func, prepare_result))) {
         LOG_WARN("sql stmt not support in pl function", K(parse_tree->str_value_), K(prepare_result.type_), K(ret));
       } else if (stmt::T_SET_PASSWORD == prepare_result.type_) {
           ret = OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE;
           LOG_WARN("set password in PL not allow", K(ret), K(get_type_name(parse_tree->type_)));
           LOG_USER_ERROR(OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE, 12, "set PASSWORD");
-      } else if (is_mysql_mode() && stmt::T_LOAD_DATA == prepare_result.type_) {
+      } else if (stmt::T_LOAD_DATA == prepare_result.type_) {
         name.assign_ptr("LOAD DATA", 9);
         ret = OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE;
         LOG_WARN("%s is not allowed in stored procedure. ", K(name), K(ret));
         LOG_USER_ERROR(OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE, name.length(), name.ptr());
-      } else if (is_mysql_mode() && stmt::T_LOCK_TABLE == prepare_result.type_) {
+      } else if (stmt::T_LOCK_TABLE == prepare_result.type_) {
         name.assign_ptr("LOCK TABLE", 10);
         ret = OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE;
         LOG_WARN("%s is not allowed in stored procedure. ", K(name), K(ret));
@@ -3567,27 +3530,12 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
       }
 
       if (OB_SUCC(ret)) {
-        if (lib::is_mysql_mode()) {
-          for (int64_t i = 0; OB_SUCC(ret) && i < prepare_result.ref_objects_.count(); ++i) {
-            if (DEPENDENCY_TABLE == prepare_result.ref_objects_.at(i).object_type_) {
-              // do nothing, no need collect table schema in mysql mode
-            } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
-              LOG_WARN("add dependency object failed", K(ret));
-            }
+        for (int64_t i = 0; OB_SUCC(ret) && i < prepare_result.ref_objects_.count(); ++i) {
+          if (DEPENDENCY_TABLE == prepare_result.ref_objects_.at(i).object_type_) {
+            // do nothing, no need collect table schema in mysql mode
+          } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
+            LOG_WARN("add dependency object failed", K(ret));
           }
-        } else {
-            // sql contain package var or package udf
-          for (int64_t i = 0; OB_SUCC(ret) && i < prepare_result.ref_objects_.count(); ++i) {
-            if (DEPENDENCY_PACKAGE == prepare_result.ref_objects_.at(i).object_type_ ||
-                DEPENDENCY_PACKAGE_BODY == prepare_result.ref_objects_.at(i).object_type_ ||
-                DEPENDENCY_FUNCTION == prepare_result.ref_objects_.at(i).object_type_) {
-              OX (func.set_external_state());
-            }
-            if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
-              LOG_WARN("add dependency object failed", K(ret));
-            }
-          }
-          OX (static_sql.set_row_desc(record_type));
         }
         // used for generate route sql
         OZ (static_sql.set_ref_objects(prepare_result.ref_objects_));
@@ -4164,13 +4112,9 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
             } else if (OB_FAIL(check_duplicate_condition(value, *desc, dup))) {
               LOG_WARN("failed to check duplication", K(ret), K(value), KPC(desc));
             } else if (dup) {
-              if (lib::is_mysql_mode()) {
-                ret = OB_ERR_SP_DUP_HANDLER;
-                LOG_USER_ERROR(OB_ERR_SP_DUP_HANDLER);
-                LOG_WARN("Duplicate handler declared in the same block", K(value), K(dup), K(ret));
-              } else {
-                // continue, Oracle same Condition on same handle is legal. such as WHEN NO_DATA_FOUND or NO_DATA_FOUND
-              }
+              ret = OB_ERR_SP_DUP_HANDLER;
+              LOG_USER_ERROR(OB_ERR_SP_DUP_HANDLER);
+              LOG_WARN("Duplicate handler declared in the same block", K(value), K(dup), K(ret));
             } else if (OB_FAIL(ObPLResolver::analyze_actual_condition_type(value, actual_type))) {
               LOG_WARN("failed to analyze actual condition type", K(value), K(ret));
             } else if (OB_FAIL(desc->add_condition(value))) {
@@ -4330,7 +4274,7 @@ int ObPLResolver::resolve_signal(const ObStmtNodeTree *parse_tree, ObPLSignalStm
       LOG_WARN("invalid name node", K(value_node->type_), K(ret));
     }
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     const ObStmtNodeTree *info_node = parse_tree->children_[1];
     if (NULL != info_node) {
       CK (T_SP_SIGNAL_INFO_LIST == info_node->type_);
@@ -5022,7 +4966,7 @@ int ObPLResolver::resolve_cparams(ObIArray<ObRawExpr*> &exprs,
       OZ (check_in_param_type_legal(params_list.at(i), params.at(i)));
     }
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       bool need_wrap = false;
       // expr T_OBJ_ACCESS_REF will add cast to string when CodeGenerate call stmt
@@ -5239,8 +5183,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                           prepare_result,
                                           func))) {
       LOG_WARN("failed to prepare stmt", K(ret));
-    } else if (!prepare_result.into_exprs_.empty()
-               && lib::is_mysql_mode()) { // oracle does not report an error, it will ignore INTO
+    } else if (!prepare_result.into_exprs_.empty()) {
       ret = OB_ER_SP_BAD_CURSOR_SELECT;
       LOG_USER_ERROR(OB_ER_SP_BAD_CURSOR_SELECT);
       LOG_WARN("Sql with into clause should not in Declare cursor", K(prepare_result.route_sql_), K(ret));
@@ -5255,25 +5198,11 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
       }
     }
     if (OB_SUCC(ret)) {
-      if (lib::is_mysql_mode()) {
-        for (int64_t i = 0; OB_SUCC(ret) && i < prepare_result.ref_objects_.count(); ++i) {
-          if (DEPENDENCY_TABLE == prepare_result.ref_objects_.at(i).object_type_) {
-            // do nothing, no need collect table schema in mysql mode
-          } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
-            LOG_WARN("add dependency object failed", K(ret));
-          }
-        }
-      } else {
-        // sql contain package var or package udf
-        for (int64_t i = 0; OB_SUCC(ret) && i < prepare_result.ref_objects_.count(); ++i) {
-          if (DEPENDENCY_PACKAGE == prepare_result.ref_objects_.at(i).object_type_ ||
-              DEPENDENCY_PACKAGE_BODY == prepare_result.ref_objects_.at(i).object_type_ ||
-              DEPENDENCY_FUNCTION == prepare_result.ref_objects_.at(i).object_type_) {
-            OX (func.set_external_state());
-          }
-          if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
-            LOG_WARN("add dependency object failed", K(ret));
-          }
+      for (int64_t i = 0; OB_SUCC(ret) && i < prepare_result.ref_objects_.count(); ++i) {
+        if (DEPENDENCY_TABLE == prepare_result.ref_objects_.at(i).object_type_) {
+          // do nothing, no need collect table schema in mysql mode
+        } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
+          LOG_WARN("add dependency object failed", K(ret));
         }
       }
     }
@@ -5473,7 +5402,7 @@ int ObPLResolver::resolve_declare_cursor(
     if (OB_ISNULL(name_node)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("parse_tree is NULL", K(name_node), K(ret));
-    } else if (lib::is_mysql_mode() && (NULL != type_node || NULL == sql_node)) {
+    } else if (NULL != type_node || NULL == sql_node) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("cursor in mysql mode must has no type node and has a valid sql node", K(type_node), K(sql_node), K(ret));
     } else {
@@ -5518,7 +5447,7 @@ int ObPLResolver::resolve_declare_cursor(
                                          func,
                                          true/*check mode*/))) {
           LOG_WARN("failed to resolve cursor", K(ret), K(name));
-        } else if (lib::is_mysql_mode() && OB_INVALID_INDEX != cursor_index) {
+        } else if (OB_INVALID_INDEX != cursor_index) {
           ret = OB_ERR_SP_DUP_CURSOR;
           LOG_WARN("Duplicate cursor", K(name),K(ret));
           LOG_USER_ERROR(OB_ERR_SP_DUP_CURSOR, name.length(), name.ptr());
@@ -6474,12 +6403,7 @@ int ObPLResolver::build_raw_expr(const ParseNode *node,
     LOG_WARN("agg expr in pl assign stmt not allowed", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "agg expr in pl assign stmt");
   } else if (sub_query_info.count() > 0) {
-    if (lib::is_mysql_mode()) {
-      OZ (transform_subquery_expr(node, expr, expected_type, unit_ast));
-    } else {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "use subquery in pl/sql expression");
-    }
+    OZ (transform_subquery_expr(node, expr, expected_type, unit_ast));
   } else {
     OZ (resolve_columns(expr, columns, unit_ast));
   }
@@ -6794,7 +6718,7 @@ int ObPLResolver::check_access_external_state(ObRawExpr *&expr,
   } else if (T_FUN_UDF == expr->get_expr_type() ||
              T_OP_GET_SYS_VAR == expr->get_expr_type() ||
              T_OP_GET_USER_VAR == expr->get_expr_type() ||
-             (T_FUN_SUBQUERY == expr->get_expr_type() && lib::is_mysql_mode())) {
+             T_FUN_SUBQUERY == expr->get_expr_type()) {
     OX (has_access_external_state = true);
   } else {
     for (int64_t i = 0;
@@ -6819,7 +6743,7 @@ int ObPLResolver::analyze_expr_type(ObRawExpr *&expr,
   } else if (T_FUN_UDF == expr->get_expr_type() ||
              T_OP_GET_SYS_VAR == expr->get_expr_type() ||
              T_OP_GET_USER_VAR == expr->get_expr_type() ||
-             (T_FUN_SUBQUERY == expr->get_expr_type() && lib::is_mysql_mode())) { // user var expr has been rewrite to subquery expr in mysql mode
+             T_FUN_SUBQUERY == expr->get_expr_type()) { // user var expr has been rewrite to subquery expr in mysql mode
     OX (unit_ast.set_external_state());
   } else {
     for (int64_t i = 0;
@@ -6899,7 +6823,7 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   if (OB_SUCC(ret)) {
     OZ (set_udf_expr_line_number(expr, line_number));
   }
-  if (OB_SUCC(ret) && is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     ObRawExprWrapEnumSet enum_set_wrapper(expr_factory_, &resolve_ctx_.session_info_);
     OZ (enum_set_wrapper.analyze_expr(expr));
   }
@@ -7251,7 +7175,7 @@ int ObPLResolver::try_transform_assign_to_dynamic_SQL(ObPLStmt *&old_stmt, ObPLF
   CK (OB_NOT_NULL(assign_stmt = static_cast<ObPLAssignStmt *>(old_stmt)));
   OX (into_count = assign_stmt->get_into_count());
   OX (value_count = assign_stmt->get_value_count());
-  if(lib::is_mysql_mode() && into_count > 0 && value_count > 0 && into_count == value_count) {
+  if(into_count > 0 && value_count > 0 && into_count == value_count) {
     bool is_need_transform_to_dynamic = false;
     ObSEArray<int64_t, 1> var_val_pos_array;
     OX (expr_count = func.get_expr_count());
@@ -9006,30 +8930,25 @@ int ObPLResolver::check_local_variable_read_only(
           shadow_var->set_name(ANONYMOUS_INOUT_ARG);
         }
       } else {
-        if (lib::is_mysql_mode()) {
-          if (0 == var->get_name().case_compare("NEW")
-              && (TgTimingEvent::TG_AFTER_DELETE == resolve_ctx_.params_.tg_timing_event_
-                  || TgTimingEvent::TG_BEFORE_DELETE == resolve_ctx_.params_.tg_timing_event_)) {
-            ret = OB_ERR_TRIGGER_NO_SUCH_ROW;
-            LOG_WARN("There is no NEW row in on DELETE trigger", K(ret), K(resolve_ctx_.params_.tg_timing_event_));
-            LOG_USER_ERROR(OB_ERR_TRIGGER_NO_SUCH_ROW, "NEW", "DELETE");
-          } else {
-            ret = OB_ERR_TRIGGER_CANT_CHANGE_ROW;
-            if (0 == var->get_name().case_compare("NEW")) {
-              LOG_WARN("can not update NEW row in after trigger", K(var->get_name()), K(ret));
-              LOG_MYSQL_USER_ERROR(OB_ERR_TRIGGER_CANT_CHANGE_ROW, "NEW", "after ");
-            } else {
-              LOG_WARN("can not update OLD row in trigger", K(var->get_name()), K(ret));
-              LOG_MYSQL_USER_ERROR(OB_ERR_TRIGGER_CANT_CHANGE_ROW, "OLD", "");
-            }
-          }
+        if (0 == var->get_name().case_compare("NEW")
+            && (TgTimingEvent::TG_AFTER_DELETE == resolve_ctx_.params_.tg_timing_event_
+                || TgTimingEvent::TG_BEFORE_DELETE == resolve_ctx_.params_.tg_timing_event_)) {
+          ret = OB_ERR_TRIGGER_NO_SUCH_ROW;
+          LOG_WARN("There is no NEW row in on DELETE trigger", K(ret), K(resolve_ctx_.params_.tg_timing_event_));
+          LOG_USER_ERROR(OB_ERR_TRIGGER_NO_SUCH_ROW, "NEW", "DELETE");
         } else {
-          ret = OB_ERR_VARIABLE_IS_READONLY;
-          LOG_WARN("variable is read only", K(ret), K(var_idx), KPC(var));
+          ret = OB_ERR_TRIGGER_CANT_CHANGE_ROW;
+          if (0 == var->get_name().case_compare("NEW")) {
+            LOG_WARN("can not update NEW row in after trigger", K(var->get_name()), K(ret));
+            LOG_MYSQL_USER_ERROR(OB_ERR_TRIGGER_CANT_CHANGE_ROW, "NEW", "after ");
+          } else {
+            LOG_WARN("can not update OLD row in trigger", K(var->get_name()), K(ret));
+            LOG_MYSQL_USER_ERROR(OB_ERR_TRIGGER_CANT_CHANGE_ROW, "OLD", "");
+          }
         }
       }
     } else if (resolve_ctx_.session_info_.is_for_trigger_package()) { 
-      if (0 == var->get_name().case_compare("NEW") && lib::is_mysql_mode()
+      if (0 == var->get_name().case_compare("NEW")
                  && (TgTimingEvent::TG_AFTER_DELETE == resolve_ctx_.params_.tg_timing_event_
                      || TgTimingEvent::TG_BEFORE_DELETE == resolve_ctx_.params_.tg_timing_event_)) {
         ret = OB_ERR_TRIGGER_NO_SUCH_ROW;
@@ -9310,7 +9229,7 @@ int ObPLResolver::resolve_package_accessible_by(
   ObStmtNodeTree *parse_tree = NULL;
   const ObStmtNodeTree *package_node = NULL;
   const ObStmtNodeTree *clause_node = NULL;
-  CK (lib::is_oracle_mode());
+  CK (false);
   OZ (parser.parse_package(source, parse_tree, resolve_ctx_.session_info_.get_dtc_params(), NULL, false));
   CK (OB_NOT_NULL(parse_tree));
   CK (T_STMT_LIST == parse_tree->type_);
@@ -9344,7 +9263,7 @@ int ObPLResolver::resolve_routine_accessible_by(
   ObStmtNodeTree *parse_tree = NULL;
   const ObStmtNodeTree *routine_node = NULL;
   const ObStmtNodeTree *clause_node = NULL;
-  CK (lib::is_oracle_mode());
+  CK (false);
   OZ (parser.parse_routine_body(source, parse_tree, false), source);
   CK (OB_NOT_NULL(parse_tree->children_));
   CK (1 == parse_tree->num_child_);
@@ -9425,7 +9344,7 @@ int ObPLResolver::resolve_sf_clause(
           LOG_USER_ERROR(OB_ERR_ONLY_SCHEMA_LEVEL_ALLOW, "AUTHID");
         } else {
           has_invoker_clause = true;
-          if (lib::is_mysql_mode() && SP_INVOKER == child->value_) {
+          if (SP_INVOKER == child->value_) {
             routine_info->set_invoker_right();
           }
         }
@@ -9476,14 +9395,14 @@ int ObPLResolver::resolve_sf_clause(
           OX (routine_info->set_pipelined());
         }
       } else if (T_COMMENT == child->type_) {
-        if (lib::is_mysql_mode()) {
+        {
           ObString routine_comment;
           CK (OB_NOT_NULL(dynamic_cast<ObRoutineInfo*>(routine_info)));
           OX (routine_comment = ObString(child->str_len_, child->str_value_));
           OZ (dynamic_cast<ObRoutineInfo*>(routine_info)->set_comment(routine_comment));
         }
       } else if (T_SP_DATA_ACCESS == child->type_) {
-        if (lib::is_mysql_mode()) {
+        {
           if (SP_NO_SQL == child->value_) {
             routine_info->set_no_sql();
           } else if (SP_READS_SQL_DATA == child->value_) {
@@ -10609,10 +10528,8 @@ int ObPLResolver::resolve_self_element_access(ObObjAccessIdent &access_ident,
   } else {
     ret = OB_ERR_SP_UNDECLARED_VAR;
     LOG_IN_CHECK_MODE("undeclared var", K(access_ident), K(ret));
-    if (lib::is_mysql_mode() || !resolve_ctx_.is_check_mode_) {
-      LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR,
-                     access_ident.access_name_.length(), access_ident.access_name_.ptr());
-    }
+    LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR,
+                   access_ident.access_name_.length(), access_ident.access_name_.ptr());
   }
   return ret;
 }
@@ -11317,7 +11234,7 @@ int ObPLResolver::resolve_condition_value(const ObStmtNodeTree *parse_tree,
   if (OB_ISNULL(parse_tree)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid Argument", K(parse_tree), K(ret));
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (T_SP_CONDITION != parse_tree->type_ || OB_ISNULL(parse_tree->children_[0])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid condition type", K(parse_tree->type_), K(ret));
@@ -11338,28 +11255,6 @@ int ObPLResolver::resolve_condition_value(const ObStmtNodeTree *parse_tree,
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid condition type", K(parse_tree->children_[0]->type_), K(ret));
-    }
-  } else {
-
-    if (T_INT == parse_tree->type_
-        || (T_VARCHAR == parse_tree->type_ && is_sys_db)) {
-      if (T_INT == parse_tree->type_) {
-        value.error_code_ = parse_tree->value_;
-      } else if (T_VARCHAR == parse_tree->type_ && is_sys_db) {
-        CK (parse_tree->str_value_ != nullptr);
-        OX (value.error_code_ = static_cast<int64_t>(strtoll(parse_tree->str_value_, NULL, 10)));
-      }
-      if (OB_SUCC(ret) && value.error_code_ >= 0) {
-        ret = OB_ERR_ILLEGAL_ERROR_NUM;
-        LOG_USER_ERROR(OB_ERR_ILLEGAL_ERROR_NUM, value.error_code_);
-        LOG_WARN("illega error number for PRAGMA EXCEPTION_INIT", K(ret));
-      }
-      OX (value.type_ = ERROR_CODE);
-      OX (value.sql_state_ = ob_sqlstate(static_cast<int>(value.error_code_)));
-      OX (value.str_len_ = STRLEN(value.sql_state_));
-    } else {
-      ret = OB_ERR_EX_SECOND_ARG;
-      LOG_WARN("second argument to PRAGMA EXCEPTION_INIT must be a numeric literal", K(ret));
     }
   }
   return ret;
@@ -12162,7 +12057,7 @@ int ObPLResolver::resolve_cond_loop(const ObStmtNodeTree *expr_node, const ObStm
     ObRawExpr *expr = NULL;
     ObPLDataType data_type(ObTinyIntType);
     if (OB_FAIL(resolve_expr(expr_node, func, expr, combine_line_and_col(expr_node->stmt_loc_),
-                             true, &data_type, false, lib::is_mysql_mode()))) {
+                             true, &data_type, false, true))) {
       LOG_WARN("failed to resolve expr", K(expr_node), K(ret));
     } else {
       stmt->set_cond(func.get_expr_count() - 1);
@@ -12570,7 +12465,7 @@ int ObPLResolver::resolve_routine_decl_param_list(const ParseNode *param_list,
         }
         if (OB_SUCC(ret)) {
           ObPLRoutineParam *param = NULL;
-          bool is_nocopy = is_mysql_mode() ? false : (1 == param_node->int32_values_[1]);
+          bool is_nocopy = false;
           OZ (routine_info.make_routine_param(resolve_ctx_.allocator_,
                                               resolve_ctx_.session_info_.get_dtc_params(),
                                               param_name,
