@@ -196,13 +196,9 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   if (OB_FAIL(ret)) {
   } else if (OB_INVALID_COUNT != fetch_limit) {
     limit_count = fetch_limit;
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (!result.get_has_top_limit() && OB_FAIL(session_.get_sql_select_limit(limit_count))) {
       LOG_WARN("failed to get sytem variable sql_select_limit", K(ret));
-    }
-  } else { // lib::is_oracle_mode()
-    if (OB_FAIL(session_.get_oracle_sql_select_limit(limit_count))) {
-      LOG_WARN("failed to get sytem variable _oracle_sql_select_limit", K(ret));
     }
   }
 
@@ -243,8 +239,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row->get_count(); i++) {
       ObObj& value = row->get_cell(i);
-      if (result.is_ps_protocol() && !is_packed 
-          && !(value.is_geometry() && lib::is_oracle_mode())) { // oracle gis will do cast in process_sql_udt_results
+      if (result.is_ps_protocol() && !is_packed) {
         if (value.get_type() != fields->at(i).type_.get_type()) {
           ObCastCtx cast_ctx(&result.get_mem_pool(), NULL, CM_WARN_ON_FAIL, 
             fields->at(i).type_.get_collation_type());
@@ -475,9 +470,6 @@ int ObQueryDriver::convert_lob_locator_to_longtext(ObObj& value,
   int ret = OB_SUCCESS;
   // If the client uses the new lob locator, then return the lob locator data
   // If the client uses the old lob (without locator header, only data), then return the old lob
-  if (lib::is_mysql_mode()) {
-    // do nothing for mysql
-  }
   return ret;
 }
 
@@ -515,14 +507,12 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
   // 3. if client does not support use_lob_locator ,,return full lob data without locator header
   bool is_lob_type = value.is_lob()
                      || value.is_json() || value.is_geometry() || value.is_roaringbitmap() ;
-  bool is_actual_return_lob_locator = is_use_lob_locator && !value.is_json() 
-                                      && !value.is_geometry() && !value.is_roaringbitmap();
+  UNUSED(is_use_lob_locator);
   if (!is_lob_type) {
     // not lob types, do nothing
   } else if (value.is_null() || value.is_nop_value()) {
     // do nothing
-  } else if ((!is_actual_return_lob_locator && lib::is_oracle_mode())
-             || lib::is_mysql_mode()) {
+  } else {
     // Should remove locator header and read full lob data
     ObString data;
     ObLobLocatorV2 loc(value.get_string(), value.has_lob_header());
@@ -547,11 +537,11 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
         value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));
       }
     }
-  } else { /* do nothing */ }
+  }
   return ret;
 }
 
-int ObQueryDriver::convert_string_charset(const ObString &in_str, const ObCollationType in_cs_type, 
+int ObQueryDriver::convert_string_charset(const ObString &in_str, const ObCollationType in_cs_type,
                                           const ObCollationType out_cs_type, 
                                           char *buf, int32_t buf_len, uint32_t &result_len)
 {
@@ -620,7 +610,7 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
         && strcmp(from_charset_info->csname, to_charset_info->csname) != 0) {
       bool is_actual_return_lob_locator = session->is_client_use_lob_locator() && !value.is_json();
       if (value.is_lob_storage() && value.has_lob_header() && OB_NOT_NULL(session) &&
-          is_actual_return_lob_locator && lib::is_oracle_mode()) {
+          is_actual_return_lob_locator && false) {
         ObLobLocatorV2 lob;
         ObString inrow_data;
         if (OB_FAIL(process_lob_locator_results(value, 
