@@ -2093,7 +2093,7 @@ OB_INLINE bool ObMultipleMerge::need_handle_lob_columns(const blocksstable::ObDa
   bool bret = !access_ctx_->query_flag_.is_skip_read_lob() &&
               access_param_->iter_param_.has_lob_column_out_ &&
               row.row_flag_.is_exist();
-  if (bret && lib::is_mysql_mode() &&
+  if (bret &&
       OB_NOT_NULL(access_ctx_->lob_locator_helper_) &&
       access_ctx_->lob_locator_helper_->enable_lob_locator_v2() &&
       !is_sys_table(access_param_->iter_param_.table_id_)) {
@@ -2151,7 +2151,7 @@ int ObMultipleMerge::fuse_lob_default(ObObj &def_cell, const uint64_t col_id)
     }
   } else if (OB_NOT_NULL(lob_locator_helper)) {
     if (nullptr == access_param_->output_exprs_
-        || (!is_sys_table(access_param_->iter_param_.table_id_) && lib::is_mysql_mode())) {
+        || !is_sys_table(access_param_->iter_param_.table_id_)) {
       if (OB_FAIL(lob_reader_.fuse_disk_lob_header(def_cell))) { // fuse disk locator
         STORAGE_LOG(WARN, "Failed to fuse lob header for nop val", K(ret));
       }

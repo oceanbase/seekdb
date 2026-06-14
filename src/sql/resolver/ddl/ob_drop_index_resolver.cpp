@@ -65,7 +65,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
       stmt_ = drop_index_stmt;
     }
 
-    if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+    if (OB_SUCC(ret)) {
       index_node = parse_tree.children_[0];
       ParseNode *relation_node = parse_tree.children_[1];
       ObString table_name;
@@ -148,7 +148,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
                                                         *schema_checker_,
                                                         has_other_indexes_on_same_cols))) {
             LOG_WARN("check indexes on same cols failed", K(ret));
-          } else if (!has_other_indexes_on_same_cols && lib::is_mysql_mode()) {
+          } else if (!has_other_indexes_on_same_cols) {
             if (OB_FAIL(check_index_columns_equal_foreign_key(*table_schema, *index_table_schema))) {
               LOG_WARN("failed to check_index_columns_equal_foreign_key", K(ret), K(index_table_name));
             }

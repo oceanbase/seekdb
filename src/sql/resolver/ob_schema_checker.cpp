@@ -248,7 +248,7 @@ int ObSchemaChecker::check_trigger_show(const share::schema::ObSessionPrivInfo &
     if(OB_FAIL(ObCompatControl::check_feature_enable(s_priv.security_version_,
                                       ObCompatFeatureType::MYSQL_TRIGGER_PRIV_CHECK, need_check))) {
       LOG_WARN("failed to check feature enable", K(ret));
-    } else if(need_check && lib::is_mysql_mode()) {
+    } else if(need_check) {
       ObNeedPriv need_priv;
       need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
       need_priv.db_ = db;
@@ -1678,7 +1678,7 @@ bool ObSchemaChecker::enable_mysql_pl_priv_check(int64_t tenant_id, ObSchemaGett
   int ret = OB_SUCCESS;
   if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
     LOG_WARN("fail to get data version", K(tenant_id));
-  } else if (lib::is_mysql_mode()) {
+  } else {
     const ObSysVarSchema *sys_var = NULL;
     ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
     ObObj val;

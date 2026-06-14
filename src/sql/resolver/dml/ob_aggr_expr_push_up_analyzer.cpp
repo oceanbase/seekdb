@@ -246,9 +246,7 @@ ObSelectResolver *ObAggrExprPushUpAnalyzer::fetch_final_aggr_resolver(ObDMLResol
      * if it is in order scope (and subquery does not appear in where scope), it will pull subquery up to compute
      */
     if (min_level_resolver != NULL && cur_resolver != min_level_resolver
-        && NULL != cur_resolver->get_parent_namespace_resolver()
-        && (lib::is_mysql_mode()
-            || T_HAVING_SCOPE == cur_resolver->get_parent_namespace_resolver()->get_current_scope())) {
+        && NULL != cur_resolver->get_parent_namespace_resolver()) {
       /*
         * bug fix: 
         *
@@ -273,7 +271,7 @@ ObSelectResolver *ObAggrExprPushUpAnalyzer::fetch_final_aggr_resolver(ObDMLResol
       ObSelectResolver *select_resolver = static_cast<ObSelectResolver*>(cur_resolver);
       if (select_resolver->can_produce_aggr()) {
         final_resolver = select_resolver;
-      } else if (lib::is_mysql_mode() && min_level_resolver == NULL) {
+      } else if (min_level_resolver == NULL) {
         /* bugfix: 
         * in mysql, a const aggr_expr(e.g., count(const_expr)), belongs to the nearest legal level.
         * 

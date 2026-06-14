@@ -816,23 +816,11 @@ int ObCountAggCellVec::copy_output_rows(const int32_t start_offset, const int32_
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected aggregate or project expr", K(ret), KPC(project_expr));
     } else {
-      if (lib::is_oracle_mode()) {
-        for (int64_t i = start_offset; i < end_offset; ++i) {
-          project_expr->get_vector(eval_ctx)->is_null(i)
-            ? agg_expr->get_vector(eval_ctx)->set_number(i, common::number::ObNumber::get_zero())
-            : agg_expr->get_vector(eval_ctx)->set_number(i, common::number::ObNumber::get_positive_one());
-        }
-      } else {
-        for (int64_t i = start_offset; i < end_offset; ++i) {
-          project_expr->get_vector(eval_ctx)->is_null(i)
-            ? agg_expr->get_vector(eval_ctx)->set_int(i, 0)
-            : agg_expr->get_vector(eval_ctx)->set_int(i, 1);
-        }
+      for (int64_t i = start_offset; i < end_offset; ++i) {
+        project_expr->get_vector(eval_ctx)->is_null(i)
+          ? agg_expr->get_vector(eval_ctx)->set_int(i, 0)
+          : agg_expr->get_vector(eval_ctx)->set_int(i, 1);
       }
-    }
-  } else if (lib::is_oracle_mode()) {
-    for (int64_t i = start_offset; i < end_offset; ++i) {
-      agg_expr->get_vector(eval_ctx)->set_number(i, common::number::ObNumber::get_positive_one());
     }
   } else {
     for (int64_t i = start_offset; i < end_offset; ++i) {

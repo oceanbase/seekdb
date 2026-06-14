@@ -104,15 +104,14 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
       ret = OB_NOT_INIT;
       LOG_WARN("session info is null");
     } else if (pl_y && OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *name_node, db_name, sp_name))) {
-      ret = OB_ERR_NO_DB_SELECTED == ret && lib::is_mysql_mode() ? OB_SUCCESS : ret;
+      ret = OB_ERR_NO_DB_SELECTED == ret ? OB_SUCCESS : ret;
       LOG_WARN("resolve sp name failed", K(ret));
     }
     // drop ddl function and drop pl function share syntax, need to check if it is ddl function first
     if (OB_FAIL(ret)) {
     } else if (pl_y
                && OB_LIKELY(2 == name_node->num_child_)
-               && OB_ISNULL(name_node->children_[0])
-               && lib::is_mysql_mode()) {
+               && OB_ISNULL(name_node->children_[0])) {
       bool exist = false;
       const share::schema::ObUDF *udf_info = nullptr;
       ObString lower_name;
