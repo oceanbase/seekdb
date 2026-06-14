@@ -149,7 +149,6 @@ public:
   OB_INLINE void set_tenant_id(const uint64_t tenant_id) { tenant_id_ = tenant_id; }
   OB_INLINE const char *get_tenant_name() const { return extract_str(tenant_name_); }
   OB_INLINE int64_t get_schema_version() const { return schema_version_; }
-  OB_INLINE common::ObCompatibilityMode get_compatibility_mode() const { return compatibility_mode_; }
   OB_INLINE share::schema::ObTenantStatus get_status() const { return tenant_status_; }
   OB_INLINE bool is_normal() const { return share::schema::TENANT_STATUS_NORMAL == tenant_status_; }
   OB_INLINE bool is_creating() const { return share::schema::TENANT_STATUS_CREATING == tenant_status_; }
@@ -180,7 +179,6 @@ private:
   uint64_t tenant_id_;
   int64_t schema_version_;
   common::ObString tenant_name_;
-  common::ObCompatibilityMode compatibility_mode_; // cannot be modified after creation
   share::schema::ObTenantStatus tenant_status_;
   common::ObCharsetType charset_type_;
   common::ObCollationType collation_type_;

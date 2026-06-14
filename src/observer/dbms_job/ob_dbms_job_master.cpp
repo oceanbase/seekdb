@@ -593,7 +593,7 @@ int ObDBMSJobMaster::load_and_register_all_jobs(ObDBMSJobKey *job_key)
             OZ (load_and_register_new_jobs(tenant_ids.at(i)));
           // }
           LOG_INFO("register single tenant",
-                   K(ret), K(tenant_ids.at(i)), K(tenant_schema->get_compatibility_mode()));
+                   K(ret), K(tenant_ids.at(i)));
         }
         OX (max_tenant_id = max_tenant_id > tenant_ids.at(i) ? max_tenant_id : tenant_ids.at(i));
       }

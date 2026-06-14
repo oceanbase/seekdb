@@ -63,7 +63,6 @@ ObSimpleTenantSchema &ObSimpleTenantSchema::operator =(const ObSimpleTenantSchem
     schema_version_ = other.schema_version_;
     name_case_mode_ = other.name_case_mode_;
     read_only_ = other.read_only_;
-    compatibility_mode_ = other.compatibility_mode_;
     gmt_modified_ = other.gmt_modified_;
     status_ = other.status_;
     in_recyclebin_ = other.in_recyclebin_;
@@ -87,7 +86,6 @@ void ObSimpleTenantSchema::reset()
   tenant_name_.reset();
   name_case_mode_ = OB_NAME_CASE_INVALID;
   read_only_ = false;
-  compatibility_mode_ = ObCompatibilityMode::OCEANBASE_MODE;
   gmt_modified_ = 0;
   status_ = TENANT_STATUS_NORMAL;
   in_recyclebin_ = false;

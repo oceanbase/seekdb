@@ -1897,8 +1897,7 @@ int ObInnerSQLConnection::switch_tenant(const uint64_t tenant_id)
       LOG_WARN("Init sys tenant in session error", K(ret));
     }
     if (OB_SUCC(ret)) {
-      const char *sys_user_name
-        = (ORACLE_MODE == tenant_schema->get_compatibility_mode()) ? OB_ORA_SYS_USER_NAME : OB_SYS_USER_NAME;
+      const char *sys_user_name = OB_SYS_USER_NAME;
       if (OB_FAIL(get_session().set_user(sys_user_name, OB_SYS_HOST_NAME, OB_SYS_USER_ID))) {
         LOG_WARN("Set sys user in session error", K(ret));
       } else {

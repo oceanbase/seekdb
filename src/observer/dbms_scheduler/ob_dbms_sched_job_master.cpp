@@ -425,7 +425,7 @@ int ObDBMSSchedJobMaster::check_tenant()
       alive_jobs_.clear();
       LOG_INFO("tenant is standby, not check new jobs, and remove exist jobs", K(tenant_id_));
     } else {
-      OZ (check_new_jobs(tenant_id_, tenant_schema->is_oracle_tenant()));
+      OZ (check_new_jobs(tenant_id_, false /*is_oracle_tenant*/));
     }
   }
   LOG_INFO("check all tenants", K(ret));

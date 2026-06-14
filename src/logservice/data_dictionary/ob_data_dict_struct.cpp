@@ -240,7 +240,6 @@ void ObDictTenantMeta::reset()
     allocator_->free(tenant_name_.ptr());
   }
   tenant_name_.reset();
-  compatibility_mode_ = ObCompatibilityMode::OCEANBASE_MODE;
   tenant_status_ = schema::ObTenantStatus::TENANT_STATUS_MAX;
   charset_type_ = ObCharsetType::CHARSET_INVALID;
   collation_type_ = ObCollationType::CS_TYPE_INVALID;
@@ -253,7 +252,6 @@ DEFINE_EQUAL(ObDictTenantMeta)
   LST_DO_CODE(IS_ARG_EQUAL,
       schema_version_,
       tenant_name_,
-      compatibility_mode_,
       tenant_status_,
       charset_type_,
       collation_type_,
@@ -271,7 +269,6 @@ DEFINE_SERIALIZE(ObDictTenantMeta)
     LST_DO_CODE(OB_UNIS_ENCODE,
       schema_version_,
       tenant_name_,
-      compatibility_mode_,
       tenant_status_,
       charset_type_,
       collation_type_,
@@ -291,7 +288,6 @@ DEFINE_DESERIALIZE_DATA_DICT(ObDictTenantMeta)
     LST_DO_CODE(OB_UNIS_DECODE,
       schema_version_,
       tmp_tenant_name,
-      compatibility_mode_,
       tenant_status_,
       charset_type_,
       collation_type_,
@@ -312,7 +308,6 @@ DEFINE_GET_SERIALIZE_SIZE(ObDictTenantMeta)
   LST_DO_CODE(OB_UNIS_ADD_LEN,
       schema_version_,
       tenant_name_,
-      compatibility_mode_,
       tenant_status_,
       charset_type_,
       collation_type_,
@@ -333,7 +328,6 @@ int ObDictTenantMeta::init(const schema::ObTenantSchema &tenant_schema)
   } else {
     tenant_id_ = tenant_schema.get_tenant_id();
     schema_version_ = tenant_schema.get_schema_version();
-    compatibility_mode_ = tenant_schema.get_compatibility_mode();
     tenant_status_ = tenant_schema.get_status();
     charset_type_ = tenant_schema.get_charset_type();
     collation_type_ = tenant_schema.get_collation_type();
@@ -359,7 +353,6 @@ int ObDictTenantMeta::incremental_data_update(const ObDictTenantMeta &new_tenant
       DDLOG(WARN, "assign tenant_name failed", KR(ret), K(new_tenant_meta), KPC(this));
     } else {
       schema_version_ = new_tenant_meta.get_schema_version();
-      compatibility_mode_ = new_tenant_meta.get_compatibility_mode();
       tenant_status_ = new_tenant_meta.get_status();
       charset_type_ = new_tenant_meta.get_charset_type();
       collation_type_ = new_tenant_meta.get_collation_type();

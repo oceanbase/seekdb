@@ -1788,7 +1788,6 @@ ObTenantSchema& ObTenantSchema::operator =(const ObTenantSchema &src_schema)
     set_charset_type(src_schema.get_charset_type());
     set_name_case_mode(src_schema.name_case_mode_);
     set_default_tablegroup_id(src_schema.default_tablegroup_id_);
-    set_compatibility_mode(src_schema.compatibility_mode_);
     set_status(src_schema.status_);
     set_in_recyclebin(src_schema.in_recyclebin_);
     if (OB_FAIL(set_tenant_name(src_schema.tenant_name_))) {
@@ -1833,7 +1832,6 @@ void ObTenantSchema::reset()
   reset_string(comment_);
   default_tablegroup_id_ = OB_INVALID_ID;
   reset_string(default_tablegroup_name_);
-  compatibility_mode_ = ObCompatibilityMode::OCEANBASE_MODE;
   status_ = TENANT_STATUS_NORMAL;
   in_recyclebin_ = false;
   reset_physical_location_info();
@@ -1922,7 +1920,6 @@ OB_DEF_SERIALIZE(ObTenantSchema)
   LST_DO_CODE(OB_UNIS_ENCODE,
               default_tablegroup_id_,
               default_tablegroup_name_,
-              compatibility_mode_,
               status_,
               in_recyclebin_);
 
@@ -1950,7 +1947,6 @@ OB_DEF_DESERIALIZE(ObTenantSchema)
   LST_DO_CODE(OB_UNIS_DECODE,
               default_tablegroup_id_,
               default_tablegroup_name_,
-              compatibility_mode_,
               status_,
               in_recyclebin_);
 
@@ -1974,7 +1970,7 @@ OB_DEF_SERIALIZE_SIZE(ObTenantSchema)
               locked_, comment_, charset_type_, collation_type_, name_case_mode_,
               read_only_,
               default_tablegroup_id_, default_tablegroup_name_,
-              compatibility_mode_, status_, in_recyclebin_);
+              status_, in_recyclebin_);
   len += get_string_array_serialize_size(zone_list_);
   return len;
 }

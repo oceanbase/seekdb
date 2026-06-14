@@ -570,7 +570,7 @@ int ObShareUtil::gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_sc
       tenant_schema.set_default_tablegroup_id(OB_INVALID_ID);
       tenant_schema.set_in_recyclebin(false);
       tenant_schema.set_status(schema::ObTenantStatus::TENANT_STATUS_NORMAL);
-      tenant_schema.set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
+      // seekdb is MySQL-only: compatibility_mode field removed from ObTenantSchema.
       // charset_type_ not used, default is ok
       // collation_type_ not used, default is ok
       // name_case_mode_ not used, default is ok

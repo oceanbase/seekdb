@@ -66,7 +66,6 @@ public:
                K_(tenant_name),
                K_(name_case_mode),
                K_(read_only),
-               K_(compatibility_mode),
                K_(gmt_modified),
                K_(status),
                K_(in_recyclebin));
@@ -85,9 +84,6 @@ public:
   inline common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
   inline void set_read_only(const bool read_only) { read_only_ = read_only; }
   inline bool get_read_only() const { return read_only_; }
-
-  inline void set_compatibility_mode(const common::ObCompatibilityMode compatibility_mode) { compatibility_mode_ = compatibility_mode; }
-  inline common::ObCompatibilityMode get_compatibility_mode() const { return compatibility_mode_; }
 
   inline void set_gmt_modified(const int64_t gmt_modified) { gmt_modified_ = gmt_modified; }
   inline int64_t get_gmt_modified() const { return gmt_modified_; }
@@ -108,7 +104,6 @@ private:
   common::ObString tenant_name_;
   common::ObNameCaseMode name_case_mode_; //deprecated
   bool read_only_;  // Subject to the value of the system variable
-  common::ObCompatibilityMode compatibility_mode_;
   int64_t gmt_modified_;
   ObTenantStatus status_;
   bool in_recyclebin_;

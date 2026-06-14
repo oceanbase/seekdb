@@ -344,7 +344,6 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
     } else {
       ObConfigItem *ci = nullptr;
       ObString config_name(item->name_.size(), item->name_.ptr());
-      bool is_default_table_organization_config = (0 == config_name.case_compare(DEFAULT_TABLE_ORGANIZATION));
       if (OB_SYS_TENANT_ID != item->exec_tenant_id_ || item->tenant_name_.size() > 0) {
         // tenants(user or sys tenants) modify tenant level configuration
         item->want_to_set_tenant_config_ = true;
@@ -391,7 +390,6 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
                       ret = OB_ERR_UNEXPECTED;
                       LOG_WARN("tenant_schema is null", KR(ret), K(tenant_id));
                     } else if (condition_func(tenant_id) &&
-                              (is_default_table_organization_config ? !tenant_schema->is_oracle_tenant() : true) &&
                               OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
                       LOG_WARN("add tenant_id failed", K(tenant_id), KR(ret));
                       break;
@@ -425,9 +423,7 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
               } else if (OB_ISNULL(tenant_schema)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("tenant_schema is null", KR(ret), K(tenant_id));
-              } else if ((is_default_table_organization_config ?
-                          !tenant_schema->is_oracle_tenant()
-                          : true) && OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
+              } else if (OB_FAIL(item->tenant_ids_.push_back(tenant_id))) {
                 LOG_WARN("add tenant_id failed", K(tenant_id), KR(ret));
               }
             } // else

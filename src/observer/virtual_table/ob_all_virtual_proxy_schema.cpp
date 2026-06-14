@@ -299,7 +299,7 @@ int ObAllVirtualProxySchema::inner_open()
             LOG_TRACE("tenant not exist", K(tenant_name)); // skip
           } else {
             tenant_id = tenant_schema->get_tenant_id();
-            is_oracle_tenant = tenant_schema->is_oracle_tenant();
+            is_oracle_tenant = false;
             if (OB_UNLIKELY(!is_valid_tenant_id(effective_tenant_id_))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("invalid effective_tenant_id", KR(ret), K_(effective_tenant_id));

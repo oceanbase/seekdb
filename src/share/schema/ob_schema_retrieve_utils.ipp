@@ -15,7 +15,6 @@
  */
 
 #include "lib/worker.h"
-#include "share/ob_get_compat_mode.h"
 #include "share/schema/ob_udf_mgr.h"
 #include "share/schema/ob_schema_mgr.h"
 #include "share/storage_cache_policy/ob_storage_cache_common.h"
@@ -1439,12 +1438,6 @@ int fill_column_schema_default_value(T &result,
   int ret = common::OB_SUCCESS;
   lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   bool is_oracle_mode = false;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-          column.get_tenant_id(), column.get_table_id(), is_oracle_mode))) {
-    SHARE_SCHEMA_LOG(WARN, "failed to get oracle mode", K(ret));
-  } else if (is_oracle_mode) {
-    compat_mode = lib::Worker::CompatMode::ORACLE;
-  }
   lib::CompatModeGuard guard(compat_mode);
   EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, orig_default_value, default_type,
                                     column,false, false, tenant_id);
@@ -3904,13 +3897,8 @@ int ObSchemaRetrieveUtils::fill_base_part_info(
         const uint64_t table_id = partition.get_table_id();
         if (is_sys_tablegroup_id(table_id)) {
           is_oracle_mode = false;
-        } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                   tenant_id, table_id, is_oracle_mode))) {
-          LOG_WARN("fail to check oracle mode", KR(ret), K(tenant_id), K(table_id));
         }
-        lib::CompatModeGuard guard(is_oracle_mode ?
-                                   lib::Worker::CompatMode::ORACLE :
-                                   lib::Worker::CompatMode::MYSQL);
+        lib::CompatModeGuard guard(lib::Worker::CompatMode::MYSQL);
         if (FAILEDx(partition.set_list_vector_values_with_hex_str(blist_val))) {
           SHARE_SCHEMA_LOG(WARN, "Failed to set list val to partition", K(ret));
         }

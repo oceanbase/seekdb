@@ -2552,7 +2552,6 @@ int ObSchemaServiceSQLImpl::construct_tenant_schema_(
     simple_tenant_schema.set_read_only(tenant_schema.is_read_only());
     simple_tenant_schema.set_status(tenant_schema.get_status());
     simple_tenant_schema.set_in_recyclebin(tenant_schema.is_in_recyclebin());
-    simple_tenant_schema.set_compatibility_mode(tenant_schema.get_compatibility_mode());
     simple_tenant_schema.set_gmt_modified(0); // not used
     if (OB_FAIL(simple_tenant_schema.set_tenant_name(tenant_schema.get_tenant_name()))) {
       LOG_WARN("fail to set tenant name", KR(ret));

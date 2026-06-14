@@ -280,8 +280,7 @@ int ObTenantDDLService::set_tenant_compatibility_(
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = tenant_schema.get_tenant_id();
-  // seekdb is MySQL-only: tenant compatibility mode is always MYSQL.
-  tenant_schema.set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
+  // seekdb is MySQL-only: compatibility mode field removed from ObTenantSchema.
   if (!is_valid_tenant_id(tenant_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arguments", KR(ret), K(tenant_id), K(arg));
@@ -522,9 +521,9 @@ int ObTenantDDLService::init_system_variables(
         SET_TENANT_VARIABLE(SYS_VAR_READ_ONLY, read_only_value);
       }
 
-      // For compatibility_mode, its priority: sys variable > tenant option.
+      // seekdb is MySQL-only: compatibility mode is always MYSQL.
       if (OB_SUCC(ret)) {
-        ObString compat_mode_value = tenant_schema.is_oracle_tenant() ? "1" : "0";
+        ObString compat_mode_value = "0";
         SET_TENANT_VARIABLE(SYS_VAR_OB_COMPATIBILITY_MODE, compat_mode_value);
       }
 
@@ -616,10 +615,9 @@ int ObTenantDDLService::update_mysql_tenant_sys_var(
   if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < ObSysVarFactory::ALL_SYS_VARS_COUNT)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity));
-  } else if (tenant_schema.is_mysql_tenant()) {
+  } else {
+    // seekdb is MySQL-only: always set charset and collation for the tenant.
     HEAP_VAR(char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf) {
-      // If it is a tenant in mysql mode, you need to consider setting the charset and collation
-      // corresponding to the tenant to sys var
       VAR_INT_TO_STRING(val_buf, tenant_schema.get_collation_type());
       // set collation and char set
       SET_TENANT_VARIABLE(SYS_VAR_COLLATION_DATABASE, val_buf);
@@ -637,60 +635,12 @@ int ObTenantDDLService::update_oracle_tenant_sys_var(
     ObSysParam *sys_params,
     int64_t params_capacity)
 {
-  int ret = OB_SUCCESS;
-  const uint64_t tenant_id = sys_variable_schema.get_tenant_id();
-  if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < ObSysVarFactory::ALL_SYS_VARS_COUNT)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity));
-  } else if (tenant_schema.is_oracle_tenant()) {
-    HEAP_VAR(char[OB_MAX_SYS_PARAM_VALUE_LENGTH], val_buf) {
-      // For oracle tenants, the collation of sys variable and tenant_option is set to binary by default.
-      // set group_concat_max_len = 4000
-      // set autocommit = off
-      // When setting oracle variables, try to keep the format consistent
-      VAR_INT_TO_STRING(val_buf, OB_DEFAULT_GROUP_CONCAT_MAX_LEN_FOR_ORACLE);
-      SET_TENANT_VARIABLE(SYS_VAR_GROUP_CONCAT_MAX_LEN, val_buf);
-
-      SET_TENANT_VARIABLE(SYS_VAR_AUTOCOMMIT, "0");
-
-      VAR_INT_TO_STRING(val_buf, tenant_schema.get_collation_type());
-      SET_TENANT_VARIABLE(SYS_VAR_COLLATION_DATABASE, val_buf);
-      SET_TENANT_VARIABLE(SYS_VAR_COLLATION_SERVER, val_buf);
-      SET_TENANT_VARIABLE(SYS_VAR_CHARACTER_SET_DATABASE, val_buf);
-      SET_TENANT_VARIABLE(SYS_VAR_CHARACTER_SET_SERVER, val_buf);
-
-      // Here is the collation of the connection, OB currently only supports the client as utf8mb4
-      VAR_INT_TO_STRING(val_buf, CS_TYPE_UTF8MB4_BIN);
-      SET_TENANT_VARIABLE(SYS_VAR_COLLATION_CONNECTION, val_buf);
-      SET_TENANT_VARIABLE(SYS_VAR_CHARACTER_SET_CONNECTION, val_buf);
-
-      /*
-       * In Oracle mode, we are only compatible with binary mode, so collate can only end with _bin
-       */
-      if (ObCharset::is_bin_sort(tenant_schema.get_collation_type())) {
-        VAR_INT_TO_STRING(val_buf, tenant_schema.get_collation_type());
-        SET_TENANT_VARIABLE(SYS_VAR_CHARACTER_SET_SERVER, val_buf);
-        SET_TENANT_VARIABLE(SYS_VAR_CHARACTER_SET_DATABASE, val_buf);
-        ObCharsetType charset_type = ObCharset::charset_type_by_coll(tenant_schema.get_collation_type());
-        OZ(databuff_printf(val_buf, OB_MAX_SYS_PARAM_VALUE_LENGTH, "%s",
-                           ObCharset::get_oracle_charset_name_by_charset_type(charset_type)));
-        SET_TENANT_VARIABLE(SYS_VAR_NLS_CHARACTERSET, val_buf);
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tenant collation set error", K(ret), K(tenant_schema.get_collation_type()));
-      }
-
-      // update oracle tenant schema
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(databuff_printf(sys_params[SYS_VAR_SQL_MODE].value_,
-            sizeof(sys_params[SYS_VAR_SQL_MODE].value_), "%llu", DEFAULT_ORACLE_MODE))) {
-          ret = OB_BUF_NOT_ENOUGH;
-          LOG_WARN("set oracle tenant default sql mode failed",  K(ret));
-        }
-      }
-    } // end HEAP_VAR
-  }
-  return ret;
+  // seekdb is MySQL-only: Oracle tenant sys var updates are never needed.
+  UNUSED(tenant_schema);
+  UNUSED(sys_variable_schema);
+  UNUSED(sys_params);
+  UNUSED(params_capacity);
+  return OB_SUCCESS;
 }
 
 // The value of certain system variables of the system/meta tenant

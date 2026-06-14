@@ -2091,7 +2091,6 @@ public:
   inline void set_storage_format_work_version(const int64_t storage_format_work_version);
   void set_default_tablegroup_id(const uint64_t tablegroup_id) { default_tablegroup_id_ = tablegroup_id; }
   int set_default_tablegroup_name(const common::ObString &tablegroup_name) { return deep_copy_str(tablegroup_name, default_tablegroup_name_); }
-  inline void set_compatibility_mode(const common::ObCompatibilityMode compatibility_mode) { compatibility_mode_ = compatibility_mode; }
 
   //get methods
   inline uint64_t get_tenant_id() const { return tenant_id_; }
@@ -2114,16 +2113,6 @@ public:
       common::ObIArray<common::ObZone> &zone_list) const;
   inline uint64_t get_default_tablegroup_id() const { return default_tablegroup_id_; }
   inline const common::ObString &get_default_tablegroup_name() const { return default_tablegroup_name_; }
-  inline common::ObCompatibilityMode get_compatibility_mode() const { return compatibility_mode_; }
-
-  inline bool is_oracle_tenant() const
-  {
-    return common::ObCompatibilityMode::ORACLE_MODE == compatibility_mode_;
-  }
-  inline bool is_mysql_tenant() const
-  {
-    return common::ObCompatibilityMode::MYSQL_MODE == compatibility_mode_;
-  }
   inline bool is_dropping() const { return TENANT_STATUS_DROPPING == status_; }
   inline bool is_in_recyclebin() const { return in_recyclebin_; }
   inline void set_in_recyclebin(const bool in_recyclebin) { in_recyclebin_ = in_recyclebin; }
@@ -2144,7 +2133,7 @@ public:
   TO_STRING_KV(K_(tenant_id), K_(schema_version), K_(tenant_name), K_(zone_list),
                K_(charset_type), K_(locked), K_(comment), K_(name_case_mode),
                K_(read_only),
-               K_(default_tablegroup_id), K_(default_tablegroup_name), K_(compatibility_mode),
+               K_(default_tablegroup_id), K_(default_tablegroup_name),
                K_(status), K_(in_recyclebin));
 private:
   uint64_t tenant_id_;
@@ -2161,7 +2150,6 @@ private:
   // The following is the parsed array of a single zone, which has been sorted according to priority
   uint64_t default_tablegroup_id_;
   common::ObString default_tablegroup_name_;
-  common::ObCompatibilityMode compatibility_mode_;//Cannot be modified after creation
   ObTenantStatus status_;
   bool in_recyclebin_;
 };
