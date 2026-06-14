@@ -270,16 +270,16 @@ int ObIJsonBase::seek(const ObJsonPath &path, uint32_t node_cnt, bool is_auto_wr
   if (OB_ISNULL(allocator_)) { // check allocator
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("param allocator is NULL", K(ret), KP(allocator_));
-  } else if (lib::is_oracle_mode() || !path.is_mysql_) {
+  } else if (!path.is_mysql_) {
     parent_info.parent_jb_ = const_cast<ObIJsonBase*> (this);
     parent_info.parent_path_ = path.begin();
     parent_info.is_subpath_ = path.is_sub_path_;
     parent_info.path_size_ = node_cnt;
-    if (OB_FAIL(SMART_CALL(find_child(allocator_, parent_info, cur_node, last_node, is_auto_wrap, 
+    if (OB_FAIL(SMART_CALL(find_child(allocator_, parent_info, cur_node, last_node, is_auto_wrap,
                           only_need_one, true, dup, res, sql_var)))) {
       LOG_WARN("fail to seek", K(ret));
-    } 
-  } else if (lib::is_mysql_mode() || path.is_mysql_) {
+    }
+  } else {
     if (OB_FAIL(SMART_CALL(find_child(allocator_, parent_info, 
                           cur_node, last_node, is_auto_wrap, 
                           only_need_one, false, dup, res, sql_var)))) {
@@ -297,7 +297,7 @@ int ObIJsonBase::seek(ObIAllocator* allocator, const ObJsonPath &path,
   INIT_SUCC(ret);
   // For the path node after $, its parent_info.parent_path is begin()
   // For the path node after @, its parent_info is the upper-level node (which could be after $ or the end node of the previous @)
-  if (lib::is_oracle_mode() || is_lax) {
+  if (is_lax) {
     ObSeekParentInfo parent_info;
     parent_info.parent_jb_ = const_cast<ObIJsonBase*> (this);
     parent_info.parent_path_ = path.begin();
@@ -307,14 +307,14 @@ int ObIJsonBase::seek(ObIAllocator* allocator, const ObJsonPath &path,
     JsonPathIterator last_node = path.begin() + node_cnt;
     ObJsonSortedResult dup;
 
-    if (OB_FAIL(SMART_CALL(find_child(allocator, parent_info, 
-                          cur_node, last_node, is_auto_wrap, 
+    if (OB_FAIL(SMART_CALL(find_child(allocator, parent_info,
+                          cur_node, last_node, is_auto_wrap,
                           only_need_one, is_lax, dup, res, sql_var)))) {
       LOG_WARN("fail to seek", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("supposed to be oracle/LAX mode.", K(ret), K(lib::is_oracle_mode()));
+    LOG_WARN("supposed to be oracle/LAX mode.", K(ret), K(is_lax));
   }
 
   return ret;
@@ -3563,11 +3563,8 @@ int ObIJsonBase::print_array(ObJsonBuffer &j_buf, uint64_t depth, bool is_pretty
 int ObIJsonBase::pint_colon(ObJsonBuffer &j_buf, bool is_pretty) const
 {
   INIT_SUCC(ret);
-  if (lib::is_oracle_mode() && is_pretty) {
-    if (OB_FAIL(j_buf.append(" : "))) {
-      LOG_WARN("fail to append \" : \"", K(ret));
-    }
-  } else if (OB_FAIL(j_buf.append(":"))) {
+  UNUSED(is_pretty);
+  if (OB_FAIL(j_buf.append(":"))) {
     LOG_WARN("fail to append \":\"", K(ret));
   }
   return ret;
@@ -3598,7 +3595,7 @@ int ObIJsonBase::print_object(ObJsonBuffer &j_buf, uint64_t depth, bool is_prett
           LOG_WARN("fail to print string", K(ret), K(depth), K(i), K(key));
         } else if (OB_FAIL(pint_colon(j_buf, is_pretty))) {
           LOG_WARN("fail to append \":\"", K(ret), K(depth), K(i), K(key));
-        } else if (lib::is_mysql_mode() && OB_FAIL(j_buf.append(" "))) {
+        } else if (OB_FAIL(j_buf.append(" "))) {
           LOG_WARN("fail to append \" \"", K(ret), K(depth), K(i), K(key));
         } else {
           ObIJsonBase *jb_ptr = NULL;
@@ -4685,7 +4682,7 @@ int ObIJsonBase::compare(const ObIJsonBase &other, int &res, bool is_path) const
         case ObJsonNodeType::J_STRING: {
           ObString str_a(get_data_length(), get_data());
           ObString str_b(other.get_data_length(), other.get_data());
-          if (lib::is_oracle_mode() && is_path) {
+          if (false) {
             if (OB_FAIL(path_compare_string(str_a, str_b, res))) {
               LOG_WARN("fail to compare json string", K(ret));
             }
@@ -5266,7 +5263,7 @@ int ObIJsonBase::to_double(double &value) const
         } else {
           ObString tmp_str(length, data);
           ObString trimed_str = tmp_str.trim();
-          if (lib::is_mysql_mode() && 0 == trimed_str.length()) {
+          if (0 == trimed_str.length()) {
             ret = OB_ERR_DOUBLE_TRUNCATED;
             LOG_WARN("convert string to double failed", K(ret), K(tmp_str));
           } else {
@@ -5403,10 +5400,7 @@ int ObIJsonBase::to_number(ObIAllocator *allocator, number::ObNumber &number) co
       }
 
       case ObJsonNodeType::J_BOOLEAN: {
-        if (lib::is_oracle_mode()) {
-          ret = OB_ERR_BOOL_NOT_CONVERT_NUMBER;
-          LOG_WARN("cannot convert Boolean value to number", K(ret));
-        } else {
+        {
           bool b = get_boolean();
           if (OB_FAIL(num.from(static_cast<int64_t>(b), *allocator))) {
             LOG_WARN("fail to number from int(boolean)", K(ret), K(b));
@@ -5496,7 +5490,7 @@ int ObIJsonBase::to_datetime(int64_t &value, ObTimeConvertCtx *cvrt_ctx_t) const
   INIT_SUCC(ret);
   int64_t datetime;
   ObTimeConvertCtx cvrt_ctx(NULL, false);
-  if (OB_NOT_NULL(cvrt_ctx_t) && (lib::is_oracle_mode() || cvrt_ctx_t->is_timestamp_)) {
+  if (OB_NOT_NULL(cvrt_ctx_t) && cvrt_ctx_t->is_timestamp_) {
     cvrt_ctx.tz_info_ = cvrt_ctx_t->tz_info_;
     cvrt_ctx.oracle_nls_format_ = cvrt_ctx_t->oracle_nls_format_;
     cvrt_ctx.is_timestamp_ = cvrt_ctx_t->is_timestamp_;
@@ -5504,20 +5498,15 @@ int ObIJsonBase::to_datetime(int64_t &value, ObTimeConvertCtx *cvrt_ctx_t) const
   switch (json_type()) {
     case ObJsonNodeType::J_INT:
     case ObJsonNodeType::J_OINT: {
-      if (lib::is_oracle_mode()) {
-        // for oracle json json_element_t::to_Date()
-        datetime = (1000 * 1000) *  get_int();
+      if (get_int() < 0) {
+        ret = OB_INVALID_DATE_FORMAT;
+        LOG_WARN("fail to get json obtime", K(ret), K(get_int()));
       } else {
-        if (get_int() < 0) {
-          ret = OB_INVALID_DATE_FORMAT;
-          LOG_WARN("fail to get json obtime", K(ret), K(get_int()));
-        } else {
-          ObDateSqlMode date_sql_mode;
-          date_sql_mode.allow_invalid_dates_ = false;
-          date_sql_mode.no_zero_date_ = false;
-          if (OB_FAIL(ObTimeConverter::int_to_datetime(get_int(), 0, cvrt_ctx, datetime, date_sql_mode))) {
-            LOG_WARN("fail to convert int to obtime", K(ret), K(get_int()));
-          }
+        ObDateSqlMode date_sql_mode;
+        date_sql_mode.allow_invalid_dates_ = false;
+        date_sql_mode.no_zero_date_ = false;
+        if (OB_FAIL(ObTimeConverter::int_to_datetime(get_int(), 0, cvrt_ctx, datetime, date_sql_mode))) {
+          LOG_WARN("fail to convert int to obtime", K(ret), K(get_int()));
         }
       }
       break;
@@ -5581,11 +5570,7 @@ int ObIJsonBase::to_datetime(int64_t &value, ObTimeConvertCtx *cvrt_ctx_t) const
         LOG_WARN("data is null", K(ret));
       } else {
         ObString str = str_data.string();
-        if (lib::is_oracle_mode() && OB_NOT_NULL(cvrt_ctx_t)) {
-          if (OB_FAIL(ObTimeConverter::str_to_date_oracle(str, cvrt_ctx, datetime))) {
-            LOG_WARN("oracle fail to cast string to date", K(ret), K(str));
-          }
-        } else if (OB_FAIL(ObTimeConverter::str_to_datetime(str, cvrt_ctx, datetime))) {
+        if (OB_FAIL(ObTimeConverter::str_to_datetime(str, cvrt_ctx, datetime))) {
           LOG_WARN("fail to cast string to datetime", K(ret), K(str));
         }
       }
@@ -5599,11 +5584,7 @@ int ObIJsonBase::to_datetime(int64_t &value, ObTimeConvertCtx *cvrt_ctx_t) const
         LOG_WARN("data is null", K(ret));
       } else {
         ObString str(static_cast<int32_t>(length), static_cast<int32_t>(length), data);
-        if (lib::is_oracle_mode() && OB_NOT_NULL(cvrt_ctx_t)) {
-          if (OB_FAIL(ObTimeConverter::str_to_date_oracle(str, cvrt_ctx, datetime))) {
-            LOG_WARN("oracle fail to cast string to date", K(ret), K(str));
-          }
-        } else if (OB_FAIL(ObTimeConverter::str_to_datetime(str, cvrt_ctx, datetime))) {
+        if (OB_FAIL(ObTimeConverter::str_to_datetime(str, cvrt_ctx, datetime))) {
           LOG_WARN("fail to cast string to datetime", K(ret), K(str));
         }
       }
@@ -6502,7 +6483,7 @@ int ObJsonBaseUtil::append_comma(ObJsonBuffer &j_buf, bool is_pretty)
 
   if (OB_FAIL(j_buf.append(","))) {
     LOG_WARN("fail to append \",\" to buffer", K(ret), K(is_pretty));
-  } else if (!is_pretty && lib::is_mysql_mode()) {
+  } else if (!is_pretty) {
     if (OB_FAIL(j_buf.append(" "))) {
       LOG_WARN("fail to append space to buffer", K(ret));
     }
@@ -7100,7 +7081,7 @@ int ObJsonBaseUtil::check_json_schema_ref_def(ObIAllocator& allocator, ObIJsonBa
   } else {
     ObJsonSeekResult hit;
     common::ObString path_ref;
-    path_ref = lib::is_mysql_mode() ? "$**.\"$ref\"" : "$..\"$ref\"";
+    path_ref = "$**.\"$ref\"";
     ObJsonPath j_path(path_ref, &allocator);
     if (OB_FAIL(j_path.parse_path())) {
       LOG_WARN("fail to parse json path", K(ret));
