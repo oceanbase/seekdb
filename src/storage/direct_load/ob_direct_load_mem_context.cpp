@@ -95,7 +95,7 @@ int ObDirectLoadMemContext::init_enc_param(const ObColDesc &col_desc, ObEncParam
   param.type_ = col_desc.col_type_.get_type();
   param.cs_type_ = col_desc.col_type_.get_collation_type();
   param.is_var_len_ = false;
-  param.is_memcmp_ = lib::is_oracle_mode();
+  param.is_memcmp_ = false;
   param.is_nullable_ = true; // unused
 #if OB_USE_MULTITARGET_CODE
   int tmp_ret = OB_SUCCESS;
@@ -107,7 +107,7 @@ int ObDirectLoadMemContext::init_enc_param(const ObColDesc &col_desc, ObEncParam
   param.is_simdopt_ = false;
 #endif
   // null pos: null first -> 0, nulls last -> 1
-  param.is_null_first_ = !lib::is_oracle_mode();
+  param.is_null_first_ = true;
   param.is_asc_ = (col_desc.col_order_ == ObOrderType::ASC);
   return ret;
 }

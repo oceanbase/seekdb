@@ -318,7 +318,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     uint64_t base_table_id = -1;
     ObString base_vector_index_col_name;
     if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-            cs_type, case_mode, lib::is_oracle_mode(), arg_base_name,
+            cs_type, case_mode, false, arg_base_name,
             base_db_name, base_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
               K(arg_base_name));
@@ -326,7 +326,7 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                     static_cast<int>(arg_base_name.length()),
                     arg_base_name.ptr());
     } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
-                  cs_type, case_mode, lib::is_oracle_mode(), arg_idx_name,
+                  cs_type, case_mode, false, arg_idx_name,
                   index_db_name, index_name))) {
       LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
               K(arg_idx_name));

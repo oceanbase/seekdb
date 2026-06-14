@@ -625,7 +625,7 @@ ObJsonPath::ObJsonPath(common::ObIAllocator *allocator)
   index_ = 0;
   bad_index_ = -1;
   use_heap_expr_ = 0;
-  is_mysql_ =  lib::is_mysql_mode();
+  is_mysql_ = true;
   is_sub_path_ = false;
   is_contained_wildcard_or_ellipsis_ = false;
 }
@@ -642,7 +642,7 @@ ObJsonPath::ObJsonPath(const ObString& path, common::ObIAllocator *allocator)
   bad_index_ = -1;
   use_heap_expr_ = 1;
   is_contained_wildcard_or_ellipsis_ = false;
-  is_mysql_ = lib::is_mysql_mode();
+  is_mysql_ = true;
   is_sub_path_ = false;
 
   if (heap_expr_.append(path) == OB_SUCCESS) {
@@ -3146,9 +3146,7 @@ int ObJsonPath::parse_oracle_member_node()
     if (OB_FAIL(get_origin_key_name(name, name_len, is_quoted, is_func, with_escape))) {
       LOG_WARN("fail to get keyname!", K(ret), K(index_), K(expression_));
     } else if (is_quoted || (!is_func)) {
-      if (lib::is_oracle_mode() && with_escape && OB_FAIL(ObJsonPath::deal_with_escape(name, name_len))) {
-        LOG_WARN("fail to deal escape!", K(ret), K(index_), K(expression_));
-      } else if (OB_FAIL(parse_name_with_rapidjson(name, name_len))) {
+      if (OB_FAIL(parse_name_with_rapidjson(name, name_len))) {
         LOG_WARN("fail to parse name with rapidjson",
         K(ret), K(index_), K(expression_),KCSTRING(name));
       } else if (!is_quoted) {

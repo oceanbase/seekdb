@@ -298,14 +298,14 @@ int ObField::get_field_mb_length(const ObObjType type,
       if (CS_TYPE_INVALID == charsetnr || accuracy.get_length() < 0) {
         length = static_cast<ObLength>(MAX_COLUMN_VARCHAR_LENGTH);
         //LOG_WARN("negative input length. something bad may have happened", K(ret), K(accuracy), K(charsetnr), K(common::lbt()));
-      } else if (is_oracle_byte_length(lib::is_oracle_mode(), accuracy.get_length_semantics())) {
+      } else if (is_oracle_byte_length(false, accuracy.get_length_semantics())) {
         length = accuracy.get_length();
       } else {
         int64_t mbmaxlen = 1;
         if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(charsetnr, mbmaxlen))) {
           LOG_WARN("fail to get mbmaxlen", K(charsetnr), K(ret));
         } else {
-          if (lib::is_mysql_mode() && tc == ObTextTC) {
+          if (tc == ObTextTC) {
             // compat mysql-jdbc 8.x for judge text type by length
             length = static_cast<uint32_t>(ObAccuracy::MAX_ACCURACY[type].get_length() - 1);
           } else {
@@ -332,8 +332,6 @@ int ObField::get_field_mb_length(const ObObjType type,
     case ObFloatTC:
       if (accuracy.get_precision() >= 0 && accuracy.get_scale() >= 0) {
         length = accuracy.get_precision();
-      } else if (lib::is_oracle_mode()) {
-        length = MAX_FLOAT_STR_LENGTH;
       } else if (accuracy.get_precision() == DEFAULT_FLOAT_PRECISION
               || accuracy.get_scale() == DEFAULT_FLOAT_SCALE) {
         length = MAX_FLOAT_STR_LENGTH;

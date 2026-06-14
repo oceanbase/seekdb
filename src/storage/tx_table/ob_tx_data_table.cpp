@@ -142,11 +142,11 @@ int ObTxDataTable::init_tx_data_read_schema_()
   } else if (OB_FAIL(columns.push_back(value))) {
     STORAGE_LOG(WARN, "failed to push back value", KR(ret), K(value));
   } else if (OB_FAIL(read_info.init(arena_allocator_, LS_TX_DATA_SCHEMA_COLUMN_CNT,
-                                    LS_TX_DATA_SCHEMA_ROWKEY_CNT, lib::is_oracle_mode(),
+                                    LS_TX_DATA_SCHEMA_ROWKEY_CNT, false,
                                     columns, nullptr/*storage_cols_index*/))) {
     STORAGE_LOG(WARN, "Fail to init read_info", K(ret));
   } else if (OB_FAIL(full_read_info.init(arena_allocator_, LS_TX_DATA_SCHEMA_COLUMN_CNT,
-                                         LS_TX_DATA_SCHEMA_ROWKEY_CNT, lib::is_oracle_mode(),
+                                         LS_TX_DATA_SCHEMA_ROWKEY_CNT, false,
                                          columns))) {
     STORAGE_LOG(WARN, "Fail to init read_info", K(ret));
   } else {
