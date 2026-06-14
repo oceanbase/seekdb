@@ -38,7 +38,6 @@
 #endif
 #endif
 #include "share/ob_define.h"
-#include "share/ob_get_compat_mode.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_trigger_info.h"
 #include "lib/compress/ob_compress_util.h"

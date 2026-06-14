@@ -76,9 +76,6 @@ int ObCreateTableLikeHelper::check_schema_valid_(const ObTableSchema *&orig_tabl
   bool is_oracle_mode = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
   } else if (is_oracle_mode) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported in oracle mode", KR(ret), K_(tenant_id));

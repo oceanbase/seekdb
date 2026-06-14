@@ -1835,10 +1835,8 @@ int ObMPConnect::verify_connection(const uint64_t tenant_id) const
       // sys tenant or root(SYS) user is considered as vip
       bool check_max_sess = tenant_id != OB_SYS_TENANT_ID;
       if (check_max_sess) {
-        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-        if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-          LOG_WARN("get_compat_mode failed", K(ret), K(tenant_id));
-        } else if (Worker::CompatMode::MYSQL == compat_mode) {
+        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+        if (Worker::CompatMode::MYSQL == compat_mode) {
           check_max_sess = user_name_.compare(OB_SYS_USER_NAME) != 0;
         } else if (Worker::CompatMode::ORACLE == compat_mode) {
           check_max_sess = user_name_.case_compare(OB_ORA_SYS_USER_NAME) != 0;
@@ -1889,10 +1887,8 @@ int ObMPConnect::check_update_tenant_id(ObSMConnection &conn, uint64_t &tenant_i
     conn.tenant_id_ = tenant_id;
     conn.resource_group_id_ = tenant_id;
     if (OBCG_DIAG_TENANT == conn.group_id_) {
-      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-      if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-        LOG_WARN("get_compat_mode failed", K(ret), K(tenant_id));
-      } else if (Worker::CompatMode::MYSQL == compat_mode) {
+      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+      if (Worker::CompatMode::MYSQL == compat_mode) {
         user_name_ = ObString::make_string(OB_SYS_USER_NAME);
       } else if (Worker::CompatMode::ORACLE == compat_mode) {
         user_name_ = ObString::make_string(OB_ORA_SYS_USER_NAME);
@@ -2034,8 +2030,6 @@ int ObMPConnect::convert_oracle_object_name(const uint64_t tenant_id, ObString &
   if (object_name.empty()) {
     //Here the obj_name passed in may be empty, so no error code is assigned
     LOG_DEBUG("object name is null when try to convert it");
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("fail to get tenant mode in convert_oracle_object_name", K(ret));
   } else if (compat_mode == lib::Worker::CompatMode::ORACLE) {
     if (object_name.length() > 1 &&
         '\"' == object_name[0]   &&

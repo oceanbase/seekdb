@@ -233,9 +233,7 @@ bool ObPluginVectorIndexLoadScheduler::check_can_do_work()
   int ret = OB_SUCCESS;
   bool is_oracle_mode = false;
   
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K_(tenant_id));
-  } else if (is_oracle_mode) {
+  if (is_oracle_mode) {
     bret = false;
     LOG_DEBUG("vector index not support oracle mode", K_(tenant_id));
   }
@@ -1521,23 +1519,19 @@ int ObPluginVectorIndexLoadScheduler::safe_to_destroy(bool &is_safe)
   return ret;
 }
 
-void ObPluginVectorIndexLoadScheduler::stop()
-{
+void ObPluginVectorIndexLoadScheduler::stop() 
+{ 
   int ret = OB_SUCCESS;
-  is_stopped_= true;
+  is_stopped_= true; 
   ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
-  if (OB_NOT_NULL(vector_index_service_) && OB_NOT_NULL(ls_)) {
+  if (OB_NOT_NULL(vector_index_service_)) {
     if (OB_FAIL(vector_index_service_->get_ls_index_mgr_map().get_refactored(ls_->get_ls_id(), index_ls_mgr))) {
       LOG_WARN("fail to get vector index ls mgr", KR(ret), K(tenant_id_), K(ls_->get_ls_id()));
     } else if (OB_NOT_NULL(index_ls_mgr)) {
       index_ls_mgr->get_async_task_opt().set_stop();
     }
   }
-  if (OB_NOT_NULL(ls_)) {
-    FLOG_INFO("vector index task scheduler stop", K(ls_->get_ls_id()), KP(index_ls_mgr));
-  } else {
-    FLOG_INFO("vector index task scheduler stop, ls is null", KP(index_ls_mgr));
-  }
+  FLOG_INFO("vector index task scheduler stop", K(ls_->get_ls_id()), KP(index_ls_mgr));
 };
 
 void ObPluginVectorIndexLoadScheduler::destroy()

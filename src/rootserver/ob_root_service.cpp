@@ -25,6 +25,7 @@
 #include "share/ob_index_builder_util.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "share/deadlock/ob_deadlock_inner_table_service.h"
+#include "share/backup/ob_backup_config.h"
 #include "share/scheduler/ob_partition_auto_split_helper.h"
 
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
@@ -47,6 +48,7 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_ddl_common.h" // for ObDDLUtil
 #include "share/ob_cluster_event_history_table_operator.h"//CLUSTER_EVENT_INSTANCE
+#include "rootserver/backup/ob_backup_proxy.h" //ObBackupServiceProxy
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "observer/ob_sys_tenant_load_sys_package_task.h"
@@ -2870,9 +2872,8 @@ int ObRootService::optimize_table(const ObOptimizeTableArg &arg)
   } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, schema service must not be NULL", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(arg.tenant_id_, mode))) {
-    LOG_WARN("fail to get tenant mode", K(ret));
   } else {
+    mode = lib::Worker::CompatMode::MYSQL;
     const int64_t all_core_table_id = OB_ALL_CORE_TABLE_TID;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.tables_.count(); ++i) {
       SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
@@ -3602,8 +3603,7 @@ int ObRootService::revoke_table(const ObRevokeTableArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(arg.tenant_id_, mode))) {
-    LOG_WARN("fail to get tenant mode", K(ret));
+  } else if (FALSE_IT(mode = lib::Worker::CompatMode::MYSQL)) {
   } else if (lib::Worker::CompatMode::ORACLE == mode) {
     ObTablePrivSortKey table_priv_key(arg.tenant_id_, arg.user_id_, arg.db_, arg.table_);
     ObObjPrivSortKey obj_priv_key(arg.tenant_id_,
@@ -4082,6 +4082,10 @@ int ObRootService::admin_set_config(obcall::ObAdminSetConfigArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
+  } else if (arg.is_backup_config_) {
+    if (OB_FAIL(admin_set_backup_config(arg))) {
+      LOG_WARN("fail to set backup config", K(ret), K(arg));
+    }
   } else {
     ObSystemAdminCtx ctx;
     if (OB_FAIL(init_sys_admin_ctx(ctx))) {
@@ -5047,6 +5051,178 @@ int ObRootService::rebuild_index_in_restore(
   return ret;
 }
 
+int ObRootService::handle_archive_log(const obcall::ObArchiveLogArg &arg)
+{
+  int ret = OB_SUCCESS;
+  LOG_INFO("handle_archive_log", K(arg));
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ObBackupServiceProxy::handle_archive_log(arg))) {
+    LOG_WARN("failed to handle archive log", K(ret));
+  }
+  return ret;
+}
+
+int ObRootService::handle_backup_database(const obcall::ObBackupDatabaseArg &in_arg)
+{
+  int ret = OB_SUCCESS;
+	if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ObBackupServiceProxy::handle_backup_database(in_arg))) {
+    LOG_WARN("failed to handle backup database", K(ret), K(in_arg));
+  }
+  FLOG_INFO("handle_backup_database", K(ret), K(in_arg));
+  return ret;
+}
+
+int ObRootService::handle_validate_database(const obcall::ObBackupManageArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
+  LOG_ERROR("not supported now", K(ret), K(arg));
+  return ret;
+}
+
+int ObRootService::handle_validate_backupset(const obcall::ObBackupManageArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
+  LOG_ERROR("not supported now", K(ret), K(arg));
+  return ret;
+}
+
+int ObRootService::handle_cancel_validate(const obcall::ObBackupManageArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
+  LOG_ERROR("not supported now", K(ret), K(arg));
+  return ret;
+}
+
+int ObRootService::handle_backup_manage(const obcall::ObBackupManageArg &arg)
+{
+  int ret = OB_SUCCESS;
+
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    switch (arg.type_) {
+    case ObBackupManageArg::CANCEL_BACKUP: {
+      if (OB_FAIL(handle_backup_database_cancel(arg))) {
+        LOG_WARN("failed to handle backup database cancel", K(ret), K(arg));
+      }
+      break;
+    };
+    case ObBackupManageArg::VALIDATE_DATABASE: {
+      if (OB_FAIL(handle_validate_database(arg))) {
+        LOG_WARN("failed to handle validate database", K(ret), K(arg));
+      }
+      break;
+    };
+    case ObBackupManageArg::VALIDATE_BACKUPSET: {
+      if (OB_FAIL(handle_validate_backupset(arg))) {
+        LOG_WARN("failed to handle validate backupset", K(ret), K(arg));
+      }
+      break;
+    };
+    case ObBackupManageArg::CANCEL_VALIDATE: {
+      if (OB_FAIL(handle_cancel_validate(arg))) {
+        LOG_WARN("failed to handle cancel validate", K(ret), K(arg));
+      }
+      break;
+    };
+    case ObBackupManageArg::CANCEL_BACKUP_BACKUPSET: {
+      if (OB_FAIL(handle_cancel_backup_backup(arg))) {
+        LOG_WARN("failed to handle cancel backup backup", K(ret), K(arg));
+      }
+      break;
+    }
+    case ObBackupManageArg::CANCEL_BACKUP_BACKUPPIECE: {
+      if (OB_FAIL(handle_cancel_backup_backup(arg))) {
+        LOG_WARN("failed to handle cancel backup backup", K(ret), K(arg));
+      }
+      break;
+    }
+    case ObBackupManageArg::CANCEL_ALL_BACKUP_FORCE: {
+      if (OB_FAIL(handle_cancel_all_backup_force(arg))) {
+        LOG_WARN("failed to handle cancel all backup force", K(ret), K(arg));
+      }
+      break;
+    };
+    default: {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_ERROR("invalid backup manage arg", K(ret), K(arg));
+      break;
+    }
+    }
+  }
+
+  FLOG_INFO("finish handle_backup_manage", K(ret), K(arg));
+  return ret;
+}
+
+int ObRootService::handle_backup_delete(const obcall::ObBackupCleanArg &arg)
+{
+  int ret = OB_SUCCESS;
+	if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ObBackupServiceProxy::handle_backup_delete(arg))) {
+    LOG_WARN("failed to handle backup delete", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int ObRootService::handle_delete_policy(const obcall::ObDeletePolicyArg &arg)
+{
+  int ret = OB_SUCCESS;
+	if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+	} else if (OB_FAIL(ObBackupServiceProxy::handle_delete_policy(arg))) {
+    LOG_WARN("failed to handle delete policy", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int ObRootService::handle_backup_database_cancel(
+    const obcall::ObBackupManageArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
+  } else if (ObBackupManageArg::CANCEL_BACKUP != arg.type_) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("handle backup database cancel get invalid argument", K(ret), K(arg));
+  } else if (OB_FAIL(ObBackupServiceProxy::handle_backup_database_cancel(arg))) {
+    LOG_WARN("failed to start schedule backup cancel", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int ObRootService::check_backup_scheduler_working(Bool &is_working)
+{
+  int ret = OB_NOT_SUPPORTED;
+  is_working = true;
+
+  FLOG_INFO("not support check backup scheduler working, should not use anymore", K(ret), K(is_working));
+  return ret;
+}
+
+int ObRootService::handle_cancel_backup_backup(const obcall::ObBackupManageArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
+  LOG_ERROR("not supported now", K(ret), K(arg));
+  return ret;
+}
+
+int ObRootService::handle_cancel_all_backup_force(const obcall::ObBackupManageArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
+  LOG_ERROR("not support now", K(ret), K(arg));
+  return ret;
+}
 
 void ObRootService::reset_fail_count()
 {
@@ -5059,6 +5235,22 @@ void ObRootService::update_fail_count(int ret)
   LOG_WARN("rs_monitor_check : fail to start root service", KR(ret), K(count));
   LOG_DBA_WARN(OB_ERR_ROOTSERVICE_START, "msg", "rootservice start()/do_restart() has failure",
                KR(ret), "fail_cnt", count);
+}
+
+int ObRootService::create_restore_point(const obcall::ObCreateRestorePointArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
+  UNUSED(arg);
+  LOG_WARN("craete restpre point is not supported now", K(ret));
+  return ret;
+}
+
+int ObRootService::drop_restore_point(const obcall::ObDropRestorePointArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
+  UNUSED(arg);
+  LOG_WARN("drop restpre point is not supported now", K(ret));
+  return ret;
 }
 
 int ObRootService::build_ddl_single_replica_response(const obcall::ObDDLBuildSingleReplicaResponseArg &arg)
@@ -5198,6 +5390,72 @@ int ObRootService::flush_opt_stat_monitoring_info(const obcall::ObFlushOptStatAr
   return ret;
 }
 
+int ObRootService::admin_set_backup_config(const obcall::ObAdminSetConfigArg &arg)
+{
+  int ret = OB_SUCCESS;  
+  if (!arg.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid backup config arg", K(ret));
+  } else if (!arg.is_backup_config_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("admin set config type not backup config", K(ret), K(arg));
+  }
+  share::BackupConfigItemPair config_item;
+  share::ObBackupConfigParserMgr config_parser_mgr;
+  ARRAY_FOREACH_X(arg.items_, i , cnt, OB_SUCC(ret)) {
+    const ObAdminSetConfigItem &item = arg.items_.at(i);
+    uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+    ObMySQLTransaction trans;
+    config_parser_mgr.reset();
+    if ((common::is_sys_tenant(item.exec_tenant_id_) && item.tenant_name_.is_empty())
+        || (common::is_user_tenant(item.exec_tenant_id_) && !item.tenant_name_.is_empty())
+        || common::is_meta_tenant(item.exec_tenant_id_)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("backup config only support user tenant", K(ret));
+    } else if (!item.tenant_name_.is_empty()) {
+      schema::ObSchemaGetterGuard guard;
+      if (OB_ISNULL(schema_service_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("schema service must not be null", K(ret));
+      } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, guard))) {
+        LOG_WARN("fail to get tenant schema guard", K(ret));
+      } else if (OB_FAIL(guard.get_tenant_id(ObString(item.tenant_name_.ptr()), exec_tenant_id))) {
+        LOG_WARN("fail to get tenant id", K(ret));
+      }
+    } else {
+      exec_tenant_id = item.exec_tenant_id_;
+    }
+
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(trans.start(&sql_proxy_, gen_meta_tenant_id(exec_tenant_id)))) {
+      LOG_WARN("fail to start trans", K(ret));
+    } else {
+      common::ObSqlString name;
+      common::ObSqlString value;
+      if (OB_FAIL(name.assign(item.name_.ptr()))) {
+        LOG_WARN("fail to assign name", K(ret));
+      } else if (OB_FAIL(value.assign(item.value_.ptr()))) {
+        LOG_WARN("fail to assign value", K(ret));
+      } else if (OB_FAIL(config_parser_mgr.init(name, value, exec_tenant_id))) {
+        LOG_WARN("fail to init backup config parser mgr", K(ret), K(item));
+      } else if (OB_FAIL(config_parser_mgr.update_inner_config_table(trans))) {
+        LOG_WARN("fail to update inner config table", K(ret));
+      }
+
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(trans.end(true))) {
+          LOG_WARN("fail to commit trans", K(ret));
+        }
+      } else {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = trans.end(false))) {
+          LOG_WARN("fail to rollback trans", K(tmp_ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
 
 int ObRootService::cancel_ddl_task(const ObCancelDDLTaskArg &arg)
 {
@@ -5253,6 +5511,12 @@ int ObRootService::set_config_after_bootstrap_()
       }
     }
   }
+  return ret;
+}
+
+int ObRootService::handle_recover_table(const obcall::ObRecoverTableArg &arg)
+{
+  int ret = OB_NOT_SUPPORTED;
   return ret;
 }
 

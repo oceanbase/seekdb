@@ -178,6 +178,14 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
     }
 
     if (OB_SUCC(ret)) {
+      if (compress_method_ == all_compressor_name[ZLIB_COMPRESSOR]) {
+        ret = OB_NOT_SUPPORTED;
+        SQL_RESV_LOG(WARN, "Not allowed to use zlib compressor!", K(ret));
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "zlib compressor");
+      } 
+    }
+
+    if (OB_SUCC(ret)) {
       table_schema.set_row_store_type(row_store_type_);
       table_schema.set_store_format(store_format_);
       table_schema.set_progressive_merge_round(progressive_merge_round);
@@ -252,10 +260,6 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
     SQL_RESV_LOG(WARN, "session is null", KP(session_info_), K(ret));
-  } else if (static_cast<int64_t>(table_id_) > 0
-             && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-             session_info_->get_effective_tenant_id(), table_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K_(table_id));
   } else if (OB_ISNULL(col = table_schema.get_column_schema(column_name))) {
     ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
     LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());

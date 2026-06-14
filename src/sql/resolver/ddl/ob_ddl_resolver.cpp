@@ -5715,8 +5715,6 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     if (OB_FAIL(cast_default_value(session_info, default_value, tz_info_wrap.get_time_zone_info(),
                                    nls_formats, allocator, column, sql_mode))) {
       LOG_WARN("fail to cast default value!", K(ret), K(default_value), KPC(tz_info_wrap.get_time_zone_info()), K(column), K(sql_mode));
-    } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(table_schema.get_tenant_id(), is_oracle_mode))) {
-      LOG_WARN("check if_oracle_compat_mode failed", KR(ret), K(table_schema.get_tenant_id()));
     } else if (OB_FAIL(check_default_value_length(!is_oracle_mode, column, default_value))) {
       LOG_WARN("fail to check default value length", K(ret), K(default_value), K(column));
     } else {
@@ -8916,11 +8914,7 @@ int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(ParseNode *node,
       ObSqlString part_expr;
       bool is_oracle_mode = false;
       const uint64_t tenant_id = session_info_->get_effective_tenant_id();
-      if (static_cast<int64_t>(table_id_) > 0
-          && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                     tenant_id, table_id_, is_oracle_mode))) {
-        LOG_WARN("fail to check oralce mode", KR(ret), K(tenant_id), K_(table_id));
-      } else if (OB_FAIL(get_part_str_with_type(is_oracle_mode, part_func_type, func_expr_name, part_expr))) {
+      if (OB_FAIL(get_part_str_with_type(is_oracle_mode, part_func_type, func_expr_name, part_expr))) {
         SQL_RESV_LOG(WARN, "Failed to get part str with type", K(ret));
       } else if (OB_FAIL(ob_write_string(*allocator_, part_expr.string(), func_expr_name))) {
         LOG_WARN("failed to copy string", K(part_expr.string()));

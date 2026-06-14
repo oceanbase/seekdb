@@ -175,8 +175,6 @@ int ObCreateViewHelper::lock_and_check_view_name_()
   bool is_oracle_mode = false;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
   } else if (is_oracle_mode) {
     if (arg_.is_alter_view_) {
       ret = OB_NOT_SUPPORTED;
@@ -867,8 +865,6 @@ int ObCreateViewHelper::handle_error_info_()
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (ERROR_STATUS_HAS_ERROR != arg_.error_info_.get_error_status()) {
     // do nothing
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret), K_(tenant_id));
   } else if (OB_UNLIKELY(!is_oracle_mode)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected compat mode add create vew error info", KR(ret), K_(tenant_id), K(is_oracle_mode));

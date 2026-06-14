@@ -421,10 +421,7 @@ int ObSchemaGuardWrapper::get_coded_index_name_info_mysql(common::ObIAllocator &
     const ObTableSchema *data_table_schema = nullptr;
     bool is_oracle_mode = false;
     ObSchemaService *schema_service_impl = nullptr;
-    if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-               tenant_id_, is_oracle_mode))) {
-      LOG_WARN("fail to check is oracle mode", KR(ret), K_(tenant_id));
-    } else if (OB_UNLIKELY(is_oracle_mode)) {
+    if (OB_UNLIKELY(is_oracle_mode)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("should use in mysql mode", KR(ret), K_(tenant_id));
     } else if (OB_FAIL(local_schema_guard_.get_table_schema(tenant_id_, data_table_id, data_table_schema))) {

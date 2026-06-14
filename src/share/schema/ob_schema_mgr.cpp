@@ -3398,11 +3398,9 @@ int ObSchemaMgr::get_index_schema(
     LOG_WARN("tenant_id not matched", K(ret), K(tenant_id), K_(tenant_id));
   } else {
     ObSimpleTableSchemaV2 *tmp_schema = NULL;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     const IndexNameMap &index_name_map = get_index_name_map_(is_built_in);
-    if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-      LOG_WARN("fail to get tenant mode", K(ret));
-    } else if (is_recyclebin_database_id(database_id)) { // in recyclebin
+    if (is_recyclebin_database_id(database_id)) { // in recyclebin
       const ObIndexSchemaHashWrapper index_name_wrapper(
           tenant_id, database_id, common::OB_INVALID_ID, table_name);
       int hash_ret = index_name_map.get_refactored(index_name_wrapper, tmp_schema);
@@ -3459,10 +3457,7 @@ int ObSchemaMgr::deep_copy_index_name_map(
 {
   int ret = OB_SUCCESS;
   bool is_oracle_mode = false;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-      tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to get tenant mode", KR(ret), K_(tenant_id));
-  } else {
+  {
     // index_name_cache will destory or not init, so sub_map_mem_size should be set first
     // to reduce dynamic memory allocation and avoid error.
     (void) index_name_cache.set_sub_map_mem_size(normal_index_name_map_.get_sub_map_mem_size());
@@ -4710,7 +4705,7 @@ int ObSchemaMgr::get_idx_schema_by_origin_idx_name(const uint64_t tenant_id,
 {
   int ret = OB_SUCCESS;
   table_schema = NULL;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -4719,8 +4714,6 @@ int ObSchemaMgr::get_idx_schema_by_origin_idx_name(const uint64_t tenant_id,
              || ori_index_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(database_id), K(ori_index_name));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("fail to get tenant mode", K(ret));
   } else if (lib::Worker::CompatMode::ORACLE != compat_mode
              || is_mysql_sys_database_id(database_id)) {
     ret = OB_INVALID_ARGUMENT;

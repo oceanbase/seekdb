@@ -845,9 +845,8 @@ int ObSchemaUtils::build_column_group(
       cg_name.empty() || (cg_type >= ObColumnGroupType::MAX_COLUMN_GROUP)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument",K(table_schema), KR(ret), K(cg_name), K(cg_type), "column_id_cnt", column_ids.count());
-  } else if(OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, mode))) {
-    LOG_WARN("fail to check if oralce mode", K(ret), K(table_schema));
   } else {
+    mode = lib::Worker::CompatMode::MYSQL;
     column_group.set_column_group_id(cg_id);
     column_group.set_column_group_type(cg_type);
     column_group.set_block_size(table_schema.get_block_size());

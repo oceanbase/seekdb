@@ -741,9 +741,7 @@ int ObUserSqlService::gen_user_dml(
   const bool is_ssl_support = (user.get_ssl_type() != ObSSLType::SSL_TYPE_NOT_SPECIFIED);
   LOG_INFO("gen_user_dml", K(is_ssl_support), K(user), K(is_from_inner_sql));
   bool is_oracle_mode = false;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(user.get_tenant_id(), is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
-  } else if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
+  if (OB_FAIL(dml.add_pk_column("user_id", ObSchemaUtils::get_extract_schema_id(
                                               exec_tenant_id,user.get_user_id())))
       || OB_FAIL(dml.add_column("user_name", ObHexEscapeSqlStr(user.get_user_name())))
       || OB_FAIL(dml.add_column("host", ObHexEscapeSqlStr(user.get_host_name())))

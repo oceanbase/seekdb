@@ -24,7 +24,6 @@
 #include "lib/string/ob_sql_string.h"
 #include "share/schema/ob_ddl_sql_service.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_get_compat_mode.h"
 #include "share/ob_partition_modify.h"
 #include "share/ob_rpc_struct.h"
 
@@ -1007,11 +1006,9 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
     RS_LOG(WARN, "Failed to get TSIDDLVar", K(ret));
   } else {
     const common::ObString *ddl_id_str = tsi_value->ddl_id_str_;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     if (share::schema::ObSchemaService::g_liboblog_mode_) {
       // do nothing
-    } else if (OB_FAIL(share::ObCompatModeGetter::get_tenant_mode(schema.get_tenant_id(), compat_mode))) {
-      RS_LOG(WARN, "fail to get tenant mode", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(ddl_id_str)) {

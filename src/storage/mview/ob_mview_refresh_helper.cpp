@@ -133,9 +133,6 @@ int ObMViewRefreshHelper::generate_purge_mlog_sql(ObSchemaGetterGuard &schema_gu
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is nullptr", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(tenant_id, mlog_id,
-                                                                            is_oracle_mode))) {
-    LOG_WARN("check if oracle mode failed", KR(ret), K(mlog_id));
   } else {
     ObArenaAllocator allocator("ObMVRefTmp");
     ObString database_name;
@@ -198,9 +195,6 @@ int ObMViewRefreshHelper::get_table_row_num(ObMViewTransaction &trans, const uin
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is nullptr", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(tenant_id, table_id,
-                                                                            is_oracle_mode))) {
-    LOG_WARN("check if oracle mode failed", KR(ret), K(table_id));
   } else {
     ObArenaAllocator allocator("ObMVRefTmp");
     ObString database_name;
@@ -283,9 +277,6 @@ int ObMViewRefreshHelper::get_mlog_dml_row_num(ObMViewTransaction &trans, const 
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is nullptr", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(tenant_id, table_id,
-                                                                            is_oracle_mode))) {
-    LOG_WARN("check if oracle mode failed", KR(ret), K(table_id));
   } else {
     ObArenaAllocator allocator("ObMVRefTmp");
     ObString database_name;

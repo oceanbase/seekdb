@@ -1074,9 +1074,8 @@ int ObUniqueCheckingParam::init(
       } else if (OB_ISNULL(data_table_schema_)) {
         ret = OB_TABLE_NOT_EXIST;
         STORAGE_LOG(WARN, "data table not exist", K(ret));
-      } else if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(tenant_id, index_table_id, compat_mode_))) {
-        LOG_WARN("failed to get compat mode", K(ret), K(index_table_id));
       } else {
+        compat_mode_ = lib::Worker::CompatMode::MYSQL;
         is_inited_ = true;
         tenant_id_ = tenant_id;
         ls_id_ = ls_id;

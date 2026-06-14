@@ -100,8 +100,6 @@ int ObCatalogDDLService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
   } else if (OB_ISNULL(ddl_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_ora_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
   } else if (is_ora_mode) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support grant revoke catalog level privilege in oracle mode", K(ret));

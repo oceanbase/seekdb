@@ -4447,8 +4447,6 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROLE_GRANTEE_MAP_HISTORY_SQL, OB_ALL_TENANT_ROLE_GRANTEE_MAP_HISTORY_TNAME,
                                ObSchemaUtils::get_extract_tenant_id(exec_tenant_id, tenant_id)))) {
       LOG_WARN("append sql failed", K(ret));
-    } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-      LOG_WARN("failed to get oracle mode", K(ret));
     } else if (!is_full_schema) {
       for (int64_t i = 0; OB_SUCC(ret) && i < users_size; ++i) {
         const uint64_t user_id = ObSchemaUtils::get_extract_schema_id(exec_tenant_id, user_keys[i]);
@@ -8143,9 +8141,6 @@ int ObSchemaServiceSQLImpl::get_index_id(
   } else if (OB_ISNULL(idx_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc idx_name failed", KR(ret), K(tenant_id), K(index_name));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(tenant_id));
   } else if (FALSE_IT(case_compare = (!is_oracle_mode
              || is_mysql_sys_database_id(database_id)))) {
   } else if (is_oceanbase_sys_database_id(database_id)) {
@@ -8261,9 +8256,6 @@ int ObSchemaServiceSQLImpl::get_constraint_id(
   } else if (OB_ISNULL(cst_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc cst_name failed", KR(ret), K(tenant_id), K(constraint_name));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(tenant_id));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObSqlString sql;
@@ -8354,9 +8346,6 @@ int ObSchemaServiceSQLImpl::get_foreign_key_id(
   } else if (OB_ISNULL(fk_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc fk_name failed", KR(ret), K(tenant_id), K(foreign_key_name));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(tenant_id));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObSqlString sql;
@@ -8531,9 +8520,6 @@ int ObSchemaServiceSQLImpl::get_package_id(
   } else if (OB_ISNULL(pkg_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc pkg_name failed", KR(ret), K(tenant_id), K(package_name));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(tenant_id));
   } else if (FALSE_IT(case_compare = !is_oracle_mode)) {
   } else if (OB_FAIL(sql.assign_fmt(
              "SELECT package_id, package_name FROM %s "
@@ -8587,9 +8573,6 @@ int ObSchemaServiceSQLImpl::get_routine_id(
   } else if (OB_ISNULL(rt_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc rt_name failed", KR(ret), K(tenant_id), K(routine_name));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(tenant_id));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObSqlString sql;

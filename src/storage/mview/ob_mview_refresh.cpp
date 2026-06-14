@@ -231,9 +231,7 @@ int ObMViewRefresher::prepare_for_refresh()
           ret = OB_ERR_MVIEW_NOT_EXIST;
           LOG_WARN("mview may dropped", KR(ret), K(tenant_id), K(mview_id));
         }
-      } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                   tenant_id, mview_id, refresh_ctx_->is_oracle_mode_))) {
-        LOG_WARN("check if oracle mode failed", KR(ret), K(mview_id));
+      } else if (FALSE_IT(refresh_ctx_->is_oracle_mode_ = false)) {
       } else if (OB_FAIL(ObDependencyInfo::collect_ref_infos(tenant_id,
                          mview_id, trans, previous_dependency_infos))) {
         LOG_WARN("fail to parse mview ref infos", KR(ret), K(tenant_id), K(mview_id));

@@ -811,9 +811,6 @@ int ObTableColumns::fill_row_cells(
         K(ret),
         K(cur_row_.count_),
         K(output_column_ids_.count()));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-             tenant_id, table_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(table_id));
   } else if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));

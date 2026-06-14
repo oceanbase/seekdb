@@ -245,9 +245,8 @@ int ObColumnNameMap::init(const ObTableSchema &orig_table_schema,
                           const AlterTableSchema &alter_table_schema)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(orig_table_schema.get_tenant_id(), orig_table_schema.get_table_id(), compat_mode_))) {
-    LOG_WARN("failed to get table compat mode", K(ret));
-  } else if (OB_FAIL(col_name_map_.create(32, "ColNameMap"))) {
+  compat_mode_ = lib::Worker::CompatMode::MYSQL;
+  if (OB_FAIL(col_name_map_.create(32, "ColNameMap"))) {
     LOG_WARN("failed to create column name map", K(ret));
   } else {
     lib::CompatModeGuard guard(compat_mode_);

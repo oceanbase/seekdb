@@ -177,9 +177,6 @@ int ObCreateTableHelper::lock_objects_by_name_()
   const int64_t start_ts =  ObTimeUtility::current_time();
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
   } else {
     const ObString &database_name = arg_.db_name_;
     const ObTableSchema &table = arg_.schema_;
@@ -526,8 +523,6 @@ int ObCreateTableHelper::check_table_name_()
   bool if_not_exist = arg_.if_not_exist_;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
   } else if (is_oracle_mode) {
     if (OB_FAIL(schema_guard_wrapper_.check_oracle_object_exist(
         database_id, session_id, table_name, TABLE_SCHEMA,
@@ -1159,8 +1154,6 @@ int ObCreateTableHelper::generate_sequence_object_()
   bool is_oracle_mode = false;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
   } else if (!is_oracle_mode) {
     // skip
   } else if (OB_UNLIKELY(new_tables_.count() <= 0)) {

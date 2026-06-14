@@ -52,8 +52,7 @@ int ObDynamicPartitionManager::init(
     LOG_WARN("tenant id is invalid", KR(ret));
   } else if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema->get_dynamic_partition_policy(), policy_))) {
     LOG_WARN("fail to convert str to dynamic partition policy", KR(ret), KPC(table_schema));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode_))) {
-    LOG_WARN("fail to check is oracle mode with tenant id", KR(ret), K_(tenant_id));
+  } else if (FALSE_IT(is_oracle_mode_ = false)) {
   } else if (OB_FAIL(check_is_supported(*table_schema))) {
     LOG_WARN("fail to check table schema is supported for dynamic partition", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(check_is_valid(*table_schema))) {

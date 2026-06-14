@@ -1333,8 +1333,6 @@ int ObDDLTask::report_error_code(const ObString &forward_user_message, const int
     LOG_WARN("ObIndexBuildTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(dst_tenant_id_, task_id_, REPORT_DDL_RET_CODE_FAILED))) {
     LOG_WARN("ddl sim failure: report ddl ret code failed", K(ret), K(dst_tenant_id_), K(task_id_));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(dst_tenant_id_, object_id_, is_oracle_mode))) {
-    LOG_WARN("check if oracle mode failed", K(ret), K(object_id_));
   } else {
     ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
     error_message.affected_rows_ = affected_rows;

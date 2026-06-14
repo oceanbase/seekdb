@@ -501,9 +501,8 @@ int ObDbmsStatsMaintenanceWindow::get_async_gather_stats_job_for_upgrade(common:
                          exec_env.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(job_id), K(exec_env));
-  } else if (OB_FAIL(share::ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("failed to get tenant compat mode", KR(ret), K(tenant_id));
   } else {
+    compat_mode = lib::Worker::CompatMode::MYSQL;
     HEAP_VAR(dbms_scheduler::ObDBMSSchedJobInfo, job_info) {
       if (OB_FAIL(get_async_gather_stats_job_info(lib::Worker::CompatMode::ORACLE == compat_mode,
                                                         tenant_id, job_id, exec_env, job_info))) {

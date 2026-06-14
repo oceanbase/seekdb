@@ -305,11 +305,9 @@ int ObDropTableHelper::calc_schema_version_cnt_()
 int ObDropTableHelper::generate_schemas_()
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id_, compat_mode))) {
-    LOG_WARN("fail to get tenant compat mode", KR(ret), K_(tenant_id));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas_.count(); i++) {
       ObArray<ObMockFKParentTableSchema> mock_fk_parent_table_schemas;
@@ -1365,11 +1363,9 @@ int ObDropTableHelper::construct_drop_table_sql_(const ObTableSchema &table_sche
   int ret = OB_SUCCESS;
 
   ddl_stmt_str_.reset();
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id_, compat_mode))) {
-    LOG_WARN("fail to get tenant mode", KR(ret), K_(tenant_id));
   } else {
     bool is_offline_ddl_hidden_data_table = ObTableStateFlag::TABLE_STATE_HIDDEN_OFFLINE_DDL == table_schema.get_table_state_flag();
     bool use_drop_table_stmt_in_arg = (USER_INDEX == arg_.table_type_) || is_offline_ddl_hidden_data_table;

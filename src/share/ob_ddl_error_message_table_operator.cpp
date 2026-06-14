@@ -485,9 +485,6 @@ int ObDDLErrorMessageTableOperator::build_ddl_error_message(
   if (OB_INVALID_ID == tenant_id || OB_INVALID_ID == table_id || index_name.empty() || OB_INVALID_ID == index_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tenant_id), K(table_id), K(index_id), K(tmp_ret_code));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-      tenant_id, table_id, is_oracle_mode))) {
-    LOG_WARN("fail to check whether is oracle mode", K(ret), K(tenant_id), K(table_id));
   } else {
     if (OB_ERR_PRIMARY_KEY_DUPLICATE == tmp_ret_code) {
       tmp_ret_code = OB_ERR_DUPLICATED_UNIQUE_KEY;    //error message of OB_ERR_PRIMARY_KEY_DUPLICATE is not compatiable with oracle, so use a new error code

@@ -1818,13 +1818,10 @@ int ObTableSqlService::supplement_for_core_table(ObISQLClient &sql_client,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMSET(orig_default_value_buf, 0, value_buf_len);
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     if (!ob_is_string_type(column.get_data_type()) && !ob_is_json(column.get_data_type())
         && !ob_is_geometry(column.get_data_type()) && !ob_is_roaringbitmap(column.get_data_type())) {
-      if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(
-          column.get_tenant_id(), column.get_table_id(), compat_mode))) {
-        LOG_WARN("fail to get tenant mode", K(ret), K(column));
-      } else {
+      {
         lib::CompatModeGuard compat_mode_guard(compat_mode);
         ObTimeZoneInfo tz_info;
         if (OB_FAIL(column.get_orig_default_value().print_plain_str_literal(
@@ -4327,11 +4324,8 @@ int ObTableSqlService::gen_column_dml(
     ObDMLSqlSplicer &dml)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-  if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(
-               column.get_tenant_id(), column.get_table_id(), compat_mode))) {
-      LOG_WARN("fail to get tenant mode", K(ret), K(column));
-  } else if (OB_FAIL(gen_column_dml_without_check(exec_tenant_id, column, compat_mode, dml))) {
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+  if (OB_FAIL(gen_column_dml_without_check(exec_tenant_id, column, compat_mode, dml))) {
     LOG_WARN("failed to gen_column_dml_without_check", KR(ret), K(compat_mode));
   }
   LOG_DEBUG("gen column dml", K(exec_tenant_id), K(column.get_tenant_id()), K(column.get_table_id()), K(column.get_column_id()),

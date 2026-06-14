@@ -436,9 +436,6 @@ int ObLatestSchemaGuard::check_oracle_object_exist(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K_(tenant_id),
              K(database_id), K(object_name), K(schema_type));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K_(tenant_id));
   } else if (!is_oracle_mode) {
     // skip
   } else {

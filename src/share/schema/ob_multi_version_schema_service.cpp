@@ -3962,9 +3962,7 @@ int ObMultiVersionSchemaService::get_tenant_name_case_mode(
   const ObSimpleSysVariableSchema *sys_variable = NULL;
   bool is_oracle_mode = false;
   name_case_mode = OB_NAME_CASE_INVALID;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(get_tenant_schema_guard(tenant_id, guard))) {
+  if (OB_FAIL(get_tenant_schema_guard(tenant_id, guard))) {
     LOG_WARN("fail to get tenant schema guard", KR(ret), K(tenant_id));
   } else if (OB_FAIL(guard.get_sys_variable_schema(tenant_id, sys_variable))) {
     LOG_WARN("fail to get sys variable schema", KR(ret), K(tenant_id));

@@ -624,8 +624,6 @@ int ObSchemaGetterGuard::check_user_priv(const ObSessionPrivInfo &session_priv,
         || priv_set == OB_PRIV_CREATE_RESOURCE_POOL
         || priv_set == OB_PRIV_CREATE_RESOURCE_UNIT)
         && (OB_TEST_PRIVS(user_priv_set, OB_PRIV_SUPER))) {
-    } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-      LOG_WARN("fail to get compat mode", K(ret));
     } else if (!is_oracle_mode) {
       ObNeedPriv need_priv("", "", OB_PRIV_USER_LEVEL, priv_set, false);
       ObNeedPriv collected_privs("", "", OB_PRIV_USER_LEVEL, OB_PRIV_SET_EMPTY, false);
@@ -731,8 +729,6 @@ int ObSchemaGetterGuard::check_single_table_priv(const ObSessionPrivInfo &sessio
     LOG_WARN("fail to check tenant schema guard", KR(ret), K(tenant_id), K_(tenant_id));
   } else if (OB_FAIL(check_lazy_guard(tenant_id, mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else {
     //first:check user and db priv.
     //second:If user_db_priv_set has no enough privileges, check table priv.
@@ -1134,8 +1130,6 @@ int ObSchemaGetterGuard::check_catalog_priv(const ObSessionPrivInfo &session_pri
     LOG_WARN("fail to check tenant schema guard", K(ret), K(tenant_id), K_(tenant_id));
   } else if (OB_FAIL(check_lazy_guard(tenant_id, mgr))) {
     LOG_WARN("fail to check lazy guard", K(ret), K(tenant_id));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else if (is_oracle_mode) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "catalog level privilege in oracle mode");
@@ -1211,8 +1205,6 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
     LOG_WARN("fail to check tenant schema guard", KR(ret), K(tenant_id), K_(tenant_id));
   } else if (OB_FAIL(check_lazy_guard(tenant_id, mgr))) {
     LOG_WARN("fail to check lazy guard", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else {
     ObPrivSet db_priv_set = 0;
     if (session_priv.db_.length() != 0 && (session_priv.db_ == db || 0 == db.length())) {

@@ -3450,8 +3450,7 @@ int ObServerSchemaService::update_schema_mgr(ObISQLClient &sql_client,
           }
           if (FAILEDx(init_schema_struct(new_tenant_id))) {
             LOG_WARN("fail to init schema struct", K(ret), K(new_tenant_id));
-          } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(new_tenant_id, compat_mode))) {
-            LOG_WARN("fail to get tenant mode", KR(ret), K(new_tenant_id));
+          } else if (FALSE_IT(compat_mode = lib::Worker::CompatMode::MYSQL)) {
           } else if (OB_FAIL(init_tenant_basic_schema(new_tenant_id))) {
             LOG_WARN("fail to init basic schema struct", K(ret), K(new_tenant_id), K(schema_status));
           } else if (OB_FAIL(init_multi_version_schema_struct(new_tenant_id))) {

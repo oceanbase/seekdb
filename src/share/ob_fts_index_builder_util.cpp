@@ -2235,11 +2235,9 @@ int ObFtsIndexBuilderUtil::try_load_dictionary_for_all_tenants()
       const uint64_t tenant_id = all_tenants.at(i);
       if (is_valid_tenant_id(tenant_id)
           && (is_user_tenant(tenant_id) || is_sys_tenant(tenant_id))) {
-        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+        lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
         // overwrite ret
-        if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-          LOG_WARN("fail to get tenant mode", K(ret), K(tenant_id), K(compat_mode));
-        } else if (compat_mode == lib::Worker::CompatMode::MYSQL) {
+        if (compat_mode == lib::Worker::CompatMode::MYSQL) {
           ObTenantDicLoaderHandle dic_loader_handle;
           if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(tenant_id,
                                                                     ObFTSLiteral::PARSER_NAME_IK,

@@ -1117,10 +1117,7 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
     LinkExecCtxGuard link_guard(default_session, exec_ctx);
     exec_ctx.set_my_session(&default_session);
     exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
-    if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                column.get_tenant_id(), column.get_table_id(), is_oracle_mode))) {
-      LOG_WARN("fail to get compat mode", KR(ret), K(column));
-    } else if (OB_FAIL(default_session.test_init(0, 0, 0, &allocator))) {
+    if (OB_FAIL(default_session.test_init(0, 0, 0, &allocator))) {
       LOG_WARN("init empty session failed", K(ret));
     } else if (OB_FAIL(default_session.load_default_sys_variable(false, false))) {
       LOG_WARN("session load default system variable failed", K(ret));
@@ -1404,10 +1401,6 @@ int ObSchemaPrinter::print_rowkey_info(
   ObArenaAllocator allocator("PrintRowkeyInfo");
   bool is_first_col = true;
   bool is_oracle_mode = false;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-      tenant_id, table_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(table_id));
-  }
   for (int64_t j = 0; OB_SUCC(ret) && j < rowkey_info.get_size(); j++) {
     const ObColumnSchemaV2* col = NULL;
     ObString new_col_name;
@@ -5496,11 +5489,6 @@ int ObSchemaPrinter::print_heap_table_pk_info(const ObTableSchema &table_schema,
   bool has_pk = false;
   const ObTableSchema *index_schema = NULL;
   ObArenaAllocator allocator("PrintHeapTblPk", OB_MALLOC_NORMAL_BLOCK_SIZE, tenant_id);
-
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-    tenant_id, table_id, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K(table_id));
-  }
 
   const common::ObIArray<ObAuxTableMetaInfo> &simple_index_infos = table_schema.get_simple_index_infos();
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {

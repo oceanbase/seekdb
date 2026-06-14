@@ -81,8 +81,6 @@ int ObDDLTabletScheduler::init(const uint64_t tenant_id,
           && tablets.count() > 0))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(table_id), K(ref_data_table_id), K(task_id), K(parallelism), K(snapshot_version), K(trace_id), K(tablets.count()));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("failed to check is oracle mode", K(ret), K(tenant_id));
   } else if (OB_FAIL(ObDDLUtil::get_tablets(tenant_id, ref_data_table_id, ref_data_table_tablets))) {
     LOG_WARN("failed to get ref data table tablet ids", K(ret), K(tenant_id), K(ref_data_table_id), K(ref_data_table_tablets));
   } else if (OB_UNLIKELY(tablets.count() != ref_data_table_tablets.count())) {
@@ -710,8 +708,6 @@ int ObDDLTabletScheduler::get_session_running_lsid(ObIArray<share::ObLSID> &runn
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id_, is_oracle_mode))) {
-    LOG_WARN("failed to check is oracle mode", K(ret), K(tenant_id_));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));

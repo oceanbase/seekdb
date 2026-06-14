@@ -332,8 +332,8 @@ int ObColDataStoreDesc::get_compat_mode_from_schema(
     const int64_t table_id = static_cast<const ObTableSchema *>(&merge_schema)->get_table_id();
     if (is_ls_reserved_table(table_id)) {
       compat_mode = lib::Worker::CompatMode::MYSQL;
-    } else if (OB_FAIL(share::ObCompatModeGetter::get_table_compat_mode(MTL_ID(), table_id, compat_mode))) {
-      STORAGE_LOG(WARN, "fail to get tenant mode", KR(ret), K(table_id));
+    } else {
+      compat_mode = lib::Worker::CompatMode::MYSQL;
     }
   }
   if (OB_SUCC(ret)) {

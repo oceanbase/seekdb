@@ -469,9 +469,8 @@ int ObSysTableChecker::check_inner_table_exist(
   } else if (!is_tenant_table) {
     // case 1: sys table in sys tenant only
     exist = is_sys_tenant(tenant_id);
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("fail to get tenant compat mode", K(ret), K(tenant_id));
   } else {
+    compat_mode = lib::Worker::CompatMode::MYSQL;
     const bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == compat_mode;
     // case 2: sys table in tenant space
     if (is_oceanbase_sys_database_id(database_id)) {
@@ -11162,11 +11161,7 @@ ObIndexSchemaHashWrapper GetIndexNameKey<ObIndexSchemaHashWrapper, ObIndexNameIn
 {
   if (OB_NOT_NULL(index_name_info)) {
     bool is_oracle_mode = false;
-    if (OB_UNLIKELY(OB_SUCCESS != ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-        index_name_info->get_tenant_id(), index_name_info->get_index_id(), is_oracle_mode))) {
-      ObIndexSchemaHashWrapper null_wrap;
-      return null_wrap;
-    } else if (is_recyclebin_database_id(index_name_info->get_database_id())) {
+    if (is_recyclebin_database_id(index_name_info->get_database_id())) {
       ObIndexSchemaHashWrapper index_schema_hash_wrapper(
           index_name_info->get_tenant_id(),
           index_name_info->get_database_id(),

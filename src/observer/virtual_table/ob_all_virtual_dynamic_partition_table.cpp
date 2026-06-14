@@ -280,8 +280,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           if (OB_UNLIKELY(table_schema.get_partition_num() <= 0)) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "part num is invalid", KR(ret));
-          } else if (OB_FAIL(share::ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-            SERVER_LOG(WARN, "fail to check is oracle mode with tenant id", KR(ret), K(tenant_id));
           } else if (OB_ISNULL(max_part = table_schema.get_part_array()[table_schema.get_partition_num() - 1])) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "max part is null", KR(ret));

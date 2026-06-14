@@ -66,9 +66,6 @@ int ObIndexNameCache::check_index_name_exist(
       || index_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(tenant_id_), K(tenant_id), K(database_id), K(index_name));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret), K(tenant_id));
   } else {
     lib::ObMutexGuard guard(mutex_);
     ObString idx_name;
@@ -166,9 +163,6 @@ int ObIndexNameCache::add_index_name(
              && index_schema.get_origin_index_name_str().empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid index schema", KR(ret), K(index_schema));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret), K(tenant_id));
   } else {
     lib::ObMutexGuard guard(mutex_);
     if (OB_FAIL(try_load_cache_())) {
@@ -443,9 +437,6 @@ int ObIndexNameChecker::check_tenant_can_be_skipped_(
   if (is_sys_tenant(tenant_id)
       || is_meta_tenant(tenant_id)) {
     can_skip = true;
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret), K(tenant_id));
   } else {
     can_skip = !is_oracle_mode;
   }

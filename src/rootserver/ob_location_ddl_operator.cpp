@@ -76,10 +76,8 @@ int ObLocationDDLOperator::create_location(const ObString &ddl_str,
 
     ObDDLOperator ddl_operator(schema_service_, sql_proxy_);
     ObObjPrivMysqlDDLOperator mysql_ddl_operator(schema_service_, sql_proxy_);
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-    if (OB_FAIL(share::ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-      LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
-    } else if (lib::Worker::CompatMode::ORACLE == compat_mode 
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+    if (lib::Worker::CompatMode::ORACLE == compat_mode 
                && OB_FAIL(ddl_operator.grant_table(table_priv_key, priv_set, NULL, trans, priv_array, 0, obj_priv_key))) {
       LOG_WARN("fail to grant table, oracle mode", K(ret), K(table_priv_key), K(priv_set), K(obj_priv_key));
     } else if (lib::Worker::CompatMode::MYSQL == compat_mode 
@@ -159,11 +157,9 @@ int ObLocationDDLOperator::drop_location(const ObString &ddl_str,
 
   ObDDLOperator ddl_operator(schema_service_, sql_proxy_);
   ObObjPrivMysqlDDLOperator mysql_ddl_operator(schema_service_, sql_proxy_);
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(ret)) {
     LOG_WARN("location in use", K(ret));
-  } else if (OB_FAIL(share::ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
   } else if (lib::Worker::CompatMode::ORACLE == compat_mode 
              && OB_FAIL(ddl_operator.drop_obj_privs(tenant_id, location_id, location_type, 
                                                     trans, schema_service_, schema_guard))) {

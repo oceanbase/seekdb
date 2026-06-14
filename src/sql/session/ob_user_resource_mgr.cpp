@@ -292,11 +292,9 @@ int ObConnectResourceMgr::on_user_connect(
       ObSQLSessionInfo& session)
 {
   int ret = OB_SUCCESS;
-  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::ORACLE;
+  lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (!session.is_user_session()) {
     // do not limit connection count for inner sesion.
-  } else if (OB_FAIL(share::ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("get tenant mode failed", K(ret), K(tenant_id));
   } else if (compat_mode == lib::Worker::CompatMode::MYSQL) {
     if (!session.has_got_tenant_conn_res()) {
       if (OB_FAIL(apply_for_tenant_conn_resource(tenant_id, priv, max_tenant_connections))) {

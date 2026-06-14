@@ -142,9 +142,6 @@ int ObCreateIndexHelper::lock_objects_by_name_()
   const ObString &table_name = arg_.table_name_;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-             tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_name_(database_name, table_name,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
     LOG_WARN("fail to add lock object by name", KR(ret), K_(tenant_id), K(database_name), K(table_name));
@@ -277,6 +274,8 @@ int ObCreateIndexHelper::check_table_legitimacy_()
     LOG_WARN("fail to check table udt exist", KR(ret));
   } else if (OB_FAIL(check_fk_related_table_ddl_(*orig_data_table_schema_, ObDDLType::DDL_CREATE_INDEX))) {
     LOG_WARN("check whether the forign key related table is executing ddl failed", KR(ret));
+  } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*orig_data_table_schema_, false/*by_admin*/))) {
+    LOG_WARN("failed to check htable ddl supported", KR(ret));
   }
   RS_TRACE(check_schemas);
   return ret;
@@ -380,10 +379,7 @@ int ObCreateIndexHelper::generate_index_schema_()
     }
   }
   bool is_oracle_mode = false;
-  if (FAILEDx(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-              tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", KR(ret));
-  } else if (OB_FAIL(index_schema->generate_origin_index_name())) {
+  if (FAILEDx(index_schema->generate_origin_index_name())) {
     LOG_WARN("fail to generate origin index name", KR(ret), KPC(index_schema));
   } else if (!is_oracle_mode) {
     ObIndexSchemaInfo index_info;

@@ -6485,7 +6485,7 @@ int ObSimpleTableSchemaV2::check_if_oracle_compat_mode(bool &is_oracle_mode) con
   const uint64_t tenant_id = get_tenant_id();
   const int64_t table_id = get_table_id();
   is_oracle_mode = false;
-  return ObCompatModeGetter::check_is_oracle_mode_with_table_id(tenant_id, table_id, is_oracle_mode);
+  return OB_SUCCESS;
 }
 
 int ObTableSchema::get_generated_column_by_define(const ObString &col_def,
@@ -7556,8 +7556,6 @@ int ObTableSchema::get_partition_keys_by_part_func_expr(const common::ObString &
   const int64_t table_id = get_table_id();
   const uint64_t tenant_id = get_tenant_id();
   if (OB_INVALID_ID != table_id && OB_FAIL(check_if_oracle_compat_mode(is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret));
-  } else if (OB_INVALID_ID == table_id && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
     LOG_WARN("fail to check oracle mode", KR(ret));
   } else if (OB_FAIL(ObDDLResolver::get_partition_keys_by_part_func_expr(part_func_expr_str, is_oracle_mode, allocator, partkey_strs))) {
     LOG_WARN("failed to get part keys", K(ret), K(part_func_expr_str), K(is_oracle_mode));

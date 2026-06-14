@@ -133,10 +133,8 @@ int ObBloomFilterBuildTask::build_bloom_filter()
     ObMacroBlockRowBareIterator *macro_bare_iter = nullptr;
     ObSSTableMacroBlockHeader macro_header;
     const ObDatumRow *row = nullptr;
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-    if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(MTL_ID(), table_id_, compat_mode))) {
-      LOG_WARN("failed to get compat mode", K(ret), K_(table_id));
-    } else {
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+    {
       THIS_WORKER.set_compatibility_mode(compat_mode);
     }
     if (OB_FAIL(ret)) {

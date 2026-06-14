@@ -180,11 +180,6 @@ int ObAllVirtualProxyPartition::fill_row_(const ObPartition &partition)
   if (OB_ISNULL(cells)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cur row cell is NULL", KR(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-      tenant_id,
-      table_id,
-      is_oracle_mode))) {
-    LOG_WARN("fail to get oracle mode", KR(ret), K(partition));
   } else if (OB_FAIL(tenant_schema_guard_.get_table_schema(
       tenant_id, 
       table_id, 

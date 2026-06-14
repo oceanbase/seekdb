@@ -451,9 +451,7 @@ int ObSchemaGetterGuard::get_user_id(uint64_t tenant_id,
   } else {
     const ObSimpleUserSchema *simple_user = NULL;
     lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-    if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-      LOG_WARN("fail to get tenant mode", KR(ret), K(tenant_id));
-    } else if (0 == user_name.case_compare(OB_SYS_USER_NAME)
+    if (0 == user_name.case_compare(OB_SYS_USER_NAME)
                && 0 == host_name.case_compare(OB_SYS_HOST_NAME)
                && (lib::Worker::CompatMode::ORACLE != compat_mode)) {
       // root is not an inner user in oracle mode.
@@ -5952,7 +5950,9 @@ int ObSchemaGetterGuard::get_idx_schema_by_origin_idx_name(uint64_t tenant_id,
 
 int ObSchemaGetterGuard::get_tenant_compat_mode(const uint64_t tenant_id, lib::Worker::CompatMode &compat_mode)
 {
-  return ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode);
+  UNUSED(tenant_id);
+  compat_mode = lib::Worker::CompatMode::MYSQL;
+  return OB_SUCCESS;
 }
 
 int ObSchemaGetterGuard::get_schema_mgr(const uint64_t tenant_id, const ObSchemaMgr *&schema_mgr) const

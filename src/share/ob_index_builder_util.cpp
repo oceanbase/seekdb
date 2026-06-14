@@ -749,7 +749,6 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
   ObArray<ObColumnSortItem> new_sort_items;
   lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   uint64_t tenant_id = data_schema.get_tenant_id();
-  ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode);
   lib::CompatModeGuard compat_guard(compat_mode);
   for (int64_t i = 0; OB_SUCC(ret) && i < sort_items.count(); ++i) {
     int64_t old_cnt = data_schema.get_column_count();

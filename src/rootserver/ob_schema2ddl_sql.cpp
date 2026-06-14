@@ -184,10 +184,7 @@ int ObSchema2DDLSql::type2str(
     LOG_WARN("invalid argument", K(column_schema), KP(str_buf), K(buf_size), K(ret));
   } else {
     bool is_oracle_mode = false;
-    if (OB_FAIL(share::ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-        column_schema.get_tenant_id(), column_schema.get_table_id(), is_oracle_mode))) {
-      LOG_WARN("fail to check is oracle mode", K(ret));
-    } else {
+    {
       switch (column_schema.get_data_type()) {
         case ObTinyIntType: {
           n = snprintf(str_buf, buf_size, "tinyint");

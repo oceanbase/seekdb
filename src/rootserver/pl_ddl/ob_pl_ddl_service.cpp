@@ -196,11 +196,9 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
         }
       }
     }
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
+    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
     if (OB_FAIL(ret)) {
     } else if (replace) {
-    } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-      LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
     } else if (lib::Worker::CompatMode::MYSQL == compat_mode) {
       const ObSysVarSchema *sys_var = NULL;
       ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
@@ -479,10 +477,8 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
     } else if (OB_FAIL(pl_operator.drop_routine(routine_info, trans, error_info, ddl_stmt_str))) {
       LOG_WARN("drop procedure failed", K(ret), K(routine_info));
     } else {
-      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-      if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-          LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
-      } else if (lib::Worker::CompatMode::MYSQL == compat_mode) {
+      lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
+      if (lib::Worker::CompatMode::MYSQL == compat_mode) {
         const ObSysVarSchema *sys_var = NULL;
         ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
         ObObj val;
@@ -1028,9 +1024,7 @@ int ObPLDDLService::drop_trigger(const obcall::ObDropTriggerArg &arg,
   const ObString &trigger_name = arg.trigger_name_;
   const ObTriggerInfo *trigger_info = NULL;
   bool is_ora_mode = false;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_ora_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
-  } else if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
+  if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
     LOG_WARN("check env failed", K(ret));
   } else if (OB_FAIL(ddl_service.get_database_id(schema_guard, tenant_id, trigger_database, trigger_database_id))) {
     LOG_WARN("get database id failed", K(ret));
@@ -1345,7 +1339,6 @@ int ObPLDDLService::adjust_trigger_action_order(share::schema::ObSchemaGetterGua
   bool is_oracle_mode = false;
   const uint64_t tenant_id = trigger_info.get_tenant_id();
   common::ObSArray<uint64_t> trg_list;
-  OZ (ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode));
   if (OB_SUCC(ret)) {
     if (trigger_info.is_dml_type()) {
       const ObTableSchema *table_schema = NULL;

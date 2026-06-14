@@ -1081,10 +1081,6 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     ret = OB_INVALID_ARGUMENT;
     SQL_RESV_LOG(WARN, "invalid argument",
                  K(ret), K(node->type_), K(node->num_child_));
-  } else if (static_cast<int64_t>(table_id_) > 0
-             && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-             session_info_->get_effective_tenant_id(), table_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K_(table_id));
   } else {
     ObSEArray<ObString, 4> gen_col_expr_arr;
     ParseNode *primary_node = NULL;
@@ -2158,10 +2154,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "node->children_ is null.", K(ret));
-  } else if (static_cast<int64_t>(table_id_) > 0
-             && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-             session_info_->get_effective_tenant_id(), table_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check oracle mode", KR(ret), K_(table_id));
   } else {
     index_arg_.reset();
     ObColumnSortItem sort_item;
@@ -2989,10 +2981,6 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
           } else if (OB_ISNULL(session_info_)) {
             ret = OB_NOT_INIT;
             SQL_RESV_LOG(WARN, "session is null", KP(session_info_), K(ret));
-          } else if (static_cast<int64_t>(table_id_) > 0
-                    && OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                    session_info_->get_effective_tenant_id(), table_id_, is_oracle_mode))) {
-            LOG_WARN("fail to check oracle mode", KR(ret), K_(table_id));
           } else if (OB_ISNULL(col = table_schema.get_column_schema(column_name))) {
             ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
             LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());

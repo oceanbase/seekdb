@@ -726,10 +726,7 @@ int ObPrivSqlService::delete_db_priv(
       //here we bypass now, should fix the bug, then delete this code.
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
       bool is_oracle_mode = false;
-      if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-                tenant_id, is_oracle_mode))) {
-        LOG_WARN("fail to check is oracle mode", K(ret));
-      } else if (is_oracle_mode) {
+      if (is_oracle_mode) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
       } else if (OB_FAIL(schema_guard.get_tenant_name_case_mode(tenant_id, mode))) {
@@ -809,10 +806,7 @@ int ObPrivSqlService::delete_table_priv(
       //here we bypass now, should fix the bug, then delete this code.
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
       bool is_oracle_mode = false;
-      if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-                tenant_id, is_oracle_mode))) {
-        LOG_WARN("fail to check is oracle mode", K(ret));
-      } else if (is_oracle_mode) {
+      if (is_oracle_mode) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
       } else if (OB_FAIL(schema_guard.get_tenant_name_case_mode(tenant_id, mode))) {
@@ -1235,10 +1229,6 @@ int ObPrivSqlService::grant_revoke_role(
   ObSqlString sql;
   int64_t affected_rows = 0;
   bool is_oracle_mode = false;
-
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to get is oracle mode", K(ret));
-  }
 
   // __all_tenant_role_grantee_map
   if (OB_FAIL(ret)) {

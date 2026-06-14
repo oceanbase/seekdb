@@ -34,6 +34,9 @@
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
+#ifndef OB_BUILD_EMBED_MODE
+#include "observer/table/ob_table_rpc_processor.h"
+#endif
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "share/object_storage/ob_device_connectivity.h"
 #include "share/resource_manager/ob_resource_manager.h"
@@ -66,6 +69,7 @@
 #include "lib/xml/ob_libxml2_sax_handler.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
+#include "storage/backup/ob_backup_meta_cache.h"
 #include "lib/stat/ob_diagnostic_info_container.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "common/ob_target_specific.h"
@@ -162,6 +166,7 @@ ObServer::ObServer()
     multi_tenant_(), vt_data_service_(root_service_, self_addr_, &config_),
     weak_read_service_(),
     bl_service_(ObBLService::get_instance()),
+    table_service_(),
     cgroup_ctrl_(),
     start_time_(ObTimeUtility::current_time()),
     warm_up_start_time_(0),
@@ -284,6 +289,10 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init retry ctrl failed", KR(ret));
     } else if (OB_FAIL(ObMdsEventBuffer::init())) {
       LOG_WARN("init MDS event buffer failed", KR(ret));
+#ifndef OB_BUILD_EMBED_MODE
+    } else if (OB_FAIL(ObTableApiProcessorBase::init_session())) {
+      LOG_ERROR("init static session failed", KR(ret));
+#endif
     } else if (OB_FAIL(init_loaddata_global_stat())) {
       LOG_ERROR("init global load data stat map failed", KR(ret));
     } else if (OB_FAIL(init_pre_setting())) {
@@ -448,8 +457,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("set sys task status self addr failed", KR(ret));
     } else if (OB_FAIL(ObServerAutoSplitScheduler::get_instance().init())) {
       LOG_ERROR("init auto split scheduler failed", KR(ret));
-    } else if (OB_FAIL(ObCompatModeGetter::instance().init(&sql_proxy_))) {
-      LOG_ERROR("init get compat mode server failed",KR(ret));
+    } else if (OB_FAIL(table_service_.init())) {
+      LOG_ERROR("init table service failed", KR(ret));
     } else if (OB_FAIL(ObTimerMonitor::get_instance().init())) {
       LOG_ERROR("init timer monitor failed", KR(ret));
     } else if (OB_FAIL(PX_P2P_DH.init())) {
@@ -462,6 +471,10 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 #endif
     } else if (OB_FAIL(init_px_target_mgr())) {
       LOG_ERROR("init px target mgr failed", KR(ret));
+    } else if (OB_FAIL(OB_BACKUP_INDEX_CACHE.init())) {
+      LOG_ERROR("init backup index cache failed", KR(ret));
+    } else if (OB_FAIL(OB_BACKUP_META_CACHE.init())) {
+      LOG_ERROR("init backup meta cache failed", KR(ret));
     } else if (OB_FAIL(ObDictCache::get_instance().init("dict_cache"))) {
       LOG_ERROR("init dict cache failed", KR(ret));
     } else if (OB_FAIL(ObActiveSessHistList::get_instance().init())) {
@@ -564,6 +577,10 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy unix domain listener");
     unix_domain_listener_.destroy();
     FLOG_INFO("unix domain listener destroyed");
+
+    FLOG_INFO("begin to destroy table service");
+    table_service_.destroy();
+    FLOG_INFO("table service destroyed");
 
     FLOG_INFO("begin to destroy schema service");
     schema_service_.destroy();
@@ -704,6 +721,14 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy server startup task handler");
     startup_accel_handler_.destroy();
     FLOG_INFO("server startup task handler destroyed");
+
+    FLOG_INFO("begin to destroy backup index cache");
+    OB_BACKUP_INDEX_CACHE.destroy();
+    FLOG_INFO("backup index cache destroyed");
+
+    FLOG_INFO("begin to destroy backup meta cache");
+    OB_BACKUP_META_CACHE.destroy();
+    FLOG_INFO("backup meta cache destroyed");
 
     FLOG_INFO("begin to destroy dict cache");
     ObDictCache::get_instance().destroy();
@@ -1243,6 +1268,10 @@ int ObServer::stop()
     FLOG_INFO("begin to stop unix domain listener");
     unix_domain_listener_.stop();
     FLOG_INFO("unix domain listener stopped");
+
+    FLOG_INFO("begin to stop table service");
+    table_service_.stop();
+    FLOG_INFO("table service stopped");
 
     FLOG_INFO("begin to stop schema service");
     schema_service_.stop();
@@ -2271,6 +2300,7 @@ int ObServer::init_global_context()
   gctx_.scramble_rand_ = &scramble_rand_;
   gctx_.init();
   gctx_.weak_read_service_ = &weak_read_service_;
+  gctx_.table_service_ = &table_service_;
   gctx_.cgroup_ctrl_ = &cgroup_ctrl_;
   gctx_.schema_status_proxy_ = &schema_status_proxy_;
   gctx_.net_frame_ = &net_frame_;

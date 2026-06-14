@@ -154,9 +154,7 @@ int ObMLogPurger::prepare_for_purge()
     } else if (OB_UNLIKELY(!mlog_table_schema->is_available_mlog())) {
       ret = OB_ERR_TABLE_NO_MLOG;
       LOG_WARN("materialized view log is not available", KR(ret), KPC(mlog_table_schema));
-    } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-                 tenant_id, mlog_table_id, is_oracle_mode_))) {
-      LOG_WARN("check if oracle mode failed", KR(ret), K(mlog_table_id));
+    } else if (FALSE_IT(is_oracle_mode_ = false)) {
     } else {
       // mlog purge parallel use dop
       purge_param_.purge_log_parallel_ = mlog_table_schema->get_dop();

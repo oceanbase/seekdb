@@ -723,16 +723,7 @@ int ObUnitInfoGetter::get_compat_mode(const int64_t tenant_id, lib::Worker::Comp
       || is_meta_tenant(tenant_id)) {
     compat_mode = lib::Worker::CompatMode::MYSQL;
   } else {
-    while (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-      if (OB_TENANT_NOT_EXIST != ret || THIS_WORKER.is_timeout()) {
-        const bool is_timeout = THIS_WORKER.is_timeout();
-        ret = OB_TIMEOUT;
-        LOG_WARN("get tenant compatibility mode fail", K(ret), K(tenant_id), K(is_timeout));
-        break;
-      } else {
-        ob_usleep(200 * 1000L);
-      }
-    }
+    compat_mode = lib::Worker::CompatMode::MYSQL;
     if (OB_SUCC(ret)) {
       LOG_INFO("jx_debug: get tenant compatibility mode", K(tenant_id), K(compat_mode));
     }

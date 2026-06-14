@@ -50,6 +50,7 @@
 #include "share/schema/ob_mlog_info.h"
 #include "storage/tx_storage/ob_ls_map.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "share/backup/ob_log_restore_config.h"//ObLogRestoreSourceServiceConfigParser
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "share/schema/ob_mview_info.h"
@@ -473,17 +474,6 @@ int ObDDLService::create_mlog_table(
       ObCStringHelper helper;
       LOG_USER_ERROR(OB_ERR_MLOG_EXIST, helper.convert(arg.table_name_));
     }
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(
-      tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode with tenant id", KR(ret), K(tenant_id));
-  } else if (is_oracle_mode && OB_FAIL(schema_guard.check_oracle_object_exist(
-      tenant_id, table_schema.get_database_id(), table_schema.get_table_name_str(),
-      TABLE_SCHEMA, INVALID_ROUTINE_TYPE, false/*if_not_exist*/, conflict_schema_types))) {
-    LOG_WARN("failed to check oracle object exist", KR(ret));
-  } else if (conflict_schema_types.count() > 0) {
-    ret = OB_ERR_EXIST_OBJECT;
-    LOG_WARN("mlog name is already used by an existing object in oralce mode",
-        KR(ret), K(table_schema.get_table_name_str()), K(conflict_schema_types));
   } else if (OB_FAIL(schema_guard.get_database_schema(
       tenant_id, table_schema.get_database_id(), database_schema))) {
     LOG_WARN("failed to get database schema",
@@ -4374,9 +4364,7 @@ int ObDDLService::check_alter_heap_table_index(const obcall::ObIndexArg::IndexAc
   uint64_t tenant_id = orig_table_schema.get_tenant_id();
   ObArenaAllocator allocator("HeapTblCheck", OB_MALLOC_NORMAL_BLOCK_SIZE);
   bool is_oracle_mode = false;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
-  } else if (OB_ISNULL(index_arg)) {
+  if (OB_ISNULL(index_arg)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("index_arg is NULL", K(ret));
   } else if (OB_FAIL(ObTableSchema::build_index_table_name(allocator,
@@ -9216,10 +9204,9 @@ int ObDDLService::modify_generated_column_default_value(ObColumnSchemaV2 &genera
                                                                      table_schema,
                                                                      expr))) {
         LOG_WARN("build generated column expr failed", K(ret));
-      } else if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(table_schema.get_tenant_id(), table_schema.get_table_id(), compat_mode))) {
-        LOG_WARN("failed to get table compat mode", K(ret));
       }
       if (OB_SUCC(ret)) {
+        compat_mode = lib::Worker::CompatMode::MYSQL;
         ObRawExprModifyColumnName modifyColumnName(new_column_name, column_name, compat_mode);
         if (OB_FAIL(modifyColumnName.modifyColumnName(*expr))) {
           LOG_WARN("modifyColumnName modify column name failed", K(ret));
@@ -9296,10 +9283,9 @@ int ObDDLService::modify_generated_column_local_vars(ObColumnSchemaV2 &generated
                                                                      table_schema,
                                                                      expr))) {
         LOG_WARN("build generated column expr failed", K(ret));
-      } else if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(table_schema.get_tenant_id(), table_schema.get_table_id(), compat_mode))) {
-        LOG_WARN("failed to get table compat mode", K(ret));
       }
       if (OB_SUCC(ret)) {
+        compat_mode = lib::Worker::CompatMode::MYSQL;
         ObRawExpr *expr_with_implicit_cast = NULL;
         ObRawExprResType dst_type;
         dst_type.set_meta(generated_column.get_meta_type());
@@ -9529,9 +9515,8 @@ int ObDDLService::modify_func_expr_column_name(
                     static_cast<char *>(allocator.alloc(OB_MAX_SQL_LENGTH)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc new_part_func_expr", K(ret));
-      } else if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(table_schema.get_tenant_id(), table_schema.get_table_id(), compat_mode))) {
-        LOG_WARN("failed to get table compat mode", K(ret));
       } else {
+        compat_mode = lib::Worker::CompatMode::MYSQL;
         ObRawExprModifyColumnName modifyColumnName(
             alter_column_name, orig_column_name, compat_mode);
         for (int64_t i = 0; OB_SUCC(ret) && i < expr_strs.count(); ++i) {
@@ -10004,9 +9989,8 @@ int ObDDLService::rebuild_constraint_check_expr(
                       static_cast<char *>(allocator.alloc(OB_MAX_SQL_LENGTH)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc new_check_expr_buf", K(ret));
-        } else if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(table_schema.get_tenant_id(), table_schema.get_table_id(), compat_mode))) {
-          LOG_WARN("failed to get table compat mode", K(ret));
         } else {
+          compat_mode = lib::Worker::CompatMode::MYSQL;
           ObRawExprModifyColumnName modifyColumnName(
               alter_column.get_column_name_str(), orig_column.get_column_name_str(), compat_mode);
           if (OB_FAIL(ObRawExprUtils::parse_bool_expr_node_from_str(orig_check_expr,
@@ -13126,8 +13110,6 @@ int ObDDLService::update_global_index(ObAlterTableArg &arg,
       LOG_WARN("fail to get tenant schema guard", K(ret), K(tenant_id));
     } else if (OB_FAIL(orig_table_schema.get_simple_index_infos(simple_index_infos))) {
       LOG_WARN("get_index_tid_array failed", K(ret));
-    } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-      LOG_WARN("fail to get compat mode", KR(ret), K(tenant_id));
     } else {
       SMART_VARS_2((ObTableSchema, new_index_table_schema), (ObTruncateInfoService, truncate_service, arg, orig_table_schema)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
@@ -17226,8 +17208,6 @@ int ObDDLService::check_alter_partitions(const ObTableSchema &orig_table_schema,
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "partition maintenance during upgrade");
   } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard with version in inner table", K(ret), K(tenant_id));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
   } else if (orig_table_schema.is_materialized_view()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("alter partition of materialized view is not supported", KR(ret));
@@ -18656,9 +18636,8 @@ int ObDDLService::rename_table(const obcall::ObRenameTableArg &rename_table_arg)
       } else if (is_virtual_tenant_id(tenant_id) || OB_SYS_TENANT_ID == tenant_id) {
         compat_mode = lib::Worker::CompatMode::MYSQL;
         is_oracle_mode = false;
-      } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-        LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
       } else {
+        compat_mode = lib::Worker::CompatMode::MYSQL;
         if (lib::Worker::CompatMode::ORACLE == compat_mode) {
           is_oracle_mode = true;
         } else {
@@ -27450,12 +27429,6 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
           const bool use_drop_table_stmt_in_arg = (is_drop_index_or_mlog || is_offline_ddl_hidden_data_table);
           bool is_cascade_constrains = false;
           lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
-          if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-            LOG_WARN("fail to get tenant mode", K(ret), K(tenant_id));
-          } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-            // oracle cascade constarints use if_exist_ flag
-            is_cascade_constrains = drop_table_arg.if_exist_;
-          }
           if (OB_FAIL(ret)) {
           } else if (use_drop_table_stmt_in_arg) {
             ddl_stmt_str = drop_table_arg.ddl_stmt_str_;
@@ -29595,9 +29568,7 @@ int ObDDLService::create_user(ObCreateUserArg &arg,
   int ret = OB_SUCCESS;
   bool is_oracle_mode = false;
   uint64_t creator_id = arg.creator_id_;
-  if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(arg.tenant_id_, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
-  } else if (!is_oracle_mode && arg.is_create_role_) {
+  if (!is_oracle_mode && arg.is_create_role_) {
     if (OB_FAIL(create_mysql_roles_in_trans(arg.tenant_id_, arg.if_not_exist_, arg.user_infos_))) {
       LOG_WARN("fail to create mysql roles", K(ret));
     }
@@ -29705,8 +29676,6 @@ int ObDDLService::drop_user(const ObDropUserArg &arg,
   if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
     ret = OB_ERR_SYS;
     LOG_WARN("Get schema manager failed", K(ret), K(tenant_id));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check compat mode", K(ret));
   } else if (arg.is_role_ && !is_oracle_mode) {
     //mysql drop roles in one trans
     //either succeeds for all named roles or rolls back and has no effect if any error occurs
@@ -30439,9 +30408,8 @@ int ObDDLService::grant(const ObGrantArg &arg)
     LOG_WARN("fail to get schema guard with version in inner table", K(ret), K(tenant_id));
   } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
     LOG_WARN("check parallel ddl conflict failed", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
   } else {
+    compat_mode = lib::Worker::CompatMode::MYSQL;
     const ObIArray<ObString> &roles = arg.roles_;
     // The user_name and host_name of the first user are stored in role[0] and role[1] respectively
     // The user_name and host_name of the remaining users are stored in remain_role
@@ -30760,7 +30728,6 @@ int ObDDLService::revoke(const ObRevokeUserArg &arg)
     user_id = user_info->get_user_id();
     ObArray<uint64_t> role_ids;
     bool is_oracle_mode = false;
-    OZ (ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode));
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.role_ids_.count(); ++i) {
       const uint64_t role_id = arg.role_ids_.at(i);
       const ObUserInfo *role_info = NULL;
@@ -31168,8 +31135,6 @@ int ObDDLService::grant_revoke_user(
   } else if (OB_INVALID_ID == tenant_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Tenant id is invalid", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_ora_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
   } else {
     ObDDLSQLTransaction trans(schema_service_);
     int64_t refreshed_schema_version = 0;
@@ -31447,8 +31412,6 @@ int ObDDLService::revoke_database(
   } else if (!db_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("db_key is invalid", K(db_key), K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_ora_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
   } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard with version in inner table", K(ret), K(tenant_id));
   } else {
@@ -31771,8 +31734,6 @@ int ObDDLService::revoke_table_and_column_mysql(const obcall::ObRevokeTableArg& 
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is invalid", K(arg), K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_ora_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
   } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard with version in inner table", K(ret), K(tenant_id));
   } else {
@@ -32687,8 +32648,6 @@ int ObDDLService::check_user_exist(const share::schema::ObUserInfo &user_info) c
       user_info.get_tenant_id(), user_info.get_user_id(), is_user_id_exist))) {
     LOG_WARN("Failed to check whether user exist", "tenant_id", user_info.get_tenant_id(),
         "user_id", user_info.get_user_id(), K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(user_info.get_tenant_id(), is_oracle_mode))) {
-    LOG_WARN("fail to check compat mode", K(ret));
   } else if (is_user_name_exist || is_user_id_exist) {
     ret = user_info.is_role() && is_oracle_mode ? OB_ROLE_EXIST : OB_ERR_USER_EXIST;
     LOG_WARN("User/role is exist, cannot create it twice,",
@@ -33676,11 +33635,7 @@ int ObDDLService::create_directory(const obcall::ObCreateDirectoryArg &arg, cons
   int64_t refreshed_schema_version = 0;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
-  } else if (lib::Worker::CompatMode::ORACLE == compat_mode
-      && FALSE_IT(is_oracle_mode = true)) {
-    // do nothing
+  } else if (FALSE_IT(compat_mode = lib::Worker::CompatMode::MYSQL)) {
   } else if (!is_oracle_mode) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("create directory under non oracle mode is not supported", K(ret));
@@ -33752,11 +33707,7 @@ int ObDDLService::drop_directory(const obcall::ObDropDirectoryArg &arg, const Ob
   int64_t refreshed_schema_version = 0;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(tenant_id, compat_mode))) {
-    LOG_WARN("failed to get compat mode", K(ret), K(tenant_id));
-  } else if (lib::Worker::CompatMode::ORACLE == compat_mode
-      && FALSE_IT(is_oracle_mode = true)) {
-    // do nothing
+  } else if (FALSE_IT(compat_mode = lib::Worker::CompatMode::MYSQL)) {
   } else if (!is_oracle_mode) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("drop directory under non oracle mode is not supported", K(ret));

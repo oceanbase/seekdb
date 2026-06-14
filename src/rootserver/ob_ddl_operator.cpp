@@ -2668,10 +2668,7 @@ int ObDDLOperator::alter_table_drop_foreign_key(const ObTableSchema &table_schem
     }
     if (OB_SUCC(ret) && OB_ISNULL(foreign_key_info)) {
       bool is_oracle_mode = false;
-      if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_table_id(
-         table_schema.get_tenant_id(), table_schema.get_table_id(), is_oracle_mode))) {
-       LOG_WARN("fail to check is oracle mode", K(ret), K(table_schema));
-      } else if (is_oracle_mode) {
+      if (is_oracle_mode) {
        ret = OB_ERR_NONEXISTENT_CONSTRAINT;
        LOG_WARN("Cannot drop foreign key constraint  - nonexistent constraint", K(ret), K(foreign_key_name), K(table_schema.get_table_name_str()));
       } else {
@@ -7229,8 +7226,6 @@ int ObDDLOperator::revoke_table(
     LOG_WARN("db_priv_key is invalid", K(table_priv_key), K(ret));
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to check is oracle mode", K(ret));
   } else {
     ObPrivSet table_priv_set = OB_PRIV_SET_EMPTY;
     if (OB_FAIL(schema_guard.get_table_priv_set(table_priv_key, table_priv_set))) {
@@ -7500,8 +7495,6 @@ int ObDDLOperator::grant_revoke_role(
     LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id));
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(tenant_id, schema_guard))) {
     LOG_WARN("failed to get schema guard", K(ret));
-  } else if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
-    LOG_WARN("fail to get compat mode", K(ret));
   } else {
     common::ObSEArray<uint64_t, 8> role_ids;
     bool need_flush = false;
