@@ -400,10 +400,7 @@ int ObTableLoadService::check_support_direct_load(ObSchemaGetterGuard &schema_gu
 
     if (!table_schema->is_user_table()) {
       ret = OB_NOT_SUPPORTED;
-      if (lib::is_oracle_mode() && table_schema->is_tmp_table()) {
-        LOG_WARN("direct-load does not support oracle temporary table", KR(ret));
-        FORWARD_USER_ERROR_MSG(ret, "%sdirect-load does not support oracle temporary table", tmp_prefix);
-      } else if (table_schema->is_view_table()) {
+      if (table_schema->is_view_table()) {
         LOG_WARN("direct-load does not support view table", KR(ret));
         FORWARD_USER_ERROR_MSG(ret, "%sdirect-load does not support view table", tmp_prefix);
       } else if (table_schema->is_mlog_table()) {
@@ -609,14 +606,10 @@ int ObTableLoadService::check_support_direct_load_for_default_value(
         else if (column_schema->is_autoincrement() || column_schema->is_identity_column()) {
         }
         // Default value is expression
-        else if (OB_UNLIKELY(lib::is_mysql_mode() && column_schema->get_cur_default_value().is_ext())) {
+        else if (OB_UNLIKELY(column_schema->get_cur_default_value().is_ext())) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("direct-load does not support column default value is ext", KR(ret), KPC(column_schema));
           FORWARD_USER_ERROR_MSG(ret, "direct-load does not support column default value is ext");
-        } else if (OB_UNLIKELY(lib::is_oracle_mode() && column_schema->is_default_expr_v2_column())) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("direct-load does not support column default value is expr", KR(ret), KPC(column_schema));
-          FORWARD_USER_ERROR_MSG(ret, "direct-load does not support column default value is expr");
         }
         // No default value, and is NOT NULL
         // Exception: Enum type defaults to the first one

@@ -57,12 +57,6 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
    //  and the internal implementation of ob is represented by an illegal value (-1, -85). 
    //  However, oracle is represented by 0. In order to be compatible with 
    //  the behavior of oracle, it is corrected to 0 here.
-    if ((ObNumberType == field.type_.get_type() 
-          || ObUNumberType == field.type_.get_type()) 
-        && lib::is_oracle_mode()) { // was decimal
-      decimals = (decimals==NUMBER_SCALE_UNKNOWN_YET ? 0:decimals);
-      pre = (pre==PRECISION_UNKNOWN_YET ? 0:pre);
-    }
     mfield.accuracy_.set_precision(pre);
     mfield.accuracy_.set_scale(decimals);
     mfield.inout_mode_ = field.inout_mode_;
@@ -85,16 +79,8 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
 int ObMySQLResultSet::to_new_result_field(const ObField &field, ObMySQLField &mfield)
 {
   int ret = OB_SUCCESS;
-  if (lib::is_mysql_mode()) {
-    if (OB_FAIL(to_mysql_field(field, mfield))) {
-      LOG_WARN("fail to mysql field", K(ret), K(mfield), K(field));
-    }
-  } else if (lib::is_oracle_mode()) {
-    if (OB_FAIL(to_oracle_field(field, mfield))) {
-      LOG_WARN("fail to oracle field", K(ret), K(mfield), K(field));
-    }
-  } else {
-    // for pg mode.
+  if (OB_FAIL(to_mysql_field(field, mfield))) {
+    LOG_WARN("fail to mysql field", K(ret), K(mfield), K(field));
   }
   return ret;
 }
