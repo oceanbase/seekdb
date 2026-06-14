@@ -880,7 +880,7 @@ int ObPLBlockNS::add_symbol(const ObString &name,
     LOG_WARN("symbol table is NULL", K(ret));
   } else if (!name.empty() && OB_FAIL(check_dup_symbol(name, type, is_dup))) {
     LOG_WARN("failed to check dup", K(name), K(ret));
-  } else if (is_dup && lib::is_mysql_mode()) {
+  } else if (is_dup) {
     ret = OB_ERR_SP_DUP_VAR;
     LOG_USER_ERROR(OB_ERR_SP_DUP_VAR, name.length(), name.ptr());
   } else if (is_dup && is_formal_param) {
@@ -1111,9 +1111,8 @@ int ObPLBlockNS::check_dup_symbol(const ObString &name, const ObPLDataType &type
       if (OB_ISNULL(symbol_table_->get_symbol(symbols_.at(i)))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("element is NULL", K(i), K(symbols_.at(i)), K(ret));
-      } else if ((lib::is_mysql_mode() && 0 == name.case_compare(symbol_table_->get_symbol(symbols_.at(i))->get_name()))) {
-        if (lib::is_mysql_mode() &&
-            type.get_type() != symbol_table_->get_symbol(symbols_.at(i))->get_type().get_type()) {
+      } else if (0 == name.case_compare(symbol_table_->get_symbol(symbols_.at(i))->get_name())) {
+        if (type.get_type() != symbol_table_->get_symbol(symbols_.at(i))->get_type().get_type()) {
           /* do nothing */
         } else {
           //Names are the same and types are the same to be considered identical
@@ -1307,7 +1306,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         }
       }
       //then database name
-      if (OB_SUCC(ret) && is_mysql_mode() && OB_INVALID_INDEX == var_idx && OB_INVALID_INDEX == parent_id) {
+      if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx && OB_INVALID_INDEX == parent_id) {
         uint64_t tenant_id = session_info.get_effective_tenant_id();
         uint64_t db_id = OB_INVALID_ID;
         if (OB_FAIL(schema_guard.get_database_id(tenant_id, name, db_id))) {
@@ -1436,7 +1435,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       // Try to see if it is a special syntax for system variables, such as set SQL_MODE='ONLY_FULL_GROUP_BY';
       if (OB_SUCC(ret)
           && !resolve_ctx_.is_sql_scope_  // Expression parsing from pure SQL context does not need to attempt resolving as SESSION VAR
-          && ObPLExternalNS::INVALID_VAR == type && lib::is_mysql_mode()) {
+          && ObPLExternalNS::INVALID_VAR == type) {
         type = SESSION_VAR;
         if (OB_FAIL(
             SMART_CALL(resolve_external_symbol(name, type, data_type, parent_id, var_idx)))) {
@@ -1473,8 +1472,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
   }
     break;
   case PKG_VAR: {
-    if (lib::is_mysql_mode()
-        && get_tenant_id_by_object_id(parent_id) != OB_SYS_TENANT_ID
+    if (get_tenant_id_by_object_id(parent_id) != OB_SYS_TENANT_ID
         && session_info.get_effective_tenant_id() != OB_SYS_TENANT_ID) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "package in Mysql mode");
@@ -1546,11 +1544,12 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
   }
     break;
   case TABLE_COL: {
-    if (lib::is_mysql_mode()) {
+    {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("Table Column is not supported in Mysql mode now", K(type), K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Table Column in Mysql mode");
-    } else {
+    }
+    if (false) {
       const ObTableSchema* table_info = NULL;
       ObRecordType *record_type = NULL;
       const ObPLDataType *member_type = NULL;

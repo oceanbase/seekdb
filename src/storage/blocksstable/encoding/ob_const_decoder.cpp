@@ -627,9 +627,7 @@ int ObConstDecoder::comparison_operator(
       while (OB_SUCC(ret) && trav_it != end_it) {
         // If const value in result, set rows not in result set to false
         // Or set rows in result set to true
-        if (OB_UNLIKELY((((*trav_it).is_null() || (col_ctx.obj_meta_.is_character_type()
-                        && (0 == (*trav_it).len_))) && lib::is_oracle_mode())
-                        || ((*trav_it).is_null() && lib::is_mysql_mode()))) {
+        if (OB_UNLIKELY((*trav_it).is_null())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("There should not be null datum in dictionary", K(ret));
         } else if (OB_FAIL(cmp_func(*trav_it, ref_datum, cmp_res))) {
@@ -716,9 +714,7 @@ int ObConstDecoder::bt_operator(
       ref_bitset->init(ref_bitset_size);
       int64_t dict_ref = 0;
       while (OB_SUCC(ret) && trav_it != end_it) {
-        if (OB_UNLIKELY((((*trav_it).is_null() || (col_ctx.obj_meta_.is_character_type()
-                        && (0 == (*trav_it).len_))) && lib::is_oracle_mode())
-                        || ((*trav_it).is_null() && lib::is_mysql_mode()))) {
+        if (OB_UNLIKELY((*trav_it).is_null())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("There should not be null datum in dictionary", K(ret));
         } else if(OB_FAIL(cmp_func(*trav_it, datums.at(0), left_cmp_res))) {
@@ -803,9 +799,7 @@ int ObConstDecoder::in_operator(
       int64_t dict_ref = 0;
       while (OB_SUCC(ret) && trav_it != end_it) {
         bool cur_in_result_set = false;
-        if (OB_UNLIKELY((((*trav_it).is_null() || (col_ctx.obj_meta_.is_character_type()
-                        && (0 == (*trav_it).len_))) && lib::is_oracle_mode())
-                        || ((*trav_it).is_null() && lib::is_mysql_mode()))) {
+        if (OB_UNLIKELY((*trav_it).is_null())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("There should not be null datum in dictionary", K(ret));
         } else if (OB_FAIL(filter.exist_in_set(*trav_it, cur_in_result_set))) {

@@ -174,14 +174,14 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
       char NEW_CREATE_USER_SQL[] = "CREATE USER %s `%.*s`@`%.*s`";
       if (0 == account.host_name_.compare(OB_DEFAULT_HOST_NAME)) {
         if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(CREATE_USER_SQL),
-                                          lib::is_oracle_mode() ? "" : IF_NOT_EXIST,
+                                          IF_NOT_EXIST,
                                           account.user_name_.length(),
                                           account.user_name_.ptr()))) {
           LOG_WARN("append sql failed", K(account), K(password), K(ret));
         }
       } else {
         if (OB_FAIL(sql_string.append_fmt(adjust_ddl_format_str(NEW_CREATE_USER_SQL),
-                                          lib::is_oracle_mode() ? "" : IF_NOT_EXIST,
+                                          IF_NOT_EXIST,
                                           account.user_name_.length(),
                                           account.user_name_.ptr(),
                                           account.host_name_.length(),
@@ -192,25 +192,11 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
     }
   }
   // mysql mode and password is not an empty string
-  if (OB_SUCC(ret) && !lib::is_oracle_mode() && !password.empty()) {
+  if (OB_SUCC(ret) && !password.empty()) {
     if (OB_FAIL(sql_string.append_fmt(" IDENTIFIED BY PASSWORD '%.*s'",
                                       password.length(),
                                       password.ptr()))) {
       LOG_WARN("append sql failed", K(password), K(ret), K(account));
-    }
-  } else if (OB_SUCC(ret) && lib::is_oracle_mode() 
-             && !password.empty()) {
-    // oracle mode and password is not an empty string
-    if (OB_FAIL(sql_string.append_fmt(" IDENTIFIED BY VALUES \"%.*s\"",
-                                      password.length(),
-                                      password.ptr()))) {
-      LOG_WARN("append sql failed", K(password), K(ret), K(account));
-    }
-  } else if (OB_SUCC(ret) && lib::is_oracle_mode() 
-             && password.empty()) {
-    // oracle mode and password is an empty string
-    if (OB_FAIL(sql_string.append(" IDENTIFIED BY \"\""))) {
-      LOG_WARN("append sql failed", K(ret), K(account));
     }
   }
 
@@ -458,11 +444,6 @@ int ObDDLSqlGenerator::gen_drop_user_sql(const ObAccountArg &account,
                                           account.host_name_.ptr()))) {
           LOG_WARN("append sql failed", K(account), K(ret));
         }
-      }
-    }
-    if (OB_SUCC(ret) && lib::is_oracle_mode() && !account.is_role_) {
-      if (OB_FAIL(sql_string.append_fmt(" CASCADE"))) {
-        LOG_WARN("append sql failed", K(ret), K(account));
       }
     }
   }
@@ -1198,17 +1179,6 @@ int ObDDLSqlGenerator::gen_object_priv_sql(const obcall::ObAccountArg &account,
 
 char *ObDDLSqlGenerator::adjust_ddl_format_str(char *ori_format_str)
 {
-  if (OB_ISNULL(ori_format_str)) {
-    //do nothing
-  } else if (lib::is_oracle_mode()) {
-    for (int i = 0; i < strlen(ori_format_str); ++i) {
-      if (*(ori_format_str + i) == '`') {
-        *(ori_format_str + i) = '"';
-      }
-    }
-  } else {
-    //do nothing
-  }
   return ori_format_str;
 }
 

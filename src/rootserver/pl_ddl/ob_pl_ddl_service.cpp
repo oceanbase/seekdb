@@ -47,8 +47,8 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
     const ObRoutineInfo* old_routine_info = NULL;
     uint64_t tenant_id = routine_info.get_tenant_id();
     ObString database_name = arg.db_name_;
-    bool is_or_replace = lib::is_oracle_mode() ? arg.is_or_replace_ : arg.is_need_alter_;
-    bool is_inner = lib::is_mysql_mode() ? arg.is_or_replace_ : false;
+    bool is_or_replace = arg.is_need_alter_;
+    bool is_inner = arg.is_or_replace_;
     const ObDatabaseSchema *db_schema = NULL;
     const ObUserInfo *user_info = NULL;
     if (OB_FAIL(schema_guard.get_database_schema(tenant_id, database_name, db_schema))) {
@@ -67,7 +67,7 @@ int ObPLDDLService::create_routine(const obcall::ObCreateRoutineArg &arg,
     }
     if (OB_SUCC(ret)
         && database_name.case_compare(OB_SYS_DATABASE_NAME) != 0
-        && lib::is_oracle_mode()) {
+        && false) {
       if (OB_FAIL(schema_guard.get_user_info(tenant_id, database_name, ObString(OB_DEFAULT_HOST_NAME), user_info))) {
         LOG_WARN("failed to get user info", K(ret), K(database_name));
       } else if (OB_ISNULL(user_info)) {
@@ -286,8 +286,7 @@ int ObPLDDLService::alter_routine(const obcall::ObCreateRoutineArg &arg,
       LOG_WARN("routine info is not exist!", K(ret), K(arg.routine_info_));
     }
     if (OB_FAIL(ret)) {
-    } else if ((lib::is_oracle_mode() && arg.is_or_replace_) ||
-                (lib::is_mysql_mode() && arg.is_need_alter_)) {
+    } else if (arg.is_need_alter_) {
       if (OB_FAIL(create_routine(arg, res, ddl_service))) {
         LOG_WARN("failed to alter routine with create", K(ret));
       }
@@ -577,7 +576,7 @@ int ObPLDDLService::create_package(const obcall::ObCreatePackageArg &arg,
     }
     if (OB_SUCC(ret)
         && database_name.case_compare(OB_SYS_DATABASE_NAME) != 0
-        && lib::is_oracle_mode()) {
+        && false) {
       if (OB_FAIL(schema_guard.get_user_info(
         tenant_id, database_name, ObString(OB_DEFAULT_HOST_NAME), user_info))) {
         LOG_WARN("failed to get user info", K(ret), K(database_name));
@@ -1587,6 +1586,8 @@ int ObPLDDLService::get_object_info(ObSchemaGetterGuard &schema_guard,
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "not create on user table or user view in trigger now");
       LOG_WARN("trigger only support create on user table or user view now", K(ret));
+    } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*table_schema, false/*by_admin*/))) {
+      LOG_WARN("fail to check htable ddl supported", K(ret));
     } else {
       object_type = table_schema->is_user_table() ? TABLE_SCHEMA : VIEW_SCHEMA;
       object_id = table_schema->get_table_id();
