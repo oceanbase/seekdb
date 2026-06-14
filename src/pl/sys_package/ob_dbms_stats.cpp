@@ -341,11 +341,7 @@ int ObDbmsStats::gather_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
     LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
-  } else if (lib::is_oracle_mode() && !params.at(11).is_null()) {
-    ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("table name shouldn't be specified in gather index stats", K(ret));
-    LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"table name shouldn't be specified in gather index stats");
-  } else if (lib::is_mysql_mode() && params.at(11).is_null()) {
+  } else if (params.at(11).is_null()) {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_WARN("table name should be specified in gather index stats", K(ret));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "table name should be specified in gather index stats");
@@ -752,11 +748,7 @@ int ObDbmsStats::set_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &
     LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
-  } else if (lib::is_oracle_mode() && !params.at(22).is_null()) {
-    ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("table name shouldn't be specified in gather index stats", K(ret));
-    LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"table name shouldn't be specified in gather index stats");
-  } else if (lib::is_mysql_mode() && params.at(22).is_null()) {
+  } else if (params.at(22).is_null()) {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_WARN("table name should be specified in gather index stats", K(ret));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "table name should be specified in gather index stats");
@@ -1089,11 +1081,7 @@ int ObDbmsStats::delete_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
     LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
-  } else if (lib::is_oracle_mode() && !params.at(10).is_null()) {
-    ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("table name shouldn't be specified in gather index stats", K(ret));
-    LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"table name shouldn't be specified in gather index stats");
-  } else if (lib::is_mysql_mode() && params.at(10).is_null()) {
+  } else if (params.at(10).is_null()) {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_WARN("table name should be specified in gather index stats", K(ret));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "table name should be specified in gather index stats");
@@ -1232,7 +1220,7 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
                OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                                 session->get_dtc_params(),
                                                 param.db_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     } else if (!params.at(1).is_null() && OB_FAIL(params.at(1).get_varchar(param.tab_name_))) {
       LOG_WARN("failed to get tab_name", K(ret));
@@ -1240,7 +1228,7 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
                OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                                 session->get_dtc_params(),
                                                 param.tab_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     } else if (!params.at(2).is_null() && OB_FAIL(params.at(2).get_varchar(param.tab_group_))) {
       LOG_WARN("failed to get tblspace", K(ret));
@@ -1248,7 +1236,7 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
                OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                                 session->get_dtc_params(),
                                                 param.tab_group_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     } else if (!params.at(3).is_null() && OB_FAIL(params.at(3).get_bool(is_temp_table))) {
       LOG_WARN("failed to get global_temporary", K(ret));
@@ -1301,7 +1289,7 @@ int ObDbmsStats::drop_stat_table(ObExecContext &ctx, ParamStore &params, ObObj &
                OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                                 session->get_dtc_params(),
                                                 param.db_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     } else if (!params.at(1).is_null() && OB_FAIL(params.at(1).get_varchar(param.tab_name_))) {
       LOG_WARN("failed to get tab_name", K(ret));
@@ -1309,7 +1297,7 @@ int ObDbmsStats::drop_stat_table(ObExecContext &ctx, ParamStore &params, ObObj &
                OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                                 session->get_dtc_params(),
                                                 param.tab_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     } else if (param.tab_name_.empty()) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -1584,11 +1572,7 @@ int ObDbmsStats::export_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
     LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
-  } else if (lib::is_oracle_mode() && !params.at(6).is_null()) {
-    ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("table name shouldn't be specified in gather index stats", K(ret));
-    LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"table name shouldn't be specified in gather index stats");
-  } else if (lib::is_mysql_mode() && params.at(6).is_null()) {
+  } else if (params.at(6).is_null()) {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_WARN("table name should be specified in gather index stats", K(ret));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "table name should be specified in gather index stats");
@@ -1976,11 +1960,7 @@ int ObDbmsStats::import_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
     LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
-  } else if (lib::is_oracle_mode() && !params.at(8).is_null()) {
-    ret = OB_ERR_DBMS_STATS_PL;
-    LOG_WARN("table name shouldn't be specified in gather index stats", K(ret));
-    LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"table name shouldn't be specified in gather index stats");
-  } else if (lib::is_mysql_mode() && params.at(8).is_null()) {
+  } else if (params.at(8).is_null()) {
     ret = OB_ERR_DBMS_STATS_PL;
     LOG_WARN("table name should be specified in gather index stats", K(ret));
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "table name should be specified in gather index stats");
@@ -2506,17 +2486,7 @@ int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
                                            part_name,
                                            stat_param))) {
     LOG_WARN("failed to parse owner", K(ret));
-  } else if (lib::is_oracle_mode()) {
-    if (params.at(2).is_null()) {
-      ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN("Invalid or inconsistent input values", K(ret));
-      LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("get invalid argument", K(ret), K(params.at(2)),
-                                       K(get_type_name(params.at(2).get_type())));
-    }
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (params.at(2).is_null()) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Invalid or inconsistent input values", K(ret));
@@ -2618,7 +2588,7 @@ int ObDbmsStats::restore_schema_stats(sql::ObExecContext &ctx,
     LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"retry restore schema stats is not allowed");
   } else if (OB_FAIL(get_all_table_ids_in_database(ctx, params.at(0), global_param, table_ids))) {
     LOG_WARN("failed to get all table ids in database", K(ret));
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (!params.at(1).is_null() && !params.at(1).is_datetime()
           && !params.at(1).is_mysql_datetime()) {
       ret = OB_INVALID_ARGUMENT;
@@ -2698,7 +2668,7 @@ int ObDbmsStats::purge_stats(sql::ObExecContext &ctx,
     LOG_WARN("failed to check tenant is restore", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
-  } else if (lib::is_mysql_mode()) {
+  } else {
     if (!params.at(0).is_null() && !params.at(0).is_datetime()
           && !params.at(0).is_mysql_datetime()) {
       ret = OB_INVALID_ARGUMENT;
@@ -2800,7 +2770,7 @@ int ObDbmsStats::get_stats_history_availability(sql::ObExecContext &ctx,
     LOG_WARN("failed to get stats history availability", K(ret));
   } else if (result.is_null()) {
     //do nothing
-  } else if (lib::is_mysql_mode() && !result.is_datetime()) {
+  } else if (!result.is_datetime()) {
     ObObj dest_obj;
     ObCastCtx cast_ctx(&ctx.get_allocator(), NULL, CM_NONE, ObCharset::get_system_collation());
     cast_ctx.dtc_params_ = ctx.get_my_session()->get_dtc_params();
@@ -3255,7 +3225,6 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
   UNUSED(result);
   const int64_t start_time = ObTimeUtility::current_time();
   ObOptStatTaskInfo task_info;
-  number::ObNumber num_duration;
   int64_t duration_time = -1;
   int64_t succeed_cnt = 0;
   bool no_async_gather = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
@@ -3274,13 +3243,7 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
     // do nothing
   } else if (GCONF.in_upgrade_mode()) {
     //in upgrade, don't async gather table stats
-  } else if (lib::is_oracle_mode() && !params.empty() && !params.at(0).is_null() &&
-             OB_FAIL(params.at(0).get_number(num_duration))) {
-    LOG_WARN("failed to get duration", K(ret), K(params.at(0)));
-  } else if (lib::is_oracle_mode() && !params.empty() && !params.at(0).is_null() &&
-             OB_FAIL(num_duration.extract_valid_int64_with_trunc(duration_time))) {
-    LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_duration));
-  } else if (lib::is_mysql_mode() && !params.empty() && !params.at(0).is_null() &&
+  } else if (!params.empty() && !params.at(0).is_null() &&
              OB_FAIL(params.at(0).get_int(duration_time))) {
     LOG_WARN("failed to get duration", K(ret), K(params.at(0)));
   } else {
@@ -3633,7 +3596,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
                                                           allocator,
                                                           col->get_column_name_str(),
                                                           new_col_name,
-                                                          lib::is_oracle_mode()))) {
+                                                          false))) {
       LOG_WARN("fail to generate new name with escape character", K(ret), K(col->get_column_name_str()));
     } else if (OB_FAIL(ob_write_string(allocator,
                                        new_col_name,
@@ -3648,9 +3611,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       col_param.column_attribute_ = 0;
       col_param.column_usage_flag_ = 0;
       col_param.column_type_ = col->get_data_type();
-      if (lib::is_oracle_mode() && col->get_meta_type().is_varbinary_or_binary()) {
-        //oracle don't have this type. but agent table will have this type, such as "SYS"."ALL_VIRTUAL_COLUMN_REAL_AGENT"
-      } else {
+      {
         //check basic column type
         if (ObColumnStatParam::is_valid_opt_col_type(col->get_meta_type().get_type())) {
           col_param.set_valid_opt_col();
@@ -3676,8 +3637,7 @@ int ObDbmsStats::init_column_stat_params(ObIAllocator &allocator,
       if (!col->is_nullable()) {
         col_param.set_is_not_null_column();
       }
-      if (lib::is_mysql_mode() && 
-          col->get_meta_type().get_type_class() == ColumnTypeClass::ObTextTC) {
+      if (col->get_meta_type().get_type_class() == ColumnTypeClass::ObTextTC) {
         col_param.set_is_text_column();
       }
       if (is_column_store) {
@@ -3823,7 +3783,7 @@ int ObDbmsStats::parse_set_column_stats(ObExecContext &ctx,
   } else if (OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                               ctx.get_my_session()->get_dtc_params(),
                                               column_name,
-                                              lib::is_oracle_mode()))) {
+                                              false))) {
     LOG_WARN("failed to convert vaild ident name", K(ret));
   } else if (OB_UNLIKELY(column_name.empty())) {
     ret = OB_ERR_UNEXPECTED;
@@ -3836,15 +3796,12 @@ int ObDbmsStats::parse_set_column_stats(ObExecContext &ctx,
       if (OB_ISNULL(tmp_col)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(tmp_col));
-      } else if ((lib::is_oracle_mode() &&
-                  ObCharset::case_sensitive_equal(column_name, tmp_col->get_column_name_str())) ||
-                 (!lib::is_oracle_mode() &&
-                  ObCharset::case_insensitive_equal(column_name, tmp_col->get_column_name_str()))) {
+      } else if (ObCharset::case_insensitive_equal(column_name, tmp_col->get_column_name_str())) {
         if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                                                           *param.allocator_,
                                                           tmp_col->get_column_name_str(),
                                                           new_col_name,
-                                                          lib::is_oracle_mode()))) {
+                                                          false))) {
           LOG_WARN("fail to generate new name with escape character", K(ret), K(tmp_col->get_column_name_str()));
         } else if (OB_FAIL(ob_write_string(*param.allocator_,
                                     new_col_name,
@@ -3909,7 +3866,7 @@ int ObDbmsStats::parse_set_partition_name(ObExecContext &ctx,
   } else if (OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                               ctx.get_my_session()->get_dtc_params(),
                                               param.part_name_,
-                                              lib::is_oracle_mode()))) {
+                                              false))) {
     LOG_WARN("failed to convert vaild ident name", K(ret));
   } else if (!table_schema->is_partitioned_table()) {
     ret = OB_ERR_NOT_PARTITIONED;
@@ -3925,7 +3882,7 @@ int ObDbmsStats::parse_set_partition_name(ObExecContext &ctx,
   } else if (OB_FAIL(find_selected_part_infos(param.part_name_,
                                               param.part_infos_,
                                               param.subpart_infos_,
-                                              lib::is_oracle_mode(),
+                                              false,
                                               part_infos,
                                               subpart_infos,
                                               param.is_subpart_name_))) {
@@ -3955,7 +3912,7 @@ int ObDbmsStats::parse_partition_name(ObExecContext &ctx,
   } else if (OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                               ctx.get_my_session()->get_dtc_params(),
                                               param.part_name_,
-                                              lib::is_oracle_mode()))) {
+                                              false))) {
     LOG_WARN("failed to convert vaild ident name", K(ret));
   } else if (!table_schema->is_partitioned_table()) {
     ret = OB_ERR_NOT_PARTITIONED;
@@ -3963,7 +3920,7 @@ int ObDbmsStats::parse_partition_name(ObExecContext &ctx,
   } else if (OB_FAIL(find_selected_part_infos(param.part_name_,
                                               param.all_part_infos_,
                                               param.all_subpart_infos_,
-                                              lib::is_oracle_mode(),
+                                              false,
                                               part_infos,
                                               subpart_infos,
                                               param.is_subpart_name_))) {
@@ -4000,7 +3957,7 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
     } else if (OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                                 session->get_dtc_params(),
                                                 param.db_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     }
   }
@@ -4012,7 +3969,7 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
     } else if (OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                                 session->get_dtc_params(),
                                                 param.tab_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     }
   }
@@ -4135,12 +4092,12 @@ int ObDbmsStats::parse_index_table_info(ObExecContext &ctx,
   } else if (OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                               ctx.get_my_session()->get_dtc_params(),
                                               index_name,
-                                              lib::is_oracle_mode()))) {
+                                              false))) {
     LOG_WARN("failed to convert vaild ident name", K(ret));
   } else if (OB_FAIL(get_index_schema(ctx,
                                       *param.allocator_,
                                       table_schema->get_table_id(),
-                                      lib::is_oracle_mode(),
+                                      false,
                                       index_name,
                                       index_schema))) {
     LOG_WARN("failed to get index schema", K(ret), K(index_name));
@@ -5488,16 +5445,13 @@ int ObDbmsStats::parse_column_info(sql::ObExecContext &ctx,
   } else if (OB_FAIL(convert_vaild_ident_name(*param.allocator_,
                                               ctx.get_my_session()->get_dtc_params(),
                                               col_name,
-                                              lib::is_oracle_mode()))) {
+                                              false))) {
     LOG_WARN("failed to convert vaild ident name", K(ret));
   } else {
     ObSEArray<ObColumnStatParam, 1> new_col_params;
     bool find_it = false;
     for (int64_t i = 0; OB_SUCC(ret) && !find_it && i < param.column_params_.count(); ++i) {
-      if ((lib::is_oracle_mode() &&
-           ObCharset::case_sensitive_equal(col_name, param.column_params_.at(i).column_name_)) ||
-          (!lib::is_oracle_mode() &&
-           ObCharset::case_insensitive_equal(col_name, param.column_params_.at(i).column_name_))) {
+      if (ObCharset::case_insensitive_equal(col_name, param.column_params_.at(i).column_name_)) {
         if (OB_FAIL(new_col_params.push_back(param.column_params_.at(i)))) {
           LOG_WARN("failed to push back column params", K(ret));
         } else {
@@ -5630,7 +5584,7 @@ int ObDbmsStats::get_all_table_ids_in_database(ObExecContext &ctx,
     } else if (OB_FAIL(convert_vaild_ident_name(*stat_param.allocator_,
                                                 session->get_dtc_params(),
                                                 stat_param.db_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
       LOG_WARN("failed to convert vaild ident name", K(ret));
     }
     if (OB_SUCC(ret)) {
@@ -5684,7 +5638,6 @@ int ObDbmsStats::gather_database_stats_job_proc(sql::ObExecContext &ctx,
   UNUSED(result);
   const int64_t start_time = ObTimeUtility::current_time();
   ObOptStatTaskInfo task_info;
-  number::ObNumber num_duration;
   int64_t duration_time = -1;
   int64_t succeed_cnt = 0;
   bool no_auto_gather = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
@@ -5700,13 +5653,7 @@ int ObDbmsStats::gather_database_stats_job_proc(sql::ObExecContext &ctx,
                                      K(ctx.get_my_session()->is_user_session()), K(no_auto_gather));
   } else if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {
     LOG_WARN("failed to cancel async gather stats", K(ret));
-  } else if (lib::is_oracle_mode() && !params.empty() && !params.at(0).is_null() &&
-             OB_FAIL(params.at(0).get_number(num_duration))) {
-    LOG_WARN("failed to get duration", K(ret), K(params.at(0)));
-  } else if (lib::is_oracle_mode() && !params.empty() && !params.at(0).is_null() &&
-             OB_FAIL(num_duration.extract_valid_int64_with_trunc(duration_time))) {
-    LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_duration));
-  } else if (lib::is_mysql_mode() && !params.empty() && !params.at(0).is_null() &&
+  } else if (!params.empty() && !params.at(0).is_null() &&
              OB_FAIL(params.at(0).get_int(duration_time))) {
     LOG_WARN("failed to get duration", K(ret), K(params.at(0)));
   } else {
@@ -5815,8 +5762,7 @@ int ObDbmsStats::do_gather_table_stats(sql::ObExecContext &ctx,
     if (OB_LIKELY(task_info.task_table_count_ > 0)) {
       -- task_info.task_table_count_;
     }
-  } else if (is_recyclebin_database_id(table_schema->get_database_id()) ||
-             (lib::is_oracle_mode() && is_oceanbase_sys_database_id(table_schema->get_database_id()))) {
+  } else if (is_recyclebin_database_id(table_schema->get_database_id())) {
     if (OB_LIKELY(task_info.task_table_count_ > 0)) {
       -- task_info.task_table_count_;
     }
@@ -7064,14 +7010,14 @@ int ObDbmsStats::extract_copy_stat_helper(sql::ParamStore &params,
   } else if (!params.at(0).is_null() && OB_FAIL(convert_vaild_ident_name(ctx.get_allocator(),
                                                 ctx.get_my_session()->get_dtc_params(),
                                                 copy_stat_helper.owner_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
     LOG_WARN("failed to extract table name", K(ret));
   } else if (!params.at(1).is_null() && OB_FAIL(params.at(1).get_string(copy_stat_helper.table_name_))) {
     LOG_WARN("failed to get string", K(ret), K(params.at(1)));
   } else if (!params.at(1).is_null() && OB_FAIL(convert_vaild_ident_name(ctx.get_allocator(),
                                                 ctx.get_my_session()->get_dtc_params(),
                                                 copy_stat_helper.table_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
     LOG_WARN("failed to extract table name", K(ret));
   } else if (!params.at(2).is_null() && OB_FAIL(params.at(2).get_string(copy_stat_helper.srcpart_name_))) {
     LOG_WARN("failed to get string", K(ret), K(params.at(2)));
@@ -7079,7 +7025,7 @@ int ObDbmsStats::extract_copy_stat_helper(sql::ParamStore &params,
             && OB_FAIL(convert_vaild_ident_name(ctx.get_allocator(),
                                                 ctx.get_my_session()->get_dtc_params(),
                                                 copy_stat_helper.srcpart_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
     LOG_WARN("failed to extract srcpart name", K(ret));
   } else if (!params.at(3).is_null() && OB_FAIL(params.at(3).get_string(copy_stat_helper.dstpart_name_))) {
     LOG_WARN("failed to get string", K(ret), K(params.at(3)));
@@ -7087,7 +7033,7 @@ int ObDbmsStats::extract_copy_stat_helper(sql::ParamStore &params,
              && OB_FAIL(convert_vaild_ident_name(ctx.get_allocator(),
                                                 ctx.get_my_session()->get_dtc_params(),
                                                 copy_stat_helper.dstpart_name_,
-                                                lib::is_oracle_mode()))) {
+                                                false))) {
     LOG_WARN("failed to extract dstpart name", K(ret));
   } else if (!params.at(4).is_null() && OB_FAIL(params.at(4).get_number(scale_factor_num))) {
     LOG_WARN("failed to extract scale factor", K(ret));
@@ -7294,7 +7240,7 @@ int ObDbmsStats::adjust_index_column_params(ObExecContext &ctx,
       index_param.column_params_.at(i).unset_need_basic_stat();
     }
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && !function_column_ids.empty()) {
+  if (OB_SUCC(ret) && !function_column_ids.empty()) {
     if (OB_FAIL(ObDbmsStatsUtils::get_prefix_index_text_pairs(ctx.get_virtual_table_ctx().schema_guard_,
                                                               index_param.tenant_id_,
                                                               index_param.data_table_id_,
@@ -7353,8 +7299,7 @@ int ObDbmsStats::do_async_gather_table_stats(sql::ObExecContext &ctx,
     if (OB_LIKELY(task_info.task_table_count_ > 0)) {
       -- task_info.task_table_count_;
     }
-  } else if (is_recyclebin_database_id(table_schema->get_database_id()) ||
-             (lib::is_oracle_mode() && is_oceanbase_sys_database_id(table_schema->get_database_id()))) {
+  } else if (is_recyclebin_database_id(table_schema->get_database_id())) {
     if (OB_LIKELY(task_info.task_table_count_ > 0)) {
       -- task_info.task_table_count_;
     }
