@@ -247,7 +247,7 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
           host_name = user_info->get_host_name_str();
         }
 
-        if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+        if (OB_SUCC(ret)) {
           OZ (priv_map.create(32, "GrantsMap"));
           OZ (add_priv_map_recursively(show_user_id, priv_map, false /*expand_roles*/));
           for (int i = 0; OB_SUCC(ret) && i < role_ids.count(); i++) {
@@ -777,20 +777,19 @@ int ObShowGrants::priv_level_printf(
     }
   } else if (OB_PRIV_CATALOG_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                lib::is_oracle_mode() ? " ON CATALOG \"%.*s\"" : " ON CATALOG `%.*s`",
+                                " ON CATALOG `%.*s`",
                                 have_priv.catalog_.length(), have_priv.catalog_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_DB_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                lib::is_oracle_mode() ? " ON \"%.*s\".*" : " ON `%.*s`.*",
+                                " ON `%.*s`.*",
                                 have_priv.db_.length(), have_priv.db_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_TABLE_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
-                                lib::is_oracle_mode() ? " ON \"%.*s\".\"%.*s\"" : 
-                                                          " ON `%.*s`.`%.*s`",
+                                " ON `%.*s`.`%.*s`",
                                 have_priv.db_.length(), have_priv.db_.ptr(),
                                 have_priv.table_.length(), have_priv.table_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));

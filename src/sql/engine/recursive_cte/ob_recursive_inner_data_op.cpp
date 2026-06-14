@@ -463,7 +463,7 @@ int ObRecursiveInnerDataOp::get_next_row()
       LOG_WARN("Format output row failed", K(ret));
     } else { }
   } else if (RecursiveUnionState::R_UNION_READ_LEFT == state_) {
-    if (is_mysql_mode() && OB_FAIL(check_recursive_depth())) {
+    if (OB_FAIL(check_recursive_depth())) {
       LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_left_rows(false, 1, read_rows))) {
       if (ret != OB_ITER_END) {
@@ -475,7 +475,7 @@ int ObRecursiveInnerDataOp::get_next_row()
       state_ = R_UNION_READ_RIGHT;
     }
   } else if (RecursiveUnionState::R_UNION_READ_RIGHT == state_) {
-    if (is_mysql_mode() && OB_FAIL(check_recursive_depth())) {
+    if (OB_FAIL(check_recursive_depth())) {
       LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_right_rows(false, 1, read_rows))) {
       if (ret != OB_ITER_END) {
@@ -517,7 +517,7 @@ int ObRecursiveInnerDataOp::get_next_batch(const int64_t batch_size,
       }
     }
   } else if (RecursiveUnionState::R_UNION_READ_LEFT == state_) {
-    if (is_mysql_mode() && OB_FAIL(check_recursive_depth())) {
+    if (OB_FAIL(check_recursive_depth())) {
       LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_left_rows(true, batch_size, read_rows))) {
       if (ret != OB_ITER_END) {
@@ -529,7 +529,7 @@ int ObRecursiveInnerDataOp::get_next_batch(const int64_t batch_size,
       state_ = R_UNION_READ_RIGHT;
     }
   } else if (RecursiveUnionState::R_UNION_READ_RIGHT == state_) {
-    if (is_mysql_mode() && OB_FAIL(check_recursive_depth())) {
+    if (OB_FAIL(check_recursive_depth())) {
       LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_right_rows(true, batch_size, read_rows))) {
       if (ret != OB_ITER_END) {

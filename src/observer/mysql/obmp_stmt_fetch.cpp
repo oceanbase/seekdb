@@ -68,7 +68,7 @@ int ObMPStmtFetch::before_process()
     ObMySQLUtil::get_int4(pos, fetch_rows);
     fetch_rows_ = fetch_rows;
     if (pkt.get_clen() > FETCH_PACKET_SIZE_WITHOUT_OFFSET) {
-      if (lib::is_mysql_mode()) {
+      if (true) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("not support offset type in mysql mode.", K(ret), K(cursor_id));
       } else {
@@ -187,13 +187,7 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         // No need to handle the error response packet additionally
         session.set_current_execution_id(execution_id);
         OX(need_response_error = false);
-        if (0 == fetch_limit && !cursor->is_streaming() && cursor->is_ps_cursor()
-            && lib::is_oracle_mode() && OB_NOT_NULL(cursor->get_spi_cursor())
-            && cursor->get_spi_cursor()->row_store_.get_row_cnt() > 0) {
-          set_close_cursor();
-        } else {
-          OZ(response_result(*cursor, session, fetch_limit, true_row_num));
-        }
+        OZ(response_result(*cursor, session, fetch_limit, true_row_num));
         if (OB_READ_NOTHING == ret) {
           LOG_WARN("nothing to read", K(ret));
           // oracle return success when read nothing
@@ -343,7 +337,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           } else {
             fields = &static_cast<pl::ObDbmsCursorInfo&>(cursor).get_field_columns();
           }
-          if (OB_SUCC(ret) && lib::is_oracle_mode()) {
+          if (false) {
             // oracle mode always needs to return head packet
             // mysql mode compatible with mysql protocol, do not return headpacket
             OZ (response_query_header(session, fields));
@@ -564,13 +558,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
             LOG_WARN("failed to alloc easy buf", K(ret));
           } else if (!has_ok_packet() && OB_FAIL(update_last_pkt_pos())) {
             LOG_WARN("failed to update last packet pos", K(ret));
-          } else if (last_row && !cursor.is_scrollable() 
-                              && !cursor.is_streaming()
-                              && cursor.is_ps_cursor()
-                              && lib::is_oracle_mode() 
-                              && OB_NOT_NULL(cursor.get_spi_cursor())
-                              && cursor.get_spi_cursor()->row_store_.get_row_cnt() > 0) {
-            set_close_cursor();
           }
         }
         // for obproxy

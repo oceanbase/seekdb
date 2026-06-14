@@ -30,7 +30,7 @@ namespace sql
 
 static bool is_string_text_cast(const ObExpr &expr)
 {
-  return lib::is_mysql_mode() && ob_is_text_tc(expr.datum_meta_.type_)
+  return ob_is_text_tc(expr.datum_meta_.type_)
       && T_FUN_SYS_CAST == expr.args_[4]->type_ && ob_is_string_tc(expr.args_[4]->args_[0]->datum_meta_.type_);
 }
 
@@ -295,8 +295,7 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
       } else if (ob_is_user_defined_type(type.get_type())
           || ob_is_collection_sql_type(type.get_type())) { // if calc meta is udt, set calc udt id
         types[4].set_calc_accuracy(type.get_accuracy());
-      } else if (lib::is_mysql_mode() &&
-          ob_is_double_tc(types[4].get_type()) && ob_is_string_tc(type.get_type())) {
+      } else if (ob_is_double_tc(types[4].get_type()) && ob_is_string_tc(type.get_type())) {
         types[4].set_calc_accuracy(type.get_accuracy());
       }
     }
@@ -417,7 +416,7 @@ static OB_INLINE int column_convert_datum_accuracy_check(const ObExpr &expr,
                                    warning))) {
     LOG_WARN("fail to check accuracy", K(ret), K(expr), K(warning));
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && OB_ERR_DATA_TOO_LONG == warning) {
+  if (OB_SUCC(ret) && OB_ERR_DATA_TOO_LONG == warning) {
     ObDatum *column_info = NULL;
     int64_t rownum = ctx.exec_ctx_.get_cur_rownum();
     if (rownum > 0
@@ -453,7 +452,7 @@ static OB_INLINE int column_convert_vector_accuracy_check(const ObExpr &expr,
                                    warning))) {
     LOG_WARN("fail to check accuracy", K(ret), K(expr), K(warning));
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode() && OB_ERR_DATA_TOO_LONG == warning) {
+  if (OB_SUCC(ret) && OB_ERR_DATA_TOO_LONG == warning) {
     ObDatum *column_info = NULL;
     int64_t rownum = ctx.exec_ctx_.get_cur_rownum();
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);

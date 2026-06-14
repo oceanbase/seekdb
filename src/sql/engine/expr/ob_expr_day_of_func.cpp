@@ -147,12 +147,9 @@ int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprToSeconds, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(2);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
-  } else {
-    SET_LOCAL_SYSVAR_CAPACITY(1);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
   }
   return ret;
@@ -246,7 +243,7 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprSecToTime, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(1);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
   }
@@ -707,7 +704,7 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
 
 DEF_SET_LOCAL_SESSION_VARS(ObExprSubAddtime, raw_expr) {
   int ret = OB_SUCCESS;
-  if (is_mysql_mode()) {
+  {
     SET_LOCAL_SYSVAR_CAPACITY(3);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
@@ -1049,11 +1046,7 @@ int vector_dayname(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, 
       OB_LOCALE_TYPE *locale_type_day = ob_cur_locale->day_names_;
       const char ** locale_daynames = locale_type_day->type_names_;
       const char *const *day_name = nullptr;
-      if (lib::is_mysql_mode()) {
-        day_name = locale_daynames;
-      } else {
-        day_name = &(WDAY_NAMES+1)->ptr_;
-      }
+      day_name = locale_daynames;
       BATCH_CALC({
         IN_TYPE in_val = *reinterpret_cast<const IN_TYPE*>(arg_vec->get_payload(idx));
         if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, days, usec))) {

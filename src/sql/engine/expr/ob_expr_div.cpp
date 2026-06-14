@@ -273,7 +273,7 @@ int ObExprDiv::div_double(ObObj &res,
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid types", K(ret), K(left), K(right));
-  } else if (lib::is_mysql_mode() && (fabs(right.get_double()) == 0.0)) {
+  } else if (fabs(right.get_double()) == 0.0) {
       res.set_null();
   } else {
     res.set_double(left.get_double() / right.get_double());
@@ -309,7 +309,7 @@ int ObExprDiv::div_double_no_overflow(ObObj &res,
   if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid types", K(ret), K(left), K(right));
-  } else if (lib::is_mysql_mode() && (fabs(right.get_double()) == 0.0)) {
+  } else if (fabs(right.get_double()) == 0.0) {
       res.set_null();
   } else {
     res.set_double(left.get_double() / right.get_double());
@@ -1005,7 +1005,7 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
     case ObNumberType: {
       bool use_decint_as_args = (rt_expr.args_[0]->obj_meta_.is_decimal_int()
                                  && rt_expr.args_[1]->obj_meta_.is_decimal_int());
-      if (use_decint_as_args && rt_expr.datum_meta_.type_ == ObNumberType && lib::is_mysql_mode()) {
+      if (use_decint_as_args && rt_expr.datum_meta_.type_ == ObNumberType) {
         int32_t l_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(
           rt_expr.args_[0]->datum_meta_.precision_);
         int32_t r_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(
@@ -1037,8 +1037,7 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
     LOG_WARN("unexpected session is null", K(ret));
   } else {
     stmt::StmtType stmt_type = op_cg_ctx.session_->get_stmt_type();
-    if (lib::is_mysql_mode()
-        && is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())
+    if (is_error_for_division_by_zero(op_cg_ctx.session_->get_sql_mode())
         && is_strict_mode(op_cg_ctx.session_->get_sql_mode())
         && !op_cg_ctx.session_->is_ignore_stmt()
         && (stmt::T_INSERT == stmt_type
