@@ -37,7 +37,7 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
   ObCreateUserStmt *create_user_stmt = NULL;
-  if (OB_UNLIKELY(lib::is_mysql_mode() && 4 != parse_tree.num_child_)
+  if (OB_UNLIKELY(4 != parse_tree.num_child_)
       || OB_UNLIKELY(T_CREATE_USER != parse_tree.type_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("expect 4 child in mysql mode and 5 child in oracle mode, create user type",
@@ -93,7 +93,7 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
         if (OB_ISNULL(user_pass)) {
           ret = OB_ERR_PARSE_SQL;
           LOG_WARN("The child of parseNode should not be NULL", K(ret), K(i));
-        } else if (OB_UNLIKELY(lib::is_mysql_mode() && 5 != user_pass->num_child_ )) {
+        } else if (OB_UNLIKELY(5 != user_pass->num_child_ )) {
           ret = OB_ERR_PARSE_SQL;
           LOG_WARN("sql_parser parse user_identification error", K(ret));
         } else {

@@ -477,8 +477,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           if (param_info->is_out_sp_param() || param_info->is_inout_sp_param()) {
             const ObRawExpr* param = params.at(i);
-            if (lib::is_mysql_mode()
-                && param->get_expr_type() != T_OP_GET_USER_VAR
+            if (param->get_expr_type() != T_OP_GET_USER_VAR
                 && param->get_expr_type() != T_OP_GET_SYS_VAR
                 && !(param->get_expr_type() == T_QUESTIONMARK && params_.is_prepare_protocol_)) {
               ret = OB_ER_SP_NOT_VAR_ARG;
@@ -504,8 +503,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
             } else {
               // no need to response parameters for client_non_standard when user/sys variable
               bool is_client_out_param =
-                  !(lib::is_mysql_mode()
-                    && params_.session_info_->client_non_standard()
+                  !(params_.session_info_->client_non_standard()
                     && (param->get_expr_type() == T_OP_GET_USER_VAR
                         || param->get_expr_type() == T_OP_GET_SYS_VAR));
               OZ (call_proc_info->add_out_param(i,

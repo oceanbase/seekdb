@@ -170,13 +170,13 @@ int ObEventResolver::resolve_event_definer(const ParseNode *parse_node, ObEventI
         }
       }
     }
-  } else if (lib::is_mysql_mode()) {
+  } else {
     // When definer is not specified, it defaults to the current user and host
     user_name = cur_user_name;
     host_name = cur_host_name;
     event_info.set_user_id(session_info_->get_user_id());
   }
-  if (OB_SUCC(ret) && lib::is_mysql_mode()) {
+  if (OB_SUCC(ret)) {
     // user@host as a whole is stored in the priv_user field
     char* tmp_buf = nullptr;
     if (OB_ISNULL(tmp_buf = static_cast<char*>(allocator_->alloc(OB_EVENT_DEFINER_MAX_LEN)))) {

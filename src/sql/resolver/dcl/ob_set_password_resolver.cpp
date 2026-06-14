@@ -69,7 +69,7 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Session info  and nodeshould not be NULL", KP(session_info_), KP(node), K(ret));
   } else if (OB_UNLIKELY(T_SET_PASSWORD != node->type_) ||
-             OB_UNLIKELY(lib::is_mysql_mode() && 5 != node->num_child_)) {
+             OB_UNLIKELY(5 != node->num_child_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Set password ParseNode error", K(node->type_), K(node->num_child_), K(ret));
   } else {
@@ -84,7 +84,7 @@ int ObSetPasswordResolver::resolve(const ParseNode &parse_tree)
       const ObString &session_user_name = session_info_->get_user_name();
       const ObString &session_host_name = session_info_->get_host_name();
       bool is_valid = false;
-      if (lib::is_mysql_mode() && NULL != node->children_[4]) {
+      if (NULL != node->children_[4]) {
         /* here code is to mock a auth plugin check. */
         ObString auth_plugin(static_cast<int32_t>(node->children_[4]->str_len_),
                               node->children_[4]->str_value_);

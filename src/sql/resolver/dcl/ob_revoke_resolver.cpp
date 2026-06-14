@@ -53,7 +53,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
   bool ignore_unknown_user = false;
   bool ignore_error = false;
   tenant_id = revoke_stmt->get_tenant_id();
-  if (lib::is_mysql_mode() && 4 == revoke_role->num_child_) {
+  if (4 == revoke_role->num_child_) {
     ignore_unknown_role = NULL != revoke_role->children_[2];
     ignore_unknown_user = NULL != revoke_role->children_[3];
   }
@@ -85,7 +85,7 @@ int ObRevokeResolver::resolve_revoke_role_inner(
       } else {
         role_id = role_info->get_user_id();
         if (OB_FAIL(revoke_stmt->add_role(role_id))) {
-          if (OB_PRIV_DUP == ret && lib::is_mysql_mode()) {
+          if (OB_PRIV_DUP == ret) {
             //ignored
             ret = OB_SUCCESS;
           } else {

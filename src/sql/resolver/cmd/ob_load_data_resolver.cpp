@@ -466,7 +466,6 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     const ObDirectLoadHint &direct_load_hint = load_stmt->get_hints().get_direct_load_hint();
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == load_args.dupl_action_ &&
         ObLoadFileLocation::CLIENT_DISK == load_args.load_file_storage_ &&
-        lib::is_mysql_mode() &&
         (!direct_load_hint.is_enable() || !direct_load_hint.is_inc_replace_load_method())) {
       // https://dev.mysql.com/doc/refman/8.0/en/load-data.html
       // In MySQL, LOCAL modifier has the same effect as the IGNORE modifier.
@@ -1579,7 +1578,7 @@ int ObLoadDataResolver::resolve_partitions(const ParseNode &node, ObLoadDataStmt
       if (T_USE_PARTITION == node.type_) {
         if (OB_FAIL(part_getter.get_part_ids(partition_name, partition_ids))) {
           LOG_WARN("fail to get part ids", K(ret), K(partition_name));
-          if (OB_UNKNOWN_PARTITION == ret && lib::is_mysql_mode()) {
+          if (OB_UNKNOWN_PARTITION == ret) {
             LOG_USER_ERROR(OB_UNKNOWN_PARTITION, partition_name.length(), partition_name.ptr(),
                           table_schema->get_table_name_str().length(),
                           table_schema->get_table_name_str().ptr());

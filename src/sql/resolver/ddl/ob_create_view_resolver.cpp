@@ -288,8 +288,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
                                             can_expand_star,
                                             add_undefined_columns))) {
         LOG_WARN("failed to check view columns", K(ret));
-      } else if ((lib::is_mysql_mode() || (resolve_succ && !add_undefined_columns))
-                 && OB_FAIL(add_column_infos(session_info_->get_effective_tenant_id(),
+      } else if (OB_FAIL(add_column_infos(session_info_->get_effective_tenant_id(),
                                              *select_stmt,
                                              table_schema,
                                              *allocator_,
@@ -1373,6 +1372,8 @@ int ObCreateViewResolver::collect_dependency_infos(ObQueryCtx *query_ctx,
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null", K(ret));
+    } else if (OB_FAIL(ObTTLUtil::check_htable_ddl_supported(*schema_guard, tenant_id, create_arg.dep_infos_))) {
+      LOG_WARN("failed to check htable ddl supported", K(ret), K(tenant_id), K(create_arg.dep_infos_));
     }
   }
 
@@ -1483,9 +1484,7 @@ int ObCreateViewResolver::add_column_infos(const uint64_t tenant_id,
                                                 column,
                                                 is_from_create_mview))) {
         LOG_WARN("failed to fill column meta infos", K(ret), K(column));
-      } else if (lib::is_mysql_mode() &&
-                 OB_FAIL(resolve_column_default_value(&select_stmt, select_item, column, alloc, session_info))) {
-        // oracle mode has default expr value, not support now
+      } else if (OB_FAIL(resolve_column_default_value(&select_stmt, select_item, column, alloc, session_info))) {
         LOG_WARN("add column to table_schema failed", K(ret), K(column));
       } else if (OB_FAIL(table_schema.add_column(column))) {
         LOG_WARN("add column to table_schema failed", K(ret), K(column));

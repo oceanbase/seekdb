@@ -364,7 +364,7 @@ int ObSelectStmtPrinter::print_group_by()
       }
       // print rollup
       if (OB_SUCC(ret)) {
-        if (lib::is_mysql_mode() && rollup_exprs_size > 0) {
+        if (rollup_exprs_size > 0) {
           for (int64_t i = 0; OB_SUCC(ret) && i < rollup_exprs_size; ++i) {
             if (OB_FAIL(print_expr_except_const_number(rollup_exprs.at(i), T_GROUP_SCOPE))) {
               LOG_WARN("fail to print group expr", K(ret));
@@ -490,19 +490,9 @@ int ObSelectStmtPrinter::print_order_by()
           }
         } 
         if (OB_SUCC(ret)) {
-          if (lib::is_mysql_mode()) {
-            if (is_descending_direction(order_item.order_type_)) {
-              DATA_PRINTF(" desc");
-            }
-          } else if (order_item.order_type_ == NULLS_FIRST_ASC) {
-            DATA_PRINTF(" asc nulls first");
-          } else if (order_item.order_type_ == NULLS_LAST_ASC) {//use default value
-            /*do nothing*/
-          } else if (order_item.order_type_ == NULLS_FIRST_DESC) {//use default value
+          if (is_descending_direction(order_item.order_type_)) {
             DATA_PRINTF(" desc");
-          } else if (order_item.order_type_ == NULLS_LAST_DESC) {
-            DATA_PRINTF(" desc nulls last");
-          } else {/*do nothing*/}
+          }
           DATA_PRINTF(",");
         }
       }
